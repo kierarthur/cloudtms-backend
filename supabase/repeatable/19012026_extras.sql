@@ -6607,81 +6607,11 @@ $function$;
 BEGIN;
 
 
-
-CREATE OR REPLACE FUNCTION public.timesheet_summary_lightweight_rows_v1(
-  p_filters jsonb DEFAULT '{}'::jsonb
-)
-RETURNS TABLE (
-  timesheet_id uuid,
-  contract_week_id uuid,
-  contract_id uuid,
-  candidate_id uuid,
-  candidate_name text,
-  candidate_display_name text,
-  client_id uuid,
-  client_name text,
-  booking_id text,
-  occupant_key_norm text,
-  hospital_norm text,
-  candidate_hint_text jsonb,
-  week_ending_date date,
-  work_date date,
-  sheet_scope text,
-  submission_mode text,
-  submission_mode_snapshot text,
-  basis text,
-  route_type text,
-  route_display text,
-  route_family text,
-  route_subfamily text,
-  underlying_channel_family text,
-  summary_stage text,
-  tools_stage text,
-  processing_status text,
-  processing_status_display text,
-  authorised_at_utc timestamptz,
-  authorised_at_server timestamptz,
-  processed_at_utc timestamptz,
-  is_authorised boolean,
-  total_hours numeric,
-  total_pay_ex_vat numeric,
-  total_charge_ex_vat numeric,
-  margin_ex_vat numeric,
-  net_delta_ex_vat numeric,
-  paid_at_utc timestamptz,
-  pay_icon_code text,
-  pay_status_code text,
-  pay_paid_at_utc timestamptz,
-  invoice_is_paid boolean,
-  invoice_issue_stage text,
-  invoice_segment_stage text,
-  invoice_segments_total integer,
-  invoice_segments_locked integer,
-  invoice_segments_unlocked integer,
-  issue_codes text[],
-  validation_status text,
-  validation_summary text,
-  hr_crosscheck_status text,
-  hr_crosscheck_issues text[],
-  qr_status text,
-  is_qr boolean,
-  is_adjusted boolean,
-  needs_attention boolean,
-  has_rate_issue boolean,
-  has_pay_channel_issue boolean,
-  client_no_timesheet_required boolean,
-  client_autoprocess_hr boolean,
-  client_is_nhsp boolean,
-  has_any_evidence boolean,
-  attached_evidence_count integer,
-  primary_artifact_storage_key text,
-  primary_artifact_display_name text,
-  primary_artifact_preview_mode text
-)
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path TO public
+CREATE OR REPLACE FUNCTION public.timesheet_summary_lightweight_rows_v1(p_filters jsonb DEFAULT '{}'::jsonb)
+ RETURNS TABLE(timesheet_id uuid, contract_week_id uuid, contract_id uuid, candidate_id uuid, candidate_name text, candidate_display_name text, client_id uuid, client_name text, booking_id text, occupant_key_norm text, hospital_norm text, candidate_hint_text jsonb, week_ending_date date, work_date date, sheet_scope text, submission_mode text, submission_mode_snapshot text, basis text, route_type text, route_display text, route_family text, route_subfamily text, underlying_channel_family text, summary_stage text, tools_stage text, processing_status text, processing_status_display text, authorised_at_utc timestamp with time zone, authorised_at_server timestamp with time zone, processed_at_utc timestamp with time zone, is_authorised boolean, total_hours numeric, total_pay_ex_vat numeric, total_charge_ex_vat numeric, margin_ex_vat numeric, net_delta_ex_vat numeric, paid_at_utc timestamp with time zone, pay_icon_code text, pay_status_code text, pay_paid_at_utc timestamp with time zone, invoice_is_paid boolean, invoice_issue_stage text, invoice_segment_stage text, invoice_segments_total integer, invoice_segments_locked integer, invoice_segments_unlocked integer, issue_codes text[], validation_status text, validation_summary text, hr_crosscheck_status text, hr_crosscheck_issues text[], qr_status text, is_qr boolean, is_adjusted boolean, needs_attention boolean, has_rate_issue boolean, has_pay_channel_issue boolean, client_no_timesheet_required boolean, client_autoprocess_hr boolean, client_is_nhsp boolean, has_any_evidence boolean, attached_evidence_count integer, primary_artifact_storage_key text, primary_artifact_display_name text, primary_artifact_preview_mode text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
@@ -7192,7 +7122,7 @@ BEGIN
         COALESCE(evidence_summary.attached_evidence_count, 0) > 0
         OR NULLIF(timesheet_row.manual_pdf_r2_key, '') IS NOT NULL
         OR NULLIF(timesheet_row.qr_r2_key, '') IS NOT NULL
-        OR NULLIF(contract_week_row.uploaded_pdf_r2_key, '') IS NOT NULL
+        OR (source_rows.timesheet_id IS NULL AND NULLIF(contract_week_row.uploaded_pdf_r2_key, '') IS NOT NULL)
       ) AS has_any_evidence,
 
       COALESCE(evidence_summary.attached_evidence_count, 0)::integer AS attached_evidence_count,
@@ -7201,18 +7131,18 @@ BEGIN
         evidence_summary.primary_storage_key,
         NULLIF(timesheet_row.manual_pdf_r2_key, ''),
         NULLIF(timesheet_row.qr_r2_key, ''),
-        NULLIF(contract_week_row.uploaded_pdf_r2_key, '')
+        CASE WHEN source_rows.timesheet_id IS NULL THEN NULLIF(contract_week_row.uploaded_pdf_r2_key, '') END
       ) AS primary_artifact_storage_key,
 
       COALESCE(
         evidence_summary.primary_display_name,
         CASE WHEN NULLIF(timesheet_row.manual_pdf_r2_key, '') IS NOT NULL THEN 'Manual timesheet PDF' END,
         CASE WHEN NULLIF(timesheet_row.qr_r2_key, '') IS NOT NULL THEN 'QR timesheet' END,
-        CASE WHEN NULLIF(contract_week_row.uploaded_pdf_r2_key, '') IS NOT NULL THEN 'Uploaded weekly PDF' END
+        CASE WHEN source_rows.timesheet_id IS NULL AND NULLIF(contract_week_row.uploaded_pdf_r2_key, '') IS NOT NULL THEN 'Uploaded weekly PDF' END
       ) AS primary_artifact_display_name,
 
       CASE
-        WHEN COALESCE(evidence_summary.primary_storage_key, NULLIF(timesheet_row.manual_pdf_r2_key, ''), NULLIF(timesheet_row.qr_r2_key, ''), NULLIF(contract_week_row.uploaded_pdf_r2_key, '')) IS NOT NULL THEN 'document'
+        WHEN COALESCE(evidence_summary.primary_storage_key, NULLIF(timesheet_row.manual_pdf_r2_key, ''), NULLIF(timesheet_row.qr_r2_key, ''), CASE WHEN source_rows.timesheet_id IS NULL THEN NULLIF(contract_week_row.uploaded_pdf_r2_key, '') END) IS NOT NULL THEN 'document'
         ELSE NULL::text
       END AS primary_artifact_preview_mode
 
@@ -7639,7 +7569,6 @@ BEGIN
   OFFSET v_offset;
 END;
 $function$;
-
 
 
 

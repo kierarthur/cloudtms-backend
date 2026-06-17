@@ -1,5 +1,3 @@
-
-
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -45,6 +43,7 @@ DECLARE
   v_effective_primary_artifact_id text := NULL;
   v_effective_primary_artifact_kind text := NULL;
   v_effective_primary_artifact_display_name text := NULL;
+  v_effective_uploaded_pdf_r2_key text := NULL;
   v_effective_action_flags jsonb := '{}'::jsonb;
   v_effective_details jsonb := '{}'::jsonb;
   v_effective_left_pane jsonb := '{}'::jsonb;
@@ -344,10 +343,10 @@ BEGIN
             'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
             'attached_evidence', COALESCE(v_evidence_layer->'attached_evidence', v_evidence_layer->'evidence', '[]'::jsonb),
             'attachedRows', COALESCE(v_evidence_layer->'attachedRows', v_evidence_layer->'attached_evidence', v_evidence_layer->'evidence', '[]'::jsonb),
-            'primary_artifact', COALESCE(v_evidence_layer->'primary_artifact', v_out->'primary_artifact', v_out#>'{details,primary_artifact}', JSONB_BUILD_OBJECT()),
-            'preview_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_out->>'preview_storage_key', '')), '')),
-            'primary_artifact_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_out->>'primary_artifact_storage_key', '')), '')),
-            'primary_artifact_preview_mode', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_preview_mode', '')), ''), NULLIF(BTRIM(COALESCE(v_out->>'primary_artifact_preview_mode', '')), '')),
+            'primary_artifact', COALESCE(v_evidence_layer->'primary_artifact', JSONB_BUILD_OBJECT()),
+            'preview_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), '')),
+            'primary_artifact_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), '')),
+            'primary_artifact_preview_mode', NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_preview_mode', '')), ''),
             'has_any_evidence', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'has_any_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
             'attached_evidence_count', CASE WHEN COALESCE(v_evidence_layer->>'attached_evidence_count', '') ~ '^[0-9]+$' THEN (v_evidence_layer->>'attached_evidence_count')::integer ELSE COALESCE(JSONB_ARRAY_LENGTH(COALESCE(v_evidence_layer->'evidence', '[]'::jsonb)), 0) END,
             'evidence_count', CASE WHEN COALESCE(v_evidence_layer->>'evidence_count', '') ~ '^[0-9]+$' THEN (v_evidence_layer->>'evidence_count')::integer ELSE COALESCE(JSONB_ARRAY_LENGTH(COALESCE(v_evidence_layer->'evidence', '[]'::jsonb)), 0) END,
@@ -359,13 +358,203 @@ BEGIN
             'action_flags', COALESCE(v_out->'action_flags', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'action_flags', JSONB_BUILD_OBJECT()),
             'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
               'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
-              'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE)
+              'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE),
+              'primary_artifact', COALESCE(v_evidence_layer->'primary_artifact', JSONB_BUILD_OBJECT()),
+              'preview_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), '')),
+              'primary_artifact_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), '')),
+              'primary_artifact_preview_mode', NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_preview_mode', '')), ''),
+              'uploaded_pdf_r2_key', NULLIF(BTRIM(COALESCE(v_evidence_layer#>>'{details,uploaded_pdf_r2_key}', v_evidence_layer->>'uploaded_pdf_r2_key', '')), '')
             ),
             'left_pane', COALESCE(v_out->'left_pane', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
               'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
-              'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE)
+              'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE),
+              'primary_artifact', COALESCE(v_evidence_layer->'primary_artifact', JSONB_BUILD_OBJECT()),
+              'preview_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), '')),
+              'primary_artifact_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), '')),
+              'primary_artifact_preview_mode', NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_preview_mode', '')), ''),
+              'uploaded_pdf_r2_key', NULLIF(BTRIM(COALESCE(v_evidence_layer#>>'{left_pane,uploaded_pdf_r2_key}', v_evidence_layer->>'uploaded_pdf_r2_key', '')), '')
             )
           );
+
+        v_effective_has_any_evidence := COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'has_any_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE);
+        v_effective_attached_evidence_count := CASE
+          WHEN COALESCE(v_evidence_layer->>'attached_evidence_count', '') ~ '^[0-9]+$' THEN (v_evidence_layer->>'attached_evidence_count')::integer
+          WHEN COALESCE(v_evidence_layer->>'evidence_count', '') ~ '^[0-9]+$' THEN (v_evidence_layer->>'evidence_count')::integer
+          ELSE COALESCE(JSONB_ARRAY_LENGTH(COALESCE(v_evidence_layer->'evidence', '[]'::jsonb)), 0)
+        END;
+        v_effective_evidence_badges := COALESCE(v_evidence_layer->'evidence_badges', v_evidence_layer#>'{evidence_meta,evidence_badges}', '[]'::jsonb);
+        v_effective_evidence_meta := COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT(
+          'evidence_loaded', TRUE,
+          'has_any_evidence', v_effective_has_any_evidence,
+          'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
+          'evidence_badges', v_effective_evidence_badges
+        );
+        v_effective_primary_artifact := COALESCE(v_evidence_layer->'primary_artifact', JSONB_BUILD_OBJECT());
+        v_effective_primary_artifact_storage_key := COALESCE(
+          NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''),
+          NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''),
+          NULLIF(BTRIM(COALESCE(v_effective_primary_artifact->>'storage_key', '')), ''),
+          NULLIF(BTRIM(COALESCE(v_effective_primary_artifact->>'r2_key', '')), '')
+        );
+        v_effective_primary_artifact_preview_mode := COALESCE(
+          NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_preview_mode', '')), ''),
+          NULLIF(BTRIM(COALESCE(v_effective_primary_artifact->>'preview_mode', '')), '')
+        );
+
+        IF COALESCE(v_effective_attached_evidence_count, 0) <= 0 THEN
+          v_effective_primary_artifact := JSONB_BUILD_OBJECT();
+          v_effective_primary_artifact_storage_key := NULL;
+          v_effective_primary_artifact_preview_mode := NULL;
+        END IF;
+
+        v_effective_primary_artifact_id := NULLIF(BTRIM(COALESCE(
+          v_effective_primary_artifact->>'id',
+          v_effective_primary_artifact->>'evidence_id',
+          v_effective_primary_artifact->>'queue_id',
+          ''
+        )), '');
+        v_effective_primary_artifact_kind := NULLIF(BTRIM(COALESCE(
+          v_effective_primary_artifact->>'kind',
+          v_effective_primary_artifact->>'staged_kind',
+          ''
+        )), '');
+        v_effective_primary_artifact_display_name := NULLIF(BTRIM(COALESCE(
+          v_effective_primary_artifact->>'display_name',
+          v_effective_primary_artifact->>'filename',
+          v_effective_primary_artifact->>'original_filename',
+          ''
+        )), '');
+        v_effective_uploaded_pdf_r2_key := CASE
+          WHEN NULLIF(BTRIM(COALESCE(
+            v_out->>'timesheet_id',
+            v_out->>'current_timesheet_id',
+            v_out#>>'{row,timesheet_id}',
+            v_out#>>'{row,current_timesheet_id}',
+            v_out#>>'{data_row,timesheet_id}',
+            v_out#>>'{data_row,current_timesheet_id}',
+            ''
+          )), '') IS NULL THEN NULLIF(BTRIM(COALESCE(
+            v_evidence_layer->>'uploaded_pdf_r2_key',
+            v_evidence_layer#>>'{details,uploaded_pdf_r2_key}',
+            v_evidence_layer#>>'{details,contract_week,uploaded_pdf_r2_key}',
+            v_evidence_layer#>>'{left_pane,uploaded_pdf_r2_key}',
+            ''
+          )), '')
+          ELSE NULL::text
+        END;
+        v_effective_artifact_hints := JSONB_BUILD_OBJECT(
+          'has_any_evidence', v_effective_has_any_evidence,
+          'evidence_badges', v_effective_evidence_badges,
+          'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
+          'primary_artifact', v_effective_primary_artifact,
+          'primary_artifact_id', v_effective_primary_artifact_id,
+          'primary_artifact_kind', v_effective_primary_artifact_kind,
+          'primary_artifact_display_name', v_effective_primary_artifact_display_name,
+          'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
+          'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
+          'preview_storage_key', v_effective_primary_artifact_storage_key,
+          'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key
+        );
+        v_effective_action_flags := COALESCE(v_out->'action_flags', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'action_flags', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+          'has_any_evidence', v_effective_has_any_evidence,
+          'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
+          'evidence_badges', v_effective_evidence_badges
+        );
+        v_effective_row_patch := COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+          'has_any_evidence', v_effective_has_any_evidence,
+          'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
+          'evidence_badges', v_effective_evidence_badges,
+          'artifact_hints', v_effective_artifact_hints,
+          'primary_artifact', v_effective_primary_artifact,
+          'primary_artifact_id', v_effective_primary_artifact_id,
+          'primary_artifact_kind', v_effective_primary_artifact_kind,
+          'primary_artifact_display_name', v_effective_primary_artifact_display_name,
+          'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
+          'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
+          'preview_storage_key', v_effective_primary_artifact_storage_key,
+          'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key
+        );
+        v_effective_row := COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+          'has_any_evidence', v_effective_has_any_evidence,
+          'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
+          'evidence_badges', v_effective_evidence_badges,
+          'artifact_hints', v_effective_artifact_hints,
+          'action_flags', COALESCE(v_out#>'{row,action_flags}', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer#>'{row,action_flags}', JSONB_BUILD_OBJECT()) || v_effective_action_flags,
+          'row_patch', v_effective_row_patch,
+          'primary_artifact', v_effective_primary_artifact,
+          'primary_artifact_id', v_effective_primary_artifact_id,
+          'primary_artifact_kind', v_effective_primary_artifact_kind,
+          'primary_artifact_display_name', v_effective_primary_artifact_display_name,
+          'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
+          'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
+          'preview_storage_key', v_effective_primary_artifact_storage_key,
+          'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key
+        );
+        v_effective_data_row := COALESCE(v_out->'data_row', v_out->'row', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'data_row', v_evidence_layer->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+          'has_any_evidence', v_effective_has_any_evidence,
+          'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
+          'evidence_badges', v_effective_evidence_badges,
+          'artifact_hints', v_effective_artifact_hints,
+          'action_flags', COALESCE(v_out#>'{data_row,action_flags}', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer#>'{data_row,action_flags}', JSONB_BUILD_OBJECT()) || v_effective_action_flags,
+          'row_patch', v_effective_row_patch,
+          'primary_artifact', v_effective_primary_artifact,
+          'primary_artifact_id', v_effective_primary_artifact_id,
+          'primary_artifact_kind', v_effective_primary_artifact_kind,
+          'primary_artifact_display_name', v_effective_primary_artifact_display_name,
+          'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
+          'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
+          'preview_storage_key', v_effective_primary_artifact_storage_key,
+          'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key
+        );
+        v_effective_details := COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+          'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
+          'evidence_meta', v_effective_evidence_meta,
+          'artifact_hints', v_effective_artifact_hints,
+          'primary_artifact', v_effective_primary_artifact,
+          'primary_artifact_id', v_effective_primary_artifact_id,
+          'primary_artifact_kind', v_effective_primary_artifact_kind,
+          'primary_artifact_display_name', v_effective_primary_artifact_display_name,
+          'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
+          'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
+          'preview_storage_key', v_effective_primary_artifact_storage_key,
+          'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key
+        );
+        v_effective_left_pane := COALESCE(v_out->'left_pane', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+          'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
+          'evidence_meta', v_effective_evidence_meta,
+          'artifact_hints', v_effective_artifact_hints,
+          'primary_artifact', v_effective_primary_artifact,
+          'primary_artifact_id', v_effective_primary_artifact_id,
+          'primary_artifact_kind', v_effective_primary_artifact_kind,
+          'primary_artifact_display_name', v_effective_primary_artifact_display_name,
+          'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
+          'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
+          'preview_storage_key', v_effective_primary_artifact_storage_key,
+          'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key
+        );
+
+        v_out := v_out || JSONB_BUILD_OBJECT(
+          'has_any_evidence', v_effective_has_any_evidence,
+          'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
+          'evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
+          'evidence_badges', v_effective_evidence_badges,
+          'evidence_meta', v_effective_evidence_meta,
+          'artifact_hints', v_effective_artifact_hints,
+          'action_flags', v_effective_action_flags,
+          'row_patch', v_effective_row_patch,
+          'row', v_effective_row,
+          'data_row', v_effective_data_row,
+          'details', v_effective_details,
+          'left_pane', v_effective_left_pane,
+          'primary_artifact', v_effective_primary_artifact,
+          'primary_artifact_id', v_effective_primary_artifact_id,
+          'primary_artifact_kind', v_effective_primary_artifact_kind,
+          'primary_artifact_display_name', v_effective_primary_artifact_display_name,
+          'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
+          'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
+          'preview_storage_key', v_effective_primary_artifact_storage_key,
+          'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key
+        );
       ELSE
         v_layer_errors := v_layer_errors || JSONB_BUILD_ARRAY(COALESCE(v_evidence_layer->>'degraded_reason', v_evidence_layer->>'error', 'EVIDENCE_LAYER_FAILED'));
         v_out := v_out || JSONB_BUILD_OBJECT(
@@ -719,7 +908,10 @@ BEGIN
         timesheet_row.is_adjustment AS timesheet_is_adjustment,
         timesheet_row.parent_timesheet_id AS timesheet_parent_timesheet_id,
         timesheet_row.adjustment_origin AS timesheet_adjustment_origin,
-        contract_week_row.uploaded_pdf_r2_key AS uploaded_pdf_r2_key,
+        CASE
+          WHEN COALESCE(summary_row.timesheet_id, timesheet_row.timesheet_id, contract_week_row.timesheet_id) IS NULL THEN contract_week_row.uploaded_pdf_r2_key
+          ELSE NULL::text
+        END AS uploaded_pdf_r2_key,
         contract_week_row.day_entries_json AS contract_week_day_entries_json,
         contract_week_row.totals_json AS contract_week_totals_json,
         contract_week_row.planned_schedule_json AS contract_week_planned_schedule_json,
@@ -1433,7 +1625,10 @@ BEGIN
         timesheet_row.qr_r2_key AS qr_r2_key,
         timesheet_row.manual_pdf_rotation_degrees AS manual_pdf_rotation_degrees,
         timesheet_row.updated_at AS timesheet_updated_at,
-        contract_week_row.uploaded_pdf_r2_key AS uploaded_pdf_r2_key,
+        CASE
+          WHEN COALESCE(summary_row.timesheet_id, timesheet_row.timesheet_id, contract_week_row.timesheet_id) IS NULL THEN contract_week_row.uploaded_pdf_r2_key
+          ELSE NULL::text
+        END AS uploaded_pdf_r2_key,
         contract_week_row.updated_at AS contract_week_updated_at
       FROM input_ids
       LEFT JOIN summary_row ON TRUE
@@ -1586,6 +1781,25 @@ BEGIN
           FROM public.timesheet_evidence AS te_contract_week_pdf_duplicate
           WHERE te_contract_week_pdf_duplicate.timesheet_id = resolved.resolved_timesheet_id
             AND te_contract_week_pdf_duplicate.storage_key = resolved.uploaded_pdf_r2_key
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.manual_timesheet_queue AS mq_contract_week_pdf_returned
+          WHERE NULLIF(regexp_replace(BTRIM(COALESCE(mq_contract_week_pdf_returned.r2_key, '')), '^/+', ''), '') =
+                NULLIF(regexp_replace(BTRIM(COALESCE(resolved.uploaded_pdf_r2_key, '')), '^/+', ''), '')
+            AND UPPER(COALESCE(mq_contract_week_pdf_returned.status, '')) = 'QUEUED'
+            AND (
+              (resolved.resolved_timesheet_id IS NOT NULL AND mq_contract_week_pdf_returned.timesheet_id = resolved.resolved_timesheet_id)
+              OR (resolved.resolved_timesheet_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_contract_week_pdf_returned.meta_json ->> 'returned_from_timesheet_id', '')), '') = resolved.resolved_timesheet_id::text)
+              OR (resolved.resolved_timesheet_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_contract_week_pdf_returned.meta_json ->> 'dematerialised_from_timesheet_id', '')), '') = resolved.resolved_timesheet_id::text)
+              OR (resolved.resolved_timesheet_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_contract_week_pdf_returned.meta_json ->> 'attached_to_timesheet_id', '')), '') = resolved.resolved_timesheet_id::text)
+              OR (resolved.resolved_timesheet_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_contract_week_pdf_returned.meta_json ->> 'materialised_to_timesheet_id', '')), '') = resolved.resolved_timesheet_id::text)
+              OR (resolved.resolved_timesheet_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_contract_week_pdf_returned.meta_json #>> '{return_queue_previous_meta,materialised_to_timesheet_id}', '')), '') = resolved.resolved_timesheet_id::text)
+              OR (resolved.resolved_contract_week_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_contract_week_pdf_returned.meta_json ->> 'contract_week_id', '')), '') = resolved.resolved_contract_week_id::text)
+              OR (resolved.resolved_contract_week_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_contract_week_pdf_returned.meta_json #>> '{return_queue_previous_meta,contract_week_id}', '')), '') = resolved.resolved_contract_week_id::text)
+              OR (resolved.resolved_contract_week_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_contract_week_pdf_returned.meta_json #>> '{return_queue_previous_meta,active_identity}', '')), '') = 'contract_week:' || resolved.resolved_contract_week_id::text)
+              OR (resolved.resolved_contract_week_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_contract_week_pdf_returned.meta_json #>> '{return_queue_previous_meta,preview_identity}', '')), '') = 'contract_week:' || resolved.resolved_contract_week_id::text)
+            )
         )
       UNION ALL
       SELECT
@@ -2611,6 +2825,11 @@ BEGIN
               OR NULLIF(BTRIM(COALESCE(mq_primary_artifact_returned.meta_json ->> 'dematerialised_from_timesheet_id', '')), '') = row_ids.timesheet_id::text
               OR NULLIF(BTRIM(COALESCE(mq_primary_artifact_returned.meta_json ->> 'attached_to_timesheet_id', '')), '') = row_ids.timesheet_id::text
               OR NULLIF(BTRIM(COALESCE(mq_primary_artifact_returned.meta_json ->> 'materialised_to_timesheet_id', '')), '') = row_ids.timesheet_id::text
+              OR NULLIF(BTRIM(COALESCE(mq_primary_artifact_returned.meta_json #>> '{return_queue_previous_meta,materialised_to_timesheet_id}', '')), '') = row_ids.timesheet_id::text
+              OR (row_ids.contract_week_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_primary_artifact_returned.meta_json ->> 'contract_week_id', '')), '') = row_ids.contract_week_id::text)
+              OR (row_ids.contract_week_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_primary_artifact_returned.meta_json #>> '{return_queue_previous_meta,contract_week_id}', '')), '') = row_ids.contract_week_id::text)
+              OR (row_ids.contract_week_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_primary_artifact_returned.meta_json #>> '{return_queue_previous_meta,active_identity}', '')), '') = 'contract_week:' || row_ids.contract_week_id::text)
+              OR (row_ids.contract_week_id IS NOT NULL AND NULLIF(BTRIM(COALESCE(mq_primary_artifact_returned.meta_json #>> '{return_queue_previous_meta,preview_identity}', '')), '') = 'contract_week:' || row_ids.contract_week_id::text)
             )
         )
       )
@@ -3010,7 +3229,7 @@ BEGIN
         'status', contract_week_row.status,
         'submission_mode_snapshot', contract_week_row.submission_mode_snapshot,
         'timesheet_id', contract_week_row.timesheet_id,
-        'uploaded_pdf_r2_key', contract_week_row.uploaded_pdf_r2_key,
+        'uploaded_pdf_r2_key', CASE WHEN row_ids.timesheet_id IS NULL THEN contract_week_row.uploaded_pdf_r2_key ELSE NULL::text END,
         'day_entries_json', contract_week_row.day_entries_json,
         'totals_json', contract_week_row.totals_json,
         'created_at', contract_week_row.created_at,
@@ -3195,8 +3414,12 @@ BEGIN
         'deviation_marker_reason', row_ids.row_json->>'deviation_marker_reason'
       )
       || JSONB_BUILD_OBJECT(
-        'row', row_ids.row_json,
-        'row_patch', COALESCE(row_ids.row_json->'row_patch', JSONB_BUILD_OBJECT()),
+        'row', row_ids.row_json || JSONB_BUILD_OBJECT(
+          'uploaded_pdf_r2_key', CASE WHEN row_ids.timesheet_id IS NULL THEN row_ids.row_json->>'uploaded_pdf_r2_key' ELSE NULL::text END
+        ),
+        'row_patch', COALESCE(row_ids.row_json->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+          'uploaded_pdf_r2_key', CASE WHEN row_ids.timesheet_id IS NULL THEN row_ids.row_json->>'uploaded_pdf_r2_key' ELSE NULL::text END
+        ),
         'details', (
           JSONB_BUILD_OBJECT(
             'requested_timesheet_id', row_ids.row_json->>'requested_timesheet_id',
@@ -3279,7 +3502,7 @@ BEGIN
             'qr_generated_at', row_ids.row_json->>'qr_generated_at',
             'qr_scanned_at', row_ids.row_json->>'qr_scanned_at',
             'manual_pdf_r2_key', row_ids.row_json->>'manual_pdf_r2_key',
-            'uploaded_pdf_r2_key', row_ids.row_json->>'uploaded_pdf_r2_key',
+            'uploaded_pdf_r2_key', CASE WHEN row_ids.timesheet_id IS NULL THEN row_ids.row_json->>'uploaded_pdf_r2_key' ELSE NULL::text END,
             'generated_pdf_at_utc', row_ids.row_json->>'generated_pdf_at_utc',
             'manual_pdf_rotation_degrees', row_ids.row_json->>'manual_pdf_rotation_degrees',
             'action_flags', COALESCE(row_ids.row_json->'action_flags', JSONB_BUILD_OBJECT()),
@@ -3352,7 +3575,7 @@ BEGIN
         'qr_generated_at', row_ids.row_json->>'qr_generated_at',
         'qr_scanned_at', row_ids.row_json->>'qr_scanned_at',
         'manual_pdf_r2_key', row_ids.row_json->>'manual_pdf_r2_key',
-        'uploaded_pdf_r2_key', row_ids.row_json->>'uploaded_pdf_r2_key',
+        'uploaded_pdf_r2_key', CASE WHEN row_ids.timesheet_id IS NULL THEN row_ids.row_json->>'uploaded_pdf_r2_key' ELSE NULL::text END,
         'generated_pdf_at_utc', row_ids.row_json->>'generated_pdf_at_utc',
         'manual_pdf_rotation_degrees', row_ids.row_json->>'manual_pdf_rotation_degrees'
       )
@@ -3667,6 +3890,26 @@ BEGIN
       ''
     )), '');
 
+    v_effective_uploaded_pdf_r2_key := CASE
+      WHEN NULLIF(BTRIM(COALESCE(
+        v_out->>'timesheet_id',
+        v_out->>'current_timesheet_id',
+        v_out#>>'{row,timesheet_id}',
+        v_out#>>'{row,current_timesheet_id}',
+        v_out#>>'{data_row,timesheet_id}',
+        v_out#>>'{data_row,current_timesheet_id}',
+        ''
+      )), '') IS NULL THEN NULLIF(BTRIM(COALESCE(
+        v_out->>'uploaded_pdf_r2_key',
+        v_out#>>'{row,uploaded_pdf_r2_key}',
+        v_out#>>'{data_row,uploaded_pdf_r2_key}',
+        v_out#>>'{details,uploaded_pdf_r2_key}',
+        v_out#>>'{details,contract_week,uploaded_pdf_r2_key}',
+        ''
+      )), '')
+      ELSE NULL::text
+    END;
+
     v_effective_evidence_badges := JSONB_BUILD_ARRAY(
       JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(v_effective_badge_timesheet, FALSE), 'has_evidence', COALESCE(v_effective_badge_timesheet, FALSE)),
       JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(v_effective_badge_mileage, FALSE), 'has_evidence', COALESCE(v_effective_badge_mileage, FALSE)),
@@ -3710,7 +3953,8 @@ BEGIN
       'primary_artifact_display_name', v_effective_primary_artifact_display_name,
       'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
       'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
-      'preview_storage_key', v_effective_primary_artifact_storage_key
+      'preview_storage_key', v_effective_primary_artifact_storage_key,
+      'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key
     );
 
     v_effective_row := COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
@@ -3724,6 +3968,7 @@ BEGIN
       'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
       'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
       'preview_storage_key', v_effective_primary_artifact_storage_key,
+      'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key,
       'artifact_hints', v_effective_artifact_hints,
       'action_flags', COALESCE(v_out->'row'->'action_flags', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
         'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
@@ -3743,6 +3988,7 @@ BEGIN
       'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
       'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
       'preview_storage_key', v_effective_primary_artifact_storage_key,
+      'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key,
       'artifact_hints', v_effective_artifact_hints,
       'action_flags', COALESCE(v_out->'data_row'->'action_flags', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
         'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
@@ -3761,6 +4007,7 @@ BEGIN
       'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
       'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
       'preview_storage_key', v_effective_primary_artifact_storage_key,
+      'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key,
       'artifact_hints', v_effective_artifact_hints,
       'action_flags', COALESCE(v_out->'details'->'action_flags', v_effective_action_flags) || JSONB_BUILD_OBJECT(
         'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
@@ -3780,6 +4027,7 @@ BEGIN
       'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
       'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
       'preview_storage_key', v_effective_primary_artifact_storage_key,
+      'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key,
       'artifact_hints', v_effective_artifact_hints
     );
 
@@ -3794,6 +4042,7 @@ BEGIN
       'primary_artifact_storage_key', v_effective_primary_artifact_storage_key,
       'primary_artifact_preview_mode', v_effective_primary_artifact_preview_mode,
       'preview_storage_key', v_effective_primary_artifact_storage_key,
+      'uploaded_pdf_r2_key', v_effective_uploaded_pdf_r2_key,
       'evidence_meta', v_effective_evidence_meta,
       'artifact_hints', v_effective_artifact_hints,
       'action_flags', v_effective_action_flags,
@@ -3873,13 +4122,7 @@ BEGIN
     'filters', v_filters
   ));
 END;
-$function$
-;
-
-
-
-
-
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.bulk_authorise_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
