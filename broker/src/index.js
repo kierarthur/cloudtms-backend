@@ -49251,6 +49251,7 @@ async function handleManualTimesheetQueueEnqueue(env, req) {
   }));
 }
 
+
 async function handleManualTimesheetQueueList(env, req) {
   const enc = encodeURIComponent;
   const url = new URL(req.url);
@@ -49296,9 +49297,60 @@ async function handleManualTimesheetQueueList(env, req) {
 
   urlStr += `&limit=${limit}`;
 
+  const sanitiseQueuedManualTimesheetQueueRowForResponse = (row) => {
+    if (!row || typeof row !== 'object') return row;
+    if (String(row.status || '').trim().toUpperCase() !== 'QUEUED') return row;
+
+    const meta = (row.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
+      ? { ...row.meta_json }
+      : {};
+    const keysToMoveToHistory = [
+      'active_identity',
+      'activeIdentity',
+      'preview_identity',
+      'previewIdentity',
+      'materialised_to_timesheet_id',
+      'materialized_to_timesheet_id',
+      'materialised_storage_key',
+      'materialized_storage_key',
+      'materialised_from_process_preview',
+      'materialized_from_process_preview',
+      'selected_queue_timesheet_materialisation',
+      'selected_queue_timesheet_materialization',
+      'attached_storage_key',
+      'attached_from_process',
+      'attached_kind',
+      'attached_at_utc',
+      'attached_to_timesheet_id',
+      'preview_selection_key',
+      'previewSelectionKey',
+      'process_claimed_at_utc',
+      'processClaimedAtUtc'
+    ];
+
+    const previousMeta = (meta.return_queue_previous_meta && typeof meta.return_queue_previous_meta === 'object' && !Array.isArray(meta.return_queue_previous_meta))
+      ? { ...meta.return_queue_previous_meta }
+      : {};
+    let changed = false;
+
+    for (const key of keysToMoveToHistory) {
+      if (!Object.prototype.hasOwnProperty.call(meta, key)) continue;
+      const value = meta[key];
+      if (value !== null && value !== undefined && value !== '') previousMeta[key] = value;
+      delete meta[key];
+      changed = true;
+    }
+
+    if (!changed) return row;
+    if (Object.keys(previousMeta).length) meta.return_queue_previous_meta = previousMeta;
+    meta.legacy_queue_meta_sanitised_for_response = true;
+
+    return { ...row, meta_json: meta };
+  };
+
   try {
     const { rows } = await sbFetch(env, urlStr);
-    const items = Array.isArray(rows) ? rows : [];
+    const items = (Array.isArray(rows) ? rows : []).map(sanitiseQueuedManualTimesheetQueueRowForResponse);
     const loadedAtUtc = new Date().toISOString();
     return withCORS(env, req, ok({
       items,
@@ -49321,6 +49373,7 @@ async function handleManualTimesheetQueueList(env, req) {
     return withCORS(env, req, serverError('Failed to list manual timesheet queue'));
   }
 }
+
 
 
  async function handleManualTimesheetQueueGet(env, req, queueId) {
@@ -58276,6 +58329,8 @@ function isImportAuthoritativeEvidenceContext(summary) {
   );
 }
 
+
+
 async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
@@ -58445,12 +58500,269 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     if (normalized >= 135 && normalized < 225) return 180;
     return 270;
   };
+  const delayReturnToQueueRetry = (ms) => new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+  const parsePostgrestRows = (txt) => {
+    try {
+      const parsed = txt ? JSON.parse(txt) : [];
+      return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+    } catch {
+      return [];
+    }
+  };
+  const isRetryableReturnToQueueDbIssue = (value) => {
+    const text = String(
+      (value && typeof value === 'object')
+        ? [value.code, value.message, value.details, value.hint, value.error, value.status, value.statusText].filter(Boolean).join(' ')
+        : (value || '')
+    ).toLowerCase();
+    return !!(
+      text.includes('55p03') ||
+      text.includes('lock timeout') ||
+      text.includes('lock_not_available') ||
+      text.includes('canceling statement due to lock timeout') ||
+      text.includes('40p01') ||
+      text.includes('deadlock') ||
+      text.includes('40001') ||
+      text.includes('serialization') ||
+      text.includes('statement timeout') ||
+      text.includes('networkerror') ||
+      text.includes('network error') ||
+      text.includes('fetch failed') ||
+      text.includes('temporarily unavailable') ||
+      text.includes('service unavailable') ||
+      text.includes('503') ||
+      text.includes('504') ||
+      text.includes('return_to_queue_manual_pdf_clear_retry') ||
+      text.includes('manual pdf pointer still matched returned storage key')
+    );
+  };
+  const retryReturnToQueueOperation = async (operation, options = {}) => {
+    const delays = Array.isArray(options.delays) && options.delays.length
+      ? options.delays
+      : [150, 250, 400, 650, 1000, 1500, 2200, 3000, 4000, 5000];
+    let retryCount = 0;
+    let waitedMs = 0;
+    let hadRetryableLock = false;
+    let lastError = null;
+    for (let attemptIndex = 0; attemptIndex < delays.length; attemptIndex += 1) {
+      try {
+        const result = await operation({ attempt: attemptIndex + 1, retryCount, waitedMs });
+        return { ok: true, result, retry_count: retryCount, wait_ms: waitedMs, had_retryable_lock: hadRetryableLock };
+      } catch (err) {
+        lastError = err;
+        const retryable = isRetryableReturnToQueueDbIssue(err);
+        if (!retryable || attemptIndex >= delays.length - 1) break;
+        hadRetryableLock = true;
+        retryCount += 1;
+        const baseDelay = Number(delays[attemptIndex]) || 0;
+        const jitter = Math.round(baseDelay * (0.8 + (Math.random() * 0.4)));
+        waitedMs += jitter;
+        await delayReturnToQueueRetry(jitter);
+      }
+    }
+    return { ok: false, error: lastError, retry_count: retryCount, wait_ms: waitedMs, had_retryable_lock: hadRetryableLock };
+  };
+  const readCurrentManualPdfPointer = async () => sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,manual_pdf_r2_key` +
+      `&limit=1`
+  );
+  const clearStaleManualPdfPointerWithRetry = async (storageKeyForClear, rawManualPdfKeyAtStart = '') => {
+    const clearStorageKey = normalizeStorageKey(storageKeyForClear);
+    const stats = {
+      retry_count: 0,
+      wait_ms: 0,
+      had_retryable_lock: false,
+      completed_after_retry: false,
+      pending: false,
+      already_clear: false,
+      cleared: false
+    };
+    if (!clearStorageKey) return { ok: true, ...stats, skipped: true };
+
+    const clearPayload = {
+      manual_pdf_r2_key: null,
+      manual_pdf_rotation_degrees: 0
+    };
+
+    const patchClear = async (useExactKeyFilter, latestManualPdfKeyRaw = '') => {
+      const rawManualPdfKey = trimStr(latestManualPdfKeyRaw || rawManualPdfKeyAtStart || '');
+      const url =
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTsId)}` +
+        `&is_current=eq.true` +
+        (useExactKeyFilter && rawManualPdfKey ? `&manual_pdf_r2_key=eq.${enc(rawManualPdfKey)}` : '');
+
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify(clearPayload)
+      });
+      const txt = await res.text().catch(() => '');
+      if (!res.ok) {
+        const err = new Error(txt || `manual pdf clear failed with HTTP ${res.status}`);
+        err.status = res.status;
+        err.statusText = res.statusText;
+        err.responseText = txt;
+        throw err;
+      }
+      return parsePostgrestRows(txt);
+    };
+
+    const attemptResult = await retryReturnToQueueOperation(async () => {
+      const latestBefore = await readCurrentManualPdfPointer().catch((err) => { throw err; });
+      if (!latestBefore) {
+        const err = new Error('current timesheet row was not available while finishing return-to-queue');
+        err.non_retryable = true;
+        throw err;
+      }
+      const latestManualPdfKey = normalizeStorageKey(latestBefore?.manual_pdf_r2_key);
+      const latestManualPdfKeyRaw = trimStr(latestBefore?.manual_pdf_r2_key || rawManualPdfKeyAtStart || '');
+      if (!latestManualPdfKey || latestManualPdfKey !== clearStorageKey) {
+        return { cleared: false, already_clear: true };
+      }
+
+      let clearRows = await patchClear(true, latestManualPdfKeyRaw);
+      if (Array.isArray(clearRows) && clearRows.length > 0) return { cleared: true, already_clear: false };
+
+      const latestAfterExact = await readCurrentManualPdfPointer().catch((err) => { throw err; });
+      const latestAfterExactKey = normalizeStorageKey(latestAfterExact?.manual_pdf_r2_key);
+      if (!latestAfterExactKey || latestAfterExactKey !== clearStorageKey) {
+        return { cleared: false, already_clear: true };
+      }
+
+      clearRows = await patchClear(false, latestManualPdfKeyRaw);
+      if (Array.isArray(clearRows) && clearRows.length > 0) return { cleared: true, already_clear: false };
+
+      const latestAfterBroad = await readCurrentManualPdfPointer().catch((err) => { throw err; });
+      const latestAfterBroadKey = normalizeStorageKey(latestAfterBroad?.manual_pdf_r2_key);
+      if (!latestAfterBroadKey || latestAfterBroadKey !== clearStorageKey) {
+        return { cleared: false, already_clear: true };
+      }
+
+      const stillMatching = new Error('manual pdf pointer still matched returned storage key after clear attempt');
+      stillMatching.code = 'RETURN_TO_QUEUE_MANUAL_PDF_CLEAR_RETRY';
+      throw stillMatching;
+    });
+
+    stats.retry_count = Number(attemptResult.retry_count || 0) || 0;
+    stats.wait_ms = Number(attemptResult.wait_ms || 0) || 0;
+    stats.had_retryable_lock = attemptResult.had_retryable_lock === true;
+    stats.completed_after_retry = stats.retry_count > 0 && attemptResult.ok === true;
+
+    if (!attemptResult.ok) {
+      const verification = await readCurrentManualPdfPointer().catch(() => null);
+      const verifiedKey = normalizeStorageKey(verification?.manual_pdf_r2_key);
+      if (!verifiedKey || verifiedKey !== clearStorageKey) {
+        return { ok: true, ...stats, cleared: false, already_clear: true };
+      }
+      return { ok: false, ...stats, pending: true };
+    }
+
+    return {
+      ok: true,
+      ...stats,
+      cleared: attemptResult.result?.cleared === true,
+      already_clear: attemptResult.result?.already_clear === true
+    };
+  };
+
+
+  const returnToQueueFinishFailedResponse = (extra = {}) => withCORS(
+    env,
+    req,
+    new Response(
+      JSON.stringify({
+        ok: false,
+        success: false,
+        error: 'RETURN_TO_QUEUE_FINISH_FAILED',
+        error_code: 'RETURN_TO_QUEUE_FINISH_FAILED',
+        message: 'CloudTMS could not finish the evidence update. Please refresh and try again.',
+        refresh_required: true,
+        ...(extra && typeof extra === 'object' ? extra : {})
+      }),
+      { status: 503, headers: JSON_HEADERS }
+    )
+  );
+
+  const makeReturnToQueuePostgrestError = (txt, fallbackMessage, res = null) => {
+    const err = new Error(trimStr(txt) || fallbackMessage || 'Return-to-queue step failed');
+    if (res) {
+      err.status = res.status;
+      err.statusText = res.statusText;
+    }
+    err.responseText = trimStr(txt || '');
+    return err;
+  };
+
+  const readCurrentEvidenceRowForReturn = async () => sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+      `?id=eq.${enc(evidenceId)}` +
+      `&timesheet_id=eq.${enc(currentTsId)}` +
+      `&select=id,timesheet_id,storage_key,kind` +
+      `&limit=1`
+  ).catch(() => null);
+
+  const deleteTimesheetEvidenceWithRetry = async () => {
+    const attempt = await retryReturnToQueueOperation(async () => {
+      const delRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      );
+      if (delRes.ok) return { deleted: true, already_deleted: false };
+
+      const txt = await delRes.text().catch(() => '');
+      const stillExists = await readCurrentEvidenceRowForReturn();
+      if (!stillExists?.id) return { deleted: false, already_deleted: true };
+      throw makeReturnToQueuePostgrestError(txt, `timesheet evidence detach failed with HTTP ${delRes.status}`, delRes);
+    });
+
+    if (attempt.ok === true) {
+      return {
+        ok: true,
+        deleted: attempt.result?.deleted === true,
+        already_deleted: attempt.result?.already_deleted === true,
+        retry_count: Number(attempt.retry_count || 0) || 0,
+        wait_ms: Number(attempt.wait_ms || 0) || 0,
+        had_retryable_lock: attempt.had_retryable_lock === true,
+        completed_after_retry: Number(attempt.retry_count || 0) > 0
+      };
+    }
+
+    const verification = await readCurrentEvidenceRowForReturn();
+    if (!verification?.id) {
+      return {
+        ok: true,
+        deleted: false,
+        already_deleted: true,
+        retry_count: Number(attempt.retry_count || 0) || 0,
+        wait_ms: Number(attempt.wait_ms || 0) || 0,
+        had_retryable_lock: attempt.had_retryable_lock === true,
+        completed_after_retry: Number(attempt.retry_count || 0) > 0
+      };
+    }
+
+    return {
+      ok: false,
+      retry_count: Number(attempt.retry_count || 0) || 0,
+      wait_ms: Number(attempt.wait_ms || 0) || 0,
+      had_retryable_lock: attempt.had_retryable_lock === true,
+      error: attempt.error || null
+    };
+  };
 
   try {
     const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
     if (!evidencePolicy?.can_manage_evidence) {
       return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'returned to the queue'));
     }
+
+    const expectedQueueId = trimStr(body?.queue_id || body?.queueId || body?.expected_queue_id || body?.expectedQueueId || '');
+    const expectedStorageKeyFromRequest = normalizeStorageKey(body?.expected_storage_key || body?.expectedStorageKey || body?.storage_key || body?.storageKey || '');
 
     const { rows: evRows } = await sbFetch(
       env,
@@ -58461,7 +58773,72 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
         `&limit=1`
     );
     const ev = evRows?.[0] || null;
-    if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+    if (!ev) {
+      if (expectedQueueId && expectedStorageKeyFromRequest) {
+        const restoredQueueRow = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+            `?id=eq.${enc(expectedQueueId)}` +
+            `&status=eq.QUEUED` +
+            `&select=id,r2_key,status,meta_json` +
+            `&limit=1`
+        ).catch(() => null);
+        const restoredQueueKey = normalizeStorageKey(restoredQueueRow?.r2_key);
+        const restoredPreviousEvidenceId = trimStr(restoredQueueRow?.meta_json?.returned_evidence_id || restoredQueueRow?.meta_json?.return_queue_previous_meta?.returned_evidence_id || '');
+        const restoredPreviousTimesheetId = trimStr(restoredQueueRow?.meta_json?.returned_from_timesheet_id || restoredQueueRow?.meta_json?.return_queue_previous_meta?.returned_from_timesheet_id || '');
+        const restoredMatches = !!(
+          restoredQueueRow?.id &&
+          restoredQueueKey &&
+          restoredQueueKey === expectedStorageKeyFromRequest &&
+          (!restoredPreviousEvidenceId || restoredPreviousEvidenceId === String(evidenceId)) &&
+          (!restoredPreviousTimesheetId || restoredPreviousTimesheetId === currentTsId)
+        );
+        if (restoredMatches) {
+          const clearResult = await clearStaleManualPdfPointerWithRetry(expectedStorageKeyFromRequest, expectedStorageKeyFromRequest);
+          if (clearResult.ok === true) {
+            try {
+              await writeAudit(
+                env,
+                user,
+                'TIMESHEET_EVIDENCE_RETURN_TO_QUEUE_IDEMPOTENT_FINISH',
+                {
+                  timesheet_id: currentTsId,
+                  evidence_id: evidenceId,
+                  queue_id: expectedQueueId,
+                  storage_key: expectedStorageKeyFromRequest,
+                  evidence_already_returned: true,
+                  manual_pdf_clear_required: true,
+                  cleared_manual_pdf_r2_key: clearResult.cleared === true || clearResult.already_clear === true,
+                  manual_pdf_clear_retry_count: clearResult.retry_count || 0,
+                  manual_pdf_clear_wait_ms: clearResult.wait_ms || 0,
+                  manual_pdf_clear_had_retryable_lock: clearResult.had_retryable_lock === true,
+                  manual_pdf_clear_completed_after_retry: clearResult.completed_after_retry === true,
+                  manual_pdf_clear_pending: false
+                },
+                { entity: 'timesheets', subject_id: currentTsId, req }
+              );
+            } catch {}
+            return withCORS(env, req, ok({
+              returned_to_queue: true,
+              evidence_already_returned: true,
+              idempotent_return_to_queue: true,
+              requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+              current_timesheet_id: currentTsId,
+              was_stale: !!resolved.was_stale,
+              queue_id: expectedQueueId,
+              return_queue_mode: 'idempotent_existing_returned_queue_row',
+              manual_pdf_clear_required: true,
+              cleared_manual_pdf_r2_key: clearResult.cleared === true || clearResult.already_clear === true,
+              manual_pdf_clear_retry_count: clearResult.retry_count || 0,
+              manual_pdf_clear_wait_ms: clearResult.wait_ms || 0,
+              manual_pdf_clear_completed_after_retry: clearResult.completed_after_retry === true
+            }));
+          }
+          return returnToQueueFinishFailedResponse();
+        }
+      }
+      return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+    }
 
     const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev });
     if (!evPolicy?.can_manage_evidence) {
@@ -58480,7 +58857,7 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     if (!storageKey) {
       return withCORS(env, req, badRequest('Evidence has no storage_key and cannot be returned to queue'));
     }
-    const expectedStorageKey = normalizeStorageKey(body?.expected_storage_key || body?.expectedStorageKey || body?.storage_key || body?.storageKey || '');
+    const expectedStorageKey = expectedStorageKeyFromRequest;
     if (expectedStorageKey && expectedStorageKey !== storageKey) {
       return withCORS(
         env,
@@ -58500,7 +58877,6 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
         )
       );
     }
-    const expectedQueueId = trimStr(body?.queue_id || body?.queueId || body?.expected_queue_id || body?.expectedQueueId || '');
 
     const storageBasename = storageKey.split('/').pop() || 'file';
     const displayName = trimStr(ev.display_name) || storageBasename;
@@ -58590,7 +58966,7 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     const patchExactQueueRowForReturn = async (queueRow, returnQueueMode) => {
       const cleanQueueRowId = trimStr(queueRow?.id);
       if (!cleanQueueRowId) {
-        return { ok: false, response: withCORS(env, req, serverError('Failed to identify queue row for return-to-queue')) };
+        return { ok: false, response: returnToQueueFinishFailedResponse({ returned_to_queue: false }) };
       }
 
       const originalContentHash = trimStr(queueRow.content_hash);
@@ -58629,29 +59005,50 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
         return { res, txt };
       };
 
-      const firstContentHash = originalContentHash || returnedSyntheticHash(cleanQueueRowId);
-      const firstRemapped = !originalContentHash;
-      let payload = basePayload(firstContentHash, firstRemapped, firstRemapped ? 'MISSING_CONTENT_HASH_ON_RETURN' : null);
-      let { res, txt } = await patchOnce(payload);
+      const patched = await retryReturnToQueueOperation(async () => {
+        const firstContentHash = originalContentHash || returnedSyntheticHash(cleanQueueRowId);
+        const firstRemapped = !originalContentHash;
+        let payload = basePayload(firstContentHash, firstRemapped, firstRemapped ? 'MISSING_CONTENT_HASH_ON_RETURN' : null);
+        let { res, txt } = await patchOnce(payload);
 
-      if (!res.ok && duplicateContentHashError(txt) && originalContentHash) {
-        payload = basePayload(
-          returnedSyntheticHash(cleanQueueRowId),
-          true,
-          'ACTIVE_CONTENT_HASH_COLLISION_ON_RETURN'
-        );
-        ({ res, txt } = await patchOnce(payload));
+        if (!res.ok && duplicateContentHashError(txt) && originalContentHash) {
+          payload = basePayload(
+            returnedSyntheticHash(cleanQueueRowId),
+            true,
+            'ACTIVE_CONTENT_HASH_COLLISION_ON_RETURN'
+          );
+          ({ res, txt } = await patchOnce(payload));
+        }
+
+        if (!res.ok) {
+          throw makeReturnToQueuePostgrestError(txt, `queue row restore failed with HTTP ${res.status}`, res);
+        }
+
+        return { payload };
+      });
+
+      if (patched.ok !== true) {
+        return {
+          ok: false,
+          response: returnToQueueFinishFailedResponse({
+            returned_to_queue: false,
+            queue_id: cleanQueueRowId,
+            manual_pdf_clear_retry_count: patched.retry_count || 0,
+            manual_pdf_clear_wait_ms: patched.wait_ms || 0,
+            manual_pdf_clear_had_retryable_lock: patched.had_retryable_lock === true
+          })
+        };
       }
 
-      if (!res.ok) {
-        return { ok: false, response: withCORS(env, req, serverError(`Failed to restore queue row for return-to-queue: ${txt}`)) };
-      }
-
+      const payload = patched.result?.payload || basePayload(originalContentHash || returnedSyntheticHash(cleanQueueRowId), !originalContentHash, !originalContentHash ? 'MISSING_CONTENT_HASH_ON_RETURN' : null);
       return {
         ok: true,
         id: cleanQueueRowId,
         content_hash_remapped_for_return: !!payload.meta_json?.content_hash_remapped_for_return,
-        original_content_hash_before_return: originalContentHash || null
+        original_content_hash_before_return: originalContentHash || null,
+        retry_count: patched.retry_count || 0,
+        wait_ms: patched.wait_ms || 0,
+        had_retryable_lock: patched.had_retryable_lock === true
       };
     };
 
@@ -58674,58 +59071,82 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
         })
       };
 
-      const insertRes = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue`,
-        {
-          method: 'POST',
-          headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-          body: JSON.stringify(insertPayload)
-        }
-      );
-
-      const txt = await insertRes.text().catch(() => '');
-      if (!insertRes.ok) {
-        if (duplicateContentHashError(txt)) {
-          const refreshedCandidates = await fetchQueueRowsForStorageKey();
-          const exactAvailable = refreshedCandidates.find(row =>
-            normalizeStorageKey(row?.r2_key) === storageKey &&
-            queueRowIsAlreadyAvailable(row)
-          ) || null;
-          if (exactAvailable?.id) {
-            const patched = await patchExactQueueRowForReturn(exactAvailable, 'reused_existing_exact_queue_row_after_insert_race');
-            if (!patched.ok) return patched;
-            return {
-              ok: true,
-              id: patched.id,
-              reused_existing_queue_row: true,
-              mode: 'reused_existing_exact_queue_row_after_insert_race',
-              content_hash_remapped_for_return: patched.content_hash_remapped_for_return,
-              original_content_hash_before_return: patched.original_content_hash_before_return
-            };
+      const insertedAttempt = await retryReturnToQueueOperation(async () => {
+        const insertRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue`,
+          {
+            method: 'POST',
+            headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+            body: JSON.stringify(insertPayload)
           }
+        );
+
+        const txt = await insertRes.text().catch(() => '');
+        if (!insertRes.ok) {
+          if (duplicateContentHashError(txt)) {
+            const refreshedCandidates = await fetchQueueRowsForStorageKey();
+            const exactAvailable = refreshedCandidates.find(row =>
+              normalizeStorageKey(row?.r2_key) === storageKey &&
+              queueRowIsAlreadyAvailable(row)
+            ) || null;
+            if (exactAvailable?.id) {
+              const patched = await patchExactQueueRowForReturn(exactAvailable, 'reused_existing_exact_queue_row_after_insert_race');
+              if (!patched.ok) {
+                throw makeReturnToQueuePostgrestError('', 'existing queue row restore failed after insert race');
+              }
+              return {
+                id: patched.id,
+                reused_existing_queue_row: true,
+                mode: 'reused_existing_exact_queue_row_after_insert_race',
+                content_hash_remapped_for_return: patched.content_hash_remapped_for_return,
+                original_content_hash_before_return: patched.original_content_hash_before_return
+              };
+            }
+          }
+          throw makeReturnToQueuePostgrestError(txt, `queue row create failed with HTTP ${insertRes.status}`, insertRes);
         }
-        return { ok: false, response: withCORS(env, req, serverError(`Failed to create queue row for return-to-queue: ${txt}`)) };
-      }
 
-      let inserted = null;
-      try {
-        const json = txt ? JSON.parse(txt) : [];
-        inserted = Array.isArray(json) ? json[0] : json;
-      } catch {
-        inserted = null;
-      }
+        let inserted = null;
+        try {
+          const json = txt ? JSON.parse(txt) : [];
+          inserted = Array.isArray(json) ? json[0] : json;
+        } catch {
+          inserted = null;
+        }
 
-      if (!inserted?.id) {
-        return { ok: false, response: withCORS(env, req, serverError('Failed to create queue row for return-to-queue')) };
+        if (!inserted?.id) {
+          const err = new Error('queue row create did not return an identifier');
+          err.non_retryable = true;
+          throw err;
+        }
+
+        return {
+          id: inserted.id,
+          reused_existing_queue_row: false,
+          mode: 'created_from_evidence',
+          content_hash_remapped_for_return: true,
+          original_content_hash_before_return: null
+        };
+      });
+
+      if (insertedAttempt.ok !== true) {
+        return {
+          ok: false,
+          response: returnToQueueFinishFailedResponse({
+            returned_to_queue: false,
+            manual_pdf_clear_retry_count: insertedAttempt.retry_count || 0,
+            manual_pdf_clear_wait_ms: insertedAttempt.wait_ms || 0,
+            manual_pdf_clear_had_retryable_lock: insertedAttempt.had_retryable_lock === true
+          })
+        };
       }
 
       return {
         ok: true,
-        id: inserted.id,
-        reused_existing_queue_row: false,
-        mode: 'created_from_evidence',
-        content_hash_remapped_for_return: true,
-        original_content_hash_before_return: null
+        ...insertedAttempt.result,
+        retry_count: insertedAttempt.retry_count || 0,
+        wait_ms: insertedAttempt.wait_ms || 0,
+        had_retryable_lock: insertedAttempt.had_retryable_lock === true
       };
     };
 
@@ -58778,14 +59199,15 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
       originalContentHashBeforeReturn = created.original_content_hash_before_return || null;
     }
 
-    const delRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-    );
-
-    if (!delRes.ok) {
-      const txt = await delRes.text().catch(() => '');
-      return withCORS(env, req, serverError(`Failed to detach evidence from timesheet: ${txt}`));
+    const deleteResult = await deleteTimesheetEvidenceWithRetry();
+    if (deleteResult.ok !== true) {
+      return returnToQueueFinishFailedResponse({
+        returned_to_queue: true,
+        queue_id: queueRowId || null,
+        manual_pdf_clear_retry_count: deleteResult.retry_count || 0,
+        manual_pdf_clear_wait_ms: deleteResult.wait_ms || 0,
+        manual_pdf_clear_had_retryable_lock: deleteResult.had_retryable_lock === true
+      });
     }
 
     const evKindU = String(evKind || '').toUpperCase();
@@ -58796,81 +59218,30 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
       currentManualPdfKey === storageKey;
     let clearedManualPdf = false;
 
+    let manualPdfClearStats = {
+      retry_count: 0,
+      wait_ms: 0,
+      had_retryable_lock: false,
+      completed_after_retry: false,
+      pending: false
+    };
+
     if (shouldClearManualPdf) {
-      const clearPayload = {
-        manual_pdf_r2_key: null,
-        manual_pdf_rotation_degrees: 0
+      const clearResult = await clearStaleManualPdfPointerWithRetry(storageKey, trimStr(tsMeta?.manual_pdf_r2_key || ''));
+      manualPdfClearStats = {
+        retry_count: Number(clearResult.retry_count || 0) || 0,
+        wait_ms: Number(clearResult.wait_ms || 0) || 0,
+        had_retryable_lock: clearResult.had_retryable_lock === true,
+        completed_after_retry: clearResult.completed_after_retry === true,
+        pending: clearResult.pending === true
       };
-
-      const clearStaleManualPdfPointer = async (useExactKeyFilter) => {
-        const rawManualPdfKey = trimStr(tsMeta?.manual_pdf_r2_key);
-        const url =
-          `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&is_current=eq.true` +
-          (useExactKeyFilter && rawManualPdfKey ? `&manual_pdf_r2_key=eq.${enc(rawManualPdfKey)}` : '');
-
-        const res = await fetch(url, {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-          body: JSON.stringify(clearPayload)
+      if (clearResult.ok !== true) {
+        return returnToQueueFinishFailedResponse({
+          returned_to_queue: true,
+          queue_id: queueRowId || null
         });
-        const txt = await res.text().catch(() => '');
-        return { res, txt };
-      };
-
-      try {
-        let { res: clearRes, txt: clearTxt } = await clearStaleManualPdfPointer(true);
-
-        if (!clearRes.ok) {
-          return withCORS(env, req, serverError(`Failed to clear stale manual_pdf_r2_key after return-to-queue: ${clearTxt}`));
-        }
-
-        let clearRows = [];
-        try {
-          clearRows = clearTxt ? JSON.parse(clearTxt) : [];
-        } catch {
-          clearRows = [];
-        }
-
-        if (!Array.isArray(clearRows) || clearRows.length < 1) {
-          const latestTsMeta = await sbGetOne(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets` +
-              `?timesheet_id=eq.${enc(currentTsId)}` +
-              `&is_current=eq.true` +
-              `&select=timesheet_id,manual_pdf_r2_key` +
-              `&limit=1`
-          ).catch(() => null);
-
-          if (!latestTsMeta) {
-            return withCORS(env, req, serverError('Failed to verify stale manual_pdf_r2_key after return-to-queue: current timesheet row was not available'));
-          }
-
-          const latestManualPdfKey = normalizeStorageKey(latestTsMeta?.manual_pdf_r2_key);
-
-          if (latestManualPdfKey && latestManualPdfKey === storageKey) {
-            ({ res: clearRes, txt: clearTxt } = await clearStaleManualPdfPointer(false));
-            if (!clearRes.ok) {
-              return withCORS(env, req, serverError(`Failed to clear stale manual_pdf_r2_key after return-to-queue: ${clearTxt}`));
-            }
-
-            try {
-              clearRows = clearTxt ? JSON.parse(clearTxt) : [];
-            } catch {
-              clearRows = [];
-            }
-
-            if (!Array.isArray(clearRows) || clearRows.length < 1) {
-              return withCORS(env, req, serverError('Failed to clear stale manual_pdf_r2_key after return-to-queue: no current timesheet row was updated'));
-            }
-          }
-        }
-
-        clearedManualPdf = Array.isArray(clearRows) && clearRows.length > 0;
-      } catch (e) {
-        return withCORS(env, req, serverError(`Failed to clear stale manual_pdf_r2_key after return-to-queue: ${e?.message || e}`));
       }
+      clearedManualPdf = clearResult.cleared === true || clearResult.already_clear === true;
     }
 
     try {
@@ -58897,7 +59268,12 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
           sheet_scope: tsMeta?.sheet_scope || null,
           submission_mode: tsMeta?.submission_mode || null,
           manual_pdf_clear_required: shouldClearManualPdf,
-          cleared_manual_pdf_r2_key: clearedManualPdf
+          cleared_manual_pdf_r2_key: clearedManualPdf,
+          manual_pdf_clear_retry_count: manualPdfClearStats.retry_count || 0,
+          manual_pdf_clear_wait_ms: manualPdfClearStats.wait_ms || 0,
+          manual_pdf_clear_had_retryable_lock: manualPdfClearStats.had_retryable_lock === true,
+          manual_pdf_clear_completed_after_retry: manualPdfClearStats.completed_after_retry === true,
+          manual_pdf_clear_pending: manualPdfClearStats.pending === true
         },
         { entity: 'timesheets', subject_id: currentTsId, req }
       );
@@ -58914,14 +59290,18 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
       return_queue_mode: returnedQueueMode,
       content_hash_remapped_for_return: contentHashRemappedForReturn,
       manual_pdf_clear_required: shouldClearManualPdf,
-      cleared_manual_pdf_r2_key: clearedManualPdf
+      cleared_manual_pdf_r2_key: clearedManualPdf,
+      manual_pdf_clear_retry_count: manualPdfClearStats.retry_count || 0,
+      manual_pdf_clear_wait_ms: manualPdfClearStats.wait_ms || 0,
+      manual_pdf_clear_completed_after_retry: manualPdfClearStats.completed_after_retry === true
     }));
   } catch (e) {
+    if (isRetryableReturnToQueueDbIssue(e)) {
+      return returnToQueueFinishFailedResponse();
+    }
     return withCORS(env, req, serverError(`Failed to return timesheet evidence to queue: ${e?.message || e}`));
   }
 }
-
-
 
 
 // POST /api/timesheets/:id/evidence
