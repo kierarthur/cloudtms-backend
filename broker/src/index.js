@@ -159626,7 +159626,7 @@ function matchPath(pathname, pattern) {
 }
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch
 export default {
-        async fetch(req, env, ctx) {
+  async fetch(req, env, ctx) {
     const pre = preflightIfNeeded(env, req);
     if (pre) return pre;
 
@@ -159790,6 +159790,10 @@ if (req.method === 'PUT' && p === '/api/banking/alerts/preferences') {
   if (m && req.method === 'POST') {
     return handleBankingPayProviderSubmitReviewResolution(env, req, user, m.id, ctx);
   }
+}
+
+if (req.method === 'POST' && p === '/api/banking/pay/payee-readiness/ensure') {
+  return handleBankingPayPayeeReadinessEnsure(env, req, user);
 }
 
 if (req.method === 'POST' && p === '/api/banking/pay/payee-map/ensure') {
