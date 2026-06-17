@@ -58070,16 +58070,84 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     return u;
   };
 
-  const stripAttachedMeta = (meta) => {
-    const src = (meta && typeof meta === 'object' && !Array.isArray(meta)) ? { ...meta } : {};
-    delete src.attached_kind;
-    delete src.attached_to_timesheet_id;
-    delete src.attached_at_utc;
-    return src;
+  const normaliseReturnQueueMetaObject = (meta) => {
+    if (meta && typeof meta === 'object' && !Array.isArray(meta)) return { ...meta };
+    if (typeof meta === 'string') {
+      try {
+        const parsed = JSON.parse(meta);
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? { ...parsed } : {};
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  };
+
+  const cleanReturnQueueMetaValue = (value) => {
+    if (value == null) return null;
+    if (Array.isArray(value)) return value.map(cleanReturnQueueMetaValue);
+    if (value && typeof value === 'object') {
+      try { return JSON.parse(JSON.stringify(value)); } catch { return null; }
+    }
+    return value;
+  };
+
+  const buildReturnQueuePreviousMeta = (sourceMeta) => {
+    const src = normaliseReturnQueueMetaObject(sourceMeta);
+    const previous = {};
+    const keysToMoveToHistory = [
+      'attached_kind',
+      'attached_to_timesheet_id',
+      'attached_at_utc',
+      'attached_storage_key',
+      'attached_from_process',
+      'attached_queue_id',
+      'attachedQueueId',
+      'contract_week_id',
+      'contractWeekId',
+      'week_id',
+      'weekId',
+      'active_identity',
+      'activeIdentity',
+      'preview_identity',
+      'previewIdentity',
+      'preview_selection_key',
+      'previewSelectionKey',
+      'process_claimed_at_utc',
+      'processClaimedAtUtc',
+      'process_claimed_by_user_id',
+      'processClaimedByUserId',
+      'materialised_at_utc',
+      'materialized_at_utc',
+      'materialised_storage_key',
+      'materialized_storage_key',
+      'materialised_to_timesheet_id',
+      'materialized_to_timesheet_id',
+      'materialised_from_process_preview',
+      'materialized_from_process_preview',
+      'materialisation_deferred_to_backend',
+      'materialization_deferred_to_backend',
+      'materialisation_noop_reason',
+      'materialization_noop_reason',
+      'materialised_from_queue_id',
+      'materialized_from_queue_id',
+      'selected_queue_timesheet_materialisation',
+      'selected_queue_timesheet_materialization',
+      'duplicate_of_queue_item_id',
+      'duplicate_timesheet_evidence_identity'
+    ];
+
+    for (const key of keysToMoveToHistory) {
+      if (!Object.prototype.hasOwnProperty.call(src, key)) continue;
+      const value = cleanReturnQueueMetaValue(src[key]);
+      if (value !== null && value !== undefined && value !== '') previous[key] = value;
+    }
+
+    return previous;
   };
 
   const queueStatus = (row) => String(row?.status || '').trim().toUpperCase();
-  const queueRowIsAlreadyAvailable = (row) => ['QUEUED', 'IN_PROGRESS'].includes(queueStatus(row));
+  const queueRowIsAlreadyAvailable = (row) => queueStatus(row) === 'QUEUED';
   const duplicateContentHashError = (txt) => /manual_timesheet_queue_content_hash_active_idx|duplicate key value|23505/i.test(txt || '');
   const normalizeStorageKey = (v) => trimStr(v).replace(/^\/+/, '');
   const normalizeRotationDeg = (raw) => {
@@ -58158,18 +58226,28 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     };
 
     const buildReturnedMeta = (sourceMeta, extra = {}) => {
-      const next = stripAttachedMeta(sourceMeta);
-      next.returned_from_timesheet_id = currentTsId;
-      next.returned_evidence_id = evidenceId;
-      next.returned_evidence_kind = evKind;
-      next.returned_display_name = displayName;
-      next.returned_storage_key = storageKey;
-      next.returned_to_queue_at_utc = nowIsoVal;
+      const source = normaliseReturnQueueMetaObject(sourceMeta);
+      const previousMeta = buildReturnQueuePreviousMeta(source);
+      const sourceLabel = trimStr(source.source_label || source.sourceLabel || '') || 'Timesheet Imports';
+      const next = {
+        source_label: sourceLabel,
+        staged_kind: evKind,
+        returned_from_timesheet_id: currentTsId,
+        returned_evidence_id: evidenceId,
+        returned_evidence_kind: evKind,
+        returned_display_name: displayName,
+        returned_storage_key: storageKey,
+        returned_to_queue_at_utc: nowIsoVal
+      };
+
       if (extra.return_queue_mode) next.return_queue_mode = extra.return_queue_mode;
       if (extra.original_content_hash) next.returned_original_content_hash = extra.original_content_hash;
       if (extra.content_hash_remapped_for_return) {
         next.content_hash_remapped_for_return = true;
         next.content_hash_remap_reason = extra.content_hash_remap_reason || 'ACTIVE_CONTENT_HASH_COLLISION_ON_RETURN';
+      }
+      if (Object.keys(previousMeta).length) {
+        next.return_queue_previous_meta = previousMeta;
       }
       return next;
     };
