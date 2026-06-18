@@ -74438,13 +74438,29 @@ BEGIN
     v_purpose := 'SECTION_PAGE';
   END IF;
 
-  IF v_purpose NOT IN ('SECTION_PAGE', 'OVERVIEW') THEN
+  IF v_purpose NOT IN (
+    'SECTION_PAGE',
+    'OVERVIEW',
+    'DETAIL',
+    'PAYE_WORKSHEET',
+    'CURRENT_PAYMENT_STATUS',
+    'PAYMENT_ISSUES',
+    'REMITTANCE'
+  ) THEN
     RAISE EXCEPTION 'PAY_BATCH_GET_SECTION_PAGE_INVALID_PURPOSE'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
               'code', 'PAY_BATCH_GET_SECTION_PAGE_INVALID_PURPOSE',
               'purpose', v_purpose,
-              'allowed_purposes', jsonb_build_array('SECTION_PAGE', 'OVERVIEW')
+              'allowed_purposes', jsonb_build_array(
+                'SECTION_PAGE',
+                'OVERVIEW',
+                'DETAIL',
+                'PAYE_WORKSHEET',
+                'CURRENT_PAYMENT_STATUS',
+                'PAYMENT_ISSUES',
+                'REMITTANCE'
+              )
             )::text;
   END IF;
 
@@ -74582,23 +74598,219 @@ BEGIN
         pay_batch_item_page.id,
         pay_batch_item_page.pay_batch_candidate_id,
         pay_batch_candidate_page.candidate_id,
+        pay_batch_candidate_page.candidate_tms_ref,
         pay_batch_candidate_page.candidate_display_name,
         pay_batch_item_page.item_type,
+        pay_batch_item_page.timesheet_id,
+        pay_batch_item_page.pay_channel,
         pay_batch_item_page.source_ref,
         pay_batch_item_page.source_ref AS source_reference,
         pay_batch_item_page.description,
+        pay_batch_item_page.amount_ex_vat,
+        pay_batch_item_page.amount_vat,
+        pay_batch_item_page.amount_inc_vat,
         pay_batch_item_page.frozen_target_amount_ex_vat,
         pay_batch_item_page.frozen_target_amount_vat,
         pay_batch_item_page.frozen_target_amount_inc_vat,
         pay_batch_item_page.frozen_component_key_type,
         pay_batch_item_page.frozen_component_key_value,
+        pay_batch_item_page.frozen_component_classification,
+        pay_batch_item_page.frozen_source_basis_json,
+        pay_batch_item_page.frozen_component_snapshot_json,
+        pay_batch_item_page.frozen_source_pay_method,
+        pay_batch_item_page.frozen_target_pay_method,
+        pay_batch_item_page.frozen_resolution_mode,
+        pay_batch_item_page.frozen_resolution_payload_json,
+        pay_batch_item_page.frozen_resolution_result_json,
         pay_batch_item_page.pay_bank_transfer_id,
-        pay_bank_transfer_page.payee_name
+        pay_bank_transfer_page.payee_name,
+        breakdown_display.first_breakdown_id,
+        breakdown_display.line_kind,
+        breakdown_display.bucket_code,
+        breakdown_display.breakdown_unit_name,
+        breakdown_display.breakdown_units,
+        breakdown_display.breakdown_rate,
+        breakdown_display.breakdown_amount_ex_vat,
+        breakdown_display.breakdowns_json,
+        display_context.week_ending_date,
+        display_context.client_name,
+        display_context.role,
+        display_context.worked_date,
+        display_context.source_rate,
+        display_context.source_charge_rate,
+        display_context.additional_code,
+        display_line.unit_name,
+        CASE
+          WHEN display_line.unit_name IS NOT NULL
+           AND display_context.role IS NOT NULL
+           AND UPPER(display_line.unit_name) <> UPPER(display_context.role) THEN display_line.unit_name || ' / ' || display_context.role
+          ELSE COALESCE(display_line.unit_name, display_context.role)
+        END AS unit_label,
+        breakdown_display.breakdown_units AS units,
+        breakdown_display.breakdown_rate AS rate
       FROM public.pay_batch_items AS pay_batch_item_page
       JOIN public.pay_batch_candidates AS pay_batch_candidate_page
         ON pay_batch_candidate_page.id = pay_batch_item_page.pay_batch_candidate_id
       LEFT JOIN public.pay_bank_transfers AS pay_bank_transfer_page
         ON pay_bank_transfer_page.id = pay_batch_item_page.pay_bank_transfer_id
+      LEFT JOIN LATERAL (
+        SELECT
+          (ARRAY_AGG(breakdown_page_inner.id ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS first_breakdown_id,
+          (ARRAY_AGG(breakdown_page_inner.line_kind ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS line_kind,
+          (ARRAY_AGG(breakdown_page_inner.bucket_code ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS bucket_code,
+          (ARRAY_AGG(breakdown_page_inner.unit_name ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS breakdown_unit_name,
+          (ARRAY_AGG(breakdown_page_inner.units ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS breakdown_units,
+          (ARRAY_AGG(breakdown_page_inner.rate ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS breakdown_rate,
+          (ARRAY_AGG(breakdown_page_inner.amount_ex_vat ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS breakdown_amount_ex_vat,
+          (ARRAY_AGG(breakdown_page_inner.meta_json ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS first_breakdown_meta_json,
+          COALESCE(
+            jsonb_agg(
+              jsonb_strip_nulls(jsonb_build_object(
+                'id', breakdown_page_inner.id::text,
+                'line_kind', breakdown_page_inner.line_kind,
+                'bucket_code', breakdown_page_inner.bucket_code,
+                'unit_name', breakdown_page_inner.unit_name,
+                'units', breakdown_page_inner.units,
+                'rate', breakdown_page_inner.rate,
+                'amount_ex_vat', breakdown_page_inner.amount_ex_vat,
+                'amount_vat', breakdown_page_inner.amount_vat,
+                'amount_inc_vat', breakdown_page_inner.amount_inc_vat,
+                'meta_json', COALESCE(breakdown_page_inner.meta_json, '{}'::jsonb),
+                'operation_source_key', breakdown_page_inner.operation_source_key
+              ))
+              ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC
+            ),
+            '[]'::jsonb
+          ) AS breakdowns_json
+        FROM public.pay_batch_item_breakdowns AS breakdown_page_inner
+        WHERE breakdown_page_inner.pay_batch_item_id = pay_batch_item_page.id
+      ) AS breakdown_display ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          snapshot_page_inner.target_snapshot_json
+        FROM public.pay_batch_timesheet_snapshots AS snapshot_page_inner
+        WHERE snapshot_page_inner.pay_batch_id = pay_batch_candidate_page.pay_batch_id
+          AND snapshot_page_inner.timesheet_id = pay_batch_item_page.timesheet_id
+          AND snapshot_page_inner.candidate_id = pay_batch_candidate_page.candidate_id
+          AND (
+            snapshot_page_inner.pay_channel IS NOT DISTINCT FROM pay_batch_item_page.pay_channel
+            OR snapshot_page_inner.pay_channel IS NULL
+            OR pay_batch_item_page.pay_channel IS NULL
+          )
+        ORDER BY snapshot_page_inner.created_at_utc DESC, snapshot_page_inner.id DESC
+        LIMIT 1
+      ) AS snapshot_page ON true
+      LEFT JOIN public.timesheets AS timesheet_display_page
+        ON timesheet_display_page.timesheet_id = pay_batch_item_page.timesheet_id
+      CROSS JOIN LATERAL (
+        SELECT
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'week_ending_date',
+            pay_batch_item_page.frozen_component_snapshot_json->>'week_ending_date',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,week_ending_date}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'week_ending_date',
+            pay_batch_item_page.frozen_resolution_result_json->>'week_ending_date',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,week_ending_date}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,week_ending_date}',
+            snapshot_page.target_snapshot_json->>'week_ending_date',
+            CASE WHEN timesheet_display_page.week_ending_date IS NULL THEN NULL ELSE timesheet_display_page.week_ending_date::text END
+          )), '') AS week_ending_date,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'client_name',
+            pay_batch_item_page.frozen_component_snapshot_json->>'client_name',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,client_name}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'client_name',
+            pay_batch_item_page.frozen_resolution_result_json->>'client_name',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,client_name}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,client_name}',
+            snapshot_page.target_snapshot_json->>'client_name',
+            timesheet_display_page.hospital_norm
+          )), '') AS client_name,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'role',
+            pay_batch_item_page.frozen_source_basis_json->>'job_title',
+            pay_batch_item_page.frozen_component_snapshot_json->>'role',
+            pay_batch_item_page.frozen_component_snapshot_json->>'job_title',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,role}',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,job_title}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'role',
+            pay_batch_item_page.frozen_resolution_payload_json->>'job_title',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,role}',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,job_title}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,role}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,job_title}',
+            snapshot_page.target_snapshot_json->>'role',
+            snapshot_page.target_snapshot_json->>'job_title',
+            timesheet_display_page.job_title_norm
+          )), '') AS role,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'date',
+            pay_batch_item_page.frozen_component_snapshot_json->>'date',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,date}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'date',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,date}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,date}',
+            snapshot_page.target_snapshot_json->>'date',
+            CASE
+              WHEN UPPER(NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_type, '')), '')) = 'TS_DAY'
+               AND NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_value, '')), '') ~ '^\d{4}-\d{2}-\d{2}$'
+              THEN NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_value, '')), '')
+              ELSE NULL
+            END
+          )), '') AS worked_date,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'source_rate',
+            pay_batch_item_page.frozen_source_basis_json->>'pay_rate',
+            pay_batch_item_page.frozen_source_basis_json->>'rate',
+            pay_batch_item_page.frozen_component_snapshot_json->>'source_rate',
+            pay_batch_item_page.frozen_component_snapshot_json->>'pay_rate',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,source_rate}',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,pay_rate}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'source_rate',
+            pay_batch_item_page.frozen_resolution_result_json->>'source_rate',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,source_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,pay_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,source_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,pay_rate}'
+          )), '') AS source_rate,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'source_charge_rate',
+            pay_batch_item_page.frozen_source_basis_json->>'charge_rate',
+            pay_batch_item_page.frozen_component_snapshot_json->>'source_charge_rate',
+            pay_batch_item_page.frozen_component_snapshot_json->>'charge_rate',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,source_charge_rate}',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,charge_rate}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'source_charge_rate',
+            pay_batch_item_page.frozen_resolution_result_json->>'source_charge_rate',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,source_charge_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,charge_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,source_charge_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,charge_rate}'
+          )), '') AS source_charge_rate,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'additional_code',
+            pay_batch_item_page.frozen_component_snapshot_json->>'additional_code',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,additional_code}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'additional_code',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,additional_code}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,additional_code}',
+            CASE
+              WHEN UPPER(NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_type, '')), '')) IN ('ADDITIONAL_CODE', 'EXPENSE_CODE')
+              THEN NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_value, '')), '')
+              ELSE NULL
+            END
+          )), '') AS additional_code
+      ) AS display_context
+      CROSS JOIN LATERAL (
+        SELECT
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(breakdown_display.breakdown_unit_name, '')), ''),
+            display_context.additional_code,
+            NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_source_basis_json->>'unit_name', pay_batch_item_page.frozen_source_basis_json->>'unit', '')), ''),
+            NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_snapshot_json->>'unit_name', pay_batch_item_page.frozen_component_snapshot_json->>'unit', '')), ''),
+            display_context.role
+          ) AS unit_name
+      ) AS display_line
       WHERE pay_batch_candidate_page.pay_batch_id = p_pay_batch_id
         AND (v_cursor_id IS NULL OR pay_batch_item_page.id > v_cursor_id)
       ORDER BY pay_batch_item_page.id ASC
@@ -74612,13 +74824,19 @@ BEGIN
             'pay_batch_item_id', page_rows.id::text,
             'pay_batch_candidate_id', page_rows.pay_batch_candidate_id::text,
             'candidate_id', page_rows.candidate_id::text,
+            'candidate_tms_ref', page_rows.candidate_tms_ref,
             'candidate_display_name', page_rows.candidate_display_name,
             'candidate_name', page_rows.candidate_display_name,
             'payee_name', COALESCE(page_rows.payee_name, page_rows.candidate_display_name),
             'item_type', page_rows.item_type,
+            'timesheet_id', CASE WHEN page_rows.timesheet_id IS NULL THEN NULL ELSE page_rows.timesheet_id::text END,
+            'pay_channel', page_rows.pay_channel,
             'source_ref', page_rows.source_ref,
             'source_reference', page_rows.source_reference,
             'description', page_rows.description,
+            'amount_ex_vat', page_rows.amount_ex_vat,
+            'amount_vat', page_rows.amount_vat,
+            'amount_inc_vat', page_rows.amount_inc_vat,
             'frozen_target_amount_ex_vat', page_rows.frozen_target_amount_ex_vat,
             'frozen_target_amount_vat', page_rows.frozen_target_amount_vat,
             'frozen_target_amount_inc_vat', page_rows.frozen_target_amount_inc_vat,
@@ -74627,6 +74845,45 @@ BEGIN
             'pay_bank_transfer_id', CASE WHEN page_rows.pay_bank_transfer_id IS NULL THEN NULL::text ELSE page_rows.pay_bank_transfer_id::text END,
             'draft_not_submitted', COALESCE(UPPER(BTRIM(COALESCE(v_batch.status, ''))) IN ('DRAFT','DRAFT_CREATED'), false)
               AND COALESCE(UPPER(BTRIM(COALESCE(v_batch.execution_commit_state, 'NOT_SUBMITTED'))) IN ('', 'NOT_SUBMITTED', 'NONE'), true)
+          )
+          || jsonb_build_object(
+            'week_ending_date', page_rows.week_ending_date,
+            'client_name', page_rows.client_name,
+            'role', page_rows.role,
+            'worked_date', page_rows.worked_date,
+            'unit_name', page_rows.unit_name,
+            'unit_label', page_rows.unit_label,
+            'units', page_rows.units,
+            'rate', page_rows.rate,
+            'source_rate', page_rows.source_rate,
+            'source_charge_rate', page_rows.source_charge_rate,
+            'additional_code', page_rows.additional_code,
+            'line_kind', page_rows.line_kind,
+            'bucket_code', page_rows.bucket_code,
+            'breakdown_unit_name', page_rows.breakdown_unit_name,
+            'breakdown_amount_ex_vat', page_rows.breakdown_amount_ex_vat,
+            'breakdowns', page_rows.breakdowns_json
+          )
+          || jsonb_build_object(
+            'frozen_component_key_type', page_rows.frozen_component_key_type,
+            'frozen_component_key_value', page_rows.frozen_component_key_value,
+            'frozen_component_classification', page_rows.frozen_component_classification,
+            'frozen_source_basis_json', COALESCE(page_rows.frozen_source_basis_json, '{}'::jsonb),
+            'frozen_component_snapshot_json', COALESCE(page_rows.frozen_component_snapshot_json, '{}'::jsonb),
+            'frozen_source_pay_method', page_rows.frozen_source_pay_method,
+            'frozen_target_pay_method', page_rows.frozen_target_pay_method,
+            'frozen_resolution_mode', page_rows.frozen_resolution_mode,
+            'frozen_resolution_payload_json', COALESCE(page_rows.frozen_resolution_payload_json, '{}'::jsonb),
+            'frozen_resolution_result_json', COALESCE(page_rows.frozen_resolution_result_json, '{}'::jsonb),
+            'display_context_json', jsonb_strip_nulls(jsonb_build_object(
+              'week_ending_date', page_rows.week_ending_date,
+              'client_name', page_rows.client_name,
+              'role', page_rows.role,
+              'worked_date', page_rows.worked_date,
+              'source_rate', page_rows.source_rate,
+              'source_charge_rate', page_rows.source_charge_rate,
+              'additional_code', page_rows.additional_code
+            ))
           )
         )
         ORDER BY page_rows.id ASC
@@ -74640,8 +74897,27 @@ BEGIN
     WITH page_rows AS (
       SELECT
         pay_batch_candidate_page.*,
+        latest_paye_net_input.id AS latest_paye_net_input_id,
+        latest_paye_net_input.source AS paye_net_source,
+        latest_paye_net_input.net_amount AS paye_net_amount,
+        latest_paye_net_input.imported_at_utc AS paye_net_imported_at_utc,
+        latest_paye_net_input.file_name AS paye_net_file_name,
+        latest_paye_net_input.file_hash AS paye_net_file_hash,
         ROW_NUMBER() OVER (ORDER BY pay_batch_candidate_page.id ASC) AS row_ordinal
       FROM public.pay_batch_candidates AS pay_batch_candidate_page
+      LEFT JOIN LATERAL (
+        SELECT
+          paye_net_input_page.id,
+          paye_net_input_page.source,
+          paye_net_input_page.net_amount,
+          paye_net_input_page.imported_at_utc,
+          paye_net_input_page.file_name,
+          paye_net_input_page.file_hash
+        FROM public.pay_batch_paye_net_inputs AS paye_net_input_page
+        WHERE paye_net_input_page.pay_batch_candidate_id = pay_batch_candidate_page.id
+        ORDER BY paye_net_input_page.imported_at_utc DESC, paye_net_input_page.id DESC
+        LIMIT 1
+      ) AS latest_paye_net_input ON true
       WHERE pay_batch_candidate_page.pay_batch_id = p_pay_batch_id
         AND (v_cursor_id IS NULL OR pay_batch_candidate_page.id > v_cursor_id)
       ORDER BY pay_batch_candidate_page.id ASC
@@ -74652,6 +74928,7 @@ BEGIN
         jsonb_strip_nulls(
           jsonb_build_object(
             'id', page_rows.id::text,
+            'pay_batch_candidate_id', page_rows.id::text,
             'pay_batch_id', page_rows.pay_batch_id::text,
             'candidate_id', page_rows.candidate_id::text,
             'candidate_tms_ref', page_rows.candidate_tms_ref,
@@ -74672,6 +74949,24 @@ BEGIN
             'last_remittance_error', page_rows.last_remittance_error,
             'updated_at', page_rows.updated_at
           )
+          || jsonb_build_object(
+            'paye_net_amount', page_rows.paye_net_amount,
+            'paye_net_source', page_rows.paye_net_source,
+            'paye_net_imported_at_utc', CASE WHEN page_rows.paye_net_imported_at_utc IS NULL THEN NULL::text ELSE page_rows.paye_net_imported_at_utc::text END,
+            'latest_paye_net_input', CASE
+              WHEN page_rows.latest_paye_net_input_id IS NULL THEN NULL::jsonb
+              ELSE jsonb_strip_nulls(jsonb_build_object(
+                'id', page_rows.latest_paye_net_input_id::text,
+                'pay_batch_candidate_id', page_rows.id::text,
+                'candidate_id', page_rows.candidate_id::text,
+                'source', page_rows.paye_net_source,
+                'net_amount', page_rows.paye_net_amount,
+                'imported_at_utc', CASE WHEN page_rows.paye_net_imported_at_utc IS NULL THEN NULL::text ELSE page_rows.paye_net_imported_at_utc::text END,
+                'file_name', page_rows.paye_net_file_name,
+                'file_hash', page_rows.paye_net_file_hash
+              ))
+            END
+          )
         )
         ORDER BY page_rows.id ASC
       ), '[]'::jsonb),
@@ -74686,6 +74981,7 @@ BEGIN
         pay_batch_item_page.id,
         pay_batch_item_page.pay_batch_candidate_id,
         pay_batch_candidate_page.candidate_id,
+        pay_batch_candidate_page.candidate_tms_ref,
         pay_batch_candidate_page.candidate_display_name,
         pay_batch_item_page.item_type,
         pay_batch_item_page.timesheet_id,
@@ -74709,12 +75005,202 @@ BEGIN
         pay_batch_item_page.finance_component_id,
         pay_batch_item_page.frozen_component_key_type,
         pay_batch_item_page.frozen_component_key_value,
+        pay_batch_item_page.frozen_component_classification,
+        pay_batch_item_page.frozen_source_basis_json,
+        pay_batch_item_page.frozen_component_snapshot_json,
+        pay_batch_item_page.frozen_source_pay_method,
+        pay_batch_item_page.frozen_target_pay_method,
+        pay_batch_item_page.frozen_resolution_mode,
+        pay_batch_item_page.frozen_resolution_payload_json,
+        pay_batch_item_page.frozen_resolution_result_json,
         pay_batch_item_page.operation_source_key,
         pay_batch_item_page.created_at,
-        pay_batch_item_page.updated_at
+        pay_batch_item_page.updated_at,
+        breakdown_display.first_breakdown_id,
+        breakdown_display.line_kind,
+        breakdown_display.bucket_code,
+        breakdown_display.breakdown_unit_name,
+        breakdown_display.breakdown_units,
+        breakdown_display.breakdown_rate,
+        breakdown_display.breakdown_amount_ex_vat,
+        breakdown_display.breakdowns_json,
+        display_context.week_ending_date,
+        display_context.client_name,
+        display_context.role,
+        display_context.worked_date,
+        display_context.source_rate,
+        display_context.source_charge_rate,
+        display_context.additional_code,
+        display_line.unit_name,
+        CASE
+          WHEN display_line.unit_name IS NOT NULL
+           AND display_context.role IS NOT NULL
+           AND UPPER(display_line.unit_name) <> UPPER(display_context.role) THEN display_line.unit_name || ' / ' || display_context.role
+          ELSE COALESCE(display_line.unit_name, display_context.role)
+        END AS unit_label,
+        breakdown_display.breakdown_units AS units,
+        breakdown_display.breakdown_rate AS rate
       FROM public.pay_batch_items AS pay_batch_item_page
       JOIN public.pay_batch_candidates AS pay_batch_candidate_page
         ON pay_batch_candidate_page.id = pay_batch_item_page.pay_batch_candidate_id
+      LEFT JOIN LATERAL (
+        SELECT
+          (ARRAY_AGG(breakdown_page_inner.id ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS first_breakdown_id,
+          (ARRAY_AGG(breakdown_page_inner.line_kind ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS line_kind,
+          (ARRAY_AGG(breakdown_page_inner.bucket_code ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS bucket_code,
+          (ARRAY_AGG(breakdown_page_inner.unit_name ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS breakdown_unit_name,
+          (ARRAY_AGG(breakdown_page_inner.units ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS breakdown_units,
+          (ARRAY_AGG(breakdown_page_inner.rate ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS breakdown_rate,
+          (ARRAY_AGG(breakdown_page_inner.amount_ex_vat ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS breakdown_amount_ex_vat,
+          (ARRAY_AGG(breakdown_page_inner.meta_json ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC))[1] AS first_breakdown_meta_json,
+          COALESCE(
+            jsonb_agg(
+              jsonb_strip_nulls(jsonb_build_object(
+                'id', breakdown_page_inner.id::text,
+                'line_kind', breakdown_page_inner.line_kind,
+                'bucket_code', breakdown_page_inner.bucket_code,
+                'unit_name', breakdown_page_inner.unit_name,
+                'units', breakdown_page_inner.units,
+                'rate', breakdown_page_inner.rate,
+                'amount_ex_vat', breakdown_page_inner.amount_ex_vat,
+                'amount_vat', breakdown_page_inner.amount_vat,
+                'amount_inc_vat', breakdown_page_inner.amount_inc_vat,
+                'meta_json', COALESCE(breakdown_page_inner.meta_json, '{}'::jsonb),
+                'operation_source_key', breakdown_page_inner.operation_source_key
+              ))
+              ORDER BY breakdown_page_inner.created_at_utc ASC, breakdown_page_inner.id ASC
+            ),
+            '[]'::jsonb
+          ) AS breakdowns_json
+        FROM public.pay_batch_item_breakdowns AS breakdown_page_inner
+        WHERE breakdown_page_inner.pay_batch_item_id = pay_batch_item_page.id
+      ) AS breakdown_display ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          snapshot_page_inner.target_snapshot_json
+        FROM public.pay_batch_timesheet_snapshots AS snapshot_page_inner
+        WHERE snapshot_page_inner.pay_batch_id = pay_batch_candidate_page.pay_batch_id
+          AND snapshot_page_inner.timesheet_id = pay_batch_item_page.timesheet_id
+          AND snapshot_page_inner.candidate_id = pay_batch_candidate_page.candidate_id
+          AND (
+            snapshot_page_inner.pay_channel IS NOT DISTINCT FROM pay_batch_item_page.pay_channel
+            OR snapshot_page_inner.pay_channel IS NULL
+            OR pay_batch_item_page.pay_channel IS NULL
+          )
+        ORDER BY snapshot_page_inner.created_at_utc DESC, snapshot_page_inner.id DESC
+        LIMIT 1
+      ) AS snapshot_page ON true
+      LEFT JOIN public.timesheets AS timesheet_display_page
+        ON timesheet_display_page.timesheet_id = pay_batch_item_page.timesheet_id
+      CROSS JOIN LATERAL (
+        SELECT
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'week_ending_date',
+            pay_batch_item_page.frozen_component_snapshot_json->>'week_ending_date',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,week_ending_date}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'week_ending_date',
+            pay_batch_item_page.frozen_resolution_result_json->>'week_ending_date',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,week_ending_date}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,week_ending_date}',
+            snapshot_page.target_snapshot_json->>'week_ending_date',
+            CASE WHEN timesheet_display_page.week_ending_date IS NULL THEN NULL ELSE timesheet_display_page.week_ending_date::text END
+          )), '') AS week_ending_date,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'client_name',
+            pay_batch_item_page.frozen_component_snapshot_json->>'client_name',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,client_name}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'client_name',
+            pay_batch_item_page.frozen_resolution_result_json->>'client_name',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,client_name}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,client_name}',
+            snapshot_page.target_snapshot_json->>'client_name',
+            timesheet_display_page.hospital_norm
+          )), '') AS client_name,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'role',
+            pay_batch_item_page.frozen_source_basis_json->>'job_title',
+            pay_batch_item_page.frozen_component_snapshot_json->>'role',
+            pay_batch_item_page.frozen_component_snapshot_json->>'job_title',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,role}',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,job_title}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'role',
+            pay_batch_item_page.frozen_resolution_payload_json->>'job_title',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,role}',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,job_title}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,role}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,job_title}',
+            snapshot_page.target_snapshot_json->>'role',
+            snapshot_page.target_snapshot_json->>'job_title',
+            timesheet_display_page.job_title_norm
+          )), '') AS role,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'date',
+            pay_batch_item_page.frozen_component_snapshot_json->>'date',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,date}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'date',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,date}',
+            breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,date}',
+            snapshot_page.target_snapshot_json->>'date',
+            CASE
+              WHEN UPPER(NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_type, '')), '')) = 'TS_DAY'
+               AND NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_value, '')), '') ~ '^\d{4}-\d{2}-\d{2}$'
+              THEN NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_value, '')), '')
+              ELSE NULL
+            END
+          )), '') AS worked_date,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'source_rate',
+            pay_batch_item_page.frozen_source_basis_json->>'pay_rate',
+            pay_batch_item_page.frozen_source_basis_json->>'rate',
+            pay_batch_item_page.frozen_component_snapshot_json->>'source_rate',
+            pay_batch_item_page.frozen_component_snapshot_json->>'pay_rate',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,source_rate}',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,pay_rate}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'source_rate',
+            pay_batch_item_page.frozen_resolution_result_json->>'source_rate',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,source_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,pay_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,source_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,pay_rate}'
+          )), '') AS source_rate,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'source_charge_rate',
+            pay_batch_item_page.frozen_source_basis_json->>'charge_rate',
+            pay_batch_item_page.frozen_component_snapshot_json->>'source_charge_rate',
+            pay_batch_item_page.frozen_component_snapshot_json->>'charge_rate',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,source_charge_rate}',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,charge_rate}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'source_charge_rate',
+            pay_batch_item_page.frozen_resolution_result_json->>'source_charge_rate',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,source_charge_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,charge_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,source_charge_rate}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,charge_rate}'
+          )), '') AS source_charge_rate,
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item_page.frozen_source_basis_json->>'additional_code',
+            pay_batch_item_page.frozen_component_snapshot_json->>'additional_code',
+            pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,additional_code}',
+            pay_batch_item_page.frozen_resolution_payload_json->>'additional_code',
+            breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,additional_code}',
+            breakdown_display.first_breakdown_meta_json#>>'{case_component_json,additional_code}',
+            CASE
+              WHEN UPPER(NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_type, '')), '')) IN ('ADDITIONAL_CODE', 'EXPENSE_CODE')
+              THEN NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_key_value, '')), '')
+              ELSE NULL
+            END
+          )), '') AS additional_code
+      ) AS display_context
+      CROSS JOIN LATERAL (
+        SELECT
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(breakdown_display.breakdown_unit_name, '')), ''),
+            display_context.additional_code,
+            NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_source_basis_json->>'unit_name', pay_batch_item_page.frozen_source_basis_json->>'unit', '')), ''),
+            NULLIF(BTRIM(COALESCE(pay_batch_item_page.frozen_component_snapshot_json->>'unit_name', pay_batch_item_page.frozen_component_snapshot_json->>'unit', '')), ''),
+            display_context.role
+          ) AS unit_name
+      ) AS display_line
       WHERE pay_batch_candidate_page.pay_batch_id = p_pay_batch_id
         AND (v_cursor_id IS NULL OR pay_batch_item_page.id > v_cursor_id)
       ORDER BY pay_batch_item_page.id ASC
@@ -74727,6 +75213,7 @@ BEGIN
             'id', page_rows.id::text,
             'pay_batch_candidate_id', page_rows.pay_batch_candidate_id::text,
             'candidate_id', page_rows.candidate_id::text,
+            'candidate_tms_ref', page_rows.candidate_tms_ref,
             'candidate_display_name', page_rows.candidate_display_name,
             'item_type', page_rows.item_type,
             'timesheet_id', CASE WHEN page_rows.timesheet_id IS NULL THEN NULL::text ELSE page_rows.timesheet_id::text END,
@@ -74755,6 +75242,43 @@ BEGIN
             'operation_source_key', page_rows.operation_source_key,
             'created_at', page_rows.created_at,
             'updated_at', page_rows.updated_at
+          )
+          || jsonb_build_object(
+            'week_ending_date', page_rows.week_ending_date,
+            'client_name', page_rows.client_name,
+            'role', page_rows.role,
+            'worked_date', page_rows.worked_date,
+            'unit_name', page_rows.unit_name,
+            'unit_label', page_rows.unit_label,
+            'units', page_rows.units,
+            'rate', page_rows.rate,
+            'source_rate', page_rows.source_rate,
+            'source_charge_rate', page_rows.source_charge_rate,
+            'additional_code', page_rows.additional_code,
+            'line_kind', page_rows.line_kind,
+            'bucket_code', page_rows.bucket_code,
+            'breakdown_unit_name', page_rows.breakdown_unit_name,
+            'breakdown_amount_ex_vat', page_rows.breakdown_amount_ex_vat,
+            'breakdowns', page_rows.breakdowns_json
+          )
+          || jsonb_build_object(
+            'frozen_component_classification', page_rows.frozen_component_classification,
+            'frozen_source_basis_json', COALESCE(page_rows.frozen_source_basis_json, '{}'::jsonb),
+            'frozen_component_snapshot_json', COALESCE(page_rows.frozen_component_snapshot_json, '{}'::jsonb),
+            'frozen_source_pay_method', page_rows.frozen_source_pay_method,
+            'frozen_target_pay_method', page_rows.frozen_target_pay_method,
+            'frozen_resolution_mode', page_rows.frozen_resolution_mode,
+            'frozen_resolution_payload_json', COALESCE(page_rows.frozen_resolution_payload_json, '{}'::jsonb),
+            'frozen_resolution_result_json', COALESCE(page_rows.frozen_resolution_result_json, '{}'::jsonb),
+            'display_context_json', jsonb_strip_nulls(jsonb_build_object(
+              'week_ending_date', page_rows.week_ending_date,
+              'client_name', page_rows.client_name,
+              'role', page_rows.role,
+              'worked_date', page_rows.worked_date,
+              'source_rate', page_rows.source_rate,
+              'source_charge_rate', page_rows.source_charge_rate,
+              'additional_code', page_rows.additional_code
+            ))
           )
         )
         ORDER BY page_rows.id ASC
@@ -75349,6 +75873,10 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_bank_csv_export_summary_get(
@@ -153534,7 +154062,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -153922,7 +154449,7 @@ BEGIN
         component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
         OR (
           component_probe_rows.target_section = 'canonical_preview_lines'
-          AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+          AND component_probe_rows.economic_key_type IS NOT NULL
           AND component_probe_rows.economic_key_value IS NOT NULL
           AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
           AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
@@ -153988,7 +154515,7 @@ BEGIN
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NULL
         AND component_probe_rows.target_section = 'canonical_preview_lines'
-        AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+        AND component_probe_rows.economic_key_type IS NOT NULL
         AND component_probe_rows.economic_key_value IS NOT NULL
         AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
         AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
@@ -153998,7 +154525,7 @@ BEGIN
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NULL
         AND component_probe_rows.target_section = 'canonical_preview_lines'
-        AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+        AND component_probe_rows.economic_key_type IS NOT NULL
         AND component_probe_rows.economic_key_value IS NOT NULL
         AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
         AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
@@ -154008,7 +154535,7 @@ BEGIN
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NULL
         AND component_probe_rows.target_section = 'canonical_preview_lines'
-        AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+        AND component_probe_rows.economic_key_type IS NOT NULL
         AND component_probe_rows.economic_key_value IS NOT NULL
         AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
         AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
@@ -154044,7 +154571,7 @@ BEGIN
          AND NOT (
            component_probe_rows.single_fixed_reimbursement_key_type IS NULL
            AND component_probe_rows.target_section = 'canonical_preview_lines'
-           AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+           AND component_probe_rows.economic_key_type IS NOT NULL
            AND component_probe_rows.economic_key_value IS NOT NULL
            AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
            AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
@@ -154880,7 +155407,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
