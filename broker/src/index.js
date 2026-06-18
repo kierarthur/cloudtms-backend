@@ -39989,6 +39989,11 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 
 // Replacement function: handleContractWeekManualUpsert (patched source lines 39943-44494)
 
+
+
+
+
+
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
  
@@ -40324,6 +40329,49 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        details: payload?.details ?? payload?.detail ?? null,
        payload
      };
+   };
+
+   const transientProcessContentionPattern = /(?:LOCK_TIMEOUT|TRANSIENT_PROCESSING_CONTENTION|55P03|40P01|40001|57014|deadlock(?: detected)?|lock timeout|could not obtain lock|serialization failure|concurrent update)/i;
+   const isTransientProcessContention = (...sources) => {
+     const text = sources.map((value) => {
+       if (value == null) return '';
+       if (typeof value === 'string') return value;
+       try { return JSON.stringify(value); } catch { return String(value); }
+     }).join(' ');
+     return transientProcessContentionPattern.test(text);
+   };
+   const buildTransientProcessContentionResponse = (payload = {}) => {
+     const source = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+     const currentTimesheetId = source.current_timesheet_id || source.timesheet_id || currentTimesheetIdForWeek || null;
+     const contractWeekId = source.contract_week_id || cw?.id || weekId || null;
+     return withCORS(env, req, new Response(JSON.stringify({
+       ok: false,
+       success: false,
+       error: 'TRANSIENT_PROCESSING_CONTENTION',
+       error_code: 'TRANSIENT_PROCESSING_CONTENTION',
+       message: 'The timesheet could not be completed immediately. The row has been safely refreshed.',
+       response_context: bulkResponseContext,
+       bulk_process: bulkProcessResponseRequested === true,
+       bulk_authorise: bulkAuthoriseResponseRequested === true,
+       contract_week_id: contractWeekId,
+       current_timesheet_id: currentTimesheetId,
+       timesheet_id: currentTimesheetId,
+       process_retry_count: Number(source.process_retry_count || 0) || 0,
+       process_retry_wait_ms: Number(source.process_retry_wait_ms || 0) || 0,
+       refresh_required: true,
+       requires_affected_row_refresh: true,
+       affected_rows: Array.isArray(source.affected_rows) && source.affected_rows.length ? source.affected_rows : [{
+         contract_week_id: contractWeekId,
+         timesheet_id: currentTimesheetId,
+         row_key: currentTimesheetId ? `timesheet:${currentTimesheetId}` : `contract_week:${contractWeekId}`,
+         context: bulkResponseContext
+       }],
+       cache_invalidation_hints: (source.cache_invalidation_hints && typeof source.cache_invalidation_hints === 'object') ? source.cache_invalidation_hints : {
+         changed_domains: ['timesheet_lifecycle'],
+         contract_week_id: contractWeekId,
+         timesheet_id: currentTimesheetId
+       }
+     }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
    };
 
  
@@ -42802,6 +42850,16 @@ const expenseEvidenceKindCategories = {
        message: rpcErr.message || null,
        details: rpcErr.details || null
      });
+
+     if (isTransientProcessContention(rpcErr.message, rpcErr.details, rpcErr.payload, e?.message)) {
+       wlog('transient_process_contention_exhausted', {
+         rpc_function_name: rpcFunctionName,
+         contract_week_id: cw?.id || weekId || null,
+         process_retry_count: Number(rpcErr.payload?.process_retry_count || 0) || 0,
+         process_retry_wait_ms: Number(rpcErr.payload?.process_retry_wait_ms || 0) || 0
+       });
+       return buildTransientProcessContentionResponse(rpcErr.payload || {});
+     }
  
      if (rpcErr.message === 'TIMESHEET_MOVED') {
        const currentTsId = detailObj?.current_timesheet_id ? String(detailObj.current_timesheet_id) : '';
@@ -43072,8 +43130,14 @@ const expenseEvidenceKindCategories = {
          }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
        }
        if (message === 'INVALID_TIMESHEET_EVIDENCE' || errorCode === 'INVALID_TIMESHEET_EVIDENCE') return withCORS(env, req, badRequest('Invalid staged TIMESHEET evidence'));
-       if (message === 'LOCK_TIMEOUT' || errorCode === 'LOCK_TIMEOUT') {
-         return withCORS(env, req, new Response(JSON.stringify({ ...conflictPayload, error: 'LOCK_TIMEOUT', error_code: 'LOCK_TIMEOUT' }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
+       if (isTransientProcessContention(message, errorCode, bulkPayload.detail, bulkPayload.detail_json, bulkPayload.sqlstate)) {
+         wlog('transient_process_contention_exhausted', {
+           rpc_function_name: rpcFunctionName,
+           contract_week_id: bulkPayload.contract_week_id || cw?.id || weekId || null,
+           process_retry_count: Number(bulkPayload.process_retry_count || 0) || 0,
+           process_retry_wait_ms: Number(bulkPayload.process_retry_wait_ms || 0) || 0
+         });
+         return buildTransientProcessContentionResponse(conflictPayload);
        }
        return withCORS(env, req, serverError(message));
      }
@@ -43098,6 +43162,9 @@ const expenseEvidenceKindCategories = {
        response_context: bulkResponseContext,
        bulk_authorise: !!bulkAuthoriseResponseRequested,
        bulk_process: !!bulkProcessResponseRequested,
+       process_retry_count: Number(bulkPayload.process_retry_count || 0) || 0,
+       process_retry_wait_ms: Number(bulkPayload.process_retry_wait_ms || 0) || 0,
+       transient_contention_recovered: bulkPayload.transient_contention_recovered === true,
        contract_week_id: bulkPayload.contract_week_id || cw.id || null,
        contract_id: bulkPayload.contract_id || cw.contract_id || null,
        timesheet_id: finalCurrentTimesheetId,
@@ -43134,7 +43201,10 @@ const expenseEvidenceKindCategories = {
        processing_status: responsePayload.processing_status,
        response_context: bulkResponseContext,
        backend_row_signature_present: !!finalBackendRowSignature,
-       affected_row_count: affectedRows.length
+       affected_row_count: affectedRows.length,
+       process_retry_count: responsePayload.process_retry_count,
+       process_retry_wait_ms: responsePayload.process_retry_wait_ms,
+       transient_contention_recovered: responsePayload.transient_contention_recovered === true
      });
 
      return withCORS(env, req, ok(responsePayload));
@@ -43171,14 +43241,8 @@ const expenseEvidenceKindCategories = {
          refresh_required: true
        }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
      }
-     if (message === 'LOCK_TIMEOUT' || errorCode === 'LOCK_TIMEOUT') {
-       return withCORS(env, req, new Response(JSON.stringify({
-         error: 'LOCK_TIMEOUT',
-         error_code: 'LOCK_TIMEOUT',
-         contract_week_id: standardPayload.contract_week_id || cw.id || weekId,
-         current_timesheet_id: standardPayload.current_timesheet_id || currentTimesheetIdForWeek || null,
-         refresh_required: true
-       }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
+     if (isTransientProcessContention(message, errorCode, standardPayload.detail, standardPayload.detail_json, standardPayload.sqlstate)) {
+       return buildTransientProcessContentionResponse(standardPayload);
      }
      if (message === 'CONTRACT_WEEK_NOT_FOUND' || errorCode === 'CONTRACT_WEEK_NOT_FOUND') return withCORS(env, req, notFound('Week not found'));
      if (message === 'CONTRACT_NOT_FOUND' || errorCode === 'CONTRACT_NOT_FOUND') return withCORS(env, req, notFound('Contract not found'));
@@ -43252,8 +43316,6 @@ const expenseEvidenceKindCategories = {
 
    return withCORS(env, req, ok(responsePayload));
  }
-
-
 
 function formatCloudTmsLondonDate(value) {
   const fallback = 'Not recorded';
@@ -64388,7 +64450,6 @@ async function handleBulkAuthoriseDataset(env, req) {
   }
 }
 
-
 async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -64685,6 +64746,121 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       if (Array.isArray(evidenceArray)) evidenceItems.push(...evidenceArray);
     }
     const evidenceArraysExplicitlyPresent = evidenceArrays.some((value) => Array.isArray(value));
+    const contextRequestsEvidence = !!(contextProfile === 'evidence' || contextProfile === 'full' || includeEvidenceSignal === true);
+    const canonicalEvidenceRowsAuthoritative = !!(
+      contextRequestsEvidence &&
+      evidenceArraysExplicitlyPresent &&
+      !contextDegraded &&
+      !softFailure
+    );
+    const activeTimesheetIdForEvidence = trimStr(timesheetId || '');
+    const normaliseEvidenceIdentityText = (value) => trimStr(value || '');
+    const isStorageEvidenceIdentity = (value) => /^\/?files\//i.test(normaliseEvidenceIdentityText(value));
+    const isSyntheticEvidenceIdentity = (value) => /^(?:synthetic-attached:|attached-fallback:|queue-fallback:|sys:manual_pdf:|sys:contract_week_pdf:|timesheet:|contract_week:|row:)/i.test(normaliseEvidenceIdentityText(value));
+    const isUuidEvidenceIdentity = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normaliseEvidenceIdentityText(value));
+    const evidenceCandidateParts = (item) => {
+      const rowItem = (item && typeof item === 'object' && !Array.isArray(item)) ? item : {};
+      const evidenceId = normaliseEvidenceIdentityText(first(rowItem.evidence_id, rowItem.timesheet_evidence_id, rowItem.evidenceId, rowItem.timesheetEvidenceId));
+      const queueId = normaliseEvidenceIdentityText(first(rowItem.queue_id, rowItem.manual_timesheet_queue_id, rowItem.queueId, rowItem.manualTimesheetQueueId));
+      const explicitId = normaliseEvidenceIdentityText(rowItem.id);
+      const storageKey = normaliseEvidenceIdentityText(first(rowItem.storage_key, rowItem.r2_key, rowItem.file_key, rowItem.download_storage_key)).replace(/^\/+/, '');
+      const evidenceKind = normalizeBulkProcessEvidenceKind(first(rowItem.kind, rowItem.staged_kind, rowItem.evidence_kind, rowItem.category)) || 'OTHER';
+      const itemTimesheetId = normaliseEvidenceIdentityText(first(rowItem.timesheet_id, rowItem.current_timesheet_id, rowItem.timesheetId, rowItem.currentTimesheetId));
+      const itemRowKey = normaliseEvidenceIdentityText(first(rowItem.row_key, rowItem.rowKey));
+      const staged = !!(
+        toBool(first(rowItem.is_staged_context, rowItem.staged, rowItem.is_staged)) ||
+        trimStr(first(rowItem.status, rowItem.queue_status)).toUpperCase() === 'STAGED' ||
+        trimStr(first(rowItem.staged_kind, rowItem.stagedKind)) !== ''
+      );
+      const identityInvalidForActiveTimesheet = (value) => !!(
+        value &&
+        (
+          isStorageEvidenceIdentity(value) ||
+          isSyntheticEvidenceIdentity(value) ||
+          (activeTimesheetIdForEvidence && value === activeTimesheetIdForEvidence)
+        )
+      );
+      const safeEvidenceId = evidenceId && !identityInvalidForActiveTimesheet(evidenceId) && isUuidEvidenceIdentity(evidenceId) ? evidenceId : '';
+      const safeExplicitId = explicitId && explicitId !== queueId && !identityInvalidForActiveTimesheet(explicitId) && isUuidEvidenceIdentity(explicitId) ? explicitId : '';
+      const wrongTimesheet = !!(activeTimesheetIdForEvidence && itemTimesheetId && itemTimesheetId !== activeTimesheetIdForEvidence);
+      const wrongTimesheetRowKey = !!(
+        activeTimesheetIdForEvidence &&
+        /^timesheet:/i.test(itemRowKey) &&
+        trimStr(itemRowKey.replace(/^timesheet:/i, '')) !== activeTimesheetIdForEvidence
+      );
+      const invalidDeclaredEvidenceId = !!(evidenceId && !safeEvidenceId);
+      const queueOnlyOnConcreteTimesheet = !!(
+        activeTimesheetIdForEvidence &&
+        queueId &&
+        !safeEvidenceId &&
+        !safeExplicitId
+      );
+      const stagedOnConcreteTimesheet = !!(activeTimesheetIdForEvidence && staged);
+      const hasPermittedAuthority = activeTimesheetIdForEvidence
+        ? !!(safeEvidenceId || safeExplicitId)
+        : !!(safeEvidenceId || safeExplicitId || (staged && queueId));
+      const allowed = !!(
+        hasPermittedAuthority &&
+        !wrongTimesheet &&
+        !wrongTimesheetRowKey &&
+        !invalidDeclaredEvidenceId &&
+        !queueOnlyOnConcreteTimesheet &&
+        !stagedOnConcreteTimesheet
+      );
+      return {
+        evidenceId,
+        queueId,
+        explicitId,
+        storageKey,
+        evidenceKind,
+        itemTimesheetId,
+        itemRowKey,
+        staged,
+        safeEvidenceId,
+        safeExplicitId,
+        allowed
+      };
+    };
+    const evidenceIdentityKey = (item) => {
+      const parts = evidenceCandidateParts(item);
+      if (!parts.allowed) return '';
+      if (parts.safeEvidenceId) return `identity:${parts.safeEvidenceId}`;
+      if (parts.safeExplicitId) return `identity:${parts.safeExplicitId}`;
+      if (!activeTimesheetIdForEvidence && parts.staged && parts.queueId) return `queue:${parts.queueId}`;
+      return parts.storageKey ? `storage:${parts.evidenceKind}:${parts.storageKey.toLowerCase()}` : '';
+    };
+    const evidenceAuthorityScore = (item) => {
+      if (!item || typeof item !== 'object') return 0;
+      const parts = evidenceCandidateParts(item);
+      if (!parts.allowed) return -Infinity;
+      let score = 0;
+      if (parts.safeEvidenceId) score += 100;
+      if (parts.safeExplicitId) score += 80;
+      if (!activeTimesheetIdForEvidence && parts.staged && parts.queueId) score += 60;
+      if (parts.storageKey) score += 30;
+      if (parts.evidenceKind) score += 10;
+      if (trimStr(first(item.display_name, item.filename, item.original_filename))) score += 5;
+      return score;
+    };
+    const canonicalEvidenceItems = [];
+    const canonicalEvidenceIndex = new Map();
+    for (const item of evidenceItems) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const parts = evidenceCandidateParts(item);
+      if (!parts.allowed) continue;
+      const key = evidenceIdentityKey(item);
+      if (!key) continue;
+      const normalisedItem = (parts.safeEvidenceId && parts.explicitId && parts.explicitId !== parts.safeEvidenceId)
+        ? { ...item, id: parts.safeEvidenceId }
+        : item;
+      const existingIndex = canonicalEvidenceIndex.get(key);
+      if (existingIndex == null) {
+        canonicalEvidenceIndex.set(key, canonicalEvidenceItems.length);
+        canonicalEvidenceItems.push(normalisedItem);
+      } else if (evidenceAuthorityScore(normalisedItem) > evidenceAuthorityScore(canonicalEvidenceItems[existingIndex])) {
+        canonicalEvidenceItems[existingIndex] = normalisedItem;
+      }
+    }
     const payloadEvidenceMeta = (payload.evidence_meta && typeof payload.evidence_meta === 'object' && !Array.isArray(payload.evidence_meta))
       ? payload.evidence_meta
       : ((details.evidence_meta && typeof details.evidence_meta === 'object' && !Array.isArray(details.evidence_meta)) ? details.evidence_meta : {});
@@ -64712,19 +64888,15 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       const existingCount = evidenceKindCounts.get(normalizedKind) || 0;
       evidenceKindCounts.set(normalizedKind, Math.max(existingCount, count));
     };
-    const realEvidenceItems = evidenceItems.filter((item) => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-      const storageKey = first(item.storage_key, item.r2_key, item.file_key, item.download_storage_key);
-      const evidenceIdentity = first(item.evidence_id, item.queue_id, item.manual_timesheet_queue_id, item.id);
-      return trimStr(storageKey) !== '' || trimStr(evidenceIdentity) !== '';
-    });
-    for (const item of realEvidenceItems) {
+    for (const item of canonicalEvidenceItems) {
       noteEvidenceKind(first(item.kind, item.staged_kind, item.evidence_kind, item.category), 1);
     }
-    for (const badge of rowEvidenceBadges) {
-      if (!badge || typeof badge !== 'object' || Array.isArray(badge)) continue;
-      if (toBool(badge.present) || toBool(badge.has_evidence) || toNumber(badge.count) > 0) {
-        noteEvidenceKind(badge.kind, toNumber(badge.count) || 1);
+    if (!canonicalEvidenceRowsAuthoritative) {
+      for (const badge of rowEvidenceBadges) {
+        if (!badge || typeof badge !== 'object' || Array.isArray(badge)) continue;
+        if (toBool(badge.present) || toBool(badge.has_evidence) || toNumber(badge.count) > 0) {
+          noteEvidenceKind(badge.kind, toNumber(badge.count) || 1);
+        }
       }
     }
     const orderedEvidenceKinds = [
@@ -64747,22 +64919,25 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       };
     });
     const positiveBadgeEvidenceCount = Array.from(evidenceKindCounts.values()).reduce((sum, count) => sum + (Number.isFinite(Number(count)) ? Number(count) : 0), 0);
-    const rawAttachedEvidenceCount = Math.max(
+    const hintedAttachedEvidenceCount = Math.max(
       toNumber(first(payload.attached_evidence_count, row.attached_evidence_count, dataRow.attached_evidence_count, payloadEvidenceMeta.attached_evidence_count, payloadArtifactHints.attached_evidence_count, detailsArtifactHints.attached_evidence_count)),
       toNumber(first(payload.evidence_count, row.evidence_count, dataRow.evidence_count, payloadEvidenceMeta.evidence_count)),
-      realEvidenceItems.length,
       positiveBadgeEvidenceCount
     );
-    const hasPositiveEvidenceExpectation = !!(
-      toBool(first(row.has_any_evidence, dataRow.has_any_evidence, payload.has_any_evidence, payloadEvidenceMeta.has_any_evidence, payloadArtifactHints.has_any_evidence, detailsArtifactHints.has_any_evidence)) ||
-      rawAttachedEvidenceCount > 0 ||
-      realEvidenceItems.length > 0 ||
-      positiveBadgeEvidenceCount > 0
-    );
-    const contextRequestsEvidence = !!(contextProfile === 'evidence' || contextProfile === 'full' || includeEvidenceSignal === true);
+    const rawAttachedEvidenceCount = canonicalEvidenceRowsAuthoritative
+      ? canonicalEvidenceItems.length
+      : Math.max(hintedAttachedEvidenceCount, canonicalEvidenceItems.length, positiveBadgeEvidenceCount);
+    const hasPositiveEvidenceExpectation = canonicalEvidenceRowsAuthoritative
+      ? canonicalEvidenceItems.length > 0
+      : !!(
+          toBool(first(row.has_any_evidence, dataRow.has_any_evidence, payload.has_any_evidence, payloadEvidenceMeta.has_any_evidence, payloadArtifactHints.has_any_evidence, detailsArtifactHints.has_any_evidence)) ||
+          rawAttachedEvidenceCount > 0 ||
+          canonicalEvidenceItems.length > 0 ||
+          positiveBadgeEvidenceCount > 0
+        );
     const lightweightNonEvidenceContext = !!(
       !contextRequestsEvidence &&
-      realEvidenceItems.length === 0 &&
+      canonicalEvidenceItems.length === 0 &&
       (
         contextProfile === 'status_header' ||
         contextProfile === 'editor' ||
@@ -64772,14 +64947,14 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
         includeEvidenceExplicitlyFalse
       )
     );
-    const evidenceContextLoadedRows = realEvidenceItems.length > 0;
+    const evidenceContextLoadedRows = canonicalEvidenceItems.length > 0;
     const evidenceContextLoadedEmpty = !!(
       !lightweightNonEvidenceContext &&
       !contextDegraded &&
       !softFailure &&
       contextRequestsEvidence &&
       evidenceArraysExplicitlyPresent &&
-      realEvidenceItems.length === 0
+      canonicalEvidenceItems.length === 0
     );
     evidenceLoaded = !!(
       !lightweightNonEvidenceContext &&
@@ -64795,9 +64970,18 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     );
     const effectiveHasAnyEvidence = !!hasPositiveEvidenceExpectation;
     const effectiveAttachedEvidenceCount = rawAttachedEvidenceCount > 0 ? rawAttachedEvidenceCount : (hasPositiveEvidenceExpectation ? 1 : 0);
-    const effectivePrimaryArtifact = (payload.primary_artifact && typeof payload.primary_artifact === 'object' && !Array.isArray(payload.primary_artifact))
+    const sourcePrimaryArtifact = (payload.primary_artifact && typeof payload.primary_artifact === 'object' && !Array.isArray(payload.primary_artifact))
       ? payload.primary_artifact
       : ((details.primary_artifact && typeof details.primary_artifact === 'object' && !Array.isArray(details.primary_artifact)) ? details.primary_artifact : null);
+    const sourcePrimaryIdentityKey = evidenceIdentityKey(sourcePrimaryArtifact);
+    const effectivePrimaryArtifact = canonicalEvidenceRowsAuthoritative
+      ? (canonicalEvidenceItems.find((item) => sourcePrimaryIdentityKey && evidenceIdentityKey(item) === sourcePrimaryIdentityKey) || canonicalEvidenceItems[0] || null)
+      : sourcePrimaryArtifact;
+    const canonicalEvidenceAliasPatch = canonicalEvidenceRowsAuthoritative ? {
+      evidence: canonicalEvidenceItems,
+      attached_evidence: canonicalEvidenceItems,
+      attachedRows: canonicalEvidenceItems
+    } : {};
     const effectiveEvidenceMeta = {
       ...payloadEvidenceMeta,
       has_any_evidence: effectiveHasAnyEvidence,
@@ -64882,6 +65066,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       evidence_badges: effectiveEvidenceBadges,
       evidence_loaded: evidenceLoaded,
       evidence_authoritative: evidenceAuthoritative,
+      ...canonicalEvidenceAliasPatch,
       evidence_meta: effectiveEvidenceMeta,
       artifact_hints: effectiveArtifactHints,
       primary_artifact: effectivePrimaryArtifact
@@ -64969,6 +65154,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
         ...(shouldMergeScheduleFields ? { planned_schedule_json: normalisedPlannedSchedule } : {})
       } : details.contract_week,
       action_flags: { ...(((details.action_flags && typeof details.action_flags === 'object') ? details.action_flags : {})), ...actionFlags },
+      ...canonicalEvidenceAliasPatch,
       evidence_meta: effectiveEvidenceMeta,
       artifact_hints: { ...(((details.artifact_hints && typeof details.artifact_hints === 'object') ? details.artifact_hints : {})), ...effectiveArtifactHints },
       primary_artifact: effectivePrimaryArtifact || details.primary_artifact || null
@@ -64985,6 +65171,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
         evidence_badges: effectiveEvidenceBadges,
         evidence_loaded: evidenceLoaded,
         evidence_authoritative: evidenceAuthoritative,
+        ...canonicalEvidenceAliasPatch,
         evidence_meta: effectiveEvidenceMeta,
         artifact_hints: effectiveArtifactHints,
         primary_artifact: effectivePrimaryArtifact,
@@ -65021,6 +65208,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       attached_evidence_count: effectiveAttachedEvidenceCount,
       evidence_count: effectiveAttachedEvidenceCount,
       evidence_badges: effectiveEvidenceBadges,
+      ...canonicalEvidenceAliasPatch,
       evidence_meta: effectiveEvidenceMeta,
       artifact_hints: effectiveArtifactHints,
       primary_artifact: effectivePrimaryArtifact || payload.primary_artifact || null,
@@ -65045,7 +65233,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     };
   };
 
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const routeIdentity = trimStr(rowIdentity || '');
 
   const baseOnly = boolParam(q('base_only') || q('baseOnly'), false);
