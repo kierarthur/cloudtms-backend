@@ -20833,8 +20833,6 @@ async function handleBankingPayReconcileExternal(env, req) {
     }));
   }
 }
-
-
 async function handleBankingPayPreview(env, req, user) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimStr = (value) => String(value ?? '').trim();
@@ -20913,6 +20911,18 @@ async function handleBankingPayPreview(env, req, user) {
   const payDate = parseIsoOrUkDateToIso(body.pay_date || body.payDate || '');
   if (!payDate) return buildPreviewErrorResponse(400, 'BANKING_PREVIEW_INVALID_PAY_DATE', 'Select a valid pay date, then try again. No payment batch has been created.', { field: 'pay_date' }, true);
 
+  const weekEndingCutoffRaw = trimStr(
+    body.week_ending_cutoff ||
+    body.weekEndingCutoff ||
+    body.week_ending_cutoff_date ||
+    body.weekEndingCutoffDate ||
+    ''
+  );
+  const weekEndingCutoff = weekEndingCutoffRaw
+    ? parseIsoOrUkDateToIso(weekEndingCutoffRaw)
+    : '9999-12-31';
+  if (!weekEndingCutoff) return buildPreviewErrorResponse(400, 'BANKING_PAY_PREVIEW_FAILED', 'Select a valid week-ending cutoff, then try again. No payment batch has been created.', { field: 'week_ending_cutoff' }, true);
+
   const candidateRaw = trimStr(body.candidate_id || body.candidateId || body.candidate_filter_id || body.candidateFilterId || body.candidate_filter || '');
   const clientRaw = trimStr(body.client_id || body.clientId || body.client_filter_id || body.clientFilterId || body.client_filter || '');
   if (candidateRaw && !uuidRe.test(candidateRaw)) return buildPreviewErrorResponse(400, 'BANKING_PAY_PREVIEW_FAILED', 'Payment preview could not be loaded. Refresh Banking and try again.', { field: 'candidate_id' }, true);
@@ -20921,8 +20931,7 @@ async function handleBankingPayPreview(env, req, user) {
   const filtersJson = cloneJson((isPlainObject(body.filters_json) ? body.filters_json : null) || (isPlainObject(body.filters) ? body.filters : null) || {}) || {};
   if (candidateRaw) filtersJson.candidate_id = candidateRaw;
   if (clientRaw) filtersJson.client_id = clientRaw;
-  const weekEndingCutoff = '9999-12-31';
-  const sessionSignature = trimStr(body.session_signature || body.sessionSignature || '') || stableStringify({ kind: 'BANKING_PAY_WORKBENCH', pay_date: payDate, filters_json: filtersJson });
+  const sessionSignature = trimStr(body.session_signature || body.sessionSignature || '') || stableStringify({ kind: 'BANKING_PAY_WORKBENCH', pay_date: payDate, week_ending_cutoff: weekEndingCutoff, filters_json: filtersJson });
 
   const execute = async () => {
     try {
@@ -20989,6 +20998,7 @@ async function handleBankingPayPreview(env, req, user) {
         can_retry: progressPayload.ready !== true,
         requires_paging: true,
         session_id: sessionId,
+        week_ending_cutoff: openPayload.week_ending_cutoff || weekEndingCutoff,
         progress: progressPayload,
         session: {
           session_id: sessionId,
@@ -21040,10 +21050,11 @@ async function handleBankingPayPreview(env, req, user) {
   };
 
   if (typeof withBankingPaySingleFlight === 'function') {
-    return withBankingPaySingleFlight({ actorUserId, routeClass: 'PREVIEW_OPEN', purpose: 'BANKING_PAY_PREVIEW', keyParts: [payDate, sessionSignature] }, execute);
+    return withBankingPaySingleFlight({ actorUserId, routeClass: 'PREVIEW_OPEN', purpose: 'BANKING_PAY_PREVIEW', keyParts: [payDate, weekEndingCutoff, sessionSignature] }, execute);
   }
   return execute();
 }
+
 
 
 
@@ -46577,7 +46588,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
   }
 }
 
-
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -47817,7 +47827,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     }
 
     if (phase === 'WAIT_FOR_PREVIEW_READY') {
-      const progress = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_session_get_progress', { p_session_id: workbenchSessionId }), 'pay_workbench_session_get_progress');
+      const progress = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_session_get_progress_light', { p_session_id: workbenchSessionId }), 'pay_workbench_session_get_progress_light');
       const ready = progress.ready === true || progress.ready_flag === true || String(progress.status || '').toUpperCase() === 'READY';
       if (!ready) return lockProgressForRetryableWait('WAIT_FOR_PREVIEW_READY', { status_text: 'Waiting for payment preview to become ready.', session_progress: progress }, 10);
       return lockProgress('RUNNING', 'SEED_CANDIDATE_SCOPE', { status_text: 'Payment preview is ready.', session_progress: progress });
@@ -150334,7 +150344,6 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
   };
 }
 
-
 async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -150434,7 +150443,8 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     try {
       const signal = unwrapRpc(await sbRpc(env, 'banking_alert_signal_for_user', {
         p_actor_user_id: actorUserId,
-        p_last_alert_hash: null
+        p_last_alert_hash: null,
+        p_alert_context: 'CACHED'
       }), 'banking_alert_signal_for_user');
       return Object.keys(signal).length ? signal : null;
     } catch { return null; }
@@ -150747,7 +150757,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       }));
     }
 
-    const result = unwrapRpc(await sbRpc(env, 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refresh', {
+    const result = unwrapRpc(await sbRpc(env, 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refr', {
       p_pay_batch_id: id,
       p_selection_json: selectionJson,
       p_actor_user_id: actorUserId,
@@ -150757,7 +150767,40 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       p_source_workbench_session_id: workbenchContext.session_id,
       p_expected_source_session_version: workbenchContext.session_version,
       p_replacement_idempotency_key: replacementIdempotencyKey
-    }), 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refresh');
+    }), 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refr');
+
+    if (result.payable_state_changed === true) {
+      const workbenchRefresh = safeObject(result.workbench_refresh);
+      const replacementSessionId = trimText(
+        result.replacement_session_id ||
+        workbenchRefresh.replacement_session_id ||
+        workbenchRefresh.session_id ||
+        ''
+      );
+      const replacementSessionVersion = positiveVersionOrNull(
+        result.replacement_session_version ??
+        workbenchRefresh.replacement_session_version ??
+        workbenchRefresh.session_version ??
+        workbenchRefresh.version ??
+        null
+      );
+
+      if (!uuidRe.test(replacementSessionId) || replacementSessionVersion === null) {
+        const consistencyError = new Error('The cancellation succeeded, but its replacement Banking Pay workbench session contract is missing or invalid.');
+        consistencyError.code = 'PAYMENT_CANCEL_WORKBENCH_REPLACEMENT_CONTRACT_MISSING';
+        consistencyError.error_code = 'PAYMENT_CANCEL_WORKBENCH_REPLACEMENT_CONTRACT_MISSING';
+        consistencyError.details = {
+          pay_batch_id: id,
+          source_workbench_session_id: workbenchContext.session_id,
+          replacement_idempotency_key: replacementIdempotencyKey,
+          replacement_session_id: replacementSessionId || null,
+          replacement_session_version: replacementSessionVersion,
+          cancellation_result: result
+        };
+        throw consistencyError;
+      }
+    }
+
     const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
     const alertSummary = await readGroupedAlertSummary(actorUserId);
     const progress = safeObject(result.progress || result.process_result || result.chunk_result);
@@ -150790,6 +150833,8 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     return rpcErrorResponse(e, 'PAYMENT_CANCEL_NOT_SENT_RECALCULATE_FAILED', 'Unable to cancel selected payments.');
   }
 }
+
+
 
 
 

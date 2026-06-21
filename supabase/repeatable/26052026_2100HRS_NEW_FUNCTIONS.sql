@@ -153180,8 +153180,6 @@ BEGIN
 END;
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_contract_client_dirty()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -153242,17 +153240,28 @@ BEGIN
 
   FOR v_scope IN
     WITH scope_rows AS (
-      SELECT 'CONTRACT'::text AS scope_kind, v_contract_id_old AS scope_id, v_contract_id_old AS contract_id, v_client_id_old AS client_id, v_candidate_id_old AS candidate_id, v_row_id_old AS row_id
+      SELECT 1::integer AS source_order, 'CONTRACT'::text AS scope_kind, v_contract_id_old AS scope_id, v_contract_id_old AS contract_id, v_client_id_old AS client_id, v_candidate_id_old AS candidate_id, v_row_id_old AS row_id
       UNION ALL
-      SELECT 'CONTRACT'::text AS scope_kind, v_contract_id_new AS scope_id, v_contract_id_new AS contract_id, v_client_id_new AS client_id, v_candidate_id_new AS candidate_id, v_row_id_new AS row_id
+      SELECT 2::integer AS source_order, 'CONTRACT'::text AS scope_kind, v_contract_id_new AS scope_id, v_contract_id_new AS contract_id, v_client_id_new AS client_id, v_candidate_id_new AS candidate_id, v_row_id_new AS row_id
       UNION ALL
-      SELECT 'CLIENT'::text AS scope_kind, v_client_id_old AS scope_id, NULL::uuid AS contract_id, v_client_id_old AS client_id, v_candidate_id_old AS candidate_id, v_row_id_old AS row_id
+      SELECT 1::integer AS source_order, 'CLIENT'::text AS scope_kind, v_client_id_old AS scope_id, NULL::uuid AS contract_id, v_client_id_old AS client_id, v_candidate_id_old AS candidate_id, v_row_id_old AS row_id
       UNION ALL
-      SELECT 'CLIENT'::text AS scope_kind, v_client_id_new AS scope_id, NULL::uuid AS contract_id, v_client_id_new AS client_id, v_candidate_id_new AS candidate_id, v_row_id_new AS row_id
+      SELECT 2::integer AS source_order, 'CLIENT'::text AS scope_kind, v_client_id_new AS scope_id, NULL::uuid AS contract_id, v_client_id_new AS client_id, v_candidate_id_new AS candidate_id, v_row_id_new AS row_id
     )
-    SELECT DISTINCT scope_rows.scope_kind, scope_rows.scope_id, scope_rows.contract_id, scope_rows.client_id, scope_rows.candidate_id, scope_rows.row_id
+    SELECT
+      scope_rows.scope_kind,
+      scope_rows.scope_id,
+      (array_agg(scope_rows.contract_id ORDER BY scope_rows.source_order DESC))[1] AS contract_id,
+      (array_agg(scope_rows.client_id ORDER BY scope_rows.source_order DESC))[1] AS client_id,
+      (array_agg(scope_rows.candidate_id ORDER BY scope_rows.source_order) FILTER (WHERE scope_rows.candidate_id IS NOT NULL))[1] AS candidate_id,
+      COALESCE(
+        array_agg(DISTINCT scope_rows.candidate_id ORDER BY scope_rows.candidate_id) FILTER (WHERE scope_rows.candidate_id IS NOT NULL),
+        ARRAY[]::uuid[]
+      ) AS candidate_ids,
+      (array_agg(scope_rows.row_id ORDER BY scope_rows.source_order DESC))[1] AS row_id
     FROM scope_rows
     WHERE scope_rows.scope_id IS NOT NULL
+    GROUP BY scope_rows.scope_kind, scope_rows.scope_id
     ORDER BY scope_rows.scope_kind, scope_rows.scope_id
   LOOP
     v_dedupe_key := 'CONTRACT_CLIENT_DIRTY_FANOUT:' || v_scope.scope_kind || ':' || v_scope.scope_id::text;
@@ -153264,13 +153273,14 @@ BEGIN
       'contract_id', CASE WHEN v_scope.contract_id IS NULL THEN NULL ELSE v_scope.contract_id::text END,
       'client_id', CASE WHEN v_scope.client_id IS NULL THEN NULL ELSE v_scope.client_id::text END,
       'candidate_id', CASE WHEN v_scope.candidate_id IS NULL THEN NULL ELSE v_scope.candidate_id::text END,
+      'candidate_ids', to_jsonb(v_scope.candidate_ids),
       'row_id', CASE WHEN v_scope.row_id IS NULL THEN NULL ELSE v_scope.row_id::text END,
       'reason', 'DIRTY_TRIGGER:' || upper(v_trigger_table) || ':' || TG_OP,
       'page_limit', 100,
       'row_backed_scope_required', true
     );
 
-    INSERT INTO public.banking_pay_workbench_jobs (
+    INSERT INTO public.banking_pay_workbench_jobs AS queued_job (
       job_type,
       status,
       priority,
@@ -153310,9 +153320,80 @@ BEGIN
     )
     ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
     DO UPDATE
-    SET priority = LEAST(public.banking_pay_workbench_jobs.priority, EXCLUDED.priority),
-        run_at_utc = LEAST(public.banking_pay_workbench_jobs.run_at_utc, EXCLUDED.run_at_utc),
-        payload_json = COALESCE(public.banking_pay_workbench_jobs.payload_json, '{}'::jsonb) || COALESCE(EXCLUDED.payload_json, '{}'::jsonb),
+    SET priority = LEAST(queued_job.priority, EXCLUDED.priority),
+        run_at_utc = LEAST(queued_job.run_at_utc, EXCLUDED.run_at_utc),
+        payload_json = (
+          WITH raw_candidate_ids AS (
+            SELECT NULLIF(BTRIM(existing_candidate_id.value), '') AS candidate_id_text
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(COALESCE(queued_job.payload_json, '{}'::jsonb)->'candidate_ids') = 'array'
+                  THEN COALESCE(queued_job.payload_json, '{}'::jsonb)->'candidate_ids'
+                ELSE '[]'::jsonb
+              END
+            ) AS existing_candidate_id(value)
+
+            UNION ALL
+
+            SELECT NULLIF(BTRIM(incoming_candidate_id.value), '') AS candidate_id_text
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(COALESCE(EXCLUDED.payload_json, '{}'::jsonb)->'candidate_ids') = 'array'
+                  THEN COALESCE(EXCLUDED.payload_json, '{}'::jsonb)->'candidate_ids'
+                ELSE '[]'::jsonb
+              END
+            ) AS incoming_candidate_id(value)
+
+            UNION ALL
+
+            SELECT NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'candidate_id', '')), '')
+
+            UNION ALL
+
+            SELECT NULLIF(BTRIM(COALESCE(EXCLUDED.payload_json->>'candidate_id', '')), '')
+          ),
+          valid_candidate_ids AS (
+            SELECT raw_candidate_ids.candidate_id_text::uuid AS candidate_id
+            FROM raw_candidate_ids
+            WHERE raw_candidate_ids.candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          ),
+          merged_candidate_ids AS (
+            SELECT COALESCE(
+              array_agg(DISTINCT valid_candidate_ids.candidate_id ORDER BY valid_candidate_ids.candidate_id),
+              ARRAY[]::uuid[]
+            ) AS candidate_ids
+            FROM valid_candidate_ids
+          ),
+          merged_payload AS (
+            SELECT
+              COALESCE(queued_job.payload_json, '{}'::jsonb)
+                || COALESCE(EXCLUDED.payload_json, '{}'::jsonb) AS base_payload,
+              merged_candidate_ids.candidate_ids,
+              COALESCE(
+                CASE
+                  WHEN NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'candidate_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'candidate_id', '')), '')::uuid
+                  ELSE NULL::uuid
+                END,
+                CASE
+                  WHEN NULLIF(BTRIM(COALESCE(EXCLUDED.payload_json->>'candidate_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN NULLIF(BTRIM(COALESCE(EXCLUDED.payload_json->>'candidate_id', '')), '')::uuid
+                  ELSE NULL::uuid
+                END,
+                merged_candidate_ids.candidate_ids[1]
+              ) AS compatibility_candidate_id
+            FROM merged_candidate_ids
+          )
+          SELECT merged_payload.base_payload
+            || jsonb_build_object(
+              'candidate_ids', to_jsonb(merged_payload.candidate_ids),
+              'candidate_id', CASE
+                WHEN merged_payload.compatibility_candidate_id IS NULL THEN NULL::text
+                ELSE merged_payload.compatibility_candidate_id::text
+              END
+            )
+          FROM merged_payload
+        ),
         updated_at_utc = v_now;
   END LOOP;
 
@@ -153323,6 +153404,7 @@ BEGIN
   END IF;
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_line_work_seed(
@@ -167596,16 +167678,11 @@ BEGIN
 END;
 $function$;
 
-
-CREATE OR REPLACE FUNCTION public.pay_workbench_contract_client_dirty_fanout_chunk(
-  p_job_id uuid,
-  p_cursor_json jsonb DEFAULT NULL::jsonb,
-  p_limit integer DEFAULT 100
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_contract_client_dirty_fanout_chunk(p_job_id uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -167620,6 +167697,10 @@ DECLARE
   v_specific_scope_id uuid := NULL::uuid;
   v_payload_candidate_id_text text := NULL::text;
   v_payload_candidate_id uuid := NULL::uuid;
+  v_payload_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_payload_candidate_value jsonb := NULL::jsonb;
+  v_payload_candidate_value_text text := NULL::text;
+  v_payload_candidate_index integer := 0;
   v_cursor_candidate_id_text text := NULL::text;
   v_cursor_candidate_id uuid := NULL::uuid;
   v_reason text := NULL::text;
@@ -167775,6 +167856,56 @@ BEGIN
     END IF;
   END IF;
 
+  IF v_payload_json ? 'candidate_ids' THEN
+    IF jsonb_typeof(v_payload_json->'candidate_ids') IS DISTINCT FROM 'array' THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_DIRTY_FANOUT_CANDIDATE_IDS_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_DIRTY_FANOUT_CANDIDATE_IDS_INVALID',
+                'job_id', v_job_row.id::text,
+                'candidate_ids', v_payload_json->'candidate_ids'
+              )::text;
+    END IF;
+
+    v_payload_candidate_index := 0;
+
+    FOR v_payload_candidate_value IN
+      SELECT payload_candidate.value
+      FROM jsonb_array_elements(v_payload_json->'candidate_ids') AS payload_candidate(value)
+    LOOP
+      v_payload_candidate_index := v_payload_candidate_index + 1;
+      v_payload_candidate_value_text := CASE
+        WHEN jsonb_typeof(v_payload_candidate_value) = 'string'
+          THEN NULLIF(BTRIM(v_payload_candidate_value #>> '{}'), '')
+        ELSE NULL::text
+      END;
+
+      IF COALESCE(v_payload_candidate_value_text, '')
+         !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_DIRTY_FANOUT_CANDIDATE_IDS_INVALID'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'PAY_WORKBENCH_DIRTY_FANOUT_CANDIDATE_IDS_INVALID',
+                  'job_id', v_job_row.id::text,
+                  'candidate_index', v_payload_candidate_index,
+                  'candidate_value', v_payload_candidate_value
+                )::text;
+      END IF;
+
+      v_payload_candidate_ids := array_append(
+        v_payload_candidate_ids,
+        v_payload_candidate_value_text::uuid
+      );
+    END LOOP;
+
+    SELECT COALESCE(
+      array_agg(DISTINCT payload_candidate.candidate_id ORDER BY payload_candidate.candidate_id),
+      ARRAY[]::uuid[]
+    )
+    INTO v_payload_candidate_ids
+    FROM unnest(v_payload_candidate_ids) AS payload_candidate(candidate_id);
+  END IF;
+
   v_payload_candidate_id_text := NULLIF(
     BTRIM(COALESCE(v_payload_json->>'candidate_id', '')),
     ''
@@ -167824,6 +167955,12 @@ BEGIN
   v_trigger_op := NULLIF(BTRIM(COALESCE(v_payload_json->>'trigger_op', '')), '');
 
   WITH candidate_pool AS (
+    SELECT historical_candidate.candidate_id
+    FROM unnest(v_payload_candidate_ids) AS historical_candidate(candidate_id)
+    WHERE historical_candidate.candidate_id IS NOT NULL
+
+    UNION
+
     SELECT v_payload_candidate_id AS candidate_id
     WHERE v_payload_candidate_id IS NOT NULL
 
