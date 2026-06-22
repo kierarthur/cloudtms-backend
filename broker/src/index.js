@@ -934,10 +934,10 @@ async function loadSettingsDefaults(env) {
       nudge: {
         enabled: _asBool(_firstConfiguredValue(row.banking_pay_workbench_nudge_enabled, bpwNudgeCfg.enabled), true),
         claim_limit: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_claim_limit, bpwNudgeCfg.claim_limit, bpwNudgeCfg.claimLimit), 50, 1, 100),
-        max_passes: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_passes, bpwNudgeCfg.max_passes, bpwNudgeCfg.maxPasses), 2, 1, 2),
-        max_jobs: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_jobs, bpwNudgeCfg.max_jobs, bpwNudgeCfg.maxJobs), 110, 1, 150),
-        max_rows: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_rows, bpwNudgeCfg.max_rows, bpwNudgeCfg.maxRows), 750, 1, 5000),
-        max_runtime_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_runtime_ms, bpwNudgeCfg.max_runtime_ms, bpwNudgeCfg.maxRuntimeMs), 15000, 1000, 30000)
+        max_passes: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_passes, bpwNudgeCfg.max_passes, bpwNudgeCfg.maxPasses), 4, 1, 4),
+        max_jobs: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_jobs, bpwNudgeCfg.max_jobs, bpwNudgeCfg.maxJobs), 150, 1, 150),
+        max_rows: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_rows, bpwNudgeCfg.max_rows, bpwNudgeCfg.maxRows), 5000, 1, 5000),
+        max_runtime_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_runtime_ms, bpwNudgeCfg.max_runtime_ms, bpwNudgeCfg.maxRuntimeMs), 25000, 1000, 30000)
       },
       drain: {
         claim_limit_max: _asBoundedInt(_firstConfiguredValue(bpwDrainCfg.claim_limit_max, bpwDrainCfg.claimLimitMax), 100, 1, 100),
@@ -1129,10 +1129,10 @@ async function loadSettingsDefaults(env) {
           nudge: {
             enabled: true,
             claim_limit: 50,
-            max_passes: 2,
-            max_jobs: 110,
-            max_rows: 750,
-            max_runtime_ms: 15000
+            max_passes: 4,
+            max_jobs: 150,
+            max_rows: 5000,
+            max_runtime_ms: 25000
           },
           drain: {
             claim_limit_max: 100,
@@ -1153,10 +1153,10 @@ async function loadSettingsDefaults(env) {
           nudge: {
             enabled: true,
             claim_limit: 50,
-            max_passes: 2,
-            max_jobs: 110,
-            max_rows: 750,
-            max_runtime_ms: 15000
+            max_passes: 4,
+            max_jobs: 150,
+            max_rows: 5000,
+            max_runtime_ms: 25000
           },
           drain: {
             claim_limit_max: 100,
@@ -1178,10 +1178,10 @@ async function loadSettingsDefaults(env) {
         nudge: {
           enabled: true,
           claim_limit: 50,
-          max_passes: 2,
-          max_jobs: 110,
-          max_rows: 750,
-          max_runtime_ms: 15000
+          max_passes: 4,
+          max_jobs: 150,
+          max_rows: 5000,
+          max_runtime_ms: 25000
         },
         drain: {
           claim_limit_max: 100,
@@ -1213,7 +1213,6 @@ async function loadSettingsDefaults(env) {
     return out;
   }
 }
-
 
 async function postToPowerAutomate(env, payload, channel = 'finance') {
   const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
@@ -13388,10 +13387,6 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
   return execute();
 }
 
-
-
-
-
 async function bankingPayWorkbenchCronTick(env, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -13422,18 +13417,79 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     if (text === 'true' || text === '1' || text === 'yes' || text === 'on') return true;
     return fallback;
   };
+  const metricInt = (source, keys, fallback = 0) => {
+    const objectSource = isPlainObject(source) ? source : {};
+    for (const key of keys) {
+      const n = Number(objectSource[key]);
+      if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+    }
+    return fallback;
+  };
+  const metricBoolean = (source, key, fallback = false) => {
+    if (!isPlainObject(source) || !Object.prototype.hasOwnProperty.call(source, key)) return fallback;
+    return readBoolean(source[key], fallback);
+  };
+  const coreMetrics = (drainResult, defaults = {}) => {
+    const drain = isPlainObject(drainResult) ? drainResult : {};
+    const claimed = metricInt(drain, ['claimed', 'claimed_count']);
+    const processed = metricInt(drain, ['processed', 'processed_count']);
+    const succeeded = metricInt(drain, ['succeeded', 'succeeded_count']);
+    const failed = metricInt(drain, ['failed', 'failed_count']);
+    const dead = metricInt(drain, ['dead', 'dead_count']);
+    const obsoleteSkipped = metricInt(drain, ['obsolete_skipped', 'obsolete_skipped_count']);
+    const continuationsCreated = metricInt(drain, ['continuations_created', 'continuation_created_count', 'continuation_enqueued_count']);
+    const continuationsReused = metricInt(drain, ['continuations_reused', 'continuation_reused_count']);
+    const rowUnitsProcessed = metricInt(drain, ['row_units_processed', 'work_units_processed']);
+    const passCount = metricInt(drain, ['pass_count']);
+    const rpcCallCount = metricInt(drain, ['rpc_call_count']);
+    const elapsedMs = metricInt(drain, ['elapsed_ms']);
+    const recoveredStaleCount = metricInt(drain, ['recovered_stale_count']);
+    const deadStaleCount = metricInt(drain, ['dead_stale_count']);
+    return {
+      claimed,
+      claimed_count: claimed,
+      processed,
+      processed_count: processed,
+      succeeded,
+      succeeded_count: succeeded,
+      failed,
+      failed_count: failed,
+      dead,
+      dead_count: dead,
+      obsolete_skipped: obsoleteSkipped,
+      obsolete_skipped_count: obsoleteSkipped,
+      continuations_created: continuationsCreated,
+      continuation_created_count: continuationsCreated,
+      continuations_reused: continuationsReused,
+      continuation_reused_count: continuationsReused,
+      continuation_count: continuationsCreated + continuationsReused,
+      recovered_stale_count: recoveredStaleCount,
+      dead_stale_count: deadStaleCount,
+      row_units_processed: rowUnitsProcessed,
+      work_units_processed: rowUnitsProcessed,
+      pass_count: passCount,
+      continuation_pass_count: metricInt(drain, ['continuation_pass_count'], Math.max(0, passCount - 1)),
+      rpc_call_count: rpcCallCount,
+      elapsed_ms: elapsedMs,
+      more_due: metricBoolean(drain, 'more_due', defaults.more_due === true),
+      stop_reason: trimStr(drain.stop_reason || defaults.stop_reason || 'NO_MORE_DUE') || 'NO_MORE_DUE',
+      budget_exhausted: metricBoolean(drain, 'budget_exhausted', defaults.budget_exhausted === true),
+      made_progress: metricBoolean(drain, 'made_progress', claimed > 0 || processed > 0 || recoveredStaleCount > 0 || deadStaleCount > 0),
+      aggregate_db_worker: drain.aggregate_db_worker !== false,
+      per_job_rpc_fanout: drain.per_job_rpc_fanout === true
+    };
+  };
 
   const source = isPlainObject(options) ? options : {};
   const origin = trimStr(source.origin) || 'BANKING_PAY_WORKBENCH_CRON';
   const requestedProfile = trimStr(source.budgetProfile || source.budget_profile || source.profile || source.workerProfile || source.worker_profile || '').toUpperCase();
   const budgetProfile = requestedProfile === 'NUDGE' || /NUDGE/i.test(origin) ? 'NUDGE' : 'CRON';
   const startedAtUtc = new Date().toISOString();
+  const tickStartedAtMs = Date.now();
 
   let settingsDefaults = {};
   try {
-    if (typeof loadSettingsDefaults === 'function') {
-      settingsDefaults = await loadSettingsDefaults(env);
-    }
+    if (typeof loadSettingsDefaults === 'function') settingsDefaults = await loadSettingsDefaults(env);
   } catch {
     settingsDefaults = {};
   }
@@ -13450,10 +13506,12 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   const profileSettings = budgetProfile === 'NUDGE' ? nudgeSettings : cronSettings;
   const envPrefix = budgetProfile === 'NUDGE' ? 'BANKING_PAY_WORKBENCH_NUDGE' : 'BANKING_PAY_WORKBENCH_CRON';
 
-  const claimLimitMax = clampInt(firstConfiguredValue(drainSettings.claim_limit_max, drainSettings.claimLimitMax), 100, 1, 100);
+  const claimLimitMaxConfigured = clampInt(firstConfiguredValue(drainSettings.claim_limit_max, drainSettings.claimLimitMax), 100, 1, 100);
+  const claimLimitMax = budgetProfile === 'NUDGE' ? Math.min(claimLimitMaxConfigured, 50) : claimLimitMaxConfigured;
   const maxJobsMax = clampInt(firstConfiguredValue(drainSettings.max_jobs_max, drainSettings.maxJobsMax), 150, 1, 150);
   const maxRowsMax = clampInt(firstConfiguredValue(drainSettings.max_rows_max, drainSettings.maxRowsMax), 5000, 1, 5000);
   const maxRuntimeMsMax = clampInt(firstConfiguredValue(drainSettings.max_runtime_ms_max, drainSettings.maxRuntimeMsMax), 30000, 1000, 30000);
+  const maxPassesProfileMax = budgetProfile === 'NUDGE' ? 4 : 2;
 
   const readOption = (camelName, snakeName, settingName, envSuffix, fallback, min, max) => {
     const fromOptions = hasOwn(source, camelName)
@@ -13476,6 +13534,15 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   );
   const enabled = readBoolean(enabledRaw, true);
 
+  const claimLimit = readOption('claimLimit', 'claim_limit', 'claim_limit', 'CLAIM_LIMIT', 50, 1, claimLimitMax);
+  const maxPasses = readOption('maxPasses', 'max_passes', 'max_passes', 'MAX_PASSES', budgetProfile === 'NUDGE' ? 4 : 2, 1, maxPassesProfileMax);
+  const maxJobs = readOption('maxJobs', 'max_jobs', 'max_jobs', 'MAX_JOBS', budgetProfile === 'NUDGE' ? 150 : Math.max(50, claimLimit), 1, maxJobsMax);
+  const maxRows = readOption('maxRows', 'max_rows', 'max_rows', 'MAX_ROWS', budgetProfile === 'NUDGE' ? 5000 : 750, 1, maxRowsMax);
+  const maxRuntimeMs = readOption('maxRuntimeMs', 'max_runtime_ms', 'max_runtime_ms', 'MAX_RUNTIME_MS', budgetProfile === 'NUDGE' ? 25000 : 15000, 1000, maxRuntimeMsMax);
+  const allowedJobTypes = hasOwn(source, 'allowedJobTypes')
+    ? source.allowedJobTypes
+    : (hasOwn(source, 'allowed_job_types') ? source.allowed_job_types : undefined);
+
   const requestedSessionId = trimStr(source.sessionId || source.session_id || '');
   const requestedCandidateId = trimStr(source.candidateId || source.candidate_id || '');
   const requestedActorUserId = trimStr(source.actorUserId || source.actor_user_id || '');
@@ -13483,47 +13550,69 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   const candidateId = uuidRe.test(requestedCandidateId) ? requestedCandidateId : null;
   const actorUserId = uuidRe.test(requestedActorUserId) ? requestedActorUserId : null;
 
+  const baseResult = {
+    worker: 'bankingPayWorkbenchCronTick',
+    origin,
+    budget_profile: budgetProfile,
+    started_at_utc: startedAtUtc,
+    claim_limit: claimLimit,
+    max_passes: maxPasses,
+    max_jobs: maxJobs,
+    max_rows: maxRows,
+    max_runtime_ms: maxRuntimeMs,
+    claim_limit_max: claimLimitMax,
+    configured_claim_limit_max: claimLimitMaxConfigured,
+    max_jobs_max: maxJobsMax,
+    max_rows_max: maxRowsMax,
+    max_runtime_ms_max: maxRuntimeMsMax,
+    session_id: sessionId,
+    candidate_id: candidateId,
+    actor_user_id: actorUserId,
+    aggregate_db_worker: true,
+    per_job_rpc_fanout: false
+  };
+
   if (!enabled) {
+    const metrics = coreMetrics({}, { more_due: false, stop_reason: 'DISABLED' });
     return {
+      ...baseResult,
+      ...metrics,
       ok: true,
       skipped: true,
       code: budgetProfile === 'NUDGE' ? 'BANKING_PAY_WORKBENCH_NUDGE_DISABLED' : 'BANKING_PAY_WORKBENCH_CRON_DISABLED',
-      worker: 'bankingPayWorkbenchCronTick',
-      origin,
-      budget_profile: budgetProfile,
-      started_at_utc: startedAtUtc,
       completed_at_utc: new Date().toISOString(),
-      session_id: sessionId,
-      candidate_id: candidateId,
-      actor_user_id: actorUserId
+      tick_elapsed_ms: Math.max(0, Date.now() - tickStartedAtMs),
+      drain_result: {
+        ok: true,
+        skipped: true,
+        more_due: false,
+        stop_reason: 'DISABLED',
+        budget_exhausted: false,
+        made_progress: false
+      }
     };
   }
 
   if (typeof drainBankingPayWorkbenchJobs !== 'function') {
+    const metrics = coreMetrics({}, { more_due: true, stop_reason: 'DRAIN_UNAVAILABLE' });
     return {
+      ...baseResult,
+      ...metrics,
       ok: false,
       skipped: true,
       code: 'DRAIN_BANKING_PAY_WORKBENCH_JOBS_UNAVAILABLE',
-      worker: 'bankingPayWorkbenchCronTick',
-      origin,
-      budget_profile: budgetProfile,
-      started_at_utc: startedAtUtc,
       completed_at_utc: new Date().toISOString(),
-      session_id: sessionId,
-      candidate_id: candidateId,
-      actor_user_id: actorUserId,
-      message: 'drainBankingPayWorkbenchJobs is not available in this backend runtime.'
+      tick_elapsed_ms: Math.max(0, Date.now() - tickStartedAtMs),
+      message: 'drainBankingPayWorkbenchJobs is not available in this backend runtime.',
+      drain_result: {
+        ok: false,
+        more_due: true,
+        stop_reason: 'DRAIN_UNAVAILABLE',
+        budget_exhausted: false,
+        made_progress: false
+      }
     };
   }
-
-  const claimLimit = readOption('claimLimit', 'claim_limit', 'claim_limit', 'CLAIM_LIMIT', 50, 1, claimLimitMax);
-  const maxPasses = readOption('maxPasses', 'max_passes', 'max_passes', 'MAX_PASSES', 2, 1, 2);
-  const maxJobs = readOption('maxJobs', 'max_jobs', 'max_jobs', 'MAX_JOBS', Math.max(50, claimLimit), 1, maxJobsMax);
-  const maxRows = readOption('maxRows', 'max_rows', 'max_rows', 'MAX_ROWS', 750, 1, maxRowsMax);
-  const maxRuntimeMs = readOption('maxRuntimeMs', 'max_runtime_ms', 'max_runtime_ms', 'MAX_RUNTIME_MS', 15000, 1000, maxRuntimeMsMax);
-  const allowedJobTypes = hasOwn(source, 'allowedJobTypes')
-    ? source.allowedJobTypes
-    : (hasOwn(source, 'allowed_job_types') ? source.allowed_job_types : undefined);
 
   try {
     const drainResult = await drainBankingPayWorkbenchJobs(env, {
@@ -13542,116 +13631,188 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
       allowedJobTypes,
       sessionId,
       candidateId,
-      actorUserId
+      actorUserId,
+      nowUtc: hasOwn(source, 'nowUtc') ? source.nowUtc : (hasOwn(source, 'now_utc') ? source.now_utc : undefined),
+      workerId: hasOwn(source, 'workerId') ? source.workerId : (hasOwn(source, 'worker_id') ? source.worker_id : undefined),
+      leaseSeconds: hasOwn(source, 'leaseSeconds') ? source.leaseSeconds : (hasOwn(source, 'lease_seconds') ? source.lease_seconds : undefined)
     });
+    const normalizedDrainResult = isPlainObject(drainResult) ? drainResult : { ok: false, more_due: true, stop_reason: 'INVALID_DRAIN_RESULT' };
+    const metrics = coreMetrics(normalizedDrainResult, { more_due: true, stop_reason: 'INVALID_DRAIN_RESULT' });
 
     return {
-      ok: drainResult && typeof drainResult === 'object' ? drainResult.ok !== false : true,
-      worker: 'bankingPayWorkbenchCronTick',
-      origin,
-      budget_profile: budgetProfile,
-      started_at_utc: startedAtUtc,
+      ...baseResult,
+      ...metrics,
+      ok: normalizedDrainResult.ok !== false,
+      skipped: normalizedDrainResult.skipped === true,
+      code: normalizedDrainResult.code || normalizedDrainResult.error_code || null,
+      error_code: normalizedDrainResult.error_code || normalizedDrainResult.code || null,
+      message: normalizedDrainResult.message || null,
       completed_at_utc: new Date().toISOString(),
-      claim_limit: claimLimit,
-      max_passes: maxPasses,
-      max_jobs: maxJobs,
-      max_rows: maxRows,
-      max_runtime_ms: maxRuntimeMs,
-      claim_limit_max: claimLimitMax,
-      max_jobs_max: maxJobsMax,
-      max_rows_max: maxRowsMax,
-      max_runtime_ms_max: maxRuntimeMsMax,
-      session_id: sessionId,
-      candidate_id: candidateId,
-      actor_user_id: actorUserId,
-      drain_result: drainResult && typeof drainResult === 'object' ? drainResult : { ok: true }
+      tick_elapsed_ms: Math.max(0, Date.now() - tickStartedAtMs),
+      drain_result: normalizedDrainResult
     };
   } catch (error) {
+    const metrics = coreMetrics({}, { more_due: true, stop_reason: 'RPC_ERROR' });
+    const errorCode = error && (error.code || error.error_code || error.name)
+      ? String(error.code || error.error_code || error.name)
+      : 'BANKING_PAY_WORKBENCH_CRON_FAILED';
+    const message = error && error.message ? String(error.message) : String(error || 'Banking Pay workbench cron failed');
     return {
+      ...baseResult,
+      ...metrics,
       ok: false,
-      worker: 'bankingPayWorkbenchCronTick',
-      origin,
-      budget_profile: budgetProfile,
-      started_at_utc: startedAtUtc,
       completed_at_utc: new Date().toISOString(),
-      claim_limit: claimLimit,
-      max_passes: maxPasses,
-      max_jobs: maxJobs,
-      max_rows: maxRows,
-      max_runtime_ms: maxRuntimeMs,
-      claim_limit_max: claimLimitMax,
-      max_jobs_max: maxJobsMax,
-      max_rows_max: maxRowsMax,
-      max_runtime_ms_max: maxRuntimeMsMax,
-      session_id: sessionId,
-      candidate_id: candidateId,
-      actor_user_id: actorUserId,
-      error_code: error && (error.code || error.error_code || error.name) ? String(error.code || error.error_code || error.name) : 'BANKING_PAY_WORKBENCH_CRON_FAILED',
-      message: error && error.message ? String(error.message) : String(error || 'Banking Pay workbench cron failed')
+      tick_elapsed_ms: Math.max(0, Date.now() - tickStartedAtMs),
+      error_code: errorCode,
+      code: errorCode,
+      message,
+      drain_result: {
+        ok: false,
+        error_code: errorCode,
+        code: errorCode,
+        message,
+        more_due: true,
+        stop_reason: 'RPC_ERROR',
+        budget_exhausted: false,
+        made_progress: false
+      }
     };
   }
 }
 
+
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const numberFrom = (sourceObject, keys, fallback = 0) => {
+    const sourceValue = isPlainObject(sourceObject) ? sourceObject : {};
+    for (const key of keys) {
+      const n = Number(sourceValue[key]);
+      if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+    }
+    return fallback;
+  };
+  const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  const sumMetric = (first, second, keys) => numberFrom(first, keys, 0) + numberFrom(second, keys, 0);
+  const combineTickResults = (firstLike, secondLike, startedAtMs) => {
+    const first = isPlainObject(firstLike) ? firstLike : {};
+    const second = isPlainObject(secondLike) ? secondLike : {};
+    const passCount = sumMetric(first, second, ['pass_count']);
+    const claimed = sumMetric(first, second, ['claimed', 'claimed_count']);
+    const processed = sumMetric(first, second, ['processed', 'processed_count']);
+    const succeeded = sumMetric(first, second, ['succeeded', 'succeeded_count']);
+    const failed = sumMetric(first, second, ['failed', 'failed_count']);
+    const dead = sumMetric(first, second, ['dead', 'dead_count']);
+    const obsoleteSkipped = sumMetric(first, second, ['obsolete_skipped', 'obsolete_skipped_count']);
+    const continuationsCreated = sumMetric(first, second, ['continuations_created', 'continuation_created_count']);
+    const continuationsReused = sumMetric(first, second, ['continuations_reused', 'continuation_reused_count']);
+    const recoveredStaleCount = sumMetric(first, second, ['recovered_stale_count']);
+    const deadStaleCount = sumMetric(first, second, ['dead_stale_count']);
+    const rowUnitsProcessed = sumMetric(first, second, ['row_units_processed', 'work_units_processed']);
+    return {
+      ...first,
+      ...second,
+      ok: first.ok !== false && second.ok !== false,
+      started_at_utc: first.started_at_utc || second.started_at_utc || new Date(startedAtMs).toISOString(),
+      completed_at_utc: second.completed_at_utc || first.completed_at_utc || new Date().toISOString(),
+      elapsed_ms: Math.max(0, Date.now() - startedAtMs),
+      tick_elapsed_ms: Math.max(0, Date.now() - startedAtMs),
+      claimed,
+      claimed_count: claimed,
+      processed,
+      processed_count: processed,
+      succeeded,
+      succeeded_count: succeeded,
+      failed,
+      failed_count: failed,
+      dead,
+      dead_count: dead,
+      obsolete_skipped: obsoleteSkipped,
+      obsolete_skipped_count: obsoleteSkipped,
+      continuations_created: continuationsCreated,
+      continuation_created_count: continuationsCreated,
+      continuations_reused: continuationsReused,
+      continuation_reused_count: continuationsReused,
+      continuation_count: continuationsCreated + continuationsReused,
+      recovered_stale_count: recoveredStaleCount,
+      dead_stale_count: deadStaleCount,
+      row_units_processed: rowUnitsProcessed,
+      work_units_processed: rowUnitsProcessed,
+      pass_count: passCount,
+      continuation_pass_count: Math.max(0, passCount - 1),
+      rpc_call_count: sumMetric(first, second, ['rpc_call_count']),
+      more_due: booleanFrom(second.more_due),
+      stop_reason: trimStr(second.stop_reason || first.stop_reason || 'NO_MORE_DUE') || 'NO_MORE_DUE',
+      budget_exhausted: booleanFrom(second.budget_exhausted) || booleanFrom(first.budget_exhausted),
+      made_progress: booleanFrom(first.made_progress) || booleanFrom(second.made_progress) || claimed > 0 || processed > 0,
+      aggregate_db_worker: true,
+      per_job_rpc_fanout: false,
+      coalesced_final_check_performed: true,
+      burst_segments: [first, second]
+    };
+  };
+
   const source = isPlainObject(options) ? options : {};
   const requestedSessionId = trimStr(source.sessionId || source.session_id || '');
   const requestedCandidateId = trimStr(source.candidateId || source.candidate_id || '');
   const requestedActorUserId = trimStr(source.actorUserId || source.actor_user_id || '');
-  const requestedProfile = trimStr(source.budgetProfile || source.budget_profile || source.profile || '').toUpperCase();
-  const budgetProfile = requestedProfile === 'CRON' ? 'CRON' : 'NUDGE';
+  const requestedProfile = upperTrim(source.budgetProfile || source.budget_profile || source.profile || '') || null;
+  const budgetProfile = 'NUDGE';
   const requestedOrigin = trimStr(source.origin) || 'BANKING_PAY_WORKBENCH_NUDGE';
   const origin = 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE';
   const singleFlightKey = 'BANKING_PAY_WORKBENCH_GLOBAL_DRAIN';
+  const requestedSessionIdValue = uuidRe.test(requestedSessionId) ? requestedSessionId : null;
+  const requestedCandidateIdValue = uuidRe.test(requestedCandidateId) ? requestedCandidateId : null;
+  const requestedActorUserIdValue = uuidRe.test(requestedActorUserId) ? requestedActorUserId : null;
+
+  const commonMetadata = {
+    origin,
+    requested_origin: requestedOrigin,
+    requested_budget_profile: requestedProfile,
+    budget_profile: budgetProfile,
+    worker_scope: 'GLOBAL',
+    global_worker_lane: true,
+    single_flight_key: singleFlightKey,
+    requested_session_id: requestedSessionIdValue,
+    requested_candidate_id: requestedCandidateIdValue,
+    requested_actor_user_id: requestedActorUserIdValue,
+    worker_session_filter: null,
+    worker_candidate_filter: null,
+    worker_actor_filter: null,
+    bounded_continuation: true,
+    durable_cron_fallback: true,
+    cron_remains_recovery_fallback: true,
+    scheduled_worker_is_durable_fallback: false
+  };
 
   if (Object.prototype.hasOwnProperty.call(source, 'enabled')) {
     const enabledText = String(source.enabled).trim().toLowerCase();
     if (source.enabled === false || enabledText === 'false' || enabledText === '0') {
       return {
+        ...commonMetadata,
         ok: true,
         scheduled: false,
+        already_running: false,
         skipped: true,
         code: 'BANKING_PAY_WORKBENCH_NUDGE_DISABLED',
-        origin,
-        requested_origin: requestedOrigin,
-        budget_profile: budgetProfile,
-        worker_scope: 'GLOBAL',
-        global_worker_lane: true,
-        single_flight_key: singleFlightKey,
-        requested_session_id: uuidRe.test(requestedSessionId) ? requestedSessionId : null,
-        requested_candidate_id: uuidRe.test(requestedCandidateId) ? requestedCandidateId : null,
-        requested_actor_user_id: uuidRe.test(requestedActorUserId) ? requestedActorUserId : null,
-        worker_session_filter: null,
-        worker_candidate_filter: null,
-        worker_actor_filter: null,
-        continuation_scheduled: false,
-        scheduled_worker_is_durable_fallback: true
+        wait_until_used: false,
+        continuation_scheduled: false
       };
     }
   }
 
   if (typeof bankingPayWorkbenchCronTick !== 'function') {
     return {
+      ...commonMetadata,
       ok: false,
       scheduled: false,
+      already_running: false,
       skipped: true,
       code: 'BANKING_PAY_WORKBENCH_CRON_TICK_UNAVAILABLE',
-      origin,
-      requested_origin: requestedOrigin,
-      budget_profile: budgetProfile,
-      worker_scope: 'GLOBAL',
-      global_worker_lane: true,
-      single_flight_key: singleFlightKey,
-      requested_session_id: uuidRe.test(requestedSessionId) ? requestedSessionId : null,
-      requested_candidate_id: uuidRe.test(requestedCandidateId) ? requestedCandidateId : null,
-      requested_actor_user_id: uuidRe.test(requestedActorUserId) ? requestedActorUserId : null,
-      worker_session_filter: null,
-      worker_candidate_filter: null,
-      worker_actor_filter: null,
-      continuation_scheduled: false,
-      scheduled_worker_is_durable_fallback: true
+      wait_until_used: false,
+      continuation_scheduled: false
     };
   }
 
@@ -13666,26 +13827,51 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const map = root.__bankingPayWorkbenchDrainNudges;
 
   if (map && map.has(singleFlightKey)) {
-    return {
-      ok: true,
-      scheduled: false,
-      already_running: true,
-      code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING',
-      origin,
-      requested_origin: requestedOrigin,
-      budget_profile: budgetProfile,
-      worker_scope: 'GLOBAL',
-      global_worker_lane: true,
-      single_flight_key: singleFlightKey,
-      requested_session_id: uuidRe.test(requestedSessionId) ? requestedSessionId : null,
-      requested_candidate_id: uuidRe.test(requestedCandidateId) ? requestedCandidateId : null,
-      requested_actor_user_id: uuidRe.test(requestedActorUserId) ? requestedActorUserId : null,
-      worker_session_filter: null,
-      worker_candidate_filter: null,
-      worker_actor_filter: null,
-      continuation_scheduled: false,
-      scheduled_worker_is_durable_fallback: true
-    };
+    const rawActiveEntry = map.get(singleFlightKey);
+    if (rawActiveEntry && typeof rawActiveEntry.then === 'function') {
+      return {
+        ...commonMetadata,
+        ok: true,
+        scheduled: false,
+        already_running: true,
+        coalesced_into_active_drain: false,
+        coalesced_wake_deferred_to_cron: true,
+        coalesced_wake_count: null,
+        active_started_at_utc: null,
+        active_budget_profile: budgetProfile,
+        code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING_LEGACY_ENTRY',
+        wait_until_used: null,
+        continuation_scheduled: true
+      };
+    }
+
+    const activeEntry = isPlainObject(rawActiveEntry) && rawActiveEntry.promise
+      ? rawActiveEntry
+      : null;
+
+    if (activeEntry && activeEntry.accepting_coalesced_wakes !== false) {
+      activeEntry.coalesced_wake_requested = true;
+      activeEntry.coalesced_wake_count = Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1;
+      activeEntry.last_coalesced_at_utc = new Date().toISOString();
+      activeEntry.last_requested_origin = requestedOrigin;
+      try { map.set(singleFlightKey, activeEntry); } catch {}
+      return {
+        ...commonMetadata,
+        ok: true,
+        scheduled: false,
+        already_running: true,
+        coalesced_into_active_drain: true,
+        coalesced_wake_count: activeEntry.coalesced_wake_count,
+        active_started_at_utc: activeEntry.started_at_utc || null,
+        active_budget_profile: activeEntry.budget_profile || budgetProfile,
+        code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING',
+        wait_until_used: activeEntry.wait_until_used === true,
+        continuation_scheduled: true,
+        final_burst_summary: isPlainObject(activeEntry.final_summary) ? activeEntry.final_summary : null
+      };
+    }
+
+    try { map.delete(singleFlightKey); } catch {}
   }
 
   const passthroughOptions = {
@@ -13705,49 +13891,157 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     'max_rows',
     'maxRuntimeMs',
     'max_runtime_ms',
-    'claimLimitMax',
-    'claim_limit_max',
-    'maxJobsMax',
-    'max_jobs_max',
-    'maxRowsMax',
-    'max_rows_max',
-    'maxRuntimeMsMax',
-    'max_runtime_ms_max',
+    'allowedJobTypes',
+    'allowed_job_types',
+    'workerId',
+    'worker_id',
+    'leaseSeconds',
+    'lease_seconds',
     'enabled'
   ]) {
-    if (Object.prototype.hasOwnProperty.call(source, key)) {
-      passthroughOptions[key] = source[key];
-    }
+    if (Object.prototype.hasOwnProperty.call(source, key)) passthroughOptions[key] = source[key];
   }
+
+  const hasWaitUntil = !!(ctx && typeof ctx.waitUntil === 'function');
+  const entry = {
+    promise: null,
+    started_at_utc: new Date().toISOString(),
+    started_at_ms: Date.now(),
+    budget_profile: budgetProfile,
+    budget_options: { ...passthroughOptions },
+    coalesced_wake_requested: false,
+    coalesced_wake_count: 0,
+    accepting_coalesced_wakes: true,
+    first_tick_summary: null,
+    coalesced_final_check_summary: null,
+    final_summary: null,
+    wait_until_used: hasWaitUntil,
+    requested_origin: requestedOrigin
+  };
 
   let promise = null;
   promise = Promise.resolve()
-    .then(() => bankingPayWorkbenchCronTick(env, passthroughOptions))
+    .then(async () => {
+      const firstTick = await bankingPayWorkbenchCronTick(env, passthroughOptions);
+      entry.first_tick_summary = isPlainObject(firstTick) ? firstTick : {};
+      let finalSummary = entry.first_tick_summary;
+
+      if (entry.coalesced_wake_requested) {
+        const originalMaxPasses = numberFrom(firstTick, ['max_passes'], 4);
+        const originalMaxJobs = numberFrom(firstTick, ['max_jobs'], 150);
+        const originalMaxRows = numberFrom(firstTick, ['max_rows'], 5000);
+        const originalMaxRuntimeMs = numberFrom(firstTick, ['max_runtime_ms'], 25000);
+        const usedPasses = numberFrom(firstTick, ['pass_count'], 0);
+        const usedJobs = Math.max(
+          numberFrom(firstTick, ['claimed', 'claimed_count'], 0),
+          numberFrom(firstTick, ['processed', 'processed_count'], 0)
+        );
+        const usedRows = numberFrom(firstTick, ['row_units_processed', 'work_units_processed'], 0);
+        const remainingPasses = Math.max(0, originalMaxPasses - usedPasses);
+        const remainingJobs = Math.max(0, originalMaxJobs - usedJobs);
+        const remainingRows = Math.max(0, originalMaxRows - usedRows);
+        const remainingRuntimeMs = Math.max(0, originalMaxRuntimeMs - Math.max(0, Date.now() - entry.started_at_ms));
+        const originalClaimLimit = Math.max(1, numberFrom(firstTick, ['claim_limit'], 50));
+        const rowBoundedClaimLimit = Math.floor(remainingRows / 100);
+        const finalCheckClaimLimit = Math.min(50, originalClaimLimit, remainingJobs, rowBoundedClaimLimit);
+        const firstStopReason = upperTrim(firstTick && firstTick.stop_reason);
+        const finalCheckAllowed = remainingPasses > 0
+          && remainingJobs > 0
+          && remainingRows >= 100
+          && remainingRuntimeMs >= 1000
+          && finalCheckClaimLimit > 0
+          && !['RPC_ERROR', 'DRAIN_UNAVAILABLE', 'DISABLED'].includes(firstStopReason);
+
+        if (finalCheckAllowed) {
+          const finalCheckOptions = {
+            ...passthroughOptions,
+            origin: 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE_COALESCED_FINAL_CHECK',
+            budgetProfile: 'NUDGE',
+            profile: 'NUDGE',
+            claimLimit: finalCheckClaimLimit,
+            maxPasses: 1,
+            maxJobs: remainingJobs,
+            maxRows: remainingRows,
+            maxRuntimeMs: remainingRuntimeMs
+          };
+          delete finalCheckOptions.claim_limit;
+          delete finalCheckOptions.max_passes;
+          delete finalCheckOptions.max_jobs;
+          delete finalCheckOptions.max_rows;
+          delete finalCheckOptions.max_runtime_ms;
+
+          const finalCheck = await bankingPayWorkbenchCronTick(env, finalCheckOptions);
+          entry.coalesced_final_check_summary = isPlainObject(finalCheck) ? finalCheck : {};
+          finalSummary = combineTickResults(firstTick, finalCheck, entry.started_at_ms);
+        } else {
+          finalSummary = {
+            ...entry.first_tick_summary,
+            coalesced_final_check_performed: false,
+            coalesced_final_check_skipped: true,
+            coalesced_final_check_skip_reason: remainingPasses <= 0
+              ? 'MAX_PASSES'
+              : (remainingJobs <= 0
+                  ? 'MAX_JOBS'
+                  : (remainingRows < 100
+                      ? 'MAX_ROWS'
+                      : (remainingRuntimeMs < 1000
+                          ? 'MAX_RUNTIME'
+                          : (finalCheckClaimLimit <= 0 ? 'NO_SAFE_CLAIM_BUDGET' : firstStopReason || 'NOT_ALLOWED')))),
+            elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
+          };
+        }
+      } else {
+        finalSummary = {
+          ...entry.first_tick_summary,
+          coalesced_final_check_performed: false,
+          coalesced_final_check_skipped: false,
+          elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
+        };
+      }
+
+      entry.accepting_coalesced_wakes = false;
+      entry.final_summary = finalSummary;
+      entry.completed_at_utc = new Date().toISOString();
+      return finalSummary;
+    })
     .catch((error) => {
-      try {
-        console.warn('[nudgeBankingPayWorkbenchDrain] Global workbench drain nudge failed:', error?.message || error);
-      } catch {}
-      return {
+      const failureSummary = {
         ok: false,
         code: 'BANKING_PAY_WORKBENCH_NUDGE_FAILED',
+        error_code: 'BANKING_PAY_WORKBENCH_NUDGE_FAILED',
         origin,
         requested_origin: requestedOrigin,
         budget_profile: budgetProfile,
         worker_scope: 'GLOBAL',
+        more_due: true,
+        stop_reason: 'RPC_ERROR',
+        budget_exhausted: false,
+        made_progress: false,
+        aggregate_db_worker: true,
+        per_job_rpc_fanout: false,
+        elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms),
         message: String(error?.message || error || 'Workbench drain nudge failed')
       };
+      entry.accepting_coalesced_wakes = false;
+      entry.final_summary = failureSummary;
+      entry.completed_at_utc = new Date().toISOString();
+      try {
+        console.warn('[nudgeBankingPayWorkbenchDrain] Global workbench drain nudge failed:', failureSummary.message);
+      } catch {}
+      return failureSummary;
     })
     .finally(() => {
+      entry.accepting_coalesced_wakes = false;
       try {
-        if (map && map.get(singleFlightKey) === promise) map.delete(singleFlightKey);
+        if (map && map.get(singleFlightKey) === entry) map.delete(singleFlightKey);
       } catch {}
     });
 
+  entry.promise = promise;
   try {
-    if (map) map.set(singleFlightKey, promise);
+    if (map) map.set(singleFlightKey, entry);
   } catch {}
 
-  const hasWaitUntil = !!(ctx && typeof ctx.waitUntil === 'function');
   if (hasWaitUntil) {
     try {
       ctx.waitUntil(promise);
@@ -13759,26 +14053,19 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   }
 
   return {
+    ...commonMetadata,
     ok: true,
     scheduled: true,
+    already_running: false,
     wait_until_used: hasWaitUntil,
-    origin,
-    requested_origin: requestedOrigin,
-    budget_profile: budgetProfile,
-    worker_scope: 'GLOBAL',
-    global_worker_lane: true,
-    single_flight_key: singleFlightKey,
-    requested_session_id: uuidRe.test(requestedSessionId) ? requestedSessionId : null,
-    requested_candidate_id: uuidRe.test(requestedCandidateId) ? requestedCandidateId : null,
-    requested_actor_user_id: uuidRe.test(requestedActorUserId) ? requestedActorUserId : null,
-    worker_session_filter: null,
-    worker_candidate_filter: null,
-    worker_actor_filter: null,
-    continuation_scheduled: false,
-    scheduled_worker_is_durable_fallback: true,
+    continuation_scheduled: true,
+    code: 'BANKING_PAY_WORKBENCH_NUDGE_SCHEDULED',
+    active_started_at_utc: entry.started_at_utc,
+    coalesced_wake_count: 0,
     budget_resolved_by: 'bankingPayWorkbenchCronTick'
   };
 }
+
 
 
 async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
@@ -22942,6 +23229,7 @@ async function handleBankingPayDraftCreateOperationLookup(env, req, user, sessio
   }
 }
 
+
 async function handleBankingPayCreateDraft(env, req, user, ctx) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -23022,18 +23310,6 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     } catch {}
     return isPlainObject(payload) ? payload : {};
   };
-  const readCachedProgress = async (sessionId) => {
-    try {
-      return unwrapRpc(await sbRpc(env, 'pay_workbench_session_get_progress_light', { p_session_id: sessionId }, {
-        routeClass: 'PREVIEW_PROGRESS',
-        purpose: 'CREATE_DRAFT_VALIDATE_SELECTION_LIGHT',
-        timeoutMs: 8000,
-        bankingPay: true
-      }), 'pay_workbench_session_get_progress_light');
-    } catch {
-      return {};
-    }
-  };
   const numberFrom = (source, keys, fallback = 0) => {
     for (const key of keys) {
       const n = Number(source && source[key]);
@@ -23042,6 +23318,299 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     return fallback;
   };
   const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  const hasOwn = (source, key) => isPlainObject(source) && Object.prototype.hasOwnProperty.call(source, key);
+  const normalizeVersion = (value) => {
+    const text = trimStr(value);
+    if (!/^\d+$/.test(text)) return null;
+    return text.replace(/^0+(?=\d)/, '') || '0';
+  };
+  const stringArrayFrom = (value) => Array.isArray(value)
+    ? value.map((item) => upperTrim(item)).filter(Boolean)
+    : [];
+  const uniqueStrings = (values) => {
+    const out = [];
+    const seen = new Set();
+    for (const value of Array.isArray(values) ? values : []) {
+      const text = upperTrim(value);
+      if (!text || seen.has(text)) continue;
+      seen.add(text);
+      out.push(text);
+    }
+    return out;
+  };
+  const jsonObjectHasValues = (value) => isPlainObject(value) && Object.keys(value).length > 0;
+  const missingNumericContractFields = (source, fieldNames, prefix) => {
+    const objectSource = isPlainObject(source) ? source : {};
+    const missing = [];
+    for (const fieldName of fieldNames) {
+      if (!Object.prototype.hasOwnProperty.call(objectSource, fieldName)) {
+        missing.push(`${prefix}.${fieldName}`);
+        continue;
+      }
+      const rawValue = objectSource[fieldName];
+      const value = Number(rawValue);
+      if (rawValue === null || rawValue === undefined || rawValue === '' || !Number.isFinite(value) || value < 0) {
+        missing.push(`${prefix}.${fieldName}`);
+      }
+    }
+    return missing;
+  };
+  const readAuthoritativeProgress = async (sessionIdValue, expectedSessionVersionValue = null) => {
+    const id = trimStr(sessionIdValue);
+    const expectedSessionVersion = normalizeVersion(expectedSessionVersionValue);
+    if (!uuidRe.test(id)) {
+      return {
+        ok: false,
+        gate_ready: false,
+        error_code: 'BANKING_PAY_CREATE_DRAFT_SESSION_REQUIRED',
+        message: 'A valid workbench session is required.',
+        blocker_codes: ['WORKBENCH_SESSION_INVALID']
+      };
+    }
+
+    let rpcPayload = null;
+    try {
+      rpcPayload = await sbRpc(env, 'pay_workbench_session_get_progress_light', { p_session_id: id }, {
+        routeClass: 'PREVIEW_PROGRESS',
+        purpose: 'CREATE_DRAFT_AUTHORITATIVE_READINESS',
+        timeoutMs: 8000,
+        bankingPay: true
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        gate_ready: false,
+        error_code: 'BANKING_PAY_WORKBENCH_PROGRESS_READ_FAILED',
+        message: String(error && error.message ? error.message : error || 'Authoritative workbench progress could not be read.'),
+        session_id: id,
+        blocker_codes: ['AUTHORITATIVE_PROGRESS_READ_FAILED']
+      };
+    }
+
+    const progress = unwrapRpc(rpcPayload, 'pay_workbench_session_get_progress_light');
+    if (!isPlainObject(progress) || booleanFrom(progress.ok) !== true) {
+      return {
+        ok: false,
+        gate_ready: false,
+        error_code: trimStr(progress.error_code || progress.code || 'BANKING_PAY_WORKBENCH_PROGRESS_INVALID') || 'BANKING_PAY_WORKBENCH_PROGRESS_INVALID',
+        message: trimStr(progress.message || 'Authoritative workbench progress was unavailable.'),
+        session_id: id,
+        blocker_codes: uniqueStrings([
+          ...stringArrayFrom(progress.session_blocker_codes),
+          ...stringArrayFrom(progress.draft_blocker_codes),
+          'AUTHORITATIVE_PROGRESS_INVALID'
+        ])
+      };
+    }
+
+    const malformedFields = [];
+    if (!hasOwn(progress, 'session_ready')) malformedFields.push('session_ready');
+    if (!hasOwn(progress, 'ready_for_draft')) malformedFields.push('ready_for_draft');
+    if (!hasOwn(progress, 'scope_seed_complete')) malformedFields.push('scope_seed_complete');
+    if (!hasOwn(progress, 'scope_cursor_remaining')) malformedFields.push('scope_cursor_remaining');
+    if (!isPlainObject(progress.candidate_counts)) malformedFields.push('candidate_counts');
+    if (!isPlainObject(progress.line_counts)) malformedFields.push('line_counts');
+    if (!isPlainObject(progress.job_counts)) malformedFields.push('job_counts');
+    if (!Array.isArray(progress.session_blocker_codes)) malformedFields.push('session_blocker_codes');
+    if (!Array.isArray(progress.draft_blocker_codes)) malformedFields.push('draft_blocker_codes');
+    if (!hasOwn(progress, 'selected_eligible_ready_row_count')) malformedFields.push('selected_eligible_ready_row_count');
+    if (!hasOwn(progress, 'session_status') && !hasOwn(progress, 'status')) malformedFields.push('session_status');
+    if (!hasOwn(progress, 'session_obsolete')) malformedFields.push('session_obsolete');
+    if (!hasOwn(progress, 'replacement_required')) malformedFields.push('replacement_required');
+    if (!hasOwn(progress, 'replacement_session_id')) malformedFields.push('replacement_session_id');
+    if (!hasOwn(progress, 'stored_ready_mismatch')) malformedFields.push('stored_ready_mismatch');
+    malformedFields.push(...missingNumericContractFields(
+      progress.candidate_counts,
+      ['pending', 'processing', 'materialisation_pending', 'dirty', 'failed', 'unknown', 'unseeded'],
+      'candidate_counts'
+    ));
+    malformedFields.push(...missingNumericContractFields(
+      progress.line_counts,
+      ['pending', 'ready_not_materialised', 'failed', 'unknown'],
+      'line_counts'
+    ));
+    malformedFields.push(...missingNumericContractFields(
+      progress.job_counts,
+      ['queued', 'running', 'unresolved_failed', 'unresolved_dead'],
+      'job_counts'
+    ));
+    if (hasOwn(progress, 'selected_eligible_ready_row_count')) {
+      const selectedEligibleCountRaw = progress.selected_eligible_ready_row_count;
+      const selectedEligibleCountValue = Number(selectedEligibleCountRaw);
+      if (selectedEligibleCountRaw === null || selectedEligibleCountRaw === undefined || selectedEligibleCountRaw === '' || !Number.isFinite(selectedEligibleCountValue) || selectedEligibleCountValue < 0) {
+        malformedFields.push('selected_eligible_ready_row_count');
+      }
+    }
+
+    const returnedSessionId = trimStr(progress.session_id || '');
+    const returnedSessionVersionRaw = progress.session_version ?? progress.version;
+    const returnedSessionVersion = normalizeVersion(returnedSessionVersionRaw);
+    const progressCounterVersion = normalizeVersion(progress.progress_counter_version);
+    if (returnedSessionId !== id) malformedFields.push('session_id');
+    if (!returnedSessionVersion) malformedFields.push('session_version');
+    if (!progressCounterVersion) malformedFields.push('progress_counter_version');
+    if (expectedSessionVersion && returnedSessionVersion && returnedSessionVersion !== expectedSessionVersion) {
+      malformedFields.push('session_version_mismatch');
+    }
+
+    const candidateCounts = isPlainObject(progress.candidate_counts) ? progress.candidate_counts : {};
+    const lineCounts = isPlainObject(progress.line_counts) ? progress.line_counts : {};
+    const jobCounts = isPlainObject(progress.job_counts) ? progress.job_counts : {};
+    const candidatePending = numberFrom(candidateCounts, ['pending'], numberFrom(progress, ['scope_pending_count', 'pending_count'], 0));
+    const candidateProcessing = numberFrom(candidateCounts, ['processing'], 0);
+    const candidateMaterialisationPending = numberFrom(candidateCounts, ['materialisation_pending'], 0);
+    const candidateDirty = numberFrom(candidateCounts, ['dirty'], 0);
+    const candidateFailed = numberFrom(candidateCounts, ['failed'], numberFrom(progress, ['scope_failed_count', 'failed_count'], 0));
+    const candidateUnknown = numberFrom(candidateCounts, ['unknown'], 0);
+    const candidateUnseeded = numberFrom(candidateCounts, ['unseeded'], 0);
+    const linePending = numberFrom(lineCounts, ['pending'], numberFrom(progress, ['line_units_pending'], 0));
+    const lineReadyNotMaterialised = numberFrom(lineCounts, ['ready_not_materialised'], numberFrom(progress, ['line_units_ready'], 0));
+    const lineFailed = numberFrom(lineCounts, ['failed'], numberFrom(progress, ['line_units_failed'], 0));
+    const lineUnknown = numberFrom(lineCounts, ['unknown'], 0);
+    const jobsQueued = numberFrom(jobCounts, ['queued'], 0);
+    const jobsRunning = numberFrom(jobCounts, ['running'], 0);
+    const jobsUnresolvedFailed = numberFrom(jobCounts, ['unresolved_failed'], 0);
+    const jobsUnresolvedDead = numberFrom(jobCounts, ['unresolved_dead'], 0);
+    const selectedEligibleReadyRowCount = numberFrom(progress, ['selected_eligible_ready_row_count'], numberFrom(progress.blocker_counts, ['selected_eligible_ready_rows'], 0));
+    const scopeCursorRemaining = booleanFrom(progress.scope_cursor_remaining)
+      || jsonObjectHasValues(progress.scope_next_cursor_json)
+      || jsonObjectHasValues(progress.scope_next_cursor);
+    const sessionStatus = upperTrim(progress.session_status || progress.status || '');
+    const sessionObsolete = booleanFrom(progress.session_obsolete || progress.obsolete);
+    const replacementRequired = booleanFrom(progress.replacement_required || progress.requires_new_session || progress.rebase_required);
+    const replacementSessionId = trimStr(progress.replacement_session_id || '');
+    const storedReadyMismatch = booleanFrom(progress.stored_ready_mismatch);
+    const sessionReady = booleanFrom(progress.session_ready);
+    const readyForDraft = booleanFrom(progress.ready_for_draft);
+
+    const derivedBlockers = [];
+    if (sessionStatus !== 'OPEN') derivedBlockers.push('SESSION_NOT_OPEN');
+    if (sessionObsolete) derivedBlockers.push('SESSION_OBSOLETE');
+    if (replacementRequired || replacementSessionId) derivedBlockers.push('SESSION_REPLACED');
+    if (booleanFrom(progress.scope_seed_complete) !== true) derivedBlockers.push('SCOPE_SEED_INCOMPLETE');
+    if (scopeCursorRemaining) derivedBlockers.push('SCOPE_CURSOR_REMAINING');
+    if (candidateUnseeded > 0) derivedBlockers.push('CANDIDATES_UNSEEDED');
+    if (candidatePending > 0) derivedBlockers.push('CANDIDATES_PENDING');
+    if (candidateProcessing > 0) derivedBlockers.push('CANDIDATES_PROCESSING');
+    if (candidateMaterialisationPending > 0) derivedBlockers.push('CANDIDATES_MATERIALISATION_PENDING');
+    if (candidateDirty > 0) derivedBlockers.push('CANDIDATES_DIRTY');
+    if (candidateFailed > 0) derivedBlockers.push('CANDIDATES_FAILED');
+    if (candidateUnknown > 0) derivedBlockers.push('CANDIDATES_UNKNOWN_STATE');
+    if (linePending > 0) derivedBlockers.push('LINE_WORK_PENDING');
+    if (lineReadyNotMaterialised > 0) derivedBlockers.push('LINE_WORK_READY_NOT_MATERIALISED');
+    if (lineFailed > 0) derivedBlockers.push('LINE_WORK_FAILED');
+    if (lineUnknown > 0) derivedBlockers.push('LINE_WORK_UNKNOWN_STATE');
+    if (jobsQueued > 0 || jobsRunning > 0) derivedBlockers.push('WORKBENCH_JOBS_ACTIVE');
+    if (jobsUnresolvedFailed > 0 || jobsUnresolvedDead > 0) derivedBlockers.push('WORKBENCH_JOBS_FAILED');
+    if (selectedEligibleReadyRowCount <= 0) derivedBlockers.push('NO_SELECTED_READY_ROWS');
+    if (storedReadyMismatch) derivedBlockers.push('STORED_READY_MISMATCH');
+    if (!sessionReady) derivedBlockers.push('SESSION_NOT_READY');
+    if (!readyForDraft) derivedBlockers.push('SESSION_NOT_READY_FOR_DRAFT');
+    if (expectedSessionVersion && returnedSessionVersion !== expectedSessionVersion) derivedBlockers.push('SESSION_VERSION_CHANGED');
+
+    const sessionBlockerCodes = uniqueStrings([
+      ...stringArrayFrom(progress.session_blocker_codes),
+      ...derivedBlockers.filter((code) => code !== 'NO_SELECTED_READY_ROWS' && code !== 'SESSION_NOT_READY_FOR_DRAFT')
+    ]);
+    const draftBlockerCodes = uniqueStrings([
+      ...stringArrayFrom(progress.draft_blocker_codes),
+      ...derivedBlockers
+    ]);
+
+    if (malformedFields.length > 0) {
+      return {
+        ok: false,
+        gate_ready: false,
+        error_code: 'BANKING_PAY_WORKBENCH_PROGRESS_CONTRACT_INVALID',
+        message: 'Authoritative workbench progress did not contain the required readiness contract.',
+        session_id: id,
+        session_version: returnedSessionVersionRaw ?? null,
+        session_version_normalized: returnedSessionVersion,
+        progress_counter_version: progressCounterVersion,
+        malformed_fields: uniqueStrings(malformedFields),
+        session_blocker_codes: sessionBlockerCodes,
+        draft_blocker_codes: uniqueStrings([...draftBlockerCodes, 'AUTHORITATIVE_PROGRESS_INCOMPLETE']),
+        blocker_codes: uniqueStrings([...draftBlockerCodes, 'AUTHORITATIVE_PROGRESS_INCOMPLETE']),
+        blocker_counts: isPlainObject(progress.blocker_counts) ? progress.blocker_counts : {}
+      };
+    }
+
+    const gateReady = sessionReady
+      && readyForDraft
+      && sessionBlockerCodes.length === 0
+      && draftBlockerCodes.length === 0;
+
+    return {
+      ok: true,
+      gate_ready: gateReady,
+      session_id: id,
+      session_version: returnedSessionVersionRaw,
+      session_version_normalized: returnedSessionVersion,
+      progress_counter_version: progressCounterVersion,
+      session_signature: trimStr(progress.session_signature || '') || null,
+      source_snapshot_run_id: trimStr(progress.source_snapshot_run_id || progress.snapshot_run_id || '') || null,
+      pay_date: trimStr(progress.pay_date || '') || null,
+      week_ending_cutoff: trimStr(progress.week_ending_cutoff || '') || null,
+      progress_state: upperTrim(progress.progress_state || ''),
+      session_status: sessionStatus,
+      session_ready: sessionReady,
+      ready_for_draft: readyForDraft,
+      scope_seed_complete: booleanFrom(progress.scope_seed_complete),
+      scope_cursor_remaining: scopeCursorRemaining,
+      session_obsolete: sessionObsolete,
+      replacement_required: replacementRequired,
+      replacement_session_id: replacementSessionId || null,
+      stored_ready_mismatch: storedReadyMismatch,
+      selected_row_count: numberFrom(progress, ['selected_row_count'], 0),
+      selected_eligible_ready_row_count: selectedEligibleReadyRowCount,
+      candidate_counts: {
+        pending: candidatePending,
+        processing: candidateProcessing,
+        materialisation_pending: candidateMaterialisationPending,
+        dirty: candidateDirty,
+        failed: candidateFailed,
+        unknown: candidateUnknown,
+        unseeded: candidateUnseeded
+      },
+      line_counts: {
+        pending: linePending,
+        ready_not_materialised: lineReadyNotMaterialised,
+        failed: lineFailed,
+        unknown: lineUnknown
+      },
+      job_counts: {
+        queued: jobsQueued,
+        running: jobsRunning,
+        unresolved_failed: jobsUnresolvedFailed,
+        unresolved_dead: jobsUnresolvedDead
+      },
+      session_blocker_codes: sessionBlockerCodes,
+      draft_blocker_codes: draftBlockerCodes,
+      blocker_codes: draftBlockerCodes,
+      blocker_counts: isPlainObject(progress.blocker_counts) ? progress.blocker_counts : {},
+      counter_drift_detected: booleanFrom(progress.counter_drift_detected)
+    };
+  };
+  const rejectWorkbenchNotReady = (sessionIdValue, stage, readinessLike, extraDetails = {}) => {
+    const readiness = isPlainObject(readinessLike) ? readinessLike : {};
+    return fail(409, 'BANKING_PAY_WORKBENCH_NOT_READY_FOR_DRAFT', 'Payment preview is still preparing or refreshing. Wait until every selected payment row is ready, then try again.', {
+      session_id: trimStr(sessionIdValue) || null,
+      readiness_stage: trimStr(stage) || null,
+      readiness_error_code: trimStr(readiness.error_code || '') || null,
+      session_version: readiness.session_version ?? null,
+      progress_counter_version: readiness.progress_counter_version ?? null,
+      progress_state: readiness.progress_state || null,
+      session_ready: readiness.session_ready === true,
+      ready_for_draft: readiness.ready_for_draft === true,
+      blocker_codes: uniqueStrings(readiness.blocker_codes || readiness.draft_blocker_codes || []),
+      session_blocker_codes: uniqueStrings(readiness.session_blocker_codes || []),
+      blocker_counts: isPlainObject(readiness.blocker_counts) ? readiness.blocker_counts : {},
+      candidate_counts: isPlainObject(readiness.candidate_counts) ? readiness.candidate_counts : {},
+      line_counts: isPlainObject(readiness.line_counts) ? readiness.line_counts : {},
+      job_counts: isPlainObject(readiness.job_counts) ? readiness.job_counts : {},
+      ...extraDetails
+    });
+  };
   const numericOrNull = (value) => {
     const text = trimStr(value);
     if (!/^-?[0-9]+(\.[0-9]+)?$/.test(text)) return null;
@@ -23108,16 +23677,21 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       economic_keyspace: 'timesheet_id,key_type,key_value'
     };
   };
-  const fetchCurrentSessionSelectionForCreateDraft = async (sessionIdValue, scopeValue = 'ALL') => {
+  const fetchCurrentSessionSelectionForCreateDraft = async (sessionIdValue, scopeValue = 'ALL', readinessSnapshot = null) => {
     const id = trimStr(sessionIdValue);
     const scope = upperTrim(scopeValue || 'ALL') || 'ALL';
+    const readiness = isPlainObject(readinessSnapshot) ? readinessSnapshot : {};
+    const expectedSessionVersion = normalizeVersion(readiness.session_version_normalized ?? readiness.session_version);
     if (!uuidRe.test(id)) {
       return { ok: false, error_code: 'BANKING_PAY_CREATE_DRAFT_SESSION_REQUIRED', selected_preview_row_ids: [] };
+    }
+    if (!expectedSessionVersion) {
+      return { ok: false, error_code: 'WORKBENCH_SESSION_VERSION_MISSING', selected_preview_row_ids: [] };
     }
 
     let sessionRow = null;
     try {
-      const { rows: sessionRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions?id=eq.${encodeURIComponent(id)}&select=id,version,source_snapshot_run_id,session_signature,server_selected_preview_row_ids,server_selected_preview_row_ids_provided,selected_row_count,status,pay_date,week_ending_cutoff&limit=1`, false);
+      const { rows: sessionRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions?id=eq.${encodeURIComponent(id)}&select=id,version,source_snapshot_run_id,session_signature,server_selected_preview_row_ids,server_selected_preview_row_ids_provided,selected_row_count,status,pay_date,week_ending_cutoff,discarded_at_utc,replacement_session_id,progress_state,progress_counter_version,scope_seed_complete,scope_next_cursor_json&limit=1`, false);
       sessionRow = Array.isArray(sessionRows) && sessionRows.length > 0 ? sessionRows[0] : null;
     } catch (error) {
       return { ok: false, error_code: 'BANKING_PAY_CREATE_DRAFT_SESSION_READ_FAILED', selected_preview_row_ids: [], error: String(error && error.message ? error.message : error) };
@@ -23128,34 +23702,126 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     }
 
     const sessionStatus = upperTrim(sessionRow.status || '');
-    if (sessionStatus !== 'OPEN') {
-      return { ok: false, error_code: 'WORKBENCH_SESSION_INVALID', selected_preview_row_ids: [], session_status: sessionStatus || null };
+    if (sessionStatus !== 'OPEN' || trimStr(sessionRow.discarded_at_utc || '') || trimStr(sessionRow.replacement_session_id || '')) {
+      return {
+        ok: false,
+        error_code: 'WORKBENCH_SESSION_INVALID',
+        selected_preview_row_ids: [],
+        session_status: sessionStatus || null,
+        discarded_at_utc: sessionRow.discarded_at_utc || null,
+        replacement_session_id: trimStr(sessionRow.replacement_session_id || '') || null
+      };
     }
 
-    const sessionVersionValue = sessionRow.version;
-    const sessionVersionNumber = Number(sessionVersionValue);
-    if (!Number.isFinite(sessionVersionNumber)) {
+    const sessionVersionRaw = sessionRow.version;
+    const sessionVersionValue = normalizeVersion(sessionVersionRaw);
+    if (!sessionVersionValue) {
       return { ok: false, error_code: 'WORKBENCH_SESSION_VERSION_MISSING', selected_preview_row_ids: [] };
+    }
+    if (sessionVersionValue !== expectedSessionVersion) {
+      return {
+        ok: false,
+        error_code: 'WORKBENCH_SESSION_VERSION_CHANGED',
+        selected_preview_row_ids: [],
+        expected_session_version: expectedSessionVersion,
+        session_version: sessionVersionRaw,
+        session_version_normalized: sessionVersionValue
+      };
     }
 
     let previewRows = [];
     try {
-      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_preview_rows?session_id=eq.${encodeURIComponent(id)}&session_version=eq.${encodeURIComponent(String(sessionVersionValue))}&section=eq.canonical_preview_lines&selected=eq.true&status=eq.READY&select=id,row_key,timesheet_id,key_type,key_value,candidate_id,section,status,selection_state,selected,row_json,row_ordinal&order=row_ordinal.asc,id.asc&limit=101`, false);
+      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_preview_rows?session_id=eq.${encodeURIComponent(id)}&session_version=eq.${encodeURIComponent(sessionVersionValue)}&section=eq.canonical_preview_lines&selected=eq.true&status=eq.READY&select=id,row_key,timesheet_id,key_type,key_value,candidate_id,section,status,selection_state,selected,row_json,row_ordinal&order=row_ordinal.asc,id.asc&limit=101`, false);
       previewRows = Array.isArray(rows) ? rows : [];
     } catch (error) {
-      return { ok: false, error_code: 'BANKING_PAY_CURRENT_SELECTION_READ_FAILED', selected_preview_row_ids: [], session_version: sessionVersionValue, error: String(error && error.message ? error.message : error) };
+      return { ok: false, error_code: 'BANKING_PAY_CURRENT_SELECTION_READ_FAILED', selected_preview_row_ids: [], session_version: sessionVersionRaw, session_version_normalized: sessionVersionValue, error: String(error && error.message ? error.message : error) };
     }
 
-    const selectedRows = previewRows.filter((previewRow) => {
-      if (!previewRow || typeof previewRow !== 'object') return false;
-      if (upperTrim(previewRow.selection_state || '') !== 'SELECTED') return false;
-      if (scope === 'PAYE' || scope === 'UMBRELLA') {
-        const rowJson = isPlainObject(previewRow.row_json) ? previewRow.row_json : {};
-        const rowPayChannel = upperTrim(rowJson.pay_channel || rowJson.current_pay_method || rowJson.candidate_pay_method || '');
-        if (rowPayChannel && rowPayChannel !== scope) return false;
+    if (previewRows.length > 100) {
+      return {
+        ok: false,
+        http_status: 413,
+        error_code: 'BANKING_CREATE_DRAFT_SELECTED_ROWS_TOO_MANY_FOR_OPERATION',
+        selected_preview_row_ids: [],
+        selected_row_count: previewRows.length,
+        limit: 100,
+        session_version: sessionVersionRaw,
+        session_version_normalized: sessionVersionValue
+      };
+    }
+
+    const authoritativeEligibleSelectedCount = Number(readiness.selected_eligible_ready_row_count);
+    if (!Number.isFinite(authoritativeEligibleSelectedCount)
+        || authoritativeEligibleSelectedCount < 0
+        || previewRows.length !== Math.trunc(authoritativeEligibleSelectedCount)) {
+      return {
+        ok: false,
+        error_code: 'BANKING_PAY_CURRENT_SELECTION_ELIGIBILITY_MISMATCH',
+        selected_preview_row_ids: [],
+        session_version: sessionVersionRaw,
+        session_version_normalized: sessionVersionValue,
+        selected_canonical_ready_row_count: previewRows.length,
+        authoritative_selected_eligible_ready_row_count: Number.isFinite(authoritativeEligibleSelectedCount)
+          ? Math.max(0, Math.trunc(authoritativeEligibleSelectedCount))
+          : null
+      };
+    }
+
+    const allowedEconomicKeyTypes = new Set(['TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE', 'EXPENSE_CODE', 'MANUAL_CARRY_FORWARD']);
+    const selectedRows = [];
+    const invalidRows = [];
+
+    for (const previewRow of previewRows) {
+      const row = isPlainObject(previewRow) ? previewRow : {};
+      const rowJson = isPlainObject(row.row_json) ? row.row_json : {};
+      const previewContract = isPlainObject(rowJson.preview_contract) ? rowJson.preview_contract : {};
+      const contract = buildCreateDraftSelectedPreviewRowContract(row, selectedRows.length);
+      const reasons = [];
+      const rowId = trimStr(row.id || '');
+      const candidateId = trimStr(row.candidate_id || contract.candidate_id || '');
+      const timesheetId = trimStr(row.timesheet_id || contract.timesheet_id || '');
+      const section = trimStr(row.section || contract.section || '').toLowerCase();
+      const payChannel = upperTrim(contract.pay_channel || '');
+      const keyType = upperTrim(contract.key_type || '');
+      const keyValue = trimStr(contract.key_value || '');
+
+      if ((scope === 'PAYE' || scope === 'UMBRELLA') && payChannel && payChannel !== scope) continue;
+
+      if (!uuidRe.test(rowId)) reasons.push('PREVIEW_ROW_ID_INVALID');
+      if (!uuidRe.test(candidateId)) reasons.push('CANDIDATE_ID_INVALID');
+      if (!uuidRe.test(timesheetId)) reasons.push('TIMESHEET_ID_INVALID');
+      if (section !== 'canonical_preview_lines') reasons.push('SECTION_NOT_CANONICAL');
+      if (upperTrim(row.status || contract.status || '') !== 'READY') reasons.push('ROW_NOT_READY');
+      if (row.selected !== true || contract.selected !== true) reasons.push('ROW_NOT_SELECTED');
+      if (upperTrim(row.selection_state || contract.selection_state || '') !== 'SELECTED') reasons.push('SELECTION_STATE_NOT_SELECTED');
+      if (!booleanFrom(rowJson.draftable) || contract.draftable !== true) reasons.push('ROW_NOT_DRAFTABLE');
+      if (!booleanFrom(rowJson.is_ready_for_draft) || contract.is_ready_for_draft !== true) reasons.push('ROW_NOT_READY_FOR_DRAFT');
+      if (booleanFrom(rowJson.is_excluded_from_allocation)) reasons.push('ROW_EXCLUDED_FROM_ALLOCATION');
+      if (!booleanFrom(previewContract.ok)) reasons.push('PREVIEW_CONTRACT_NOT_OK');
+      if (!booleanFrom(previewContract.selection_allowed)) reasons.push('PREVIEW_CONTRACT_SELECTION_NOT_ALLOWED');
+      if (hasOwn(rowJson, 'selection_allowed') && !booleanFrom(rowJson.selection_allowed)) reasons.push('ROW_SELECTION_NOT_ALLOWED');
+      if (!allowedEconomicKeyTypes.has(keyType)) reasons.push('ECONOMIC_KEY_TYPE_INVALID');
+      if (!keyValue) reasons.push('ECONOMIC_KEY_VALUE_MISSING');
+      if (!['PAYE', 'UMBRELLA'].includes(payChannel)) reasons.push('PAY_CHANNEL_NOT_DRAFT_ELIGIBLE');
+
+      if (reasons.length > 0) {
+        invalidRows.push({ preview_row_id: rowId || null, reasons });
+      } else {
+        selectedRows.push(row);
       }
-      return true;
-    });
+    }
+
+    if (invalidRows.length > 0) {
+      return {
+        ok: false,
+        error_code: 'BANKING_PAY_CURRENT_SELECTION_NOT_DRAFT_ELIGIBLE',
+        selected_preview_row_ids: [],
+        session_version: sessionVersionRaw,
+        session_version_normalized: sessionVersionValue,
+        invalid_row_count: invalidRows.length,
+        invalid_rows: invalidRows.slice(0, 25)
+      };
+    }
 
     const selectedIds = [];
     const seenIds = new Set();
@@ -23173,9 +23839,14 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       ok: selectedIds.length > 0,
       error_code: selectedIds.length > 0 ? null : 'BANKING_CREATE_DRAFT_NO_SELECTED_ROWS_CURRENT_VERSION',
       session_id: id,
-      session_version: sessionVersionValue,
+      session_version: sessionVersionRaw,
+      session_version_normalized: sessionVersionValue,
+      progress_state: upperTrim(sessionRow.progress_state || ''),
+      progress_counter_version: normalizeVersion(sessionRow.progress_counter_version),
       source_snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id || '') || null,
       session_signature: trimStr(sessionRow.session_signature || '') || null,
+      pay_date: trimStr(sessionRow.pay_date || '') || null,
+      week_ending_cutoff: trimStr(sessionRow.week_ending_cutoff || '') || null,
       selected_preview_row_ids: selectedIds,
       selected_row_count: selectedIds.length,
       server_selected_preview_row_ids_provided: sessionRow.server_selected_preview_row_ids_provided === true,
@@ -23201,29 +23872,57 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     if (Number.isFinite(attemptCount) && Number.isFinite(maxAttempts) && attemptCount >= maxAttempts) return 'STALE_OR_EXHAUSTED';
     return 'HEALTHY_ACTIVE';
   };
-  const buildCreateDraftOperationResponse = (operationPayload, meta = {}) => response(200, Object.assign({}, isPlainObject(operationPayload) ? operationPayload : {}, {
-    ok: true,
-    create_draft_operation_started: true,
-    operation_created: meta.reused === true ? false : operationPayload && operationPayload.operation_created !== false,
-    reused_active_operation: meta.reused === true,
-    workbench_session_id: sessionId,
-    pay_date: payDate,
-    selected_rows_total: selectedCount,
-    selected_preview_row_count: selectedCount,
-    selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
-    selected_preview_row_mode: selectedPreviewRowMode,
-    week_ending_cutoff_date: weekEndingCutoffDate,
-    backend_runner_owned: true,
-    frontend_completion_required: false,
-    preview_payload_requested: false,
-    row_backed_preview_required: true,
-    frozen_economic_keys_required: true,
-    decision_sync: {
-      state_changed: decisionSync && decisionSync.state_changed === true,
-      job_ids: Array.isArray(decisionSync && decisionSync.job_ids) ? decisionSync.job_ids.slice(0, 25) : [],
-      touched_candidate_ids: Array.isArray(decisionSync && decisionSync.touched_candidate_ids) ? decisionSync.touched_candidate_ids.slice(0, 25) : []
+  const findHealthyActiveDraftCreateOperation = async (actorUserIdValue, sessionIdValue) => {
+    try {
+      const activeLookup = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active_draft_create', {
+        p_actor_user_id: actorUserIdValue,
+        p_workbench_session_id: sessionIdValue,
+        p_include_recent_terminal: false,
+        p_recent_terminal_minutes: 0
+      }, {
+        routeClass: 'OPERATION_GET',
+        purpose: 'BANKING_PAY_CREATE_DRAFT_ACTIVE_GUARD',
+        timeoutMs: 8000
+      }), 'banking_pay_operation_find_active_draft_create');
+      const activeSource = isPlainObject(activeLookup.operation) ? activeLookup.operation : activeLookup;
+      if (classifyExistingDraftCreateOperation(activeSource) !== 'HEALTHY_ACTIVE') return null;
+      return typeof buildBankingPayOperationPublicPayload === 'function'
+        ? buildBankingPayOperationPublicPayload(activeSource, { mode: 'PROGRESS_LIGHT' })
+        : activeSource;
+    } catch {
+      return null;
     }
-  }));
+  };
+  const buildCreateDraftOperationResponse = (operationPayload, meta = {}) => {
+    const reused = meta.reused === true;
+    const basePayload = isPlainObject(operationPayload) ? operationPayload : {};
+    const routeMetadata = {
+      ok: true,
+      create_draft_operation_started: true,
+      operation_created: reused ? false : operationPayload && operationPayload.operation_created !== false,
+      reused_active_operation: reused,
+      workbench_session_id: trimStr(basePayload.workbench_session_id || sessionId) || sessionId,
+      backend_runner_owned: true,
+      frontend_completion_required: false,
+      preview_payload_requested: false,
+      row_backed_preview_required: true,
+      frozen_economic_keys_required: true
+    };
+    const newOperationSelectionMetadata = reused ? {} : {
+      pay_date: payDate,
+      selected_rows_total: selectedCount,
+      selected_preview_row_count: selectedCount,
+      selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+      selected_preview_row_mode: selectedPreviewRowMode,
+      week_ending_cutoff_date: weekEndingCutoffDate,
+      decision_sync: {
+        state_changed: decisionSync && decisionSync.state_changed === true,
+        job_ids: Array.isArray(decisionSync && decisionSync.job_ids) ? decisionSync.job_ids.slice(0, 25) : [],
+        touched_candidate_ids: Array.isArray(decisionSync && decisionSync.touched_candidate_ids) ? decisionSync.touched_candidate_ids.slice(0, 25) : []
+      }
+    };
+    return response(200, Object.assign({}, basePayload, routeMetadata, newOperationSelectionMetadata));
+  };
 
   const resolveOperationIdForImmediateDrain = (operationPayload) => {
     const payload = isPlainObject(operationPayload) ? operationPayload : {};
@@ -23303,6 +24002,31 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   }
 
   let decisionSync = { ok: true, state_changed: false, job_ids: [], touched_candidate_ids: [] };
+  let selectedCount = selectedPreviewRowIds.length;
+  let sessionVersion = body.session_version ?? body.sessionVersion ?? null;
+  let sourceSnapshotRunId = trimStr(body.source_snapshot_run_id || body.sourceSnapshotRunId) || null;
+  let sessionSignature = trimStr(body.session_signature || body.sessionSignature || '') || null;
+  let authoritativeReadinessSnapshot = null;
+
+  const healthyActiveOperation = await findHealthyActiveDraftCreateOperation(actorUserId, sessionId);
+  if (healthyActiveOperation) {
+    scheduleDraftCreateDrainBestEffort(healthyActiveOperation);
+    return buildCreateDraftOperationResponse(healthyActiveOperation, { reused: true });
+  }
+
+  const initialReadiness = await readAuthoritativeProgress(sessionId, sessionVersion);
+  if (!initialReadiness || initialReadiness.ok !== true || initialReadiness.gate_ready !== true) {
+    return rejectWorkbenchNotReady(sessionId, 'INITIAL_READINESS', initialReadiness, {
+      supplied_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100)
+    });
+  }
+
+  authoritativeReadinessSnapshot = initialReadiness;
+  selectedCount = Math.max(0, Number(initialReadiness.selected_eligible_ready_row_count) || 0);
+  sessionVersion = initialReadiness.session_version;
+  sourceSnapshotRunId = initialReadiness.source_snapshot_run_id || sourceSnapshotRunId;
+  sessionSignature = initialReadiness.session_signature || sessionSignature;
+
   if (selectedPreviewRowIds.length > 0 || isPlainObject(body.case_resolutions) || isPlainObject(body.caseResolutions)) {
     if (typeof normalizeBankingPayPreviewDecisions === 'function' && typeof syncBankingPayPreviewDecisionsToSession === 'function') {
       const merged = cloneJson(previewDecisions) || {};
@@ -23326,20 +24050,36 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     }
   }
 
-  const progress = await readCachedProgress(sessionId);
-  let selectedCount = numberFrom(progress, ['selected_rows_total', 'selected_row_count', 'selected_count'], selectedPreviewRowIds.length);
-  if (selectedCount <= 0) {
-    return fail(409, 'BANKING_CREATE_DRAFT_NO_SELECTED_ROWS', 'Select at least one payment row before creating the batch.', { session_id: sessionId, selected_rows_total: selectedCount });
+  const postSyncReadiness = await readAuthoritativeProgress(sessionId, sessionVersion);
+  if (!postSyncReadiness || postSyncReadiness.ok !== true || postSyncReadiness.gate_ready !== true) {
+    return rejectWorkbenchNotReady(sessionId, 'POST_DECISION_SYNC_READINESS', postSyncReadiness, {
+      decision_sync_state_changed: decisionSync && decisionSync.state_changed === true,
+      decision_sync_job_ids: Array.isArray(decisionSync && decisionSync.job_ids) ? decisionSync.job_ids.slice(0, 25) : []
+    });
   }
 
-  let sessionVersion = progress.session_version ?? body.session_version ?? body.sessionVersion ?? null;
-  let sourceSnapshotRunId = trimStr(progress.snapshot_run_id || body.source_snapshot_run_id || body.sourceSnapshotRunId) || null;
-  let sessionSignature = trimStr(body.session_signature || body.sessionSignature || progress.session_signature || progress.filter_hash || '') || null;
+  authoritativeReadinessSnapshot = postSyncReadiness;
+  selectedCount = Math.max(0, Number(postSyncReadiness.selected_eligible_ready_row_count) || 0);
+  sessionVersion = postSyncReadiness.session_version;
+  sourceSnapshotRunId = postSyncReadiness.source_snapshot_run_id || sourceSnapshotRunId;
+  sessionSignature = postSyncReadiness.session_signature || sessionSignature;
 
-  const currentSelection = await fetchCurrentSessionSelectionForCreateDraft(sessionId, payChannelScope);
+  const currentSelection = await fetchCurrentSessionSelectionForCreateDraft(sessionId, payChannelScope, postSyncReadiness);
   if (!currentSelection || currentSelection.ok !== true || !Array.isArray(currentSelection.selected_preview_row_ids) || currentSelection.selected_preview_row_ids.length <= 0) {
-    return fail(409, currentSelection?.error_code || 'WORKBENCH_STALE_SELECTION', 'Selected preview rows are not part of the current ready workbench session version. Refresh the preview page and try again.', {
-      session_id: sessionId,
+    if (Number(currentSelection && currentSelection.http_status) === 413) {
+      return fail(413, currentSelection.error_code || 'BANKING_CREATE_DRAFT_SELECTED_ROWS_TOO_MANY_FOR_OPERATION', 'Too many current selected rows are present for one draft-create operation. Reduce the row-backed selection and try again.', {
+        session_id: sessionId,
+        current_selection: currentSelection || null,
+        limit: 100
+      });
+    }
+    return rejectWorkbenchNotReady(sessionId, 'CURRENT_SELECTION_READ', {
+      ...postSyncReadiness,
+      blocker_codes: uniqueStrings([
+        ...(postSyncReadiness.blocker_codes || []),
+        currentSelection && currentSelection.error_code ? currentSelection.error_code : 'WORKBENCH_STALE_SELECTION'
+      ])
+    }, {
       supplied_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
       progress_selected_count: selectedCount,
       current_selection: currentSelection || null
@@ -23359,28 +24099,27 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     ? currentSelection.selected_economic_keys.filter((contract) => isPlainObject(contract)).map((contract) => cloneJson(contract) || contract)
     : selectedPreviewRowContracts.map((contract) => buildCreateDraftEconomicKeyContract(contract));
 
-  try {
-    const activeLookup = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active_draft_create', {
-      p_actor_user_id: actorUserId,
-      p_workbench_session_id: sessionId,
-      p_include_recent_terminal: false,
-      p_recent_terminal_minutes: 0
+  const finalReadiness = await readAuthoritativeProgress(sessionId, sessionVersion);
+  const selectionProgressCounterVersion = normalizeVersion(currentSelection.progress_counter_version);
+  const finalProgressCounterVersion = normalizeVersion(finalReadiness && finalReadiness.progress_counter_version);
+  const progressCounterChanged = selectionProgressCounterVersion
+    && finalProgressCounterVersion
+    && selectionProgressCounterVersion !== finalProgressCounterVersion;
+  if (!finalReadiness || finalReadiness.ok !== true || finalReadiness.gate_ready !== true || progressCounterChanged) {
+    return rejectWorkbenchNotReady(sessionId, 'FINAL_PRE_OPERATION_READINESS', {
+      ...(isPlainObject(finalReadiness) ? finalReadiness : {}),
+      blocker_codes: uniqueStrings([
+        ...((isPlainObject(finalReadiness) && Array.isArray(finalReadiness.blocker_codes)) ? finalReadiness.blocker_codes : []),
+        ...(progressCounterChanged ? ['SESSION_PROGRESS_CHANGED_DURING_CREATE_DRAFT'] : [])
+      ])
     }, {
-      routeClass: 'OPERATION_GET',
-      purpose: 'BANKING_PAY_CREATE_DRAFT_ACTIVE_GUARD',
-      timeoutMs: 8000
-    }), 'banking_pay_operation_find_active_draft_create');
-    const activeSource = isPlainObject(activeLookup.operation) ? activeLookup.operation : activeLookup;
-    const activeStatus = classifyExistingDraftCreateOperation(activeSource);
-    if (activeStatus === 'HEALTHY_ACTIVE') {
-      const operationPayload = typeof buildBankingPayOperationPublicPayload === 'function'
-        ? buildBankingPayOperationPublicPayload(activeSource, { mode: 'PROGRESS_LIGHT' })
-        : activeSource;
-      scheduleDraftCreateDrainBestEffort(operationPayload);
-      return buildCreateDraftOperationResponse(operationPayload, { reused: true });
-    }
-  } catch {}
+      selection_progress_counter_version: selectionProgressCounterVersion,
+      final_progress_counter_version: finalProgressCounterVersion,
+      selected_preview_row_count: selectedCount
+    });
+  }
 
+  authoritativeReadinessSnapshot = finalReadiness;
   const selectedHashInput = selectedEconomicKeys.length > 0 ? selectedEconomicKeys : (selectedPreviewRowIds.length > 0 ? selectedPreviewRowIds : { row_backed_selection: true, session_id: sessionId, selected_count: selectedCount, session_version: sessionVersion });
   const selectedPreviewRowHash = await sha256Hex(stableStringify(selectedHashInput));
   const idempotencyHash = await sha256Hex(stableStringify({
@@ -23415,6 +24154,16 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     draft_selected_economic_keys: selectedEconomicKeys,
     submitted_preview_row_ids_before_current_selection_refresh: previousSelectedIds,
     current_selection_refreshed_before_operation_start: true,
+    workbench_readiness_snapshot: {
+      session_id: sessionId,
+      session_version: sessionVersion,
+      progress_counter_version: authoritativeReadinessSnapshot ? authoritativeReadinessSnapshot.progress_counter_version : null,
+      session_ready: authoritativeReadinessSnapshot ? authoritativeReadinessSnapshot.session_ready === true : false,
+      ready_for_draft: authoritativeReadinessSnapshot ? authoritativeReadinessSnapshot.ready_for_draft === true : false,
+      selected_eligible_ready_row_count: authoritativeReadinessSnapshot ? authoritativeReadinessSnapshot.selected_eligible_ready_row_count : selectedCount,
+      blocker_codes: authoritativeReadinessSnapshot && Array.isArray(authoritativeReadinessSnapshot.blocker_codes) ? authoritativeReadinessSnapshot.blocker_codes.slice(0, 25) : [],
+      validated_at_utc: new Date().toISOString()
+    },
     selected_preview_row_mode: selectedPreviewRowMode,
     selection_session_version: sessionVersion,
     selected_preview_row_hash: selectedPreviewRowHash,
@@ -23460,7 +24209,6 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     });
   }
 }
-
 
 
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
@@ -156052,8 +156800,10 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
 }
 
 
+
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const numberInRange = (value, fallback, min, max) => {
@@ -156061,13 +156811,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     if (!Number.isFinite(n)) return fallback;
     return Math.max(min, Math.min(max, Math.trunc(n)));
   };
-  const normalizeNowUtc = (value) => {
+  const normalizeExplicitNowUtc = (value) => {
     const raw = trimStr(value);
-    if (raw) {
-      const parsed = new Date(raw);
-      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
-    }
-    return new Date().toISOString();
+    if (!raw) return null;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
   };
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -156086,6 +156834,15 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     }
     return fallback;
   };
+  const numericField = (source, keys) => {
+    const objectSource = isPlainObject(source) ? source : {};
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(objectSource, key)) continue;
+      const n = Number(objectSource[key]);
+      if (Number.isFinite(n)) return { found: true, value: Math.max(0, Math.trunc(n)) };
+    }
+    return { found: false, value: 0 };
+  };
   const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
   const normalizeAllowedJobTypes = (value) => {
     if (value === undefined || value === null || value === '') return null;
@@ -156093,21 +156850,85 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const output = [];
     const seen = new Set();
     for (const rawValue of rawValues) {
-      const jobType = trimStr(rawValue).toUpperCase();
+      const jobType = upperTrim(rawValue);
       if (!jobType || seen.has(jobType)) continue;
       seen.add(jobType);
       output.push(jobType);
     }
     return output.length > 0 ? output : null;
   };
+  const canonicalJobType = (jobLike) => {
+    const job = isPlainObject(jobLike) ? jobLike : {};
+    const raw = upperTrim(job.canonical_job_type || job.job_type || job.original_job_type || '');
+    if (['WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE'].includes(raw)) {
+      return 'WORKBENCH_SESSION_SCOPE_SEED';
+    }
+    if (['WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH'].includes(raw)) {
+      return 'WORKBENCH_CANDIDATE_LINE_WORK_SEED';
+    }
+    if (['WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK'].includes(raw)) {
+      return 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS';
+    }
+    if (['WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK'].includes(raw)) {
+      return 'WORKBENCH_PREVIEW_ROWS_MATERIALISE';
+    }
+    return raw === 'CONTRACT_CLIENT_DIRTY_FANOUT' ? raw : raw;
+  };
+  const workUnitsForJob = (jobLike) => {
+    const job = isPlainObject(jobLike) ? jobLike : {};
+    if (booleanFrom(job.obsolete_skip)) return { units: 0, recognised: true, stage_limit: 0 };
+
+    const stageResult = isPlainObject(job.stage_result) ? job.stage_result : {};
+    const stageLimit = numberInRange(
+      stageResult.limit ?? stageResult.p_limit ?? stageResult.page_limit ?? stageResult.chunk_size,
+      100,
+      1,
+      100
+    );
+    const jobType = canonicalJobType(job);
+    let parsed = { found: false, value: 0 };
+
+    if (jobType === 'WORKBENCH_SESSION_SCOPE_SEED') {
+      parsed = numericField(stageResult, ['seeded_count', 'scope_row_count', 'scope_rows_seeded', 'new_scope_count', 'page_count']);
+    } else if (jobType === 'WORKBENCH_CANDIDATE_LINE_WORK_SEED') {
+      parsed = numericField(stageResult, ['line_work_seeded_count', 'seeded_count', 'page_count']);
+      if (!parsed.found && isPlainObject(stageResult.line_work_state)) {
+        parsed = numericField(stageResult.line_work_state, ['seeded_count']);
+      }
+    } else if (jobType === 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS') {
+      parsed = numericField(stageResult, ['processed_count', 'line_work_processed_count']);
+    } else if (jobType === 'WORKBENCH_PREVIEW_ROWS_MATERIALISE') {
+      parsed = numericField(stageResult, ['materialised_count', 'materialized_count', 'processed_count']);
+    } else if (jobType === 'CONTRACT_CLIENT_DIRTY_FANOUT') {
+      parsed = numericField(stageResult, ['processed_count', 'candidate_count', 'affected_candidate_count']);
+    }
+
+    if (parsed.found) return { units: parsed.value, recognised: true, stage_limit: stageLimit };
+
+    const status = upperTrim(job.status || '');
+    const isStageJob = [
+      'WORKBENCH_SESSION_SCOPE_SEED',
+      'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+      'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+      'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
+      'CONTRACT_CLIENT_DIRTY_FANOUT'
+    ].includes(jobType);
+    const stageMayHaveRun = ['SUCCEEDED', 'FAILED', 'DEAD', 'QUEUED', 'INVALID_CLAIM_RESULT'].includes(status);
+    return {
+      units: isStageJob && stageMayHaveRun ? stageLimit : 0,
+      recognised: false,
+      stage_limit: stageLimit
+    };
+  };
 
   const sourceOptions = isPlainObject(opts) ? opts : {};
-  const budgetProfile = trimStr(sourceOptions.budgetProfile || sourceOptions.budget_profile || sourceOptions.profile || '').toUpperCase() || null;
+  const budgetProfile = upperTrim(sourceOptions.budgetProfile || sourceOptions.budget_profile || sourceOptions.profile || '') || null;
   const claimLimitMax = numberInRange(sourceOptions.claimLimitMax ?? sourceOptions.claim_limit_max, 100, 1, 100);
   const maxJobsMax = numberInRange(sourceOptions.maxJobsMax ?? sourceOptions.max_jobs_max, 150, 1, 150);
   const maxRowsMax = numberInRange(sourceOptions.maxRowsMax ?? sourceOptions.max_rows_max, 5000, 1, 5000);
   const maxRuntimeMsMax = numberInRange(sourceOptions.maxRuntimeMsMax ?? sourceOptions.max_runtime_ms_max, 30000, 1000, 30000);
-  const claimLimit = numberInRange(sourceOptions.claimLimit ?? sourceOptions.claim_limit, 5, 1, claimLimitMax);
+  const profileClaimLimitMax = budgetProfile === 'NUDGE' ? Math.min(claimLimitMax, 50) : claimLimitMax;
+  const claimLimit = numberInRange(sourceOptions.claimLimit ?? sourceOptions.claim_limit, 5, 1, profileClaimLimitMax);
   const maxPasses = numberInRange(sourceOptions.maxPasses ?? sourceOptions.max_passes, 1, 1, 4);
   const maxJobs = numberInRange(sourceOptions.maxJobs ?? sourceOptions.max_jobs, Math.min(maxJobsMax, claimLimit * maxPasses), 1, maxJobsMax);
   const maxRows = numberInRange(sourceOptions.maxRows ?? sourceOptions.max_rows, 500, 1, maxRowsMax);
@@ -156117,9 +156938,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const sessionFilterId = trimStr(sourceOptions.sessionId || sourceOptions.session_id);
   const candidateFilterId = trimStr(sourceOptions.candidateId || sourceOptions.candidate_id);
   const allowedJobTypes = normalizeAllowedJobTypes(sourceOptions.allowedJobTypes ?? sourceOptions.allowed_job_types);
-  const nowUtc = normalizeNowUtc(sourceOptions.nowUtc || sourceOptions.now_utc);
-  const rowBoundedJobLimit = Math.max(1, Math.floor(maxRows / 100));
-  const effectiveLimit = Math.max(1, Math.min(100, claimLimit, maxJobs, rowBoundedJobLimit));
+  const explicitNowUtc = normalizeExplicitNowUtc(sourceOptions.nowUtc || sourceOptions.now_utc);
   const workerId = trimStr(
     sourceOptions.workerId ||
     sourceOptions.worker_id ||
@@ -156131,173 +156950,323 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     25,
     3600
   );
+
+  const maxStageWorkUnitsPerJob = 100;
   const startedAtUtc = new Date().toISOString();
   const startedAtMs = Date.now();
-  const rpcArgs = {
-    p_limit: effectiveLimit,
-    p_now_utc: nowUtc,
-    p_session_id: uuidRe.test(sessionFilterId) ? sessionFilterId : null,
-    p_candidate_id: uuidRe.test(candidateFilterId) ? candidateFilterId : null,
-    p_allowed_job_types: allowedJobTypes,
-    p_worker_id: workerId,
-    p_lease_seconds: leaseSeconds
+  const sessionId = uuidRe.test(sessionFilterId) ? sessionFilterId : null;
+  const candidateId = uuidRe.test(candidateFilterId) ? candidateFilterId : null;
+  const validActorUserId = uuidRe.test(actorUserId) ? actorUserId : null;
+
+  let passCount = 0;
+  let rpcCallCount = 0;
+  let claimedCount = 0;
+  let processedCount = 0;
+  let succeededCount = 0;
+  let failedCount = 0;
+  let deadCount = 0;
+  let obsoleteSkippedCount = 0;
+  let continuationsCreated = 0;
+  let continuationsReused = 0;
+  let recoveredStaleCount = 0;
+  let deadStaleCount = 0;
+  let staleRecoveryErrorCount = 0;
+  let rowUnitsProcessed = 0;
+  let moreDue = true;
+  let madeProgress = false;
+  let stopReason = null;
+  let budgetExhausted = false;
+  let lastAggregate = {};
+  let lastEffectiveLimit = 0;
+  let transportError = null;
+  const jobs = [];
+  const errors = [];
+  const passSummaries = [];
+
+  while (stopReason === null) {
+    const elapsedBeforePass = Math.max(0, Date.now() - startedAtMs);
+    const remainingPasses = Math.max(0, maxPasses - passCount);
+    const consumedJobs = Math.max(claimedCount, processedCount);
+    const remainingJobs = Math.max(0, maxJobs - consumedJobs);
+    const remainingRows = Math.max(0, maxRows - rowUnitsProcessed);
+    const remainingRuntimeMs = Math.max(0, maxRuntimeMs - elapsedBeforePass);
+
+    if (remainingPasses <= 0) {
+      stopReason = 'MAX_PASSES';
+      budgetExhausted = true;
+      moreDue = true;
+      break;
+    }
+    if (remainingJobs <= 0) {
+      stopReason = 'MAX_JOBS';
+      budgetExhausted = true;
+      moreDue = true;
+      break;
+    }
+    if (remainingRows < maxStageWorkUnitsPerJob) {
+      stopReason = 'MAX_ROWS';
+      budgetExhausted = true;
+      moreDue = true;
+      break;
+    }
+    if (remainingRuntimeMs <= 100) {
+      stopReason = 'MAX_RUNTIME';
+      budgetExhausted = true;
+      moreDue = true;
+      break;
+    }
+
+    const rowBoundedJobLimit = Math.max(1, Math.floor(remainingRows / maxStageWorkUnitsPerJob));
+    const effectiveLimit = Math.max(1, Math.min(100, claimLimit, remainingJobs, rowBoundedJobLimit));
+    const passNowUtc = explicitNowUtc || new Date().toISOString();
+    const passStartedAtMs = Date.now();
+    const passTimeoutMs = Math.max(100, Math.min(30000, remainingRuntimeMs - 50));
+    const rpcArgs = {
+      p_limit: effectiveLimit,
+      p_now_utc: passNowUtc,
+      p_session_id: sessionId,
+      p_candidate_id: candidateId,
+      p_allowed_job_types: allowedJobTypes,
+      p_worker_id: workerId,
+      p_lease_seconds: leaseSeconds
+    };
+
+    passCount += 1;
+    rpcCallCount += 1;
+    lastEffectiveLimit = effectiveLimit;
+
+    let aggregate = {};
+    try {
+      aggregate = unwrapRpc(await sbRpc(env, 'pay_workbench_worker_drain_chunk', rpcArgs, {
+        routeClass: 'PREVIEW_CHUNK',
+        purpose: 'WORKBENCH_DB_WORKER_DRAIN_CHUNK',
+        timeoutMs: passTimeoutMs,
+        bankingPay: true
+      }), 'pay_workbench_worker_drain_chunk');
+
+      if (!isPlainObject(aggregate) || !Object.prototype.hasOwnProperty.call(aggregate, 'more_due')) {
+        const invalidResponseError = new Error('pay_workbench_worker_drain_chunk returned an invalid aggregate response');
+        invalidResponseError.code = 'BANKING_PAY_WORKBENCH_DRAIN_RPC_INVALID_RESPONSE';
+        throw invalidResponseError;
+      }
+    } catch (error) {
+      const message = String(error?.message || error || 'Banking Pay aggregate workbench drain failed');
+      const errorCode = upperTrim(error?.code || error?.error_code || error?.name || 'BANKING_PAY_WORKBENCH_AGGREGATE_DRAIN_FAILED') || 'BANKING_PAY_WORKBENCH_AGGREGATE_DRAIN_FAILED';
+      transportError = { code: errorCode, message };
+      errors.push(transportError);
+      stopReason = 'RPC_ERROR';
+      moreDue = true;
+      passSummaries.push({
+        pass_number: passCount,
+        rpc_call_number: rpcCallCount,
+        effective_db_limit: effectiveLimit,
+        elapsed_ms: Math.max(0, Date.now() - passStartedAtMs),
+        claimed: 0,
+        processed: 0,
+        row_units_processed: 0,
+        more_due: true,
+        error_code: errorCode
+      });
+      break;
+    }
+
+    lastAggregate = aggregate;
+    const passClaimed = countFrom(aggregate, ['claimed', 'claimed_count']);
+    const passProcessed = countFrom(aggregate, ['processed', 'processed_count']);
+    const passSucceeded = countFrom(aggregate, ['succeeded', 'succeeded_count']);
+    const passFailed = countFrom(aggregate, ['failed', 'failed_count']);
+    const passDead = countFrom(aggregate, ['dead', 'dead_count']);
+    const passObsoleteSkipped = countFrom(aggregate, ['obsolete_skipped', 'obsolete_skipped_count']);
+    const passContinuationsCreated = countFrom(aggregate, ['continuations_created', 'continuation_created_count']);
+    const passContinuationsReused = countFrom(aggregate, ['continuations_reused', 'continuation_reused_count']);
+    const passRecoveredStale = countFrom(aggregate, ['recovered_stale_count']);
+    const passDeadStale = countFrom(aggregate, ['dead_stale_count']);
+    const passStaleRecoveryErrors = countFrom(aggregate, ['supplemental_stale_recovery_error_count']);
+    const passMoreDue = booleanFrom(aggregate.more_due);
+    const passJobs = Array.isArray(aggregate.jobs) ? aggregate.jobs.filter((job) => isPlainObject(job)) : [];
+
+    let passWorkUnits = 0;
+    let returnedStageJobCount = 0;
+    for (const job of passJobs) {
+      const workUnitResult = workUnitsForJob(job);
+      passWorkUnits += workUnitResult.units;
+      const jobType = canonicalJobType(job);
+      if (!booleanFrom(job.obsolete_skip) && [
+        'WORKBENCH_SESSION_SCOPE_SEED',
+        'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+        'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+        'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
+        'CONTRACT_CLIENT_DIRTY_FANOUT'
+      ].includes(jobType)) {
+        returnedStageJobCount += 1;
+      }
+      if (jobs.length < maxJobs) jobs.push(job);
+    }
+
+    const expectedStageProcessedCount = Math.max(0, passProcessed - passObsoleteSkipped);
+    if (returnedStageJobCount < expectedStageProcessedCount) {
+      passWorkUnits += (expectedStageProcessedCount - returnedStageJobCount) * maxStageWorkUnitsPerJob;
+    }
+
+    claimedCount += passClaimed;
+    processedCount += passProcessed;
+    succeededCount += passSucceeded;
+    failedCount += passFailed;
+    deadCount += passDead;
+    obsoleteSkippedCount += passObsoleteSkipped;
+    continuationsCreated += passContinuationsCreated;
+    continuationsReused += passContinuationsReused;
+    recoveredStaleCount += passRecoveredStale;
+    deadStaleCount += passDeadStale;
+    staleRecoveryErrorCount += passStaleRecoveryErrors;
+    rowUnitsProcessed += passWorkUnits;
+    moreDue = passMoreDue;
+    madeProgress = madeProgress || passClaimed > 0 || passProcessed > 0 || passRecoveredStale > 0 || passDeadStale > 0;
+
+    passSummaries.push({
+      pass_number: passCount,
+      rpc_call_number: rpcCallCount,
+      effective_db_limit: effectiveLimit,
+      elapsed_ms: Math.max(0, Date.now() - passStartedAtMs),
+      claimed: passClaimed,
+      processed: passProcessed,
+      succeeded: passSucceeded,
+      failed: passFailed,
+      dead: passDead,
+      obsolete_skipped: passObsoleteSkipped,
+      continuations_created: passContinuationsCreated,
+      continuations_reused: passContinuationsReused,
+      recovered_stale_count: passRecoveredStale,
+      dead_stale_count: passDeadStale,
+      row_units_processed: passWorkUnits,
+      more_due: passMoreDue
+    });
+
+    if (!passMoreDue) {
+      stopReason = 'NO_MORE_DUE';
+      moreDue = false;
+      break;
+    }
+
+    if (passClaimed === 0 && passProcessed === 0) {
+      stopReason = 'NO_PROGRESS';
+      moreDue = true;
+      break;
+    }
+
+    const elapsedAfterPass = Math.max(0, Date.now() - startedAtMs);
+    if (elapsedAfterPass >= maxRuntimeMs) {
+      stopReason = 'MAX_RUNTIME';
+      budgetExhausted = true;
+      moreDue = true;
+    } else if (Math.max(claimedCount, processedCount) >= maxJobs) {
+      stopReason = 'MAX_JOBS';
+      budgetExhausted = true;
+      moreDue = true;
+    } else if (rowUnitsProcessed >= maxRows) {
+      stopReason = 'MAX_ROWS';
+      budgetExhausted = true;
+      moreDue = true;
+    } else if (passCount >= maxPasses) {
+      stopReason = 'MAX_PASSES';
+      budgetExhausted = true;
+      moreDue = true;
+    }
+  }
+
+  const completedAtUtc = new Date().toISOString();
+  const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+  const result = {
+    ...lastAggregate,
+    ok: transportError === null && failedCount === 0 && staleRecoveryErrorCount === 0,
+    error_code: transportError ? transportError.code : null,
+    code: transportError ? transportError.code : null,
+    message: transportError ? transportError.message : null,
+    origin,
+    worker_id: lastAggregate.worker_id || workerId,
+    worker_scope: sessionId || candidateId ? 'FILTERED' : 'GLOBAL',
+    actor_user_id: validActorUserId,
+    session_id: sessionId,
+    candidate_id: candidateId,
+    budget_profile: budgetProfile,
+    started_at_utc: startedAtUtc,
+    completed_at_utc: completedAtUtc,
+    elapsed_ms: elapsedMs,
+    requested_claim_limit: numberInRange(sourceOptions.claimLimit ?? sourceOptions.claim_limit, claimLimit, 1, claimLimitMax),
+    claim_limit: claimLimit,
+    effective_db_limit: lastEffectiveLimit,
+    max_passes: maxPasses,
+    max_jobs: maxJobs,
+    max_rows: maxRows,
+    max_runtime_ms: maxRuntimeMs,
+    claim_limit_max: claimLimitMax,
+    max_jobs_max: maxJobsMax,
+    max_rows_max: maxRowsMax,
+    max_runtime_ms_max: maxRuntimeMsMax,
+    lease_seconds: leaseSeconds,
+    allowed_job_types: allowedJobTypes,
+    claimed: claimedCount,
+    claimed_count: claimedCount,
+    processed: processedCount,
+    processed_count: processedCount,
+    succeeded: succeededCount,
+    succeeded_count: succeededCount,
+    failed: failedCount,
+    failed_count: failedCount,
+    dead: deadCount,
+    dead_count: deadCount,
+    obsolete_skipped: obsoleteSkippedCount,
+    obsolete_skipped_count: obsoleteSkippedCount,
+    continuations_created: continuationsCreated,
+    continuation_created_count: continuationsCreated,
+    continuations_reused: continuationsReused,
+    continuation_reused_count: continuationsReused,
+    continuation_enqueued_count: continuationsCreated,
+    recovered_stale_count: recoveredStaleCount,
+    dead_stale_count: deadStaleCount,
+    supplemental_stale_recovery_error_count: staleRecoveryErrorCount,
+    row_units_processed: rowUnitsProcessed,
+    work_units_processed: rowUnitsProcessed,
+    pass_count: passCount,
+    continuation_pass_count: Math.max(0, passCount - 1),
+    rpc_call_count: rpcCallCount,
+    more_due: moreDue,
+    stop_reason: stopReason || 'NO_MORE_DUE',
+    budget_exhausted: budgetExhausted,
+    made_progress: madeProgress,
+    aggregate_db_worker: true,
+    per_job_rpc_fanout: false,
+    pass_summaries: passSummaries,
+    jobs,
+    errors
   };
 
   try {
-    const aggregate = unwrapRpc(await sbRpc(env, 'pay_workbench_worker_drain_chunk', rpcArgs, {
-      routeClass: 'PREVIEW_CHUNK',
-      purpose: 'WORKBENCH_DB_WORKER_DRAIN_CHUNK',
-      timeoutMs: maxRuntimeMs,
-      bankingPay: true
-    }), 'pay_workbench_worker_drain_chunk');
-
-    const claimedCount = countFrom(aggregate, ['claimed', 'claimed_count']);
-    const processedCount = countFrom(aggregate, ['processed', 'processed_count']);
-    const succeededCount = countFrom(aggregate, ['succeeded', 'succeeded_count']);
-    const failedCount = countFrom(aggregate, ['failed', 'failed_count']);
-    const deadCount = countFrom(aggregate, ['dead', 'dead_count']);
-    const obsoleteSkippedCount = countFrom(aggregate, ['obsolete_skipped', 'obsolete_skipped_count']);
-    const continuationsCreated = countFrom(aggregate, ['continuations_created', 'continuation_created_count']);
-    const continuationsReused = countFrom(aggregate, ['continuations_reused', 'continuation_reused_count']);
-    const recoveredStaleCount = countFrom(aggregate, ['recovered_stale_count']);
-    const deadStaleCount = countFrom(aggregate, ['dead_stale_count']);
-    const moreDue = booleanFrom(aggregate.more_due);
-    const aggregateOk = aggregate.ok !== false && failedCount === 0;
-    const completedAtUtc = new Date().toISOString();
-    const result = {
-      ...aggregate,
-      ok: aggregateOk,
+    const logPayload = {
       origin,
-      worker_id: aggregate.worker_id || workerId,
-      worker_scope: rpcArgs.p_session_id || rpcArgs.p_candidate_id ? 'FILTERED' : 'GLOBAL',
-      actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null,
-      session_id: rpcArgs.p_session_id,
-      candidate_id: rpcArgs.p_candidate_id,
-      budget_profile: budgetProfile,
-      started_at_utc: startedAtUtc,
-      completed_at_utc: completedAtUtc,
-      elapsed_ms: Math.max(0, Date.now() - startedAtMs),
-      claim_limit: claimLimit,
-      effective_db_limit: effectiveLimit,
-      max_passes: maxPasses,
-      max_jobs: maxJobs,
-      max_rows: maxRows,
-      max_runtime_ms: maxRuntimeMs,
-      claim_limit_max: claimLimitMax,
-      max_jobs_max: maxJobsMax,
-      max_rows_max: maxRowsMax,
-      max_runtime_ms_max: maxRuntimeMsMax,
-      lease_seconds: leaseSeconds,
-      allowed_job_types: allowedJobTypes,
+      worker_id: result.worker_id,
+      pass_count: result.pass_count,
+      rpc_call_count: result.rpc_call_count,
       claimed: claimedCount,
-      claimed_count: claimedCount,
       processed: processedCount,
-      processed_count: processedCount,
       succeeded: succeededCount,
-      succeeded_count: succeededCount,
       failed: failedCount,
-      failed_count: failedCount,
       dead: deadCount,
-      dead_count: deadCount,
       obsolete_skipped: obsoleteSkippedCount,
-      obsolete_skipped_count: obsoleteSkippedCount,
       continuations_created: continuationsCreated,
-      continuation_created_count: continuationsCreated,
       continuations_reused: continuationsReused,
-      continuation_reused_count: continuationsReused,
-      continuation_enqueued_count: continuationsCreated,
-      recovered_stale_count: recoveredStaleCount,
-      dead_stale_count: deadStaleCount,
+      row_units_processed: rowUnitsProcessed,
       more_due: moreDue,
-      rpc_call_count: 1,
-      aggregate_db_worker: true,
-      per_job_rpc_fanout: false
+      stop_reason: result.stop_reason,
+      budget_exhausted: budgetExhausted,
+      elapsed_ms: elapsedMs
     };
+    if (transportError) console.warn('[drainBankingPayWorkbenchJobs] bounded aggregate drain stopped', logPayload);
+    else console.info('[drainBankingPayWorkbenchJobs] bounded aggregate drain', logPayload);
+  } catch {}
 
-    try {
-      console.info('[drainBankingPayWorkbenchJobs] aggregate', {
-        origin,
-        worker_id: result.worker_id,
-        claimed: claimedCount,
-        processed: processedCount,
-        succeeded: succeededCount,
-        failed: failedCount,
-        dead: deadCount,
-        obsolete_skipped: obsoleteSkippedCount,
-        continuations_created: continuationsCreated,
-        more_due: moreDue,
-        elapsed_ms: result.elapsed_ms
-      });
-    } catch {}
-
-    return result;
-  } catch (error) {
-    const completedAtUtc = new Date().toISOString();
-    const message = String(error?.message || error || 'Banking Pay aggregate workbench drain failed');
-    const errorCode = trimStr(error?.code || error?.error_code || error?.name || 'BANKING_PAY_WORKBENCH_AGGREGATE_DRAIN_FAILED').toUpperCase() || 'BANKING_PAY_WORKBENCH_AGGREGATE_DRAIN_FAILED';
-    const result = {
-      ok: false,
-      error_code: errorCode,
-      code: errorCode,
-      message,
-      origin,
-      worker_id: workerId,
-      worker_scope: rpcArgs.p_session_id || rpcArgs.p_candidate_id ? 'FILTERED' : 'GLOBAL',
-      actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null,
-      session_id: rpcArgs.p_session_id,
-      candidate_id: rpcArgs.p_candidate_id,
-      budget_profile: budgetProfile,
-      started_at_utc: startedAtUtc,
-      completed_at_utc: completedAtUtc,
-      elapsed_ms: Math.max(0, Date.now() - startedAtMs),
-      claim_limit: claimLimit,
-      effective_db_limit: effectiveLimit,
-      max_passes: maxPasses,
-      max_jobs: maxJobs,
-      max_rows: maxRows,
-      max_runtime_ms: maxRuntimeMs,
-      lease_seconds: leaseSeconds,
-      allowed_job_types: allowedJobTypes,
-      claimed: 0,
-      claimed_count: 0,
-      processed: 0,
-      processed_count: 0,
-      succeeded: 0,
-      succeeded_count: 0,
-      failed: 0,
-      failed_count: 0,
-      dead: 0,
-      dead_count: 0,
-      obsolete_skipped: 0,
-      obsolete_skipped_count: 0,
-      continuations_created: 0,
-      continuation_created_count: 0,
-      continuations_reused: 0,
-      continuation_reused_count: 0,
-      continuation_enqueued_count: 0,
-      recovered_stale_count: 0,
-      dead_stale_count: 0,
-      more_due: false,
-      rpc_call_count: 1,
-      aggregate_db_worker: true,
-      per_job_rpc_fanout: false,
-      jobs: [],
-      errors: [{ code: errorCode, message }]
-    };
-
-    try {
-      console.warn('[drainBankingPayWorkbenchJobs] aggregate drain failed', {
-        origin,
-        worker_id: workerId,
-        error_code: errorCode,
-        message
-      });
-    } catch {}
-
-    return result;
-  }
+  return result;
 }
-
 
 
 
