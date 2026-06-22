@@ -16454,6 +16454,7 @@ async function sendPayBatchRemittancesInternal(env, opts = {}) {
   };
 }
 
+
 function buildRemittanceEmailPayload(job, context = {}) {
   const sourceJob = (typeof normaliseRemittanceJobForRendering === 'function')
     ? normaliseRemittanceJobForRendering((job && typeof job === 'object') ? job : {})
@@ -16467,6 +16468,19 @@ function buildRemittanceEmailPayload(job, context = {}) {
   const moneyNum = (value) => {
     const n = asNum(value);
     return n == null ? 0 : n;
+  };
+  const authoritativeMoneyOrNull = (...values) => {
+    for (const value of values) {
+      if (value === null || value === undefined) continue;
+      if (typeof value === 'string' && value.trim() === '') continue;
+      const n = Number(typeof value === 'string' ? value.replace(/,/g, '') : value);
+      if (Number.isFinite(n)) return Math.round(n * 100) / 100;
+    }
+    return null;
+  };
+  const authoritativeMoneyOrComputed = (computedValue, ...values) => {
+    const authoritative = authoritativeMoneyOrNull(...values);
+    return authoritative == null ? moneyNum(computedValue) : authoritative;
   };
   const fmtMoney = (value) => {
     if (typeof formatCloudTmsGbp === 'function') {
@@ -16960,7 +16974,24 @@ function buildRemittanceEmailPayload(job, context = {}) {
     const vat = chooseTotal(frozenTotals.vat ?? frozenTotals.gross_vat ?? totals.vat ?? totals.gross_vat, detailTotals.vat);
     const grossInc = chooseTotal(frozenTotals.gross_inc_vat ?? totals.gross_inc_vat ?? totals.total_inc_vat, detailTotals.gross_inc_vat || (grossEx + vat));
     const deductions = moneyNum(frozenTotals.deductions_recoveries_inc_vat ?? frozenTotals.deductions_inc_vat ?? totals.deductions_inc_vat ?? totals?.deductions_summary?.total_deductions);
-    const finalPayable = chooseTotal(frozenTotals.final_payable ?? frozenTotals.net_inc_vat ?? totals.final_payable ?? totals.final_paid, grossInc - deductions);
+    const finalPayable = authoritativeMoneyOrComputed(
+      grossInc - deductions,
+      candidate.net_bank_amount,
+      candidate.paye_net_amount,
+      candidate.final_paid,
+      frozenTotals.net_bank_amount,
+      frozenTotals.paye_net_amount,
+      frozenTotals.final_paid,
+      totals.net_bank_amount,
+      totals.paye_net_amount,
+      totals.final_paid,
+      frozenTotals.final_payable,
+      frozenTotals.net_inc_vat,
+      totals.final_payable,
+      totals.net_inc_vat,
+      candidate.final_payable,
+      candidate.net_inc_vat
+    );
     return {
       ...candidate,
       candidate_id: candidateId,
@@ -17031,6 +17062,11 @@ function buildRemittanceEmailPayload(job, context = {}) {
     display_name: recipient.display_name || sourceJob.display_name || sourceJob.candidate_display_name || '',
     tms_ref: recipient.tms_ref || sourceJob.tms_ref || sourceJob.candidate_tms_ref || '',
     umbrella_id: recipient.umbrella_id || recipient.umbrellaId || sourceJob.umbrella_id || sourceJob.umbrellaId || '',
+    final_payable: sourceJob.final_payable ?? sourceJob.finalPayable ?? null,
+    net_inc_vat: sourceJob.net_inc_vat ?? sourceJob.netIncVat ?? null,
+    net_bank_amount: sourceJob.net_bank_amount ?? sourceJob.netBankAmount ?? null,
+    paye_net_amount: sourceJob.paye_net_amount ?? sourceJob.payeNetAmount ?? null,
+    final_paid: sourceJob.final_paid ?? sourceJob.finalPaid ?? null,
     timesheets: rootTimesheets,
     totals: sourceJob.totals,
     frozen_totals: sourceJob.frozen_totals,
@@ -17061,6 +17097,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
     if (Math.abs(rounded) < 1e-9 && Math.abs(computed) > 1e-9) return computed;
     return rounded;
   };
+  const summaryFinalPayableOrComputed = (computedValue, ...summaryValues) => authoritativeMoneyOrComputed(computedValue, ...summaryValues);
   const grandTotals = {
     candidate_count: Number(summary.candidate_count ?? computedSummary.candidate_count) || computedSummary.candidate_count,
     timesheet_count: Number(summary.timesheet_count ?? computedSummary.timesheet_count) || computedSummary.timesheet_count,
@@ -17068,7 +17105,15 @@ function buildRemittanceEmailPayload(job, context = {}) {
     vat: summaryMoneyOrComputed(summary.vat ?? summary.gross_vat, computedSummary.vat),
     gross_inc_vat: summaryMoneyOrComputed(summary.gross_inc_vat, computedSummary.gross_inc_vat),
     deductions: summaryMoneyOrComputed(summary.deductions_recoveries_inc_vat ?? summary.deductions_inc_vat, computedSummary.deductions),
-    final_payable: summaryMoneyOrComputed(summary.final_payable ?? summary.net_inc_vat ?? summary.total_amount, computedSummary.final_payable)
+    final_payable: summaryFinalPayableOrComputed(
+      computedSummary.final_payable,
+      summary.net_bank_amount,
+      summary.paye_net_amount,
+      summary.final_paid,
+      summary.final_payable,
+      summary.net_inc_vat,
+      summary.total_amount
+    )
   };
   const candidateHasRenderableDetail = (candidate) => {
     const c = candidate && typeof candidate === 'object' ? candidate : {};
@@ -17312,8 +17357,6 @@ function buildRemittanceEmailPayload(job, context = {}) {
     }
   };
 }
-
-
 
 async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId, ctx) {
 
@@ -24159,6 +24202,7 @@ async function tsfinBestEffortMakeReadyForDraft(env, timesheetIds, opts = {}) {
 
 
 
+
 async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -24459,7 +24503,9 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     const out = safeObject(payload);
     const batch = safeObject(out.batch);
     const summary = safeObject(executionSummary);
-    const preflight = safeObject(summary.paye_net_preflight || summary.payeNetPreflight);
+    const preflight = safeObject(summary.paye_net_preflight || summary.payeNetPreflight || summary.global_execute_preflight || summary.globalExecutePreflight);
+    const csvScopePreflight = safeObject(summary.bank_csv_scope_preflight || summary.bankCsvScopePreflight || summary.csv_scope_preflight || summary.csvScopePreflight);
+    const storedCsv = safeObject(summary.bank_csv_export_json || summary.bankCsvExportJson || out.bank_csv_export_json || batch.bank_csv_export_json);
 
     scrubActiveOperationFields(out);
     scrubActiveOperationFields(batch);
@@ -24468,32 +24514,153 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       if (Object.keys(batch).length) attachActivePaymentOperation(batch, activePaymentOperation);
     }
 
-    const missingPayeCount = firstFiniteNonNegativeInteger(
+    const textOrNull = (...values) => {
+      for (const value of values) {
+        const text = trimText(value);
+        if (text) return text;
+      }
+      return null;
+    };
+    const numberOrZero = (...values) => firstFiniteNonNegativeInteger(...values) ?? 0;
+
+    const globalMissingPayeCount = numberOrZero(
+      summary.global_missing_explicit_paye_input_count,
+      summary.globalMissingExplicitPayeInputCount,
       preflight.missing_explicit_paye_input_count,
       preflight.missingExplicitPayeInputCount
     );
-    const explicitZeroCount = firstFiniteNonNegativeInteger(preflight.explicit_zero_count, preflight.explicitZeroCount) ?? 0;
-    const positiveBankPaymentCount = firstFiniteNonNegativeInteger(
+    const globalExplicitZeroCount = numberOrZero(
+      summary.global_explicit_zero_count,
+      summary.globalExplicitZeroCount,
+      preflight.explicit_zero_count,
+      preflight.explicitZeroCount
+    );
+    const globalPositivePayeCount = numberOrZero(
+      summary.global_positive_paye_count,
+      summary.globalPositivePayeCount,
+      preflight.positive_paye_count,
+      preflight.positivePayeCount
+    );
+    const globalPositiveBankPaymentCount = numberOrZero(
+      summary.global_positive_bank_payment_count,
+      summary.globalPositiveBankPaymentCount,
       preflight.positive_bank_payment_count,
       preflight.positiveBankPaymentCount,
       summary.current_bank_payment_row_count,
       summary.currentBankPaymentRowCount
-    ) ?? 0;
-    const payeNetCompleteFlag = optionalBool(summary.paye_net_complete ?? summary.payeNetComplete);
-    const payeNetComplete = payeNetCompleteFlag !== null ? payeNetCompleteFlag : (missingPayeCount !== null && missingPayeCount === 0);
-    const allRequiredPayeExplicitZeroFlag = optionalBool(summary.all_required_paye_explicit_zero ?? summary.allRequiredPayeExplicitZero);
-    const allRequiredPayeExplicitZero = allRequiredPayeExplicitZeroFlag !== null
-      ? allRequiredPayeExplicitZeroFlag
-      : (payeNetComplete && explicitZeroCount > 0 && positiveBankPaymentCount === 0);
-    const hasPositiveBankPaymentsFlag = optionalBool(summary.has_positive_bank_payments ?? summary.hasPositiveBankPayments);
-    const hasPositiveBankPayments = hasPositiveBankPaymentsFlag !== null ? hasPositiveBankPaymentsFlag : positiveBankPaymentCount > 0;
-    const noBankPaymentExecutionEligibleFlag = optionalBool(summary.no_bank_payment_execution_eligible ?? summary.noBankPaymentExecutionEligible);
-    const noBankPaymentExecutionEligible = noBankPaymentExecutionEligibleFlag !== null
-      ? noBankPaymentExecutionEligibleFlag
-      : (payeNetComplete && explicitZeroCount > 0 && positiveBankPaymentCount === 0);
+    );
+    const globalInvalidPaymentRowCount = numberOrZero(
+      summary.global_invalid_payment_row_count,
+      summary.globalInvalidPaymentRowCount,
+      preflight.invalid_payment_row_count,
+      preflight.invalidPaymentRowCount,
+      preflight.invalid_projected_payment_row_count,
+      preflight.invalidProjectedPaymentRowCount
+    );
+    const scopedMissingPayeCount = numberOrZero(
+      summary.scoped_missing_explicit_paye_input_count,
+      summary.scopedMissingExplicitPayeInputCount,
+      csvScopePreflight.missing_explicit_paye_input_count,
+      csvScopePreflight.missingExplicitPayeInputCount
+    );
+    const scopedExplicitZeroCount = numberOrZero(
+      summary.scoped_explicit_zero_count,
+      summary.scopedExplicitZeroCount,
+      csvScopePreflight.explicit_zero_count,
+      csvScopePreflight.explicitZeroCount
+    );
+    const scopedPositivePayeCount = numberOrZero(
+      summary.scoped_positive_paye_count,
+      summary.scopedPositivePayeCount,
+      csvScopePreflight.positive_paye_count,
+      csvScopePreflight.positivePayeCount
+    );
+    const scopedPositiveBankPaymentCount = numberOrZero(
+      summary.scoped_positive_bank_payment_count,
+      summary.scopedPositiveBankPaymentCount,
+      csvScopePreflight.positive_bank_payment_count,
+      csvScopePreflight.positiveBankPaymentCount,
+      summary.current_bank_payment_row_count,
+      summary.currentBankPaymentRowCount
+    );
+    const scopedInvalidPaymentRowCount = numberOrZero(
+      summary.scoped_invalid_payment_row_count,
+      summary.scopedInvalidPaymentRowCount,
+      csvScopePreflight.invalid_payment_row_count,
+      csvScopePreflight.invalidPaymentRowCount,
+      csvScopePreflight.invalid_projected_payment_row_count,
+      csvScopePreflight.invalidProjectedPaymentRowCount
+    );
+    const globalPayeNetStateHash = textOrNull(
+      summary.global_paye_net_state_hash,
+      summary.globalPayeNetStateHash,
+      summary.current_paye_net_state_hash,
+      summary.currentPayeNetStateHash,
+      summary.paye_net_state_hash,
+      summary.payeNetStateHash,
+      preflight.paye_net_state_hash,
+      preflight.payeNetStateHash
+    );
+    const scopedPayeNetStateHash = textOrNull(
+      summary.scoped_paye_net_state_hash,
+      summary.scopedPayeNetStateHash,
+      summary.current_scoped_paye_net_state_hash,
+      summary.currentScopedPayeNetStateHash,
+      csvScopePreflight.paye_net_state_hash,
+      csvScopePreflight.payeNetStateHash
+    );
+    const globalBankProjectionHash = textOrNull(
+      summary.global_bank_payment_projection_hash,
+      summary.globalBankPaymentProjectionHash,
+      summary.all_scope_bank_payment_projection_hash,
+      summary.allScopeBankPaymentProjectionHash
+    );
+    const scopedBankProjectionHash = textOrNull(
+      summary.bank_payment_projection_hash,
+      summary.bankPaymentProjectionHash,
+      summary.current_bank_payment_projection_hash,
+      summary.currentBankPaymentProjectionHash,
+      csvScopePreflight.bank_payment_projection_hash,
+      csvScopePreflight.bankPaymentProjectionHash
+    );
+    const storedCsvScope = upperText(summary.bank_csv_scope || summary.bankCsvScope || storedCsv.scope || storedCsv.requested_scope || storedCsv.pay_channel_scope || storedCsv.payChannelScope);
     const bankCsvGenerated = optionalBool(summary.bank_csv_generated ?? summary.bankCsvGenerated) === true;
     const bankCsvCurrent = optionalBool(summary.bank_csv_current ?? summary.bankCsvCurrent) === true;
     const bankCsvStaleReason = trimText(summary.bank_csv_stale_reason || summary.bankCsvStaleReason) || (bankCsvGenerated ? 'CSV_STALE' : 'CSV_NOT_GENERATED');
+    const bankCsvZeroRow = anyTrueBool(
+      summary.bank_csv_zero_row,
+      summary.bankCsvZeroRow,
+      summary.zero_row_export,
+      summary.zeroRowExport,
+      storedCsv.zero_row_export,
+      storedCsv.zeroRowExport,
+      storedCsv.header_only_or_empty_body,
+      storedCsv.headerOnlyOrEmptyBody,
+      storedCsv.no_bank_payment_required,
+      storedCsv.noBankPaymentRequired
+    );
+
+    const payeNetCompleteFlag = optionalBool(summary.paye_net_complete ?? summary.payeNetComplete);
+    const payeNetComplete = payeNetCompleteFlag !== null ? payeNetCompleteFlag : globalMissingPayeCount === 0;
+    const projectionInvalid = globalInvalidPaymentRowCount > 0 || scopedInvalidPaymentRowCount > 0;
+    const hasPositiveBankPaymentsFlag = optionalBool(summary.has_positive_bank_payments ?? summary.hasPositiveBankPayments);
+    const hasPositiveBankPayments = hasPositiveBankPaymentsFlag !== null ? hasPositiveBankPaymentsFlag : globalPositiveBankPaymentCount > 0;
+    const batchWideNoBankFlag = optionalBool(summary.no_bank_payment_execution_eligible ?? summary.noBankPaymentExecutionEligible ?? summary.batch_wide_no_bank_payment_execution_eligible ?? summary.batchWideNoBankPaymentExecutionEligible);
+    const batchWideNoBankPaymentExecutionEligible = batchWideNoBankFlag !== null
+      ? batchWideNoBankFlag
+      : (payeNetComplete && globalInvalidPaymentRowCount === 0 && globalExplicitZeroCount > 0 && globalPositiveBankPaymentCount === 0);
+    const explicitZeroNoBankScopeEligibleFlag = optionalBool(summary.explicit_zero_no_bank_scope_eligible ?? summary.explicitZeroNoBankScopeEligible ?? summary.allow_explicit_zero_no_bank_scopes ?? summary.allowExplicitZeroNoBankScopes);
+    const explicitZeroNoBankScopeEligible = explicitZeroNoBankScopeEligibleFlag !== null
+      ? explicitZeroNoBankScopeEligibleFlag
+      : (scopedMissingPayeCount === 0 && scopedInvalidPaymentRowCount === 0 && scopedExplicitZeroCount > 0);
+    const scopedNoTransferFlag = optionalBool(summary.scoped_no_transfer_execution_eligible ?? summary.scopedNoTransferExecutionEligible ?? summary.scoped_no_transfer_execution ?? summary.scopedNoTransferExecution);
+    const scopedNoTransferExecutionEligible = scopedNoTransferFlag !== null
+      ? scopedNoTransferFlag
+      : (explicitZeroNoBankScopeEligible && scopedPositiveBankPaymentCount === 0);
+    const allRequiredPayeExplicitZeroFlag = optionalBool(summary.all_required_paye_explicit_zero ?? summary.allRequiredPayeExplicitZero);
+    const allRequiredPayeExplicitZero = allRequiredPayeExplicitZeroFlag !== null
+      ? allRequiredPayeExplicitZeroFlag
+      : (payeNetComplete && globalInvalidPaymentRowCount === 0 && globalExplicitZeroCount > 0 && globalPositiveBankPaymentCount === 0);
 
     const status = upperText(summary.batch_status || summary.status || out.status || batch.status || out.batch_status_raw || batch.batch_status_raw || '');
     const executionCommitState = upperText(summary.execution_commit_state || out.execution_commit_state || batch.execution_commit_state || 'NOT_SUBMITTED') || 'NOT_SUBMITTED';
@@ -24511,10 +24678,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       batch.active_item_count,
       batch.activeItemCount
     );
-    const summaryActiveItemCount = firstFiniteNonNegativeInteger(
-      summary.active_item_count,
-      summary.activeItemCount
-    );
+    const summaryActiveItemCount = firstFiniteNonNegativeInteger(summary.active_item_count, summary.activeItemCount);
     const itemCount = firstFiniteNonNegativeInteger(
       summary.item_count,
       summary.itemCount,
@@ -24559,7 +24723,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     const hasFrozenNonVoidItems = rawActiveItemCount !== null
       ? rawActiveItemCount > 0
       : ((summaryActiveItemCount !== null && summaryActiveItemCount > 0) || (itemCount !== null && itemCount > 0));
-    const hasAuthoritativeExecutablePaymentScope = hasPositiveBankPayments || noBankPaymentExecutionEligible;
+    const hasAuthoritativeExecutablePaymentScope = !projectionInvalid && (hasPositiveBankPayments || batchWideNoBankPaymentExecutionEligible || explicitZeroNoBankScopeEligible);
 
     const providerEnvironmentSummary = safeObject(
       out.provider_environment_summary ||
@@ -24580,13 +24744,8 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       batch.railProviderSnapshot
     );
     if (providerNormalized === 'REVOLUT_BANK_API') providerNormalized = 'REVOLUT';
-    const providerKnownState = optionalBool(
-      providerEnvironmentSummary.provider_known ??
-      providerEnvironmentSummary.providerKnown
-    );
-    const providerKnown = providerKnownState !== null
-      ? providerKnownState
-      : ['REVOLUT', 'CSV'].includes(providerNormalized);
+    const providerKnownState = optionalBool(providerEnvironmentSummary.provider_known ?? providerEnvironmentSummary.providerKnown);
+    const providerKnown = providerKnownState !== null ? providerKnownState : ['REVOLUT', 'CSV'].includes(providerNormalized);
     const providerAvailabilityBlocked = providerKnown !== true;
     const freshnessDetails = safeObject(out.freshness || batch.freshness);
     const freshnessStatus = upperText(
@@ -24637,6 +24796,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       hasFrozenNonVoidItems &&
       hasAuthoritativeExecutablePaymentScope &&
       payeNetComplete &&
+      !projectionInvalid &&
       !hasActiveRealOperation &&
       !securityBlocked &&
       !freshnessBlocked &&
@@ -24646,6 +24806,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       hasFrozenNonVoidItems &&
       hasAuthoritativeExecutablePaymentScope &&
       payeNetComplete &&
+      !projectionInvalid &&
       !hasActiveRealOperation &&
       !securityBlocked &&
       !freshnessBlocked &&
@@ -24661,7 +24822,8 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       if (!batchStateEligible) return { code: 'BATCH_TERMINAL_OR_STATUS_BLOCKED', message: 'Payment actions are not available for this batch state.' };
       if (hasActiveRealOperation) return { code: 'ACTIVE_PAYMENT_OPERATION', message: 'A payment execution operation is already in progress.' };
       if (!hasFrozenNonVoidItems) return { code: 'NO_SETTLEABLE_BATCH_ITEMS', message: 'This batch has no frozen non-void payment items to settle.' };
-      if (!payeNetComplete || (missingPayeCount != null && missingPayeCount > 0)) return { code: 'PAYE_NET_REQUIRED', message: 'Every required PAYE net amount must be explicitly entered or imported first.' };
+      if (!payeNetComplete || globalMissingPayeCount > 0) return { code: 'PAYE_NET_REQUIRED', message: 'Every required PAYE net amount must be explicitly entered or imported first.' };
+      if (projectionInvalid) return { code: 'PAYMENT_PROJECTION_INVALID', message: 'The frozen payment projection contains an invalid payment row. Refresh and resolve the payment issue before continuing.' };
       if (!hasAuthoritativeExecutablePaymentScope) return { code: 'NO_EXECUTABLE_PAYMENT_SCOPE', message: 'No authoritative positive or explicit-zero payment scope is available for this batch.' };
       if (securityBlocked) return { code: 'SECURITY_BLOCKED', message: 'Payment actions are blocked by the current security or authorisation state.' };
       if (freshnessBlocked) return { code: 'FRESHNESS_BLOCKED', message: 'Refresh and validate the latest batch state before continuing.' };
@@ -24698,42 +24860,90 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       if (!target || typeof target !== 'object') return;
       target.paye_net_preflight = preflight;
       target.payeNetPreflight = preflight;
+      target.global_execute_preflight = preflight;
+      target.globalExecutePreflight = preflight;
+      target.bank_csv_scope_preflight = csvScopePreflight;
+      target.bankCsvScopePreflight = csvScopePreflight;
       target.paye_net_complete = payeNetComplete;
       target.payeNetComplete = payeNetComplete;
       target.all_required_paye_explicit_zero = allRequiredPayeExplicitZero;
       target.allRequiredPayeExplicitZero = allRequiredPayeExplicitZero;
       target.has_positive_bank_payments = hasPositiveBankPayments;
       target.hasPositiveBankPayments = hasPositiveBankPayments;
-      target.no_bank_payment_execution_eligible = noBankPaymentExecutionEligible;
-      target.noBankPaymentExecutionEligible = noBankPaymentExecutionEligible;
-      target.paye_net_state_hash = summary.paye_net_state_hash || summary.current_paye_net_state_hash || null;
-      target.current_paye_net_state_hash = summary.current_paye_net_state_hash || summary.paye_net_state_hash || null;
-      target.currentPayeNetStateHash = target.current_paye_net_state_hash;
-      target.bank_payment_projection_scope = summary.bank_payment_projection_scope || null;
-      target.bank_payment_projection_hash = summary.bank_payment_projection_hash || summary.current_bank_payment_projection_hash || null;
-      target.current_bank_payment_projection_hash = summary.current_bank_payment_projection_hash || summary.bank_payment_projection_hash || null;
-      target.currentBankPaymentProjectionHash = target.current_bank_payment_projection_hash;
-      target.all_scope_bank_payment_projection_hash = summary.all_scope_bank_payment_projection_hash || null;
+      target.no_bank_payment_execution_eligible = batchWideNoBankPaymentExecutionEligible;
+      target.noBankPaymentExecutionEligible = batchWideNoBankPaymentExecutionEligible;
+      target.batch_wide_no_bank_payment_execution_eligible = batchWideNoBankPaymentExecutionEligible;
+      target.batchWideNoBankPaymentExecutionEligible = batchWideNoBankPaymentExecutionEligible;
+      target.explicit_zero_no_bank_scope_eligible = explicitZeroNoBankScopeEligible;
+      target.explicitZeroNoBankScopeEligible = explicitZeroNoBankScopeEligible;
+      target.scoped_no_transfer_execution_eligible = scopedNoTransferExecutionEligible;
+      target.scopedNoTransferExecutionEligible = scopedNoTransferExecutionEligible;
+      target.payment_projection_invalid = projectionInvalid;
+      target.paymentProjectionInvalid = projectionInvalid;
+      target.global_missing_explicit_paye_input_count = globalMissingPayeCount;
+      target.globalMissingExplicitPayeInputCount = globalMissingPayeCount;
+      target.global_explicit_zero_count = globalExplicitZeroCount;
+      target.globalExplicitZeroCount = globalExplicitZeroCount;
+      target.global_positive_paye_count = globalPositivePayeCount;
+      target.globalPositivePayeCount = globalPositivePayeCount;
+      target.global_positive_bank_payment_count = globalPositiveBankPaymentCount;
+      target.globalPositiveBankPaymentCount = globalPositiveBankPaymentCount;
+      target.global_invalid_payment_row_count = globalInvalidPaymentRowCount;
+      target.globalInvalidPaymentRowCount = globalInvalidPaymentRowCount;
+      target.scoped_missing_explicit_paye_input_count = scopedMissingPayeCount;
+      target.scopedMissingExplicitPayeInputCount = scopedMissingPayeCount;
+      target.scoped_explicit_zero_count = scopedExplicitZeroCount;
+      target.scopedExplicitZeroCount = scopedExplicitZeroCount;
+      target.scoped_positive_paye_count = scopedPositivePayeCount;
+      target.scopedPositivePayeCount = scopedPositivePayeCount;
+      target.scoped_positive_bank_payment_count = scopedPositiveBankPaymentCount;
+      target.scopedPositiveBankPaymentCount = scopedPositiveBankPaymentCount;
+      target.scoped_invalid_payment_row_count = scopedInvalidPaymentRowCount;
+      target.scopedInvalidPaymentRowCount = scopedInvalidPaymentRowCount;
+      target.paye_net_state_hash = globalPayeNetStateHash;
+      target.payeNetStateHash = globalPayeNetStateHash;
+      target.global_paye_net_state_hash = globalPayeNetStateHash;
+      target.globalPayeNetStateHash = globalPayeNetStateHash;
+      target.current_paye_net_state_hash = globalPayeNetStateHash;
+      target.currentPayeNetStateHash = globalPayeNetStateHash;
+      target.scoped_paye_net_state_hash = scopedPayeNetStateHash;
+      target.scopedPayeNetStateHash = scopedPayeNetStateHash;
+      target.current_scoped_paye_net_state_hash = scopedPayeNetStateHash;
+      target.currentScopedPayeNetStateHash = scopedPayeNetStateHash;
+      target.global_bank_payment_projection_hash = globalBankProjectionHash;
+      target.globalBankPaymentProjectionHash = globalBankProjectionHash;
+      target.all_scope_bank_payment_projection_hash = globalBankProjectionHash;
+      target.allScopeBankPaymentProjectionHash = globalBankProjectionHash;
+      target.bank_payment_projection_scope = summary.bank_payment_projection_scope || summary.bankPaymentProjectionScope || storedCsvScope || null;
+      target.bank_payment_projection_hash = scopedBankProjectionHash;
+      target.bankPaymentProjectionHash = scopedBankProjectionHash;
+      target.current_bank_payment_projection_hash = scopedBankProjectionHash;
+      target.currentBankPaymentProjectionHash = scopedBankProjectionHash;
       target.bank_csv_generated = bankCsvGenerated;
       target.bankCsvGenerated = bankCsvGenerated;
       target.bank_csv_current = bankCsvCurrent;
       target.bankCsvCurrent = bankCsvCurrent;
       target.bank_csv_stale_reason = bankCsvStaleReason || null;
       target.bankCsvStaleReason = bankCsvStaleReason || null;
-      target.bank_csv_scope = summary.bank_csv_scope || null;
-      target.stored_paye_net_state_hash = summary.stored_paye_net_state_hash || null;
-      target.storedPayeNetStateHash = summary.stored_paye_net_state_hash || null;
-      target.stored_bank_payment_projection_hash = summary.stored_bank_payment_projection_hash || null;
-      target.storedBankPaymentProjectionHash = summary.stored_bank_payment_projection_hash || null;
-      target.current_bank_payment_row_count = firstFiniteNonNegativeInteger(summary.current_bank_payment_row_count, summary.currentBankPaymentRowCount) ?? positiveBankPaymentCount;
+      target.bank_csv_scope = storedCsvScope || null;
+      target.bankCsvScope = storedCsvScope || null;
+      target.bank_csv_zero_row = bankCsvZeroRow;
+      target.bankCsvZeroRow = bankCsvZeroRow;
+      target.zero_row_bank_csv = bankCsvZeroRow;
+      target.zeroRowBankCsv = bankCsvZeroRow;
+      target.stored_paye_net_state_hash = summary.stored_paye_net_state_hash || storedCsv.paye_net_state_hash || null;
+      target.storedPayeNetStateHash = target.stored_paye_net_state_hash;
+      target.stored_bank_payment_projection_hash = summary.stored_bank_payment_projection_hash || storedCsv.bank_payment_projection_hash || null;
+      target.storedBankPaymentProjectionHash = target.stored_bank_payment_projection_hash;
+      target.current_bank_payment_row_count = firstFiniteNonNegativeInteger(summary.current_bank_payment_row_count, summary.currentBankPaymentRowCount) ?? scopedPositiveBankPaymentCount;
       target.currentBankPaymentRowCount = target.current_bank_payment_row_count;
       target.current_bank_payment_total = firstFiniteNumber(summary.current_bank_payment_total, summary.currentBankPaymentTotal, preflight.positive_total, preflight.positiveTotal) ?? 0;
       target.currentBankPaymentTotal = target.current_bank_payment_total;
-      target.stored_bank_csv_row_count = firstFiniteNonNegativeInteger(summary.stored_bank_csv_row_count, summary.storedBankCsvRowCount);
+      target.stored_bank_csv_row_count = firstFiniteNonNegativeInteger(summary.stored_bank_csv_row_count, summary.storedBankCsvRowCount, storedCsv.row_count, storedCsv.rowCount);
       target.storedBankCsvRowCount = target.stored_bank_csv_row_count;
-      target.stored_bank_csv_total = firstFiniteNumber(summary.stored_bank_csv_total, summary.storedBankCsvTotal);
+      target.stored_bank_csv_total = firstFiniteNumber(summary.stored_bank_csv_total, summary.storedBankCsvTotal, storedCsv.total_amount, storedCsv.totalAmount);
       target.storedBankCsvTotal = target.stored_bank_csv_total;
-      target.bank_csv_export_json = safeObject(summary.bank_csv_export_json);
+      target.bank_csv_export_json = storedCsv;
       target.payment_route_capabilities = routeCapabilities;
       target.paymentRouteCapabilities = routeCapabilities;
       target.active_payment_item_count = activeItemCount ?? 0;
@@ -37898,6 +38108,7 @@ async function handleBankingPayCorrectionStatus(env, req, user, correctionReques
   }
 }
 
+
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -37960,7 +38171,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
     const queue = [source];
     const knownCodes = [
       'PAYE_NET_REQUIRED_FOR_BANK_CSV', 'BANK_CSV_PROJECTION_CHANGED_DURING_EXPORT', 'BANK_CSV_PROJECTION_INCONSISTENT', 'BANK_CSV_OUTPUT_ROW_COUNT_MISMATCH',
-      'BATCH_STALE', 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED', 'PAY_BATCH_NOT_FOUND', 'UNKNOWN_RAIL_PROVIDER',
+      'BANK_CSV_PROJECTION_INVALID', 'BATCH_STALE', 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED', 'PAY_BATCH_NOT_FOUND', 'UNKNOWN_RAIL_PROVIDER',
       'RAIL_PROVIDER_REQUIRED', 'MISSING_RAIL_PROVIDER', 'RAIL_NOT_CONFIGURED', 'PAY_EXPORT_BANK_CSV_FAILED',
       'PAY_BATCH_EXPORT_CSV_FAILED', 'NO_PENDING_TRANSFERS', 'NO_PENDING_TRANSFER_ROWS', 'NO_EXPORTABLE_TRANSFERS',
       'NO_ACTIVE_PAYMENTS_IN_BATCH', 'CURRENT_TRANSFER_HASH_REQUIRED', 'INVALID_BANK_CSV_SCOPE'
@@ -38022,6 +38233,9 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
     if (normalizedCode === 'BANK_CSV_OUTPUT_ROW_COUNT_MISMATCH') {
       return { title: 'Bank CSV could not be verified', message: 'The generated Bank CSV row count did not match the authoritative frozen payment projection. No current export evidence was saved.' };
     }
+    if (normalizedCode === 'BANK_CSV_PROJECTION_INVALID') {
+      return { title: 'Payment projection needs review', message: 'The frozen payment projection contains an invalid payment row for this scope. Resolve the payment issue before creating the Bank CSV.' };
+    }
     if (normalizedCode === 'BATCH_STALE') {
       return { title: 'Payment batch has changed', message: 'This payment batch is no longer up to date. No export was created. Refresh the batch, review the latest payment details, then try again.' };
     }
@@ -38039,7 +38253,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
 
   const statusForExportCsvFailureCode = (code, fallbackStatus = 400) => {
     const normalizedCode = normalizeExportCsvFailureCode(code);
-    if (['PAYE_NET_REQUIRED_FOR_BANK_CSV', 'BANK_CSV_PROJECTION_CHANGED_DURING_EXPORT', 'BANK_CSV_PROJECTION_INCONSISTENT', 'BANK_CSV_OUTPUT_ROW_COUNT_MISMATCH', 'BATCH_STALE', 'NO_PENDING_TRANSFERS', 'NO_PENDING_TRANSFER_ROWS', 'NO_EXPORTABLE_TRANSFERS', 'NO_ACTIVE_PAYMENTS_IN_BATCH', 'CURRENT_TRANSFER_HASH_REQUIRED'].includes(normalizedCode)) return 409;
+    if (['PAYE_NET_REQUIRED_FOR_BANK_CSV', 'BANK_CSV_PROJECTION_CHANGED_DURING_EXPORT', 'BANK_CSV_PROJECTION_INCONSISTENT', 'BANK_CSV_OUTPUT_ROW_COUNT_MISMATCH', 'BANK_CSV_PROJECTION_INVALID', 'BATCH_STALE', 'NO_PENDING_TRANSFERS', 'NO_PENDING_TRANSFER_ROWS', 'NO_EXPORTABLE_TRANSFERS', 'NO_ACTIVE_PAYMENTS_IN_BATCH', 'CURRENT_TRANSFER_HASH_REQUIRED'].includes(normalizedCode)) return 409;
     if (normalizedCode === 'PAY_BATCH_NOT_FOUND') return 404;
     return Number.isFinite(Number(fallbackStatus)) ? Math.trunc(Number(fallbackStatus)) : 400;
   };
@@ -38179,6 +38393,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
       explicit_zero_count: explicitZeroCount,
       global_positive_bank_payment_count: positiveCount,
       global_positive_total: roundMoney(positiveTotalRaw),
+      global_invalid_payment_row_count: nonNegativeInteger(summary.global_invalid_payment_row_count ?? summary.globalInvalidPaymentRowCount ?? preflight.invalid_payment_row_count ?? preflight.invalidPaymentRowCount) || 0,
       paye_net_state_hash: payeHash
     };
   };
@@ -38206,16 +38421,26 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
     let scopedExplicitZeroCount = 0;
     let positiveCount = 0;
     let positiveTotal = 0;
+    let invalidPaymentRowCount = 0;
     const scopedPayeHashes = new Set();
     const projectionHashes = new Set();
     for (const row of rows) {
       const isPayeState = truthy(row.is_paye_net_state_row);
+      const isPositiveBankPayment = truthy(row.is_positive_bank_payment);
       const classification = upperTrim(row.paye_net_classification);
+      const finalAmount = Number(row.final_frozen_bank_amount ?? row.amount ?? 0);
       if (isPayeState && classification === 'MISSING') scopedMissingCount += 1;
       if (isPayeState && classification === 'ZERO') scopedExplicitZeroCount += 1;
-      if (truthy(row.is_positive_bank_payment)) {
+      if (isPositiveBankPayment) {
         positiveCount += 1;
         positiveTotal += Number(row.amount ?? row.final_frozen_bank_amount ?? 0) || 0;
+      }
+      if (isPayeState) {
+        if (!['MISSING', 'ZERO', 'POSITIVE'].includes(classification)) invalidPaymentRowCount += 1;
+        if (classification === 'ZERO' && (!Number.isFinite(finalAmount) || roundMoney(finalAmount) !== 0)) invalidPaymentRowCount += 1;
+        if (classification === 'POSITIVE' && !isPositiveBankPayment) invalidPaymentRowCount += 1;
+      } else if (!isPositiveBankPayment) {
+        invalidPaymentRowCount += 1;
       }
       const scopedPayeHash = trimStr(row.paye_net_state_hash);
       const projectionHash = trimStr(row.bank_payment_projection_hash);
@@ -38237,6 +38462,8 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
       global_positive_total: globalProof.global_positive_total,
       positive_bank_payment_count: positiveCount,
       positive_total: roundMoney(positiveTotal),
+      global_invalid_payment_row_count: globalProof.global_invalid_payment_row_count || 0,
+      scoped_invalid_payment_row_count: invalidPaymentRowCount,
       paye_net_state_hash: globalProof.paye_net_state_hash,
       scoped_paye_net_state_hash: Array.from(scopedPayeHashes)[0] || null,
       bank_payment_projection_hash: Array.from(projectionHashes)[0] || null,
@@ -38258,7 +38485,8 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
       'positive_total',
       'paye_net_state_hash',
       'scoped_paye_net_state_hash',
-      'bank_payment_projection_hash'
+      'bank_payment_projection_hash',
+      'scoped_invalid_payment_row_count'
     ];
     return keys.every((key) => {
       if (key === 'positive_total' || key === 'global_positive_total') return roundMoney(before[key]) === roundMoney(after[key]);
@@ -38343,16 +38571,22 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
     }
 
     const preExportProof = await loadScopedProjectionProof(preExportGlobalProof);
-    if (preExportProof.missing_explicit_paye_input_count > 0) {
+    if (preExportProof.scoped_missing_explicit_paye_input_count > 0) {
       return failureResponse(409, 'PAYE_NET_REQUIRED_FOR_BANK_CSV', 'PAYE_NET_REQUIRED_FOR_BANK_CSV', {
         requested_scope: requestedScope,
-        missing_explicit_paye_input_count: preExportProof.missing_explicit_paye_input_count
+        scoped_missing_explicit_paye_input_count: preExportProof.scoped_missing_explicit_paye_input_count
+      });
+    }
+    if (preExportProof.scoped_invalid_payment_row_count > 0) {
+      return failureResponse(409, 'BANK_CSV_PROJECTION_INVALID', 'BANK_CSV_PROJECTION_INVALID', {
+        requested_scope: requestedScope,
+        scoped_invalid_payment_row_count: preExportProof.scoped_invalid_payment_row_count
       });
     }
     if (preExportProof.positive_bank_payment_count === 0 && preExportProof.scoped_explicit_zero_count === 0) {
       return failureResponse(409, 'NO_ACTIVE_PAYMENTS_IN_BATCH', 'NO_ACTIVE_PAYMENTS_IN_BATCH', { requested_scope: requestedScope });
     }
-    if (!preExportProof.paye_net_state_hash || !preExportProof.bank_payment_projection_hash) {
+    if (!preExportProof.scoped_paye_net_state_hash || !preExportProof.bank_payment_projection_hash) {
       return failureResponse(409, 'BANK_CSV_PROJECTION_INCONSISTENT', 'BANK_CSV_PROJECTION_INCONSISTENT', { requested_scope: requestedScope });
     }
 
@@ -38398,9 +38632,12 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
       filename,
       row_count: actualDataRowCount,
       total_amount: roundMoney(postExportProof.positive_total),
-      paye_net_state_hash: postExportProof.paye_net_state_hash,
-      current_paye_net_state_hash: postExportProof.paye_net_state_hash,
+      paye_net_state_hash: postExportProof.scoped_paye_net_state_hash,
+      current_paye_net_state_hash: postExportProof.scoped_paye_net_state_hash,
       scoped_paye_net_state_hash: postExportProof.scoped_paye_net_state_hash,
+      current_scoped_paye_net_state_hash: postExportProof.scoped_paye_net_state_hash,
+      global_paye_net_state_hash: postExportProof.paye_net_state_hash,
+      current_global_paye_net_state_hash: postExportProof.paye_net_state_hash,
       bank_payment_projection_hash: postExportProof.bank_payment_projection_hash,
       current_bank_payment_projection_hash: postExportProof.bank_payment_projection_hash,
       missing_explicit_paye_input_count: postExportProof.missing_explicit_paye_input_count,
@@ -38409,6 +38646,8 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
       scoped_explicit_zero_count: postExportProof.scoped_explicit_zero_count,
       global_positive_bank_payment_count: postExportProof.global_positive_bank_payment_count,
       positive_bank_payment_count: postExportProof.positive_bank_payment_count,
+      global_invalid_payment_row_count: postExportProof.global_invalid_payment_row_count,
+      scoped_invalid_payment_row_count: postExportProof.scoped_invalid_payment_row_count,
       no_bank_payment_required: zeroRow,
       zero_row_export: zeroRow,
       header_only_or_empty_body: zeroRow,
@@ -38441,6 +38680,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
     return failureResponse(statusForExportCsvFailureCode(failure.code, Number(error?.status) || 400), error, failure.code || 'PAY_BATCH_EXPORT_CSV_FAILED');
   }
 }
+
 
 
 

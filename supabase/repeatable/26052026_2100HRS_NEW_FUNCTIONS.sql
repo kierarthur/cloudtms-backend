@@ -65739,6 +65739,8 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.banking_pay_operation_start(text, uuid, text, uuid, uuid, uuid, jsonb, jsonb);
 
+
+
 CREATE OR REPLACE FUNCTION public.banking_pay_operation_start(p_operation_type text, p_actor_user_id uuid, p_idempotency_key text, p_workbench_session_id uuid DEFAULT NULL::uuid, p_pay_batch_id uuid DEFAULT NULL::uuid, p_root_operation_id uuid DEFAULT NULL::uuid, p_input_json jsonb DEFAULT '{}'::jsonb, p_config_json jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(operation_id uuid, operation_type text, status text, phase text, actor_user_id uuid, workbench_session_id uuid, pay_batch_id uuid, root_operation_id uuid, idempotency_key text, input_json jsonb, config_json jsonb, progress_json jsonb, result_json jsonb, error_json jsonb, total_units integer, completed_units integer, failed_units integer, current_chunk_index integer, chunk_count integer, locked_by text, lock_expires_at_utc timestamp with time zone, created_at_utc timestamp with time zone, started_at_utc timestamp with time zone, updated_at_utc timestamp with time zone, completed_at_utc timestamp with time zone, failed_at_utc timestamp with time zone, is_existing boolean)
  LANGUAGE plpgsql
@@ -66461,7 +66463,7 @@ BEGIN
          AND COALESCE(v_settlement_confirmation_no_bank, false)
          AND v_settlement_confirmation_local_commit_ref IS NOT NULL
          AND v_settlement_confirmation_local_commit_ref = v_settlement_execution_commit_ref
-         AND upper(BTRIM(COALESCE(v_settlement_confirmation_mode, ''))) IN ('NO_BANK_PAYMENT_REVIEW', 'NO_BANK_PAYMENT_EXECUTION')
+         AND upper(BTRIM(COALESCE(v_settlement_confirmation_mode, ''))) IN ('NO_BANK_PAYMENT_REVIEW', 'NO_BANK_PAYMENT_EXECUTION', 'NO_BANK_PAYMENT_EXTERNAL_CONFIRMATION')
          AND upper(BTRIM(COALESCE(v_settlement_confirmation_settlement_mode, ''))) IN ('STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT')
          AND COALESCE(v_settlement_confirmation_auth_authorised, false)
          AND COALESCE(v_settlement_no_bank_operation_count, 0) = 1
@@ -67105,8 +67107,6 @@ BEGIN
         false;
 END;
 $function$;
-
-
 
 
 
@@ -171619,7 +171619,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_operation_settlement_scope_seed(p_operation_id uuid, p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text, p_actor_user_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -172566,7 +172565,7 @@ BEGIN
         updated_at_utc = v_now
     WHERE scope_update.operation_id = p_operation_id
       AND scope_update.pay_batch_id = p_pay_batch_id
-      AND scope_update.status = 'PENDING'
+      AND scope_update.status IN ('PENDING', 'FAILED')
       AND UPPER(BTRIM(COALESCE(scope_update.payload_json->>'scope_kind', ''))) <> 'NO_BANK_PAYMENT'
       AND NULLIF(BTRIM(COALESCE(scope_update.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}', '')), '') IS NULL
       AND NOT EXISTS (
@@ -172982,7 +172981,7 @@ BEGIN
    AND COALESCE(v_confirmation_no_bank, false)
    AND v_confirmation_local_commit_ref IS NOT NULL
    AND v_confirmation_local_commit_ref = NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '')
-   AND UPPER(BTRIM(COALESCE(v_confirmation_mode, ''))) IN ('NO_BANK_PAYMENT_REVIEW', 'NO_BANK_PAYMENT_EXECUTION')
+   AND UPPER(BTRIM(COALESCE(v_confirmation_mode, ''))) IN ('NO_BANK_PAYMENT_REVIEW', 'NO_BANK_PAYMENT_EXECUTION', 'NO_BANK_PAYMENT_EXTERNAL_CONFIRMATION')
    AND UPPER(BTRIM(COALESCE(v_confirmation_settlement_mode, ''))) IN ('STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT')
    AND COALESCE(v_confirmation_auth_authorised, false)
    AND COALESCE(v_no_bank_operation_count, 0) = 1
