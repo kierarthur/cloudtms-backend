@@ -105582,7 +105582,6 @@ DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, tex
 DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text, text, date, text, boolean, boolean, boolean, text, text, uuid, text, text);
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_auth_start(p_pay_batch_id uuid, p_schedule_kind text, p_scheduled_at_utc timestamp with time zone, p_funding_account_ref text, p_warning_hours_json jsonb, p_actor_user_id uuid, p_actor_intent text DEFAULT NULL::text, p_execution_mode text DEFAULT 'STANDARD_BANK'::text, p_payment_date date DEFAULT NULL::date, p_pay_channel_scope text DEFAULT 'ALL'::text, p_suppress_remittances boolean DEFAULT false, p_suppress_remittances_confirmed boolean DEFAULT false, p_csv_uploaded_confirmed boolean DEFAULT false, p_csv_bank_confirm_ref text DEFAULT NULL::text, p_external_settlement_comment text DEFAULT NULL::text, p_operation_id uuid DEFAULT NULL::uuid, p_idempotency_key text DEFAULT NULL::text, p_freshness_result_hash text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -106261,6 +106260,7 @@ BEGIN
     'server_owned_payment_projection_proof', true,
     'payment_projection_proof_source', 'PAY_BATCH_AUTH_START',
     'payment_projection_proof_generated_at_utc', v_now::text,
+    'pay_batch_id', p_pay_batch_id::text,
     'pay_channel_scope', v_pay_channel_scope,
     'scoped_no_transfer_execution', v_scoped_no_transfer_execution_validated,
     'no_bank_payment_execution', v_no_bank_payment_validated,
@@ -107664,8 +107664,7 @@ BEGIN
     'execution_intent_json', v_execution_intent_json
   );
 END;
-$function$;
-
+$function$
 
 
 create or replace function public.pay_batch_auth_apply_action(
