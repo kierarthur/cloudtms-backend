@@ -24156,6 +24156,9 @@ async function tsfinBestEffortMakeReadyForDraft(env, timesheetIds, opts = {}) {
 }
 
 
+
+
+
 async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -24202,14 +24205,14 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     if (['FALSE', 'F', 'NO', 'N', '0', 'OFF'].includes(text)) return false;
     return null;
   };
-  const readFirstBool = (...values) => {
-    for (const value of values) {
-      const b = optionalBool(value);
-      if (b !== null) return b;
-    }
-    return false;
+  const anyTrueBool = (...values) => values.map(optionalBool).some((value) => value === true);
+  const explicitCapabilityState = (...values) => {
+    const states = values.map(optionalBool).filter((value) => value !== null);
+    if (states.includes(false)) return false;
+    if (states.includes(true)) return true;
+    return null;
   };
-  const paymentExecutionOperationTypes = new Set(['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS']);
+  const paymentExecutionOperationTypes = new Set(['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT']);
   const activePaymentOperationStates = new Set([
     'QUEUED', 'RUNNING', 'WAITING', 'RUNNABLE', 'CONTINUING', 'WAITING_RETRY',
     'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'AWAITING_AUTHORISATION', 'AWAITING_AUTHORIZATION',
@@ -24217,9 +24220,39 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     'WAITING_USER', 'WAITING_USER_REVIEW', 'REVIEW_REQUIRED'
   ]);
   const terminalOperationStates = new Set(['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'ERRORED', 'CANCELLED', 'CANCELED', 'ABORTED']);
+  const terminalBatchStates = new Set(['SUBMITTED', 'COMMITTED', 'EXECUTED', 'EXECUTING', 'SETTLED', 'COMPLETED', 'COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED']);
+
+  const isLegacyCsvExportPrepareOperation = (operation) => {
+    const op = safeObject(operation);
+    const inputJson = safeObject(op.input_json || op.inputJson);
+    const nestedIntent = safeObject(inputJson.execution_intent_json || inputJson.executionIntentJson);
+    const prepareOnly = [
+      inputJson.prepare_bank_csv_export_only,
+      inputJson.prepareBankCsvExportOnly,
+      nestedIntent.prepare_bank_csv_export_only,
+      nestedIntent.prepareBankCsvExportOnly,
+      op.prepare_bank_csv_export_only,
+      op.prepareBankCsvExportOnly
+    ].map(optionalBool).some((value) => value === true);
+    const executionMode = upperText(
+      inputJson.execution_mode ||
+      inputJson.executionMode ||
+      nestedIntent.execution_mode ||
+      nestedIntent.executionMode ||
+      op.execution_mode ||
+      op.executionMode
+    );
+    const source = trimText(inputJson.source || nestedIntent.source || op.source);
+    const idempotencyKey = trimText(op.idempotency_key || op.idempotencyKey || inputJson.idempotency_key || inputJson.idempotencyKey).toLowerCase();
+    return prepareOnly === true ||
+      executionMode === 'BANK_CSV_EXPORT_PREPARE' ||
+      source === 'handleBankingPayBatchExportCsv' ||
+      idempotencyKey.startsWith('bank-csv-export-prepare:');
+  };
+
   const normaliseActivePaymentOperation = (operation, forcedType = '') => {
     const op = safeObject(operation);
-    if (!Object.keys(op).length) return null;
+    if (!Object.keys(op).length || isLegacyCsvExportPrepareOperation(op)) return null;
     const type = upperText(
       op.operation_type ||
       op.operationType ||
@@ -24247,22 +24280,33 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     if (!opId || !hasActiveState) return null;
     return { ...op, operation_type: type, operationType: type };
   };
+
   const normaliseActivePaymentOperationFromScalars = (obj) => {
-    const specificPaymentOperationId = trimText(obj.active_payment_operation_id || obj.activePaymentOperationId || obj.payment_execute_operation_id || obj.paymentExecuteOperationId || '');
-    const genericOperationId = trimText(obj.active_operation_id || obj.activeOperationId || '');
-    const specificPaymentOperationType = obj.active_payment_operation_type || obj.activePaymentOperationType || obj.payment_execute_operation_type || obj.paymentExecuteOperationType || '';
-    const genericOperationType = obj.active_operation_type || obj.activeOperationType || '';
+    const source = safeObject(obj);
+    const specificPaymentOperationId = trimText(source.active_payment_operation_id || source.activePaymentOperationId || source.payment_execute_operation_id || source.paymentExecuteOperationId || '');
+    const genericOperationId = trimText(source.active_operation_id || source.activeOperationId || '');
+    const specificPaymentOperationType = source.active_payment_operation_type || source.activePaymentOperationType || source.payment_execute_operation_type || source.paymentExecuteOperationType || '';
+    const genericOperationType = source.active_operation_type || source.activeOperationType || '';
+    const scalarInput = {
+      ...safeObject(source.active_payment_operation_input_json || source.activePaymentOperationInputJson || source.input_json || source.inputJson),
+      prepare_bank_csv_export_only: source.active_payment_operation_prepare_bank_csv_export_only ?? source.activePaymentOperationPrepareBankCsvExportOnly ?? source.prepare_bank_csv_export_only ?? source.prepareBankCsvExportOnly,
+      execution_mode: source.active_payment_operation_execution_mode || source.activePaymentOperationExecutionMode || source.execution_mode || source.executionMode || null,
+      source: source.active_payment_operation_source || source.activePaymentOperationSource || source.operation_source || source.operationSource || source.source || null
+    };
     return normaliseActivePaymentOperation({
       operation_id: specificPaymentOperationId || genericOperationId || '',
       operation_type: specificPaymentOperationType || genericOperationType || (specificPaymentOperationId ? 'PAYMENT_EXECUTE' : ''),
-      status: obj.active_payment_operation_status || obj.activePaymentOperationStatus || obj.payment_execute_operation_status || obj.paymentExecuteOperationStatus || obj.active_operation_status || obj.activeOperationStatus || '',
-      phase: obj.active_payment_operation_phase || obj.activePaymentOperationPhase || obj.payment_execute_operation_phase || obj.paymentExecuteOperationPhase || obj.active_operation_phase || obj.activeOperationPhase || '',
-      runner_state: obj.active_payment_operation_runner_state || obj.activePaymentOperationRunnerState || obj.payment_execute_operation_runner_state || obj.paymentExecuteOperationRunnerState || obj.active_operation_runner_state || obj.activeOperationRunnerState || '',
-      requires_user_action: obj.active_payment_operation_requires_user_action ?? obj.activePaymentOperationRequiresUserAction ?? null,
-      resume_reason: obj.active_payment_operation_resume_reason || obj.activePaymentOperationResumeReason || null,
-      pay_batch_id: obj.pay_batch_id || obj.payBatchId || id
+      status: source.active_payment_operation_status || source.activePaymentOperationStatus || source.payment_execute_operation_status || source.paymentExecuteOperationStatus || source.active_operation_status || source.activeOperationStatus || '',
+      phase: source.active_payment_operation_phase || source.activePaymentOperationPhase || source.payment_execute_operation_phase || source.paymentExecuteOperationPhase || source.active_operation_phase || source.activeOperationPhase || '',
+      runner_state: source.active_payment_operation_runner_state || source.activePaymentOperationRunnerState || source.payment_execute_operation_runner_state || source.paymentExecuteOperationRunnerState || source.active_operation_runner_state || source.activeOperationRunnerState || source.runner_state || source.runnerState || '',
+      requires_user_action: source.active_payment_operation_requires_user_action ?? source.activePaymentOperationRequiresUserAction ?? null,
+      resume_reason: source.active_payment_operation_resume_reason || source.activePaymentOperationResumeReason || null,
+      pay_batch_id: source.pay_batch_id || source.payBatchId || id,
+      input_json: scalarInput,
+      idempotency_key: source.active_payment_operation_idempotency_key || source.activePaymentOperationIdempotencyKey || source.idempotency_key || source.idempotencyKey || null
     });
   };
+
   const chooseValidActivePaymentOperation = (...containers) => {
     for (const source of containers) {
       const obj = safeObject(source);
@@ -24277,6 +24321,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     }
     return null;
   };
+
   const scrubActiveOperationFields = (target) => {
     if (!target || typeof target !== 'object') return;
     for (const key of [
@@ -24288,11 +24333,13 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       'payment_execute_operation', 'paymentExecuteOperation', 'payment_execute_operation_id', 'paymentExecuteOperationId',
       'payment_execute_operation_type', 'paymentExecuteOperationType', 'payment_execute_operation_status', 'paymentExecuteOperationStatus',
       'payment_execute_operation_phase', 'paymentExecuteOperationPhase', 'payment_execute_operation_runner_state', 'paymentExecuteOperationRunnerState',
-      'active_payment_execute_operation', 'activePaymentExecuteOperation'
+      'active_payment_execute_operation', 'activePaymentExecuteOperation',
+      'active_real_payment_operation', 'activeRealPaymentOperation'
     ]) {
       try { delete target[key]; } catch {}
     }
   };
+
   const attachActivePaymentOperation = (target, operation) => {
     if (!target || typeof target !== 'object') return;
     const op = normaliseActivePaymentOperation(operation);
@@ -24302,7 +24349,15 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     const statusText = upperText(op.status || op.operation_status || op.operationStatus || '');
     const phaseText = upperText(op.phase || '');
     const runnerState = upperText(op.runner_state || op.runnerState || '');
-    const normalised = { ...op, operation_id: operationId || op.operation_id || op.id, operationId: operationId || op.operationId || op.id, operation_type: operationType, operationType: operationType, pay_batch_id: op.pay_batch_id || op.payBatchId || id, payBatchId: op.payBatchId || op.pay_batch_id || id };
+    const normalised = {
+      ...op,
+      operation_id: operationId || op.operation_id || op.id,
+      operationId: operationId || op.operationId || op.id,
+      operation_type: operationType,
+      operationType,
+      pay_batch_id: op.pay_batch_id || op.payBatchId || id,
+      payBatchId: op.payBatchId || op.pay_batch_id || id
+    };
     target.active_operation = normalised;
     target.activeOperation = normalised;
     target.active_payment_operation = normalised;
@@ -24339,12 +24394,18 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     target.paymentExecuteOperationPhase = phaseText || null;
     target.payment_execute_operation_runner_state = runnerState || null;
     target.paymentExecuteOperationRunnerState = runnerState || null;
+    target.active_real_payment_operation = normalised;
+    target.activeRealPaymentOperation = normalised;
   };
-  const lookupActivePaymentExecutionOperation = async () => {
+
+  const lookupActivePaymentExecutionOperation = async (executionSummary) => {
+    const summaryOperation = normaliseActivePaymentOperationFromScalars(executionSummary);
+    if (summaryOperation) return summaryOperation;
+
     const candidates = [];
     for (const operationType of paymentExecutionOperationTypes) {
       try {
-        const found = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active', {
+        const foundRaw = await sbRpc(env, 'banking_pay_operation_find_active', {
           p_operation_type: operationType,
           p_workbench_session_id: null,
           p_pay_batch_id: id,
@@ -24354,20 +24415,21 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
           purpose: 'ACTIVE_PAYMENT_EXECUTION_LOOKUP',
           timeoutMs: 5000,
           bankingPay: true
-        }), 'banking_pay_operation_find_active');
-        const rows = Array.isArray(found) ? found : (found ? [found] : []);
+        });
+        let rows = foundRaw;
+        if (rows && typeof rows === 'object' && !Array.isArray(rows) && Object.prototype.hasOwnProperty.call(rows, 'banking_pay_operation_find_active')) rows = rows.banking_pay_operation_find_active;
+        if (!Array.isArray(rows)) rows = rows && typeof rows === 'object' ? [rows] : [];
         for (const row of rows) {
           let payload = row;
           try {
-            if (typeof buildBankingPayOperationPublicPayload === 'function') {
-              payload = buildBankingPayOperationPublicPayload(row, { mode: 'PROGRESS_LIGHT' });
-            }
+            if (typeof buildBankingPayOperationPublicPayload === 'function') payload = buildBankingPayOperationPublicPayload(row, { mode: 'PROGRESS_LIGHT' });
           } catch {}
-          const normalised = normaliseActivePaymentOperation({ ...(safeObject(row)), ...(safeObject(payload)), operation_type: row.operation_type || payload.operation_type || operationType });
+          const normalised = normaliseActivePaymentOperation({ ...safeObject(row), ...safeObject(payload), operation_type: row.operation_type || safeObject(payload).operation_type || operationType });
           if (normalised) candidates.push(normalised);
         }
       } catch {}
     }
+
     if (!candidates.length) return null;
     candidates.sort((a, b) => {
       const priority = (op) => {
@@ -24377,8 +24439,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
         if (status === 'QUEUED') return 2;
         if (status === 'CONTINUING') return 3;
         if (status === 'WAITING_RETRY') return 4;
-        if (status.includes('AUTHORIS')) return 5;
-        if (status.includes('AUTHORIZ')) return 5;
+        if (status.includes('AUTHORIS') || status.includes('AUTHORIZ')) return 5;
         if (status.includes('PROVIDER')) return 6;
         if (status.includes('USER')) return 7;
         if (status === 'REVIEW_REQUIRED') return 8;
@@ -24393,20 +24454,50 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     });
     return candidates[0];
   };
-  const decoratePayloadForChildModal = (payload) => {
+
+  const decoratePayloadForChildModal = (payload, executionSummary, activePaymentOperation) => {
     const out = safeObject(payload);
     const batch = safeObject(out.batch);
-    const validActiveOperation = chooseValidActivePaymentOperation(out, batch);
+    const summary = safeObject(executionSummary);
+    const preflight = safeObject(summary.paye_net_preflight || summary.payeNetPreflight);
+
     scrubActiveOperationFields(out);
     scrubActiveOperationFields(batch);
-    if (validActiveOperation) {
-      attachActivePaymentOperation(out, validActiveOperation);
-      if (Object.keys(batch).length) attachActivePaymentOperation(batch, validActiveOperation);
+    if (activePaymentOperation) {
+      attachActivePaymentOperation(out, activePaymentOperation);
+      if (Object.keys(batch).length) attachActivePaymentOperation(batch, activePaymentOperation);
     }
 
-    const status = upperText(out.status || batch.status || out.batch_status_raw || batch.batch_status_raw || '');
-    const executionCommitState = upperText(out.execution_commit_state || batch.execution_commit_state || 'NOT_SUBMITTED') || 'NOT_SUBMITTED';
-    const activeItemCount = firstFiniteNonNegativeInteger(
+    const missingPayeCount = firstFiniteNonNegativeInteger(
+      preflight.missing_explicit_paye_input_count,
+      preflight.missingExplicitPayeInputCount
+    );
+    const explicitZeroCount = firstFiniteNonNegativeInteger(preflight.explicit_zero_count, preflight.explicitZeroCount) ?? 0;
+    const positiveBankPaymentCount = firstFiniteNonNegativeInteger(
+      preflight.positive_bank_payment_count,
+      preflight.positiveBankPaymentCount,
+      summary.current_bank_payment_row_count,
+      summary.currentBankPaymentRowCount
+    ) ?? 0;
+    const payeNetCompleteFlag = optionalBool(summary.paye_net_complete ?? summary.payeNetComplete);
+    const payeNetComplete = payeNetCompleteFlag !== null ? payeNetCompleteFlag : (missingPayeCount !== null && missingPayeCount === 0);
+    const allRequiredPayeExplicitZeroFlag = optionalBool(summary.all_required_paye_explicit_zero ?? summary.allRequiredPayeExplicitZero);
+    const allRequiredPayeExplicitZero = allRequiredPayeExplicitZeroFlag !== null
+      ? allRequiredPayeExplicitZeroFlag
+      : (payeNetComplete && explicitZeroCount > 0 && positiveBankPaymentCount === 0);
+    const hasPositiveBankPaymentsFlag = optionalBool(summary.has_positive_bank_payments ?? summary.hasPositiveBankPayments);
+    const hasPositiveBankPayments = hasPositiveBankPaymentsFlag !== null ? hasPositiveBankPaymentsFlag : positiveBankPaymentCount > 0;
+    const noBankPaymentExecutionEligibleFlag = optionalBool(summary.no_bank_payment_execution_eligible ?? summary.noBankPaymentExecutionEligible);
+    const noBankPaymentExecutionEligible = noBankPaymentExecutionEligibleFlag !== null
+      ? noBankPaymentExecutionEligibleFlag
+      : (payeNetComplete && explicitZeroCount > 0 && positiveBankPaymentCount === 0);
+    const bankCsvGenerated = optionalBool(summary.bank_csv_generated ?? summary.bankCsvGenerated) === true;
+    const bankCsvCurrent = optionalBool(summary.bank_csv_current ?? summary.bankCsvCurrent) === true;
+    const bankCsvStaleReason = trimText(summary.bank_csv_stale_reason || summary.bankCsvStaleReason) || (bankCsvGenerated ? 'CSV_STALE' : 'CSV_NOT_GENERATED');
+
+    const status = upperText(summary.batch_status || summary.status || out.status || batch.status || out.batch_status_raw || batch.batch_status_raw || '');
+    const executionCommitState = upperText(summary.execution_commit_state || out.execution_commit_state || batch.execution_commit_state || 'NOT_SUBMITTED') || 'NOT_SUBMITTED';
+    const rawActiveItemCount = firstFiniteNonNegativeInteger(
       out.active_payment_item_count,
       out.activePaymentItemCount,
       batch.active_payment_item_count,
@@ -24418,12 +24509,23 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       out.active_item_count,
       out.activeItemCount,
       batch.active_item_count,
-      batch.activeItemCount,
+      batch.activeItemCount
+    );
+    const summaryActiveItemCount = firstFiniteNonNegativeInteger(
+      summary.active_item_count,
+      summary.activeItemCount
+    );
+    const itemCount = firstFiniteNonNegativeInteger(
+      summary.item_count,
+      summary.itemCount,
       out.item_count,
       batch.item_count,
       out.durable_counts && out.durable_counts.item_count,
       out.durableCounts && out.durableCounts.item_count
     );
+    const activeItemCount = rawActiveItemCount !== null
+      ? rawActiveItemCount
+      : ((summaryActiveItemCount !== null && summaryActiveItemCount > 0) ? summaryActiveItemCount : itemCount);
     const activeAmountVat = firstFiniteNumber(out.active_payment_amount_vat, out.activePaymentAmountVat, batch.active_payment_amount_vat, batch.activePaymentAmountVat, out.active_amount_vat, batch.active_amount_vat) ?? 0;
     const activeAmountEx = firstFiniteNumber(
       out.active_payment_amount_ex_vat,
@@ -24454,34 +24556,65 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       batch.activeAmountIncVat
     );
     const activeAmountInc = explicitInc != null ? explicitInc : activeAmountEx + activeAmountVat;
-    const hasActivePayables = (activeItemCount == null ? activeAmountInc > 0 : activeItemCount > 0) && activeAmountInc > 0;
-    const executeBlocked = readFirstBool(
-      out.execute_disabled,
-      out.executeDisabled,
-      batch.execute_disabled,
-      batch.executeDisabled,
-      out.execution_blocked,
-      out.executionBlocked,
-      batch.execution_blocked,
-      batch.executionBlocked,
-      out.provider_blocked,
-      out.providerBlocked,
-      batch.provider_blocked,
-      batch.providerBlocked,
-      out.security_blocked,
-      out.securityBlocked,
-      batch.security_blocked,
-      batch.securityBlocked,
-      out.freshness_blocked,
-      out.freshnessBlocked,
-      batch.freshness_blocked,
-      batch.freshnessBlocked,
-      out.funds_blocked,
-      out.fundsBlocked,
-      batch.funds_blocked,
-      batch.fundsBlocked
+    const hasFrozenNonVoidItems = rawActiveItemCount !== null
+      ? rawActiveItemCount > 0
+      : ((summaryActiveItemCount !== null && summaryActiveItemCount > 0) || (itemCount !== null && itemCount > 0));
+    const hasAuthoritativeExecutablePaymentScope = hasPositiveBankPayments || noBankPaymentExecutionEligible;
+
+    const providerEnvironmentSummary = safeObject(
+      out.provider_environment_summary ||
+      out.providerEnvironmentSummary ||
+      batch.provider_environment_summary ||
+      batch.providerEnvironmentSummary
     );
-    const standardExecutionFlagStates = [
+    let providerNormalized = upperText(
+      providerEnvironmentSummary.provider_normalized ||
+      providerEnvironmentSummary.providerNormalized ||
+      providerEnvironmentSummary.rail_provider_snapshot ||
+      providerEnvironmentSummary.railProviderSnapshot ||
+      summary.rail_provider_snapshot ||
+      summary.railProviderSnapshot ||
+      out.rail_provider_snapshot ||
+      out.railProviderSnapshot ||
+      batch.rail_provider_snapshot ||
+      batch.railProviderSnapshot
+    );
+    if (providerNormalized === 'REVOLUT_BANK_API') providerNormalized = 'REVOLUT';
+    const providerKnownState = optionalBool(
+      providerEnvironmentSummary.provider_known ??
+      providerEnvironmentSummary.providerKnown
+    );
+    const providerKnown = providerKnownState !== null
+      ? providerKnownState
+      : ['REVOLUT', 'CSV'].includes(providerNormalized);
+    const providerAvailabilityBlocked = providerKnown !== true;
+    const freshnessDetails = safeObject(out.freshness || batch.freshness);
+    const freshnessStatus = upperText(
+      summary.freshness_validation_status ||
+      summary.freshnessValidationStatus ||
+      freshnessDetails.freshness_validation_status ||
+      freshnessDetails.freshnessValidationStatus ||
+      out.freshness_validation_status ||
+      out.freshnessValidationStatus ||
+      batch.freshness_validation_status ||
+      batch.freshnessValidationStatus
+    );
+    const freshnessStatusBlocked = ['STALE', 'FAILED', 'BLOCKED', 'CONFLICT', 'INVALID'].includes(freshnessStatus);
+
+    const securityBlocked = anyTrueBool(out.security_blocked, out.securityBlocked, batch.security_blocked, batch.securityBlocked);
+    const providerBlocked = anyTrueBool(out.provider_blocked, out.providerBlocked, batch.provider_blocked, batch.providerBlocked);
+    const standardProviderBlocked = providerBlocked || providerAvailabilityBlocked || providerNormalized === 'CSV';
+    const freshnessBlocked = anyTrueBool(out.freshness_blocked, out.freshnessBlocked, batch.freshness_blocked, batch.freshnessBlocked) || freshnessStatusBlocked;
+    const fundsBlocked = anyTrueBool(out.funds_blocked, out.fundsBlocked, batch.funds_blocked, batch.fundsBlocked);
+    const executionBlocked = anyTrueBool(out.execution_blocked, out.executionBlocked, batch.execution_blocked, batch.executionBlocked);
+    const bankCsvSpecificBlocked = anyTrueBool(out.bank_csv_blocked, out.bankCsvBlocked, batch.bank_csv_blocked, batch.bankCsvBlocked, out.csv_export_blocked, out.csvExportBlocked, batch.csv_export_blocked, batch.csvExportBlocked);
+    const bankCsvCapabilityState = explicitCapabilityState(
+      out.can_create_bank_csv_file,
+      out.canCreateBankCsvFile,
+      batch.can_create_bank_csv_file,
+      batch.canCreateBankCsvFile
+    );
+    const standardCapabilityState = explicitCapabilityState(
       out.can_start_standard_execution,
       out.canStartStandardExecution,
       batch.can_start_standard_execution,
@@ -24489,40 +24622,120 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       out.native_execution_available,
       out.nativeExecutionAvailable,
       batch.native_execution_available,
-      batch.nativeExecutionAvailable,
-      out.can_execute,
-      out.canExecute,
-      out.execute_allowed,
-      out.executeAllowed,
-      batch.can_execute,
-      batch.canExecute,
-      batch.execute_allowed,
-      batch.executeAllowed
-    ].map(optionalBool).filter((value) => value !== null);
-    const explicitStandardExecutionAllow = standardExecutionFlagStates.includes(true);
-    const explicitStandardExecutionDeny = standardExecutionFlagStates.length > 0 && !explicitStandardExecutionAllow;
-    const cleanDraftExecutable = ['DRAFT', 'DRAFT_CREATED', 'READY'].includes(status) &&
-      executionCommitState === 'NOT_SUBMITTED' &&
-      hasActivePayables &&
-      !validActiveOperation &&
-      !executeBlocked &&
-      (explicitStandardExecutionAllow || !explicitStandardExecutionDeny);
-    const cleanDraftBankCsvFileAllowed = ['DRAFT', 'DRAFT_CREATED', 'READY'].includes(status) &&
-      executionCommitState === 'NOT_SUBMITTED' &&
-      hasActivePayables &&
-      !validActiveOperation &&
-      !executeBlocked;
+      batch.nativeExecutionAvailable
+    );
+    const externalCapabilityState = explicitCapabilityState(
+      out.can_start_external_settlement,
+      out.canStartExternalSettlement,
+      batch.can_start_external_settlement,
+      batch.canStartExternalSettlement
+    );
+    const externalSettlementConfigured = externalCapabilityState !== false && !providerAvailabilityBlocked;
+    const batchStateEligible = ['DRAFT', 'DRAFT_CREATED', 'READY'].includes(status) && executionCommitState === 'NOT_SUBMITTED' && !terminalBatchStates.has(status);
+    const hasActiveRealOperation = !!normaliseActivePaymentOperation(activePaymentOperation);
+    const sharedPaymentReady = batchStateEligible &&
+      hasFrozenNonVoidItems &&
+      hasAuthoritativeExecutablePaymentScope &&
+      payeNetComplete &&
+      !hasActiveRealOperation &&
+      !securityBlocked &&
+      !freshnessBlocked &&
+      !executionBlocked;
 
-    const decorateAmountsAndFlags = (target) => {
+    const bankCsvAllowed = batchStateEligible &&
+      hasFrozenNonVoidItems &&
+      hasAuthoritativeExecutablePaymentScope &&
+      payeNetComplete &&
+      !hasActiveRealOperation &&
+      !securityBlocked &&
+      !freshnessBlocked &&
+      !bankCsvSpecificBlocked &&
+      !providerAvailabilityBlocked &&
+      bankCsvCapabilityState !== false;
+    const standardAllowed = sharedPaymentReady && standardCapabilityState !== false && !standardProviderBlocked && !fundsBlocked;
+    const csvSettlementAllowed = sharedPaymentReady && externalCapabilityState !== false && !providerAvailabilityBlocked && !fundsBlocked && bankCsvCurrent;
+    const externalSettlementAllowed = sharedPaymentReady && !fundsBlocked && externalSettlementConfigured;
+    const anyExecuteAllowed = standardAllowed || csvSettlementAllowed || externalSettlementAllowed;
+
+    const reasonFor = (route) => {
+      if (!batchStateEligible) return { code: 'BATCH_TERMINAL_OR_STATUS_BLOCKED', message: 'Payment actions are not available for this batch state.' };
+      if (hasActiveRealOperation) return { code: 'ACTIVE_PAYMENT_OPERATION', message: 'A payment execution operation is already in progress.' };
+      if (!hasFrozenNonVoidItems) return { code: 'NO_SETTLEABLE_BATCH_ITEMS', message: 'This batch has no frozen non-void payment items to settle.' };
+      if (!payeNetComplete || (missingPayeCount != null && missingPayeCount > 0)) return { code: 'PAYE_NET_REQUIRED', message: 'Every required PAYE net amount must be explicitly entered or imported first.' };
+      if (!hasAuthoritativeExecutablePaymentScope) return { code: 'NO_EXECUTABLE_PAYMENT_SCOPE', message: 'No authoritative positive or explicit-zero payment scope is available for this batch.' };
+      if (securityBlocked) return { code: 'SECURITY_BLOCKED', message: 'Payment actions are blocked by the current security or authorisation state.' };
+      if (freshnessBlocked) return { code: 'FRESHNESS_BLOCKED', message: 'Refresh and validate the latest batch state before continuing.' };
+      if (route === 'BANK_CSV' && bankCsvSpecificBlocked) return { code: 'BANK_CSV_BLOCKED', message: 'Bank CSV generation is currently blocked for this batch.' };
+      if (route === 'BANK_CSV' && (providerAvailabilityBlocked || bankCsvCapabilityState === false)) return { code: 'PROVIDER_OR_SECURITY_BLOCKED', message: 'Bank CSV generation is unavailable under the current banking or security configuration.' };
+      if (route !== 'BANK_CSV' && executionBlocked) return { code: 'EXECUTION_BLOCKED', message: 'Payment execution is currently blocked.' };
+      if (route === 'STANDARD_BANK' && (standardProviderBlocked || standardCapabilityState === false)) return { code: 'PROVIDER_OR_SECURITY_BLOCKED', message: 'The payment provider is unavailable or blocked for this batch.' };
+      if (route === 'CSV_SETTLEMENT' && (providerAvailabilityBlocked || externalCapabilityState === false)) return { code: 'PROVIDER_OR_SECURITY_BLOCKED', message: 'Manual settlement is unavailable under the current banking or security configuration.' };
+      if (route !== 'BANK_CSV' && fundsBlocked) return { code: 'FUNDS_BLOCKED', message: 'Payment execution is blocked by the current funding check.' };
+      if (route === 'CSV_SETTLEMENT' && !bankCsvGenerated) return { code: 'BANK_CSV_NOT_GENERATED', message: 'Generate the Bank CSV before using manual CSV settlement.' };
+      if (route === 'CSV_SETTLEMENT' && !bankCsvCurrent) return { code: 'BANK_CSV_STALE', message: 'The Bank CSV is no longer current. Regenerate it before manual settlement.' };
+      if (route === 'EXTERNAL_SETTLEMENT' && !externalSettlementConfigured) return { code: 'EXTERNAL_SETTLEMENT_UNAVAILABLE', message: 'External settlement is not available for this batch.' };
+      return { code: 'ROUTE_NOT_AVAILABLE', message: 'This payment route is not currently available.' };
+    };
+
+    const routeCapability = (allowed, route) => {
+      const reason = allowed ? { code: '', message: '' } : reasonFor(route);
+      return {
+        allowed,
+        enabled: allowed,
+        disabled: !allowed,
+        disabled_reason_code: reason.code,
+        disabled_reason: reason.message
+      };
+    };
+    const routeCapabilities = {
+      bank_csv: routeCapability(bankCsvAllowed, 'BANK_CSV'),
+      standard_execution: routeCapability(standardAllowed, 'STANDARD_BANK'),
+      csv_settlement: routeCapability(csvSettlementAllowed, 'CSV_SETTLEMENT'),
+      external_settlement: routeCapability(externalSettlementAllowed, 'EXTERNAL_SETTLEMENT')
+    };
+
+    const applyExecutionSummary = (target) => {
       if (!target || typeof target !== 'object') return;
-      const keepTrueWhenSafe = (...values) => values.map(optionalBool).some((value) => value === true) && !validActiveOperation && !executeBlocked;
-      const standardAllowed = cleanDraftExecutable || keepTrueWhenSafe(target.can_start_standard_execution, target.canStartStandardExecution);
-      const nativeAllowed = cleanDraftExecutable || keepTrueWhenSafe(target.native_execution_available, target.nativeExecutionAvailable);
-      const directAllowed = cleanDraftExecutable || keepTrueWhenSafe(target.can_execute, target.canExecute, target.execute_allowed, target.executeAllowed);
-      const csvSettlementAllowed = keepTrueWhenSafe(target.can_start_csv_settlement, target.canStartCsvSettlement);
-      const externalSettlementAllowed = keepTrueWhenSafe(target.can_start_external_settlement, target.canStartExternalSettlement);
-      const bankCsvFileAllowed = cleanDraftBankCsvFileAllowed || keepTrueWhenSafe(target.can_create_bank_csv_file, target.canCreateBankCsvFile);
-      const anyExecuteAllowed = standardAllowed || nativeAllowed || directAllowed || csvSettlementAllowed || externalSettlementAllowed;
+      target.paye_net_preflight = preflight;
+      target.payeNetPreflight = preflight;
+      target.paye_net_complete = payeNetComplete;
+      target.payeNetComplete = payeNetComplete;
+      target.all_required_paye_explicit_zero = allRequiredPayeExplicitZero;
+      target.allRequiredPayeExplicitZero = allRequiredPayeExplicitZero;
+      target.has_positive_bank_payments = hasPositiveBankPayments;
+      target.hasPositiveBankPayments = hasPositiveBankPayments;
+      target.no_bank_payment_execution_eligible = noBankPaymentExecutionEligible;
+      target.noBankPaymentExecutionEligible = noBankPaymentExecutionEligible;
+      target.paye_net_state_hash = summary.paye_net_state_hash || summary.current_paye_net_state_hash || null;
+      target.current_paye_net_state_hash = summary.current_paye_net_state_hash || summary.paye_net_state_hash || null;
+      target.currentPayeNetStateHash = target.current_paye_net_state_hash;
+      target.bank_payment_projection_scope = summary.bank_payment_projection_scope || null;
+      target.bank_payment_projection_hash = summary.bank_payment_projection_hash || summary.current_bank_payment_projection_hash || null;
+      target.current_bank_payment_projection_hash = summary.current_bank_payment_projection_hash || summary.bank_payment_projection_hash || null;
+      target.currentBankPaymentProjectionHash = target.current_bank_payment_projection_hash;
+      target.all_scope_bank_payment_projection_hash = summary.all_scope_bank_payment_projection_hash || null;
+      target.bank_csv_generated = bankCsvGenerated;
+      target.bankCsvGenerated = bankCsvGenerated;
+      target.bank_csv_current = bankCsvCurrent;
+      target.bankCsvCurrent = bankCsvCurrent;
+      target.bank_csv_stale_reason = bankCsvStaleReason || null;
+      target.bankCsvStaleReason = bankCsvStaleReason || null;
+      target.bank_csv_scope = summary.bank_csv_scope || null;
+      target.stored_paye_net_state_hash = summary.stored_paye_net_state_hash || null;
+      target.storedPayeNetStateHash = summary.stored_paye_net_state_hash || null;
+      target.stored_bank_payment_projection_hash = summary.stored_bank_payment_projection_hash || null;
+      target.storedBankPaymentProjectionHash = summary.stored_bank_payment_projection_hash || null;
+      target.current_bank_payment_row_count = firstFiniteNonNegativeInteger(summary.current_bank_payment_row_count, summary.currentBankPaymentRowCount) ?? positiveBankPaymentCount;
+      target.currentBankPaymentRowCount = target.current_bank_payment_row_count;
+      target.current_bank_payment_total = firstFiniteNumber(summary.current_bank_payment_total, summary.currentBankPaymentTotal, preflight.positive_total, preflight.positiveTotal) ?? 0;
+      target.currentBankPaymentTotal = target.current_bank_payment_total;
+      target.stored_bank_csv_row_count = firstFiniteNonNegativeInteger(summary.stored_bank_csv_row_count, summary.storedBankCsvRowCount);
+      target.storedBankCsvRowCount = target.stored_bank_csv_row_count;
+      target.stored_bank_csv_total = firstFiniteNumber(summary.stored_bank_csv_total, summary.storedBankCsvTotal);
+      target.storedBankCsvTotal = target.stored_bank_csv_total;
+      target.bank_csv_export_json = safeObject(summary.bank_csv_export_json);
+      target.payment_route_capabilities = routeCapabilities;
+      target.paymentRouteCapabilities = routeCapabilities;
       target.active_payment_item_count = activeItemCount ?? 0;
       target.activePaymentItemCount = activeItemCount ?? 0;
       target.active_payment_amount_ex_vat = activeAmountEx;
@@ -24531,33 +24744,52 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       target.activePaymentAmountVat = activeAmountVat;
       target.active_payment_amount_inc_vat = activeAmountInc;
       target.activePaymentAmountIncVat = activeAmountInc;
-      target.can_execute = directAllowed || standardAllowed || nativeAllowed;
-      target.canExecute = target.can_execute;
-      target.execute_allowed = anyExecuteAllowed;
-      target.executeAllowed = anyExecuteAllowed;
+      target.can_create_bank_csv_file = bankCsvAllowed;
+      target.canCreateBankCsvFile = bankCsvAllowed;
       target.can_start_standard_execution = standardAllowed;
       target.canStartStandardExecution = standardAllowed;
-      target.native_execution_available = nativeAllowed;
-      target.nativeExecutionAvailable = nativeAllowed;
+      target.native_execution_available = standardAllowed;
+      target.nativeExecutionAvailable = standardAllowed;
       target.can_start_csv_settlement = csvSettlementAllowed;
       target.canStartCsvSettlement = csvSettlementAllowed;
       target.can_start_external_settlement = externalSettlementAllowed;
       target.canStartExternalSettlement = externalSettlementAllowed;
-      target.can_create_bank_csv_file = bankCsvFileAllowed;
-      target.canCreateBankCsvFile = bankCsvFileAllowed;
+      target.can_execute = standardAllowed;
+      target.canExecute = standardAllowed;
+      target.execute_allowed = anyExecuteAllowed;
+      target.executeAllowed = anyExecuteAllowed;
       target.execute_disabled = !anyExecuteAllowed;
       target.executeDisabled = !anyExecuteAllowed;
-      if (anyExecuteAllowed) {
-        target.execute_disabled_reason = '';
-        target.executeDisabledReason = '';
-      } else if (!trimText(target.execute_disabled_reason || target.executeDisabledReason || '')) {
-        target.execute_disabled_reason = validActiveOperation ? 'A payment operation is already in progress.' : (executeBlocked ? 'Payment execution is currently blocked.' : 'Payment execution is not available for this batch state.');
-        target.executeDisabledReason = target.execute_disabled_reason;
-      }
+      const primaryExecuteReason = anyExecuteAllowed ? { code: '', message: '' } : reasonFor('STANDARD_BANK');
+      target.execute_disabled_reason_code = primaryExecuteReason.code;
+      target.executeDisabledReasonCode = primaryExecuteReason.code;
+      target.execute_disabled_reason = primaryExecuteReason.message;
+      target.executeDisabledReason = primaryExecuteReason.message;
+      const bankCsvReason = bankCsvAllowed ? { code: '', message: '' } : reasonFor('BANK_CSV');
+      target.bank_csv_disabled_reason_code = bankCsvReason.code;
+      target.bankCsvDisabledReasonCode = bankCsvReason.code;
+      target.bank_csv_disabled_reason = bankCsvReason.message;
+      target.bankCsvDisabledReason = bankCsvReason.message;
+      const csvReason = csvSettlementAllowed ? { code: '', message: '' } : reasonFor('CSV_SETTLEMENT');
+      target.csv_settlement_disabled_reason_code = csvReason.code;
+      target.csvSettlementDisabledReasonCode = csvReason.code;
+      target.csv_settlement_disabled_reason = csvReason.message;
+      target.csvSettlementDisabledReason = csvReason.message;
+      const standardReason = standardAllowed ? { code: '', message: '' } : reasonFor('STANDARD_BANK');
+      target.standard_execution_disabled_reason_code = standardReason.code;
+      target.standardExecutionDisabledReasonCode = standardReason.code;
+      target.standard_execution_disabled_reason = standardReason.message;
+      target.standardExecutionDisabledReason = standardReason.message;
+      const externalReason = externalSettlementAllowed ? { code: '', message: '' } : reasonFor('EXTERNAL_SETTLEMENT');
+      target.external_settlement_disabled_reason_code = externalReason.code;
+      target.externalSettlementDisabledReasonCode = externalReason.code;
+      target.external_settlement_disabled_reason = externalReason.message;
+      target.externalSettlementDisabledReason = externalReason.message;
     };
-    decorateAmountsAndFlags(out);
+
+    applyExecutionSummary(out);
     if (Object.keys(batch).length) {
-      decorateAmountsAndFlags(batch);
+      applyExecutionSummary(batch);
       out.batch = batch;
     }
     return out;
@@ -24583,23 +24815,37 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
         timeoutMs: detailMode === 'FULL' ? 60000 : 8000,
         bankingPay: true
       }), 'pay_batch_get'));
-      const activePaymentOperation = await lookupActivePaymentExecutionOperation();
-      if (activePaymentOperation) {
-        attachActivePaymentOperation(rawPayload, activePaymentOperation);
-        if (rawPayload.batch && typeof rawPayload.batch === 'object' && !Array.isArray(rawPayload.batch)) attachActivePaymentOperation(rawPayload.batch, activePaymentOperation);
+
+      const executionSummary = safeObject(unwrapRpc(await sbRpc(env, 'pay_batch_execution_summary_get', {
+        p_pay_batch_id: id,
+        p_actor_user_id: actorUserId || null,
+        p_mode: 'LIGHT'
+      }, {
+        routeClass: 'BATCH_BOOTSTRAP',
+        purpose: 'PAYMENT_EXECUTION_SUMMARY',
+        timeoutMs: 8000,
+        bankingPay: true
+      }), 'pay_batch_execution_summary_get'));
+
+      if (!executionSummary.pay_batch_id || executionSummary.ok === false) {
+        throw new Error(trimText(executionSummary.message || executionSummary.error || executionSummary.code) || 'PAY_BATCH_EXECUTION_SUMMARY_UNAVAILABLE');
       }
-      const payload = decoratePayloadForChildModal(rawPayload);
+
+      const lookedUpActivePaymentOperation = await lookupActivePaymentExecutionOperation(executionSummary);
+      const embeddedActivePaymentOperation = chooseValidActivePaymentOperation(rawPayload, rawPayload.batch);
+      const activePaymentOperation = lookedUpActivePaymentOperation || embeddedActivePaymentOperation;
+      const payload = decoratePayloadForChildModal(rawPayload, executionSummary, activePaymentOperation);
 
       return withCORS(env, req, ok({
         ...payload,
         ok: payload.ok !== false,
         pay_batch_id: payload.pay_batch_id || id,
         grouped_alert_summary: detailMode === 'BOOTSTRAP_ONLY' ? (payload.grouped_alert_summary || payload.cached_alert_summary || null) : (payload.grouped_alert_summary || null),
-        live_signal_version: payload.live_signal_version ?? payload.version ?? null,
-        payment_status_version: payload.payment_status_version ?? null,
-        correction_progress_version: payload.correction_progress_version ?? null,
-        alert_version: payload.alert_version ?? null,
-        overview_version: payload.overview_version ?? null,
+        live_signal_version: executionSummary.live_signal_version ?? payload.live_signal_version ?? payload.version ?? null,
+        payment_status_version: executionSummary.payment_status_version ?? payload.payment_status_version ?? null,
+        correction_progress_version: executionSummary.correction_progress_version ?? payload.correction_progress_version ?? null,
+        alert_version: executionSummary.alert_version ?? payload.alert_version ?? null,
+        overview_version: executionSummary.overview_version ?? payload.overview_version ?? null,
         recommended_page_size: payload.recommended_page_size || recommendedPageSize,
         detail_mode: payload.detail_mode_applied || payload.detail_mode || detailMode,
         detail_mode_applied: payload.detail_mode_applied || payload.detail_mode || detailMode,
@@ -24617,7 +24863,9 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
         summary_refresh_failed: payload.summary_refresh_failed === true,
         summaryRefreshFailed: payload.summary_refresh_failed === true,
         durable_counts: payload.durable_counts || null,
-        durableCounts: payload.durable_counts || null
+        durableCounts: payload.durable_counts || null,
+        execution_summary: executionSummary,
+        executionSummary
       }));
     } catch (e) {
       const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
@@ -24632,12 +24880,6 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   }
   return execute();
 }
-
-
-
-
-
-
 
 
 
@@ -24954,10 +25196,12 @@ async function handleBankingIdLedgerList(env, req, user) {
 }
 
 
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const safeObject = (value) => isPlainObject(value) ? value : {};
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const enc = encodeURIComponent;
 
@@ -25909,6 +26153,8 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       ['rail_tx_id_count', `pay_bank_transfers?select=id&${batchFilter}&rail_tx_id=not.is.null`],
       ['rail_state_count', `pay_bank_transfers?select=id&${batchFilter}&rail_state=not.is.null`],
       ['provider_status_evidence_count', `pay_bank_transfers?select=id&${batchFilter}&status=in.(PROCESSING,UNKNOWN,COMPLETED,FAILED,DECLINED,REJECTED,RETURNED,REVERTED,SUBMISSION_FAILED)`],
+      ['provider_attempt_row_count', `banking_pay_operation_provider_attempts?select=id&${batchFilter}`],
+      ['transfer_event_count', `pay_bank_transfer_events?select=id&${batchFilter}`],
       ['provider_event_count', `pay_bank_transfer_events?select=id&${batchFilter}&event_source=in.(PROVIDER_WEBHOOK,PROVIDER_POLL,PROVIDER_RESPONSE)`],
       ['provider_event_transaction_count', `pay_bank_transfer_events?select=id&${batchFilter}&provider_transaction_id=not.is.null`],
       ['provider_event_request_count', `pay_bank_transfer_events?select=id&${batchFilter}&provider_request_id=not.is.null`]
@@ -25970,6 +26216,8 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       materialised_transfer_count: countValue('materialised_transfer_count'),
       pending_transfer_count: countValue('pending_transfer_count'),
       provider_status_evidence_count: countValue('provider_status_evidence_count'),
+      provider_attempt_row_count: countValue('provider_attempt_row_count'),
+      transfer_event_count: countValue('transfer_event_count'),
       provider_event_count: countValue('provider_event_count'),
       provider_event_transaction_count: countValue('provider_event_transaction_count'),
       provider_event_request_count: countValue('provider_event_request_count'),
@@ -26011,7 +26259,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     try {
       const operationRes = await sbFetch(
         env,
-        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(targetId)}&select=id,operation_type,status,phase,runner_state,requires_user_action,resume_reason,progress_json,result_json,error_json,failed_at_utc,lease_owner,lease_expires_at_utc,locked_by,lock_expires_at_utc,run_after_utc,updated_at_utc&limit=1`,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(targetId)}&select=id,operation_type,pay_batch_id,root_operation_id,input_json,status,phase,runner_state,requires_user_action,resume_reason,progress_json,result_json,error_json,failed_at_utc,lease_owner,lease_expires_at_utc,locked_by,lock_expires_at_utc,run_after_utc,updated_at_utc&limit=1`,
         false
       );
       const rows = operationRes && Array.isArray(operationRes.rows) ? operationRes.rows : [];
@@ -26021,6 +26269,33 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     }
   };
 
+
+  const settlementOperationBoundToCurrentExecution = (operationRowValue) => {
+    const settlementOperation = isPlainObject(operationRowValue) ? operationRowValue : {};
+    const settlementOperationType = upper(settlementOperation.operation_type || settlementOperation.operationType);
+    if (settlementOperationType && settlementOperationType !== 'PAYMENT_SETTLEMENT') return false;
+    const settlementBatchId = trimStr(settlementOperation.pay_batch_id || settlementOperation.payBatchId);
+    if (settlementBatchId && settlementBatchId !== payBatchId) return false;
+    const childInput = isPlainObject(settlementOperation.input_json)
+      ? settlementOperation.input_json
+      : (isPlainObject(settlementOperation.inputJson) ? settlementOperation.inputJson : {});
+    const nestedIntent = isPlainObject(childInput.execution_intent_json)
+      ? childInput.execution_intent_json
+      : (isPlainObject(childInput.executionIntentJson) ? childInput.executionIntentJson : {});
+    const rootId = trimStr(settlementOperation.root_operation_id || settlementOperation.rootOperationId);
+    const inputExecutionId = trimStr(
+      childInput.execution_operation_id
+      || childInput.executionOperationId
+      || childInput.root_execution_operation_id
+      || childInput.rootExecutionOperationId
+      || childInput.root_operation_id
+      || childInput.rootOperationId
+      || nestedIntent.operation_id
+      || nestedIntent.operationId
+    );
+    if (rootId) return rootId === operationId;
+    return inputExecutionId === operationId;
+  };
 
   const readDurableSettlementTruth = async (reason = 'UNKNOWN') => {
     const empty = {
@@ -26037,7 +26312,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     try {
       const batchQuery = new URLSearchParams();
       batchQuery.set('id', `eq.${payBatchId}`);
-      batchQuery.set('select', 'id,status,execution_commit_state,execution_commit_ref,execution_committed_at_utc,completed_at_utc,freshness_validation_status,freshness_checked_at_utc,settlement_confirmation_json,completion_notice_queued_at_utc,completion_notice_reference');
+      batchQuery.set('select', 'id,status,execution_commit_state,execution_commit_ref,execution_committed_at_utc,completed_at_utc,freshness_validation_status,freshness_checked_at_utc,settlement_confirmation_json,execution_intent_json,completion_notice_queued_at_utc,completion_notice_reference');
       batchQuery.set('limit', '1');
       const batchRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?${batchQuery.toString()}`, false);
       const batchRow = batchRes && Array.isArray(batchRes.rows) && isPlainObject(batchRes.rows[0]) ? batchRes.rows[0] : null;
@@ -26051,16 +26326,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       const candidateRows = candidateRes && Array.isArray(candidateRes.rows) ? candidateRes.rows.map((row) => isPlainObject(row) ? row : {}) : [];
 
       const itemQuery = new URLSearchParams();
-      itemQuery.set('select', 'id,pay_bank_transfer_id,is_voided,item_type,pay_batch_candidate_id,pay_batch_candidates!inner(pay_batch_id)');
+      itemQuery.set('select', 'id,pay_bank_transfer_id,is_voided,item_type,pay_channel,pay_batch_candidate_id,pay_batch_candidates!inner(pay_batch_id)');
       itemQuery.set('pay_batch_candidates.pay_batch_id', `eq.${payBatchId}`);
       itemQuery.set('limit', '50000');
-      let itemRows = [];
-      try {
-        const itemRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batch_items?${itemQuery.toString()}`, false);
-        itemRows = itemRes && Array.isArray(itemRes.rows) ? itemRes.rows.map((row) => isPlainObject(row) ? row : {}) : [];
-      } catch {
-        itemRows = [];
-      }
+      const itemRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batch_items?${itemQuery.toString()}`, false);
+      const itemRows = itemRes && Array.isArray(itemRes.rows) ? itemRes.rows.map((row) => isPlainObject(row) ? row : {}) : [];
 
       const transferQuery = new URLSearchParams();
       transferQuery.set('pay_batch_id', `eq.${payBatchId}`);
@@ -26068,6 +26338,46 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       transferQuery.set('limit', '50000');
       const transferRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?${transferQuery.toString()}`, false);
       const transferRows = transferRes && Array.isArray(transferRes.rows) ? transferRes.rows.map((row) => isPlainObject(row) ? row : {}) : [];
+
+      const settlementScopeQuery = new URLSearchParams();
+      settlementScopeQuery.set('pay_batch_id', `eq.${payBatchId}`);
+      settlementScopeQuery.set('select', 'id,operation_id,pay_batch_id,pay_batch_candidate_id,candidate_id,pay_channel,payload_json,status,settlement_event_id');
+      settlementScopeQuery.set('limit', '50000');
+      const settlementScopeRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_settlement_scope?${settlementScopeQuery.toString()}`, false);
+      const settlementScopeRows = settlementScopeRes && Array.isArray(settlementScopeRes.rows) ? settlementScopeRes.rows.map((row) => isPlainObject(row) ? row : {}) : [];
+
+      const settlementOperationQuery = new URLSearchParams();
+      settlementOperationQuery.set('pay_batch_id', `eq.${payBatchId}`);
+      settlementOperationQuery.set('operation_type', 'eq.PAYMENT_SETTLEMENT');
+      settlementOperationQuery.set('select', 'id,operation_type,pay_batch_id,root_operation_id,input_json,status,phase,runner_state,progress_json,result_json,error_json,created_at_utc,updated_at_utc,completed_at_utc,failed_at_utc,run_after_utc');
+      settlementOperationQuery.set('limit', '50000');
+      const settlementOperationRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?${settlementOperationQuery.toString()}`, false);
+      const settlementOperationRows = settlementOperationRes && Array.isArray(settlementOperationRes.rows)
+        ? settlementOperationRes.rows.map((row) => isPlainObject(row) ? row : {}).filter((row) => uuidRe.test(trimStr(row.id)) && settlementOperationBoundToCurrentExecution(row))
+        : [];
+      const settlementOperationIdsForRoot = new Set(settlementOperationRows.map((row) => trimStr(row.id)));
+
+      const transferScopeQuery = new URLSearchParams();
+      transferScopeQuery.set('operation_id', `eq.${operationId}`);
+      transferScopeQuery.set('pay_batch_id', `eq.${payBatchId}`);
+      transferScopeQuery.set('select', 'id,pay_bank_transfer_id,provider_submit_attempt_count,provider_request_id,provider_transaction_id,provider_request_sent_at_utc');
+      transferScopeQuery.set('limit', '50000');
+      const transferScopeRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_transfer_scope?${transferScopeQuery.toString()}`, false);
+      const transferScopeRows = transferScopeRes && Array.isArray(transferScopeRes.rows) ? transferScopeRes.rows.map((row) => isPlainObject(row) ? row : {}) : [];
+
+      const providerAttemptQuery = new URLSearchParams();
+      providerAttemptQuery.set('pay_batch_id', `eq.${payBatchId}`);
+      providerAttemptQuery.set('select', 'id,operation_id,transfer_scope_id,provider_request_id,provider_transaction_id');
+      providerAttemptQuery.set('limit', '50000');
+      const providerAttemptRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_provider_attempts?${providerAttemptQuery.toString()}`, false);
+      const providerAttemptRows = providerAttemptRes && Array.isArray(providerAttemptRes.rows) ? providerAttemptRes.rows.map((row) => isPlainObject(row) ? row : {}) : [];
+
+      const transferEventQuery = new URLSearchParams();
+      transferEventQuery.set('pay_batch_id', `eq.${payBatchId}`);
+      transferEventQuery.set('select', 'id,pay_bank_transfer_id,provider_request_id,provider_transaction_id,event_source');
+      transferEventQuery.set('limit', '50000');
+      const transferEventRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfer_events?${transferEventQuery.toString()}`, false);
+      const transferEventRows = transferEventRes && Array.isArray(transferEventRes.rows) ? transferEventRes.rows.map((row) => isPlainObject(row) ? row : {}) : [];
 
       const statusText = (value) => upper(value || '');
       const successStates = new Set(['COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED', 'BANK_CONFIRMED', 'MANUAL_CONFIRM']);
@@ -26084,26 +26394,176 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         const source = isPlainObject(row) ? row : {};
         return ['SETTLED', 'PAID', 'CONFIRMED'].includes(statusText(source.settlement_status)) || !!source.settled_at_utc;
       };
-      const nonvoidItems = itemRows.filter((row) => row && row.is_voided !== true && upper(row.item_type) !== 'DEBT_CREATED');
+      const proof = resolveAuthoritativeProjectionProof([
+        safeObject(progressJson.pay_batch_auth_start).execution_intent_json,
+        progressJson.pay_batch_auth_start,
+        progressJson.no_bank_payment_proof,
+        progressJson,
+        inputJson.execution_intent_json,
+        inputJson
+      ]);
+      const expectedAuthRequestId = firstTextValue(proof.auth_request_id, progressJson.auth_request_id, safeObject(progressJson.pay_batch_auth_start).auth_request_id, inputJson.auth_request_id);
+      const expectedPayeHash = firstTextValue(proof.paye_net_state_hash, progressJson.paye_net_state_hash, inputJson.paye_net_state_hash);
+      const expectedProjectionHash = firstTextValue(proof.bank_payment_projection_hash, progressJson.bank_payment_projection_hash, inputJson.bank_payment_projection_hash);
+      const expectedScope = upper(firstTextValue(proof.pay_channel_scope, progressJson.pay_channel_scope, inputJson.pay_channel_scope, payChannelScope));
+      const expectedMode = normaliseExecutionMode(firstTextValue(proof.execution_mode, progressJson.execution_mode, inputJson.execution_mode, 'STANDARD_BANK'));
+      const itemById = new Map(itemRows.map((row) => [trimStr(row.id), row]));
+      const nonvoidItems = itemRows.filter((row) => row && row.is_voided !== true && statusText(row.item_type) !== 'DEBT_CREATED');
+      const noBankItemIds = new Set();
+      const relevantNoBankScopeRows = [];
+      const validSettledNoBankScopeRows = [];
+      const invalidNoBankScopeRows = [];
+      const pendingNoBankScopeRows = [];
+
+      for (const scopeRow of settlementScopeRows) {
+        const payload = isPlainObject(scopeRow.payload_json) ? scopeRow.payload_json : {};
+        const paymentScope = isPlainObject(payload.payment_scope_json) ? payload.payment_scope_json : {};
+        const declaresNoBank = statusText(payload.scope_kind) === 'NO_BANK_PAYMENT'
+          || readBooleanLike(payload.no_bank_payment_scope, false)
+          || statusText(paymentScope.scope_kind) === 'NO_BANK_PAYMENT';
+        if (!declaresNoBank) continue;
+        const scopeOperationId = trimStr(scopeRow.operation_id);
+        if (!settlementOperationIdsForRoot.has(scopeOperationId)) continue;
+        const boundExecutionOperationId = firstTextValue(payload.execution_operation_id, payload.executionOperationId);
+        const boundAuthRequestId = firstTextValue(payload.auth_request_id, payload.authRequestId);
+        relevantNoBankScopeRows.push(scopeRow);
+
+        const itemIds = toArray(payload.pay_batch_item_ids).map((value) => trimStr(value)).filter((value) => uuidRe.test(value));
+        const itemCoverageValid = itemIds.length > 0 && itemIds.every((itemId) => {
+          const item = itemById.get(itemId);
+          return !!item
+            && item.is_voided !== true
+            && statusText(item.item_type) !== 'DEBT_CREATED'
+            && !trimStr(item.pay_bank_transfer_id)
+            && (!scopeRow.pay_batch_candidate_id || trimStr(item.pay_batch_candidate_id) === trimStr(scopeRow.pay_batch_candidate_id));
+        });
+        const scopeBindingValid = boundExecutionOperationId === operationId
+          && uuidRe.test(expectedAuthRequestId)
+          && boundAuthRequestId === expectedAuthRequestId
+          && firstTextValue(payload.settlement_operation_id, payload.settlementOperationId) === scopeOperationId
+          && (!expectedPayeHash || firstTextValue(payload.paye_net_state_hash, payload.payeNetStateHash) === expectedPayeHash)
+          && (!expectedProjectionHash || firstTextValue(payload.bank_payment_projection_hash, payload.bankPaymentProjectionHash) === expectedProjectionHash)
+          && (!expectedScope || upper(firstTextValue(payload.projection_scope, payload.scope, scopeRow.pay_channel)) === expectedScope)
+          && (!expectedMode || normaliseExecutionMode(payload.authorised_execution_mode || payload.execution_mode) === expectedMode);
+        const noTransferEvidence = !trimStr(paymentScope.pay_bank_transfer_id)
+          && !trimStr(payload.pay_bank_transfer_id)
+          && !trimStr(scopeRow.settlement_event_id)
+          && itemCoverageValid;
+        const proofFieldsValid = statusText(scopeRow.pay_channel) === 'PAYE'
+          && statusText(payload.scope_kind) === 'NO_BANK_PAYMENT'
+          && statusText(payload.no_bank_payment_reason) === 'EXPLICIT_ZERO_PAYE'
+          && readBooleanLike(payload.no_bank_payment_scope, false)
+          && readBooleanLike(payload.server_owned_payment_projection_proof, false)
+          && readBooleanLike(payload.has_effective_paye_input, false)
+          && !!firstTextValue(payload.effective_paye_net_input_id)
+          && numberValue(payload.net_bank_amount, NaN) === 0
+          && numberValue(payload.total_amount, NaN) === 0;
+        const valid = scopeBindingValid && noTransferEvidence && proofFieldsValid;
+        const scopeStatus = statusText(scopeRow.status);
+        if (scopeStatus === 'SETTLED' && valid) {
+          validSettledNoBankScopeRows.push(scopeRow);
+          for (const itemId of itemIds) noBankItemIds.add(itemId);
+        } else if (['PENDING', 'WAITING', 'QUEUED', 'PROCESSING', ''].includes(scopeStatus)) {
+          pendingNoBankScopeRows.push(scopeRow);
+        } else if (scopeStatus !== 'SKIPPED' || !valid) {
+          invalidNoBankScopeRows.push(scopeRow);
+        }
+      }
+
       const terminalSuccessTransferCount = transferRows.filter(isSuccessTransfer).length;
       const terminalFailedTransferCount = transferRows.filter(isFailedTransfer).length;
       const pendingOrUnknownTransferCount = Math.max(0, transferRows.length - terminalSuccessTransferCount - terminalFailedTransferCount);
       const settledCandidateCount = candidateRows.filter(isSettledCandidate).length;
       const freshnessStatus = statusText(batchRow.freshness_validation_status);
       const freshnessClean = !freshnessStatus || ['PASSED', 'NOT_REQUIRED'].includes(freshnessStatus);
-      const itemLinkageClean = nonvoidItems.length <= 0 || nonvoidItems.every((row) => uuidRe.test(trimStr(row.pay_bank_transfer_id)));
-      const durableSettlementSuccess = statusText(batchRow.status) === 'SETTLED'
-        && statusText(batchRow.execution_commit_state) === 'COMMITTED'
-        && !!trimStr(batchRow.execution_commit_ref)
-        && !!trimStr(batchRow.completed_at_utc)
-        && transferRows.length > 0
-        && terminalSuccessTransferCount > 0
+      const linkedNonvoidItemCount = nonvoidItems.filter((row) => uuidRe.test(trimStr(row.pay_bank_transfer_id))).length;
+      const coveredNonvoidItemCount = nonvoidItems.filter((row) => uuidRe.test(trimStr(row.pay_bank_transfer_id)) || noBankItemIds.has(trimStr(row.id))).length;
+      const itemCoverageClean = nonvoidItems.length <= 0 || coveredNonvoidItemCount === nonvoidItems.length;
+      const allCandidatesSettled = candidateRows.length > 0 && settledCandidateCount === candidateRows.length;
+      const allTransfersSuccessful = transferRows.length > 0
+        && terminalSuccessTransferCount === transferRows.length
         && terminalFailedTransferCount === 0
-        && pendingOrUnknownTransferCount === 0
-        && candidateRows.length > 0
-        && settledCandidateCount === candidateRows.length
-        && freshnessClean
-        && itemLinkageClean;
+        && pendingOrUnknownTransferCount === 0;
+      const expectedNoBankScopeCount = numberValue(proof.scoped_explicit_zero_count, -1);
+      const noBankScopeSettlementOperationIds = new Set(validSettledNoBankScopeRows.map((row) => trimStr(row.operation_id)).filter((value) => uuidRe.test(value)));
+      const noBankScopeSettlementOperationId = noBankScopeSettlementOperationIds.size === 1 ? Array.from(noBankScopeSettlementOperationIds)[0] : null;
+      const noBankScopesClean = relevantNoBankScopeRows.length > 0
+        && validSettledNoBankScopeRows.length > 0
+        && pendingNoBankScopeRows.length === 0
+        && invalidNoBankScopeRows.length === 0
+        && expectedNoBankScopeCount >= 0
+        && validSettledNoBankScopeRows.length === expectedNoBankScopeCount
+        && noBankScopeSettlementOperationIds.size === 1;
+      const confirmation = isPlainObject(batchRow.settlement_confirmation_json) ? batchRow.settlement_confirmation_json : {};
+      const confirmationMode = normaliseExecutionMode(confirmation.settlement_mode || confirmation.execution_mode || expectedMode);
+      const confirmationFullFinalised = readBooleanLike(confirmation.full_batch_finalised, false);
+      const confirmationPayeHash = firstTextValue(confirmation.paye_net_state_hash, confirmation.current_paye_net_state_hash);
+      const confirmationProjectionHash = firstTextValue(confirmation.bank_payment_projection_hash, confirmation.current_bank_payment_projection_hash);
+      const confirmationExecutionOperationId = firstTextValue(confirmation.execution_operation_id, confirmation.executionOperationId);
+      const confirmationAuthRequestId = firstTextValue(confirmation.auth_request_id, confirmation.authRequestId);
+      const confirmationSettlementOperationId = firstTextValue(confirmation.settlement_operation_id, confirmation.settlementOperationId);
+      const confirmationZeroScopeCount = numberValue(confirmation.zero_scope_count, -1);
+      const confirmationPositiveTransferCount = numberValue(confirmation.positive_transfer_count, -1);
+      const confirmationBindingMatches = confirmationExecutionOperationId === operationId
+        && uuidRe.test(expectedAuthRequestId)
+        && confirmationAuthRequestId === expectedAuthRequestId
+        && !!noBankScopeSettlementOperationId
+        && confirmationSettlementOperationId === noBankScopeSettlementOperationId;
+      const confirmationProofMatches = confirmationBindingMatches
+        && confirmationZeroScopeCount === validSettledNoBankScopeRows.length
+        && upper(confirmation.no_bank_payment_reason) === 'EXPLICIT_ZERO_PAYE'
+        && (!expectedPayeHash || confirmationPayeHash === expectedPayeHash)
+        && (!expectedProjectionHash || confirmationProjectionHash === expectedProjectionHash)
+        && (!expectedScope || upper(firstTextValue(confirmation.projection_scope, confirmation.scope, expectedScope)) === expectedScope)
+        && (!expectedMode || confirmationMode === expectedMode);
+      const executionCommitRef = trimStr(batchRow.execution_commit_ref);
+      const batchCompletionBase = statusText(batchRow.status) === 'SETTLED'
+        && statusText(batchRow.execution_commit_state) === 'COMMITTED'
+        && !!executionCommitRef
+        && !!trimStr(batchRow.completed_at_utc)
+        && allCandidatesSettled
+        && itemCoverageClean;
+      const pureNoBank = proof.valid === true && proof.no_bank_payment_execution === true;
+      const mixed = proof.valid === true
+        && proof.no_bank_payment_execution !== true
+        && proof.allow_explicit_zero_no_bank_scopes === true
+        && numberValue(proof.scoped_explicit_zero_count, 0) > 0
+        && numberValue(proof.scoped_positive_bank_payment_count, 0) > 0;
+      const pureNoBankArtifactFree = transferRows.length === 0
+        && transferScopeRows.length === 0
+        && providerAttemptRows.length === 0
+        && transferEventRows.length === 0;
+      const pureNoBankConfirmationValid = confirmationFullFinalised
+        && readBooleanLike(confirmation.no_bank_payment_execution, false)
+        && confirmationPositiveTransferCount === 0
+        && readBooleanLike(confirmation.bank_upload_occurred ?? confirmation.bank_upload_performed, false) === false
+        && readBooleanLike(confirmation.bank_payment_occurred ?? confirmation.bank_payment_performed, false) === false
+        && readBooleanLike(confirmation.provider_submission_occurred ?? confirmation.provider_submission_performed, false) === false
+        && confirmationProofMatches
+        && executionCommitRef.startsWith('NO_BANK_PAYMENT:')
+        && (!firstTextValue(confirmation.local_commit_reference) || firstTextValue(confirmation.local_commit_reference) === executionCommitRef);
+      const mixedConfirmationValid = confirmationFullFinalised
+        && readBooleanLike(confirmation.contains_no_bank_payment_scopes, false)
+        && confirmationPositiveTransferCount === terminalSuccessTransferCount
+        && confirmationProofMatches
+        && !executionCommitRef.startsWith('NO_BANK_PAYMENT:');
+      const positiveSettlementSuccess = batchCompletionBase
+        && allTransfersSuccessful
+        && relevantNoBankScopeRows.length === 0;
+      const pureNoBankSettlementSuccess = batchCompletionBase
+        && pureNoBank
+        && noBankScopesClean
+        && pureNoBankArtifactFree
+        && pureNoBankConfirmationValid;
+      const mixedSettlementSuccess = batchCompletionBase
+        && mixed
+        && allTransfersSuccessful
+        && noBankScopesClean
+        && mixedConfirmationValid;
+      const durableSettlementSuccess = positiveSettlementSuccess || pureNoBankSettlementSuccess || mixedSettlementSuccess;
+      const settlementBranch = pureNoBankSettlementSuccess ? 'PURE_NO_BANK_PAYMENT'
+        : (mixedSettlementSuccess ? 'MIXED_TRANSFER_AND_NO_BANK_PAYMENT'
+          : (positiveSettlementSuccess ? 'TRANSFER_BACKED' : (pureNoBank ? 'PURE_NO_BANK_PAYMENT_INCOMPLETE' : (mixed ? 'MIXED_INCOMPLETE' : 'TRANSFER_BACKED_INCOMPLETE'))));
 
       return {
         ok: true,
@@ -26112,28 +26572,47 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         pay_batch_id: payBatchId,
         durable_settlement_success: durableSettlementSuccess,
         verified_clean_success: durableSettlementSuccess,
+        settlement_branch: settlementBranch,
         batch_already_settled: statusText(batchRow.status) === 'SETTLED',
         batch_status: batchRow.status || null,
         completed_at_utc: batchRow.completed_at_utc || null,
         execution_commit_state: batchRow.execution_commit_state || null,
-        execution_commit_ref: trimStr(batchRow.execution_commit_ref) || null,
+        execution_commit_ref: executionCommitRef || null,
         execution_committed_at_utc: batchRow.execution_committed_at_utc || null,
         freshness_validation_status: batchRow.freshness_validation_status || null,
         freshness_clean: freshnessClean,
+        freshness_is_diagnostic_only_after_settlement: true,
         transfer_count: transferRows.length,
         terminal_success_transfer_count: terminalSuccessTransferCount,
         completed_transfer_count: terminalSuccessTransferCount,
         terminal_failed_transfer_count: terminalFailedTransferCount,
         pending_or_unknown_transfer_count: pendingOrUnknownTransferCount,
+        transfer_scope_count: transferScopeRows.length,
+        provider_attempt_count: providerAttemptRows.length,
+        transfer_event_count: transferEventRows.length,
         candidate_count: candidateRows.length,
         settled_candidate_count: settledCandidateCount,
         unsettled_candidate_count: Math.max(0, candidateRows.length - settledCandidateCount),
         item_count: nonvoidItems.length,
-        linked_nonvoid_item_count: nonvoidItems.filter((row) => uuidRe.test(trimStr(row.pay_bank_transfer_id))).length,
-        item_transfer_linkage_clean: itemLinkageClean,
+        linked_nonvoid_item_count: linkedNonvoidItemCount,
+        no_bank_covered_item_count: noBankItemIds.size,
+        covered_nonvoid_item_count: coveredNonvoidItemCount,
+        item_transfer_linkage_clean: linkedNonvoidItemCount === nonvoidItems.length,
+        item_settlement_coverage_clean: itemCoverageClean,
+        no_bank_scope_count: relevantNoBankScopeRows.length,
+        expected_no_bank_scope_count: expectedNoBankScopeCount >= 0 ? expectedNoBankScopeCount : null,
+        settled_no_bank_scope_count: validSettledNoBankScopeRows.length,
+        no_bank_scope_settlement_operation_id: noBankScopeSettlementOperationId,
+        no_bank_scope_settlement_operation_count: noBankScopeSettlementOperationIds.size,
+        pending_no_bank_scope_count: pendingNoBankScopeRows.length,
+        invalid_no_bank_scope_count: invalidNoBankScopeRows.length,
+        no_bank_scope_evidence_clean: noBankScopesClean,
+        no_bank_money_movement_artifact_free: pureNoBankArtifactFree,
+        settlement_confirmation_present: Object.keys(confirmation).length > 0,
+        settlement_confirmation_full_batch_finalised: confirmationFullFinalised,
+        settlement_confirmation_proof_matches: confirmationProofMatches,
         completion_notice_queued_at_utc: batchRow.completion_notice_queued_at_utc || null,
-        completion_notice_reference: batchRow.completion_notice_reference || null,
-        settlement_confirmation_present: isPlainObject(batchRow.settlement_confirmation_json)
+        completion_notice_reference: batchRow.completion_notice_reference || null
       };
     } catch (error) {
       return Object.assign({}, empty, {
@@ -26146,6 +26625,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
 
   const settlementCompletedEvidenceIsSafe = (operationRowValue, durableTruth = null) => {
     const op = isPlainObject(operationRowValue) ? operationRowValue : {};
+    if (!settlementOperationBoundToCurrentExecution(op)) return false;
     if (upper(op.status) !== 'COMPLETE') return false;
     const progress = isPlainObject(op.progress_json) ? op.progress_json : (isPlainObject(op.progressJson) ? op.progressJson : {});
     const result = isPlainObject(op.result_json) ? op.result_json : (isPlainObject(op.resultJson) ? op.resultJson : {});
@@ -26156,11 +26636,14 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     const readiness = isPlainObject(progress.durable_settlement_scope_readiness)
       ? progress.durable_settlement_scope_readiness
       : (isPlainObject(result.durable_settlement_scope_readiness) ? result.durable_settlement_scope_readiness : {});
+    const failedScopeCount = numberValue(readiness.terminal_failed_scope_count, numberValue(verification.terminal_failed_scope_count, 0));
+    const processorFailedScopeCount = numberValue(readiness.processor_failed_scope_count, 0);
     const hasJsonEvidence = finalisation.completed === true
       && (verification.verified_clean_success === true || upper(verification.batch_status) === 'SETTLED')
       && upper(verification.execution_commit_state) === 'COMMITTED'
       && (readiness.all_scopes_successful === true || readiness.scope_settlement_complete === true || result.settlement_complete === true)
-      && numberValue(verification.terminal_failed_transfer_count, numberValue(readiness.terminal_failed_transfer_count, 0)) === 0;
+      && failedScopeCount === 0
+      && processorFailedScopeCount === 0;
     return hasJsonEvidence && durableTruth && durableTruth.verified_clean_success === true;
   };
 
@@ -26174,7 +26657,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       query.set('order', 'updated_at_utc.desc,created_at_utc.desc,id.desc');
       query.set('limit', '50');
       const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?${query.toString()}`, false);
-      return res && Array.isArray(res.rows) ? res.rows.map((row) => isPlainObject(row) ? row : {}).filter((row) => uuidRe.test(trimStr(row.id))) : [];
+      return res && Array.isArray(res.rows)
+        ? res.rows
+          .map((row) => isPlainObject(row) ? row : {})
+          .filter((row) => uuidRe.test(trimStr(row.id)) && settlementOperationBoundToCurrentExecution(row))
+        : [];
     } catch (error) {
       try { console.warn('[advanceBankingPayExecuteOperation] settlement operation lookup failed:', reason, error && error.message ? error.message : error); } catch {}
       return [];
@@ -26184,8 +26671,13 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   const resolveLocalSettlementStageGuard = async (reason = 'UNKNOWN') => {
     const durableTruth = await readDurableSettlementTruth(reason);
     const settlementOperations = await readSettlementOperationsForBatch(reason);
-    const activeStatuses = new Set(['QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_PROVIDER']);
-    const terminalProblemStatuses = new Set(['FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED']);
+    const activeStatuses = new Set([
+      'QUEUED', 'RUNNING', 'WAITING', 'RUNNABLE', 'CONTINUING', 'WAITING_RETRY',
+      'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'AWAITING_AUTHORISATION', 'AWAITING_AUTHORIZATION',
+      'WAITING_PROVIDER', 'WAITING_FOR_PROVIDER', 'AWAITING_PROVIDER',
+      'WAITING_USER', 'WAITING_USER_REVIEW'
+    ]);
+    const terminalProblemStatuses = new Set(['FAILED', 'ERROR', 'ERRORED', 'ABORTED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED']);
     const completedOperation = settlementOperations.find((row) => settlementCompletedEvidenceIsSafe(row, durableTruth))
       || (durableTruth.verified_clean_success === true ? settlementOperations.find((row) => upper(row.status) === 'COMPLETE') : null)
       || null;
@@ -26326,7 +26818,104 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         stage_guard: stageGuard
       };
     }
-    const idempotencyKey = `payment-settlement:batch:${payBatchId}:root:${operationId}:scope:${payChannelScope}:rail`;
+
+    const authStart = isPlainObject(progressJson.pay_batch_auth_start) ? progressJson.pay_batch_auth_start : {};
+    const authIntent = firstObjectValue(authStart.execution_intent_json, authStart.executionIntentJson);
+    const projectionProof = resolveAuthoritativeProjectionProof([
+      authIntent,
+      authStart,
+      progressJson.no_bank_payment_proof,
+      progressJson,
+      inputJson.execution_intent_json,
+      inputJson
+    ], { requireAuth: true });
+    if (projectionProof.valid !== true) {
+      return {
+        ok: false,
+        operation_id: null,
+        error: {
+          code: 'AUTHORISED_SETTLEMENT_PROJECTION_PROOF_REQUIRED',
+          message: 'The settlement child cannot start without the complete authorised server-owned payment projection proof.',
+          proof_validation: projectionProof
+        }
+      };
+    }
+    const executionMode = normaliseExecutionMode(projectionProof.execution_mode || inputJson.execution_mode || 'STANDARD_BANK');
+    if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) {
+      return {
+        ok: false,
+        operation_id: null,
+        error: {
+          code: 'AUTHORISED_SETTLEMENT_MODE_INVALID',
+          message: 'The authorised settlement mode is invalid.',
+          execution_mode: executionMode || null
+        }
+      };
+    }
+    const authRequestId = trimStr(projectionProof.auth_request_id);
+    if (!uuidRe.test(authRequestId)) {
+      return {
+        ok: false,
+        operation_id: null,
+        error: {
+          code: 'AUTHORISED_SETTLEMENT_AUTH_REQUEST_REQUIRED',
+          message: 'The settlement child cannot start without the authorised payment request id.'
+        }
+      };
+    }
+    const settlementMode = executionMode;
+    const pureNoBankCsv = executionMode === 'CSV_SETTLEMENT' && projectionProof.pure_no_bank_payment === true;
+    const confirmationMode = pureNoBankCsv
+      ? 'ZERO_ROW_REVIEW_NO_BANK_PAYMENT_REQUIRED'
+      : firstTextValue(projectionProof.manual_confirmation_mode, authIntent.manual_confirmation_mode, inputJson.manual_confirmation_mode);
+    const idempotencyKey = [
+      'payment-settlement',
+      `batch:${payBatchId}`,
+      `root:${operationId}`,
+      `auth:${authRequestId}`,
+      `mode:${settlementMode}`,
+      `scope:${projectionProof.pay_channel_scope || payChannelScope}`,
+      `projection:${projectionProof.bank_payment_projection_hash}`
+    ].join(':');
+    const frozenChildInput = jsonbStripNulls({
+      pay_batch_id: payBatchId,
+      root_operation_id: operationId,
+      execution_operation_id: operationId,
+      auth_request_id: authRequestId,
+      scope: projectionProof.pay_channel_scope || payChannelScope,
+      pay_channel_scope: projectionProof.pay_channel_scope || payChannelScope,
+      settlement_mode: settlementMode,
+      execution_mode: executionMode,
+      server_owned_payment_projection_proof: true,
+      no_bank_payment_execution: projectionProof.no_bank_payment_execution === true,
+      allow_explicit_zero_no_bank_scopes: projectionProof.allow_explicit_zero_no_bank_scopes === true,
+      missing_explicit_paye_input_count: projectionProof.missing_explicit_paye_input_count,
+      explicit_zero_count: projectionProof.explicit_zero_count,
+      scoped_explicit_zero_count: projectionProof.scoped_explicit_zero_count,
+      scoped_positive_bank_payment_count: projectionProof.scoped_positive_bank_payment_count,
+      scoped_positive_bank_payment_total: projectionProof.scoped_positive_bank_payment_total,
+      paye_net_state_hash: projectionProof.paye_net_state_hash,
+      bank_payment_projection_hash: projectionProof.bank_payment_projection_hash,
+      payment_date: projectionProof.payment_date || null,
+      schedule_kind: projectionProof.schedule_kind || scheduleKind,
+      scheduled_at_utc: projectionProof.scheduled_at_utc || null,
+      csv_uploaded_confirmed: projectionProof.csv_uploaded_confirmed === true,
+      csv_bank_confirm_ref: projectionProof.csv_bank_confirm_ref || null,
+      external_settlement_comment: projectionProof.external_settlement_comment || null,
+      manual_confirmation_mode: confirmationMode || null,
+      bank_csv_export_json: projectionProof.bank_csv_export_json || null,
+      suppress_remittances: projectionProof.suppress_remittances === true,
+      do_not_send_remittances: projectionProof.suppress_remittances === true,
+      no_bank_payment_proof: projectionProof.pure_no_bank_payment === true ? projectionProof : null,
+      source_operation_type: operationType,
+      source_phase: currentPhase,
+      source_rpc: 'advanceBankingPayExecuteOperation',
+      only_confirmed: true,
+      backend_runner_owned: true,
+      server_runnable: true,
+      frontend_completion_required: false,
+      submission_evidence: evidenceObject.evidence || null
+    });
     const start = await rpc('banking_pay_operation_start', {
       p_operation_type: 'PAYMENT_SETTLEMENT',
       p_actor_user_id: actorUserId,
@@ -26334,23 +26923,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       p_workbench_session_id: null,
       p_pay_batch_id: payBatchId,
       p_root_operation_id: operationId,
-      p_input_json: {
-        pay_batch_id: payBatchId,
-        root_operation_id: operationId,
-        scope: payChannelScope,
-        settlement_mode: 'RAIL_SETTLEMENT',
-        execution_mode: 'RAIL_SETTLEMENT',
-        source_operation_type: operationType,
-        source_phase: currentPhase,
-        source_rpc: 'advanceBankingPayExecuteOperation',
-        suppress_remittances: inputJson.suppress_remittances === true,
-        do_not_send_remittances: inputJson.do_not_send_remittances === true,
-        only_confirmed: true,
-        backend_runner_owned: true,
-        server_runnable: true,
-        frontend_completion_required: false,
-        submission_evidence: evidenceObject.evidence || null
-      },
+      p_input_json: frozenChildInput,
       p_config_json: {
         backend_runner_owned: true,
         server_runnable: true,
@@ -26380,7 +26953,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       start,
       is_existing: start.is_existing === true,
       status: start.status || null,
-      phase: start.phase || null
+      phase: start.phase || null,
+      settlement_mode: settlementMode,
+      execution_mode: executionMode,
+      auth_request_id: authRequestId,
+      projection_proof: projectionProof
     };
   };
 
@@ -26596,6 +27173,309 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       if (isPlainObject(value)) return value;
     }
     return {};
+  };
+
+  const nonNegativeIntegerOrNull = (...values) => {
+    for (const value of values) {
+      if (value === null || value === undefined || value === '') continue;
+      const number = Number(value);
+      if (Number.isFinite(number) && number >= 0) return Math.trunc(number);
+      return null;
+    }
+    return null;
+  };
+
+  const normaliseExecutionMode = (value) => {
+    const mode = upper(value);
+    if (['STANDARD_BANK', 'BANK', 'RAIL_SETTLEMENT', 'REVOLUT'].includes(mode)) return 'STANDARD_BANK';
+    if (['CSV', 'CSV_SETTLEMENT'].includes(mode)) return 'CSV_SETTLEMENT';
+    if (['EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT'].includes(mode)) return 'EXTERNAL_SETTLEMENT';
+    return mode;
+  };
+
+  const projectionProofCandidates = (sources) => {
+    const candidates = [];
+    const seen = new Set();
+    const add = (value) => {
+      if (!isPlainObject(value) || seen.has(value)) return;
+      seen.add(value);
+      candidates.push(value);
+      add(value.execution_intent_json);
+      add(value.executionIntentJson);
+      add(value.authorised_execution_intent_json);
+      add(value.authorisedExecutionIntentJson);
+      add(value.authorized_execution_intent_json);
+      add(value.authorizedExecutionIntentJson);
+      add(value.no_bank_payment_proof);
+      add(value.noBankPaymentProof);
+      add(value.payment_projection_proof);
+      add(value.paymentProjectionProof);
+      add(value.pay_batch_auth_start);
+      add(value.payBatchAuthStart);
+    };
+    for (const source of Array.isArray(sources) ? sources : []) add(source);
+    return candidates;
+  };
+
+  const resolveAuthoritativeProjectionProof = (sources, proofOptions = {}) => {
+    const requireAuth = proofOptions.requireAuth === true;
+    const requireNoBank = proofOptions.requireNoBank === true;
+    const allowDirectSeedResult = proofOptions.allowDirectSeedResult === true;
+    let firstRejected = null;
+
+    for (const source of projectionProofCandidates(sources)) {
+      const directSeedAuthority = allowDirectSeedResult
+        && source.ok === true
+        && source.no_transfer_scope === true
+        && upper(source.code) === 'NO_BANK_PAYMENT_EXECUTION_READY';
+      const proofSource = upper(source.proof_source || source.proofSource || source.payment_projection_proof_source || source.paymentProjectionProofSource);
+      const serverOwned = directSeedAuthority
+        || readBooleanLike(source.server_owned_payment_projection_proof ?? source.serverOwnedPaymentProjectionProof, false)
+        || ['PAY_EXECUTE_BANK_TRANSFER_SCOPE_SEED', 'PAY_BATCH_AUTH_START', 'HANDLEBANKINGPAYBATCHEXECUTEPAYMENT'].includes(proofSource);
+      const noBankPaymentExecution = readBooleanLike(source.no_bank_payment_execution ?? source.noBankPaymentExecution, false);
+      const allowExplicitZeroScopes = readBooleanLike(source.allow_explicit_zero_no_bank_scopes ?? source.allowExplicitZeroNoBankScopes, false);
+      const missingCount = nonNegativeIntegerOrNull(
+        source.missing_explicit_paye_input_count,
+        source.current_missing_explicit_paye_input_count,
+        source.authorised_missing_explicit_paye_input_count,
+        source.missingExplicitPayeInputCount
+      );
+      const scopedZeroCount = nonNegativeIntegerOrNull(
+        source.scoped_explicit_zero_count,
+        source.current_scoped_explicit_zero_count,
+        source.authorised_scoped_explicit_zero_count,
+        source.explicit_zero_count,
+        source.current_explicit_zero_count,
+        source.explicitZeroCount
+      );
+      const scopedPositiveCount = nonNegativeIntegerOrNull(
+        source.scoped_positive_bank_payment_count,
+        source.current_scoped_positive_bank_payment_count,
+        source.authorised_scoped_positive_bank_payment_count,
+        source.positive_bank_payment_count,
+        source.positiveBankPaymentCount
+      );
+      const globalZeroCount = nonNegativeIntegerOrNull(
+        source.explicit_zero_count,
+        source.current_explicit_zero_count,
+        source.authorised_explicit_zero_count,
+        scopedZeroCount
+      );
+      const positiveTotalRaw = Number(
+        source.scoped_positive_bank_payment_total
+        ?? source.current_scoped_positive_bank_payment_total
+        ?? source.positive_bank_payment_total
+        ?? source.positiveBankPaymentTotal
+        ?? 0
+      );
+      const positiveTotal = Number.isFinite(positiveTotalRaw) ? Number(positiveTotalRaw.toFixed(2)) : 0;
+      const payeNetStateHash = firstTextValue(
+        source.paye_net_state_hash,
+        source.current_paye_net_state_hash,
+        source.authorised_paye_net_state_hash,
+        source.payeNetStateHash
+      );
+      const bankPaymentProjectionHash = firstTextValue(
+        source.bank_payment_projection_hash,
+        source.current_bank_payment_projection_hash,
+        source.authorised_bank_payment_projection_hash,
+        source.bankPaymentProjectionHash
+      );
+      const proofScopeSource = firstTextValue(source.pay_channel_scope, source.payChannelScope, source.projection_scope, source.projectionScope, source.scope);
+      const proofScope = upper(proofScopeSource || payChannelScope);
+      const proofOperationId = firstTextValue(source.operation_id, source.operationId, source.execution_operation_id, source.executionOperationId);
+      const proofBatchId = firstTextValue(source.pay_batch_id, source.payBatchId);
+      const authRequestId = firstTextValue(source.auth_request_id, source.authRequestId, source.pay_batch_auth_request_id, source.payBatchAuthRequestId);
+      const authState = upper(source.auth_state || source.authState || source.state);
+      const executionMode = normaliseExecutionMode(source.execution_mode || source.executionMode || inputJson.execution_mode || inputJson.executionMode || 'STANDARD_BANK');
+      const scheduleKindValue = upper(source.schedule_kind || source.scheduleKind || inputJson.schedule_kind || inputJson.scheduleKind || scheduleKind || 'IMMEDIATE') || 'IMMEDIATE';
+      const scheduledAtUtc = firstTextValue(source.scheduled_at_utc, source.scheduledAtUtc, inputJson.scheduled_at_utc, inputJson.scheduledAtUtc);
+      const paymentDate = firstTextValue(source.payment_date, source.paymentDate, inputJson.payment_date, inputJson.paymentDate);
+      const suppressRemittances = readBooleanLike(source.suppress_remittances ?? source.suppressRemittances ?? inputJson.suppress_remittances ?? inputJson.suppressRemittances, false);
+      const nextRequiredPhase = upper(source.next_required_phase || source.nextRequiredPhase);
+      const explicitBindingRequired = serverOwned
+        || directSeedAuthority
+        || noBankPaymentExecution === true
+        || allowExplicitZeroScopes === true
+        || requireAuth === true
+        || requireNoBank === true;
+      const scopeValid = ['ALL', 'PAYE', 'UMBRELLA', 'LOANS'].includes(proofScope)
+        && proofScope === payChannelScope
+        && (explicitBindingRequired !== true || Boolean(proofScopeSource));
+      const operationBindingValid = explicitBindingRequired
+        ? proofOperationId === operationId
+        : (!proofOperationId || proofOperationId === operationId);
+      const batchBindingValid = explicitBindingRequired
+        ? proofBatchId === payBatchId
+        : (!proofBatchId || proofBatchId === payBatchId);
+      const countsPresent = missingCount !== null && scopedZeroCount !== null && scopedPositiveCount !== null;
+      const zeroMarkerConsistent = scopedZeroCount <= 0 || allowExplicitZeroScopes === true;
+      const noBankMarkerConsistent = noBankPaymentExecution !== true
+        || (allowExplicitZeroScopes === true && scopedZeroCount > 0 && scopedPositiveCount === 0);
+      const positiveOrZeroScopePresent = scopedZeroCount > 0 || scopedPositiveCount > 0;
+      const authValid = requireAuth !== true
+        || (uuidRe.test(authRequestId || '') && (!authState || ['AUTHORISED', 'AUTHORIZED'].includes(authState)));
+      const noBankValid = requireNoBank !== true
+        || (noBankPaymentExecution === true && allowExplicitZeroScopes === true && scopedZeroCount > 0 && scopedPositiveCount === 0);
+      const valid = serverOwned
+        && countsPresent
+        && missingCount === 0
+        && positiveOrZeroScopePresent
+        && zeroMarkerConsistent
+        && noBankMarkerConsistent
+        && !!payeNetStateHash
+        && !!bankPaymentProjectionHash
+        && scopeValid
+        && operationBindingValid
+        && batchBindingValid
+        && authValid
+        && noBankValid
+        && retryBlockedFunds !== true;
+
+      const proof = jsonbStripNulls({
+        valid,
+        direct_seed_authority: directSeedAuthority,
+        proof_source: proofSource || (directSeedAuthority ? 'PAY_EXECUTE_BANK_TRANSFER_SCOPE_SEED' : null),
+        server_owned_payment_projection_proof: serverOwned,
+        no_bank_payment_execution: noBankPaymentExecution,
+        allow_explicit_zero_no_bank_scopes: allowExplicitZeroScopes,
+        pure_no_bank_payment: noBankPaymentExecution === true && scopedPositiveCount === 0 && scopedZeroCount > 0,
+        contains_explicit_zero_no_bank_scopes: allowExplicitZeroScopes === true && scopedZeroCount > 0,
+        missing_explicit_paye_input_count: missingCount,
+        explicit_zero_count: globalZeroCount,
+        scoped_explicit_zero_count: scopedZeroCount,
+        scoped_positive_bank_payment_count: scopedPositiveCount,
+        scoped_positive_bank_payment_total: positiveTotal,
+        paye_net_state_hash: payeNetStateHash,
+        bank_payment_projection_hash: bankPaymentProjectionHash,
+        pay_channel_scope: proofScope,
+        operation_id: proofOperationId || operationId,
+        execution_operation_id: proofOperationId || operationId,
+        pay_batch_id: proofBatchId || payBatchId,
+        auth_request_id: authRequestId,
+        auth_state: authState || null,
+        execution_mode: executionMode || null,
+        schedule_kind: scheduleKindValue,
+        scheduled_at_utc: scheduledAtUtc,
+        payment_date: paymentDate,
+        suppress_remittances: suppressRemittances,
+        csv_uploaded_confirmed: readBooleanLike(source.csv_uploaded_confirmed ?? source.csvUploadedConfirmed, false),
+        csv_bank_confirm_ref: firstTextValue(source.csv_bank_confirm_ref, source.csvBankConfirmRef),
+        external_settlement_comment: firstTextValue(source.external_settlement_comment, source.externalSettlementComment),
+        manual_confirmation_mode: firstTextValue(source.manual_confirmation_mode, source.manualConfirmationMode),
+        bank_csv_export_json: isPlainObject(source.bank_csv_export_json) ? source.bank_csv_export_json : (isPlainObject(source.bankCsvExportJson) ? source.bankCsvExportJson : null),
+        next_required_phase: nextRequiredPhase || null
+      });
+
+      if (valid) return proof;
+      if (!firstRejected && (noBankPaymentExecution || allowExplicitZeroScopes || directSeedAuthority || serverOwned)) {
+        firstRejected = Object.assign({}, proof, {
+          valid: false,
+          rejection_reason: !serverOwned ? 'SERVER_OWNED_PROOF_REQUIRED'
+            : (!countsPresent ? 'PROJECTION_COUNTS_REQUIRED'
+              : (missingCount !== 0 ? 'MISSING_PAYE_INPUT_PRESENT'
+                : (!positiveOrZeroScopePresent ? 'PAYMENT_SCOPE_EMPTY'
+                  : (!zeroMarkerConsistent ? 'EXPLICIT_ZERO_MARKER_REQUIRED'
+                    : (!noBankMarkerConsistent ? 'NO_BANK_MARKER_INCONSISTENT'
+                      : (!payeNetStateHash || !bankPaymentProjectionHash ? 'PROJECTION_HASHES_REQUIRED'
+                        : (!scopeValid ? 'PROJECTION_SCOPE_MISMATCH'
+                          : (!operationBindingValid ? 'EXECUTION_OPERATION_MISMATCH'
+                            : (!batchBindingValid ? 'PAY_BATCH_MISMATCH'
+                              : (!authValid ? 'AUTHORISED_REQUEST_REQUIRED'
+                                : (!noBankValid ? 'PURE_NO_BANK_PROOF_REQUIRED'
+                                  : (retryBlockedFunds ? 'BLOCKED_FUNDS_RETRY_CANNOT_USE_NO_BANK_PATH' : 'PROJECTION_PROOF_INVALID'))))))))))))
+        });
+      }
+    }
+
+    return firstRejected || {
+      valid: false,
+      rejection_reason: 'AUTHORITATIVE_PAYMENT_PROJECTION_PROOF_MISSING',
+      no_bank_payment_execution: false,
+      allow_explicit_zero_no_bank_scopes: false
+    };
+  };
+
+  const projectionProofProgressPatch = (proofValue, extra = {}) => {
+    const proof = isPlainObject(proofValue) ? proofValue : {};
+    const durableProof = jsonbStripNulls({
+      proof_source: proof.proof_source || null,
+      server_owned_payment_projection_proof: proof.server_owned_payment_projection_proof === true,
+      no_bank_payment_execution: proof.no_bank_payment_execution === true,
+      allow_explicit_zero_no_bank_scopes: proof.allow_explicit_zero_no_bank_scopes === true,
+      missing_explicit_paye_input_count: proof.missing_explicit_paye_input_count,
+      explicit_zero_count: proof.explicit_zero_count,
+      scoped_explicit_zero_count: proof.scoped_explicit_zero_count,
+      scoped_positive_bank_payment_count: proof.scoped_positive_bank_payment_count,
+      scoped_positive_bank_payment_total: proof.scoped_positive_bank_payment_total,
+      paye_net_state_hash: proof.paye_net_state_hash || null,
+      bank_payment_projection_hash: proof.bank_payment_projection_hash || null,
+      pay_channel_scope: proof.pay_channel_scope || payChannelScope,
+      operation_id: proof.operation_id || operationId,
+      execution_operation_id: proof.execution_operation_id || operationId,
+      pay_batch_id: proof.pay_batch_id || payBatchId,
+      auth_request_id: proof.auth_request_id || null,
+      auth_state: proof.auth_state || null,
+      execution_mode: proof.execution_mode || null,
+      schedule_kind: proof.schedule_kind || null,
+      scheduled_at_utc: proof.scheduled_at_utc || null,
+      payment_date: proof.payment_date || null,
+      suppress_remittances: proof.suppress_remittances === true
+    });
+    return Object.assign({
+      server_owned_payment_projection_proof: durableProof.server_owned_payment_projection_proof === true,
+      no_transfer_scope: durableProof.no_bank_payment_execution === true,
+      no_bank_payment_execution: durableProof.no_bank_payment_execution === true,
+      allow_explicit_zero_no_bank_scopes: durableProof.allow_explicit_zero_no_bank_scopes === true,
+      missing_explicit_paye_input_count: durableProof.missing_explicit_paye_input_count,
+      explicit_zero_count: durableProof.explicit_zero_count,
+      scoped_explicit_zero_count: durableProof.scoped_explicit_zero_count,
+      scoped_positive_bank_payment_count: durableProof.scoped_positive_bank_payment_count,
+      scoped_positive_bank_payment_total: durableProof.scoped_positive_bank_payment_total,
+      paye_net_state_hash: durableProof.paye_net_state_hash,
+      bank_payment_projection_hash: durableProof.bank_payment_projection_hash,
+      pay_channel_scope: durableProof.pay_channel_scope,
+      auth_request_id: durableProof.auth_request_id,
+      execution_mode: durableProof.execution_mode,
+      payment_projection_proof: durableProof,
+      no_bank_payment_proof: (durableProof.no_bank_payment_execution === true || durableProof.allow_explicit_zero_no_bank_scopes === true) ? durableProof : null
+    }, isPlainObject(extra) ? extra : {});
+  };
+
+  const routeNoTransferSeedResult = async (seededValue, sourcePhase) => {
+    const seeded = isPlainObject(seededValue) ? seededValue : {};
+    if (seeded.no_transfer_scope !== true) return null;
+    const proof = resolveAuthoritativeProjectionProof([seeded], {
+      allowDirectSeedResult: true,
+      requireNoBank: true
+    });
+    if (proof.valid !== true) {
+      return reviewRequired(
+        sourcePhase || currentPhase,
+        seeded.code || 'NO_BANK_PAYMENT_PROOF_INVALID',
+        seeded.message || 'The no-transfer result did not contain a complete server-owned explicit-zero payment proof.',
+        { transfer_scope_seed: seeded, no_bank_payment_proof_validation: proof }
+      );
+    }
+    const nextRequiredPhase = canonicalExecutePhase(seeded.next_required_phase || proof.next_required_phase || 'START_AUTHORISATION_PROOF');
+    if (!['START_AUTHORISATION_PROOF', 'START_AUTHORISATION'].includes(nextRequiredPhase)) {
+      return reviewRequired(
+        sourcePhase || currentPhase,
+        'NO_BANK_PAYMENT_NEXT_PHASE_INVALID',
+        'The valid no-bank payment proof did not route to payment authorisation.',
+        { transfer_scope_seed: seeded, no_bank_payment_proof_validation: proof, next_required_phase: nextRequiredPhase }
+      );
+    }
+    return moreWork('START_AUTHORISATION_PROOF', Object.assign({
+      status_text: 'No bank transfer is required for the authorised explicit-zero scope. Payment authorisation is next.',
+      transfer_scope_seed: seeded,
+      transfer_scope_group_seed_complete: true,
+      transfer_scope_count: 0,
+      unseeded_transfer_scope_count: 0,
+      membership_seed_required: false,
+      provider_submission_suppressed_for_no_bank_payment: true,
+      next_required_phase: 'START_AUTHORISATION_PROOF'
+    }, projectionProofProgressPatch(proof)), 0, 'NO_BANK_PAYMENT_AUTHORISATION_REQUIRED');
   };
 
   const settlementRemittanceHandoffFrom = (settlementOperation) => {
@@ -27100,9 +27980,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
 
     if (['TRANSFER_SCOPE_SEED', 'SEED_TRANSFER_SCOPE', 'TRANSFER_GROUP_SEED_PAGE', 'PREPARE_TRANSFER_SCOPE'].includes(currentPhase)) {
       const seeded = await transferScopeSeedState();
-      if (seeded.ok === false || seeded.no_transfer_scope === true) {
+      if (seeded.ok === false) {
         return reviewRequired(currentPhase, seeded.code || 'NO_ELIGIBLE_TRANSFER_SCOPE', seeded.message || 'No eligible payable transfer scope was available for this operation.', { transfer_scope_seed: seeded });
       }
+      const noTransferSeedRoute = await routeNoTransferSeedResult(seeded, currentPhase);
+      if (noTransferSeedRoute) return noTransferSeedRoute;
       if (seeded.has_more_transfer_groups === true) {
         return moreWork('TRANSFER_SCOPE_SEED', {
           status_text: 'Seeded one transfer-group page.',
@@ -27135,9 +28017,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       let seedState = null;
       if (!uuidRe.test(transferScopeId)) {
         seedState = await transferScopeSeedState();
-        if (seedState.ok === false || seedState.no_transfer_scope === true) {
+        if (seedState.ok === false) {
           return reviewRequired(currentPhase, seedState.code || 'NO_ELIGIBLE_TRANSFER_SCOPE', seedState.message || 'No eligible payable transfer scope was available for this operation.', { transfer_scope_seed: seedState });
         }
+        const noTransferSeedRoute = await routeNoTransferSeedResult(seedState, currentPhase);
+        if (noTransferSeedRoute) return noTransferSeedRoute;
         if (seedState.has_more_transfer_groups === true) {
           return moreWork('TRANSFER_SCOPE_SEED', {
             status_text: 'Transfer-group seeding is not yet complete; continuing transfer-group seed before item membership seed.',
@@ -27201,9 +28085,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
 
     if (currentPhase === 'SEED_TRANSFER_ROLLUP_CHUNKS') {
       const seedState = await transferScopeSeedState();
-      if (seedState.ok === false || seedState.no_transfer_scope === true) {
+      if (seedState.ok === false) {
         return reviewRequired(currentPhase, seedState.code || 'NO_ELIGIBLE_TRANSFER_SCOPE', seedState.message || 'No eligible payable transfer scope was available for this operation.', { transfer_scope_seed: seedState });
       }
+      const noTransferSeedRoute = await routeNoTransferSeedResult(seedState, currentPhase);
+      if (noTransferSeedRoute) return noTransferSeedRoute;
       if (seedState.has_more_transfer_groups === true) {
         return moreWork('TRANSFER_SCOPE_SEED', {
           status_text: 'Transfer-group seeding is not yet complete; continuing transfer-group seed before rollup.',
@@ -27358,26 +28244,84 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         p_freshness_result_hash: progressJson.freshness_result_hash || inputJson.freshness_result_hash || null
       }, 'pay_batch_auth_start');
       if (auth.ok === false || auth.hard_blocker === true) return reviewRequired(currentPhase, auth.code || 'PAY_BATCH_AUTH_START_FAILED', auth.message || 'Payment authorisation failed.', { pay_batch_auth_start: auth });
-      if (auth.requires_user_action === true || upper(auth.status || auth.state || '') === 'WAITING_AUTHORISATION') {
-        return waitingAuthorisation({ status_text: 'Human authorisation is required before provider submission.', pay_batch_auth_start: auth });
+      const authState = upper(auth.auth_state || auth.status || auth.state || '');
+      const authNextRequiredPhase = upper(auth.next_required_phase || auth.nextRequiredPhase || '');
+      if (auth.requires_user_action === true || ['WAITING_AUTHORISATION', 'WAIT_FOR_AUTHORISATION', 'AWAITING', 'PENDING_AUTHORISATION'].includes(authState) || authNextRequiredPhase === 'WAIT_FOR_AUTHORISATION') {
+        return waitingAuthorisation({ status_text: 'Human authorisation is required before payment execution can continue.', pay_batch_auth_start: auth, next_required_phase: 'WAIT_FOR_AUTHORISATION' });
       }
-      const scheduledNoticeAuthRequestId = resolveAuthRequestIdForScheduledNotice(auth, inputJson, progressJson) || null;
-      if (scheduleKind === 'SCHEDULED') {
-        return moreWork('SCHEDULE_PAYMENT', {
-          status_text: 'Authorisation complete; scheduling is required.',
-          pay_batch_auth_start: auth,
+      const authProof = resolveAuthoritativeProjectionProof([
+        auth.execution_intent_json,
+        auth.executionIntentJson,
+        auth
+      ], { requireAuth: true });
+      if (authProof.valid !== true) {
+        return reviewRequired(currentPhase, 'AUTHORISED_PAYMENT_PROJECTION_PROOF_INVALID', 'The authorised payment result did not contain a complete server-owned payment projection proof.', { pay_batch_auth_start: auth, payment_projection_proof_validation: authProof });
+      }
+      if (!['SETTLEMENT', 'WAIT_FOR_SCHEDULE', 'SUBMIT_PROVIDER_TRANSFERS'].includes(authNextRequiredPhase)) {
+        return reviewRequired(currentPhase, 'AUTHORISED_NEXT_REQUIRED_PHASE_INVALID', 'The authorised payment result returned an unsupported next_required_phase.', { pay_batch_auth_start: auth, next_required_phase: authNextRequiredPhase });
+      }
+      const scheduledNoticeAuthRequestId = resolveAuthRequestIdForScheduledNotice(auth, inputJson, progressJson) || authProof.auth_request_id || null;
+      const proofPatch = projectionProofProgressPatch(authProof, {
+        pay_batch_auth_start: auth,
+        auth_request_id: scheduledNoticeAuthRequestId,
+        authorised_execution_intent_json: isPlainObject(auth.execution_intent_json) ? auth.execution_intent_json : null,
+        next_required_phase: authNextRequiredPhase
+      });
+      if (authNextRequiredPhase === 'WAIT_FOR_SCHEDULE') {
+        return moreWork('SCHEDULE_PAYMENT', Object.assign({
+          status_text: 'Authorisation complete; the scheduled execution time must be reached before the authorised route continues.',
           pay_batch_scheduled_notice_auth_request_id: scheduledNoticeAuthRequestId
-        });
+        }, proofPatch), 0, 'WAIT_FOR_SCHEDULE');
       }
       const scheduledNotice = await queueScheduledPaymentNoticeBestEffort(auth, inputJson, progressJson);
-      return moreWork('SUBMIT_PROVIDER_TRANSFERS', {
+      if (authNextRequiredPhase === 'SETTLEMENT') {
+        return moreWork('START_LOCAL_SETTLEMENT', Object.assign({
+          status_text: authProof.pure_no_bank_payment === true
+            ? 'Authorisation complete; no bank transfer is required and local settlement is next.'
+            : 'Authorisation complete; the authorised manual settlement route is next.',
+          pay_batch_scheduled_notice: scheduledNotice,
+          local_settlement_required: true
+        }, proofPatch), 0, 'AUTHORISED_SETTLEMENT_REQUIRED');
+      }
+      return moreWork('SUBMIT_PROVIDER_TRANSFERS', Object.assign({
         status_text: 'Authorisation complete; ready to claim one provider chunk.',
-        pay_batch_auth_start: auth,
         pay_batch_scheduled_notice: scheduledNotice
-      });
+      }, proofPatch), 0, 'SUBMIT_PROVIDER_TRANSFERS');
     }
 
     if (currentPhase === 'SCHEDULE_PAYMENT') {
+      const scheduledNoBankProof = resolveAuthoritativeProjectionProof([
+        safeObject(progressJson.pay_batch_auth_start).execution_intent_json,
+        progressJson.pay_batch_auth_start,
+        progressJson.no_bank_payment_proof,
+        progressJson
+      ], { requireAuth: true, requireNoBank: true });
+      if (scheduledNoBankProof.valid === true) {
+        const scheduledAtUtc = firstTextValue(scheduledNoBankProof.scheduled_at_utc, inputJson.scheduled_at_utc, inputJson.scheduledAtUtc);
+        const scheduledTimeMs = scheduledAtUtc ? Date.parse(scheduledAtUtc) : NaN;
+        if (!scheduledAtUtc || !Number.isFinite(scheduledTimeMs)) {
+          return reviewRequired(currentPhase, 'SCHEDULED_NO_BANK_PAYMENT_TIME_REQUIRED', 'The authorised scheduled no-bank payment route has no valid scheduled execution time.', { no_bank_payment_proof: scheduledNoBankProof });
+        }
+        const scheduledNotice = await queueScheduledPaymentNoticeBestEffort(progressJson.pay_batch_auth_start, progressJson, inputJson);
+        if (scheduledTimeMs > Date.now() + 1000) {
+          const delaySeconds = Math.max(1, Math.min(86400, Math.ceil((scheduledTimeMs - Date.now()) / 1000)));
+          return moreWork('SCHEDULE_PAYMENT', Object.assign({
+            status_text: 'The authorised no-bank payment execution is waiting for its scheduled time.',
+            pay_batch_scheduled_notice: scheduledNotice,
+            scheduled_wait_until_utc: new Date(scheduledTimeMs).toISOString(),
+            scheduled_no_bank_payment_wait: true,
+            next_required_phase: 'WAIT_FOR_SCHEDULE'
+          }, projectionProofProgressPatch(scheduledNoBankProof)), delaySeconds, 'WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT');
+        }
+        return moreWork('START_LOCAL_SETTLEMENT', Object.assign({
+          status_text: 'The scheduled no-bank payment execution is due; local settlement is next without provider submission.',
+          pay_batch_scheduled_notice: scheduledNotice,
+          scheduled_no_bank_payment_due: true,
+          local_settlement_required: true,
+          next_required_phase: 'START_LOCAL_SETTLEMENT'
+        }, projectionProofProgressPatch(scheduledNoBankProof)), 0, 'SCHEDULED_NO_BANK_PAYMENT_DUE');
+      }
+
       const scheduled = await rpc('pay_batch_schedule', {
         p_pay_batch_id: payBatchId,
         p_schedule_kind: scheduleKind,
@@ -27595,10 +28539,68 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     }
 
     if (currentPhase === 'START_LOCAL_SETTLEMENT') {
-      const submissionEvidence = await readSubmissionEvidence();
-      if (submissionEvidence.unknownOrReviewCount > 0) return routeAfterRailEvidence(submissionEvidence, { settlement_start_recheck: true });
-      if (submissionEvidence.pendingNonFinalCount > 0 || submissionEvidence.materialisedTransferCount <= 0) return routeAfterRailEvidence(submissionEvidence, { settlement_start_recheck: true });
-      if (submissionEvidence.finalMoneyMovedCount <= 0) return routeAfterRailEvidence(submissionEvidence, { settlement_start_recheck: true });
+      const localSettlementProof = resolveAuthoritativeProjectionProof([
+        safeObject(progressJson.pay_batch_auth_start).execution_intent_json,
+        progressJson.pay_batch_auth_start,
+        progressJson.no_bank_payment_proof,
+        progressJson,
+        inputJson.execution_intent_json,
+        inputJson
+      ], { requireAuth: true });
+      const authorisedLocalSettlementMode = normaliseExecutionMode(localSettlementProof.execution_mode || inputJson.execution_mode || 'STANDARD_BANK');
+      const pureNoBankLocalSettlement = localSettlementProof.valid === true && localSettlementProof.pure_no_bank_payment === true;
+      const manualLocalSettlement = localSettlementProof.valid === true && ['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(authorisedLocalSettlementMode);
+      let submissionEvidence;
+      if (pureNoBankLocalSettlement) {
+        const noBankArtifactEvidence = await readProviderDispatchEvidence({ reason: 'NO_BANK_LOCAL_SETTLEMENT_PRECHECK' });
+        if (noBankArtifactEvidence.evidence_read_ok !== true) {
+          return reviewRequired(currentPhase, 'NO_BANK_PAYMENT_ARTIFACT_EVIDENCE_READ_FAILED', 'CloudTMS could not prove that the authorised no-bank route is free of transfer and provider artefacts.', { no_bank_payment_proof: localSettlementProof, provider_dispatch_evidence: noBankArtifactEvidence });
+        }
+        const forbiddenArtifactCount = numberValue(noBankArtifactEvidence.transfer_scope_count, 0)
+          + numberValue(noBankArtifactEvidence.materialised_transfer_count, 0)
+          + numberValue(noBankArtifactEvidence.provider_submit_attempt_count, 0)
+          + numberValue(noBankArtifactEvidence.provider_attempt_row_count, 0)
+          + numberValue(noBankArtifactEvidence.transfer_event_count, 0);
+        if (noBankArtifactEvidence.provider_call_started === true || forbiddenArtifactCount > 0) {
+          return reviewRequired(currentPhase, 'NO_BANK_PAYMENT_FORBIDDEN_TRANSFER_OR_PROVIDER_EVIDENCE', 'The authorised no-bank payment route contains transfer or provider evidence and cannot be settled as an explicit-zero execution.', { no_bank_payment_proof: localSettlementProof, provider_dispatch_evidence: noBankArtifactEvidence });
+        }
+        submissionEvidence = {
+          ok: true,
+          finalMoneyMovedCount: 0,
+          terminalNoMoneyCount: 0,
+          pendingNonFinalCount: 0,
+          unknownOrReviewCount: 0,
+          materialisedTransferCount: 0,
+          evidence: {
+            no_bank_payment_execution: true,
+            no_bank_payment_proof: localSettlementProof,
+            provider_dispatch_evidence: noBankArtifactEvidence,
+            money_movement_required: false
+          }
+        };
+      } else if (manualLocalSettlement) {
+        submissionEvidence = {
+          ok: true,
+          finalMoneyMovedCount: 0,
+          terminalNoMoneyCount: 0,
+          pendingNonFinalCount: 0,
+          unknownOrReviewCount: 0,
+          materialisedTransferCount: 0,
+          evidence: {
+            authorised_manual_settlement: true,
+            settlement_mode: authorisedLocalSettlementMode,
+            provider_submission_required: false,
+            provider_submission_attempted: false,
+            money_movement_confirmation_deferred_to_settlement_rpc: true,
+            payment_projection_proof: localSettlementProof
+          }
+        };
+      } else {
+        submissionEvidence = await readSubmissionEvidence();
+        if (submissionEvidence.unknownOrReviewCount > 0) return routeAfterRailEvidence(submissionEvidence, { settlement_start_recheck: true });
+        if (submissionEvidence.pendingNonFinalCount > 0 || submissionEvidence.materialisedTransferCount <= 0) return routeAfterRailEvidence(submissionEvidence, { settlement_start_recheck: true });
+        if (submissionEvidence.finalMoneyMovedCount <= 0) return routeAfterRailEvidence(submissionEvidence, { settlement_start_recheck: true });
+      }
 
       const stageGuard = await resolveLocalSettlementStageGuard('START_LOCAL_SETTLEMENT');
       if (stageGuard.local_settlement_complete === true) {
@@ -27704,10 +28706,16 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         }, 0, 'LOCAL_SETTLEMENT_ALREADY_COMPLETE_QUEUE_REMITTANCES');
       }
 
-      let settlementOperationId = trimStr(progressJson.settlement_operation_id || progressJson.active_child_operation_id || progressJson.child_operation_id);
-      if (!uuidRe.test(settlementOperationId) && uuidRe.test(waitStageGuard.active_settlement_operation_id || '')) {
-        settlementOperationId = waitStageGuard.active_settlement_operation_id;
+      const recordedSettlementOperationId = trimStr(progressJson.settlement_operation_id || progressJson.active_child_operation_id || progressJson.child_operation_id);
+      let recordedSettlementOperation = {};
+      let recordedSettlementOperationBound = false;
+      if (uuidRe.test(recordedSettlementOperationId)) {
+        recordedSettlementOperation = await fetchOperationRawById(recordedSettlementOperationId);
+        recordedSettlementOperationBound = settlementOperationBoundToCurrentExecution(recordedSettlementOperation);
       }
+      let settlementOperationId = uuidRe.test(waitStageGuard.active_settlement_operation_id || '')
+        ? waitStageGuard.active_settlement_operation_id
+        : (recordedSettlementOperationBound ? recordedSettlementOperationId : '');
       if (!uuidRe.test(settlementOperationId)) {
         const submissionEvidence = await readSubmissionEvidence();
         const settlementStart = await startLocalSettlementOperation(submissionEvidence);
@@ -27846,6 +28854,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         settlement_phase: settlementPhase || null,
         settlement_operation: compactSettlementAdvanceForProgress(settlementAdvance),
         settlement_stage_guard: waitStageGuard,
+        ignored_unbound_settlement_operation_id: uuidRe.test(recordedSettlementOperationId) && recordedSettlementOperationBound !== true ? recordedSettlementOperationId : null,
         local_settlement_required: true,
         next_required_phase: 'WAIT_LOCAL_SETTLEMENT'
       }, 15, 'WAIT_LOCAL_SETTLEMENT');
@@ -27866,13 +28875,17 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       const priorSettlementRawOperation = progressJson.local_settlement_complete === true && uuidRe.test(priorSettlementOperationId)
         ? await fetchOperationRawById(priorSettlementOperationId)
         : {};
-      const priorSettlementRemittanceHandoff = progressJson.local_settlement_complete === true
+      const priorSettlementOperationBound = settlementOperationBoundToCurrentExecution(priorSettlementRawOperation);
+      const priorSettlementRemittanceHandoff = progressJson.local_settlement_complete === true && priorSettlementOperationBound
         ? settlementRemittanceHandoffFrom(Object.assign({}, isPlainObject(priorSettlementOperation) ? priorSettlementOperation : {}, {
           raw_operation: priorSettlementRawOperation,
           raw_progress_json: isPlainObject(priorSettlementRawOperation.progress_json) ? priorSettlementRawOperation.progress_json : null,
           raw_result_json: isPlainObject(priorSettlementRawOperation.result_json) ? priorSettlementRawOperation.result_json : null
         }))
-        : { handled: false };
+        : {
+          handled: false,
+          ignored_unbound_settlement_operation_id: uuidRe.test(priorSettlementOperationId) && priorSettlementOperationBound !== true ? priorSettlementOperationId : null
+        };
       if (priorSettlementRemittanceHandoff.unsafe_remittance_status === true) {
         return reviewRequired(
           'QUEUE_REMITTANCES',
@@ -27893,7 +28906,15 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
           remittance_handoff_already_handled_by_settlement: true
         }, 0, 'LOCAL_SETTLEMENT_AND_REMITTANCE_HANDOFF_COMPLETE');
       }
-      if (isScheduledFutureExecution() !== true) {
+      const queueProjectionProof = resolveAuthoritativeProjectionProof([
+        safeObject(progressJson.pay_batch_auth_start).execution_intent_json,
+        progressJson.pay_batch_auth_start,
+        progressJson.no_bank_payment_proof,
+        progressJson,
+        inputJson.execution_intent_json,
+        inputJson
+      ]);
+      if (queueProjectionProof.pure_no_bank_payment !== true && isScheduledFutureExecution() !== true) {
         const queueSubmissionEvidence = await readSubmissionEvidence();
         if (queueSubmissionEvidence.finalMoneyMovedCount > 0 && queueSubmissionEvidence.pendingNonFinalCount <= 0 && queueSubmissionEvidence.unknownOrReviewCount <= 0 && progressJson.local_settlement_complete !== true) {
           return moreWork('START_LOCAL_SETTLEMENT', {
@@ -28285,6 +29306,9 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     });
   }
 }
+
+
+
 
 
 
@@ -30866,10 +31890,15 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
 }
 
 
+
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, ctx) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const truthy = (value) => {
+    if (value === true) return true;
+    return ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  };
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const jsonHeaders = typeof JSON_HEADERS !== 'undefined' ? JSON_HEADERS : { 'Content-Type': 'application/json; charset=utf-8' };
   const response = (status, payload) => {
@@ -30880,10 +31909,15 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
   const parseDate = (value) => {
     const raw = trimStr(value);
     if (!raw) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-    const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-    return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const date = new Date(`${raw}T00:00:00.000Z`);
+      return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === raw ? raw : null;
+    }
+    const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) return null;
+    const normalized = `${match[3]}-${match[2]}-${match[1]}`;
+    const date = new Date(`${normalized}T00:00:00.000Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === normalized ? normalized : null;
   };
   const stableStringify = (value) => {
     const seen = new WeakSet();
@@ -30908,40 +31942,58 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
     try {
       if (globalThis.crypto && globalThis.crypto.subtle) {
         const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-        return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
       }
     } catch {}
-    let h = 0;
-    for (let i = 0; i < text.length; i += 1) h = Math.imul(31, h) + text.charCodeAt(i) | 0;
-    return `fallback-${Math.abs(h)}`;
+    let hash = 0;
+    for (let index = 0; index < text.length; index += 1) hash = Math.imul(31, hash) + text.charCodeAt(index) | 0;
+    return `fallback-${Math.abs(hash)}`;
   };
-
-  const resolveOperationIdForImmediateDrain = (operationPayload) => {
-    const payload = isPlainObject(operationPayload) ? operationPayload : {};
-    const nestedOperation = isPlainObject(payload.operation) ? payload.operation : {};
-    const nestedRawOperation = isPlainObject(payload.raw_operation) ? payload.raw_operation : {};
-    const idValue = trimStr(payload.operation_id || payload.operationId || payload.id || nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id || nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id);
-    return uuidRe.test(idValue) ? idValue : null;
-  };
-  const scheduleExecutePaymentDrainBestEffort = (operationPayload, fallbackOperationType) => {
+  const unwrapRowsRpc = (rpcRes, key) => {
+    let payload = rpcRes;
     try {
-      if (typeof scheduleBankingPayOperationDrain !== 'function') return null;
-      const operationId = resolveOperationIdForImmediateDrain(operationPayload);
-      if (!operationId) return null;
-      const payload = isPlainObject(operationPayload) ? operationPayload : {};
-      const operationType = upperTrim(payload.operation_type || payload.operationType || fallbackOperationType || (retryBlockedFunds ? 'PAYMENT_RETRY_BLOCKED_FUNDS' : 'PAYMENT_EXECUTE')) || (retryBlockedFunds ? 'PAYMENT_RETRY_BLOCKED_FUNDS' : 'PAYMENT_EXECUTE');
-      if (!['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)) return null;
-      return scheduleBankingPayOperationDrain(env, ctx, {
-        operationId,
-        operationType,
-        payBatchId: id,
-        actorUserId,
-        source: 'handleBankingPayBatchExecutePayment'
-      });
-    } catch (error) {
-      try { console.warn('[handleBankingPayBatchExecutePayment] immediate drain schedule failed:', error && error.message ? error.message : error); } catch {}
-      return null;
-    }
+      if (isPlainObject(payload) && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (isPlainObject(payload) && Array.isArray(payload.rows)) payload = payload.rows;
+      if (isPlainObject(payload) && Array.isArray(payload.data)) payload = payload.data;
+    } catch {}
+    return Array.isArray(payload) ? payload.filter((row) => isPlainObject(row)) : [];
+  };
+  const unwrapObjectRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+      if (isPlainObject(payload) && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+    } catch {}
+    return isPlainObject(payload) ? payload : {};
+  };
+  const nonNegativeInteger = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? Math.trunc(number) : null;
+  };
+  const roundMoney = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Number(number.toFixed(2)) : 0;
+  };
+  const sanitizeWarningHoursJson = (value) => {
+    if (value === null || value === undefined) return null;
+    if (!Array.isArray(value) || value.length > 100) throw Object.assign(new Error('warning_hours_json must be a bounded array.'), { error_code: 'INVALID_WARNING_HOURS_JSON' });
+    return value.map((entry) => {
+      if (!isPlainObject(entry)) throw Object.assign(new Error('warning_hours_json entries must be objects.'), { error_code: 'INVALID_WARNING_HOURS_JSON' });
+      const output = {};
+      const keys = Object.keys(entry);
+      if (keys.length > 25) throw Object.assign(new Error('warning_hours_json entry contains too many fields.'), { error_code: 'INVALID_WARNING_HOURS_JSON' });
+      for (const key of keys) {
+        const field = trimStr(key);
+        const fieldValue = entry[key];
+        if (!field || field.length > 100 || (fieldValue !== null && !['string', 'number', 'boolean'].includes(typeof fieldValue))) {
+          throw Object.assign(new Error('warning_hours_json contains an unsupported value.'), { error_code: 'INVALID_WARNING_HOURS_JSON' });
+        }
+        output[field] = typeof fieldValue === 'string' ? fieldValue.slice(0, 1000) : fieldValue;
+      }
+      return output;
+    });
   };
 
   const id = trimStr(payBatchId);
@@ -30955,67 +32007,306 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
   } catch {
     body = {};
   }
-  if (body == null) body = {};
   if (!isPlainObject(body)) return fail(400, 'BANKING_EXECUTE_PAYMENT_INVALID_BODY', 'Invalid execution request.');
 
-  const payChannelScope = ['ALL', 'PAYE', 'UMBRELLA', 'LOANS'].includes(upperTrim(body.pay_channel_scope || body.payChannelScope || body.scope || 'ALL'))
-    ? upperTrim(body.pay_channel_scope || body.payChannelScope || body.scope || 'ALL')
-    : 'ALL';
+  const requestedScope = upperTrim(body.pay_channel_scope || body.payChannelScope || body.scope || 'ALL') || 'ALL';
+  if (!['ALL', 'PAYE', 'UMBRELLA', 'LOANS'].includes(requestedScope)) return fail(400, 'INVALID_PAYMENT_SCOPE', 'Payment scope must be ALL, PAYE, UMBRELLA or LOANS.');
   const executionMode = upperTrim(body.execution_mode || body.executionMode || 'STANDARD_BANK') || 'STANDARD_BANK';
+  if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) return fail(400, 'INVALID_EXECUTION_MODE', 'execution_mode must be STANDARD_BANK, CSV_SETTLEMENT or EXTERNAL_SETTLEMENT.');
+  if (requestedScope === 'LOANS' && executionMode !== 'STANDARD_BANK') return fail(400, 'MANUAL_SETTLEMENT_SCOPE_UNSUPPORTED', 'CSV and external settlement support ALL, PAYE or UMBRELLA scope only.');
   const scheduleKind = upperTrim(body.schedule_kind || body.scheduleKind || (body.scheduled_at_utc || body.scheduledAtUtc ? 'SCHEDULED' : 'IMMEDIATE')) || 'IMMEDIATE';
-  const scheduledAtUtc = trimStr(body.scheduled_at_utc || body.scheduledAtUtc) || null;
-  const paymentDate = parseDate(body.payment_date || body.paymentDate || body.pay_date || body.payDate) || null;
-  const retryBlockedFunds = body.retry_blocked_funds === true || body.retryBlockedFunds === true;
-  const suppressRemittances = body.suppress_remittances === true || body.suppressRemittances === true || body.do_not_send_remittances === true || body.doNotSendRemittances === true;
-  const suppressRemittancesConfirmed = body.suppress_remittances_confirmed === true || body.suppressRemittancesConfirmed === true;
-  const fundingAccountRef = trimStr(body.funding_account_ref || body.fundingAccountRef) || null;
-  const railProvider = upperTrim(body.rail_provider_snapshot || body.railProviderSnapshot || body.rail_provider || body.railProvider || 'REVOLUT') || 'REVOLUT';
-  const railEnv = upperTrim(body.rail_env_snapshot || body.railEnvSnapshot || body.rail_env || body.railEnv || body.provider_environment || body.providerEnvironment || 'PROD') || 'PROD';
+  if (!['IMMEDIATE', 'SCHEDULED'].includes(scheduleKind)) return fail(400, 'INVALID_SCHEDULE_KIND', 'schedule_kind must be IMMEDIATE or SCHEDULED.');
+  if (executionMode !== 'STANDARD_BANK' && scheduleKind !== 'IMMEDIATE') return fail(400, 'MANUAL_SETTLEMENT_MUST_BE_IMMEDIATE', 'CSV and external settlement must use an immediate settlement schedule.');
 
-  if (scheduleKind === 'SCHEDULED' && !scheduledAtUtc) {
-    return fail(400, 'BANKING_EXECUTE_PAYMENT_SCHEDULE_TIME_REQUIRED', 'Choose a scheduled payment time before starting execution.', { pay_batch_id: id });
+  const scheduledAtRaw = trimStr(body.scheduled_at_utc || body.scheduledAtUtc);
+  let scheduledAtUtc = null;
+  if (scheduleKind === 'SCHEDULED') {
+    const scheduledMs = Date.parse(scheduledAtRaw);
+    if (!scheduledAtRaw || !Number.isFinite(scheduledMs)) return fail(400, 'BANKING_EXECUTE_PAYMENT_SCHEDULE_TIME_REQUIRED', 'Choose a valid scheduled payment time before starting execution.', { pay_batch_id: id });
+    scheduledAtUtc = new Date(scheduledMs).toISOString();
+  } else if (scheduledAtRaw) {
+    const immediateMs = Date.parse(scheduledAtRaw);
+    if (!Number.isFinite(immediateMs)) return fail(400, 'INVALID_SCHEDULE_TIME', 'scheduled_at_utc is invalid.');
   }
 
-  const idempotencyHash = await sha256Hex(stableStringify({
-    actor_user_id: actorUserId,
-    pay_batch_id: id,
-    pay_channel_scope: payChannelScope,
-    execution_mode: executionMode,
-    payment_date: paymentDate,
-    schedule_kind: scheduleKind,
-    scheduled_at_utc: scheduledAtUtc,
-    funding_account_ref: fundingAccountRef,
-    retry_blocked_funds: retryBlockedFunds,
-    suppress_remittances: suppressRemittances,
-    suppress_remittances_confirmed: suppressRemittancesConfirmed,
-    rail_provider: railProvider,
-    rail_env: railEnv
-  }));
+  const suppliedPaymentDateRaw = trimStr(body.payment_date || body.paymentDate || body.pay_date || body.payDate);
+  const suppliedPaymentDate = parseDate(suppliedPaymentDateRaw);
+  if (suppliedPaymentDateRaw && !suppliedPaymentDate) return fail(400, 'INVALID_PAYMENT_DATE', 'Choose a valid payment date.');
+
+  const retryBlockedFunds = body.retry_blocked_funds === true || body.retryBlockedFunds === true;
+  if (retryBlockedFunds && executionMode !== 'STANDARD_BANK') return fail(400, 'BLOCKED_FUNDS_RETRY_MODE_INVALID', 'Blocked-funds retry must use STANDARD_BANK.');
+  const suppressRemittances = body.suppress_remittances === true || body.suppressRemittances === true || body.do_not_send_remittances === true || body.doNotSendRemittances === true;
+  const suppressRemittancesConfirmed = body.suppress_remittances_confirmed === true || body.suppressRemittancesConfirmed === true;
+  if (suppressRemittances && !suppressRemittancesConfirmed) return fail(400, 'SUPPRESS_REMITTANCES_CONFIRMATION_REQUIRED', 'Confirm the suppress-remittances choice before starting execution.');
+  const fundingAccountRef = trimStr(body.funding_account_ref || body.fundingAccountRef) || null;
+  let warningHoursJson = null;
+  try {
+    warningHoursJson = sanitizeWarningHoursJson(body.warning_hours_json ?? body.warningHoursJson ?? null);
+  } catch (error) {
+    return fail(400, upperTrim(error?.error_code || error?.code) || 'INVALID_WARNING_HOURS_JSON', String(error?.message || 'warning_hours_json is invalid.'));
+  }
+  const actorIntentRaw = upperTrim(body.actor_intent || body.actorIntent);
+  const actorIntent = actorIntentRaw === 'USE_GOLDEN_KEY' ? 'USE_GOLDEN_KEY' : null;
+  const csvUploadedConfirmed = body.csv_uploaded_confirmed === true || body.csvUploadedConfirmed === true;
+  const csvBankConfirmRef = trimStr(body.csv_bank_confirm_ref || body.csvBankConfirmRef) || null;
+  const externalSettlementComment = trimStr(body.external_settlement_comment || body.externalSettlementComment) || null;
+  const reauthToken = trimStr(body.reauth_token || body.reauthToken);
+  if (!reauthToken) return fail(401, 'REAUTH_TOKEN_REQUIRED', 'Payment verification is required before execution can start.');
+
+  let reauthResult;
+  try {
+    reauthResult = await verifyPaymentScheduleReauth(env, user, reauthToken);
+  } catch (error) {
+    return fail(401, 'REAUTH_VERIFICATION_FAILED', String(error?.message || error || 'Payment verification failed.'));
+  }
+  if (!reauthResult || reauthResult.ok !== true) {
+    const rawResponse = reauthResult && reauthResult.response;
+    if (rawResponse instanceof Response) return typeof withCORS === 'function' ? withCORS(env, req, rawResponse) : rawResponse;
+    return fail(401, 'REAUTH_VERIFICATION_FAILED', 'Payment verification failed.');
+  }
+  const loadScopedProjectionProof = async () => {
+    const rows = unwrapRowsRpc(await sbRpc(env, '_pay_batch_bank_payment_projection_rows', {
+      p_pay_batch_id: id,
+      p_scope: requestedScope
+    }), '_pay_batch_bank_payment_projection_rows');
+    let missingCount = 0;
+    let explicitZeroCount = 0;
+    let positiveCount = 0;
+    let positiveTotal = 0;
+    const payeHashes = new Set();
+    const projectionHashes = new Set();
+    for (const row of rows) {
+      const classification = upperTrim(row.paye_net_classification);
+      if (truthy(row.is_paye_net_state_row) && classification === 'MISSING') missingCount += 1;
+      if (truthy(row.is_paye_net_state_row) && classification === 'ZERO') explicitZeroCount += 1;
+      if (truthy(row.is_positive_bank_payment)) {
+        positiveCount += 1;
+        positiveTotal += Number(row.amount ?? row.final_frozen_bank_amount ?? 0) || 0;
+      }
+      const payeHash = trimStr(row.paye_net_state_hash);
+      const projectionHash = trimStr(row.bank_payment_projection_hash);
+      if (payeHash) payeHashes.add(payeHash);
+      if (projectionHash) projectionHashes.add(projectionHash);
+    }
+    if (payeHashes.size > 1 || projectionHashes.size > 1) throw Object.assign(new Error('Authoritative payment projection is inconsistent.'), { error_code: 'PAYMENT_PROJECTION_INCONSISTENT' });
+    return {
+      scope: requestedScope,
+      missing_explicit_paye_input_count: missingCount,
+      explicit_zero_count: explicitZeroCount,
+      scoped_explicit_zero_count: explicitZeroCount,
+      positive_bank_payment_count: positiveCount,
+      scoped_positive_bank_payment_count: positiveCount,
+      positive_bank_payment_total: roundMoney(positiveTotal),
+      scoped_positive_bank_payment_total: roundMoney(positiveTotal),
+      paye_net_state_hash: Array.from(payeHashes)[0] || null,
+      scoped_paye_net_state_hash: Array.from(payeHashes)[0] || null,
+      bank_payment_projection_hash: Array.from(projectionHashes)[0] || null
+    };
+  };
 
   try {
+    const { rows: batchRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(id)}&select=id,status,pay_date,authoritative_payment_date,rail_provider_snapshot,rail_env_snapshot,bank_csv_export_json,freshness_result_hash,freshness_scope_hash,execution_commit_state&limit=1`, false);
+    const batch = Array.isArray(batchRows) && isPlainObject(batchRows[0]) ? batchRows[0] : null;
+    if (!batch) return fail(404, 'PAY_BATCH_NOT_FOUND', 'Payment batch not found.');
+
+    let projectionProof = null;
+    let pureAllZero = false;
+    let allowExplicitZeroNoBankScopes = false;
+    if (!retryBlockedFunds) {
+      const executionSummary = unwrapObjectRpc(await sbRpc(env, 'pay_batch_execution_summary_get', {
+        p_pay_batch_id: id,
+        p_actor_user_id: actorUserId,
+        p_mode: 'LIGHT'
+      }), 'pay_batch_execution_summary_get');
+      if (!executionSummary.pay_batch_id || executionSummary.ok === false) return fail(404, 'PAY_BATCH_NOT_FOUND', 'Payment batch not found.');
+      const summaryPreflight = isPlainObject(executionSummary.paye_net_preflight) ? executionSummary.paye_net_preflight : {};
+      const globalMissingCount = nonNegativeInteger(summaryPreflight.missing_explicit_paye_input_count);
+      const globalExplicitZeroCount = nonNegativeInteger(summaryPreflight.explicit_zero_count);
+      const summaryPayeHash = trimStr(executionSummary.current_paye_net_state_hash || executionSummary.paye_net_state_hash || summaryPreflight.paye_net_state_hash);
+      if (globalMissingCount === null || globalExplicitZeroCount === null || !summaryPayeHash) {
+        return fail(409, 'PAYMENT_PROJECTION_PROOF_REQUIRED', 'CloudTMS could not establish the authoritative PAYE preflight required for execution.');
+      }
+      if (globalMissingCount > 0) {
+        return fail(409, 'PAYE_NET_REQUIRED_FOR_EXECUTION', 'Enter and save every required PAYE net amount before starting execution.', {
+          pay_batch_id: id,
+          pay_channel_scope: requestedScope,
+          missing_explicit_paye_input_count: globalMissingCount
+        });
+      }
+
+      projectionProof = await loadScopedProjectionProof();
+      if (!projectionProof.scoped_paye_net_state_hash || !projectionProof.bank_payment_projection_hash) {
+        return fail(409, 'PAYMENT_PROJECTION_PROOF_REQUIRED', 'CloudTMS could not establish the authoritative scoped payment projection required for execution.');
+      }
+      if (projectionProof.missing_explicit_paye_input_count > 0) {
+        return fail(409, 'PAYMENT_PROJECTION_CHANGED_DURING_PREFLIGHT', 'The frozen payment projection changed during execution preflight. Refresh the batch and try again.');
+      }
+      projectionProof.missing_explicit_paye_input_count = globalMissingCount;
+      projectionProof.explicit_zero_count = globalExplicitZeroCount;
+      projectionProof.paye_net_state_hash = summaryPayeHash;
+      if (projectionProof.positive_bank_payment_count === 0 && projectionProof.scoped_explicit_zero_count === 0) {
+        return fail(409, 'NO_EXECUTABLE_PAYMENT_SCOPE', 'This scope has no complete positive or explicit-zero payment position to execute.', { pay_batch_id: id, pay_channel_scope: requestedScope });
+      }
+      pureAllZero = globalMissingCount === 0 && projectionProof.scoped_explicit_zero_count > 0 && projectionProof.positive_bank_payment_count === 0;
+      allowExplicitZeroNoBankScopes = globalMissingCount === 0 && projectionProof.scoped_explicit_zero_count > 0;
+    }
+
+    const batchPaymentDate = parseDate(batch.authoritative_payment_date || batch.pay_date);
+    let paymentDate = suppliedPaymentDate || batchPaymentDate;
+    if (!paymentDate && !retryBlockedFunds && !(pureAllZero && ['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode))) {
+      return fail(400, 'PAYMENT_DATE_REQUIRED', 'Choose a payment date before starting execution.');
+    }
+    if (!paymentDate && pureAllZero) paymentDate = batchPaymentDate;
+    if (!paymentDate && !retryBlockedFunds) return fail(409, 'ACCOUNTING_PAYMENT_DATE_REQUIRED', 'The batch does not contain a valid accounting payment date.');
+
+    const storedCsv = isPlainObject(batch.bank_csv_export_json) ? batch.bank_csv_export_json : {};
+    const storedCsvScope = upperTrim(storedCsv.scope || storedCsv.pay_channel_scope || storedCsv.payChannelScope);
+    const storedPayeHash = trimStr(storedCsv.paye_net_state_hash || storedCsv.current_paye_net_state_hash || storedCsv.payeNetStateHash);
+    const storedProjectionHash = trimStr(storedCsv.bank_payment_projection_hash || storedCsv.current_bank_payment_projection_hash || storedCsv.bankPaymentProjectionHash);
+    const storedRowCount = Number(storedCsv.row_count ?? storedCsv.rowCount);
+    const storedTotal = Number(storedCsv.total_amount ?? storedCsv.totalAmount);
+    const csvCurrent = !retryBlockedFunds && projectionProof && Object.keys(storedCsv).length > 0
+      && storedCsvScope === requestedScope
+      && storedPayeHash === projectionProof.paye_net_state_hash
+      && storedProjectionHash === projectionProof.bank_payment_projection_hash
+      && Number.isFinite(storedRowCount)
+      && Math.max(0, Math.trunc(storedRowCount)) === projectionProof.positive_bank_payment_count
+      && Number.isFinite(storedTotal)
+      && roundMoney(storedTotal) === roundMoney(projectionProof.positive_bank_payment_total);
+
+    if (executionMode === 'CSV_SETTLEMENT') {
+      if (!csvCurrent) return fail(409, Object.keys(storedCsv).length ? 'BANK_CSV_STALE' : 'BANK_CSV_REQUIRED', Object.keys(storedCsv).length ? 'The Bank CSV is out of date. Regenerate it before using CSV settlement.' : 'Generate the current Bank CSV before using CSV settlement.');
+      if (!csvUploadedConfirmed) return fail(400, pureAllZero ? 'ZERO_ROW_CSV_REVIEW_CONFIRMATION_REQUIRED' : 'CSV_UPLOAD_CONFIRMATION_REQUIRED', pureAllZero ? 'Confirm that the current zero-row CloudTMS CSV was reviewed and that no bank payment was required.' : 'Confirm that the current Bank CSV was uploaded and processed.');
+      if (!pureAllZero && !csvBankConfirmRef) return fail(400, 'CSV_BANK_CONFIRM_REF_REQUIRED', 'Bank confirmation reference is required for CSV settlement.');
+      if (!pureAllZero && !suppliedPaymentDate) return fail(400, 'CSV_PAYMENT_DATE_REQUIRED', 'Payment date is required for CSV settlement.');
+    }
+
+    if (executionMode === 'EXTERNAL_SETTLEMENT') {
+      if (!pureAllZero && !externalSettlementComment) return fail(400, 'EXTERNAL_SETTLEMENT_COMMENT_REQUIRED', 'External settlement comment is required.');
+      if (!pureAllZero && !suppliedPaymentDate) return fail(400, 'EXTERNAL_SETTLEMENT_PAYMENT_DATE_REQUIRED', 'Payment date is required for external settlement.');
+    }
+
+    const railProvider = upperTrim(batch.rail_provider_snapshot || body.rail_provider_snapshot || body.railProviderSnapshot || body.rail_provider || body.railProvider || 'REVOLUT') || 'REVOLUT';
+    const railEnv = upperTrim(batch.rail_env_snapshot || body.rail_env_snapshot || body.railEnvSnapshot || body.rail_env || body.railEnv || body.provider_environment || body.providerEnvironment || 'PROD') || 'PROD';
+    const manualConfirmationMode = executionMode === 'CSV_SETTLEMENT'
+      ? (pureAllZero ? 'ZERO_ROW_REVIEW_NO_BANK_PAYMENT' : 'BANK_UPLOAD_CONFIRMED')
+      : executionMode === 'EXTERNAL_SETTLEMENT'
+        ? (pureAllZero ? 'NO_BANK_PAYMENT_CONFIRMED' : 'EXTERNAL_SETTLEMENT_CONFIRMED')
+        : null;
+
+    const idempotencyBasis = retryBlockedFunds ? {
+      actor_user_id: actorUserId,
+      pay_batch_id: id,
+      pay_channel_scope: requestedScope,
+      execution_mode: executionMode,
+      payment_date: paymentDate,
+      schedule_kind: scheduleKind,
+      scheduled_at_utc: scheduledAtUtc,
+      funding_account_ref: fundingAccountRef,
+      retry_blocked_funds: true,
+      suppress_remittances: suppressRemittances,
+      suppress_remittances_confirmed: suppressRemittancesConfirmed,
+      rail_provider: railProvider,
+      rail_env: railEnv
+    } : {
+      actor_user_id: actorUserId,
+      pay_batch_id: id,
+      pay_channel_scope: requestedScope,
+      execution_mode: executionMode,
+      payment_date: paymentDate,
+      schedule_kind: scheduleKind,
+      scheduled_at_utc: scheduledAtUtc,
+      funding_account_ref: fundingAccountRef,
+      retry_blocked_funds: false,
+      suppress_remittances: suppressRemittances,
+      suppress_remittances_confirmed: suppressRemittancesConfirmed,
+      warning_hours_json: warningHoursJson,
+      actor_intent: actorIntent,
+      csv_uploaded_confirmed: executionMode === 'CSV_SETTLEMENT' ? csvUploadedConfirmed : false,
+      csv_bank_confirm_ref: executionMode === 'CSV_SETTLEMENT' ? csvBankConfirmRef : null,
+      external_settlement_comment: executionMode === 'EXTERNAL_SETTLEMENT' ? externalSettlementComment : null,
+      manual_confirmation_mode: manualConfirmationMode,
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      projection_proof: projectionProof,
+      bank_csv_scope: executionMode === 'CSV_SETTLEMENT' ? storedCsvScope : null,
+      bank_csv_paye_net_state_hash: executionMode === 'CSV_SETTLEMENT' ? storedPayeHash : null,
+      bank_csv_bank_payment_projection_hash: executionMode === 'CSV_SETTLEMENT' ? storedProjectionHash : null
+    };
+    const idempotencyHash = await sha256Hex(stableStringify(idempotencyBasis));
+
+    const operationInput = retryBlockedFunds ? {
+      source: 'handleBankingPayBatchExecutePayment',
+      pay_batch_id: id,
+      pay_channel_scope: requestedScope,
+      execution_mode: executionMode,
+      payment_date: paymentDate,
+      schedule_kind: scheduleKind,
+      scheduled_at_utc: scheduledAtUtc,
+      funding_account_ref: fundingAccountRef,
+      retry_blocked_funds: true,
+      suppress_remittances: suppressRemittances,
+      suppress_remittances_confirmed: suppressRemittancesConfirmed,
+      rail_provider_snapshot: railProvider,
+      rail_env_snapshot: railEnv,
+      backend_owned_execution: true,
+      provider_submission_attempted: false,
+      submitted_to_bank: false
+    } : {
+      source: 'handleBankingPayBatchExecutePayment',
+      pay_batch_id: id,
+      pay_channel_scope: requestedScope,
+      execution_mode: executionMode,
+      payment_date: paymentDate,
+      schedule_kind: scheduleKind,
+      scheduled_at_utc: scheduledAtUtc,
+      funding_account_ref: fundingAccountRef,
+      warning_hours_json: warningHoursJson,
+      actor_intent: actorIntent,
+      retry_blocked_funds: false,
+      suppress_remittances: suppressRemittances,
+      suppress_remittances_confirmed: suppressRemittancesConfirmed,
+      csv_uploaded_confirmed: executionMode === 'CSV_SETTLEMENT' ? csvUploadedConfirmed : false,
+      csv_bank_confirm_ref: executionMode === 'CSV_SETTLEMENT' ? csvBankConfirmRef : null,
+      external_settlement_comment: executionMode === 'EXTERNAL_SETTLEMENT' ? externalSettlementComment : null,
+      manual_confirmation_mode: manualConfirmationMode,
+      rail_provider_snapshot: railProvider,
+      rail_env_snapshot: railEnv,
+      reauth_verified: true,
+      reauth_verified_at_utc: new Date().toISOString(),
+      backend_owned_execution: true,
+      provider_submission_attempted: false,
+      submitted_to_bank: false,
+      server_owned_payment_projection_proof: true,
+      payment_projection_proof_source: 'HANDLE_BANKING_PAY_BATCH_EXECUTE_PAYMENT',
+      no_bank_payment_execution: pureAllZero,
+      allow_explicit_zero_no_bank_scopes: allowExplicitZeroNoBankScopes,
+      paye_net_state_hash: projectionProof.paye_net_state_hash,
+      bank_payment_projection_hash: projectionProof.bank_payment_projection_hash,
+      missing_explicit_paye_input_count: projectionProof.missing_explicit_paye_input_count,
+      explicit_zero_count: projectionProof.explicit_zero_count,
+      scoped_explicit_zero_count: projectionProof.scoped_explicit_zero_count,
+      positive_bank_payment_count: projectionProof.positive_bank_payment_count,
+      scoped_positive_bank_payment_count: projectionProof.scoped_positive_bank_payment_count,
+      positive_bank_payment_total: projectionProof.positive_bank_payment_total,
+      scoped_positive_bank_payment_total: projectionProof.scoped_positive_bank_payment_total,
+      freshness_result_hash: batch.freshness_result_hash || null,
+      freshness_scope_hash: batch.freshness_scope_hash || null,
+      bank_csv_generated: executionMode === 'CSV_SETTLEMENT' ? Object.keys(storedCsv).length > 0 : false,
+      bank_csv_current: executionMode === 'CSV_SETTLEMENT' ? csvCurrent : false,
+      bank_csv_scope: executionMode === 'CSV_SETTLEMENT' ? storedCsvScope : null,
+      bank_csv_paye_net_state_hash: executionMode === 'CSV_SETTLEMENT' ? storedPayeHash : null,
+      bank_csv_bank_payment_projection_hash: executionMode === 'CSV_SETTLEMENT' ? storedProjectionHash : null,
+      bank_csv_row_count: executionMode === 'CSV_SETTLEMENT' && Number.isFinite(storedRowCount) ? Math.max(0, Math.trunc(storedRowCount)) : null,
+      bank_csv_total_amount: executionMode === 'CSV_SETTLEMENT' && Number.isFinite(storedTotal) ? roundMoney(storedTotal) : null
+    };
+
     const operationPayload = await startBankingPayOperation(env, {
       operation_type: retryBlockedFunds ? 'PAYMENT_RETRY_BLOCKED_FUNDS' : 'PAYMENT_EXECUTE',
       actor_user_id: actorUserId,
       idempotency_key: `payment-execute:batch:${id}:hash:${idempotencyHash}`,
       pay_batch_id: id,
-      input_json: {
-        source: 'handleBankingPayBatchExecutePayment',
-        pay_batch_id: id,
-        pay_channel_scope: payChannelScope,
-        execution_mode: executionMode,
-        payment_date: paymentDate,
-        schedule_kind: scheduleKind,
-        scheduled_at_utc: scheduledAtUtc,
-        funding_account_ref: fundingAccountRef,
-        retry_blocked_funds: retryBlockedFunds,
-        suppress_remittances: suppressRemittances,
-        suppress_remittances_confirmed: suppressRemittancesConfirmed,
-        rail_provider_snapshot: railProvider,
-        rail_env_snapshot: railEnv,
-        backend_owned_execution: true,
-        provider_submission_attempted: false,
-        submitted_to_bank: false
-      },
+      input_json: operationInput,
       config_json: {
         runner_state: 'RUNNABLE',
         run_after_utc: new Date().toISOString(),
@@ -31031,15 +32322,36 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       }
     }, { publicPayloadOptions: { mode: 'PROGRESS_LIGHT' } });
 
-    const operationReused = operationPayload.operation_reused === true ||
-      operationPayload.active_operation_reused === true ||
-      operationPayload.existing_active_operation === true ||
-      operationPayload.active_execution_already_exists === true ||
-      operationPayload.duplicate_start_prevented === true ||
-      operationPayload.is_existing === true ||
-      operationPayload.operation_created === false;
+    const resolveOperationIdForImmediateDrain = (payloadValue) => {
+      const payload = isPlainObject(payloadValue) ? payloadValue : {};
+      const nestedOperation = isPlainObject(payload.operation) ? payload.operation : {};
+      const nestedRawOperation = isPlainObject(payload.raw_operation) ? payload.raw_operation : {};
+      const operationId = trimStr(payload.operation_id || payload.operationId || payload.id || nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id || nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id);
+      return uuidRe.test(operationId) ? operationId : null;
+    };
+    try {
+      const operationId = resolveOperationIdForImmediateDrain(operationPayload);
+      if (operationId && typeof scheduleBankingPayOperationDrain === 'function') {
+        scheduleBankingPayOperationDrain(env, ctx, {
+          operationId,
+          operationType: retryBlockedFunds ? 'PAYMENT_RETRY_BLOCKED_FUNDS' : 'PAYMENT_EXECUTE',
+          payBatchId: id,
+          actorUserId,
+          source: 'handleBankingPayBatchExecutePayment'
+        });
+      }
+    } catch (error) {
+      try { console.warn('[handleBankingPayBatchExecutePayment] immediate drain schedule failed:', error?.message || error); } catch {}
+    }
+
+    const operationReused = operationPayload.operation_reused === true
+      || operationPayload.active_operation_reused === true
+      || operationPayload.existing_active_operation === true
+      || operationPayload.active_execution_already_exists === true
+      || operationPayload.duplicate_start_prevented === true
+      || operationPayload.is_existing === true
+      || operationPayload.operation_created === false;
     const operationCreated = !operationReused && operationPayload.operation_created !== false;
-    scheduleExecutePaymentDrainBestEffort(operationPayload, retryBlockedFunds ? 'PAYMENT_RETRY_BLOCKED_FUNDS' : 'PAYMENT_EXECUTE');
 
     return response(200, Object.assign({}, operationPayload, {
       ok: true,
@@ -31055,11 +32367,15 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       provider_submission_attempted: false,
       submitted_to_bank: false,
       pay_batch_id: id,
-      pay_channel_scope: payChannelScope,
+      pay_channel_scope: requestedScope,
       execution_mode: executionMode,
       payment_date: paymentDate,
       schedule_kind: scheduleKind,
       scheduled_at_utc: scheduledAtUtc,
+      no_bank_payment_execution: retryBlockedFunds ? false : pureAllZero,
+      allow_explicit_zero_no_bank_scopes: retryBlockedFunds ? false : allowExplicitZeroNoBankScopes,
+      paye_net_state_hash: projectionProof?.paye_net_state_hash || null,
+      bank_payment_projection_hash: projectionProof?.bank_payment_projection_hash || null,
       progress_light: isPlainObject(operationPayload.progress_light) ? operationPayload.progress_light : (isPlainObject(operationPayload.progress) ? operationPayload.progress : {})
     }));
   } catch (error) {
@@ -31082,8 +32398,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
 }
 
 
-
-
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   const token = String(reauthToken || '').trim();
   if (!token) return { ok: false, response: badRequest('reauth_token is required') };
@@ -31103,7 +32417,38 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const truthyIntentFlag = (value) => {
+    if (value === true) return true;
+    if (value === false || value === null || value === undefined) return false;
+    return ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  };
+  const normaliseMode = (value) => {
+    const mode = upperTrim(value);
+    if (['STANDARD_BANK', 'BANK'].includes(mode)) return 'STANDARD_BANK';
+    if (['CSV', 'CSV_SETTLEMENT'].includes(mode)) return 'CSV_SETTLEMENT';
+    if (['EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT'].includes(mode)) return 'EXTERNAL_SETTLEMENT';
+    return mode;
+  };
+  const normaliseScope = (value) => upperTrim(value || 'ALL') || 'ALL';
+  const integerField = (obj, ...keys) => {
+    for (const key of keys) {
+      const raw = obj && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
+      if (raw === null || raw === undefined || raw === '') continue;
+      if (/^[0-9]+$/.test(trimStr(raw))) return Math.max(0, Math.trunc(Number(raw)));
+      return null;
+    }
+    return null;
+  };
+  const moneyField = (obj, ...keys) => {
+    for (const key of keys) {
+      const raw = obj && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
+      if (raw === null || raw === undefined || raw === '') continue;
+      const number = Number(raw);
+      return Number.isFinite(number) ? Number(number.toFixed(2)) : null;
+    }
+    return null;
+  };
   const stableStringify = (value) => {
     const seen = new WeakSet();
     const normalise = (input) => {
@@ -31122,122 +32467,364 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
     };
     return JSON.stringify(normalise(value));
   };
-
   const sha256Hex = async (value) => {
     const text = String(value || '');
     try {
       if (globalThis.crypto && globalThis.crypto.subtle) {
         const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-        return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
       }
     } catch {}
-    let h = 0;
-    for (let i = 0; i < text.length; i += 1) h = Math.imul(31, h) + text.charCodeAt(i) | 0;
-    return `fallback-${Math.abs(h)}`;
+    let hash = 0;
+    for (let index = 0; index < text.length; index += 1) hash = Math.imul(31, hash) + text.charCodeAt(index) | 0;
+    return `fallback-${Math.abs(hash)}`;
   };
+  const resolveOperationIdForImmediateDrain = (operationPayload) => {
+    const payload = isPlainObject(operationPayload) ? operationPayload : {};
+    const nestedOperation = isPlainObject(payload.operation) ? payload.operation : {};
+    const nestedRawOperation = isPlainObject(payload.raw_operation) ? payload.raw_operation : {};
+    const operationId = trimStr(
+      payload.operation_id || payload.operationId || payload.id ||
+      nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id ||
+      nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id
+    );
+    return uuidRe.test(operationId) ? operationId : null;
+  };
+  const fail = (errorCode, message, extra = {}) => ({
+    ok: false,
+    error_code: errorCode,
+    code: errorCode,
+    message,
+    ...(isPlainObject(extra) ? extra : {})
+  });
 
-  const truthyIntentFlag = (value) => {
-    if (value === true) return true;
-    const text = String(value == null ? '' : value).trim().toLowerCase();
-    return ['true', '1', 'yes', 'y', 'on'].includes(text);
+  const isLegacyCsvExportPrepareOperation = (operation) => {
+    const op = isPlainObject(operation) ? operation : {};
+    const input = isPlainObject(op.input_json) ? op.input_json : {};
+    const nestedIntent = isPlainObject(input.execution_intent_json) ? input.execution_intent_json : {};
+    const prepareOnly = truthyIntentFlag(input.prepare_bank_csv_export_only ?? nestedIntent.prepare_bank_csv_export_only);
+    const executionMode = upperTrim(input.execution_mode || nestedIntent.execution_mode);
+    const source = trimStr(input.source || nestedIntent.source);
+    const idempotencyKey = trimStr(op.idempotency_key).toLowerCase();
+    return prepareOnly ||
+      executionMode === 'BANK_CSV_EXPORT_PREPARE' ||
+      source === 'handleBankingPayBatchExportCsv' ||
+      idempotencyKey.startsWith('bank-csv-export-prepare:');
   };
 
   const payBatchIdText = trimStr(payBatchId);
   const authRequestIdText = trimStr(authRequestId);
   const actorUserId = trimStr(
-    (userOrActor && typeof userOrActor === 'object' ? userOrActor.id : userOrActor)
-    || options.actorUserId
-    || options.actor_user_id
-    || ''
+    (userOrActor && typeof userOrActor === 'object' ? userOrActor.id : userOrActor) ||
+    options.actorUserId ||
+    options.actor_user_id
   );
   const ctx = options.ctx || options.executionContext || options.execution_context || null;
-  const resolveOperationIdForImmediateDrain = (operationPayload) => {
-    const payload = isPlainObject(operationPayload) ? operationPayload : {};
-    const nestedOperation = isPlainObject(payload.operation) ? payload.operation : {};
-    const nestedRawOperation = isPlainObject(payload.raw_operation) ? payload.raw_operation : {};
-    const operationId = trimStr(payload.operation_id || payload.operationId || payload.id || nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id || nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id);
-    return operationId || null;
-  };
 
-  if (!payBatchIdText || !authRequestIdText || !actorUserId) {
-    return { ok: false, error_code: 'INVALID_FINALISATION_INPUT', message: 'Missing finalisation input.' };
+  if (!uuidRe.test(payBatchIdText) || !uuidRe.test(authRequestIdText) || !uuidRe.test(actorUserId)) {
+    return fail('INVALID_FINALISATION_INPUT', 'Missing or invalid settlement finalisation input.');
   }
 
-  let authRow = null;
+  let authRow;
+  let batchRow;
+  try {
+    const enc = encodeURIComponent;
+    const [authResult, batchResult] = await Promise.all([
+      sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests` +
+        `?id=eq.${enc(authRequestIdText)}` +
+        `&select=id,pay_batch_id,state,execution_intent_json,funding_account_ref,created_at_utc,finalised_at_utc` +
+        `&limit=1`,
+        false
+      ),
+      sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batches` +
+        `?id=eq.${enc(payBatchIdText)}` +
+        `&select=id,status,pay_date,authoritative_payment_date,execution_intent_json,bank_csv_export_json,rail_provider_snapshot,rail_env_snapshot,execution_commit_state,execution_commit_ref,execution_committed_at_utc` +
+        `&limit=1`,
+        false
+      )
+    ]);
+    authRow = Array.isArray(authResult.rows) && isPlainObject(authResult.rows[0]) ? authResult.rows[0] : null;
+    batchRow = Array.isArray(batchResult.rows) && isPlainObject(batchResult.rows[0]) ? batchResult.rows[0] : null;
+  } catch (error) {
+    return fail('AUTHORISED_SETTLEMENT_CONTEXT_LOAD_FAILED', String(error?.message || error || 'Authorised settlement context could not be loaded.'));
+  }
+
+  if (!authRow) return fail('AUTH_REQUEST_NOT_FOUND', 'Auth request not found.');
+  if (!batchRow) return fail('PAY_BATCH_NOT_FOUND', 'Payment batch not found.');
+  if (trimStr(authRow.pay_batch_id) !== payBatchIdText) return fail('AUTH_REQUEST_BATCH_MISMATCH', 'Auth request does not belong to this batch.');
+
+  const authState = upperTrim(authRow.state);
+  if (authState !== 'AUTHORISED') {
+    return fail('AUTH_NOT_AUTHORISED', 'Auth request is not authorised yet.', { waiting: true, auth_state: authState || null });
+  }
+
+  const authIntent = isPlainObject(authRow.execution_intent_json) ? authRow.execution_intent_json : {};
+  const batchIntent = isPlainObject(batchRow.execution_intent_json) ? batchRow.execution_intent_json : {};
+  if (!Object.keys(authIntent).length || !Object.keys(batchIntent).length) {
+    return fail('AUTH_BATCH_EXECUTION_INTENT_REQUIRED', 'The authorised and batch-frozen execution intents are required before settlement can start.');
+  }
+
+  const authOperationId = trimStr(authIntent.operation_id || authIntent.operationId);
+  const batchOperationId = trimStr(batchIntent.operation_id || batchIntent.operationId);
+  const authIntentAuthRequestId = trimStr(authIntent.auth_request_id || authIntent.authRequestId);
+  const batchIntentAuthRequestId = trimStr(batchIntent.auth_request_id || batchIntent.authRequestId);
+  const authMode = normaliseMode(authIntent.execution_mode || authIntent.executionMode || authIntent.mode);
+  const batchMode = normaliseMode(batchIntent.execution_mode || batchIntent.executionMode || batchIntent.mode);
+  const authScopeRaw = trimStr(authIntent.pay_channel_scope || authIntent.payChannelScope || authIntent.scope);
+  const batchScopeRaw = trimStr(batchIntent.pay_channel_scope || batchIntent.payChannelScope || batchIntent.scope);
+  const authScope = normaliseScope(authScopeRaw);
+  const batchScope = normaliseScope(batchScopeRaw);
+  const authPayeHash = trimStr(authIntent.paye_net_state_hash || authIntent.payeNetStateHash);
+  const batchPayeHash = trimStr(batchIntent.paye_net_state_hash || batchIntent.payeNetStateHash);
+  const authProjectionHash = trimStr(authIntent.bank_payment_projection_hash || authIntent.bankPaymentProjectionHash);
+  const batchProjectionHash = trimStr(batchIntent.bank_payment_projection_hash || batchIntent.bankPaymentProjectionHash);
+  const authMissingCount = integerField(authIntent, 'missing_explicit_paye_input_count', 'missingExplicitPayeInputCount');
+  const batchMissingCount = integerField(batchIntent, 'missing_explicit_paye_input_count', 'missingExplicitPayeInputCount');
+  const authGlobalZeroCount = integerField(authIntent, 'explicit_zero_count', 'explicitZeroCount');
+  const batchGlobalZeroCount = integerField(batchIntent, 'explicit_zero_count', 'explicitZeroCount');
+  const authScopedZeroCount = integerField(authIntent, 'scoped_explicit_zero_count', 'scopedExplicitZeroCount', 'explicit_zero_count', 'explicitZeroCount');
+  const batchScopedZeroCount = integerField(batchIntent, 'scoped_explicit_zero_count', 'scopedExplicitZeroCount', 'explicit_zero_count', 'explicitZeroCount');
+  const authPositiveCount = integerField(authIntent, 'scoped_positive_bank_payment_count', 'scopedPositiveBankPaymentCount', 'positive_bank_payment_count', 'positiveBankPaymentCount');
+  const batchPositiveCount = integerField(batchIntent, 'scoped_positive_bank_payment_count', 'scopedPositiveBankPaymentCount', 'positive_bank_payment_count', 'positiveBankPaymentCount');
+  const authPositiveTotal = moneyField(authIntent, 'scoped_positive_bank_payment_total', 'scopedPositiveBankPaymentTotal', 'positive_bank_payment_total', 'positiveBankPaymentTotal');
+  const batchPositiveTotal = moneyField(batchIntent, 'scoped_positive_bank_payment_total', 'scopedPositiveBankPaymentTotal', 'positive_bank_payment_total', 'positiveBankPaymentTotal');
+  const authNoBank = truthyIntentFlag(authIntent.no_bank_payment_execution ?? authIntent.noBankPaymentExecution);
+  const batchNoBank = truthyIntentFlag(batchIntent.no_bank_payment_execution ?? batchIntent.noBankPaymentExecution);
+  const authAllowZero = truthyIntentFlag(authIntent.allow_explicit_zero_no_bank_scopes ?? authIntent.allowExplicitZeroNoBankScopes);
+  const batchAllowZero = truthyIntentFlag(batchIntent.allow_explicit_zero_no_bank_scopes ?? batchIntent.allowExplicitZeroNoBankScopes);
+  const authSuppressRemittances = truthyIntentFlag(authIntent.suppress_remittances ?? authIntent.suppressRemittances);
+  const batchSuppressRemittances = truthyIntentFlag(batchIntent.suppress_remittances ?? batchIntent.suppressRemittances);
+  const authServerProof = truthyIntentFlag(authIntent.server_owned_payment_projection_proof ?? authIntent.serverOwnedPaymentProjectionProof);
+  const batchServerProof = truthyIntentFlag(batchIntent.server_owned_payment_projection_proof ?? batchIntent.serverOwnedPaymentProjectionProof);
+  const authPaymentDate = trimStr(authIntent.payment_date || authIntent.paymentDate);
+  const batchPaymentDate = trimStr(batchIntent.payment_date || batchIntent.paymentDate);
+  const authCsvConfirmed = truthyIntentFlag(authIntent.csv_uploaded_confirmed ?? authIntent.csvUploadedConfirmed);
+  const batchCsvConfirmed = truthyIntentFlag(batchIntent.csv_uploaded_confirmed ?? batchIntent.csvUploadedConfirmed);
+  const authCsvReference = trimStr(authIntent.csv_bank_confirm_ref || authIntent.csvBankConfirmRef) || null;
+  const batchCsvReference = trimStr(batchIntent.csv_bank_confirm_ref || batchIntent.csvBankConfirmRef) || null;
+  const authExternalComment = trimStr(authIntent.external_settlement_comment || authIntent.externalSettlementComment) || null;
+  const batchExternalComment = trimStr(batchIntent.external_settlement_comment || batchIntent.externalSettlementComment) || null;
+
+  const intentsCompatible =
+    uuidRe.test(authOperationId) &&
+    authOperationId === batchOperationId &&
+    authIntentAuthRequestId === authRequestIdText &&
+    batchIntentAuthRequestId === authRequestIdText &&
+    ['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(authMode) &&
+    authMode === batchMode &&
+    !!authScopeRaw && !!batchScopeRaw &&
+    ['ALL', 'PAYE', 'UMBRELLA', 'LOANS'].includes(authScope) &&
+    authScope === batchScope &&
+    !!authPayeHash && authPayeHash === batchPayeHash &&
+    !!authProjectionHash && authProjectionHash === batchProjectionHash &&
+    authMissingCount !== null && authMissingCount === batchMissingCount &&
+    authGlobalZeroCount !== null && authGlobalZeroCount === batchGlobalZeroCount &&
+    authScopedZeroCount !== null && authScopedZeroCount === batchScopedZeroCount &&
+    authPositiveCount !== null && authPositiveCount === batchPositiveCount &&
+    authPositiveTotal !== null && authPositiveTotal === batchPositiveTotal &&
+    authNoBank === batchNoBank &&
+    authAllowZero === batchAllowZero &&
+    authSuppressRemittances === batchSuppressRemittances &&
+    authServerProof === true && batchServerProof === true &&
+    /^\d{4}-\d{2}-\d{2}$/.test(authPaymentDate) && authPaymentDate === batchPaymentDate &&
+    authCsvConfirmed === batchCsvConfirmed &&
+    authCsvReference === batchCsvReference &&
+    authExternalComment === batchExternalComment;
+
+  if (!intentsCompatible) {
+    return fail('AUTH_BATCH_EXECUTION_INTENT_MISMATCH', 'The authorised execution intent and batch execution intent are missing required server proof or are materially inconsistent.', {
+      pay_batch_id: payBatchIdText,
+      auth_request_id: authRequestIdText,
+      execution_operation_id: uuidRe.test(authOperationId) ? authOperationId : null,
+      authorised_execution_mode: authMode || null,
+      authorised_scope: authScope || null
+    });
+  }
+
+  let executionOperation;
   try {
     const enc = encodeURIComponent;
     const { rows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests` +
-      `?id=eq.${enc(authRequestIdText)}` +
-      `&select=id,pay_batch_id,state,execution_intent_json,funding_account_ref,created_at_utc,finalised_at_utc` +
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_operations` +
+      `?id=eq.${enc(authOperationId)}` +
+      `&select=id,operation_type,status,phase,runner_state,actor_user_id,pay_batch_id,root_operation_id,idempotency_key,input_json,progress_json,created_at_utc,updated_at_utc` +
       `&limit=1`,
       false
     );
-    authRow = Array.isArray(rows) && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
-  } catch (e) {
-    return { ok: false, error_code: 'AUTH_REQUEST_LOAD_FAILED', message: String(e?.message || e || 'AUTH_REQUEST_LOAD_FAILED') };
+    executionOperation = Array.isArray(rows) && isPlainObject(rows[0]) ? rows[0] : null;
+  } catch (error) {
+    return fail('EXECUTION_OPERATION_LOAD_FAILED', String(error?.message || error || 'The authorised payment execution operation could not be loaded.'));
   }
 
-  if (!authRow) return { ok: false, error_code: 'AUTH_REQUEST_NOT_FOUND', message: 'Auth request not found.' };
-  if (trimStr(authRow.pay_batch_id) !== payBatchIdText) return { ok: false, error_code: 'AUTH_REQUEST_BATCH_MISMATCH', message: 'Auth request does not belong to this batch.' };
-
-  const authState = upperTrim(authRow.state);
-  if (authState !== 'AUTHORISED') {
-    return { ok: false, waiting: true, error_code: 'AUTH_NOT_AUTHORISED', message: 'Auth request is not authorised yet.', auth_state: authState || null };
+  const executionOperationStatus = upperTrim(executionOperation?.status);
+  if (!executionOperation ||
+      upperTrim(executionOperation.operation_type) !== 'PAYMENT_EXECUTE' ||
+      trimStr(executionOperation.pay_batch_id) !== payBatchIdText ||
+      isLegacyCsvExportPrepareOperation(executionOperation) ||
+      ['FAILED', 'ERROR', 'ERRORED', 'CANCELLED', 'CANCELED', 'ABORTED'].includes(executionOperationStatus)) {
+    return fail('AUTHORISED_EXECUTION_OPERATION_INVALID', 'The authorised execution intent is not bound to a valid PAYMENT_EXECUTE operation for this batch.', {
+      pay_batch_id: payBatchIdText,
+      auth_request_id: authRequestIdText,
+      execution_operation_id: authOperationId
+    });
   }
 
-  const intent = isPlainObject(authRow.execution_intent_json) ? authRow.execution_intent_json : {};
-  const mode = upperTrim(intent.execution_mode || options.execution_mode);
-  if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(mode)) {
-    return { ok: false, error_code: 'INVALID_FROZEN_EXECUTION_MODE', message: 'Frozen execution_mode missing or invalid.' };
+  const pureAllZero = authNoBank && authAllowZero && authMissingCount === 0 && authScopedZeroCount > 0 && authPositiveCount === 0;
+  if (authNoBank && !pureAllZero) {
+    return fail('NO_BANK_PAYMENT_PROOF_INVALID', 'The authorised no-bank-payment marker is not supported by the frozen payment counts.');
+  }
+  if (authScopedZeroCount > 0 && !authAllowZero) {
+    return fail('EXPLICIT_ZERO_SCOPE_NOT_AUTHORISED', 'The authorised intent does not permit explicit-zero no-bank settlement scopes.');
   }
 
-  if (mode === 'STANDARD_BANK') {
+  const scheduleKind = upperTrim(authIntent.schedule_kind || authIntent.scheduleKind || 'IMMEDIATE') === 'SCHEDULED' ? 'SCHEDULED' : 'IMMEDIATE';
+  const nextRequiredPhase = scheduleKind === 'SCHEDULED'
+    ? 'WAIT_FOR_SCHEDULE'
+    : (authMode === 'STANDARD_BANK' && !authNoBank ? 'SUBMIT_PROVIDER_TRANSFERS' : 'SETTLEMENT');
+
+  if (authMode === 'STANDARD_BANK') {
     return {
       ok: true,
       authorised_pending_native_execution: true,
-      execution_mode: mode,
+      execution_mode: authMode,
+      next_required_phase: nextRequiredPhase,
       pay_batch_id: payBatchIdText,
-      auth_request_id: authRequestIdText
+      auth_request_id: authRequestIdText,
+      execution_operation_id: authOperationId,
+      root_operation_id: authOperationId,
+      operation: (() => {
+        try {
+          if (typeof buildBankingPayOperationPublicPayload === 'function') return buildBankingPayOperationPublicPayload(executionOperation, { mode: 'PROGRESS_LIGHT' });
+        } catch {}
+        return executionOperation;
+      })()
     };
   }
 
-  const scopeRaw = upperTrim(options.pay_channel_scope || intent.pay_channel_scope || intent.scope || 'ALL');
-  const scope = ['ALL', 'PAYE', 'UMBRELLA'].includes(scopeRaw) ? scopeRaw : 'ALL';
-  const paymentDate = trimStr(intent.payment_date || options.payment_date) || null;
+  if (!['ALL', 'PAYE', 'UMBRELLA'].includes(authScope)) {
+    return fail('MANUAL_SETTLEMENT_SCOPE_UNSUPPORTED', 'CSV and external settlement support ALL, PAYE or UMBRELLA scope only.', { authorised_scope: authScope });
+  }
+
+  const paymentDate = authPaymentDate || trimStr(batchRow.authoritative_payment_date || batchRow.pay_date) || null;
+  if (!paymentDate) return fail('ACCOUNTING_PAYMENT_DATE_REQUIRED', 'The authorised payment batch does not contain an accounting payment date.');
+
+  const bankCsvExport = isPlainObject(batchRow.bank_csv_export_json) ? batchRow.bank_csv_export_json : {};
+  const bankCsvScopeRaw = trimStr(bankCsvExport.scope || bankCsvExport.pay_channel_scope || bankCsvExport.payChannelScope);
+  const bankCsvScope = bankCsvScopeRaw ? normaliseScope(bankCsvScopeRaw) : '';
+  const bankCsvPayeHash = trimStr(bankCsvExport.paye_net_state_hash || bankCsvExport.current_paye_net_state_hash || bankCsvExport.payeNetStateHash);
+  const bankCsvProjectionHash = trimStr(bankCsvExport.bank_payment_projection_hash || bankCsvExport.current_bank_payment_projection_hash || bankCsvExport.bankPaymentProjectionHash);
+  const bankCsvGenerated = Object.keys(bankCsvExport).length > 0 && !!trimStr(bankCsvExport.generated_at_utc || bankCsvExport.generatedAtUtc || bankCsvExport.filename);
+  const bankCsvRowCount = integerField(bankCsvExport, 'row_count', 'rowCount');
+  const bankCsvTotal = moneyField(bankCsvExport, 'total_amount', 'totalAmount');
+  const bankCsvCurrent = bankCsvGenerated
+    && !!bankCsvScopeRaw
+    && bankCsvScope === authScope
+    && bankCsvPayeHash === authPayeHash
+    && bankCsvProjectionHash === authProjectionHash
+    && bankCsvRowCount !== null
+    && bankCsvRowCount === authPositiveCount
+    && bankCsvTotal !== null
+    && bankCsvTotal === (authPositiveTotal ?? 0);
+
+  if (authMode === 'CSV_SETTLEMENT') {
+    if (!bankCsvCurrent) return fail(bankCsvGenerated ? 'BANK_CSV_STALE' : 'BANK_CSV_REQUIRED', bankCsvGenerated ? 'The Bank CSV no longer matches the authorised payment projection.' : 'A current Bank CSV is required before CSV settlement can start.');
+    if (!authCsvConfirmed) return fail(pureAllZero ? 'ZERO_ROW_CSV_REVIEW_CONFIRMATION_REQUIRED' : 'CSV_UPLOAD_CONFIRMATION_REQUIRED', pureAllZero ? 'The authorised zero-row CSV review confirmation is required.' : 'The authorised CSV upload confirmation is required.');
+    if (!pureAllZero && !authCsvReference) return fail('CSV_BANK_CONFIRM_REF_REQUIRED', 'The authorised bank confirmation reference is required for positive CSV settlement.');
+  }
+  if (authMode === 'EXTERNAL_SETTLEMENT' && !pureAllZero && !authExternalComment) {
+    return fail('EXTERNAL_SETTLEMENT_COMMENT_REQUIRED', 'The authorised external settlement comment is required.');
+  }
+
+  const manualConfirmationMode = authMode === 'CSV_SETTLEMENT'
+    ? (pureAllZero ? 'ZERO_ROW_REVIEW_NO_BANK_PAYMENT' : 'BANK_UPLOAD_CONFIRMED')
+    : (pureAllZero ? 'NO_BANK_PAYMENT_CONFIRMED' : 'EXTERNAL_SETTLEMENT_CONFIRMED');
+  const settlementInput = {
+    ...authIntent,
+    source: 'finaliseAuthorisedBankingPaySettlement',
+    pay_batch_id: payBatchIdText,
+    auth_request_id: authRequestIdText,
+    execution_operation_id: authOperationId,
+    root_execution_operation_id: authOperationId,
+    root_operation_id: authOperationId,
+    execution_mode: authMode,
+    settlement_mode: authMode,
+    pay_channel_scope: authScope,
+    scope: authScope,
+    payment_date: paymentDate,
+    schedule_kind: scheduleKind,
+    server_owned_payment_projection_proof: true,
+    payment_projection_proof_source: trimStr(authIntent.payment_projection_proof_source) || 'PAY_BATCH_AUTH_START',
+    no_bank_payment_execution: authNoBank,
+    allow_explicit_zero_no_bank_scopes: authAllowZero,
+    paye_net_state_hash: authPayeHash,
+    bank_payment_projection_hash: authProjectionHash,
+    missing_explicit_paye_input_count: authMissingCount,
+    explicit_zero_count: authGlobalZeroCount,
+    scoped_explicit_zero_count: authScopedZeroCount,
+    positive_bank_payment_count: authPositiveCount,
+    scoped_positive_bank_payment_count: authPositiveCount,
+    positive_bank_payment_total: authPositiveTotal,
+    scoped_positive_bank_payment_total: authPositiveTotal,
+    suppress_remittances: authSuppressRemittances,
+    csv_uploaded_confirmed: authMode === 'CSV_SETTLEMENT' ? authCsvConfirmed : false,
+    bank_confirm_ref: authMode === 'CSV_SETTLEMENT' ? authCsvReference : null,
+    csv_bank_confirm_ref: authMode === 'CSV_SETTLEMENT' ? authCsvReference : null,
+    external_settlement_comment: authMode === 'EXTERNAL_SETTLEMENT' ? authExternalComment : null,
+    manual_confirmation_mode: manualConfirmationMode,
+    bank_csv_generated: authMode === 'CSV_SETTLEMENT' ? bankCsvGenerated : false,
+    bank_csv_current: authMode === 'CSV_SETTLEMENT' ? bankCsvCurrent : false,
+    bank_csv_scope: authMode === 'CSV_SETTLEMENT' ? bankCsvScope : null,
+    bank_csv_paye_net_state_hash: authMode === 'CSV_SETTLEMENT' ? bankCsvPayeHash : null,
+    bank_csv_bank_payment_projection_hash: authMode === 'CSV_SETTLEMENT' ? bankCsvProjectionHash : null,
+    bank_csv_row_count: authMode === 'CSV_SETTLEMENT' ? bankCsvRowCount : null,
+    bank_csv_total_amount: authMode === 'CSV_SETTLEMENT' ? bankCsvTotal : null,
+    zero_row_csv_review_confirmed: authMode === 'CSV_SETTLEMENT' && pureAllZero ? authCsvConfirmed : false,
+    accounting_payment_date_source: authPaymentDate ? 'AUTHORISED_EXECUTION_INTENT' : 'FROZEN_PAY_BATCH',
+    execution_intent_json: authIntent,
+    final_result_shape: 'finaliseAuthorisedBankingPaySettlement'
+  };
+
   const idempotencyHash = await sha256Hex(stableStringify({
     pay_batch_id: payBatchIdText,
     auth_request_id: authRequestIdText,
-    execution_mode: mode,
-    scope,
-    payment_date: paymentDate,
-    csv_bank_confirm_ref: intent.csv_bank_confirm_ref || null,
-    external_settlement_comment: intent.external_settlement_comment || null,
-    suppress_remittances: truthyIntentFlag(intent.suppress_remittances)
+    execution_operation_id: authOperationId,
+    execution_intent_json: authIntent,
+    bank_csv_evidence: authMode === 'CSV_SETTLEMENT' ? {
+      scope: bankCsvScope,
+      paye_net_state_hash: bankCsvPayeHash,
+      bank_payment_projection_hash: bankCsvProjectionHash,
+      row_count: bankCsvRowCount,
+      total_amount: bankCsvTotal
+    } : null,
+    manual_confirmation_mode: manualConfirmationMode
   }));
 
-  const operationPayload = await startBankingPayOperation(env, {
-    operation_type: 'PAYMENT_SETTLEMENT',
-    actor_user_id: actorUserId,
-    idempotency_key: `payment-settlement:batch:${payBatchIdText}:auth:${authRequestIdText}:hash:${idempotencyHash}`,
-    pay_batch_id: payBatchIdText,
-    input_json: {
-      source: 'finaliseAuthorisedBankingPaySettlement',
+  let operationPayload;
+  try {
+    operationPayload = await startBankingPayOperation(env, {
+      operation_type: 'PAYMENT_SETTLEMENT',
+      actor_user_id: actorUserId,
+      idempotency_key: `payment-settlement:batch:${payBatchIdText}:auth:${authRequestIdText}:root:${authOperationId}:hash:${idempotencyHash}`,
       pay_batch_id: payBatchIdText,
-      auth_request_id: authRequestIdText,
-      execution_mode: mode,
-      settlement_mode: mode,
-      scope,
-      payment_date: paymentDate,
-      bank_confirm_ref: mode === 'CSV_SETTLEMENT' ? (intent.csv_bank_confirm_ref ?? null) : null,
-      csv_bank_confirm_ref: mode === 'CSV_SETTLEMENT' ? (intent.csv_bank_confirm_ref ?? null) : null,
-      csv_uploaded_confirmed: mode === 'CSV_SETTLEMENT' ? truthyIntentFlag(intent.csv_uploaded_confirmed) : false,
-      external_settlement_comment: mode === 'EXTERNAL_SETTLEMENT' ? (intent.external_settlement_comment ?? null) : null,
-      suppress_remittances: truthyIntentFlag(intent.suppress_remittances),
-      final_result_shape: 'finaliseAuthorisedBankingPaySettlement'
-    }
-  });
+      root_operation_id: authOperationId,
+      input_json: settlementInput,
+      config_json: {
+        runner_state: 'RUNNABLE',
+        run_after_utc: new Date().toISOString(),
+        settlement_scope_limit: 100,
+        settlement_chunk_size: 100,
+        lock_seconds: 60,
+        max_request_ms: 20000
+      }
+    }, { publicPayloadOptions: { mode: 'PROGRESS_LIGHT' } });
+  } catch (error) {
+    return fail('PAYMENT_SETTLEMENT_OPERATION_START_FAILED', String(error?.safe_message || error?.message || error || 'Payment settlement operation could not be started.'));
+  }
 
   let drainScheduleResult = null;
   try {
@@ -31257,24 +32844,44 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
     drainScheduleResult = {
       ok: false,
       scheduled: false,
-      error: String(error && error.message ? error.message : error || 'PAYMENT_SETTLEMENT_DRAIN_SCHEDULE_FAILED')
+      error: String(error?.message || error || 'PAYMENT_SETTLEMENT_DRAIN_SCHEDULE_FAILED')
     };
   }
 
+  const operationReused = operationPayload.operation_reused === true ||
+    operationPayload.active_operation_reused === true ||
+    operationPayload.existing_active_operation === true ||
+    operationPayload.active_execution_already_exists === true ||
+    operationPayload.duplicate_start_prevented === true ||
+    operationPayload.is_existing === true ||
+    operationPayload.operation_created === false;
+  const operationCreated = !operationReused && operationPayload.operation_created !== false;
+
   return {
     ok: true,
-    operation_started: true,
+    operation_started: operationCreated,
+    operation_created: operationCreated,
+    operation_reused: operationReused,
     finalisation_deferred: true,
-    execution_mode: mode,
+    execution_mode: authMode,
+    next_required_phase: 'SETTLEMENT',
     pay_batch_id: payBatchIdText,
     auth_request_id: authRequestIdText,
+    execution_operation_id: authOperationId,
+    root_operation_id: authOperationId,
+    settlement_operation_id: resolveOperationIdForImmediateDrain(operationPayload),
+    no_bank_payment_execution: pureAllZero,
+    allow_explicit_zero_no_bank_scopes: authAllowZero,
+    manual_confirmation_mode: manualConfirmationMode,
     operation: operationPayload,
-    operation_id: operationPayload.operation_id || null,
-    operation_status: operationPayload.status || null,
-    operation_phase: operationPayload.phase || null,
+    operation_id: resolveOperationIdForImmediateDrain(operationPayload),
+    operation_status: operationPayload.status || operationPayload.operation_status || null,
+    operation_phase: operationPayload.phase || operationPayload.operation_phase || null,
     drain_schedule_result: drainScheduleResult
   };
 }
+
+
 
 
 
@@ -34148,6 +35755,7 @@ async function handleTimesheetSnoozePayment(env, req, timesheetId) {
   }
 }
 
+
 async function handleBankingPayAuthTokenAction(env, req, user, ctx) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -34155,31 +35763,40 @@ async function handleBankingPayAuthTokenAction(env, req, user, ctx) {
 
   const token = String(body.pay_auth_token || body.token || '').trim();
   if (!token) return withCORS(env, req, badRequest('pay_auth_token is required'));
-
-  // Tokens are generated in DB as encode(gen_random_bytes(24), 'hex') => 48 hex chars.
-  if (!/^[0-9a-f]{48}$/i.test(token)) {
-    return withCORS(env, req, badRequest('invalid_pay_auth_token'));
-  }
+  if (!/^[0-9a-f]{48}$/i.test(token)) return withCORS(env, req, badRequest('invalid_pay_auth_token'));
 
   const actionKind = String(body.action_kind || body.action || '').trim().toUpperCase();
   if (!actionKind) return withCORS(env, req, badRequest('action_kind is required'));
-  if (!(actionKind === 'AUTHORISE' || actionKind === 'USE_GOLDEN_KEY' || actionKind === 'REJECT')) {
+  if (!['AUTHORISE', 'USE_GOLDEN_KEY', 'REJECT'].includes(actionKind)) {
     return withCORS(env, req, badRequest('action_kind must be AUTHORISE, USE_GOLDEN_KEY or REJECT'));
   }
 
-  const note = (body.note === null || body.note === undefined) ? null : String(body.note).trim();
-
+  const note = body.note === null || body.note === undefined ? null : String(body.note).trim();
   const enc = encodeURIComponent;
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
   const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const truthy = (value) => {
+    if (value === true) return true;
+    if (value === false || value === null || value === undefined) return false;
+    return ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  };
+  const normaliseMode = (value) => {
+    const mode = upperTrim(value);
+    if (['STANDARD_BANK', 'BANK'].includes(mode)) return 'STANDARD_BANK';
+    if (['CSV', 'CSV_SETTLEMENT'].includes(mode)) return 'CSV_SETTLEMENT';
+    if (['EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT'].includes(mode)) return 'EXTERNAL_SETTLEMENT';
+    return mode;
+  };
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object' && !Array.isArray(payload[0])) payload = payload[0];
       if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object' && !Array.isArray(payload[0])) payload = payload[0];
     } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    return safeObject(payload);
   };
   const stableStringify = (value) => {
     const seen = new WeakSet();
@@ -34204,41 +35821,130 @@ async function handleBankingPayAuthTokenAction(env, req, user, ctx) {
     try {
       if (globalThis.crypto && globalThis.crypto.subtle) {
         const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-        return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
       }
     } catch {}
-    let h = 0;
-    for (let i = 0; i < text.length; i += 1) h = Math.imul(31, h) + text.charCodeAt(i) | 0;
-    return `fallback-${Math.abs(h)}`;
+    let hash = 0;
+    for (let index = 0; index < text.length; index += 1) hash = Math.imul(31, hash) + text.charCodeAt(index) | 0;
+    return `fallback-${Math.abs(hash)}`;
   };
-  const resolveOperationIdForImmediateDrain = (operationPayload) => {
+  const resolveOperationId = (operationPayload) => {
     const payload = safeObject(operationPayload);
     const nestedOperation = safeObject(payload.operation);
     const nestedRawOperation = safeObject(payload.raw_operation);
-    const operationId = String(payload.operation_id || payload.operationId || payload.id || nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id || nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id || '').trim();
+    const operationId = trimStr(
+      payload.operation_id || payload.operationId || payload.id ||
+      nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id ||
+      nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id
+    );
     return uuidRe.test(operationId) ? operationId : null;
   };
-  const scheduleAuthTokenExecuteDrainBestEffort = (operationPayload) => {
+  const publicOperation = (operationRow) => {
+    const row = safeObject(operationRow);
     try {
-      if (typeof scheduleBankingPayOperationDrain !== 'function') return null;
-      const operationId = resolveOperationIdForImmediateDrain(operationPayload);
-      if (!operationId) return null;
-      return scheduleBankingPayOperationDrain(env, ctx, {
-        operationId,
-        operationType: 'PAYMENT_EXECUTE',
-        payBatchId,
-        actorUserId: user.id,
-        source: 'handleBankingPayAuthTokenAction'
-      });
-    } catch (error) {
-      try { console.warn('[handleBankingPayAuthTokenAction] immediate execute drain schedule failed:', error && error.message ? error.message : error); } catch {}
-      return null;
-    }
+      if (typeof buildBankingPayOperationPublicPayload === 'function') return buildBankingPayOperationPublicPayload(row, { mode: 'PROGRESS_LIGHT' });
+    } catch {}
+    return row;
+  };
+  const isLegacyCsvExportPrepareOperation = (operation) => {
+    const op = safeObject(operation);
+    const input = safeObject(op.input_json || op.inputJson);
+    return truthy(input.prepare_bank_csv_export_only ?? input.prepareBankCsvExportOnly) ||
+      upperTrim(input.execution_mode || input.executionMode) === 'BANK_CSV_EXPORT_PREPARE' ||
+      trimStr(input.source) === 'handleBankingPayBatchExportCsv' ||
+      trimStr(op.idempotency_key || op.idempotencyKey).toLowerCase().startsWith('bank-csv-export-prepare:');
+  };
+  const deriveNextRequiredPhase = (executionIntent, explicitPhase) => {
+    const direct = upperTrim(explicitPhase || executionIntent.next_required_phase || executionIntent.nextRequiredPhase);
+    if (['SETTLEMENT', 'WAIT_FOR_SCHEDULE', 'SUBMIT_PROVIDER_TRANSFERS', 'WAIT_FOR_AUTHORISATION'].includes(direct)) return direct;
+    const mode = normaliseMode(executionIntent.execution_mode || executionIntent.executionMode);
+    const scheduleKind = upperTrim(executionIntent.schedule_kind || executionIntent.scheduleKind || 'IMMEDIATE') === 'SCHEDULED' ? 'SCHEDULED' : 'IMMEDIATE';
+    const noBank = truthy(executionIntent.no_bank_payment_execution ?? executionIntent.noBankPaymentExecution);
+    if (scheduleKind === 'SCHEDULED') return 'WAIT_FOR_SCHEDULE';
+    if (mode === 'CSV_SETTLEMENT' || mode === 'EXTERNAL_SETTLEMENT' || noBank) return 'SETTLEMENT';
+    return 'SUBMIT_PROVIDER_TRANSFERS';
+  };
+  const loadExecutionOperation = async (operationId, payBatchId) => {
+    if (!uuidRe.test(operationId)) return null;
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_operations` +
+      `?id=eq.${enc(operationId)}` +
+      `&select=id,operation_type,status,phase,runner_state,actor_user_id,pay_batch_id,root_operation_id,idempotency_key,input_json,config_json,progress_json,result_json,error_json,created_at_utc,updated_at_utc` +
+      `&limit=1`,
+      false
+    );
+    const row = Array.isArray(rows) && rows[0] && typeof rows[0] === 'object' && !Array.isArray(rows[0]) ? rows[0] : null;
+    const status = upperTrim(row?.status);
+    if (!row ||
+        upperTrim(row.operation_type) !== 'PAYMENT_EXECUTE' ||
+        trimStr(row.pay_batch_id) !== payBatchId ||
+        isLegacyCsvExportPrepareOperation(row) ||
+        ['FAILED', 'ERROR', 'ERRORED', 'CANCELLED', 'CANCELED', 'ABORTED'].includes(status)) return null;
+    return row;
+  };
+  const findActiveExecutionOperation = async (payBatchId) => {
+    const found = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active', {
+      p_operation_type: 'PAYMENT_EXECUTE',
+      p_workbench_session_id: null,
+      p_pay_batch_id: payBatchId,
+      p_actor_user_id: null
+    }), 'banking_pay_operation_find_active');
+    return found && resolveOperationId(found) && !isLegacyCsvExportPrepareOperation(found) ? found : null;
   };
 
-  // Validate actor eligibility (authoriser or golden key)
+  const resumeAuthorisedExecutionOperation = async (operationRow, executionIntent, authRequestId, nextRequiredPhase) => {
+    const operationId = resolveOperationId(operationRow);
+    if (!operationId) throw Object.assign(new Error('The authorised payment execution operation could not be resolved.'), { error_code: 'AUTHORISED_EXECUTION_OPERATION_INVALID' });
+    const phaseMap = {
+      SETTLEMENT: 'START_LOCAL_SETTLEMENT',
+      WAIT_FOR_SCHEDULE: 'SCHEDULE_PAYMENT',
+      SUBMIT_PROVIDER_TRANSFERS: 'SUBMIT_PROVIDER_TRANSFERS'
+    };
+    const runnerPhase = phaseMap[nextRequiredPhase];
+    if (!runnerPhase) throw Object.assign(new Error('The authorised next_required_phase is invalid for execution resumption.'), { error_code: 'AUTHORISED_NEXT_REQUIRED_PHASE_INVALID' });
+    const resumed = unwrapRpc(await sbRpc(env, 'banking_pay_operation_save_progress', {
+      p_operation_id: operationId,
+      p_status: 'RUNNING',
+      p_phase: runnerPhase,
+      p_total_units: null,
+      p_completed_units: null,
+      p_failed_units: null,
+      p_current_chunk_index: null,
+      p_chunk_count: null,
+      p_progress_json: {
+        runner_state: 'RUNNABLE',
+        requires_user_action: false,
+        run_after_utc: new Date().toISOString(),
+        resume_reason: `PAYMENT_AUTHORISED_${nextRequiredPhase}`,
+        auth_request_id: authRequestId,
+        auth_state: 'AUTHORISED',
+        execution_mode: normaliseMode(executionIntent.execution_mode || executionIntent.executionMode),
+        next_required_phase: nextRequiredPhase,
+        no_bank_payment_execution: truthy(executionIntent.no_bank_payment_execution ?? executionIntent.noBankPaymentExecution),
+        allow_explicit_zero_no_bank_scopes: truthy(executionIntent.allow_explicit_zero_no_bank_scopes ?? executionIntent.allowExplicitZeroNoBankScopes),
+        paye_net_state_hash: trimStr(executionIntent.paye_net_state_hash || executionIntent.payeNetStateHash) || null,
+        bank_payment_projection_hash: trimStr(executionIntent.bank_payment_projection_hash || executionIntent.bankPaymentProjectionHash) || null,
+        missing_explicit_paye_input_count: executionIntent.missing_explicit_paye_input_count ?? executionIntent.missingExplicitPayeInputCount ?? null,
+        explicit_zero_count: executionIntent.explicit_zero_count ?? executionIntent.explicitZeroCount ?? null,
+        scoped_explicit_zero_count: executionIntent.scoped_explicit_zero_count ?? executionIntent.scopedExplicitZeroCount ?? null,
+        positive_bank_payment_count: executionIntent.positive_bank_payment_count ?? executionIntent.positiveBankPaymentCount ?? null,
+        scoped_positive_bank_payment_count: executionIntent.scoped_positive_bank_payment_count ?? executionIntent.scopedPositiveBankPaymentCount ?? null,
+        authorised_at_utc: new Date().toISOString()
+      },
+      p_extend_lock_seconds: null
+    }), 'banking_pay_operation_save_progress');
+    if (resumed.saved !== true) {
+      throw Object.assign(new Error(`The authorised payment execution operation could not be resumed (${trimStr(resumed.not_saved_reason) || 'UNKNOWN'}).`), {
+        error_code: 'AUTHORISED_EXECUTION_OPERATION_RESUME_FAILED',
+        not_saved_reason: resumed.not_saved_reason || null
+      });
+    }
+    return resumed;
+  };
+
   try {
-    const { rows: urows } = await sbFetch(
+    const { rows: userRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/tms_users` +
       `?id=eq.${enc(user.id)}` +
@@ -34246,20 +35952,15 @@ async function handleBankingPayAuthTokenAction(env, req, user, ctx) {
       `&limit=1`,
       false
     );
-    const u0 = (urows && urows[0]) ? urows[0] : null;
-    if (!u0 || u0.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
-    if (u0.payment_authoriser !== true && u0.payment_golden_key !== true) {
-      return withCORS(env, req, badRequest('PAYMENT_AUTHORISER_REQUIRED'));
-    }
-    if (actionKind === 'USE_GOLDEN_KEY' && u0.payment_golden_key !== true) {
-      return withCORS(env, req, badRequest('PAYMENT_GOLDEN_KEY_REQUIRED'));
-    }
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to validate actor')));
+    const actor = Array.isArray(userRows) && safeObject(userRows[0]) ? userRows[0] : null;
+    if (!actor || actor.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
+    if (actor.payment_authoriser !== true && actor.payment_golden_key !== true) return withCORS(env, req, badRequest('PAYMENT_AUTHORISER_REQUIRED'));
+    if (actionKind === 'USE_GOLDEN_KEY' && actor.payment_golden_key !== true) return withCORS(env, req, badRequest('PAYMENT_GOLDEN_KEY_REQUIRED'));
+  } catch (error) {
+    return withCORS(env, req, serverError(String(error?.message || error || 'Failed to validate actor')));
   }
 
-  // Load token row
-  let tok = null;
+  let tokenRow = null;
   try {
     const { rows } = await sbFetch(
       env,
@@ -34269,30 +35970,21 @@ async function handleBankingPayAuthTokenAction(env, req, user, ctx) {
       `&limit=1`,
       false
     );
-    tok = (rows && rows[0]) ? rows[0] : null;
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'TOKEN_LOOKUP_FAILED')));
+    tokenRow = Array.isArray(rows) && safeObject(rows[0]) ? rows[0] : null;
+  } catch (error) {
+    return withCORS(env, req, serverError(String(error?.message || error || 'TOKEN_LOOKUP_FAILED')));
   }
 
-  if (!tok) return withCORS(env, req, badRequest('invalid_or_expired_token'));
+  if (!tokenRow) return withCORS(env, req, badRequest('invalid_or_expired_token'));
+  if (trimStr(tokenRow.target_user_id) !== trimStr(user.id)) return withCORS(env, req, unauthorized('invalid_or_expired_token'));
+  if (tokenRow.used_at_utc) return withCORS(env, req, badRequest('invalid_or_expired_token'));
+  const expiryMs = Date.parse(trimStr(tokenRow.expires_at_utc));
+  if (!Number.isFinite(expiryMs) || expiryMs < Date.now()) return withCORS(env, req, badRequest('invalid_or_expired_token'));
 
-  const targetUserId = tok.target_user_id ? String(tok.target_user_id).trim() : '';
-  if (!targetUserId || targetUserId !== String(user.id || '').trim()) {
-    return withCORS(env, req, unauthorized('invalid_or_expired_token'));
-  }
+  const authRequestId = trimStr(tokenRow.auth_request_id);
+  if (!uuidRe.test(authRequestId)) return withCORS(env, req, badRequest('invalid_or_expired_token'));
 
-  if (tok.used_at_utc) return withCORS(env, req, badRequest('invalid_or_expired_token'));
-
-  const expMs = Date.parse(String(tok.expires_at_utc || ''));
-  if (!Number.isFinite(expMs) || expMs < Date.now()) return withCORS(env, req, badRequest('invalid_or_expired_token'));
-
-  const authRequestId = tok.auth_request_id ? String(tok.auth_request_id).trim() : '';
-  if (!uuidRe.test(authRequestId)) {
-    return withCORS(env, req, badRequest('invalid_or_expired_token'));
-  }
-
-  // Load auth_request row to obtain pay_batch_id + state
-  let reqRow = null;
+  let authRequestRow = null;
   try {
     const { rows } = await sbFetch(
       env,
@@ -34302,221 +35994,256 @@ async function handleBankingPayAuthTokenAction(env, req, user, ctx) {
       `&limit=1`,
       false
     );
-    reqRow = (rows && rows[0]) ? rows[0] : null;
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'AUTH_REQUEST_LOOKUP_FAILED')));
+    authRequestRow = Array.isArray(rows) && safeObject(rows[0]) ? rows[0] : null;
+  } catch (error) {
+    return withCORS(env, req, serverError(String(error?.message || error || 'AUTH_REQUEST_LOOKUP_FAILED')));
   }
 
-  if (!reqRow) return withCORS(env, req, badRequest('invalid_or_expired_token'));
+  if (!authRequestRow) return withCORS(env, req, badRequest('invalid_or_expired_token'));
+  const authStateBefore = upperTrim(authRequestRow.state);
+  if (authStateBefore !== 'AWAITING') return withCORS(env, req, badRequest(`AUTH_REQUEST_NOT_ACTIONABLE current_state=${authStateBefore}`));
 
-  const authState = String(reqRow.state || '').trim().toUpperCase();
-  if (authState !== 'AWAITING') {
-    return withCORS(env, req, badRequest(`AUTH_REQUEST_NOT_ACTIONABLE current_state=${authState}`));
-  }
+  const payBatchId = trimStr(authRequestRow.pay_batch_id);
+  if (!uuidRe.test(payBatchId)) return withCORS(env, req, badRequest('invalid_or_expired_token'));
 
-  const payBatchId = reqRow.pay_batch_id ? String(reqRow.pay_batch_id).trim() : '';
-  if (!uuidRe.test(payBatchId)) {
-    return withCORS(env, req, badRequest('invalid_or_expired_token'));
-  }
-
-  // Apply action via DB RPC
-  let rpcRes;
+  let actionResult;
   try {
-    rpcRes = await sbRpc(env, 'pay_batch_auth_apply_action', {
+    actionResult = unwrapRpc(await sbRpc(env, 'pay_batch_auth_apply_action', {
       p_auth_request_id: authRequestId,
       p_actor_user_id: user.id,
       p_action: actionKind,
       p_note: note
-    });
-  } catch (e) {
-    const msg = (e && e.message) ? String(e.message) : String(e || 'AUTH_ACTION_FAILED');
-    return withCORS(env, req, serverError(msg));
+    }), 'pay_batch_auth_apply_action');
+  } catch (error) {
+    return withCORS(env, req, serverError(String(error?.message || error || 'AUTH_ACTION_FAILED')));
+  }
+  if (!actionResult || actionResult.ok === false) {
+    const message = trimStr(actionResult?.message || actionResult?.error || 'AUTH_ACTION_FAILED') || 'AUTH_ACTION_FAILED';
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      error: message,
+      message,
+      error_code: upperTrim(actionResult?.error_code || actionResult?.code || 'AUTH_ACTION_FAILED') || 'AUTH_ACTION_FAILED'
+    }), { status: 409, headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
   }
 
-  let payload = rpcRes;
+  let refreshedAuthRequestRow = null;
   try {
-    if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-    if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_auth_apply_action')) {
-      payload = payload.pay_batch_auth_apply_action;
-    }
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests` +
+      `?id=eq.${enc(authRequestId)}` +
+      `&select=id,pay_batch_id,state,required_quantity,execution_intent_json,finalised_at_utc` +
+      `&limit=1`,
+      false
+    );
+    refreshedAuthRequestRow = Array.isArray(rows) && safeObject(rows[0]) ? rows[0] : null;
   } catch {}
 
-  const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  const becameAuthorised = (out.became_authorised === true) || (String(out.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
-  const executionIntent = Object.assign({}, safeObject(reqRow.execution_intent_json), safeObject(out.execution_intent_json));
-  const executionMode = String(out.execution_mode || executionIntent.execution_mode || 'STANDARD_BANK').trim().toUpperCase() || 'STANDARD_BANK';
-  const scheduleKindRaw = String(executionIntent.schedule_kind || out.schedule_kind || 'IMMEDIATE').trim().toUpperCase() || 'IMMEDIATE';
-  const scheduleKind = scheduleKindRaw === 'SCHEDULED' ? 'SCHEDULED' : 'IMMEDIATE';
+  const authStateAfter = upperTrim(refreshedAuthRequestRow?.state || actionResult.auth_state || actionResult.authState);
+  const becameAuthorised = actionResult.became_authorised === true || authStateAfter === 'AUTHORISED';
+  const actionExecutionIntent = safeObject(actionResult.execution_intent_json);
+  const refreshedExecutionIntent = safeObject(refreshedAuthRequestRow?.execution_intent_json);
+  const originalExecutionIntent = safeObject(authRequestRow.execution_intent_json);
+  if (Object.keys(actionExecutionIntent).length && Object.keys(refreshedExecutionIntent).length && stableStringify(actionExecutionIntent) !== stableStringify(refreshedExecutionIntent)) {
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      error: 'The authorised execution intent changed unexpectedly while the authorisation action was being applied.',
+      message: 'The authorised execution intent changed unexpectedly while the authorisation action was being applied.',
+      error_code: 'AUTH_EXECUTION_INTENT_REFRESH_MISMATCH'
+    }), { status: 409, headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
+  }
+  const executionIntent = Object.keys(refreshedExecutionIntent).length
+    ? refreshedExecutionIntent
+    : (Object.keys(actionExecutionIntent).length ? actionExecutionIntent : originalExecutionIntent);
+  const executionMode = normaliseMode(actionResult.execution_mode || executionIntent.execution_mode || executionIntent.executionMode);
+  const scheduleKind = upperTrim(executionIntent.schedule_kind || executionIntent.scheduleKind || actionResult.schedule_kind || 'IMMEDIATE') === 'SCHEDULED' ? 'SCHEDULED' : 'IMMEDIATE';
+  const nextRequiredPhase = deriveNextRequiredPhase(executionIntent, actionResult.next_required_phase || actionResult.nextRequiredPhase);
   let finalisation = null;
   let operationPayload = null;
   let operationDrainScheduleResult = null;
 
   if (becameAuthorised && actionKind !== 'REJECT') {
-    if (executionMode === 'STANDARD_BANK') {
-      try {
-        const activeOperation = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active', {
-          p_operation_type: 'PAYMENT_EXECUTE',
-          p_workbench_session_id: null,
-          p_pay_batch_id: payBatchId,
-          p_actor_user_id: user.id
-        }), 'banking_pay_operation_find_active');
-
-        if (activeOperation && activeOperation.operation_id) {
-          operationPayload = (typeof buildBankingPayOperationPublicPayload === 'function')
-            ? buildBankingPayOperationPublicPayload(activeOperation)
-            : activeOperation;
-        } else {
-          const idempotencyHash = await sha256Hex(stableStringify({
-            pay_batch_id: payBatchId,
-            auth_request_id: authRequestId,
-            action: actionKind,
-            execution_intent: executionIntent
-          }));
-          operationPayload = await startBankingPayOperation(env, {
-            operation_type: 'PAYMENT_EXECUTE',
-            actor_user_id: user.id,
-            idempotency_key: `payment-execute:auth-action:batch:${payBatchId}:auth:${authRequestId}:hash:${idempotencyHash}`,
-            pay_batch_id: payBatchId,
-            input_json: {
-              source: 'handleBankingPayAuthTokenAction',
-              pay_batch_id: payBatchId,
-              auth_request_id: authRequestId,
-              action_kind: actionKind,
-              execution_mode: executionMode,
-              schedule_kind: scheduleKind,
-              scheduled_at_utc: executionIntent.scheduled_at_utc || out.scheduled_at_utc || null,
-              funding_account_ref: executionIntent.funding_account_ref || out.funding_account_ref || null,
-              payment_date: executionIntent.payment_date || out.payment_date || null,
-              pay_channel_scope: executionIntent.pay_channel_scope || out.pay_channel_scope || 'ALL',
-              suppress_remittances: executionIntent.suppress_remittances === true || out.suppress_remittances === true,
-              reauth_verified: true
-            }
-          });
-        }
-        operationDrainScheduleResult = scheduleAuthTokenExecuteDrainBestEffort(operationPayload);
-      } catch (e) {
-        const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
-          ? makeBankingFriendlyErrorPayload(e, { action: 'BANKING_PAY_AUTH_TOKEN_EXECUTE_START', pay_batch_id: payBatchId })
-          : { ok: false, error: String(e?.message || e || 'Payment execution start failed.'), message: String(e?.message || e || 'Payment execution start failed.'), error_code: 'PAYMENT_EXECUTE_START_FAILED' };
-        return withCORS(env, req, new Response(JSON.stringify(friendly), {
-          status: Number(friendly.http_status || friendly.status || 500) || 500,
-          headers: { 'Content-Type': 'application/json; charset=utf-8' }
-        }));
-      }
-    } else if (['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) {
-      finalisation = await finaliseAuthorisedBankingPaySettlement(env, req, user, payBatchId, authRequestId, {
-        ctx,
-        execution_mode: executionMode,
-        source: 'handleBankingPayAuthTokenAction'
-      });
-      operationPayload = finalisation && finalisation.operation ? finalisation.operation : null;
-      operationDrainScheduleResult = finalisation && finalisation.drain_schedule_result ? finalisation.drain_schedule_result : null;
-      if (!finalisation || finalisation.ok !== true) {
-        const msg = String(finalisation?.message || 'Settlement finalisation failed.');
-        const code = String(finalisation?.error_code || 'SETTLEMENT_FINALISATION_FAILED').toUpperCase();
-        return withCORS(env, req, new Response(JSON.stringify({ error: msg, message: msg, error_code: code, finalisation }), {
-          status: 409,
-          headers: { 'Content-Type': 'application/json; charset=utf-8' }
-        }));
-      }
-    } else {
+    if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) {
       return withCORS(env, req, new Response(JSON.stringify({
-        error: 'INVALID_FROZEN_EXECUTION_MODE',
+        ok: false,
+        error: 'Frozen execution_mode missing or invalid.',
         message: 'Frozen execution_mode missing or invalid.',
         error_code: 'INVALID_FROZEN_EXECUTION_MODE',
         execution_mode: executionMode || null
       }), { status: 409, headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
     }
 
+    if (executionMode === 'CSV_SETTLEMENT' || executionMode === 'EXTERNAL_SETTLEMENT') {
+      finalisation = await finaliseAuthorisedBankingPaySettlement(env, req, user, payBatchId, authRequestId, {
+        ctx,
+        source: 'handleBankingPayAuthTokenAction'
+      });
+      operationPayload = safeObject(finalisation.operation);
+      operationDrainScheduleResult = finalisation.drain_schedule_result || null;
+      if (!finalisation || finalisation.ok !== true) {
+        const message = String(finalisation?.message || 'Settlement finalisation failed.');
+        const code = upperTrim(finalisation?.error_code || finalisation?.code || 'SETTLEMENT_FINALISATION_FAILED');
+        return withCORS(env, req, new Response(JSON.stringify({ ok: false, error: message, message, error_code: code, code, finalisation }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' }
+        }));
+      }
+    } else {
+      try {
+        const originalOperationId = trimStr(executionIntent.operation_id || executionIntent.operationId);
+        let operationRow = await loadExecutionOperation(originalOperationId, payBatchId);
+        if (!operationRow && !originalOperationId) operationRow = await findActiveExecutionOperation(payBatchId);
+
+        if (originalOperationId && !operationRow) {
+          throw Object.assign(new Error('The authorised execution intent references a missing or incompatible payment execution operation.'), { error_code: 'AUTHORISED_EXECUTION_OPERATION_INVALID' });
+        }
+
+        if (operationRow) {
+          const resumedOperation = await resumeAuthorisedExecutionOperation(operationRow, executionIntent, authRequestId, nextRequiredPhase);
+          operationPayload = publicOperation(resumedOperation);
+        } else {
+          const idempotencyHash = await sha256Hex(stableStringify({
+            pay_batch_id: payBatchId,
+            auth_request_id: authRequestId,
+            action: actionKind,
+            next_required_phase: nextRequiredPhase,
+            execution_intent_json: executionIntent
+          }));
+          operationPayload = await startBankingPayOperation(env, {
+            operation_type: 'PAYMENT_EXECUTE',
+            actor_user_id: user.id,
+            idempotency_key: `payment-execute:authorised-recovery:batch:${payBatchId}:auth:${authRequestId}:hash:${idempotencyHash}`,
+            pay_batch_id: payBatchId,
+            input_json: {
+              ...executionIntent,
+              source: 'handleBankingPayAuthTokenAction',
+              pay_batch_id: payBatchId,
+              auth_request_id: authRequestId,
+              action_kind: actionKind,
+              execution_mode: executionMode,
+              schedule_kind: scheduleKind,
+              next_required_phase: nextRequiredPhase,
+              original_operation_id: originalOperationId || null,
+              execution_intent_json: executionIntent,
+              authorised_recovery_operation: true,
+              reauth_verified: true
+            }
+          }, { publicPayloadOptions: { mode: 'PROGRESS_LIGHT' } });
+        }
+
+        try {
+          if (typeof scheduleBankingPayOperationDrain === 'function') {
+            const operationId = resolveOperationId(operationPayload);
+            if (operationId) {
+              operationDrainScheduleResult = scheduleBankingPayOperationDrain(env, ctx, {
+                operationId,
+                operationType: 'PAYMENT_EXECUTE',
+                payBatchId,
+                actorUserId: user.id,
+                source: `handleBankingPayAuthTokenAction.${nextRequiredPhase.toLowerCase()}`
+              });
+            }
+          }
+        } catch (error) {
+          operationDrainScheduleResult = { ok: false, scheduled: false, error: String(error?.message || error || 'PAYMENT_EXECUTE_DRAIN_SCHEDULE_FAILED') };
+        }
+      } catch (error) {
+        const friendly = typeof makeBankingFriendlyErrorPayload === 'function'
+          ? makeBankingFriendlyErrorPayload(error, { action: 'BANKING_PAY_AUTH_TOKEN_EXECUTE_START', pay_batch_id: payBatchId })
+          : { ok: false, error: String(error?.message || error || 'Payment execution start failed.'), message: String(error?.message || error || 'Payment execution start failed.'), error_code: upperTrim(error?.error_code || error?.code || 'PAYMENT_EXECUTE_START_FAILED') };
+        return withCORS(env, req, new Response(JSON.stringify(friendly), {
+          status: Number(friendly.http_status || friendly.status || 500) || 500,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' }
+        }));
+      }
+    }
+
     try {
       await sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, user?.id || null, {
         scheduleKind,
-        noticeKind: scheduleKind === 'SCHEDULED' ? 'PAYMENT_SCHEDULED' : 'PAYMENT_PROCESSING',
-        forceProcessing: scheduleKind !== 'SCHEDULED',
-        operationId: resolveOperationIdForImmediateDrain(operationPayload) || null,
-        source: executionMode === 'STANDARD_BANK' ? 'handleBankingPayAuthTokenAction.standard_bank' : 'handleBankingPayAuthTokenAction.settlement'
+        noticeKind: nextRequiredPhase === 'WAIT_FOR_SCHEDULE' ? 'PAYMENT_SCHEDULED' : 'PAYMENT_PROCESSING',
+        forceProcessing: nextRequiredPhase !== 'WAIT_FOR_SCHEDULE',
+        operationId: resolveOperationId(operationPayload) || null,
+        source: nextRequiredPhase === 'SETTLEMENT'
+          ? 'handleBankingPayAuthTokenAction.local_settlement'
+          : (nextRequiredPhase === 'SUBMIT_PROVIDER_TRANSFERS' ? 'handleBankingPayAuthTokenAction.provider_execution' : 'handleBankingPayAuthTokenAction.scheduled_execution')
       });
-    } catch {
-      // best-effort only
-    }
+    } catch {}
   }
 
-  // Mark THIS token used (prevents link reuse). Best-effort (DB also invalidates tokens on REJECT).
   try {
-    const nowIso = new Date().toISOString();
     await fetch(`${env.SUPABASE_URL}/rest/v1/pay_batch_auth_tokens?token=eq.${enc(token)}`, {
       method: 'PATCH',
       headers: { ...sbHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ used_at_utc: nowIso })
+      body: JSON.stringify({ used_at_utc: new Date().toISOString() })
     }).catch(() => {});
   } catch {}
 
-  // Load updated batch/auth for response + email content
   let afterGet = null;
   try {
-    const bg2 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: payBatchId });
-
-    let bp2 = bg2;
-    try {
-      if (Array.isArray(bg2) && bg2.length === 1 && bg2[0] && typeof bg2[0] === 'object') bp2 = bg2[0];
-      if (bp2 && typeof bp2 === 'object' && Object.prototype.hasOwnProperty.call(bp2, 'pay_batch_get')) bp2 = bp2.pay_batch_get;
-    } catch {}
-
-    afterGet = (bp2 && typeof bp2 === 'object') ? bp2 : null;
+    afterGet = unwrapRpc(await sbRpc(env, 'pay_batch_get', {
+      p_pay_batch_id: payBatchId,
+      p_actor_user_id: user.id,
+      p_detail_mode: 'BOOTSTRAP_ONLY',
+      p_recommended_page_size: 100
+    }), 'pay_batch_get');
   } catch {
     afterGet = null;
   }
 
-  const respAuth = afterGet && typeof afterGet === 'object' ? (afterGet.auth || null) : null;
-  const respBatch = afterGet && typeof afterGet === 'object' ? (afterGet.batch || null) : null;
-
+  const responseAuth = safeObject(afterGet).auth || null;
+  const responseBatch = safeObject(afterGet).batch || null;
   return withCORS(env, req, ok({
     ok: true,
-    result: out,
-    execution_intent_json: out.execution_intent_json || respAuth?.execution_intent_json || executionIntent || null,
-    execution_mode: out.execution_mode || executionMode || null,
-    suppress_remittances: (typeof out.suppress_remittances === 'boolean') ? out.suppress_remittances : null,
+    result: actionResult,
+    execution_intent_json: Object.keys(safeObject(actionResult.execution_intent_json)).length ? actionResult.execution_intent_json : executionIntent,
+    execution_mode: executionMode || null,
+    next_required_phase: becameAuthorised ? nextRequiredPhase : 'WAIT_FOR_AUTHORISATION',
+    auth_state: authStateAfter || null,
+    suppress_remittances: truthy(executionIntent.suppress_remittances ?? executionIntent.suppressRemittances),
+    no_bank_payment_execution: truthy(executionIntent.no_bank_payment_execution ?? executionIntent.noBankPaymentExecution),
+    allow_explicit_zero_no_bank_scopes: truthy(executionIntent.allow_explicit_zero_no_bank_scopes ?? executionIntent.allowExplicitZeroNoBankScopes),
+    provider_submission_expected: becameAuthorised && nextRequiredPhase === 'SUBMIT_PROVIDER_TRANSFERS',
     finalisation,
     operation: operationPayload,
-    operation_id: operationPayload ? (operationPayload.operation_id || operationPayload.id || null) : null,
-    operation_status: operationPayload ? (operationPayload.status || null) : null,
-    operation_phase: operationPayload ? (operationPayload.phase || null) : null,
+    operation_id: resolveOperationId(operationPayload),
+    operation_status: operationPayload ? (operationPayload.status || operationPayload.operation_status || null) : null,
+    operation_phase: operationPayload ? (operationPayload.phase || operationPayload.operation_phase || null) : null,
     operation_drain_schedule_result: operationDrainScheduleResult,
-    batch: respBatch,
-    auth: respAuth
+    batch: responseBatch,
+    auth: responseAuth
   }));
 }
-
-
-
 
 
 async function handleBankingPayBatchAuthAction(env, req, user, payBatchId, ctx) {
   const enc = encodeURIComponent;
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
-  if (!user || !user.id) return withCORS(env, req, unauthorized('Unauthorized'));
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
-
-  const actionKind = String(body.action_kind || '').trim().toUpperCase();
-  if (!actionKind) return withCORS(env, req, badRequest('action_kind is required'));
-  if (!(actionKind === 'AUTHORISE' || actionKind === 'USE_GOLDEN_KEY' || actionKind === 'REJECT')) return withCORS(env, req, badRequest('action_kind must be AUTHORISE, USE_GOLDEN_KEY or REJECT'));
-
-  const note = (body.note === null || body.note === undefined) ? null : String(body.note).trim();
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const truthy = (value) => {
+    if (value === true) return true;
+    if (value === false || value === null || value === undefined) return false;
+    return ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  };
+  const normaliseMode = (value) => {
+    const mode = upperTrim(value);
+    if (['STANDARD_BANK', 'BANK'].includes(mode)) return 'STANDARD_BANK';
+    if (['CSV', 'CSV_SETTLEMENT'].includes(mode)) return 'CSV_SETTLEMENT';
+    if (['EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT'].includes(mode)) return 'EXTERNAL_SETTLEMENT';
+    return mode;
+  };
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
       if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
       if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
     } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    return safeObject(payload);
   };
-
   const stableStringify = (value) => {
     const seen = new WeakSet();
     const normalise = (input) => {
@@ -34535,135 +36262,364 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId, ctx) 
     };
     return JSON.stringify(normalise(value));
   };
-
   const sha256Hex = async (value) => {
     const text = String(value || '');
     try {
       if (globalThis.crypto && globalThis.crypto.subtle) {
         const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-        return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
       }
     } catch {}
-    let h = 0;
-    for (let i = 0; i < text.length; i += 1) h = Math.imul(31, h) + text.charCodeAt(i) | 0;
-    return `fallback-${Math.abs(h)}`;
+    let hash = 0;
+    for (let index = 0; index < text.length; index += 1) hash = Math.imul(31, hash) + text.charCodeAt(index) | 0;
+    return `fallback-${Math.abs(hash)}`;
   };
-
-  const resolveOperationIdForImmediateDrain = (operationPayload) => {
-    const payload = (operationPayload && typeof operationPayload === 'object' && !Array.isArray(operationPayload)) ? operationPayload : {};
-    const nestedOperation = (payload.operation && typeof payload.operation === 'object' && !Array.isArray(payload.operation)) ? payload.operation : {};
-    const nestedRawOperation = (payload.raw_operation && typeof payload.raw_operation === 'object' && !Array.isArray(payload.raw_operation)) ? payload.raw_operation : {};
-    const operationId = String(payload.operation_id || payload.operationId || payload.id || nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id || nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id || '').trim();
+  const resolveOperationId = (operationPayload) => {
+    const payload = safeObject(operationPayload);
+    const nestedOperation = safeObject(payload.operation);
+    const nestedRawOperation = safeObject(payload.raw_operation);
+    const operationId = trimStr(
+      payload.operation_id || payload.operationId || payload.id ||
+      nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id ||
+      nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id
+    );
     return uuidRe.test(operationId) ? operationId : null;
   };
-  const scheduleAuthActionExecuteDrainBestEffort = (operationPayload) => {
+  const publicOperation = (operationRow) => {
+    const row = safeObject(operationRow);
     try {
-      if (typeof scheduleBankingPayOperationDrain !== 'function') return null;
-      const operationId = resolveOperationIdForImmediateDrain(operationPayload);
-      if (!operationId) return null;
-      return scheduleBankingPayOperationDrain(env, ctx, {
-        operationId,
-        operationType: 'PAYMENT_EXECUTE',
-        payBatchId: id,
-        actorUserId: user.id,
-        source: 'handleBankingPayBatchAuthAction'
-      });
-    } catch (error) {
-      try { console.warn('[handleBankingPayBatchAuthAction] immediate drain schedule failed:', error && error.message ? error.message : error); } catch {}
-      return null;
-    }
+      if (typeof buildBankingPayOperationPublicPayload === 'function') return buildBankingPayOperationPublicPayload(row, { mode: 'PROGRESS_LIGHT' });
+    } catch {}
+    return row;
+  };
+  const isLegacyCsvExportPrepareOperation = (operation) => {
+    const op = safeObject(operation);
+    const input = safeObject(op.input_json || op.inputJson);
+    return truthy(input.prepare_bank_csv_export_only ?? input.prepareBankCsvExportOnly) ||
+      upperTrim(input.execution_mode || input.executionMode) === 'BANK_CSV_EXPORT_PREPARE' ||
+      trimStr(input.source) === 'handleBankingPayBatchExportCsv' ||
+      trimStr(op.idempotency_key || op.idempotencyKey).toLowerCase().startsWith('bank-csv-export-prepare:');
+  };
+  const deriveNextRequiredPhase = (executionIntent, explicitPhase) => {
+    const direct = upperTrim(explicitPhase || executionIntent.next_required_phase || executionIntent.nextRequiredPhase);
+    if (['SETTLEMENT', 'WAIT_FOR_SCHEDULE', 'SUBMIT_PROVIDER_TRANSFERS', 'WAIT_FOR_AUTHORISATION'].includes(direct)) return direct;
+    const mode = normaliseMode(executionIntent.execution_mode || executionIntent.executionMode);
+    const scheduleKind = upperTrim(executionIntent.schedule_kind || executionIntent.scheduleKind || 'IMMEDIATE') === 'SCHEDULED' ? 'SCHEDULED' : 'IMMEDIATE';
+    const noBank = truthy(executionIntent.no_bank_payment_execution ?? executionIntent.noBankPaymentExecution);
+    if (scheduleKind === 'SCHEDULED') return 'WAIT_FOR_SCHEDULE';
+    if (mode === 'CSV_SETTLEMENT' || mode === 'EXTERNAL_SETTLEMENT' || noBank) return 'SETTLEMENT';
+    return 'SUBMIT_PROVIDER_TRANSFERS';
+  };
+  const loadExecutionOperation = async (operationId, batchId) => {
+    if (!uuidRe.test(operationId)) return null;
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_operations` +
+      `?id=eq.${enc(operationId)}` +
+      `&select=id,operation_type,status,phase,runner_state,actor_user_id,pay_batch_id,root_operation_id,idempotency_key,input_json,config_json,progress_json,result_json,error_json,created_at_utc,updated_at_utc` +
+      `&limit=1`,
+      false
+    );
+    const row = Array.isArray(rows) && rows[0] && typeof rows[0] === 'object' && !Array.isArray(rows[0]) ? rows[0] : null;
+    const status = upperTrim(row?.status);
+    if (!row ||
+        upperTrim(row.operation_type) !== 'PAYMENT_EXECUTE' ||
+        trimStr(row.pay_batch_id) !== batchId ||
+        isLegacyCsvExportPrepareOperation(row) ||
+        ['FAILED', 'ERROR', 'ERRORED', 'CANCELLED', 'CANCELED', 'ABORTED'].includes(status)) return null;
+    return row;
+  };
+  const findActiveExecutionOperation = async (batchId) => {
+    const found = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active', {
+      p_operation_type: 'PAYMENT_EXECUTE',
+      p_workbench_session_id: null,
+      p_pay_batch_id: batchId,
+      p_actor_user_id: null
+    }), 'banking_pay_operation_find_active');
+    return found && resolveOperationId(found) && !isLegacyCsvExportPrepareOperation(found) ? found : null;
   };
 
+  const resumeAuthorisedExecutionOperation = async (operationRow, executionIntent, authRequestId, nextRequiredPhase) => {
+    const operationId = resolveOperationId(operationRow);
+    if (!operationId) throw Object.assign(new Error('The authorised payment execution operation could not be resolved.'), { error_code: 'AUTHORISED_EXECUTION_OPERATION_INVALID' });
+    const phaseMap = {
+      SETTLEMENT: 'START_LOCAL_SETTLEMENT',
+      WAIT_FOR_SCHEDULE: 'SCHEDULE_PAYMENT',
+      SUBMIT_PROVIDER_TRANSFERS: 'SUBMIT_PROVIDER_TRANSFERS'
+    };
+    const runnerPhase = phaseMap[nextRequiredPhase];
+    if (!runnerPhase) throw Object.assign(new Error('The authorised next_required_phase is invalid for execution resumption.'), { error_code: 'AUTHORISED_NEXT_REQUIRED_PHASE_INVALID' });
+    const resumed = unwrapRpc(await sbRpc(env, 'banking_pay_operation_save_progress', {
+      p_operation_id: operationId,
+      p_status: 'RUNNING',
+      p_phase: runnerPhase,
+      p_total_units: null,
+      p_completed_units: null,
+      p_failed_units: null,
+      p_current_chunk_index: null,
+      p_chunk_count: null,
+      p_progress_json: {
+        runner_state: 'RUNNABLE',
+        requires_user_action: false,
+        run_after_utc: new Date().toISOString(),
+        resume_reason: `PAYMENT_AUTHORISED_${nextRequiredPhase}`,
+        auth_request_id: authRequestId,
+        auth_state: 'AUTHORISED',
+        execution_mode: normaliseMode(executionIntent.execution_mode || executionIntent.executionMode),
+        next_required_phase: nextRequiredPhase,
+        no_bank_payment_execution: truthy(executionIntent.no_bank_payment_execution ?? executionIntent.noBankPaymentExecution),
+        allow_explicit_zero_no_bank_scopes: truthy(executionIntent.allow_explicit_zero_no_bank_scopes ?? executionIntent.allowExplicitZeroNoBankScopes),
+        paye_net_state_hash: trimStr(executionIntent.paye_net_state_hash || executionIntent.payeNetStateHash) || null,
+        bank_payment_projection_hash: trimStr(executionIntent.bank_payment_projection_hash || executionIntent.bankPaymentProjectionHash) || null,
+        missing_explicit_paye_input_count: executionIntent.missing_explicit_paye_input_count ?? executionIntent.missingExplicitPayeInputCount ?? null,
+        explicit_zero_count: executionIntent.explicit_zero_count ?? executionIntent.explicitZeroCount ?? null,
+        scoped_explicit_zero_count: executionIntent.scoped_explicit_zero_count ?? executionIntent.scopedExplicitZeroCount ?? null,
+        positive_bank_payment_count: executionIntent.positive_bank_payment_count ?? executionIntent.positiveBankPaymentCount ?? null,
+        scoped_positive_bank_payment_count: executionIntent.scoped_positive_bank_payment_count ?? executionIntent.scopedPositiveBankPaymentCount ?? null,
+        authorised_at_utc: new Date().toISOString()
+      },
+      p_extend_lock_seconds: null
+    }), 'banking_pay_operation_save_progress');
+    if (resumed.saved !== true) {
+      throw Object.assign(new Error(`The authorised payment execution operation could not be resumed (${trimStr(resumed.not_saved_reason) || 'UNKNOWN'}).`), {
+        error_code: 'AUTHORISED_EXECUTION_OPERATION_RESUME_FAILED',
+        not_saved_reason: resumed.not_saved_reason || null
+      });
+    }
+    return resumed;
+  };
+
+  const id = trimStr(payBatchId);
+  if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_pay_batch_id'));
+  if (!user || !uuidRe.test(trimStr(user.id))) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const actionKind = upperTrim(body.action_kind || body.action);
+  if (!actionKind) return withCORS(env, req, badRequest('action_kind is required'));
+  if (!['AUTHORISE', 'USE_GOLDEN_KEY', 'REJECT'].includes(actionKind)) return withCORS(env, req, badRequest('action_kind must be AUTHORISE, USE_GOLDEN_KEY or REJECT'));
+  const note = body.note === null || body.note === undefined ? null : trimStr(body.note);
+
   try {
-    const { rows: userRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${enc(user.id)}&select=id,is_active,payment_authoriser,payment_golden_key,email,display_name&limit=1`, false);
-    const actor = Array.isArray(userRows) && userRows.length ? userRows[0] : null;
+    const { rows: userRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${enc(user.id)}&select=id,is_active,payment_authoriser,payment_golden_key,email,display_name&limit=1`,
+      false
+    );
+    const actor = Array.isArray(userRows) && safeObject(userRows[0]) ? userRows[0] : null;
     if (!actor || actor.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
     if (actor.payment_authoriser !== true && actor.payment_golden_key !== true) return withCORS(env, req, badRequest('PAYMENT_AUTHORISER_REQUIRED'));
     if (actionKind === 'USE_GOLDEN_KEY' && actor.payment_golden_key !== true) return withCORS(env, req, badRequest('PAYMENT_GOLDEN_KEY_REQUIRED'));
 
-    let authRequestId = body.auth_request_id == null ? null : String(body.auth_request_id).trim();
+    let authRequestId = body.auth_request_id == null ? null : trimStr(body.auth_request_id);
     if (authRequestId && !uuidRe.test(authRequestId)) return withCORS(env, req, badRequest('invalid_auth_request_id'));
 
+    let selectedAuthRow = null;
     if (!authRequestId) {
-      const { rows: authRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests?pay_batch_id=eq.${enc(id)}&state=in.(AWAITING,PENDING_AUTHORISATION,AUTHORISED)&select=id,state,execution_intent_json,created_at_utc,finalised_at_utc&order=created_at_utc.desc,id.desc&limit=1`, false);
-      const activeAuth = Array.isArray(authRows) && authRows.length ? authRows[0] : null;
-      authRequestId = String(activeAuth?.id || '').trim() || null;
+      const { rows: authRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests` +
+        `?pay_batch_id=eq.${enc(id)}` +
+        `&state=in.(AWAITING,AUTHORISED)` +
+        `&select=id,pay_batch_id,state,execution_intent_json,created_at_utc,finalised_at_utc` +
+        `&order=created_at_utc.desc,id.desc&limit=1`,
+        false
+      );
+      selectedAuthRow = Array.isArray(authRows) && safeObject(authRows[0]) ? authRows[0] : null;
+      authRequestId = trimStr(selectedAuthRow?.id) || null;
+    } else {
+      const { rows: authRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests` +
+        `?id=eq.${enc(authRequestId)}` +
+        `&select=id,pay_batch_id,state,execution_intent_json,created_at_utc,finalised_at_utc` +
+        `&limit=1`,
+        false
+      );
+      selectedAuthRow = Array.isArray(authRows) && safeObject(authRows[0]) ? authRows[0] : null;
     }
-    if (!authRequestId) return withCORS(env, req, badRequest('No active authorisation request for this batch'));
+    if (!authRequestId || !selectedAuthRow) return withCORS(env, req, badRequest('No active authorisation request for this batch'));
+    if (trimStr(selectedAuthRow.pay_batch_id) !== id) return withCORS(env, req, badRequest('AUTH_REQUEST_BATCH_MISMATCH'));
 
-    const out = unwrapRpc(await sbRpc(env, 'pay_batch_auth_apply_action', {
+    const actionResult = unwrapRpc(await sbRpc(env, 'pay_batch_auth_apply_action', {
       p_auth_request_id: authRequestId,
       p_actor_user_id: user.id,
       p_action: actionKind,
       p_note: note
     }), 'pay_batch_auth_apply_action');
+    if (!actionResult || actionResult.ok === false) {
+      const error = new Error(trimStr(actionResult?.message || actionResult?.error || 'AUTH_ACTION_FAILED') || 'AUTH_ACTION_FAILED');
+      error.error_code = upperTrim(actionResult?.error_code || actionResult?.code || 'AUTH_ACTION_FAILED') || 'AUTH_ACTION_FAILED';
+      throw error;
+    }
 
-    const becameAuthorised = (out.became_authorised === true) || (String(out.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
+    let refreshedAuthRow = null;
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests` +
+        `?id=eq.${enc(authRequestId)}` +
+        `&select=id,pay_batch_id,state,execution_intent_json,created_at_utc,finalised_at_utc` +
+        `&limit=1`,
+        false
+      );
+      refreshedAuthRow = Array.isArray(rows) && safeObject(rows[0]) ? rows[0] : null;
+    } catch {}
+
+    const authStateAfter = upperTrim(refreshedAuthRow?.state || actionResult.auth_state || actionResult.authState);
+    const becameAuthorised = actionResult.became_authorised === true || authStateAfter === 'AUTHORISED';
+    const actionExecutionIntent = safeObject(actionResult.execution_intent_json);
+    const refreshedExecutionIntent = safeObject(refreshedAuthRow?.execution_intent_json);
+    const selectedExecutionIntent = safeObject(selectedAuthRow?.execution_intent_json);
+    if (Object.keys(actionExecutionIntent).length && Object.keys(refreshedExecutionIntent).length && stableStringify(actionExecutionIntent) !== stableStringify(refreshedExecutionIntent)) {
+      const error = new Error('The authorised execution intent changed unexpectedly while the authorisation action was being applied.');
+      error.error_code = 'AUTH_EXECUTION_INTENT_REFRESH_MISMATCH';
+      throw error;
+    }
+    const executionIntent = Object.keys(refreshedExecutionIntent).length
+      ? refreshedExecutionIntent
+      : (Object.keys(actionExecutionIntent).length ? actionExecutionIntent : selectedExecutionIntent);
+    const executionMode = normaliseMode(actionResult.execution_mode || executionIntent.execution_mode || executionIntent.executionMode);
+    const scheduleKind = upperTrim(executionIntent.schedule_kind || executionIntent.scheduleKind || actionResult.schedule_kind || 'IMMEDIATE') === 'SCHEDULED' ? 'SCHEDULED' : 'IMMEDIATE';
+    const nextRequiredPhase = deriveNextRequiredPhase(executionIntent, actionResult.next_required_phase || actionResult.nextRequiredPhase);
     let operationPayload = null;
+    let finalisation = null;
+    let operationDrainScheduleResult = null;
 
     if (becameAuthorised && actionKind !== 'REJECT') {
-      const executionIntent = (out.execution_intent_json && typeof out.execution_intent_json === 'object' && !Array.isArray(out.execution_intent_json)) ? out.execution_intent_json : {};
-      const earlyScheduleKind = String(executionIntent.schedule_kind || out.schedule_kind || 'IMMEDIATE').trim().toUpperCase() || 'IMMEDIATE';
-      try {
-        await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user.id || null, {
-          scheduleKind: earlyScheduleKind,
-          noticeKind: earlyScheduleKind === 'SCHEDULED' ? 'PAYMENT_SCHEDULED' : 'PAYMENT_PROCESSING',
-          source: 'handleBankingPayBatchAuthAction',
-          forceProcessing: earlyScheduleKind !== 'SCHEDULED'
+      if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) {
+        return withCORS(env, req, new Response(JSON.stringify({
+          ok: false,
+          error: 'Frozen execution_mode missing or invalid.',
+          message: 'Frozen execution_mode missing or invalid.',
+          error_code: 'INVALID_FROZEN_EXECUTION_MODE',
+          execution_mode: executionMode || null
+        }), { status: 409, headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
+      }
+
+      if (executionMode === 'CSV_SETTLEMENT' || executionMode === 'EXTERNAL_SETTLEMENT') {
+        finalisation = await finaliseAuthorisedBankingPaySettlement(env, req, user, id, authRequestId, {
+          ctx,
+          source: 'handleBankingPayBatchAuthAction'
         });
-      } catch {}
-
-      const activeOperation = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active', {
-        p_operation_type: 'PAYMENT_EXECUTE',
-        p_workbench_session_id: null,
-        p_pay_batch_id: id,
-        p_actor_user_id: user.id
-      }), 'banking_pay_operation_find_active');
-
-      if (activeOperation && activeOperation.operation_id) {
-        operationPayload = buildBankingPayOperationPublicPayload(activeOperation);
+        operationPayload = safeObject(finalisation.operation);
+        operationDrainScheduleResult = finalisation.drain_schedule_result || null;
+        if (!finalisation || finalisation.ok !== true) {
+          const message = String(finalisation?.message || 'Settlement finalisation failed.');
+          const code = upperTrim(finalisation?.error_code || finalisation?.code || 'SETTLEMENT_FINALISATION_FAILED');
+          return withCORS(env, req, new Response(JSON.stringify({ ok: false, error: message, message, error_code: code, code, finalisation }), {
+            status: 409,
+            headers: { 'Content-Type': 'application/json; charset=utf-8' }
+          }));
+        }
       } else {
-        const executionMode = String(out.execution_mode || executionIntent.execution_mode || 'STANDARD_BANK').trim().toUpperCase() || 'STANDARD_BANK';
-        const idempotencyHash = await sha256Hex(stableStringify({ pay_batch_id: id, auth_request_id: authRequestId, action: actionKind, execution_intent: executionIntent }));
-        operationPayload = await startBankingPayOperation(env, {
-          operation_type: 'PAYMENT_EXECUTE',
-          actor_user_id: user.id,
-          idempotency_key: `payment-execute:auth-action:batch:${id}:auth:${authRequestId}:hash:${idempotencyHash}`,
-          pay_batch_id: id,
-          input_json: {
-            source: 'handleBankingPayBatchAuthAction',
+        const originalOperationId = trimStr(executionIntent.operation_id || executionIntent.operationId);
+        let operationRow = await loadExecutionOperation(originalOperationId, id);
+        if (!operationRow && !originalOperationId) operationRow = await findActiveExecutionOperation(id);
+
+        if (originalOperationId && !operationRow) {
+          const error = new Error('The authorised execution intent references a missing or incompatible payment execution operation.');
+          error.error_code = 'AUTHORISED_EXECUTION_OPERATION_INVALID';
+          throw error;
+        }
+
+        if (operationRow) {
+          const resumedOperation = await resumeAuthorisedExecutionOperation(operationRow, executionIntent, authRequestId, nextRequiredPhase);
+          operationPayload = publicOperation(resumedOperation);
+        } else {
+          const idempotencyHash = await sha256Hex(stableStringify({
             pay_batch_id: id,
             auth_request_id: authRequestId,
-            action_kind: actionKind,
-            execution_mode: executionMode,
-            schedule_kind: executionIntent.schedule_kind || out.schedule_kind || 'IMMEDIATE',
-            scheduled_at_utc: executionIntent.scheduled_at_utc || out.scheduled_at_utc || null,
-            funding_account_ref: executionIntent.funding_account_ref || out.funding_account_ref || null,
-            payment_date: executionIntent.payment_date || out.payment_date || null,
-            pay_channel_scope: executionIntent.pay_channel_scope || out.pay_channel_scope || 'ALL',
-            suppress_remittances: executionIntent.suppress_remittances === true || out.suppress_remittances === true,
-            reauth_verified: true
+            action: actionKind,
+            next_required_phase: nextRequiredPhase,
+            execution_intent_json: executionIntent
+          }));
+          operationPayload = await startBankingPayOperation(env, {
+            operation_type: 'PAYMENT_EXECUTE',
+            actor_user_id: user.id,
+            idempotency_key: `payment-execute:authorised-recovery:batch:${id}:auth:${authRequestId}:hash:${idempotencyHash}`,
+            pay_batch_id: id,
+            input_json: {
+              ...executionIntent,
+              source: 'handleBankingPayBatchAuthAction',
+              pay_batch_id: id,
+              auth_request_id: authRequestId,
+              action_kind: actionKind,
+              execution_mode: executionMode,
+              schedule_kind: scheduleKind,
+              next_required_phase: nextRequiredPhase,
+              original_operation_id: originalOperationId || null,
+              execution_intent_json: executionIntent,
+              authorised_recovery_operation: true,
+              reauth_verified: true
+            }
+          }, { publicPayloadOptions: { mode: 'PROGRESS_LIGHT' } });
+        }
+
+        try {
+          if (typeof scheduleBankingPayOperationDrain === 'function') {
+            const operationId = resolveOperationId(operationPayload);
+            if (operationId) {
+              operationDrainScheduleResult = scheduleBankingPayOperationDrain(env, ctx, {
+                operationId,
+                operationType: 'PAYMENT_EXECUTE',
+                payBatchId: id,
+                actorUserId: user.id,
+                source: `handleBankingPayBatchAuthAction.${nextRequiredPhase.toLowerCase()}`
+              });
+            }
           }
-        });
+        } catch (error) {
+          operationDrainScheduleResult = { ok: false, scheduled: false, error: String(error?.message || error || 'PAYMENT_EXECUTE_DRAIN_SCHEDULE_FAILED') };
+        }
       }
-      scheduleAuthActionExecuteDrainBestEffort(operationPayload);
+
+      try {
+        await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user.id || null, {
+          scheduleKind,
+          noticeKind: nextRequiredPhase === 'WAIT_FOR_SCHEDULE' ? 'PAYMENT_SCHEDULED' : 'PAYMENT_PROCESSING',
+          forceProcessing: nextRequiredPhase !== 'WAIT_FOR_SCHEDULE',
+          operationId: resolveOperationId(operationPayload),
+          source: nextRequiredPhase === 'SETTLEMENT'
+            ? 'handleBankingPayBatchAuthAction.local_settlement'
+            : (nextRequiredPhase === 'SUBMIT_PROVIDER_TRANSFERS' ? 'handleBankingPayBatchAuthAction.provider_execution' : 'handleBankingPayBatchAuthAction.scheduled_execution')
+        });
+      } catch {}
     }
 
     return withCORS(env, req, ok({
       ok: true,
-      result: out,
+      result: actionResult,
+      execution_intent_json: executionIntent,
+      execution_mode: executionMode || null,
+      next_required_phase: becameAuthorised ? nextRequiredPhase : 'WAIT_FOR_AUTHORISATION',
+      auth_state: authStateAfter || null,
+      suppress_remittances: truthy(executionIntent.suppress_remittances ?? executionIntent.suppressRemittances),
+    no_bank_payment_execution: truthy(executionIntent.no_bank_payment_execution ?? executionIntent.noBankPaymentExecution),
+    allow_explicit_zero_no_bank_scopes: truthy(executionIntent.allow_explicit_zero_no_bank_scopes ?? executionIntent.allowExplicitZeroNoBankScopes),
+    provider_submission_expected: becameAuthorised && nextRequiredPhase === 'SUBMIT_PROVIDER_TRANSFERS',
+      finalisation,
       operation: operationPayload,
-      operation_id: operationPayload ? operationPayload.operation_id : null,
-      operation_status: operationPayload ? operationPayload.status : null,
-      operation_phase: operationPayload ? operationPayload.phase : null
+      operation_id: resolveOperationId(operationPayload),
+      operation_status: operationPayload ? (operationPayload.status || operationPayload.operation_status || null) : null,
+      operation_phase: operationPayload ? (operationPayload.phase || operationPayload.operation_phase || null) : null,
+      operation_drain_schedule_result: operationDrainScheduleResult
     }));
-  } catch (e) {
-    const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
-      ? makeBankingFriendlyErrorPayload(e, { action: 'BANKING_PAY_AUTH_ACTION', pay_batch_id: id })
-      : { ok: false, error: String(e?.message || e || 'Authorisation action failed') };
-    return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
+  } catch (error) {
+    const friendly = typeof makeBankingFriendlyErrorPayload === 'function'
+      ? makeBankingFriendlyErrorPayload(error, { action: 'BANKING_PAY_AUTH_ACTION', pay_batch_id: id })
+      : { ok: false, error: String(error?.message || error || 'Authorisation action failed'), error_code: upperTrim(error?.error_code || error?.code || 'BANKING_PAY_AUTH_ACTION_FAILED') };
+    return withCORS(env, req, new Response(JSON.stringify(friendly), {
+      status: Number(friendly.http_status || friendly.status || 500) || 500,
+      headers: typeof JSON_HEADERS !== 'undefined' ? JSON_HEADERS : { 'Content-Type': 'application/json; charset=utf-8' }
+    }));
   }
 }
+
+
+
 
 
 async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, actorUserId, options = {}) {
@@ -35942,42 +37898,52 @@ async function handleBankingPayCorrectionStatus(env, req, user, correctionReques
   }
 }
 
-
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const id = String(payBatchId || '').trim();
-
-  const stringifyFailureValue = (value) => {
-    try {
-      if (value === null || value === undefined) return '';
-      if (typeof value === 'string') return value;
-      if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
-      if (value instanceof Error) return String(value.message || value.name || '');
-      return JSON.stringify(value);
-    } catch {
-      try { return String(value || ''); } catch { return ''; }
-    }
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const truthy = (value) => {
+    if (value === true) return true;
+    return ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
   };
-
-  const parseJsonObjectCandidate = (raw) => {
-    const source = String(raw || '').trim();
-    if (!source) return null;
-    const candidates = [source];
-    const firstBrace = source.indexOf('{');
-    const lastBrace = source.lastIndexOf('}');
-    if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(source.slice(firstBrace, lastBrace + 1));
-    for (const candidate of candidates) {
-      try {
-        const parsed = JSON.parse(candidate);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
-      } catch {}
-    }
-    return null;
+  const roundMoney = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Number(number.toFixed(2)) : 0;
+  };
+  const nonNegativeInteger = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? Math.trunc(number) : null;
+  };
+  const unwrapObjectRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+      if (isPlainObject(payload) && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+    } catch {}
+    return isPlainObject(payload) ? payload : {};
+  };
+  const unwrapRowsRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (isPlainObject(payload) && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (isPlainObject(payload) && Array.isArray(payload.rows)) payload = payload.rows;
+      if (isPlainObject(payload) && Array.isArray(payload.data)) payload = payload.data;
+    } catch {}
+    return Array.isArray(payload) ? payload.filter((row) => isPlainObject(row)) : [];
+  };
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers(typeof JSON_HEADERS !== 'undefined' ? JSON_HEADERS : { 'Content-Type': 'application/json' });
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status, headers }));
   };
 
   const normalizeExportCsvFailureCode = (value) => {
-    const raw = String(value || '').trim().toUpperCase();
+    const raw = upperTrim(value);
     if (!raw) return '';
     const compact = raw.replace(/^ERROR[:\s]+/, '').replace(/^CODE[:\s]+/, '').replace(/[^A-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
     if (!compact || /^[0-9]{5}$/.test(compact) || /^P[0-9A-Z]{4}$/.test(compact)) return '';
@@ -35989,803 +37955,490 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
     return compact;
   };
 
-  const extractExportCsvFailure = (source, fallbackCode = 'PAY_EXPORT_BANK_CSV_FAILED') => {
+  const extractFailure = (source, fallbackCode) => {
+    const seen = new Set();
+    const queue = [source];
     const knownCodes = [
-      'BATCH_STALE',
-      'PAY_BATCH_VALIDATE_FRESHNESS_FAILED',
-      'PAY_BATCH_NOT_FOUND',
-      'UNKNOWN_RAIL_PROVIDER',
-      'RAIL_PROVIDER_REQUIRED',
-      'MISSING_RAIL_PROVIDER',
-      'RAIL_NOT_CONFIGURED',
-      'PAY_EXPORT_BANK_CSV_FAILED',
-      'PAY_BATCH_EXPORT_CSV_FAILED',
-      'PAY_EXECUTE_BANK_FAILED',
-      'NO_PENDING_TRANSFERS',
-      'NO_PENDING_TRANSFER_ROWS',
-      'NO_PENDING_BANK_TRANSFERS',
-      'NO_PENDING_BANK_TRANSFER_ROWS',
-      'NO_EXPORTABLE_TRANSFERS',
-      'NO_EXPORTABLE_TRANSFER_ROWS',
-      'NO_ACTIVE_PAYMENTS_IN_BATCH',
-      'CURRENT_TRANSFER_HASH_REQUIRED'
+      'PAYE_NET_REQUIRED_FOR_BANK_CSV', 'BANK_CSV_PROJECTION_CHANGED_DURING_EXPORT', 'BANK_CSV_PROJECTION_INCONSISTENT', 'BANK_CSV_OUTPUT_ROW_COUNT_MISMATCH',
+      'BATCH_STALE', 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED', 'PAY_BATCH_NOT_FOUND', 'UNKNOWN_RAIL_PROVIDER',
+      'RAIL_PROVIDER_REQUIRED', 'MISSING_RAIL_PROVIDER', 'RAIL_NOT_CONFIGURED', 'PAY_EXPORT_BANK_CSV_FAILED',
+      'PAY_BATCH_EXPORT_CSV_FAILED', 'NO_PENDING_TRANSFERS', 'NO_PENDING_TRANSFER_ROWS', 'NO_EXPORTABLE_TRANSFERS',
+      'NO_ACTIVE_PAYMENTS_IN_BATCH', 'CURRENT_TRANSFER_HASH_REQUIRED', 'INVALID_BANK_CSV_SCOPE'
     ];
-    const queue = [];
-    const seenObjects = new Set();
-    const seenStrings = new Set();
-    const findings = [];
-    const textParts = [];
-    const enqueue = (value) => {
-      if (value === null || value === undefined) return;
+    let rawMessage = '';
+    let bestCode = '';
+    while (queue.length) {
+      const value = queue.shift();
+      if (value === null || value === undefined) continue;
+      if (typeof value === 'object') {
+        if (seen.has(value)) continue;
+        seen.add(value);
+      }
+      if (value instanceof Error) {
+        queue.push(value.message, value.code, value.error_code, value.details, value.detail, value.cause);
+        continue;
+      }
       if (typeof value === 'string') {
         const text = value.trim();
-        if (!text || seenStrings.has(text)) return;
-        seenStrings.add(text);
-        queue.push(text);
-        return;
-      }
-      if (typeof value === 'object') {
-        if (seenObjects.has(value)) return;
-        seenObjects.add(value);
-      }
-      queue.push(value);
-    };
-    const addFinding = (payload, code, directKnown = false) => {
-      const normalizedCode = normalizeExportCsvFailureCode(code || fallbackCode);
-      if (!normalizedCode) return;
-      const priority = normalizedCode === 'BATCH_STALE' ? 100 : (directKnown ? 80 : 40);
-      findings.push({ code: normalizedCode, payload, priority });
-    };
-
-    enqueue(source);
-    while (queue.length) {
-      const item = queue.shift();
-      if (item instanceof Error) {
-        enqueue({
-          name: item.name,
-          message: item.message,
-          code: item.code,
-          error_code: item.error_code,
-          details: item.details,
-          detail: item.detail,
-          hint: item.hint,
-          cause: item.cause,
-          json: item.json,
-          body: item.body
-        });
-        continue;
-      }
-      if (typeof item === 'string') {
-        const text = item.trim();
-        if (text) textParts.push(text);
-        const parsed = parseJsonObjectCandidate(text);
-        if (parsed) enqueue(parsed);
+        if (!text) continue;
+        if (!rawMessage) rawMessage = text;
         const upper = text.toUpperCase();
-        for (const knownCode of knownCodes) {
-          if (upper.includes(knownCode)) addFinding({ message: text }, knownCode, true);
+        for (const known of knownCodes) {
+          if (upper.includes(known)) {
+            bestCode = normalizeExportCsvFailureCode(known);
+            break;
+          }
         }
+        try {
+          const start = text.indexOf('{');
+          const end = text.lastIndexOf('}');
+          const parsed = JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text);
+          queue.push(parsed);
+        } catch {}
         continue;
       }
-      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-      const directCode = normalizeExportCsvFailureCode(item.error_code || item.errorCode || item.code || item.error || '');
-      if (directCode) addFinding(item, directCode, knownCodes.map((code) => normalizeExportCsvFailureCode(code)).includes(directCode));
-      for (const key of ['error_code', 'errorCode', 'code', 'error', 'message', 'details', 'detail', 'reason', 'hint', 'body', 'json', 'payload', 'data', 'cause', 'response', 'result', 'technical_message', 'technicalMessage']) {
-        const nested = item[key];
-        enqueue(nested);
-        const parsed = parseJsonObjectCandidate(nested);
-        if (parsed) enqueue(parsed);
+      if (isPlainObject(value)) {
+        const directCode = normalizeExportCsvFailureCode(value.error_code || value.errorCode || value.code || '');
+        if (directCode) bestCode = directCode;
+        for (const key of ['error', 'message', 'details', 'detail', 'reason', 'hint', 'body', 'json', 'payload', 'data', 'cause', 'response', 'result', 'technical_message', 'technicalMessage']) {
+          if (Object.prototype.hasOwnProperty.call(value, key)) queue.push(value[key]);
+        }
       }
     }
-
-    findings.sort((a, b) => b.priority - a.priority);
-    const best = findings[0] || null;
-    return {
-      code: best ? best.code : normalizeExportCsvFailureCode(fallbackCode) || 'PAY_EXPORT_BANK_CSV_FAILED',
-      raw_message: textParts.find(Boolean) || stringifyFailureValue(source),
-      payload: best ? best.payload : null
-    };
+    return { code: bestCode || normalizeExportCsvFailureCode(fallbackCode) || 'PAY_EXPORT_BANK_CSV_FAILED', rawMessage };
   };
 
   const getExportCsvFailureCopy = (code) => {
     const normalizedCode = normalizeExportCsvFailureCode(code) || 'PAY_EXPORT_BANK_CSV_FAILED';
+    if (normalizedCode === 'PAYE_NET_REQUIRED_FOR_BANK_CSV') {
+      return { title: 'PAYE net amount required', message: 'Enter and save every required PAYE net amount before creating the Bank CSV. No payment operation or transfer artefact was created.' };
+    }
+    if (normalizedCode === 'BANK_CSV_PROJECTION_CHANGED_DURING_EXPORT') {
+      return { title: 'Payment values changed', message: 'Payment values changed while the Bank CSV was being generated. No current export evidence was saved. Refresh the batch and generate the CSV again.' };
+    }
+    if (normalizedCode === 'BANK_CSV_PROJECTION_INCONSISTENT') {
+      return { title: 'Payment projection could not be verified', message: 'CloudTMS could not verify one authoritative payment projection for this scope. No export evidence was saved.' };
+    }
+    if (normalizedCode === 'BANK_CSV_OUTPUT_ROW_COUNT_MISMATCH') {
+      return { title: 'Bank CSV could not be verified', message: 'The generated Bank CSV row count did not match the authoritative frozen payment projection. No current export evidence was saved.' };
+    }
     if (normalizedCode === 'BATCH_STALE') {
-      return {
-        title: 'Payment batch has changed',
-        message: 'This payment batch is no longer up to date. No export was created. Refresh the batch, review the latest payment details, then try again.'
-      };
+      return { title: 'Payment batch has changed', message: 'This payment batch is no longer up to date. No export was created. Refresh the batch, review the latest payment details, then try again.' };
     }
     if (['RAIL_PROVIDER_REQUIRED', 'UNKNOWN_RAIL_PROVIDER', 'RAIL_NOT_CONFIGURED'].includes(normalizedCode)) {
-      return {
-        title: 'Banking setup needs attention',
-        message: 'CloudTMS could not create this bank CSV because the banking setup is incomplete or unavailable. Review Banking settings and try again.'
-      };
+      return { title: 'Banking setup needs attention', message: 'CloudTMS could not create this Bank CSV because the banking setup is incomplete or unavailable. Review Banking settings and try again.' };
     }
-    if (normalizedCode === 'NO_ACTIVE_PAYMENTS_IN_BATCH' || normalizedCode === 'NO_PENDING_TRANSFERS' || normalizedCode === 'NO_PENDING_TRANSFER_ROWS' || normalizedCode === 'NO_EXPORTABLE_TRANSFERS') {
-      return {
-        title: 'Bank CSV could not be created',
-        message: 'This batch has no active payments ready to export. Delete the draft or create a new batch.'
-      };
+    if (['NO_ACTIVE_PAYMENTS_IN_BATCH', 'NO_PENDING_TRANSFERS', 'NO_PENDING_TRANSFER_ROWS', 'NO_EXPORTABLE_TRANSFERS'].includes(normalizedCode)) {
+      return { title: 'Bank CSV could not be created', message: 'This batch has no complete positive or explicit-zero payment scope to export.' };
     }
-    return {
-      title: 'Bank CSV could not be created',
-      message: 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.'
-    };
-  };
-
-  const buildExportCsvFailurePayload = (source, fallbackCode = 'PAY_EXPORT_BANK_CSV_FAILED', fallbackMessage = 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.', details = {}) => {
-    const failure = extractExportCsvFailure(source, fallbackCode);
-    const code = normalizeExportCsvFailureCode(failure.code || fallbackCode) || normalizeExportCsvFailureCode(fallbackCode) || 'PAY_EXPORT_BANK_CSV_FAILED';
-    const copy = getExportCsvFailureCopy(code);
-    const safeDetails = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
-    const friendlyPayload = makeBankingFriendlyErrorPayload({
-      ok: false,
-      error_code: code,
-      code,
-      message: copy.message || fallbackMessage,
-      details: {
-        ...safeDetails,
-        pay_batch_id: id || null,
-        reason: code,
-        technical_message: failure.raw_message || null
-      },
-      reason: failure.raw_message || code,
-      technical_message: failure.raw_message || code
-    }, { action: 'EXPORT_BANK_CSV' });
-
-    return {
-      ...((friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {}),
-      ok: false,
-      error_code: code,
-      code,
-      title: copy.title,
-      message: copy.message || fallbackMessage,
-      user_message: copy.message || fallbackMessage,
-      error: copy.message || fallbackMessage,
-      can_retry: true,
-      friendly_error: {
-        ...((friendlyPayload && friendlyPayload.friendly_error && typeof friendlyPayload.friendly_error === 'object') ? friendlyPayload.friendly_error : {}),
-        code,
-        title: copy.title,
-        message: copy.message || fallbackMessage
-      }
-    };
+    if (normalizedCode === 'INVALID_BANK_CSV_SCOPE') {
+      return { title: 'Invalid Bank CSV scope', message: 'Choose a valid Bank CSV scope and try again.' };
+    }
+    return { title: 'Bank CSV could not be created', message: 'CloudTMS could not create the Bank CSV for this batch. Refresh the batch and try again.' };
   };
 
   const statusForExportCsvFailureCode = (code, fallbackStatus = 400) => {
-    const normalizedCode = String(code || '').trim().toUpperCase();
-    if (normalizedCode === 'BATCH_STALE' || normalizedCode === 'NO_PENDING_TRANSFERS' || normalizedCode === 'NO_PENDING_TRANSFER_ROWS' || normalizedCode === 'NO_EXPORTABLE_TRANSFERS' || normalizedCode === 'NO_ACTIVE_PAYMENTS_IN_BATCH' || normalizedCode === 'CURRENT_TRANSFER_HASH_REQUIRED') return 409;
+    const normalizedCode = normalizeExportCsvFailureCode(code);
+    if (['PAYE_NET_REQUIRED_FOR_BANK_CSV', 'BANK_CSV_PROJECTION_CHANGED_DURING_EXPORT', 'BANK_CSV_PROJECTION_INCONSISTENT', 'BANK_CSV_OUTPUT_ROW_COUNT_MISMATCH', 'BATCH_STALE', 'NO_PENDING_TRANSFERS', 'NO_PENDING_TRANSFER_ROWS', 'NO_EXPORTABLE_TRANSFERS', 'NO_ACTIVE_PAYMENTS_IN_BATCH', 'CURRENT_TRANSFER_HASH_REQUIRED'].includes(normalizedCode)) return 409;
     if (normalizedCode === 'PAY_BATCH_NOT_FOUND') return 404;
     return Number.isFinite(Number(fallbackStatus)) ? Math.trunc(Number(fallbackStatus)) : 400;
   };
 
-  const buildExportCsvFailureResponse = (status, source, fallbackCode = 'PAY_EXPORT_BANK_CSV_FAILED', fallbackMessage = 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.', details = {}) => {
-    const payload = buildExportCsvFailurePayload(source, fallbackCode, fallbackMessage, details);
-    return withCORS(env, req, new Response(JSON.stringify(payload), { status: statusForExportCsvFailureCode(payload.error_code || payload.code, status), headers: JSON_HEADERS }));
-  };
-
-  if (!id) return buildExportCsvFailureResponse(400, 'pay_batch_id is required', 'PAY_EXPORT_BANK_CSV_FAILED', 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.', { field: 'pay_batch_id' });
-
-  const requestedScopeFromQuery = (() => {
+  const buildFailurePayload = (source, fallbackCode, details = {}) => {
+    const failure = extractFailure(source, fallbackCode);
+    const code = failure.code;
+    const copy = getExportCsvFailureCopy(code);
+    const base = {
+      ok: false,
+      error_code: code,
+      code,
+      title: copy.title,
+      message: copy.message,
+      user_message: copy.message,
+      error: copy.message,
+      can_retry: true,
+      details: { ...(isPlainObject(details) ? details : {}), pay_batch_id: id || null, technical_message: failure.rawMessage || null },
+      friendly_error: { code, title: copy.title, message: copy.message }
+    };
     try {
-      const u = new URL(req.url);
-      return String(u.searchParams.get('scope') || u.searchParams.get('pay_channel_scope') || 'ALL').trim().toUpperCase();
-    } catch {
-      return 'ALL';
-    }
-  })();
-  const requestedPayChannelScope = ['ALL', 'PAYE', 'UMBRELLA'].includes(requestedScopeFromQuery) ? requestedScopeFromQuery : 'ALL';
-
-  const payChannelScope = 'ALL';
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  };
-
-  const normalizeRpcError = (e, fallbackCode = 'RPC_ERROR') => {
-    const statusRaw = (e && Number.isFinite(Number(e.status))) ? Number(e.status) : null;
-    const failure = extractExportCsvFailure(e, fallbackCode);
-    const status = statusForExportCsvFailureCode(failure.code, statusRaw || 400);
-    return {
-      status,
-      body: buildExportCsvFailurePayload(e, fallbackCode, 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.')
-    };
-  };
-
-  const isMissingTransferRowsError = (e) => {
-    const candidates = [];
-    const seen = new Set();
-    const addCandidate = (value) => {
-      if (value === null || value === undefined) return;
-      let text = '';
-      try {
-        if (value instanceof Error) text = value.message || value.name || '';
-        else if (typeof value === 'string') text = value;
-        else if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') text = String(value);
-        else return;
-      } catch {
-        return;
-      }
-      text = String(text || '').trim();
-      if (!text || seen.has(text)) return;
-      seen.add(text);
-      candidates.push(text);
-    };
-    const visit = (value, depth = 0) => {
-      if (value === null || value === undefined || depth > 5) return;
-      if (value instanceof Error) {
-        addCandidate(value.name);
-        addCandidate(value.message);
-        visit(value.code, depth + 1);
-        visit(value.error_code, depth + 1);
-        visit(value.errorCode, depth + 1);
-        visit(value.details, depth + 1);
-        visit(value.detail, depth + 1);
-        visit(value.hint, depth + 1);
-        visit(value.json, depth + 1);
-        visit(value.body, depth + 1);
-        visit(value.cause, depth + 1);
-        return;
-      }
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-        addCandidate(value);
-        const parsed = parseJsonObjectCandidate(value);
-        if (parsed) visit(parsed, depth + 1);
-        return;
-      }
-      if (Array.isArray(value)) {
-        for (const item of value.slice(0, 25)) visit(item, depth + 1);
-        return;
-      }
-      if (typeof value !== 'object') return;
-      for (const key of ['error_code', 'errorCode', 'code', 'error', 'message', 'details', 'detail', 'reason', 'hint', 'body', 'json', 'payload', 'data', 'cause', 'response', 'result', 'technical_message', 'technicalMessage']) {
-        if (Object.prototype.hasOwnProperty.call(value, key)) visit(value[key], depth + 1);
-      }
-    };
-
-    visit(e);
-    const raw = candidates.join(' | ').toUpperCase();
-    const normalizedCodes = candidates.map((candidate) => normalizeExportCsvFailureCode(candidate)).filter(Boolean);
-
-    return normalizedCodes.includes('NO_PENDING_TRANSFER_ROWS')
-      || normalizedCodes.includes('NO_EXPORTABLE_TRANSFERS')
-      || raw.includes('NO_PENDING_TRANSFERS')
-      || raw.includes('NO_PENDING_TRANSFER_ROWS')
-      || raw.includes('NO_PENDING_BANK_TRANSFERS')
-      || raw.includes('NO_PENDING_BANK_TRANSFER_ROWS')
-      || raw.includes('NO PENDING TRANSFERS')
-      || raw.includes('NO PENDING BANK TRANSFERS')
-      || raw.includes('NO EXPORTABLE TRANSFERS')
-      || raw.includes('NO EXPORTABLE TRANSFER')
-      || raw.includes('NO_EXPORTABLE_TRANSFERS')
-      || raw.includes('NO_EXPORTABLE_TRANSFER_ROWS')
-      || raw.includes('NO_EXPORTABLE_TRANSFER')
-      || raw.includes('NO TRANSFER ROWS');
-  };
-
-  const jsonResponse = (status, payload) => {
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json; charset=utf-8');
-    return new Response(JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }), { status, headers });
-  };
-
-  const noActivePaymentsResponse = () => jsonResponse(409, buildExportCsvFailurePayload(
-    'NO_ACTIVE_PAYMENTS_IN_BATCH',
-    'NO_ACTIVE_PAYMENTS_IN_BATCH',
-    'This batch has no active payments ready to export. Delete the draft or create a new batch.'
-  ));
-
-  const numberFromSummary = (...values) => {
-    let firstFinite = null;
-    for (const value of values) {
-      if (value === null || value === undefined || value === '') continue;
-      const n = Number(value);
-      if (!Number.isFinite(n)) continue;
-      if (firstFinite === null) firstFinite = n;
-      if (n > 0) return n;
-    }
-    return firstFinite === null ? 0 : firstFinite;
-  };
-
-  const isPlainExportObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
-
-  const firstFiniteExportNumber = (...values) => {
-    for (const value of values) {
-      if (value === null || value === undefined || value === '') continue;
-      const n = Number(value);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  };
-
-  const collectFiniteExportNumbers = (...values) => {
-    const out = [];
-    for (const value of values) {
-      if (value === null || value === undefined || value === '') continue;
-      const n = Number(value);
-      if (Number.isFinite(n)) out.push(n);
-    }
-    return out;
-  };
-
-  const loadRestRowsForCsvExport = async (pathWithQuery, { pageSize = 1000, maxPages = 250 } = {}) => {
-    const out = [];
-    const safePageSize = Number.isFinite(Number(pageSize)) ? Math.max(1, Math.min(1000, Math.trunc(Number(pageSize)))) : 1000;
-    const safeMaxPages = Number.isFinite(Number(maxPages)) ? Math.max(1, Math.min(1000, Math.trunc(Number(maxPages)))) : 250;
-    const joiner = String(pathWithQuery || '').includes('?') ? '&' : '?';
-    for (let pageIndex = 0; pageIndex < safeMaxPages; pageIndex += 1) {
-      const offset = pageIndex * safePageSize;
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}${pathWithQuery}${joiner}limit=${encodeURIComponent(String(safePageSize))}&offset=${encodeURIComponent(String(offset))}`
-      );
-      const pageRows = Array.isArray(rows) ? rows : [];
-      out.push(...pageRows);
-      if (pageRows.length < safePageSize) break;
-    }
-    return out;
-  };
-
-  const loadFrozenPayableItemEvidence = async () => {
-    const baseEvidence = {
-      known: false,
-      pay_batch_id: id,
-      candidate_count: null,
-      non_void_item_count: null,
-      item_count: null,
-      total_payable: null,
-      hasPayableContent: false,
-      source: 'pay_batch_items'
-    };
-
-    const candidateRows = await loadRestRowsForCsvExport(
-      `/rest/v1/pay_batch_candidates?pay_batch_id=eq.${encodeURIComponent(id)}&select=id`,
-      { pageSize: 1000, maxPages: 500 }
-    );
-    const candidateIds = Array.from(new Set(
-      candidateRows
-        .map((row) => String(row && row.id != null ? row.id : '').trim())
-        .filter(Boolean)
-    ));
-
-    if (!candidateIds.length) {
-      return {
-        ...baseEvidence,
-        known: true,
-        candidate_count: 0,
-        non_void_item_count: 0,
-        item_count: 0,
-        total_payable: 0,
-        hasPayableContent: false
-      };
-    }
-
-    let nonVoidItemCount = 0;
-    let payableItemCount = 0;
-    let payableTotal = 0;
-    const chunkSize = 50;
-
-    for (let index = 0; index < candidateIds.length; index += chunkSize) {
-      const chunk = candidateIds.slice(index, index + chunkSize);
-      const inList = chunk.map((candidateId) => encodeURIComponent(candidateId)).join(',');
-      const itemRows = await loadRestRowsForCsvExport(
-        `/rest/v1/pay_batch_items?pay_batch_candidate_id=in.(${inList})&select=pay_batch_candidate_id,is_voided,frozen_target_amount_inc_vat,amount_inc_vat,frozen_target_amount_ex_vat,amount_ex_vat`,
-        { pageSize: 1000, maxPages: 500 }
-      );
-
-      for (const item of itemRows) {
-        if (!item || typeof item !== 'object') continue;
-        const voidedText = String(item.is_voided == null ? '' : item.is_voided).trim().toLowerCase();
-        if (item.is_voided === true || voidedText === 'true' || voidedText === 't' || voidedText === '1' || voidedText === 'yes') continue;
-        nonVoidItemCount += 1;
-        const amount = firstFiniteExportNumber(
-          item.frozen_target_amount_inc_vat,
-          item.amount_inc_vat,
-          item.frozen_target_amount_ex_vat,
-          item.amount_ex_vat,
-          0
-        );
-        if (Number.isFinite(amount) && amount > 0) {
-          payableItemCount += 1;
-          payableTotal += amount;
-        }
-      }
-    }
-
-    const roundedTotal = Number.isFinite(payableTotal) ? Number(payableTotal.toFixed(2)) : 0;
-    return {
-      ...baseEvidence,
-      known: true,
-      candidate_count: candidateIds.length,
-      non_void_item_count: nonVoidItemCount,
-      item_count: payableItemCount,
-      total_payable: roundedTotal,
-      hasPayableContent: payableItemCount > 0 || roundedTotal > 0
-    };
-  };
-
-  const derivePayableDraftContentEvidence = (summary = {}, frozenItemEvidence = null) => {
-    const summaryObj = isPlainExportObject(summary) ? summary : {};
-    const displaySummary = isPlainExportObject(summaryObj.display_summary) ? summaryObj.display_summary : {};
-    const payBatchDisplaySummary = isPlainExportObject(summaryObj.pay_batch_display_summary) ? summaryObj.pay_batch_display_summary : {};
-    const frozenEvidence = isPlainExportObject(frozenItemEvidence) ? frozenItemEvidence : {};
-
-    const durableCountValues = collectFiniteExportNumbers(
-      summaryObj.item_count,
-      summaryObj.pay_batch_item_count,
-      summaryObj.non_void_item_count,
-      displaySummary.item_count,
-      displaySummary.pay_batch_item_count,
-      displaySummary.non_void_item_count,
-      payBatchDisplaySummary.item_count,
-      payBatchDisplaySummary.pay_batch_item_count,
-      payBatchDisplaySummary.non_void_item_count
-    );
-    const durableAmountValues = collectFiniteExportNumbers(
-      summaryObj.total_payable,
-      summaryObj.totalPayable,
-      summaryObj.total_amount,
-      summaryObj.totalAmount,
-      summaryObj.total_amount_inc_vat,
-      summaryObj.totalAmountIncVat,
-      displaySummary.total_payable,
-      displaySummary.totalPayable,
-      displaySummary.total_amount,
-      displaySummary.totalAmount,
-      displaySummary.total_amount_inc_vat,
-      displaySummary.totalAmountIncVat,
-      payBatchDisplaySummary.total_payable,
-      payBatchDisplaySummary.totalPayable,
-      payBatchDisplaySummary.total_amount,
-      payBatchDisplaySummary.totalAmount,
-      payBatchDisplaySummary.total_amount_inc_vat,
-      payBatchDisplaySummary.totalAmountIncVat
-    );
-    const activeCountValues = collectFiniteExportNumbers(
-      summaryObj.active_payment_count,
-      summaryObj.active_pay_item_count,
-      summaryObj.active_item_count,
-      summaryObj.payable_item_count,
-      displaySummary.active_payment_count,
-      displaySummary.active_pay_item_count,
-      displaySummary.active_item_count,
-      displaySummary.payable_item_count
-    );
-    const activeAmountValues = collectFiniteExportNumbers(
-      summaryObj.active_amount_inc_vat,
-      summaryObj.active_payment_amount_inc_vat,
-      displaySummary.active_amount_inc_vat,
-      displaySummary.active_payment_amount_inc_vat
-    );
-
-    const durableItemCount = numberFromSummary(...durableCountValues);
-    const durableTotalPayable = numberFromSummary(...durableAmountValues);
-    const activeItemCount = numberFromSummary(...activeCountValues);
-    const activeTotalPayable = numberFromSummary(...activeAmountValues);
-    const frozenKnown = frozenEvidence.known === true;
-    const frozenItemCount = firstFiniteExportNumber(frozenEvidence.item_count, frozenEvidence.payable_item_count);
-    const frozenTotalPayable = firstFiniteExportNumber(frozenEvidence.total_payable, frozenEvidence.totalPayable);
-    const frozenHasPayableContent = frozenEvidence.hasPayableContent === true || (Number.isFinite(frozenItemCount) && frozenItemCount > 0) || (Number.isFinite(frozenTotalPayable) && frozenTotalPayable > 0);
-    const hasDurablePayableContent = durableCountValues.some((value) => value > 0) || durableAmountValues.some((value) => value > 0);
-    const hasActivePositiveEvidence = activeCountValues.some((value) => value > 0) || activeAmountValues.some((value) => value > 0);
-    const durableEvidenceKnown = durableCountValues.length > 0 || durableAmountValues.length > 0;
-    const durableEvidenceAllZero = durableEvidenceKnown && durableCountValues.concat(durableAmountValues).every((value) => value <= 0);
-    const frozenEvidenceAllZero = frozenKnown && (!Number.isFinite(frozenItemCount) || frozenItemCount <= 0) && (!Number.isFinite(frozenTotalPayable) || frozenTotalPayable <= 0) && frozenHasPayableContent !== true;
-    const hasPayableContent = hasDurablePayableContent || hasActivePositiveEvidence || frozenHasPayableContent;
-    const known = durableEvidenceKnown || frozenKnown || hasActivePositiveEvidence;
-    const knownEmpty = !hasPayableContent && frozenKnown && frozenEvidenceAllZero && (!durableEvidenceKnown || durableEvidenceAllZero);
-
-    return {
-      known,
-      known_empty: knownEmpty,
-      knownEmpty,
-      has_payable_content: hasPayableContent,
-      hasPayableContent,
-      summary_item_count: durableItemCount,
-      summary_total_payable: durableTotalPayable,
-      active_item_count: activeItemCount,
-      active_total_payable: activeTotalPayable,
-      frozen_item_count: Number.isFinite(frozenItemCount) ? frozenItemCount : null,
-      frozen_total_payable: Number.isFinite(frozenTotalPayable) ? frozenTotalPayable : null,
-      frozen_known: frozenKnown,
-      frozen_query_error: frozenEvidence.error || null,
-      source: 'summary_display_and_frozen_pay_batch_items'
-    };
-  };
-
-  const normalizeProvider = (rawProvider) => {
-    const raw = String(rawProvider || '').trim().toUpperCase();
-    if (!raw) return { provider: null, valid: false, reason: 'RAIL_PROVIDER_REQUIRED' };
-    const provider = raw === 'REV' ? 'REVOLUT' : raw;
-    const knownProviders = new Set(['CSV', 'REVOLUT']);
-    try {
-      const listed = getRailAdapter('__LIST__');
-      if (Array.isArray(listed)) {
-        for (const p of listed) {
-          const v = String(p || '').trim().toUpperCase();
-          if (v) knownProviders.add(v);
-        }
+      if (typeof makeBankingFriendlyErrorPayload === 'function') {
+        const friendly = makeBankingFriendlyErrorPayload(base, { action: 'EXPORT_BANK_CSV', pay_batch_id: id });
+        return { ...base, ...(isPlainObject(friendly) ? friendly : {}), error_code: code, code, title: copy.title, message: copy.message, user_message: copy.message, error: copy.message, friendly_error: { ...(isPlainObject(friendly?.friendly_error) ? friendly.friendly_error : {}), code, title: copy.title, message: copy.message } };
       }
     } catch {}
-    if (!knownProviders.has(provider)) return { provider, valid: false, reason: 'UNKNOWN_RAIL_PROVIDER' };
-    return { provider, valid: true, reason: null };
+    return base;
   };
+
+  const failureResponse = (status, source, fallbackCode, details = {}) => {
+    const payload = buildFailurePayload(source, fallbackCode, details);
+    return jsonResponse(statusForExportCsvFailureCode(payload.error_code || payload.code, status), payload);
+  };
+
+  if (!id) return failureResponse(400, 'pay_batch_id is required', 'PAY_EXPORT_BANK_CSV_FAILED', { field: 'pay_batch_id' });
+
+  let requestedScope = 'ALL';
+  try {
+    const url = new URL(req.url);
+    requestedScope = upperTrim(url.searchParams.get('scope') || url.searchParams.get('pay_channel_scope') || 'ALL') || 'ALL';
+  } catch {}
+  if (!['ALL', 'PAYE', 'UMBRELLA', 'LOANS'].includes(requestedScope)) {
+    return failureResponse(400, 'INVALID_BANK_CSV_SCOPE', 'INVALID_BANK_CSV_SCOPE', { requested_scope: requestedScope || null });
+  }
 
   const loadCsvExportSettingsSummary = async () => {
-    const DEFAULT_COLUMNS = ['payment_reference', 'payee_name', 'sort_code', 'account_number', 'amount'];
+    const defaultColumns = ['payment_reference', 'payee_name', 'sort_code', 'account_number', 'amount'];
     const parseJsonish = (value) => {
       if (value === null || value === undefined) return null;
-      if (typeof value === 'string') {
-        const s = value.trim();
-        if (!s) return null;
-        try { return JSON.parse(s); } catch { return null; }
-      }
-      return value;
+      if (typeof value !== 'string') return value;
+      try { return JSON.parse(value.trim()); } catch { return null; }
     };
-    const toBool = (value, fallback) => {
+    const boolValue = (value, fallback) => {
       if (typeof value === 'boolean') return value;
       if (value === null || value === undefined || value === '') return fallback;
-      const s = String(value).trim().toLowerCase();
-      if (['true', '1', 'yes', 'y', 'on'].includes(s)) return true;
-      if (['false', '0', 'no', 'n', 'off'].includes(s)) return false;
+      const text = trimStr(value).toLowerCase();
+      if (['true', '1', 'yes', 'y', 'on'].includes(text)) return true;
+      if (['false', '0', 'no', 'n', 'off'].includes(text)) return false;
       return fallback;
     };
-    const normalizeDelimiter = (value) => {
-      const raw = String(value === null || value === undefined ? '' : value).trim();
-      const upper = raw.toUpperCase();
-      if (upper === 'TAB' || raw === '\t') return 'TAB';
-      if ([',', ';', '|'].includes(raw)) return raw;
-      return ',';
+    const enumValue = (value, allowed, fallback) => allowed.includes(upperTrim(value)) ? upperTrim(value) : fallback;
+    const delimiterValue = (value) => {
+      const raw = trimStr(value);
+      if (raw === '\t' || upperTrim(raw) === 'TAB') return 'TAB';
+      return [',', ';', '|'].includes(raw) ? raw : ',';
     };
-    const normalizeEnum = (value, allowed, fallback) => {
-      const s = String(value === null || value === undefined ? '' : value).trim().toUpperCase();
-      return allowed.includes(s) ? s : fallback;
-    };
-    const normalizeAmountDecimals = (value) => {
-      const n = Number(value);
-      if (!Number.isFinite(n)) return 2;
-      return Math.max(0, Math.min(4, Math.trunc(n)));
-    };
-    const normalizeColumns = (value) => {
-      const parsed = parseJsonish(value);
-      if (!Array.isArray(parsed)) return DEFAULT_COLUMNS.slice(0);
-      const out = [];
-      const seen = new Set();
-      for (const raw of parsed) {
-        const key = String(raw || '').trim();
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        out.push(key);
-      }
-      return out.length ? out : DEFAULT_COLUMNS.slice(0);
-    };
-
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=pay_export_csv_columns_json,pay_export_csv_format_json&limit=1`
-    );
-    const settingsRow = Array.isArray(rows) && rows[0] && typeof rows[0] === 'object' ? rows[0] : {};
-    const columns = normalizeColumns(settingsRow.pay_export_csv_columns_json);
-    const format = parseJsonish(settingsRow.pay_export_csv_format_json);
-    const formatObj = (format && typeof format === 'object' && !Array.isArray(format)) ? format : {};
-    const headersObj = (formatObj.headers && typeof formatObj.headers === 'object' && !Array.isArray(formatObj.headers)) ? formatObj.headers : {};
-    const headerOverrideKeys = columns.filter((key) => String(headersObj[key] || '').trim());
-
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=pay_export_csv_columns_json,pay_export_csv_format_json&limit=1`);
+    const row = Array.isArray(rows) && isPlainObject(rows[0]) ? rows[0] : {};
+    const parsedColumns = parseJsonish(row.pay_export_csv_columns_json);
+    const columns = Array.isArray(parsedColumns) && parsedColumns.map(trimStr).filter(Boolean).length ? Array.from(new Set(parsedColumns.map(trimStr).filter(Boolean))) : defaultColumns;
+    const format = isPlainObject(parseJsonish(row.pay_export_csv_format_json)) ? parseJsonish(row.pay_export_csv_format_json) : {};
+    const headers = isPlainObject(format.headers) ? format.headers : {};
+    const decimals = Number(format.amount_decimals);
     return {
       columns,
       format_summary: {
-        include_header: toBool(formatObj.include_header, true),
-        delimiter: normalizeDelimiter(formatObj.delimiter),
-        line_ending: normalizeEnum(formatObj.line_ending, ['LF', 'CRLF'], 'LF'),
-        quote_mode: normalizeEnum(formatObj.quote_mode, ['MINIMAL', 'ALL'], 'MINIMAL'),
-        bom: toBool(formatObj.bom, false),
-        sort_code_format: normalizeEnum(formatObj.sort_code_format, ['AS_STORED', 'DIGITS', 'HYPHENATED'], 'AS_STORED'),
-        account_number_format: normalizeEnum(formatObj.account_number_format, ['AS_STORED', 'DIGITS'], 'AS_STORED'),
-        amount_decimals: normalizeAmountDecimals(formatObj.amount_decimals),
-        empty_value: String(formatObj.empty_value === null || formatObj.empty_value === undefined ? '' : formatObj.empty_value),
-        header_override_keys: headerOverrideKeys
+        include_header: boolValue(format.include_header, true),
+        delimiter: delimiterValue(format.delimiter),
+        line_ending: enumValue(format.line_ending, ['LF', 'CRLF'], 'LF'),
+        quote_mode: enumValue(format.quote_mode, ['MINIMAL', 'ALL'], 'MINIMAL'),
+        bom: boolValue(format.bom, false),
+        sort_code_format: enumValue(format.sort_code_format, ['AS_STORED', 'DIGITS', 'HYPHENATED'], 'AS_STORED'),
+        account_number_format: enumValue(format.account_number_format, ['AS_STORED', 'DIGITS'], 'AS_STORED'),
+        amount_decimals: Number.isFinite(decimals) ? Math.max(0, Math.min(4, Math.trunc(decimals))) : 2,
+        empty_value: String(format.empty_value == null ? '' : format.empty_value),
+        header_override_keys: columns.filter((key) => trimStr(headers[key]))
       }
     };
   };
 
-  const buildCsvExportPrepareOperation = async (reason, summary = {}, payableContentEvidence = null) => {
-    const idempotencyBasis = {
-      action: 'BANK_CSV_EXPORT_PREPARE',
-      pay_batch_id: id,
-      scope: payChannelScope,
-      requested_scope: requestedPayChannelScope,
-      actor_user_id: String(user?.id || '').trim() || null,
-      freshness_result_hash: summary.freshness_result_hash || null,
-      freshness_scope_hash: summary.freshness_scope_hash || null,
-      reason: String(reason || 'PREPARE_REQUIRED')
-    };
-    let idempotencyHash = '';
-    try {
-      if (globalThis.crypto && globalThis.crypto.subtle) {
-        const stable = JSON.stringify(idempotencyBasis, Object.keys(idempotencyBasis).sort());
-        const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(stable));
-        idempotencyHash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  const countCsvDataRows = (csvValue, includeHeader) => {
+    const text = String(csvValue == null ? '' : csvValue).replace(/^\uFEFF/, '');
+    if (!text) return 0;
+    let recordCount = 0;
+    let recordHasContent = false;
+    let inQuotes = false;
+    for (let index = 0; index < text.length; index += 1) {
+      const character = text[index];
+      if (character === '"') {
+        recordHasContent = true;
+        if (inQuotes && text[index + 1] === '"') {
+          index += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
       }
-    } catch {}
-    if (!idempotencyHash) idempotencyHash = `${Date.now()}:${Math.random().toString(16).slice(2)}`;
-
-    const evidenceForOperation = isPlainExportObject(payableContentEvidence) ? payableContentEvidence : null;
-    const inputJson = {
-      source: 'handleBankingPayBatchExportCsv',
-      execution_mode: 'BANK_CSV_EXPORT_PREPARE',
-      prepare_bank_csv_export_only: true,
-      pay_channel_scope: payChannelScope,
-      requested_scope: requestedPayChannelScope,
-      reason: String(reason || 'PREPARE_REQUIRED')
-    };
-    if (evidenceForOperation) inputJson.bank_csv_payable_content_evidence = evidenceForOperation;
-
-    const operationPayload = await startBankingPayOperation(env, {
-      operation_type: 'PAYMENT_EXECUTE',
-      actor_user_id: user.id,
-      idempotency_key: `bank-csv-export-prepare:batch:${id}:scope:${payChannelScope}:hash:${idempotencyHash}`,
-      pay_batch_id: id,
-      input_json: inputJson
-    });
-
-    try {
-      const operationId = String(
-        operationPayload?.operation_id
-        || operationPayload?.operationId
-        || operationPayload?.id
-        || operationPayload?.operation?.operation_id
-        || operationPayload?.operation?.operationId
-        || operationPayload?.operation?.id
-        || ''
-      ).trim();
-      if (operationId && typeof scheduleBankingPayOperationDrain === 'function') {
-        scheduleBankingPayOperationDrain(env, ctx, {
-          operationId,
-          operationType: 'PAYMENT_EXECUTE',
-          payBatchId: id,
-          actorUserId: user.id,
-          source: 'handleBankingPayBatchExportCsv.buildCsvExportPrepareOperation'
-        });
+      if (!inQuotes && (character === '\r' || character === '\n')) {
+        if (recordHasContent) recordCount += 1;
+        recordHasContent = false;
+        if (character === '\r' && text[index + 1] === '\n') index += 1;
+        continue;
       }
-    } catch (drainError) {
-      try { console.warn('[handleBankingPayBatchExportCsv] bank CSV prepare drain scheduling failed:', drainError?.message || drainError); } catch {}
+      recordHasContent = true;
     }
+    if (recordHasContent) recordCount += 1;
+    return Math.max(0, recordCount - (includeHeader && recordCount > 0 ? 1 : 0));
+  };
 
+  const buildGlobalExecutionProof = (summaryValue) => {
+    const summary = isPlainObject(summaryValue) ? summaryValue : {};
+    const preflight = isPlainObject(summary.paye_net_preflight || summary.payeNetPreflight)
+      ? (summary.paye_net_preflight || summary.payeNetPreflight)
+      : {};
+    const missingCount = nonNegativeInteger(preflight.missing_explicit_paye_input_count ?? preflight.missingExplicitPayeInputCount);
+    const explicitZeroCount = nonNegativeInteger(preflight.explicit_zero_count ?? preflight.explicitZeroCount);
+    const positiveCount = nonNegativeInteger(preflight.positive_bank_payment_count ?? preflight.positiveBankPaymentCount);
+    const positiveTotalRaw = Number(preflight.positive_total ?? preflight.positiveTotal);
+    const payeHash = trimStr(summary.current_paye_net_state_hash || summary.paye_net_state_hash || preflight.paye_net_state_hash || preflight.payeNetStateHash);
+    if (missingCount === null || explicitZeroCount === null || positiveCount === null || !Number.isFinite(positiveTotalRaw) || !payeHash) {
+      const error = new Error('BANK_CSV_PROJECTION_INCONSISTENT');
+      error.error_code = 'BANK_CSV_PROJECTION_INCONSISTENT';
+      throw error;
+    }
     return {
-      ...operationPayload,
-      ok: true,
-      operation_required: true,
-      bank_csv_export_prepare_required: true,
-      pay_batch_id: id,
-      requested_scope: requestedPayChannelScope,
-      scope: payChannelScope,
-      reason: String(reason || 'PREPARE_REQUIRED'),
-      bank_csv_payable_content_evidence: evidenceForOperation
+      missing_explicit_paye_input_count: missingCount,
+      explicit_zero_count: explicitZeroCount,
+      global_positive_bank_payment_count: positiveCount,
+      global_positive_total: roundMoney(positiveTotalRaw),
+      paye_net_state_hash: payeHash
     };
   };
 
-  const exportFrozenCsv = async () => csvAdapter_export(env, id, payChannelScope, user.id);
+  const loadExecutionSummary = async () => {
+    const summary = unwrapObjectRpc(await sbRpc(env, 'pay_batch_execution_summary_get', {
+      p_pay_batch_id: id,
+      p_actor_user_id: user.id,
+      p_mode: 'LIGHT'
+    }), 'pay_batch_execution_summary_get');
+    if (!summary.pay_batch_id || summary.ok === false) {
+      const error = new Error('PAY_BATCH_NOT_FOUND');
+      error.error_code = 'PAY_BATCH_NOT_FOUND';
+      throw error;
+    }
+    return summary;
+  };
+
+  const loadScopedProjectionProof = async (globalProof) => {
+    const rows = unwrapRowsRpc(await sbRpc(env, '_pay_batch_bank_payment_projection_rows', {
+      p_pay_batch_id: id,
+      p_scope: requestedScope
+    }), '_pay_batch_bank_payment_projection_rows');
+    let scopedMissingCount = 0;
+    let scopedExplicitZeroCount = 0;
+    let positiveCount = 0;
+    let positiveTotal = 0;
+    const scopedPayeHashes = new Set();
+    const projectionHashes = new Set();
+    for (const row of rows) {
+      const isPayeState = truthy(row.is_paye_net_state_row);
+      const classification = upperTrim(row.paye_net_classification);
+      if (isPayeState && classification === 'MISSING') scopedMissingCount += 1;
+      if (isPayeState && classification === 'ZERO') scopedExplicitZeroCount += 1;
+      if (truthy(row.is_positive_bank_payment)) {
+        positiveCount += 1;
+        positiveTotal += Number(row.amount ?? row.final_frozen_bank_amount ?? 0) || 0;
+      }
+      const scopedPayeHash = trimStr(row.paye_net_state_hash);
+      const projectionHash = trimStr(row.bank_payment_projection_hash);
+      if (scopedPayeHash) scopedPayeHashes.add(scopedPayeHash);
+      if (projectionHash) projectionHashes.add(projectionHash);
+    }
+    if (scopedPayeHashes.size > 1 || projectionHashes.size > 1) {
+      const error = new Error('BANK_CSV_PROJECTION_INCONSISTENT');
+      error.error_code = 'BANK_CSV_PROJECTION_INCONSISTENT';
+      throw error;
+    }
+    return {
+      scope: requestedScope,
+      missing_explicit_paye_input_count: globalProof.missing_explicit_paye_input_count,
+      scoped_missing_explicit_paye_input_count: scopedMissingCount,
+      explicit_zero_count: globalProof.explicit_zero_count,
+      scoped_explicit_zero_count: scopedExplicitZeroCount,
+      global_positive_bank_payment_count: globalProof.global_positive_bank_payment_count,
+      global_positive_total: globalProof.global_positive_total,
+      positive_bank_payment_count: positiveCount,
+      positive_total: roundMoney(positiveTotal),
+      paye_net_state_hash: globalProof.paye_net_state_hash,
+      scoped_paye_net_state_hash: Array.from(scopedPayeHashes)[0] || null,
+      bank_payment_projection_hash: Array.from(projectionHashes)[0] || null,
+      row_count: positiveCount,
+      rows_observed: rows.length
+    };
+  };
+
+  const projectionProofMatches = (before, after) => {
+    const keys = [
+      'scope',
+      'missing_explicit_paye_input_count',
+      'scoped_missing_explicit_paye_input_count',
+      'explicit_zero_count',
+      'scoped_explicit_zero_count',
+      'global_positive_bank_payment_count',
+      'global_positive_total',
+      'positive_bank_payment_count',
+      'positive_total',
+      'paye_net_state_hash',
+      'scoped_paye_net_state_hash',
+      'bank_payment_projection_hash'
+    ];
+    return keys.every((key) => {
+      if (key === 'positive_total' || key === 'global_positive_total') return roundMoney(before[key]) === roundMoney(after[key]);
+      return before[key] === after[key];
+    });
+  };
+
+  const exportFrozenCsv = async () => csvAdapter_export(env, id, requestedScope, user.id);
 
   try {
-    const summary = unwrapRpc(await sbRpc(env, 'pay_batch_execution_summary_get', {
-      p_pay_batch_id: id,
-      p_actor_user_id: user.id
-    }), 'pay_batch_execution_summary_get');
+    const summary = await loadExecutionSummary();
+    const preExportGlobalProof = buildGlobalExecutionProof(summary);
 
-    if (!summary || summary.ok === false || !summary.pay_batch_id) {
-      return buildExportCsvFailureResponse(404, summary || 'PAY_BATCH_NOT_FOUND', 'PAY_BATCH_NOT_FOUND', 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.');
-    }
-
-    let frozenPayableItemEvidence = {
-      known: false,
-      pay_batch_id: id,
-      item_count: null,
-      total_payable: null,
-      hasPayableContent: false,
-      source: 'pay_batch_items'
-    };
-    try {
-      frozenPayableItemEvidence = await loadFrozenPayableItemEvidence();
-    } catch (evidenceError) {
-      frozenPayableItemEvidence = {
-        ...frozenPayableItemEvidence,
-        error: stringifyFailureValue(evidenceError) || 'FROZEN_PAYABLE_ITEM_EVIDENCE_UNAVAILABLE'
-      };
-    }
-
-    const payableContentEvidence = derivePayableDraftContentEvidence(summary, frozenPayableItemEvidence);
-    const batchStatus = String(summary.batch_status || summary.status || '').trim().toUpperCase();
-    const executionCommitState = String(summary.execution_commit_state || '').trim().toUpperCase();
-    const freshnessStatus = String(summary.freshness_validation_status || '').trim().toUpperCase();
-    const isCancelledBatch = batchStatus === 'CANCELLED' || batchStatus === 'CANCELED';
-    const isPostExecutionOrHistoricalExport = isCancelledBatch || ['SUBMITTED_NOT_COMMITTED', 'COMMITTED'].includes(executionCommitState);
-
-    if (payableContentEvidence.knownEmpty === true && !isPostExecutionOrHistoricalExport) {
-      return withCORS(env, req, noActivePaymentsResponse());
-    }
-
-    if (!isPostExecutionOrHistoricalExport) {
-      const providerMeta = normalizeProvider(summary.rail_provider_snapshot || summary.provider || null);
-      if (!providerMeta.valid) return buildExportCsvFailureResponse(400, providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER', providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER', 'CloudTMS could not create this bank CSV because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider: providerMeta.provider || null });
-    }
-
-    if (!['PASSED', 'NOT_REQUIRED'].includes(freshnessStatus) && !isPostExecutionOrHistoricalExport) {
-      const operationPayload = await buildCsvExportPrepareOperation('FRESHNESS_REQUIRED', summary, payableContentEvidence);
-      return withCORS(env, req, jsonResponse(202, operationPayload));
-    }
-
-    let csvText;
-    try {
-      csvText = await exportFrozenCsv();
-    } catch (firstExportError) {
-      if (isMissingTransferRowsError(firstExportError) && !isPostExecutionOrHistoricalExport) {
-        const operationPayload = await buildCsvExportPrepareOperation('TRANSFER_ROWS_REQUIRED_AFTER_EXPORT_CHECK', summary, payableContentEvidence);
-        return withCORS(env, req, jsonResponse(202, operationPayload));
-      }
-      const norm = normalizeRpcError(firstExportError, 'PAY_EXPORT_BANK_CSV_FAILED');
-      return withCORS(env, req, jsonResponse(norm.status, norm.body));
-    }
-
-    const csvSettingsSummary = await loadCsvExportSettingsSummary();
-    const exportSummary = unwrapRpc(await sbRpc(env, 'pay_bank_csv_export_summary_get', {
-      p_pay_batch_id: id,
-      p_scope: payChannelScope,
-      p_actor_user_id: user.id
-    }), 'pay_bank_csv_export_summary_get');
-
-    const transferHash = String(exportSummary.current_transfer_hash || exportSummary.transfer_hash || '').trim();
-    if (!transferHash) {
-      return buildExportCsvFailureResponse(409, 'CURRENT_TRANSFER_HASH_REQUIRED', 'PAY_EXPORT_BANK_CSV_FAILED', 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.', { reason: 'CURRENT_TRANSFER_HASH_REQUIRED' });
-    }
-
-    const rowCount = Number(exportSummary.row_count ?? 0);
-    const totalAmountRaw = Number(exportSummary.total_amount ?? 0);
-    const evidence = {
-      generated_at_utc: new Date().toISOString(),
-      generated_by_user_id: String(user?.id || '').trim() || null,
-      scope: payChannelScope,
-      requested_scope: requestedPayChannelScope,
-      filename: `pay-batch-${id}.csv`,
-      row_count: Number.isFinite(rowCount) ? Math.max(0, Math.trunc(rowCount)) : 0,
-      total_amount: Number.isFinite(totalAmountRaw) ? Number(totalAmountRaw.toFixed(2)) : 0,
-      transfer_hash: transferHash,
-      current_transfer_hash: transferHash,
-      pending_transfer_hash: exportSummary.pending_transfer_hash || null,
-      columns: csvSettingsSummary.columns,
-      format_summary: csvSettingsSummary.format_summary,
-      provider_snapshot: exportSummary.provider_snapshot ?? summary.rail_provider_snapshot ?? null,
-      rail_env_snapshot: exportSummary.rail_env_snapshot ?? summary.rail_env_snapshot ?? null,
-      pay_channel_scope: exportSummary.pay_channel_scope || payChannelScope,
-      freshness_validation_status: exportSummary.freshness_validation_status || summary.freshness_validation_status || null,
-      freshness_result_hash: exportSummary.freshness_result_hash || summary.freshness_result_hash || null,
-      freshness_scope_hash: exportSummary.freshness_scope_hash || summary.freshness_scope_hash || null,
-      summary_source: exportSummary.summary_source || 'pay_bank_csv_export_summary_get',
-      policy_x_authority: exportSummary.policy_x_authority || 'FROZEN_MATERIALISED_TRANSFER_ROWS'
-    };
-
-    await sbFetch(
+    const { rows: currentBatchRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(id)}`,
-      {
+      `${env.SUPABASE_URL}/rest/v1/pay_batches` +
+      `?id=eq.${encodeURIComponent(id)}` +
+      `&select=id,status,batch_kind_fixed,execution_commit_state,rail_provider_snapshot,rail_env_snapshot,freshness_validation_status,freshness_result_hash,freshness_scope_hash` +
+      `&limit=1`,
+      false
+    );
+    const currentBatch = Array.isArray(currentBatchRows) && isPlainObject(currentBatchRows[0]) ? currentBatchRows[0] : null;
+    if (!currentBatch) return failureResponse(404, 'PAY_BATCH_NOT_FOUND', 'PAY_BATCH_NOT_FOUND');
+
+    const batchStatus = upperTrim(summary.batch_status || summary.status || currentBatch.status);
+    const executionCommitState = upperTrim(summary.execution_commit_state || currentBatch.execution_commit_state || 'NOT_SUBMITTED');
+    const isHistorical = ['CANCELLED', 'CANCELED'].includes(batchStatus) || ['SUBMITTED_NOT_COMMITTED', 'COMMITTED'].includes(executionCommitState);
+    const filename = `pay-batch-${id}.csv`;
+    const settingsSummary = await loadCsvExportSettingsSummary();
+
+    if (isHistorical) {
+      const csvText = await exportFrozenCsv();
+      let exportSummary = {};
+      const historicalSummaryScope = requestedScope === 'LOANS' && upperTrim(currentBatch.batch_kind_fixed) === 'LOANS'
+        ? 'PAYE'
+        : requestedScope;
+      if (historicalSummaryScope !== 'LOANS') {
+        try {
+          exportSummary = unwrapObjectRpc(await sbRpc(env, 'pay_bank_csv_export_summary_get', {
+            p_pay_batch_id: id,
+            p_scope: historicalSummaryScope,
+            p_actor_user_id: user.id
+          }), 'pay_bank_csv_export_summary_get');
+        } catch {
+          exportSummary = {};
+        }
+      }
+      const transferHash = trimStr(exportSummary.current_transfer_hash || exportSummary.transfer_hash) || null;
+      const historicalDataRowCount = countCsvDataRows(csvText, settingsSummary.format_summary.include_header === true);
+      const summaryRowCount = Number(exportSummary.row_count);
+      const evidence = {
+        generated_at_utc: new Date().toISOString(),
+        generated_by_user_id: String(user.id || '').trim() || null,
+        scope: requestedScope,
+        requested_scope: requestedScope,
+        filename,
+        row_count: Number.isFinite(summaryRowCount) ? Math.max(0, Math.trunc(summaryRowCount)) : historicalDataRowCount,
+        total_amount: roundMoney(exportSummary.total_amount),
+        transfer_hash: transferHash,
+        current_transfer_hash: transferHash,
+        pending_transfer_hash: exportSummary.pending_transfer_hash || null,
+        columns: settingsSummary.columns,
+        format_summary: settingsSummary.format_summary,
+        provider_snapshot: exportSummary.provider_snapshot ?? summary.rail_provider_snapshot ?? currentBatch.rail_provider_snapshot ?? null,
+        rail_env_snapshot: exportSummary.rail_env_snapshot ?? summary.rail_env_snapshot ?? currentBatch.rail_env_snapshot ?? null,
+        pay_channel_scope: exportSummary.pay_channel_scope || requestedScope,
+        freshness_validation_status: exportSummary.freshness_validation_status || summary.freshness_validation_status || currentBatch.freshness_validation_status || null,
+        freshness_result_hash: exportSummary.freshness_result_hash || summary.freshness_result_hash || currentBatch.freshness_result_hash || null,
+        freshness_scope_hash: exportSummary.freshness_scope_hash || summary.freshness_scope_hash || currentBatch.freshness_scope_hash || null,
+        summary_source: exportSummary.summary_source || 'pay_bank_csv_export_summary_get',
+        policy_x_authority: exportSummary.policy_x_authority || 'FROZEN_MATERIALISED_TRANSFER_ROWS'
+      };
+      await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(id)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ bank_csv_export_json: evidence })
-      }
+      });
+      const headers = new Headers();
+      headers.set('Content-Type', 'text/csv; charset=utf-8');
+      headers.set('Content-Disposition', `attachment; filename="${filename}"`);
+      return withCORS(env, req, new Response(csvText == null ? '' : String(csvText), { status: 200, headers }));
+    }
+
+    const preExportProof = await loadScopedProjectionProof(preExportGlobalProof);
+    if (preExportProof.missing_explicit_paye_input_count > 0) {
+      return failureResponse(409, 'PAYE_NET_REQUIRED_FOR_BANK_CSV', 'PAYE_NET_REQUIRED_FOR_BANK_CSV', {
+        requested_scope: requestedScope,
+        missing_explicit_paye_input_count: preExportProof.missing_explicit_paye_input_count
+      });
+    }
+    if (preExportProof.positive_bank_payment_count === 0 && preExportProof.scoped_explicit_zero_count === 0) {
+      return failureResponse(409, 'NO_ACTIVE_PAYMENTS_IN_BATCH', 'NO_ACTIVE_PAYMENTS_IN_BATCH', { requested_scope: requestedScope });
+    }
+    if (!preExportProof.paye_net_state_hash || !preExportProof.bank_payment_projection_hash) {
+      return failureResponse(409, 'BANK_CSV_PROJECTION_INCONSISTENT', 'BANK_CSV_PROJECTION_INCONSISTENT', { requested_scope: requestedScope });
+    }
+
+    const csvText = await exportFrozenCsv();
+    const postExportSummary = await loadExecutionSummary();
+    const postExportGlobalProof = buildGlobalExecutionProof(postExportSummary);
+    const postExportProof = await loadScopedProjectionProof(postExportGlobalProof);
+    if (!projectionProofMatches(preExportProof, postExportProof)) {
+      return failureResponse(409, 'BANK_CSV_PROJECTION_CHANGED_DURING_EXPORT', 'BANK_CSV_PROJECTION_CHANGED_DURING_EXPORT', {
+        requested_scope: requestedScope,
+        pre_export_projection: preExportProof,
+        post_export_projection: postExportProof
+      });
+    }
+
+    const actualDataRowCount = countCsvDataRows(csvText, settingsSummary.format_summary.include_header === true);
+    if (actualDataRowCount !== postExportProof.positive_bank_payment_count) {
+      return failureResponse(409, 'BANK_CSV_OUTPUT_ROW_COUNT_MISMATCH', 'BANK_CSV_OUTPUT_ROW_COUNT_MISMATCH', {
+        requested_scope: requestedScope,
+        expected_row_count: postExportProof.positive_bank_payment_count,
+        actual_row_count: actualDataRowCount
+      });
+    }
+
+    const { rows: refreshedBatchRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches` +
+      `?id=eq.${encodeURIComponent(id)}` +
+      `&select=id,rail_provider_snapshot,rail_env_snapshot,freshness_validation_status,freshness_result_hash,freshness_scope_hash` +
+      `&limit=1`,
+      false
     );
+    const refreshedBatch = Array.isArray(refreshedBatchRows) && isPlainObject(refreshedBatchRows[0]) ? refreshedBatchRows[0] : null;
+    if (!refreshedBatch) return failureResponse(404, 'PAY_BATCH_NOT_FOUND', 'PAY_BATCH_NOT_FOUND');
+
+    const zeroRow = actualDataRowCount === 0 && postExportProof.scoped_explicit_zero_count > 0;
+    const evidence = {
+      generated_at_utc: new Date().toISOString(),
+      generated_by_user_id: String(user.id || '').trim() || null,
+      scope: requestedScope,
+      requested_scope: requestedScope,
+      pay_channel_scope: requestedScope,
+      filename,
+      row_count: actualDataRowCount,
+      total_amount: roundMoney(postExportProof.positive_total),
+      paye_net_state_hash: postExportProof.paye_net_state_hash,
+      current_paye_net_state_hash: postExportProof.paye_net_state_hash,
+      scoped_paye_net_state_hash: postExportProof.scoped_paye_net_state_hash,
+      bank_payment_projection_hash: postExportProof.bank_payment_projection_hash,
+      current_bank_payment_projection_hash: postExportProof.bank_payment_projection_hash,
+      missing_explicit_paye_input_count: postExportProof.missing_explicit_paye_input_count,
+      scoped_missing_explicit_paye_input_count: postExportProof.scoped_missing_explicit_paye_input_count,
+      explicit_zero_count: postExportProof.explicit_zero_count,
+      scoped_explicit_zero_count: postExportProof.scoped_explicit_zero_count,
+      global_positive_bank_payment_count: postExportProof.global_positive_bank_payment_count,
+      positive_bank_payment_count: postExportProof.positive_bank_payment_count,
+      no_bank_payment_required: zeroRow,
+      zero_row_export: zeroRow,
+      header_only_or_empty_body: zeroRow,
+      transfer_hash: null,
+      columns: settingsSummary.columns,
+      format_summary: settingsSummary.format_summary,
+      provider_snapshot: refreshedBatch.rail_provider_snapshot || summary.rail_provider_snapshot || currentBatch.rail_provider_snapshot || null,
+      rail_env_snapshot: refreshedBatch.rail_env_snapshot || summary.rail_env_snapshot || currentBatch.rail_env_snapshot || null,
+      freshness_validation_status: refreshedBatch.freshness_validation_status || summary.freshness_validation_status || currentBatch.freshness_validation_status || null,
+      freshness_result_hash: refreshedBatch.freshness_result_hash || summary.freshness_result_hash || currentBatch.freshness_result_hash || null,
+      freshness_scope_hash: refreshedBatch.freshness_scope_hash || summary.freshness_scope_hash || currentBatch.freshness_scope_hash || null,
+      summary_source: 'pay_batch_execution_summary_get+_pay_batch_bank_payment_projection_rows',
+      projection_authority_rpc: '_pay_batch_bank_payment_projection_rows',
+      frozen_projection_authority_identifier: 'FROZEN_BANK_PAYMENT_PROJECTION_ROWS',
+      policy_x_authority: 'FROZEN_BANK_PAYMENT_PROJECTION_ROWS'
+    };
+
+    await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ bank_csv_export_json: evidence })
+    });
 
     const headers = new Headers();
     headers.set('Content-Type', 'text/csv; charset=utf-8');
-    headers.set('Content-Disposition', `attachment; filename="pay-batch-${id}.csv"`);
-
-    return withCORS(env, req, new Response((csvText === null || csvText === undefined) ? '' : String(csvText), { status: 200, headers }));
-  } catch (e) {
-    const norm = normalizeRpcError(e, 'PAY_BATCH_EXPORT_CSV_FAILED');
-    return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    headers.set('Content-Disposition', `attachment; filename="${filename}"`);
+    return withCORS(env, req, new Response(csvText == null ? '' : String(csvText), { status: 200, headers }));
+  } catch (error) {
+    const failure = extractFailure(error, 'PAY_BATCH_EXPORT_CSV_FAILED');
+    return failureResponse(statusForExportCsvFailureCode(failure.code, Number(error?.status) || 400), error, failure.code || 'PAY_BATCH_EXPORT_CSV_FAILED');
   }
 }
 
@@ -45310,39 +46963,77 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
   };
 
   const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const firstNonEmptyObject = (...values) => {
+    for (const value of values) {
+      const objectValue = safeObject(value);
+      if (Object.keys(objectValue).length > 0) return objectValue;
+    }
+    return {};
+  };
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const upperText = (value) => trimText(value).toUpperCase();
+  const readBooleanLike = (value, fallback = false) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    const text = trimText(value).toLowerCase();
+    if (!text) return fallback;
+    if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return fallback;
+  };
+  const integerOrNull = (...values) => {
+    for (const value of values) {
+      if (value === null || value === undefined || value === '') continue;
+      const number = Number(value);
+      return Number.isFinite(number) && number >= 0 ? Math.trunc(number) : null;
+    }
+    return null;
+  };
+  const normaliseSettlementMode = (value) => {
+    const mode = upperText(value);
+    if (['RAIL_SETTLEMENT', 'STANDARD_BANK', 'BANK', 'REVOLUT'].includes(mode)) return 'STANDARD_BANK';
+    if (['CSV', 'CSV_SETTLEMENT'].includes(mode)) return 'CSV_SETTLEMENT';
+    if (['EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT'].includes(mode)) return 'EXTERNAL_SETTLEMENT';
+    return mode;
+  };
   const enc = encodeURIComponent;
   const operation = safeObject(operationRow);
-  const operationId = String(operation.operation_id || operation.id || '').trim();
-  const payBatchId = String(operation.pay_batch_id || '').trim();
-  const actorUserId = String(user?.id || operation.actor_user_id || operation.input_json?.actor_user_id || '').trim();
+  const operationId = trimText(operation.operation_id || operation.id);
+  const payBatchId = trimText(operation.pay_batch_id);
+  const actorUserId = trimText(user?.id || operation.actor_user_id || operation.input_json?.actor_user_id);
   const inputJson = safeObject(operation.input_json);
-  const rootOperationId = String(operation.root_operation_id || operation.rootOperationId || inputJson.root_operation_id || inputJson.rootOperationId || '').trim();
+  const rootOperationId = trimText(operation.root_operation_id || operation.rootOperationId || inputJson.root_operation_id || inputJson.rootOperationId || inputJson.execution_operation_id || inputJson.executionOperationId);
   const configJson = safeObject(operation.config_json);
   const progressJson = safeObject(operation.progress_json);
-  const lockOwner = String(options.lockOwner || `settlement:${operationId}`).trim();
+  const lockOwner = trimText(options.lockOwner || `settlement:${operationId}`);
   const lockSeconds = Number.isFinite(Number(configJson.lock_seconds)) ? Math.max(5, Math.min(3600, Math.trunc(Number(configJson.lock_seconds)))) : 60;
-  const phase = String(operation.phase || 'VALIDATE_BATCH').trim().toUpperCase() || 'VALIDATE_BATCH';
-  const settlementMode = String(inputJson.settlement_mode || inputJson.execution_mode || 'CSV_SETTLEMENT').trim().toUpperCase() || 'CSV_SETTLEMENT';
+  const phase = upperText(operation.phase || 'VALIDATE_BATCH') || 'VALIDATE_BATCH';
+  const settlementMode = normaliseSettlementMode(inputJson.settlement_mode || inputJson.execution_mode || 'CSV_SETTLEMENT') || 'CSV_SETTLEMENT';
 
   if (!operationId) throw new Error('advanceBankingPaySettlementOperation: operation_id is required');
   if (!payBatchId) throw new Error('advanceBankingPaySettlementOperation: pay_batch_id is required');
   if (!actorUserId) throw new Error('advanceBankingPaySettlementOperation: actor_user_id is required');
+  if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(settlementMode)) throw new Error(`advanceBankingPaySettlementOperation: unsupported settlement_mode ${settlementMode || 'UNKNOWN'}`);
 
   const settlementChunkSize = Number.isFinite(Number(configJson.settlement_chunk_size)) ? Math.max(1, Math.trunc(Number(configJson.settlement_chunk_size))) : 100;
-  const railSettlementModes = new Set(['RAIL_SETTLEMENT', 'STANDARD_BANK', 'BANK', 'REVOLUT']);
-  const usesRailSettlement = railSettlementModes.has(settlementMode);
+  const usesRailSettlement = settlementMode === 'STANDARD_BANK';
+  const supportsFullBatchFinalisation = ['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(settlementMode);
 
   const jsonStable = (value) => {
-    const seen = new WeakSet();
+    const activePath = new WeakSet();
     const normalise = (raw) => {
       if (raw === null || raw === undefined) return null;
       if (typeof raw !== 'object') return raw;
-      if (seen.has(raw)) return '[Circular]';
-      seen.add(raw);
-      if (Array.isArray(raw)) return raw.map((item) => normalise(item));
-      const out = {};
-      for (const key of Object.keys(raw).sort()) out[key] = normalise(raw[key]);
-      return out;
+      if (activePath.has(raw)) return '[Circular]';
+      activePath.add(raw);
+      try {
+        if (Array.isArray(raw)) return raw.map((item) => normalise(item));
+        const out = {};
+        for (const key of Object.keys(raw).sort()) out[key] = normalise(raw[key]);
+        return out;
+      } finally {
+        activePath.delete(raw);
+      }
     };
     try {
       return JSON.stringify(normalise(value));
@@ -45507,12 +47198,179 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
   };
   const isUuidText = (value) => uuidRe.test(String(value || '').trim());
 
+  const proofCandidates = (sources = []) => {
+    const out = [];
+    const seen = new Set();
+    const add = (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value) || seen.has(value)) return;
+      seen.add(value);
+      out.push(value);
+      add(value.execution_intent_json);
+      add(value.executionIntentJson);
+      add(value.authorised_execution_intent_json);
+      add(value.authorisedExecutionIntentJson);
+      add(value.no_bank_payment_proof);
+      add(value.noBankPaymentProof);
+      add(value.payment_projection_proof);
+      add(value.paymentProjectionProof);
+      add(value.settlement_scope_seed);
+      add(value.durable_settlement_scope_readiness);
+    };
+    for (const source of Array.isArray(sources) ? sources : []) add(source);
+    return out;
+  };
+
+  const resolveSettlementProofContract = (additionalSource = {}) => {
+    let firstPartial = null;
+    let firstValid = null;
+    const sources = proofCandidates([
+      additionalSource,
+      progressJson.durable_settlement_scope_readiness,
+      progressJson.last_chunk_result,
+      progressJson.settlement_scope_seed,
+      inputJson
+    ]);
+    for (const source of sources) {
+      const serverOwned = readBooleanLike(source.server_owned_payment_projection_proof ?? source.serverOwnedPaymentProjectionProof, false);
+      const executionOperationId = trimText(source.execution_operation_id || source.executionOperationId || source.root_operation_id || source.rootOperationId || source.operation_id || source.operationId || rootOperationId);
+      const authRequestId = trimText(source.auth_request_id || source.authRequestId || inputJson.auth_request_id || inputJson.authRequestId);
+      const scope = upperText(source.projection_scope || source.projectionScope || source.pay_channel_scope || source.payChannelScope || source.scope || inputJson.pay_channel_scope || inputJson.scope || 'ALL') || 'ALL';
+      const mode = normaliseSettlementMode(source.authorised_execution_mode || source.execution_mode || source.executionMode || source.settlement_mode || settlementMode);
+      const payeHash = trimText(source.paye_net_state_hash || source.current_paye_net_state_hash || source.authorised_paye_net_state_hash || source.payeNetStateHash);
+      const projectionHash = trimText(source.bank_payment_projection_hash || source.current_bank_payment_projection_hash || source.authorised_bank_payment_projection_hash || source.bankPaymentProjectionHash);
+      const missingCount = integerOrNull(source.missing_explicit_paye_input_count, source.current_missing_explicit_paye_input_count, source.authorised_missing_explicit_paye_input_count);
+      const globalZeroCount = integerOrNull(source.explicit_zero_count, source.current_explicit_zero_count, source.authorised_explicit_zero_count);
+      const scopedZeroCount = integerOrNull(source.scoped_explicit_zero_count, source.current_scoped_explicit_zero_count, source.authorised_scoped_explicit_zero_count, globalZeroCount);
+      const scopedPositiveCount = integerOrNull(source.scoped_positive_bank_payment_count, source.current_scoped_positive_bank_payment_count, source.authorised_scoped_positive_bank_payment_count, source.positive_bank_payment_count);
+      const noBankPaymentExecution = readBooleanLike(source.no_bank_payment_execution ?? source.noBankPaymentExecution, false);
+      const allowZeroScopes = readBooleanLike(source.allow_explicit_zero_no_bank_scopes ?? source.allowExplicitZeroNoBankScopes, false);
+      const suppressRemittancesPresent = Object.prototype.hasOwnProperty.call(source, 'suppress_remittances')
+        || Object.prototype.hasOwnProperty.call(source, 'suppressRemittances');
+      const suppressRemittances = readBooleanLike(source.suppress_remittances ?? source.suppressRemittances, false);
+      const complete = serverOwned
+        && isUuidText(executionOperationId)
+        && isUuidText(authRequestId)
+        && ['ALL', 'PAYE', 'UMBRELLA', 'LOANS'].includes(scope)
+        && ['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(mode)
+        && Boolean(payeHash)
+        && Boolean(projectionHash)
+        && missingCount !== null
+        && scopedZeroCount !== null
+        && scopedPositiveCount !== null;
+      const consistent = complete
+        && executionOperationId === rootOperationId
+        && mode === settlementMode
+        && missingCount === 0
+        && (scopedZeroCount <= 0 || allowZeroScopes === true)
+        && (noBankPaymentExecution !== true || (allowZeroScopes === true && scopedZeroCount > 0 && scopedPositiveCount === 0));
+      let rejectionReason = null;
+      if (!consistent) {
+        if (!serverOwned) rejectionReason = 'SERVER_OWNED_PROJECTION_PROOF_REQUIRED';
+        else if (!isUuidText(executionOperationId)) rejectionReason = 'EXECUTION_OPERATION_ID_REQUIRED';
+        else if (!isUuidText(authRequestId)) rejectionReason = 'AUTH_REQUEST_ID_REQUIRED';
+        else if (!payeHash || !projectionHash) rejectionReason = 'PROJECTION_HASHES_REQUIRED';
+        else if (missingCount === null || scopedZeroCount === null || scopedPositiveCount === null) rejectionReason = 'PROJECTION_COUNTS_REQUIRED';
+        else if (executionOperationId !== rootOperationId) rejectionReason = 'EXECUTION_OPERATION_MISMATCH';
+        else if (mode !== settlementMode) rejectionReason = 'SETTLEMENT_MODE_MISMATCH';
+        else if (missingCount !== 0) rejectionReason = 'MISSING_PAYE_INPUT_PRESENT';
+        else if (scopedZeroCount > 0 && allowZeroScopes !== true) rejectionReason = 'EXPLICIT_ZERO_SCOPE_MARKER_REQUIRED';
+        else if (noBankPaymentExecution === true && scopedPositiveCount !== 0) rejectionReason = 'PURE_NO_BANK_PROJECTION_INVALID';
+        else rejectionReason = 'PROJECTION_PROOF_INVALID';
+      }
+      const contract = {
+        valid: consistent,
+        server_owned_payment_projection_proof: serverOwned,
+        execution_operation_id: executionOperationId || null,
+        settlement_operation_id: operationId,
+        auth_request_id: authRequestId || null,
+        execution_mode: mode || null,
+        projection_scope: scope || null,
+        paye_net_state_hash: payeHash || null,
+        bank_payment_projection_hash: projectionHash || null,
+        missing_explicit_paye_input_count: missingCount,
+        explicit_zero_count: globalZeroCount,
+        scoped_explicit_zero_count: scopedZeroCount,
+        scoped_positive_bank_payment_count: scopedPositiveCount,
+        no_bank_payment_execution: noBankPaymentExecution,
+        allow_explicit_zero_no_bank_scopes: allowZeroScopes,
+        suppress_remittances_present: suppressRemittancesPresent,
+        suppress_remittances: suppressRemittances,
+        rejection_reason: rejectionReason
+      };
+      if (consistent) {
+        if (contract.suppress_remittances_present === true) return contract;
+        if (!firstValid) firstValid = contract;
+        continue;
+      }
+      if (!firstPartial && (serverOwned || noBankPaymentExecution || allowZeroScopes)) firstPartial = contract;
+    }
+    return firstValid || firstPartial || {
+      valid: false,
+      server_owned_payment_projection_proof: false,
+      execution_operation_id: rootOperationId || null,
+      settlement_operation_id: operationId,
+      auth_request_id: trimText(inputJson.auth_request_id || inputJson.authRequestId) || null,
+      execution_mode: settlementMode,
+      projection_scope: upperText(inputJson.pay_channel_scope || inputJson.scope || 'ALL') || 'ALL',
+      no_bank_payment_execution: false,
+      allow_explicit_zero_no_bank_scopes: false,
+      rejection_reason: 'AUTHORITATIVE_SETTLEMENT_PROJECTION_PROOF_MISSING'
+    };
+  };
+
+  const fetchBatchItemRows = async () => {
+    const query = new URLSearchParams();
+    query.set('select', 'id,pay_batch_candidate_id,pay_bank_transfer_id,is_voided,item_type,pay_channel,pay_batch_candidates!inner(pay_batch_id)');
+    query.set('pay_batch_candidates.pay_batch_id', `eq.${payBatchId}`);
+    query.set('limit', '50000');
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batch_items?${query.toString()}`, false);
+    return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)).filter((row) => isUuidText(row.id)) : [];
+  };
+
+  const fetchAllBatchTransferRows = async () => {
+    const query = new URLSearchParams();
+    query.set('pay_batch_id', `eq.${payBatchId}`);
+    query.set('select', 'id,pay_batch_id,status,rail_state,completed_at_utc,rail_tx_id,rail_meta_json,amount,failed_reason');
+    query.set('limit', '50000');
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?${query.toString()}`, false);
+    return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)).filter((row) => isUuidText(row.id)) : [];
+  };
+
+  const fetchExecutionTransferScopeRows = async (executionOperationId) => {
+    if (!isUuidText(executionOperationId)) return [];
+    const query = new URLSearchParams();
+    query.set('operation_id', `eq.${executionOperationId}`);
+    query.set('pay_batch_id', `eq.${payBatchId}`);
+    query.set('select', 'id,operation_id,pay_batch_id,pay_bank_transfer_id,provider_submit_attempt_count,provider_request_id,provider_transaction_id,provider_request_sent_at_utc');
+    query.set('limit', '50000');
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_transfer_scope?${query.toString()}`, false);
+    return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)) : [];
+  };
+
+  const fetchProviderAttemptRows = async () => {
+    const query = new URLSearchParams();
+    query.set('pay_batch_id', `eq.${payBatchId}`);
+    query.set('select', 'id,operation_id,pay_batch_id,transfer_scope_id,provider_request_id,provider_transaction_id');
+    query.set('limit', '50000');
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_provider_attempts?${query.toString()}`, false);
+    return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)) : [];
+  };
+
+  const fetchTransferEventRows = async () => {
+    const query = new URLSearchParams();
+    query.set('pay_batch_id', `eq.${payBatchId}`);
+    query.set('select', 'id,pay_batch_id,pay_bank_transfer_id,provider_event_type,normalised_state,provider_transaction_id');
+    query.set('limit', '50000');
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfer_events?${query.toString()}`, false);
+    return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)) : [];
+  };
+
   const fetchPendingSettlementScopeRows = async () => {
     const query = new URLSearchParams();
     query.set('operation_id', `eq.${operationId}`);
     query.set('pay_batch_id', `eq.${payBatchId}`);
     query.set('status', 'eq.PENDING');
-    query.set('select', 'id,operation_id,pay_batch_id,pay_batch_candidate_id,candidate_id,pay_channel,settlement_key,payload_json,status,created_at_utc,updated_at_utc');
+    query.set('select', 'id,operation_id,pay_batch_id,pay_batch_candidate_id,candidate_id,pay_channel,settlement_key,payload_json,status,settlement_event_id,created_at_utc,updated_at_utc');
     query.set('order', 'created_at_utc.asc,id.asc');
     query.set('limit', '50000');
     const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_settlement_scope?${query.toString()}`, false);
@@ -45523,17 +47381,31 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     const query = new URLSearchParams();
     query.set('operation_id', `eq.${operationId}`);
     query.set('pay_batch_id', `eq.${payBatchId}`);
-    query.set('select', 'id,operation_id,pay_batch_id,pay_batch_candidate_id,candidate_id,pay_channel,settlement_key,payload_json,status,created_at_utc,updated_at_utc');
+    query.set('select', 'id,operation_id,pay_batch_id,pay_batch_candidate_id,candidate_id,pay_channel,settlement_key,payload_json,status,settlement_event_id,created_at_utc,updated_at_utc');
     query.set('order', 'created_at_utc.asc,id.asc');
     query.set('limit', '50000');
     const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_settlement_scope?${query.toString()}`, false);
     return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)).filter((row) => isUuidText(row.id)) : [];
   };
 
-  const extractTransferIdsFromSettlementScopeRows = (settlementScopeRows = []) => uniqueTexts((Array.isArray(settlementScopeRows) ? settlementScopeRows : []).map((row) => {
-    const payload = safeObject(row?.payload_json);
-    return payload?.payment_scope_json?.pay_bank_transfer_id;
-  })).filter(isUuidText);
+  const extractTransferIdsFromSettlementScopeRows = (settlementScopeRows = [], batchItemRowsOrMap = []) => {
+    const itemById = batchItemRowsOrMap instanceof Map
+      ? batchItemRowsOrMap
+      : new Map((Array.isArray(batchItemRowsOrMap) ? batchItemRowsOrMap : []).map((row) => [trimText(row?.id), safeObject(row)]));
+    const transferIds = [];
+    for (const scopeRow of Array.isArray(settlementScopeRows) ? settlementScopeRows : []) {
+      const payload = safeObject(scopeRow?.payload_json);
+      const paymentScope = safeObject(payload.payment_scope_json);
+      const directTransferId = trimText(paymentScope.pay_bank_transfer_id || payload.pay_bank_transfer_id);
+      if (isUuidText(directTransferId)) transferIds.push(directTransferId);
+      const itemIds = uniqueTexts(Array.isArray(payload.pay_batch_item_ids) ? payload.pay_batch_item_ids : []).filter(isUuidText);
+      for (const itemId of itemIds) {
+        const itemTransferId = trimText(itemById.get(itemId)?.pay_bank_transfer_id);
+        if (isUuidText(itemTransferId)) transferIds.push(itemTransferId);
+      }
+    }
+    return uniqueTexts(transferIds).filter(isUuidText);
+  };
 
   const fetchSettlementScopeTransferRows = async (transferIds = []) => {
     const ids = uniqueTexts(transferIds).filter(isUuidText);
@@ -45541,7 +47413,7 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     const idSet = new Set(ids);
     const query = new URLSearchParams();
     query.set('pay_batch_id', `eq.${payBatchId}`);
-    query.set('select', 'id,pay_batch_id,status,rail_state,completed_at_utc,rail_tx_id,amount,failed_reason');
+    query.set('select', 'id,pay_batch_id,status,rail_state,completed_at_utc,rail_tx_id,rail_meta_json,amount,failed_reason');
     query.set('limit', '50000');
     const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?${query.toString()}`, false);
     return res && Array.isArray(res.rows)
@@ -45549,83 +47421,331 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       : [];
   };
 
+  const buildRailSettlementRequestForScopeIds = async (settlementScopeIds = []) => {
+    const requestedScopeIds = uniqueTexts(settlementScopeIds).filter(isUuidText);
+    if (requestedScopeIds.length <= 0) {
+      return {
+        settlement_scope_ids: [],
+        settlement_json: [],
+        mixed_zero_scope_anchor_id: null
+      };
+    }
+
+    const requestedScopeIdSet = new Set(requestedScopeIds);
+    const [allSettlementScopeRows, batchItemRows] = await Promise.all([
+      fetchAllSettlementScopeRows(),
+      fetchBatchItemRows()
+    ]);
+    const batchItemById = new Map(batchItemRows.map((row) => [trimText(row?.id), safeObject(row)]));
+    const selectedScopeRows = allSettlementScopeRows.filter((row) => requestedScopeIdSet.has(trimText(row.id)));
+    if (selectedScopeRows.length !== requestedScopeIds.length) {
+      throw Object.assign(new Error('One or more requested settlement scopes could not be loaded for the rail-settlement payload.'), {
+        code: 'RAIL_SETTLEMENT_SCOPE_ROWS_MISSING',
+        error_code: 'RAIL_SETTLEMENT_SCOPE_ROWS_MISSING',
+        requested_scope_count: requestedScopeIds.length,
+        matched_scope_count: selectedScopeRows.length
+      });
+    }
+
+    const proof = resolveSettlementProofContract();
+    const suppliedSettlementJson = inputJson.settlement_json;
+    if (suppliedSettlementJson !== null && suppliedSettlementJson !== undefined && !Array.isArray(suppliedSettlementJson)) {
+      throw Object.assign(new Error('The stored rail settlement payload must be a JSON array.'), {
+        code: 'RAIL_SETTLEMENT_PAYLOAD_INVALID',
+        error_code: 'RAIL_SETTLEMENT_PAYLOAD_INVALID'
+      });
+    }
+    if (proof.valid === true && proof.no_bank_payment_execution === true && Array.isArray(suppliedSettlementJson) && suppliedSettlementJson.length > 0) {
+      throw Object.assign(new Error('Pure no-bank settlement cannot include transfer or provider settlement payload rows.'), {
+        code: 'RAIL_SETTLEMENT_PAYLOAD_FORBIDDEN_FOR_NO_BANK_SCOPE',
+        error_code: 'RAIL_SETTLEMENT_PAYLOAD_FORBIDDEN_FOR_NO_BANK_SCOPE'
+      });
+    }
+
+    const allOperationTransferIds = extractTransferIdsFromSettlementScopeRows(allSettlementScopeRows, batchItemById);
+    const allOperationTransferIdSet = new Set(allOperationTransferIds);
+    const effectiveScopeRows = selectedScopeRows.slice();
+    const effectiveScopeIds = requestedScopeIds.slice();
+    let selectedTransferIds = extractTransferIdsFromSettlementScopeRows(effectiveScopeRows, batchItemById);
+    let mixedZeroScopeAnchorId = null;
+
+    if (
+      selectedTransferIds.length <= 0
+      && proof.valid === true
+      && proof.no_bank_payment_execution !== true
+      && proof.allow_explicit_zero_no_bank_scopes === true
+      && Number(proof.scoped_positive_bank_payment_count || 0) > 0
+    ) {
+      const transferBackedAnchorCandidates = allSettlementScopeRows.filter((scopeRow) => {
+        if (requestedScopeIdSet.has(trimText(scopeRow.id))) return false;
+        return extractTransferIdsFromSettlementScopeRows([scopeRow], batchItemById).length > 0;
+      });
+      const anchorScopeRow = transferBackedAnchorCandidates.find((scopeRow) => upperText(scopeRow.status) === 'SETTLED')
+        || transferBackedAnchorCandidates.find((scopeRow) => upperText(scopeRow.status) !== 'FAILED')
+        || transferBackedAnchorCandidates[0]
+        || null;
+      if (anchorScopeRow && isUuidText(anchorScopeRow.id)) {
+        mixedZeroScopeAnchorId = trimText(anchorScopeRow.id);
+        effectiveScopeRows.push(anchorScopeRow);
+        effectiveScopeIds.push(mixedZeroScopeAnchorId);
+        selectedTransferIds = extractTransferIdsFromSettlementScopeRows(effectiveScopeRows, batchItemById);
+      }
+    }
+
+    const selectedTransferIdSet = new Set(selectedTransferIds);
+    if (selectedTransferIds.length <= 0) {
+      return {
+        settlement_scope_ids: effectiveScopeIds,
+        settlement_json: [],
+        mixed_zero_scope_anchor_id: mixedZeroScopeAnchorId
+      };
+    }
+
+    const selectedSuppliedRows = [];
+    const suppliedTransferIds = new Set();
+    for (const suppliedRowValue of Array.isArray(suppliedSettlementJson) ? suppliedSettlementJson : []) {
+      if (!suppliedRowValue || typeof suppliedRowValue !== 'object' || Array.isArray(suppliedRowValue)) {
+        throw Object.assign(new Error('The stored rail settlement payload must contain only JSON objects.'), {
+          code: 'RAIL_SETTLEMENT_PAYLOAD_INVALID',
+          error_code: 'RAIL_SETTLEMENT_PAYLOAD_INVALID'
+        });
+      }
+      const suppliedRow = safeObject(suppliedRowValue);
+      const suppliedTransferId = trimText(suppliedRow.transfer_id || suppliedRow.pay_bank_transfer_id);
+      if (!isUuidText(suppliedTransferId)) {
+        throw Object.assign(new Error('The stored rail settlement payload contains an invalid or missing transfer id.'), {
+          code: 'RAIL_SETTLEMENT_PAYLOAD_TRANSFER_ID_INVALID',
+          error_code: 'RAIL_SETTLEMENT_PAYLOAD_TRANSFER_ID_INVALID'
+        });
+      }
+      if (!allOperationTransferIdSet.has(suppliedTransferId)) {
+        throw Object.assign(new Error('The stored rail settlement payload contains a transfer outside this settlement operation.'), {
+          code: 'RAIL_SETTLEMENT_PAYLOAD_TRANSFER_OUT_OF_SCOPE',
+          error_code: 'RAIL_SETTLEMENT_PAYLOAD_TRANSFER_OUT_OF_SCOPE',
+          transfer_id: suppliedTransferId
+        });
+      }
+      if (selectedTransferIdSet.has(suppliedTransferId)) {
+        selectedSuppliedRows.push({ ...suppliedRow, transfer_id: suppliedTransferId });
+        suppliedTransferIds.add(suppliedTransferId);
+      }
+    }
+
+    const fallbackTransferIds = selectedTransferIds.filter((transferId) => !suppliedTransferIds.has(transferId));
+    const fallbackTransferRows = await fetchSettlementScopeTransferRows(fallbackTransferIds);
+    const fallbackTransferById = new Map(fallbackTransferRows.map((row) => [trimText(row.id), row]));
+    const missingTransferIds = fallbackTransferIds.filter((transferId) => !fallbackTransferById.has(transferId));
+    if (missingTransferIds.length > 0) {
+      throw Object.assign(new Error('One or more transfer-backed settlement scopes do not resolve to a durable pay_bank_transfers row.'), {
+        code: 'RAIL_SETTLEMENT_TRANSFER_ROWS_MISSING',
+        error_code: 'RAIL_SETTLEMENT_TRANSFER_ROWS_MISSING',
+        missing_transfer_ids: missingTransferIds
+      });
+    }
+
+    const fallbackPayloadRows = fallbackTransferIds.map((transferId) => {
+      const transferRow = safeObject(fallbackTransferById.get(transferId));
+      const row = {
+        transfer_id: transferId,
+        status: upperText(transferRow.status || 'UNKNOWN') || 'UNKNOWN',
+        rail_tx_id: textOrNull(transferRow.rail_tx_id),
+        rail_state: textOrNull(transferRow.rail_state),
+        rail_meta_json: transferRow.rail_meta_json === null || transferRow.rail_meta_json === undefined ? {} : transferRow.rail_meta_json,
+        event_time_utc: textOrNull(transferRow.completed_at_utc)
+      };
+      for (const key of Object.keys(row)) {
+        if (row[key] === null || row[key] === undefined || row[key] === '') delete row[key];
+      }
+      return row;
+    });
+
+    return {
+      settlement_scope_ids: uniqueTexts(effectiveScopeIds).filter(isUuidText),
+      settlement_json: selectedSuppliedRows.concat(fallbackPayloadRows),
+      mixed_zero_scope_anchor_id: mixedZeroScopeAnchorId
+    };
+  };
+
   const buildDurableSettlementScopeReadiness = async (previousChunkResult = {}) => {
-    const settlementScopeRows = await fetchAllSettlementScopeRows();
-    const settlementScopeIds = settlementScopeRows.map((row) => String(row.id || '').trim()).filter(isUuidText);
-    const transferIds = extractTransferIdsFromSettlementScopeRows(settlementScopeRows);
-    const transferRows = await fetchSettlementScopeTransferRows(transferIds);
-    const transferById = new Map(transferRows.map((row) => [String(row.id || '').trim(), row]));
-    const successTerminalStates = new Set(['COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED']);
+    const proof = resolveSettlementProofContract(previousChunkResult);
+    const [settlementScopeRows, batchItemRows, transferRows, transferScopeRows, providerAttemptRows] = await Promise.all([
+      fetchAllSettlementScopeRows(),
+      fetchBatchItemRows(),
+      fetchAllBatchTransferRows(),
+      fetchExecutionTransferScopeRows(proof.execution_operation_id || rootOperationId),
+      fetchProviderAttemptRows()
+    ]);
+    const transferEventRows = await fetchTransferEventRows();
+    const settlementScopeIds = settlementScopeRows.map((row) => trimText(row.id)).filter(isUuidText).sort();
+    const transferById = new Map(transferRows.map((row) => [trimText(row.id), row]));
+    const itemById = new Map(batchItemRows.map((row) => [trimText(row.id), row]));
+    const successTerminalStates = new Set(['COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED', 'BANK_CONFIRMED', 'MANUAL_CONFIRM']);
     const failedTerminalStates = new Set(['FAILED', 'FAILURE', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED', 'REVERSED', 'VOIDED', 'BLOCKED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT']);
     const pendingStates = new Set(['', 'PENDING', 'SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'WAITING', 'WAITING_BANK_CONFIRM', 'UNKNOWN', 'NOT_SUBMITTED']);
-    const statusOf = (value) => String(value == null ? '' : value).trim().toUpperCase();
-    const isFailedTransfer = (row) => {
-      const transfer = safeObject(row);
-      return failedTerminalStates.has(statusOf(transfer.status)) || failedTerminalStates.has(statusOf(transfer.rail_state));
-    };
-    const isSuccessTransfer = (row) => {
-      const transfer = safeObject(row);
-      return !isFailedTransfer(transfer) && (successTerminalStates.has(statusOf(transfer.status)) || successTerminalStates.has(statusOf(transfer.rail_state)) || Boolean(transfer.completed_at_utc));
-    };
-    const settledScopeRows = [];
+    const statusOf = (value) => upperText(value);
+    const isFailedTransfer = (row) => failedTerminalStates.has(statusOf(row?.status)) || failedTerminalStates.has(statusOf(row?.rail_state));
+    const isSuccessTransfer = (row) => !isFailedTransfer(row) && (successTerminalStates.has(statusOf(row?.status)) || successTerminalStates.has(statusOf(row?.rail_state)) || Boolean(row?.completed_at_utc));
+
+    const settledTransferBackedScopeRows = [];
+    const settledNoBankScopeRows = [];
     const failedScopeRows = [];
     const skippedScopeRows = [];
     const pendingScopeRows = [];
     const unknownScopeRows = [];
+    const invalidScopeRows = [];
     const successfulTransferIds = [];
     const failedTransferIds = [];
     const pendingTransferIds = [];
+    const noBankItemIds = new Set();
 
     for (const scopeRow of settlementScopeRows) {
-      const scopeStatus = statusOf(scopeRow.status);
       const payload = safeObject(scopeRow.payload_json);
-      const transferId = String(payload?.payment_scope_json?.pay_bank_transfer_id || '').trim();
-      const transferRow = transferById.get(transferId) || null;
-      if (transferRow && isSuccessTransfer(transferRow)) successfulTransferIds.push(transferId);
-      if (transferRow && !isSuccessTransfer(transferRow) && isFailedTransfer(transferRow)) failedTransferIds.push(transferId);
-      if (transferRow && !isSuccessTransfer(transferRow) && !isFailedTransfer(transferRow)) pendingTransferIds.push(transferId);
+      const paymentScope = safeObject(payload.payment_scope_json);
+      const scopeStatus = statusOf(scopeRow.status);
+      const transferId = trimText(paymentScope.pay_bank_transfer_id || payload.pay_bank_transfer_id);
+      const declaresNoBank = statusOf(payload.scope_kind) === 'NO_BANK_PAYMENT'
+        || readBooleanLike(payload.no_bank_payment_scope, false)
+        || statusOf(paymentScope.scope_kind) === 'NO_BANK_PAYMENT';
 
-      if (scopeStatus === 'SETTLED') {
-        settledScopeRows.push(scopeRow);
-      } else if (scopeStatus === 'FAILED') {
-        failedScopeRows.push(scopeRow);
-      } else if (scopeStatus === 'SKIPPED') {
+      if (declaresNoBank) {
+        const itemIds = uniqueTexts(Array.isArray(payload.pay_batch_item_ids) ? payload.pay_batch_item_ids : []).filter(isUuidText);
+        const itemsValid = itemIds.length > 0 && itemIds.every((itemId) => {
+          const item = itemById.get(itemId);
+          return Boolean(item)
+            && item.is_voided !== true
+            && statusOf(item.item_type) !== 'DEBT_CREATED'
+            && statusOf(item.pay_channel) === 'PAYE'
+            && !trimText(item.pay_bank_transfer_id)
+            && (!scopeRow.pay_batch_candidate_id || trimText(item.pay_batch_candidate_id) === trimText(scopeRow.pay_batch_candidate_id));
+        });
+        const bindingValid = proof.valid === true
+          && trimText(payload.execution_operation_id) === proof.execution_operation_id
+          && trimText(payload.settlement_operation_id) === operationId
+          && trimText(scopeRow.operation_id) === operationId
+          && trimText(payload.auth_request_id) === proof.auth_request_id
+          && trimText(payload.paye_net_state_hash) === proof.paye_net_state_hash
+          && trimText(payload.bank_payment_projection_hash) === proof.bank_payment_projection_hash
+          && upperText(payload.projection_scope || payload.scope) === proof.projection_scope
+          && normaliseSettlementMode(payload.authorised_execution_mode || payload.execution_mode) === settlementMode;
+        const proofValid = statusOf(scopeRow.pay_channel) === 'PAYE'
+          && statusOf(payload.scope_kind) === 'NO_BANK_PAYMENT'
+          && statusOf(payload.no_bank_payment_reason) === 'EXPLICIT_ZERO_PAYE'
+          && readBooleanLike(payload.no_bank_payment_scope, false)
+          && readBooleanLike(payload.server_owned_payment_projection_proof, false)
+          && readBooleanLike(payload.has_effective_paye_input, false)
+          && isUuidText(payload.effective_paye_net_input_id)
+          && Number(payload.net_bank_amount) === 0
+          && Number(payload.total_amount) === 0
+          && !transferId
+          && !trimText(scopeRow.settlement_event_id)
+          && itemsValid;
+        const valid = bindingValid && proofValid;
+        if (scopeStatus === 'SETTLED' && valid) {
+          settledNoBankScopeRows.push(scopeRow);
+          for (const itemId of itemIds) noBankItemIds.add(itemId);
+        } else if (scopeStatus === 'FAILED') {
+          failedScopeRows.push(scopeRow);
+        } else if (scopeStatus === 'SKIPPED' && valid) {
+          skippedScopeRows.push(scopeRow);
+        } else if (pendingStates.has(scopeStatus) && valid) {
+          pendingScopeRows.push(scopeRow);
+        } else {
+          invalidScopeRows.push(scopeRow);
+        }
+        continue;
+      }
+
+      if (scopeStatus === 'SKIPPED') {
         skippedScopeRows.push(scopeRow);
-      } else if (pendingStates.has(scopeStatus)) {
+        continue;
+      }
+      if (scopeStatus === 'FAILED') {
+        failedScopeRows.push(scopeRow);
+        if (transferId) failedTransferIds.push(transferId);
+        continue;
+      }
+      if (!isUuidText(transferId)) {
+        if (pendingStates.has(scopeStatus)) pendingScopeRows.push(scopeRow);
+        else invalidScopeRows.push(scopeRow);
+        continue;
+      }
+      const transfer = transferById.get(transferId);
+      if (!transfer) {
+        invalidScopeRows.push(scopeRow);
+        continue;
+      }
+      if (isSuccessTransfer(transfer) && scopeStatus === 'SETTLED') {
+        settledTransferBackedScopeRows.push(scopeRow);
+        successfulTransferIds.push(transferId);
+      } else if (isFailedTransfer(transfer) || scopeStatus === 'FAILED') {
+        failedScopeRows.push(scopeRow);
+        failedTransferIds.push(transferId);
+      } else if (pendingStates.has(scopeStatus) || !isSuccessTransfer(transfer)) {
         pendingScopeRows.push(scopeRow);
+        pendingTransferIds.push(transferId);
       } else {
         unknownScopeRows.push(scopeRow);
       }
     }
 
-    const totalScopeCount = settlementScopeRows.length;
-    const successfulScopeCount = settledScopeRows.length;
-    const terminalFailedScopeCount = failedScopeRows.length;
+    const uniqueSuccessfulTransferIds = uniqueTexts(successfulTransferIds);
+    const uniqueFailedTransferIds = uniqueTexts(failedTransferIds);
+    const uniquePendingTransferIds = uniqueTexts(pendingTransferIds);
+    const noBankScopeCount = settledNoBankScopeRows.length;
+    const transferBackedSuccessfulScopeCount = settledTransferBackedScopeRows.length;
     const skippedScopeCount = skippedScopeRows.length;
+    const terminalFailedScopeCount = failedScopeRows.length;
     const pendingScopeCount = pendingScopeRows.length;
     const unknownScopeCount = unknownScopeRows.length;
-    const processorFailedScopeCount = 0;
+    const processorFailedScopeCount = invalidScopeRows.length;
+    const totalScopeCount = settlementScopeRows.length;
+    const successfulScopeCount = noBankScopeCount + transferBackedSuccessfulScopeCount + skippedScopeCount;
     const allScopesTerminal = totalScopeCount > 0
       && pendingScopeCount === 0
       && unknownScopeCount === 0
       && processorFailedScopeCount === 0
-      && successfulScopeCount + terminalFailedScopeCount + skippedScopeCount === totalScopeCount
-      && successfulScopeCount + terminalFailedScopeCount > 0;
-    const allScopesSuccessful = allScopesTerminal === true && terminalFailedScopeCount === 0;
-    const completedWithFailedPayments = allScopesTerminal === true && terminalFailedScopeCount > 0;
-    const priorReadiness = settlementReadinessFromChunkResult(previousChunkResult);
+      && successfulScopeCount + terminalFailedScopeCount === totalScopeCount;
+    const allScopesSuccessful = allScopesTerminal && terminalFailedScopeCount === 0;
+    const completedWithFailedPayments = allScopesTerminal && terminalFailedScopeCount > 0;
+    const expectedZeroCount = proof.scoped_explicit_zero_count;
+    const expectedPositiveCount = proof.scoped_positive_bank_payment_count;
+    const pureNoBank = proof.valid === true && proof.no_bank_payment_execution === true;
+    const mixed = proof.valid === true && proof.no_bank_payment_execution !== true && proof.allow_explicit_zero_no_bank_scopes === true && noBankScopeCount > 0;
+    const noBankProofRequired = noBankScopeCount > 0 || settlementScopeRows.some((row) => statusOf(safeObject(row.payload_json).scope_kind) === 'NO_BANK_PAYMENT');
+    const zeroScopeCoverageValid = noBankProofRequired !== true
+      || (proof.valid === true && Number.isInteger(expectedZeroCount) && noBankScopeCount === expectedZeroCount);
+    const positiveScopeCoverageValid = Number.isInteger(expectedPositiveCount)
+      ? uniqueSuccessfulTransferIds.length === expectedPositiveCount
+      : (noBankProofRequired ? false : uniqueSuccessfulTransferIds.length > 0);
+    const pureNoBankArtifactCount = pureNoBank
+      ? transferRows.length + transferScopeRows.length + providerAttemptRows.length + transferEventRows.length
+      : 0;
+    const fullBatchFinalisationSafe = allScopesSuccessful
+      && zeroScopeCoverageValid
+      && positiveScopeCoverageValid
+      && (pureNoBank !== true || (uniqueSuccessfulTransferIds.length === 0 && pureNoBankArtifactCount === 0))
+      && (!noBankProofRequired || proof.valid === true);
     const finalisationPayload = {
       pay_batch_id: payBatchId,
-      operation_id: operationId,
+      settlement_operation_id: operationId,
+      execution_operation_id: proof.execution_operation_id || rootOperationId || null,
+      auth_request_id: proof.auth_request_id || null,
+      settlement_mode: settlementMode,
+      projection_scope: proof.projection_scope || upperText(inputJson.scope || 'ALL'),
+      paye_net_state_hash: proof.paye_net_state_hash || null,
+      bank_payment_projection_hash: proof.bank_payment_projection_hash || null,
       settlement_scope_ids: settlementScopeIds,
       successful_scope_count: successfulScopeCount,
       terminal_failed_scope_count: terminalFailedScopeCount,
       pending_scope_count: pendingScopeCount,
       unknown_scope_count: unknownScopeCount,
       processor_failed_scope_count: processorFailedScopeCount,
-      completed_transfer_count: uniqueTexts(successfulTransferIds).length
+      completed_transfer_count: uniqueSuccessfulTransferIds.length,
+      no_bank_scope_count: noBankScopeCount,
+      transfer_backed_successful_scope_count: transferBackedSuccessfulScopeCount
     };
     const finalisationPayloadHash = allScopesTerminal ? simpleHash(finalisationPayload) : null;
+    const priorReadiness = settlementReadinessFromChunkResult(previousChunkResult);
 
     return {
       ok: true,
@@ -45633,7 +47753,20 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       durable_settlement_scope_readiness: true,
       source: 'banking_pay_operation_settlement_scope',
       operation_id: operationId,
+      settlement_operation_id: operationId,
+      execution_operation_id: proof.execution_operation_id || rootOperationId || null,
+      auth_request_id: proof.auth_request_id || null,
       pay_batch_id: payBatchId,
+      settlement_mode: settlementMode,
+      projection_scope: proof.projection_scope || null,
+      paye_net_state_hash: proof.paye_net_state_hash || null,
+      bank_payment_projection_hash: proof.bank_payment_projection_hash || null,
+      server_owned_payment_projection_proof: proof.server_owned_payment_projection_proof === true,
+      proof_validation_outcome: proof.valid === true ? 'AUTHORISED_PROJECTION_REVALIDATED' : proof.rejection_reason,
+      no_bank_payment_execution: pureNoBank,
+      allow_explicit_zero_no_bank_scopes: proof.allow_explicit_zero_no_bank_scopes === true,
+      suppress_remittances_present: proof.suppress_remittances_present === true,
+      suppress_remittances: proof.suppress_remittances === true,
       settlement_scope_ids: settlementScopeIds,
       settlement_scope_count: totalScopeCount,
       total_scope_count: totalScopeCount,
@@ -45643,31 +47776,48 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       pending_this_chunk: pendingScopeCount,
       remaining: pendingScopeCount + unknownScopeCount,
       failed_scope_count: terminalFailedScopeCount,
-      scope_settlement_complete: allScopesTerminal && terminalFailedScopeCount === 0,
+      scope_settlement_complete: allScopesSuccessful,
       successful_scope_count: successfulScopeCount,
+      settled_no_bank_scope_count: noBankScopeCount,
+      no_bank_scope_count: noBankScopeCount,
+      transfer_backed_successful_scope_count: transferBackedSuccessfulScopeCount,
       terminal_failed_scope_count: terminalFailedScopeCount,
       skipped_scope_count: skippedScopeCount,
       pending_scope_count: pendingScopeCount,
       unknown_scope_count: unknownScopeCount,
       processor_failed_scope_count: processorFailedScopeCount,
+      invalid_scope_ids: invalidScopeRows.map((row) => trimText(row.id)).filter(isUuidText),
       all_scopes_terminal: allScopesTerminal,
       all_scopes_successful: allScopesSuccessful,
       completed_with_failed_payments: completedWithFailedPayments,
-      batch_status_label: completedWithFailedPayments ? 'Completed with failed payments' : (allScopesSuccessful ? 'Completed' : 'Waiting for bank confirmation'),
-      completed_transfer_count: uniqueTexts(successfulTransferIds).length,
-      terminal_failed_transfer_count: uniqueTexts(failedTransferIds).length,
-      pending_transfer_count: uniqueTexts(pendingTransferIds).length,
+      batch_status_label: completedWithFailedPayments ? 'Completed with failed payments' : (allScopesSuccessful ? 'Completed' : 'Waiting for settlement completion'),
+      completed_transfer_count: uniqueSuccessfulTransferIds.length,
+      terminal_success_transfer_count: uniqueSuccessfulTransferIds.length,
+      terminal_failed_transfer_count: uniqueFailedTransferIds.length,
+      pending_transfer_count: uniquePendingTransferIds.length,
+      transfer_count: transferRows.length,
+      transfer_scope_count: transferScopeRows.length,
+      provider_attempt_count: providerAttemptRows.length,
+      transfer_event_count: transferEventRows.length,
+      forbidden_no_bank_artifact_count: pureNoBankArtifactCount,
+      expected_scoped_explicit_zero_count: expectedZeroCount,
+      expected_scoped_positive_bank_payment_count: expectedPositiveCount,
+      zero_scope_coverage_valid: zeroScopeCoverageValid,
+      positive_scope_coverage_valid: positiveScopeCoverageValid,
+      pure_no_bank_payment: pureNoBank,
+      mixed_positive_and_zero: mixed,
       has_more: pendingScopeCount + unknownScopeCount > 0,
-      remittance_ready: allScopesTerminal === true && successfulScopeCount > 0,
+      remittance_ready: fullBatchFinalisationSafe,
       requires_full_batch_finalisation: allScopesTerminal,
-      full_batch_finalisation_safe: allScopesTerminal,
+      full_batch_finalisation_safe: fullBatchFinalisationSafe,
       finalisation_idempotency_key: allScopesTerminal ? `rail-finalise:batch:${payBatchId}:operation:${operationId}:hash:${finalisationPayloadHash}` : null,
       finalisation_payload_hash: finalisationPayloadHash,
+      finalisation_payload: finalisationPayload,
       remittance_queued: false,
       previous_last_chunk_result_hash: simpleHash(previousChunkResult),
       previous_last_chunk_readiness: priorReadiness,
       message: allScopesTerminal
-        ? 'Durable settlement scopes are terminal. Full batch settlement finalisation can proceed.'
+        ? (fullBatchFinalisationSafe ? 'Durable settlement scopes are terminal and safe for full batch finalisation.' : 'Durable settlement scopes are terminal but are not safe for full batch finalisation.')
         : 'Durable settlement scopes are not yet terminal.'
     };
   };
@@ -45834,10 +47984,12 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     return uniqueTexts(ids).filter(isUuidText);
   };
 
-  const readSettlementVerification = async () => {
+  const readSettlementVerification = async (readinessSource = {}) => {
+    const readiness = await buildDurableSettlementScopeReadiness(readinessSource);
+    const proof = resolveSettlementProofContract(readiness);
     const batchQuery = new URLSearchParams();
     batchQuery.set('id', `eq.${payBatchId}`);
-    batchQuery.set('select', 'id,status,execution_commit_state,execution_commit_ref,execution_committed_at_utc,completed_at_utc');
+    batchQuery.set('select', 'id,status,execution_commit_state,execution_commit_ref,execution_committed_at_utc,completed_at_utc,freshness_validation_status,freshness_checked_at_utc,settlement_confirmation_json,execution_intent_json');
     batchQuery.set('limit', '1');
     const batchRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?${batchQuery.toString()}`, false);
     const batchRow = batchRes && Array.isArray(batchRes.rows) && batchRes.rows.length ? safeObject(batchRes.rows[0]) : null;
@@ -45850,116 +48002,157 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     const candidateRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batch_candidates?${candidateQuery.toString()}`, false);
     const candidateRows = candidateRes && Array.isArray(candidateRes.rows) ? candidateRes.rows.map((row) => safeObject(row)) : [];
 
-    const transferQuery = new URLSearchParams();
-    transferQuery.set('pay_batch_id', `eq.${payBatchId}`);
-    transferQuery.set('select', 'id,status,rail_state,completed_at_utc,rail_tx_id,amount,failed_reason');
-    transferQuery.set('limit', '50000');
-    const transferRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?${transferQuery.toString()}`, false);
-    const transferRows = transferRes && Array.isArray(transferRes.rows) ? transferRes.rows.map((row) => safeObject(row)) : [];
-
-    const successTerminalStates = new Set(['COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED']);
+    const transferRows = await fetchAllBatchTransferRows();
+    const successTerminalStates = new Set(['COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED', 'BANK_CONFIRMED', 'MANUAL_CONFIRM']);
     const failedTerminalStates = new Set(['FAILED', 'FAILURE', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED', 'REVERSED', 'VOIDED', 'BLOCKED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT']);
-    const pendingStates = new Set(['PENDING', 'SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'WAITING', 'WAITING_BANK_CONFIRM', 'UNKNOWN', 'NOT_SUBMITTED']);
-    const statusOf = (row) => String(row.status || '').trim().toUpperCase();
-    const railStateOf = (row) => String(row.rail_state || '').trim().toUpperCase();
-    const isSettledCandidate = (row) => ['SETTLED', 'PAID', 'CONFIRMED'].includes(String(row.settlement_status || '').trim().toUpperCase()) || Boolean(row.settled_at_utc);
-    const isFailedTerminalTransfer = (row) => failedTerminalStates.has(statusOf(row)) || failedTerminalStates.has(railStateOf(row));
-    const isSuccessfulTerminalTransfer = (row) => !isFailedTerminalTransfer(row) && (successTerminalStates.has(statusOf(row)) || successTerminalStates.has(railStateOf(row)) || Boolean(row.completed_at_utc));
-    const isPendingOrUnknownTransfer = (row) => {
-      if (isSuccessfulTerminalTransfer(row) || isFailedTerminalTransfer(row)) return false;
-      const statusText = statusOf(row);
-      const railStateText = railStateOf(row);
-      return !statusText || pendingStates.has(statusText) || pendingStates.has(railStateText) || true;
-    };
-
+    const statusOf = (value) => upperText(value);
+    const isSettledCandidate = (row) => ['SETTLED', 'PAID', 'CONFIRMED'].includes(statusOf(row?.settlement_status)) || Boolean(row?.settled_at_utc);
+    const isFailedTerminalTransfer = (row) => failedTerminalStates.has(statusOf(row?.status)) || failedTerminalStates.has(statusOf(row?.rail_state));
+    const isSuccessfulTerminalTransfer = (row) => !isFailedTerminalTransfer(row) && (successTerminalStates.has(statusOf(row?.status)) || successTerminalStates.has(statusOf(row?.rail_state)) || Boolean(row?.completed_at_utc));
     const unsettledCandidates = candidateRows.filter((row) => !isSettledCandidate(row));
     const successfulTransfers = transferRows.filter(isSuccessfulTerminalTransfer);
     const failedTerminalTransfers = transferRows.filter((row) => !isSuccessfulTerminalTransfer(row) && isFailedTerminalTransfer(row));
-    const pendingOrUnknownTransfers = transferRows.filter(isPendingOrUnknownTransfer);
+    const pendingOrUnknownTransfers = transferRows.filter((row) => !isSuccessfulTerminalTransfer(row) && !isFailedTerminalTransfer(row));
     const allTransfersTerminal = transferRows.length > 0 && pendingOrUnknownTransfers.length === 0 && successfulTransfers.length + failedTerminalTransfers.length === transferRows.length;
     const allTransfersSuccessful = allTransfersTerminal && failedTerminalTransfers.length === 0;
-    const batchStatus = String(batchRow.status || '').trim().toUpperCase();
-    const executionCommitState = String(batchRow.execution_commit_state || '').trim().toUpperCase();
-    const executionCommitRef = String(batchRow.execution_commit_ref || '').trim();
-    const verifiedCleanSuccess = batchStatus === 'SETTLED'
+    const batchStatus = statusOf(batchRow.status);
+    const executionCommitState = statusOf(batchRow.execution_commit_state);
+    const executionCommitRef = trimText(batchRow.execution_commit_ref);
+    const confirmation = safeObject(batchRow.settlement_confirmation_json);
+    const batchIntent = safeObject(batchRow.execution_intent_json);
+    const confirmationMode = normaliseSettlementMode(confirmation.settlement_mode || confirmation.execution_mode || settlementMode);
+    const pureNoBank = readiness.pure_no_bank_payment === true;
+    const mixed = readiness.mixed_positive_and_zero === true;
+    const positiveOnly = readiness.no_bank_scope_count === 0;
+    const confirmationSettlementOperationId = trimText(confirmation.settlement_operation_id || confirmation.settlementOperationId);
+    const confirmationZeroScopeCount = integerOrNull(confirmation.zero_scope_count, confirmation.no_bank_scope_count);
+    const confirmationPositiveTransferCount = integerOrNull(confirmation.positive_transfer_count, confirmation.completed_transfer_count);
+    const hasBatchSuppression = Object.prototype.hasOwnProperty.call(batchIntent, 'suppress_remittances')
+      || Object.prototype.hasOwnProperty.call(batchIntent, 'suppressRemittances');
+    const hasConfirmationSuppression = Object.prototype.hasOwnProperty.call(confirmation, 'suppress_remittances')
+      || Object.prototype.hasOwnProperty.call(confirmation, 'suppressRemittances');
+    const batchSuppressRemittances = readBooleanLike(batchIntent.suppress_remittances ?? batchIntent.suppressRemittances, false);
+    const confirmationSuppressRemittances = readBooleanLike(confirmation.suppress_remittances ?? confirmation.suppressRemittances, batchSuppressRemittances);
+    const proofSuppressRemittances = proof.valid === true ? proof.suppress_remittances === true : false;
+    const authorisedSuppressRemittances = hasBatchSuppression
+      ? batchSuppressRemittances
+      : (proof.valid === true ? proofSuppressRemittances : (hasConfirmationSuppression ? confirmationSuppressRemittances : false));
+    const suppressionBindingValid = (!hasBatchSuppression || !hasConfirmationSuppression || batchSuppressRemittances === confirmationSuppressRemittances)
+      && (!hasBatchSuppression || proof.valid !== true || batchSuppressRemittances === proofSuppressRemittances)
+      && (proof.valid !== true || !hasConfirmationSuppression || proofSuppressRemittances === confirmationSuppressRemittances);
+    const confirmationOperationBindingValid = positiveOnly
+      ? (!confirmationSettlementOperationId || confirmationSettlementOperationId === operationId)
+      : confirmationSettlementOperationId === operationId;
+    const confirmationBindingValid = confirmationMode === settlementMode
+      && readBooleanLike(confirmation.full_batch_finalised, false)
+      && (!proof.execution_operation_id || trimText(confirmation.execution_operation_id) === proof.execution_operation_id)
+      && (!proof.auth_request_id || trimText(confirmation.auth_request_id) === proof.auth_request_id)
+      && (!proof.paye_net_state_hash || trimText(confirmation.paye_net_state_hash) === proof.paye_net_state_hash)
+      && (!proof.bank_payment_projection_hash || trimText(confirmation.bank_payment_projection_hash) === proof.bank_payment_projection_hash)
+      && (!proof.projection_scope || upperText(confirmation.projection_scope || confirmation.scope) === proof.projection_scope)
+      && confirmationOperationBindingValid
+      && suppressionBindingValid;
+    const confirmationNoBankScopeCoverageValid = positiveOnly || (
+      confirmationZeroScopeCount !== null
+      && confirmationZeroScopeCount === Number(readiness.no_bank_scope_count || 0)
+      && upperText(confirmation.no_bank_payment_reason) === 'EXPLICIT_ZERO_PAYE'
+    );
+    const batchCompletionBase = batchStatus === 'SETTLED'
       && executionCommitState === 'COMMITTED'
       && Boolean(executionCommitRef)
       && Boolean(batchRow.completed_at_utc)
+      && candidateRows.length > 0
       && unsettledCandidates.length === 0
-      && allTransfersSuccessful;
-    const verifiedTerminalWithFailedPayments = allTransfersTerminal
-      && failedTerminalTransfers.length > 0
+      && readiness.all_scopes_successful === true
+      && confirmationBindingValid;
+    const pureNoBankVerified = batchCompletionBase
+      && pureNoBank
+      && confirmationNoBankScopeCoverageValid
+      && confirmationPositiveTransferCount === 0
+      && transferRows.length === 0
+      && Number(readiness.transfer_scope_count || 0) === 0
+      && Number(readiness.provider_attempt_count || 0) === 0
+      && Number(readiness.transfer_event_count || 0) === 0
+      && Number(readiness.forbidden_no_bank_artifact_count || 0) === 0
+      && executionCommitRef.startsWith('NO_BANK_PAYMENT:')
+      && readBooleanLike(confirmation.no_bank_payment_execution, false)
+      && upperText(confirmation.scope_kind) === 'NO_BANK_PAYMENT'
+      && readBooleanLike(confirmation.bank_upload_occurred ?? confirmation.bank_upload_performed, false) === false
+      && readBooleanLike(confirmation.bank_payment_occurred ?? confirmation.bank_payment_performed, false) === false
+      && readBooleanLike(confirmation.provider_submission_occurred ?? confirmation.provider_submission_performed, false) === false;
+    const mixedVerified = batchCompletionBase
+      && mixed
+      && confirmationNoBankScopeCoverageValid
+      && readBooleanLike(confirmation.contains_no_bank_payment_scopes, false)
+      && confirmationPositiveTransferCount === successfulTransfers.length
+      && allTransfersSuccessful
+      && successfulTransfers.length === Number(readiness.completed_transfer_count || 0)
+      && Number(readiness.no_bank_scope_count || 0) > 0
+      && !executionCommitRef.startsWith('NO_BANK_PAYMENT:');
+    const positiveVerified = batchCompletionBase
+      && positiveOnly
+      && allTransfersSuccessful
+      && successfulTransfers.length > 0;
+    const verifiedCleanSuccess = pureNoBankVerified || mixedVerified || positiveVerified;
+    const verifiedTerminalWithFailedPayments = readiness.all_scopes_terminal === true
+      && Number(readiness.terminal_failed_scope_count || 0) > 0
+      && pendingOrUnknownTransfers.length === 0
       && ['FAILED', 'PARTIAL'].includes(batchStatus);
     const verified = verifiedCleanSuccess || verifiedTerminalWithFailedPayments;
-    const batchTerminalWithFailedPayments = verifiedTerminalWithFailedPayments || (batchStatus === 'FAILED' && failedTerminalTransfers.length > 0 && pendingOrUnknownTransfers.length === 0);
+    const freshnessStatus = statusOf(batchRow.freshness_validation_status);
 
     return {
       ok: true,
       verified,
       verified_clean_success: verifiedCleanSuccess,
+      verified_positive_transfer_success: positiveVerified,
+      verified_pure_no_bank_success: pureNoBankVerified,
+      verified_mixed_success: mixedVerified,
       verified_terminal_with_failed_payments: verifiedTerminalWithFailedPayments,
-      batch_terminal_with_failed_payments: batchTerminalWithFailedPayments,
-      batch_status_label: batchTerminalWithFailedPayments ? 'Completed with failed payments' : (batchStatus === 'SETTLED' ? 'Completed' : (batchStatus === 'WAITING_BANK_CONFIRM' ? 'Waiting for bank confirmation' : (batchRow.status || null))),
+      batch_terminal_with_failed_payments: verifiedTerminalWithFailedPayments,
+      settlement_branch: pureNoBank ? 'PURE_NO_BANK' : (mixed ? 'MIXED' : 'POSITIVE_TRANSFER_BACKED'),
+      pure_no_bank_payment: pureNoBank,
+      mixed_positive_and_zero: mixed,
+      no_bank_scope_count: Number(readiness.no_bank_scope_count || 0),
+      transfer_backed_successful_scope_count: Number(readiness.transfer_backed_successful_scope_count || 0),
+      batch_status_label: verifiedTerminalWithFailedPayments ? 'Completed with failed payments' : (batchStatus === 'SETTLED' ? 'Completed' : (batchStatus === 'WAITING_BANK_CONFIRM' ? 'Waiting for bank confirmation' : (batchRow.status || null))),
       pay_batch_id: payBatchId,
+      operation_id: operationId,
+      execution_operation_id: proof.execution_operation_id || rootOperationId || null,
+      auth_request_id: proof.auth_request_id || null,
+      settlement_mode: settlementMode,
       batch_status: batchRow.status || null,
       completed_at_utc: batchRow.completed_at_utc || null,
       execution_commit_state: batchRow.execution_commit_state || null,
       execution_commit_ref: executionCommitRef || null,
       execution_committed_at_utc: batchRow.execution_committed_at_utc || null,
+      settlement_confirmation_json: confirmation,
+      settlement_confirmation_valid: confirmationBindingValid,
+      settlement_confirmation_operation_binding_valid: confirmationOperationBindingValid,
+      settlement_confirmation_no_bank_scope_coverage_valid: confirmationNoBankScopeCoverageValid,
+      settlement_confirmation_suppression_binding_valid: suppressionBindingValid,
+      authorised_suppress_remittances: authorisedSuppressRemittances,
+      suppress_remittances: authorisedSuppressRemittances,
+      freshness_validation_status: freshnessStatus || null,
+      freshness_checked_at_utc: batchRow.freshness_checked_at_utc || null,
+      freshness_clean_diagnostic: !freshnessStatus || ['PASSED', 'NOT_REQUIRED'].includes(freshnessStatus),
+      freshness_affects_durable_completion: false,
       candidate_count: candidateRows.length,
       unsettled_candidate_count: unsettledCandidates.length,
-      unsettled_candidate_ids: unsettledCandidates.map((row) => String(row.id || '').trim()).filter(Boolean),
+      unsettled_candidate_ids: unsettledCandidates.map((row) => trimText(row.id)).filter(Boolean),
       transfer_count: transferRows.length,
-      all_transfers_terminal: allTransfersTerminal,
-      all_transfers_successful: allTransfersSuccessful,
+      all_transfers_terminal: transferRows.length === 0 ? pureNoBank : allTransfersTerminal,
+      all_transfers_successful: transferRows.length === 0 ? pureNoBank : allTransfersSuccessful,
       terminal_success_transfer_count: successfulTransfers.length,
       terminal_failed_transfer_count: failedTerminalTransfers.length,
       pending_or_unknown_transfer_count: pendingOrUnknownTransfers.length,
       completed_transfer_count: successfulTransfers.length,
       incomplete_transfer_count: pendingOrUnknownTransfers.length,
-      incomplete_transfer_ids: pendingOrUnknownTransfers.map((row) => String(row.id || '').trim()).filter(Boolean),
-      terminal_failed_transfer_ids: failedTerminalTransfers.map((row) => String(row.id || '').trim()).filter(Boolean)
+      incomplete_transfer_ids: pendingOrUnknownTransfers.map((row) => trimText(row.id)).filter(Boolean),
+      terminal_failed_transfer_ids: failedTerminalTransfers.map((row) => trimText(row.id)).filter(Boolean),
+      durable_settlement_scope_readiness: readiness,
+      proof_validation_outcome: readiness.proof_validation_outcome || null
     };
-  };
-
-  const finalisationIdentityFrom = (chunkResult = {}) => {
-    const source = safeObject(chunkResult);
-    const payload = {
-      pay_batch_id: payBatchId,
-      operation_id: operationId,
-      settlement_mode: settlementMode,
-      settlement_json: Array.isArray(inputJson.settlement_json) ? inputJson.settlement_json : [],
-      source_finalisation_payload_hash: source.finalisation_payload_hash || null,
-      source_remaining: source.remaining ?? null,
-      source_failed_scope_count: source.failed_scope_count ?? null,
-      source_terminal_failed_scope_count: source.terminal_failed_scope_count ?? null,
-      source_pending_scope_count: source.pending_scope_count ?? null,
-      source_unknown_scope_count: source.unknown_scope_count ?? null,
-      source_processor_failed_scope_count: source.processor_failed_scope_count ?? null,
-      source_all_scopes_terminal: source.all_scopes_terminal === true,
-      source_all_scopes_successful: source.all_scopes_successful === true,
-      source_scope_settlement_complete: source.scope_settlement_complete === true
-    };
-    const payloadHash = String(source.finalisation_payload_hash || simpleHash(payload)).trim();
-    const key = String(source.finalisation_idempotency_key || `rail-finalise:batch:${payBatchId}:operation:${operationId}:hash:${payloadHash}`).trim();
-    return { key, payloadHash };
-  };
-
-  const shouldRunFullSettlementFinalisation = (chunkResult = {}) => {
-    const source = safeObject(chunkResult);
-    const remaining = Number(source.remaining ?? source.pending_scope_count ?? 0) || 0;
-    const pending = Number(source.pending_scope_count ?? 0) || 0;
-    const unknown = Number(source.unknown_scope_count ?? 0) || 0;
-    const processorFailed = Number(source.processor_failed_scope_count ?? 0) || 0;
-    return usesRailSettlement === true
-      && source.ok !== false
-      && remaining === 0
-      && pending === 0
-      && unknown === 0
-      && processorFailed === 0
-      && source.all_scopes_terminal === true
-      && source.requires_full_batch_finalisation === true
-      && source.full_batch_finalisation_safe === true;
   };
 
   const settlementReadinessFromChunkResult = (chunkResult = {}) => {
@@ -45969,20 +48162,73 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     const remaining = Math.max(0, Math.trunc(Number(source.remaining ?? pending) || 0));
     const processorFailed = Math.max(0, Math.trunc(Number(source.processor_failed_scope_count ?? 0) || 0));
     const terminalFailed = Math.max(0, Math.trunc(Number(source.terminal_failed_scope_count ?? 0) || 0));
-    const successful = Math.max(0, Math.trunc(Number(source.successful_scope_count ?? source.completed_transfer_count ?? 0) || 0));
+    const successful = Math.max(0, Math.trunc(Number(source.successful_scope_count ?? 0) || 0));
+    const noBankScopeCount = Math.max(0, Math.trunc(Number(source.no_bank_scope_count ?? source.settled_no_bank_scope_count ?? 0) || 0));
+    const transferBackedSuccessfulScopeCount = Math.max(0, Math.trunc(Number(source.transfer_backed_successful_scope_count ?? source.completed_transfer_count ?? 0) || 0));
     const allTerminal = source.all_scopes_terminal === true;
     return {
       pending_scope_count: pending,
       unknown_scope_count: unknown,
       remaining_scope_count: remaining,
-      pending_or_unknown_scope_count: pending + unknown + remaining,
+      pending_or_unknown_scope_count: Math.max(remaining, pending + unknown),
       processor_failed_scope_count: processorFailed,
       terminal_failed_scope_count: terminalFailed,
       successful_scope_count: successful,
+      no_bank_scope_count: noBankScopeCount,
+      transfer_backed_successful_scope_count: transferBackedSuccessfulScopeCount,
+      completed_transfer_count: Math.max(0, Math.trunc(Number(source.completed_transfer_count ?? 0) || 0)),
       all_scopes_terminal: allTerminal,
       all_scopes_successful: source.all_scopes_successful === true,
-      completed_with_failed_payments: source.completed_with_failed_payments === true || (allTerminal && terminalFailed > 0)
+      requires_full_batch_finalisation: source.requires_full_batch_finalisation === true,
+      full_batch_finalisation_safe: source.full_batch_finalisation_safe === true,
+      completed_with_failed_payments: source.completed_with_failed_payments === true || (allTerminal && terminalFailed > 0),
+      pure_no_bank_payment: source.pure_no_bank_payment === true || source.no_bank_payment_execution === true,
+      mixed_positive_and_zero: source.mixed_positive_and_zero === true
     };
+  };
+
+  const finalisationIdentityFrom = (chunkResult = {}) => {
+    const source = safeObject(chunkResult);
+    const proof = resolveSettlementProofContract(source);
+    const scopeIds = uniqueTexts(Array.isArray(source.settlement_scope_ids) ? source.settlement_scope_ids : []).filter(isUuidText).sort();
+    const payload = {
+      pay_batch_id: payBatchId,
+      settlement_operation_id: operationId,
+      execution_operation_id: proof.execution_operation_id || rootOperationId || null,
+      auth_request_id: proof.auth_request_id || null,
+      settlement_mode: settlementMode,
+      projection_scope: proof.projection_scope || null,
+      paye_net_state_hash: proof.paye_net_state_hash || null,
+      bank_payment_projection_hash: proof.bank_payment_projection_hash || null,
+      settlement_scope_ids: scopeIds,
+      no_bank_scope_count: Number(source.no_bank_scope_count || 0) || 0,
+      transfer_backed_successful_scope_count: Number(source.transfer_backed_successful_scope_count || 0) || 0,
+      completed_transfer_count: Number(source.completed_transfer_count || 0) || 0,
+      successful_scope_count: Number(source.successful_scope_count || 0) || 0,
+      terminal_failed_scope_count: Number(source.terminal_failed_scope_count || 0) || 0,
+      pending_scope_count: Number(source.pending_scope_count || 0) || 0,
+      unknown_scope_count: Number(source.unknown_scope_count || 0) || 0,
+      processor_failed_scope_count: Number(source.processor_failed_scope_count || 0) || 0,
+      all_scopes_terminal: source.all_scopes_terminal === true,
+      all_scopes_successful: source.all_scopes_successful === true
+    };
+    const payloadHash = trimText(source.finalisation_payload_hash || simpleHash(payload));
+    const key = trimText(source.finalisation_idempotency_key || `rail-finalise:batch:${payBatchId}:operation:${operationId}:hash:${payloadHash}`);
+    return { key, payloadHash, payload };
+  };
+
+  const shouldRunFullSettlementFinalisation = (chunkResult = {}) => {
+    const source = safeObject(chunkResult);
+    const readiness = settlementReadinessFromChunkResult(source);
+    return supportsFullBatchFinalisation === true
+      && source.ok !== false
+      && readiness.pending_or_unknown_scope_count === 0
+      && readiness.processor_failed_scope_count === 0
+      && readiness.terminal_failed_scope_count === 0
+      && readiness.all_scopes_terminal === true
+      && readiness.all_scopes_successful === true
+      && readiness.requires_full_batch_finalisation === true
+      && readiness.full_batch_finalisation_safe === true;
   };
 
   const advanceChildOperationOnce = async (childOperationId, childLockPrefix) => {
@@ -46076,20 +48322,18 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 
   const isCleanDurableSettlementVerification = (verificationValue) => {
     const verification = safeObject(verificationValue);
-    const batchStatus = String(verification.batch_status || '').trim().toUpperCase();
-    const executionCommitState = String(verification.execution_commit_state || '').trim().toUpperCase();
-    const terminalSuccessTransferCount = Number(verification.terminal_success_transfer_count || verification.completed_transfer_count || 0) || 0;
-    const terminalFailedTransferCount = Number(verification.terminal_failed_transfer_count || 0) || 0;
-    const pendingOrUnknownTransferCount = Number(verification.pending_or_unknown_transfer_count || verification.incomplete_transfer_count || 0) || 0;
+    const batchStatus = upperText(verification.batch_status);
+    const executionCommitState = upperText(verification.execution_commit_state);
     const candidateCount = Number(verification.candidate_count || 0) || 0;
     const unsettledCandidateCount = Number(verification.unsettled_candidate_count || 0) || 0;
+    const branchVerified = verification.verified_positive_transfer_success === true
+      || verification.verified_pure_no_bank_success === true
+      || verification.verified_mixed_success === true;
     return verification.verified_clean_success === true
       || (
-        batchStatus === 'SETTLED'
+        branchVerified
+        && batchStatus === 'SETTLED'
         && executionCommitState === 'COMMITTED'
-        && terminalSuccessTransferCount > 0
-        && terminalFailedTransferCount === 0
-        && pendingOrUnknownTransferCount === 0
         && candidateCount > 0
         && unsettledCandidateCount === 0
       );
@@ -46100,7 +48344,7 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     let verification = safeObject(seedObject.durable_settlement_truth || seedObject.durableSettlementTruth || seedObject.settlement_verification || seedObject.verification);
     if (!Object.keys(verification).length || isCleanDurableSettlementVerification(verification) !== true) {
       try {
-        verification = await readSettlementVerification();
+        verification = await readSettlementVerification(seedObject);
       } catch (verificationError) {
         verification = Object.assign({}, verification, {
           ok: false,
@@ -46108,19 +48352,21 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         });
       }
     }
-
     const seedSaysAlreadySettled = seedObject.idempotent_settlement_complete === true
       || seedObject.already_settled === true
       || seedObject.batch_already_settled === true;
     if (seedSaysAlreadySettled !== true && isCleanDurableSettlementVerification(verification) !== true) return null;
     if (isCleanDurableSettlementVerification(verification) !== true) return null;
 
+    const readiness = safeObject(verification.durable_settlement_scope_readiness);
     const terminalSuccessTransferCount = Number(verification.terminal_success_transfer_count || verification.completed_transfer_count || seedObject.terminal_success_transfer_count || 0) || 0;
     const terminalFailedTransferCount = Number(verification.terminal_failed_transfer_count || seedObject.terminal_failed_transfer_count || 0) || 0;
     const pendingOrUnknownTransferCount = Number(verification.pending_or_unknown_transfer_count || verification.incomplete_transfer_count || seedObject.pending_or_unknown_transfer_count || 0) || 0;
     const candidateCount = Number(verification.candidate_count || seedObject.candidate_count || 0) || 0;
-    const settledCandidateCount = Number(seedObject.settled_candidate_count || Math.max(0, candidateCount - (Number(verification.unsettled_candidate_count || 0) || 0))) || 0;
-    const completedSettlementOperationId = String(seedObject.existing_completed_settlement_operation_id || seedObject.completed_settlement_operation_id || '').trim();
+    const settledCandidateCount = Math.max(0, candidateCount - (Number(verification.unsettled_candidate_count || 0) || 0));
+    const completedSettlementOperationId = trimText(seedObject.existing_completed_settlement_operation_id || seedObject.completed_settlement_operation_id || operationId);
+    const noBankScopeCount = Number(verification.no_bank_scope_count || readiness.no_bank_scope_count || seedObject.explicit_zero_no_bank_scope_count || 0) || 0;
+    const successfulScopeCount = Number(readiness.successful_scope_count || seedObject.existing_settled_scope_count || terminalSuccessTransferCount + noBankScopeCount) || 0;
 
     return {
       ok: true,
@@ -46134,18 +48380,20 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       batch_status_label: 'Completed',
       scope_rows_created: Number(seedObject.scope_rows_created || 0) || 0,
       scope_rows_reused: Number(seedObject.scope_rows_reused || 0) || 0,
-      settlement_unit_count: Number(seedObject.settlement_unit_count || 0) || 0,
+      settlement_unit_count: Number(seedObject.settlement_unit_count || readiness.total_scope_count || 0) || 0,
       existing_completed_settlement_operation_id: strictUuidRe.test(completedSettlementOperationId) ? completedSettlementOperationId : null,
       durable_settlement_truth: verification,
       durable_settlement_scope_readiness: {
+        ...readiness,
         ok: true,
         idempotent_settlement_complete: true,
         already_settled: true,
         all_scopes_terminal: true,
         all_scopes_successful: true,
         scope_settlement_complete: true,
-        total_scope_count: Number(seedObject.existing_settled_scope_count || seedObject.settlement_scope_count || seedObject.settlement_unit_count || terminalSuccessTransferCount) || terminalSuccessTransferCount,
-        successful_scope_count: Number(seedObject.existing_settled_scope_count || terminalSuccessTransferCount) || terminalSuccessTransferCount,
+        total_scope_count: Number(readiness.total_scope_count || seedObject.existing_settled_scope_count || seedObject.settlement_scope_count || seedObject.settlement_unit_count || successfulScopeCount) || successfulScopeCount,
+        successful_scope_count: successfulScopeCount,
+        no_bank_scope_count: noBankScopeCount,
         terminal_failed_scope_count: 0,
         pending_scope_count: 0,
         unknown_scope_count: 0,
@@ -46168,10 +48416,66 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       },
       settlement_scope_seed: seedObject,
       completed_with_failed_payments: false,
-      remittances_suppressed: inputJson.suppress_remittances === true || inputJson.do_not_send_remittances === true,
+      no_bank_payment_execution: verification.verified_pure_no_bank_success === true,
+      mixed_positive_and_zero: verification.verified_mixed_success === true,
+      no_bank_scope_count: noBankScopeCount,
+      remittances_suppressed: verification.authorised_suppress_remittances === true || verification.suppress_remittances === true,
       source: 'advanceBankingPaySettlementOperation.idempotentCompletion',
       ...safeObject(extra)
     };
+  };
+
+  const routeIdempotentSettlementCompletionThroughRemittances = async (completionPayload, reason) => {
+    const completion = safeObject(completionPayload);
+    const verification = firstNonEmptyObject(
+      completion.durable_settlement_truth,
+      completion.settlement_verification,
+      safeObject(completion.batch_settlement_finalisation).verification
+    );
+    const readiness = firstNonEmptyObject(
+      completion.durable_settlement_scope_readiness,
+      verification.durable_settlement_scope_readiness
+    );
+    const idempotentProof = resolveSettlementProofContract(
+      firstNonEmptyObject(completion.settlement_scope_seed, completion, readiness)
+    );
+    const authorisedSuppressRemittances = idempotentProof.valid === true
+      && idempotentProof.suppress_remittances_present === true
+      ? idempotentProof.suppress_remittances === true
+      : readBooleanLike(verification.authorised_suppress_remittances ?? verification.suppress_remittances, false);
+    const normalisedVerification = {
+      ...verification,
+      verified: true,
+      verified_clean_success: true,
+      authorised_suppress_remittances: authorisedSuppressRemittances,
+      suppress_remittances: authorisedSuppressRemittances,
+      durable_settlement_scope_readiness: readiness,
+      verification_source: 'PAY_OPERATION_SETTLEMENT_SCOPE_SEED_DURABLE_TRUTH'
+    };
+    const completedSettlementOperationId = trimText(
+      completion.existing_completed_settlement_operation_id
+      || completion.completed_settlement_operation_id
+      || operationId
+    );
+    const remittanceRootOperationId = strictUuidRe.test(completedSettlementOperationId)
+      ? completedSettlementOperationId
+      : operationId;
+    return save('RUNNING', 'QUEUE_REMITTANCES', {
+      status_text: 'Durable settlement was already complete. Checking the authorised remittance handoff idempotently.',
+      idempotent_settlement_completion: completion,
+      durable_settlement_scope_readiness: readiness,
+      completed_with_failed_payments: completion.completed_with_failed_payments === true,
+      remittance_root_operation_id: remittanceRootOperationId,
+      batch_settlement_finalisation: {
+        required: false,
+        completed: true,
+        verified: true,
+        idempotent_settlement_complete: true,
+        already_settled: true,
+        reason: reason || completion.reason || 'BATCH_ALREADY_DURABLY_SETTLED',
+        verification: normalisedVerification
+      }
+    });
   };
 
   try {
@@ -46187,7 +48491,7 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       const seed = unwrapRpcPayload(await sbRpc(env, 'pay_operation_settlement_scope_seed', {
         p_operation_id: operationId,
         p_pay_batch_id: payBatchId,
-        p_scope: inputJson.scope || 'ALL',
+        p_scope: inputJson.scope || inputJson.pay_channel_scope || 'ALL',
         p_actor_user_id: actorUserId
       }), 'pay_operation_settlement_scope_seed');
       const settlementScopeRows = await fetchPendingSettlementScopeRows();
@@ -46196,27 +48500,59 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
           phase,
           zero_scope_rows_after_seed: true
         });
-        if (idempotentCompletion) return finish('COMPLETE', idempotentCompletion, null);
+        if (idempotentCompletion) return routeIdempotentSettlementCompletionThroughRemittances(idempotentCompletion, 'BATCH_ALREADY_DURABLY_SETTLED');
+        const durableReadiness = await buildDurableSettlementScopeReadiness(seed);
+        if (shouldRunFullSettlementFinalisation(durableReadiness)) {
+          const finalisationIdentity = finalisationIdentityFrom(durableReadiness);
+          return save('RUNNING', 'FINALISE_BATCH_SETTLEMENT', {
+            status_text: 'All durable settlement scopes are terminal. Finalising the full payment batch.',
+            settlement_scope_seed: seed,
+            last_chunk_result: durableReadiness,
+            durable_settlement_scope_readiness: durableReadiness,
+            batch_settlement_finalisation: {
+              required: true,
+              completed: false,
+              finalisation_idempotency_key: finalisationIdentity.key,
+              finalisation_payload_hash: finalisationIdentity.payloadHash,
+              source_chunk_result: durableReadiness
+            }
+          });
+        }
+        const readiness = settlementReadinessFromChunkResult(durableReadiness);
+        if (readiness.all_scopes_terminal === true && readiness.terminal_failed_scope_count > 0) {
+          return save('RUNNING', 'APPLY_RAIL_UPDATES', {
+            status_text: 'All settlement scopes are terminal with failed payments.',
+            settlement_scope_seed: seed,
+            last_chunk_result: durableReadiness,
+            durable_settlement_scope_readiness: durableReadiness,
+            completed_with_failed_payments: true
+          });
+        }
         return finish('FAILED', null, {
-          code: 'SETTLEMENT_SCOPE_ROWS_MISSING',
-          message: 'Settlement scope seeding completed but no pending settlement scope rows were available to chunk.',
+          code: durableReadiness.processor_failed_scope_count > 0 ? 'SETTLEMENT_SCOPE_PROOF_INVALID' : 'SETTLEMENT_SCOPE_ROWS_MISSING',
+          message: durableReadiness.processor_failed_scope_count > 0
+            ? 'Settlement scope proof or binding validation failed.'
+            : 'Settlement scope seeding completed but no pending or finalisable settlement scope rows were available.',
           phase,
-          settlement_scope_seed: seed
+          settlement_scope_seed: seed,
+          durable_settlement_scope_readiness: durableReadiness
         });
       }
-      const chunkSeed = await seedSettlementChunksFromScopeRows(settlementScopeRows);
+      const allSettlementScopeRows = await fetchAllSettlementScopeRows();
+      const chunkSeed = await seedSettlementChunksFromScopeRows(allSettlementScopeRows);
       return save('RUNNING', 'APPLY_SETTLEMENT_CHUNKS', {
         status_text: 'Settlement chunks are ready.',
         settlement_scope_seed: seed,
         settlement_chunk_seed: chunkSeed
-      }, { total_units: settlementScopeRows.length, completed_units: 0, failed_units: 0, current_chunk_index: 0, chunk_count: chunkSeed.chunk_count || 0 });
+      }, { total_units: allSettlementScopeRows.length, completed_units: 0, failed_units: 0, current_chunk_index: 0, chunk_count: chunkSeed.chunk_count || 0 });
     }
 
     if (phase === 'APPLY_SETTLEMENT_CHUNKS') {
       const pendingSettlementScopeRows = await fetchPendingSettlementScopeRows();
       let settlementChunkSeedRepair = null;
       if (pendingSettlementScopeRows.length > 0) {
-        settlementChunkSeedRepair = await seedSettlementChunksFromScopeRows(pendingSettlementScopeRows);
+        const allSettlementScopeRows = await fetchAllSettlementScopeRows();
+        settlementChunkSeedRepair = await seedSettlementChunksFromScopeRows(allSettlementScopeRows);
       }
       const chunk = await claim('APPLY_SETTLEMENT_CHUNKS', 'SETTLEMENT');
       if (chunk && chunk.chunk_id) {
@@ -46235,25 +48571,38 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
           return finish('FAILED', null, errorJson);
         }
         try {
+          const settlementProof = resolveSettlementProofContract(progressJson.last_chunk_result);
+          const authorisedScope = settlementProof.valid === true
+            ? settlementProof.projection_scope
+            : (upperText(inputJson.scope || inputJson.pay_channel_scope || 'ALL') || 'ALL');
+          const authorisedAuthRequestId = settlementProof.valid === true && isUuidText(settlementProof.auth_request_id)
+            ? settlementProof.auth_request_id
+            : (isUuidText(inputJson.auth_request_id || inputJson.authRequestId) ? trimText(inputJson.auth_request_id || inputJson.authRequestId) : null);
+          const authorisedSuppressRemittances = settlementProof.valid === true
+            ? settlementProof.suppress_remittances === true
+            : readBooleanLike(inputJson.suppress_remittances ?? inputJson.suppressRemittances, false);
+          const railSettlementRequest = usesRailSettlement
+            ? await buildRailSettlementRequestForScopeIds(ids)
+            : null;
           const settled = usesRailSettlement
             ? unwrapRpcPayload(await sbRpc(env, 'pay_settle_rail', {
                 p_pay_batch_id: payBatchId,
-                p_settlement_json: inputJson.settlement_json || [],
+                p_settlement_json: railSettlementRequest.settlement_json,
                 p_actor_user_id: actorUserId,
                 p_operation_id: operationId,
-                p_settlement_scope_ids: ids
+                p_settlement_scope_ids: railSettlementRequest.settlement_scope_ids
               }), 'pay_settle_rail')
             : unwrapRpcPayload(await sbRpc(env, 'pay_settle_manual_confirm', {
                 p_pay_batch_id: payBatchId,
-                p_scope: inputJson.scope || 'ALL',
+                p_scope: authorisedScope,
                 p_bank_confirm_ref: inputJson.bank_confirm_ref || inputJson.csv_bank_confirm_ref || null,
                 p_payment_date: inputJson.payment_date || null,
                 p_actor_user_id: actorUserId,
                 p_settlement_mode: settlementMode,
-                p_auth_request_id: inputJson.auth_request_id || null,
+                p_auth_request_id: authorisedAuthRequestId,
                 p_csv_uploaded_confirmed: inputJson.csv_uploaded_confirmed === true,
                 p_external_settlement_comment: inputJson.external_settlement_comment || null,
-                p_suppress_remittances: inputJson.suppress_remittances === true,
+                p_suppress_remittances: authorisedSuppressRemittances,
                 p_operation_id: operationId,
                 p_settlement_scope_ids: ids
               }), 'pay_settle_manual_confirm');
@@ -46269,40 +48618,26 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         }
       }
       const lastChunkResult = safeObject(progressJson.last_chunk_result);
-      let effectiveLastChunkResult = lastChunkResult;
-      let durableSettlementReadiness = null;
+      const durableSettlementReadiness = await buildDurableSettlementScopeReadiness(lastChunkResult);
+      const effectiveLastChunkResult = {
+        ...lastChunkResult,
+        ...durableSettlementReadiness,
+        stale_chunk_result_recomputed_from_durable_scope: true
+      };
 
-      if (usesRailSettlement === true) {
-        durableSettlementReadiness = await buildDurableSettlementScopeReadiness(lastChunkResult);
-        const previousReadiness = settlementReadinessFromChunkResult(lastChunkResult);
-        const durableReadinessShouldReplaceStaleChunkResult = durableSettlementReadiness.total_scope_count > 0
-          && (
-            durableSettlementReadiness.all_scopes_terminal === true
-            || previousReadiness.all_scopes_terminal !== true
-            || previousReadiness.pending_or_unknown_scope_count > 0
-            || Object.keys(lastChunkResult).length === 0
-          );
-        if (durableReadinessShouldReplaceStaleChunkResult) {
-          effectiveLastChunkResult = {
-            ...durableSettlementReadiness,
-            stale_chunk_result_recomputed_from_durable_scope: true
-          };
-        }
-      }
-
-      if (usesRailSettlement === true && pendingSettlementScopeRows.length <= 0) {
+      if (pendingSettlementScopeRows.length <= 0) {
         const idempotentCompletion = await idempotentSettlementCompletionPayloadFromSeed(progressJson.settlement_scope_seed || progressJson.last_scope_seed || {}, 'BATCH_ALREADY_DURABLY_SETTLED_DURING_CHUNK_READINESS', {
           phase,
           durable_settlement_scope_readiness: durableSettlementReadiness,
           last_chunk_result: effectiveLastChunkResult
         });
-        if (idempotentCompletion) return finish('COMPLETE', idempotentCompletion, null);
+        if (idempotentCompletion) return routeIdempotentSettlementCompletionThroughRemittances(idempotentCompletion, 'BATCH_ALREADY_DURABLY_SETTLED');
       }
 
       if (shouldRunFullSettlementFinalisation(effectiveLastChunkResult)) {
         const finalisationIdentity = finalisationIdentityFrom(effectiveLastChunkResult);
         return save('RUNNING', 'FINALISE_BATCH_SETTLEMENT', {
-          status_text: 'All operation-mode settlement scopes are terminal. Finalising the full batch settlement once before remittance queueing.',
+          status_text: 'All operation-mode settlement scopes are terminal and successful. Finalising the full batch settlement before remittance queueing.',
           last_chunk_result: effectiveLastChunkResult,
           durable_settlement_scope_readiness: durableSettlementReadiness,
           batch_settlement_finalisation: {
@@ -46315,32 +48650,36 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         });
       }
 
-      if (usesRailSettlement === true) {
-        const readiness = settlementReadinessFromChunkResult(effectiveLastChunkResult);
-        if (readiness.processor_failed_scope_count > 0) {
-          return finish('FAILED', null, {
-            code: 'SETTLEMENT_SCOPE_PROCESSOR_FAILURE',
-            message: 'One or more settlement scopes failed for a processor/data reason and require investigation.',
-            phase,
-            last_chunk_result: effectiveLastChunkResult,
-            durable_settlement_scope_readiness: durableSettlementReadiness,
-            readiness
-          });
-        }
-        if (readiness.all_scopes_terminal !== true || readiness.pending_or_unknown_scope_count > 0) {
-          return save('WAITING_PROVIDER', 'APPLY_SETTLEMENT_CHUNKS', {
-            status_text: 'Waiting for remaining bank/provider outcomes before finalising the payment run.',
-            waiting_provider: true,
-            last_chunk_result: effectiveLastChunkResult,
-            durable_settlement_scope_readiness: durableSettlementReadiness,
-            readiness,
-            resume_reason: 'WAITING_FOR_TERMINAL_BANK_OUTCOMES'
-          });
-        }
+      const readiness = settlementReadinessFromChunkResult(effectiveLastChunkResult);
+      if (readiness.processor_failed_scope_count > 0) {
+        return finish('FAILED', null, {
+          code: 'SETTLEMENT_SCOPE_PROCESSOR_FAILURE',
+          message: 'One or more settlement scopes failed proof, binding, or processor validation and require investigation.',
+          phase,
+          last_chunk_result: effectiveLastChunkResult,
+          durable_settlement_scope_readiness: durableSettlementReadiness,
+          readiness
+        });
+      }
+      if (readiness.all_scopes_terminal !== true || readiness.pending_or_unknown_scope_count > 0) {
+        return save(usesRailSettlement ? 'WAITING_PROVIDER' : 'RUNNING', 'APPLY_SETTLEMENT_CHUNKS', {
+          status_text: usesRailSettlement
+            ? 'Waiting for remaining bank/provider outcomes before finalising the payment run.'
+            : 'Waiting for remaining manual settlement scopes before finalising the payment run.',
+          waiting_provider: usesRailSettlement,
+          waiting_manual_settlement: usesRailSettlement !== true,
+          last_chunk_result: effectiveLastChunkResult,
+          durable_settlement_scope_readiness: durableSettlementReadiness,
+          readiness,
+          resume_reason: usesRailSettlement ? 'WAITING_FOR_TERMINAL_BANK_OUTCOMES' : 'WAITING_FOR_TERMINAL_MANUAL_SETTLEMENT_SCOPES'
+        });
       }
 
       return save('RUNNING', 'APPLY_RAIL_UPDATES', {
-        status_text: 'All settlement chunks applied.',
+        status_text: readiness.completed_with_failed_payments
+          ? 'All settlement scopes are terminal with failed payments.'
+          : 'All settlement scopes are terminal, but full finalisation is not safe.',
+        completed_with_failed_payments: readiness.completed_with_failed_payments,
         last_chunk_result: effectiveLastChunkResult,
         durable_settlement_scope_readiness: durableSettlementReadiness
       });
@@ -46348,13 +48687,17 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 
     if (phase === 'FINALISE_BATCH_SETTLEMENT') {
       const priorFinalisation = safeObject(progressJson.batch_settlement_finalisation);
-      const sourceChunkResult = safeObject(priorFinalisation.source_chunk_result || progressJson.last_chunk_result);
+      const priorSource = safeObject(priorFinalisation.source_chunk_result || progressJson.last_chunk_result);
+      const durableReadiness = await buildDurableSettlementScopeReadiness(priorSource);
+      const sourceChunkResult = { ...priorSource, ...durableReadiness };
       const finalisationIdentity = finalisationIdentityFrom(sourceChunkResult);
+
       if (priorFinalisation.completed === true && priorFinalisation.finalisation_idempotency_key === finalisationIdentity.key) {
-        const verified = await readSettlementVerification();
+        const verified = await readSettlementVerification(sourceChunkResult);
         if (verified.verified === true) {
           return save('RUNNING', 'QUEUE_REMITTANCES', {
             status_text: 'Full batch settlement finalisation was already completed and verified.',
+            durable_settlement_scope_readiness: durableReadiness,
             batch_settlement_finalisation: {
               ...priorFinalisation,
               verified: true,
@@ -46365,40 +48708,48 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       }
 
       if (!shouldRunFullSettlementFinalisation(sourceChunkResult)) {
-        if (usesRailSettlement === true) {
-          const readiness = settlementReadinessFromChunkResult(sourceChunkResult);
-          if (readiness.processor_failed_scope_count > 0) {
-            return finish('FAILED', null, {
-              code: 'SETTLEMENT_SCOPE_PROCESSOR_FAILURE',
-              message: 'One or more settlement scopes failed for a processor/data reason and require investigation.',
-              phase,
+        const readiness = settlementReadinessFromChunkResult(sourceChunkResult);
+        if (readiness.processor_failed_scope_count > 0) {
+          return finish('FAILED', null, {
+            code: 'SETTLEMENT_SCOPE_PROCESSOR_FAILURE',
+            message: 'One or more settlement scopes failed proof, binding, or processor validation and require investigation.',
+            phase,
+            source_chunk_result: sourceChunkResult,
+            durable_settlement_scope_readiness: durableReadiness,
+            readiness
+          });
+        }
+        if (readiness.all_scopes_terminal !== true || readiness.pending_or_unknown_scope_count > 0) {
+          return save(usesRailSettlement ? 'WAITING_PROVIDER' : 'RUNNING', 'APPLY_SETTLEMENT_CHUNKS', {
+            status_text: usesRailSettlement
+              ? 'Waiting for remaining bank/provider outcomes before finalising the payment run.'
+              : 'Waiting for remaining manual settlement scopes before finalising the payment run.',
+            waiting_provider: usesRailSettlement,
+            waiting_manual_settlement: usesRailSettlement !== true,
+            durable_settlement_scope_readiness: durableReadiness,
+            batch_settlement_finalisation: {
+              required: true,
+              completed: false,
+              waiting: true,
+              skip_reason: usesRailSettlement ? 'WAITING_FOR_TERMINAL_BANK_OUTCOMES' : 'WAITING_FOR_TERMINAL_MANUAL_SETTLEMENT_SCOPES',
               source_chunk_result: sourceChunkResult,
               readiness
-            });
-          }
-          if (readiness.all_scopes_terminal !== true || readiness.pending_or_unknown_scope_count > 0) {
-            return save('WAITING_PROVIDER', 'APPLY_SETTLEMENT_CHUNKS', {
-              status_text: 'Waiting for remaining bank/provider outcomes before finalising the payment run.',
-              waiting_provider: true,
-              batch_settlement_finalisation: {
-                required: true,
-                completed: false,
-                waiting_provider: true,
-                skip_reason: 'WAITING_FOR_TERMINAL_BANK_OUTCOMES',
-                source_chunk_result: sourceChunkResult,
-                readiness
-              },
-              resume_reason: 'WAITING_FOR_TERMINAL_BANK_OUTCOMES'
-            });
-          }
+            }
+          });
         }
         return save('RUNNING', 'APPLY_RAIL_UPDATES', {
-          status_text: 'Full batch settlement finalisation was not required for this settlement operation.',
+          status_text: readiness.completed_with_failed_payments
+            ? 'Settlement scopes are terminal with failed payments; full successful finalisation is not applicable.'
+            : 'Settlement scopes are terminal but full batch finalisation is not safe.',
+          completed_with_failed_payments: readiness.completed_with_failed_payments,
+          durable_settlement_scope_readiness: durableReadiness,
           batch_settlement_finalisation: {
-            required: false,
+            required: true,
+            completed: false,
             skipped: true,
-            skip_reason: 'SOURCE_CHUNK_DOES_NOT_REQUIRE_FULL_BATCH_FINALISATION',
-            source_chunk_result: sourceChunkResult
+            skip_reason: readiness.completed_with_failed_payments ? 'TERMINAL_FAILED_PAYMENTS' : 'FULL_BATCH_FINALISATION_NOT_SAFE',
+            source_chunk_result: sourceChunkResult,
+            readiness
           }
         });
       }
@@ -46415,8 +48766,9 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       } catch (finaliseError) {
         return finish('FAILED', null, {
           code: 'LOCAL_BATCH_FINALISATION_FAILED',
-          message: 'Operation-mode rail settlement scopes were settled, but full batch/candidate finalisation failed.',
+          message: 'Settlement scopes were completed, but full batch/candidate finalisation failed.',
           phase,
+          settlement_mode: settlementMode,
           finalisation_idempotency_key: finalisationIdentity.key,
           finalisation_payload_hash: finalisationIdentity.payloadHash,
           source_chunk_result: sourceChunkResult,
@@ -46424,11 +48776,12 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         });
       }
 
-      const verified = await readSettlementVerification();
+      const verified = await readSettlementVerification(sourceChunkResult);
       if (verified.verified !== true) {
         return save('RUNNING', 'FINALISE_BATCH_SETTLEMENT', {
-          status_text: 'Full batch settlement finalisation ran, but the batch/candidate/transfer settlement state is not verified yet.',
+          status_text: 'Full batch settlement finalisation ran, but durable batch/candidate/scope settlement is not verified yet.',
           local_finalisation_pending: true,
+          durable_settlement_scope_readiness: durableReadiness,
           batch_settlement_finalisation: {
             required: true,
             completed: false,
@@ -46444,6 +48797,7 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 
       return save('RUNNING', 'QUEUE_REMITTANCES', {
         status_text: 'Full batch settlement finalisation completed and verified.',
+        durable_settlement_scope_readiness: durableReadiness,
         batch_settlement_finalisation: {
           required: true,
           completed: true,
@@ -46458,14 +48812,130 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     }
 
     if (phase === 'APPLY_RAIL_UPDATES') {
-      return save('RUNNING', 'QUEUE_REMITTANCES', { status_text: 'Settlement rail state checked.' });
+      const source = safeObject(progressJson.last_chunk_result || progressJson.durable_settlement_scope_readiness);
+      const durableReadiness = await buildDurableSettlementScopeReadiness(source);
+      const verification = await readSettlementVerification(durableReadiness);
+      if (verification.verified === true) {
+        return save('RUNNING', 'QUEUE_REMITTANCES', {
+          status_text: 'Durable settlement state is verified.',
+          durable_settlement_scope_readiness: durableReadiness,
+          batch_settlement_finalisation: {
+            ...safeObject(progressJson.batch_settlement_finalisation),
+            completed: true,
+            verified: true,
+            verification
+          }
+        });
+      }
+      if (shouldRunFullSettlementFinalisation(durableReadiness)) {
+        const finalisationIdentity = finalisationIdentityFrom(durableReadiness);
+        return save('RUNNING', 'FINALISE_BATCH_SETTLEMENT', {
+          status_text: 'Durable settlement scopes require full batch finalisation.',
+          last_chunk_result: durableReadiness,
+          durable_settlement_scope_readiness: durableReadiness,
+          batch_settlement_finalisation: {
+            required: true,
+            completed: false,
+            finalisation_idempotency_key: finalisationIdentity.key,
+            finalisation_payload_hash: finalisationIdentity.payloadHash,
+            source_chunk_result: durableReadiness
+          }
+        });
+      }
+      const readiness = settlementReadinessFromChunkResult(durableReadiness);
+      if (readiness.processor_failed_scope_count > 0) {
+        return finish('FAILED', null, {
+          code: 'SETTLEMENT_SCOPE_PROCESSOR_FAILURE',
+          message: 'Durable settlement scope proof or binding validation failed.',
+          phase,
+          durable_settlement_scope_readiness: durableReadiness,
+          verification
+        });
+      }
+      if (readiness.all_scopes_terminal !== true || readiness.pending_or_unknown_scope_count > 0) {
+        return save(usesRailSettlement ? 'WAITING_PROVIDER' : 'RUNNING', 'APPLY_SETTLEMENT_CHUNKS', {
+          status_text: usesRailSettlement
+            ? 'Waiting for remaining bank/provider outcomes.'
+            : 'Waiting for remaining manual settlement scopes.',
+          waiting_provider: usesRailSettlement,
+          waiting_manual_settlement: usesRailSettlement !== true,
+          durable_settlement_scope_readiness: durableReadiness,
+          verification
+        });
+      }
+      return finish('FAILED', null, {
+        code: readiness.completed_with_failed_payments
+          ? 'TERMINAL_FAILED_SETTLEMENT_NOT_DURABLY_VERIFIED'
+          : 'FULL_BATCH_FINALISATION_NOT_SAFE',
+        message: readiness.completed_with_failed_payments
+          ? 'Settlement scopes are terminal with failed payments, but the durable failed-payment batch state is not verified.'
+          : 'Settlement scopes are terminal, but the authorised full-batch finalisation contract is not safe or durably verified.',
+        phase,
+        completed_with_failed_payments: readiness.completed_with_failed_payments,
+        durable_settlement_scope_readiness: durableReadiness,
+        settlement_verification: verification
+      });
     }
 
     if (phase === 'QUEUE_REMITTANCES') {
       const settlementFinalisation = safeObject(progressJson.batch_settlement_finalisation);
-      const settlementVerification = safeObject(settlementFinalisation.verification);
-      const terminalSuccessTransferCount = Number(settlementVerification.terminal_success_transfer_count || settlementVerification.completed_transfer_count || 0) || 0;
-      const terminalFailedWithoutSuccess = settlementVerification.batch_terminal_with_failed_payments === true && terminalSuccessTransferCount <= 0;
+      let settlementVerification = firstNonEmptyObject(
+        settlementFinalisation.verification,
+        progressJson.settlement_verification,
+        safeObject(progressJson.idempotent_settlement_completion).durable_settlement_truth
+      );
+      if (settlementVerification.verified !== true) {
+        try {
+          settlementVerification = await readSettlementVerification(
+            firstNonEmptyObject(
+              progressJson.durable_settlement_scope_readiness,
+              progressJson.last_chunk_result,
+              safeObject(progressJson.idempotent_settlement_completion).durable_settlement_scope_readiness
+            )
+          );
+        } catch (verificationError) {
+          return save('RUNNING', 'APPLY_RAIL_UPDATES', {
+            status_text: 'Remittance handoff is blocked until durable settlement can be verified.',
+            settlement_verification_error: String(verificationError?.message || verificationError || 'SETTLEMENT_VERIFICATION_FAILED'),
+            batch_settlement_finalisation: settlementFinalisation
+          });
+        }
+      }
+      if (settlementVerification.verified !== true) {
+        return save('RUNNING', 'APPLY_RAIL_UPDATES', {
+          status_text: 'Remittance handoff is blocked because durable settlement is not verified.',
+          settlement_verification: settlementVerification,
+          batch_settlement_finalisation: {
+            ...settlementFinalisation,
+            completed: false,
+            verified: false,
+            verification: settlementVerification
+          }
+        });
+      }
+      const durableReadiness = firstNonEmptyObject(
+        settlementVerification.durable_settlement_scope_readiness,
+        progressJson.durable_settlement_scope_readiness,
+        progressJson.last_chunk_result
+      );
+      const terminalSuccessTransferCount = Number(settlementVerification.terminal_success_transfer_count || settlementVerification.completed_transfer_count || durableReadiness.completed_transfer_count || 0) || 0;
+      const terminalFailedWithoutSuccess = (
+        settlementVerification.batch_terminal_with_failed_payments === true
+        || durableReadiness.completed_with_failed_payments === true
+        || progressJson.completed_with_failed_payments === true
+      ) && terminalSuccessTransferCount <= 0;
+      const settlementProof = resolveSettlementProofContract(durableReadiness);
+      const hasVerifiedSuppression = Object.prototype.hasOwnProperty.call(settlementVerification, 'authorised_suppress_remittances')
+        || Object.prototype.hasOwnProperty.call(settlementVerification, 'suppress_remittances');
+      const authorisedSuppressRemittances = hasVerifiedSuppression
+        ? readBooleanLike(settlementVerification.authorised_suppress_remittances ?? settlementVerification.suppress_remittances, false)
+        : (settlementProof.valid === true && settlementProof.suppress_remittances_present === true && settlementProof.suppress_remittances === true);
+      const remittanceRootOperationId = strictUuidRe.test(trimText(progressJson.remittance_root_operation_id))
+        ? trimText(progressJson.remittance_root_operation_id)
+        : operationId;
+      const remittanceScope = settlementProof.valid === true
+        ? settlementProof.projection_scope
+        : (upperText(inputJson.scope || inputJson.pay_channel_scope || 'ALL') || 'ALL');
       if (terminalFailedWithoutSuccess === true) {
         return save('RUNNING', 'COMPLETE', {
           status_text: 'Settlement completed with failed payments; there are no confirmed-payment remittances to queue.',
@@ -46476,7 +48946,7 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         });
       }
 
-      if (inputJson.suppress_remittances === true || inputJson.do_not_send_remittances === true) {
+      if (authorisedSuppressRemittances === true) {
         return save('RUNNING', 'COMPLETE', {
           status_text: 'Settlement remittance messages are suppressed for this payment operation.',
           remittance_suppressed: true,
@@ -46487,9 +48957,9 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       const gate = await queueRemittanceViaTimingGate(env, {
         payBatchId,
         actorUserId,
-        rootOperationId: operationId,
+        rootOperationId: remittanceRootOperationId,
         trigger: 'ON_PAYMENT_CONFIRMED',
-        scope: inputJson.scope || 'ALL',
+        scope: remittanceScope,
         onlyConfirmed: true,
         source: 'advanceBankingPaySettlementOperation'
       });
@@ -46562,10 +49032,27 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       }), 'pay_batch_execution_summary_get');
       const remittanceOperation = safeObject(progressJson.remittance_operation);
       const childOperationId = progressJson.child_operation_id || null;
-      const remittancesSuppressed = inputJson.suppress_remittances === true || inputJson.do_not_send_remittances === true || progressJson.remittance_suppressed === true || progressJson.suppress_remittances === true;
       const settlementFinalisation = safeObject(progressJson.batch_settlement_finalisation);
-      const settlementVerification = safeObject(settlementFinalisation.verification);
+      const settlementVerification = firstNonEmptyObject(
+        settlementFinalisation.verification,
+        progressJson.settlement_verification,
+        safeObject(progressJson.idempotent_settlement_completion).durable_settlement_truth
+      );
       const completedWithFailedPayments = settlementVerification.batch_terminal_with_failed_payments === true || progressJson.completed_with_failed_payments === true;
+      const completionProof = resolveSettlementProofContract(
+        firstNonEmptyObject(
+          settlementVerification.durable_settlement_scope_readiness,
+          progressJson.durable_settlement_scope_readiness,
+          progressJson.last_chunk_result
+        )
+      );
+      const hasVerifiedSuppression = Object.prototype.hasOwnProperty.call(settlementVerification, 'authorised_suppress_remittances')
+        || Object.prototype.hasOwnProperty.call(settlementVerification, 'suppress_remittances');
+      const remittancesSuppressed = (hasVerifiedSuppression
+        ? readBooleanLike(settlementVerification.authorised_suppress_remittances ?? settlementVerification.suppress_remittances, false)
+        : (completionProof.valid === true && completionProof.suppress_remittances_present === true && completionProof.suppress_remittances === true))
+        || progressJson.remittance_suppressed === true
+        || progressJson.suppress_remittances === true;
       return finish('COMPLETE', {
         ok: true,
         pay_batch_id: payBatchId,
@@ -46576,6 +49063,10 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         remittances_suppressed: remittancesSuppressed,
         suppress_remittances: remittancesSuppressed,
         batch_settlement_finalisation: settlementFinalisation,
+        no_bank_payment_execution: settlementVerification.verified_pure_no_bank_success === true,
+        mixed_positive_and_zero: settlementVerification.verified_mixed_success === true,
+        no_bank_scope_count: Number(settlementVerification.no_bank_scope_count || 0) || 0,
+        completed_transfer_count: Number(settlementVerification.completed_transfer_count || 0) || 0,
         remittance_operation: Object.keys(remittanceOperation).length ? remittanceOperation : null,
         child_operation_id: childOperationId,
         batch_summary: summary
@@ -46587,6 +49078,9 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     return finish('FAILED', null, { code: 'SETTLEMENT_OPERATION_FAILED', message: 'Settlement operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
+
+
 
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
@@ -47827,7 +50321,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     }
 
     if (phase === 'WAIT_FOR_PREVIEW_READY') {
-      const progress = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_session_get_progress_light', { p_session_id: workbenchSessionId }), 'pay_workbench_session_get_progress_light');
+      const progress = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_session_get_progress', { p_session_id: workbenchSessionId }), 'pay_workbench_session_get_progress');
       const ready = progress.ready === true || progress.ready_flag === true || String(progress.status || '').toUpperCase() === 'READY';
       if (!ready) return lockProgressForRetryableWait('WAIT_FOR_PREVIEW_READY', { status_text: 'Waiting for payment preview to become ready.', session_progress: progress }, 10);
       return lockProgress('RUNNING', 'SEED_CANDIDATE_SCOPE', { status_text: 'Payment preview is ready.', session_progress: progress });
@@ -48717,6 +51211,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
 
 
 
@@ -66352,6 +68847,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
 }
 
 
+
 async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -66359,6 +68855,12 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
   const upperText = (value) => trimText(value).toUpperCase();
   const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
   const toArray = (value) => Array.isArray(value) ? value : [];
+  const positiveVersionOrNull = (value) => {
+    const raw = trimText(value);
+    if (!/^[0-9]{1,18}$/.test(raw)) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed >= 1 ? Math.trunc(parsed) : null;
+  };
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
@@ -66466,8 +68968,196 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
       ? sanitizePaymentIssueDisplayMessage(e, fallbackMessage)
       : trimText(e && (e.message || e.error)) || fallbackMessage || 'Unable to update selected payments.';
     const code = upperText(e && (e.code || e.error_code || e.errorCode)) || fallbackCode;
-    const conflictLike = code.includes('STALE') || code.includes('BLOCK') || code.includes('CONFLICT') || code.includes('PENDING') || code.includes('UNKNOWN') || code.includes('PAID') || code.includes('SETTLED') || code.includes('UNSAFE');
+    const conflictLike = code.includes('STALE') || code.includes('BLOCK') || code.includes('CONFLICT') || code.includes('PENDING') || code.includes('UNKNOWN') || code.includes('PAID') || code.includes('SETTLED') || code.includes('UNSAFE') || code.includes('WORKBENCH');
     return withCORS(env, req, jsonResponse(conflictLike ? 409 : 400, { ok: false, error: message, message, error_code: code || fallbackCode }));
+  };
+
+  const fetchWorkbenchSessionRow = async (sessionId) => {
+    const workbenchSessionId = trimText(sessionId);
+    if (!uuidRe.test(workbenchSessionId)) return null;
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+          `?id=eq.${encodeURIComponent(workbenchSessionId)}` +
+          `&select=id,version,status,discarded_at_utc,replacement_session_id,session_signature,pay_date,week_ending_cutoff,replacement_idempotency_key` +
+          `&limit=1`,
+        false
+      );
+      return Array.isArray(rows) && rows.length > 0 && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const resolveCurrentSharedSessionFromSeed = async (seedSessionId, suppliedVersion = null, sourceLabel = 'REQUEST') => {
+    const seedId = trimText(seedSessionId);
+    if (!uuidRe.test(seedId)) return null;
+    const seedRow = await fetchWorkbenchSessionRow(seedId);
+    if (!seedRow) return null;
+    const seedStatus = upperText(seedRow.status || '');
+    const seedDiscarded = !!trimText(seedRow.discarded_at_utc || '');
+    const seedVersion = positiveVersionOrNull(suppliedVersion) || positiveVersionOrNull(seedRow.version);
+    if (seedStatus === 'OPEN' && !seedDiscarded && seedVersion !== null) {
+      return {
+        session_id: seedId,
+        session_version: seedVersion,
+        resolution_source: sourceLabel,
+        seed_session_id: seedId
+      };
+    }
+
+    const replacementSessionId = trimText(seedRow.replacement_session_id || '');
+    if (uuidRe.test(replacementSessionId)) {
+      const replacementRow = await fetchWorkbenchSessionRow(replacementSessionId);
+      const replacementVersion = positiveVersionOrNull(replacementRow?.version);
+      if (replacementRow && upperText(replacementRow.status || '') === 'OPEN' && !trimText(replacementRow.discarded_at_utc || '') && replacementVersion !== null) {
+        return {
+          session_id: replacementSessionId,
+          session_version: replacementVersion,
+          resolution_source: `${sourceLabel}_EXPLICIT_REPLACEMENT`,
+          seed_session_id: seedId
+        };
+      }
+    }
+
+    const signature = trimText(seedRow.session_signature || '');
+    const payDate = trimText(seedRow.pay_date || '');
+    const weekEndingCutoff = trimText(seedRow.week_ending_cutoff || '');
+    if (!signature || !payDate || !weekEndingCutoff) return null;
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+          `?session_signature=eq.${encodeURIComponent(signature)}` +
+          `&pay_date=eq.${encodeURIComponent(payDate)}` +
+          `&week_ending_cutoff=eq.${encodeURIComponent(weekEndingCutoff)}` +
+          `&status=eq.OPEN` +
+          `&discarded_at_utc=is.null` +
+          `&select=id,version,status,discarded_at_utc` +
+          `&order=updated_at_utc.desc,id.asc` +
+          `&limit=1`,
+        false
+      );
+      const currentRow = Array.isArray(rows) && rows.length > 0 && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
+      const currentId = trimText(currentRow?.id || '');
+      const currentVersion = positiveVersionOrNull(currentRow?.version);
+      if (uuidRe.test(currentId) && currentVersion !== null) {
+        return {
+          session_id: currentId,
+          session_version: currentVersion,
+          resolution_source: `${sourceLabel}_SHARED_CONTEXT`,
+          seed_session_id: seedId
+        };
+      }
+    } catch {}
+    return null;
+  };
+
+  const resolveReplacementReplayWorkbenchContext = async (replacementIdempotencyKey) => {
+    const key = trimText(replacementIdempotencyKey);
+    if (!key) return null;
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+          `?replacement_idempotency_key=eq.${encodeURIComponent(key)}` +
+          `&replacement_session_id=not.is.null` +
+          `&select=id,version,status,discarded_at_utc,replacement_session_id,replacement_idempotency_key,session_signature,pay_date,week_ending_cutoff` +
+          `&order=updated_at_utc.desc,id.asc` +
+          `&limit=2`,
+        false
+      );
+      const matches = Array.isArray(rows)
+        ? rows.filter((row) => row && typeof row === 'object')
+        : [];
+      if (matches.length > 1) {
+        const error = new Error('PAYMENT_CORRECTION_WORKBENCH_REPLACEMENT_IDEMPOTENCY_NOT_UNIQUE');
+        error.code = 'PAYMENT_CORRECTION_WORKBENCH_REPLACEMENT_IDEMPOTENCY_NOT_UNIQUE';
+        throw error;
+      }
+      const sourceRow = matches[0] || null;
+      const sourceSessionId = trimText(sourceRow?.id || '');
+      const sourceSessionVersion = positiveVersionOrNull(sourceRow?.version);
+      const replacementSessionId = trimText(sourceRow?.replacement_session_id || '');
+      if (!uuidRe.test(sourceSessionId) || sourceSessionVersion === null || !uuidRe.test(replacementSessionId)) {
+        return null;
+      }
+      return {
+        session_id: sourceSessionId,
+        session_version: sourceSessionVersion,
+        resolution_source: 'REPLACEMENT_IDEMPOTENCY_REPLAY',
+        seed_session_id: sourceSessionId,
+        replacement_session_id: replacementSessionId,
+        replacement_idempotency_key: key,
+        source_session_status: upperText(sourceRow.status || '') || null,
+        source_session_discarded: !!trimText(sourceRow.discarded_at_utc || '')
+      };
+    } catch (error) {
+      if (upperText(error?.code || error?.message || '') === 'PAYMENT_CORRECTION_WORKBENCH_REPLACEMENT_IDEMPOTENCY_NOT_UNIQUE') {
+        throw error;
+      }
+      return null;
+    }
+  };
+
+  const resolveCorrectionWorkbenchContext = async (bodyArg, selectionJsonArg, confirmationJsonArg, payBatchIdArg) => {
+    const bodyObject = safeObject(bodyArg);
+    const selectionObject = safeObject(selectionJsonArg);
+    const confirmationObject = safeObject(confirmationJsonArg);
+    const explicitSessionId = trimText(
+      bodyObject.source_workbench_session_id || bodyObject.sourceWorkbenchSessionId ||
+      bodyObject.workbench_session_id || bodyObject.workbenchSessionId ||
+      bodyObject.session_id || bodyObject.sessionId ||
+      confirmationObject.source_workbench_session_id || confirmationObject.sourceWorkbenchSessionId ||
+      confirmationObject.workbench_session_id || confirmationObject.workbenchSessionId ||
+      selectionObject.source_workbench_session_id || selectionObject.sourceWorkbenchSessionId ||
+      selectionObject.workbench_session_id || selectionObject.workbenchSessionId ||
+      ''
+    );
+    const explicitVersion = positiveVersionOrNull(
+      bodyObject.expected_source_session_version ?? bodyObject.expectedSourceSessionVersion ??
+      bodyObject.source_session_version ?? bodyObject.sourceSessionVersion ??
+      bodyObject.workbench_session_version ?? bodyObject.workbenchSessionVersion ??
+      bodyObject.session_version ?? bodyObject.sessionVersion ??
+      confirmationObject.expected_source_session_version ?? confirmationObject.expectedSourceSessionVersion ??
+      confirmationObject.source_session_version ?? confirmationObject.sourceSessionVersion ??
+      selectionObject.expected_source_session_version ?? selectionObject.expectedSourceSessionVersion ??
+      selectionObject.source_session_version ?? selectionObject.sourceSessionVersion
+    );
+
+    if (uuidRe.test(explicitSessionId) && explicitVersion !== null) {
+      return {
+        session_id: explicitSessionId,
+        session_version: explicitVersion,
+        resolution_source: 'REQUEST',
+        seed_session_id: explicitSessionId
+      };
+    }
+
+    if (uuidRe.test(explicitSessionId)) {
+      const explicitContext = await resolveCurrentSharedSessionFromSeed(explicitSessionId, null, 'REQUEST');
+      if (explicitContext) return explicitContext;
+    }
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batches` +
+          `?id=eq.${encodeURIComponent(payBatchIdArg)}` +
+          `&select=id,source_workbench_session_id` +
+          `&limit=1`,
+        false
+      );
+      const batchRow = Array.isArray(rows) && rows.length > 0 && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
+      const batchSourceSessionId = trimText(batchRow?.source_workbench_session_id || '');
+      if (uuidRe.test(batchSourceSessionId)) {
+        const batchContext = await resolveCurrentSharedSessionFromSeed(batchSourceSessionId, null, 'PAY_BATCH_SOURCE');
+        if (batchContext) return batchContext;
+      }
+    } catch {}
+
+    return null;
   };
 
   const id = trimText(payBatchId);
@@ -66514,7 +69204,8 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
     const plan = unwrapRpc(await sbRpc(env, 'pay_payment_correction_plan', {
       p_pay_batch_id: id,
       p_selection_json: selectionJson,
-      p_actor_user_id: actorUserId
+      p_actor_user_id: actorUserId,
+      p_correction_context: 'PAYMENT_CORRECTION_ACTION'
     }), 'pay_payment_correction_plan');
     const action = upperText(body.requested_action || body.requestedAction || selectionJson.requested_action || selectionJson.requestedAction || plan.recommended_action || plan.action || plan.requested_action || '');
     let result;
@@ -66522,14 +69213,85 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
     if (action === 'PRE_PROVIDER_CANCEL_AND_RECALCULATE') {
       const reauth = await requireReauthForMutation();
       if (!reauth.ok) return withCORS(env, req, reauth.response);
-      result = unwrapRpc(await sbRpc(env, 'pay_payment_cancel_not_sent_and_recalculate', {
+
+      const cancellationSelectionJson = { ...selectionJson, requested_action: 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' };
+      const cancellationConfirmationJson = { ...buildConfirmationJson(), source_handler: 'handleBankingPayCorrectionStart', routed_action: action };
+      const replacementIdempotencyKey = trimText(
+        body.replacement_idempotency_key || body.replacementIdempotencyKey ||
+        cancellationConfirmationJson.replacement_idempotency_key || cancellationConfirmationJson.replacementIdempotencyKey ||
+        selectionJson.replacement_idempotency_key || selectionJson.replacementIdempotencyKey ||
+        `PAYMENT_CORRECTION_PRE_PROVIDER:${id}:${idempotencyKey}`
+      );
+
+      const replayWorkbenchContext = await resolveReplacementReplayWorkbenchContext(replacementIdempotencyKey);
+      const workbenchContext = replayWorkbenchContext
+        || await resolveCorrectionWorkbenchContext(body, cancellationSelectionJson, cancellationConfirmationJson, id);
+
+      if (!workbenchContext || !uuidRe.test(workbenchContext.session_id) || positiveVersionOrNull(workbenchContext.session_version) === null) {
+        return withCORS(env, req, jsonResponse(409, {
+          ok: false,
+          pay_batch_id: id,
+          error_code: 'PAYMENT_CORRECTION_WORKBENCH_SESSION_REQUIRED',
+          code: 'PAYMENT_CORRECTION_WORKBENCH_SESSION_REQUIRED',
+          message: 'The current Banking Pay preview session could not be resolved. Reopen Banking Pay and retry the payment issue action.',
+          requested_action: action,
+          route,
+          plan
+        }));
+      }
+
+      result = unwrapRpc(await sbRpc(env, 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refr', {
         p_pay_batch_id: id,
-        p_selection_json: { ...selectionJson, requested_action: 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' },
+        p_selection_json: cancellationSelectionJson,
         p_actor_user_id: actorUserId,
         p_reason: reason,
         p_idempotency_key: idempotencyKey,
-        p_confirmation_json: { ...buildConfirmationJson(), source_handler: 'handleBankingPayCorrectionStart', routed_action: action }
-      }), 'pay_payment_cancel_not_sent_and_recalculate');
+        p_confirmation_json: cancellationConfirmationJson,
+        p_source_workbench_session_id: workbenchContext.session_id,
+        p_expected_source_session_version: workbenchContext.session_version,
+        p_replacement_idempotency_key: replacementIdempotencyKey
+      }), 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refr');
+
+      if (result.payable_state_changed === true) {
+        const workbenchRefresh = safeObject(result.workbench_refresh);
+        const replacementSessionId = trimText(
+          result.replacement_session_id ||
+          workbenchRefresh.replacement_session_id ||
+          workbenchRefresh.session_id ||
+          ''
+        );
+        const replacementSessionVersion = positiveVersionOrNull(
+          result.replacement_session_version ??
+          workbenchRefresh.replacement_session_version ??
+          workbenchRefresh.session_version ??
+          workbenchRefresh.version ??
+          null
+        );
+
+        if (!uuidRe.test(replacementSessionId) || replacementSessionVersion === null) {
+          const consistencyError = new Error('The correction cancellation succeeded, but its replacement Banking Pay workbench session contract is missing or invalid.');
+          consistencyError.code = 'PAYMENT_CORRECTION_WORKBENCH_REPLACEMENT_CONTRACT_MISSING';
+          consistencyError.error_code = 'PAYMENT_CORRECTION_WORKBENCH_REPLACEMENT_CONTRACT_MISSING';
+          consistencyError.details = {
+            pay_batch_id: id,
+            source_workbench_session_id: workbenchContext.session_id,
+            replacement_idempotency_key: replacementIdempotencyKey,
+            replacement_session_id: replacementSessionId || null,
+            replacement_session_version: replacementSessionVersion,
+            correction_result: result
+          };
+          throw consistencyError;
+        }
+      }
+
+      result = {
+        ...result,
+        source_workbench_session_id: result.source_workbench_session_id || workbenchContext.session_id,
+        expected_source_session_version: result.expected_source_session_version ?? workbenchContext.session_version,
+        replacement_idempotency_key: result.replacement_idempotency_key || replacementIdempotencyKey,
+        workbench_context_resolution_source: workbenchContext.resolution_source || null,
+        workbench_context_seed_session_id: workbenchContext.seed_session_id || null
+      };
     } else if (action === 'NO_MONEY_UNWIND_AND_RECALCULATE') {
       const reauth = await requireReauthForMutation();
       if (!reauth.ok) return withCORS(env, req, reauth.response);
@@ -66613,6 +69375,8 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
     return rpcErrorResponse(e, 'PAYMENT_CORRECTION_START_FAILED', 'Unable to start payment issue action.');
   }
 }
+
+
 
 async function handleTimesheetLifecycleAffectedRows(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -160213,18 +162977,14 @@ if (p.startsWith('/api/banking/')) {
 // after `user` has been resolved.
 // ====================== BANKING (add inside /api/banking/ router block) ======================
 {
-  const m = matchPath(p, '/api/banking/pay/batch/:id/cancel-not-sent-recalculate');
-  if (m && req.method === 'POST') {
-    return handleBankingPayCancelNotSentAndRecalculate(env, req, user, m.id);
-  }
-}
+  const cancelMatch = matchPath(p, '/api/banking/pay/batch/:id/cancel');
+  const recalcMatch = cancelMatch
+    ? null
+    : matchPath(p, '/api/banking/pay/batch/:id/cancel-not-sent-recalculate');
+  const m = cancelMatch || recalcMatch;
 
-// Compatibility route: replace the existing whole-batch /cancel route handler call
-// so legacy callers use the new chunked local/pre-provider cancellation flow.
-{
-  const m = matchPath(p, '/api/banking/pay/batch/:id/cancel');
   if (m && req.method === 'POST') {
-    return handleBankingPayCancelNotSentAndRecalculate(env, req, user, m.id);
+    return handleBankingPayBatchCancel(env, req, user, m.id);
   }
 }
 
