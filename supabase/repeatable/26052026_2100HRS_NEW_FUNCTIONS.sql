@@ -24021,6 +24021,52 @@ DECLARE
   v_next_recommended_action text := NULL::text;
   v_existing_completion_json jsonb := '{}'::jsonb;
   v_payload_limit integer := 100;
+  v_duplicate_completion boolean := false;
+  v_completed_at_utc timestamptz := NULL::timestamptz;
+  v_scope_pending_job_cleared_count integer := 0;
+  v_scope_status_before_continuation text := NULL::text;
+  v_scope_status_after_continuation text := NULL::text;
+  v_scope_bucket_before_continuation text := NULL::text;
+  v_scope_bucket_after_continuation text := NULL::text;
+  v_scope_continuation_pending_delta integer := 0;
+  v_scope_continuation_ready_delta integer := 0;
+  v_scope_continuation_failed_delta integer := 0;
+  v_scope_continuation_counter_adjusted boolean := false;
+  v_finalisation_should_evaluate boolean := false;
+  v_finalisation_actual_precheck_required boolean := false;
+  v_finalisation_actual_precheck_passed boolean := false;
+  v_current_candidate_terminal_success boolean := false;
+  v_finalisation_evaluated boolean := false;
+  v_finalisation_progress_json jsonb := '{}'::jsonb;
+  v_finalisation_session_ready boolean := false;
+  v_finalisation_ready_for_draft boolean := false;
+  v_finalisation_ready_empty boolean := false;
+  v_finalisation_stored_ready_mismatch boolean := false;
+  v_finalisation_counter_reconciliation_required boolean := false;
+  v_finalisation_counter_reconciliation_applied boolean := false;
+  v_finalisation_counter_reconciled boolean := false;
+  v_finalisation_counter_reconciliation_json jsonb := '{}'::jsonb;
+  v_finalisation_blocker_codes jsonb := '[]'::jsonb;
+  v_finalisation_draft_blocker_codes jsonb := '[]'::jsonb;
+  v_finalisation_blocker_counts jsonb := '{}'::jsonb;
+  v_final_progress_state text := NULL::text;
+  v_final_phase text := NULL::text;
+  v_final_status_text text := NULL::text;
+  v_final_next_recommended_action text := NULL::text;
+  v_authoritative_scope_total integer := 0;
+  v_authoritative_scope_seeded integer := 0;
+  v_authoritative_scope_ready integer := 0;
+  v_authoritative_scope_pending integer := 0;
+  v_authoritative_scope_failed integer := 0;
+  v_authoritative_line_total integer := 0;
+  v_authoritative_line_pending integer := 0;
+  v_authoritative_line_ready integer := 0;
+  v_authoritative_line_failed integer := 0;
+  v_authoritative_preview_row_count integer := 0;
+  v_authoritative_selected_row_count integer := 0;
+  v_authoritative_section_counts_json jsonb := '{}'::jsonb;
+  v_authoritative_candidate_sample_rows_json jsonb := '[]'::jsonb;
+  v_completion_finalisation_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_job_id IS NULL THEN
     RAISE EXCEPTION 'job_id is required';
@@ -24036,22 +24082,44 @@ BEGIN
     RAISE EXCEPTION 'banking_pay_workbench_jobs row % not found', p_job_id;
   END IF;
 
-  IF UPPER(BTRIM(COALESCE(v_job_row.status, ''))) = 'SUCCEEDED'
-     AND v_job_row.completed_at_utc IS NOT NULL THEN
-    v_existing_completion_json := COALESCE(v_job_row.payload_json->'completion_json', '{}'::jsonb);
+  v_duplicate_completion := UPPER(BTRIM(COALESCE(v_job_row.status, ''))) = 'SUCCEEDED'
+    AND v_job_row.completed_at_utc IS NOT NULL;
 
-    RETURN jsonb_build_object(
-      'ok', true,
-      'job_id', p_job_id::text,
-      'status', 'SUCCEEDED',
-      'completed_at_utc', v_job_row.completed_at_utc,
-      'result_json', COALESCE(v_job_row.payload_json->'result_json', v_result_json),
-      'continuation_enqueued', COALESCE((v_existing_completion_json->>'continuation_enqueued')::boolean, false),
-      'continuation_jobs', COALESCE(v_existing_completion_json->'continuation_jobs', '[]'::jsonb),
-      'continuation_count', COALESCE(NULLIF(BTRIM(COALESCE(v_existing_completion_json->>'continuation_count', '')), '')::integer, 0),
-      'next_recommended_action', COALESCE(NULLIF(BTRIM(v_existing_completion_json->>'next_recommended_action'), ''), NULL::text),
-      'duplicate_completion', true
-    );
+  IF v_duplicate_completion THEN
+    v_existing_completion_json := CASE
+      WHEN jsonb_typeof(COALESCE(v_job_row.payload_json->'completion_json', '{}'::jsonb)) = 'object'
+        THEN COALESCE(v_job_row.payload_json->'completion_json', '{}'::jsonb)
+      ELSE '{}'::jsonb
+    END;
+
+    v_result_json := CASE
+      WHEN jsonb_typeof(COALESCE(v_job_row.payload_json->'result_json', '{}'::jsonb)) = 'object'
+        THEN COALESCE(v_job_row.payload_json->'result_json', '{}'::jsonb)
+      ELSE v_result_json
+    END;
+
+    v_continuation_jobs := CASE
+      WHEN jsonb_typeof(COALESCE(v_existing_completion_json->'continuation_jobs', '[]'::jsonb)) = 'array'
+        THEN COALESCE(v_existing_completion_json->'continuation_jobs', '[]'::jsonb)
+      ELSE '[]'::jsonb
+    END;
+
+    v_continuation_count := CASE
+      WHEN COALESCE(v_existing_completion_json->>'continuation_count', '') ~ '^[0-9]+$'
+        THEN (v_existing_completion_json->>'continuation_count')::integer
+      ELSE jsonb_array_length(v_continuation_jobs)
+    END;
+
+    v_continuation_reused_count := CASE
+      WHEN COALESCE(v_existing_completion_json->>'continuation_reused_count', '') ~ '^[0-9]+$'
+        THEN (v_existing_completion_json->>'continuation_reused_count')::integer
+      ELSE 0
+    END;
+
+    v_continuation_enqueued := COALESCE(v_continuation_count, 0) > 0
+      OR LOWER(BTRIM(COALESCE(v_existing_completion_json->>'continuation_enqueued', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_next_recommended_action := NULLIF(BTRIM(COALESCE(v_existing_completion_json->>'next_recommended_action', '')), '');
+    v_completed_at_utc := v_job_row.completed_at_utc;
   END IF;
 
   v_job_type := UPPER(BTRIM(COALESCE(v_job_row.job_type, '')));
@@ -24089,7 +24157,11 @@ BEGIN
     WHEN COALESCE(v_result_json->>'materialized_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'materialized_count')::integer
     ELSE 0
   END;
-  v_error_count := CASE WHEN COALESCE(v_result_json->>'error_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'error_count')::integer ELSE 0 END;
+  v_error_count := CASE
+    WHEN COALESCE(v_result_json->>'error_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'error_count')::integer
+    WHEN COALESCE(v_result_json->>'materialisation_error_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'materialisation_error_count')::integer
+    ELSE 0
+  END;
   v_payload_limit := LEAST(
     GREATEST(
       CASE
@@ -24114,7 +24186,8 @@ BEGIN
       AND v_session_row.discarded_at_utc IS NULL;
   END IF;
 
-  IF v_stage_job_type IN (
+  IF v_duplicate_completion IS NOT TRUE
+     AND v_stage_job_type IN (
        'WORKBENCH_SESSION_SCOPE_SEED',
        'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
        'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
@@ -24134,209 +24207,632 @@ BEGIN
             )::text;
   END IF;
 
-  IF v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+  IF v_duplicate_completion IS NOT TRUE THEN
+    IF v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+       AND v_job_row.session_id IS NOT NULL
+       AND v_job_row.candidate_id IS NOT NULL
+       AND v_has_more IS NOT TRUE THEN
+      SELECT EXISTS(
+        SELECT 1
+        FROM public.banking_pay_workbench_candidate_line_work AS line_work_pending
+        WHERE line_work_pending.session_id = v_job_row.session_id
+          AND line_work_pending.candidate_id = v_job_row.candidate_id
+          AND UPPER(BTRIM(COALESCE(line_work_pending.status, ''))) = 'PENDING'
+      )
+      INTO v_pending_line_work_exists;
+    END IF;
+
+    IF v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+       AND v_job_row.session_id IS NOT NULL
+       AND v_job_row.candidate_id IS NOT NULL THEN
+      SELECT EXISTS(
+        SELECT 1
+        FROM public.banking_pay_workbench_candidate_line_work AS line_work_pending
+        WHERE line_work_pending.session_id = v_job_row.session_id
+          AND line_work_pending.candidate_id = v_job_row.candidate_id
+          AND UPPER(BTRIM(COALESCE(line_work_pending.status, ''))) = 'PENDING'
+      )
+      INTO v_pending_line_work_exists;
+
+      SELECT EXISTS(
+        SELECT 1
+        FROM public.banking_pay_workbench_candidate_line_work AS line_work_ready
+        WHERE line_work_ready.session_id = v_job_row.session_id
+          AND line_work_ready.candidate_id = v_job_row.candidate_id
+          AND UPPER(BTRIM(COALESCE(line_work_ready.status, ''))) = 'READY'
+      )
+      INTO v_ready_line_work_exists;
+    END IF;
+
+    IF v_stage_job_type IN (
+         'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+         'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+         'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+       )
+       AND v_job_row.session_id IS NOT NULL
+       AND v_job_row.candidate_id IS NOT NULL THEN
+      SELECT UPPER(BTRIM(COALESCE(scope_before_continuation.status, 'PENDING')))
+      INTO v_scope_status_before_continuation
+      FROM public.banking_pay_workbench_session_scope AS scope_before_continuation
+      WHERE scope_before_continuation.session_id = v_job_row.session_id
+        AND scope_before_continuation.candidate_id = v_job_row.candidate_id
+      FOR UPDATE;
+    END IF;
+
+    IF v_stage_job_type = 'WORKBENCH_SESSION_SCOPE_SEED'
+       AND v_has_more IS TRUE
+       AND v_next_cursor IS NOT NULL THEN
+      v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
+        p_session_id => v_job_row.session_id,
+        p_candidate_id => NULL::uuid,
+        p_job_type => 'WORKBENCH_SESSION_SCOPE_SEED',
+        p_cursor_json => v_next_cursor,
+        p_source_job_id => p_job_id,
+        p_result_json => v_result_json,
+        p_actor_user_id => v_session_row.actor_user_id,
+        p_reason => 'SCOPE_SEED_CURSOR_CONTINUATION',
+        p_priority => 40,
+        p_limit => v_payload_limit
+      );
+      v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
+      v_next_recommended_action := 'SEED_SCOPE_CHUNK';
+    ELSIF v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+          AND v_job_row.candidate_id IS NOT NULL THEN
+      IF v_has_more IS TRUE AND v_next_cursor IS NOT NULL THEN
+        v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
+          p_session_id => v_job_row.session_id,
+          p_candidate_id => v_job_row.candidate_id,
+          p_job_type => 'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+          p_cursor_json => v_next_cursor,
+          p_source_job_id => p_job_id,
+          p_result_json => v_result_json,
+          p_actor_user_id => v_session_row.actor_user_id,
+          p_reason => 'LINE_WORK_SEED_CURSOR_CONTINUATION',
+          p_priority => 45,
+          p_limit => v_payload_limit
+        );
+        v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
+        v_next_recommended_action := 'SEED_LINE_WORK_CHUNK';
+      ELSIF COALESCE(v_seeded_count, 0) > 0 OR v_pending_line_work_exists IS TRUE THEN
+        v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
+          p_session_id => v_job_row.session_id,
+          p_candidate_id => v_job_row.candidate_id,
+          p_job_type => 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+          p_cursor_json => NULL::jsonb,
+          p_source_job_id => p_job_id,
+          p_result_json => v_result_json,
+          p_actor_user_id => v_session_row.actor_user_id,
+          p_reason => 'LINE_WORK_SEED_COMPLETE_PROCESS_PENDING',
+          p_priority => 42,
+          p_limit => v_payload_limit
+        );
+        v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
+        v_next_recommended_action := 'PROCESS_LINE_WORK_CHUNK';
+      END IF;
+    ELSIF v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+          AND v_job_row.candidate_id IS NOT NULL THEN
+      IF v_has_more IS TRUE AND v_next_cursor IS NOT NULL THEN
+        v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
+          p_session_id => v_job_row.session_id,
+          p_candidate_id => v_job_row.candidate_id,
+          p_job_type => 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+          p_cursor_json => v_next_cursor,
+          p_source_job_id => p_job_id,
+          p_result_json => v_result_json,
+          p_actor_user_id => v_session_row.actor_user_id,
+          p_reason => 'LINE_WORK_PROCESS_CURSOR_CONTINUATION',
+          p_priority => 42,
+          p_limit => v_payload_limit
+        );
+        v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
+        v_next_recommended_action := 'PROCESS_LINE_WORK_CHUNK';
+      END IF;
+
+      IF v_has_more IS NOT TRUE
+         AND v_pending_line_work_exists IS NOT TRUE
+         AND (COALESCE(v_ready_count_delta, 0) > 0 OR v_ready_line_work_exists IS TRUE) THEN
+        v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
+          p_session_id => v_job_row.session_id,
+          p_candidate_id => v_job_row.candidate_id,
+          p_job_type => 'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
+          p_cursor_json => NULL::jsonb,
+          p_source_job_id => p_job_id,
+          p_result_json => v_result_json,
+          p_actor_user_id => v_session_row.actor_user_id,
+          p_reason => 'LINE_WORK_READY_MATERIALISE_PREVIEW_ROWS',
+          p_priority => 41,
+          p_limit => v_payload_limit
+        );
+        v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
+        v_next_recommended_action := COALESCE(v_next_recommended_action, 'MATERIALISE_PREVIEW_ROWS_CHUNK');
+      END IF;
+    ELSIF v_stage_job_type = 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+          AND v_job_row.candidate_id IS NOT NULL THEN
+      IF v_has_more IS TRUE AND v_next_cursor IS NOT NULL THEN
+        v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
+          p_session_id => v_job_row.session_id,
+          p_candidate_id => v_job_row.candidate_id,
+          p_job_type => 'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
+          p_cursor_json => v_next_cursor,
+          p_source_job_id => p_job_id,
+          p_result_json => v_result_json,
+          p_actor_user_id => v_session_row.actor_user_id,
+          p_reason => 'PREVIEW_ROWS_MATERIALISE_CURSOR_CONTINUATION',
+          p_priority => 41,
+          p_limit => v_payload_limit
+        );
+        v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
+        v_next_recommended_action := 'MATERIALISE_PREVIEW_ROWS_CHUNK';
+      ELSIF COALESCE(v_materialised_count, 0) > 0 THEN
+        v_next_recommended_action := 'READ_PREVIEW_PAGE';
+      END IF;
+    END IF;
+
+    v_continuation_count := jsonb_array_length(COALESCE(v_continuation_jobs, '[]'::jsonb));
+    v_continuation_enqueued := v_continuation_count > 0;
+
+    SELECT COUNT(*)::integer
+    INTO v_continuation_reused_count
+    FROM jsonb_array_elements(COALESCE(v_continuation_jobs, '[]'::jsonb)) AS continuation_items(continuation_item)
+    WHERE LOWER(BTRIM(COALESCE(continuation_items.continuation_item->>'reused', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+    IF COALESCE(v_continuation_count, 0) > 0
+       AND v_scope_status_before_continuation IS NOT NULL
+       AND v_job_row.session_id IS NOT NULL
+       AND v_job_row.candidate_id IS NOT NULL THEN
+      SELECT UPPER(BTRIM(COALESCE(scope_after_continuation.status, 'PENDING')))
+      INTO v_scope_status_after_continuation
+      FROM public.banking_pay_workbench_session_scope AS scope_after_continuation
+      WHERE scope_after_continuation.session_id = v_job_row.session_id
+        AND scope_after_continuation.candidate_id = v_job_row.candidate_id
+      FOR UPDATE;
+
+      v_scope_bucket_before_continuation := CASE
+        WHEN v_scope_status_before_continuation IN ('READY', 'MATERIALISED', 'MATERIALIZED') THEN 'READY'
+        WHEN v_scope_status_before_continuation IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 'FAILED'
+        ELSE 'PENDING'
+      END;
+
+      v_scope_bucket_after_continuation := CASE
+        WHEN v_scope_status_after_continuation IN ('READY', 'MATERIALISED', 'MATERIALIZED') THEN 'READY'
+        WHEN v_scope_status_after_continuation IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 'FAILED'
+        ELSE 'PENDING'
+      END;
+
+      v_scope_continuation_pending_delta := CASE WHEN v_scope_bucket_after_continuation = 'PENDING' THEN 1 ELSE 0 END
+        - CASE WHEN v_scope_bucket_before_continuation = 'PENDING' THEN 1 ELSE 0 END;
+      v_scope_continuation_ready_delta := CASE WHEN v_scope_bucket_after_continuation = 'READY' THEN 1 ELSE 0 END
+        - CASE WHEN v_scope_bucket_before_continuation = 'READY' THEN 1 ELSE 0 END;
+      v_scope_continuation_failed_delta := CASE WHEN v_scope_bucket_after_continuation = 'FAILED' THEN 1 ELSE 0 END
+        - CASE WHEN v_scope_bucket_before_continuation = 'FAILED' THEN 1 ELSE 0 END;
+
+      IF COALESCE(v_scope_continuation_pending_delta, 0) <> 0
+         OR COALESCE(v_scope_continuation_ready_delta, 0) <> 0
+         OR COALESCE(v_scope_continuation_failed_delta, 0) <> 0 THEN
+        UPDATE public.banking_pay_workbench_sessions AS continuation_session_update
+        SET scope_pending_count = GREATEST(
+              COALESCE(continuation_session_update.scope_pending_count, 0)
+                + COALESCE(v_scope_continuation_pending_delta, 0),
+              0
+            ),
+            scope_ready_count = GREATEST(
+              COALESCE(continuation_session_update.scope_ready_count, 0)
+                + COALESCE(v_scope_continuation_ready_delta, 0),
+              0
+            ),
+            scope_failed_count = GREATEST(
+              COALESCE(continuation_session_update.scope_failed_count, 0)
+                + COALESCE(v_scope_continuation_failed_delta, 0),
+              0
+            ),
+            progress_json = COALESCE(continuation_session_update.progress_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'last_continuation_scope_old_status', v_scope_status_before_continuation,
+                'last_continuation_scope_new_status', v_scope_status_after_continuation,
+                'last_continuation_scope_pending_delta', COALESCE(v_scope_continuation_pending_delta, 0),
+                'last_continuation_scope_ready_delta', COALESCE(v_scope_continuation_ready_delta, 0),
+                'last_continuation_scope_failed_delta', COALESCE(v_scope_continuation_failed_delta, 0),
+                'last_continuation_scope_counter_adjusted_at_utc', v_now::text
+              ),
+            progress_counter_version = COALESCE(continuation_session_update.progress_counter_version, 0) + 1,
+            progress_updated_at_utc = v_now,
+            updated_at_utc = v_now
+        WHERE continuation_session_update.id = v_job_row.session_id;
+
+        v_scope_continuation_counter_adjusted := true;
+      END IF;
+    END IF;
+
+    UPDATE public.banking_pay_workbench_jobs AS update_job
+    SET status = 'SUCCEEDED',
+        updated_at_utc = v_now,
+        completed_at_utc = v_now,
+        failed_at_utc = NULL,
+        last_error_json = NULL,
+        payload_json = COALESCE(update_job.payload_json, '{}'::jsonb)
+          || jsonb_build_object('result_json', v_result_json)
+          || jsonb_build_object(
+            'completion_json', jsonb_build_object(
+              'continuation_enqueued', v_continuation_enqueued,
+              'continuation_jobs', COALESCE(v_continuation_jobs, '[]'::jsonb),
+              'continuation_count', COALESCE(v_continuation_count, 0),
+              'continuation_reused_count', COALESCE(v_continuation_reused_count, 0),
+              'next_recommended_action', v_next_recommended_action,
+              'completed_at_utc', v_now::text
+            )
+          )
+    WHERE update_job.id = p_job_id
+    RETURNING update_job.*
+    INTO v_job_row;
+
+    v_completed_at_utc := v_now;
+  END IF;
+
+  IF v_stage_job_type IN (
+       'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+       'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+       'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+     )
      AND v_job_row.session_id IS NOT NULL
      AND v_job_row.candidate_id IS NOT NULL
-     AND v_has_more IS NOT TRUE THEN
-    SELECT EXISTS(
-      SELECT 1
-      FROM public.banking_pay_workbench_candidate_line_work AS line_work_pending
-      WHERE line_work_pending.session_id = v_job_row.session_id
-        AND line_work_pending.candidate_id = v_job_row.candidate_id
-        AND UPPER(BTRIM(COALESCE(line_work_pending.status, ''))) = 'PENDING'
-    )
-    INTO v_pending_line_work_exists;
+     AND COALESCE(v_continuation_count, 0) = 0 THEN
+    UPDATE public.banking_pay_workbench_session_scope AS scope_update
+    SET pending_job_id = NULL::uuid,
+        updated_at_utc = v_now
+    WHERE scope_update.session_id = v_job_row.session_id
+      AND scope_update.candidate_id = v_job_row.candidate_id
+      AND scope_update.pending_job_id = p_job_id;
+
+    GET DIAGNOSTICS v_scope_pending_job_cleared_count = ROW_COUNT;
   END IF;
 
-  IF v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+  IF v_stage_job_type IN (
+       'WORKBENCH_SESSION_SCOPE_SEED',
+       'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+       'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+       'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+     )
      AND v_job_row.session_id IS NOT NULL
-     AND v_job_row.candidate_id IS NOT NULL THEN
-    SELECT EXISTS(
-      SELECT 1
-      FROM public.banking_pay_workbench_candidate_line_work AS line_work_pending
-      WHERE line_work_pending.session_id = v_job_row.session_id
-        AND line_work_pending.candidate_id = v_job_row.candidate_id
-        AND UPPER(BTRIM(COALESCE(line_work_pending.status, ''))) = 'PENDING'
-    )
-    INTO v_pending_line_work_exists;
+     AND v_has_open_session THEN
+    SELECT session_row.*
+    INTO v_session_row
+    FROM public.banking_pay_workbench_sessions AS session_row
+    WHERE session_row.id = v_job_row.session_id
+    FOR UPDATE;
 
-    SELECT EXISTS(
-      SELECT 1
-      FROM public.banking_pay_workbench_candidate_line_work AS line_work_ready
-      WHERE line_work_ready.session_id = v_job_row.session_id
-        AND line_work_ready.candidate_id = v_job_row.candidate_id
-        AND UPPER(BTRIM(COALESCE(line_work_ready.status, ''))) = 'READY'
-    )
-    INTO v_ready_line_work_exists;
-  END IF;
-
-  IF v_stage_job_type = 'WORKBENCH_SESSION_SCOPE_SEED'
-     AND v_has_more IS TRUE
-     AND v_next_cursor IS NOT NULL THEN
-    v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
-      p_session_id => v_job_row.session_id,
-      p_candidate_id => NULL::uuid,
-      p_job_type => 'WORKBENCH_SESSION_SCOPE_SEED',
-      p_cursor_json => v_next_cursor,
-      p_source_job_id => p_job_id,
-      p_result_json => v_result_json,
-      p_actor_user_id => v_session_row.actor_user_id,
-      p_reason => 'SCOPE_SEED_CURSOR_CONTINUATION',
-      p_priority => 40,
-      p_limit => v_payload_limit
-    );
-    v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
-    v_next_recommended_action := 'SEED_SCOPE_CHUNK';
-  ELSIF v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
-        AND v_job_row.candidate_id IS NOT NULL THEN
-    IF v_has_more IS TRUE AND v_next_cursor IS NOT NULL THEN
-      v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
-        p_session_id => v_job_row.session_id,
-        p_candidate_id => v_job_row.candidate_id,
-        p_job_type => 'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
-        p_cursor_json => v_next_cursor,
-        p_source_job_id => p_job_id,
-        p_result_json => v_result_json,
-        p_actor_user_id => v_session_row.actor_user_id,
-        p_reason => 'LINE_WORK_SEED_CURSOR_CONTINUATION',
-        p_priority => 45,
-        p_limit => v_payload_limit
-      );
-      v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
-      v_next_recommended_action := 'SEED_LINE_WORK_CHUNK';
-    ELSIF COALESCE(v_seeded_count, 0) > 0 OR v_pending_line_work_exists IS TRUE THEN
-      v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
-        p_session_id => v_job_row.session_id,
-        p_candidate_id => v_job_row.candidate_id,
-        p_job_type => 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
-        p_cursor_json => NULL::jsonb,
-        p_source_job_id => p_job_id,
-        p_result_json => v_result_json,
-        p_actor_user_id => v_session_row.actor_user_id,
-        p_reason => 'LINE_WORK_SEED_COMPLETE_PROCESS_PENDING',
-        p_priority => 42,
-        p_limit => v_payload_limit
-      );
-      v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
-      v_next_recommended_action := 'PROCESS_LINE_WORK_CHUNK';
-    END IF;
-  ELSIF v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
-        AND v_job_row.candidate_id IS NOT NULL THEN
-    IF v_has_more IS TRUE AND v_next_cursor IS NOT NULL THEN
-      v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
-        p_session_id => v_job_row.session_id,
-        p_candidate_id => v_job_row.candidate_id,
-        p_job_type => 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
-        p_cursor_json => v_next_cursor,
-        p_source_job_id => p_job_id,
-        p_result_json => v_result_json,
-        p_actor_user_id => v_session_row.actor_user_id,
-        p_reason => 'LINE_WORK_PROCESS_CURSOR_CONTINUATION',
-        p_priority => 42,
-        p_limit => v_payload_limit
-      );
-      v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
-      v_next_recommended_action := 'PROCESS_LINE_WORK_CHUNK';
-    END IF;
-
-    IF v_has_more IS NOT TRUE
-       AND v_pending_line_work_exists IS NOT TRUE
-       AND (COALESCE(v_ready_count_delta, 0) > 0 OR v_ready_line_work_exists IS TRUE) THEN
-      v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
-        p_session_id => v_job_row.session_id,
-        p_candidate_id => v_job_row.candidate_id,
-        p_job_type => 'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
-        p_cursor_json => NULL::jsonb,
-        p_source_job_id => p_job_id,
-        p_result_json => v_result_json,
-        p_actor_user_id => v_session_row.actor_user_id,
-        p_reason => 'LINE_WORK_READY_MATERIALISE_PREVIEW_ROWS',
-        p_priority => 41,
-        p_limit => v_payload_limit
-      );
-      v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
-      v_next_recommended_action := COALESCE(v_next_recommended_action, 'MATERIALISE_PREVIEW_ROWS_CHUNK');
-    END IF;
-  ELSIF v_stage_job_type = 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
-        AND v_job_row.candidate_id IS NOT NULL THEN
-    IF v_has_more IS TRUE AND v_next_cursor IS NOT NULL THEN
-      v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
-        p_session_id => v_job_row.session_id,
-        p_candidate_id => v_job_row.candidate_id,
-        p_job_type => 'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
-        p_cursor_json => v_next_cursor,
-        p_source_job_id => p_job_id,
-        p_result_json => v_result_json,
-        p_actor_user_id => v_session_row.actor_user_id,
-        p_reason => 'PREVIEW_ROWS_MATERIALISE_CURSOR_CONTINUATION',
-        p_priority => 41,
-        p_limit => v_payload_limit
-      );
-      v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
-      v_next_recommended_action := 'MATERIALISE_PREVIEW_ROWS_CHUNK';
-    ELSIF COALESCE(v_materialised_count, 0) > 0 THEN
-      v_next_recommended_action := 'READ_PREVIEW_PAGE';
-    END IF;
-  END IF;
-
-  v_continuation_count := jsonb_array_length(COALESCE(v_continuation_jobs, '[]'::jsonb));
-  v_continuation_enqueued := v_continuation_count > 0;
-
-  SELECT COUNT(*)::integer
-  INTO v_continuation_reused_count
-  FROM jsonb_array_elements(COALESCE(v_continuation_jobs, '[]'::jsonb)) AS continuation_items(continuation_item)
-  WHERE COALESCE((continuation_items.continuation_item->>'reused')::boolean, false) IS TRUE;
-
-  UPDATE public.banking_pay_workbench_jobs AS update_job
-  SET status = 'SUCCEEDED',
-      updated_at_utc = v_now,
-      completed_at_utc = v_now,
-      failed_at_utc = NULL,
-      last_error_json = NULL,
-      payload_json = COALESCE(update_job.payload_json, '{}'::jsonb)
-        || jsonb_build_object('result_json', v_result_json)
-        || jsonb_build_object(
-          'completion_json', jsonb_build_object(
-            'continuation_enqueued', v_continuation_enqueued,
-            'continuation_jobs', COALESCE(v_continuation_jobs, '[]'::jsonb),
-            'continuation_count', COALESCE(v_continuation_count, 0),
-            'continuation_reused_count', COALESCE(v_continuation_reused_count, 0),
-            'next_recommended_action', v_next_recommended_action,
-            'completed_at_utc', v_now::text
+    IF v_job_row.candidate_id IS NOT NULL THEN
+      SELECT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_session_scope AS terminal_scope
+        WHERE terminal_scope.session_id = v_job_row.session_id
+          AND terminal_scope.candidate_id = v_job_row.candidate_id
+          AND UPPER(BTRIM(COALESCE(terminal_scope.status, ''))) IN ('READY', 'MATERIALISED', 'MATERIALIZED')
+          AND COALESCE(terminal_scope.dirty, false) IS NOT TRUE
+          AND (
+            terminal_scope.error_json IS NULL
+            OR terminal_scope.error_json = '{}'::jsonb
+            OR terminal_scope.error_json = 'null'::jsonb
           )
-        )
-  WHERE update_job.id = p_job_id
-  RETURNING update_job.*
-  INTO v_job_row;
+      )
+      INTO v_current_candidate_terminal_success;
+    END IF;
 
-  PERFORM public._audit_insert(
-    'banking_pay_workbench_job',
-    p_job_id::text,
-    'SUCCEEDED',
-    NULL,
-    jsonb_build_object(
-      'id', p_job_id::text,
-      'job_type', v_job_row.job_type,
-      'status', v_job_row.status,
-      'snapshot_run_id', CASE WHEN v_job_row.snapshot_run_id IS NULL THEN NULL ELSE v_job_row.snapshot_run_id::text END,
-      'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL ELSE v_job_row.session_id::text END,
-      'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL ELSE v_job_row.candidate_id::text END,
-      'attempt_count', v_job_row.attempt_count,
-      'completed_at_utc', v_job_row.completed_at_utc,
-      'continuation_count', COALESCE(v_continuation_count, 0),
-      'continuation_reused_count', COALESCE(v_continuation_reused_count, 0),
-      'next_recommended_action', v_next_recommended_action,
-      'result_json', v_result_json
-    ),
-    'WORKBENCH_JOB_COMPLETED',
-    NULL
+    v_finalisation_should_evaluate := (
+      COALESCE(v_continuation_count, 0) = 0
+      AND COALESCE(v_session_row.scope_seed_complete, false)
+      AND COALESCE(v_session_row.scope_pending_count, 0) = 0
+      AND COALESCE(v_session_row.scope_failed_count, 0) = 0
+      AND COALESCE(v_session_row.line_units_pending, 0) = 0
+      AND COALESCE(v_session_row.line_units_ready, 0) = 0
+      AND COALESCE(v_session_row.line_units_failed, 0) = 0
+    )
+    OR UPPER(BTRIM(COALESCE(v_session_row.progress_state, ''))) IN ('READY', 'READY_EMPTY');
+
+    v_finalisation_actual_precheck_required := v_finalisation_should_evaluate IS NOT TRUE
+      AND COALESCE(v_continuation_count, 0) = 0
+      AND COALESCE(v_session_row.scope_seed_complete, false)
+      AND COALESCE(v_session_row.scope_next_cursor_json, '{}'::jsonb) = '{}'::jsonb
+      AND (
+        v_stage_job_type = 'WORKBENCH_SESSION_SCOPE_SEED'
+        OR v_current_candidate_terminal_success
+      );
+
+    IF v_finalisation_actual_precheck_required THEN
+      SELECT
+        NOT EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_session_scope AS unresolved_scope
+          WHERE unresolved_scope.session_id = v_job_row.session_id
+            AND (
+              UPPER(BTRIM(COALESCE(unresolved_scope.status, ''))) NOT IN ('READY', 'MATERIALISED', 'MATERIALIZED')
+              OR COALESCE(unresolved_scope.seeded, false) IS NOT TRUE
+              OR COALESCE(unresolved_scope.dirty, false)
+              OR NOT (
+                unresolved_scope.error_json IS NULL
+                OR unresolved_scope.error_json = '{}'::jsonb
+                OR unresolved_scope.error_json = 'null'::jsonb
+              )
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_candidate_line_work AS unresolved_line_work
+          WHERE unresolved_line_work.session_id = v_job_row.session_id
+            AND (
+              UPPER(BTRIM(COALESCE(unresolved_line_work.status, ''))) NOT IN ('MATERIALISED', 'MATERIALIZED', 'SKIPPED')
+              OR NOT (
+                unresolved_line_work.error_json IS NULL
+                OR unresolved_line_work.error_json = '{}'::jsonb
+                OR unresolved_line_work.error_json = 'null'::jsonb
+              )
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_jobs AS active_job
+          CROSS JOIN LATERAL (
+            SELECT CASE
+              WHEN COALESCE(active_job.payload_json->>'session_version', '') ~ '^[0-9]+$'
+                THEN (active_job.payload_json->>'session_version')::bigint
+              ELSE NULL::bigint
+            END AS job_session_version
+          ) AS active_job_version
+          WHERE active_job.session_id = v_job_row.session_id
+            AND UPPER(BTRIM(COALESCE(active_job.status, ''))) IN ('QUEUED', 'RUNNING')
+            AND (
+              active_job_version.job_session_version IS NULL
+              OR active_job_version.job_session_version >= COALESCE(v_session_row.version, 0)
+            )
+        )
+      INTO v_finalisation_actual_precheck_passed;
+
+      v_finalisation_should_evaluate := COALESCE(v_finalisation_actual_precheck_passed, false);
+    END IF;
+
+    IF v_finalisation_should_evaluate THEN
+      v_finalisation_progress_json := public.pay_workbench_session_get_progress_light(
+        p_session_id => v_job_row.session_id
+      );
+
+      IF jsonb_typeof(COALESCE(v_finalisation_progress_json, '{}'::jsonb)) <> 'object'
+         OR LOWER(BTRIM(COALESCE(v_finalisation_progress_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+         OR NOT (v_finalisation_progress_json ? 'session_ready') THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_COMPLETE_JOB_FINALISATION_PROGRESS_INVALID'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'PAY_WORKBENCH_COMPLETE_JOB_FINALISATION_PROGRESS_INVALID',
+                  'job_id', p_job_id::text,
+                  'session_id', v_job_row.session_id::text,
+                  'progress_result', COALESCE(v_finalisation_progress_json, '{}'::jsonb)
+                )::text;
+      END IF;
+
+      v_finalisation_evaluated := true;
+      v_finalisation_session_ready := LOWER(BTRIM(COALESCE(v_finalisation_progress_json->>'session_ready', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+      v_finalisation_ready_for_draft := LOWER(BTRIM(COALESCE(v_finalisation_progress_json->>'ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+      v_finalisation_ready_empty := LOWER(BTRIM(COALESCE(v_finalisation_progress_json->>'ready_empty', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+      v_finalisation_stored_ready_mismatch := LOWER(BTRIM(COALESCE(v_finalisation_progress_json->>'stored_ready_mismatch', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+      v_finalisation_blocker_codes := CASE
+        WHEN jsonb_typeof(COALESCE(v_finalisation_progress_json->'session_blocker_codes', '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_finalisation_progress_json->'session_blocker_codes', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END;
+      v_finalisation_draft_blocker_codes := CASE
+        WHEN jsonb_typeof(COALESCE(v_finalisation_progress_json->'draft_blocker_codes', '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_finalisation_progress_json->'draft_blocker_codes', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END;
+      v_finalisation_blocker_counts := CASE
+        WHEN jsonb_typeof(COALESCE(v_finalisation_progress_json->'blocker_counts', '{}'::jsonb)) = 'object'
+          THEN COALESCE(v_finalisation_progress_json->'blocker_counts', '{}'::jsonb)
+        ELSE '{}'::jsonb
+      END;
+
+      v_authoritative_scope_total := CASE WHEN COALESCE(v_finalisation_progress_json->>'scope_total_count', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'scope_total_count')::integer ELSE 0 END;
+      v_authoritative_scope_seeded := CASE WHEN COALESCE(v_finalisation_progress_json->>'scope_seeded_count', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'scope_seeded_count')::integer ELSE 0 END;
+      v_authoritative_scope_ready := CASE WHEN COALESCE(v_finalisation_progress_json->>'scope_ready_count', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'scope_ready_count')::integer ELSE 0 END;
+      v_authoritative_scope_pending := CASE WHEN COALESCE(v_finalisation_progress_json->>'scope_pending_count', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'scope_pending_count')::integer ELSE 0 END;
+      v_authoritative_scope_failed := CASE WHEN COALESCE(v_finalisation_progress_json->>'scope_failed_count', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'scope_failed_count')::integer ELSE 0 END;
+      v_authoritative_line_total := CASE WHEN COALESCE(v_finalisation_progress_json->>'line_units_total', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'line_units_total')::integer ELSE 0 END;
+      v_authoritative_line_pending := CASE WHEN COALESCE(v_finalisation_progress_json->>'line_units_pending', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'line_units_pending')::integer ELSE 0 END;
+      v_authoritative_line_ready := CASE WHEN COALESCE(v_finalisation_progress_json->>'line_units_ready', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'line_units_ready')::integer ELSE 0 END;
+      v_authoritative_line_failed := CASE WHEN COALESCE(v_finalisation_progress_json->>'line_units_failed', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'line_units_failed')::integer ELSE 0 END;
+      v_authoritative_preview_row_count := CASE WHEN COALESCE(v_finalisation_progress_json->>'preview_row_count', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'preview_row_count')::integer ELSE 0 END;
+      v_authoritative_selected_row_count := CASE WHEN COALESCE(v_finalisation_progress_json->>'selected_row_count', '') ~ '^[0-9]+$' THEN (v_finalisation_progress_json->>'selected_row_count')::integer ELSE 0 END;
+      v_authoritative_section_counts_json := CASE
+        WHEN jsonb_typeof(COALESCE(v_finalisation_progress_json->'section_counts_json', '{}'::jsonb)) = 'object'
+          THEN COALESCE(v_finalisation_progress_json->'section_counts_json', '{}'::jsonb)
+        ELSE '{}'::jsonb
+      END;
+      v_authoritative_candidate_sample_rows_json := CASE
+        WHEN jsonb_typeof(COALESCE(v_finalisation_progress_json->'candidate_sample_rows_json', '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_finalisation_progress_json->'candidate_sample_rows_json', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END;
+
+      v_finalisation_counter_reconciliation_required := COALESCE(v_session_row.scope_total_count, 0) IS DISTINCT FROM COALESCE(v_authoritative_scope_total, 0)
+        OR COALESCE(v_session_row.scope_seeded_count, 0) IS DISTINCT FROM COALESCE(v_authoritative_scope_seeded, 0)
+        OR COALESCE(v_session_row.scope_ready_count, 0) IS DISTINCT FROM COALESCE(v_authoritative_scope_ready, 0)
+        OR COALESCE(v_session_row.scope_pending_count, 0) IS DISTINCT FROM COALESCE(v_authoritative_scope_pending, 0)
+        OR COALESCE(v_session_row.scope_failed_count, 0) IS DISTINCT FROM COALESCE(v_authoritative_scope_failed, 0)
+        OR COALESCE(v_session_row.line_units_total, 0) IS DISTINCT FROM COALESCE(v_authoritative_line_total, 0)
+        OR COALESCE(v_session_row.line_units_pending, 0) IS DISTINCT FROM COALESCE(v_authoritative_line_pending, 0)
+        OR COALESCE(v_session_row.line_units_ready, 0) IS DISTINCT FROM COALESCE(v_authoritative_line_ready, 0)
+        OR COALESCE(v_session_row.line_units_failed, 0) IS DISTINCT FROM COALESCE(v_authoritative_line_failed, 0)
+        OR COALESCE(v_session_row.preview_row_count, 0) IS DISTINCT FROM COALESCE(v_authoritative_preview_row_count, 0)
+        OR COALESCE(v_session_row.selected_row_count, 0) IS DISTINCT FROM COALESCE(v_authoritative_selected_row_count, 0)
+        OR COALESCE(v_session_row.section_counts_json, '{}'::jsonb) IS DISTINCT FROM COALESCE(v_authoritative_section_counts_json, '{}'::jsonb);
+      v_finalisation_counter_reconciliation_applied := v_finalisation_session_ready
+        AND v_duplicate_completion IS NOT TRUE;
+      v_finalisation_counter_reconciled := v_finalisation_counter_reconciliation_applied;
+
+      v_finalisation_counter_reconciliation_json := jsonb_build_object(
+        'required', v_finalisation_counter_reconciliation_required,
+        'applied', v_finalisation_counter_reconciliation_applied,
+        'changed', v_finalisation_counter_reconciliation_required AND v_finalisation_counter_reconciliation_applied,
+        'reconciled', v_finalisation_counter_reconciled,
+        'scope_total_count', COALESCE(v_authoritative_scope_total, 0),
+        'scope_seeded_count', COALESCE(v_authoritative_scope_seeded, 0),
+        'scope_ready_count', COALESCE(v_authoritative_scope_ready, 0),
+        'scope_pending_count', COALESCE(v_authoritative_scope_pending, 0),
+        'scope_failed_count', COALESCE(v_authoritative_scope_failed, 0),
+        'line_units_total', COALESCE(v_authoritative_line_total, 0),
+        'line_units_pending', COALESCE(v_authoritative_line_pending, 0),
+        'line_units_ready', COALESCE(v_authoritative_line_ready, 0),
+        'line_units_failed', COALESCE(v_authoritative_line_failed, 0),
+        'preview_row_count', COALESCE(v_authoritative_preview_row_count, 0),
+        'selected_row_count', COALESCE(v_authoritative_selected_row_count, 0),
+        'section_counts_json', COALESCE(v_authoritative_section_counts_json, '{}'::jsonb)
+      );
+
+      IF v_finalisation_session_ready THEN
+        v_final_progress_state := CASE WHEN v_finalisation_ready_empty THEN 'READY_EMPTY' ELSE 'READY' END;
+        v_final_phase := 'READY';
+        v_final_status_text := 'Payment preview is ready.';
+        v_final_next_recommended_action := 'READ_PREVIEW_PAGE';
+      ELSE
+        v_final_progress_state := UPPER(BTRIM(COALESCE(v_finalisation_progress_json->>'progress_state', '')));
+        IF v_final_progress_state IN ('', 'READY', 'READY_EMPTY') THEN
+          v_final_progress_state := CASE
+            WHEN COALESCE(v_authoritative_scope_failed, 0) > 0
+              OR COALESCE(v_authoritative_line_failed, 0) > 0
+              OR (COALESCE(v_finalisation_blocker_codes, '[]'::jsonb) ? 'WORKBENCH_JOBS_FAILED') THEN 'ERROR'
+            WHEN COALESCE(v_authoritative_line_ready, 0) > 0 THEN 'MATERIALISING_PREVIEW_ROWS'
+            WHEN COALESCE(v_authoritative_line_pending, 0) > 0 THEN 'PROCESSING_LINE_WORK'
+            ELSE 'REFRESHING_CANDIDATES'
+          END;
+        END IF;
+        v_final_phase := COALESCE(NULLIF(BTRIM(v_finalisation_progress_json->>'phase'), ''), 'REFRESHING_CANDIDATES');
+        v_final_status_text := COALESCE(NULLIF(BTRIM(v_finalisation_progress_json->>'status_text'), ''), 'Preparing payment preview.');
+        v_final_next_recommended_action := COALESCE(NULLIF(BTRIM(v_finalisation_progress_json->>'next_recommended_action'), ''), 'WAIT_FOR_WORKER');
+      END IF;
+
+      IF v_duplicate_completion IS NOT TRUE THEN
+        UPDATE public.banking_pay_workbench_sessions AS session_update
+        SET scope_total_count = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_scope_total, 0), 0) ELSE session_update.scope_total_count END,
+          scope_seeded_count = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_scope_seeded, 0), 0) ELSE session_update.scope_seeded_count END,
+          scope_ready_count = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_scope_ready, 0), 0) ELSE session_update.scope_ready_count END,
+          scope_pending_count = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_scope_pending, 0), 0) ELSE session_update.scope_pending_count END,
+          scope_failed_count = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_scope_failed, 0), 0) ELSE session_update.scope_failed_count END,
+          line_units_total = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_line_total, 0), 0) ELSE session_update.line_units_total END,
+          line_units_pending = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_line_pending, 0), 0) ELSE session_update.line_units_pending END,
+          line_units_ready = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_line_ready, 0), 0) ELSE session_update.line_units_ready END,
+          line_units_failed = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_line_failed, 0), 0) ELSE session_update.line_units_failed END,
+          preview_row_count = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_preview_row_count, 0), 0) ELSE session_update.preview_row_count END,
+          selected_row_count = CASE WHEN v_finalisation_session_ready THEN GREATEST(COALESCE(v_authoritative_selected_row_count, 0), 0) ELSE session_update.selected_row_count END,
+          section_counts_json = CASE WHEN v_finalisation_session_ready THEN COALESCE(v_authoritative_section_counts_json, '{}'::jsonb) ELSE session_update.section_counts_json END,
+          candidate_sample_rows_json = CASE WHEN v_finalisation_session_ready THEN COALESCE(v_authoritative_candidate_sample_rows_json, '[]'::jsonb) ELSE session_update.candidate_sample_rows_json END,
+          progress_state = v_final_progress_state,
+          progress_json = COALESCE(session_update.progress_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'phase', v_final_phase,
+              'status_text', v_final_status_text,
+              'next_recommended_action', v_final_next_recommended_action,
+              'authoritative_session_ready', v_finalisation_session_ready,
+              'authoritative_ready_for_draft', v_finalisation_ready_for_draft,
+              'authoritative_ready_empty', v_finalisation_ready_empty,
+              'authoritative_progress_state', v_final_progress_state,
+              'session_blocker_codes', COALESCE(v_finalisation_blocker_codes, '[]'::jsonb),
+              'draft_blocker_codes', COALESCE(v_finalisation_draft_blocker_codes, '[]'::jsonb),
+              'blocker_codes', COALESCE(v_finalisation_draft_blocker_codes, '[]'::jsonb),
+              'blocker_counts', COALESCE(v_finalisation_blocker_counts, '{}'::jsonb),
+              'stored_ready_mismatch', v_finalisation_stored_ready_mismatch
+            )
+            || jsonb_build_object(
+              'finalisation_evaluated', true,
+              'finalisation_evaluated_at_utc', v_now::text,
+              'finalisation_source_job_id', p_job_id::text,
+              'finalisation_source_job_type', v_stage_job_type,
+              'terminal_readiness_deferred', v_finalisation_session_ready IS NOT TRUE,
+              'finalisation_pending', v_finalisation_session_ready IS NOT TRUE,
+              'finalised_at_utc', CASE WHEN v_finalisation_session_ready THEN v_now::text ELSE NULL::text END,
+              'counter_reconciled', v_finalisation_counter_reconciled
+            ),
+          progress_counter_version = COALESCE(session_update.progress_counter_version, 0) + 1,
+          progress_updated_at_utc = v_now,
+          updated_at_utc = v_now
+        WHERE session_update.id = v_job_row.session_id
+        RETURNING session_update.*
+        INTO v_session_row;
+      END IF;
+    END IF;
+  END IF;
+
+  v_completion_finalisation_json := jsonb_build_object(
+    'finalisation_evaluated', v_finalisation_evaluated,
+    'session_ready', CASE WHEN v_finalisation_evaluated THEN v_finalisation_session_ready ELSE NULL::boolean END,
+    'ready_for_draft', CASE WHEN v_finalisation_evaluated THEN v_finalisation_ready_for_draft ELSE NULL::boolean END,
+    'ready_empty', CASE WHEN v_finalisation_evaluated THEN v_finalisation_ready_empty ELSE NULL::boolean END,
+    'final_progress_state', CASE WHEN v_finalisation_evaluated THEN v_final_progress_state ELSE v_session_row.progress_state END,
+    'blocker_codes', COALESCE(v_finalisation_blocker_codes, '[]'::jsonb),
+    'draft_blocker_codes', COALESCE(v_finalisation_draft_blocker_codes, '[]'::jsonb),
+    'counter_reconciliation_required', v_finalisation_counter_reconciliation_required,
+    'counter_reconciliation_applied', v_finalisation_counter_reconciliation_applied,
+    'counter_reconciled', v_finalisation_counter_reconciled,
+    'counter_reconciliation', COALESCE(v_finalisation_counter_reconciliation_json, '{}'::jsonb),
+    'actual_precheck_required', v_finalisation_actual_precheck_required,
+    'actual_precheck_passed', v_finalisation_actual_precheck_passed,
+    'scope_pending_job_cleared_count', COALESCE(v_scope_pending_job_cleared_count, 0),
+    'continuation_scope_counter_adjusted', v_scope_continuation_counter_adjusted,
+    'continuation_scope_old_status', v_scope_status_before_continuation,
+    'continuation_scope_new_status', v_scope_status_after_continuation,
+    'continuation_scope_pending_delta', COALESCE(v_scope_continuation_pending_delta, 0),
+    'continuation_scope_ready_delta', COALESCE(v_scope_continuation_ready_delta, 0),
+    'continuation_scope_failed_delta', COALESCE(v_scope_continuation_failed_delta, 0),
+    'evaluated_at_utc', CASE WHEN v_finalisation_evaluated THEN v_now::text ELSE NULL::text END
   );
+
+  IF v_duplicate_completion IS NOT TRUE THEN
+    UPDATE public.banking_pay_workbench_jobs AS update_job
+    SET payload_json = COALESCE(update_job.payload_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'completion_json', COALESCE(update_job.payload_json->'completion_json', '{}'::jsonb)
+              || v_completion_finalisation_json
+          ),
+        updated_at_utc = v_now
+    WHERE update_job.id = p_job_id
+    RETURNING update_job.*
+    INTO v_job_row;
+
+    PERFORM public._audit_insert(
+      'banking_pay_workbench_job',
+      p_job_id::text,
+      'SUCCEEDED',
+      NULL,
+      jsonb_build_object(
+        'id', p_job_id::text,
+        'job_type', v_job_row.job_type,
+        'status', v_job_row.status,
+        'snapshot_run_id', CASE WHEN v_job_row.snapshot_run_id IS NULL THEN NULL ELSE v_job_row.snapshot_run_id::text END,
+        'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL ELSE v_job_row.session_id::text END,
+        'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL ELSE v_job_row.candidate_id::text END,
+        'attempt_count', v_job_row.attempt_count,
+        'completed_at_utc', v_job_row.completed_at_utc,
+        'continuation_count', COALESCE(v_continuation_count, 0),
+        'continuation_reused_count', COALESCE(v_continuation_reused_count, 0),
+        'next_recommended_action', v_next_recommended_action
+      )
+      || jsonb_build_object(
+        'has_more', v_has_more,
+        'next_cursor_present', v_next_cursor IS NOT NULL,
+        'seeded_count', COALESCE(v_seeded_count, 0),
+        'new_scope_count', COALESCE(v_new_scope_count, 0),
+        'processed_count', COALESCE(v_processed_count, 0),
+        'ready_count_delta', COALESCE(v_ready_count_delta, 0),
+        'materialised_count', COALESCE(v_materialised_count, 0),
+        'error_count', COALESCE(v_error_count, 0),
+        'finalisation', v_completion_finalisation_json
+      ),
+      'WORKBENCH_JOB_COMPLETED',
+      NULL
+    );
+  END IF;
 
   RETURN jsonb_build_object(
     'ok', true,
     'job_id', p_job_id::text,
     'status', 'SUCCEEDED',
-    'completed_at_utc', v_now,
+    'completed_at_utc', COALESCE(v_completed_at_utc, v_job_row.completed_at_utc, v_now),
     'result_json', v_result_json,
     'continuation_enqueued', v_continuation_enqueued,
     'continuation_jobs', COALESCE(v_continuation_jobs, '[]'::jsonb),
@@ -24346,10 +24842,35 @@ BEGIN
     'has_more', v_has_more,
     'next_cursor_present', v_next_cursor IS NOT NULL,
     'line_work_pending_after_completion', CASE WHEN v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS' THEN v_pending_line_work_exists ELSE NULL END,
-    'stage_job_type', v_stage_job_type
+    'stage_job_type', v_stage_job_type,
+    'duplicate_completion', v_duplicate_completion
+  )
+  || jsonb_build_object(
+    'finalisation_evaluated', v_finalisation_evaluated,
+    'session_ready', CASE WHEN v_finalisation_evaluated THEN v_finalisation_session_ready ELSE NULL::boolean END,
+    'ready_for_draft', CASE WHEN v_finalisation_evaluated THEN v_finalisation_ready_for_draft ELSE NULL::boolean END,
+    'ready_empty', CASE WHEN v_finalisation_evaluated THEN v_finalisation_ready_empty ELSE NULL::boolean END,
+    'final_progress_state', CASE WHEN v_finalisation_evaluated THEN v_final_progress_state ELSE v_session_row.progress_state END,
+    'blocker_codes', COALESCE(v_finalisation_blocker_codes, '[]'::jsonb),
+    'draft_blocker_codes', COALESCE(v_finalisation_draft_blocker_codes, '[]'::jsonb),
+    'counter_reconciliation_required', v_finalisation_counter_reconciliation_required,
+    'counter_reconciliation_applied', v_finalisation_counter_reconciliation_applied,
+    'counter_reconciled', v_finalisation_counter_reconciled,
+    'counter_reconciliation', COALESCE(v_finalisation_counter_reconciliation_json, '{}'::jsonb),
+    'actual_precheck_required', v_finalisation_actual_precheck_required,
+    'actual_precheck_passed', v_finalisation_actual_precheck_passed,
+    'scope_pending_job_cleared_count', COALESCE(v_scope_pending_job_cleared_count, 0),
+    'continuation_scope_counter_adjusted', v_scope_continuation_counter_adjusted,
+    'continuation_scope_old_status', v_scope_status_before_continuation,
+    'continuation_scope_new_status', v_scope_status_after_continuation,
+    'continuation_scope_pending_delta', COALESCE(v_scope_continuation_pending_delta, 0),
+    'continuation_scope_ready_delta', COALESCE(v_scope_continuation_ready_delta, 0),
+    'continuation_scope_failed_delta', COALESCE(v_scope_continuation_failed_delta, 0)
   );
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_fail_job(p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer DEFAULT NULL::integer)
  RETURNS jsonb
@@ -159561,8 +160082,6 @@ BEGIN
 END;
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_line_work_seed(
   p_session_id uuid,
   p_candidate_id uuid,
@@ -159599,6 +160118,11 @@ DECLARE
   v_force_include_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_exclude_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_mismatch_choices_json jsonb := '{}'::jsonb;
+  v_old_scope_bucket text := 'PENDING';
+  v_new_scope_bucket text := 'PENDING';
+  v_scope_pending_delta integer := 0;
+  v_scope_ready_delta integer := 0;
+  v_scope_failed_delta integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -159645,7 +160169,7 @@ BEGIN
   FROM public.banking_pay_workbench_session_scope AS scope_row
   WHERE scope_row.session_id = p_session_id
     AND scope_row.candidate_id = p_candidate_id
-  LIMIT 1;
+  FOR UPDATE;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_LINE_WORK_SEED_CANDIDATE_NOT_IN_SCOPE'
@@ -159826,6 +160350,25 @@ BEGIN
     ELSE 'MATERIALISED'
   END;
 
+  v_old_scope_bucket := CASE
+    WHEN UPPER(BTRIM(COALESCE(v_scope_status, ''))) IN ('READY', 'MATERIALISED', 'MATERIALIZED') THEN 'READY'
+    WHEN UPPER(BTRIM(COALESCE(v_scope_status, ''))) IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 'FAILED'
+    ELSE 'PENDING'
+  END;
+
+  v_new_scope_bucket := CASE
+    WHEN UPPER(BTRIM(COALESCE(v_next_scope_status, ''))) IN ('READY', 'MATERIALISED', 'MATERIALIZED') THEN 'READY'
+    WHEN UPPER(BTRIM(COALESCE(v_next_scope_status, ''))) IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 'FAILED'
+    ELSE 'PENDING'
+  END;
+
+  v_scope_pending_delta := CASE WHEN v_new_scope_bucket = 'PENDING' THEN 1 ELSE 0 END
+    - CASE WHEN v_old_scope_bucket = 'PENDING' THEN 1 ELSE 0 END;
+  v_scope_ready_delta := CASE WHEN v_new_scope_bucket = 'READY' THEN 1 ELSE 0 END
+    - CASE WHEN v_old_scope_bucket = 'READY' THEN 1 ELSE 0 END;
+  v_scope_failed_delta := CASE WHEN v_new_scope_bucket = 'FAILED' THEN 1 ELSE 0 END
+    - CASE WHEN v_old_scope_bucket = 'FAILED' THEN 1 ELSE 0 END;
+
   UPDATE public.banking_pay_workbench_session_scope AS scope_update
   SET status = v_next_scope_status,
       dirty = v_next_scope_status NOT IN ('MATERIALISED', 'MATERIALIZED', 'READY'),
@@ -159858,10 +160401,25 @@ BEGIN
         + COALESCE(v_new_error_count, 0),
         0
       ),
+      scope_pending_count = GREATEST(
+        COALESCE(session_update.scope_pending_count, 0)
+        + COALESCE(v_scope_pending_delta, 0),
+        0
+      ),
+      scope_ready_count = GREATEST(
+        COALESCE(session_update.scope_ready_count, 0)
+        + COALESCE(v_scope_ready_delta, 0),
+        0
+      ),
+      scope_failed_count = GREATEST(
+        COALESCE(session_update.scope_failed_count, 0)
+        + COALESCE(v_scope_failed_delta, 0),
+        0
+      ),
       progress_state = CASE
         WHEN COALESCE(v_error_count, 0) > 0 THEN 'ERROR'
         WHEN COALESCE(v_seeded_count, 0) > 0 OR COALESCE(v_has_more, false) THEN 'LINE_WORK_SEEDED'
-        ELSE COALESCE(NULLIF(BTRIM(session_update.progress_state), ''), 'PENDING')
+        ELSE 'REFRESHING_CANDIDATES'
       END,
       progress_json = COALESCE(session_update.progress_json, '{}'::jsonb)
         || jsonb_build_object(
@@ -159869,7 +160427,24 @@ BEGIN
           'last_line_seeded_count', COALESCE(v_seeded_count, 0),
           'last_line_seed_error_count', COALESCE(v_error_count, 0),
           'last_line_seed_has_more', COALESCE(v_has_more, false),
-          'last_line_seeded_at_utc', v_now::text
+          'last_line_seeded_at_utc', v_now::text,
+          'last_scope_old_status', UPPER(BTRIM(COALESCE(v_scope_status, 'PENDING'))),
+          'last_scope_new_status', v_next_scope_status,
+          'last_scope_pending_delta', COALESCE(v_scope_pending_delta, 0),
+          'last_scope_ready_delta', COALESCE(v_scope_ready_delta, 0),
+          'last_scope_failed_delta', COALESCE(v_scope_failed_delta, 0),
+          'status_text', CASE
+            WHEN COALESCE(v_error_count, 0) > 0 THEN 'Payment preview could not be prepared for this candidate.'
+            ELSE 'Preparing payment preview.'
+          END,
+          'next_recommended_action', CASE
+            WHEN COALESCE(v_error_count, 0) > 0 THEN 'REVIEW_ERRORS'
+            WHEN COALESCE(v_has_more, false) THEN 'SEED_LINE_WORK_CHUNK'
+            WHEN COALESCE(v_seeded_count, 0) > 0 THEN 'PROCESS_LINE_WORK_CHUNK'
+            ELSE 'WAIT_FOR_WORKER'
+          END,
+          'terminal_readiness_deferred', true,
+          'terminal_readiness_deferred_to', 'pay_workbench_complete_job'
         ),
       progress_counter_version = COALESCE(session_update.progress_counter_version, 0) + 1,
       progress_updated_at_utc = v_now,
@@ -159893,6 +160468,15 @@ BEGIN
     'pending', COALESCE(v_has_more, false) OR COALESCE(v_seeded_count, 0) > 0,
     'ready', COALESCE(v_has_more, false) IS NOT TRUE AND COALESCE(v_error_count, 0) = 0,
     'scope_status', v_next_scope_status,
+    'scope_transition', jsonb_build_object(
+      'old_status', UPPER(BTRIM(COALESCE(v_scope_status, 'PENDING'))),
+      'new_status', v_next_scope_status,
+      'old_bucket', v_old_scope_bucket,
+      'new_bucket', v_new_scope_bucket,
+      'pending_delta', COALESCE(v_scope_pending_delta, 0),
+      'ready_delta', COALESCE(v_scope_ready_delta, 0),
+      'failed_delta', COALESCE(v_scope_failed_delta, 0)
+    ),
     'line_work_state', jsonb_build_object(
       'seeded_count', COALESCE(v_seeded_count, 0),
       'error_count', COALESCE(v_error_count, 0),
@@ -159905,7 +160489,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -160141,13 +160724,26 @@ BEGIN
       scope_pending_count = v_scope_pending_count,
       scope_ready_count = v_scope_ready_count,
       scope_failed_count = v_scope_failed_count,
-      progress_state = CASE WHEN v_scope_seed_complete AND v_scope_seeded_count = 0 THEN 'READY_EMPTY' ELSE 'REFRESHING_CANDIDATES' END,
+      progress_state = 'REFRESHING_CANDIDATES',
       progress_json = jsonb_build_object(
-        'phase', CASE WHEN v_scope_seed_complete AND v_scope_seeded_count = 0 THEN 'READY' ELSE 'REFRESHING_CANDIDATES' END,
-        'status_text', CASE WHEN v_scope_seed_complete AND v_scope_seeded_count = 0 THEN 'Payment preview is ready.' ELSE 'Preparing payment preview.' END,
+        'phase', 'REFRESHING_CANDIDATES',
+        'status_text', CASE
+          WHEN v_scope_seed_complete AND v_scope_seeded_count = 0 THEN 'Finalising payment preview.'
+          ELSE 'Preparing payment preview.'
+        END,
         'scope_seed_complete', v_scope_seed_complete,
         'count_unknown', NOT v_scope_seed_complete
-      ),
+      )
+      || CASE
+        WHEN v_scope_seed_complete AND v_scope_seeded_count = 0 THEN jsonb_build_object(
+          'next_recommended_action', 'WAIT_FOR_WORKER',
+          'scope_discovery_complete', true,
+          'finalisation_pending', true,
+          'terminal_readiness_deferred', true,
+          'terminal_readiness_deferred_to', 'pay_workbench_complete_job'
+        )
+        ELSE '{}'::jsonb
+      END,
       progress_counter_version = COALESCE(session_update.progress_counter_version, 0) + 1,
       progress_updated_at_utc = v_now,
       updated_at_utc = v_now
@@ -160179,7 +160775,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_line_work_process_chunk(
   p_session_id uuid,
   p_candidate_id uuid DEFAULT NULL::uuid,
@@ -160209,6 +160804,9 @@ DECLARE
   v_last_returned_line_ordinal bigint := NULL::bigint;
   v_last_returned_line_work_id uuid := NULL::uuid;
   v_affected_candidate_sample jsonb := '[]'::jsonb;
+  v_scope_pending_delta integer := 0;
+  v_scope_ready_delta integer := 0;
+  v_scope_failed_delta integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -160727,6 +161325,30 @@ BEGIN
     ON scope_row.session_id = p_session_id
    AND scope_row.candidate_id = candidate_new_status.candidate_id;
 
+  SELECT
+    COALESCE(SUM(
+      CASE
+        WHEN scope_delta.new_status IN ('READY', 'MATERIALISED', 'MATERIALIZED', 'ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 0
+        ELSE 1
+      END
+      - CASE
+        WHEN scope_delta.old_status IN ('READY', 'MATERIALISED', 'MATERIALIZED', 'ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 0
+        ELSE 1
+      END
+    ), 0)::integer,
+    COALESCE(SUM(
+      CASE WHEN scope_delta.new_status IN ('READY', 'MATERIALISED', 'MATERIALIZED') THEN 1 ELSE 0 END
+      - CASE WHEN scope_delta.old_status IN ('READY', 'MATERIALISED', 'MATERIALIZED') THEN 1 ELSE 0 END
+    ), 0)::integer,
+    COALESCE(SUM(
+      CASE WHEN scope_delta.new_status IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 1 ELSE 0 END
+      - CASE WHEN scope_delta.old_status IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 1 ELSE 0 END
+    ), 0)::integer
+  INTO v_scope_pending_delta,
+       v_scope_ready_delta,
+       v_scope_failed_delta
+  FROM pg_temp._tmp_pay_wb_line_process_scope_delta AS scope_delta;
+
   UPDATE public.banking_pay_workbench_session_scope AS scope_row
   SET status = scope_delta.new_status,
       dirty = scope_delta.new_status NOT IN ('LINE_WORK_READY', 'MATERIALISED', 'MATERIALIZED'),
@@ -160756,11 +161378,13 @@ BEGIN
   SET line_units_pending = GREATEST(COALESCE(session_row.line_units_pending, 0) - COALESCE(v_processed_count, 0), 0),
       line_units_ready = GREATEST(COALESCE(session_row.line_units_ready, 0) + COALESCE(v_ready_delta, 0), 0),
       line_units_failed = GREATEST(COALESCE(session_row.line_units_failed, 0) + COALESCE(v_error_count, 0), 0),
+      scope_pending_count = GREATEST(COALESCE(session_row.scope_pending_count, 0) + COALESCE(v_scope_pending_delta, 0), 0),
+      scope_ready_count = GREATEST(COALESCE(session_row.scope_ready_count, 0) + COALESCE(v_scope_ready_delta, 0), 0),
+      scope_failed_count = GREATEST(COALESCE(session_row.scope_failed_count, 0) + COALESCE(v_scope_failed_delta, 0), 0),
       candidate_sample_rows_json = COALESCE(v_affected_candidate_sample, '[]'::jsonb),
       progress_state = CASE
         WHEN COALESCE(v_error_count, 0) > 0 THEN 'ERROR'
-        WHEN v_next_cursor IS NOT NULL OR COALESCE(v_processed_count, 0) > 0 THEN 'PROCESSING_LINE_WORK'
-        ELSE COALESCE(NULLIF(BTRIM(session_row.progress_state), ''), 'PENDING')
+        ELSE 'PROCESSING_LINE_WORK'
       END,
       progress_json = COALESCE(session_row.progress_json, '{}'::jsonb)
         || jsonb_build_object(
@@ -160769,7 +161393,23 @@ BEGIN
           'last_line_process_ready_count', COALESCE(v_ready_delta, 0),
           'last_line_process_skipped_count', COALESCE(v_skipped_count, 0),
           'last_line_process_error_count', COALESCE(v_error_count, 0),
-          'last_line_process_has_more', v_next_cursor IS NOT NULL
+          'last_line_process_has_more', v_next_cursor IS NOT NULL,
+          'last_scope_pending_delta', COALESCE(v_scope_pending_delta, 0),
+          'last_scope_ready_delta', COALESCE(v_scope_ready_delta, 0),
+          'last_scope_failed_delta', COALESCE(v_scope_failed_delta, 0),
+          'phase', CASE WHEN COALESCE(v_error_count, 0) > 0 THEN 'ERROR' ELSE 'PROCESSING_LINE_WORK' END,
+          'status_text', CASE
+            WHEN COALESCE(v_error_count, 0) > 0 THEN 'Payment preview could not be prepared for every candidate.'
+            ELSE 'Processing payment preview line work.'
+          END,
+          'next_recommended_action', CASE
+            WHEN COALESCE(v_error_count, 0) > 0 THEN 'REVIEW_ERRORS'
+            WHEN v_next_cursor IS NOT NULL THEN 'PROCESS_LINE_WORK_CHUNK'
+            WHEN COALESCE(v_ready_delta, 0) > 0 THEN 'MATERIALISE_PREVIEW_ROWS_CHUNK'
+            ELSE 'WAIT_FOR_WORKER'
+          END,
+          'terminal_readiness_deferred', true,
+          'terminal_readiness_deferred_to', 'pay_workbench_complete_job'
         ),
       progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
       progress_updated_at_utc = v_now,
@@ -160793,10 +161433,16 @@ BEGIN
     'next_cursor', v_next_cursor,
     'has_more', v_next_cursor IS NOT NULL,
     'affected_candidates', COALESCE(v_affected_candidate_sample, '[]'::jsonb),
+    'scope_counter_deltas', jsonb_build_object(
+      'pending_delta', COALESCE(v_scope_pending_delta, 0),
+      'ready_delta', COALESCE(v_scope_ready_delta, 0),
+      'failed_delta', COALESCE(v_scope_failed_delta, 0)
+    ),
     'cursor_scheme', 'last_scope_ordinal_last_line_ordinal_last_line_work_id'
   );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
@@ -160824,6 +161470,10 @@ DECLARE
   v_last_returned_line_work_id uuid := NULL::uuid;
   v_section_delta_json jsonb := '{}'::jsonb;
   v_affected_candidate_sample jsonb := '[]'::jsonb;
+  v_scope_pending_delta integer := 0;
+  v_scope_ready_delta integer := 0;
+  v_scope_failed_delta integer := 0;
+  v_scope_error_candidate_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -162019,6 +162669,34 @@ BEGIN
     ON scope_row.session_id = p_session_id
    AND scope_row.candidate_id = candidate_new_status.candidate_id;
 
+  SELECT
+    COALESCE(SUM(
+      CASE
+        WHEN scope_delta.new_status IN ('READY', 'MATERIALISED', 'MATERIALIZED', 'ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 0
+        ELSE 1
+      END
+      - CASE
+        WHEN scope_delta.old_status IN ('READY', 'MATERIALISED', 'MATERIALIZED', 'ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 0
+        ELSE 1
+      END
+    ), 0)::integer,
+    COALESCE(SUM(
+      CASE WHEN scope_delta.new_status IN ('READY', 'MATERIALISED', 'MATERIALIZED') THEN 1 ELSE 0 END
+      - CASE WHEN scope_delta.old_status IN ('READY', 'MATERIALISED', 'MATERIALIZED') THEN 1 ELSE 0 END
+    ), 0)::integer,
+    COALESCE(SUM(
+      CASE WHEN scope_delta.new_status IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 1 ELSE 0 END
+      - CASE WHEN scope_delta.old_status IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN 1 ELSE 0 END
+    ), 0)::integer,
+    COUNT(*) FILTER (
+      WHERE scope_delta.new_status IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR')
+    )::integer
+  INTO v_scope_pending_delta,
+       v_scope_ready_delta,
+       v_scope_failed_delta,
+       v_scope_error_candidate_count
+  FROM pg_temp._tmp_pay_wb_materialise_scope_delta AS scope_delta;
+
   UPDATE public.banking_pay_workbench_preview_rows AS obsolete_current_preview_row
   SET status = 'SUPERSEDED',
       selected = false,
@@ -162046,6 +162724,17 @@ BEGIN
   UPDATE public.banking_pay_workbench_session_scope AS scope_row
   SET status = scope_delta.new_status,
       dirty = scope_delta.new_status <> 'MATERIALISED',
+      error_json = CASE
+        WHEN scope_delta.new_status IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR') THEN COALESCE(
+          scope_row.error_json,
+          jsonb_build_object(
+            'code', 'PREVIEW_ROW_MATERIALISATION_ERROR',
+            'candidate_id', scope_row.candidate_id::text,
+            'session_id', p_session_id::text
+          )
+        )
+        ELSE NULL::jsonb
+      END,
       updated_at_utc = v_now
   FROM pg_temp._tmp_pay_wb_materialise_scope_delta AS scope_delta
   WHERE scope_row.session_id = p_session_id
@@ -162069,16 +162758,9 @@ BEGIN
       line_units_failed = GREATEST(COALESCE(session_row.line_units_failed, 0) + COALESCE(v_materialise_error_count, 0), 0),
       preview_row_count = GREATEST(COALESCE(session_row.preview_row_count, 0) + COALESCE(v_new_preview_row_count, 0), 0),
       selected_row_count = GREATEST(COALESCE(session_row.selected_row_count, 0) + COALESCE(v_new_selected_row_count, 0), 0),
-      scope_ready_count = GREATEST(COALESCE(session_row.scope_ready_count, 0)
-        + COALESCE((
-          SELECT COUNT(*) FILTER (WHERE scope_delta.old_status NOT IN ('READY', 'MATERIALISED', 'MATERIALIZED') AND scope_delta.new_status = 'MATERIALISED')::integer
-          FROM pg_temp._tmp_pay_wb_materialise_scope_delta AS scope_delta
-        ), 0), 0),
-      scope_pending_count = GREATEST(COALESCE(session_row.scope_pending_count, 0)
-        - COALESCE((
-          SELECT COUNT(*) FILTER (WHERE scope_delta.old_status IN ('PENDING', 'QUEUED', 'RUNNING', 'LINE_WORK_PENDING', 'LINE_WORK_READY') AND scope_delta.new_status = 'MATERIALISED')::integer
-          FROM pg_temp._tmp_pay_wb_materialise_scope_delta AS scope_delta
-        ), 0), 0),
+      scope_ready_count = GREATEST(COALESCE(session_row.scope_ready_count, 0) + COALESCE(v_scope_ready_delta, 0), 0),
+      scope_pending_count = GREATEST(COALESCE(session_row.scope_pending_count, 0) + COALESCE(v_scope_pending_delta, 0), 0),
+      scope_failed_count = GREATEST(COALESCE(session_row.scope_failed_count, 0) + COALESCE(v_scope_failed_delta, 0), 0),
       section_counts_json = COALESCE((
         SELECT COALESCE(jsonb_object_agg(merged_counts.section_key, to_jsonb(merged_counts.section_count) ORDER BY merged_counts.section_key), '{}'::jsonb)
         FROM (
@@ -162099,20 +162781,42 @@ BEGIN
       ), '{}'::jsonb),
       candidate_sample_rows_json = COALESCE(v_affected_candidate_sample, '[]'::jsonb),
       progress_state = CASE
-        WHEN v_next_cursor IS NOT NULL THEN 'MATERIALISING_PREVIEW_ROWS'
-        WHEN COALESCE(session_row.line_units_pending, 0) = 0
-          AND GREATEST(COALESCE(session_row.line_units_ready, 0) - COALESCE(v_materialised_count, 0), 0) = 0
-          AND COALESCE(session_row.line_units_failed, 0) = 0 THEN 'READY'
-        ELSE COALESCE(NULLIF(BTRIM(session_row.progress_state), ''), 'PENDING')
+        WHEN UPPER(BTRIM(COALESCE(session_row.progress_state, ''))) IN ('ERROR', 'FAILED')
+          OR COALESCE(v_materialise_error_count, 0) > 0
+          OR COALESCE(v_scope_error_candidate_count, 0) > 0 THEN 'ERROR'
+        ELSE 'MATERIALISING_PREVIEW_ROWS'
       END,
       progress_json = COALESCE(session_row.progress_json, '{}'::jsonb)
         || jsonb_build_object(
+          'phase', CASE
+            WHEN UPPER(BTRIM(COALESCE(session_row.progress_state, ''))) IN ('ERROR', 'FAILED')
+              OR COALESCE(v_materialise_error_count, 0) > 0
+              OR COALESCE(v_scope_error_candidate_count, 0) > 0 THEN 'ERROR'
+            ELSE 'MATERIALISING_PREVIEW_ROWS'
+          END,
+          'status_text', CASE
+            WHEN UPPER(BTRIM(COALESCE(session_row.progress_state, ''))) IN ('ERROR', 'FAILED')
+              OR COALESCE(v_materialise_error_count, 0) > 0
+              OR COALESCE(v_scope_error_candidate_count, 0) > 0 THEN 'Payment preview could not be prepared for every candidate.'
+            ELSE 'Finalising payment preview rows.'
+          END,
+          'next_recommended_action', CASE
+            WHEN UPPER(BTRIM(COALESCE(session_row.progress_state, ''))) IN ('ERROR', 'FAILED')
+              OR COALESCE(v_materialise_error_count, 0) > 0
+              OR COALESCE(v_scope_error_candidate_count, 0) > 0 THEN 'REVIEW_ERRORS'
+            ELSE 'WAIT_FOR_WORKER'
+          END,
           'last_preview_materialise_at_utc', v_now::text,
           'last_preview_materialise_count', COALESCE(v_materialised_count, 0),
           'last_preview_materialise_selected_count', COALESCE(v_new_selected_row_count, 0),
           'last_preview_materialise_suppressed_count', COALESCE(v_suppressed_preview_row_count, 0),
           'last_preview_materialise_error_count', COALESCE(v_materialise_error_count, 0),
-          'last_preview_materialise_has_more', v_next_cursor IS NOT NULL
+          'last_preview_materialise_has_more', v_next_cursor IS NOT NULL,
+          'last_scope_pending_delta', COALESCE(v_scope_pending_delta, 0),
+          'last_scope_ready_delta', COALESCE(v_scope_ready_delta, 0),
+          'last_scope_failed_delta', COALESCE(v_scope_failed_delta, 0),
+          'terminal_readiness_deferred', true,
+          'terminal_readiness_deferred_to', 'pay_workbench_complete_job'
         ),
       progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
       progress_updated_at_utc = v_now,
@@ -162138,12 +162842,18 @@ BEGIN
     'has_more', v_next_cursor IS NOT NULL,
     'section_delta_counts', COALESCE(v_section_delta_json, '{}'::jsonb),
     'affected_candidates', COALESCE(v_affected_candidate_sample, '[]'::jsonb),
+    'scope_counter_deltas', jsonb_build_object(
+      'pending_delta', COALESCE(v_scope_pending_delta, 0),
+      'ready_delta', COALESCE(v_scope_ready_delta, 0),
+      'failed_delta', COALESCE(v_scope_failed_delta, 0)
+    ),
+    'terminal_readiness_deferred', true,
+    'terminal_readiness_deferred_to', 'pay_workbench_complete_job',
     'stable_row_ordinal_scheme', 'scope_ordinal_times_1000000_plus_line_ordinal',
     'cursor_scheme', 'last_scope_ordinal_last_line_ordinal_last_line_work_id'
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_finance_case_dirty()
@@ -175535,22 +176245,73 @@ DECLARE
   v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
   v_replacement_row public.banking_pay_workbench_sessions%ROWTYPE;
   v_session_obsolete boolean := false;
+  v_replacement_required boolean := false;
   v_replacement_lookup_source text := NULL::text;
-  v_progress_state_upper text := '';
-  v_ready_flag boolean := false;
+  v_scope_cursor_remaining boolean := false;
+  v_stored_progress_state_upper text := '';
+  v_derived_progress_state text := 'REFRESHING_CANDIDATES';
+  v_stored_ready boolean := false;
+  v_stored_ready_mismatch boolean := false;
+  v_session_ready boolean := false;
+  v_ready_for_draft boolean := false;
   v_ready_empty boolean := false;
   v_failure_flag boolean := false;
   v_rows_available boolean := false;
   v_selected_rows_available boolean := false;
   v_still_running boolean := false;
-  v_line_units_complete integer := 0;
-  v_ready_preview_line_count integer := 0;
-  v_case_resolution_state_count integer := 0;
-  v_blocked_preview_line_count integer := 0;
   v_phase text := 'REFRESHING_CANDIDATES';
   v_status_text text := 'Preparing payment preview.';
   v_next_recommended_action text := 'WAIT_FOR_WORKER';
+
+  v_scope_actual_total integer := 0;
+  v_scope_actual_seeded integer := 0;
+  v_scope_actual_terminal integer := 0;
+  v_scope_actual_pending_status integer := 0;
+  v_scope_actual_processing integer := 0;
+  v_scope_actual_materialisation_pending integer := 0;
+  v_scope_actual_dirty integer := 0;
+  v_scope_actual_failed integer := 0;
+  v_scope_actual_unknown integer := 0;
+  v_scope_actual_unseeded integer := 0;
+  v_scope_actual_pending_bucket integer := 0;
+
+  v_line_actual_total integer := 0;
+  v_line_actual_terminal integer := 0;
+  v_line_actual_pending_status integer := 0;
+  v_line_actual_ready integer := 0;
+  v_line_actual_failed integer := 0;
+  v_line_actual_unknown integer := 0;
+  v_line_actual_pending_bucket integer := 0;
+
+  v_jobs_relevant_total integer := 0;
+  v_jobs_queued integer := 0;
+  v_jobs_running integer := 0;
+  v_jobs_unresolved_failed integer := 0;
+  v_jobs_unresolved_dead integer := 0;
+  v_jobs_invalid_version integer := 0;
+  v_jobs_explicit_older_excluded integer := 0;
+
+  v_current_preview_row_count integer := 0;
+  v_current_selected_row_count integer := 0;
+  v_selected_eligible_ready_row_count integer := 0;
+  v_ready_preview_line_count integer := 0;
+  v_case_resolution_state_count integer := 0;
+  v_blocked_preview_line_count integer := 0;
+  v_current_section_counts_json jsonb := '{}'::jsonb;
   v_available_sections_json jsonb := '[]'::jsonb;
+
+  v_candidate_sample_rows_json jsonb := '[]'::jsonb;
+  v_pending_candidate_jobs_json jsonb := '[]'::jsonb;
+  v_pending_job_ids_json jsonb := '[]'::jsonb;
+
+  v_session_blocker_codes jsonb := '[]'::jsonb;
+  v_draft_blocker_codes jsonb := '[]'::jsonb;
+  v_blocker_counts_json jsonb := '{}'::jsonb;
+  v_candidate_counts_json jsonb := '{}'::jsonb;
+  v_line_counts_json jsonb := '{}'::jsonb;
+  v_job_counts_json jsonb := '{}'::jsonb;
+  v_maintained_counts_json jsonb := '{}'::jsonb;
+  v_counter_drift_detected boolean := false;
   v_progress_payload_json jsonb := '{}'::jsonb;
   v_response_json jsonb := '{}'::jsonb;
 BEGIN
@@ -175580,6 +176341,9 @@ BEGIN
       'replacement_available', false,
       'ready', false,
       'ready_flag', false,
+      'session_ready', false,
+      'ready_for_draft', false,
+      'can_create_draft', false,
       'ready_empty', false,
       'rows_available', false,
       'selected_rows_available', false,
@@ -175592,8 +176356,12 @@ BEGIN
       'preview_ready', false,
       'requires_paging', true,
       'phase', 'REBASE_REQUIRED',
+      'progress_state', 'REBASE_REQUIRED',
       'status_text', 'Payment preview needs refreshing.',
       'next_recommended_action', 'OPEN_NEW_SESSION',
+      'session_blocker_codes', jsonb_build_array('WORKBENCH_SESSION_NOT_FOUND'),
+      'draft_blocker_codes', jsonb_build_array('WORKBENCH_SESSION_NOT_FOUND'),
+      'blocker_codes', jsonb_build_array('WORKBENCH_SESSION_NOT_FOUND'),
       'read_only', true
     );
   END IF;
@@ -175601,6 +176369,15 @@ BEGIN
   v_session_obsolete := UPPER(BTRIM(COALESCE(v_session_row.status, ''))) <> 'OPEN'
     OR v_session_row.discarded_at_utc IS NOT NULL
     OR v_session_row.replacement_session_id IS NOT NULL;
+
+  v_replacement_required := v_session_obsolete
+    OR v_session_row.replacement_idempotency_key IS NOT NULL
+    OR NULLIF(BTRIM(COALESCE(v_session_row.progress_json->>'replacement_session_id', '')), '') IS NOT NULL
+    OR LOWER(BTRIM(COALESCE(
+      v_session_row.progress_json->>'replacement_required',
+      v_session_row.progress_json->>'requires_new_session',
+      'false'
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
   IF v_session_obsolete THEN
     IF v_session_row.replacement_session_id IS NOT NULL THEN
@@ -175619,7 +176396,7 @@ BEGIN
       WHERE replacement_row.session_signature = v_session_row.session_signature
         AND replacement_row.pay_date = v_session_row.pay_date
         AND replacement_row.week_ending_cutoff = v_session_row.week_ending_cutoff
-        AND replacement_row.status = 'OPEN'
+        AND UPPER(BTRIM(COALESCE(replacement_row.status, ''))) = 'OPEN'
         AND replacement_row.discarded_at_utc IS NULL
         AND replacement_row.id <> v_session_row.id
       ORDER BY replacement_row.updated_at_utc DESC,
@@ -175632,148 +176409,761 @@ BEGIN
     END IF;
   END IF;
 
-  v_progress_state_upper := UPPER(BTRIM(COALESCE(v_session_row.progress_state, '')));
-  v_failure_flag := COALESCE(v_session_row.scope_failed_count, 0) > 0
-    OR COALESCE(v_session_row.line_units_failed, 0) > 0
-    OR v_progress_state_upper IN ('FAILED', 'ERROR');
-  v_ready_flag := v_session_obsolete IS NOT TRUE
-    AND v_failure_flag IS NOT TRUE
-    AND v_progress_state_upper IN ('READY', 'READY_EMPTY');
-  v_ready_empty := v_ready_flag
-    AND (
-      v_progress_state_upper = 'READY_EMPTY'
-      OR COALESCE(v_session_row.scope_total_count, 0) = 0
-    );
-  v_rows_available := v_session_obsolete IS NOT TRUE
-    AND COALESCE(v_session_row.preview_row_count, 0) > 0;
-  v_selected_rows_available := v_rows_available
-    AND COALESCE(v_session_row.selected_row_count, 0) > 0;
-  v_still_running := v_session_obsolete IS NOT TRUE
-    AND v_ready_flag IS NOT TRUE
-    AND v_failure_flag IS NOT TRUE;
-  v_line_units_complete := GREATEST(
-    COALESCE(v_session_row.line_units_total, 0)
-      - COALESCE(v_session_row.line_units_pending, 0)
-      - COALESCE(v_session_row.line_units_ready, 0)
-      - COALESCE(v_session_row.line_units_failed, 0),
+  v_scope_cursor_remaining := jsonb_typeof(COALESCE(v_session_row.scope_next_cursor_json, '{}'::jsonb)) = 'object'
+    AND COALESCE(v_session_row.scope_next_cursor_json, '{}'::jsonb) <> '{}'::jsonb;
+
+  WITH scope_classified AS (
+    SELECT
+      UPPER(BTRIM(COALESCE(scope_row.status, ''))) AS status_upper,
+      COALESCE(scope_row.seeded, false) AS seeded,
+      COALESCE(scope_row.dirty, false) AS dirty,
+      NOT (
+        scope_row.error_json IS NULL
+        OR scope_row.error_json = '{}'::jsonb
+        OR scope_row.error_json = 'null'::jsonb
+      ) AS has_error
+    FROM public.banking_pay_workbench_session_scope AS scope_row
+    WHERE scope_row.session_id = p_session_id
+  )
+  SELECT
+    COUNT(*)::integer,
+    COUNT(*) FILTER (WHERE scope_classified.seeded)::integer,
+    COUNT(*) FILTER (
+      WHERE scope_classified.seeded
+        AND scope_classified.dirty IS NOT TRUE
+        AND scope_classified.has_error IS NOT TRUE
+        AND scope_classified.status_upper IN ('READY', 'MATERIALISED', 'MATERIALIZED')
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE scope_classified.has_error IS NOT TRUE
+        AND scope_classified.status_upper IN ('PENDING', 'QUEUED', 'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'DIRTY')
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE scope_classified.has_error IS NOT TRUE
+        AND scope_classified.status_upper IN ('RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED', 'LINE_WORK_PENDING')
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE scope_classified.has_error IS NOT TRUE
+        AND scope_classified.status_upper = 'LINE_WORK_READY'
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE scope_classified.dirty
+        OR scope_classified.status_upper = 'DIRTY'
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE scope_classified.has_error
+        OR scope_classified.status_upper IN ('ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR')
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE scope_classified.has_error IS NOT TRUE
+        AND scope_classified.status_upper NOT IN (
+          'PENDING', 'QUEUED', 'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'DIRTY',
+          'RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED', 'LINE_WORK_PENDING', 'LINE_WORK_READY',
+          'READY', 'MATERIALISED', 'MATERIALIZED',
+          'ERROR', 'FAILED', 'LINE_WORK_ERROR', 'LINE_WORK_PROCESS_ERROR'
+        )
+    )::integer,
+    COUNT(*) FILTER (WHERE scope_classified.seeded IS NOT TRUE)::integer
+  INTO v_scope_actual_total,
+       v_scope_actual_seeded,
+       v_scope_actual_terminal,
+       v_scope_actual_pending_status,
+       v_scope_actual_processing,
+       v_scope_actual_materialisation_pending,
+       v_scope_actual_dirty,
+       v_scope_actual_failed,
+       v_scope_actual_unknown,
+       v_scope_actual_unseeded
+  FROM scope_classified;
+
+  v_scope_actual_pending_bucket := GREATEST(
+    COALESCE(v_scope_actual_total, 0)
+      - COALESCE(v_scope_actual_terminal, 0)
+      - COALESCE(v_scope_actual_failed, 0),
     0
   );
 
-  v_ready_preview_line_count := CASE
-    WHEN COALESCE(v_session_row.section_counts_json->>'canonical_preview_lines', '') ~ '^[0-9]+$'
-      THEN (v_session_row.section_counts_json->>'canonical_preview_lines')::integer
-    ELSE 0
-  END;
-  v_case_resolution_state_count := CASE
-    WHEN COALESCE(v_session_row.section_counts_json->>'cases_resolutions', '') ~ '^[0-9]+$'
-      THEN (v_session_row.section_counts_json->>'cases_resolutions')::integer
-    ELSE 0
-  END;
-  v_blocked_preview_line_count := CASE
-    WHEN COALESCE(v_session_row.section_counts_json->>'blocked_for_pay', '') ~ '^[0-9]+$'
-      THEN (v_session_row.section_counts_json->>'blocked_for_pay')::integer
-    ELSE 0
+  WITH line_classified AS (
+    SELECT
+      UPPER(BTRIM(COALESCE(line_work.status, ''))) AS status_upper,
+      NOT (
+        line_work.error_json IS NULL
+        OR line_work.error_json = '{}'::jsonb
+        OR line_work.error_json = 'null'::jsonb
+      ) AS has_error
+    FROM public.banking_pay_workbench_candidate_line_work AS line_work
+    WHERE line_work.session_id = p_session_id
+  )
+  SELECT
+    COUNT(*)::integer,
+    COUNT(*) FILTER (
+      WHERE line_classified.has_error IS NOT TRUE
+        AND line_classified.status_upper IN ('MATERIALISED', 'MATERIALIZED', 'SKIPPED')
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE line_classified.has_error IS NOT TRUE
+        AND line_classified.status_upper IN (
+          'PENDING', 'QUEUED', 'RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED',
+          'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'DIRTY'
+        )
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE line_classified.has_error IS NOT TRUE
+        AND line_classified.status_upper = 'READY'
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE line_classified.has_error
+        OR line_classified.status_upper IN ('ERROR', 'FAILED')
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE line_classified.has_error IS NOT TRUE
+        AND line_classified.status_upper NOT IN (
+          'PENDING', 'QUEUED', 'RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED',
+          'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'DIRTY',
+          'READY', 'MATERIALISED', 'MATERIALIZED', 'SKIPPED', 'ERROR', 'FAILED'
+        )
+    )::integer
+  INTO v_line_actual_total,
+       v_line_actual_terminal,
+       v_line_actual_pending_status,
+       v_line_actual_ready,
+       v_line_actual_failed,
+       v_line_actual_unknown
+  FROM line_classified;
+
+  v_line_actual_pending_bucket := GREATEST(
+    COALESCE(v_line_actual_total, 0)
+      - COALESCE(v_line_actual_terminal, 0)
+      - COALESCE(v_line_actual_ready, 0)
+      - COALESCE(v_line_actual_failed, 0),
+    0
+  );
+
+  WITH normalised_jobs AS (
+    SELECT
+      workbench_job.id,
+      workbench_job.job_type,
+      UPPER(BTRIM(COALESCE(workbench_job.status, ''))) AS status_upper,
+      workbench_job.candidate_id,
+      workbench_job.dedupe_key,
+      workbench_job.priority,
+      workbench_job.run_at_utc,
+      workbench_job.created_at_utc,
+      workbench_job.updated_at_utc,
+      workbench_job.started_at_utc,
+      workbench_job.completed_at_utc,
+      workbench_job.failed_at_utc,
+      workbench_job.payload_json,
+      workbench_job.last_error_json,
+      CASE
+        WHEN COALESCE(workbench_job.payload_json->>'session_version', '') ~ '^[0-9]+$'
+          THEN (workbench_job.payload_json->>'session_version')::bigint
+        ELSE NULL::bigint
+      END AS job_session_version,
+      CASE
+        WHEN UPPER(BTRIM(COALESCE(workbench_job.job_type, ''))) IN (
+          'WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED',
+          'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE'
+        ) THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+        WHEN UPPER(BTRIM(COALESCE(workbench_job.job_type, ''))) IN (
+          'WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE',
+          'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE'
+        ) THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+        WHEN UPPER(BTRIM(COALESCE(workbench_job.job_type, ''))) IN ('SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH')
+          AND LOWER(BTRIM(COALESCE(workbench_job.payload_json->>'line_work_only', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+        WHEN UPPER(BTRIM(COALESCE(workbench_job.job_type, ''))) IN (
+          'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK',
+          'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK',
+          'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK'
+        ) THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+        WHEN UPPER(BTRIM(COALESCE(workbench_job.job_type, ''))) IN (
+          'WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE',
+          'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK',
+          'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE',
+          'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK',
+          'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK'
+        ) THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+        ELSE UPPER(BTRIM(COALESCE(workbench_job.job_type, '')))
+      END AS canonical_job_type,
+      COALESCE(
+        workbench_job.completed_at_utc,
+        workbench_job.failed_at_utc,
+        workbench_job.updated_at_utc,
+        workbench_job.started_at_utc,
+        workbench_job.run_at_utc,
+        workbench_job.created_at_utc
+      ) AS lifecycle_at_utc,
+      (
+        COALESCE(workbench_job.payload_json, '{}'::jsonb) ? 'superseded_by_newer_session_version_at_utc'
+        OR COALESCE(workbench_job.payload_json, '{}'::jsonb) ? 'superseded_at_utc'
+        OR UPPER(BTRIM(COALESCE(workbench_job.last_error_json->>'code', ''))) = 'WORKBENCH_JOB_SUPERSEDED_BY_NEWER_SESSION_VERSION'
+      ) AS explicitly_superseded
+    FROM public.banking_pay_workbench_jobs AS workbench_job
+    WHERE workbench_job.session_id = p_session_id
+  ), relevant_jobs AS (
+    SELECT normalised_job.*
+    FROM normalised_jobs AS normalised_job
+    WHERE normalised_job.job_session_version IS NULL
+       OR normalised_job.job_session_version >= COALESCE(v_session_row.version, 0)
+  ), unresolved_terminal_jobs AS (
+    SELECT failed_job.*
+    FROM relevant_jobs AS failed_job
+    WHERE failed_job.status_upper IN ('FAILED', 'DEAD')
+      AND failed_job.explicitly_superseded IS NOT TRUE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM relevant_jobs AS successor_job
+        WHERE successor_job.status_upper = 'SUCCEEDED'
+          AND successor_job.canonical_job_type = failed_job.canonical_job_type
+          AND successor_job.candidate_id IS NOT DISTINCT FROM failed_job.candidate_id
+          AND (
+            successor_job.dedupe_key = failed_job.dedupe_key
+            OR (
+              NULLIF(BTRIM(COALESCE(successor_job.payload_json->>'cursor_token', '')), '') IS NOT NULL
+              AND LOWER(BTRIM(COALESCE(successor_job.payload_json->>'cursor_token', ''))) <> 'none'
+              AND NULLIF(BTRIM(COALESCE(successor_job.payload_json->>'cursor_token', '')), '')
+                = NULLIF(BTRIM(COALESCE(failed_job.payload_json->>'cursor_token', '')), '')
+            )
+          )
+          AND successor_job.lifecycle_at_utc > failed_job.lifecycle_at_utc
+      )
+  )
+  SELECT
+    (SELECT COUNT(*)::integer FROM relevant_jobs),
+    (SELECT COUNT(*)::integer FROM relevant_jobs AS relevant_job WHERE relevant_job.status_upper = 'QUEUED'),
+    (SELECT COUNT(*)::integer FROM relevant_jobs AS relevant_job WHERE relevant_job.status_upper = 'RUNNING'),
+    (SELECT COUNT(*)::integer FROM unresolved_terminal_jobs AS failed_job WHERE failed_job.status_upper = 'FAILED'),
+    (SELECT COUNT(*)::integer FROM unresolved_terminal_jobs AS dead_job WHERE dead_job.status_upper = 'DEAD'),
+    (SELECT COUNT(*)::integer FROM relevant_jobs AS relevant_job WHERE relevant_job.job_session_version IS NULL),
+    (SELECT COUNT(*)::integer FROM normalised_jobs AS older_job WHERE older_job.job_session_version IS NOT NULL AND older_job.job_session_version < COALESCE(v_session_row.version, 0))
+  INTO v_jobs_relevant_total,
+       v_jobs_queued,
+       v_jobs_running,
+       v_jobs_unresolved_failed,
+       v_jobs_unresolved_dead,
+       v_jobs_invalid_version,
+       v_jobs_explicit_older_excluded;
+
+  WITH current_preview_rows AS (
+    SELECT
+      preview_row.id,
+      preview_row.section,
+      preview_row.selected,
+      preview_row.selection_state,
+      preview_row.row_json,
+      public.pay_workbench_preview_section_from_line_json(preview_row.row_json) AS resolved_section
+    FROM public.banking_pay_workbench_preview_rows AS preview_row
+    WHERE preview_row.session_id = p_session_id
+      AND preview_row.session_version = v_session_row.version
+      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+  )
+  SELECT
+    COUNT(*)::integer,
+    COUNT(*) FILTER (
+      WHERE COALESCE(current_preview_rows.selected, false)
+        AND UPPER(BTRIM(COALESCE(current_preview_rows.selection_state, ''))) = 'SELECTED'
+    )::integer,
+    COUNT(*) FILTER (WHERE current_preview_rows.resolved_section = 'canonical_preview_lines')::integer,
+    COUNT(*) FILTER (WHERE current_preview_rows.resolved_section = 'cases_resolutions')::integer,
+    COUNT(*) FILTER (WHERE current_preview_rows.resolved_section = 'blocked_for_pay')::integer
+  INTO v_current_preview_row_count,
+       v_current_selected_row_count,
+       v_ready_preview_line_count,
+       v_case_resolution_state_count,
+       v_blocked_preview_line_count
+  FROM current_preview_rows;
+
+  SELECT COALESCE(
+           jsonb_object_agg(section_counts.section_key, to_jsonb(section_counts.section_count) ORDER BY section_counts.section_key),
+           '{}'::jsonb
+         )
+  INTO v_current_section_counts_json
+  FROM (
+    SELECT
+      public.pay_workbench_preview_section_from_line_json(preview_row.row_json) AS section_key,
+      COUNT(*)::integer AS section_count
+    FROM public.banking_pay_workbench_preview_rows AS preview_row
+    WHERE preview_row.session_id = p_session_id
+      AND preview_row.session_version = v_session_row.version
+      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+    GROUP BY public.pay_workbench_preview_section_from_line_json(preview_row.row_json)
+  ) AS section_counts
+  WHERE NULLIF(BTRIM(COALESCE(section_counts.section_key, '')), '') IS NOT NULL;
+
+  WITH selected_current_rows AS (
+    SELECT
+      preview_row.id,
+      preview_row.row_key,
+      preview_row.section,
+      preview_row.selection_state,
+      preview_row.row_json,
+      preview_row.timesheet_id,
+      UPPER(NULLIF(BTRIM(COALESCE(
+        preview_row.key_type,
+        preview_row.row_json#>>'{economic_key,key_type}',
+        preview_row.row_json->>'component_key_type',
+        preview_row.row_json->>'key_type',
+        ''
+      )), '')) AS key_type,
+      NULLIF(BTRIM(COALESCE(
+        preview_row.key_value,
+        preview_row.row_json#>>'{economic_key,key_value}',
+        preview_row.row_json->>'component_key_value',
+        preview_row.row_json->>'key_value',
+        ''
+      )), '') AS key_value,
+      UPPER(NULLIF(BTRIM(COALESCE(
+        preview_row.row_json->>'pay_channel',
+        preview_row.row_json->>'current_pay_method',
+        preview_row.row_json->>'candidate_pay_method',
+        ''
+      )), '')) AS pay_channel
+    FROM public.banking_pay_workbench_preview_rows AS preview_row
+    WHERE preview_row.session_id = p_session_id
+      AND preview_row.session_version = v_session_row.version
+      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+      AND COALESCE(preview_row.selected, false)
+      AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) = 'SELECTED'
+  ), selected_timesheet_ids AS (
+    SELECT COALESCE(
+      array_agg(DISTINCT selected_row.timesheet_id ORDER BY selected_row.timesheet_id),
+      array[]::uuid[]
+    ) AS timesheet_ids
+    FROM selected_current_rows AS selected_row
+    WHERE selected_row.timesheet_id IS NOT NULL
+  ), selected_rotation_scope AS (
+    SELECT DISTINCT ON (rotation_scope.requested_timesheet_id)
+      rotation_scope.requested_timesheet_id,
+      COALESCE(rotation_scope.canonical_timesheet_id, rotation_scope.requested_timesheet_id) AS canonical_timesheet_id,
+      (rotation_scope.family_timesheet_id IS NOT NULL AND rotation_scope.family_is_current IS NOT NULL) AS rotation_scope_resolved,
+      COALESCE(rotation_scope.requested_is_canonical, false) AS requested_is_canonical
+    FROM selected_timesheet_ids
+    JOIN public._pay_timesheet_rotation_scope(selected_timesheet_ids.timesheet_ids) AS rotation_scope
+      ON true
+    ORDER BY
+      rotation_scope.requested_timesheet_id,
+      rotation_scope.family_is_current DESC NULLS LAST,
+      rotation_scope.family_version DESC NULLS LAST,
+      rotation_scope.family_timesheet_id
+  ), contracted_selected_rows AS (
+    SELECT
+      selected_row.*,
+      selected_rotation.canonical_timesheet_id,
+      COALESCE(selected_rotation.rotation_scope_resolved, false) AS rotation_scope_resolved,
+      COALESCE(selected_rotation.requested_is_canonical, false) AS requested_is_canonical,
+      public.pay_workbench_preview_line_contract_ok(
+        p_line_json => jsonb_strip_nulls(
+          COALESCE(selected_row.row_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'row_key', selected_row.row_key,
+            'preview_row_pk', selected_row.id::text,
+            'selection_state', selected_row.selection_state
+          )
+        ),
+        p_economic_key_json => jsonb_strip_nulls(jsonb_build_object(
+          'timesheet_id', CASE WHEN selected_rotation.canonical_timesheet_id IS NULL THEN NULL ELSE selected_rotation.canonical_timesheet_id::text END,
+          'key_type', selected_row.key_type,
+          'key_value', selected_row.key_value
+        )),
+        p_target_section => COALESCE(NULLIF(BTRIM(selected_row.section), ''), 'canonical_preview_lines')
+      ) AS contract_json
+    FROM selected_current_rows AS selected_row
+    LEFT JOIN selected_rotation_scope AS selected_rotation
+      ON selected_rotation.requested_timesheet_id = selected_row.timesheet_id
+  )
+  SELECT COUNT(*)::integer
+  INTO v_selected_eligible_ready_row_count
+  FROM contracted_selected_rows AS contracted_row
+  WHERE LOWER(COALESCE(NULLIF(BTRIM(contracted_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+    AND contracted_row.timesheet_id IS NOT NULL
+    AND contracted_row.canonical_timesheet_id IS NOT NULL
+    AND contracted_row.rotation_scope_resolved
+    AND contracted_row.requested_is_canonical
+    AND contracted_row.pay_channel IN ('PAYE', 'UMBRELLA')
+    AND contracted_row.key_type IN ('TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE', 'EXPENSE_CODE', 'MANUAL_CARRY_FORWARD')
+    AND contracted_row.key_value IS NOT NULL
+    AND LOWER(BTRIM(COALESCE(contracted_row.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND LOWER(BTRIM(COALESCE(contracted_row.contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  SELECT COALESCE(
+           jsonb_agg(section_entry.section_key ORDER BY section_entry.section_key),
+           '[]'::jsonb
+         )
+  INTO v_available_sections_json
+  FROM jsonb_each(COALESCE(v_current_section_counts_json, '{}'::jsonb)) AS section_entry(section_key, section_count_json)
+  WHERE COALESCE(NULLIF(BTRIM(section_entry.section_count_json #>> '{}'), '')::integer, 0) > 0;
+
+  SELECT COALESCE(
+           jsonb_agg(
+             jsonb_build_object(
+               'candidate_id', candidate_sample.candidate_id::text,
+               'status', candidate_sample.status,
+               'candidate_status', candidate_sample.status,
+               'seeded', candidate_sample.seeded,
+               'dirty', candidate_sample.dirty,
+               'pending_job_id', CASE WHEN candidate_sample.pending_job_id IS NULL THEN NULL ELSE candidate_sample.pending_job_id::text END,
+               'latest_job_id', CASE WHEN pending_job.id IS NULL THEN NULL ELSE pending_job.id::text END,
+               'latest_job_type', pending_job.job_type,
+               'latest_job_status', pending_job.status,
+               'job_status', pending_job.status,
+               'error_json', candidate_sample.error_json
+             )
+             ORDER BY candidate_sample.scope_ordinal, candidate_sample.candidate_id
+           ),
+           '[]'::jsonb
+         )
+  INTO v_candidate_sample_rows_json
+  FROM (
+    SELECT scope_row.*
+    FROM public.banking_pay_workbench_session_scope AS scope_row
+    WHERE scope_row.session_id = p_session_id
+    ORDER BY scope_row.scope_ordinal, scope_row.candidate_id
+    LIMIT 25
+  ) AS candidate_sample
+  LEFT JOIN public.banking_pay_workbench_jobs AS pending_job
+    ON pending_job.id = candidate_sample.pending_job_id;
+
+  WITH relevant_active_jobs AS (
+    SELECT
+      workbench_job.*,
+      CASE
+        WHEN COALESCE(workbench_job.payload_json->>'session_version', '') ~ '^[0-9]+$'
+          THEN (workbench_job.payload_json->>'session_version')::bigint
+        ELSE NULL::bigint
+      END AS job_session_version
+    FROM public.banking_pay_workbench_jobs AS workbench_job
+    WHERE workbench_job.session_id = p_session_id
+      AND UPPER(BTRIM(COALESCE(workbench_job.status, ''))) IN ('QUEUED', 'RUNNING')
+  ), active_job_sample AS (
+    SELECT relevant_job.*
+    FROM relevant_active_jobs AS relevant_job
+    WHERE relevant_job.job_session_version IS NULL
+       OR relevant_job.job_session_version >= COALESCE(v_session_row.version, 0)
+    ORDER BY relevant_job.priority ASC,
+             relevant_job.run_at_utc ASC,
+             relevant_job.created_at_utc ASC,
+             relevant_job.id ASC
+    LIMIT 25
+  )
+  SELECT
+    COALESCE(
+      jsonb_agg(active_job.id::text ORDER BY active_job.priority, active_job.run_at_utc, active_job.created_at_utc, active_job.id),
+      '[]'::jsonb
+    ),
+    COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'candidate_id', CASE WHEN active_job.candidate_id IS NULL THEN NULL ELSE active_job.candidate_id::text END,
+          'pending_job_id', active_job.id::text,
+          'latest_job_id', active_job.id::text,
+          'latest_job_type', active_job.job_type,
+          'latest_job_status', active_job.status,
+          'job_status', active_job.status,
+          'run_at_utc', active_job.run_at_utc,
+          'attempt_count', COALESCE(active_job.attempt_count, 0),
+          'max_attempts', COALESCE(active_job.max_attempts, 0)
+        )
+        ORDER BY active_job.priority, active_job.run_at_utc, active_job.created_at_utc, active_job.id
+      ) FILTER (WHERE active_job.candidate_id IS NOT NULL),
+      '[]'::jsonb
+    )
+  INTO v_pending_job_ids_json,
+       v_pending_candidate_jobs_json
+  FROM active_job_sample AS active_job;
+
+  IF v_session_row.replacement_session_id IS NOT NULL THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('SESSION_REPLACED');
+  ELSIF v_session_obsolete THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('SESSION_OBSOLETE');
+  END IF;
+
+  IF v_replacement_required AND v_session_obsolete IS NOT TRUE THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('REPLACEMENT_REQUIRED');
+  END IF;
+
+  IF COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('SCOPE_SEED_INCOMPLETE');
+  END IF;
+
+  IF v_scope_cursor_remaining THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('SCOPE_CURSOR_REMAINING');
+  END IF;
+
+  IF COALESCE(v_scope_actual_unseeded, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('CANDIDATES_UNSEEDED');
+  END IF;
+
+  IF COALESCE(v_scope_actual_pending_bucket, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('CANDIDATES_PENDING');
+  END IF;
+
+  IF COALESCE(v_scope_actual_processing, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('CANDIDATES_PROCESSING');
+  END IF;
+
+  IF COALESCE(v_scope_actual_materialisation_pending, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('CANDIDATES_MATERIALISATION_PENDING');
+  END IF;
+
+  IF COALESCE(v_scope_actual_dirty, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('CANDIDATES_DIRTY');
+  END IF;
+
+  IF COALESCE(v_scope_actual_failed, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('CANDIDATES_FAILED');
+  END IF;
+
+  IF COALESCE(v_scope_actual_unknown, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('CANDIDATES_UNKNOWN_STATE');
+  END IF;
+
+  IF COALESCE(v_line_actual_pending_bucket, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('LINE_WORK_PENDING');
+  END IF;
+
+  IF COALESCE(v_line_actual_ready, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('LINE_WORK_READY_NOT_MATERIALISED');
+  END IF;
+
+  IF COALESCE(v_line_actual_failed, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('LINE_WORK_FAILED');
+  END IF;
+
+  IF COALESCE(v_line_actual_unknown, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('LINE_WORK_UNKNOWN_STATE');
+  END IF;
+
+  IF COALESCE(v_jobs_queued, 0) > 0 OR COALESCE(v_jobs_running, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('WORKBENCH_JOBS_ACTIVE');
+  END IF;
+
+  IF COALESCE(v_jobs_unresolved_failed, 0) > 0 OR COALESCE(v_jobs_unresolved_dead, 0) > 0 THEN
+    v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('WORKBENCH_JOBS_FAILED');
+  END IF;
+
+  v_session_ready := jsonb_array_length(COALESCE(v_session_blocker_codes, '[]'::jsonb)) = 0
+    AND COALESCE(v_scope_actual_terminal, 0) = COALESCE(v_scope_actual_total, 0)
+    AND COALESCE(v_line_actual_terminal, 0) = COALESCE(v_line_actual_total, 0);
+
+  v_ready_empty := v_session_ready
+    AND COALESCE(v_current_preview_row_count, 0) = 0;
+  v_ready_for_draft := v_session_ready
+    AND COALESCE(v_selected_eligible_ready_row_count, 0) > 0;
+
+  v_draft_blocker_codes := COALESCE(v_session_blocker_codes, '[]'::jsonb);
+  IF COALESCE(v_selected_eligible_ready_row_count, 0) = 0 THEN
+    v_draft_blocker_codes := v_draft_blocker_codes || jsonb_build_array('NO_SELECTED_READY_ROWS');
+  END IF;
+
+  v_stored_progress_state_upper := UPPER(BTRIM(COALESCE(v_session_row.progress_state, '')));
+  v_stored_ready := v_stored_progress_state_upper IN ('READY', 'READY_EMPTY');
+  v_stored_ready_mismatch := v_stored_ready AND v_session_ready IS NOT TRUE;
+
+  v_rows_available := v_session_obsolete IS NOT TRUE
+    AND COALESCE(v_current_preview_row_count, 0) > 0;
+  v_selected_rows_available := v_rows_available
+    AND COALESCE(v_current_selected_row_count, 0) > 0;
+
+  v_failure_flag := COALESCE(v_scope_actual_failed, 0) > 0
+    OR COALESCE(v_scope_actual_unknown, 0) > 0
+    OR COALESCE(v_line_actual_failed, 0) > 0
+    OR COALESCE(v_line_actual_unknown, 0) > 0
+    OR COALESCE(v_jobs_unresolved_failed, 0) > 0
+    OR COALESCE(v_jobs_unresolved_dead, 0) > 0;
+
+  v_derived_progress_state := CASE
+    WHEN v_session_obsolete OR v_replacement_required THEN 'DISCARDED'
+    WHEN v_session_ready AND v_ready_empty THEN 'READY_EMPTY'
+    WHEN v_session_ready THEN 'READY'
+    WHEN v_failure_flag THEN 'ERROR'
+    WHEN COALESCE(v_line_actual_ready, 0) > 0
+      OR COALESCE(v_scope_actual_materialisation_pending, 0) > 0 THEN 'MATERIALISING_PREVIEW_ROWS'
+    WHEN COALESCE(v_line_actual_pending_bucket, 0) > 0
+      OR COALESCE(v_scope_actual_processing, 0) > 0 THEN 'PROCESSING_LINE_WORK'
+    ELSE 'REFRESHING_CANDIDATES'
   END;
 
   v_phase := CASE
-    WHEN v_session_obsolete THEN 'REBASE_REQUIRED'
-    WHEN v_ready_flag THEN 'READY'
+    WHEN v_session_obsolete OR v_replacement_required THEN 'REBASE_REQUIRED'
+    WHEN v_session_ready THEN 'READY'
     WHEN v_failure_flag THEN 'FAILED'
     WHEN v_rows_available THEN 'PARTIAL_READY'
-    WHEN v_progress_state_upper = 'MATERIALISING_PREVIEW_ROWS' THEN 'MATERIALISING_PREVIEW_ROWS'
-    WHEN v_progress_state_upper = 'PROCESSING_LINE_WORK' THEN 'PROCESSING_LINE_WORK'
+    WHEN v_derived_progress_state = 'MATERIALISING_PREVIEW_ROWS' THEN 'MATERIALISING_PREVIEW_ROWS'
+    WHEN v_derived_progress_state = 'PROCESSING_LINE_WORK' THEN 'PROCESSING_LINE_WORK'
     ELSE 'REFRESHING_CANDIDATES'
   END;
 
   v_status_text := CASE
-    WHEN v_session_obsolete AND v_replacement_row.id IS NOT NULL
-      THEN 'Payment preview has been replaced.'
-    WHEN v_session_obsolete
-      THEN 'Payment preview is obsolete.'
-    WHEN v_ready_flag
-      THEN 'Payment preview is ready.'
-    WHEN v_failure_flag
-      THEN 'Payment preview could not be prepared for every candidate.'
-    WHEN v_rows_available
-      THEN 'Payment preview is still preparing; available rows can be paged.'
-    ELSE COALESCE(
-      NULLIF(BTRIM(COALESCE(v_session_row.progress_json->>'status_text', '')), ''),
-      'Preparing payment preview candidates.'
-    )
+    WHEN v_session_obsolete AND v_replacement_row.id IS NOT NULL THEN 'Payment preview has been replaced.'
+    WHEN v_session_obsolete OR v_replacement_required THEN 'Payment preview is obsolete.'
+    WHEN v_session_ready THEN 'Payment preview is ready.'
+    WHEN v_failure_flag THEN 'Payment preview could not be prepared for every candidate.'
+    WHEN v_rows_available THEN 'Payment preview is still preparing; available rows can be paged.'
+    ELSE 'Preparing payment preview candidates.'
   END;
 
   v_next_recommended_action := CASE
     WHEN v_session_obsolete AND v_replacement_row.id IS NOT NULL THEN 'ADOPT_REPLACEMENT_SESSION'
-    WHEN v_session_obsolete THEN 'OPEN_NEW_SESSION'
-    WHEN v_ready_flag THEN 'READ_PREVIEW_PAGE'
+    WHEN v_session_obsolete OR v_replacement_required THEN 'OPEN_NEW_SESSION'
+    WHEN v_session_ready THEN 'READ_PREVIEW_PAGE'
     WHEN v_failure_flag THEN 'REVIEW_ERRORS'
+    WHEN COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE OR v_scope_cursor_remaining THEN 'SEED_SCOPE_CHUNK'
+    WHEN COALESCE(v_line_actual_ready, 0) > 0 THEN 'MATERIALISE_PREVIEW_ROWS_CHUNK'
+    WHEN COALESCE(v_line_actual_pending_bucket, 0) > 0 THEN 'PROCESS_LINE_WORK_CHUNK'
     ELSE 'WAIT_FOR_WORKER'
   END;
 
-  SELECT COALESCE(
-           jsonb_agg(section_entries.section_key ORDER BY section_entries.section_key),
-           '[]'::jsonb
-         )
-  INTO v_available_sections_json
-  FROM jsonb_each(COALESCE(v_session_row.section_counts_json, '{}'::jsonb))
-       AS section_entries(section_key, section_count_json)
-  CROSS JOIN LATERAL (
-    SELECT CASE
-      WHEN (section_entries.section_count_json #>> '{}') ~ '^[0-9]+$'
-        THEN (section_entries.section_count_json #>> '{}')::numeric
-      ELSE 0::numeric
-    END AS section_count
-  ) AS parsed_section_count
-  WHERE parsed_section_count.section_count > 0;
+  v_still_running := v_session_obsolete IS NOT TRUE
+    AND v_replacement_required IS NOT TRUE
+    AND v_session_ready IS NOT TRUE
+    AND v_failure_flag IS NOT TRUE;
+
+  v_counter_drift_detected := COALESCE(v_session_row.scope_total_count, 0) <> COALESCE(v_scope_actual_total, 0)
+    OR COALESCE(v_session_row.scope_seeded_count, 0) <> COALESCE(v_scope_actual_seeded, 0)
+    OR COALESCE(v_session_row.scope_ready_count, 0) <> COALESCE(v_scope_actual_terminal, 0)
+    OR COALESCE(v_session_row.scope_pending_count, 0) <> COALESCE(v_scope_actual_pending_bucket, 0)
+    OR COALESCE(v_session_row.scope_failed_count, 0) <> COALESCE(v_scope_actual_failed, 0)
+    OR COALESCE(v_session_row.line_units_total, 0) <> COALESCE(v_line_actual_total, 0)
+    OR COALESCE(v_session_row.line_units_pending, 0) <> COALESCE(v_line_actual_pending_bucket, 0)
+    OR COALESCE(v_session_row.line_units_ready, 0) <> COALESCE(v_line_actual_ready, 0)
+    OR COALESCE(v_session_row.line_units_failed, 0) <> COALESCE(v_line_actual_failed, 0)
+    OR COALESCE(v_session_row.preview_row_count, 0) <> COALESCE(v_current_preview_row_count, 0)
+    OR COALESCE(v_session_row.selected_row_count, 0) <> COALESCE(v_current_selected_row_count, 0)
+    OR COALESCE(v_session_row.section_counts_json, '{}'::jsonb) <> COALESCE(v_current_section_counts_json, '{}'::jsonb);
+
+  v_candidate_counts_json := jsonb_build_object(
+    'total', COALESCE(v_scope_actual_total, 0),
+    'seeded', COALESCE(v_scope_actual_seeded, 0),
+    'ready', COALESCE(v_scope_actual_terminal, 0),
+    'terminal_materialised', COALESCE(v_scope_actual_terminal, 0),
+    'pending', COALESCE(v_scope_actual_pending_bucket, 0),
+    'pending_status', COALESCE(v_scope_actual_pending_status, 0),
+    'processing', COALESCE(v_scope_actual_processing, 0),
+    'materialisation_pending', COALESCE(v_scope_actual_materialisation_pending, 0),
+    'dirty', COALESCE(v_scope_actual_dirty, 0),
+    'failed', COALESCE(v_scope_actual_failed, 0),
+    'unknown', COALESCE(v_scope_actual_unknown, 0),
+    'unseeded', COALESCE(v_scope_actual_unseeded, 0),
+    'count_unknown', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE OR v_scope_cursor_remaining
+  );
+
+  v_line_counts_json := jsonb_build_object(
+    'total', COALESCE(v_line_actual_total, 0),
+    'complete', COALESCE(v_line_actual_terminal, 0),
+    'materialised_or_skipped', COALESCE(v_line_actual_terminal, 0),
+    'pending', COALESCE(v_line_actual_pending_bucket, 0),
+    'pending_status', COALESCE(v_line_actual_pending_status, 0),
+    'ready_not_materialised', COALESCE(v_line_actual_ready, 0),
+    'failed', COALESCE(v_line_actual_failed, 0),
+    'unknown', COALESCE(v_line_actual_unknown, 0)
+  );
+
+  v_job_counts_json := jsonb_build_object(
+    'relevant_total', COALESCE(v_jobs_relevant_total, 0),
+    'queued', COALESCE(v_jobs_queued, 0),
+    'running', COALESCE(v_jobs_running, 0),
+    'active', COALESCE(v_jobs_queued, 0) + COALESCE(v_jobs_running, 0),
+    'unresolved_failed', COALESCE(v_jobs_unresolved_failed, 0),
+    'unresolved_dead', COALESCE(v_jobs_unresolved_dead, 0),
+    'invalid_or_missing_session_version', COALESCE(v_jobs_invalid_version, 0),
+    'explicit_older_version_excluded', COALESCE(v_jobs_explicit_older_excluded, 0)
+  );
+
+  v_blocker_counts_json := jsonb_build_object(
+    'scope_seed_incomplete', CASE WHEN COALESCE(v_session_row.scope_seed_complete, false) THEN 0 ELSE 1 END,
+    'scope_cursor_remaining', CASE WHEN v_scope_cursor_remaining THEN 1 ELSE 0 END,
+    'candidates_pending', COALESCE(v_scope_actual_pending_bucket, 0),
+    'candidates_processing', COALESCE(v_scope_actual_processing, 0),
+    'candidates_materialisation_pending', COALESCE(v_scope_actual_materialisation_pending, 0),
+    'candidates_dirty', COALESCE(v_scope_actual_dirty, 0),
+    'candidates_failed', COALESCE(v_scope_actual_failed, 0),
+    'candidates_unknown', COALESCE(v_scope_actual_unknown, 0),
+    'line_work_pending', COALESCE(v_line_actual_pending_bucket, 0),
+    'line_work_ready_not_materialised', COALESCE(v_line_actual_ready, 0),
+    'line_work_failed', COALESCE(v_line_actual_failed, 0),
+    'line_work_unknown', COALESCE(v_line_actual_unknown, 0),
+    'jobs_queued', COALESCE(v_jobs_queued, 0),
+    'jobs_running', COALESCE(v_jobs_running, 0),
+    'jobs_unresolved_failed', COALESCE(v_jobs_unresolved_failed, 0),
+    'jobs_unresolved_dead', COALESCE(v_jobs_unresolved_dead, 0),
+    'selected_eligible_ready_rows', COALESCE(v_selected_eligible_ready_row_count, 0)
+  );
+
+  v_maintained_counts_json := jsonb_build_object(
+    'scope_total_count', COALESCE(v_session_row.scope_total_count, 0),
+    'scope_seeded_count', COALESCE(v_session_row.scope_seeded_count, 0),
+    'scope_ready_count', COALESCE(v_session_row.scope_ready_count, 0),
+    'scope_pending_count', COALESCE(v_session_row.scope_pending_count, 0),
+    'scope_failed_count', COALESCE(v_session_row.scope_failed_count, 0),
+    'line_units_total', COALESCE(v_session_row.line_units_total, 0),
+    'line_units_pending', COALESCE(v_session_row.line_units_pending, 0),
+    'line_units_ready', COALESCE(v_session_row.line_units_ready, 0),
+    'line_units_failed', COALESCE(v_session_row.line_units_failed, 0),
+    'preview_row_count', COALESCE(v_session_row.preview_row_count, 0),
+    'selected_row_count', COALESCE(v_session_row.selected_row_count, 0),
+    'section_counts_json', COALESCE(v_session_row.section_counts_json, '{}'::jsonb)
+  );
 
   v_progress_payload_json := COALESCE(v_session_row.progress_json, '{}'::jsonb)
     || jsonb_build_object(
       'session_id', v_session_row.id::text,
       'session_version', v_session_row.version,
       'progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
-      'progress_state', v_session_row.progress_state,
+      'progress_state', v_derived_progress_state,
+      'stored_progress_state', v_session_row.progress_state,
       'phase', v_phase,
       'status_text', v_status_text,
       'next_recommended_action', v_next_recommended_action,
-      'ready', v_ready_flag,
-      'ready_flag', v_ready_flag,
+      'ready', v_session_ready,
+      'ready_flag', v_session_ready,
+      'session_ready', v_session_ready,
+      'ready_for_draft', v_ready_for_draft,
+      'can_create_draft', v_ready_for_draft,
       'ready_empty', v_ready_empty,
       'still_running', v_still_running,
       'pending_refresh', v_still_running,
       'scope_seed_complete', COALESCE(v_session_row.scope_seed_complete, false),
-      'candidate_count', COALESCE(v_session_row.scope_total_count, 0),
-      'total_count', COALESCE(v_session_row.scope_total_count, 0),
-      'seeded_count', COALESCE(v_session_row.scope_seeded_count, 0),
-      'ready_count', COALESCE(v_session_row.scope_ready_count, 0),
-      'completed_count', COALESCE(v_session_row.scope_ready_count, 0),
-      'pending_count', COALESCE(v_session_row.scope_pending_count, 0),
-      'failed_count', COALESCE(v_session_row.scope_failed_count, 0)
+      'scope_cursor_remaining', v_scope_cursor_remaining,
+      'candidate_count', COALESCE(v_scope_actual_total, 0),
+      'total_count', COALESCE(v_scope_actual_total, 0),
+      'seeded_count', COALESCE(v_scope_actual_seeded, 0),
+      'ready_count', COALESCE(v_scope_actual_terminal, 0),
+      'completed_count', COALESCE(v_scope_actual_terminal, 0),
+      'pending_count', COALESCE(v_scope_actual_pending_bucket, 0),
+      'failed_count', COALESCE(v_scope_actual_failed, 0)
     )
     || jsonb_build_object(
-      'scope_total_count', COALESCE(v_session_row.scope_total_count, 0),
-      'scope_seeded_count', COALESCE(v_session_row.scope_seeded_count, 0),
-      'scope_ready_count', COALESCE(v_session_row.scope_ready_count, 0),
-      'scope_pending_count', COALESCE(v_session_row.scope_pending_count, 0),
-      'scope_failed_count', COALESCE(v_session_row.scope_failed_count, 0),
-      'line_units_total', COALESCE(v_session_row.line_units_total, 0),
-      'line_units_complete', COALESCE(v_line_units_complete, 0),
-      'line_units_pending', COALESCE(v_session_row.line_units_pending, 0),
-      'line_units_ready', COALESCE(v_session_row.line_units_ready, 0),
-      'line_units_failed', COALESCE(v_session_row.line_units_failed, 0),
-      'line_units_error', COALESCE(v_session_row.line_units_failed, 0),
-      'preview_row_count', COALESCE(v_session_row.preview_row_count, 0),
-      'selected_row_count', COALESCE(v_session_row.selected_row_count, 0),
+      'candidate_counts', v_candidate_counts_json,
+      'line_counts', v_line_counts_json,
+      'job_counts', v_job_counts_json,
+      'scope_total_count', COALESCE(v_scope_actual_total, 0),
+      'scope_seeded_count', COALESCE(v_scope_actual_seeded, 0),
+      'scope_ready_count', COALESCE(v_scope_actual_terminal, 0),
+      'scope_pending_count', COALESCE(v_scope_actual_pending_bucket, 0),
+      'scope_failed_count', COALESCE(v_scope_actual_failed, 0),
+      'line_units_total', COALESCE(v_line_actual_total, 0),
+      'line_units_complete', COALESCE(v_line_actual_terminal, 0),
+      'line_units_pending', COALESCE(v_line_actual_pending_bucket, 0),
+      'line_units_ready', COALESCE(v_line_actual_ready, 0),
+      'line_units_failed', COALESCE(v_line_actual_failed, 0),
+      'line_units_error', COALESCE(v_line_actual_failed, 0),
+      'preview_row_count', COALESCE(v_current_preview_row_count, 0),
+      'selected_row_count', COALESCE(v_current_selected_row_count, 0),
+      'selected_eligible_ready_row_count', COALESCE(v_selected_eligible_ready_row_count, 0),
       'ready_preview_line_count', COALESCE(v_ready_preview_line_count, 0),
       'case_resolution_state_count', COALESCE(v_case_resolution_state_count, 0),
       'blocked_preview_line_count', COALESCE(v_blocked_preview_line_count, 0),
-      'section_counts', COALESCE(v_session_row.section_counts_json, '{}'::jsonb),
-      'section_counts_json', COALESCE(v_session_row.section_counts_json, '{}'::jsonb),
-      'candidate_sample_rows', COALESCE(v_session_row.candidate_sample_rows_json, '[]'::jsonb),
-      'candidate_sample_rows_json', COALESCE(v_session_row.candidate_sample_rows_json, '[]'::jsonb),
-      'candidate_status_rows', COALESCE(v_session_row.candidate_sample_rows_json, '[]'::jsonb),
-      'candidate_statuses', COALESCE(v_session_row.candidate_sample_rows_json, '[]'::jsonb)
+      'section_counts', COALESCE(v_current_section_counts_json, '{}'::jsonb),
+      'section_counts_json', COALESCE(v_current_section_counts_json, '{}'::jsonb),
+      'candidate_sample_rows', COALESCE(v_candidate_sample_rows_json, '[]'::jsonb),
+      'candidate_sample_rows_json', COALESCE(v_candidate_sample_rows_json, '[]'::jsonb)
     )
     || jsonb_build_object(
+      'candidate_status_rows', COALESCE(v_candidate_sample_rows_json, '[]'::jsonb),
+      'candidate_statuses', COALESCE(v_candidate_sample_rows_json, '[]'::jsonb),
+      'pending_candidate_jobs', COALESCE(v_pending_candidate_jobs_json, '[]'::jsonb),
+      'pending_job_ids', COALESCE(v_pending_job_ids_json, '[]'::jsonb),
       'rows_available', v_rows_available,
       'selected_rows_available', v_selected_rows_available,
       'has_materialised_preview_rows', v_rows_available,
@@ -175784,10 +177174,18 @@ BEGIN
       'preview_rows_section', 'canonical_preview_lines',
       'recommended_page_size', 100,
       'requires_paging', true,
-      'count_unknown', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE,
+      'count_unknown', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE OR v_scope_cursor_remaining,
       'session_obsolete', v_session_obsolete,
+      'replacement_required', v_replacement_required,
       'replacement_session_id', CASE WHEN v_replacement_row.id IS NULL THEN NULL ELSE v_replacement_row.id::text END,
       'replacement_session_version', CASE WHEN v_replacement_row.id IS NULL THEN NULL ELSE v_replacement_row.version END,
+      'stored_ready_mismatch', v_stored_ready_mismatch,
+      'counter_drift_detected', v_counter_drift_detected,
+      'session_blocker_codes', COALESCE(v_session_blocker_codes, '[]'::jsonb),
+      'draft_blocker_codes', COALESCE(v_draft_blocker_codes, '[]'::jsonb),
+      'blocker_codes', COALESCE(v_draft_blocker_codes, '[]'::jsonb),
+      'blocker_counts', COALESCE(v_blocker_counts_json, '{}'::jsonb),
+      'maintained_counts', COALESCE(v_maintained_counts_json, '{}'::jsonb),
       'read_only', true
     );
 
@@ -175803,7 +177201,8 @@ BEGIN
       'source_snapshot_run_id', v_session_row.source_snapshot_run_id::text,
       'status', v_session_row.status,
       'session_status', v_session_row.status,
-      'progress_state', v_session_row.progress_state,
+      'progress_state', v_derived_progress_state,
+      'stored_progress_state', v_session_row.progress_state,
       'progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
       'progress_updated_at_utc', v_session_row.progress_updated_at_utc,
       'requires_paging', true,
@@ -175813,53 +177212,71 @@ BEGIN
       'scope_next_cursor_json', COALESCE(v_session_row.scope_next_cursor_json, '{}'::jsonb),
       'scope_next_cursor', NULLIF(COALESCE(v_session_row.scope_next_cursor_json, '{}'::jsonb), '{}'::jsonb),
       'scope_seed_complete', COALESCE(v_session_row.scope_seed_complete, false),
-      'scope_has_more', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE,
-      'scope_count_unknown', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE,
-      'scope_total_count', COALESCE(v_session_row.scope_total_count, 0),
-      'scope_seeded_count', COALESCE(v_session_row.scope_seeded_count, 0),
-      'scope_ready_count', COALESCE(v_session_row.scope_ready_count, 0),
-      'scope_pending_count', COALESCE(v_session_row.scope_pending_count, 0),
-      'scope_failed_count', COALESCE(v_session_row.scope_failed_count, 0),
-      'candidate_count', COALESCE(v_session_row.scope_total_count, 0),
-      'total_count', COALESCE(v_session_row.scope_total_count, 0),
-      'seeded_count', COALESCE(v_session_row.scope_seeded_count, 0),
-      'ready_count', COALESCE(v_session_row.scope_ready_count, 0),
-      'completed_count', COALESCE(v_session_row.scope_ready_count, 0),
-      'pending_count', COALESCE(v_session_row.scope_pending_count, 0),
-      'failed_count', COALESCE(v_session_row.scope_failed_count, 0),
-      'candidate_counts', jsonb_build_object(
-        'total', COALESCE(v_session_row.scope_total_count, 0),
-        'seeded', COALESCE(v_session_row.scope_seeded_count, 0),
-        'ready', COALESCE(v_session_row.scope_ready_count, 0),
-        'pending', COALESCE(v_session_row.scope_pending_count, 0),
-        'failed', COALESCE(v_session_row.scope_failed_count, 0),
-        'count_unknown', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE
-      )
+      'scope_has_more', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE OR v_scope_cursor_remaining,
+      'scope_count_unknown', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE OR v_scope_cursor_remaining,
+      'scope_cursor_remaining', v_scope_cursor_remaining,
+      'scope_total_count', COALESCE(v_scope_actual_total, 0),
+      'scope_seeded_count', COALESCE(v_scope_actual_seeded, 0),
+      'scope_ready_count', COALESCE(v_scope_actual_terminal, 0),
+      'scope_pending_count', COALESCE(v_scope_actual_pending_bucket, 0),
+      'scope_failed_count', COALESCE(v_scope_actual_failed, 0),
+      'candidate_count', COALESCE(v_scope_actual_total, 0),
+      'total_count', COALESCE(v_scope_actual_total, 0),
+      'seeded_count', COALESCE(v_scope_actual_seeded, 0),
+      'ready_count', COALESCE(v_scope_actual_terminal, 0),
+      'completed_count', COALESCE(v_scope_actual_terminal, 0),
+      'pending_count', COALESCE(v_scope_actual_pending_bucket, 0),
+      'failed_count', COALESCE(v_scope_actual_failed, 0),
+      'candidate_counts', v_candidate_counts_json,
+      'maintained_scope_total_count', COALESCE(v_session_row.scope_total_count, 0),
+      'maintained_scope_seeded_count', COALESCE(v_session_row.scope_seeded_count, 0),
+      'maintained_scope_ready_count', COALESCE(v_session_row.scope_ready_count, 0),
+      'maintained_scope_pending_count', COALESCE(v_session_row.scope_pending_count, 0),
+      'maintained_scope_failed_count', COALESCE(v_session_row.scope_failed_count, 0)
     )
     || jsonb_build_object(
-      'line_units_total', COALESCE(v_session_row.line_units_total, 0),
-      'line_units_complete', COALESCE(v_line_units_complete, 0),
-      'line_units_pending', COALESCE(v_session_row.line_units_pending, 0),
-      'line_units_ready', COALESCE(v_session_row.line_units_ready, 0),
-      'line_units_failed', COALESCE(v_session_row.line_units_failed, 0),
-      'line_units_error', COALESCE(v_session_row.line_units_failed, 0),
-      'preview_row_count', COALESCE(v_session_row.preview_row_count, 0),
-      'selected_row_count', COALESCE(v_session_row.selected_row_count, 0),
+      'line_units_total', COALESCE(v_line_actual_total, 0),
+      'line_units_complete', COALESCE(v_line_actual_terminal, 0),
+      'line_units_pending', COALESCE(v_line_actual_pending_bucket, 0),
+      'line_units_ready', COALESCE(v_line_actual_ready, 0),
+      'line_units_failed', COALESCE(v_line_actual_failed, 0),
+      'line_units_error', COALESCE(v_line_actual_failed, 0),
+      'line_counts', v_line_counts_json,
+      'maintained_line_units_total', COALESCE(v_session_row.line_units_total, 0),
+      'maintained_line_units_pending', COALESCE(v_session_row.line_units_pending, 0),
+      'maintained_line_units_ready', COALESCE(v_session_row.line_units_ready, 0),
+      'maintained_line_units_failed', COALESCE(v_session_row.line_units_failed, 0),
+      'preview_row_count', COALESCE(v_current_preview_row_count, 0),
+      'selected_row_count', COALESCE(v_current_selected_row_count, 0),
+      'selected_eligible_ready_row_count', COALESCE(v_selected_eligible_ready_row_count, 0),
+      'maintained_preview_row_count', COALESCE(v_session_row.preview_row_count, 0),
+      'maintained_selected_row_count', COALESCE(v_session_row.selected_row_count, 0),
       'ready_preview_line_count', COALESCE(v_ready_preview_line_count, 0),
       'case_resolution_state_count', COALESCE(v_case_resolution_state_count, 0),
       'blocked_preview_line_count', COALESCE(v_blocked_preview_line_count, 0),
-      'section_counts', COALESCE(v_session_row.section_counts_json, '{}'::jsonb),
-      'section_counts_json', COALESCE(v_session_row.section_counts_json, '{}'::jsonb),
-      'candidate_sample_rows', COALESCE(v_session_row.candidate_sample_rows_json, '[]'::jsonb),
-      'candidate_sample_rows_json', COALESCE(v_session_row.candidate_sample_rows_json, '[]'::jsonb),
-      'candidate_status_rows', COALESCE(v_session_row.candidate_sample_rows_json, '[]'::jsonb),
-      'candidate_statuses', COALESCE(v_session_row.candidate_sample_rows_json, '[]'::jsonb),
-      'progress_json', COALESCE(v_session_row.progress_json, '{}'::jsonb),
-      'progress', v_progress_payload_json
+      'section_counts', COALESCE(v_current_section_counts_json, '{}'::jsonb),
+      'section_counts_json', COALESCE(v_current_section_counts_json, '{}'::jsonb),
+      'maintained_section_counts_json', COALESCE(v_session_row.section_counts_json, '{}'::jsonb),
+      'candidate_sample_rows', COALESCE(v_candidate_sample_rows_json, '[]'::jsonb),
+      'candidate_sample_rows_json', COALESCE(v_candidate_sample_rows_json, '[]'::jsonb)
     )
     || jsonb_build_object(
-      'ready', v_ready_flag,
-      'ready_flag', v_ready_flag,
+      'candidate_status_rows', COALESCE(v_candidate_sample_rows_json, '[]'::jsonb),
+      'candidate_statuses', COALESCE(v_candidate_sample_rows_json, '[]'::jsonb),
+      'pending_candidate_jobs', COALESCE(v_pending_candidate_jobs_json, '[]'::jsonb),
+      'pending_job_ids', COALESCE(v_pending_job_ids_json, '[]'::jsonb),
+      'job_counts', v_job_counts_json,
+      'queued_jobs', COALESCE(v_jobs_queued, 0),
+      'running_jobs', COALESCE(v_jobs_running, 0),
+      'unresolved_failed_jobs', COALESCE(v_jobs_unresolved_failed, 0),
+      'unresolved_dead_jobs', COALESCE(v_jobs_unresolved_dead, 0),
+      'progress_json', COALESCE(v_session_row.progress_json, '{}'::jsonb),
+      'progress', v_progress_payload_json,
+      'ready', v_session_ready,
+      'ready_flag', v_session_ready,
+      'session_ready', v_session_ready,
+      'ready_for_draft', v_ready_for_draft,
+      'can_create_draft', v_ready_for_draft,
       'ready_empty', v_ready_empty,
       'still_running', v_still_running,
       'pending_refresh', v_still_running,
@@ -175868,7 +177285,9 @@ BEGIN
       'deferred', v_still_running,
       'progress_only', v_still_running,
       'preview_deferred', v_still_running,
-      'preview_ready', v_ready_flag,
+      'preview_ready', v_session_ready
+    )
+    || jsonb_build_object(
       'rows_available', v_rows_available,
       'selected_rows_available', v_selected_rows_available,
       'has_materialised_preview_rows', v_rows_available,
@@ -175881,22 +177300,32 @@ BEGIN
       'phase', v_phase,
       'status_text', v_status_text,
       'next_recommended_action', v_next_recommended_action,
+      'stored_ready_mismatch', v_stored_ready_mismatch,
+      'counter_drift_detected', v_counter_drift_detected,
+      'session_blocker_codes', COALESCE(v_session_blocker_codes, '[]'::jsonb),
+      'draft_blocker_codes', COALESCE(v_draft_blocker_codes, '[]'::jsonb),
+      'blocker_codes', COALESCE(v_draft_blocker_codes, '[]'::jsonb),
+      'blocker_counts', COALESCE(v_blocker_counts_json, '{}'::jsonb),
+      'maintained_counts', COALESCE(v_maintained_counts_json, '{}'::jsonb),
       'progress_summary', jsonb_build_object(
         'phase', v_phase,
         'status_text', v_status_text,
-        'ready_flag', v_ready_flag,
+        'ready_flag', v_session_ready,
+        'session_ready', v_session_ready,
+        'ready_for_draft', v_ready_for_draft,
         'ready_empty', v_ready_empty,
-        'count_unknown', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE,
+        'count_unknown', COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE OR v_scope_cursor_remaining,
         'next_recommended_action', v_next_recommended_action
       )
     )
     || jsonb_build_object(
       'session_obsolete', v_session_obsolete,
       'obsolete', v_session_obsolete,
-      'error_code', CASE WHEN v_session_obsolete THEN 'OBSOLETE_SESSION' ELSE NULL::text END,
-      'code', CASE WHEN v_session_obsolete THEN 'OBSOLETE_SESSION' ELSE NULL::text END,
-      'rebase_required', v_session_obsolete,
-      'requires_new_session', v_session_obsolete AND v_replacement_row.id IS NULL,
+      'replacement_required', v_replacement_required,
+      'error_code', CASE WHEN v_session_obsolete OR v_replacement_required THEN 'OBSOLETE_SESSION' ELSE NULL::text END,
+      'code', CASE WHEN v_session_obsolete OR v_replacement_required THEN 'OBSOLETE_SESSION' ELSE NULL::text END,
+      'rebase_required', v_session_obsolete OR v_replacement_required,
+      'requires_new_session', (v_session_obsolete OR v_replacement_required) AND v_replacement_row.id IS NULL,
       'replacement_available', v_replacement_row.id IS NOT NULL,
       'replacement_session_id', CASE WHEN v_replacement_row.id IS NULL THEN NULL ELSE v_replacement_row.id::text END,
       'replacement_session_version', CASE WHEN v_replacement_row.id IS NULL THEN NULL ELSE v_replacement_row.version END,
@@ -175916,6 +177345,8 @@ BEGIN
   RETURN v_response_json;
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2(
   p_actor_user_id uuid,

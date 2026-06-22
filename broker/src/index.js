@@ -32101,6 +32101,7 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
 
 
 
+
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, ctx) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -32310,7 +32311,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       scoped_positive_bank_payment_total: roundMoney(positiveTotal),
       paye_net_state_hash: Array.from(payeHashes)[0] || null,
       scoped_paye_net_state_hash: Array.from(payeHashes)[0] || null,
-      bank_payment_projection_hash: Array.from(projectionHashes)[0] || null
+      bank_payment_projection_hash: Array.from(projectionHashes)[0] || null,
+      scoped_bank_payment_projection_hash: Array.from(projectionHashes)[0] || null
     };
   };
 
@@ -32345,15 +32347,28 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       }
 
       projectionProof = await loadScopedProjectionProof();
-      if (!projectionProof.scoped_paye_net_state_hash || !projectionProof.bank_payment_projection_hash) {
+      const scopedPayeNetStateHash = trimStr(projectionProof.scoped_paye_net_state_hash || projectionProof.paye_net_state_hash);
+      const scopedBankPaymentProjectionHash = trimStr(projectionProof.scoped_bank_payment_projection_hash || projectionProof.bank_payment_projection_hash);
+      if (!scopedPayeNetStateHash || !scopedBankPaymentProjectionHash) {
         return fail(409, 'PAYMENT_PROJECTION_PROOF_REQUIRED', 'CloudTMS could not establish the authoritative scoped payment projection required for execution.');
       }
       if (projectionProof.missing_explicit_paye_input_count > 0) {
         return fail(409, 'PAYMENT_PROJECTION_CHANGED_DURING_PREFLIGHT', 'The frozen payment projection changed during execution preflight. Refresh the batch and try again.');
       }
+      projectionProof.global_missing_explicit_paye_input_count = globalMissingCount;
+      projectionProof.global_explicit_zero_count = globalExplicitZeroCount;
+      projectionProof.global_paye_net_state_hash = summaryPayeHash;
+      projectionProof.current_global_paye_net_state_hash = summaryPayeHash;
       projectionProof.missing_explicit_paye_input_count = globalMissingCount;
       projectionProof.explicit_zero_count = globalExplicitZeroCount;
-      projectionProof.paye_net_state_hash = summaryPayeHash;
+      projectionProof.paye_net_state_hash = scopedPayeNetStateHash;
+      projectionProof.current_paye_net_state_hash = scopedPayeNetStateHash;
+      projectionProof.scoped_paye_net_state_hash = scopedPayeNetStateHash;
+      projectionProof.current_scoped_paye_net_state_hash = scopedPayeNetStateHash;
+      projectionProof.bank_payment_projection_hash = scopedBankPaymentProjectionHash;
+      projectionProof.current_bank_payment_projection_hash = scopedBankPaymentProjectionHash;
+      projectionProof.scoped_bank_payment_projection_hash = scopedBankPaymentProjectionHash;
+      projectionProof.current_scoped_bank_payment_projection_hash = scopedBankPaymentProjectionHash;
       if (projectionProof.positive_bank_payment_count === 0 && projectionProof.scoped_explicit_zero_count === 0) {
         return fail(409, 'NO_EXECUTABLE_PAYMENT_SCOPE', 'This scope has no complete positive or explicit-zero payment position to execute.', { pay_batch_id: id, pay_channel_scope: requestedScope });
       }
@@ -32371,14 +32386,16 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
 
     const storedCsv = isPlainObject(batch.bank_csv_export_json) ? batch.bank_csv_export_json : {};
     const storedCsvScope = upperTrim(storedCsv.scope || storedCsv.pay_channel_scope || storedCsv.payChannelScope);
-    const storedPayeHash = trimStr(storedCsv.paye_net_state_hash || storedCsv.current_paye_net_state_hash || storedCsv.payeNetStateHash);
-    const storedProjectionHash = trimStr(storedCsv.bank_payment_projection_hash || storedCsv.current_bank_payment_projection_hash || storedCsv.bankPaymentProjectionHash);
+    const storedPayeHash = trimStr(storedCsv.scoped_paye_net_state_hash || storedCsv.current_scoped_paye_net_state_hash || storedCsv.paye_net_state_hash || storedCsv.current_paye_net_state_hash || storedCsv.payeNetStateHash || storedCsv.scopedPayeNetStateHash);
+    const storedProjectionHash = trimStr(storedCsv.scoped_bank_payment_projection_hash || storedCsv.current_scoped_bank_payment_projection_hash || storedCsv.bank_payment_projection_hash || storedCsv.current_bank_payment_projection_hash || storedCsv.bankPaymentProjectionHash || storedCsv.scopedBankPaymentProjectionHash);
     const storedRowCount = Number(storedCsv.row_count ?? storedCsv.rowCount);
     const storedTotal = Number(storedCsv.total_amount ?? storedCsv.totalAmount);
+    const currentScopedPayeHashForCsv = projectionProof ? trimStr(projectionProof.scoped_paye_net_state_hash || projectionProof.paye_net_state_hash) : '';
+    const currentScopedProjectionHashForCsv = projectionProof ? trimStr(projectionProof.scoped_bank_payment_projection_hash || projectionProof.bank_payment_projection_hash) : '';
     const csvCurrent = !retryBlockedFunds && projectionProof && Object.keys(storedCsv).length > 0
       && storedCsvScope === requestedScope
-      && storedPayeHash === projectionProof.paye_net_state_hash
-      && storedProjectionHash === projectionProof.bank_payment_projection_hash
+      && storedPayeHash === currentScopedPayeHashForCsv
+      && storedProjectionHash === currentScopedProjectionHashForCsv
       && Number.isFinite(storedRowCount)
       && Math.max(0, Math.trunc(storedRowCount)) === projectionProof.positive_bank_payment_count
       && Number.isFinite(storedTotal)
@@ -32492,7 +32509,11 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       no_bank_payment_execution: pureAllZero,
       allow_explicit_zero_no_bank_scopes: allowExplicitZeroNoBankScopes,
       paye_net_state_hash: projectionProof.paye_net_state_hash,
+      scoped_paye_net_state_hash: projectionProof.scoped_paye_net_state_hash,
+      global_paye_net_state_hash: projectionProof.global_paye_net_state_hash || null,
+      current_global_paye_net_state_hash: projectionProof.current_global_paye_net_state_hash || projectionProof.global_paye_net_state_hash || null,
       bank_payment_projection_hash: projectionProof.bank_payment_projection_hash,
+      scoped_bank_payment_projection_hash: projectionProof.scoped_bank_payment_projection_hash,
       missing_explicit_paye_input_count: projectionProof.missing_explicit_paye_input_count,
       explicit_zero_count: projectionProof.explicit_zero_count,
       scoped_explicit_zero_count: projectionProof.scoped_explicit_zero_count,
@@ -32506,7 +32527,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       bank_csv_current: executionMode === 'CSV_SETTLEMENT' ? csvCurrent : false,
       bank_csv_scope: executionMode === 'CSV_SETTLEMENT' ? storedCsvScope : null,
       bank_csv_paye_net_state_hash: executionMode === 'CSV_SETTLEMENT' ? storedPayeHash : null,
+      bank_csv_scoped_paye_net_state_hash: executionMode === 'CSV_SETTLEMENT' ? storedPayeHash : null,
       bank_csv_bank_payment_projection_hash: executionMode === 'CSV_SETTLEMENT' ? storedProjectionHash : null,
+      bank_csv_scoped_bank_payment_projection_hash: executionMode === 'CSV_SETTLEMENT' ? storedProjectionHash : null,
       bank_csv_row_count: executionMode === 'CSV_SETTLEMENT' && Number.isFinite(storedRowCount) ? Math.max(0, Math.trunc(storedRowCount)) : null,
       bank_csv_total_amount: executionMode === 'CSV_SETTLEMENT' && Number.isFinite(storedTotal) ? roundMoney(storedTotal) : null
     };
@@ -32585,7 +32608,10 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       no_bank_payment_execution: retryBlockedFunds ? false : pureAllZero,
       allow_explicit_zero_no_bank_scopes: retryBlockedFunds ? false : allowExplicitZeroNoBankScopes,
       paye_net_state_hash: projectionProof?.paye_net_state_hash || null,
+      scoped_paye_net_state_hash: projectionProof?.scoped_paye_net_state_hash || null,
+      global_paye_net_state_hash: projectionProof?.global_paye_net_state_hash || null,
       bank_payment_projection_hash: projectionProof?.bank_payment_projection_hash || null,
+      scoped_bank_payment_projection_hash: projectionProof?.scoped_bank_payment_projection_hash || null,
       progress_light: isPlainObject(operationPayload.progress_light) ? operationPayload.progress_light : (isPlainObject(operationPayload.progress) ? operationPayload.progress : {})
     }));
   } catch (error) {
@@ -32606,6 +32632,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
     return response(Number(friendly && (friendly.http_status || friendly.status)) || 400, Object.assign({}, friendlyInput, isPlainObject(friendly) ? friendly : {}));
   }
 }
+
+
 
 
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
