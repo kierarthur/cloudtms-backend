@@ -26155,6 +26155,9 @@ async function handleBankingIdLedgerList(env, req, user) {
 
 
 
+
+
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -26370,6 +26373,15 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   );
   const actorUserId = operationActorUserId;
   const operationType = upper(operation.operation_type || operation.operationType);
+  const operationIdempotencyKey = trimStr(operation.idempotency_key || operation.idempotencyKey || inputJson.idempotency_key || inputJson.idempotencyKey);
+  const canonicaliseDurableExecutionMode = (value, options = {}) => {
+    const mode = upper(value);
+    if (['CSV', 'CSV_SETTLEMENT'].includes(mode)) return 'CSV_SETTLEMENT';
+    if (['STANDARD_BANK', 'BANK'].includes(mode)) return 'STANDARD_BANK';
+    if (['EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT'].includes(mode)) return 'EXTERNAL_SETTLEMENT';
+    if (options && options.allowBankCsvExportPrepareOnly === true && mode === 'BANK_CSV_EXPORT_PREPARE') return 'CSV_SETTLEMENT';
+    return '';
+  };
   const normalisePhase = (value) => upper(value);
   const phaseRank = (phase) => {
     const normalised = normalisePhase(phase);
@@ -26493,6 +26505,78 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   const scheduleKind = upper(inputJson.schedule_kind || inputJson.scheduleKind || (inputJson.scheduled_at_utc ? 'SCHEDULED' : 'IMMEDIATE')) || 'IMMEDIATE';
   const retryBlockedFunds = operationType === 'PAYMENT_RETRY_BLOCKED_FUNDS' || inputJson.retry_blocked_funds === true || options.retryBlockedFunds === true;
   const bankCsvExportPrepareOnly = inputJson.prepare_bank_csv_export_only === true || upper(inputJson.execution_mode || '') === 'BANK_CSV_EXPORT_PREPARE';
+  const durableExecutionModeRaw = trimStr(inputJson.execution_mode || inputJson.executionMode);
+  const canonicalExecutionMode = canonicaliseDurableExecutionMode(durableExecutionModeRaw, { allowBankCsvExportPrepareOnly: bankCsvExportPrepareOnly });
+  const executionModeInvalidReason = canonicalExecutionMode
+    ? ''
+    : (durableExecutionModeRaw ? 'UNSUPPORTED_DURABLE_EXECUTION_MODE' : 'MISSING_DURABLE_EXECUTION_MODE');
+  const providerBoundaryPhases = new Set([
+    'SUBMIT_PROVIDER_TRANSFERS',
+    'SEND_PROVIDER_CHUNK',
+    'REQUEST_PROVIDER_SEND',
+    'FINALISE_PROVIDER_CHUNK',
+    'APPLY_RAIL_UPDATES'
+  ]);
+  const providerContinuationPhases = new Set([
+    'PROVIDER_SUBMIT_CLAIM',
+    'CLAIM_PROVIDER_SUBMIT',
+    'SUBMIT_PROVIDER_TRANSFERS',
+    'SEND_PROVIDER_CHUNK',
+    'REQUEST_PROVIDER_SEND',
+    'FINALISE_PROVIDER_CHUNK',
+    'APPLY_RAIL_UPDATES'
+  ]);
+  const localManualSettlementModes = new Set(['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT']);
+  const isLocalManualSettlementMode = (modeValue = canonicalExecutionMode) => localManualSettlementModes.has(normaliseExecutionMode(modeValue));
+  const localManualSettlementLabel = (modeValue = canonicalExecutionMode) => normaliseExecutionMode(modeValue) === 'CSV_SETTLEMENT' ? 'CSV settlement' : 'external settlement';
+  const isProviderContinuationPhase = (value) => providerContinuationPhases.has(upper(value)) || providerBoundaryPhases.has(canonicalExecutePhase(value));
+  const csvManualConfirmationMode = () => {
+    const existing = upper(inputJson.manual_confirmation_mode || inputJson.manualConfirmationMode || progressJson.manual_confirmation_mode || progressJson.manualConfirmationMode);
+    if (existing) return existing;
+    if (inputJson.csv_uploaded_confirmed === true || inputJson.csvUploadedConfirmed === true) return 'BANK_UPLOAD_CONFIRMED';
+    return '';
+  };
+  const localManualConfirmationMode = () => {
+    const existing = upper(inputJson.manual_confirmation_mode || inputJson.manualConfirmationMode || progressJson.manual_confirmation_mode || progressJson.manualConfirmationMode);
+    if (existing) return existing;
+    if (canonicalExecutionMode === 'CSV_SETTLEMENT' && (inputJson.csv_uploaded_confirmed === true || inputJson.csvUploadedConfirmed === true)) return 'BANK_UPLOAD_CONFIRMED';
+    return '';
+  };
+  const applyExecutionModeInvariantToProgress = (progressPatchValue) => {
+    const patch = isPlainObject(progressPatchValue) ? Object.assign({}, progressPatchValue) : {};
+    if (!isLocalManualSettlementMode()) return patch;
+    patch.execution_mode = canonicalExecutionMode;
+    patch.provider_submission_required = false;
+    patch.provider_submission_attempted = false;
+    patch.submitted_to_bank = false;
+    patch.provider_submission_status = 'NO_PROVIDER_SUBMISSION_ATTEMPTED';
+    delete patch.provider_submit_claim;
+    delete patch.last_provider_submit_chunk_id;
+    delete patch.last_provider_chunk_id;
+    delete patch.provider_submit_claim_chunk_id;
+    delete patch.provider_submit_stage_last_recorded;
+    delete patch.provider_submit_transfer_scope_count;
+    delete patch.provider_submit_transfer_count;
+    delete patch.provider_submit_transfer_payload_source;
+    if (isProviderContinuationPhase(patch.next_required_phase || patch.nextRequiredPhase || patch.phase)) {
+      patch.next_required_phase = 'START_AUTHORISATION_PROOF';
+      delete patch.nextRequiredPhase;
+    }
+    if (!patch.manual_confirmation_mode) {
+      const manualMode = localManualConfirmationMode();
+      if (manualMode) patch.manual_confirmation_mode = manualMode;
+    }
+    if (canonicalExecutionMode === 'CSV_SETTLEMENT' && (inputJson.csv_uploaded_confirmed === true || inputJson.csvUploadedConfirmed === true)) {
+      patch.csv_uploaded_confirmed = true;
+      const csvConfirmRef = trimStr(inputJson.csv_bank_confirm_ref || inputJson.csvBankConfirmRef);
+      if (csvConfirmRef) patch.csv_bank_confirm_ref = csvConfirmRef;
+    }
+    if (canonicalExecutionMode === 'EXTERNAL_SETTLEMENT') {
+      const externalComment = trimStr(inputJson.external_settlement_comment || inputJson.externalSettlementComment);
+      if (externalComment) patch.external_settlement_comment = externalComment;
+    }
+    return patch;
+  };
 
   if (!uuidRe.test(operationId)) throw new Error('advanceBankingPayExecuteOperation: operation_id is required');
   if (!uuidRe.test(payBatchId)) throw new Error('advanceBankingPayExecuteOperation: pay_batch_id is required');
@@ -26629,7 +26713,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   ]);
 
   const saveAndRelease = async (releaseState, nextPhase, progressPatch, resultPatch, errorPatch, delaySeconds, resumeReason) => {
-    const progress = isPlainObject(progressPatch) ? progressPatch : {};
+    const progress = applyExecutionModeInvariantToProgress(isPlainObject(progressPatch) ? progressPatch : {});
     const releaseTimeoutMs = limitFromConfig('rpc_timeout_ms', 15000, 1000, 20000);
     const releaseProgressPatch = Object.assign({}, progress, {
       phase: nextPhase,
@@ -27364,7 +27448,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       const expectedPayeHash = firstTextValue(proof.paye_net_state_hash, progressJson.paye_net_state_hash, inputJson.paye_net_state_hash);
       const expectedProjectionHash = firstTextValue(proof.bank_payment_projection_hash, progressJson.bank_payment_projection_hash, inputJson.bank_payment_projection_hash);
       const expectedScope = upper(firstTextValue(proof.pay_channel_scope, progressJson.pay_channel_scope, inputJson.pay_channel_scope, payChannelScope));
-      const expectedMode = normaliseExecutionMode(firstTextValue(proof.execution_mode, progressJson.execution_mode, inputJson.execution_mode, 'STANDARD_BANK'));
+      const expectedMode = normaliseExecutionMode(firstTextValue(proof.execution_mode, progressJson.execution_mode, inputJson.execution_mode, canonicalExecutionMode));
       const itemById = new Map(itemRows.map((row) => [trimStr(row.id), row]));
       const nonvoidItems = itemRows.filter((row) => row && row.is_voided !== true && statusText(row.item_type) !== 'DEBT_CREATED');
       const noBankItemIds = new Set();
@@ -27798,7 +27882,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         }
       };
     }
-    const executionMode = normaliseExecutionMode(projectionProof.execution_mode || inputJson.execution_mode || 'STANDARD_BANK');
+    const executionMode = normaliseExecutionMode(projectionProof.execution_mode || inputJson.execution_mode || canonicalExecutionMode);
     if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) {
       return {
         ok: false,
@@ -27822,10 +27906,10 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       };
     }
     const settlementMode = executionMode;
-    const pureNoBankCsv = executionMode === 'CSV_SETTLEMENT' && projectionProof.pure_no_bank_payment === true;
-    const confirmationMode = pureNoBankCsv
+    const pureNoBankLocalManual = ['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode) && projectionProof.pure_no_bank_payment === true;
+    const confirmationMode = pureNoBankLocalManual
       ? 'ZERO_ROW_REVIEW_NO_BANK_PAYMENT_REQUIRED'
-      : firstTextValue(projectionProof.manual_confirmation_mode, authIntent.manual_confirmation_mode, inputJson.manual_confirmation_mode);
+      : firstTextValue(projectionProof.manual_confirmation_mode, authIntent.manual_confirmation_mode, inputJson.manual_confirmation_mode, inputJson.manualConfirmationMode, localManualConfirmationMode());
     const idempotencyKey = [
       'payment-settlement',
       `batch:${payBatchId}`,
@@ -28245,7 +28329,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       const proofBatchId = firstTextValue(source.pay_batch_id, source.payBatchId);
       const authRequestId = firstTextValue(source.auth_request_id, source.authRequestId, source.pay_batch_auth_request_id, source.payBatchAuthRequestId);
       const authState = upper(source.auth_state || source.authState || source.state);
-      const executionMode = normaliseExecutionMode(source.execution_mode || source.executionMode || inputJson.execution_mode || inputJson.executionMode || 'STANDARD_BANK');
+      const executionMode = normaliseExecutionMode(source.execution_mode || source.executionMode || inputJson.execution_mode || inputJson.executionMode || canonicalExecutionMode);
       const scheduleKindValue = upper(source.schedule_kind || source.scheduleKind || inputJson.schedule_kind || inputJson.scheduleKind || scheduleKind || 'IMMEDIATE') || 'IMMEDIATE';
       const scheduledAtUtc = firstTextValue(source.scheduled_at_utc, source.scheduledAtUtc, inputJson.scheduled_at_utc, inputJson.scheduledAtUtc);
       const paymentDate = firstTextValue(source.payment_date, source.paymentDate, inputJson.payment_date, inputJson.paymentDate);
@@ -28855,7 +28939,93 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     };
   };
 
+  const rpcExecutionModeFrom = (payload) => {
+    const source = isPlainObject(payload) ? payload : {};
+    return normaliseExecutionMode(firstTextValue(
+      source.execution_mode,
+      source.executionMode,
+      source.operation_execution_mode,
+      source.operationExecutionMode,
+      source.settlement_mode,
+      source.settlementMode
+    ));
+  };
+
+  const buildExecutionModeMismatchDetails = (sourceName, payload, returnedMode) => ({
+    source: sourceName,
+    durable_execution_mode_raw: durableExecutionModeRaw || null,
+    canonical_execution_mode: canonicalExecutionMode || null,
+    returned_execution_mode: returnedMode || null,
+    pay_batch_id: payBatchId,
+    operation_id: operationId,
+    payload: isPlainObject(payload) ? payload : {}
+  });
+
+  const handleLocalManualProviderBoundaryPhase = async () => {
+    const settlementLabel = localManualSettlementLabel();
+    const providerEvidence = await readProviderDispatchEvidence({ reason: 'LOCAL_MANUAL_SETTLEMENT_PROVIDER_BOUNDARY_GUARD' });
+    if (providerEvidence.evidence_read_ok !== true) {
+      return reviewRequired(
+        currentPhase,
+        'LOCAL_MANUAL_SETTLEMENT_PROVIDER_EVIDENCE_READ_FAILED',
+        `${settlementLabel} reached a provider phase, and CloudTMS could not prove whether provider submission evidence exists.`,
+        { provider_dispatch_evidence: providerEvidence, canonical_execution_mode: canonicalExecutionMode }
+      );
+    }
+    if (providerEvidence.provider_call_started === true || providerEvidence.provider_dispatch_evidence_present === true || providerEvidence.provider_submit_attempt_evidence_present === true || providerEvidence.provider_ambiguity_evidence_present === true || providerEvidence.provider_claim_or_prepare_only === true || numberValue(providerEvidence.provider_submit_ready_count, 0) > 0) {
+      return reviewRequired(
+        currentPhase,
+        'LOCAL_MANUAL_SETTLEMENT_PROVIDER_BOUNDARY_EVIDENCE_PRESENT',
+        `${settlementLabel} reached a provider phase after provider/bank evidence was detected. This must be reviewed rather than routed through provider submission.`,
+        { provider_dispatch_evidence: providerEvidence, canonical_execution_mode: canonicalExecutionMode }
+      );
+    }
+    const authProof = resolveAuthoritativeProjectionProof([
+      safeObject(progressJson.pay_batch_auth_start).execution_intent_json,
+      progressJson.pay_batch_auth_start,
+      progressJson.no_bank_payment_proof,
+      progressJson,
+      inputJson.execution_intent_json,
+      inputJson
+    ], { requireAuth: true });
+    if (authProof.valid === true) {
+      return moreWork('START_LOCAL_SETTLEMENT', Object.assign({
+        status_text: `${settlementLabel} reached a provider phase without provider dispatch evidence; routing to local settlement from the authorised local/manual proof.`,
+        local_manual_provider_boundary_guard: providerEvidence,
+        local_settlement_required: true,
+        next_required_phase: 'START_LOCAL_SETTLEMENT'
+      }, projectionProofProgressPatch(authProof)), 0, 'LOCAL_MANUAL_SETTLEMENT_PROVIDER_PHASE_REROUTED_TO_LOCAL_SETTLEMENT');
+    }
+    return moreWork('START_AUTHORISATION_PROOF', {
+      status_text: `${settlementLabel} reached a provider phase without provider dispatch evidence; routing back to authorisation proof instead of provider submission.`,
+      local_manual_provider_boundary_guard: providerEvidence,
+      execution_mode: canonicalExecutionMode,
+      provider_submission_required: false,
+      provider_submission_attempted: false,
+      submitted_to_bank: false,
+      next_required_phase: 'START_AUTHORISATION_PROOF'
+    }, 0, 'LOCAL_MANUAL_SETTLEMENT_PROVIDER_PHASE_REROUTED_TO_AUTHORISATION');
+  };
+
   try {
+    if (!canonicalExecutionMode) {
+      return reviewRequired(
+        currentPhase,
+        executionModeInvalidReason || 'DURABLE_EXECUTION_MODE_INVALID',
+        'Payment execution operation has no supported durable execution mode in operation.input_json.execution_mode.',
+        {
+          durable_execution_mode_raw: durableExecutionModeRaw || null,
+          supported_execution_modes: ['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'],
+          pay_batch_id: payBatchId,
+          operation_id: operationId
+        }
+      );
+    }
+
+    if (isLocalManualSettlementMode() && !bankCsvExportPrepareOnly && providerBoundaryPhases.has(canonicalExecutePhase(currentPhase))) {
+      return handleLocalManualProviderBoundaryPhase();
+    }
+
     if (bankCsvExportPrepareOnly && ['PREPARE_BATCH_PROOF', 'PREPARE_BATCH', 'START_AUTHORISATION_PROOF', 'START_AUTHORISATION', 'SCHEDULE_PAYMENT', 'SUBMIT_PROVIDER_TRANSFERS', 'SEND_PROVIDER_CHUNK', 'REQUEST_PROVIDER_SEND'].includes(currentPhase)) {
       return complete({
         status_text: 'Bank CSV transfer rows are prepared; provider submission is not run for CSV export preparation.',
@@ -29076,6 +29246,17 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         if (numberValue(seededChunks.new_chunk_count, 0) > 0) {
           return moreWork('ROLLUP_TRANSFER_SCOPE_ITEMS', { status_text: 'Seeded transfer rollup chunks for next bounded advance.', chunk_seed: seededChunks });
         }
+        if (isLocalManualSettlementMode()) {
+          return moreWork('PREPARE_TRANSFER_CHUNKS', {
+            status_text: `No transfer-scope rollup chunks remain. ${localManualSettlementLabel()} skips provider-submit chunk seeding and will prepare local settlement evidence next.`,
+            chunk_seed: seededChunks,
+            provider_submit_chunk_seed_skipped: true,
+            provider_submission_required: false,
+            provider_submission_attempted: false,
+            submitted_to_bank: false,
+            next_required_phase: 'PREPARE_TRANSFER_CHUNKS'
+          }, 0, 'LOCAL_MANUAL_SETTLEMENT_PREPARE_LOCAL_EVIDENCE');
+        }
         return moreWork('SEED_TRANSFER_SUBMIT_CHUNKS', { status_text: 'No transfer-scope rollup chunks remain.', chunk_seed: seededChunks });
       }
       const transferScopeId = firstTransferScopeIdFromChunk(chunk);
@@ -29112,12 +29293,18 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     }
 
     if (currentPhase === 'SEED_TRANSFER_SUBMIT_CHUNKS') {
-      if (bankCsvExportPrepareOnly) {
+      if (isLocalManualSettlementMode() || bankCsvExportPrepareOnly) {
         return moreWork('PREPARE_TRANSFER_CHUNKS', {
-          status_text: 'Bank CSV export preparation skips provider-submit chunk seeding and will only prepare local transfer rows.',
-          bank_csv_export_prepare_only: true,
-          provider_submit_chunk_seed_skipped: true
-        });
+          status_text: bankCsvExportPrepareOnly
+            ? 'Bank CSV export preparation skips provider-submit chunk seeding and will only prepare local transfer rows.'
+            : `${localManualSettlementLabel()} skips provider-submit chunk seeding and will prepare local settlement evidence.`,
+          bank_csv_export_prepare_only: bankCsvExportPrepareOnly === true,
+          provider_submit_chunk_seed_skipped: true,
+          provider_submission_required: false,
+          provider_submission_attempted: false,
+          submitted_to_bank: false,
+          next_required_phase: 'PREPARE_TRANSFER_CHUNKS'
+        }, 0, isLocalManualSettlementMode() ? 'LOCAL_MANUAL_SETTLEMENT_PREPARE_LOCAL_EVIDENCE' : 'BANK_CSV_EXPORT_PREPARE_LOCAL_TRANSFER_ROWS');
       }
       const seededChunks = await seedChunks('SUBMIT_PROVIDER_TRANSFERS', 'TRANSFER_SUBMIT', limitFromConfig('provider_submit_limit', 25, 1, 25));
       return moreWork('PREPARE_TRANSFER_CHUNKS', { status_text: 'Seeded provider-transfer submit chunks.', chunk_seed: seededChunks });
@@ -29131,6 +29318,24 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         p_actor_user_id: actorUserId
       }, 'pay_execute_bank_transfer_chunk_prepare');
       if (prepared.ok === false) return reviewRequired(currentPhase, prepared.code || 'TRANSFER_CHUNK_PREPARE_FAILED', prepared.message || 'Transfer chunk prepare failed.', { transfer_chunk_prepare: prepared });
+      const preparedReturnedExecutionMode = rpcExecutionModeFrom(prepared);
+      if (preparedReturnedExecutionMode !== canonicalExecutionMode) {
+        return reviewRequired(
+          currentPhase,
+          'TRANSFER_CHUNK_PREPARE_EXECUTION_MODE_MISMATCH',
+          'Transfer chunk prepare returned an execution mode that does not match the durable payment operation mode.',
+          buildExecutionModeMismatchDetails('pay_execute_bank_transfer_chunk_prepare', prepared, preparedReturnedExecutionMode)
+        );
+      }
+      const preparedNextRequiredPhase = canonicalExecutePhase(prepared.next_required_phase || prepared.nextRequiredPhase || prepared.phase || '');
+      if (isLocalManualSettlementMode() && isProviderContinuationPhase(preparedNextRequiredPhase)) {
+        return reviewRequired(
+          currentPhase,
+          'LOCAL_MANUAL_SETTLEMENT_TRANSFER_PREPARE_PROVIDER_PHASE_REJECTED',
+          `${localManualSettlementLabel()} transfer preparation returned a provider-submission continuation phase. Local/manual settlement must continue to authorisation and local settlement instead.`,
+          { transfer_chunk_prepare: prepared, returned_next_required_phase: preparedNextRequiredPhase, canonical_execution_mode: canonicalExecutionMode }
+        );
+      }
       if (prepared.has_more === true || numberValue(prepared.remaining_count, 0) > 0) {
         return moreWork('PREPARE_TRANSFER_CHUNKS', { status_text: 'Prepared one transfer chunk page.', transfer_chunk_prepare: prepared });
       }
@@ -29170,6 +29375,24 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       const prepareReady = prepared.ready === true || prepared.ready_flag === true || prepared.readyFlag === true;
       const prepareNextRequiredPhase = upper(prepared.next_required_phase || prepared.nextRequiredPhase || '');
       if (prepared.ok === false || prepared.hard_blocker === true) return reviewRequired(currentPhase, prepared.code || 'PAY_BATCH_PREPARE_FAILED', prepared.message || 'Payment batch prepare failed.', { pay_batch_prepare: prepared });
+      const prepareReturnedExecutionMode = rpcExecutionModeFrom(prepared);
+      if (prepareReturnedExecutionMode !== canonicalExecutionMode) {
+        return reviewRequired(
+          currentPhase,
+          'PAY_BATCH_PREPARE_EXECUTION_MODE_MISMATCH',
+          'Payment batch prepare returned an execution mode that does not match the durable payment operation mode.',
+          buildExecutionModeMismatchDetails('pay_batch_prepare', prepared, prepareReturnedExecutionMode)
+        );
+      }
+      const prepareNextRequiredPhaseCanonical = canonicalExecutePhase(prepareNextRequiredPhase);
+      if (isLocalManualSettlementMode() && isProviderContinuationPhase(prepareNextRequiredPhaseCanonical)) {
+        return reviewRequired(
+          currentPhase,
+          'LOCAL_MANUAL_SETTLEMENT_PREPARE_PROVIDER_PHASE_REJECTED',
+          `${localManualSettlementLabel()} prepare returned a provider-submission continuation phase. Local/manual settlement must continue to authorisation and local settlement instead.`,
+          { pay_batch_prepare: prepared, returned_next_required_phase: prepareNextRequiredPhaseCanonical, canonical_execution_mode: canonicalExecutionMode }
+        );
+      }
       if (prepareReady !== true || prepareBlockerCount > 0 || prepareNextRequiredPhase === 'RESOLVE_BLOCKERS') {
         return reviewRequired(
           currentPhase,
@@ -29190,17 +29413,32 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         p_warning_hours_json: Array.isArray(inputJson.warning_hours_json) ? inputJson.warning_hours_json : [],
         p_actor_user_id: actorUserId,
         p_actor_intent: inputJson.actor_intent || null,
-        p_execution_mode: inputJson.execution_mode || 'STANDARD_BANK',
-        p_payment_date: inputJson.payment_date || null,
+        p_execution_mode: canonicalExecutionMode,
+        p_payment_date: inputJson.payment_date || inputJson.paymentDate || null,
         p_pay_channel_scope: payChannelScope,
         p_suppress_remittances: inputJson.suppress_remittances === true,
         p_suppress_remittances_confirmed: inputJson.suppress_remittances_confirmed === true,
         p_csv_uploaded_confirmed: inputJson.csv_uploaded_confirmed === true,
         p_csv_bank_confirm_ref: inputJson.csv_bank_confirm_ref || null,
-        p_external_settlement_comment: inputJson.external_settlement_comment || null,
+        p_external_settlement_comment: inputJson.external_settlement_comment || inputJson.externalSettlementComment || null,
         p_operation_id: operationId,
+        p_idempotency_key: operationIdempotencyKey || null,
         p_freshness_result_hash: progressJson.freshness_result_hash || inputJson.freshness_result_hash || null
       }, 'pay_batch_auth_start');
+      const staleAuthSafeCancelled = auth.stale_auth_request_cancelled === true
+        || auth.stale_auth_cancelled === true
+        || auth.safe_cancelled_previous_auth_request === true
+        || auth.previous_auth_request_cancelled === true
+        || auth.cancelled_previous_auth_request === true;
+      if ((auth.ok === false || auth.hard_blocker === true) && staleAuthSafeCancelled === true && progressJson.stale_auth_request_safe_cancelled_once !== true) {
+        return moreWork('START_AUTHORISATION_PROOF', {
+          status_text: 'A stale previous-operation auth request was safely cancelled; authorisation will retry once using the current operation idempotency key.',
+          pay_batch_auth_start: auth,
+          stale_auth_request_safe_cancelled_once: true,
+          stale_auth_request_safe_cancelled_at_utc: new Date().toISOString(),
+          next_required_phase: 'START_AUTHORISATION_PROOF'
+        }, 0, 'STALE_AUTH_REQUEST_SAFE_CANCELLED_RETRY_AUTHORISATION');
+      }
       if (auth.ok === false || auth.hard_blocker === true) return reviewRequired(currentPhase, auth.code || 'PAY_BATCH_AUTH_START_FAILED', auth.message || 'Payment authorisation failed.', { pay_batch_auth_start: auth });
       const authState = upper(auth.auth_state || auth.status || auth.state || '');
       const authNextRequiredPhase = upper(auth.next_required_phase || auth.nextRequiredPhase || '');
@@ -29215,7 +29453,37 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       if (authProof.valid !== true) {
         return reviewRequired(currentPhase, 'AUTHORISED_PAYMENT_PROJECTION_PROOF_INVALID', 'The authorised payment result did not contain a complete server-owned payment projection proof.', { pay_batch_auth_start: auth, payment_projection_proof_validation: authProof });
       }
-      if (!['SETTLEMENT', 'WAIT_FOR_SCHEDULE', 'SUBMIT_PROVIDER_TRANSFERS'].includes(authNextRequiredPhase)) {
+      const authProofExecutionMode = normaliseExecutionMode(authProof.execution_mode || auth.execution_mode || auth.executionMode);
+      if (authProofExecutionMode !== canonicalExecutionMode) {
+        return reviewRequired(
+          currentPhase,
+          'AUTHORISED_EXECUTION_MODE_MISMATCH',
+          'The authorised payment proof execution mode does not match the durable payment operation mode.',
+          { pay_batch_auth_start: auth, payment_projection_proof_validation: authProof, authorised_execution_mode: authProofExecutionMode || null, canonical_execution_mode: canonicalExecutionMode }
+        );
+      }
+      if (isLocalManualSettlementMode()) {
+        const authProofOperationId = trimStr(authProof.execution_operation_id || authProof.operation_id);
+        const authProofBatchId = trimStr(authProof.pay_batch_id);
+        const authProofScope = upper(authProof.pay_channel_scope || authProof.scope);
+        if (authProofOperationId !== operationId || authProofBatchId !== payBatchId || authProofScope !== payChannelScope) {
+          return reviewRequired(
+            currentPhase,
+            'LOCAL_MANUAL_SETTLEMENT_AUTHORISED_PROOF_BINDING_MISMATCH',
+            `The authorised ${localManualSettlementLabel()} proof is not bound to the current operation, batch, and scope.`,
+            { pay_batch_auth_start: auth, payment_projection_proof_validation: authProof, expected_operation_id: operationId, expected_pay_batch_id: payBatchId, expected_scope: payChannelScope }
+          );
+        }
+        if (isProviderContinuationPhase(authNextRequiredPhase)) {
+          return reviewRequired(
+            currentPhase,
+            'LOCAL_MANUAL_SETTLEMENT_AUTHORISED_PROVIDER_PHASE_REJECTED',
+            `The authorised ${localManualSettlementLabel()} result returned a provider-submission continuation phase. Local/manual settlement must continue to local settlement.`,
+            { pay_batch_auth_start: auth, next_required_phase: authNextRequiredPhase, canonical_execution_mode: canonicalExecutionMode }
+          );
+        }
+      }
+      if (!['SETTLEMENT', 'START_LOCAL_SETTLEMENT', 'WAIT_FOR_SCHEDULE', 'SUBMIT_PROVIDER_TRANSFERS'].includes(authNextRequiredPhase)) {
         return reviewRequired(currentPhase, 'AUTHORISED_NEXT_REQUIRED_PHASE_INVALID', 'The authorised payment result returned an unsupported next_required_phase.', { pay_batch_auth_start: auth, next_required_phase: authNextRequiredPhase });
       }
       const scheduledNoticeAuthRequestId = resolveAuthRequestIdForScheduledNotice(auth, inputJson, progressJson) || authProof.auth_request_id || null;
@@ -29232,14 +29500,24 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         }, proofPatch), 0, 'WAIT_FOR_SCHEDULE');
       }
       const scheduledNotice = await queueScheduledPaymentNoticeBestEffort(auth, inputJson, progressJson);
-      if (authNextRequiredPhase === 'SETTLEMENT') {
+      if (authNextRequiredPhase === 'SETTLEMENT' || authNextRequiredPhase === 'START_LOCAL_SETTLEMENT') {
         return moreWork('START_LOCAL_SETTLEMENT', Object.assign({
           status_text: authProof.pure_no_bank_payment === true
             ? 'Authorisation complete; no bank transfer is required and local settlement is next.'
-            : 'Authorisation complete; the authorised manual settlement route is next.',
+            : (canonicalExecutionMode === 'CSV_SETTLEMENT'
+              ? 'Authorisation complete; the authorised CSV settlement route is next.'
+              : 'Authorisation complete; the authorised external/manual settlement route is next.'),
           pay_batch_scheduled_notice: scheduledNotice,
           local_settlement_required: true
         }, proofPatch), 0, 'AUTHORISED_SETTLEMENT_REQUIRED');
+      }
+      if (canonicalExecutionMode !== 'STANDARD_BANK') {
+        return reviewRequired(
+          currentPhase,
+          'NON_STANDARD_EXECUTION_PROVIDER_ROUTE_REJECTED',
+          'Only STANDARD_BANK execution may continue to provider submission after authorisation.',
+          { pay_batch_auth_start: auth, next_required_phase: authNextRequiredPhase, canonical_execution_mode: canonicalExecutionMode }
+        );
       }
       return moreWork('SUBMIT_PROVIDER_TRANSFERS', Object.assign({
         status_text: 'Authorisation complete; ready to claim one provider chunk.',
@@ -29278,6 +29556,62 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
           local_settlement_required: true,
           next_required_phase: 'START_LOCAL_SETTLEMENT'
         }, projectionProofProgressPatch(scheduledNoBankProof)), 0, 'SCHEDULED_NO_BANK_PAYMENT_DUE');
+      }
+
+      if (isLocalManualSettlementMode()) {
+        const scheduledLocalSettlementProof = resolveAuthoritativeProjectionProof([
+          safeObject(progressJson.pay_batch_auth_start).execution_intent_json,
+          progressJson.pay_batch_auth_start,
+          progressJson.no_bank_payment_proof,
+          progressJson,
+          inputJson.execution_intent_json,
+          inputJson
+        ], { requireAuth: true });
+        if (scheduledLocalSettlementProof.valid !== true) {
+          return reviewRequired(
+            currentPhase,
+            'SCHEDULED_LOCAL_MANUAL_SETTLEMENT_PROOF_REQUIRED',
+            `The authorised scheduled ${localManualSettlementLabel()} route has no complete server-owned payment projection proof.`,
+            { payment_projection_proof_validation: scheduledLocalSettlementProof, canonical_execution_mode: canonicalExecutionMode }
+          );
+        }
+        const scheduledProofMode = normaliseExecutionMode(scheduledLocalSettlementProof.execution_mode || canonicalExecutionMode);
+        if (scheduledProofMode !== canonicalExecutionMode) {
+          return reviewRequired(
+            currentPhase,
+            'SCHEDULED_LOCAL_MANUAL_SETTLEMENT_MODE_MISMATCH',
+            `The authorised scheduled ${localManualSettlementLabel()} proof execution mode does not match the durable operation mode.`,
+            { payment_projection_proof_validation: scheduledLocalSettlementProof, authorised_execution_mode: scheduledProofMode || null, canonical_execution_mode: canonicalExecutionMode }
+          );
+        }
+        const scheduledAtUtc = firstTextValue(scheduledLocalSettlementProof.scheduled_at_utc, inputJson.scheduled_at_utc, inputJson.scheduledAtUtc);
+        const scheduledTimeMs = scheduledAtUtc ? Date.parse(scheduledAtUtc) : NaN;
+        if (!scheduledAtUtc || !Number.isFinite(scheduledTimeMs)) {
+          return reviewRequired(
+            currentPhase,
+            'SCHEDULED_LOCAL_MANUAL_SETTLEMENT_TIME_REQUIRED',
+            `The authorised scheduled ${localManualSettlementLabel()} route has no valid scheduled execution time.`,
+            { payment_projection_proof_validation: scheduledLocalSettlementProof, canonical_execution_mode: canonicalExecutionMode }
+          );
+        }
+        const scheduledNotice = await queueScheduledPaymentNoticeBestEffort(progressJson.pay_batch_auth_start, progressJson, inputJson);
+        if (scheduledTimeMs > Date.now() + 1000) {
+          const delaySeconds = Math.max(1, Math.min(86400, Math.ceil((scheduledTimeMs - Date.now()) / 1000)));
+          return moreWork('SCHEDULE_PAYMENT', Object.assign({
+            status_text: `The authorised ${localManualSettlementLabel()} execution is waiting for its scheduled time.`,
+            pay_batch_scheduled_notice: scheduledNotice,
+            scheduled_wait_until_utc: new Date(scheduledTimeMs).toISOString(),
+            scheduled_local_manual_settlement_wait: true,
+            next_required_phase: 'WAIT_FOR_SCHEDULE'
+          }, projectionProofProgressPatch(scheduledLocalSettlementProof)), delaySeconds, 'WAIT_FOR_SCHEDULED_LOCAL_MANUAL_SETTLEMENT');
+        }
+        return moreWork('START_LOCAL_SETTLEMENT', Object.assign({
+          status_text: `The scheduled ${localManualSettlementLabel()} execution is due; local settlement is next without provider submission.`,
+          pay_batch_scheduled_notice: scheduledNotice,
+          scheduled_local_manual_settlement_due: true,
+          local_settlement_required: true,
+          next_required_phase: 'START_LOCAL_SETTLEMENT'
+        }, projectionProofProgressPatch(scheduledLocalSettlementProof)), 0, 'SCHEDULED_LOCAL_MANUAL_SETTLEMENT_DUE');
       }
 
       const scheduled = await rpc('pay_batch_schedule', {
@@ -29505,9 +29839,25 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         inputJson.execution_intent_json,
         inputJson
       ], { requireAuth: true });
-      const authorisedLocalSettlementMode = normaliseExecutionMode(localSettlementProof.execution_mode || inputJson.execution_mode || 'STANDARD_BANK');
+      const authorisedLocalSettlementMode = normaliseExecutionMode(localSettlementProof.execution_mode || inputJson.execution_mode || canonicalExecutionMode);
       const pureNoBankLocalSettlement = localSettlementProof.valid === true && localSettlementProof.pure_no_bank_payment === true;
       const manualLocalSettlement = localSettlementProof.valid === true && ['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(authorisedLocalSettlementMode);
+      if (isLocalManualSettlementMode() && localSettlementProof.valid !== true) {
+        return reviewRequired(
+          currentPhase,
+          'LOCAL_MANUAL_SETTLEMENT_AUTHORISED_PROOF_REQUIRED',
+          `The ${localManualSettlementLabel()} route cannot start local settlement without a complete authorised server-owned payment projection proof.`,
+          { payment_projection_proof_validation: localSettlementProof, canonical_execution_mode: canonicalExecutionMode }
+        );
+      }
+      if (isLocalManualSettlementMode() && authorisedLocalSettlementMode !== canonicalExecutionMode) {
+        return reviewRequired(
+          currentPhase,
+          'LOCAL_MANUAL_SETTLEMENT_MODE_MISMATCH',
+          `The authorised ${localManualSettlementLabel()} proof execution mode does not match the durable operation mode.`,
+          { payment_projection_proof_validation: localSettlementProof, authorised_execution_mode: authorisedLocalSettlementMode || null, canonical_execution_mode: canonicalExecutionMode }
+        );
+      }
       let submissionEvidence;
       if (pureNoBankLocalSettlement) {
         const noBankArtifactEvidence = await readProviderDispatchEvidence({ reason: 'NO_BANK_LOCAL_SETTLEMENT_PRECHECK' });
@@ -29549,6 +29899,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
             settlement_mode: authorisedLocalSettlementMode,
             provider_submission_required: false,
             provider_submission_attempted: false,
+            submitted_to_bank: false,
             money_movement_confirmation_deferred_to_settlement_rpc: true,
             payment_projection_proof: localSettlementProof
           }
@@ -30057,7 +30408,10 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     }
 
     if (releaseFailure && providerEvidence && providerEvidence.evidence_read_ok === true && providerEvidence.provider_call_started !== true) {
-      const retryPhase = normaliseRetryPhaseAfterReleaseFailure(baseReleaseDiagnostic);
+      const releaseFailureRetryPhaseCandidate = normaliseRetryPhaseAfterReleaseFailure(baseReleaseDiagnostic);
+      const retryPhase = isLocalManualSettlementMode() && isProviderContinuationPhase(releaseFailureRetryPhaseCandidate)
+        ? 'START_AUTHORISATION_PROOF'
+        : releaseFailureRetryPhaseCandidate;
       const retryDiagnostic = buildReleaseRpcFailureDiagnostic({
         error,
         phaseBefore: currentPhase,
@@ -30073,7 +30427,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       });
       const releaseResume = isPlainObject(retryDiagnostic.release_progress_resume) ? retryDiagnostic.release_progress_resume : {};
       const resumeChunkId = trimStr(releaseResume.last_provider_submit_chunk_id || releaseResume.provider_submit_claim_chunk_id);
-      const retryProgressPatch = {
+      let retryProgressPatch = {
         status_text: 'Release lease failed before provider dispatch; retrying orchestration without user review.',
         last_message: 'Release lease failed before provider dispatch; retrying orchestration without user review.',
         code: 'RELEASE_TIMEOUT_BEFORE_PROVIDER_CALL_RETRYABLE',
@@ -30102,6 +30456,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
           })
           : undefined
       };
+      retryProgressPatch = applyExecutionModeInvariantToProgress(retryProgressPatch);
       let releaseRestore = null;
       let releaseRestoreError = null;
       let saveProgressFallback = null;
