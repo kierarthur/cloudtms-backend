@@ -154537,7 +154537,6 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
 }
 
 
-
 async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -154857,6 +154856,88 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     return null;
   };
 
+  const boolish = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(String(value == null ? '' : value).trim().toLowerCase());
+  const readWorkbenchRefreshEnvelope = (payload) => {
+    const source = safeObject(payload);
+    const processResult = safeObject(source.process_result || source.processResult);
+    const workbenchRefresh = safeObject(source.workbench_refresh || source.workbenchRefresh);
+    if (Object.keys(workbenchRefresh).length) return workbenchRefresh;
+    const postCancelRefresh = safeObject(source.post_cancel_refresh || source.postCancelRefresh || source.post_cancel_refresh_json || source.postCancelRefreshJson);
+    if (Object.keys(postCancelRefresh).length) return postCancelRefresh;
+    const processWorkbenchRefresh = safeObject(processResult.workbench_refresh || processResult.workbenchRefresh);
+    if (Object.keys(processWorkbenchRefresh).length) return processWorkbenchRefresh;
+    return safeObject(processResult.post_cancel_refresh || processResult.postCancelRefresh);
+  };
+  const readCancellationReplacementSessionContract = (payload) => {
+    const source = safeObject(payload);
+    const workbenchRefresh = readWorkbenchRefreshEnvelope(source);
+    const replacementSessionId = trimText(
+      source.replacement_session_id ||
+      source.replacementSessionId ||
+      source.current_workbench_session_id ||
+      source.currentWorkbenchSessionId ||
+      source.refreshed_session_id ||
+      source.refreshedSessionId ||
+      workbenchRefresh.replacement_session_id ||
+      workbenchRefresh.replacementSessionId ||
+      workbenchRefresh.current_workbench_session_id ||
+      workbenchRefresh.currentWorkbenchSessionId ||
+      workbenchRefresh.refreshed_session_id ||
+      workbenchRefresh.refreshedSessionId ||
+      workbenchRefresh.session_id ||
+      workbenchRefresh.sessionId ||
+      ''
+    );
+    const replacementSessionVersion = positiveVersionOrNull(
+      source.replacement_session_version ??
+      source.replacementSessionVersion ??
+      source.current_workbench_session_version ??
+      source.currentWorkbenchSessionVersion ??
+      source.refreshed_session_version ??
+      source.refreshedSessionVersion ??
+      workbenchRefresh.replacement_session_version ??
+      workbenchRefresh.replacementSessionVersion ??
+      workbenchRefresh.current_workbench_session_version ??
+      workbenchRefresh.currentWorkbenchSessionVersion ??
+      workbenchRefresh.refreshed_session_version ??
+      workbenchRefresh.refreshedSessionVersion ??
+      workbenchRefresh.session_version ??
+      workbenchRefresh.sessionVersion ??
+      workbenchRefresh.version ??
+      null
+    );
+    return {
+      session_id: replacementSessionId,
+      session_version: replacementSessionVersion,
+      workbench_refresh: workbenchRefresh
+    };
+  };
+  const readCancellationWorkbenchWakeRequired = (payload, replacementContract = null) => {
+    const source = safeObject(payload);
+    const workbenchRefresh = readWorkbenchRefreshEnvelope(source);
+    const replacement = safeObject(replacementContract || readCancellationReplacementSessionContract(source));
+    return source.ok !== false && (
+      boolish(source.payable_state_changed) ||
+      boolish(source.payableStateChanged) ||
+      boolish(source.workbench_refresh_required) ||
+      boolish(source.workbenchRefreshRequired) ||
+      boolish(source.workbench_session_replaced) ||
+      boolish(source.workbenchSessionReplaced) ||
+      boolish(source.work_queued) ||
+      boolish(source.workQueued) ||
+      boolish(workbenchRefresh.payable_state_changed) ||
+      boolish(workbenchRefresh.payableStateChanged) ||
+      boolish(workbenchRefresh.workbench_refresh_required) ||
+      boolish(workbenchRefresh.workbenchRefreshRequired) ||
+      boolish(workbenchRefresh.workbench_session_replaced) ||
+      boolish(workbenchRefresh.workbenchSessionReplaced) ||
+      boolish(workbenchRefresh.work_queued) ||
+      boolish(workbenchRefresh.workQueued) ||
+      uuidRe.test(trimText(replacement.session_id || ''))
+    );
+  };
+
+
   const id = trimText(payBatchId);
   const actorUserId = trimText(user && user.id);
   if (!id || !uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_pay_batch_id'));
@@ -154963,25 +155044,12 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       p_replacement_idempotency_key: replacementIdempotencyKey
     }), 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refr');
 
-    let replacementSessionId = '';
-    let replacementSessionVersion = null;
+    const replacementContract = readCancellationReplacementSessionContract(result);
+    const workbenchWakeRequired = readCancellationWorkbenchWakeRequired(result, replacementContract);
+    let replacementSessionId = trimText(replacementContract.session_id || '');
+    let replacementSessionVersion = replacementContract.session_version;
     let workbenchWorkerWake = null;
-    if (result.payable_state_changed === true) {
-      const workbenchRefresh = safeObject(result.workbench_refresh);
-      replacementSessionId = trimText(
-        result.replacement_session_id ||
-        workbenchRefresh.replacement_session_id ||
-        workbenchRefresh.session_id ||
-        ''
-      );
-      replacementSessionVersion = positiveVersionOrNull(
-        result.replacement_session_version ??
-        workbenchRefresh.replacement_session_version ??
-        workbenchRefresh.session_version ??
-        workbenchRefresh.version ??
-        null
-      );
-
+    if (workbenchWakeRequired === true) {
       if (!uuidRe.test(replacementSessionId) || replacementSessionVersion === null) {
         const consistencyError = new Error('The cancellation succeeded, but its replacement Banking Pay workbench session contract is missing or invalid.');
         consistencyError.code = 'PAYMENT_CANCEL_WORKBENCH_REPLACEMENT_CONTRACT_MISSING';
@@ -154992,6 +155060,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
           replacement_idempotency_key: replacementIdempotencyKey,
           replacement_session_id: replacementSessionId || null,
           replacement_session_version: replacementSessionVersion,
+          workbench_refresh: replacementContract.workbench_refresh || null,
           cancellation_result: result
         };
         throw consistencyError;
@@ -155054,9 +155123,11 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
       workbenchWorkerWake = {
         attempted: true,
+        required: true,
         started_at_utc: wakeStartedAtUtc,
         replacement_session_id: replacementSessionId,
         replacement_session_version: replacementSessionVersion,
+        workbench_refresh: replacementContract.workbench_refresh || null,
         immediate_drain: immediateDrain,
         immediate_drain_error: immediateDrainError,
         background_nudge: backgroundNudge,
