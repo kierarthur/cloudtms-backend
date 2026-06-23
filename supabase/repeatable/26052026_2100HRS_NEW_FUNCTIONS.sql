@@ -107664,7 +107664,7 @@ BEGIN
     'execution_intent_json', v_execution_intent_json
   );
 END;
-$function$
+$function$;
 
 
 create or replace function public.pay_batch_auth_apply_action(
