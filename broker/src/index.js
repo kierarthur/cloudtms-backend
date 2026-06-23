@@ -154536,6 +154536,8 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
   };
 }
 
+
+
 async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -154961,15 +154963,18 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       p_replacement_idempotency_key: replacementIdempotencyKey
     }), 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refr');
 
+    let replacementSessionId = '';
+    let replacementSessionVersion = null;
+    let workbenchWorkerWake = null;
     if (result.payable_state_changed === true) {
       const workbenchRefresh = safeObject(result.workbench_refresh);
-      const replacementSessionId = trimText(
+      replacementSessionId = trimText(
         result.replacement_session_id ||
         workbenchRefresh.replacement_session_id ||
         workbenchRefresh.session_id ||
         ''
       );
-      const replacementSessionVersion = positiveVersionOrNull(
+      replacementSessionVersion = positiveVersionOrNull(
         result.replacement_session_version ??
         workbenchRefresh.replacement_session_version ??
         workbenchRefresh.session_version ??
@@ -154991,6 +154996,73 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
         };
         throw consistencyError;
       }
+
+      const wakeStartedAtUtc = new Date().toISOString();
+      let immediateDrain = null;
+      let backgroundNudge = null;
+      let immediateDrainError = null;
+      let backgroundNudgeError = null;
+
+      try {
+        if (typeof drainBankingPayWorkbenchJobs === 'function') {
+          immediateDrain = await drainBankingPayWorkbenchJobs(env, {
+            origin: 'PAYMENT_CANCEL_POST_REPLACEMENT_IMMEDIATE',
+            budgetProfile: 'NUDGE',
+            profile: 'NUDGE',
+            sessionId: replacementSessionId,
+            actorUserId,
+            claimLimit: 2,
+            maxPasses: 1,
+            maxJobs: 2,
+            maxRows: 200,
+            maxRuntimeMs: 3000
+          });
+        } else {
+          immediateDrainError = {
+            code: 'BANKING_PAY_WORKBENCH_DRAIN_UNAVAILABLE',
+            message: 'drainBankingPayWorkbenchJobs is unavailable.'
+          };
+        }
+      } catch (drainError) {
+        immediateDrainError = {
+          code: trimText(drainError?.code || drainError?.error_code || 'BANKING_PAY_WORKBENCH_IMMEDIATE_DRAIN_FAILED') || 'BANKING_PAY_WORKBENCH_IMMEDIATE_DRAIN_FAILED',
+          message: trimText(drainError?.message || drainError || 'Immediate workbench drain failed.') || 'Immediate workbench drain failed.'
+        };
+      }
+
+      try {
+        if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
+          backgroundNudge = nudgeBankingPayWorkbenchDrain(env, null, {
+            origin: 'PAYMENT_CANCEL_POST_REPLACEMENT_CONTINUATION',
+            budgetProfile: 'NUDGE',
+            profile: 'NUDGE',
+            sessionId: replacementSessionId,
+            actorUserId
+          });
+        } else {
+          backgroundNudgeError = {
+            code: 'BANKING_PAY_WORKBENCH_NUDGE_UNAVAILABLE',
+            message: 'nudgeBankingPayWorkbenchDrain is unavailable.'
+          };
+        }
+      } catch (nudgeError) {
+        backgroundNudgeError = {
+          code: trimText(nudgeError?.code || nudgeError?.error_code || 'BANKING_PAY_WORKBENCH_NUDGE_FAILED') || 'BANKING_PAY_WORKBENCH_NUDGE_FAILED',
+          message: trimText(nudgeError?.message || nudgeError || 'Workbench drain nudge failed.') || 'Workbench drain nudge failed.'
+        };
+      }
+
+      workbenchWorkerWake = {
+        attempted: true,
+        started_at_utc: wakeStartedAtUtc,
+        replacement_session_id: replacementSessionId,
+        replacement_session_version: replacementSessionVersion,
+        immediate_drain: immediateDrain,
+        immediate_drain_error: immediateDrainError,
+        background_nudge: backgroundNudge,
+        background_nudge_error: backgroundNudgeError,
+        durable_cron_fallback_retained: true
+      };
     }
 
     const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
@@ -155008,6 +155080,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       replacement_idempotency_key: result.replacement_idempotency_key || replacementIdempotencyKey,
       workbench_context_resolution_source: workbenchContext.resolution_source || null,
       workbench_context_seed_session_id: workbenchContext.seed_session_id || null,
+      workbench_worker_wake: result.workbench_worker_wake || workbenchWorkerWake || null,
       diagnostic,
       progress: Object.keys(progress).length ? progress : (result.progress || null),
       carry_forward_counts: result.carry_forward_counts || extractCarryForwardCounts(result),
@@ -155025,9 +155098,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     return rpcErrorResponse(e, 'PAYMENT_CANCEL_NOT_SENT_RECALCULATE_FAILED', 'Unable to cancel selected payments.');
   }
 }
-
-
-
 
 
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
