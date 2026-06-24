@@ -39146,9 +39146,6 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId, ctx) 
 }
 
 
-
-
-
 async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, actorUserId, options = {}) {
   const enc = encodeURIComponent;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -39289,7 +39286,18 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
   const subject = `${heading} – Pay batch ${String(id).slice(0, 8)}${payDate ? ` – ${fmtDate(payDate)}` : ''}`;
   const releaseUtc = trimText(opts.scheduledAtUtc || opts.scheduled_at_utc || executionIntent.scheduled_at_utc || batchObj.scheduled_at_utc || authObj?.finalised_at_utc || authObj?.created_at_utc || '');
   const scheduledAtUk = releaseUtc ? fmtUk(releaseUtc) : '';
-  const providerLabel = [trimText(batchObj.rail_provider_snapshot || executionIntent.rail_provider_snapshot || executionIntent.rail_provider), trimText(batchObj.rail_env_snapshot || executionIntent.rail_env_snapshot || executionIntent.rail_env)].filter(Boolean).join(' ') || 'Provider not recorded';
+  const routeDisplay = typeof derivePayBatchRouteDisplay === 'function'
+    ? derivePayBatchRouteDisplay({
+        batch: batchObj,
+        executionIntent,
+        fallbackRailProvider: batchObj.rail_provider_snapshot || executionIntent.rail_provider_snapshot || executionIntent.rail_provider,
+        fallbackRailEnv: batchObj.rail_env_snapshot || executionIntent.rail_env_snapshot || executionIntent.rail_env,
+        fallbackLabel: 'Provider not recorded'
+      })
+    : null;
+  const providerLabel = trimText(routeDisplay && routeDisplay.label)
+    || [trimText(batchObj.rail_provider_snapshot || executionIntent.rail_provider_snapshot || executionIntent.rail_provider), trimText(batchObj.rail_env_snapshot || executionIntent.rail_env_snapshot || executionIntent.rail_env)].filter(Boolean).join(' ')
+    || 'Provider not recorded';
 
   let totalAmount = null;
   try {
@@ -67917,6 +67925,7 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
 
 
 
+
 async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
   const enc = encodeURIComponent;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -68017,6 +68026,17 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
   const transferCount = transfers.length;
 
   if (transferCount === 0) {
+    const routeDisplay = typeof derivePayBatchRouteDisplay === 'function'
+      ? derivePayBatchRouteDisplay({
+          batch,
+          executionIntent: asObject(batch.execution_intent_json),
+          settlementConfirmation: asObject(batch.settlement_confirmation_json),
+          transfers,
+          events: [],
+          fallbackRailProvider: firstText(batch.rail_provider_snapshot, batch.banking_system_snapshot),
+          fallbackRailEnv: firstText(batch.rail_env_snapshot)
+        })
+      : null;
     return skipResult('NO_MATERIALISED_TRANSFERS', {
       source,
       pay_batch_id: payBatchId,
@@ -68024,7 +68044,7 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
       batch_status: batch.status || null,
       execution_commit_state: batch.execution_commit_state || null,
       rail_provider: batch.rail_provider_snapshot || null,
-      provider_label: firstText(batch.rail_provider_snapshot, batch.banking_system_snapshot) || null,
+      provider_label: firstText(routeDisplay && routeDisplay.label, batch.rail_provider_snapshot, batch.banking_system_snapshot) || null,
       rail_env: firstText(batch.rail_env_snapshot) || null
     });
   }
@@ -68229,7 +68249,21 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
 
   const providerLabelRaw = providerSet.size ? Array.from(providerSet).join('/') : firstText(batch.rail_provider_snapshot, batch.banking_system_snapshot);
   const railEnvRaw = envSet.size ? Array.from(envSet).join('/') : firstText(batch.rail_env_snapshot);
-  const providerLabel = providerLabelRaw ? `${providerLabelRaw}${railEnvRaw ? ` ${railEnvRaw}` : ''}` : null;
+  const routeDisplay = typeof derivePayBatchRouteDisplay === 'function'
+    ? derivePayBatchRouteDisplay({
+        batch,
+        executionIntent: asObject(batch.execution_intent_json),
+        settlementConfirmation: asObject(batch.settlement_confirmation_json),
+        transfers,
+        events: transferEvents,
+        fallbackRailProvider: providerLabelRaw,
+        fallbackRailEnv: railEnvRaw
+      })
+    : null;
+  const providerLabel = firstText(
+    routeDisplay && routeDisplay.label,
+    providerLabelRaw ? `${providerLabelRaw}${railEnvRaw ? ` ${railEnvRaw}` : ''}` : null
+  ) || null;
   const batchRailProvider = upperText(batch.rail_provider_snapshot);
   const batchBankingSystem = upperText(batch.banking_system_snapshot);
   const executionCommitted = upperText(batch.execution_commit_state) === 'COMMITTED';
@@ -68398,8 +68432,6 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
     issue_lines: issueLines.length ? issueLines : ['The terminal payment outcome is ambiguous and requires review.']
   });
 }
-
-
 
 
 
@@ -117462,6 +117494,236 @@ async function handleTsfinPatchMileage(env, req, timesheetId) {
       charge_rate: src?.charge_rate
     }
   }));
+}
+function derivePayBatchRouteDisplay(context = {}) {
+  const ctx = context && typeof context === 'object' && !Array.isArray(context) ? context : {};
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const normalise = (value) => trimText(value)
+    .toUpperCase()
+    .replace(/[·/\\|.\-\s]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  const bool = (value) => value === true || ['TRUE', 'T', '1', 'YES', 'Y', 'ON'].includes(normalise(value));
+  const numberOrNull = (value) => {
+    if (value == null || trimText(value) === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const objectOrEmpty = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value !== 'string') return {};
+    const raw = value.trim();
+    if (!raw || raw[0] !== '{') return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+  const arrayOrEmpty = (value) => Array.isArray(value) ? value : [];
+
+  const sources = [];
+  const seen = new Set();
+  const nestedKeys = [
+    'rail_meta_json', 'railMetaJson',
+    'settlement_confirmation_json', 'settlementConfirmationJson',
+    'execution_intent_json', 'executionIntentJson',
+    'raw_payload', 'rawPayload',
+    'payment_route_json', 'paymentRouteJson',
+    'route_json', 'routeJson',
+    'metadata', 'meta', 'details',
+    'settlement', 'confirmation', 'execution', 'route', 'payment',
+    'provider_event', 'providerEvent', 'latest_event', 'latestEvent'
+  ];
+  const addSource = (value, depth = 0) => {
+    const objectValue = objectOrEmpty(value);
+    if (!Object.keys(objectValue).length || seen.has(objectValue) || sources.length >= 400) return;
+    seen.add(objectValue);
+    sources.push(objectValue);
+    if (depth >= 4) return;
+    nestedKeys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(objectValue, key)) addSource(objectValue[key], depth + 1);
+    });
+  };
+
+  addSource(ctx);
+  addSource(ctx.batch);
+  addSource(ctx.executionIntent || ctx.execution_intent);
+  addSource(ctx.settlementConfirmation || ctx.settlement_confirmation);
+  arrayOrEmpty(ctx.transfers).forEach((row) => addSource(row));
+  arrayOrEmpty(ctx.events).forEach((row) => addSource(row));
+
+  const values = (keys) => {
+    const output = [];
+    sources.forEach((item) => {
+      keys.forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(item, key)) output.push(item[key]);
+      });
+    });
+    return output;
+  };
+  const firstText = (keys) => {
+    for (const value of values(keys)) {
+      const candidate = trimText(value);
+      if (candidate) return candidate;
+    }
+    return '';
+  };
+  const anyTrue = (keys) => values(keys).some(bool);
+  const tokens = (keys) => values(keys).map(normalise).filter(Boolean);
+
+  const routeLabelTokens = tokens([
+    'payment_route_display_label', 'paymentRouteDisplayLabel',
+    'payment_route_label', 'paymentRouteLabel',
+    'route_display_label', 'routeDisplayLabel',
+    'provider_label', 'providerLabel'
+  ]);
+  const modeTokens = tokens([
+    'execution_mode', 'executionMode',
+    'settlement_mode', 'settlementMode',
+    'confirmation_mode', 'confirmationMode',
+    'manual_confirmation_mode', 'manualConfirmationMode',
+    'payment_route_kind', 'paymentRouteKind',
+    'route_kind', 'routeKind',
+    'scope_kind', 'scopeKind',
+    'rail_state', 'railState',
+    'provider_state', 'providerState',
+    'latest_event_provider_state', 'latestEventProviderState',
+    'banking_system', 'bankingSystem',
+    'banking_system_snapshot', 'bankingSystemSnapshot'
+  ]);
+  const providerTokens = tokens([
+    'rail_provider', 'railProvider',
+    'provider', 'provider_key', 'providerKey',
+    'payment_provider', 'paymentProvider'
+  ]);
+  const allRouteTokens = routeLabelTokens.concat(modeTokens);
+
+  const csvTokens = new Set([
+    'BANK_CSV_UPLOAD',
+    'CSV',
+    'CSV_SETTLEMENT',
+    'CSV_MANUAL_CONFIRM',
+    'CSV_MANUAL_SETTLEMENT',
+    'BANK_UPLOAD_CONFIRMED',
+    'CSV_BANK_UPLOAD'
+  ]);
+  const externalTokens = new Set([
+    'EXTERNAL_SETTLEMENT',
+    'EXTERNAL_SETTLEMENT_CONFIRM',
+    'EXTERNAL_SETTLEMENT_CONFIRMED',
+    'EXTERNAL_MANUAL_CONFIRM',
+    'MANUAL_SETTLEMENT',
+    'MANUAL_EXTERNAL_SETTLEMENT'
+  ]);
+  const noBankTokens = new Set([
+    'NO_BANK_PAYMENT_REQUIRED',
+    'NO_BANK_PAYMENT',
+    'NO_BANK_PAYMENT_EXECUTION',
+    'NO_BANK_PAYMENT_REVIEW',
+    'NO_BANK_PAYMENT_EXTERNAL_CONFIRMATION',
+    'NO_BANK_TRANSFER',
+    'ZERO_BANK',
+    'ZERO_BANK_PAYMENT',
+    'NO_MONEY'
+  ]);
+  const hasToken = (set, candidates) => candidates.some((candidate) => set.has(candidate));
+
+  const positiveTransferCount = [
+    ...values(['positive_transfer_count', 'positiveTransferCount']),
+    ...values(['transfer_count', 'transferCount'])
+  ].map(numberOrNull).find((value) => value !== null);
+  const totalBankOut = [
+    ...values(['total_bank_out', 'totalBankOut']),
+    ...values(['payment_amount', 'paymentAmount']),
+    ...values(['amount'])
+  ].map(numberOrNull).find((value) => value !== null);
+  const hasPositiveMoneyEvidence = (positiveTransferCount !== undefined && positiveTransferCount > 0)
+    || (totalBankOut !== undefined && totalBankOut > 0)
+    || arrayOrEmpty(ctx.transfers).some((row) => numberOrNull(row && row.amount) > 0);
+
+  const explicitNoBankExecution = anyTrue([
+    'no_bank_payment_execution', 'noBankPaymentExecution',
+    'is_no_bank_payment', 'isNoBankPayment',
+    'no_bank_payment_required', 'noBankPaymentRequired',
+    'zero_bank_proof', 'zeroBankProof'
+  ]) || hasToken(noBankTokens, allRouteTokens);
+  const explicitBankPaymentDidNotOccur = values(['bank_payment_occurred', 'bankPaymentOccurred'])
+    .some((value) => value === false || normalise(value) === 'FALSE');
+  const noBankReferencePresent = !!firstText([
+    'no_bank_scope_reference', 'noBankScopeReference',
+    'no_bank_payment_note', 'noBankPaymentNote',
+    'local_no_bank_commit_ref', 'localNoBankCommitRef'
+  ]);
+  const pureNoBankExecution = explicitNoBankExecution
+    || (explicitBankPaymentDidNotOccur && noBankReferencePresent && !hasPositiveMoneyEvidence);
+
+  const csvEvidence = hasToken(csvTokens, allRouteTokens)
+    || providerTokens.some((token) => token === 'CSV' || token === 'BANK_CSV')
+    || anyTrue(['csv_uploaded_confirmed', 'csvUploadedConfirmed', 'bank_upload_confirmed', 'bankUploadConfirmed']);
+  const externalEvidence = hasToken(externalTokens, allRouteTokens)
+    || anyTrue(['external_settlement_confirmed', 'externalSettlementConfirmed']);
+
+  const localSettlementEvidenceOnly = anyTrue(['local_settlement_evidence_only', 'localSettlementEvidenceOnly']);
+  const submittedToBankFalse = values(['submitted_to_bank', 'submittedToBank'])
+    .some((value) => value === false || normalise(value) === 'FALSE');
+  const providerSubmissionRequiredFalse = values(['provider_submission_required', 'providerSubmissionRequired'])
+    .some((value) => value === false || normalise(value) === 'FALSE');
+  const providerSubmissionAttemptedFalse = values(['provider_submission_attempted', 'providerSubmissionAttempted'])
+    .some((value) => value === false || normalise(value) === 'FALSE');
+  const strongLocalProof = localSettlementEvidenceOnly
+    && submittedToBankFalse
+    && providerSubmissionRequiredFalse
+    && providerSubmissionAttemptedFalse;
+
+  const result = (label, routeKind, isLocalSettlement, isNoBankPayment) => ({
+    label,
+    route_kind: routeKind,
+    routeKind,
+    is_local_settlement: isLocalSettlement,
+    isLocalSettlement,
+    is_no_bank_payment: isNoBankPayment,
+    isNoBankPayment
+  });
+
+  // Explicit whole-route no-bank proof must win over the authorised CSV/external
+  // mode. A mixed positive + zero batch lacks this whole-route flag and therefore
+  // continues to display the actual positive-payment route.
+  if (pureNoBankExecution) return result('No bank payment required', 'NO_BANK_PAYMENT', true, true);
+  if (csvEvidence || (strongLocalProof && allRouteTokens.some((token) => token.includes('CSV')))) {
+    return result('Bank CSV upload', 'CSV_SETTLEMENT', true, false);
+  }
+  if (externalEvidence || (strongLocalProof && allRouteTokens.some((token) => token.includes('EXTERNAL')))) {
+    return result('External settlement', 'EXTERNAL_SETTLEMENT', true, false);
+  }
+
+  const transferProviders = arrayOrEmpty(ctx.transfers)
+    .map((row) => trimText(row && (row.rail_provider || row.railProvider)))
+    .filter(Boolean);
+  const transferEnvironments = arrayOrEmpty(ctx.transfers)
+    .map((row) => trimText(row && (row.rail_env || row.railEnv)))
+    .filter(Boolean);
+  const unique = (items) => Array.from(new Set(items.map(trimText).filter(Boolean)));
+  const provider = unique(transferProviders).join('/') || trimText(
+    ctx.fallbackRailProvider
+    || ctx.fallback_rail_provider
+    || ctx.fallbackProvider
+    || ctx.fallback_provider
+    || objectOrEmpty(ctx.batch).rail_provider_snapshot
+    || objectOrEmpty(ctx.batch).banking_system_snapshot
+  );
+  const environment = unique(transferEnvironments).join('/') || trimText(
+    ctx.fallbackRailEnv
+    || ctx.fallback_rail_env
+    || ctx.fallbackEnvironment
+    || ctx.fallback_environment
+    || objectOrEmpty(ctx.batch).rail_env_snapshot
+  );
+  const label = provider && environment && !normalise(provider).includes(normalise(environment))
+    ? `${provider} ${environment}`
+    : (provider || environment || trimText(ctx.fallbackLabel || ctx.fallback_label));
+  return result(label, label ? 'PROVIDER' : 'UNKNOWN', false, false);
 }
 
 
