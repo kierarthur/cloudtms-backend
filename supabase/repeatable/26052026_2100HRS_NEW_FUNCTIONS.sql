@@ -172235,6 +172235,8 @@ BEGIN
 END;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_seed_candidate_preview_line_source(p_session_id uuid, p_candidate_id uuid, p_context_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -173124,6 +173126,62 @@ BEGIN
           )
           ELSE '{}'::jsonb
         END
+        || CASE
+          WHEN base_rows.target_section = 'cases_resolutions'
+           AND jsonb_typeof(base_rows.line_json->'case_resolution_summary') = 'object'
+           AND LOWER(BTRIM(COALESCE(base_rows.line_json->'case_resolution_summary'->>'case_needs_resolution', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
+           AND LOWER(BTRIM(COALESCE(base_rows.line_json->'case_resolution_summary'->>'case_resolution_satisfied_now', ''))) IN ('false', 'f', '0', 'no', 'n', 'off')
+           AND NULLIF(BTRIM(COALESCE(base_rows.line_json->'case_resolution_summary'->>'resolution_family', '')), '') IS NOT NULL
+           AND NULLIF(BTRIM(COALESCE(base_rows.line_json->'case_resolution_summary'->>'resolution_action_label', '')), '') IS NOT NULL
+          THEN jsonb_build_object(
+            'resolution_family', base_rows.line_json->'case_resolution_summary'->>'resolution_family',
+            'resolution_action_label', base_rows.line_json->'case_resolution_summary'->>'resolution_action_label',
+            'case_needs_resolution', true,
+            'case_resolution_satisfied_now', false,
+            'unresolved_taxable_count', base_rows.line_json->'case_resolution_summary'->'unresolved_taxable_count',
+            'unresolved_taxable_amount_ex_vat', base_rows.line_json->'case_resolution_summary'->'unresolved_taxable_amount_ex_vat',
+            'blocked_case_amount_ex_vat', base_rows.line_json->'case_resolution_summary'->'blocked_case_amount_ex_vat',
+            'open_reimbursement_count', base_rows.line_json->'case_resolution_summary'->'open_reimbursement_count',
+            'stale_count', base_rows.line_json->'case_resolution_summary'->'stale_count',
+            'is_mixed_case', base_rows.line_json->'case_resolution_summary'->'is_mixed_case',
+            'linked_resolution_scope_json', base_rows.line_json->'case_resolution_summary'->'linked_resolution_scope_json',
+            '__case_entry', jsonb_strip_nulls(
+              CASE
+                WHEN jsonb_typeof(base_rows.line_json->'__case_entry') = 'object' THEN base_rows.line_json->'__case_entry'
+                ELSE '{}'::jsonb
+              END
+              || jsonb_strip_nulls(jsonb_build_object(
+                'candidate_id', base_rows.line_json->>'candidate_id',
+                'candidate_display_name', COALESCE(base_rows.line_json->>'candidate_display_name', base_rows.line_json->>'display_name'),
+                'candidate_tms_ref', COALESCE(base_rows.line_json->>'candidate_tms_ref', base_rows.line_json->>'tms_ref'),
+                'finance_case_id', base_rows.line_json->>'finance_case_id',
+                'case_key', base_rows.line_json->>'case_key',
+                'case_type', base_rows.line_json->>'case_type',
+                'linked_timesheet_id', COALESCE(base_rows.line_json->>'linked_timesheet_id', base_rows.line_json->>'timesheet_id', base_rows.line_json->>'real_business_timesheet_id'),
+                'timesheet_id', COALESCE(base_rows.line_json->>'timesheet_id', base_rows.line_json->>'real_business_timesheet_id'),
+                'client_id', base_rows.line_json->>'client_id',
+                'client_name', base_rows.line_json->>'client_name',
+                'contract_id', base_rows.line_json->>'contract_id',
+                'pay_channel', base_rows.line_json->>'pay_channel',
+                'current_pay_method', base_rows.line_json->>'pay_channel',
+                'week_ending_date', base_rows.line_json->>'week_ending_date',
+                'case_amount', base_rows.line_json->'amount_ex_vat',
+                'amount_ex_vat', base_rows.line_json->'amount_ex_vat',
+                'excluded_from_run', COALESCE(base_rows.line_json->'excluded_from_run', base_rows.line_json->'exclude_from_run'),
+                'resolution_family', base_rows.line_json->'case_resolution_summary'->>'resolution_family',
+                'resolution_action_label', base_rows.line_json->'case_resolution_summary'->>'resolution_action_label',
+                'case_needs_resolution', true,
+                'case_resolution_satisfied_now', false,
+                'unresolved_taxable_count', base_rows.line_json->'case_resolution_summary'->'unresolved_taxable_count',
+                'stale_count', base_rows.line_json->'case_resolution_summary'->'stale_count',
+                'is_mixed_case', base_rows.line_json->'case_resolution_summary'->'is_mixed_case',
+                'blocked_reason_codes', base_rows.line_json->'blocked_reason_codes',
+                'linked_resolution_scope_json', base_rows.line_json->'case_resolution_summary'->'linked_resolution_scope_json'
+              ))
+            )
+          )
+          ELSE '{}'::jsonb
+        END
       ) AS seed_line_json
     FROM base_rows
     WHERE base_rows.target_section IN ('cases_resolutions', 'blocked_for_pay')
@@ -173341,6 +173399,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_line_economic_key(p_line_json jsonb DEFAULT '{}'::jsonb, p_timesheet_id uuid DEFAULT NULL::uuid, p_item_type text DEFAULT NULL::text, p_segment_json jsonb DEFAULT NULL::jsonb, p_key_type_hint text DEFAULT NULL::text, p_key_value_hint text DEFAULT NULL::text)
  RETURNS jsonb
