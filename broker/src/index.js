@@ -26293,6 +26293,8 @@ async function handleBankingIdLedgerList(env, req, user) {
 
 
 
+
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -28945,14 +28947,222 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     return Math.round(total * 100) / 100;
   };
 
-  const buildPreparedTransferProof = (preparedResult) => {
+  const md5Hex = (input) => {
+    const add32 = (a, b) => (a + b) & 0xffffffff;
+    const cmn = (q, a, b, x, s, t) => {
+      a = add32(add32(a, q), add32(x, t));
+      return add32(((a << s) | (a >>> (32 - s))), b);
+    };
+    const ff = (a, b, c, d, x, s, t) => cmn((b & c) | ((~b) & d), a, b, x, s, t);
+    const gg = (a, b, c, d, x, s, t) => cmn((b & d) | (c & (~d)), a, b, x, s, t);
+    const hh = (a, b, c, d, x, s, t) => cmn(b ^ c ^ d, a, b, x, s, t);
+    const ii = (a, b, c, d, x, s, t) => cmn(c ^ (b | (~d)), a, b, x, s, t);
+    const md5cycle = (state, block) => {
+      let a = state[0];
+      let b = state[1];
+      let c = state[2];
+      let d = state[3];
+
+      a = ff(a, b, c, d, block[0], 7, -680876936);
+      d = ff(d, a, b, c, block[1], 12, -389564586);
+      c = ff(c, d, a, b, block[2], 17, 606105819);
+      b = ff(b, c, d, a, block[3], 22, -1044525330);
+      a = ff(a, b, c, d, block[4], 7, -176418897);
+      d = ff(d, a, b, c, block[5], 12, 1200080426);
+      c = ff(c, d, a, b, block[6], 17, -1473231341);
+      b = ff(b, c, d, a, block[7], 22, -45705983);
+      a = ff(a, b, c, d, block[8], 7, 1770035416);
+      d = ff(d, a, b, c, block[9], 12, -1958414417);
+      c = ff(c, d, a, b, block[10], 17, -42063);
+      b = ff(b, c, d, a, block[11], 22, -1990404162);
+      a = ff(a, b, c, d, block[12], 7, 1804603682);
+      d = ff(d, a, b, c, block[13], 12, -40341101);
+      c = ff(c, d, a, b, block[14], 17, -1502002290);
+      b = ff(b, c, d, a, block[15], 22, 1236535329);
+
+      a = gg(a, b, c, d, block[1], 5, -165796510);
+      d = gg(d, a, b, c, block[6], 9, -1069501632);
+      c = gg(c, d, a, b, block[11], 14, 643717713);
+      b = gg(b, c, d, a, block[0], 20, -373897302);
+      a = gg(a, b, c, d, block[5], 5, -701558691);
+      d = gg(d, a, b, c, block[10], 9, 38016083);
+      c = gg(c, d, a, b, block[15], 14, -660478335);
+      b = gg(b, c, d, a, block[4], 20, -405537848);
+      a = gg(a, b, c, d, block[9], 5, 568446438);
+      d = gg(d, a, b, c, block[14], 9, -1019803690);
+      c = gg(c, d, a, b, block[3], 14, -187363961);
+      b = gg(b, c, d, a, block[8], 20, 1163531501);
+      a = gg(a, b, c, d, block[13], 5, -1444681467);
+      d = gg(d, a, b, c, block[2], 9, -51403784);
+      c = gg(c, d, a, b, block[7], 14, 1735328473);
+      b = gg(b, c, d, a, block[12], 20, -1926607734);
+
+      a = hh(a, b, c, d, block[5], 4, -378558);
+      d = hh(d, a, b, c, block[8], 11, -2022574463);
+      c = hh(c, d, a, b, block[11], 16, 1839030562);
+      b = hh(b, c, d, a, block[14], 23, -35309556);
+      a = hh(a, b, c, d, block[1], 4, -1530992060);
+      d = hh(d, a, b, c, block[4], 11, 1272893353);
+      c = hh(c, d, a, b, block[7], 16, -155497632);
+      b = hh(b, c, d, a, block[10], 23, -1094730640);
+      a = hh(a, b, c, d, block[13], 4, 681279174);
+      d = hh(d, a, b, c, block[0], 11, -358537222);
+      c = hh(c, d, a, b, block[3], 16, -722521979);
+      b = hh(b, c, d, a, block[6], 23, 76029189);
+      a = hh(a, b, c, d, block[9], 4, -640364487);
+      d = hh(d, a, b, c, block[12], 11, -421815835);
+      c = hh(c, d, a, b, block[15], 16, 530742520);
+      b = hh(b, c, d, a, block[2], 23, -995338651);
+
+      a = ii(a, b, c, d, block[0], 6, -198630844);
+      d = ii(d, a, b, c, block[7], 10, 1126891415);
+      c = ii(c, d, a, b, block[14], 15, -1416354905);
+      b = ii(b, c, d, a, block[5], 21, -57434055);
+      a = ii(a, b, c, d, block[12], 6, 1700485571);
+      d = ii(d, a, b, c, block[3], 10, -1894986606);
+      c = ii(c, d, a, b, block[10], 15, -1051523);
+      b = ii(b, c, d, a, block[1], 21, -2054922799);
+      a = ii(a, b, c, d, block[8], 6, 1873313359);
+      d = ii(d, a, b, c, block[15], 10, -30611744);
+      c = ii(c, d, a, b, block[6], 15, -1560198380);
+      b = ii(b, c, d, a, block[13], 21, 1309151649);
+      a = ii(a, b, c, d, block[4], 6, -145523070);
+      d = ii(d, a, b, c, block[11], 10, -1120210379);
+      c = ii(c, d, a, b, block[2], 15, 718787259);
+      b = ii(b, c, d, a, block[9], 21, -343485551);
+
+      state[0] = add32(a, state[0]);
+      state[1] = add32(b, state[1]);
+      state[2] = add32(c, state[2]);
+      state[3] = add32(d, state[3]);
+    };
+    const md5blk = (s) => {
+      const block = [];
+      for (let i = 0; i < 64; i += 4) {
+        block[i >> 2] = s.charCodeAt(i)
+          + (s.charCodeAt(i + 1) << 8)
+          + (s.charCodeAt(i + 2) << 16)
+          + (s.charCodeAt(i + 3) << 24);
+      }
+      return block;
+    };
+    const utf8 = unescape(encodeURIComponent(String(input == null ? '' : input)));
+    const n = utf8.length;
+    const state = [1732584193, -271733879, -1732584194, 271733878];
+    let i = 64;
+    for (; i <= n; i += 64) md5cycle(state, md5blk(utf8.substring(i - 64, i)));
+    const tail = new Array(16).fill(0);
+    const remaining = utf8.substring(i - 64);
+    for (i = 0; i < remaining.length; i += 1) tail[i >> 2] |= remaining.charCodeAt(i) << ((i % 4) << 3);
+    tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+    if (i > 55) {
+      md5cycle(state, tail);
+      for (i = 0; i < 16; i += 1) tail[i] = 0;
+    }
+    tail[14] = n * 8;
+    md5cycle(state, tail);
+    const hex = '0123456789abcdef';
+    const rhex = (num) => {
+      let out = '';
+      for (let j = 0; j < 4; j += 1) out += hex[(num >> (j * 8 + 4)) & 0x0f] + hex[(num >> (j * 8)) & 0x0f];
+      return out;
+    };
+    return state.map(rhex).join('');
+  };
+
+  const canonicalTransferProofAmountText = (value) => {
+    const n = Number(value);
+    const safe = Number.isFinite(n) ? n : 0;
+    return (Math.round(safe * 100) / 100).toFixed(2);
+  };
+
+  const readCanonicalPreparedTransferProof = async (preparedResult) => {
     const prepared = isPlainObject(preparedResult) ? preparedResult : {};
+    if (typeof sbFetch !== 'function' || !env || !env.SUPABASE_URL) {
+      return {
+        ok: false,
+        code: 'CANONICAL_TRANSFER_SCOPE_PROOF_READ_UNAVAILABLE',
+        message: 'Cannot build final transfer proof because Supabase REST access is unavailable in the operation runner.',
+        transfer_chunk_prepare: prepared
+      };
+    }
+    try {
+      const query = new URLSearchParams();
+      query.set('operation_id', `eq.${operationId}`);
+      query.set('pay_batch_id', `eq.${payBatchId}`);
+      query.set('select', 'id,pay_channel,pay_bank_transfer_id,status,amount,prepared_scope_hash,prepared_result_hash');
+      query.set('order', 'id.asc');
+      query.set('limit', '50000');
+      const response = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_transfer_scope?${query.toString()}`, false);
+      const rows = response && Array.isArray(response.rows) ? response.rows.map((row) => isPlainObject(row) ? row : {}) : [];
+      const scopedRows = rows
+        .filter((row) => {
+          const rowPayChannel = upper(row.pay_channel);
+          return payChannelScope === 'ALL'
+            || rowPayChannel === payChannelScope
+            || (payChannelScope === 'LOANS' && rowPayChannel === 'PAYE');
+        })
+        .sort((a, b) => trimStr(a.id).localeCompare(trimStr(b.id)));
+      const basis = scopedRows.length
+        ? scopedRows.map((row) => [
+          trimStr(row.id),
+          trimStr(row.pay_bank_transfer_id),
+          trimStr(row.status),
+          canonicalTransferProofAmountText(row.amount),
+          trimStr(row.prepared_scope_hash),
+          trimStr(row.prepared_result_hash)
+        ].join(':')).join('|')
+        : 'NO_SCOPE';
+      const transferScopeHash = md5Hex(basis);
+      const preparedScopeCount = scopedRows.filter((row) => upper(row.status) === 'PREPARED').length;
+      const withoutTransferCount = scopedRows.filter((row) => !trimStr(row.pay_bank_transfer_id)).length;
+      return {
+        ok: true,
+        proof_source: 'banking_pay_operation_transfer_scope_final_state',
+        canonical_transfer_scope_hash_source: 'POST_LINK_OPERATION_TRANSFER_SCOPE_ROWS',
+        operation_id: operationId,
+        pay_batch_id: payBatchId,
+        pay_channel_scope: payChannelScope,
+        scoped_operation_scope_count: scopedRows.length,
+        transfer_scope_count: scopedRows.length,
+        scoped_scope_prepared_count: preparedScopeCount,
+        prepared_transfer_scope_count: preparedScopeCount,
+        prepared_count: preparedScopeCount,
+        scoped_scope_without_transfer_count: withoutTransferCount,
+        without_transfer_count: withoutTransferCount,
+        prepared_transfer_proof_hash: transferScopeHash,
+        prepared_transfer_scope_hash: transferScopeHash,
+        transfer_prepare_proof_hash: transferScopeHash,
+        transfer_scope_hash: transferScopeHash,
+        current_transfer_scope_hash: transferScopeHash,
+        canonical_transfer_scope_hash_basis_count: scopedRows.length,
+        transfer_chunk_prepare: prepared
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        code: 'CANONICAL_TRANSFER_SCOPE_PROOF_READ_FAILED',
+        message: 'Cannot build final transfer proof from operation transfer-scope rows.',
+        error: compactErrorMessage(error, 500),
+        operation_id: operationId,
+        pay_batch_id: payBatchId,
+        pay_channel_scope: payChannelScope,
+        transfer_chunk_prepare: prepared
+      };
+    }
+  };
+
+  const buildPreparedTransferProof = (preparedResult, canonicalProofResult = null) => {
+    const prepared = isPlainObject(preparedResult) ? preparedResult : {};
+    const canonicalProof = isPlainObject(canonicalProofResult) && canonicalProofResult.ok !== false ? canonicalProofResult : {};
     const rollupProofRows = readRollupProofRows();
     const rollup = isPlainObject(progressJson.transfer_scope_rollup) ? progressJson.transfer_scope_rollup : {};
     const lastRollup = isPlainObject(progressJson.last_transfer_scope_rollup) ? progressJson.last_transfer_scope_rollup : {};
     const rollupProofCount = rollupProofRows.length || (uuidRe.test(trimStr(rollup.transfer_scope_id || lastRollup.transfer_scope_id)) ? 1 : 0);
     const scopedOperationScopeCount = numberValue(
-      prepared.scoped_operation_scope_count
+      canonicalProof.scoped_operation_scope_count
+      ?? canonicalProof.transfer_scope_count
+      ?? prepared.scoped_operation_scope_count
       ?? prepared.transfer_scope_count
       ?? prepared.requested_scope_count
       ?? prepared.scope_count
@@ -28961,7 +29171,10 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       rollupProofCount
     );
     const preparedScopeCount = numberValue(
-      prepared.scoped_scope_prepared_count
+      canonicalProof.scoped_scope_prepared_count
+      ?? canonicalProof.prepared_transfer_scope_count
+      ?? canonicalProof.prepared_count
+      ?? prepared.scoped_scope_prepared_count
       ?? prepared.prepared_transfer_scope_count
       ?? prepared.prepared_scope_count
       ?? prepared.prepared_count
@@ -28984,7 +29197,14 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     );
     const failedCount = numberValue(prepared.scoped_scope_failed_count ?? prepared.failed_count, 0);
     const skippedCount = numberValue(prepared.scoped_scope_skipped_count ?? prepared.skipped_count, 0);
-    const withoutTransferCount = numberValue(prepared.scoped_scope_without_transfer_count ?? prepared.without_transfer_count ?? prepared.scope_without_transfer_count, 0);
+    const withoutTransferCount = numberValue(
+      canonicalProof.scoped_scope_without_transfer_count
+      ?? canonicalProof.without_transfer_count
+      ?? prepared.scoped_scope_without_transfer_count
+      ?? prepared.without_transfer_count
+      ?? prepared.scope_without_transfer_count,
+      0
+    );
     const unsafeTransferCount = numberValue(prepared.unsafe_transfer_count ?? prepared.review_required_count ?? prepared.unsafe_scope_count, 0);
     const providerNotReadyCount = numberValue(
       prepared.scope_provider_not_ready_count
@@ -29009,6 +29229,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     const batchItemAmountTotal = roundMoney(prepared.batch_item_amount_total ?? prepared.item_total_amount ?? prepared.prepared_amount_total, scopeAmountTotal);
     const firstRollupProof = rollupProofRows.find((row) => firstNonBlank(row.prepared_result_hash, row.prepared_scope_hash, row.prepared_transfer_proof_hash, row.transfer_scope_hash)) || {};
     const proofHash = firstNonBlank(
+      canonicalProof.prepared_transfer_proof_hash,
+      canonicalProof.prepared_transfer_scope_hash,
+      canonicalProof.transfer_prepare_proof_hash,
+      canonicalProof.transfer_scope_hash,
+      canonicalProof.current_transfer_scope_hash,
       prepared.prepared_transfer_proof_hash,
       prepared.prepared_transfer_scope_hash,
       prepared.transfer_prepare_proof_hash,
@@ -29070,6 +29295,9 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       transfer_prepare_proof_hash: proofHash,
       transfer_scope_hash: proofHash,
       prepared_result_hash: proofHash,
+      current_transfer_scope_hash: canonicalProof.current_transfer_scope_hash || proofHash,
+      canonical_transfer_scope_hash_source: canonicalProof.canonical_transfer_scope_hash_source || null,
+      canonical_transfer_scope_hash_basis_count: canonicalProof.canonical_transfer_scope_hash_basis_count ?? null,
       transfer_chunk_prepare: prepared
     };
   };
@@ -29474,7 +29702,16 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       if (prepared.has_more === true || numberValue(prepared.remaining_count, 0) > 0) {
         return moreWork('PREPARE_TRANSFER_CHUNKS', { status_text: 'Prepared one transfer chunk page.', transfer_chunk_prepare: prepared });
       }
-      const preparedTransferProof = buildPreparedTransferProof(prepared);
+      const canonicalPreparedTransferProof = await readCanonicalPreparedTransferProof(prepared);
+      if (canonicalPreparedTransferProof.ok === false) {
+        return reviewRequired(
+          currentPhase,
+          canonicalPreparedTransferProof.code || 'CANONICAL_TRANSFER_SCOPE_PROOF_REQUIRED',
+          canonicalPreparedTransferProof.message || 'Transfer chunks were prepared, but CloudTMS could not build the final canonical transfer-scope proof for batch preparation.',
+          { transfer_chunk_prepare: prepared, canonical_prepared_transfer_proof: canonicalPreparedTransferProof }
+        );
+      }
+      const preparedTransferProof = buildPreparedTransferProof(prepared, canonicalPreparedTransferProof);
       if (bankCsvExportPrepareOnly) {
         return complete({
           status_text: 'Bank CSV transfer rows prepared. CSV export can now read pending local transfer rows.',
