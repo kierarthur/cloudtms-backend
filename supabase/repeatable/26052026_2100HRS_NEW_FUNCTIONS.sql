@@ -94073,6 +94073,28 @@ declare
   v_no_bank_transfer_event_count integer := 0;
   v_no_bank_provider_attempt_count integer := 0;
   v_no_bank_settlement_operation_id uuid := NULL::uuid;
+  v_settlement_operation_id uuid := NULL::uuid;
+  v_settlement_operation_count integer := 0;
+  v_related_settlement_operation_count integer := 0;
+  v_bound_settlement_scope_count integer := 0;
+  v_completed_transfer_total numeric(14,2) := 0;
+  v_completed_transfer_ids jsonb := '[]'::jsonb;
+  v_settlement_scope_ids jsonb := '[]'::jsonb;
+  v_local_positive_commit_ref text := NULL::text;
+  v_bank_confirm_ref text := NULL::text;
+  v_submitted_to_bank boolean := false;
+  v_provider_submission_required boolean := false;
+  v_provider_submission_attempted boolean := false;
+  v_local_settlement_evidence_only boolean := false;
+  v_legacy_direct_settlement boolean := false;
+  v_settlement_positive_scope_count integer := 0;
+  v_settlement_positive_transfer_count integer := 0;
+  v_settlement_missing_event_count integer := 0;
+  v_settlement_nonterminal_scope_count integer := 0;
+  v_settlement_failed_scope_count integer := 0;
+  v_settlement_local_proof_invalid_count integer := 0;
+  v_settlement_unmatched_transfer_count integer := 0;
+  v_settlement_unmatched_scope_transfer_count integer := 0;
   v_no_bank_nonterminal_scope_count integer := 0;
   v_no_bank_failed_scope_count integer := 0;
   v_no_bank_invalid_scope_count integer := 0;
@@ -97735,38 +97757,495 @@ begin
   FROM externally_supported_completed
   WHERE externally_supported_completed.has_external_completion_evidence IS TRUE;
 
-  select
-    count(*)::int,
-    (
-      select nullif(btrim(coalesce(completed_transfer_ref.rail_tx_id, bank_transfer_ref.rail_tx_id, '')), '')
-      from pg_temp._tmp_settle_external_completed_transfers as completed_transfer_ref
-      join public.pay_bank_transfers as bank_transfer_ref
-        on bank_transfer_ref.id = completed_transfer_ref.transfer_id
-       and bank_transfer_ref.pay_batch_id = p_pay_batch_id
-      where nullif(btrim(coalesce(completed_transfer_ref.rail_tx_id, bank_transfer_ref.rail_tx_id, '')), '') is not null
-      order by coalesce(completed_transfer_ref.completed_at_utc, bank_transfer_ref.completed_at_utc) desc nulls last, bank_transfer_ref.id desc
-      limit 1
+  SELECT
+    COUNT(*)::int,
+    ROUND(COALESCE(SUM(bank_transfer_total.amount), 0), 2)::numeric(14,2),
+    COALESCE(
+      JSONB_AGG(completed_transfer_count_row.transfer_id::text ORDER BY completed_transfer_count_row.transfer_id),
+      '[]'::jsonb
     ),
     (
-      select coalesce(completed_transfer_ts.completed_at_utc, bank_transfer_ts.completed_at_utc)
-      from pg_temp._tmp_settle_external_completed_transfers as completed_transfer_ts
-      join public.pay_bank_transfers as bank_transfer_ts
-        on bank_transfer_ts.id = completed_transfer_ts.transfer_id
-       and bank_transfer_ts.pay_batch_id = p_pay_batch_id
-      order by coalesce(completed_transfer_ts.completed_at_utc, bank_transfer_ts.completed_at_utc) desc nulls last, bank_transfer_ts.id desc
-      limit 1
+      SELECT NULLIF(BTRIM(COALESCE(completed_transfer_ref.rail_tx_id, bank_transfer_ref.rail_tx_id, '')), '')
+      FROM pg_temp._tmp_settle_external_completed_transfers AS completed_transfer_ref
+      JOIN public.pay_bank_transfers AS bank_transfer_ref
+        ON bank_transfer_ref.id = completed_transfer_ref.transfer_id
+       AND bank_transfer_ref.pay_batch_id = p_pay_batch_id
+      WHERE NULLIF(BTRIM(COALESCE(completed_transfer_ref.rail_tx_id, bank_transfer_ref.rail_tx_id, '')), '') IS NOT NULL
+      ORDER BY COALESCE(completed_transfer_ref.completed_at_utc, bank_transfer_ref.completed_at_utc) DESC NULLS LAST, bank_transfer_ref.id DESC
+      LIMIT 1
+    ),
+    (
+      SELECT COALESCE(completed_transfer_ts.completed_at_utc, bank_transfer_ts.completed_at_utc)
+      FROM pg_temp._tmp_settle_external_completed_transfers AS completed_transfer_ts
+      JOIN public.pay_bank_transfers AS bank_transfer_ts
+        ON bank_transfer_ts.id = completed_transfer_ts.transfer_id
+       AND bank_transfer_ts.pay_batch_id = p_pay_batch_id
+      ORDER BY COALESCE(completed_transfer_ts.completed_at_utc, bank_transfer_ts.completed_at_utc) DESC NULLS LAST, bank_transfer_ts.id DESC
+      LIMIT 1
     )
-  into
+  INTO
     v_completed_transfer_count,
+    v_completed_transfer_total,
+    v_completed_transfer_ids,
     v_detected_execution_commit_ref,
     v_detected_execution_committed_at_utc
-  from pg_temp._tmp_settle_external_completed_transfers as completed_transfer_count_row;
+  FROM pg_temp._tmp_settle_external_completed_transfers AS completed_transfer_count_row
+  JOIN public.pay_bank_transfers AS bank_transfer_total
+    ON bank_transfer_total.id = completed_transfer_count_row.transfer_id
+   AND bank_transfer_total.pay_batch_id = p_pay_batch_id;
 
-  if coalesce(v_completed_transfer_count, 0) > 0 then
+  IF COALESCE(v_completed_transfer_count, 0) > 0 THEN
     v_execution_commit_state := 'COMMITTED';
-    v_execution_commit_ref := coalesce(v_execution_commit_ref, v_detected_execution_commit_ref);
-    v_execution_committed_at_utc := coalesce(v_execution_committed_at_utc, v_detected_execution_committed_at_utc, v_now);
-  end if;
+    v_execution_commit_ref := COALESCE(v_execution_commit_ref, v_detected_execution_commit_ref);
+    v_execution_committed_at_utc := COALESCE(v_execution_committed_at_utc, v_detected_execution_committed_at_utc, v_now);
+  END IF;
+
+  IF v_no_bank_settlement_operation_id IS NOT NULL THEN
+    v_settlement_operation_id := v_no_bank_settlement_operation_id;
+  ELSIF COALESCE(v_completed_transfer_count, 0) > 0 THEN
+    DROP TABLE IF EXISTS pg_temp.tmp_pay_settle_rail_compatible_settlement_operations;
+    CREATE TEMPORARY TABLE pg_temp.tmp_pay_settle_rail_compatible_settlement_operations
+    ON COMMIT DROP
+    AS
+    SELECT settlement_operation.id AS operation_id
+    FROM public.banking_pay_operations AS settlement_operation
+    WHERE settlement_operation.pay_batch_id = p_pay_batch_id
+      AND settlement_operation.operation_type = 'PAYMENT_SETTLEMENT'
+      AND settlement_operation.root_operation_id = v_execution_operation_id
+      AND JSONB_TYPEOF(settlement_operation.input_json) = 'object'
+      AND NULLIF(BTRIM(COALESCE(
+        settlement_operation.input_json->>'execution_operation_id',
+        settlement_operation.input_json->>'root_operation_id',
+        ''
+      )), '') = v_execution_operation_id::text
+      AND NULLIF(BTRIM(COALESCE(settlement_operation.input_json->>'auth_request_id', '')), '') = v_operation_auth_request_id::text
+      AND CASE
+        WHEN UPPER(BTRIM(COALESCE(
+          settlement_operation.input_json->>'settlement_mode',
+          settlement_operation.input_json->>'execution_mode',
+          ''
+        ))) IN ('STANDARD_BANK', 'BANK') THEN 'STANDARD_BANK'
+        WHEN UPPER(BTRIM(COALESCE(
+          settlement_operation.input_json->>'settlement_mode',
+          settlement_operation.input_json->>'execution_mode',
+          ''
+        ))) IN ('CSV', 'CSV_SETTLEMENT') THEN 'CSV_SETTLEMENT'
+        WHEN UPPER(BTRIM(COALESCE(
+          settlement_operation.input_json->>'settlement_mode',
+          settlement_operation.input_json->>'execution_mode',
+          ''
+        ))) IN ('EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN 'EXTERNAL_SETTLEMENT'
+        ELSE UPPER(BTRIM(COALESCE(
+          settlement_operation.input_json->>'settlement_mode',
+          settlement_operation.input_json->>'execution_mode',
+          ''
+        )))
+      END = v_settlement_mode
+      AND UPPER(BTRIM(COALESCE(
+        settlement_operation.input_json->>'pay_channel_scope',
+        settlement_operation.input_json->>'scope',
+        ''
+      ))) = v_operation_projection_scope
+      AND LOWER(BTRIM(COALESCE(settlement_operation.input_json->>'server_owned_payment_projection_proof', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND NULLIF(BTRIM(COALESCE(settlement_operation.input_json->>'paye_net_state_hash', '')), '') = v_expected_paye_net_state_hash
+      AND NULLIF(BTRIM(COALESCE(settlement_operation.input_json->>'bank_payment_projection_hash', '')), '') = v_expected_bank_payment_projection_hash
+      AND CASE
+        WHEN COALESCE(settlement_operation.input_json->>'missing_explicit_paye_input_count', '') ~ '^[0-9]+$'
+          THEN (settlement_operation.input_json->>'missing_explicit_paye_input_count')::integer
+        ELSE -1
+      END = COALESCE(v_expected_missing_count, -1)
+      AND CASE
+        WHEN COALESCE(settlement_operation.input_json->>'scoped_explicit_zero_count', '') ~ '^[0-9]+$'
+          THEN (settlement_operation.input_json->>'scoped_explicit_zero_count')::integer
+        ELSE -1
+      END = COALESCE(v_expected_zero_count, -1)
+      AND CASE
+        WHEN COALESCE(settlement_operation.input_json->>'scoped_positive_bank_payment_count', '') ~ '^[0-9]+$'
+          THEN (settlement_operation.input_json->>'scoped_positive_bank_payment_count')::integer
+        ELSE -1
+      END = COALESCE(v_expected_positive_count, -1)
+      AND LOWER(BTRIM(COALESCE(settlement_operation.input_json->>'no_bank_payment_execution', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') = v_no_bank_payment_marker
+      AND LOWER(BTRIM(COALESCE(settlement_operation.input_json->>'allow_explicit_zero_no_bank_scopes', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') = v_allow_explicit_zero_no_bank_scopes_marker
+      AND LOWER(BTRIM(COALESCE(settlement_operation.input_json->>'suppress_remittances', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') = v_suppress_remittances
+      AND EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operation_settlement_scope AS settlement_scope
+        WHERE settlement_scope.operation_id = settlement_operation.id
+          AND settlement_scope.pay_batch_id = p_pay_batch_id
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operation_settlement_scope AS settlement_scope
+        WHERE settlement_scope.operation_id = settlement_operation.id
+          AND settlement_scope.pay_batch_id = p_pay_batch_id
+          AND UPPER(BTRIM(COALESCE(settlement_scope.status, ''))) NOT IN ('SETTLED', 'SKIPPED')
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operation_settlement_scope AS settlement_scope
+        WHERE settlement_scope.operation_id = settlement_operation.id
+          AND settlement_scope.pay_batch_id = p_pay_batch_id
+          AND UPPER(BTRIM(COALESCE(settlement_scope.status, ''))) = 'FAILED'
+      );
+
+    SELECT
+      COUNT(*)::integer,
+      (ARRAY_AGG(compatible_operation.operation_id ORDER BY compatible_operation.operation_id))[1]
+    INTO
+      v_settlement_operation_count,
+      v_settlement_operation_id
+    FROM pg_temp.tmp_pay_settle_rail_compatible_settlement_operations AS compatible_operation;
+
+    SELECT COUNT(*)::integer
+    INTO v_related_settlement_operation_count
+    FROM public.banking_pay_operations AS related_operation
+    WHERE related_operation.pay_batch_id = p_pay_batch_id
+      AND related_operation.operation_type = 'PAYMENT_SETTLEMENT'
+      AND (
+        related_operation.root_operation_id = v_execution_operation_id
+        OR NULLIF(BTRIM(COALESCE(related_operation.input_json->>'execution_operation_id', '')), '') = v_execution_operation_id::text
+      );
+
+    SELECT COUNT(*)::integer
+    INTO v_bound_settlement_scope_count
+    FROM public.banking_pay_operation_settlement_scope AS bound_scope
+    JOIN public.banking_pay_operations AS bound_operation
+      ON bound_operation.id = bound_scope.operation_id
+     AND bound_operation.pay_batch_id = p_pay_batch_id
+     AND bound_operation.operation_type = 'PAYMENT_SETTLEMENT'
+    WHERE bound_scope.pay_batch_id = p_pay_batch_id
+      AND (
+        bound_operation.root_operation_id = v_execution_operation_id
+        OR NULLIF(BTRIM(COALESCE(bound_operation.input_json->>'execution_operation_id', '')), '') = v_execution_operation_id::text
+      );
+
+    IF COALESCE(v_settlement_operation_count, 0) = 0 THEN
+      IF COALESCE(v_related_settlement_operation_count, 0) = 0
+         AND COALESCE(v_bound_settlement_scope_count, 0) = 0 THEN
+        -- Compatibility for an older direct settlement route that genuinely has no
+        -- child operation or durable settlement-scope rows. The execution operation
+        -- remains the deterministic proof binding; no provider evidence is invented.
+        v_settlement_operation_id := v_execution_operation_id;
+        v_settlement_operation_count := 1;
+        v_legacy_direct_settlement := true;
+      ELSE
+        RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+          'error', 'PAY_SETTLE_RAIL',
+          'code', 'SETTLEMENT_OPERATION_PROOF_INCOMPLETE',
+          'message', 'Full settlement found a settlement child or settlement scopes, but none formed one complete successful operation bound to the authorised frozen proof.',
+          'pay_batch_id', p_pay_batch_id::text,
+          'execution_operation_id', v_execution_operation_id::text,
+          'auth_request_id', v_operation_auth_request_id::text,
+          'related_settlement_operation_count', COALESCE(v_related_settlement_operation_count, 0),
+          'bound_settlement_scope_count', COALESCE(v_bound_settlement_scope_count, 0)
+        )::text USING ERRCODE = 'P0001';
+      END IF;
+    ELSIF COALESCE(v_settlement_operation_count, 0) <> 1 THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_SETTLE_RAIL',
+        'code', 'SETTLEMENT_OPERATION_PROOF_AMBIGUOUS',
+        'message', 'Full settlement requires exactly one successful settlement operation bound to the authorised frozen proof.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'execution_operation_id', v_execution_operation_id::text,
+        'auth_request_id', v_operation_auth_request_id::text,
+        'compatible_settlement_operation_count', COALESCE(v_settlement_operation_count, 0)
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  IF v_settlement_operation_id IS NOT NULL
+     AND v_settlement_operation_id <> v_execution_operation_id THEN
+    SELECT COUNT(*)::integer
+    INTO v_settlement_operation_count
+    FROM public.banking_pay_operations AS bound_settlement_operation
+    WHERE bound_settlement_operation.id = v_settlement_operation_id
+      AND bound_settlement_operation.pay_batch_id = p_pay_batch_id
+      AND bound_settlement_operation.operation_type = 'PAYMENT_SETTLEMENT'
+      AND bound_settlement_operation.root_operation_id = v_execution_operation_id
+      AND JSONB_TYPEOF(bound_settlement_operation.input_json) = 'object'
+      AND NULLIF(BTRIM(COALESCE(bound_settlement_operation.input_json->>'execution_operation_id', '')), '') = v_execution_operation_id::text
+      AND NULLIF(BTRIM(COALESCE(bound_settlement_operation.input_json->>'auth_request_id', '')), '') = v_operation_auth_request_id::text
+      AND CASE
+        WHEN UPPER(BTRIM(COALESCE(bound_settlement_operation.input_json->>'settlement_mode', bound_settlement_operation.input_json->>'execution_mode', ''))) IN ('STANDARD_BANK', 'BANK') THEN 'STANDARD_BANK'
+        WHEN UPPER(BTRIM(COALESCE(bound_settlement_operation.input_json->>'settlement_mode', bound_settlement_operation.input_json->>'execution_mode', ''))) IN ('CSV', 'CSV_SETTLEMENT') THEN 'CSV_SETTLEMENT'
+        WHEN UPPER(BTRIM(COALESCE(bound_settlement_operation.input_json->>'settlement_mode', bound_settlement_operation.input_json->>'execution_mode', ''))) IN ('EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN 'EXTERNAL_SETTLEMENT'
+        ELSE UPPER(BTRIM(COALESCE(bound_settlement_operation.input_json->>'settlement_mode', bound_settlement_operation.input_json->>'execution_mode', '')))
+      END = v_settlement_mode
+      AND UPPER(BTRIM(COALESCE(bound_settlement_operation.input_json->>'pay_channel_scope', bound_settlement_operation.input_json->>'scope', ''))) = v_operation_projection_scope
+      AND LOWER(BTRIM(COALESCE(bound_settlement_operation.input_json->>'server_owned_payment_projection_proof', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND NULLIF(BTRIM(COALESCE(bound_settlement_operation.input_json->>'paye_net_state_hash', '')), '') = v_expected_paye_net_state_hash
+      AND NULLIF(BTRIM(COALESCE(bound_settlement_operation.input_json->>'bank_payment_projection_hash', '')), '') = v_expected_bank_payment_projection_hash
+      AND LOWER(BTRIM(COALESCE(bound_settlement_operation.input_json->>'suppress_remittances', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') = v_suppress_remittances;
+
+    IF COALESCE(v_settlement_operation_count, 0) <> 1 THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_SETTLE_RAIL',
+        'code', 'SETTLEMENT_OPERATION_BINDING_INVALID',
+        'message', 'The selected settlement child is not bound to the authorised execution operation, auth request, mode, scope, hashes, and remittance policy.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'execution_operation_id', v_execution_operation_id::text,
+        'settlement_operation_id', v_settlement_operation_id::text,
+        'auth_request_id', v_operation_auth_request_id::text
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  IF v_settlement_operation_id IS NOT NULL THEN
+    SELECT COALESCE(
+      JSONB_AGG(settlement_scope_id_row.id::text ORDER BY settlement_scope_id_row.id),
+      '[]'::jsonb
+    )
+    INTO v_settlement_scope_ids
+    FROM public.banking_pay_operation_settlement_scope AS settlement_scope_id_row
+    WHERE settlement_scope_id_row.operation_id = v_settlement_operation_id
+      AND settlement_scope_id_row.pay_batch_id = p_pay_batch_id
+      AND UPPER(BTRIM(COALESCE(settlement_scope_id_row.status, ''))) IN ('SETTLED', 'SKIPPED');
+  END IF;
+
+  IF COALESCE(v_completed_transfer_count, 0) > 0
+     AND v_settlement_operation_id IS NOT NULL
+     AND v_settlement_operation_id <> v_execution_operation_id THEN
+    SELECT
+      COUNT(*) FILTER (
+        WHERE UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SETTLED'
+          AND NOT (
+            UPPER(BTRIM(COALESCE(scope_row.payload_json->>'scope_kind', ''))) = 'NO_BANK_PAYMENT'
+            AND UPPER(BTRIM(COALESCE(scope_row.payload_json->>'no_bank_payment_reason', ''))) = 'EXPLICIT_ZERO_PAYE'
+          )
+      )::integer,
+      COUNT(DISTINCT COALESCE(
+        NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'pay_bank_transfer_id', '')), ''),
+        NULLIF(BTRIM(COALESCE(scope_row.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}', '')), '')
+      )) FILTER (
+        WHERE UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SETTLED'
+          AND NOT (
+            UPPER(BTRIM(COALESCE(scope_row.payload_json->>'scope_kind', ''))) = 'NO_BANK_PAYMENT'
+            AND UPPER(BTRIM(COALESCE(scope_row.payload_json->>'no_bank_payment_reason', ''))) = 'EXPLICIT_ZERO_PAYE'
+          )
+      )::integer,
+      COUNT(*) FILTER (
+        WHERE UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SETTLED'
+          AND NOT (
+            UPPER(BTRIM(COALESCE(scope_row.payload_json->>'scope_kind', ''))) = 'NO_BANK_PAYMENT'
+            AND UPPER(BTRIM(COALESCE(scope_row.payload_json->>'no_bank_payment_reason', ''))) = 'EXPLICIT_ZERO_PAYE'
+          )
+          AND scope_row.settlement_event_id IS NULL
+      )::integer,
+      COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE(scope_row.status, ''))) NOT IN ('SETTLED', 'SKIPPED'))::integer,
+      COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'FAILED')::integer,
+      COUNT(*) FILTER (
+        WHERE v_settlement_mode IN ('CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT')
+          AND UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SETTLED'
+          AND NOT (
+            UPPER(BTRIM(COALESCE(scope_row.payload_json->>'scope_kind', ''))) = 'NO_BANK_PAYMENT'
+            AND UPPER(BTRIM(COALESCE(scope_row.payload_json->>'no_bank_payment_reason', ''))) = 'EXPLICIT_ZERO_PAYE'
+          )
+          AND (
+            UPPER(BTRIM(COALESCE(scope_row.payload_json->>'scope_kind', ''))) <> 'LOCAL_MANUAL_TRANSFER'
+            OR LOWER(BTRIM(COALESCE(scope_row.payload_json->>'local_manual_settlement_scope', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+            OR NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'execution_operation_id', '')), '') <> v_execution_operation_id::text
+            OR NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'settlement_operation_id', '')), '') <> v_settlement_operation_id::text
+            OR NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'auth_request_id', '')), '') <> v_operation_auth_request_id::text
+            OR NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'global_paye_net_state_hash', scope_row.payload_json->>'paye_net_state_hash', '')), '') <> v_expected_paye_net_state_hash
+            OR NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'scoped_paye_net_state_hash', '')), '') <> v_expected_scoped_paye_net_state_hash
+            OR NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'global_bank_payment_projection_hash', '')), '') <> v_expected_global_bank_payment_projection_hash
+            OR NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'scoped_bank_payment_projection_hash', scope_row.payload_json->>'bank_payment_projection_hash', '')), '') <> v_expected_bank_payment_projection_hash
+            OR LOWER(BTRIM(COALESCE(scope_row.payload_json->>'submitted_to_bank', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+            OR LOWER(BTRIM(COALESCE(scope_row.payload_json->>'provider_submission_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+            OR LOWER(BTRIM(COALESCE(scope_row.payload_json->>'provider_submission_attempted', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          )
+      )::integer
+    INTO
+      v_settlement_positive_scope_count,
+      v_settlement_positive_transfer_count,
+      v_settlement_missing_event_count,
+      v_settlement_nonterminal_scope_count,
+      v_settlement_failed_scope_count,
+      v_settlement_local_proof_invalid_count
+    FROM public.banking_pay_operation_settlement_scope AS scope_row
+    WHERE scope_row.operation_id = v_settlement_operation_id
+      AND scope_row.pay_batch_id = p_pay_batch_id;
+
+    SELECT COUNT(*)::integer
+    INTO v_settlement_unmatched_transfer_count
+    FROM pg_temp._tmp_settle_external_completed_transfers AS completed_transfer
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_operation_settlement_scope AS scope_row
+      WHERE scope_row.operation_id = v_settlement_operation_id
+        AND scope_row.pay_batch_id = p_pay_batch_id
+        AND UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SETTLED'
+        AND COALESCE(
+          NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'pay_bank_transfer_id', '')), ''),
+          NULLIF(BTRIM(COALESCE(scope_row.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}', '')), '')
+        ) = completed_transfer.transfer_id::text
+    );
+
+    SELECT COUNT(*)::integer
+    INTO v_settlement_unmatched_scope_transfer_count
+    FROM public.banking_pay_operation_settlement_scope AS scope_row
+    WHERE scope_row.operation_id = v_settlement_operation_id
+      AND scope_row.pay_batch_id = p_pay_batch_id
+      AND UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SETTLED'
+      AND NOT (
+        UPPER(BTRIM(COALESCE(scope_row.payload_json->>'scope_kind', ''))) = 'NO_BANK_PAYMENT'
+        AND UPPER(BTRIM(COALESCE(scope_row.payload_json->>'no_bank_payment_reason', ''))) = 'EXPLICIT_ZERO_PAYE'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_temp._tmp_settle_external_completed_transfers AS completed_transfer
+        WHERE completed_transfer.transfer_id::text = COALESCE(
+          NULLIF(BTRIM(COALESCE(scope_row.payload_json->>'pay_bank_transfer_id', '')), ''),
+          NULLIF(BTRIM(COALESCE(scope_row.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}', '')), '')
+        )
+      );
+
+    IF COALESCE(v_settlement_positive_scope_count, 0) = 0
+       OR COALESCE(v_settlement_positive_transfer_count, 0) <> COALESCE(v_completed_transfer_count, 0)
+       OR COALESCE(v_settlement_missing_event_count, 0) <> 0
+       OR COALESCE(v_settlement_nonterminal_scope_count, 0) <> 0
+       OR COALESCE(v_settlement_failed_scope_count, 0) <> 0
+       OR COALESCE(v_settlement_local_proof_invalid_count, 0) <> 0
+       OR COALESCE(v_settlement_unmatched_transfer_count, 0) <> 0
+       OR COALESCE(v_settlement_unmatched_scope_transfer_count, 0) <> 0 THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_SETTLE_RAIL',
+        'code', 'SETTLEMENT_SCOPE_TRANSFER_PROOF_INCOMPLETE',
+        'message', 'Completed transfers and terminal settlement scopes do not form one exact, mode-valid, operation-bound proof set.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'execution_operation_id', v_execution_operation_id::text,
+        'settlement_operation_id', v_settlement_operation_id::text,
+        'completed_transfer_count', COALESCE(v_completed_transfer_count, 0),
+        'settlement_positive_scope_count', COALESCE(v_settlement_positive_scope_count, 0),
+        'settlement_positive_transfer_count', COALESCE(v_settlement_positive_transfer_count, 0),
+        'missing_settlement_event_count', COALESCE(v_settlement_missing_event_count, 0),
+        'nonterminal_scope_count', COALESCE(v_settlement_nonterminal_scope_count, 0),
+        'failed_scope_count', COALESCE(v_settlement_failed_scope_count, 0),
+        'local_proof_invalid_count', COALESCE(v_settlement_local_proof_invalid_count, 0),
+        'unmatched_completed_transfer_count', COALESCE(v_settlement_unmatched_transfer_count, 0),
+        'unmatched_scope_transfer_count', COALESCE(v_settlement_unmatched_scope_transfer_count, 0)
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  v_submitted_to_bank := v_settlement_mode = 'STANDARD_BANK' AND COALESCE(v_completed_transfer_count, 0) > 0;
+  v_provider_submission_required := v_submitted_to_bank;
+  v_provider_submission_attempted := v_submitted_to_bank;
+  v_local_settlement_evidence_only := v_settlement_mode IN ('CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT')
+    OR v_no_bank_payment_execution_validated;
+
+  IF v_settlement_mode = 'CSV_SETTLEMENT' THEN
+    v_bank_confirm_ref := COALESCE(
+      NULLIF(BTRIM(COALESCE(v_operation_auth_intent_json->>'csv_bank_confirm_ref', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'csv_bank_confirm_ref', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_batch.settlement_confirmation_json->>'bank_confirm_ref', '')), '')
+    );
+  END IF;
+
+  IF COALESCE(v_completed_transfer_count, 0) > 0
+     AND v_settlement_mode IN ('CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT') THEN
+    IF v_settlement_operation_id IS NULL THEN
+      RAISE EXCEPTION 'PAY_SETTLE_RAIL_LOCAL_SETTLEMENT_OPERATION_REQUIRED' USING ERRCODE = 'P0001';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM pg_temp._tmp_settle_external_completed_transfers AS local_completed_transfer
+      JOIN public.pay_bank_transfers AS local_transfer
+        ON local_transfer.id = local_completed_transfer.transfer_id
+       AND local_transfer.pay_batch_id = p_pay_batch_id
+      WHERE NULLIF(BTRIM(COALESCE(local_transfer.request_id, '')), '') IS NOT NULL
+         OR NULLIF(BTRIM(COALESCE(local_transfer.rail_tx_id, '')), '') IS NOT NULL
+         OR EXISTS (
+           SELECT 1
+           FROM public.pay_bank_transfer_events AS local_event_conflict
+           WHERE local_event_conflict.pay_bank_transfer_id = local_transfer.id
+             AND (
+               NULLIF(BTRIM(COALESCE(local_event_conflict.provider_request_id, '')), '') IS NOT NULL
+               OR NULLIF(BTRIM(COALESCE(local_event_conflict.provider_transaction_id, '')), '') IS NOT NULL
+               OR local_event_conflict.provider_webhook_receipt_id IS NOT NULL
+               OR NULLIF(BTRIM(COALESCE(local_event_conflict.provider_event_transport, '')), '') IS NOT NULL
+               OR NULLIF(BTRIM(COALESCE(local_event_conflict.adapter_key, '')), '') IS NOT NULL
+               OR NULLIF(BTRIM(COALESCE(local_event_conflict.adapter_version, '')), '') IS NOT NULL
+               OR UPPER(BTRIM(COALESCE(local_event_conflict.event_source, ''))) IN (
+                 'PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL',
+                 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT'
+               )
+             )
+         )
+      LIMIT 1
+    ) THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_SETTLE_RAIL',
+        'code', 'LOCAL_SETTLEMENT_PROVIDER_EVIDENCE_CONFLICT',
+        'message', 'CSV/external settlement cannot be finalised from local proof while provider request, transaction, webhook, transport, or adapter evidence exists.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'execution_operation_id', v_execution_operation_id::text,
+        'settlement_operation_id', v_settlement_operation_id::text,
+        'settlement_mode', v_settlement_mode
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+
+    v_local_positive_commit_ref := CASE
+      WHEN v_legacy_direct_settlement
+        THEN COALESCE(
+          NULLIF(BTRIM(COALESCE(v_execution_commit_ref, '')), ''),
+          CASE
+            WHEN v_settlement_mode = 'CSV_SETTLEMENT' THEN 'CSV_SETTLEMENT:'
+            ELSE 'EXTERNAL_SETTLEMENT:'
+          END || v_settlement_operation_id::text
+        )
+      ELSE CASE
+        WHEN v_settlement_mode = 'CSV_SETTLEMENT' THEN 'CSV_SETTLEMENT:'
+        ELSE 'EXTERNAL_SETTLEMENT:'
+      END || v_settlement_operation_id::text
+    END;
+
+    IF v_legacy_direct_settlement IS NOT TRUE
+       AND NULLIF(BTRIM(COALESCE(v_execution_commit_ref, '')), '') IS NOT NULL
+       AND NULLIF(BTRIM(COALESCE(v_execution_commit_ref, '')), '') <> v_local_positive_commit_ref THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_SETTLE_RAIL',
+        'code', 'LOCAL_SETTLEMENT_COMMIT_REFERENCE_CONFLICT',
+        'message', 'The existing execution commit reference conflicts with the deterministic local settlement proof.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'settlement_operation_id', v_settlement_operation_id::text,
+        'existing_execution_commit_ref', v_execution_commit_ref,
+        'expected_execution_commit_ref', v_local_positive_commit_ref
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+
+    v_execution_commit_ref := v_local_positive_commit_ref;
+
+    UPDATE public.pay_bank_transfers AS local_completed_transfer_update
+    SET rail_meta_json = JSONB_STRIP_NULLS(
+      COALESCE(local_completed_transfer_update.rail_meta_json, '{}'::jsonb)
+      || JSONB_BUILD_OBJECT(
+        'execution_mode', v_settlement_mode,
+        'settlement_mode', v_settlement_mode,
+        'execution_operation_id', v_execution_operation_id::text,
+        'manual_settlement_operation_id', v_settlement_operation_id::text,
+        'auth_request_id', v_operation_auth_request_id::text,
+        'bank_confirm_ref', CASE WHEN v_settlement_mode = 'CSV_SETTLEMENT' THEN v_bank_confirm_ref ELSE NULL::text END,
+        'external_settlement_comment', CASE
+          WHEN v_settlement_mode = 'EXTERNAL_SETTLEMENT'
+            THEN NULLIF(BTRIM(COALESCE(v_operation_auth_intent_json->>'external_settlement_comment', '')), '')
+          ELSE NULL::text
+        END,
+        'submitted_to_bank', false,
+        'provider_submission_required', false,
+        'provider_submission_attempted', false,
+        'local_settlement_evidence_only', true
+      )
+    )
+    WHERE local_completed_transfer_update.pay_batch_id = p_pay_batch_id
+      AND EXISTS (
+        SELECT 1
+        FROM pg_temp._tmp_settle_external_completed_transfers AS completed_transfer_marker
+        WHERE completed_transfer_marker.transfer_id = local_completed_transfer_update.id
+      );
+  END IF;
+
 
   select count(distinct pbi_chk.pay_bank_transfer_id)::int
   into v_linked_transfer_ct
@@ -99195,203 +99674,282 @@ begin
     ELSE v_batch_status
   END;
 
-  update public.pay_batches as pb2
-  set
+  v_settlement_confirmation_json := COALESCE(v_batch.settlement_confirmation_json, '{}'::jsonb);
+
+  IF COALESCE(v_completed_transfer_count, 0) > 0 THEN
+    IF v_settlement_mode IN ('CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT') THEN
+      v_settlement_confirmation_json := v_settlement_confirmation_json
+        - 'provider_reference'
+        - 'provider_request_id'
+        - 'provider_submission_id'
+        - 'provider_transaction_id'
+        - 'rail_tx_id';
+    ELSIF v_no_bank_scope_authorised THEN
+      v_settlement_confirmation_json := v_settlement_confirmation_json - 'local_commit_reference';
+    END IF;
+
+    v_settlement_confirmation_json := v_settlement_confirmation_json
+      || JSONB_STRIP_NULLS(
+        JSONB_BUILD_OBJECT(
+          'settlement_mode', v_settlement_mode,
+          'provisional_scope_settlement', CASE WHEN v_batch_status IN ('SETTLED', 'FAILED') THEN false ELSE NULL::boolean END,
+          'full_batch_finalised', (v_batch_status IN ('SETTLED', 'FAILED')),
+          'full_batch_finalised_at_utc', CASE
+            WHEN v_batch_status IN ('SETTLED', 'FAILED') THEN COALESCE(
+              NULLIF(BTRIM(COALESCE(v_settlement_confirmation_json->>'full_batch_finalised_at_utc', '')), ''),
+              v_now::text
+            )
+            ELSE NULL::text
+          END,
+          'confirmation_mode', CASE
+            WHEN v_no_bank_scope_authorised THEN 'MIXED_TRANSFER_AND_NO_BANK_PAYMENT'
+            WHEN v_settlement_mode = 'CSV_SETTLEMENT' THEN 'CSV_MANUAL_CONFIRM'
+            WHEN v_settlement_mode = 'EXTERNAL_SETTLEMENT' THEN 'EXTERNAL_MANUAL_CONFIRM'
+            ELSE 'PROVIDER_TERMINAL_SETTLEMENT'
+          END,
+          'settled_at_utc', COALESCE(
+            NULLIF(BTRIM(COALESCE(v_settlement_confirmation_json->>'settled_at_utc', '')), ''),
+            v_now::text
+          ),
+          'settled_by_user_id', COALESCE(
+            NULLIF(BTRIM(COALESCE(v_settlement_confirmation_json->>'settled_by_user_id', '')), ''),
+            p_actor_user_id::text
+          ),
+          'payment_date', CASE WHEN v_effective_payment_date IS NULL THEN NULL::text ELSE v_effective_payment_date::text END,
+          'execution_operation_id', v_execution_operation_id::text,
+          'settlement_operation_id', CASE WHEN v_settlement_operation_id IS NULL THEN NULL::text ELSE v_settlement_operation_id::text END,
+          'auth_request_id', v_operation_auth_request_id::text,
+          'projection_scope', v_operation_projection_scope
+        )
+        || JSONB_BUILD_OBJECT(
+          'global_paye_net_state_hash', v_expected_paye_net_state_hash,
+          'paye_net_state_hash', v_expected_paye_net_state_hash,
+          'scoped_paye_net_state_hash', v_expected_scoped_paye_net_state_hash,
+          'global_bank_payment_projection_hash', v_expected_global_bank_payment_projection_hash,
+          'scoped_bank_payment_projection_hash', v_expected_bank_payment_projection_hash,
+          'bank_payment_projection_hash', v_expected_bank_payment_projection_hash,
+          'projection_changed_after_authorisation', v_current_projection_changed,
+          'positive_transfer_count', COALESCE(v_completed_transfer_count, 0),
+          'total_bank_out', ROUND(COALESCE(v_completed_transfer_total, 0), 2),
+          'pay_bank_transfer_ids', COALESCE(v_completed_transfer_ids, '[]'::jsonb),
+          'pay_bank_transfer_id', CASE
+            WHEN JSONB_ARRAY_LENGTH(COALESCE(v_completed_transfer_ids, '[]'::jsonb)) = 1 THEN v_completed_transfer_ids->>0
+            ELSE NULL::text
+          END,
+          'settlement_scope_ids', COALESCE(v_settlement_scope_ids, '[]'::jsonb),
+          'settlement_scope_id', CASE
+            WHEN JSONB_ARRAY_LENGTH(COALESCE(v_settlement_scope_ids, '[]'::jsonb)) = 1 THEN v_settlement_scope_ids->>0
+            ELSE NULL::text
+          END
+        )
+        || JSONB_BUILD_OBJECT(
+          'execution_commit_ref', COALESCE(
+            NULLIF(BTRIM(COALESCE(v_execution_commit_ref, '')), ''),
+            NULLIF(BTRIM(COALESCE(v_detected_execution_commit_ref, '')), ''),
+            NULLIF(BTRIM(COALESCE(v_local_positive_commit_ref, '')), '')
+          ),
+          'local_commit_reference', CASE
+            WHEN v_settlement_mode IN ('CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT')
+              THEN COALESCE(NULLIF(BTRIM(COALESCE(v_execution_commit_ref, '')), ''), v_local_positive_commit_ref)
+            ELSE NULL::text
+          END,
+          'bank_confirm_ref', CASE WHEN v_settlement_mode = 'CSV_SETTLEMENT' THEN v_bank_confirm_ref ELSE NULL::text END,
+          'external_comment', CASE
+            WHEN v_settlement_mode = 'EXTERNAL_SETTLEMENT'
+              THEN NULLIF(BTRIM(COALESCE(v_operation_auth_intent_json->>'external_settlement_comment', '')), '')
+            ELSE NULL::text
+          END,
+          'csv_export_hash', CASE
+            WHEN v_settlement_mode = 'CSV_SETTLEMENT'
+              THEN NULLIF(BTRIM(COALESCE(v_operation_auth_intent_json->>'bank_csv_export_hash', v_batch_intent_json->>'bank_csv_export_hash', '')), '')
+            ELSE NULL::text
+          END,
+          'csv_uploaded_confirmed', CASE
+            WHEN v_settlement_mode = 'CSV_SETTLEMENT'
+              THEN LOWER(BTRIM(COALESCE(v_operation_auth_intent_json->>'csv_uploaded_confirmed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+            ELSE NULL::boolean
+          END,
+          'external_settlement_confirmed', CASE WHEN v_settlement_mode = 'EXTERNAL_SETTLEMENT' THEN true ELSE NULL::boolean END,
+          'submitted_to_bank', v_submitted_to_bank,
+          'provider_submission_required', v_provider_submission_required,
+          'provider_submission_attempted', v_provider_submission_attempted,
+          'local_settlement_evidence_only', v_local_settlement_evidence_only
+        )
+        || JSONB_BUILD_OBJECT(
+          'contains_no_bank_payment_scopes', CASE WHEN v_no_bank_scope_authorised THEN true ELSE NULL::boolean END,
+          'no_bank_payment_reason', CASE WHEN v_no_bank_scope_authorised THEN 'EXPLICIT_ZERO_PAYE' ELSE NULL::text END,
+          'zero_scope_count', CASE WHEN v_no_bank_scope_authorised THEN COALESCE(v_no_bank_total_scope_count, 0) ELSE 0 END,
+          'allow_explicit_zero_no_bank_scopes', v_allow_explicit_zero_no_bank_scopes_marker,
+          'no_bank_scope_reference', CASE WHEN v_no_bank_scope_authorised THEN v_local_no_bank_commit_ref ELSE NULL::text END,
+          'suppress_remittances', v_suppress_remittances,
+          'remittances_suppressed_at_utc', CASE
+            WHEN v_suppress_remittances THEN COALESCE(
+              NULLIF(BTRIM(COALESCE(v_settlement_confirmation_json->>'remittances_suppressed_at_utc', '')), ''),
+              v_now::text
+            )
+            ELSE NULL::text
+          END,
+          'no_bank_payment_note', CASE
+            WHEN v_no_bank_scope_authorised
+              THEN 'Explicit-zero PAYE scopes were settled locally without transfer or provider evidence; the positive-payment commit proof remains authoritative.'
+            ELSE NULL::text
+          END
+        )
+      );
+  ELSIF v_no_bank_payment_execution_validated AND v_batch_status = 'SETTLED' THEN
+    v_settlement_confirmation_json := v_settlement_confirmation_json
+      - 'bank_confirm_ref'
+      - 'provider_reference'
+      - 'provider_request_id'
+      - 'provider_submission_id'
+      - 'provider_transaction_id'
+      - 'rail_tx_id';
+
+    v_settlement_confirmation_json := v_settlement_confirmation_json
+      || JSONB_STRIP_NULLS(
+        JSONB_BUILD_OBJECT(
+          'settlement_mode', v_settlement_mode,
+          'provisional_scope_settlement', false,
+          'full_batch_finalised', true,
+          'full_batch_finalised_at_utc', COALESCE(
+            NULLIF(BTRIM(COALESCE(v_settlement_confirmation_json->>'full_batch_finalised_at_utc', '')), ''),
+            v_now::text
+          ),
+          'confirmation_mode', CASE
+            WHEN v_settlement_mode = 'CSV_SETTLEMENT' THEN 'NO_BANK_PAYMENT_REVIEW'
+            WHEN v_settlement_mode = 'EXTERNAL_SETTLEMENT' THEN 'NO_BANK_PAYMENT_EXTERNAL_CONFIRMATION'
+            ELSE 'NO_BANK_PAYMENT_EXECUTION'
+          END,
+          'scope_kind', 'NO_BANK_PAYMENT',
+          'no_bank_payment_reason', 'EXPLICIT_ZERO_PAYE',
+          'no_bank_payment_execution', true,
+          'contains_no_bank_payment_scopes', true,
+          'allow_explicit_zero_no_bank_scopes', true,
+          'local_commit_reference', v_local_no_bank_commit_ref,
+          'execution_commit_ref', v_local_no_bank_commit_ref,
+          'execution_operation_id', v_execution_operation_id::text,
+          'settlement_operation_id', CASE WHEN v_settlement_operation_id IS NULL THEN NULL::text ELSE v_settlement_operation_id::text END,
+          'auth_request_id', v_operation_auth_request_id::text
+        )
+        || JSONB_BUILD_OBJECT(
+          'global_paye_net_state_hash', v_expected_paye_net_state_hash,
+          'paye_net_state_hash', v_expected_paye_net_state_hash,
+          'scoped_paye_net_state_hash', v_expected_scoped_paye_net_state_hash,
+          'global_bank_payment_projection_hash', v_expected_global_bank_payment_projection_hash,
+          'scoped_bank_payment_projection_hash', v_expected_bank_payment_projection_hash,
+          'bank_payment_projection_hash', v_expected_bank_payment_projection_hash,
+          'projection_changed_after_authorisation', v_current_projection_changed,
+          'projection_scope', v_operation_projection_scope,
+          'zero_scope_count', COALESCE(v_no_bank_total_scope_count, 0),
+          'positive_transfer_count', 0,
+          'total_bank_out', 0,
+          'pay_bank_transfer_ids', '[]'::jsonb,
+          'settlement_scope_ids', COALESCE(v_settlement_scope_ids, '[]'::jsonb),
+          'settlement_scope_id', CASE
+            WHEN JSONB_ARRAY_LENGTH(COALESCE(v_settlement_scope_ids, '[]'::jsonb)) = 1 THEN v_settlement_scope_ids->>0
+            ELSE NULL::text
+          END
+        )
+        || JSONB_BUILD_OBJECT(
+          'payment_date', CASE WHEN v_effective_payment_date IS NULL THEN NULL::text ELSE v_effective_payment_date::text END,
+          'settled_at_utc', COALESCE(
+            NULLIF(BTRIM(COALESCE(v_settlement_confirmation_json->>'settled_at_utc', '')), ''),
+            v_now::text
+          ),
+          'settled_by_user_id', COALESCE(
+            NULLIF(BTRIM(COALESCE(v_settlement_confirmation_json->>'settled_by_user_id', '')), ''),
+            p_actor_user_id::text
+          ),
+          'csv_uploaded_confirmed', CASE
+            WHEN v_settlement_mode = 'CSV_SETTLEMENT'
+              THEN LOWER(BTRIM(COALESCE(v_operation_auth_intent_json->>'csv_uploaded_confirmed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+            ELSE NULL::boolean
+          END,
+          'external_comment', CASE
+            WHEN v_settlement_mode = 'EXTERNAL_SETTLEMENT'
+              THEN NULLIF(BTRIM(COALESCE(v_operation_auth_intent_json->>'external_settlement_comment', '')), '')
+            ELSE NULL::text
+          END,
+          'submitted_to_bank', false,
+          'provider_submission_required', false,
+          'provider_submission_attempted', false,
+          'local_settlement_evidence_only', true,
+          'bank_upload_occurred', false,
+          'bank_payment_occurred', false,
+          'provider_submission_occurred', false
+        )
+        || JSONB_BUILD_OBJECT(
+          'suppress_remittances', v_suppress_remittances,
+          'remittances_suppressed_at_utc', CASE
+            WHEN v_suppress_remittances THEN COALESCE(
+              NULLIF(BTRIM(COALESCE(v_settlement_confirmation_json->>'remittances_suppressed_at_utc', '')), ''),
+              v_now::text
+            )
+            ELSE NULL::text
+          END,
+          'no_bank_payment_note', CASE
+            WHEN v_settlement_mode = 'CSV_SETTLEMENT'
+              THEN 'The current zero-row CloudTMS Bank CSV was reviewed; no bank upload or payment occurred or was required.'
+            WHEN v_settlement_mode = 'EXTERNAL_SETTLEMENT'
+              THEN 'The authorised external no-bank settlement was completed locally; no bank payment or provider submission occurred or was required.'
+            ELSE 'All authorised PAYE bank amounts were explicitly zero; no bank transfer or provider submission occurred or was required.'
+          END
+        )
+      );
+  END IF;
+
+  UPDATE public.pay_batches AS pb2
+  SET
     status = v_batch_status,
-    completed_at_utc = case
-      when v_batch_status in ('SETTLED', 'FAILED') then coalesce(pb2.completed_at_utc, v_now)
-      else pb2.completed_at_utc
-    end,
+    completed_at_utc = CASE
+      WHEN v_batch_status IN ('SETTLED', 'FAILED') THEN COALESCE(pb2.completed_at_utc, v_now)
+      ELSE pb2.completed_at_utc
+    END,
     last_status_checked_at_utc = v_now,
-    execution_commit_state = case
-      when coalesce(v_completed_transfer_count, 0) > 0 then 'COMMITTED'
-      when v_no_bank_payment_execution_validated and v_batch_status = 'SETTLED' then 'COMMITTED'
-      else coalesce(nullif(btrim(coalesce(pb2.execution_commit_state, '')), ''), 'NOT_SUBMITTED')
-    end,
-    execution_commit_ref = case
-      when coalesce(v_completed_transfer_count, 0) > 0 then coalesce(
-        nullif(btrim(coalesce(pb2.execution_commit_ref, '')), ''),
-        nullif(btrim(coalesce(v_execution_commit_ref, '')), ''),
-        nullif(btrim(coalesce(v_detected_execution_commit_ref, '')), '')
+    total_bank_out = CASE
+      WHEN v_batch_status = 'SETTLED' AND COALESCE(v_completed_transfer_count, 0) > 0
+        THEN ROUND(COALESCE(v_completed_transfer_total, 0), 2)
+      WHEN v_batch_status = 'SETTLED' AND v_no_bank_payment_execution_validated
+        THEN 0
+      ELSE pb2.total_bank_out
+    END,
+    execution_commit_state = CASE
+      WHEN COALESCE(v_completed_transfer_count, 0) > 0 THEN 'COMMITTED'
+      WHEN v_no_bank_payment_execution_validated AND v_batch_status = 'SETTLED' THEN 'COMMITTED'
+      ELSE COALESCE(NULLIF(BTRIM(COALESCE(pb2.execution_commit_state, '')), ''), 'NOT_SUBMITTED')
+    END,
+    execution_commit_ref = CASE
+      WHEN COALESCE(v_completed_transfer_count, 0) > 0
+           AND v_settlement_mode IN ('CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT')
+        THEN v_local_positive_commit_ref
+      WHEN COALESCE(v_completed_transfer_count, 0) > 0 THEN COALESCE(
+        NULLIF(BTRIM(COALESCE(pb2.execution_commit_ref, '')), ''),
+        NULLIF(BTRIM(COALESCE(v_execution_commit_ref, '')), ''),
+        NULLIF(BTRIM(COALESCE(v_detected_execution_commit_ref, '')), '')
       )
-      when v_no_bank_payment_execution_validated and v_batch_status = 'SETTLED' then coalesce(
-        nullif(btrim(coalesce(pb2.execution_commit_ref, '')), ''),
+      WHEN v_no_bank_payment_execution_validated AND v_batch_status = 'SETTLED' THEN COALESCE(
+        NULLIF(BTRIM(COALESCE(pb2.execution_commit_ref, '')), ''),
         v_local_no_bank_commit_ref
       )
-      else pb2.execution_commit_ref
-    end,
-    execution_committed_at_utc = case
-      when coalesce(v_completed_transfer_count, 0) > 0 then coalesce(
+      ELSE pb2.execution_commit_ref
+    END,
+    execution_committed_at_utc = CASE
+      WHEN COALESCE(v_completed_transfer_count, 0) > 0 THEN COALESCE(
         pb2.execution_committed_at_utc,
         v_execution_committed_at_utc,
         v_detected_execution_committed_at_utc,
         v_now
       )
-      when v_no_bank_payment_execution_validated and v_batch_status = 'SETTLED' then coalesce(
+      WHEN v_no_bank_payment_execution_validated AND v_batch_status = 'SETTLED' THEN COALESCE(
         pb2.execution_committed_at_utc,
         v_execution_committed_at_utc,
         v_now
       )
-      else pb2.execution_committed_at_utc
-    end,
-    settlement_confirmation_json = case
-      when coalesce(v_completed_transfer_count, 0) > 0 then
-        case
-          when v_no_bank_scope_authorised
-            then coalesce(pb2.settlement_confirmation_json, '{}'::jsonb) - 'local_commit_reference'
-          else coalesce(pb2.settlement_confirmation_json, '{}'::jsonb)
-        end
-        || jsonb_strip_nulls(
-          jsonb_build_object(
-            'settlement_mode', v_settlement_mode,
-            'provisional_scope_settlement', case when v_batch_status in ('SETTLED', 'FAILED') then false else null::boolean end,
-            'full_batch_finalised', (v_batch_status in ('SETTLED', 'FAILED')),
-            'full_batch_finalised_at_utc', case
-              when v_batch_status in ('SETTLED', 'FAILED') then coalesce(
-                nullif(btrim(coalesce(pb2.settlement_confirmation_json->>'full_batch_finalised_at_utc', '')), ''),
-                v_now::text
-              )
-              else null::text
-            end,
-            'confirmation_mode', case
-              when v_no_bank_scope_authorised then 'MIXED_TRANSFER_AND_NO_BANK_PAYMENT'
-              else null::text
-            end,
-            'settled_at_utc', coalesce(
-              nullif(btrim(coalesce(pb2.settlement_confirmation_json->>'settled_at_utc', '')), ''),
-              v_now::text
-            ),
-            'settled_by_user_id', coalesce(
-              nullif(btrim(coalesce(pb2.settlement_confirmation_json->>'settled_by_user_id', '')), ''),
-              p_actor_user_id::text
-            ),
-            'payment_date', case when v_effective_payment_date is null then null else v_effective_payment_date::text end,
-            'bank_confirm_ref', coalesce(
-              nullif(btrim(coalesce(v_execution_commit_ref, '')), ''),
-              nullif(btrim(coalesce(v_detected_execution_commit_ref, '')), ''),
-              nullif(btrim(coalesce(pb2.execution_commit_ref, '')), '')
-            ),
-            'external_comment', nullif(btrim(coalesce(v_execution_intent_json->>'external_settlement_comment', '')), ''),
-            'csv_export_hash', nullif(btrim(coalesce(v_execution_intent_json->>'bank_csv_export_hash', '')), ''),
-            'suppress_remittances', v_suppress_remittances,
-            'remittances_suppressed_at_utc', case
-              when v_suppress_remittances then coalesce(
-                nullif(btrim(coalesce(pb2.settlement_confirmation_json->>'remittances_suppressed_at_utc', '')), ''),
-                v_now::text
-              )
-              else null::text
-            end,
-            'auth_request_id', v_operation_auth_request_id::text,
-            'execution_operation_id', v_execution_operation_id::text,
-            'settlement_operation_id', case
-              when v_no_bank_scope_authorised and v_no_bank_settlement_operation_id is not null
-                then v_no_bank_settlement_operation_id::text
-              else null::text
-            end
-          )
-          || jsonb_build_object(
-            'contains_no_bank_payment_scopes', case when v_no_bank_scope_authorised then true else null::boolean end,
-            'no_bank_payment_reason', case when v_no_bank_scope_authorised then 'EXPLICIT_ZERO_PAYE' else null::text end,
-            'zero_scope_count', case when v_no_bank_scope_authorised then coalesce(v_no_bank_total_scope_count, 0) else null::integer end,
-            'positive_transfer_count', coalesce(v_completed_transfer_count, 0),
-            'paye_net_state_hash', case when v_no_bank_scope_authorised then v_expected_paye_net_state_hash else null::text end,
-            'global_bank_payment_projection_hash', case when v_no_bank_scope_authorised then v_expected_global_bank_payment_projection_hash else null::text end,
-            'scoped_paye_net_state_hash', case when v_no_bank_scope_authorised then v_expected_scoped_paye_net_state_hash else null::text end,
-            'bank_payment_projection_hash', case when v_no_bank_scope_authorised then v_expected_bank_payment_projection_hash else null::text end,
-            'projection_changed_after_authorisation', case when v_no_bank_scope_authorised then v_current_projection_changed else null::boolean end,
-            'projection_scope', case when v_no_bank_scope_authorised then v_operation_projection_scope else null::text end,
-            'allow_explicit_zero_no_bank_scopes', case when v_no_bank_scope_authorised then v_allow_explicit_zero_no_bank_scopes_marker else null::boolean end,
-            'no_bank_scope_reference', case when v_no_bank_scope_authorised then v_local_no_bank_commit_ref else null::text end,
-            'no_bank_payment_note', case
-              when v_no_bank_scope_authorised
-                then 'Explicit-zero PAYE scopes were settled locally without transfer or provider evidence; the real positive-payment commit reference remains authoritative.'
-              else null::text
-            end
-          )
-        )
-      when v_no_bank_payment_execution_validated and v_batch_status = 'SETTLED' then
-        coalesce(pb2.settlement_confirmation_json, '{}'::jsonb)
-          - 'bank_confirm_ref'
-          - 'provider_reference'
-          - 'provider_request_id'
-          - 'provider_submission_id'
-          - 'provider_transaction_id'
-          - 'rail_tx_id'
-        || jsonb_strip_nulls(
-          jsonb_build_object(
-            'settlement_mode', v_settlement_mode,
-            'provisional_scope_settlement', false,
-            'full_batch_finalised', true,
-            'full_batch_finalised_at_utc', coalesce(
-              nullif(btrim(coalesce(pb2.settlement_confirmation_json->>'full_batch_finalised_at_utc', '')), ''),
-              v_now::text
-            ),
-            'confirmation_mode', case
-              when v_settlement_mode = 'CSV_SETTLEMENT' then 'NO_BANK_PAYMENT_REVIEW'
-              when v_settlement_mode = 'EXTERNAL_SETTLEMENT' then 'NO_BANK_PAYMENT_EXTERNAL_CONFIRMATION'
-              else 'NO_BANK_PAYMENT_EXECUTION'
-            end,
-            'scope_kind', 'NO_BANK_PAYMENT',
-            'no_bank_payment_reason', 'EXPLICIT_ZERO_PAYE',
-            'no_bank_payment_execution', true,
-            'contains_no_bank_payment_scopes', true,
-            'allow_explicit_zero_no_bank_scopes', true,
-            'local_commit_reference', v_local_no_bank_commit_ref,
-            'paye_net_state_hash', v_expected_paye_net_state_hash,
-            'global_bank_payment_projection_hash', v_expected_global_bank_payment_projection_hash,
-            'scoped_paye_net_state_hash', v_expected_scoped_paye_net_state_hash,
-            'bank_payment_projection_hash', v_expected_bank_payment_projection_hash,
-            'projection_changed_after_authorisation', v_current_projection_changed,
-            'projection_scope', v_operation_projection_scope,
-            'zero_scope_count', coalesce(v_no_bank_total_scope_count, 0),
-            'positive_transfer_count', 0,
-            'payment_date', case when v_effective_payment_date is null then null else v_effective_payment_date::text end,
-            'suppress_remittances', v_suppress_remittances,
-            'remittances_suppressed_at_utc', case
-              when v_suppress_remittances then coalesce(
-                nullif(btrim(coalesce(pb2.settlement_confirmation_json->>'remittances_suppressed_at_utc', '')), ''),
-                v_now::text
-              )
-              else null::text
-            end
-          )
-          || jsonb_build_object(
-            'settled_at_utc', coalesce(
-              nullif(btrim(coalesce(pb2.settlement_confirmation_json->>'settled_at_utc', '')), ''),
-              v_now::text
-            ),
-            'settled_by_user_id', coalesce(
-              nullif(btrim(coalesce(pb2.settlement_confirmation_json->>'settled_by_user_id', '')), ''),
-              p_actor_user_id::text
-            ),
-            'execution_operation_id', v_execution_operation_id::text,
-            'settlement_operation_id', v_no_bank_settlement_operation_id::text,
-            'auth_request_id', v_operation_auth_request_id::text,
-            'csv_uploaded_confirmed', case
-              when v_settlement_mode = 'CSV_SETTLEMENT'
-                then lower(btrim(coalesce(v_operation_auth_intent_json->>'csv_uploaded_confirmed', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
-              else null::boolean
-            end,
-            'external_comment', case
-              when v_settlement_mode = 'EXTERNAL_SETTLEMENT'
-                then nullif(btrim(coalesce(v_operation_auth_intent_json->>'external_settlement_comment', '')), '')
-              else null::text
-            end,
-            'bank_upload_occurred', false,
-            'bank_payment_occurred', false,
-            'provider_submission_occurred', false,
-            'no_bank_payment_note', case
-              when v_settlement_mode = 'CSV_SETTLEMENT'
-                then 'The current zero-row CloudTMS Bank CSV was reviewed; no bank upload or payment occurred or was required.'
-              when v_settlement_mode = 'EXTERNAL_SETTLEMENT'
-                then 'The authorised external no-bank settlement was completed locally; no bank payment or provider submission occurred or was required.'
-              else 'All authorised PAYE bank amounts were explicitly zero; no bank transfer or provider submission occurred or was required.'
-            end
-          )
-        )
-      else pb2.settlement_confirmation_json
-    end
-  where pb2.id = p_pay_batch_id;
+      ELSE pb2.execution_committed_at_utc
+    END,
+    settlement_confirmation_json = v_settlement_confirmation_json
+  WHERE pb2.id = p_pay_batch_id;
+
 
   if jsonb_array_length(coalesce(v_durably_finalised_candidate_ids, '[]'::jsonb)) > 0 then
     update public.pay_batches as finalised_candidate_batch_update
@@ -99402,11 +99960,15 @@ begin
     where finalised_candidate_batch_update.id = p_pay_batch_id;
   end if;
 
-  if v_no_bank_payment_execution_validated and v_batch_status = 'SETTLED' then
+  IF v_no_bank_payment_execution_validated AND v_batch_status = 'SETTLED' THEN
     v_execution_commit_state := 'COMMITTED';
     v_execution_commit_ref := v_local_no_bank_commit_ref;
-    v_execution_committed_at_utc := coalesce(v_execution_committed_at_utc, v_now);
-  end if;
+    v_execution_committed_at_utc := COALESCE(v_execution_committed_at_utc, v_now);
+  ELSIF COALESCE(v_completed_transfer_count, 0) > 0 THEN
+    v_execution_commit_state := 'COMMITTED';
+    v_execution_commit_ref := COALESCE(v_local_positive_commit_ref, v_execution_commit_ref, v_detected_execution_commit_ref);
+    v_execution_committed_at_utc := COALESCE(v_execution_committed_at_utc, v_detected_execution_committed_at_utc, v_now);
+  END IF;
 
   select exists (
     select 1
@@ -99923,7 +100485,10 @@ begin
       'no_bank_payment_execution', v_no_bank_payment_execution_validated,
       'allow_explicit_zero_no_bank_scopes', v_allow_explicit_zero_no_bank_scopes_marker,
       'no_bank_scope_count', COALESCE(v_no_bank_total_scope_count, 0),
-      'local_commit_reference', CASE WHEN v_no_bank_scope_authorised THEN v_local_no_bank_commit_ref ELSE NULL::text END,
+      'local_commit_reference', COALESCE(
+        CASE WHEN v_no_bank_scope_authorised THEN v_local_no_bank_commit_ref ELSE NULL::text END,
+        v_local_positive_commit_ref
+      ),
       'consumed_carry_forward_count', COALESCE(v_consumed_carry_forward_count, 0),
       'component_id_missing_from_frozen_artifact_count', COALESCE(v_component_unresolved_count, 0),
       'bank_event_ingest_count', COALESCE(v_bank_event_ingest_count, 0)
@@ -99943,6 +100508,8 @@ begin
     'execution_commit_state', (select pb3.execution_commit_state from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
     'execution_commit_ref', (select pb3.execution_commit_ref from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
     'execution_committed_at_utc', (select case when pb3.execution_committed_at_utc is null then null else pb3.execution_committed_at_utc::text end from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+    'total_bank_out', (select pb3.total_bank_out from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+    'settlement_operation_id', CASE WHEN v_settlement_operation_id IS NULL THEN NULL::text ELSE v_settlement_operation_id::text END,
     'settlement_confirmation_json', (select pb3.settlement_confirmation_json from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
     'execution_mode', v_settlement_mode,
     'suppress_remittances', v_suppress_remittances,
@@ -99994,11 +100561,10 @@ begin
       'proof_validation_outcome', v_proof_validation_outcome,
       'auth_request_id', case when v_operation_auth_request_id is null then null else v_operation_auth_request_id::text end,
       'execution_operation_id', case when v_execution_operation_id is null then null else v_execution_operation_id::text end,
-      'settlement_operation_id', case
-        when v_no_bank_scope_authorised and v_no_bank_settlement_operation_id is not null
-          then v_no_bank_settlement_operation_id::text
-        else null::text
-      end,
+      'settlement_operation_id', CASE
+        WHEN v_settlement_operation_id IS NULL THEN NULL::text
+        ELSE v_settlement_operation_id::text
+      END,
       'authorised_execution_mode', v_authorised_execution_mode,
       'authorised_projection_scope', v_operation_projection_scope,
       'authorised_paye_net_state_hash', v_expected_paye_net_state_hash,
@@ -100035,10 +100601,7 @@ begin
     )
   );
 end;
-$function$;
-
-
-
+$function$
 
 
 CREATE OR REPLACE FUNCTION public._pay_batch_bank_payment_projection_rows(

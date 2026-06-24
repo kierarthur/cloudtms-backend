@@ -62656,10 +62656,13 @@ function hasAnySegmentInvoiceLock(input) {
   }
 }
 
+
 async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
   const enc = encodeURIComponent;
   const out = {
     can_manage_evidence: false,
+    can_manage_expense_evidence: false,
+    expense_protected_reason: null,
     document_locked: false,
     document_lock_reason: null,
     candidate_paid: false,
@@ -62682,6 +62685,15 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
     return Number.isFinite(x) ? x : 0;
   };
   const up = (v) => String(v == null ? '' : v).trim().toUpperCase();
+  const normaliseEvidenceKind = (value) => {
+    const kindU = up(value);
+    if (kindU === 'EXPENSE' || kindU === 'EXPENSES') return 'TRAVEL';
+    if (kindU === 'MILES' || kindU === 'MILE') return 'MILEAGE';
+    if (kindU === 'ACCOM') return 'ACCOMMODATION';
+    if (kindU === 'TS') return 'TIMESHEET';
+    return kindU;
+  };
+  const expenseEvidenceKinds = new Set(['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
 
   const resolved = await resolveTimesheetToCurrent(env, timesheetId).catch(() => null);
   if (!resolved?.current_timesheet_id) {
@@ -62798,6 +62810,21 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
 
   const evidence = opts?.evidence_item || null;
   const evidenceId = String(evidence?.id || opts?.evidence_id || '').trim();
+  const requestedKindU = normaliseEvidenceKind(
+    opts?.requested_kind ||
+    opts?.requestedKind ||
+    opts?.evidence_kind ||
+    opts?.evidenceKind ||
+    opts?.kind ||
+    ''
+  );
+  const existingKindU = normaliseEvidenceKind(evidence?.kind || '');
+  const scopedKinds = [requestedKindU, existingKindU].filter(Boolean);
+  const expenseEvidenceMutation = !!(
+    opts?.allow_expense_evidence_preflight === true ||
+    opts?.allowExpenseEvidencePreflight === true ||
+    (scopedKinds.length > 0 && scopedKinds.every((kind) => expenseEvidenceKinds.has(kind)))
+  );
   let evidenceProtected = false;
 
   if (evidenceId.startsWith('SYS:')) evidenceProtected = true;
@@ -62848,14 +62875,29 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
     }
   }
 
+  const invoiceProtectedReason = out.document_lock_reason === 'INVOICE_SEGMENT_LOCKED'
+    ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED'
+    : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED';
+
   if (out.authorised) {
+    out.expense_protected_reason = 'TIMESHEET_AUTHORISED_EDIT_BLOCKED';
+  } else if (out.document_locked) {
+    out.expense_protected_reason = invoiceProtectedReason;
+  } else if (out.import_authoritative) {
+    out.expense_protected_reason = 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED';
+  } else if (evidenceProtected) {
+    out.expense_protected_reason = 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE';
+  }
+  out.can_manage_expense_evidence = !out.expense_protected_reason;
+
+  if (expenseEvidenceMutation) {
+    out.protected_reason = out.expense_protected_reason;
+  } else if (out.authorised) {
     out.protected_reason = 'TIMESHEET_AUTHORISED_EDIT_BLOCKED';
   } else if (out.candidate_paid) {
     out.protected_reason = 'TIMESHEET_PAID_EDIT_BLOCKED';
   } else if (out.document_locked) {
-    out.protected_reason = out.document_lock_reason === 'INVOICE_SEGMENT_LOCKED'
-      ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED'
-      : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED';
+    out.protected_reason = invoiceProtectedReason;
   } else if (out.import_authoritative) {
     out.protected_reason = 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED';
   } else if (evidenceProtected) {
@@ -62865,8 +62907,6 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
   out.can_manage_evidence = !out.protected_reason;
   return out;
 }
-
-
 
 async function applyTimesheetEvidenceReplacement(env, args = {}) {
   throw new Error('Direct evidence replacement is not supported. Delete or return the existing evidence first, then add/attach the new evidence.');
@@ -63092,6 +63132,16 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     const summary = evidencePolicy?.summary || null;
     const importAuthoritative = !!evidencePolicy?.import_authoritative;
     const routeEvidenceEditable = !!evidencePolicy?.can_manage_evidence;
+    const routeExpenseEvidenceEditable = !!evidencePolicy?.can_manage_expense_evidence;
+    const expenseEvidenceKinds = new Set(['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
+    const normaliseEvidenceKindForPermissions = (value) => {
+      const kindU = String(value || '').trim().toUpperCase();
+      if (kindU === 'EXPENSE' || kindU === 'EXPENSES') return 'TRAVEL';
+      if (kindU === 'MILES' || kindU === 'MILE') return 'MILEAGE';
+      if (kindU === 'ACCOM') return 'ACCOMMODATION';
+      if (kindU === 'TS') return 'TIMESHEET';
+      return kindU;
+    };
 
     // ─────────────────────────────────────────────────────────────
     // 1) User evidence rows (timesheet_evidence)
@@ -63161,10 +63211,14 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       }
       if (queueMetaObj) out.meta_json = queueMetaObj;
       out.system = false;
-      out.is_view_only = !routeEvidenceEditable;
-      out.can_delete = routeEvidenceEditable;
-      out.can_reclassify = routeEvidenceEditable;
-      out.can_return_to_queue = routeEvidenceEditable;
+      const evidenceKindU = normaliseEvidenceKindForPermissions(out.kind);
+      const itemEvidenceEditable = expenseEvidenceKinds.has(evidenceKindU)
+        ? routeExpenseEvidenceEditable
+        : routeEvidenceEditable;
+      out.is_view_only = !itemEvidenceEditable;
+      out.can_delete = itemEvidenceEditable;
+      out.can_reclassify = itemEvidenceEditable;
+      out.can_return_to_queue = itemEvidenceEditable;
       out.source_badge = 'Attached';
       if (!out.uploaded_at_utc && out.created_at) out.uploaded_at_utc = out.created_at;
       return out;
@@ -63791,7 +63845,6 @@ function isImportAuthoritativeEvidenceContext(summary) {
 }
 
 
-
 async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
@@ -64217,7 +64270,7 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
   };
 
   try {
-    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { allow_expense_evidence_preflight: true });
     if (!evidencePolicy?.can_manage_evidence) {
       return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'returned to the queue'));
     }
@@ -64763,6 +64816,7 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     return withCORS(env, req, serverError(`Failed to return timesheet evidence to queue: ${e?.message || e}`));
   }
 }
+
 
 
 // POST /api/timesheets/:id/evidence
@@ -117410,6 +117464,7 @@ async function handleTsfinPatchMileage(env, req, timesheetId) {
   }));
 }
 
+
 async function patchTsfinCommon(env, req, timesheetId, patch) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -117830,10 +117885,10 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     }
   }
 
-  if (before.paid_at_utc || summary?.paid_at_utc) {
+  if ((before.paid_at_utc || summary?.paid_at_utc) && patch.po && hasOwn(patch.po, 'number')) {
     return blockedResponse(
       'TIMESHEET_PAID_EDIT_BLOCKED',
-      'This timesheet has been paid and cannot be amended directly.'
+      'This timesheet has been paid and its purchase order cannot be amended directly.'
     );
   }
 
@@ -118237,7 +118292,6 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   });
 }
 
-
 // ============================================================
 // UPDATED: handleTimesheetEvidenceAdd / handleTimesheetEvidenceUpdateKind
 // - Normalizes kind to canonical set where applicable:
@@ -118254,7 +118308,6 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 // - Maps legacy UI "Expenses" -> TRAVEL
 // - Keeps other/system kinds as UPPER(TRIM(...))
 // ============================================================
-
 
 async function handleTimesheetEvidenceAdd(env, req, tsId) {
   const enc = encodeURIComponent;
@@ -118387,7 +118440,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
   }
 
   try {
-    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { requested_kind: kind });
     if (!evidencePolicy?.can_manage_evidence) {
       return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'added'));
     }
@@ -118663,7 +118716,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
   if (!allowedKinds.has(newKind)) return withCORS(env, req, badRequest('Invalid evidence kind'));
 
   try {
-    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { allow_expense_evidence_preflight: true });
     if (!evidencePolicy?.can_manage_evidence) {
       return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'edited'));
     }
@@ -118680,7 +118733,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
     const ev = evRows?.[0] || null;
     if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
 
-    const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev });
+    const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev, requested_kind: newKind });
     if (!evPolicy?.can_manage_evidence) {
       return withCORS(env, req, evidencePolicyBlockedResponse(evPolicy, 'edited'));
     }
@@ -118871,6 +118924,8 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
 }
 
 
+
+
 async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
@@ -118940,7 +118995,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   };
 
   try {
-    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { allow_expense_evidence_preflight: true });
     if (!evidencePolicy?.can_manage_evidence) {
       return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'deleted'));
     }
@@ -119099,7 +119154,6 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${e?.message || e}`));
   }
 }
-
 
 
 
