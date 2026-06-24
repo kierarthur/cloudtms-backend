@@ -100601,7 +100601,7 @@ begin
     )
   );
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public._pay_batch_bank_payment_projection_rows(
