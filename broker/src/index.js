@@ -24948,9 +24948,6 @@ async function tsfinBestEffortMakeReadyForDraft(env, timesheetIds, opts = {}) {
 
 
 
-
-
-
 async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -25251,6 +25248,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     const out = safeObject(payload);
     const batch = safeObject(out.batch);
     const summary = safeObject(executionSummary);
+    const summaryFinalising = summary.summary_finalising === true || summary.summaryFinalising === true || summary.bootstrap_finalising === true || summary.bootstrapFinalising === true;
     const preflight = safeObject(summary.paye_net_preflight || summary.payeNetPreflight || summary.global_execute_preflight || summary.globalExecutePreflight);
     const csvScopePreflight = safeObject(summary.bank_csv_scope_preflight || summary.bankCsvScopePreflight || summary.csv_scope_preflight || summary.csvScopePreflight);
     const storedCsv = safeObject(summary.bank_csv_export_json || summary.bankCsvExportJson || out.bank_csv_export_json || batch.bank_csv_export_json);
@@ -25540,7 +25538,8 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     const externalSettlementConfigured = externalCapabilityState !== false && !providerAvailabilityBlocked;
     const batchStateEligible = ['DRAFT', 'DRAFT_CREATED', 'READY'].includes(status) && executionCommitState === 'NOT_SUBMITTED' && !terminalBatchStates.has(status);
     const hasActiveRealOperation = !!normaliseActivePaymentOperation(activePaymentOperation);
-    const sharedPaymentReady = batchStateEligible &&
+    const sharedPaymentReady = !summaryFinalising &&
+      batchStateEligible &&
       hasFrozenNonVoidItems &&
       hasAuthoritativeExecutablePaymentScope &&
       payeNetComplete &&
@@ -25550,7 +25549,8 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       !freshnessBlocked &&
       !executionBlocked;
 
-    const bankCsvAllowed = batchStateEligible &&
+    const bankCsvAllowed = !summaryFinalising &&
+      batchStateEligible &&
       hasFrozenNonVoidItems &&
       hasAuthoritativeExecutablePaymentScope &&
       payeNetComplete &&
@@ -25567,6 +25567,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     const anyExecuteAllowed = standardAllowed || csvSettlementAllowed || externalSettlementAllowed;
 
     const reasonFor = (route) => {
+      if (summaryFinalising) return { code: 'PAYMENT_SUMMARY_FINALISING', message: 'Payment actions will be available after the draft summary finishes finalising.' };
       if (!batchStateEligible) return { code: 'BATCH_TERMINAL_OR_STATUS_BLOCKED', message: 'Payment actions are not available for this batch state.' };
       if (hasActiveRealOperation) return { code: 'ACTIVE_PAYMENT_OPERATION', message: 'A payment execution operation is already in progress.' };
       if (!hasFrozenNonVoidItems) return { code: 'NO_SETTLEABLE_BATCH_ITEMS', message: 'This batch has no frozen non-void payment items to settle.' };
@@ -25753,6 +25754,103 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     return out;
   };
 
+  const describeExecutionSummaryFailure = (value) => {
+    const fragments = [];
+    const codes = [];
+    const statuses = [];
+    const seen = new WeakSet();
+    const walk = (node, depth = 0) => {
+      if (node == null || depth > 5) return;
+      if (typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') {
+        const text = trimText(node);
+        if (text) fragments.push(text);
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const entry of node) walk(entry, depth + 1);
+        return;
+      }
+      if (typeof node !== 'object') return;
+      if (seen.has(node)) return;
+      seen.add(node);
+      for (const key of ['code', 'error_code', 'errorCode', 'sqlstate', 'sql_state', 'name']) {
+        const text = trimText(node[key]);
+        if (text) codes.push(text);
+      }
+      for (const key of ['status', 'http_status', 'httpStatus', 'status_code', 'statusCode']) {
+        const number = Number(node[key]);
+        if (Number.isFinite(number)) statuses.push(Math.trunc(number));
+      }
+      for (const key of ['message', 'error', 'details', 'detail', 'hint', 'status_text', 'statusText', 'reason']) {
+        if (Object.prototype.hasOwnProperty.call(node, key)) walk(node[key], depth + 1);
+      }
+      for (const key of ['payload', 'json', 'body', 'response', 'cause', 'data']) {
+        if (Object.prototype.hasOwnProperty.call(node, key)) walk(node[key], depth + 1);
+      }
+    };
+    walk(value, 0);
+    const code = upperText(codes.find(Boolean) || 'PAY_BATCH_EXECUTION_SUMMARY_UNAVAILABLE') || 'PAY_BATCH_EXECUTION_SUMMARY_UNAVAILABLE';
+    const text = fragments.join(' | ');
+    return {
+      code,
+      status: statuses.find((status) => status > 0) || null,
+      text,
+      combined: `${code} ${text}`.trim()
+    };
+  };
+
+  const isSafeDraftBootstrapPayload = (payload) => {
+    const root = safeObject(payload);
+    const batch = safeObject(root.batch);
+    const returnedId = trimText(root.pay_batch_id || root.payBatchId || root.batch_id || root.batchId || batch.id || batch.pay_batch_id || batch.payBatchId || '');
+    const status = upperText(root.status || root.db_status || root.batch_status || root.batch_status_raw || batch.status || batch.db_status || batch.batch_status || batch.batch_status_raw || '');
+    const commitState = upperText(root.execution_commit_state || root.executionCommitState || batch.execution_commit_state || batch.executionCommitState || 'NOT_SUBMITTED') || 'NOT_SUBMITTED';
+    return root.ok !== false && returnedId === id && ['DRAFT', 'DRAFT_CREATED', 'READY'].includes(status) && commitState === 'NOT_SUBMITTED';
+  };
+
+  const isTransientExecutionSummaryFailure = (failure) => {
+    const descriptor = failure && typeof failure === 'object' && Object.prototype.hasOwnProperty.call(failure, 'combined')
+      ? failure
+      : describeExecutionSummaryFailure(failure);
+    const combined = upperText(descriptor.combined || '');
+    const code = upperText(descriptor.code || '');
+    const status = Number(descriptor.status);
+    const fatalPattern = /(PAY_BATCH_EXECUTION_SUMMARY_(PAY_BATCH_ID_REQUIRED|ACTOR_NOT_FOUND|BATCH_NOT_FOUND|MODE_NOT_SUPPORTED)|PERMISSION DENIED|UNAUTHORI[ZS]ED|FORBIDDEN|ROW[- ]LEVEL SECURITY|INVALID INPUT SYNTAX|MALFORMED|INTEGRITY|CONSTRAINT|UNDEFINED FUNCTION|SCHEMA CACHE|FUNCTION .* NOT FOUND)/i;
+    if (fatalPattern.test(combined)) return false;
+    if ([408, 425, 429, 502, 503, 504].includes(status)) return true;
+    if (/^(55P03|57014|40001|40P01|53300|57P0[123]|08[A-Z0-9]{3}|PGRST00[023]|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ABORT_ERR|ABORTERROR)$/.test(code)) return true;
+    return /(TIMEOUT|TIMED OUT|LOCK TIMEOUT|COULD NOT OBTAIN LOCK|DEADLOCK|SERIALIZATION FAILURE|QUERY CANCELED|QUERY CANCELLED|STATEMENT TIMEOUT|STATEMENT CANCELLED|TEMPORAR|TRY AGAIN|CONNECTION|NETWORK|FETCH FAILED|UPSTREAM|SERVICE UNAVAILABLE|BAD GATEWAY|GATEWAY TIMEOUT|TOO MANY CONNECTIONS|RESOURCE BUSY|STILL FINALI[ZS]ING|SUMMARY .*NOT .*READY|MATERIALI[ZS]|DISPLAY SUMMARY .*REFRESH)/i.test(combined);
+  };
+
+  const makeExecutionSummaryFailureError = (failure) => {
+    const descriptor = failure && typeof failure === 'object' && Object.prototype.hasOwnProperty.call(failure, 'combined')
+      ? failure
+      : describeExecutionSummaryFailure(failure);
+    const message = trimText(descriptor.text || descriptor.code || 'Payment batch execution summary could not be loaded.') || 'Payment batch execution summary could not be loaded.';
+    const error = new Error(message);
+    error.code = descriptor.code || 'PAY_BATCH_EXECUTION_SUMMARY_UNAVAILABLE';
+    error.error_code = error.code;
+    if (descriptor.status) error.status = descriptor.status;
+    return error;
+  };
+
+  const buildFinalisingExecutionSummary = (existingSummary, reasonCode) => ({
+    ...safeObject(existingSummary),
+    ok: true,
+    pay_batch_id: id,
+    batch_id: id,
+    mode: 'LIGHT',
+    light_mode: true,
+    summary_finalising: true,
+    summaryFinalising: true,
+    bootstrap_finalising: true,
+    bootstrapFinalising: true,
+    status_text: 'Payment draft is still finalising.',
+    message: 'Payment draft is still finalising. Its summary will refresh automatically.',
+    finalising_reason: reasonCode,
+    finalisingReason: reasonCode
+  });
+
   const execute = async () => {
     try {
       const url = new URL(req.url);
@@ -25774,22 +25872,53 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
         bankingPay: true
       }), 'pay_batch_get'));
 
-      const executionSummary = safeObject(unwrapRpc(await sbRpc(env, 'pay_batch_execution_summary_get', {
-        p_pay_batch_id: id,
-        p_actor_user_id: actorUserId || null,
-        p_mode: 'LIGHT'
-      }, {
-        routeClass: 'BATCH_BOOTSTRAP',
-        purpose: 'PAYMENT_EXECUTION_SUMMARY',
-        timeoutMs: 8000,
-        bankingPay: true
-      }), 'pay_batch_execution_summary_get'));
-
-      if (!executionSummary.pay_batch_id || executionSummary.ok === false) {
-        throw new Error(trimText(executionSummary.message || executionSummary.error || executionSummary.code) || 'PAY_BATCH_EXECUTION_SUMMARY_UNAVAILABLE');
+      let executionSummary = {};
+      let executionSummaryFinalising = false;
+      let executionSummaryFinalisingReason = null;
+      let executionSummaryFailure = null;
+      try {
+        executionSummary = safeObject(unwrapRpc(await sbRpc(env, 'pay_batch_execution_summary_get', {
+          p_pay_batch_id: id,
+          p_actor_user_id: actorUserId || null,
+          p_mode: 'LIGHT'
+        }, {
+          routeClass: 'BATCH_BOOTSTRAP',
+          purpose: 'PAYMENT_EXECUTION_SUMMARY',
+          timeoutMs: 8000,
+          bankingPay: true
+        }), 'pay_batch_execution_summary_get'));
+      } catch (summaryError) {
+        executionSummaryFailure = describeExecutionSummaryFailure(summaryError);
+        if (
+          detailMode === 'FULL' ||
+          !isSafeDraftBootstrapPayload(rawPayload) ||
+          !isTransientExecutionSummaryFailure(executionSummaryFailure)
+        ) throw summaryError;
       }
 
-      const lookedUpActivePaymentOperation = await lookupActivePaymentExecutionOperation(executionSummary);
+      if (!executionSummaryFailure && (!executionSummary.pay_batch_id || executionSummary.ok === false)) {
+        const hasReturnedFailure = executionSummary.ok === false || Object.keys(executionSummary).length > 0;
+        executionSummaryFailure = describeExecutionSummaryFailure(hasReturnedFailure
+          ? executionSummary
+          : { code: 'PAY_BATCH_EXECUTION_SUMMARY_UNAVAILABLE', message: 'Payment batch execution summary was not returned.' });
+        const missingSummaryCanFinalise = !hasReturnedFailure || isTransientExecutionSummaryFailure(executionSummaryFailure);
+        if (
+          detailMode === 'FULL' ||
+          !isSafeDraftBootstrapPayload(rawPayload) ||
+          !missingSummaryCanFinalise
+        ) throw makeExecutionSummaryFailureError(executionSummaryFailure);
+      }
+
+      if (executionSummaryFailure) {
+        executionSummaryFinalising = true;
+        const rawFinalisingCode = upperText(executionSummaryFailure.code || '');
+        executionSummaryFinalisingReason = rawFinalisingCode && !['ERROR', 'TYPEERROR', 'DOMEXCEPTION', 'ABORTERROR'].includes(rawFinalisingCode)
+          ? rawFinalisingCode
+          : 'PAY_BATCH_EXECUTION_SUMMARY_FINALISING';
+        executionSummary = buildFinalisingExecutionSummary(executionSummary, executionSummaryFinalisingReason);
+      }
+
+      const lookedUpActivePaymentOperation = executionSummaryFinalising ? null : await lookupActivePaymentExecutionOperation(executionSummary);
       const embeddedActivePaymentOperation = chooseValidActivePaymentOperation(rawPayload, rawPayload.batch);
       const activePaymentOperation = lookedUpActivePaymentOperation || embeddedActivePaymentOperation;
       const payload = decoratePayloadForChildModal(rawPayload, executionSummary, activePaymentOperation);
@@ -25820,6 +25949,14 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
         displaySummaryRepaired: payload.display_summary_repaired === true,
         summary_refresh_failed: payload.summary_refresh_failed === true,
         summaryRefreshFailed: payload.summary_refresh_failed === true,
+        bootstrap_finalising: executionSummaryFinalising,
+        bootstrapFinalising: executionSummaryFinalising,
+        summary_finalising: executionSummaryFinalising || executionSummary.summary_finalising === true,
+        summaryFinalising: executionSummaryFinalising || executionSummary.summary_finalising === true,
+        finalising_message: executionSummaryFinalising ? 'Payment draft is still finalising. Its summary will refresh automatically.' : null,
+        finalisingMessage: executionSummaryFinalising ? 'Payment draft is still finalising. Its summary will refresh automatically.' : null,
+        finalising_reason: executionSummaryFinalisingReason,
+        finalisingReason: executionSummaryFinalisingReason,
         durable_counts: payload.durable_counts || null,
         durableCounts: payload.durable_counts || null,
         execution_summary: executionSummary,
@@ -25838,6 +25975,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   }
   return execute();
 }
+
 
 
 
@@ -155169,7 +155307,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   }
 }
 
-
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const unwrapRow = (value) => {
     let row = value;
@@ -155315,6 +155452,59 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     ]) {
       for (const item of extractStringArray(arrayValue)) push(item);
     }
+    const nestedVisited = new WeakSet();
+    const collectNestedBatchIds = (value, depth = 0, batchContext = false) => {
+      if (value == null || depth > 7) return;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (batchContext && (typeof item === 'string' || typeof item === 'number')) push(item);
+          else collectNestedBatchIds(item, depth + 1, batchContext);
+        }
+        return;
+      }
+      if (typeof value === 'string') {
+        const text = trimText(value);
+        if (!text) return;
+        if (batchContext) push(text);
+        if (text[0] !== '{' && text[0] !== '[') return;
+        try { collectNestedBatchIds(JSON.parse(text), depth + 1, batchContext); } catch {}
+        return;
+      }
+      const nested = asPlainObject(value);
+      if (!Object.keys(nested).length || nestedVisited.has(nested)) return;
+      nestedVisited.add(nested);
+      if (batchContext) push(nested.id);
+      for (const scalarValue of [nested.pay_batch_id, nested.payBatchId, nested.primary_pay_batch_id, nested.primaryPayBatchId]) push(scalarValue);
+      for (const arrayValue of [nested.pay_batch_ids, nested.payBatchIds, nested.created_pay_batch_ids, nested.createdPayBatchIds]) {
+        for (const item of extractStringArray(arrayValue)) push(item);
+      }
+      const batchContainerKeys = new Set([
+        'created_batches', 'createdBatches',
+        'batch_shells', 'batchShells',
+        'batch_results', 'batchResults'
+      ]);
+      for (const key of [
+        'post_create_refresh', 'postCreateRefresh',
+        'workbench_refresh', 'workbenchRefresh',
+        'refresh',
+        'replacement_session', 'replacementSession',
+        'created_batches', 'createdBatches',
+        'batch_shells', 'batchShells',
+        'scope_results', 'scopeResults',
+        'batch_results', 'batchResults',
+        'results',
+        'result', 'result_json', 'resultJson', 'final_result', 'finalResult',
+        'progress', 'progress_json', 'progressJson',
+        'raw_payload', 'rawPayload', 'payload'
+      ]) {
+        if (Object.prototype.hasOwnProperty.call(nested, key)) {
+          collectNestedBatchIds(nested[key], depth + 1, batchContainerKeys.has(key));
+        }
+      }
+    };
+    collectNestedBatchIds(sourceProgress, 0);
+    collectNestedBatchIds(sourceResult, 0);
+    collectNestedBatchIds(sourceRow, 0);
     return out;
   };
   const operationType = upperText(firstText(row.operation_type, row.operationType, progress.operation_type, progress.operationType, resultObject.operation_type, resultObject.operationType)) || null;
@@ -155340,6 +155530,191 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     };
   };
   const draftCreateResultSummary = extractDraftCreateResultSummary();
+  const extractDraftCreatePostCreateRefresh = () => {
+    if (operationType !== 'DRAFT_CREATE') return null;
+    const visited = new WeakSet();
+    const sources = [];
+    const addSource = (value) => {
+      const objectValue = asPlainObject(value);
+      if (!Object.keys(objectValue).length || visited.has(objectValue)) return;
+      visited.add(objectValue);
+      sources.push(objectValue);
+    };
+    const walk = (value, depth = 0) => {
+      if (depth > 7) return;
+      const objectValue = asPlainObject(value);
+      if (!Object.keys(objectValue).length || visited.has(objectValue)) return;
+      addSource(objectValue);
+      for (const key of [
+        'post_create_refresh', 'postCreateRefresh',
+        'workbench_refresh', 'workbenchRefresh',
+        'refresh',
+        'replacement_session', 'replacementSession',
+        'session',
+        'result', 'result_json', 'resultJson', 'final_result', 'finalResult',
+        'progress', 'progress_json', 'progressJson',
+        'raw_payload', 'rawPayload', 'payload'
+      ]) {
+        if (Object.prototype.hasOwnProperty.call(objectValue, key)) walk(objectValue[key], depth + 1);
+      }
+    };
+    for (const value of [
+      resultObject.post_create_refresh,
+      resultObject.postCreateRefresh,
+      resultObject.workbench_refresh,
+      resultObject.workbenchRefresh,
+      resultObject.refresh,
+      resultObject,
+      progress.post_create_refresh,
+      progress.postCreateRefresh,
+      progress.workbench_refresh,
+      progress.workbenchRefresh,
+      progress.refresh,
+      progress,
+      row.post_create_refresh,
+      row.postCreateRefresh,
+      row.workbench_refresh,
+      row.workbenchRefresh,
+      row.refresh,
+      row
+    ]) walk(value, 0);
+
+    const sourceValue = (snakeKey, camelKey) => {
+      for (const source of sources) {
+        const value = firstValue(source[snakeKey], source[camelKey]);
+        if (value !== null && value !== undefined && value !== '') return value;
+      }
+      return null;
+    };
+    const sourceText = (snakeKey, camelKey) => trimText(sourceValue(snakeKey, camelKey));
+    const sourcePositiveInteger = (snakeKey, camelKey) => {
+      const value = finiteInteger(sourceValue(snakeKey, camelKey), null);
+      return Number.isFinite(value) && value >= 1 ? value : null;
+    };
+    const sourceBoolean = (snakeKey, camelKey, fallback = false) => boolValue(sourceValue(snakeKey, camelKey), fallback);
+    const sourceArray = (snakeKey, camelKey) => {
+      const values = [];
+      const seenValues = new Set();
+      for (const source of sources) {
+        for (const value of extractStringArray(firstValue(source[snakeKey], source[camelKey]))) {
+          if (seenValues.has(value)) continue;
+          seenValues.add(value);
+          values.push(value);
+        }
+      }
+      return values;
+    };
+
+    let replacementSession = {};
+    for (const source of sources) {
+      const candidate = asPlainObject(source.replacement_session || source.replacementSession);
+      if (Object.keys(candidate).length) {
+        replacementSession = candidate;
+        break;
+      }
+    }
+    const replacementSessionId = firstText(
+      sourceText('replacement_session_id', 'replacementSessionId'),
+      sourceText('replacement_workbench_session_id', 'replacementWorkbenchSessionId'),
+      sourceText('current_workbench_session_id', 'currentWorkbenchSessionId'),
+      sourceText('refreshed_session_id', 'refreshedSessionId'),
+      replacementSession.session_id,
+      replacementSession.sessionId,
+      replacementSession.id
+    ) || null;
+    const replacementSessionVersion = firstValue(
+      sourcePositiveInteger('replacement_session_version', 'replacementSessionVersion'),
+      sourcePositiveInteger('replacement_workbench_session_version', 'replacementWorkbenchSessionVersion'),
+      sourcePositiveInteger('current_workbench_session_version', 'currentWorkbenchSessionVersion'),
+      sourcePositiveInteger('refreshed_session_version', 'refreshedSessionVersion'),
+      finiteInteger(firstValue(replacementSession.session_version, replacementSession.sessionVersion, replacementSession.version), null)
+    );
+    const sourceWorkbenchSessionId = firstText(
+      sourceText('source_workbench_session_id', 'sourceWorkbenchSessionId'),
+      sourceText('source_session_id', 'sourceSessionId'),
+      row.workbench_session_id,
+      row.workbenchSessionId,
+      progress.workbench_session_id,
+      progress.workbenchSessionId,
+      resultObject.workbench_session_id,
+      resultObject.workbenchSessionId
+    ) || null;
+    const createdBatchIds = Array.from(new Set([
+      ...payBatchIds,
+      ...sourceArray('created_pay_batch_ids', 'createdPayBatchIds'),
+      ...sourceArray('pay_batch_ids', 'payBatchIds')
+    ]));
+    const replacementSessionContract = {
+      ...replacementSession,
+      session_id: replacementSessionId,
+      session_version: Number.isFinite(Number(replacementSessionVersion)) && Number(replacementSessionVersion) >= 1 ? Math.trunc(Number(replacementSessionVersion)) : null,
+      snapshot_run_id: firstText(
+        sourceText('replacement_snapshot_run_id', 'replacementSnapshotRunId'),
+        sourceText('refreshed_snapshot_run_id', 'refreshedSnapshotRunId'),
+        replacementSession.snapshot_run_id,
+        replacementSession.snapshotRunId,
+        replacementSession.source_snapshot_run_id,
+        replacementSession.sourceSnapshotRunId
+      ) || null,
+      session_signature: firstText(
+        sourceText('replacement_session_signature', 'replacementSessionSignature'),
+        sourceText('refreshed_session_signature', 'refreshedSessionSignature'),
+        replacementSession.session_signature,
+        replacementSession.sessionSignature
+      ) || null,
+      pay_date: firstText(sourceText('replacement_pay_date', 'replacementPayDate'), replacementSession.pay_date, replacementSession.payDate) || null,
+      week_ending_cutoff: firstText(
+        sourceText('replacement_week_ending_cutoff', 'replacementWeekEndingCutoff'),
+        sourceText('replacement_week_ending_cutoff_date', 'replacementWeekEndingCutoffDate'),
+        replacementSession.week_ending_cutoff,
+        replacementSession.weekEndingCutoff,
+        replacementSession.week_ending_cutoff_date,
+        replacementSession.weekEndingCutoffDate
+      ) || null
+    };
+    const sourceSessionVersion = sourcePositiveInteger('source_session_version', 'sourceSessionVersion');
+    const sourceSnapshotRunId = firstText(sourceText('source_snapshot_run_id', 'sourceSnapshotRunId')) || null;
+    const sourceSessionSignature = firstText(sourceText('source_session_signature', 'sourceSessionSignature')) || null;
+    const replacementAvailable = !!replacementSessionId || sourceBoolean('replacement_available', 'replacementAvailable', false);
+    if (!replacementAvailable && !sourceWorkbenchSessionId && !createdBatchIds.length) return null;
+
+    return {
+      ok: true,
+      operation_id: firstText(row.operation_id, row.id, progress.operation_id, resultObject.operation_id) || null,
+      operation_type: 'DRAFT_CREATE',
+      source_workbench_session_id: sourceWorkbenchSessionId,
+      source_session_id: sourceWorkbenchSessionId,
+      source_session_version: sourceSessionVersion,
+      source_snapshot_run_id: sourceSnapshotRunId,
+      source_session_signature: sourceSessionSignature,
+      source_session_discarded: sourceBoolean('source_session_discarded', 'sourceSessionDiscarded', !!replacementSessionId),
+      source_session_obsolete: sourceBoolean('source_session_obsolete', 'sourceSessionObsolete', !!replacementSessionId),
+      replacement_available: replacementAvailable,
+      replacement_session_id: replacementSessionId,
+      replacement_session_version: replacementSessionContract.session_version,
+      replacement_workbench_session_id: replacementSessionId,
+      replacement_workbench_session_version: replacementSessionContract.session_version,
+      replacement_snapshot_run_id: replacementSessionContract.snapshot_run_id,
+      replacement_session_signature: replacementSessionContract.session_signature,
+      replacement_pay_date: replacementSessionContract.pay_date,
+      replacement_week_ending_cutoff: replacementSessionContract.week_ending_cutoff,
+      replacement_session: replacementSessionContract,
+      current_workbench_session_id: replacementSessionId,
+      current_workbench_session_version: replacementSessionContract.session_version,
+      refreshed_session_id: replacementSessionId,
+      refreshed_session_version: replacementSessionContract.session_version,
+      refreshed_snapshot_run_id: replacementSessionContract.snapshot_run_id,
+      refreshed_session_signature: replacementSessionContract.session_signature,
+      created_pay_batch_ids: createdBatchIds,
+      pay_batch_ids: createdBatchIds.slice(),
+      primary_pay_batch_id: primaryPayBatchId,
+      pay_batch_id: primaryPayBatchId,
+      requires_new_session: false,
+      preview_reopen_required: false,
+      adopted_replacement_session: !!replacementSessionId
+    };
+  };
+  const draftCreatePostCreateRefresh = extractDraftCreatePostCreateRefresh();
 
   const status = upperText(firstText(row.status, progress.status, resultObject.status, errorObject.status)) || 'UNKNOWN';
   const phase = upperText(firstText(row.phase, progress.phase, resultObject.phase, errorObject.phase)) || 'UNKNOWN';
@@ -155866,6 +156241,39 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     frontend_completion_required: frontendCompletionRequired,
     frontendCompletionRequired,
     result_summary: draftCreateResultSummary,
+    ...(operationType === 'DRAFT_CREATE' ? {
+      result: Object.keys(resultObject).length ? resultObject : null,
+      result_json: Object.keys(resultObject).length ? resultObject : null,
+      progress_json: Object.keys(progress).length ? progress : null,
+      post_create_refresh: draftCreatePostCreateRefresh,
+      workbench_refresh: draftCreatePostCreateRefresh,
+      refresh: draftCreatePostCreateRefresh,
+      source_workbench_session_id: draftCreatePostCreateRefresh?.source_workbench_session_id || null,
+      source_session_id: draftCreatePostCreateRefresh?.source_session_id || null,
+      source_session_version: draftCreatePostCreateRefresh?.source_session_version ?? null,
+      source_snapshot_run_id: draftCreatePostCreateRefresh?.source_snapshot_run_id || null,
+      source_session_signature: draftCreatePostCreateRefresh?.source_session_signature || null,
+      source_session_discarded: draftCreatePostCreateRefresh?.source_session_discarded === true,
+      source_session_obsolete: draftCreatePostCreateRefresh?.source_session_obsolete === true,
+      replacement_available: draftCreatePostCreateRefresh?.replacement_available === true,
+      replacement_session_id: draftCreatePostCreateRefresh?.replacement_session_id || null,
+      replacement_session_version: draftCreatePostCreateRefresh?.replacement_session_version ?? null,
+      replacement_workbench_session_id: draftCreatePostCreateRefresh?.replacement_workbench_session_id || null,
+      replacement_workbench_session_version: draftCreatePostCreateRefresh?.replacement_workbench_session_version ?? null,
+      replacement_snapshot_run_id: draftCreatePostCreateRefresh?.replacement_snapshot_run_id || null,
+      replacement_session_signature: draftCreatePostCreateRefresh?.replacement_session_signature || null,
+      replacement_pay_date: draftCreatePostCreateRefresh?.replacement_pay_date || null,
+      replacement_week_ending_cutoff: draftCreatePostCreateRefresh?.replacement_week_ending_cutoff || null,
+      replacement_session: draftCreatePostCreateRefresh?.replacement_session || null,
+      current_workbench_session_id: draftCreatePostCreateRefresh?.current_workbench_session_id || null,
+      current_workbench_session_version: draftCreatePostCreateRefresh?.current_workbench_session_version ?? null,
+      refreshed_session_id: draftCreatePostCreateRefresh?.refreshed_session_id || null,
+      refreshed_session_version: draftCreatePostCreateRefresh?.refreshed_session_version ?? null,
+      refreshed_snapshot_run_id: draftCreatePostCreateRefresh?.refreshed_snapshot_run_id || null,
+      refreshed_session_signature: draftCreatePostCreateRefresh?.refreshed_session_signature || null,
+      requires_new_session: false,
+      preview_reopen_required: false
+    } : {}),
     status,
     phase,
     phase_label: phaseLabels[phase] || null,
