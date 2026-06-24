@@ -9074,100 +9074,12 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_workbench_row_source_v1(p_filters jsonb DEFAULT '{}'::jsonb)
-RETURNS TABLE(
-  timesheet_id uuid,
-  timesheet_status public.timesheet_status_enum,
-  week_ending_date date,
-  booking_id text,
-  occupant_key_norm text,
-  hospital_norm text,
-  sheet_scope public.timesheet_scope_enum,
-  submission_mode public.submission_mode_enum,
-  authorised_at_server timestamp with time zone,
-  candidate_id uuid,
-  client_id uuid,
-  pay_method text,
-  processing_status public.ts_fin_processing_status_enum,
-  basis public.timesheet_fin_basis_enum,
-  total_hours numeric,
-  total_pay_ex_vat numeric,
-  total_charge_ex_vat numeric,
-  margin_ex_vat numeric,
-  paid_at_utc timestamp with time zone,
-  pay_on_hold boolean,
-  ready_to_pay boolean,
-  locked_by_invoice_id uuid,
-  candidate_name text,
-  client_name text,
-  nhsp_shift_count integer,
-  nhsp_shift_included_count integer,
-  nhsp_shift_deferred_count integer,
-  validation_status public.validation_status_enum,
-  summary_stage text,
-  route_type text,
-  contract_week_id uuid,
-  contract_week_ending_date date,
-  contract_week_status public.contract_week_status_enum,
-  additional_seq integer,
-  is_adjustment boolean,
-  qr_status public.timesheet_qr_status_enum,
-  pay_adjustment_count integer,
-  has_pay_adjustments boolean,
-  is_adjusted boolean,
-  is_qr boolean,
-  needs_attention boolean,
-  client_autoprocess_hr boolean,
-  has_rate_issue boolean,
-  has_pay_channel_issue boolean,
-  hr_crosscheck_status text,
-  hr_crosscheck_issues text[],
-  external_source_rows_json jsonb,
-  issue_codes text[],
-  client_requires_hr boolean,
-  client_no_timesheet_required boolean,
-  client_is_nhsp boolean,
-  client_pay_reference_required boolean,
-  client_invoice_reference_required boolean,
-  client_hr_validation_required boolean,
-  client_ts_reference_required boolean,
-  require_reference_to_pay boolean,
-  require_reference_to_invoice boolean,
-  qr_token text,
-  qr_generated_at timestamp with time zone,
-  qr_scanned_at timestamp with time zone,
-  candidate_hint_text jsonb,
-  expenses_pay_ex_vat numeric,
-  expenses_description text,
-  mileage_units numeric,
-  mileage_pay_rate numeric,
-  mileage_charge_rate numeric,
-  mileage_pay_ex_vat numeric,
-  travel_pay_ex_vat numeric,
-  travel_charge_ex_vat numeric,
-  accommodation_pay_ex_vat numeric,
-  accommodation_charge_ex_vat numeric,
-  other_pay_ex_vat numeric,
-  other_charge_ex_vat numeric,
-  hr_validation_required_for_invoice boolean,
-  invoice_segments_total integer,
-  invoice_segments_locked integer,
-  invoice_segments_unlocked integer,
-  invoice_segment_stage text,
-  tools_stage text,
-  processing_status_display text,
-  invoice_is_paid boolean,
-  refs_block_invoicing boolean,
-  refs_block_issuing_invoices boolean,
-  refs_block_invoice_and_issuing boolean,
-  pay_icon_code text,
-  pay_status_code text,
-  pay_paid_at_utc timestamp with time zone,
-  net_delta_ex_vat numeric
-)
-LANGUAGE plpgsql
-STABLE SECURITY DEFINER
-SET search_path TO 'public'
+ RETURNS TABLE(timesheet_id uuid, timesheet_status timesheet_status_enum, week_ending_date date, booking_id text, occupant_key_norm text, hospital_norm text, sheet_scope timesheet_scope_enum, submission_mode submission_mode_enum, authorised_at_server timestamp with time zone, candidate_id uuid, client_id uuid, pay_method text, processing_status ts_fin_processing_status_enum, basis timesheet_fin_basis_enum, total_hours numeric, total_pay_ex_vat numeric, total_charge_ex_vat numeric, margin_ex_vat numeric, paid_at_utc timestamp with time zone, pay_on_hold boolean, ready_to_pay boolean, locked_by_invoice_id uuid, candidate_name text, client_name text, nhsp_shift_count integer, nhsp_shift_included_count integer, nhsp_shift_deferred_count integer, validation_status validation_status_enum, summary_stage text, route_type text, contract_week_id uuid, contract_week_ending_date date, contract_week_status contract_week_status_enum, additional_seq integer, is_adjustment boolean, qr_status timesheet_qr_status_enum, pay_adjustment_count integer, has_pay_adjustments boolean, is_adjusted boolean, is_qr boolean, needs_attention boolean, client_autoprocess_hr boolean, has_rate_issue boolean, has_pay_channel_issue boolean, hr_crosscheck_status text, hr_crosscheck_issues text[], external_source_rows_json jsonb, issue_codes text[], client_requires_hr boolean, client_no_timesheet_required boolean, client_is_nhsp boolean, client_pay_reference_required boolean, client_invoice_reference_required boolean, client_hr_validation_required boolean, client_ts_reference_required boolean, require_reference_to_pay boolean, require_reference_to_invoice boolean, qr_token text, qr_generated_at timestamp with time zone, qr_scanned_at timestamp with time zone, candidate_hint_text jsonb, expenses_pay_ex_vat numeric, expenses_description text, mileage_units numeric, mileage_pay_rate numeric, mileage_charge_rate numeric, mileage_pay_ex_vat numeric, travel_pay_ex_vat numeric, travel_charge_ex_vat numeric, accommodation_pay_ex_vat numeric, accommodation_charge_ex_vat numeric, other_pay_ex_vat numeric, other_charge_ex_vat numeric, hr_validation_required_for_invoice boolean, invoice_segments_total integer, invoice_segments_locked integer, invoice_segments_unlocked integer, invoice_segment_stage text, tools_stage text, processing_status_display text, invoice_is_paid boolean, refs_block_invoicing boolean, refs_block_issuing_invoices boolean, refs_block_invoice_and_issuing boolean, pay_icon_code text, pay_status_code text, pay_paid_at_utc timestamp with time zone, net_delta_ex_vat numeric)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
@@ -10531,6 +10443,8 @@ BEGIN
       FALSE AS refs_block_issuing_invoices,
       FALSE AS refs_block_invoice_and_issuing,
       CASE
+        WHEN COALESCE(summary_pay_cache.summary_state_applies, FALSE)
+          THEN summary_pay_cache.summary_pay_icon_code
         WHEN tps.summary_pay_icon_code IS NOT NULL THEN tps.summary_pay_icon_code
         WHEN tps.summary_pay_status_code = 'PAID' THEN 'COIN'
         WHEN tps.summary_pay_status_code = 'PARTIALLY_PAID' THEN 'HALF_COIN'
@@ -10540,6 +10454,11 @@ BEGIN
         ELSE 'NONE'
       END::text AS pay_icon_code,
       COALESCE(
+        CASE
+          WHEN COALESCE(summary_pay_cache.summary_state_applies, FALSE)
+            THEN summary_pay_cache.summary_pay_status_code
+          ELSE NULL
+        END,
         tps.summary_pay_status_code,
         CASE
           WHEN tps.last_settled_at_utc IS NOT NULL OR sr0.paid_at_utc IS NOT NULL THEN 'PAID'
@@ -10547,11 +10466,23 @@ BEGIN
         END
       )::text AS pay_status_code,
       CASE
+        WHEN COALESCE(summary_pay_cache.summary_state_applies, FALSE)
+          THEN summary_pay_cache.last_paid_at_utc
         WHEN tps.summary_pay_status_code IS NOT NULL OR tps.summary_pay_icon_code IS NOT NULL THEN tps.summary_pay_paid_at_utc
         ELSE COALESCE(tps.last_settled_at_utc, sr0.paid_at_utc)
       END AS pay_paid_at_utc,
-      COALESCE(tps.summary_net_delta_ex_vat, 0)::numeric AS net_delta_ex_vat
+      COALESCE(
+        CASE
+          WHEN COALESCE(summary_pay_cache.summary_state_applies, FALSE)
+            THEN summary_pay_cache.net_delta_ex_vat
+          ELSE NULL
+        END,
+        tps.summary_net_delta_ex_vat,
+        0
+      )::numeric AS net_delta_ex_vat
     FROM issue_normalised_rows AS sr0
+    LEFT JOIN public.timesheet_summary_pay_state_cache AS summary_pay_cache
+      ON summary_pay_cache.timesheet_id = sr0.timesheet_id
     LEFT JOIN public.timesheet_pay_state AS tps
       ON tps.timesheet_id = sr0.timesheet_id
   )

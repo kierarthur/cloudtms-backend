@@ -49874,19 +49874,12 @@ DROP FUNCTION IF EXISTS public.pay_batch_finalize_reservations_and_markers(uuid,
 
 
 
-CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers(
-  p_pay_batch_id uuid,
-  p_pay_channel_scope text,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_pay_date date DEFAULT NULL::date,
-  p_week_start date DEFAULT NULL::date,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers(p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid DEFAULT NULL::uuid, p_pay_date date DEFAULT NULL::date, p_week_start date DEFAULT NULL::date, p_operation_id uuid DEFAULT NULL::uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -49905,6 +49898,10 @@ DECLARE
   v_reservation_check_component_count integer := 0;
   v_reservation_requested_amount_ex_vat numeric := 0;
   v_reservation_outstanding_before_batch_ex_vat numeric := 0;
+  v_summary_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_summary_chunk_ids uuid[] := ARRAY[]::uuid[];
+  v_summary_offset integer := 1;
+  v_summary_total integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -50326,6 +50323,51 @@ BEGIN
       WHERE scope_row.id = scope_update.id
     );
 
+  SELECT COALESCE(
+    ARRAY_AGG(DISTINCT batch_item.timesheet_id ORDER BY batch_item.timesheet_id),
+    ARRAY[]::uuid[]
+  )
+  INTO v_summary_timesheet_ids
+  FROM public.pay_batch_items AS batch_item
+  JOIN public.pay_batch_candidates AS batch_candidate
+    ON batch_candidate.id = batch_item.pay_batch_candidate_id
+  JOIN public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+    ON allocation_row.pay_batch_item_id = batch_item.id
+   AND allocation_row.operation_id = p_operation_id
+  WHERE batch_candidate.pay_batch_id = p_pay_batch_id
+    AND allocation_row.candidate_scope_id IN (
+      SELECT scope_row.id
+      FROM pg_temp.tmp_pay_batch_finalize_scope AS scope_row
+    )
+    AND batch_item.timesheet_id IS NOT NULL
+    AND COALESCE(batch_item.is_voided, false) = false
+    AND UPPER(BTRIM(COALESCE(batch_item.item_type, ''))) IN (
+      'SEGMENT_DELTA',
+      'EXPENSE_DELTA',
+      'ADJUSTMENT_DELTA',
+      'MILEAGE_DELTA'
+    );
+
+  v_summary_total := COALESCE(CARDINALITY(v_summary_timesheet_ids), 0);
+  v_summary_offset := 1;
+
+  WHILE v_summary_offset <= v_summary_total LOOP
+    SELECT COALESCE(
+      ARRAY_AGG(chunk_rows.timesheet_id ORDER BY chunk_rows.ordinality),
+      ARRAY[]::uuid[]
+    )
+    INTO v_summary_chunk_ids
+    FROM UNNEST(v_summary_timesheet_ids) WITH ORDINALITY AS chunk_rows(timesheet_id, ordinality)
+    WHERE chunk_rows.ordinality BETWEEN v_summary_offset AND v_summary_offset + 99;
+
+    PERFORM public.pay_timesheet_summary_pay_state_refresh(
+      p_timesheet_ids => v_summary_chunk_ids,
+      p_actor_user_id => p_actor_user_id
+    );
+
+    v_summary_offset := v_summary_offset + 100;
+  END LOOP;
+
   PERFORM public.pay_batch_display_summary_touch(p_pay_batch_id);
 
   PERFORM public.banking_pay_batch_signal_touch(
@@ -50382,6 +50424,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_populate_candidate_summaries(uuid, text, uuid);
@@ -54431,17 +54475,11 @@ END;
 $function$;
 
 
-
-
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_case_resolution(
-  p_session_id uuid,
-  p_actor_user_id uuid,
-  p_resolution_payload_json jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_case_resolution(p_session_id uuid, p_actor_user_id uuid, p_resolution_payload_json jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -54465,6 +54503,8 @@ DECLARE
   v_matching_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_matching_candidate_count integer := 0;
   v_target_match_count integer := 0;
+  v_row_backed_case_count integer := 0;
+  v_row_backed_component_count integer := 0;
   v_bucket_count integer := 0;
   v_existing_deleted_count integer := 0;
   v_new_session_version bigint := 0;
@@ -54606,10 +54646,160 @@ BEGIN
     RAISE EXCEPTION 'resolution_family must be BUCKETED, NON_BUCKET or TAXABLE_CHANNEL_RESTRUCTURE';
   END IF;
 
+  CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_session_candidate_scope (
+    candidate_id uuid PRIMARY KEY
+  ) ON COMMIT DROP;
+
+  TRUNCATE TABLE _tmp_bpay_session_candidate_scope;
+
+  INSERT INTO _tmp_bpay_session_candidate_scope (candidate_id)
+  SELECT scoped_candidate.candidate_id
+  FROM unnest(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])) AS scoped_candidate(candidate_id)
+  WHERE scoped_candidate.candidate_id IS NOT NULL
+  ON CONFLICT (candidate_id) DO NOTHING;
+
+  INSERT INTO _tmp_bpay_session_candidate_scope (candidate_id)
+  SELECT DISTINCT session_scope.candidate_id
+  FROM public.banking_pay_workbench_session_scope AS session_scope
+  WHERE session_scope.session_id = p_session_id
+    AND session_scope.candidate_id IS NOT NULL
+  ON CONFLICT (candidate_id) DO NOTHING;
+
+  INSERT INTO _tmp_bpay_session_candidate_scope (candidate_id)
+  SELECT DISTINCT preview_row.candidate_id
+  FROM public.banking_pay_workbench_preview_rows AS preview_row
+  WHERE preview_row.session_id = p_session_id
+    AND preview_row.candidate_id IS NOT NULL
+  ON CONFLICT (candidate_id) DO NOTHING;
+
+  INSERT INTO _tmp_bpay_session_candidate_scope (candidate_id)
+  SELECT DISTINCT line_work.candidate_id
+  FROM public.banking_pay_workbench_candidate_line_work AS line_work
+  WHERE line_work.session_id = p_session_id
+    AND line_work.candidate_id IS NOT NULL
+  ON CONFLICT (candidate_id) DO NOTHING;
+
   IF v_candidate_id IS NOT NULL
-     AND NOT (COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[v_candidate_id]::uuid[]) THEN
-    RAISE EXCEPTION 'candidate % is not in workbench session scope %', v_candidate_id, p_session_id;
+     AND NOT EXISTS (
+       SELECT 1
+       FROM _tmp_bpay_session_candidate_scope AS candidate_scope
+       WHERE candidate_scope.candidate_id = v_candidate_id
+     ) THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_CANDIDATE_NOT_FOUND'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_CANDIDATE_NOT_FOUND',
+              'session_id', p_session_id::text,
+              'candidate_id', v_candidate_id::text
+            )::text;
   END IF;
+
+  CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_session_row_backed_case_baseline (
+    preview_row_id uuid PRIMARY KEY,
+    candidate_id uuid NOT NULL,
+    case_key text NOT NULL,
+    timesheet_id uuid NULL,
+    finance_case_id uuid NULL,
+    resolution_family text NULL,
+    row_key text NOT NULL,
+    row_json jsonb NOT NULL
+  ) ON COMMIT DROP;
+
+  TRUNCATE TABLE _tmp_bpay_session_row_backed_case_baseline;
+
+  INSERT INTO _tmp_bpay_session_row_backed_case_baseline (
+    preview_row_id,
+    candidate_id,
+    case_key,
+    timesheet_id,
+    finance_case_id,
+    resolution_family,
+    row_key,
+    row_json
+  )
+  WITH preview_source AS (
+    SELECT
+      preview_row.id AS preview_row_id,
+      preview_row.candidate_id,
+      preview_row.row_key,
+      COALESCE(preview_row.row_json, '{}'::jsonb) AS row_json,
+      BTRIM(COALESCE(
+        preview_row.row_json->>'case_key',
+        preview_row.row_json #>> '{case_resolution_summary,case_key}',
+        preview_row.row_json #>> '{case,case_key}',
+        preview_row.row_json #>> '{raw_case,case_key}',
+        ''
+      )) AS extracted_case_key,
+      BTRIM(COALESCE(
+        preview_row.timesheet_id::text,
+        preview_row.row_json->>'timesheet_id',
+        preview_row.row_json->>'real_business_timesheet_id',
+        preview_row.row_json->>'linked_timesheet_id',
+        preview_row.row_json #>> '{case,timesheet_id}',
+        preview_row.row_json #>> '{raw_case,timesheet_id}',
+        ''
+      )) AS timesheet_id_text,
+      BTRIM(COALESCE(
+        preview_row.row_json->>'finance_case_id',
+        preview_row.row_json #>> '{case,finance_case_id}',
+        preview_row.row_json #>> '{raw_case,finance_case_id}',
+        ''
+      )) AS finance_case_id_text,
+      UPPER(BTRIM(COALESCE(
+        preview_row.row_json->>'resolution_family',
+        preview_row.row_json #>> '{case_resolution_summary,resolution_family}',
+        preview_row.row_json #>> '{case,resolution_family}',
+        preview_row.row_json #>> '{raw_case,resolution_family}',
+        ''
+      ))) AS resolution_family
+    FROM public.banking_pay_workbench_preview_rows AS preview_row
+    WHERE preview_row.session_id = p_session_id
+      AND LOWER(BTRIM(COALESCE(preview_row.section, ''))) = 'cases_resolutions'
+      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+  ),
+  normalized_preview_source AS (
+    SELECT
+      preview_source.*,
+      CASE
+        WHEN preview_source.timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN preview_source.timesheet_id_text::uuid
+        ELSE NULL::uuid
+      END AS timesheet_id,
+      CASE
+        WHEN preview_source.finance_case_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN preview_source.finance_case_id_text::uuid
+        ELSE NULL::uuid
+      END AS finance_case_id
+    FROM preview_source
+  )
+  SELECT
+    normalized_preview_source.preview_row_id,
+    normalized_preview_source.candidate_id,
+    COALESCE(NULLIF(normalized_preview_source.extracted_case_key, ''), v_case_key),
+    normalized_preview_source.timesheet_id,
+    normalized_preview_source.finance_case_id,
+    NULLIF(normalized_preview_source.resolution_family, ''),
+    normalized_preview_source.row_key,
+    normalized_preview_source.row_json
+  FROM normalized_preview_source
+  WHERE normalized_preview_source.candidate_id IS NOT NULL
+    AND (
+      normalized_preview_source.extracted_case_key = v_case_key
+      OR (
+        normalized_preview_source.extracted_case_key = ''
+        AND v_linked_timesheet_id IS NOT NULL
+        AND (
+          normalized_preview_source.timesheet_id = v_linked_timesheet_id
+          OR normalized_preview_source.row_key = v_linked_timesheet_id::text
+          OR normalized_preview_source.row_key LIKE (v_linked_timesheet_id::text || ':%')
+        )
+      )
+      OR (
+        normalized_preview_source.extracted_case_key = ''
+        AND v_finance_case_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND normalized_preview_source.finance_case_id = v_finance_case_id_text::uuid
+      )
+    );
 
   create temp table if not exists _tmp_bpay_session_case_resolution_existing
   as
@@ -54646,23 +54836,76 @@ BEGIN
       RAISE EXCEPTION 'candidate_id % does not match taxable-channel finance case candidate %', v_candidate_id, v_taxable_case_candidate_id;
     END IF;
 
-    IF NOT (COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[v_taxable_case_candidate_id]::uuid[]) THEN
-      RAISE EXCEPTION 'finance case candidate % is not in workbench session scope %', v_taxable_case_candidate_id, p_session_id;
+    IF NOT EXISTS (
+      SELECT 1
+      FROM _tmp_bpay_session_candidate_scope AS candidate_scope
+      WHERE candidate_scope.candidate_id = v_taxable_case_candidate_id
+    ) THEN
+      RAISE EXCEPTION 'WORKBENCH_SESSION_CANDIDATE_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_SESSION_CANDIDATE_NOT_FOUND',
+                'session_id', p_session_id::text,
+                'candidate_id', v_taxable_case_candidate_id::text
+              )::text;
     END IF;
 
     v_resolved_candidate_id := v_taxable_case_candidate_id;
 
     SELECT COUNT(*)::integer
-    INTO v_target_match_count
-    FROM public.banking_pay_snapshot_case_state AS snapshot_case
-    WHERE snapshot_case.snapshot_run_id = v_session_row.source_snapshot_run_id
-      AND snapshot_case.candidate_id = v_resolved_candidate_id
-      AND snapshot_case.case_key = v_case_key;
+    INTO v_row_backed_case_count
+    FROM _tmp_bpay_session_row_backed_case_baseline AS row_backed_case
+    WHERE COALESCE(row_backed_case.resolution_family, '') IN ('', 'TAXABLE_CHANNEL_RESTRUCTURE')
+      AND (
+        row_backed_case.finance_case_id IS NULL
+        OR row_backed_case.finance_case_id = v_taxable_finance_case_id
+      );
 
-    IF v_target_match_count = 0 THEN
-      RAISE EXCEPTION 'No matching snapshot baseline case found for TAXABLE_CHANNEL_RESTRUCTURE candidate % in session %', v_resolved_candidate_id, p_session_id;
-    ELSIF v_target_match_count > 1 THEN
-      RAISE EXCEPTION 'Ambiguous snapshot baseline case found for TAXABLE_CHANNEL_RESTRUCTURE candidate % in session %', v_resolved_candidate_id, p_session_id;
+    IF v_row_backed_case_count > 0 THEN
+      SELECT COUNT(*)::integer
+      INTO v_target_match_count
+      FROM _tmp_bpay_session_row_backed_case_baseline AS row_backed_case
+      WHERE row_backed_case.candidate_id = v_resolved_candidate_id
+        AND COALESCE(row_backed_case.resolution_family, '') IN ('', 'TAXABLE_CHANNEL_RESTRUCTURE')
+        AND (
+          row_backed_case.finance_case_id IS NULL
+          OR row_backed_case.finance_case_id = v_taxable_finance_case_id
+        );
+
+      IF v_target_match_count = 0 THEN
+        RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND',
+                  'session_id', p_session_id::text,
+                  'candidate_id', v_resolved_candidate_id::text,
+                  'case_key', v_case_key,
+                  'resolution_family', 'TAXABLE_CHANNEL_RESTRUCTURE'
+                )::text;
+      ELSIF v_target_match_count > 1 THEN
+        RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS',
+                  'session_id', p_session_id::text,
+                  'candidate_id', v_resolved_candidate_id::text,
+                  'case_key', v_case_key,
+                  'resolution_family', 'TAXABLE_CHANNEL_RESTRUCTURE'
+                )::text;
+      END IF;
+    ELSE
+      SELECT COUNT(*)::integer
+      INTO v_target_match_count
+      FROM public.banking_pay_snapshot_case_state AS snapshot_case
+      WHERE snapshot_case.snapshot_run_id = v_session_row.source_snapshot_run_id
+        AND snapshot_case.candidate_id = v_resolved_candidate_id
+        AND snapshot_case.case_key = v_case_key;
+
+      IF v_target_match_count = 0 THEN
+        RAISE EXCEPTION 'No matching snapshot baseline case found for TAXABLE_CHANNEL_RESTRUCTURE candidate % in session %', v_resolved_candidate_id, p_session_id;
+      ELSIF v_target_match_count > 1 THEN
+        RAISE EXCEPTION 'Ambiguous snapshot baseline case found for TAXABLE_CHANNEL_RESTRUCTURE candidate % in session %', v_resolved_candidate_id, p_session_id;
+      END IF;
     END IF;
 
     v_taxable_resolution_path := UPPER(BTRIM(COALESCE(
@@ -54982,17 +55225,229 @@ BEGIN
       RAISE EXCEPTION 'Duplicate bucket resolution identity detected for case_key %', v_case_key;
     END IF;
 
+    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_session_row_backed_component_baseline (
+      preview_row_id uuid NOT NULL,
+      component_ordinal integer NOT NULL,
+      candidate_id uuid NOT NULL,
+      case_key text NOT NULL,
+      timesheet_id uuid NULL,
+      source_basis_fingerprint text NOT NULL,
+      source_family_key text NOT NULL,
+      bucket_code text NULL,
+      component_key_type text NOT NULL,
+      component_key_value text NOT NULL,
+      component_fingerprint text NULL,
+      component_state_json jsonb NOT NULL,
+      PRIMARY KEY (preview_row_id, component_ordinal)
+    ) ON COMMIT DROP;
+
+    TRUNCATE TABLE _tmp_bpay_session_row_backed_component_baseline;
+
+    INSERT INTO _tmp_bpay_session_row_backed_component_baseline (
+      preview_row_id,
+      component_ordinal,
+      candidate_id,
+      case_key,
+      timesheet_id,
+      source_basis_fingerprint,
+      source_family_key,
+      bucket_code,
+      component_key_type,
+      component_key_value,
+      component_fingerprint,
+      component_state_json
+    )
+    WITH case_component_arrays AS (
+      SELECT
+        row_backed_case.*,
+        CASE
+          WHEN jsonb_typeof(row_backed_case.row_json->'case_components') = 'array' THEN row_backed_case.row_json->'case_components'
+          WHEN jsonb_typeof(row_backed_case.row_json->'components') = 'array' THEN row_backed_case.row_json->'components'
+          WHEN jsonb_typeof(row_backed_case.row_json->'component_states') = 'array' THEN row_backed_case.row_json->'component_states'
+          WHEN jsonb_typeof(row_backed_case.row_json->'component_resolution_states') = 'array' THEN row_backed_case.row_json->'component_resolution_states'
+          WHEN jsonb_typeof(row_backed_case.row_json->'preview_components') = 'array' THEN row_backed_case.row_json->'preview_components'
+          WHEN jsonb_typeof(row_backed_case.row_json #> '{case,case_components}') = 'array' THEN row_backed_case.row_json #> '{case,case_components}'
+          WHEN jsonb_typeof(row_backed_case.row_json #> '{case,components}') = 'array' THEN row_backed_case.row_json #> '{case,components}'
+          WHEN jsonb_typeof(row_backed_case.row_json #> '{raw_case,case_components}') = 'array' THEN row_backed_case.row_json #> '{raw_case,case_components}'
+          WHEN jsonb_typeof(row_backed_case.row_json #> '{raw_case,components}') = 'array' THEN row_backed_case.row_json #> '{raw_case,components}'
+          ELSE '[]'::jsonb
+        END AS components_json
+      FROM _tmp_bpay_session_row_backed_case_baseline AS row_backed_case
+      WHERE COALESCE(row_backed_case.resolution_family, '') IN ('', 'BUCKETED')
+    ),
+    expanded_components AS (
+      SELECT
+        case_component_arrays.preview_row_id,
+        component_element.ordinality::integer AS component_ordinal,
+        case_component_arrays.candidate_id,
+        case_component_arrays.case_key,
+        case_component_arrays.timesheet_id AS case_timesheet_id,
+        component_element.value AS component_json
+      FROM case_component_arrays
+      CROSS JOIN LATERAL jsonb_array_elements(case_component_arrays.components_json) WITH ORDINALITY AS component_element(value, ordinality)
+      WHERE jsonb_typeof(component_element.value) = 'object'
+    ),
+    normalized_components AS (
+      SELECT
+        expanded_components.*,
+        BTRIM(COALESCE(
+          expanded_components.case_timesheet_id::text,
+          expanded_components.component_json->>'timesheet_id',
+          expanded_components.component_json #>> '{source_basis_json,timesheet_id}',
+          expanded_components.component_json #>> '{raw,timesheet_id}',
+          expanded_components.component_json #>> '{raw,source_basis_json,timesheet_id}',
+          ''
+        )) AS timesheet_id_text,
+        BTRIM(COALESCE(
+          expanded_components.component_json->>'source_basis_fingerprint',
+          expanded_components.component_json #>> '{raw,source_basis_fingerprint}',
+          ''
+        )) AS source_basis_fingerprint,
+        BTRIM(COALESCE(
+          expanded_components.component_json->>'source_family_key',
+          expanded_components.component_json #>> '{raw,source_family_key}',
+          ''
+        )) AS source_family_key,
+        UPPER(BTRIM(COALESCE(
+          expanded_components.component_json->>'bucket_code',
+          expanded_components.component_json #>> '{source_basis_json,bucket_code}',
+          expanded_components.component_json #>> '{raw,bucket_code}',
+          expanded_components.component_json #>> '{raw,source_basis_json,bucket_code}',
+          ''
+        ))) AS bucket_code,
+        UPPER(BTRIM(COALESCE(
+          expanded_components.component_json->>'component_key_type',
+          expanded_components.component_json #>> '{raw,component_key_type}',
+          ''
+        ))) AS component_key_type,
+        BTRIM(COALESCE(
+          expanded_components.component_json->>'component_key_value',
+          expanded_components.component_json #>> '{raw,component_key_value}',
+          ''
+        )) AS component_key_value,
+        BTRIM(COALESCE(
+          expanded_components.component_json->>'component_fingerprint',
+          expanded_components.component_json #>> '{raw,component_fingerprint}',
+          ''
+        )) AS component_fingerprint
+      FROM expanded_components
+    )
+    SELECT
+      normalized_components.preview_row_id,
+      normalized_components.component_ordinal,
+      normalized_components.candidate_id,
+      normalized_components.case_key,
+      CASE
+        WHEN normalized_components.timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN normalized_components.timesheet_id_text::uuid
+        ELSE NULL::uuid
+      END,
+      normalized_components.source_basis_fingerprint,
+      normalized_components.source_family_key,
+      NULLIF(normalized_components.bucket_code, ''),
+      normalized_components.component_key_type,
+      normalized_components.component_key_value,
+      NULLIF(normalized_components.component_fingerprint, ''),
+      normalized_components.component_json
+    FROM normalized_components;
+
+    SELECT COUNT(*)::integer
+    INTO v_row_backed_component_count
+    FROM _tmp_bpay_session_row_backed_component_baseline;
+
     FOR v_bucket_row IN
       SELECT *
       FROM _tmp_bpay_session_bucket_resolution
       ORDER BY bucket_ordinal
     LOOP
-      IF v_candidate_id IS NULL THEN
+      IF v_row_backed_component_count > 0 THEN
+        IF v_candidate_id IS NULL THEN
+          SELECT
+            COUNT(*)::integer,
+            COALESCE(array_agg(DISTINCT row_backed_component.candidate_id ORDER BY row_backed_component.candidate_id), ARRAY[]::uuid[])
+          INTO v_target_match_count, v_matching_candidate_ids
+          FROM _tmp_bpay_session_row_backed_component_baseline AS row_backed_component
+          WHERE row_backed_component.case_key = v_case_key
+            AND COALESCE(row_backed_component.timesheet_id::text, '') = COALESCE(v_bucket_row.timesheet_id::text, '')
+            AND COALESCE(row_backed_component.source_basis_fingerprint, '') = v_bucket_row.source_basis_fingerprint
+            AND COALESCE(row_backed_component.source_family_key, '') = v_bucket_row.source_family_key
+            AND COALESCE(row_backed_component.bucket_code, '') = COALESCE(v_bucket_row.bucket_code, '')
+            AND COALESCE(row_backed_component.component_key_type, '') = v_bucket_row.component_key_type
+            AND COALESCE(row_backed_component.component_key_value, '') = v_bucket_row.component_key_value;
+
+          v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
+          IF v_target_match_count = 0 OR v_matching_candidate_count = 0 THEN
+            RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND'
+              USING ERRCODE = 'P0001',
+                    DETAIL = jsonb_build_object(
+                      'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND',
+                      'session_id', p_session_id::text,
+                      'case_key', v_case_key,
+                      'bucket_ordinal', v_bucket_row.bucket_ordinal
+                    )::text;
+          ELSIF v_target_match_count > 1 OR v_matching_candidate_count > 1 THEN
+            RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS'
+              USING ERRCODE = 'P0001',
+                    DETAIL = jsonb_build_object(
+                      'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS',
+                      'session_id', p_session_id::text,
+                      'case_key', v_case_key,
+                      'bucket_ordinal', v_bucket_row.bucket_ordinal
+                    )::text;
+          END IF;
+
+          UPDATE _tmp_bpay_session_bucket_resolution
+          SET matched_candidate_id = v_matching_candidate_ids[1]
+          WHERE _tmp_bpay_session_bucket_resolution.bucket_ordinal = v_bucket_row.bucket_ordinal;
+        ELSE
+          SELECT COUNT(*)::integer
+          INTO v_target_match_count
+          FROM _tmp_bpay_session_row_backed_component_baseline AS row_backed_component
+          WHERE row_backed_component.candidate_id = v_candidate_id
+            AND row_backed_component.case_key = v_case_key
+            AND COALESCE(row_backed_component.timesheet_id::text, '') = COALESCE(v_bucket_row.timesheet_id::text, '')
+            AND COALESCE(row_backed_component.source_basis_fingerprint, '') = v_bucket_row.source_basis_fingerprint
+            AND COALESCE(row_backed_component.source_family_key, '') = v_bucket_row.source_family_key
+            AND COALESCE(row_backed_component.bucket_code, '') = COALESCE(v_bucket_row.bucket_code, '')
+            AND COALESCE(row_backed_component.component_key_type, '') = v_bucket_row.component_key_type
+            AND COALESCE(row_backed_component.component_key_value, '') = v_bucket_row.component_key_value;
+
+          IF v_target_match_count = 0 THEN
+            RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND'
+              USING ERRCODE = 'P0001',
+                    DETAIL = jsonb_build_object(
+                      'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND',
+                      'session_id', p_session_id::text,
+                      'candidate_id', v_candidate_id::text,
+                      'case_key', v_case_key,
+                      'bucket_ordinal', v_bucket_row.bucket_ordinal
+                    )::text;
+          ELSIF v_target_match_count > 1 THEN
+            RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS'
+              USING ERRCODE = 'P0001',
+                    DETAIL = jsonb_build_object(
+                      'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS',
+                      'session_id', p_session_id::text,
+                      'candidate_id', v_candidate_id::text,
+                      'case_key', v_case_key,
+                      'bucket_ordinal', v_bucket_row.bucket_ordinal
+                    )::text;
+          END IF;
+
+          UPDATE _tmp_bpay_session_bucket_resolution
+          SET matched_candidate_id = v_candidate_id
+          WHERE _tmp_bpay_session_bucket_resolution.bucket_ordinal = v_bucket_row.bucket_ordinal;
+        END IF;
+      ELSIF v_candidate_id IS NULL THEN
         SELECT COALESCE(array_agg(DISTINCT snapshot_component.candidate_id ORDER BY snapshot_component.candidate_id), ARRAY[]::uuid[])
         INTO v_matching_candidate_ids
         FROM public.banking_pay_snapshot_case_component_state AS snapshot_component
         WHERE snapshot_component.snapshot_run_id = v_session_row.source_snapshot_run_id
-          AND COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[snapshot_component.candidate_id]::uuid[]
+          AND EXISTS (
+            SELECT 1
+            FROM _tmp_bpay_session_candidate_scope AS candidate_scope
+            WHERE candidate_scope.candidate_id = snapshot_component.candidate_id
+          )
           AND snapshot_component.case_key = v_case_key
           AND COALESCE(snapshot_component.timesheet_id::text, '') = COALESCE(v_bucket_row.timesheet_id::text, '')
           AND COALESCE(snapshot_component.source_basis_fingerprint, '') = v_bucket_row.source_basis_fingerprint
@@ -55260,12 +55715,122 @@ BEGIN
       RAISE EXCEPTION 'target_amount_ex_vat must be non-negative';
     END IF;
 
-    IF v_candidate_id IS NULL THEN
+    SELECT COUNT(*)::integer
+    INTO v_row_backed_case_count
+    FROM _tmp_bpay_session_row_backed_case_baseline AS row_backed_case
+    WHERE COALESCE(row_backed_case.resolution_family, '') IN ('', 'NON_BUCKET')
+      AND (
+        v_linked_timesheet_id IS NULL
+        OR row_backed_case.timesheet_id IS NULL
+        OR row_backed_case.timesheet_id = v_linked_timesheet_id
+      )
+      AND (
+        v_finance_case_id_text = ''
+        OR row_backed_case.finance_case_id IS NULL
+        OR row_backed_case.finance_case_id::text = v_finance_case_id_text
+      );
+
+    IF v_row_backed_case_count > 0 THEN
+      IF v_candidate_id IS NULL THEN
+        IF v_row_backed_case_count > 1 THEN
+          RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS',
+                    'session_id', p_session_id::text,
+                    'case_key', v_case_key,
+                    'resolution_family', 'NON_BUCKET'
+                  )::text;
+        END IF;
+
+        SELECT COALESCE(array_agg(DISTINCT row_backed_case.candidate_id ORDER BY row_backed_case.candidate_id), ARRAY[]::uuid[])
+        INTO v_matching_candidate_ids
+        FROM _tmp_bpay_session_row_backed_case_baseline AS row_backed_case
+        WHERE COALESCE(row_backed_case.resolution_family, '') IN ('', 'NON_BUCKET')
+          AND (
+            v_linked_timesheet_id IS NULL
+            OR row_backed_case.timesheet_id IS NULL
+            OR row_backed_case.timesheet_id = v_linked_timesheet_id
+          )
+          AND (
+            v_finance_case_id_text = ''
+            OR row_backed_case.finance_case_id IS NULL
+            OR row_backed_case.finance_case_id::text = v_finance_case_id_text
+          );
+
+        v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
+        IF v_matching_candidate_count = 0 THEN
+          RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND',
+                    'session_id', p_session_id::text,
+                    'case_key', v_case_key,
+                    'resolution_family', 'NON_BUCKET'
+                  )::text;
+        ELSIF v_matching_candidate_count > 1 THEN
+          RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS',
+                    'session_id', p_session_id::text,
+                    'case_key', v_case_key,
+                    'resolution_family', 'NON_BUCKET'
+                  )::text;
+        END IF;
+
+        v_resolved_candidate_id := v_matching_candidate_ids[1];
+      ELSE
+        SELECT COUNT(*)::integer
+        INTO v_target_match_count
+        FROM _tmp_bpay_session_row_backed_case_baseline AS row_backed_case
+        WHERE row_backed_case.candidate_id = v_candidate_id
+          AND COALESCE(row_backed_case.resolution_family, '') IN ('', 'NON_BUCKET')
+          AND (
+            v_linked_timesheet_id IS NULL
+            OR row_backed_case.timesheet_id IS NULL
+            OR row_backed_case.timesheet_id = v_linked_timesheet_id
+          )
+          AND (
+            v_finance_case_id_text = ''
+            OR row_backed_case.finance_case_id IS NULL
+            OR row_backed_case.finance_case_id::text = v_finance_case_id_text
+          );
+
+        IF v_target_match_count = 0 THEN
+          RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND',
+                    'session_id', p_session_id::text,
+                    'candidate_id', v_candidate_id::text,
+                    'case_key', v_case_key,
+                    'resolution_family', 'NON_BUCKET'
+                  )::text;
+        ELSIF v_target_match_count > 1 THEN
+          RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS',
+                    'session_id', p_session_id::text,
+                    'candidate_id', v_candidate_id::text,
+                    'case_key', v_case_key,
+                    'resolution_family', 'NON_BUCKET'
+                  )::text;
+        END IF;
+
+        v_resolved_candidate_id := v_candidate_id;
+      END IF;
+    ELSIF v_candidate_id IS NULL THEN
       SELECT COALESCE(array_agg(DISTINCT snapshot_case.candidate_id ORDER BY snapshot_case.candidate_id), ARRAY[]::uuid[])
       INTO v_matching_candidate_ids
       FROM public.banking_pay_snapshot_case_state AS snapshot_case
       WHERE snapshot_case.snapshot_run_id = v_session_row.source_snapshot_run_id
-        AND COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[snapshot_case.candidate_id]::uuid[]
+        AND EXISTS (
+          SELECT 1
+          FROM _tmp_bpay_session_candidate_scope AS candidate_scope
+          WHERE candidate_scope.candidate_id = snapshot_case.candidate_id
+        )
         AND snapshot_case.case_key = v_case_key;
 
       v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
@@ -55476,6 +56041,584 @@ END;
 $function$;
 
 
+
+CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_refresh(
+  p_timesheet_ids uuid[],
+  p_actor_user_id uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_requested_ids uuid[] := ARRAY[]::uuid[];
+  v_target_ids uuid[] := ARRAY[]::uuid[];
+  v_refreshed_count integer := 0;
+  v_legacy_state_rows_updated integer := 0;
+BEGIN
+  SELECT COALESCE(
+    ARRAY_AGG(DISTINCT input_rows.timesheet_id ORDER BY input_rows.timesheet_id),
+    ARRAY[]::uuid[]
+  )
+  INTO v_requested_ids
+  FROM UNNEST(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_rows(timesheet_id)
+  WHERE input_rows.timesheet_id IS NOT NULL;
+
+  IF COALESCE(CARDINALITY(v_requested_ids), 0) = 0 THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'requested_count', 0,
+      'target_count', 0,
+      'refreshed_count', 0,
+      'legacy_state_rows_updated', 0
+    );
+  END IF;
+
+  IF CARDINALITY(v_requested_ids) > 100 THEN
+    RAISE EXCEPTION 'pay_timesheet_summary_pay_state_refresh accepts at most 100 distinct timesheet ids per call';
+  END IF;
+
+  SELECT COALESCE(
+    ARRAY_AGG(DISTINCT resolved_rows.target_timesheet_id ORDER BY resolved_rows.target_timesheet_id),
+    ARRAY[]::uuid[]
+  )
+  INTO v_target_ids
+  FROM (
+    SELECT
+      COALESCE(
+        rotation_rows.canonical_timesheet_id,
+        rotation_rows.requested_timesheet_id
+      ) AS target_timesheet_id
+    FROM public._pay_timesheet_rotation_scope(v_requested_ids) AS rotation_rows
+  ) AS resolved_rows
+  JOIN public.timesheets AS target_timesheet
+    ON target_timesheet.timesheet_id = resolved_rows.target_timesheet_id
+  WHERE resolved_rows.target_timesheet_id IS NOT NULL;
+
+  IF COALESCE(CARDINALITY(v_target_ids), 0) = 0 THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'requested_count', CARDINALITY(v_requested_ids),
+      'target_count', 0,
+      'refreshed_count', 0,
+      'legacy_state_rows_updated', 0
+    );
+  END IF;
+
+  WITH
+  target_ids AS MATERIALIZED (
+    SELECT target_values.timesheet_id
+    FROM UNNEST(v_target_ids) AS target_values(timesheet_id)
+  ),
+  target_id_array AS MATERIALIZED (
+    SELECT ARRAY_AGG(target_ids.timesheet_id ORDER BY target_ids.timesheet_id) AS timesheet_ids
+    FROM target_ids
+  ),
+  family_scope AS MATERIALIZED (
+    SELECT DISTINCT
+      rotation_rows.family_timesheet_id,
+      COALESCE(
+        rotation_rows.canonical_timesheet_id,
+        rotation_rows.requested_timesheet_id
+      ) AS projected_timesheet_id
+    FROM target_id_array
+    CROSS JOIN LATERAL public._pay_timesheet_rotation_scope(
+      target_id_array.timesheet_ids
+    ) AS rotation_rows
+    WHERE rotation_rows.family_timesheet_id IS NOT NULL
+      AND COALESCE(
+        rotation_rows.canonical_timesheet_id,
+        rotation_rows.requested_timesheet_id
+      ) IS NOT NULL
+  ),
+  outstanding_components AS MATERIALIZED (
+    SELECT
+      outstanding_rows.timesheet_id,
+      outstanding_rows.truth_ex_vat,
+      outstanding_rows.baseline_ex_vat,
+      outstanding_rows.reserved_ex_vat,
+      outstanding_rows.outstanding_ex_vat
+    FROM target_id_array
+    CROSS JOIN LATERAL public._pay_outstanding_components(
+      target_id_array.timesheet_ids
+    ) AS outstanding_rows
+  ),
+  component_totals AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      ROUND(
+        COALESCE(SUM(COALESCE(outstanding_components.baseline_ex_vat, 0)), 0),
+        2
+      )::numeric AS paid_to_date_ex_vat,
+      ROUND(
+        COALESCE(
+          SUM(
+            COALESCE(outstanding_components.truth_ex_vat, 0)
+            - COALESCE(outstanding_components.baseline_ex_vat, 0)
+          ),
+          0
+        ),
+        2
+      )::numeric AS net_delta_ex_vat,
+      ROUND(
+        COALESCE(SUM(COALESCE(outstanding_components.reserved_ex_vat, 0)), 0),
+        2
+      )::numeric AS reserved_ex_vat,
+      ROUND(
+        COALESCE(SUM(COALESCE(outstanding_components.outstanding_ex_vat, 0)), 0),
+        2
+      )::numeric AS outstanding_ex_vat
+    FROM target_ids
+    LEFT JOIN outstanding_components
+      ON outstanding_components.timesheet_id = target_ids.timesheet_id
+    GROUP BY target_ids.timesheet_id
+  ),
+  legacy_state_presence AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      COALESCE(BOOL_OR(legacy_state.timesheet_id IS NOT NULL), false) AS has_legacy_pay_state
+    FROM target_ids
+    LEFT JOIN family_scope
+      ON family_scope.projected_timesheet_id = target_ids.timesheet_id
+    LEFT JOIN public.timesheet_pay_state AS legacy_state
+      ON legacy_state.timesheet_id = family_scope.family_timesheet_id
+    GROUP BY target_ids.timesheet_id
+  ),
+  actual_last_paid_totals AS MATERIALIZED (
+    SELECT
+      family_scope.projected_timesheet_id AS timesheet_id,
+      MAX(
+        GREATEST(
+          paid_candidate.settled_at_utc,
+          paid_transfer.completed_at_utc,
+          paid_history.settled_at_utc,
+          paid_batch.completed_at_utc
+        )
+      ) AS last_paid_at_utc
+    FROM family_scope
+    JOIN public.pay_batch_items AS paid_item
+      ON paid_item.timesheet_id = family_scope.family_timesheet_id
+    JOIN public.pay_batch_candidates AS paid_candidate
+      ON paid_candidate.id = paid_item.pay_batch_candidate_id
+    JOIN public.pay_batches AS paid_batch
+      ON paid_batch.id = paid_candidate.pay_batch_id
+    LEFT JOIN public.pay_bank_transfers AS paid_transfer
+      ON paid_transfer.id = paid_item.pay_bank_transfer_id
+     AND paid_transfer.pay_batch_id = paid_batch.id
+    LEFT JOIN public.timesheet_pay_state_history AS paid_history
+      ON paid_history.pay_batch_id = paid_candidate.pay_batch_id
+     AND paid_history.timesheet_id = paid_item.timesheet_id
+    WHERE COALESCE(paid_item.is_voided, false) = false
+      AND UPPER(BTRIM(COALESCE(paid_item.item_type, ''))) IN (
+        'SEGMENT_DELTA',
+        'EXPENSE_DELTA',
+        'ADJUSTMENT_DELTA',
+        'MILEAGE_DELTA'
+      )
+      AND (
+        UPPER(BTRIM(COALESCE(paid_candidate.settlement_status, ''))) = 'SETTLED'
+        OR paid_candidate.settled_at_utc IS NOT NULL
+        OR UPPER(BTRIM(COALESCE(paid_transfer.status, ''))) = 'COMPLETED'
+        OR paid_transfer.completed_at_utc IS NOT NULL
+        OR paid_history.id IS NOT NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_items AS applied_correction
+        WHERE applied_correction.pay_batch_item_id = paid_item.id
+          AND applied_correction.status = 'APPLIED'
+          AND applied_correction.correction_item_kind IN (
+            'PRE_BANK_CANCEL',
+            'NO_MONEY_UNWIND',
+            'SETTLED_REVERSAL'
+          )
+      )
+    GROUP BY family_scope.projected_timesheet_id
+  ),
+  legacy_last_paid_totals AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      MAX(
+        COALESCE(
+          legacy_state.last_settled_at_utc,
+          legacy_state.summary_pay_paid_at_utc
+        )
+      ) AS last_paid_at_utc
+    FROM target_ids
+    LEFT JOIN family_scope
+      ON family_scope.projected_timesheet_id = target_ids.timesheet_id
+    LEFT JOIN public.timesheet_pay_state AS legacy_state
+      ON legacy_state.timesheet_id = family_scope.family_timesheet_id
+    GROUP BY target_ids.timesheet_id
+  ),
+  last_paid_totals AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      COALESCE(
+        actual_last_paid_totals.last_paid_at_utc,
+        legacy_last_paid_totals.last_paid_at_utc
+      ) AS last_paid_at_utc
+    FROM target_ids
+    LEFT JOIN actual_last_paid_totals
+      ON actual_last_paid_totals.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN legacy_last_paid_totals
+      ON legacy_last_paid_totals.timesheet_id = target_ids.timesheet_id
+  ),
+  latest_advance_override AS MATERIALIZED (
+    SELECT DISTINCT ON (family_scope.projected_timesheet_id)
+      family_scope.projected_timesheet_id AS timesheet_id,
+      payment_override.id AS override_id,
+      payment_override.created_at_utc AS override_created_at_utc
+    FROM family_scope
+    JOIN public.timesheet_payment_overrides AS payment_override
+      ON payment_override.timesheet_id = family_scope.family_timesheet_id
+    WHERE payment_override.cleared_at_utc IS NULL
+      AND UPPER(BTRIM(COALESCE(payment_override.override_type, ''))) = 'ADVANCE_THIS_PAYMENT'
+    ORDER BY
+      family_scope.projected_timesheet_id,
+      payment_override.created_at_utc DESC,
+      payment_override.id DESC
+  ),
+  current_authorisation_state AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      GREATEST(
+        MAX(family_timesheet.authorised_at_server),
+        MAX(family_timesheet.revoked_at),
+        MAX(family_financial.authorised_at_utc)
+      ) AS authorised_at_utc
+    FROM target_ids
+    LEFT JOIN family_scope
+      ON family_scope.projected_timesheet_id = target_ids.timesheet_id
+    LEFT JOIN public.timesheets AS family_timesheet
+      ON family_timesheet.timesheet_id = family_scope.family_timesheet_id
+    LEFT JOIN public.timesheets_financials AS family_financial
+      ON family_financial.timesheet_id = family_scope.family_timesheet_id
+    GROUP BY target_ids.timesheet_id
+  ),
+  existing_display_cache AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      MAX(existing_cache.advance_authorisation_consumed_at_utc) AS advance_authorisation_consumed_at_utc
+    FROM target_ids
+    LEFT JOIN family_scope
+      ON family_scope.projected_timesheet_id = target_ids.timesheet_id
+    LEFT JOIN public.timesheet_summary_pay_state_cache AS existing_cache
+      ON existing_cache.timesheet_id = family_scope.family_timesheet_id
+    GROUP BY target_ids.timesheet_id
+  ),
+  advance_state_prepared AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      latest_advance_override.override_created_at_utc,
+      current_authorisation_state.authorised_at_utc,
+      CASE
+        WHEN latest_advance_override.override_created_at_utc IS NULL
+          THEN existing_display_cache.advance_authorisation_consumed_at_utc
+        WHEN existing_display_cache.advance_authorisation_consumed_at_utc
+               >= latest_advance_override.override_created_at_utc
+          THEN existing_display_cache.advance_authorisation_consumed_at_utc
+        WHEN current_authorisation_state.authorised_at_utc
+               >= latest_advance_override.override_created_at_utc
+          THEN current_authorisation_state.authorised_at_utc
+        ELSE NULL::timestamptz
+      END AS advance_authorisation_consumed_at_utc
+    FROM target_ids
+    LEFT JOIN latest_advance_override
+      ON latest_advance_override.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN current_authorisation_state
+      ON current_authorisation_state.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN existing_display_cache
+      ON existing_display_cache.timesheet_id = target_ids.timesheet_id
+  ),
+  advance_state AS MATERIALIZED (
+    SELECT
+      advance_state_prepared.timesheet_id,
+      advance_state_prepared.override_created_at_utc,
+      advance_state_prepared.advance_authorisation_consumed_at_utc,
+      (
+        advance_state_prepared.override_created_at_utc IS NOT NULL
+        AND (
+          advance_state_prepared.advance_authorisation_consumed_at_utc IS NULL
+          OR advance_state_prepared.advance_authorisation_consumed_at_utc
+               < advance_state_prepared.override_created_at_utc
+        )
+      ) AS active_advance
+    FROM advance_state_prepared
+  ),
+  active_batch_processing AS MATERIALIZED (
+    SELECT DISTINCT
+      family_scope.projected_timesheet_id AS timesheet_id
+    FROM family_scope
+    JOIN public.pay_batch_items AS batch_item
+      ON batch_item.timesheet_id = family_scope.family_timesheet_id
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id = batch_item.pay_batch_candidate_id
+    JOIN public.pay_batches AS pay_batch
+      ON pay_batch.id = batch_candidate.pay_batch_id
+    LEFT JOIN public.pay_bank_transfers AS bank_transfer
+      ON bank_transfer.id = batch_item.pay_bank_transfer_id
+     AND bank_transfer.pay_batch_id = pay_batch.id
+    LEFT JOIN LATERAL public._pay_rail_state_money_movement_classify(
+      bank_transfer.status,
+      bank_transfer.rail_state,
+      COALESCE(bank_transfer.rail_meta_json, '{}'::jsonb),
+      COALESCE(bank_transfer.rail_meta_json, '{}'::jsonb)
+    ) AS transfer_classifier
+      ON bank_transfer.id IS NOT NULL
+    WHERE COALESCE(batch_item.is_voided, false) = false
+      AND UPPER(BTRIM(COALESCE(batch_item.item_type, ''))) IN (
+        'SEGMENT_DELTA',
+        'EXPENSE_DELTA',
+        'ADJUSTMENT_DELTA',
+        'MILEAGE_DELTA'
+      )
+      AND public._pay_batch_status_is_active_reservation(pay_batch.status)
+      AND UPPER(BTRIM(COALESCE(batch_candidate.settlement_status, ''))) NOT IN (
+        'SETTLED',
+        'PAID',
+        'CONFIRMED'
+      )
+      AND batch_candidate.settled_at_utc IS NULL
+      AND COALESCE(transfer_classifier.is_final_money_moved, false) = false
+      AND COALESCE(transfer_classifier.is_terminal_no_money, false) = false
+      AND bank_transfer.completed_at_utc IS NULL
+  ),
+  active_correction_processing AS MATERIALIZED (
+    SELECT DISTINCT
+      family_scope.projected_timesheet_id AS timesheet_id
+    FROM public.pay_payment_correction_items AS correction_item
+    LEFT JOIN public.pay_batch_items AS correction_batch_item
+      ON correction_batch_item.id = correction_item.pay_batch_item_id
+    JOIN family_scope
+      ON family_scope.family_timesheet_id = COALESCE(
+        correction_item.timesheet_id,
+        correction_batch_item.timesheet_id
+      )
+    JOIN public.pay_payment_correction_requests AS correction_request
+      ON correction_request.id = correction_item.correction_request_id
+    WHERE correction_request.status IN (
+      'REQUESTED',
+      'AWAITING_AUTHORISATION',
+      'AUTHORISED',
+      'EXPANDED',
+      'PROCESSING',
+      'BLOCKED'
+    )
+      AND correction_item.status NOT IN ('APPLIED', 'SKIPPED')
+  ),
+  calculated_state AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      COALESCE(component_totals.paid_to_date_ex_vat, 0)::numeric AS paid_to_date_ex_vat,
+      last_paid_totals.last_paid_at_utc,
+      COALESCE(component_totals.reserved_ex_vat, 0)::numeric AS reserved_ex_vat,
+      COALESCE(component_totals.outstanding_ex_vat, 0)::numeric AS outstanding_ex_vat,
+      COALESCE(component_totals.net_delta_ex_vat, 0)::numeric AS net_delta_ex_vat,
+      COALESCE(advance_state.active_advance, false) AS active_advance,
+      advance_state.override_created_at_utc AS advance_override_created_at_utc,
+      advance_state.advance_authorisation_consumed_at_utc,
+      (
+        ABS(COALESCE(component_totals.reserved_ex_vat, 0)) > 0.01
+        OR active_batch_processing.timesheet_id IS NOT NULL
+        OR active_correction_processing.timesheet_id IS NOT NULL
+      ) AS active_processing,
+      (
+        COALESCE(component_totals.net_delta_ex_vat, 0) < -0.01
+        OR COALESCE(component_totals.outstanding_ex_vat, 0) < -0.01
+      ) AS is_overpaid,
+      COALESCE(legacy_state_presence.has_legacy_pay_state, false) AS has_legacy_pay_state
+    FROM target_ids
+    LEFT JOIN component_totals
+      ON component_totals.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN last_paid_totals
+      ON last_paid_totals.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN advance_state
+      ON advance_state.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN active_batch_processing
+      ON active_batch_processing.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN active_correction_processing
+      ON active_correction_processing.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN legacy_state_presence
+      ON legacy_state_presence.timesheet_id = target_ids.timesheet_id
+  ),
+  display_state_base AS MATERIALIZED (
+    SELECT
+      calculated_state.*,
+      CASE
+        WHEN calculated_state.is_overpaid THEN 'OVERPAID'
+        WHEN calculated_state.paid_to_date_ex_vat > 0.01
+         AND calculated_state.net_delta_ex_vat > 0.01 THEN 'PARTIALLY_PAID'
+        WHEN calculated_state.paid_to_date_ex_vat > 0.01 THEN 'PAID'
+        WHEN calculated_state.active_processing THEN 'PROCESSING'
+        ELSE 'UNPAID'
+      END::text AS summary_pay_status_code,
+      (
+        calculated_state.has_legacy_pay_state
+        OR ABS(calculated_state.paid_to_date_ex_vat) > 0.01
+        OR calculated_state.last_paid_at_utc IS NOT NULL
+        OR ABS(calculated_state.reserved_ex_vat) > 0.01
+        OR calculated_state.active_advance
+        OR calculated_state.active_processing
+        OR calculated_state.is_overpaid
+      ) AS summary_state_applies
+    FROM calculated_state
+  ),
+  display_state AS MATERIALIZED (
+    SELECT
+      display_state_base.timesheet_id,
+      display_state_base.paid_to_date_ex_vat,
+      display_state_base.last_paid_at_utc,
+      display_state_base.reserved_ex_vat,
+      display_state_base.outstanding_ex_vat,
+      display_state_base.net_delta_ex_vat,
+      display_state_base.active_advance,
+      display_state_base.active_processing,
+      display_state_base.summary_state_applies,
+      display_state_base.advance_override_created_at_utc,
+      display_state_base.advance_authorisation_consumed_at_utc,
+      display_state_base.summary_pay_status_code,
+      CASE display_state_base.summary_pay_status_code
+        WHEN 'PARTIALLY_PAID' THEN 'HALF_COIN'
+        WHEN 'PAID' THEN 'COIN'
+        WHEN 'PROCESSING' THEN 'CLOCK'
+        ELSE 'NONE'
+      END::text AS summary_pay_icon_code,
+      ARRAY_REMOVE(
+        ARRAY[
+          CASE
+            WHEN display_state_base.active_advance THEN '__PAY_BADGE_ADV__'
+            ELSE NULL::text
+          END,
+          CASE
+            WHEN display_state_base.summary_pay_status_code = 'OVERPAID'
+              THEN '__PAY_BADGE_OVERPAID__'
+            ELSE NULL::text
+          END,
+          CASE
+            WHEN display_state_base.active_processing
+             AND display_state_base.summary_pay_status_code <> 'PROCESSING'
+              THEN '__PAY_BADGE_PROCESSING__'
+            ELSE NULL::text
+          END
+        ]::text[],
+        NULL::text
+      ) AS summary_badge_codes
+    FROM display_state_base
+  )
+  INSERT INTO public.timesheet_summary_pay_state_cache (
+    timesheet_id,
+    paid_to_date_ex_vat,
+    last_paid_at_utc,
+    reserved_ex_vat,
+    outstanding_ex_vat,
+    net_delta_ex_vat,
+    active_advance,
+    active_processing,
+    summary_state_applies,
+    advance_override_created_at_utc,
+    advance_authorisation_consumed_at_utc,
+    summary_pay_status_code,
+    summary_pay_icon_code,
+    summary_badge_codes,
+    refreshed_at_utc,
+    refreshed_by_user_id
+  )
+  SELECT
+    display_state.timesheet_id,
+    display_state.paid_to_date_ex_vat,
+    display_state.last_paid_at_utc,
+    display_state.reserved_ex_vat,
+    display_state.outstanding_ex_vat,
+    display_state.net_delta_ex_vat,
+    display_state.active_advance,
+    display_state.active_processing,
+    display_state.summary_state_applies,
+    display_state.advance_override_created_at_utc,
+    display_state.advance_authorisation_consumed_at_utc,
+    display_state.summary_pay_status_code,
+    display_state.summary_pay_icon_code,
+    display_state.summary_badge_codes,
+    now(),
+    p_actor_user_id
+  FROM display_state
+  ORDER BY display_state.timesheet_id
+  ON CONFLICT (timesheet_id) DO UPDATE
+  SET
+    paid_to_date_ex_vat = EXCLUDED.paid_to_date_ex_vat,
+    last_paid_at_utc = EXCLUDED.last_paid_at_utc,
+    reserved_ex_vat = EXCLUDED.reserved_ex_vat,
+    outstanding_ex_vat = EXCLUDED.outstanding_ex_vat,
+    net_delta_ex_vat = EXCLUDED.net_delta_ex_vat,
+    active_advance = EXCLUDED.active_advance,
+    active_processing = EXCLUDED.active_processing,
+    summary_state_applies = EXCLUDED.summary_state_applies,
+    advance_override_created_at_utc = EXCLUDED.advance_override_created_at_utc,
+    advance_authorisation_consumed_at_utc = EXCLUDED.advance_authorisation_consumed_at_utc,
+    summary_pay_status_code = EXCLUDED.summary_pay_status_code,
+    summary_pay_icon_code = EXCLUDED.summary_pay_icon_code,
+    summary_badge_codes = EXCLUDED.summary_badge_codes,
+    refreshed_at_utc = EXCLUDED.refreshed_at_utc,
+    refreshed_by_user_id = EXCLUDED.refreshed_by_user_id;
+
+  GET DIAGNOSTICS v_refreshed_count = ROW_COUNT;
+
+  WITH legacy_projection AS MATERIALIZED (
+    SELECT DISTINCT
+      rotation_rows.family_timesheet_id,
+      COALESCE(
+        rotation_rows.canonical_timesheet_id,
+        rotation_rows.requested_timesheet_id
+      ) AS projected_timesheet_id
+    FROM public._pay_timesheet_rotation_scope(v_target_ids) AS rotation_rows
+    WHERE rotation_rows.family_timesheet_id IS NOT NULL
+      AND COALESCE(
+        rotation_rows.canonical_timesheet_id,
+        rotation_rows.requested_timesheet_id
+      ) IS NOT NULL
+  )
+  UPDATE public.timesheet_pay_state AS legacy_state
+  SET
+    summary_pay_status_code = CASE
+      WHEN summary_cache.summary_pay_status_code = 'OVERPAID' THEN 'PAID'
+      ELSE summary_cache.summary_pay_status_code
+    END,
+    summary_pay_icon_code = CASE
+      WHEN summary_cache.summary_pay_status_code = 'OVERPAID' THEN 'RED_COIN'
+      ELSE summary_cache.summary_pay_icon_code
+    END,
+    summary_pay_paid_at_utc = summary_cache.last_paid_at_utc,
+    summary_net_delta_ex_vat = summary_cache.net_delta_ex_vat
+  FROM legacy_projection
+  JOIN public.timesheet_summary_pay_state_cache AS summary_cache
+    ON summary_cache.timesheet_id = legacy_projection.projected_timesheet_id
+  WHERE legacy_state.timesheet_id = legacy_projection.family_timesheet_id
+    AND summary_cache.timesheet_id = ANY (v_target_ids)
+    AND (
+      legacy_state.summary_pay_status_code IS DISTINCT FROM CASE
+        WHEN summary_cache.summary_pay_status_code = 'OVERPAID' THEN 'PAID'
+        ELSE summary_cache.summary_pay_status_code
+      END
+      OR legacy_state.summary_pay_icon_code IS DISTINCT FROM CASE
+        WHEN summary_cache.summary_pay_status_code = 'OVERPAID' THEN 'RED_COIN'
+        ELSE summary_cache.summary_pay_icon_code
+      END
+      OR legacy_state.summary_pay_paid_at_utc IS DISTINCT FROM summary_cache.last_paid_at_utc
+      OR legacy_state.summary_net_delta_ex_vat IS DISTINCT FROM summary_cache.net_delta_ex_vat
+    );
+
+  GET DIAGNOSTICS v_legacy_state_rows_updated = ROW_COUNT;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'requested_count', CARDINALITY(v_requested_ids),
+    'target_count', CARDINALITY(v_target_ids),
+    'refreshed_count', v_refreshed_count,
+    'legacy_state_rows_updated', v_legacy_state_rows_updated
+  );
+END;
+$function$;
 
 
 
@@ -183979,3 +185122,810 @@ END;
 $function$;
 
 
+CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_chunk_ids uuid[] := ARRAY[]::uuid[];
+  v_offset integer := 1;
+  v_total integer := 0;
+BEGIN
+  IF TG_TABLE_SCHEMA <> 'public' THEN
+    RETURN NULL;
+  END IF;
+
+  IF TG_TABLE_NAME = 'timesheets_financials' THEN
+    IF TG_OP = 'INSERT' THEN
+      SELECT COALESCE(ARRAY_AGG(DISTINCT new_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM new_rows
+      WHERE new_rows.timesheet_id IS NOT NULL
+        AND COALESCE(new_rows.is_current, false) = true;
+    ELSIF TG_OP = 'UPDATE' THEN
+      WITH changed_rows AS MATERIALIZED (
+        SELECT
+          new_rows.timesheet_id AS new_timesheet_id,
+          old_rows.timesheet_id AS old_timesheet_id,
+          COALESCE(new_rows.is_current, false) AS new_is_current,
+          COALESCE(old_rows.is_current, false) AS old_is_current
+        FROM new_rows
+        JOIN old_rows
+          ON old_rows.id = new_rows.id
+        WHERE new_rows.timesheet_id IS DISTINCT FROM old_rows.timesheet_id
+           OR new_rows.is_current IS DISTINCT FROM old_rows.is_current
+           OR new_rows.basis IS DISTINCT FROM old_rows.basis
+           OR new_rows.candidate_id IS DISTINCT FROM old_rows.candidate_id
+           OR new_rows.client_id IS DISTINCT FROM old_rows.client_id
+           OR new_rows.pay_method IS DISTINCT FROM old_rows.pay_method
+           OR new_rows.policy_snapshot_json IS DISTINCT FROM old_rows.policy_snapshot_json
+           OR new_rows.rate_source_refs_json IS DISTINCT FROM old_rows.rate_source_refs_json
+           OR new_rows.hours_day IS DISTINCT FROM old_rows.hours_day
+           OR new_rows.hours_night IS DISTINCT FROM old_rows.hours_night
+           OR new_rows.hours_sat IS DISTINCT FROM old_rows.hours_sat
+           OR new_rows.hours_sun IS DISTINCT FROM old_rows.hours_sun
+           OR new_rows.hours_bh IS DISTINCT FROM old_rows.hours_bh
+           OR new_rows.pay_day IS DISTINCT FROM old_rows.pay_day
+           OR new_rows.pay_night IS DISTINCT FROM old_rows.pay_night
+           OR new_rows.pay_sat IS DISTINCT FROM old_rows.pay_sat
+           OR new_rows.pay_sun IS DISTINCT FROM old_rows.pay_sun
+           OR new_rows.pay_bh IS DISTINCT FROM old_rows.pay_bh
+           OR new_rows.total_pay_ex_vat IS DISTINCT FROM old_rows.total_pay_ex_vat
+           OR new_rows.invoice_breakdown_json IS DISTINCT FROM old_rows.invoice_breakdown_json
+           OR new_rows.additional_units_json IS DISTINCT FROM old_rows.additional_units_json
+           OR new_rows.additional_pay_ex_vat IS DISTINCT FROM old_rows.additional_pay_ex_vat
+           OR new_rows.expenses_pay_ex_vat IS DISTINCT FROM old_rows.expenses_pay_ex_vat
+           OR new_rows.travel_pay_ex_vat IS DISTINCT FROM old_rows.travel_pay_ex_vat
+           OR new_rows.accommodation_pay_ex_vat IS DISTINCT FROM old_rows.accommodation_pay_ex_vat
+           OR new_rows.other_pay_ex_vat IS DISTINCT FROM old_rows.other_pay_ex_vat
+           OR new_rows.mileage_pay_ex_vat IS DISTINCT FROM old_rows.mileage_pay_ex_vat
+           OR new_rows.worked_start_iso IS DISTINCT FROM old_rows.worked_start_iso
+           OR new_rows.worked_end_iso IS DISTINCT FROM old_rows.worked_end_iso
+           OR new_rows.break_start_iso IS DISTINCT FROM old_rows.break_start_iso
+           OR new_rows.break_end_iso IS DISTINCT FROM old_rows.break_end_iso
+           OR new_rows.break_minutes IS DISTINCT FROM old_rows.break_minutes
+           OR new_rows.actual_schedule_json IS DISTINCT FROM old_rows.actual_schedule_json
+           OR new_rows.pay_on_hold IS DISTINCT FROM old_rows.pay_on_hold
+           OR new_rows.paid_at_utc IS DISTINCT FROM old_rows.paid_at_utc
+           OR new_rows.authorised_at_utc IS DISTINCT FROM old_rows.authorised_at_utc
+      ),
+      affected_rows AS (
+        SELECT changed_rows.new_timesheet_id AS timesheet_id
+        FROM changed_rows
+        WHERE changed_rows.new_timesheet_id IS NOT NULL
+          AND changed_rows.new_is_current = true
+
+        UNION
+
+        SELECT changed_rows.old_timesheet_id AS timesheet_id
+        FROM changed_rows
+        WHERE changed_rows.old_timesheet_id IS NOT NULL
+          AND changed_rows.old_is_current = true
+      )
+      SELECT COALESCE(ARRAY_AGG(DISTINCT affected_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM affected_rows;
+    ELSE
+      SELECT COALESCE(ARRAY_AGG(DISTINCT old_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM old_rows
+      WHERE old_rows.timesheet_id IS NOT NULL
+        AND COALESCE(old_rows.is_current, false) = true;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'timesheets' THEN
+    SELECT COALESCE(ARRAY_AGG(DISTINCT new_rows.timesheet_id), ARRAY[]::uuid[])
+    INTO v_timesheet_ids
+    FROM new_rows
+    JOIN old_rows
+      ON old_rows.timesheet_id = new_rows.timesheet_id
+    WHERE new_rows.timesheet_id IS NOT NULL
+      AND (
+        new_rows.is_current IS DISTINCT FROM old_rows.is_current
+        OR new_rows.version IS DISTINCT FROM old_rows.version
+        OR new_rows.authorised_at_server IS DISTINCT FROM old_rows.authorised_at_server
+        OR new_rows.revoked_at IS DISTINCT FROM old_rows.revoked_at
+        OR new_rows.status IS DISTINCT FROM old_rows.status
+        OR new_rows.booking_id IS DISTINCT FROM old_rows.booking_id
+        OR new_rows.contract_id IS DISTINCT FROM old_rows.contract_id
+        OR new_rows.sheet_scope IS DISTINCT FROM old_rows.sheet_scope
+        OR new_rows.submission_mode IS DISTINCT FROM old_rows.submission_mode
+        OR new_rows.line_type IS DISTINCT FROM old_rows.line_type
+        OR new_rows.week_ending_date IS DISTINCT FROM old_rows.week_ending_date
+        OR new_rows.reference_number IS DISTINCT FROM old_rows.reference_number
+        OR new_rows.scheduled_start_iso IS DISTINCT FROM old_rows.scheduled_start_iso
+        OR new_rows.scheduled_end_iso IS DISTINCT FROM old_rows.scheduled_end_iso
+        OR new_rows.worked_start_iso IS DISTINCT FROM old_rows.worked_start_iso
+        OR new_rows.worked_end_iso IS DISTINCT FROM old_rows.worked_end_iso
+        OR new_rows.break_start_iso IS DISTINCT FROM old_rows.break_start_iso
+        OR new_rows.break_end_iso IS DISTINCT FROM old_rows.break_end_iso
+        OR new_rows.break_minutes IS DISTINCT FROM old_rows.break_minutes
+        OR new_rows.actual_schedule_json IS DISTINCT FROM old_rows.actual_schedule_json
+        OR new_rows.additional_units_week IS DISTINCT FROM old_rows.additional_units_week
+        OR new_rows.additional_units_per_day IS DISTINCT FROM old_rows.additional_units_per_day
+        OR new_rows.is_adjustment IS DISTINCT FROM old_rows.is_adjustment
+        OR new_rows.parent_timesheet_id IS DISTINCT FROM old_rows.parent_timesheet_id
+        OR new_rows.correction_id IS DISTINCT FROM old_rows.correction_id
+        OR new_rows.correction_kind IS DISTINCT FROM old_rows.correction_kind
+        OR new_rows.adjustment_origin IS DISTINCT FROM old_rows.adjustment_origin
+      );
+
+  ELSIF TG_TABLE_NAME = 'timesheet_payment_overrides' THEN
+    IF TG_OP = 'INSERT' THEN
+      SELECT COALESCE(ARRAY_AGG(DISTINCT new_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM new_rows
+      WHERE new_rows.timesheet_id IS NOT NULL;
+    ELSIF TG_OP = 'UPDATE' THEN
+      WITH changed_overrides AS (
+        SELECT
+          new_rows.timesheet_id AS new_timesheet_id,
+          old_rows.timesheet_id AS old_timesheet_id
+        FROM new_rows
+        JOIN old_rows ON old_rows.id = new_rows.id
+        WHERE new_rows.timesheet_id IS DISTINCT FROM old_rows.timesheet_id
+           OR new_rows.override_type IS DISTINCT FROM old_rows.override_type
+           OR new_rows.created_at_utc IS DISTINCT FROM old_rows.created_at_utc
+           OR new_rows.consumed_by_pay_batch_id IS DISTINCT FROM old_rows.consumed_by_pay_batch_id
+           OR new_rows.consumed_at_utc IS DISTINCT FROM old_rows.consumed_at_utc
+           OR new_rows.cleared_at_utc IS DISTINCT FROM old_rows.cleared_at_utc
+      )
+      SELECT COALESCE(ARRAY_AGG(DISTINCT affected_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM (
+        SELECT changed_overrides.new_timesheet_id AS timesheet_id
+        FROM changed_overrides
+        WHERE changed_overrides.new_timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT changed_overrides.old_timesheet_id AS timesheet_id
+        FROM changed_overrides
+        WHERE changed_overrides.old_timesheet_id IS NOT NULL
+      ) AS affected_rows;
+    ELSE
+      SELECT COALESCE(ARRAY_AGG(DISTINCT old_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM old_rows
+      WHERE old_rows.timesheet_id IS NOT NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'timesheet_pay_state' THEN
+    IF TG_OP = 'INSERT' THEN
+      SELECT COALESCE(ARRAY_AGG(DISTINCT new_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM new_rows
+      WHERE new_rows.timesheet_id IS NOT NULL;
+    ELSIF TG_OP = 'UPDATE' THEN
+      SELECT COALESCE(ARRAY_AGG(DISTINCT new_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM new_rows
+      JOIN old_rows
+        ON old_rows.timesheet_id = new_rows.timesheet_id
+      WHERE new_rows.timesheet_id IS NOT NULL
+        AND (
+          new_rows.last_settled_snapshot_json IS DISTINCT FROM old_rows.last_settled_snapshot_json
+          OR new_rows.last_settled_signature IS DISTINCT FROM old_rows.last_settled_signature
+          OR new_rows.last_settled_pay_batch_id IS DISTINCT FROM old_rows.last_settled_pay_batch_id
+          OR new_rows.last_settled_at_utc IS DISTINCT FROM old_rows.last_settled_at_utc
+        );
+    ELSE
+      SELECT COALESCE(ARRAY_AGG(DISTINCT old_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM old_rows
+      WHERE old_rows.timesheet_id IS NOT NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'timesheet_pay_state_history' THEN
+    IF TG_OP = 'INSERT' THEN
+      SELECT COALESCE(ARRAY_AGG(DISTINCT new_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM new_rows
+      WHERE new_rows.timesheet_id IS NOT NULL;
+    ELSIF TG_OP = 'UPDATE' THEN
+      WITH changed_history AS (
+        SELECT
+          new_rows.timesheet_id AS new_timesheet_id,
+          old_rows.timesheet_id AS old_timesheet_id
+        FROM new_rows
+        JOIN old_rows ON old_rows.id = new_rows.id
+        WHERE new_rows.timesheet_id IS DISTINCT FROM old_rows.timesheet_id
+           OR new_rows.pay_batch_id IS DISTINCT FROM old_rows.pay_batch_id
+           OR new_rows.settled_at_utc IS DISTINCT FROM old_rows.settled_at_utc
+           OR new_rows.snapshot_json IS DISTINCT FROM old_rows.snapshot_json
+           OR new_rows.signature IS DISTINCT FROM old_rows.signature
+      )
+      SELECT COALESCE(ARRAY_AGG(DISTINCT affected_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM (
+        SELECT changed_history.new_timesheet_id AS timesheet_id
+        FROM changed_history
+        WHERE changed_history.new_timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT changed_history.old_timesheet_id AS timesheet_id
+        FROM changed_history
+        WHERE changed_history.old_timesheet_id IS NOT NULL
+      ) AS affected_rows;
+    ELSE
+      SELECT COALESCE(ARRAY_AGG(DISTINCT old_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM old_rows
+      WHERE old_rows.timesheet_id IS NOT NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'pay_batch_items' THEN
+    IF TG_OP = 'UPDATE' THEN
+      SELECT COALESCE(ARRAY_AGG(DISTINCT affected_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM (
+        SELECT new_rows.timesheet_id
+        FROM new_rows
+        JOIN old_rows ON old_rows.id = new_rows.id
+        WHERE new_rows.timesheet_id IS NOT NULL
+          AND (
+            new_rows.timesheet_id IS DISTINCT FROM old_rows.timesheet_id
+            OR new_rows.is_voided IS DISTINCT FROM old_rows.is_voided
+          )
+
+        UNION
+
+        SELECT old_rows.timesheet_id
+        FROM old_rows
+        JOIN new_rows ON new_rows.id = old_rows.id
+        WHERE old_rows.timesheet_id IS NOT NULL
+          AND old_rows.timesheet_id IS DISTINCT FROM new_rows.timesheet_id
+      ) AS affected_rows;
+    ELSE
+      SELECT COALESCE(ARRAY_AGG(DISTINCT old_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM old_rows
+      WHERE old_rows.timesheet_id IS NOT NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'pay_batch_candidates' THEN
+    WITH changed_candidates AS (
+      SELECT new_rows.id
+      FROM new_rows
+      JOIN old_rows ON old_rows.id = new_rows.id
+      WHERE new_rows.settlement_status IS DISTINCT FROM old_rows.settlement_status
+         OR new_rows.settled_at_utc IS DISTINCT FROM old_rows.settled_at_utc
+         OR new_rows.pay_batch_id IS DISTINCT FROM old_rows.pay_batch_id
+    )
+    SELECT COALESCE(ARRAY_AGG(DISTINCT batch_item.timesheet_id), ARRAY[]::uuid[])
+    INTO v_timesheet_ids
+    FROM changed_candidates
+    JOIN public.pay_batch_items AS batch_item
+      ON batch_item.pay_batch_candidate_id = changed_candidates.id
+    WHERE batch_item.timesheet_id IS NOT NULL;
+
+  ELSIF TG_TABLE_NAME = 'pay_batches' THEN
+    WITH changed_batches AS (
+      SELECT new_rows.id
+      FROM new_rows
+      JOIN old_rows ON old_rows.id = new_rows.id
+      WHERE public._pay_batch_status_is_active_reservation(old_rows.status)
+            IS DISTINCT FROM
+            public._pay_batch_status_is_active_reservation(new_rows.status)
+         OR new_rows.cancelled_at_utc IS DISTINCT FROM old_rows.cancelled_at_utc
+         OR new_rows.completed_at_utc IS DISTINCT FROM old_rows.completed_at_utc
+    )
+    SELECT COALESCE(ARRAY_AGG(DISTINCT batch_item.timesheet_id), ARRAY[]::uuid[])
+    INTO v_timesheet_ids
+    FROM changed_batches
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.pay_batch_id = changed_batches.id
+    JOIN public.pay_batch_items AS batch_item
+      ON batch_item.pay_batch_candidate_id = batch_candidate.id
+    WHERE batch_item.timesheet_id IS NOT NULL;
+
+  ELSIF TG_TABLE_NAME = 'pay_bank_transfers' THEN
+    WITH changed_transfers AS (
+      SELECT new_rows.id
+      FROM new_rows
+      JOIN old_rows ON old_rows.id = new_rows.id
+      WHERE new_rows.status IS DISTINCT FROM old_rows.status
+         OR new_rows.rail_state IS DISTINCT FROM old_rows.rail_state
+         OR new_rows.rail_meta_json IS DISTINCT FROM old_rows.rail_meta_json
+         OR new_rows.completed_at_utc IS DISTINCT FROM old_rows.completed_at_utc
+    )
+    SELECT COALESCE(ARRAY_AGG(DISTINCT batch_item.timesheet_id), ARRAY[]::uuid[])
+    INTO v_timesheet_ids
+    FROM changed_transfers
+    JOIN public.pay_batch_items AS batch_item
+      ON batch_item.pay_bank_transfer_id = changed_transfers.id
+    WHERE batch_item.timesheet_id IS NOT NULL;
+
+  ELSIF TG_TABLE_NAME = 'pay_payment_correction_items' THEN
+    IF TG_OP = 'INSERT' THEN
+      SELECT COALESCE(ARRAY_AGG(DISTINCT COALESCE(new_rows.timesheet_id, batch_item.timesheet_id)), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM new_rows
+      LEFT JOIN public.pay_batch_items AS batch_item
+        ON batch_item.id = new_rows.pay_batch_item_id
+      WHERE COALESCE(new_rows.timesheet_id, batch_item.timesheet_id) IS NOT NULL;
+    ELSIF TG_OP = 'UPDATE' THEN
+      WITH changed_correction_rows AS (
+        SELECT
+          new_rows.timesheet_id AS new_timesheet_id,
+          new_rows.pay_batch_item_id AS new_pay_batch_item_id,
+          old_rows.timesheet_id AS old_timesheet_id,
+          old_rows.pay_batch_item_id AS old_pay_batch_item_id
+        FROM new_rows
+        JOIN old_rows ON old_rows.id = new_rows.id
+        WHERE new_rows.timesheet_id IS DISTINCT FROM old_rows.timesheet_id
+           OR new_rows.pay_batch_item_id IS DISTINCT FROM old_rows.pay_batch_item_id
+           OR new_rows.correction_request_id IS DISTINCT FROM old_rows.correction_request_id
+           OR new_rows.status IS DISTINCT FROM old_rows.status
+           OR new_rows.correction_item_kind IS DISTINCT FROM old_rows.correction_item_kind
+      ),
+      correction_rows AS (
+        SELECT
+          changed_correction_rows.new_timesheet_id AS timesheet_id,
+          changed_correction_rows.new_pay_batch_item_id AS pay_batch_item_id
+        FROM changed_correction_rows
+
+        UNION ALL
+
+        SELECT
+          changed_correction_rows.old_timesheet_id AS timesheet_id,
+          changed_correction_rows.old_pay_batch_item_id AS pay_batch_item_id
+        FROM changed_correction_rows
+      )
+      SELECT COALESCE(ARRAY_AGG(DISTINCT COALESCE(correction_rows.timesheet_id, batch_item.timesheet_id)), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM correction_rows
+      LEFT JOIN public.pay_batch_items AS batch_item
+        ON batch_item.id = correction_rows.pay_batch_item_id
+      WHERE COALESCE(correction_rows.timesheet_id, batch_item.timesheet_id) IS NOT NULL;
+    ELSE
+      SELECT COALESCE(ARRAY_AGG(DISTINCT COALESCE(old_rows.timesheet_id, batch_item.timesheet_id)), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM old_rows
+      LEFT JOIN public.pay_batch_items AS batch_item
+        ON batch_item.id = old_rows.pay_batch_item_id
+      WHERE COALESCE(old_rows.timesheet_id, batch_item.timesheet_id) IS NOT NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'pay_payment_correction_requests' THEN
+    IF TG_OP = 'INSERT' THEN
+      WITH changed_batches AS (
+        SELECT new_rows.pay_batch_id
+        FROM new_rows
+        WHERE new_rows.pay_batch_id IS NOT NULL
+      )
+      SELECT COALESCE(ARRAY_AGG(DISTINCT batch_item.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM changed_batches
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.pay_batch_id = changed_batches.pay_batch_id
+      JOIN public.pay_batch_items AS batch_item
+        ON batch_item.pay_batch_candidate_id = batch_candidate.id
+      WHERE batch_item.timesheet_id IS NOT NULL;
+    ELSIF TG_OP = 'UPDATE' THEN
+      WITH changed_batches AS (
+        SELECT new_rows.pay_batch_id
+        FROM new_rows
+        JOIN old_rows ON old_rows.id = new_rows.id
+        WHERE new_rows.pay_batch_id IS DISTINCT FROM old_rows.pay_batch_id
+           OR new_rows.status IS DISTINCT FROM old_rows.status
+        UNION
+        SELECT old_rows.pay_batch_id
+        FROM old_rows
+        JOIN new_rows ON new_rows.id = old_rows.id
+        WHERE new_rows.pay_batch_id IS DISTINCT FROM old_rows.pay_batch_id
+           OR new_rows.status IS DISTINCT FROM old_rows.status
+      )
+      SELECT COALESCE(ARRAY_AGG(DISTINCT batch_item.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM changed_batches
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.pay_batch_id = changed_batches.pay_batch_id
+      JOIN public.pay_batch_items AS batch_item
+        ON batch_item.pay_batch_candidate_id = batch_candidate.id
+      WHERE batch_item.timesheet_id IS NOT NULL;
+    ELSE
+      WITH changed_batches AS (
+        SELECT old_rows.pay_batch_id
+        FROM old_rows
+        WHERE old_rows.pay_batch_id IS NOT NULL
+      )
+      SELECT COALESCE(ARRAY_AGG(DISTINCT batch_item.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM changed_batches
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.pay_batch_id = changed_batches.pay_batch_id
+      JOIN public.pay_batch_items AS batch_item
+        ON batch_item.pay_batch_candidate_id = batch_candidate.id
+      WHERE batch_item.timesheet_id IS NOT NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'pay_finance_case_components' THEN
+    IF TG_OP = 'INSERT' THEN
+      SELECT COALESCE(ARRAY_AGG(DISTINCT new_rows.linked_timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM new_rows
+      WHERE new_rows.linked_timesheet_id IS NOT NULL;
+    ELSIF TG_OP = 'UPDATE' THEN
+      WITH changed_components AS (
+        SELECT
+          new_rows.linked_timesheet_id AS new_timesheet_id,
+          old_rows.linked_timesheet_id AS old_timesheet_id
+        FROM new_rows
+        JOIN old_rows ON old_rows.id = new_rows.id
+        WHERE new_rows.linked_timesheet_id IS DISTINCT FROM old_rows.linked_timesheet_id
+           OR new_rows.finance_case_id IS DISTINCT FROM old_rows.finance_case_id
+           OR new_rows.component_key_type IS DISTINCT FROM old_rows.component_key_type
+           OR new_rows.component_key_value IS DISTINCT FROM old_rows.component_key_value
+           OR new_rows.source_basis_json IS DISTINCT FROM old_rows.source_basis_json
+           OR new_rows.remaining_source_amount IS DISTINCT FROM old_rows.remaining_source_amount
+           OR new_rows.closed_at_utc IS DISTINCT FROM old_rows.closed_at_utc
+      )
+      SELECT COALESCE(ARRAY_AGG(DISTINCT affected_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM (
+        SELECT changed_components.new_timesheet_id AS timesheet_id
+        FROM changed_components
+        WHERE changed_components.new_timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT changed_components.old_timesheet_id AS timesheet_id
+        FROM changed_components
+        WHERE changed_components.old_timesheet_id IS NOT NULL
+      ) AS affected_rows;
+    ELSE
+      SELECT COALESCE(ARRAY_AGG(DISTINCT old_rows.linked_timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM old_rows
+      WHERE old_rows.linked_timesheet_id IS NOT NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'pay_advances' THEN
+    WITH changed_advances AS (
+      SELECT
+        new_rows.id AS new_id,
+        new_rows.linked_timesheet_id AS new_linked_timesheet_id,
+        old_rows.id AS old_id,
+        old_rows.linked_timesheet_id AS old_linked_timesheet_id
+      FROM new_rows
+      JOIN old_rows ON old_rows.id = new_rows.id
+      WHERE new_rows.linked_timesheet_id IS DISTINCT FROM old_rows.linked_timesheet_id
+         OR new_rows.case_type IS DISTINCT FROM old_rows.case_type
+    ),
+    advance_ids AS (
+      SELECT
+        changed_advances.new_id AS id,
+        changed_advances.new_linked_timesheet_id AS linked_timesheet_id
+      FROM changed_advances
+
+      UNION
+
+      SELECT
+        changed_advances.old_id AS id,
+        changed_advances.old_linked_timesheet_id AS linked_timesheet_id
+      FROM changed_advances
+    )
+    SELECT COALESCE(ARRAY_AGG(DISTINCT affected_rows.timesheet_id), ARRAY[]::uuid[])
+    INTO v_timesheet_ids
+    FROM (
+      SELECT advance_ids.linked_timesheet_id AS timesheet_id
+      FROM advance_ids
+      WHERE advance_ids.linked_timesheet_id IS NOT NULL
+
+      UNION
+
+      SELECT finance_component.linked_timesheet_id AS timesheet_id
+      FROM advance_ids
+      JOIN public.pay_finance_case_components AS finance_component
+        ON finance_component.finance_case_id = advance_ids.id
+      WHERE finance_component.linked_timesheet_id IS NOT NULL
+    ) AS affected_rows;
+
+  ELSIF TG_TABLE_NAME = 'ts_pay_adjustments' THEN
+    IF TG_OP = 'INSERT' THEN
+      SELECT COALESCE(ARRAY_AGG(DISTINCT new_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM new_rows
+      WHERE new_rows.timesheet_id IS NOT NULL;
+    ELSIF TG_OP = 'UPDATE' THEN
+      WITH changed_adjustments AS (
+        SELECT
+          new_rows.timesheet_id AS new_timesheet_id,
+          old_rows.timesheet_id AS old_timesheet_id
+        FROM new_rows
+        JOIN old_rows ON old_rows.id = new_rows.id
+        WHERE new_rows.timesheet_id IS DISTINCT FROM old_rows.timesheet_id
+           OR new_rows.delta_pay_ex_vat IS DISTINCT FROM old_rows.delta_pay_ex_vat
+           OR new_rows.as_advance IS DISTINCT FROM old_rows.as_advance
+      )
+      SELECT COALESCE(ARRAY_AGG(DISTINCT affected_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM (
+        SELECT changed_adjustments.new_timesheet_id AS timesheet_id
+        FROM changed_adjustments
+        WHERE changed_adjustments.new_timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT changed_adjustments.old_timesheet_id AS timesheet_id
+        FROM changed_adjustments
+        WHERE changed_adjustments.old_timesheet_id IS NOT NULL
+      ) AS affected_rows;
+    ELSE
+      SELECT COALESCE(ARRAY_AGG(DISTINCT old_rows.timesheet_id), ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM old_rows
+      WHERE old_rows.timesheet_id IS NOT NULL;
+    END IF;
+  END IF;
+
+  SELECT COALESCE(
+    ARRAY_AGG(DISTINCT input_ids.timesheet_id ORDER BY input_ids.timesheet_id),
+    ARRAY[]::uuid[]
+  )
+  INTO v_timesheet_ids
+  FROM UNNEST(COALESCE(v_timesheet_ids, ARRAY[]::uuid[])) AS input_ids(timesheet_id)
+  WHERE input_ids.timesheet_id IS NOT NULL;
+
+  v_total := COALESCE(CARDINALITY(v_timesheet_ids), 0);
+  v_offset := 1;
+
+  WHILE v_offset <= v_total LOOP
+    SELECT COALESCE(
+      ARRAY_AGG(chunk_rows.timesheet_id ORDER BY chunk_rows.ordinality),
+      ARRAY[]::uuid[]
+    )
+    INTO v_chunk_ids
+    FROM UNNEST(v_timesheet_ids) WITH ORDINALITY AS chunk_rows(timesheet_id, ordinality)
+    WHERE chunk_rows.ordinality BETWEEN v_offset AND v_offset + 99;
+
+    PERFORM public.pay_timesheet_summary_pay_state_refresh(
+      p_timesheet_ids => v_chunk_ids,
+      p_actor_user_id => NULL::uuid
+    );
+
+    v_offset := v_offset + 100;
+  END LOOP;
+
+  RETURN NULL;
+END;
+$function$;
+
+-- Current financial truth / save / recompute.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_tsfin_ai ON public.timesheets_financials;
+CREATE TRIGGER trg_ts_summary_pay_cache_tsfin_ai
+AFTER INSERT ON public.timesheets_financials
+REFERENCING NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_tsfin_au ON public.timesheets_financials;
+CREATE TRIGGER trg_ts_summary_pay_cache_tsfin_au
+AFTER UPDATE ON public.timesheets_financials
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_tsfin_ad ON public.timesheets_financials;
+CREATE TRIGGER trg_ts_summary_pay_cache_tsfin_ad
+AFTER DELETE ON public.timesheets_financials
+REFERENCING OLD TABLE AS old_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+-- Authorise / unauthorise / version rotation / current timesheet truth.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_timesheets_au ON public.timesheets;
+CREATE TRIGGER trg_ts_summary_pay_cache_timesheets_au
+AFTER UPDATE ON public.timesheets
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+-- Advance Pay lifecycle.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_override_ai ON public.timesheet_payment_overrides;
+CREATE TRIGGER trg_ts_summary_pay_cache_override_ai
+AFTER INSERT ON public.timesheet_payment_overrides
+REFERENCING NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_override_au ON public.timesheet_payment_overrides;
+CREATE TRIGGER trg_ts_summary_pay_cache_override_au
+AFTER UPDATE ON public.timesheet_payment_overrides
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_override_ad ON public.timesheet_payment_overrides;
+CREATE TRIGGER trg_ts_summary_pay_cache_override_ad
+AFTER DELETE ON public.timesheet_payment_overrides
+REFERENCING OLD TABLE AS old_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+-- Settlement snapshot lifecycle. Summary-only updates are ignored by the trigger function.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_state_ai ON public.timesheet_pay_state;
+CREATE TRIGGER trg_ts_summary_pay_cache_state_ai
+AFTER INSERT ON public.timesheet_pay_state
+REFERENCING NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_state_au ON public.timesheet_pay_state;
+CREATE TRIGGER trg_ts_summary_pay_cache_state_au
+AFTER UPDATE ON public.timesheet_pay_state
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_state_ad ON public.timesheet_pay_state;
+CREATE TRIGGER trg_ts_summary_pay_cache_state_ad
+AFTER DELETE ON public.timesheet_pay_state
+REFERENCING OLD TABLE AS old_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+-- Reservation release / item void / item deletion. Draft activation is refreshed explicitly by the finaliser RPC.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_items_au ON public.pay_batch_items;
+CREATE TRIGGER trg_ts_summary_pay_cache_items_au
+AFTER UPDATE ON public.pay_batch_items
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_items_ad ON public.pay_batch_items;
+CREATE TRIGGER trg_ts_summary_pay_cache_items_ad
+AFTER DELETE ON public.pay_batch_items
+REFERENCING OLD TABLE AS old_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+-- Partial/final candidate and rail state transitions.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_candidates_au ON public.pay_batch_candidates;
+CREATE TRIGGER trg_ts_summary_pay_cache_candidates_au
+AFTER UPDATE ON public.pay_batch_candidates
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_batches_au ON public.pay_batches;
+CREATE TRIGGER trg_ts_summary_pay_cache_batches_au
+AFTER UPDATE ON public.pay_batches
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_transfers_au ON public.pay_bank_transfers;
+CREATE TRIGGER trg_ts_summary_pay_cache_transfers_au
+AFTER UPDATE ON public.pay_bank_transfers
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+-- Direct history evidence used by the authoritative settled baseline.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_history_ai ON public.timesheet_pay_state_history;
+CREATE TRIGGER trg_ts_summary_pay_cache_history_ai
+AFTER INSERT ON public.timesheet_pay_state_history
+REFERENCING NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_history_au ON public.timesheet_pay_state_history;
+CREATE TRIGGER trg_ts_summary_pay_cache_history_au
+AFTER UPDATE ON public.timesheet_pay_state_history
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_history_ad ON public.timesheet_pay_state_history;
+CREATE TRIGGER trg_ts_summary_pay_cache_history_ad
+AFTER DELETE ON public.timesheet_pay_state_history
+REFERENCING OLD TABLE AS old_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+-- Remove earlier draft trigger names if an interrupted deployment created them.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_transfer_events_ai ON public.pay_bank_transfer_events;
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_transfer_events_au ON public.pay_bank_transfer_events;
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_transfer_events_ad ON public.pay_bank_transfer_events;
+
+-- Correction / unwind / recovery truth.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_correction_requests_ai ON public.pay_payment_correction_requests;
+CREATE TRIGGER trg_ts_summary_pay_cache_correction_requests_ai
+AFTER INSERT ON public.pay_payment_correction_requests
+REFERENCING NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_correction_requests_au ON public.pay_payment_correction_requests;
+CREATE TRIGGER trg_ts_summary_pay_cache_correction_requests_au
+AFTER UPDATE ON public.pay_payment_correction_requests
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_correction_requests_ad ON public.pay_payment_correction_requests;
+CREATE TRIGGER trg_ts_summary_pay_cache_correction_requests_ad
+AFTER DELETE ON public.pay_payment_correction_requests
+REFERENCING OLD TABLE AS old_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_correction_items_ai ON public.pay_payment_correction_items;
+CREATE TRIGGER trg_ts_summary_pay_cache_correction_items_ai
+AFTER INSERT ON public.pay_payment_correction_items
+REFERENCING NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_correction_items_au ON public.pay_payment_correction_items;
+CREATE TRIGGER trg_ts_summary_pay_cache_correction_items_au
+AFTER UPDATE ON public.pay_payment_correction_items
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_correction_items_ad ON public.pay_payment_correction_items;
+CREATE TRIGGER trg_ts_summary_pay_cache_correction_items_ad
+AFTER DELETE ON public.pay_payment_correction_items
+REFERENCING OLD TABLE AS old_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_finance_components_ai ON public.pay_finance_case_components;
+CREATE TRIGGER trg_ts_summary_pay_cache_finance_components_ai
+AFTER INSERT ON public.pay_finance_case_components
+REFERENCING NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_finance_components_au ON public.pay_finance_case_components;
+CREATE TRIGGER trg_ts_summary_pay_cache_finance_components_au
+AFTER UPDATE ON public.pay_finance_case_components
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_finance_components_ad ON public.pay_finance_case_components;
+CREATE TRIGGER trg_ts_summary_pay_cache_finance_components_ad
+AFTER DELETE ON public.pay_finance_case_components
+REFERENCING OLD TABLE AS old_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+-- pay_advances.case_type participates in under/overpayment component truth.
+-- Finance component insert/delete triggers cover creation/removal of linked component rows.
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_advances_ai ON public.pay_advances;
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_advances_ad ON public.pay_advances;
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_advances_au ON public.pay_advances;
+CREATE TRIGGER trg_ts_summary_pay_cache_advances_au
+AFTER UPDATE ON public.pay_advances
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_adjustments_ai ON public.ts_pay_adjustments;
+CREATE TRIGGER trg_ts_summary_pay_cache_adjustments_ai
+AFTER INSERT ON public.ts_pay_adjustments
+REFERENCING NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_adjustments_au ON public.ts_pay_adjustments;
+CREATE TRIGGER trg_ts_summary_pay_cache_adjustments_au
+AFTER UPDATE ON public.ts_pay_adjustments
+REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
+
+DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_adjustments_ad ON public.ts_pay_adjustments;
+CREATE TRIGGER trg_ts_summary_pay_cache_adjustments_ad
+AFTER DELETE ON public.ts_pay_adjustments
+REFERENCING OLD TABLE AS old_rows
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();

@@ -6606,7 +6606,6 @@ $function$;
 
 BEGIN;
 
-
 CREATE OR REPLACE FUNCTION public.timesheet_summary_lightweight_rows_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(timesheet_id uuid, contract_week_id uuid, contract_id uuid, candidate_id uuid, candidate_name text, candidate_display_name text, client_id uuid, client_name text, booking_id text, occupant_key_norm text, hospital_norm text, candidate_hint_text jsonb, week_ending_date date, work_date date, sheet_scope text, submission_mode text, submission_mode_snapshot text, basis text, route_type text, route_display text, route_family text, route_subfamily text, underlying_channel_family text, summary_stage text, tools_stage text, processing_status text, processing_status_display text, authorised_at_utc timestamp with time zone, authorised_at_server timestamp with time zone, processed_at_utc timestamp with time zone, is_authorised boolean, total_hours numeric, total_pay_ex_vat numeric, total_charge_ex_vat numeric, margin_ex_vat numeric, net_delta_ex_vat numeric, paid_at_utc timestamp with time zone, pay_icon_code text, pay_status_code text, pay_paid_at_utc timestamp with time zone, invoice_is_paid boolean, invoice_issue_stage text, invoice_segment_stage text, invoice_segments_total integer, invoice_segments_locked integer, invoice_segments_unlocked integer, issue_codes text[], validation_status text, validation_summary text, hr_crosscheck_status text, hr_crosscheck_issues text[], qr_status text, is_qr boolean, is_adjusted boolean, needs_attention boolean, has_rate_issue boolean, has_pay_channel_issue boolean, client_no_timesheet_required boolean, client_autoprocess_hr boolean, client_is_nhsp boolean, has_any_evidence boolean, attached_evidence_count integer, primary_artifact_storage_key text, primary_artifact_display_name text, primary_artifact_preview_mode text)
  LANGUAGE plpgsql
@@ -7093,7 +7092,37 @@ BEGIN
       COALESCE(source_rows.invoice_segments_locked, 0)::integer AS invoice_segments_locked,
       COALESCE(source_rows.invoice_segments_unlocked, 0)::integer AS invoice_segments_unlocked,
 
-      COALESCE(source_rows.issue_codes, ARRAY[]::text[]) AS issue_codes,
+      COALESCE(
+        ARRAY(
+          SELECT issue_values.issue_code
+          FROM UNNEST(COALESCE(source_rows.issue_codes, ARRAY[]::text[]))
+            WITH ORDINALITY AS issue_values(issue_code, issue_ordinality)
+          WHERE issue_values.issue_code NOT IN (
+            '__PAY_BADGE_ADV__',
+            '__PAY_BADGE_OVERPAID__',
+            '__PAY_BADGE_PROCESSING__'
+          )
+          ORDER BY issue_values.issue_ordinality
+        ),
+        ARRAY[]::text[]
+      ) AS business_issue_codes,
+      (
+        COALESCE(
+          ARRAY(
+            SELECT issue_values.issue_code
+            FROM UNNEST(COALESCE(source_rows.issue_codes, ARRAY[]::text[]))
+              WITH ORDINALITY AS issue_values(issue_code, issue_ordinality)
+            WHERE issue_values.issue_code NOT IN (
+              '__PAY_BADGE_ADV__',
+              '__PAY_BADGE_OVERPAID__',
+              '__PAY_BADGE_PROCESSING__'
+            )
+            ORDER BY issue_values.issue_ordinality
+          ),
+          ARRAY[]::text[]
+        )
+        || COALESCE(summary_pay_cache.summary_badge_codes, ARRAY[]::text[])
+      ) AS issue_codes,
       source_rows.validation_status::text AS validation_status,
 
       CASE
@@ -7147,6 +7176,8 @@ BEGIN
       END AS primary_artifact_preview_mode
 
     FROM source_rows
+    LEFT JOIN public.timesheet_summary_pay_state_cache AS summary_pay_cache
+      ON summary_pay_cache.timesheet_id = source_rows.timesheet_id
     LEFT JOIN public.timesheets AS timesheet_row
       ON timesheet_row.timesheet_id = source_rows.timesheet_id
      AND timesheet_row.is_current = TRUE
@@ -7315,7 +7346,7 @@ BEGIN
         v_candidate_paid IS NULL
         OR (
           (
-            UPPER(COALESCE(enriched_row.pay_status_code, '')) IN ('PAID','PARTIALLY_PAID')
+            UPPER(COALESCE(enriched_row.pay_status_code, '')) IN ('PAID','PARTIALLY_PAID','OVERPAID')
             OR enriched_row.pay_paid_at_utc IS NOT NULL
             OR enriched_row.paid_at_utc IS NOT NULL
           ) = v_candidate_paid
@@ -7353,11 +7384,11 @@ BEGIN
         v_issues_filter IS NULL
         OR (
           v_issues_filter IN ('all', 'any')
-          AND (enriched_row.needs_attention OR COALESCE(ARRAY_LENGTH(enriched_row.issue_codes, 1), 0) > 0)
+          AND (enriched_row.needs_attention OR COALESCE(ARRAY_LENGTH(enriched_row.business_issue_codes, 1), 0) > 0)
         )
         OR (
           v_issues_filter IN ('none', 'clear')
-          AND (NOT enriched_row.needs_attention AND COALESCE(ARRAY_LENGTH(enriched_row.issue_codes, 1), 0) = 0)
+          AND (NOT enriched_row.needs_attention AND COALESCE(ARRAY_LENGTH(enriched_row.business_issue_codes, 1), 0) = 0)
         )
         OR (
           v_issues_filter IN ('rate', 'rates', 'rate_missing')
@@ -7365,7 +7396,7 @@ BEGIN
             enriched_row.has_rate_issue
             OR EXISTS (
               SELECT 1
-              FROM UNNEST(COALESCE(enriched_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
               WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('RATE', 'RATE MISSING')
             )
           )
@@ -7376,7 +7407,7 @@ BEGIN
             enriched_row.has_pay_channel_issue
             OR EXISTS (
               SELECT 1
-              FROM UNNEST(COALESCE(enriched_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
               WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('PAY CHANNEL', 'PAY CHANNEL MISSING')
             )
           )
@@ -7388,7 +7419,7 @@ BEGIN
             OR UPPER(COALESCE(enriched_row.tools_stage, '')) = 'AWAITING_HR_VALIDATION'
             OR EXISTS (
               SELECT 1
-              FROM UNNEST(COALESCE(enriched_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
               WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HR VALIDATION', 'AWAITING HR VALIDATION')
             )
             OR (
@@ -7401,7 +7432,7 @@ BEGIN
           v_issues_filter IN ('hr_hours_mismatch', 'hours_mismatch_hr')
           AND EXISTS (
             SELECT 1
-            FROM UNNEST(COALESCE(enriched_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
             WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HOURS MISMATCH HR', 'HOURS MISMATCH (HEALTHROSTER)')
           )
         )
@@ -7409,7 +7440,7 @@ BEGIN
           v_issues_filter = 'hr_hours_missing'
           AND EXISTS (
             SELECT 1
-            FROM UNNEST(COALESCE(enriched_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
             WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'HR HOURS MISSING'
           )
         )
@@ -7417,7 +7448,7 @@ BEGIN
           v_issues_filter = 'duplicate_contracts'
           AND EXISTS (
             SELECT 1
-            FROM UNNEST(COALESCE(enriched_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
             WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'DUPLICATE CONTRACTS'
           )
         )
@@ -7425,7 +7456,7 @@ BEGIN
           v_issues_filter IN ('timesheet_evidence', 'expenses_evidence', 'mileage_evidence', 'reference_missing', 'validation', 'authorisation', 'on_hold', 'refs_pdf_invalid')
           AND EXISTS (
             SELECT 1
-            FROM UNNEST(COALESCE(enriched_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
             WHERE
               (v_issues_filter = 'timesheet_evidence' AND UPPER(COALESCE(issue_value.issue_code, '')) = 'TIMESHEET EVIDENCE MISSING')
               OR (v_issues_filter = 'expenses_evidence' AND UPPER(COALESCE(issue_value.issue_code, '')) = 'EXPENSES EVIDENCE MISSING')
@@ -7454,7 +7485,7 @@ BEGIN
         )
         OR EXISTS (
           SELECT 1
-          FROM UNNEST(COALESCE(enriched_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+          FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
           WHERE LOWER(issue_value.issue_code) = v_issues_filter
         )
       )
