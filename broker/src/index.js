@@ -27448,6 +27448,522 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     }
   };
 
+  const bankCsvStaleRetryMessage = 'The Bank CSV file is no longer current because PAYE/payment values changed while the payment was being prepared. Nothing was submitted to the bank. Download the latest Bank CSV file and run CSV settlement again.';
+  const bankCsvStaleCodes = new Set([
+    'BANK_CSV_STALE',
+    'BANK_CSV_REQUIRED',
+    'BANK_CSV_NOT_CURRENT',
+    'CSV_REGENERATION_REQUIRED',
+    'BANK_CSV_REGENERATION_REQUIRED',
+    'PAYE_NET_STATE_CHANGED',
+    'BANK_PAYMENT_PROJECTION_CHANGED',
+    'BANK_CSV_SCOPE_MISMATCH',
+    'BANK_CSV_ROW_COUNT_CHANGED',
+    'BANK_CSV_TOTAL_CHANGED'
+  ]);
+  const normaliseFailureCode = (value) => upper(value).replace(/[^A-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  const collectFailureSignals = (value) => {
+    const codes = new Set();
+    const texts = [];
+    const objects = [];
+    const seen = new WeakSet();
+    const codeKeys = new Set(['code', 'error_code', 'errorCode', 'business_code', 'businessCode', 'review_reason_code', 'reviewReasonCode', 'blocker_code', 'blockerCode']);
+    const scan = (candidate, depth = 0) => {
+      if (candidate == null || depth > 8) return;
+      if (typeof candidate === 'string') {
+        const text = trimStr(candidate);
+        if (!text) return;
+        texts.push(text.slice(0, 4000));
+        const upperText = upper(text);
+        for (const code of [...bankCsvStaleCodes, 'CSV_SETTLEMENT_PROOF_INVALID', 'LOCAL_MANUAL_SETTLEMENT_PROJECTION_PROOF_INVALID', 'LOCAL_MANUAL_SETTLEMENT_PROVIDER_BOUNDARY_EVIDENCE']) {
+          if (upperText.includes(code)) codes.add(code);
+        }
+        if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+          try { scan(JSON.parse(text), depth + 1); } catch {}
+        }
+        return;
+      }
+      if (typeof candidate !== 'object') return;
+      if (seen.has(candidate)) return;
+      seen.add(candidate);
+      if (Array.isArray(candidate)) {
+        for (const item of candidate.slice(0, 100)) scan(item, depth + 1);
+        return;
+      }
+      objects.push(candidate);
+      for (const [key, nested] of Object.entries(candidate)) {
+        if (codeKeys.has(key)) {
+          const code = normaliseFailureCode(nested);
+          if (code) codes.add(code);
+        }
+        if (['message', 'error', 'detail', 'details', 'hint', 'reason', 'status_text', 'statusText'].includes(key) && typeof nested === 'string') {
+          texts.push(trimStr(nested).slice(0, 4000));
+        }
+        scan(nested, depth + 1);
+      }
+    };
+    scan(value);
+    return { codes, texts, objects };
+  };
+  const firstSignalBoolean = (objects, ...keys) => {
+    let sawFalse = false;
+    for (const objectValue of objects) {
+      if (!isPlainObject(objectValue)) continue;
+      for (const key of keys) {
+        if (!Object.prototype.hasOwnProperty.call(objectValue, key)) continue;
+        const value = objectValue[key];
+        if (value === true) return true;
+        if (value === false) { sawFalse = true; continue; }
+        const text = trimStr(value).toLowerCase();
+        if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+        if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) sawFalse = true;
+      }
+    }
+    return sawFalse ? false : null;
+  };
+  const maxSignalNumber = (objects, ...keys) => {
+    let max = 0;
+    for (const objectValue of objects) {
+      if (!isPlainObject(objectValue)) continue;
+      for (const key of keys) {
+        const number = Number(objectValue[key]);
+        if (Number.isFinite(number)) max = Math.max(max, number);
+      }
+    }
+    return max;
+  };
+  const classifyStaleBankCsvFailure = (failureValue) => {
+    if (canonicalExecutionMode !== 'CSV_SETTLEMENT') return { is_stale_bank_csv: false, reason: 'NOT_CSV_SETTLEMENT' };
+    const signals = collectFailureSignals(failureValue);
+    const objects = [inputJson, progressJson, ...signals.objects].filter((value) => isPlainObject(value));
+    const providerSubmissionRequired = firstSignalBoolean(objects, 'provider_submission_required', 'providerSubmissionRequired') === true;
+    const providerSubmissionAttempted = firstSignalBoolean(objects, 'provider_submission_attempted', 'providerSubmissionAttempted', 'provider_called', 'providerCalled') === true;
+    const submittedToBank = firstSignalBoolean(objects, 'submitted_to_bank', 'submittedToBank', 'provider_request_sent', 'providerRequestSent') === true;
+    const providerBoundaryEvidenceCount = maxSignalNumber(objects, 'provider_boundary_evidence_count', 'providerBoundaryEvidenceCount', 'provider_scope_evidence_count', 'providerScopeEvidenceCount', 'provider_attempt_row_count', 'providerAttemptRowCount', 'provider_event_count', 'providerEventCount');
+    if (providerSubmissionRequired || providerSubmissionAttempted || submittedToBank || providerBoundaryEvidenceCount > 0) {
+      return {
+        is_stale_bank_csv: false,
+        reason: 'PROVIDER_OR_BANK_EVIDENCE_PRESENT_IN_FAILURE_PAYLOAD',
+        provider_submission_required: providerSubmissionRequired,
+        provider_submission_attempted: providerSubmissionAttempted,
+        submitted_to_bank: submittedToBank,
+        provider_boundary_evidence_count: providerBoundaryEvidenceCount,
+        codes: Array.from(signals.codes)
+      };
+    }
+
+    const explicitStaleCode = Array.from(signals.codes).find((code) => bankCsvStaleCodes.has(code)) || '';
+    const hasGenericCsvProofInvalid = signals.codes.has('CSV_SETTLEMENT_PROOF_INVALID');
+    const text = signals.texts.join(' | ').toUpperCase();
+    const textIndicatesCurrentness = /(CSV[^|]{0,120}(STALE|NOT CURRENT|REGENERAT|OUT OF DATE)|PAYE(?: NET| PAYMENT)?[^|]{0,100}(CHANGED|MISMATCH)|(?:BANK )?PAYMENT PROJECTION[^|]{0,100}(CHANGED|MISMATCH)|(?:PAYE|BANK PAYMENT PROJECTION|CSV)[^|]{0,80}HASH[^|]{0,80}MISMATCH)/.test(text);
+    const blockerMismatch = signals.objects.some((objectValue) => {
+      if (!isPlainObject(objectValue)) return false;
+      const requestedScope = upper(objectValue.requested_scope || objectValue.pay_channel_scope || objectValue.payChannelScope || payChannelScope);
+      const storedScope = upper(objectValue.stored_csv_scope || objectValue.storedCsvScope);
+      const operationScope = upper(objectValue.operation_csv_scope || objectValue.operationCsvScope);
+      const storedRows = Number(objectValue.stored_csv_row_count ?? objectValue.storedCsvRowCount);
+      const operationRows = Number(objectValue.operation_csv_row_count ?? objectValue.operationCsvRowCount);
+      const expectedRows = Number(objectValue.expected_positive_row_count ?? objectValue.expectedPositiveRowCount);
+      const storedTotal = Number(objectValue.stored_csv_total_amount ?? objectValue.storedCsvTotalAmount);
+      const operationTotal = Number(objectValue.operation_csv_total_amount ?? objectValue.operationCsvTotalAmount);
+      const expectedTotal = Number(objectValue.expected_positive_total_amount ?? objectValue.expectedPositiveTotalAmount);
+      if (requestedScope && storedScope && requestedScope !== storedScope) return true;
+      if (requestedScope && operationScope && requestedScope !== operationScope) return true;
+      if (Number.isFinite(expectedRows) && Number.isFinite(storedRows) && Math.trunc(expectedRows) !== Math.trunc(storedRows)) return true;
+      if (Number.isFinite(expectedRows) && Number.isFinite(operationRows) && Math.trunc(expectedRows) !== Math.trunc(operationRows)) return true;
+      if (Number.isFinite(expectedTotal) && Number.isFinite(storedTotal) && Number(expectedTotal.toFixed(2)) !== Number(storedTotal.toFixed(2))) return true;
+      if (Number.isFinite(expectedTotal) && Number.isFinite(operationTotal) && Number(expectedTotal.toFixed(2)) !== Number(operationTotal.toFixed(2))) return true;
+      return false;
+    });
+    const csvProofInvalidBlockerWithConfirmedUserEvidence = signals.objects.some((objectValue) => {
+      if (!isPlainObject(objectValue)) return false;
+      const blockerCode = normaliseFailureCode(objectValue.code || objectValue.error_code || objectValue.blocker_code || objectValue.blockerCode);
+      if (blockerCode !== 'CSV_SETTLEMENT_PROOF_INVALID') return false;
+      const uploaded = firstSignalBoolean([objectValue], 'csv_uploaded_confirmed', 'csvUploadedConfirmed') === true;
+      const manualMode = upper(objectValue.manual_confirmation_mode || objectValue.manualConfirmationMode || inputJson.manual_confirmation_mode || inputJson.manualConfirmationMode);
+      const confirmRefPresent = firstSignalBoolean([objectValue], 'csv_bank_confirm_ref_present', 'csvBankConfirmRefPresent') === true
+        || !!trimStr(objectValue.csv_bank_confirm_ref || objectValue.csvBankConfirmRef || inputJson.csv_bank_confirm_ref || inputJson.csvBankConfirmRef);
+      if (uploaded !== true) return false;
+      if (manualMode === 'ZERO_ROW_REVIEW_NO_BANK_PAYMENT') return true;
+      return manualMode === 'BANK_UPLOAD_CONFIRMED' && confirmRefPresent === true;
+    });
+    const localManualProjectionProofInvalidForCsv = signals.codes.has('LOCAL_MANUAL_SETTLEMENT_PROJECTION_PROOF_INVALID');
+    const durableInputHasValidCsvUserEvidence = inputJson.bank_csv_generated === true
+      && inputJson.bank_csv_current === true
+      && inputJson.csv_uploaded_confirmed === true
+      && (
+        upper(inputJson.manual_confirmation_mode || inputJson.manualConfirmationMode) === 'ZERO_ROW_REVIEW_NO_BANK_PAYMENT'
+        || (
+          upper(inputJson.manual_confirmation_mode || inputJson.manualConfirmationMode) === 'BANK_UPLOAD_CONFIRMED'
+          && !!trimStr(inputJson.csv_bank_confirm_ref || inputJson.csvBankConfirmRef)
+        )
+      );
+    const csvProofExplicitlyInvalid = firstSignalBoolean(signals.objects, 'csv_proof_valid', 'csvProofValid', 'mode_specific_proof_valid', 'modeSpecificProofValid') === false;
+    const stale = !!explicitStaleCode
+      || textIndicatesCurrentness
+      || (hasGenericCsvProofInvalid && durableInputHasValidCsvUserEvidence && (blockerMismatch || csvProofExplicitlyInvalid || csvProofInvalidBlockerWithConfirmedUserEvidence))
+      || (localManualProjectionProofInvalidForCsv && durableInputHasValidCsvUserEvidence);
+
+    const staleReason = explicitStaleCode
+      || (blockerMismatch ? 'CSV_PROOF_SCOPE_ROW_OR_TOTAL_MISMATCH' : '')
+      || (csvProofExplicitlyInvalid ? 'CSV_PROOF_CURRENTNESS_INVALID' : '')
+      || (csvProofInvalidBlockerWithConfirmedUserEvidence ? 'CSV_PROOF_INVALID_WITH_CONFIRMED_USER_EVIDENCE' : '')
+      || (localManualProjectionProofInvalidForCsv ? 'LOCAL_MANUAL_PAYMENT_PROJECTION_CHANGED' : '')
+      || (textIndicatesCurrentness ? 'CSV_TEXT_CURRENTNESS_SIGNAL' : '')
+      || 'CSV_PROOF_CURRENTNESS_INVALID';
+
+    return {
+      is_stale_bank_csv: stale,
+      code: explicitStaleCode || (stale ? 'BANK_CSV_STALE' : ''),
+      reason: stale ? staleReason : 'NO_STALE_CSV_CURRENTNESS_SIGNAL',
+      codes: Array.from(signals.codes),
+      blocker_mismatch: blockerMismatch,
+      csv_proof_explicitly_invalid: csvProofExplicitlyInvalid,
+      csv_proof_invalid_blocker_with_confirmed_user_evidence: csvProofInvalidBlockerWithConfirmedUserEvidence,
+      local_manual_projection_proof_invalid_for_csv: localManualProjectionProofInvalidForCsv,
+      durable_input_has_valid_csv_user_evidence: durableInputHasValidCsvUserEvidence,
+      provider_submission_required: false,
+      provider_submission_attempted: false,
+      submitted_to_bank: false,
+      provider_boundary_evidence_count: 0
+    };
+  };
+  const providerEvidencePreventsCsvRetryReset = (evidenceValue) => {
+    const evidence = isPlainObject(evidenceValue) ? evidenceValue : {};
+    if (evidence.evidence_read_ok !== true) return true;
+    return evidence.provider_call_started === true
+      || evidence.provider_dispatch_evidence_present === true
+      || evidence.provider_submit_attempt_evidence_present === true
+      || numberValue(evidence.provider_submit_attempt_count, 0) > 0
+      || numberValue(evidence.provider_attempt_row_count, 0) > 0
+      || numberValue(evidence.provider_event_count, 0) > 0
+      || numberValue(evidence.provider_event_transaction_count, 0) > 0
+      || numberValue(evidence.provider_event_request_count, 0) > 0
+      || numberValue(evidence.provider_status_evidence_count, 0) > 0
+      || evidence.rail_tx_id_present === true
+      || evidence.rail_state_present === true;
+  };
+  const deriveCsvFallbackProviderFlags = (evidenceValue) => {
+    const evidence = isPlainObject(evidenceValue) ? evidenceValue : {};
+    const providerSubmissionAttempted = evidence.provider_call_started === true
+      || evidence.provider_submit_attempt_evidence_present === true
+      || numberValue(evidence.provider_submit_attempt_count, 0) > 0
+      || numberValue(evidence.provider_attempt_row_count, 0) > 0;
+    const submittedToBank = evidence.provider_request_sent_present === true
+      || evidence.provider_response_present === true
+      || evidence.provider_transaction_present === true
+      || evidence.rail_tx_id_present === true;
+    const providerBoundaryEvidenceCount = [
+      'provider_submit_attempt_count',
+      'provider_attempt_row_count',
+      'provider_event_count',
+      'provider_event_transaction_count',
+      'provider_event_request_count',
+      'provider_status_evidence_count'
+    ].reduce((total, key) => total + numberValue(evidence[key], 0), 0)
+      + (evidence.provider_request_sending_present === true ? 1 : 0)
+      + (evidence.provider_request_sent_present === true ? 1 : 0)
+      + (evidence.provider_response_present === true ? 1 : 0)
+      + (evidence.provider_transaction_present === true ? 1 : 0)
+      + (evidence.rail_tx_id_present === true ? 1 : 0)
+      + (evidence.rail_state_present === true ? 1 : 0);
+    return {
+      provider_submission_attempted: providerSubmissionAttempted,
+      submitted_to_bank: submittedToBank,
+      provider_boundary_evidence_count: Math.max(0, providerBoundaryEvidenceCount),
+      provider_ambiguity: providerSubmissionAttempted || submittedToBank || providerBoundaryEvidenceCount > 0
+    };
+  };
+  const patchCsvFallbackOperationState = async (patchBody, expectedStatus, expectedRequiresUserAction) => {
+    const expectedStatusUpper = upper(expectedStatus);
+    let lastError = null;
+    let verifiedRow = {};
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const patchResponse = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(operationId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify(patchBody)
+        });
+        const responseRows = patchResponse && Array.isArray(patchResponse.rows) ? patchResponse.rows : [];
+        verifiedRow = isPlainObject(responseRows[0]) ? responseRows[0] : await fetchOperationRawById(operationId);
+        if (upper(verifiedRow.status) === expectedStatusUpper
+          && (typeof expectedRequiresUserAction !== 'boolean' || verifiedRow.requires_user_action === expectedRequiresUserAction)) {
+          return { ok: true, attempt_count: attempt, operation: verifiedRow, error: null };
+        }
+        lastError = `Operation state verification failed after PATCH attempt ${attempt}.`;
+      } catch (patchError) {
+        lastError = compactErrorMessage(patchError, 500) || `Operation state PATCH attempt ${attempt} failed.`;
+      }
+      verifiedRow = await fetchOperationRawById(operationId);
+      if (upper(verifiedRow.status) === expectedStatusUpper
+        && (typeof expectedRequiresUserAction !== 'boolean' || verifiedRow.requires_user_action === expectedRequiresUserAction)) {
+        return { ok: true, attempt_count: attempt, operation: verifiedRow, error: null };
+      }
+    }
+    return { ok: false, attempt_count: 3, operation: verifiedRow, error: lastError || 'Operation state could not be persisted.' };
+  };
+  const persistPostCleanupCsvReviewState = async (code, message, assessment, cleanupSummary, providerEvidence, reason) => {
+    const latestBeforePatch = await fetchOperationRawById(operationId);
+    const nowUtc = new Date().toISOString();
+    const providerFlags = deriveCsvFallbackProviderFlags(providerEvidence);
+    const reviewState = {
+      code,
+      error_code: code,
+      message,
+      status_text: message,
+      review_required: true,
+      requires_user_action: true,
+      user_correctable: false,
+      retryable: false,
+      csv_regeneration_required: true,
+      bank_csv_stale: true,
+      safe_to_retry: false,
+      operation_reset_for_retry: false,
+      provider_submission_required: false,
+      provider_submission_attempted: providerFlags.provider_submission_attempted,
+      submitted_to_bank: providerFlags.submitted_to_bank,
+      provider_boundary_evidence_count: providerFlags.provider_boundary_evidence_count,
+      provider_ambiguity: providerFlags.provider_ambiguity,
+      next_required_action: 'REVIEW_PAYMENT_STATUS',
+      csv_stale_assessment: assessment,
+      cleanup_summary: cleanupSummary,
+      provider_evidence_state: providerEvidence,
+      cleanup_retry_blocked_reason: reason || null,
+      updated_at_utc: nowUtc
+    };
+    const reviewPatch = {
+      status: 'REVIEW_REQUIRED',
+      phase: trimStr(latestBeforePatch.phase) || currentPhase,
+      runner_state: 'WAITING_USER_REVIEW',
+      requires_user_action: true,
+      resume_reason: code,
+      run_after_utc: null,
+      progress_json: Object.assign({}, safeObject(latestBeforePatch.progress_json), reviewState),
+      result_json: Object.assign({}, safeObject(latestBeforePatch.result_json), reviewState),
+      error_json: Object.assign({}, safeObject(latestBeforePatch.error_json), reviewState),
+      lease_owner: null,
+      lease_expires_at_utc: null,
+      heartbeat_at_utc: null,
+      locked_by: null,
+      lock_expires_at_utc: null,
+      updated_at_utc: nowUtc
+    };
+    const persistence = await patchCsvFallbackOperationState(reviewPatch, 'REVIEW_REQUIRED', true);
+    const latest = isPlainObject(persistence.operation) && Object.keys(persistence.operation).length
+      ? persistence.operation
+      : await fetchOperationRawById(operationId);
+    return Object.assign({}, publicPayload(latest), reviewState, {
+      ok: false,
+      status: 'REVIEW_REQUIRED',
+      phase: trimStr(latest.phase) || currentPhase,
+      runner_state: 'WAITING_USER_REVIEW',
+      terminal: true,
+      backend_execution_continues: false,
+      bounded_advance: true,
+      advanced_phase: currentPhase,
+      next_phase: trimStr(latest.phase) || currentPhase,
+      already_released_after_advance: true,
+      review_state_persisted: persistence.ok === true,
+      review_state_persist_attempt_count: persistence.attempt_count,
+      review_state_persist_error: persistence.ok === true ? null : persistence.error
+    });
+  };
+  const handleStaleBankCsvFailure = async (failureValue, detectionSource) => {
+    const assessment = classifyStaleBankCsvFailure(failureValue);
+    if (assessment.is_stale_bank_csv !== true) return null;
+
+    let providerEvidence;
+    try {
+      providerEvidence = await readProviderDispatchEvidence({ reason: `BANK_CSV_STALE_${upper(detectionSource || currentPhase)}` });
+    } catch (providerEvidenceError) {
+      providerEvidence = {
+        evidence_read_ok: false,
+        provider_call_started: true,
+        evidence_read_error_count: 1,
+        evidence_read_errors: [{ key: 'provider_dispatch_evidence', message: compactErrorMessage(providerEvidenceError, 240) }],
+        diagnostic_source: 'advanceBankingPayExecuteOperation'
+      };
+    }
+
+    if (providerEvidencePreventsCsvRetryReset(providerEvidence)) {
+      return reviewRequired(
+        currentPhase,
+        'BANK_CSV_STALE_PROVIDER_EVIDENCE_REVIEW_REQUIRED',
+        'The Bank CSV proof is no longer current, but provider or bank-dispatch evidence exists. Review Current Payment Status before any retry.',
+        { csv_stale_assessment: assessment, provider_evidence_state: providerEvidence, detection_source: detectionSource || null }
+      );
+    }
+
+    const cleanupPasses = [];
+    const cleanupMaxPasses = limitFromConfig('csv_stale_cleanup_max_passes', 25, 1, 100);
+    let cleanupSummary = null;
+    let cleanupError = null;
+    for (let pass = 1; pass <= cleanupMaxPasses; pass += 1) {
+      try {
+        cleanupSummary = await rpc('pay_execute_operation_cleanup_failed_local_artifacts', {
+          p_operation_id: operationId,
+          p_actor_user_id: actorUserId,
+          p_failure_phase: currentPhase,
+          p_failure_error_json: {
+            code: 'BANK_CSV_STALE',
+            error_code: 'BANK_CSV_STALE',
+            message: bankCsvStaleRetryMessage,
+            detection_source: detectionSource || null,
+            csv_stale_assessment: assessment
+          },
+          p_dry_run: false
+        }, 'pay_execute_operation_cleanup_failed_local_artifacts');
+      } catch (error) {
+        cleanupError = compactErrorMessage(error, 500) || 'The bounded local cleanup RPC failed.';
+        break;
+      }
+      cleanupPasses.push(cleanupSummary);
+      if (cleanupSummary.review_required === true || cleanupSummary.safe_to_retry !== true || cleanupSummary.retry_blocked === true) break;
+      const considered = numberValue(cleanupSummary.scope_rows_considered, 0);
+      const deleted = numberValue(cleanupSummary.scope_rows_deleted, 0);
+      if (considered <= deleted || deleted <= 0) break;
+    }
+
+    if (cleanupError || !isPlainObject(cleanupSummary) || cleanupSummary.ok === false || cleanupSummary.review_required === true || cleanupSummary.safe_to_retry !== true || cleanupSummary.retry_blocked === true) {
+      return persistPostCleanupCsvReviewState(
+        cleanupError ? 'BANK_CSV_STALE_CLEANUP_FAILED' : 'BANK_CSV_STALE_CLEANUP_REVIEW_REQUIRED',
+        cleanupError
+          ? 'The Bank CSV proof is no longer current, but CloudTMS could not complete the bounded local cleanup safely. Review Current Payment Status before retrying.'
+          : 'The Bank CSV proof is no longer current, but CloudTMS could not prove that all local execution artefacts were safe to remove. Review Current Payment Status before retrying.',
+        assessment,
+        { final: cleanupSummary, passes: cleanupPasses, error: cleanupError },
+        providerEvidence,
+        cleanupError ? 'LOCAL_CLEANUP_RPC_FAILED' : trimStr(cleanupSummary && cleanupSummary.retry_blocked_reason) || 'LOCAL_CLEANUP_NOT_SAFE'
+      );
+    }
+
+    const initialCleanupPass = isPlainObject(cleanupPasses[0]) ? cleanupPasses[0] : {};
+    const initialScopeRows = numberValue(initialCleanupPass.scope_rows_considered, 0);
+    const initialTransferRows = numberValue(initialCleanupPass.transfer_rows_considered, 0);
+    const totalScopeRowsDeleted = cleanupPasses.reduce((total, pass) => total + numberValue(pass && pass.scope_rows_deleted, 0), 0);
+    const totalTransferRowsDeleted = cleanupPasses.reduce((total, pass) => total + numberValue(pass && pass.transfer_rows_deleted, 0), 0);
+    const cleanupCompletion = {
+      initial_scope_rows: initialScopeRows,
+      total_scope_rows_deleted: totalScopeRowsDeleted,
+      initial_transfer_rows: initialTransferRows,
+      total_transfer_rows_deleted: totalTransferRowsDeleted,
+      scope_cleanup_complete: totalScopeRowsDeleted >= initialScopeRows,
+      transfer_cleanup_complete: totalTransferRowsDeleted >= initialTransferRows,
+      cleanup_pass_count: cleanupPasses.length
+    };
+
+    let postCleanupEvidence;
+    try {
+      postCleanupEvidence = await readProviderDispatchEvidence({ reason: 'BANK_CSV_STALE_POST_CLEANUP_VERIFY' });
+    } catch (postCleanupEvidenceError) {
+      postCleanupEvidence = {
+        evidence_read_ok: false,
+        provider_call_started: true,
+        evidence_read_error_count: 1,
+        evidence_read_errors: [{ key: 'post_cleanup_provider_dispatch_evidence', message: compactErrorMessage(postCleanupEvidenceError, 240) }]
+      };
+    }
+    const localCleanupNotProven = cleanupCompletion.scope_cleanup_complete !== true
+      || cleanupCompletion.transfer_cleanup_complete !== true
+      || numberValue(postCleanupEvidence.transfer_scope_count, 0) > 0;
+    if (providerEvidencePreventsCsvRetryReset(postCleanupEvidence) || localCleanupNotProven) {
+      const retryBlockedReason = numberValue(postCleanupEvidence.transfer_scope_count, 0) > 0
+        ? 'LOCAL_TRANSFER_SCOPE_REMAINS'
+        : (cleanupCompletion.scope_cleanup_complete !== true
+          ? 'LOCAL_TRANSFER_SCOPE_CLEANUP_INCOMPLETE'
+          : (cleanupCompletion.transfer_cleanup_complete !== true
+            ? 'LOCAL_TRANSFER_ROW_CLEANUP_INCOMPLETE'
+            : 'PROVIDER_EVIDENCE_AFTER_CLEANUP'));
+      return persistPostCleanupCsvReviewState(
+        'BANK_CSV_STALE_CLEANUP_NOT_PROVEN_SAFE',
+        'The Bank CSV proof is no longer current, but CloudTMS could not prove that the local operation was fully reset. Review Current Payment Status before retrying.',
+        assessment,
+        { final: cleanupSummary, passes: cleanupPasses, completion: cleanupCompletion },
+        postCleanupEvidence,
+        retryBlockedReason
+      );
+    }
+
+    const latestBeforePatch = await fetchOperationRawById(operationId);
+    const nowUtc = new Date().toISOString();
+    const cleanupDiagnostic = { final: cleanupSummary, passes: cleanupPasses, completion: cleanupCompletion };
+    const staleState = {
+      code: 'BANK_CSV_STALE',
+      error_code: 'BANK_CSV_STALE',
+      message: bankCsvStaleRetryMessage,
+      status_text: bankCsvStaleRetryMessage,
+      execution_mode: 'CSV_SETTLEMENT',
+      user_correctable: true,
+      retryable: true,
+      csv_regeneration_required: true,
+      bank_csv_stale: true,
+      operation_reset_for_retry: true,
+      safe_to_retry: true,
+      review_required: false,
+      requires_user_action: false,
+      provider_submission_required: false,
+      provider_submission_attempted: false,
+      submitted_to_bank: false,
+      provider_boundary_evidence_count: 0,
+      provider_ambiguity: false,
+      local_settlement_evidence_created: false,
+      backend_execution_continues: false,
+      next_required_action: 'DOWNLOAD_LATEST_BANK_CSV',
+      detection_source: detectionSource || null,
+      csv_stale_assessment: assessment,
+      cleanup_summary: cleanupDiagnostic,
+      provider_evidence_state: postCleanupEvidence,
+      operation_reset_at_utc: nowUtc
+    };
+    const stalePatch = {
+      status: 'FAILED',
+      phase: trimStr(latestBeforePatch.phase) || currentPhase,
+      runner_state: 'FAILED',
+      requires_user_action: false,
+      resume_reason: 'BANK_CSV_STALE_RETRY_REQUIRED',
+      run_after_utc: null,
+      progress_json: Object.assign({}, safeObject(latestBeforePatch.progress_json), staleState),
+      result_json: Object.assign({}, safeObject(latestBeforePatch.result_json), staleState),
+      error_json: Object.assign({}, safeObject(latestBeforePatch.error_json), staleState),
+      failed_at_utc: trimStr(latestBeforePatch.failed_at_utc) || nowUtc,
+      lease_owner: null,
+      lease_expires_at_utc: null,
+      heartbeat_at_utc: null,
+      locked_by: null,
+      lock_expires_at_utc: null,
+      updated_at_utc: nowUtc
+    };
+    const persistence = await patchCsvFallbackOperationState(stalePatch, 'FAILED', false);
+
+    await touchPaymentStateChangedBestEffort('PAYMENT_EXECUTE_BANK_CSV_STALE_RESET_FOR_RETRY', ['overview', 'payment_status', 'alerts'], {
+      operation_id: operationId,
+      execution_mode: 'CSV_SETTLEMENT',
+      safe_to_retry: true,
+      next_required_action: 'DOWNLOAD_LATEST_BANK_CSV'
+    });
+
+    const latest = isPlainObject(persistence.operation) && Object.keys(persistence.operation).length
+      ? persistence.operation
+      : await fetchOperationRawById(operationId);
+    return Object.assign({}, publicPayload(latest), staleState, {
+      ok: false,
+      status: 'FAILED',
+      phase: trimStr(latest.phase) || currentPhase,
+      runner_state: 'FAILED',
+      terminal: true,
+      operation_created: true,
+      execute_payment_operation_started: true,
+      progress_persisted: persistence.ok === true,
+      progress_persist_attempt_count: persistence.attempt_count,
+      progress_persist_error: persistence.ok === true ? null : persistence.error,
+      bounded_advance: true,
+      advanced_phase: currentPhase,
+      next_phase: trimStr(latest.phase) || currentPhase,
+      already_released_after_advance: true
+    });
+  };
+
 
   const settlementOperationBoundToCurrentExecution = (operationRowValue) => {
     const settlementOperation = isPlainObject(operationRowValue) ? operationRowValue : {};
@@ -29746,7 +30262,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       const prepareBlockerCount = numberValue(prepared.blocker_count ?? prepared.blockerCount, 0);
       const prepareReady = prepared.ready === true || prepared.ready_flag === true || prepared.readyFlag === true;
       const prepareNextRequiredPhase = upper(prepared.next_required_phase || prepared.nextRequiredPhase || '');
-      if (prepared.ok === false || prepared.hard_blocker === true) return reviewRequired(currentPhase, prepared.code || 'PAY_BATCH_PREPARE_FAILED', prepared.message || 'Payment batch prepare failed.', { pay_batch_prepare: prepared });
+      if (prepared.ok === false || prepared.hard_blocker === true) {
+        const staleCsvResult = await handleStaleBankCsvFailure(prepared, 'PAY_BATCH_PREPARE_HARD_BLOCKER');
+        if (staleCsvResult) return staleCsvResult;
+        return reviewRequired(currentPhase, prepared.code || 'PAY_BATCH_PREPARE_FAILED', prepared.message || 'Payment batch prepare failed.', { pay_batch_prepare: prepared });
+      }
       const prepareReturnedExecutionMode = rpcExecutionModeFrom(prepared);
       if (prepareReturnedExecutionMode !== canonicalExecutionMode) {
         return reviewRequired(
@@ -29766,6 +30286,8 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         );
       }
       if (prepareReady !== true || prepareBlockerCount > 0 || prepareNextRequiredPhase === 'RESOLVE_BLOCKERS') {
+        const staleCsvResult = await handleStaleBankCsvFailure(prepared, 'PAY_BATCH_PREPARE_NOT_READY');
+        if (staleCsvResult) return staleCsvResult;
         return reviewRequired(
           currentPhase,
           prepared.code || 'PAY_BATCH_PREPARE_NOT_READY',
@@ -29811,7 +30333,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
           next_required_phase: 'START_AUTHORISATION_PROOF'
         }, 0, 'STALE_AUTH_REQUEST_SAFE_CANCELLED_RETRY_AUTHORISATION');
       }
-      if (auth.ok === false || auth.hard_blocker === true) return reviewRequired(currentPhase, auth.code || 'PAY_BATCH_AUTH_START_FAILED', auth.message || 'Payment authorisation failed.', { pay_batch_auth_start: auth });
+      if (auth.ok === false || auth.hard_blocker === true) {
+        const staleCsvResult = await handleStaleBankCsvFailure(auth, 'PAY_BATCH_AUTH_START_BLOCKER');
+        if (staleCsvResult) return staleCsvResult;
+        return reviewRequired(currentPhase, auth.code || 'PAY_BATCH_AUTH_START_FAILED', auth.message || 'Payment authorisation failed.', { pay_batch_auth_start: auth });
+      }
       const authState = upper(auth.auth_state || auth.status || auth.state || '');
       const authNextRequiredPhase = upper(auth.next_required_phase || auth.nextRequiredPhase || '');
       if (auth.requires_user_action === true || ['WAITING_AUTHORISATION', 'WAIT_FOR_AUTHORISATION', 'AWAITING', 'PENDING_AUTHORISATION'].includes(authState) || authNextRequiredPhase === 'WAIT_FOR_AUTHORISATION') {
@@ -30749,6 +31275,9 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
 
     return reviewRequired(currentPhase, 'UNKNOWN_EXECUTE_PHASE', `Unknown payment execution phase: ${currentPhase}`, { phase: currentPhase });
   } catch (error) {
+    const staleCsvResult = await handleStaleBankCsvFailure(error, 'OPERATION_ADVANCE_EXCEPTION');
+    if (staleCsvResult) return staleCsvResult;
+
     const releaseFailure = isReleaseLeaseRpcError(error);
     const baseReleaseDiagnostic = buildReleaseRpcFailureDiagnostic({
       error,
@@ -30991,9 +31520,6 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     });
   }
 }
-
-
-
 
 
 
@@ -33578,7 +34104,6 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
 
 
 
-
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, ctx) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -33804,6 +34329,185 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
     };
   };
 
+  const csvStaleMessage = 'The Bank CSV file is no longer current because the PAYE/payment values have changed. Please download the latest Bank CSV file and then run CSV settlement again.';
+  const buildCsvRegenerationRequiredResponse = (code = 'BANK_CSV_STALE', diagnostic = {}) => fail(409, code, csvStaleMessage, {
+    user_correctable: true,
+    retryable: true,
+    operation_created: false,
+    execute_payment_operation_started: false,
+    execute_payment_operation_available: false,
+    submitted_to_bank: false,
+    provider_submission_attempted: false,
+    provider_submission_required: false,
+    local_settlement_evidence_created: false,
+    csv_regeneration_required: true,
+    bank_csv_stale: true,
+    safe_to_retry: true,
+    next_required_action: 'DOWNLOAD_LATEST_BANK_CSV',
+    pay_batch_id: id,
+    pay_channel_scope: requestedScope,
+    execution_mode: executionMode,
+    csv_proof: isPlainObject(diagnostic) ? diagnostic : {}
+  });
+  const readCurrentCsvExecutionProof = async () => {
+    const { rows: currentBatchRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(id)}&select=id,pay_date,authoritative_payment_date,bank_csv_export_json,freshness_result_hash,freshness_scope_hash&limit=1`,
+      false
+    );
+    const currentBatch = Array.isArray(currentBatchRows) && isPlainObject(currentBatchRows[0]) ? currentBatchRows[0] : null;
+    if (!currentBatch) return { ok: false, code: 'PAY_BATCH_NOT_FOUND', message: 'Payment batch not found.' };
+
+    const currentSummary = unwrapObjectRpc(await sbRpc(env, 'pay_batch_execution_summary_get', {
+      p_pay_batch_id: id,
+      p_actor_user_id: actorUserId,
+      p_mode: 'LIGHT'
+    }), 'pay_batch_execution_summary_get');
+    if (!currentSummary.pay_batch_id || currentSummary.ok === false) return { ok: false, code: 'PAY_BATCH_NOT_FOUND', message: 'Payment batch not found.' };
+
+    const currentSummaryPreflight = isPlainObject(currentSummary.paye_net_preflight) ? currentSummary.paye_net_preflight : {};
+    const currentGlobalMissingCount = nonNegativeInteger(currentSummaryPreflight.missing_explicit_paye_input_count);
+    const currentGlobalExplicitZeroCount = nonNegativeInteger(currentSummaryPreflight.explicit_zero_count);
+    const currentGlobalPositiveCount = nonNegativeInteger(currentSummary.global_positive_bank_payment_count ?? currentSummaryPreflight.positive_bank_payment_count);
+    const currentGlobalInvalidCount = nonNegativeInteger(currentSummary.global_invalid_payment_row_count ?? currentSummaryPreflight.invalid_payment_row_count);
+    const currentGlobalPositiveTotalRaw = Number(currentSummary.global_positive_bank_payment_total ?? currentSummaryPreflight.positive_total);
+    const currentGlobalPositiveTotal = Number.isFinite(currentGlobalPositiveTotalRaw) && currentGlobalPositiveTotalRaw >= 0 ? roundMoney(currentGlobalPositiveTotalRaw) : null;
+    const currentGlobalPayeHash = trimStr(currentSummary.current_paye_net_state_hash || currentSummary.global_paye_net_state_hash || currentSummary.paye_net_state_hash || currentSummaryPreflight.paye_net_state_hash);
+    const currentGlobalProjectionHash = trimStr(currentSummary.global_bank_payment_projection_hash || currentSummary.all_scope_bank_payment_projection_hash || currentSummaryPreflight.bank_payment_projection_hash);
+    const currentScopedProof = await loadScopedProjectionProof();
+    const currentScopedPayeHash = trimStr(currentScopedProof.scoped_paye_net_state_hash || currentScopedProof.paye_net_state_hash);
+    const currentScopedProjectionHash = trimStr(currentScopedProof.scoped_bank_payment_projection_hash || currentScopedProof.bank_payment_projection_hash);
+
+    const currentStoredCsv = isPlainObject(currentBatch.bank_csv_export_json) ? currentBatch.bank_csv_export_json : {};
+    const currentStoredCsvScope = upperTrim(currentStoredCsv.scope || currentStoredCsv.pay_channel_scope || currentStoredCsv.payChannelScope);
+    const currentStoredPayeHash = trimStr(currentStoredCsv.scoped_paye_net_state_hash || currentStoredCsv.current_scoped_paye_net_state_hash || currentStoredCsv.paye_net_state_hash || currentStoredCsv.current_paye_net_state_hash || currentStoredCsv.payeNetStateHash || currentStoredCsv.scopedPayeNetStateHash);
+    const currentStoredGlobalPayeHash = trimStr(currentStoredCsv.current_global_paye_net_state_hash || currentStoredCsv.global_paye_net_state_hash || currentStoredCsv.currentGlobalPayeNetStateHash || currentStoredCsv.globalPayeNetStateHash);
+    const currentStoredProjectionHash = trimStr(currentStoredCsv.scoped_bank_payment_projection_hash || currentStoredCsv.current_scoped_bank_payment_projection_hash || currentStoredCsv.bank_payment_projection_hash || currentStoredCsv.current_bank_payment_projection_hash || currentStoredCsv.bankPaymentProjectionHash || currentStoredCsv.scopedBankPaymentProjectionHash);
+    const currentStoredRowCount = nonNegativeInteger(currentStoredCsv.row_count ?? currentStoredCsv.rowCount);
+    const currentStoredTotalRaw = Number(currentStoredCsv.total_amount ?? currentStoredCsv.totalAmount ?? currentStoredCsv.total);
+    const currentStoredTotal = Number.isFinite(currentStoredTotalRaw) ? roundMoney(currentStoredTotalRaw) : null;
+    const currentStoredPositiveCount = nonNegativeInteger(currentStoredCsv.positive_bank_payment_count ?? currentStoredCsv.scoped_positive_bank_payment_count ?? currentStoredCsv.positiveBankPaymentCount);
+    const currentStoredGlobalPositiveCount = nonNegativeInteger(currentStoredCsv.global_positive_bank_payment_count ?? currentStoredCsv.globalPositiveBankPaymentCount);
+    const currentStoredZeroCount = nonNegativeInteger(currentStoredCsv.scoped_explicit_zero_count ?? currentStoredCsv.scopedExplicitZeroCount);
+    const currentStoredGlobalZeroCount = nonNegativeInteger(currentStoredCsv.explicit_zero_count ?? currentStoredCsv.global_explicit_zero_count ?? currentStoredCsv.globalExplicitZeroCount);
+    const currentStoredScopedMissingCount = nonNegativeInteger(currentStoredCsv.scoped_missing_explicit_paye_input_count ?? currentStoredCsv.scopedMissingExplicitPayeInputCount);
+    const currentStoredGlobalMissingCount = nonNegativeInteger(currentStoredCsv.missing_explicit_paye_input_count ?? currentStoredCsv.global_missing_explicit_paye_input_count ?? currentStoredCsv.globalMissingExplicitPayeInputCount);
+    const currentStoredScopedInvalidCount = nonNegativeInteger(currentStoredCsv.scoped_invalid_payment_row_count ?? currentStoredCsv.scopedInvalidPaymentRowCount);
+    const currentStoredGlobalInvalidCount = nonNegativeInteger(currentStoredCsv.global_invalid_payment_row_count ?? currentStoredCsv.globalInvalidPaymentRowCount);
+    const currentStoredNoBankRequired = truthy(currentStoredCsv.no_bank_payment_required ?? currentStoredCsv.noBankPaymentRequired);
+    const currentStoredZeroRow = truthy(currentStoredCsv.zero_row_export ?? currentStoredCsv.zeroRowExport);
+    const currentStoredHeaderOnly = truthy(currentStoredCsv.header_only_or_empty_body ?? currentStoredCsv.headerOnlyOrEmptyBody);
+
+    return {
+      ok: true,
+      batch: currentBatch,
+      stored_csv: currentStoredCsv,
+      stored_csv_scope: currentStoredCsvScope,
+      stored_csv_paye_net_state_hash: currentStoredPayeHash,
+      stored_csv_global_paye_net_state_hash: currentStoredGlobalPayeHash,
+      stored_csv_bank_payment_projection_hash: currentStoredProjectionHash,
+      stored_csv_row_count: currentStoredRowCount,
+      stored_csv_total_amount: currentStoredTotal,
+      stored_csv_positive_bank_payment_count: currentStoredPositiveCount,
+      stored_csv_global_positive_bank_payment_count: currentStoredGlobalPositiveCount,
+      stored_csv_scoped_explicit_zero_count: currentStoredZeroCount,
+      stored_csv_global_explicit_zero_count: currentStoredGlobalZeroCount,
+      stored_csv_scoped_missing_explicit_paye_input_count: currentStoredScopedMissingCount,
+      stored_csv_global_missing_explicit_paye_input_count: currentStoredGlobalMissingCount,
+      stored_csv_scoped_invalid_payment_row_count: currentStoredScopedInvalidCount,
+      stored_csv_global_invalid_payment_row_count: currentStoredGlobalInvalidCount,
+      stored_csv_no_bank_payment_required: currentStoredNoBankRequired,
+      stored_csv_zero_row_export: currentStoredZeroRow,
+      stored_csv_header_only_or_empty_body: currentStoredHeaderOnly,
+      current_global_missing_explicit_paye_input_count: currentGlobalMissingCount,
+      current_global_explicit_zero_count: currentGlobalExplicitZeroCount,
+      current_global_positive_bank_payment_count: currentGlobalPositiveCount,
+      current_global_positive_bank_payment_total: currentGlobalPositiveTotal,
+      current_global_invalid_payment_row_count: currentGlobalInvalidCount,
+      current_global_paye_net_state_hash: currentGlobalPayeHash,
+      current_global_bank_payment_projection_hash: currentGlobalProjectionHash,
+      current_scoped_missing_explicit_paye_input_count: nonNegativeInteger(currentScopedProof.scoped_missing_explicit_paye_input_count ?? currentScopedProof.missing_explicit_paye_input_count),
+      current_scoped_explicit_zero_count: nonNegativeInteger(currentScopedProof.scoped_explicit_zero_count ?? currentScopedProof.explicit_zero_count),
+      current_scoped_invalid_payment_row_count: nonNegativeInteger(currentScopedProof.scoped_invalid_payment_row_count),
+      current_scoped_positive_bank_payment_count: nonNegativeInteger(currentScopedProof.scoped_positive_bank_payment_count ?? currentScopedProof.positive_bank_payment_count),
+      current_scoped_positive_bank_payment_total: roundMoney(currentScopedProof.scoped_positive_bank_payment_total ?? currentScopedProof.positive_bank_payment_total),
+      current_scoped_paye_net_state_hash: currentScopedPayeHash,
+      current_scoped_bank_payment_projection_hash: currentScopedProjectionHash
+    };
+  };
+  const validateCurrentCsvSettlementProof = async (operationInputValue = {}) => {
+    const proof = await readCurrentCsvExecutionProof();
+    if (proof.ok !== true) return proof;
+    const storedCsvGenerated = Object.keys(proof.stored_csv || {}).length > 0;
+    const positiveCount = nonNegativeInteger(proof.current_scoped_positive_bank_payment_count);
+    const zeroCount = nonNegativeInteger(proof.current_scoped_explicit_zero_count);
+    const currentNoBankRoute = positiveCount === 0 && Number(zeroCount || 0) > 0;
+    const expectedManualConfirmationMode = currentNoBankRoute ? 'ZERO_ROW_REVIEW_NO_BANK_PAYMENT' : 'BANK_UPLOAD_CONFIRMED';
+    const expectedPaymentDate = parseDate(operationInputValue.payment_date || operationInputValue.paymentDate);
+    const mismatches = [];
+    const mismatch = (code, actual, expected) => mismatches.push({ code, actual: actual ?? null, expected: expected ?? null });
+
+    if (!storedCsvGenerated) mismatch('BANK_CSV_REQUIRED', false, true);
+    if (proof.stored_csv_scope !== requestedScope) mismatch('BANK_CSV_SCOPE_MISMATCH', proof.stored_csv_scope, requestedScope);
+    if (!proof.current_scoped_paye_net_state_hash || proof.stored_csv_paye_net_state_hash !== proof.current_scoped_paye_net_state_hash) mismatch('PAYE_NET_STATE_CHANGED', proof.stored_csv_paye_net_state_hash, proof.current_scoped_paye_net_state_hash);
+    if (proof.stored_csv_global_paye_net_state_hash && proof.stored_csv_global_paye_net_state_hash !== proof.current_global_paye_net_state_hash) mismatch('GLOBAL_PAYE_NET_STATE_CHANGED', proof.stored_csv_global_paye_net_state_hash, proof.current_global_paye_net_state_hash);
+    if (!proof.current_scoped_bank_payment_projection_hash || proof.stored_csv_bank_payment_projection_hash !== proof.current_scoped_bank_payment_projection_hash) mismatch('BANK_PAYMENT_PROJECTION_CHANGED', proof.stored_csv_bank_payment_projection_hash, proof.current_scoped_bank_payment_projection_hash);
+    if (proof.stored_csv_row_count !== positiveCount) mismatch('BANK_CSV_ROW_COUNT_CHANGED', proof.stored_csv_row_count, positiveCount);
+    if (proof.stored_csv_total_amount === null || roundMoney(proof.stored_csv_total_amount) !== roundMoney(proof.current_scoped_positive_bank_payment_total)) mismatch('BANK_CSV_TOTAL_CHANGED', proof.stored_csv_total_amount, proof.current_scoped_positive_bank_payment_total);
+    if (proof.stored_csv_positive_bank_payment_count !== null && proof.stored_csv_positive_bank_payment_count !== positiveCount) mismatch('BANK_CSV_POSITIVE_COUNT_CHANGED', proof.stored_csv_positive_bank_payment_count, positiveCount);
+    if (proof.stored_csv_global_positive_bank_payment_count !== null && proof.stored_csv_global_positive_bank_payment_count !== proof.current_global_positive_bank_payment_count) mismatch('BANK_CSV_GLOBAL_POSITIVE_COUNT_CHANGED', proof.stored_csv_global_positive_bank_payment_count, proof.current_global_positive_bank_payment_count);
+    if (proof.stored_csv_scoped_explicit_zero_count !== null && proof.stored_csv_scoped_explicit_zero_count !== zeroCount) mismatch('BANK_CSV_ZERO_COUNT_CHANGED', proof.stored_csv_scoped_explicit_zero_count, zeroCount);
+    if (proof.stored_csv_global_explicit_zero_count !== null && proof.stored_csv_global_explicit_zero_count !== proof.current_global_explicit_zero_count) mismatch('BANK_CSV_GLOBAL_ZERO_COUNT_CHANGED', proof.stored_csv_global_explicit_zero_count, proof.current_global_explicit_zero_count);
+    if (proof.stored_csv_scoped_missing_explicit_paye_input_count !== null && proof.stored_csv_scoped_missing_explicit_paye_input_count !== proof.current_scoped_missing_explicit_paye_input_count) mismatch('BANK_CSV_MISSING_INPUT_COUNT_CHANGED', proof.stored_csv_scoped_missing_explicit_paye_input_count, proof.current_scoped_missing_explicit_paye_input_count);
+    if (proof.stored_csv_global_missing_explicit_paye_input_count !== null && proof.stored_csv_global_missing_explicit_paye_input_count !== proof.current_global_missing_explicit_paye_input_count) mismatch('BANK_CSV_GLOBAL_MISSING_INPUT_COUNT_CHANGED', proof.stored_csv_global_missing_explicit_paye_input_count, proof.current_global_missing_explicit_paye_input_count);
+    if (proof.stored_csv_scoped_invalid_payment_row_count !== null && proof.stored_csv_scoped_invalid_payment_row_count !== proof.current_scoped_invalid_payment_row_count) mismatch('BANK_CSV_INVALID_ROW_COUNT_CHANGED', proof.stored_csv_scoped_invalid_payment_row_count, proof.current_scoped_invalid_payment_row_count);
+    if (proof.stored_csv_global_invalid_payment_row_count !== null && proof.stored_csv_global_invalid_payment_row_count !== proof.current_global_invalid_payment_row_count) mismatch('BANK_CSV_GLOBAL_INVALID_ROW_COUNT_CHANGED', proof.stored_csv_global_invalid_payment_row_count, proof.current_global_invalid_payment_row_count);
+    if (proof.stored_csv_no_bank_payment_required !== currentNoBankRoute) mismatch('BANK_CSV_NO_BANK_FLAG_CHANGED', proof.stored_csv_no_bank_payment_required, currentNoBankRoute);
+    if (proof.stored_csv_zero_row_export !== currentNoBankRoute) mismatch('BANK_CSV_ZERO_ROW_FLAG_CHANGED', proof.stored_csv_zero_row_export, currentNoBankRoute);
+    if (proof.stored_csv_header_only_or_empty_body !== currentNoBankRoute) mismatch('BANK_CSV_HEADER_ONLY_FLAG_CHANGED', proof.stored_csv_header_only_or_empty_body, currentNoBankRoute);
+    if (proof.current_global_missing_explicit_paye_input_count !== 0 || proof.current_scoped_missing_explicit_paye_input_count !== 0) mismatch('PAYE_NET_STATE_CHANGED', proof.current_scoped_missing_explicit_paye_input_count, 0);
+    if (proof.current_global_invalid_payment_row_count !== 0 || proof.current_scoped_invalid_payment_row_count !== 0) mismatch('BANK_PAYMENT_PROJECTION_CHANGED', proof.current_scoped_invalid_payment_row_count, 0);
+    if (!(Number(positiveCount || 0) > 0 || Number(zeroCount || 0) > 0)) mismatch('NO_EXECUTABLE_PAYMENT_SCOPE', positiveCount, 'positive-or-explicit-zero');
+
+    if (upperTrim(operationInputValue.execution_mode) !== 'CSV_SETTLEMENT') mismatch('CSV_EXECUTION_MODE_INVALID', operationInputValue.execution_mode, 'CSV_SETTLEMENT');
+    if (operationInputValue.csv_uploaded_confirmed !== true) mismatch('CSV_UPLOAD_CONFIRMATION_REQUIRED', false, true);
+    if (upperTrim(operationInputValue.manual_confirmation_mode) !== expectedManualConfirmationMode) mismatch('CSV_MANUAL_CONFIRMATION_MODE_INVALID', operationInputValue.manual_confirmation_mode, expectedManualConfirmationMode);
+    if (!currentNoBankRoute && !trimStr(operationInputValue.csv_bank_confirm_ref)) mismatch('CSV_BANK_CONFIRM_REF_REQUIRED', false, true);
+    if (!expectedPaymentDate) mismatch('CSV_PAYMENT_DATE_REQUIRED', operationInputValue.payment_date || null, 'YYYY-MM-DD');
+    if (operationInputValue.bank_csv_generated !== true) mismatch('BANK_CSV_REQUIRED', operationInputValue.bank_csv_generated, true);
+    if (operationInputValue.bank_csv_current !== true) mismatch('BANK_CSV_NOT_CURRENT', operationInputValue.bank_csv_current, true);
+    if (upperTrim(operationInputValue.bank_csv_scope) !== requestedScope) mismatch('OPERATION_BANK_CSV_SCOPE_MISMATCH', operationInputValue.bank_csv_scope, requestedScope);
+    if (trimStr(operationInputValue.bank_csv_scoped_paye_net_state_hash || operationInputValue.bank_csv_paye_net_state_hash) !== proof.current_scoped_paye_net_state_hash) mismatch('OPERATION_PAYE_NET_STATE_CHANGED', operationInputValue.bank_csv_scoped_paye_net_state_hash || operationInputValue.bank_csv_paye_net_state_hash, proof.current_scoped_paye_net_state_hash);
+    if (trimStr(operationInputValue.bank_csv_scoped_bank_payment_projection_hash || operationInputValue.bank_csv_bank_payment_projection_hash) !== proof.current_scoped_bank_payment_projection_hash) mismatch('OPERATION_BANK_PAYMENT_PROJECTION_CHANGED', operationInputValue.bank_csv_scoped_bank_payment_projection_hash || operationInputValue.bank_csv_bank_payment_projection_hash, proof.current_scoped_bank_payment_projection_hash);
+    if (nonNegativeInteger(operationInputValue.bank_csv_row_count) !== positiveCount) mismatch('OPERATION_BANK_CSV_ROW_COUNT_CHANGED', operationInputValue.bank_csv_row_count, positiveCount);
+    if (roundMoney(operationInputValue.bank_csv_total_amount) !== roundMoney(proof.current_scoped_positive_bank_payment_total)) mismatch('OPERATION_BANK_CSV_TOTAL_CHANGED', operationInputValue.bank_csv_total_amount, proof.current_scoped_positive_bank_payment_total);
+    if (trimStr(operationInputValue.scoped_paye_net_state_hash || operationInputValue.paye_net_state_hash) !== proof.current_scoped_paye_net_state_hash) mismatch('OPERATION_SCOPED_PAYE_NET_STATE_CHANGED', operationInputValue.scoped_paye_net_state_hash || operationInputValue.paye_net_state_hash, proof.current_scoped_paye_net_state_hash);
+    if (trimStr(operationInputValue.global_paye_net_state_hash || operationInputValue.current_global_paye_net_state_hash) !== proof.current_global_paye_net_state_hash) mismatch('OPERATION_GLOBAL_PAYE_NET_STATE_CHANGED', operationInputValue.global_paye_net_state_hash || operationInputValue.current_global_paye_net_state_hash, proof.current_global_paye_net_state_hash);
+    if (trimStr(operationInputValue.scoped_bank_payment_projection_hash || operationInputValue.bank_payment_projection_hash) !== proof.current_scoped_bank_payment_projection_hash) mismatch('OPERATION_SCOPED_BANK_PAYMENT_PROJECTION_CHANGED', operationInputValue.scoped_bank_payment_projection_hash || operationInputValue.bank_payment_projection_hash, proof.current_scoped_bank_payment_projection_hash);
+    if (trimStr(operationInputValue.global_bank_payment_projection_hash || operationInputValue.current_global_bank_payment_projection_hash) !== proof.current_global_bank_payment_projection_hash) mismatch('OPERATION_GLOBAL_BANK_PAYMENT_PROJECTION_CHANGED', operationInputValue.global_bank_payment_projection_hash || operationInputValue.current_global_bank_payment_projection_hash, proof.current_global_bank_payment_projection_hash);
+    if (nonNegativeInteger(operationInputValue.scoped_positive_bank_payment_count ?? operationInputValue.positive_bank_payment_count) !== positiveCount) mismatch('OPERATION_SCOPED_POSITIVE_COUNT_CHANGED', operationInputValue.scoped_positive_bank_payment_count ?? operationInputValue.positive_bank_payment_count, positiveCount);
+    if (nonNegativeInteger(operationInputValue.global_positive_bank_payment_count) !== proof.current_global_positive_bank_payment_count) mismatch('OPERATION_GLOBAL_POSITIVE_COUNT_CHANGED', operationInputValue.global_positive_bank_payment_count, proof.current_global_positive_bank_payment_count);
+    if (roundMoney(operationInputValue.scoped_positive_bank_payment_total ?? operationInputValue.positive_bank_payment_total) !== roundMoney(proof.current_scoped_positive_bank_payment_total)) mismatch('OPERATION_SCOPED_POSITIVE_TOTAL_CHANGED', operationInputValue.scoped_positive_bank_payment_total ?? operationInputValue.positive_bank_payment_total, proof.current_scoped_positive_bank_payment_total);
+    if (roundMoney(operationInputValue.global_positive_bank_payment_total) !== roundMoney(proof.current_global_positive_bank_payment_total)) mismatch('OPERATION_GLOBAL_POSITIVE_TOTAL_CHANGED', operationInputValue.global_positive_bank_payment_total, proof.current_global_positive_bank_payment_total);
+    if (nonNegativeInteger(operationInputValue.scoped_explicit_zero_count) !== zeroCount) mismatch('OPERATION_SCOPED_ZERO_COUNT_CHANGED', operationInputValue.scoped_explicit_zero_count, zeroCount);
+    if (nonNegativeInteger(operationInputValue.global_explicit_zero_count) !== proof.current_global_explicit_zero_count) mismatch('OPERATION_GLOBAL_ZERO_COUNT_CHANGED', operationInputValue.global_explicit_zero_count, proof.current_global_explicit_zero_count);
+    if (nonNegativeInteger(operationInputValue.global_missing_explicit_paye_input_count) !== proof.current_global_missing_explicit_paye_input_count) mismatch('OPERATION_GLOBAL_MISSING_INPUT_COUNT_CHANGED', operationInputValue.global_missing_explicit_paye_input_count, proof.current_global_missing_explicit_paye_input_count);
+    if (nonNegativeInteger(operationInputValue.global_invalid_payment_row_count) !== proof.current_global_invalid_payment_row_count) mismatch('OPERATION_GLOBAL_INVALID_ROW_COUNT_CHANGED', operationInputValue.global_invalid_payment_row_count, proof.current_global_invalid_payment_row_count);
+
+    return Object.assign({}, proof, {
+      ok: mismatches.length === 0,
+      code: storedCsvGenerated ? 'BANK_CSV_STALE' : 'BANK_CSV_REQUIRED',
+      mismatches,
+      bank_csv_generated: storedCsvGenerated,
+      bank_csv_current: mismatches.length === 0,
+      current_no_bank_payment_route: currentNoBankRoute,
+      csv_uploaded_confirmed: operationInputValue.csv_uploaded_confirmed === true,
+      csv_bank_confirm_ref_present: !!trimStr(operationInputValue.csv_bank_confirm_ref),
+      manual_confirmation_mode: upperTrim(operationInputValue.manual_confirmation_mode),
+      payment_date: expectedPaymentDate
+    });
+  };
+
   try {
     const { rows: batchRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(id)}&select=id,status,pay_date,authoritative_payment_date,rail_provider_snapshot,rail_env_snapshot,bank_csv_export_json,freshness_result_hash,freshness_scope_hash,execution_commit_state&limit=1`, false);
     const batch = Array.isArray(batchRows) && isPlainObject(batchRows[0]) ? batchRows[0] : null;
@@ -33919,7 +34623,21 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       && roundMoney(storedTotal) === roundMoney(projectionProof.positive_bank_payment_total);
 
     if (executionMode === 'CSV_SETTLEMENT') {
-      if (!csvCurrent) return fail(409, Object.keys(storedCsv).length ? 'BANK_CSV_STALE' : 'BANK_CSV_REQUIRED', Object.keys(storedCsv).length ? 'The Bank CSV is out of date. Regenerate it before using CSV settlement.' : 'Generate the current Bank CSV before using CSV settlement.');
+      if (!csvCurrent) return buildCsvRegenerationRequiredResponse(Object.keys(storedCsv).length ? 'BANK_CSV_STALE' : 'BANK_CSV_REQUIRED', {
+        validation_stage: 'INITIAL_PRE_START_GUARD',
+        bank_csv_generated: Object.keys(storedCsv).length > 0,
+        bank_csv_current: false,
+        stored_scope: storedCsvScope || null,
+        requested_scope: requestedScope,
+        stored_paye_net_state_hash: storedPayeHash || null,
+        current_paye_net_state_hash: currentScopedPayeHashForCsv || null,
+        stored_bank_payment_projection_hash: storedProjectionHash || null,
+        current_bank_payment_projection_hash: currentScopedProjectionHashForCsv || null,
+        stored_row_count: Number.isFinite(storedRowCount) ? Math.max(0, Math.trunc(storedRowCount)) : null,
+        current_row_count: projectionProof.positive_bank_payment_count,
+        stored_total_amount: Number.isFinite(storedTotal) ? roundMoney(storedTotal) : null,
+        current_total_amount: roundMoney(projectionProof.positive_bank_payment_total)
+      });
       if (!csvUploadedConfirmed) return fail(400, pureAllZero ? 'ZERO_ROW_CSV_REVIEW_CONFIRMATION_REQUIRED' : 'CSV_UPLOAD_CONFIRMATION_REQUIRED', pureAllZero ? 'Confirm that the current zero-row CloudTMS CSV was reviewed and that no bank payment was required.' : 'Confirm that the current Bank CSV was uploaded and processed.');
       if (!pureAllZero && !csvBankConfirmRef) return fail(400, 'CSV_BANK_CONFIRM_REF_REQUIRED', 'Bank confirmation reference is required for CSV settlement.');
       if (!pureAllZero && !suppliedPaymentDate) return fail(400, 'CSV_PAYMENT_DATE_REQUIRED', 'Payment date is required for CSV settlement.');
@@ -34064,6 +34782,36 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       bank_csv_total_amount: executionMode === 'CSV_SETTLEMENT' && Number.isFinite(storedTotal) ? roundMoney(storedTotal) : null
     };
 
+    if (executionMode === 'CSV_SETTLEMENT') {
+      const currentCsvProof = await validateCurrentCsvSettlementProof(operationInput);
+      if (currentCsvProof.ok !== true) {
+        if (currentCsvProof.code === 'PAY_BATCH_NOT_FOUND') return fail(404, 'PAY_BATCH_NOT_FOUND', 'Payment batch not found.');
+        return buildCsvRegenerationRequiredResponse(currentCsvProof.code || 'BANK_CSV_STALE', {
+          validation_stage: 'FINAL_JUST_IN_TIME_PRE_START_GUARD',
+          bank_csv_generated: currentCsvProof.bank_csv_generated === true,
+          bank_csv_current: false,
+          mismatches: Array.isArray(currentCsvProof.mismatches) ? currentCsvProof.mismatches.slice(0, 30) : [],
+          stored_scope: currentCsvProof.stored_csv_scope || null,
+          requested_scope: requestedScope,
+          stored_paye_net_state_hash: currentCsvProof.stored_csv_paye_net_state_hash || null,
+          current_paye_net_state_hash: currentCsvProof.current_scoped_paye_net_state_hash || null,
+          stored_bank_payment_projection_hash: currentCsvProof.stored_csv_bank_payment_projection_hash || null,
+          current_bank_payment_projection_hash: currentCsvProof.current_scoped_bank_payment_projection_hash || null,
+          stored_row_count: currentCsvProof.stored_csv_row_count,
+          current_row_count: currentCsvProof.current_scoped_positive_bank_payment_count,
+          stored_total_amount: currentCsvProof.stored_csv_total_amount,
+          current_total_amount: currentCsvProof.current_scoped_positive_bank_payment_total,
+          current_positive_bank_payment_count: currentCsvProof.current_scoped_positive_bank_payment_count,
+          current_explicit_zero_count: currentCsvProof.current_scoped_explicit_zero_count,
+          current_no_bank_payment_route: currentCsvProof.current_no_bank_payment_route === true,
+          csv_uploaded_confirmed: currentCsvProof.csv_uploaded_confirmed === true,
+          csv_bank_confirm_ref_present: currentCsvProof.csv_bank_confirm_ref_present === true,
+          manual_confirmation_mode: currentCsvProof.manual_confirmation_mode || null,
+          payment_date: currentCsvProof.payment_date || null
+        });
+      }
+    }
+
     const operationPayload = await startBankingPayOperation(env, {
       operation_type: retryBlockedFunds ? 'PAYMENT_RETRY_BLOCKED_FUNDS' : 'PAYMENT_EXECUTE',
       actor_user_id: actorUserId,
@@ -34147,6 +34895,12 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
     }));
   } catch (error) {
     const code = upperTrim(error && (error.error_code || error.code)) || 'PAYMENT_EXECUTE_OPERATION_START_FAILED';
+    if (['BANK_CSV_STALE', 'BANK_CSV_REQUIRED', 'BANK_CSV_NOT_CURRENT', 'CSV_REGENERATION_REQUIRED'].includes(code)) {
+      return buildCsvRegenerationRequiredResponse(code === 'CSV_REGENERATION_REQUIRED' ? 'BANK_CSV_STALE' : code, {
+        validation_stage: 'PRE_START_GUARD_ERROR',
+        backend_error_code: code
+      });
+    }
     const friendlyInput = {
       ok: false,
       error_code: code,
@@ -34163,6 +34917,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
     return response(Number(friendly && (friendly.http_status || friendly.status)) || 400, Object.assign({}, friendlyInput, isPlainObject(friendly) ? friendly : {}));
   }
 }
+
 
 
 
