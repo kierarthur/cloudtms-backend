@@ -18953,14 +18953,15 @@ DROP FUNCTION IF EXISTS public.pay_batches_list(integer, integer, text);
 
 DROP FUNCTION IF EXISTS public.pay_batches_list(integer, integer, text, uuid);
 
-CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_display_mode text DEFAULT 'LIGHT'::text, p_include_diagnostics boolean DEFAULT false, p_include_alerts boolean DEFAULT false, p_include_correction_summary boolean DEFAULT false)
+
+CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 5, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_display_mode text DEFAULT 'LIGHT'::text, p_include_diagnostics boolean DEFAULT false, p_include_alerts boolean DEFAULT false, p_include_correction_summary boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_limit integer := GREATEST(1, LEAST(COALESCE(p_limit, 50), 50));
+  v_limit integer := GREATEST(1, LEAST(COALESCE(p_limit, 5), 200));
   v_offset integer := GREATEST(COALESCE(p_offset, 0), 0);
   v_status text := UPPER(NULLIF(BTRIM(COALESCE(p_status, '')), ''));
   v_display_mode text := UPPER(REPLACE(NULLIF(BTRIM(COALESCE(p_display_mode, 'LIGHT')), ''), '-', '_'));
@@ -19312,7 +19313,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
