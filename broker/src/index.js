@@ -23611,6 +23611,7 @@ async function handleBankingPayDraftCreateOperationLookup(env, req, user, sessio
 }
 
 
+
 async function handleBankingPayCreateDraft(env, req, user, ctx) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -23628,6 +23629,16 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   const fail = (status, code, message, details = {}) => {
     const safeDetails = isPlainObject(details) ? details : {};
     const safeTitle = trimStr(safeDetails.title || safeDetails.friendly_title || safeDetails.friendlyTitle || '');
+    const preserveSpecificMessageCodes = new Set([
+      'BANKING_PAY_CREATE_DRAFT_FILTER_CONTEXT_INVALID',
+      'BANKING_PAY_CREATE_DRAFT_FILTER_CONTEXT_MISMATCH',
+      'BANKING_PAY_CREATE_DRAFT_NO_ROWS_FOR_SCOPE',
+      'BANKING_PAY_CREATE_DRAFT_ROWS_OUTSIDE_FILTER',
+      'BANKING_PAY_CREATE_DRAFT_ROW_CONTRACT_MISMATCH',
+      'BANKING_PAY_CREATE_DRAFT_ECONOMIC_KEY_CONTRACT_MISMATCH',
+      'BANKING_PAY_CREATE_DRAFT_DRAFT_ROWS_TOO_MANY_FOR_REQUEST'
+    ]);
+    const preserveSpecificMessage = preserveSpecificMessageCodes.has(upperTrim(code));
     const raw = {
       ok: false,
       create_draft_unavailable: true,
@@ -23650,12 +23661,28 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     try {
       if (typeof makeBankingFriendlyErrorPayload === 'function') friendly = makeBankingFriendlyErrorPayload(raw, { action: 'CREATE_DRAFT' });
     } catch {}
-    return response(status, Object.assign({}, isPlainObject(friendly) ? friendly : raw, {
+    const friendlyObject = isPlainObject(friendly) ? friendly : raw;
+    const preservedTitle = safeTitle || trimStr(friendlyObject.title || friendlyObject.friendly_error?.title || '') || 'Payment batch could not be created';
+    const preservedMessage = trimStr(message) || 'Payment batch could not be created. Refresh Banking and try again.';
+    return response(status, Object.assign({}, friendlyObject, {
       ok: false,
       create_draft_unavailable: true,
       error_code: code,
       code,
       ...(safeTitle ? { title: safeTitle } : {}),
+      ...(preserveSpecificMessage ? {
+        title: preservedTitle,
+        message: preservedMessage,
+        error: preservedMessage,
+        user_message: preservedMessage,
+        friendly_error: {
+          ...(isPlainObject(friendlyObject.friendly_error) ? friendlyObject.friendly_error : {}),
+          title: preservedTitle,
+          message: preservedMessage,
+          error_code: code,
+          code
+        }
+      } : {}),
       details: safeDetails,
       details_json: safeDetails,
       operation_started: false,
@@ -24084,6 +24111,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     const lineId = trimStr(rowJson.line_id || rowJson.lineId || '');
     const section = trimStr(previewRow.section || rowJson.section || 'canonical_preview_lines') || 'canonical_preview_lines';
     const candidateId = trimStr(previewRow.candidate_id || rowJson.candidate_id || '');
+    const clientId = trimStr(rowJson.client_id || rowJson.clientId || '');
     const timesheetId = trimStr(previewRow.timesheet_id || economicKey.timesheet_id || rowJson.timesheet_id || '');
     const keyType = upperTrim(previewRow.key_type || economicKey.key_type || rowJson.key_type || rowJson.component_key_type || '');
     const keyValue = trimStr(previewRow.key_value || economicKey.key_value || rowJson.key_value || rowJson.component_key_value || '');
@@ -24101,6 +24129,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       row_key: rowKey || null,
       section,
       candidate_id: candidateId || null,
+      client_id: clientId || null,
       timesheet_id: timesheetId || null,
       key_type: keyType || null,
       key_value: keyValue || null,
@@ -24125,6 +24154,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     const contract = isPlainObject(contractLike) ? contractLike : {};
     return {
       candidate_id: trimStr(contract.candidate_id || '') || null,
+      client_id: trimStr(contract.client_id || '') || null,
       timesheet_id: trimStr(contract.timesheet_id || contract.economic_key?.timesheet_id || '') || null,
       key_type: upperTrim(contract.key_type || contract.economic_key?.key_type || '') || null,
       key_value: trimStr(contract.key_value || contract.economic_key?.key_value || '') || null,
@@ -24148,7 +24178,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
 
     let sessionRow = null;
     try {
-      const { rows: sessionRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions?id=eq.${encodeURIComponent(id)}&select=id,version,source_snapshot_run_id,session_signature,server_selected_preview_row_ids,server_selected_preview_row_ids_provided,selected_row_count,status,pay_date,week_ending_cutoff,discarded_at_utc,replacement_session_id,progress_state,progress_counter_version,scope_seed_complete,scope_next_cursor_json&limit=1`, false);
+      const { rows: sessionRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions?id=eq.${encodeURIComponent(id)}&select=id,version,source_snapshot_run_id,session_signature,filters_json,server_selected_preview_row_ids,server_selected_preview_row_ids_provided,selected_row_count,status,pay_date,week_ending_cutoff,discarded_at_utc,replacement_session_id,progress_state,progress_counter_version,scope_seed_complete,scope_next_cursor_json&limit=1`, false);
       sessionRow = Array.isArray(sessionRows) && sessionRows.length > 0 ? sessionRows[0] : null;
     } catch (error) {
       return { ok: false, error_code: 'BANKING_PAY_CREATE_DRAFT_SESSION_READ_FAILED', selected_preview_row_ids: [], error: String(error && error.message ? error.message : error) };
@@ -24350,6 +24380,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       session_signature: trimStr(sessionRow.session_signature || '') || null,
       pay_date: trimStr(sessionRow.pay_date || '') || null,
       week_ending_cutoff: trimStr(sessionRow.week_ending_cutoff || '') || null,
+      filters_json: isPlainObject(sessionRow.filters_json) ? cloneJson(sessionRow.filters_json) : {},
       pay_channel_scope: scope,
       scope_counts: scopeCounts,
       all_selected_preview_row_ids: allSelectedIds,
@@ -24611,9 +24642,72 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     selectedPreviewRowIdSeen.add(text);
     selectedPreviewRowIds.push(text);
   }
+
+  const rawDraftSelectedPreviewRowIds = Array.isArray(body.draft_selected_preview_row_ids)
+    ? body.draft_selected_preview_row_ids
+    : (Array.isArray(body.draftSelectedPreviewRowIds)
+        ? body.draftSelectedPreviewRowIds
+        : (Array.isArray(previewDecisions.draft_selected_preview_row_ids)
+            ? previewDecisions.draft_selected_preview_row_ids
+            : (Array.isArray(previewDecisions.scoped_selected_preview_row_ids) ? previewDecisions.scoped_selected_preview_row_ids : [])));
+  const draftSelectedPreviewRowIdsProvided = Object.prototype.hasOwnProperty.call(body, 'draft_selected_preview_row_ids')
+    || Object.prototype.hasOwnProperty.call(body, 'draftSelectedPreviewRowIds')
+    || Object.prototype.hasOwnProperty.call(previewDecisions, 'draft_selected_preview_row_ids')
+    || Object.prototype.hasOwnProperty.call(previewDecisions, 'scoped_selected_preview_row_ids');
+  const requestedDraftSelectedPreviewRowIds = [];
+  const requestedDraftSelectedPreviewRowIdSeen = new Set();
+  for (const value of rawDraftSelectedPreviewRowIds) {
+    const text = trimStr(value);
+    if (!text || requestedDraftSelectedPreviewRowIdSeen.has(text)) continue;
+    requestedDraftSelectedPreviewRowIdSeen.add(text);
+    requestedDraftSelectedPreviewRowIds.push(text);
+  }
+  const candidateFilterProvided = Object.prototype.hasOwnProperty.call(body, 'candidate_filter_id')
+    || Object.prototype.hasOwnProperty.call(body, 'candidateFilterId')
+    || Object.prototype.hasOwnProperty.call(previewDecisions, 'candidate_filter_id')
+    || Object.prototype.hasOwnProperty.call(previewDecisions, 'candidateFilterId');
+  const clientFilterProvided = Object.prototype.hasOwnProperty.call(body, 'client_filter_id')
+    || Object.prototype.hasOwnProperty.call(body, 'clientFilterId')
+    || Object.prototype.hasOwnProperty.call(previewDecisions, 'client_filter_id')
+    || Object.prototype.hasOwnProperty.call(previewDecisions, 'clientFilterId');
+  const requestedCandidateFilterId = trimStr(
+    body.candidate_filter_id || body.candidateFilterId || previewDecisions.candidate_filter_id || previewDecisions.candidateFilterId || ''
+  );
+  const requestedClientFilterId = trimStr(
+    body.client_filter_id || body.clientFilterId || previewDecisions.client_filter_id || previewDecisions.clientFilterId || ''
+  );
+  if (requestedCandidateFilterId && !uuidRe.test(requestedCandidateFilterId)) {
+    return fail(400, 'BANKING_PAY_CREATE_DRAFT_FILTER_CONTEXT_INVALID', 'The candidate filter for Create Draft is not valid. Reopen Banking Pay filters and try again.', { field: 'candidate_filter_id', session_id: sessionId });
+  }
+  if (requestedClientFilterId && !uuidRe.test(requestedClientFilterId)) {
+    return fail(400, 'BANKING_PAY_CREATE_DRAFT_FILTER_CONTEXT_INVALID', 'The client filter for Create Draft is not valid. Reopen Banking Pay filters and try again.', { field: 'client_filter_id', session_id: sessionId });
+  }
+  const submittedDraftContractsRaw = Array.isArray(body.draft_selected_preview_row_contracts)
+    ? body.draft_selected_preview_row_contracts
+    : (Array.isArray(body.selected_preview_row_contracts)
+        ? body.selected_preview_row_contracts
+        : (Array.isArray(previewDecisions.draft_selected_preview_row_contracts)
+            ? previewDecisions.draft_selected_preview_row_contracts
+            : (Array.isArray(previewDecisions.scoped_selected_preview_row_contracts) ? previewDecisions.scoped_selected_preview_row_contracts : [])));
+  const submittedDraftEconomicKeysRaw = Array.isArray(body.draft_selected_economic_keys)
+    ? body.draft_selected_economic_keys
+    : (Array.isArray(body.selected_economic_keys)
+        ? body.selected_economic_keys
+        : (Array.isArray(previewDecisions.draft_selected_economic_keys)
+            ? previewDecisions.draft_selected_economic_keys
+            : (Array.isArray(previewDecisions.scoped_selected_economic_keys) ? previewDecisions.scoped_selected_economic_keys : [])));
+
   const selectedPreviewRowModeRaw = upperTrim(body.selected_preview_row_mode || body.selectedPreviewRowMode || previewDecisions.selected_preview_row_mode || previewDecisions.selectedPreviewRowMode || 'ROW_IDS') || 'ROW_IDS';
   const selectedPreviewRowMode = ['ROW_IDS', 'IMPLICIT_ALL', 'EXPLICIT_IDS', 'ROW_PATCH_CAPPED_CONTRACT_GUARDED'].includes(selectedPreviewRowModeRaw) ? selectedPreviewRowModeRaw : 'ROW_IDS';
   const weekEndingCutoffDate = parseDate(body.week_ending_cutoff_date || body.weekEndingCutoffDate || body.week_ending_cutoff || body.weekEndingCutoff) || '9999-12-31';
+
+  if (requestedDraftSelectedPreviewRowIds.length > 100) {
+    return fail(413, 'BANKING_PAY_CREATE_DRAFT_DRAFT_ROWS_TOO_MANY_FOR_REQUEST', 'Too many filtered draft rows were sent with the create request. Reduce the filtered selection and try again.', {
+      session_id: sessionId,
+      supplied_draft_selected_row_count: requestedDraftSelectedPreviewRowIds.length,
+      limit: 100
+    });
+  }
 
   if (selectedPreviewRowIds.length > 100) {
     return fail(413, 'BANKING_CREATE_DRAFT_SELECTED_ROWS_TOO_MANY_FOR_REQUEST', 'Too many selected rows were sent with the create request. Apply selection in the workbench first, then create the draft from the row-backed selection.', {
@@ -24726,17 +24820,156 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   }
 
   const previousSelectedIds = selectedPreviewRowIds.slice(0, 100);
-  selectedPreviewRowIds = currentSelection.selected_preview_row_ids.slice(0, 100);
+  const sessionFilters = isPlainObject(currentSelection.filters_json) ? currentSelection.filters_json : {};
+  const sessionCandidateFilterId = trimStr(sessionFilters.candidate_id || sessionFilters.candidateId || '');
+  const sessionClientFilterId = trimStr(sessionFilters.client_id || sessionFilters.clientId || '');
+  if ((candidateFilterProvided && requestedCandidateFilterId !== sessionCandidateFilterId)
+      || (clientFilterProvided && requestedClientFilterId !== sessionClientFilterId)) {
+    return fail(409, 'BANKING_PAY_CREATE_DRAFT_FILTER_CONTEXT_MISMATCH', 'Banking Pay filters changed before Create Draft could start. Refresh Banking Pay and try again.', {
+      session_id: sessionId,
+      requested_candidate_filter_id: requestedCandidateFilterId || null,
+      session_candidate_filter_id: sessionCandidateFilterId || null,
+      requested_client_filter_id: requestedClientFilterId || null,
+      session_client_filter_id: sessionClientFilterId || null,
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true
+    });
+  }
+  const effectiveCandidateFilterId = sessionCandidateFilterId;
+  const effectiveClientFilterId = sessionClientFilterId;
+
+  const authoritativeScopedContracts = Array.isArray(currentSelection.selected_preview_row_contracts)
+    ? currentSelection.selected_preview_row_contracts.filter((contract) => isPlainObject(contract)).map((contract) => cloneJson(contract) || contract)
+    : [];
+  const contractByRowId = new Map();
+  for (const contract of authoritativeScopedContracts) {
+    const rowId = trimStr(contract.preview_row_id || contract.materialised_preview_row_id || contract.row_id || '');
+    if (uuidRe.test(rowId) && !contractByRowId.has(rowId)) contractByRowId.set(rowId, contract);
+  }
+
+  if (draftSelectedPreviewRowIdsProvided && requestedDraftSelectedPreviewRowIds.length <= 0) {
+    return fail(409, 'BANKING_PAY_CREATE_DRAFT_NO_ROWS_FOR_SCOPE', 'No Ready to Pay rows match the current Banking Pay filters. Change the filters or refresh Banking Pay.', {
+      session_id: sessionId,
+      pay_channel_scope: payChannelScope,
+      candidate_filter_id: effectiveCandidateFilterId || null,
+      client_filter_id: effectiveClientFilterId || null,
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true
+    });
+  }
+
+  const effectiveDraftRowIds = draftSelectedPreviewRowIdsProvided
+    ? requestedDraftSelectedPreviewRowIds
+    : Array.from(contractByRowId.keys());
+  const outsideScopeRowIds = effectiveDraftRowIds.filter((rowId) => !uuidRe.test(rowId) || !contractByRowId.has(rowId));
+  if (outsideScopeRowIds.length > 0) {
+    return fail(409, 'BANKING_PAY_CREATE_DRAFT_ROWS_OUTSIDE_FILTER', 'One or more submitted payment rows are outside the current Banking Pay filters. Refresh Banking Pay and try again.', {
+      session_id: sessionId,
+      pay_channel_scope: payChannelScope,
+      candidate_filter_id: effectiveCandidateFilterId || null,
+      client_filter_id: effectiveClientFilterId || null,
+      outside_filter_preview_row_ids: outsideScopeRowIds.slice(0, 25),
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true
+    });
+  }
+
+  const selectedPreviewRowContracts = effectiveDraftRowIds.map((rowId) => contractByRowId.get(rowId));
+  const rowFilterViolations = selectedPreviewRowContracts.filter((contract) => {
+    const channel = upperTrim(contract.pay_channel || '');
+    const candidateId = trimStr(contract.candidate_id || '');
+    const clientId = trimStr(contract.client_id || '');
+    if (payChannelScope !== 'ALL' && channel !== payChannelScope) return true;
+    if (effectiveCandidateFilterId && candidateId !== effectiveCandidateFilterId) return true;
+    if (effectiveClientFilterId && clientId !== effectiveClientFilterId) return true;
+    return false;
+  });
+  if (rowFilterViolations.length > 0) {
+    return fail(409, 'BANKING_PAY_CREATE_DRAFT_ROWS_OUTSIDE_FILTER', 'One or more submitted payment rows no longer match the current Banking Pay filters. Refresh Banking Pay and try again.', {
+      session_id: sessionId,
+      pay_channel_scope: payChannelScope,
+      candidate_filter_id: effectiveCandidateFilterId || null,
+      client_filter_id: effectiveClientFilterId || null,
+      invalid_preview_row_ids: rowFilterViolations.map((contract) => contract.preview_row_id).filter(Boolean).slice(0, 25),
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true
+    });
+  }
+
+  const contractFingerprint = (contractLike) => {
+    const contract = isPlainObject(contractLike) ? contractLike : {};
+    return stableStringify({
+      preview_row_id: trimStr(contract.preview_row_id || contract.materialised_preview_row_id || contract.row_id || '') || null,
+      candidate_id: trimStr(contract.candidate_id || '') || null,
+      client_id: trimStr(contract.client_id || '') || null,
+      timesheet_id: trimStr(contract.timesheet_id || contract.economic_key?.timesheet_id || '') || null,
+      key_type: upperTrim(contract.key_type || contract.economic_key?.key_type || '') || null,
+      key_value: trimStr(contract.key_value || contract.economic_key?.key_value || '') || null,
+      pay_channel: upperTrim(contract.pay_channel || '') || null,
+      section: trimStr(contract.section || 'canonical_preview_lines') || 'canonical_preview_lines'
+    });
+  };
+  if (submittedDraftContractsRaw.length > 0) {
+    const submittedByRowId = new Map();
+    for (const submitted of submittedDraftContractsRaw) {
+      if (!isPlainObject(submitted)) continue;
+      const rowId = trimStr(submitted.preview_row_id || submitted.materialised_preview_row_id || submitted.row_id || '');
+      if (rowId && !submittedByRowId.has(rowId)) submittedByRowId.set(rowId, submitted);
+    }
+    const contractMismatchRowIds = effectiveDraftRowIds.filter((rowId) => {
+      const submitted = submittedByRowId.get(rowId);
+      const authoritative = contractByRowId.get(rowId);
+      return !submitted || contractFingerprint(submitted) !== contractFingerprint(authoritative);
+    });
+    if (submittedByRowId.size !== effectiveDraftRowIds.length || contractMismatchRowIds.length > 0) {
+      return fail(409, 'BANKING_PAY_CREATE_DRAFT_ROW_CONTRACT_MISMATCH', 'The submitted payment-row contract no longer matches the current Banking Pay preview. Refresh Banking Pay and try again.', {
+        session_id: sessionId,
+        pay_channel_scope: payChannelScope,
+        mismatch_preview_row_ids: contractMismatchRowIds.slice(0, 25),
+        operation_started: false,
+        no_operation_started: true,
+        no_batch_created: true
+      });
+    }
+  }
+
+  const selectedEconomicKeys = selectedPreviewRowContracts.map((contract) => buildCreateDraftEconomicKeyContract(contract));
+  if (submittedDraftEconomicKeysRaw.length > 0) {
+    const economicFingerprint = (keyLike) => {
+      const key = isPlainObject(keyLike) ? keyLike : {};
+      return stableStringify({
+        candidate_id: trimStr(key.candidate_id || '') || null,
+        client_id: trimStr(key.client_id || '') || null,
+        timesheet_id: trimStr(key.timesheet_id || key.economic_key?.timesheet_id || '') || null,
+        key_type: upperTrim(key.key_type || key.economic_key?.key_type || '') || null,
+        key_value: trimStr(key.key_value || key.economic_key?.key_value || '') || null,
+        pay_channel: upperTrim(key.pay_channel || '') || null,
+        section: trimStr(key.section || 'canonical_preview_lines') || 'canonical_preview_lines'
+      });
+    };
+    const submittedEconomicFingerprints = submittedDraftEconomicKeysRaw.filter((key) => isPlainObject(key)).map(economicFingerprint).sort();
+    const authoritativeEconomicFingerprints = selectedEconomicKeys.map(economicFingerprint).sort();
+    if (submittedEconomicFingerprints.length !== authoritativeEconomicFingerprints.length
+        || submittedEconomicFingerprints.some((fingerprint, index) => fingerprint !== authoritativeEconomicFingerprints[index])) {
+      return fail(409, 'BANKING_PAY_CREATE_DRAFT_ECONOMIC_KEY_CONTRACT_MISMATCH', 'The submitted payment economic keys no longer match the current Banking Pay preview. Refresh Banking Pay and try again.', {
+        session_id: sessionId,
+        pay_channel_scope: payChannelScope,
+        operation_started: false,
+        no_operation_started: true,
+        no_batch_created: true
+      });
+    }
+  }
+
+  selectedPreviewRowIds = effectiveDraftRowIds.slice(0, 100);
   selectedCount = selectedPreviewRowIds.length;
   sessionVersion = currentSelection.session_version ?? sessionVersion;
   sourceSnapshotRunId = currentSelection.source_snapshot_run_id || sourceSnapshotRunId;
   sessionSignature = currentSelection.session_signature || sessionSignature;
-  const selectedPreviewRowContracts = Array.isArray(currentSelection.selected_preview_row_contracts)
-    ? currentSelection.selected_preview_row_contracts.filter((contract) => isPlainObject(contract)).map((contract) => cloneJson(contract) || contract)
-    : [];
-  const selectedEconomicKeys = Array.isArray(currentSelection.selected_economic_keys)
-    ? currentSelection.selected_economic_keys.filter((contract) => isPlainObject(contract)).map((contract) => cloneJson(contract) || contract)
-    : selectedPreviewRowContracts.map((contract) => buildCreateDraftEconomicKeyContract(contract));
 
   const finalReadiness = await readAuthoritativeProgress(sessionId, sessionVersion);
   const selectionProgressCounterVersion = normalizeVersion(currentSelection.progress_counter_version);
@@ -24760,7 +24993,6 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
 
   authoritativeReadinessSnapshot = finalReadiness;
 
-  const authoritativeScopeCounts = isPlainObject(currentSelection.scope_counts) ? currentSelection.scope_counts : {};
   const scopedContractCounts = selectedPreviewRowContracts.reduce((counts, contract) => {
     const channel = upperTrim(contract && contract.pay_channel);
     if (channel === 'PAYE') counts.paye_rows += 1;
@@ -24768,13 +25000,15 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     return counts;
   }, { paye_rows: 0, umbrella_rows: 0 });
   const scopeCounts = {
-    paye_rows: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_paye)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_paye))) : scopedContractCounts.paye_rows,
-    umbrella_rows: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_umbrella)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_umbrella))) : scopedContractCounts.umbrella_rows,
-    selected_ready_total: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_total)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_total))) : selectedPreviewRowContracts.length,
-    selected_ready_paye: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_paye)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_paye))) : scopedContractCounts.paye_rows,
-    selected_ready_umbrella: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_umbrella)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_umbrella))) : scopedContractCounts.umbrella_rows,
-    selected_ready_for_scope: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_for_scope)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_for_scope))) : selectedPreviewRowContracts.length,
-    pay_channel_scope: payChannelScope
+    paye_rows: scopedContractCounts.paye_rows,
+    umbrella_rows: scopedContractCounts.umbrella_rows,
+    selected_ready_total: selectedPreviewRowContracts.length,
+    selected_ready_paye: scopedContractCounts.paye_rows,
+    selected_ready_umbrella: scopedContractCounts.umbrella_rows,
+    selected_ready_for_scope: selectedPreviewRowContracts.length,
+    pay_channel_scope: payChannelScope,
+    candidate_filter_id: effectiveCandidateFilterId || null,
+    client_filter_id: effectiveClientFilterId || null
   };
   const payeRowsIncluded = scopedContractCounts.paye_rows > 0 && payChannelScope !== 'UMBRELLA';
   const umbrellaRowsIncluded = scopedContractCounts.umbrella_rows > 0 && payChannelScope !== 'PAYE';
@@ -25013,6 +25247,8 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       pay_channel_scope: payChannelScope,
       scope: payChannelScope,
       scope_counts: scopeCounts,
+      candidate_filter_id: effectiveCandidateFilterId || null,
+      client_filter_id: effectiveClientFilterId || null,
       selected_preview_row_count: selectedCount,
       guardrail: payeGuardrails,
       override_required: !!(payeGuardrails && payeGuardrails.override_required === true),
@@ -25053,6 +25289,8 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     week_ending_cutoff: weekEndingCutoffDate,
     pay_channel_scope: payChannelScope,
     draft_scope: payChannelScope,
+    candidate_filter_id: effectiveCandidateFilterId || null,
+    client_filter_id: effectiveClientFilterId || null,
     same_week_paye_override: verifiedSameWeekPayeOverride,
     same_week_paye_override_json: verifiedSameWeekPayeOverride,
     same_week_paye_override_used: verifiedSameWeekPayeOverride ? true : false,
@@ -25169,7 +25407,6 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     });
   }
 }
-
 
 
 
@@ -26940,8 +27177,6 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
 
 
 
-
-
 async function handleBankingPayBatchesList(env, req, user) {
   const clampInt = (raw, dflt, lo, hi) => {
     const n = Number(raw);
@@ -27120,7 +27355,7 @@ async function handleBankingPayBatchesList(env, req, user) {
   const execute = async () => {
     try {
       const u = new URL(req.url);
-      const limit = clampInt(u.searchParams.get('limit'), 50, 1, 50);
+      const limit = clampInt(u.searchParams.get('limit'), 5, 1, 200);
       const offset = clampInt(u.searchParams.get('offset'), 0, 0, 1000000);
       const statusRaw = String(u.searchParams.get('status') || '').trim();
       const status = statusRaw ? statusRaw.toUpperCase() : null;
@@ -27163,7 +27398,7 @@ async function handleBankingPayBatchesList(env, req, user) {
       actorUserId,
       routeClass: 'DISPLAY',
       purpose: 'BATCH_LIST',
-      keyParts: [u.searchParams.get('limit') || '50', u.searchParams.get('offset') || '0', u.searchParams.get('status') || '']
+      keyParts: [u.searchParams.get('limit') || '5', u.searchParams.get('offset') || '0', u.searchParams.get('status') || '']
     }, execute);
   }
   return execute();
