@@ -31057,7 +31057,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_case_component_rows(p_context_json jsonb, p_candidate_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -31093,6 +31092,8 @@ declare
   v_requires_payee_map boolean := false;
   v_paye_guardrails jsonb := '{}'::jsonb;
   v_overpayment_sync_mode boolean := false;
+  v_workbench_resolution_session_id uuid := null::uuid;
+  v_workbench_resolution_session_id_text text := null::text;
 begin
   if jsonb_typeof(v_context_json) <> 'object' then
     raise exception 'p_context_json must be a JSON object';
@@ -31101,6 +31102,49 @@ begin
   if v_candidate_id is null then
     raise exception 'candidate_id is required';
   end if;
+
+  v_workbench_resolution_session_id_text := NULLIF(BTRIM(COALESCE(
+    v_context_json->>'workbench_resolution_session_id',
+    v_context_json#>>'{workbench,resolution_session_id}',
+    ''
+  )), '');
+
+  IF v_workbench_resolution_session_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_workbench_resolution_session_id := v_workbench_resolution_session_id_text::uuid;
+
+    PERFORM 1
+    FROM public.banking_pay_workbench_sessions AS resolution_session
+    WHERE resolution_session.id = v_workbench_resolution_session_id
+      AND UPPER(BTRIM(COALESCE(resolution_session.status, ''))) = 'OPEN'
+      AND resolution_session.discarded_at_utc IS NULL
+      AND (
+        v_candidate_id = ANY(COALESCE(resolution_session.scope_candidate_ids, ARRAY[]::uuid[]))
+        OR EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_session_scope AS resolution_scope
+          WHERE resolution_scope.session_id = resolution_session.id
+            AND resolution_scope.candidate_id = v_candidate_id
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_preview_rows AS resolution_preview_row
+          WHERE resolution_preview_row.session_id = resolution_session.id
+            AND resolution_preview_row.candidate_id = v_candidate_id
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_candidate_line_work AS resolution_line_work
+          WHERE resolution_line_work.session_id = resolution_session.id
+            AND resolution_line_work.candidate_id = v_candidate_id
+        )
+      );
+
+    IF NOT FOUND THEN
+      v_workbench_resolution_session_id := NULL::uuid;
+    END IF;
+  ELSE
+    v_workbench_resolution_session_id := NULL::uuid;
+  END IF;
 
   v_overpayment_sync_mode := LOWER(BTRIM(COALESCE(v_context_json->>'overpayment_sync_mode', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
     OR LOWER(BTRIM(COALESCE(v_context_json#>>'{preview_decisions_json,overpayment_sync_mode}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -31185,7 +31229,7 @@ begin
   from pg_temp.pay_preview_candidate_context ctx
   limit 1;
 
-  drop table if exists pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.timesheet_case_rollup;
+  drop table if exists pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.workbench_bucket_resolution_overlay, pg_temp.timesheet_case_rollup;
 
   create temporary table worked_time_current_segment_rows on commit drop as
         select
@@ -32667,6 +32711,12 @@ begin
           ttrx.is_fixed_taxable_conversion as is_fixed_no_action_taxable_row,
           null::text as approved_resolution_mode,
           null::numeric as approved_target_rate,
+          null::jsonb as approved_resolution_payload_json,
+          null::jsonb as approved_resolution_result_json,
+          null::uuid as resolved_rate_resolution_id,
+          false::boolean as resolved_rate_applied_via_linked_scope,
+          null::text as resolved_rate_source_anchor_case_key,
+          null::uuid as resolved_rate_source_anchor_timesheet_id,
           case
             when ttr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then false
             when upper(coalesce(ttr.source_pay_method,'')) is not distinct from upper(coalesce(ttr.current_target_pay_method,'')) then false
@@ -32865,6 +32915,184 @@ begin
   
   ;
 
+  IF v_workbench_resolution_session_id IS NOT NULL THEN
+    CREATE TEMPORARY TABLE workbench_bucket_resolution_overlay ON COMMIT DROP AS
+    WITH stored_resolution_components AS (
+      SELECT
+        stored_resolution.id AS resolution_id,
+        stored_resolution.case_key,
+        stored_resolution.timesheet_id,
+        stored_resolution.source_basis_fingerprint,
+        stored_resolution.source_family_key,
+        stored_resolution.bucket_code,
+        stored_resolution.component_key_type,
+        stored_resolution.component_key_value,
+        stored_resolution.payload_json,
+        stored_resolution.updated_at_utc,
+        bucket_element.ordinality::integer AS bucket_ordinal,
+        bucket_element.value AS bucket_json
+      FROM public.banking_pay_workbench_session_case_resolutions AS stored_resolution
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(stored_resolution.payload_json->'bucket_resolutions') = 'array'
+            THEN stored_resolution.payload_json->'bucket_resolutions'
+          ELSE '[]'::jsonb
+        END
+      ) WITH ORDINALITY AS bucket_element(value, ordinality)
+      WHERE stored_resolution.session_id = v_workbench_resolution_session_id
+        AND stored_resolution.candidate_id = v_candidate_id
+        AND stored_resolution.resolution_family = 'BUCKETED'
+        AND jsonb_typeof(bucket_element.value) = 'object'
+    )
+    SELECT DISTINCT ON (
+      stored_component.case_key,
+      stored_component.timesheet_id,
+      stored_component.source_basis_fingerprint,
+      stored_component.source_family_key,
+      COALESCE(stored_component.bucket_code, ''),
+      stored_component.component_key_type,
+      stored_component.component_key_value
+    )
+      stored_component.resolution_id,
+      stored_component.case_key,
+      stored_component.timesheet_id,
+      stored_component.source_basis_fingerprint,
+      stored_component.source_family_key,
+      stored_component.bucket_code,
+      stored_component.component_key_type,
+      stored_component.component_key_value,
+      stored_component.payload_json,
+      stored_component.bucket_json,
+      UPPER(BTRIM(COALESCE(stored_component.bucket_json->>'classification', ''))) AS classification,
+      UPPER(BTRIM(COALESCE(stored_component.bucket_json->>'source_pay_method', ''))) AS source_pay_method,
+      UPPER(BTRIM(COALESCE(
+        stored_component.bucket_json->>'target_pay_method',
+        stored_component.bucket_json->>'current_target_pay_method',
+        ''
+      ))) AS target_pay_method,
+      CASE
+        WHEN COALESCE(stored_component.bucket_json->>'source_units', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN round((stored_component.bucket_json->>'source_units')::numeric, 6)
+        ELSE NULL::numeric
+      END AS source_units,
+      CASE
+        WHEN COALESCE(stored_component.bucket_json->>'source_rate', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN round((stored_component.bucket_json->>'source_rate')::numeric, 6)
+        ELSE NULL::numeric
+      END AS source_rate,
+      CASE
+        WHEN COALESCE(stored_component.bucket_json->>'source_charge_rate', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN round((stored_component.bucket_json->>'source_charge_rate')::numeric, 6)
+        ELSE NULL::numeric
+      END AS source_charge_rate,
+      UPPER(BTRIM(COALESCE(stored_component.bucket_json->>'resolution_mode', ''))) AS resolution_mode,
+      CASE
+        WHEN COALESCE(stored_component.bucket_json->>'target_rate', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN round((stored_component.bucket_json->>'target_rate')::numeric, 2)
+        ELSE NULL::numeric
+      END AS target_rate,
+      LOWER(BTRIM(COALESCE(stored_component.payload_json->>'applied_via_linked_scope', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS applied_via_linked_scope,
+      NULLIF(BTRIM(COALESCE(stored_component.payload_json->>'source_anchor_case_key', '')), '') AS source_anchor_case_key,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(stored_component.payload_json->>'source_anchor_timesheet_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(stored_component.payload_json->>'source_anchor_timesheet_id', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS source_anchor_timesheet_id
+    FROM stored_resolution_components AS stored_component
+    WHERE stored_component.timesheet_id IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(stored_component.case_key, '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(stored_component.source_basis_fingerprint, '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(stored_component.source_family_key, '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(stored_component.component_key_type, '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(stored_component.component_key_value, '')), '') IS NOT NULL
+      AND UPPER(BTRIM(COALESCE(stored_component.bucket_json->>'resolution_mode', ''))) IN ('SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_REPLACEMENT_RATE')
+      AND COALESCE(stored_component.bucket_json->>'target_rate', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+      AND (stored_component.bucket_json->>'target_rate')::numeric >= 0
+    ORDER BY
+      stored_component.case_key,
+      stored_component.timesheet_id,
+      stored_component.source_basis_fingerprint,
+      stored_component.source_family_key,
+      COALESCE(stored_component.bucket_code, ''),
+      stored_component.component_key_type,
+      stored_component.component_key_value,
+      stored_component.updated_at_utc DESC,
+      stored_component.resolution_id DESC,
+      stored_component.bucket_ordinal DESC;
+
+    UPDATE transient_timesheet_component_review_rows_effective AS effective_component
+    SET approved_resolution_mode = resolution_overlay.resolution_mode,
+        approved_target_rate = resolution_overlay.target_rate,
+        approved_resolution_payload_json = resolution_overlay.payload_json,
+        approved_resolution_result_json = jsonb_strip_nulls(
+          COALESCE(resolution_overlay.bucket_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'target_units', round(effective_component.source_units, 6),
+            'target_rate', round(resolution_overlay.target_rate, 2),
+            'target_pay_ex_vat', round(effective_component.source_units * resolution_overlay.target_rate, 2),
+            'target_charge_ex_vat', effective_component.source_charge_component_ex_vat,
+            'target_margin_ex_vat', CASE
+              WHEN effective_component.source_charge_component_ex_vat IS NULL THEN NULL
+              ELSE round(effective_component.source_charge_component_ex_vat - (effective_component.source_units * resolution_overlay.target_rate), 2)
+            END,
+            'margin_delta_ex_vat', CASE
+              WHEN effective_component.source_charge_component_ex_vat IS NULL OR effective_component.source_margin_ex_vat IS NULL THEN NULL
+              ELSE round(
+                (effective_component.source_charge_component_ex_vat - (effective_component.source_units * resolution_overlay.target_rate))
+                - effective_component.source_margin_ex_vat,
+                2
+              )
+            END
+          )
+        ),
+        resolved_rate_resolution_id = resolution_overlay.resolution_id,
+        resolved_rate_applied_via_linked_scope = resolution_overlay.applied_via_linked_scope,
+        resolved_rate_source_anchor_case_key = resolution_overlay.source_anchor_case_key,
+        resolved_rate_source_anchor_timesheet_id = resolution_overlay.source_anchor_timesheet_id,
+        requires_resolution = false,
+        case_resolution_satisfied_now_component = true,
+        has_suggested_resolution = true,
+        suggestion_provenance = 'PREVIEW_CASE_RESOLUTION',
+        is_fresh_suggested_resolution = false,
+        is_reusable_saved_resolution = true,
+        is_stale_saved_resolution = false,
+        target_pay_ex_vat = round(effective_component.source_units * resolution_overlay.target_rate, 2),
+        target_charge_ex_vat = effective_component.source_charge_component_ex_vat,
+        target_margin_ex_vat = CASE
+          WHEN effective_component.source_charge_component_ex_vat IS NULL THEN NULL
+          ELSE round(effective_component.source_charge_component_ex_vat - (effective_component.source_units * resolution_overlay.target_rate), 2)
+        END,
+        margin_delta_ex_vat = CASE
+          WHEN effective_component.source_charge_component_ex_vat IS NULL OR effective_component.source_margin_ex_vat IS NULL THEN NULL
+          ELSE round(
+            (effective_component.source_charge_component_ex_vat - (effective_component.source_units * resolution_overlay.target_rate))
+            - effective_component.source_margin_ex_vat,
+            2
+          )
+        END,
+        preview_component_amount_ex_vat = round(effective_component.source_units * resolution_overlay.target_rate, 2),
+        ready_preview_amount_ex_vat = round(effective_component.source_units * resolution_overlay.target_rate, 2),
+        blocked_preview_amount_ex_vat = 0::numeric,
+        resolution_state = 'RESOLVED',
+        target_rate = resolution_overlay.target_rate
+    FROM workbench_bucket_resolution_overlay AS resolution_overlay
+    WHERE effective_component.candidate_id = v_candidate_id
+      AND effective_component.timesheet_id = resolution_overlay.timesheet_id
+      AND resolution_overlay.case_key = ('timesheet:' || effective_component.timesheet_id::text)
+      AND effective_component.source_family_key = resolution_overlay.source_family_key
+      AND md5(COALESCE(effective_component.source_basis_json::text, '{}'::text)) = resolution_overlay.source_basis_fingerprint
+      AND COALESCE(NULLIF(UPPER(BTRIM(COALESCE(effective_component.source_basis_json->>'bucket_code', ''))), ''), '') = COALESCE(resolution_overlay.bucket_code, '')
+      AND effective_component.component_key_type = resolution_overlay.component_key_type
+      AND effective_component.component_key_value = resolution_overlay.component_key_value
+      AND round(effective_component.source_units, 6) = resolution_overlay.source_units
+      AND round(effective_component.source_rate, 6) = resolution_overlay.source_rate
+      AND round(effective_component.source_charge_rate, 6) = resolution_overlay.source_charge_rate
+      AND (resolution_overlay.classification = '' OR UPPER(effective_component.classification::text) = resolution_overlay.classification)
+      AND (resolution_overlay.source_pay_method = '' OR UPPER(BTRIM(COALESCE(effective_component.source_pay_method, ''))) = resolution_overlay.source_pay_method)
+      AND (resolution_overlay.target_pay_method = '' OR UPPER(BTRIM(COALESCE(effective_component.current_target_pay_method, ''))) = resolution_overlay.target_pay_method)
+      AND effective_component.is_actionable_resolution_row = true;
+  END IF;
+
   create temporary table timesheet_case_rollup on commit drop as
         select
           tcr.candidate_id,
@@ -32959,6 +33187,26 @@ begin
             'case_needs_resolution', (count(*) filter (where coalesce(tcr.requires_resolution, false) = true) > 0),
             'case_resolution_satisfied_now', (count(*) filter (where coalesce(tcr.requires_resolution, false) = true) = 0),
             'resolution_action_label', 'Suggested Rate',
+            'has_resolved_rate', bool_or(tcr.approved_resolution_mode is not null),
+            'resolved_rate_family', CASE WHEN bool_or(tcr.approved_resolution_mode is not null) THEN 'BUCKETED' ELSE NULL END,
+            'resolved_rate_case_key', CASE WHEN bool_or(tcr.approved_resolution_mode is not null) THEN ('timesheet:' || max(tcr.timesheet_id::text)) ELSE NULL END,
+            'resolved_rate_timesheet_id', CASE WHEN bool_or(tcr.approved_resolution_mode is not null) THEN max(tcr.timesheet_id::text) ELSE NULL END,
+            'resolved_rate_candidate_id', CASE WHEN bool_or(tcr.approved_resolution_mode is not null) THEN max(tcr.candidate_id::text) ELSE NULL END,
+            'resolved_rate_source_anchor_case_key', max(tcr.resolved_rate_source_anchor_case_key) FILTER (WHERE tcr.approved_resolution_mode is not null),
+            'resolved_rate_source_anchor_timesheet_id', max(tcr.resolved_rate_source_anchor_timesheet_id::text) FILTER (WHERE tcr.approved_resolution_mode is not null),
+            'resolved_rate_applied_via_linked_scope', bool_or(coalesce(tcr.resolved_rate_applied_via_linked_scope, false)),
+            'resolved_rate_component_count', count(*) FILTER (WHERE tcr.approved_resolution_mode is not null),
+            'resolved_rate_clear_payload_json', CASE
+              WHEN bool_or(tcr.approved_resolution_mode is not null) THEN jsonb_build_object(
+                'session_id', v_workbench_resolution_session_id::text,
+                'candidate_id', max(tcr.candidate_id::text),
+                'case_key', ('timesheet:' || max(tcr.timesheet_id::text)),
+                'timesheet_id', max(tcr.timesheet_id::text),
+                'linked_timesheet_id', max(tcr.timesheet_id::text),
+                'resolution_family', 'BUCKETED'
+              )
+              ELSE NULL
+            END,
             'linked_resolution_scope_json', jsonb_strip_nulls(
               jsonb_build_object(
                 'resolve_all_linked_timesheets_default', true,
@@ -32983,86 +33231,96 @@ begin
           ) as case_resolution_summary_json,
           coalesce(
             jsonb_agg(
-              jsonb_build_object(
-                'finance_component_id', null,
-                'source_family_key', tcr.source_family_key,
-                'component_key_type', tcr.component_key_type,
-                'component_key_value', tcr.component_key_value,
-                'label',
-                  case
-                    when tcr.component_key_type in ('TS_DAY','TS_TOTAL')
-                      then coalesce(nullif(btrim(coalesce(tcr.source_basis_json->>'bucket_code','')), ''), tcr.component_key_value, tcr.component_key_type)
-                    when tcr.component_key_type = 'ADDITIONAL_CODE'
-                      then coalesce(nullif(btrim(coalesce(tcr.source_basis_json->>'additional_code','')), ''), tcr.component_key_value)
-                    when tcr.component_key_type = 'ADJUSTMENT_CODE'
-                      then coalesce(nullif(btrim(coalesce(tcr.source_basis_json->>'adjustment_id','')), ''), tcr.component_key_value)
-                    when tcr.component_key_type = 'EXPENSE_CODE'
-                      then coalesce(nullif(btrim(coalesce(tcr.source_basis_json->>'expense_code','')), ''), tcr.component_key_value)
-                    else tcr.component_key_value
-                  end,
-                'bucket_code', nullif(btrim(coalesce(tcr.source_basis_json->>'bucket_code','')), ''),
-                'source_basis_fingerprint', md5(coalesce(tcr.source_basis_json::text, '{}'::text)),
-                'is_rate_bearing',
-                  (
-                    tcr.source_units is not null
-                    and coalesce(tcr.source_units,0) <> 0
-                    and tcr.source_rate is not null
-                    and tcer.effective_source_charge_rate is not null
-                    and tcr.component_key_type <> 'ADJUSTMENT_CODE'
+              (
+                jsonb_build_object(
+                  'finance_component_id', null,
+                  'source_family_key', tcr.source_family_key,
+                  'component_key_type', tcr.component_key_type,
+                  'component_key_value', tcr.component_key_value,
+                  'label',
+                    case
+                      when tcr.component_key_type in ('TS_DAY','TS_TOTAL')
+                        then coalesce(nullif(btrim(coalesce(tcr.source_basis_json->>'bucket_code','')), ''), tcr.component_key_value, tcr.component_key_type)
+                      when tcr.component_key_type = 'ADDITIONAL_CODE'
+                        then coalesce(nullif(btrim(coalesce(tcr.source_basis_json->>'additional_code','')), ''), tcr.component_key_value)
+                      when tcr.component_key_type = 'ADJUSTMENT_CODE'
+                        then coalesce(nullif(btrim(coalesce(tcr.source_basis_json->>'adjustment_id','')), ''), tcr.component_key_value)
+                      when tcr.component_key_type = 'EXPENSE_CODE'
+                        then coalesce(nullif(btrim(coalesce(tcr.source_basis_json->>'expense_code','')), ''), tcr.component_key_value)
+                      else tcr.component_key_value
+                    end,
+                  'bucket_code', nullif(btrim(coalesce(tcr.source_basis_json->>'bucket_code','')), ''),
+                  'source_basis_fingerprint', md5(coalesce(tcr.source_basis_json::text, '{}'::text)),
+                  'is_rate_bearing',
+                    (
+                      tcr.source_units is not null
+                      and coalesce(tcr.source_units,0) <> 0
+                      and tcr.source_rate is not null
+                      and tcer.effective_source_charge_rate is not null
+                      and tcr.component_key_type <> 'ADJUSTMENT_CODE'
+                    ),
+                  'classification', tcr.classification::text,
+                  'source_pay_method', tcr.source_pay_method,
+                  'current_target_pay_method', tcr.current_target_pay_method,
+                  'component_amount_ex_vat', round(coalesce(tcr.component_amount_ex_vat,0),2),
+                  'preview_component_amount_ex_vat', round(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0),2),
+                  'ready_preview_amount_ex_vat', round(coalesce(tcr.ready_preview_amount_ex_vat, 0),2),
+                  'blocked_preview_amount_ex_vat', round(coalesce(tcr.blocked_preview_amount_ex_vat, 0),2)
+                )
+                || jsonb_build_object(
+                  'source_basis_json', jsonb_strip_nulls(
+                    tcr.source_basis_json
+                    || jsonb_build_object(
+                      'source_rate', case when tcr.source_rate is null then null else round(tcr.source_rate,2) end,
+                      'source_charge_rate',
+                        case
+                          when tcer.effective_source_charge_rate is null then null
+                          else round(tcer.effective_source_charge_rate, 2)
+                        end
+                    )
                   ),
-                'classification', tcr.classification::text,
-                'source_pay_method', tcr.source_pay_method,
-                'current_target_pay_method', tcr.current_target_pay_method,
-                'component_amount_ex_vat', round(coalesce(tcr.component_amount_ex_vat,0),2),
-                'preview_component_amount_ex_vat', round(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0),2),
-                'ready_preview_amount_ex_vat', round(coalesce(tcr.ready_preview_amount_ex_vat, 0),2),
-                'blocked_preview_amount_ex_vat', round(coalesce(tcr.blocked_preview_amount_ex_vat, 0),2),
-                'source_basis_json', jsonb_strip_nulls(
-                  tcr.source_basis_json
-                  || jsonb_build_object(
-                    'source_rate', case when tcr.source_rate is null then null else round(tcr.source_rate,2) end,
-                    'source_charge_rate',
-                      case
-                        when tcer.effective_source_charge_rate is null then null
-                        else round(tcer.effective_source_charge_rate, 2)
-                      end
-                  )
-                ),
-                'saved_target_pay_method', null,
-                'saved_resolution_mode', case when tcr.approved_resolution_mode is null then null else tcr.approved_resolution_mode end,
-                'saved_resolution_payload_json', null,
-                'saved_resolution_result_json', null,
-                'has_suggested_resolution', tcr.has_suggested_resolution,
-                'suggestion_provenance', tcr.suggestion_provenance,
-                'is_fresh_suggested_resolution', tcr.is_fresh_suggested_resolution,
-                'is_reusable_saved_resolution', tcr.is_reusable_saved_resolution,
-                'is_stale_saved_resolution', tcr.is_stale_saved_resolution,
-                'suggested_resolution_payload_json', tcr.suggested_resolution_payload_json,
-                'suggested_resolution_result_json', tcr.suggested_resolution_result_json,
-                'source_units', tcr.source_units,
-                'target_units', case when ttrg.target_units is null then tcr.source_units else ttrg.target_units end,
-                'source_rate', case when tcr.source_rate is null then null else round(tcr.source_rate,2) end,
-                'source_charge_rate',
-                  case
-                    when tcer.effective_source_charge_rate is null then null
-                    else round(tcer.effective_source_charge_rate, 2)
-                  end,
-                'target_rate', case when tcr.target_rate is null then null else round(tcr.target_rate,2) end,
-                'source_pay_ex_vat', tcr.source_pay_ex_vat,
-                'source_charge_ex_vat', tcr.source_charge_component_ex_vat,
-                'source_margin_ex_vat', tcr.source_margin_ex_vat,
-                'target_pay_ex_vat', tcr.target_pay_ex_vat,
-                'target_charge_ex_vat', tcr.target_charge_ex_vat,
-                'target_margin_ex_vat', tcr.target_margin_ex_vat,
-                'margin_delta_ex_vat', tcr.margin_delta_ex_vat,
-                'suggestion_explanation_text', tcr.suggestion_explanation_text,
-                'component_fingerprint', tcr.component_fingerprint,
-                'is_resolution_stale', false,
-                'stale_reason', null,
-                'requires_resolution', coalesce(tcr.requires_resolution, false),
-                'resolution_state', tcr.resolution_state,
-                'is_actionable_resolution_row', coalesce(tcr.is_actionable_resolution_row, false),
-                'is_fixed_no_action_taxable_row', coalesce(tcr.is_fixed_no_action_taxable_row, false)
+                  'saved_target_pay_method', case when tcr.approved_resolution_mode is null then null else tcr.current_target_pay_method end,
+                  'saved_resolution_mode', case when tcr.approved_resolution_mode is null then null else tcr.approved_resolution_mode end,
+                  'saved_resolution_payload_json', tcr.approved_resolution_payload_json,
+                  'saved_resolution_result_json', tcr.approved_resolution_result_json,
+                  'resolved_rate_resolution_id', case when tcr.resolved_rate_resolution_id is null then null else tcr.resolved_rate_resolution_id::text end,
+                  'resolved_rate_applied_via_linked_scope', case when tcr.approved_resolution_mode is null then null else tcr.resolved_rate_applied_via_linked_scope end,
+                  'resolved_rate_source_anchor_case_key', tcr.resolved_rate_source_anchor_case_key,
+                  'resolved_rate_source_anchor_timesheet_id', case when tcr.resolved_rate_source_anchor_timesheet_id is null then null else tcr.resolved_rate_source_anchor_timesheet_id::text end,
+                  'has_suggested_resolution', tcr.has_suggested_resolution,
+                  'suggestion_provenance', tcr.suggestion_provenance,
+                  'is_fresh_suggested_resolution', tcr.is_fresh_suggested_resolution,
+                  'is_reusable_saved_resolution', tcr.is_reusable_saved_resolution,
+                  'is_stale_saved_resolution', tcr.is_stale_saved_resolution,
+                  'suggested_resolution_payload_json', tcr.suggested_resolution_payload_json,
+                  'suggested_resolution_result_json', tcr.suggested_resolution_result_json,
+                  'source_units', tcr.source_units,
+                  'target_units', case when ttrg.target_units is null then tcr.source_units else ttrg.target_units end,
+                  'source_rate', case when tcr.source_rate is null then null else round(tcr.source_rate,2) end
+                )
+                || jsonb_build_object(
+                  'source_charge_rate',
+                    case
+                      when tcer.effective_source_charge_rate is null then null
+                      else round(tcer.effective_source_charge_rate, 2)
+                    end,
+                  'target_rate', case when tcr.target_rate is null then null else round(tcr.target_rate,2) end,
+                  'source_pay_ex_vat', tcr.source_pay_ex_vat,
+                  'source_charge_ex_vat', tcr.source_charge_component_ex_vat,
+                  'source_margin_ex_vat', tcr.source_margin_ex_vat,
+                  'target_pay_ex_vat', tcr.target_pay_ex_vat,
+                  'target_charge_ex_vat', tcr.target_charge_ex_vat,
+                  'target_margin_ex_vat', tcr.target_margin_ex_vat,
+                  'margin_delta_ex_vat', tcr.margin_delta_ex_vat,
+                  'suggestion_explanation_text', tcr.suggestion_explanation_text,
+                  'component_fingerprint', tcr.component_fingerprint,
+                  'is_resolution_stale', false,
+                  'stale_reason', null,
+                  'requires_resolution', coalesce(tcr.requires_resolution, false),
+                  'resolution_state', tcr.resolution_state,
+                  'is_actionable_resolution_row', coalesce(tcr.is_actionable_resolution_row, false),
+                  'is_fixed_no_action_taxable_row', coalesce(tcr.is_fixed_no_action_taxable_row, false)
+                )
               )
               order by
                 case
@@ -54474,7 +54732,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_case_resolution(p_session_id uuid, p_actor_user_id uuid, p_resolution_payload_json jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -54550,6 +54807,22 @@ DECLARE
   v_taxable_result_json jsonb := '{}'::jsonb;
   v_audit_before_json jsonb := NULL;
   v_audit_after_json jsonb := '{}'::jsonb;
+  v_anchor_evidence_key text := NULL::text;
+  v_bucket_matched_candidate_id uuid := NULL::uuid;
+  v_matching_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_anchor_timesheet_id uuid := NULL::uuid;
+  v_anchor_contract_id uuid := NULL::uuid;
+  v_anchor_client_id uuid := NULL::uuid;
+  v_anchor_component_count integer := 0;
+  v_linked_target_timesheet_count integer := 0;
+  v_linked_target_component_count integer := 0;
+  v_materialized_target_timesheet_count integer := 0;
+  v_skipped_mismatch_count integer := 0;
+  v_linked_scope_type text := 'SELF_ONLY';
+  v_target_resolution_row record;
+  v_target_resolution_result_json jsonb := '{}'::jsonb;
+  v_target_bucket_payload_json jsonb := '{}'::jsonb;
+  v_linked_scope_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -55007,25 +55280,28 @@ BEGIN
       RAISE EXCEPTION 'bucket_resolutions must be a non-empty JSON array for BUCKETED resolution';
     END IF;
 
-    create temp table if not exists _tmp_bpay_session_bucket_resolution (
-      bucket_ordinal integer not null,
-      timesheet_id uuid null,
-      source_basis_json jsonb not null,
-      source_basis_fingerprint text not null,
-      source_family_key text not null,
-      bucket_code text null,
-      component_key_type text not null,
-      component_key_value text not null,
-      source_units numeric not null,
-      source_rate numeric not null,
-      source_charge_rate numeric not null,
-      resolution_mode text not null,
-      target_rate numeric not null,
-      resolution_identity_key text not null,
-      matched_candidate_id uuid null
-    ) on commit drop;
+    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_session_bucket_resolution (
+      bucket_ordinal integer PRIMARY KEY,
+      timesheet_id uuid NULL,
+      source_basis_json jsonb NOT NULL,
+      source_basis_fingerprint text NOT NULL,
+      source_family_key text NOT NULL,
+      bucket_code text NULL,
+      component_key_type text NOT NULL,
+      component_key_value text NOT NULL,
+      source_units numeric NOT NULL,
+      source_rate numeric NOT NULL,
+      source_charge_rate numeric NOT NULL,
+      resolution_mode text NOT NULL,
+      target_rate numeric NOT NULL,
+      resolution_identity_key text NOT NULL,
+      matched_candidate_id uuid NULL,
+      anchor_evidence_key text NULL,
+      decision_context_key text NULL,
+      category_identity text NULL
+    ) ON COMMIT DROP;
 
-    truncate table _tmp_bpay_session_bucket_resolution;
+    TRUNCATE TABLE _tmp_bpay_session_bucket_resolution;
 
     FOR v_bucket_element IN
       SELECT bucket_item.ordinality AS bucket_ordinal, bucket_item.value AS bucket_json
@@ -55160,6 +55436,11 @@ BEGIN
         RAISE EXCEPTION 'bucket_code is required for BUCKETED worked-time resolution bucket %', v_bucket_element.bucket_ordinal;
       END IF;
 
+      IF v_bucket_component_key_type = 'TS_DAY'
+         AND v_bucket_component_key_value !~ '^\d{4}-\d{2}-\d{2}$' THEN
+        RAISE EXCEPTION 'Invalid TS_DAY economic key in BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+
       v_bucket_resolution_identity_key := concat_ws(
         '|',
         'BUCKETED',
@@ -55187,7 +55468,10 @@ BEGIN
         resolution_mode,
         target_rate,
         resolution_identity_key,
-        matched_candidate_id
+        matched_candidate_id,
+        anchor_evidence_key,
+        decision_context_key,
+        category_identity
       )
       VALUES (
         v_bucket_element.bucket_ordinal,
@@ -55204,13 +55488,16 @@ BEGIN
         v_bucket_resolution_mode,
         v_bucket_target_rate,
         v_bucket_resolution_identity_key,
-        NULL::uuid
+        NULL::uuid,
+        NULL::text,
+        NULL::text,
+        NULL::text
       );
     END LOOP;
 
     SELECT COUNT(*)::integer
     INTO v_bucket_count
-    FROM _tmp_bpay_session_bucket_resolution;
+    FROM _tmp_bpay_session_bucket_resolution AS input_bucket;
 
     IF v_bucket_count = 0 THEN
       RAISE EXCEPTION 'bucket_resolutions must contain at least one JSON object for BUCKETED resolution';
@@ -55218,229 +55505,548 @@ BEGIN
 
     IF EXISTS (
       SELECT 1
-      FROM _tmp_bpay_session_bucket_resolution AS tmp_duplicate_bucket
-      GROUP BY tmp_duplicate_bucket.resolution_identity_key
+      FROM _tmp_bpay_session_bucket_resolution AS duplicate_bucket
+      GROUP BY duplicate_bucket.resolution_identity_key
       HAVING COUNT(*) > 1
     ) THEN
       RAISE EXCEPTION 'Duplicate bucket resolution identity detected for case_key %', v_case_key;
     END IF;
 
-    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_session_row_backed_component_baseline (
-      preview_row_id uuid NOT NULL,
-      component_ordinal integer NOT NULL,
+    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_session_bucket_component_raw (
+      evidence_key text PRIMARY KEY,
+      evidence_source text NOT NULL,
       candidate_id uuid NOT NULL,
       case_key text NOT NULL,
-      timesheet_id uuid NULL,
+      timesheet_id uuid NOT NULL,
+      case_client_id uuid NULL,
+      source_basis_json jsonb NOT NULL,
       source_basis_fingerprint text NOT NULL,
       source_family_key text NOT NULL,
       bucket_code text NULL,
       component_key_type text NOT NULL,
       component_key_value text NOT NULL,
       component_fingerprint text NULL,
-      component_state_json jsonb NOT NULL,
-      PRIMARY KEY (preview_row_id, component_ordinal)
+      classification text NOT NULL,
+      source_pay_method text NOT NULL,
+      target_pay_method text NOT NULL,
+      source_units numeric NOT NULL,
+      source_rate numeric NOT NULL,
+      source_charge_rate numeric NOT NULL,
+      source_pay_ex_vat numeric NULL,
+      source_charge_ex_vat numeric NULL,
+      source_margin_ex_vat numeric NULL,
+      suggested_target_rate numeric NULL,
+      suggested_target_charge_rate numeric NULL,
+      relevant_erni_pct numeric NULL,
+      vat_rate_pct numeric NULL,
+      umbrella_vat_chargeable boolean NULL,
+      charge_basis text NULL,
+      taxability_context text NULL,
+      gross_net_context text NULL,
+      reuse_mode text NULL,
+      suggested_resolution_payload_json jsonb NOT NULL,
+      suggested_resolution_result_json jsonb NOT NULL,
+      requires_resolution boolean NOT NULL,
+      is_actionable_resolution_row boolean NOT NULL,
+      component_state_json jsonb NOT NULL
     ) ON COMMIT DROP;
 
-    TRUNCATE TABLE _tmp_bpay_session_row_backed_component_baseline;
+    TRUNCATE TABLE _tmp_bpay_session_bucket_component_raw;
 
-    INSERT INTO _tmp_bpay_session_row_backed_component_baseline (
-      preview_row_id,
-      component_ordinal,
+    INSERT INTO _tmp_bpay_session_bucket_component_raw (
+      evidence_key,
+      evidence_source,
       candidate_id,
       case_key,
       timesheet_id,
+      case_client_id,
+      source_basis_json,
       source_basis_fingerprint,
       source_family_key,
       bucket_code,
       component_key_type,
       component_key_value,
       component_fingerprint,
+      classification,
+      source_pay_method,
+      target_pay_method,
+      source_units,
+      source_rate,
+      source_charge_rate,
+      source_pay_ex_vat,
+      source_charge_ex_vat,
+      source_margin_ex_vat,
+      suggested_target_rate,
+      suggested_target_charge_rate,
+      relevant_erni_pct,
+      vat_rate_pct,
+      umbrella_vat_chargeable,
+      charge_basis,
+      taxability_context,
+      gross_net_context,
+      reuse_mode,
+      suggested_resolution_payload_json,
+      suggested_resolution_result_json,
+      requires_resolution,
+      is_actionable_resolution_row,
       component_state_json
     )
-    WITH case_component_arrays AS (
+    WITH preview_source AS (
       SELECT
-        row_backed_case.*,
+        preview_row.id AS preview_row_id,
+        preview_row.candidate_id,
+        preview_row.row_key,
+        preview_row.timesheet_id AS preview_timesheet_id,
+        COALESCE(preview_row.row_json, '{}'::jsonb) AS row_json,
+        BTRIM(COALESCE(
+          preview_row.row_json->>'case_key',
+          preview_row.row_json #>> '{case_resolution_summary,case_key}',
+          preview_row.row_json #>> '{case,case_key}',
+          preview_row.row_json #>> '{raw_case,case_key}',
+          ''
+        )) AS extracted_case_key,
+        BTRIM(COALESCE(
+          preview_row.timesheet_id::text,
+          preview_row.row_json->>'timesheet_id',
+          preview_row.row_json->>'real_business_timesheet_id',
+          preview_row.row_json->>'linked_timesheet_id',
+          preview_row.row_json #>> '{case,timesheet_id}',
+          preview_row.row_json #>> '{raw_case,timesheet_id}',
+          ''
+        )) AS row_timesheet_id_text,
+        BTRIM(COALESCE(
+          preview_row.row_json->>'client_id',
+          preview_row.row_json #>> '{case,client_id}',
+          preview_row.row_json #>> '{raw_case,client_id}',
+          ''
+        )) AS case_client_id_text,
+        UPPER(BTRIM(COALESCE(
+          preview_row.row_json->>'resolution_family',
+          preview_row.row_json #>> '{case_resolution_summary,resolution_family}',
+          preview_row.row_json #>> '{case,resolution_family}',
+          preview_row.row_json #>> '{raw_case,resolution_family}',
+          ''
+        ))) AS resolution_family
+      FROM public.banking_pay_workbench_preview_rows AS preview_row
+      WHERE preview_row.session_id = p_session_id
+        AND preview_row.session_version = COALESCE(v_session_row.version, 1)
+        AND (v_candidate_id IS NULL OR preview_row.candidate_id = v_candidate_id)
+        AND LOWER(BTRIM(COALESCE(preview_row.section, ''))) = 'cases_resolutions'
+        AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+        AND EXISTS (
+          SELECT 1
+          FROM _tmp_bpay_session_candidate_scope AS candidate_scope
+          WHERE candidate_scope.candidate_id = preview_row.candidate_id
+        )
+    ), normalized_preview AS (
+      SELECT
+        preview_source.preview_row_id,
+        preview_source.candidate_id,
+        preview_source.row_key,
+        preview_source.row_json,
         CASE
-          WHEN jsonb_typeof(row_backed_case.row_json->'case_components') = 'array' THEN row_backed_case.row_json->'case_components'
-          WHEN jsonb_typeof(row_backed_case.row_json->'components') = 'array' THEN row_backed_case.row_json->'components'
-          WHEN jsonb_typeof(row_backed_case.row_json->'component_states') = 'array' THEN row_backed_case.row_json->'component_states'
-          WHEN jsonb_typeof(row_backed_case.row_json->'component_resolution_states') = 'array' THEN row_backed_case.row_json->'component_resolution_states'
-          WHEN jsonb_typeof(row_backed_case.row_json->'preview_components') = 'array' THEN row_backed_case.row_json->'preview_components'
-          WHEN jsonb_typeof(row_backed_case.row_json #> '{case,case_components}') = 'array' THEN row_backed_case.row_json #> '{case,case_components}'
-          WHEN jsonb_typeof(row_backed_case.row_json #> '{case,components}') = 'array' THEN row_backed_case.row_json #> '{case,components}'
-          WHEN jsonb_typeof(row_backed_case.row_json #> '{raw_case,case_components}') = 'array' THEN row_backed_case.row_json #> '{raw_case,case_components}'
-          WHEN jsonb_typeof(row_backed_case.row_json #> '{raw_case,components}') = 'array' THEN row_backed_case.row_json #> '{raw_case,components}'
+          WHEN preview_source.row_timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN preview_source.row_timesheet_id_text::uuid
+          ELSE NULL::uuid
+        END AS row_timesheet_id,
+        CASE
+          WHEN preview_source.case_client_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN preview_source.case_client_id_text::uuid
+          ELSE NULL::uuid
+        END AS case_client_id,
+        COALESCE(
+          NULLIF(preview_source.extracted_case_key, ''),
+          CASE
+            WHEN preview_source.row_timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN 'timesheet:' || preview_source.row_timesheet_id_text
+            ELSE NULL::text
+          END,
+          ''
+        ) AS case_key,
+        preview_source.resolution_family
+      FROM preview_source
+    ), case_component_arrays AS (
+      SELECT
+        normalized_preview.preview_row_id,
+        normalized_preview.candidate_id,
+        normalized_preview.case_key,
+        normalized_preview.row_timesheet_id,
+        normalized_preview.case_client_id,
+        normalized_preview.row_json,
+        CASE
+          WHEN jsonb_typeof(normalized_preview.row_json->'case_components') = 'array' THEN normalized_preview.row_json->'case_components'
+          WHEN jsonb_typeof(normalized_preview.row_json->'components') = 'array' THEN normalized_preview.row_json->'components'
+          WHEN jsonb_typeof(normalized_preview.row_json->'component_states') = 'array' THEN normalized_preview.row_json->'component_states'
+          WHEN jsonb_typeof(normalized_preview.row_json->'component_resolution_states') = 'array' THEN normalized_preview.row_json->'component_resolution_states'
+          WHEN jsonb_typeof(normalized_preview.row_json->'preview_components') = 'array' THEN normalized_preview.row_json->'preview_components'
+          WHEN jsonb_typeof(normalized_preview.row_json #> '{case,case_components}') = 'array' THEN normalized_preview.row_json #> '{case,case_components}'
+          WHEN jsonb_typeof(normalized_preview.row_json #> '{case,components}') = 'array' THEN normalized_preview.row_json #> '{case,components}'
+          WHEN jsonb_typeof(normalized_preview.row_json #> '{raw_case,case_components}') = 'array' THEN normalized_preview.row_json #> '{raw_case,case_components}'
+          WHEN jsonb_typeof(normalized_preview.row_json #> '{raw_case,components}') = 'array' THEN normalized_preview.row_json #> '{raw_case,components}'
           ELSE '[]'::jsonb
         END AS components_json
-      FROM _tmp_bpay_session_row_backed_case_baseline AS row_backed_case
-      WHERE COALESCE(row_backed_case.resolution_family, '') IN ('', 'BUCKETED')
-    ),
-    expanded_components AS (
+      FROM normalized_preview
+      WHERE normalized_preview.case_key <> ''
+        AND COALESCE(normalized_preview.resolution_family, '') IN ('', 'BUCKETED')
+    ), expanded_components AS (
       SELECT
         case_component_arrays.preview_row_id,
         component_element.ordinality::integer AS component_ordinal,
         case_component_arrays.candidate_id,
         case_component_arrays.case_key,
-        case_component_arrays.timesheet_id AS case_timesheet_id,
+        case_component_arrays.row_timesheet_id,
+        case_component_arrays.case_client_id,
         component_element.value AS component_json
       FROM case_component_arrays
       CROSS JOIN LATERAL jsonb_array_elements(case_component_arrays.components_json) WITH ORDINALITY AS component_element(value, ordinality)
       WHERE jsonb_typeof(component_element.value) = 'object'
-    ),
-    normalized_components AS (
+    ), components_with_basis AS (
       SELECT
         expanded_components.*,
+        CASE
+          WHEN jsonb_typeof(expanded_components.component_json->'source_basis_json') = 'object' THEN COALESCE(expanded_components.component_json->'source_basis_json', '{}'::jsonb)
+          WHEN jsonb_typeof(expanded_components.component_json->'frozen_source_basis_json') = 'object' THEN COALESCE(expanded_components.component_json->'frozen_source_basis_json', '{}'::jsonb)
+          WHEN jsonb_typeof(expanded_components.component_json #> '{raw,source_basis_json}') = 'object' THEN COALESCE(expanded_components.component_json #> '{raw,source_basis_json}', '{}'::jsonb)
+          ELSE '{}'::jsonb
+        END AS source_basis_json,
+        CASE
+          WHEN jsonb_typeof(expanded_components.component_json->'suggested_resolution_payload_json') = 'object' THEN COALESCE(expanded_components.component_json->'suggested_resolution_payload_json', '{}'::jsonb)
+          WHEN jsonb_typeof(expanded_components.component_json #> '{raw,suggested_resolution_payload_json}') = 'object' THEN COALESCE(expanded_components.component_json #> '{raw,suggested_resolution_payload_json}', '{}'::jsonb)
+          ELSE '{}'::jsonb
+        END AS suggested_resolution_payload_json,
+        CASE
+          WHEN jsonb_typeof(expanded_components.component_json->'suggested_resolution_result_json') = 'object' THEN COALESCE(expanded_components.component_json->'suggested_resolution_result_json', '{}'::jsonb)
+          WHEN jsonb_typeof(expanded_components.component_json #> '{raw,suggested_resolution_result_json}') = 'object' THEN COALESCE(expanded_components.component_json #> '{raw,suggested_resolution_result_json}', '{}'::jsonb)
+          ELSE '{}'::jsonb
+        END AS suggested_resolution_result_json
+      FROM expanded_components
+    ), normalized_components AS (
+      SELECT
+        components_with_basis.*,
         BTRIM(COALESCE(
-          expanded_components.case_timesheet_id::text,
-          expanded_components.component_json->>'timesheet_id',
-          expanded_components.component_json #>> '{source_basis_json,timesheet_id}',
-          expanded_components.component_json #>> '{raw,timesheet_id}',
-          expanded_components.component_json #>> '{raw,source_basis_json,timesheet_id}',
+          components_with_basis.row_timesheet_id::text,
+          components_with_basis.component_json->>'timesheet_id',
+          components_with_basis.source_basis_json->>'timesheet_id',
+          components_with_basis.component_json #>> '{raw,timesheet_id}',
+          components_with_basis.component_json #>> '{raw,source_basis_json,timesheet_id}',
           ''
         )) AS timesheet_id_text,
         BTRIM(COALESCE(
-          expanded_components.component_json->>'source_basis_fingerprint',
-          expanded_components.component_json #>> '{raw,source_basis_fingerprint}',
+          components_with_basis.component_json->>'source_basis_fingerprint',
+          components_with_basis.component_json #>> '{raw,source_basis_fingerprint}',
+          CASE WHEN components_with_basis.source_basis_json <> '{}'::jsonb THEN md5(components_with_basis.source_basis_json::text) ELSE NULL::text END,
           ''
         )) AS source_basis_fingerprint,
         BTRIM(COALESCE(
-          expanded_components.component_json->>'source_family_key',
-          expanded_components.component_json #>> '{raw,source_family_key}',
+          components_with_basis.component_json->>'source_family_key',
+          components_with_basis.component_json #>> '{raw,source_family_key}',
+          components_with_basis.component_json->>'frozen_source_family_key',
           ''
         )) AS source_family_key,
         UPPER(BTRIM(COALESCE(
-          expanded_components.component_json->>'bucket_code',
-          expanded_components.component_json #>> '{source_basis_json,bucket_code}',
-          expanded_components.component_json #>> '{raw,bucket_code}',
-          expanded_components.component_json #>> '{raw,source_basis_json,bucket_code}',
+          components_with_basis.component_json->>'bucket_code',
+          components_with_basis.source_basis_json->>'bucket_code',
+          components_with_basis.component_json #>> '{raw,bucket_code}',
+          components_with_basis.component_json #>> '{raw,source_basis_json,bucket_code}',
           ''
         ))) AS bucket_code,
         UPPER(BTRIM(COALESCE(
-          expanded_components.component_json->>'component_key_type',
-          expanded_components.component_json #>> '{raw,component_key_type}',
+          components_with_basis.component_json->>'component_key_type',
+          components_with_basis.component_json->>'frozen_component_key_type',
+          components_with_basis.component_json #>> '{raw,component_key_type}',
           ''
         ))) AS component_key_type,
         BTRIM(COALESCE(
-          expanded_components.component_json->>'component_key_value',
-          expanded_components.component_json #>> '{raw,component_key_value}',
+          components_with_basis.component_json->>'component_key_value',
+          components_with_basis.component_json->>'frozen_component_key_value',
+          components_with_basis.component_json #>> '{raw,component_key_value}',
           ''
         )) AS component_key_value,
-        BTRIM(COALESCE(
-          expanded_components.component_json->>'component_fingerprint',
-          expanded_components.component_json #>> '{raw,component_fingerprint}',
+        NULLIF(BTRIM(COALESCE(
+          components_with_basis.component_json->>'component_fingerprint',
+          components_with_basis.component_json #>> '{raw,component_fingerprint}',
           ''
-        )) AS component_fingerprint
-      FROM expanded_components
+        )), '') AS component_fingerprint,
+        UPPER(BTRIM(COALESCE(
+          components_with_basis.component_json->>'classification',
+          components_with_basis.component_json->>'frozen_component_classification',
+          components_with_basis.component_json #>> '{raw,classification}',
+          ''
+        ))) AS classification,
+        UPPER(BTRIM(COALESCE(
+          components_with_basis.component_json->>'source_pay_method',
+          components_with_basis.source_basis_json->>'source_pay_method',
+          components_with_basis.component_json #>> '{raw,source_pay_method}',
+          ''
+        ))) AS source_pay_method,
+        UPPER(BTRIM(COALESCE(
+          components_with_basis.component_json->>'current_target_pay_method',
+          components_with_basis.component_json->>'target_pay_method',
+          components_with_basis.suggested_resolution_payload_json->>'target_pay_method',
+          components_with_basis.suggested_resolution_result_json->>'target_pay_method',
+          components_with_basis.component_json #>> '{raw,current_target_pay_method}',
+          components_with_basis.component_json #>> '{raw,target_pay_method}',
+          ''
+        ))) AS target_pay_method,
+        COALESCE(
+          components_with_basis.component_json->>'source_units',
+          components_with_basis.source_basis_json->>'source_units',
+          components_with_basis.component_json #>> '{raw,source_units}',
+          ''
+        ) AS source_units_text,
+        COALESCE(
+          components_with_basis.component_json->>'source_rate',
+          components_with_basis.source_basis_json->>'source_rate',
+          components_with_basis.component_json #>> '{raw,source_rate}',
+          ''
+        ) AS source_rate_text,
+        COALESCE(
+          components_with_basis.component_json->>'source_charge_rate',
+          components_with_basis.source_basis_json->>'source_charge_rate',
+          components_with_basis.component_json #>> '{raw,source_charge_rate}',
+          ''
+        ) AS source_charge_rate_text,
+        COALESCE(
+          components_with_basis.component_json->>'source_pay_ex_vat',
+          components_with_basis.component_json->>'component_amount_ex_vat',
+          components_with_basis.component_json #>> '{raw,source_pay_ex_vat}',
+          ''
+        ) AS source_pay_ex_vat_text,
+        COALESCE(
+          components_with_basis.component_json->>'source_charge_ex_vat',
+          components_with_basis.component_json #>> '{raw,source_charge_ex_vat}',
+          ''
+        ) AS source_charge_ex_vat_text,
+        COALESCE(
+          components_with_basis.component_json->>'source_margin_ex_vat',
+          components_with_basis.component_json #>> '{raw,source_margin_ex_vat}',
+          ''
+        ) AS source_margin_ex_vat_text,
+        COALESCE(
+          components_with_basis.suggested_resolution_payload_json->>'suggested_target_rate',
+          components_with_basis.suggested_resolution_result_json->>'replacement_rate',
+          components_with_basis.component_json->>'target_rate',
+          components_with_basis.component_json #>> '{raw,target_rate}',
+          ''
+        ) AS suggested_target_rate_text,
+        COALESCE(
+          components_with_basis.suggested_resolution_result_json->>'target_charge_rate',
+          components_with_basis.suggested_resolution_payload_json->>'target_charge_rate',
+          components_with_basis.component_json->>'target_charge_rate',
+          ''
+        ) AS suggested_target_charge_rate_text,
+        COALESCE(
+          components_with_basis.suggested_resolution_payload_json->>'relevant_erni_pct',
+          components_with_basis.suggested_resolution_result_json->>'relevant_erni_pct',
+          ''
+        ) AS relevant_erni_pct_text,
+        COALESCE(
+          components_with_basis.suggested_resolution_payload_json->>'vat_rate_pct',
+          components_with_basis.suggested_resolution_result_json->>'vat_rate_pct',
+          ''
+        ) AS vat_rate_pct_text,
+        COALESCE(
+          components_with_basis.suggested_resolution_payload_json->>'umbrella_vat_chargeable',
+          components_with_basis.suggested_resolution_result_json->>'umbrella_vat_chargeable',
+          components_with_basis.component_json->>'umbrella_vat_chargeable',
+          ''
+        ) AS umbrella_vat_chargeable_text,
+        NULLIF(BTRIM(COALESCE(
+          components_with_basis.suggested_resolution_payload_json->>'target_charge_basis',
+          components_with_basis.suggested_resolution_result_json->>'target_charge_basis',
+          components_with_basis.suggested_resolution_payload_json->>'charge_basis',
+          components_with_basis.suggested_resolution_result_json->>'charge_basis',
+          ''
+        )), '') AS charge_basis,
+        NULLIF(UPPER(BTRIM(COALESCE(
+          components_with_basis.component_json->>'taxability',
+          components_with_basis.source_basis_json->>'taxability',
+          components_with_basis.component_json #>> '{raw,taxability}',
+          ''
+        ))), '') AS taxability_context,
+        NULLIF(UPPER(BTRIM(COALESCE(
+          components_with_basis.component_json->>'gross_net_handling',
+          components_with_basis.source_basis_json->>'gross_net_handling',
+          components_with_basis.component_json #>> '{raw,gross_net_handling}',
+          ''
+        ))), '') AS gross_net_context,
+        NULLIF(UPPER(BTRIM(COALESCE(
+          components_with_basis.suggested_resolution_payload_json->>'reuse_mode',
+          components_with_basis.suggested_resolution_result_json->>'reuse_mode',
+          ''
+        ))), '') AS reuse_mode,
+        LOWER(BTRIM(COALESCE(components_with_basis.component_json->>'requires_resolution', ''))) AS requires_resolution_text,
+        LOWER(BTRIM(COALESCE(components_with_basis.component_json->>'is_actionable_resolution_row', ''))) AS is_actionable_resolution_row_text
+      FROM components_with_basis
+    ), typed_components AS (
+      SELECT
+        normalized_components.*,
+        CASE
+          WHEN normalized_components.timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN normalized_components.timesheet_id_text::uuid
+          ELSE NULL::uuid
+        END AS timesheet_id,
+        CASE WHEN normalized_components.source_units_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.source_units_text::numeric, 6) ELSE NULL::numeric END AS source_units,
+        CASE WHEN normalized_components.source_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.source_rate_text::numeric, 6) ELSE NULL::numeric END AS source_rate,
+        CASE WHEN normalized_components.source_charge_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.source_charge_rate_text::numeric, 6) ELSE NULL::numeric END AS source_charge_rate,
+        CASE WHEN normalized_components.source_pay_ex_vat_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.source_pay_ex_vat_text::numeric, 2) ELSE NULL::numeric END AS source_pay_ex_vat,
+        CASE WHEN normalized_components.source_charge_ex_vat_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.source_charge_ex_vat_text::numeric, 2) ELSE NULL::numeric END AS source_charge_ex_vat,
+        CASE WHEN normalized_components.source_margin_ex_vat_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.source_margin_ex_vat_text::numeric, 2) ELSE NULL::numeric END AS source_margin_ex_vat,
+        CASE WHEN normalized_components.suggested_target_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.suggested_target_rate_text::numeric, 2) ELSE NULL::numeric END AS suggested_target_rate,
+        CASE WHEN normalized_components.suggested_target_charge_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.suggested_target_charge_rate_text::numeric, 6) ELSE NULL::numeric END AS suggested_target_charge_rate,
+        CASE WHEN normalized_components.relevant_erni_pct_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.relevant_erni_pct_text::numeric, 6) ELSE NULL::numeric END AS relevant_erni_pct,
+        CASE WHEN normalized_components.vat_rate_pct_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_components.vat_rate_pct_text::numeric, 6) ELSE NULL::numeric END AS vat_rate_pct,
+        CASE
+          WHEN normalized_components.umbrella_vat_chargeable_text = '' THEN NULL::boolean
+          WHEN LOWER(normalized_components.umbrella_vat_chargeable_text) IN ('true', 't', '1', 'yes', 'y', 'on') THEN true
+          ELSE false
+        END AS umbrella_vat_chargeable,
+        CASE
+          WHEN normalized_components.requires_resolution_text = '' THEN (
+            normalized_components.classification = 'TAXABLE_CHANNEL_SENSITIVE'
+            AND normalized_components.source_pay_method <> ''
+            AND normalized_components.target_pay_method <> ''
+            AND normalized_components.source_pay_method IS DISTINCT FROM normalized_components.target_pay_method
+          )
+          ELSE normalized_components.requires_resolution_text IN ('true', 't', '1', 'yes', 'y', 'on')
+        END AS requires_resolution,
+        CASE
+          WHEN normalized_components.is_actionable_resolution_row_text = '' THEN (
+            normalized_components.source_units_text ~ '^-?[0-9]+(\.[0-9]+)?$'
+            AND normalized_components.source_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$'
+            AND normalized_components.source_charge_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$'
+            AND normalized_components.component_key_type <> 'ADJUSTMENT_CODE'
+          )
+          ELSE normalized_components.is_actionable_resolution_row_text IN ('true', 't', '1', 'yes', 'y', 'on')
+        END AS is_actionable_resolution_row
+      FROM normalized_components
     )
     SELECT
-      normalized_components.preview_row_id,
-      normalized_components.component_ordinal,
-      normalized_components.candidate_id,
-      normalized_components.case_key,
-      CASE
-        WHEN normalized_components.timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          THEN normalized_components.timesheet_id_text::uuid
-        ELSE NULL::uuid
-      END,
-      normalized_components.source_basis_fingerprint,
-      normalized_components.source_family_key,
-      NULLIF(normalized_components.bucket_code, ''),
-      normalized_components.component_key_type,
-      normalized_components.component_key_value,
-      NULLIF(normalized_components.component_fingerprint, ''),
-      normalized_components.component_json
-    FROM normalized_components;
+      'ROW|' || typed_components.preview_row_id::text || '|' || typed_components.component_ordinal::text,
+      'ROW_BACKED',
+      typed_components.candidate_id,
+      COALESCE(NULLIF(typed_components.case_key, ''), 'timesheet:' || typed_components.timesheet_id::text),
+      typed_components.timesheet_id,
+      typed_components.case_client_id,
+      typed_components.source_basis_json,
+      typed_components.source_basis_fingerprint,
+      typed_components.source_family_key,
+      NULLIF(typed_components.bucket_code, ''),
+      typed_components.component_key_type,
+      typed_components.component_key_value,
+      typed_components.component_fingerprint,
+      typed_components.classification,
+      typed_components.source_pay_method,
+      typed_components.target_pay_method,
+      typed_components.source_units,
+      typed_components.source_rate,
+      typed_components.source_charge_rate,
+      typed_components.source_pay_ex_vat,
+      typed_components.source_charge_ex_vat,
+      typed_components.source_margin_ex_vat,
+      typed_components.suggested_target_rate,
+      typed_components.suggested_target_charge_rate,
+      typed_components.relevant_erni_pct,
+      typed_components.vat_rate_pct,
+      typed_components.umbrella_vat_chargeable,
+      typed_components.charge_basis,
+      typed_components.taxability_context,
+      typed_components.gross_net_context,
+      typed_components.reuse_mode,
+      typed_components.suggested_resolution_payload_json,
+      typed_components.suggested_resolution_result_json,
+      typed_components.requires_resolution,
+      typed_components.is_actionable_resolution_row,
+      typed_components.component_json
+    FROM typed_components
+    WHERE typed_components.timesheet_id IS NOT NULL
+      AND typed_components.source_basis_fingerprint <> ''
+      AND typed_components.source_family_key <> ''
+      AND typed_components.component_key_type <> ''
+      AND typed_components.component_key_value <> ''
+      AND typed_components.source_units IS NOT NULL
+      AND typed_components.source_rate IS NOT NULL
+      AND typed_components.source_charge_rate IS NOT NULL
+    ON CONFLICT (evidence_key) DO NOTHING;
 
     SELECT COUNT(*)::integer
     INTO v_row_backed_component_count
-    FROM _tmp_bpay_session_row_backed_component_baseline;
+    FROM _tmp_bpay_session_bucket_component_raw AS raw_component
+    WHERE raw_component.evidence_source = 'ROW_BACKED'
+      AND raw_component.case_key = v_case_key
+      AND (v_candidate_id IS NULL OR raw_component.candidate_id = v_candidate_id)
+      AND (v_linked_timesheet_id IS NULL OR raw_component.timesheet_id = v_linked_timesheet_id);
 
-    FOR v_bucket_row IN
-      SELECT *
-      FROM _tmp_bpay_session_bucket_resolution
-      ORDER BY bucket_ordinal
-    LOOP
-      IF v_row_backed_component_count > 0 THEN
-        IF v_candidate_id IS NULL THEN
-          SELECT
-            COUNT(*)::integer,
-            COALESCE(array_agg(DISTINCT row_backed_component.candidate_id ORDER BY row_backed_component.candidate_id), ARRAY[]::uuid[])
-          INTO v_target_match_count, v_matching_candidate_ids
-          FROM _tmp_bpay_session_row_backed_component_baseline AS row_backed_component
-          WHERE row_backed_component.case_key = v_case_key
-            AND COALESCE(row_backed_component.timesheet_id::text, '') = COALESCE(v_bucket_row.timesheet_id::text, '')
-            AND COALESCE(row_backed_component.source_basis_fingerprint, '') = v_bucket_row.source_basis_fingerprint
-            AND COALESCE(row_backed_component.source_family_key, '') = v_bucket_row.source_family_key
-            AND COALESCE(row_backed_component.bucket_code, '') = COALESCE(v_bucket_row.bucket_code, '')
-            AND COALESCE(row_backed_component.component_key_type, '') = v_bucket_row.component_key_type
-            AND COALESCE(row_backed_component.component_key_value, '') = v_bucket_row.component_key_value;
+    IF v_row_backed_component_count = 0 THEN
+      TRUNCATE TABLE _tmp_bpay_session_bucket_component_raw;
 
-          v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
-          IF v_target_match_count = 0 OR v_matching_candidate_count = 0 THEN
-            RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND'
-              USING ERRCODE = 'P0001',
-                    DETAIL = jsonb_build_object(
-                      'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND',
-                      'session_id', p_session_id::text,
-                      'case_key', v_case_key,
-                      'bucket_ordinal', v_bucket_row.bucket_ordinal
-                    )::text;
-          ELSIF v_target_match_count > 1 OR v_matching_candidate_count > 1 THEN
-            RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS'
-              USING ERRCODE = 'P0001',
-                    DETAIL = jsonb_build_object(
-                      'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS',
-                      'session_id', p_session_id::text,
-                      'case_key', v_case_key,
-                      'bucket_ordinal', v_bucket_row.bucket_ordinal
-                    )::text;
-          END IF;
-
-          UPDATE _tmp_bpay_session_bucket_resolution
-          SET matched_candidate_id = v_matching_candidate_ids[1]
-          WHERE _tmp_bpay_session_bucket_resolution.bucket_ordinal = v_bucket_row.bucket_ordinal;
-        ELSE
-          SELECT COUNT(*)::integer
-          INTO v_target_match_count
-          FROM _tmp_bpay_session_row_backed_component_baseline AS row_backed_component
-          WHERE row_backed_component.candidate_id = v_candidate_id
-            AND row_backed_component.case_key = v_case_key
-            AND COALESCE(row_backed_component.timesheet_id::text, '') = COALESCE(v_bucket_row.timesheet_id::text, '')
-            AND COALESCE(row_backed_component.source_basis_fingerprint, '') = v_bucket_row.source_basis_fingerprint
-            AND COALESCE(row_backed_component.source_family_key, '') = v_bucket_row.source_family_key
-            AND COALESCE(row_backed_component.bucket_code, '') = COALESCE(v_bucket_row.bucket_code, '')
-            AND COALESCE(row_backed_component.component_key_type, '') = v_bucket_row.component_key_type
-            AND COALESCE(row_backed_component.component_key_value, '') = v_bucket_row.component_key_value;
-
-          IF v_target_match_count = 0 THEN
-            RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND'
-              USING ERRCODE = 'P0001',
-                    DETAIL = jsonb_build_object(
-                      'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND',
-                      'session_id', p_session_id::text,
-                      'candidate_id', v_candidate_id::text,
-                      'case_key', v_case_key,
-                      'bucket_ordinal', v_bucket_row.bucket_ordinal
-                    )::text;
-          ELSIF v_target_match_count > 1 THEN
-            RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS'
-              USING ERRCODE = 'P0001',
-                    DETAIL = jsonb_build_object(
-                      'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS',
-                      'session_id', p_session_id::text,
-                      'candidate_id', v_candidate_id::text,
-                      'case_key', v_case_key,
-                      'bucket_ordinal', v_bucket_row.bucket_ordinal
-                    )::text;
-          END IF;
-
-          UPDATE _tmp_bpay_session_bucket_resolution
-          SET matched_candidate_id = v_candidate_id
-          WHERE _tmp_bpay_session_bucket_resolution.bucket_ordinal = v_bucket_row.bucket_ordinal;
-        END IF;
-      ELSIF v_candidate_id IS NULL THEN
-        SELECT COALESCE(array_agg(DISTINCT snapshot_component.candidate_id ORDER BY snapshot_component.candidate_id), ARRAY[]::uuid[])
-        INTO v_matching_candidate_ids
+      INSERT INTO _tmp_bpay_session_bucket_component_raw (
+        evidence_key,
+        evidence_source,
+        candidate_id,
+        case_key,
+        timesheet_id,
+        case_client_id,
+        source_basis_json,
+        source_basis_fingerprint,
+        source_family_key,
+        bucket_code,
+        component_key_type,
+        component_key_value,
+        component_fingerprint,
+        classification,
+        source_pay_method,
+        target_pay_method,
+        source_units,
+        source_rate,
+        source_charge_rate,
+        source_pay_ex_vat,
+        source_charge_ex_vat,
+        source_margin_ex_vat,
+        suggested_target_rate,
+        suggested_target_charge_rate,
+        relevant_erni_pct,
+        vat_rate_pct,
+        umbrella_vat_chargeable,
+        charge_basis,
+        taxability_context,
+        gross_net_context,
+        reuse_mode,
+        suggested_resolution_payload_json,
+        suggested_resolution_result_json,
+        requires_resolution,
+        is_actionable_resolution_row,
+        component_state_json
+      )
+      WITH snapshot_source AS (
+        SELECT
+          snapshot_component.id AS snapshot_component_id,
+          snapshot_component.candidate_id,
+          snapshot_component.case_key,
+          snapshot_component.timesheet_id,
+          COALESCE(snapshot_component.component_state_json, '{}'::jsonb) AS component_json,
+          CASE
+            WHEN jsonb_typeof(snapshot_component.component_state_json->'source_basis_json') = 'object' THEN COALESCE(snapshot_component.component_state_json->'source_basis_json', '{}'::jsonb)
+            WHEN jsonb_typeof(snapshot_component.component_state_json->'frozen_source_basis_json') = 'object' THEN COALESCE(snapshot_component.component_state_json->'frozen_source_basis_json', '{}'::jsonb)
+            WHEN jsonb_typeof(snapshot_component.component_state_json #> '{raw,source_basis_json}') = 'object' THEN COALESCE(snapshot_component.component_state_json #> '{raw,source_basis_json}', '{}'::jsonb)
+            ELSE '{}'::jsonb
+          END AS source_basis_json,
+          CASE
+            WHEN jsonb_typeof(snapshot_component.component_state_json->'suggested_resolution_payload_json') = 'object' THEN COALESCE(snapshot_component.component_state_json->'suggested_resolution_payload_json', '{}'::jsonb)
+            WHEN jsonb_typeof(snapshot_component.component_state_json #> '{raw,suggested_resolution_payload_json}') = 'object' THEN COALESCE(snapshot_component.component_state_json #> '{raw,suggested_resolution_payload_json}', '{}'::jsonb)
+            ELSE '{}'::jsonb
+          END AS suggested_resolution_payload_json,
+          CASE
+            WHEN jsonb_typeof(snapshot_component.component_state_json->'suggested_resolution_result_json') = 'object' THEN COALESCE(snapshot_component.component_state_json->'suggested_resolution_result_json', '{}'::jsonb)
+            WHEN jsonb_typeof(snapshot_component.component_state_json #> '{raw,suggested_resolution_result_json}') = 'object' THEN COALESCE(snapshot_component.component_state_json #> '{raw,suggested_resolution_result_json}', '{}'::jsonb)
+            ELSE '{}'::jsonb
+          END AS suggested_resolution_result_json,
+          snapshot_component.source_basis_fingerprint,
+          snapshot_component.source_family_key,
+          snapshot_component.bucket_code,
+          snapshot_component.component_key_type,
+          snapshot_component.component_key_value,
+          snapshot_component.component_fingerprint
         FROM public.banking_pay_snapshot_case_component_state AS snapshot_component
         WHERE snapshot_component.snapshot_run_id = v_session_row.source_snapshot_run_id
           AND EXISTS (
@@ -55448,139 +56054,1078 @@ BEGIN
             FROM _tmp_bpay_session_candidate_scope AS candidate_scope
             WHERE candidate_scope.candidate_id = snapshot_component.candidate_id
           )
-          AND snapshot_component.case_key = v_case_key
-          AND COALESCE(snapshot_component.timesheet_id::text, '') = COALESCE(v_bucket_row.timesheet_id::text, '')
-          AND COALESCE(snapshot_component.source_basis_fingerprint, '') = v_bucket_row.source_basis_fingerprint
-          AND COALESCE(snapshot_component.source_family_key, '') = v_bucket_row.source_family_key
-          AND COALESCE(snapshot_component.bucket_code, '') = COALESCE(v_bucket_row.bucket_code, '')
-          AND COALESCE(snapshot_component.component_key_type, '') = v_bucket_row.component_key_type
-          AND COALESCE(snapshot_component.component_key_value, '') = v_bucket_row.component_key_value;
+      ), normalized_snapshot AS (
+        SELECT
+          snapshot_source.*,
+          BTRIM(COALESCE(
+            snapshot_source.source_basis_fingerprint,
+            snapshot_source.component_json->>'source_basis_fingerprint',
+            snapshot_source.component_json #>> '{raw,source_basis_fingerprint}',
+            CASE WHEN snapshot_source.source_basis_json <> '{}'::jsonb THEN md5(snapshot_source.source_basis_json::text) ELSE NULL::text END,
+            ''
+          )) AS normalized_source_basis_fingerprint,
+          BTRIM(COALESCE(
+            snapshot_source.source_family_key,
+            snapshot_source.component_json->>'source_family_key',
+            snapshot_source.component_json #>> '{raw,source_family_key}',
+            CASE WHEN snapshot_source.timesheet_id IS NULL THEN NULL ELSE 'timesheet:' || snapshot_source.timesheet_id::text END,
+            ''
+          )) AS normalized_source_family_key,
+          UPPER(BTRIM(COALESCE(
+            snapshot_source.bucket_code,
+            snapshot_source.component_json->>'bucket_code',
+            snapshot_source.source_basis_json->>'bucket_code',
+            snapshot_source.component_json #>> '{raw,bucket_code}',
+            ''
+          ))) AS normalized_bucket_code,
+          UPPER(BTRIM(COALESCE(
+            snapshot_source.component_key_type,
+            snapshot_source.component_json->>'component_key_type',
+            snapshot_source.component_json->>'frozen_component_key_type',
+            snapshot_source.component_json #>> '{raw,component_key_type}',
+            ''
+          ))) AS normalized_component_key_type,
+          BTRIM(COALESCE(
+            snapshot_source.component_key_value,
+            snapshot_source.component_json->>'component_key_value',
+            snapshot_source.component_json->>'frozen_component_key_value',
+            snapshot_source.component_json #>> '{raw,component_key_value}',
+            ''
+          )) AS normalized_component_key_value,
+          NULLIF(BTRIM(COALESCE(
+            snapshot_source.component_fingerprint,
+            snapshot_source.component_json->>'component_fingerprint',
+            snapshot_source.component_json #>> '{raw,component_fingerprint}',
+            ''
+          )), '') AS normalized_component_fingerprint,
+          UPPER(BTRIM(COALESCE(
+            snapshot_source.component_json->>'classification',
+            snapshot_source.component_json->>'frozen_component_classification',
+            snapshot_source.component_json #>> '{raw,classification}',
+            ''
+          ))) AS classification,
+          UPPER(BTRIM(COALESCE(
+            snapshot_source.component_json->>'source_pay_method',
+            snapshot_source.source_basis_json->>'source_pay_method',
+            snapshot_source.component_json #>> '{raw,source_pay_method}',
+            ''
+          ))) AS source_pay_method,
+          UPPER(BTRIM(COALESCE(
+            snapshot_source.component_json->>'current_target_pay_method',
+            snapshot_source.component_json->>'target_pay_method',
+            snapshot_source.suggested_resolution_payload_json->>'target_pay_method',
+            snapshot_source.suggested_resolution_result_json->>'target_pay_method',
+            snapshot_source.component_json #>> '{raw,current_target_pay_method}',
+            snapshot_source.component_json #>> '{raw,target_pay_method}',
+            ''
+          ))) AS target_pay_method,
+          COALESCE(snapshot_source.component_json->>'source_units', snapshot_source.source_basis_json->>'source_units', snapshot_source.component_json #>> '{raw,source_units}', '') AS source_units_text,
+          COALESCE(snapshot_source.component_json->>'source_rate', snapshot_source.source_basis_json->>'source_rate', snapshot_source.component_json #>> '{raw,source_rate}', '') AS source_rate_text,
+          COALESCE(snapshot_source.component_json->>'source_charge_rate', snapshot_source.source_basis_json->>'source_charge_rate', snapshot_source.component_json #>> '{raw,source_charge_rate}', '') AS source_charge_rate_text,
+          COALESCE(snapshot_source.component_json->>'source_pay_ex_vat', snapshot_source.component_json->>'component_amount_ex_vat', snapshot_source.component_json #>> '{raw,source_pay_ex_vat}', '') AS source_pay_ex_vat_text,
+          COALESCE(snapshot_source.component_json->>'source_charge_ex_vat', snapshot_source.component_json #>> '{raw,source_charge_ex_vat}', '') AS source_charge_ex_vat_text,
+          COALESCE(snapshot_source.component_json->>'source_margin_ex_vat', snapshot_source.component_json #>> '{raw,source_margin_ex_vat}', '') AS source_margin_ex_vat_text,
+          COALESCE(snapshot_source.suggested_resolution_payload_json->>'suggested_target_rate', snapshot_source.suggested_resolution_result_json->>'replacement_rate', snapshot_source.component_json->>'target_rate', '') AS suggested_target_rate_text,
+          COALESCE(snapshot_source.suggested_resolution_result_json->>'target_charge_rate', snapshot_source.suggested_resolution_payload_json->>'target_charge_rate', snapshot_source.component_json->>'target_charge_rate', '') AS suggested_target_charge_rate_text,
+          COALESCE(snapshot_source.suggested_resolution_payload_json->>'relevant_erni_pct', snapshot_source.suggested_resolution_result_json->>'relevant_erni_pct', '') AS relevant_erni_pct_text,
+          COALESCE(snapshot_source.suggested_resolution_payload_json->>'vat_rate_pct', snapshot_source.suggested_resolution_result_json->>'vat_rate_pct', '') AS vat_rate_pct_text,
+          COALESCE(snapshot_source.suggested_resolution_payload_json->>'umbrella_vat_chargeable', snapshot_source.suggested_resolution_result_json->>'umbrella_vat_chargeable', snapshot_source.component_json->>'umbrella_vat_chargeable', '') AS umbrella_vat_chargeable_text,
+          NULLIF(BTRIM(COALESCE(snapshot_source.suggested_resolution_payload_json->>'target_charge_basis', snapshot_source.suggested_resolution_result_json->>'target_charge_basis', snapshot_source.suggested_resolution_payload_json->>'charge_basis', snapshot_source.suggested_resolution_result_json->>'charge_basis', '')), '') AS charge_basis,
+          NULLIF(UPPER(BTRIM(COALESCE(snapshot_source.component_json->>'taxability', snapshot_source.source_basis_json->>'taxability', snapshot_source.component_json #>> '{raw,taxability}', ''))), '') AS taxability_context,
+          NULLIF(UPPER(BTRIM(COALESCE(snapshot_source.component_json->>'gross_net_handling', snapshot_source.source_basis_json->>'gross_net_handling', snapshot_source.component_json #>> '{raw,gross_net_handling}', ''))), '') AS gross_net_context,
+          NULLIF(UPPER(BTRIM(COALESCE(snapshot_source.suggested_resolution_payload_json->>'reuse_mode', snapshot_source.suggested_resolution_result_json->>'reuse_mode', ''))), '') AS reuse_mode,
+          LOWER(BTRIM(COALESCE(snapshot_source.component_json->>'requires_resolution', ''))) AS requires_resolution_text,
+          LOWER(BTRIM(COALESCE(snapshot_source.component_json->>'is_actionable_resolution_row', ''))) AS is_actionable_resolution_row_text,
+          BTRIM(COALESCE(snapshot_source.component_json->>'client_id', snapshot_source.source_basis_json->>'client_id', snapshot_source.component_json #>> '{raw,client_id}', '')) AS case_client_id_text
+        FROM snapshot_source
+      ), typed_snapshot AS (
+        SELECT
+          normalized_snapshot.*,
+          CASE WHEN normalized_snapshot.case_client_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN normalized_snapshot.case_client_id_text::uuid ELSE NULL::uuid END AS case_client_id,
+          CASE WHEN normalized_snapshot.source_units_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.source_units_text::numeric, 6) ELSE NULL::numeric END AS source_units,
+          CASE WHEN normalized_snapshot.source_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.source_rate_text::numeric, 6) ELSE NULL::numeric END AS source_rate,
+          CASE WHEN normalized_snapshot.source_charge_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.source_charge_rate_text::numeric, 6) ELSE NULL::numeric END AS source_charge_rate,
+          CASE WHEN normalized_snapshot.source_pay_ex_vat_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.source_pay_ex_vat_text::numeric, 2) ELSE NULL::numeric END AS source_pay_ex_vat,
+          CASE WHEN normalized_snapshot.source_charge_ex_vat_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.source_charge_ex_vat_text::numeric, 2) ELSE NULL::numeric END AS source_charge_ex_vat,
+          CASE WHEN normalized_snapshot.source_margin_ex_vat_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.source_margin_ex_vat_text::numeric, 2) ELSE NULL::numeric END AS source_margin_ex_vat,
+          CASE WHEN normalized_snapshot.suggested_target_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.suggested_target_rate_text::numeric, 2) ELSE NULL::numeric END AS suggested_target_rate,
+          CASE WHEN normalized_snapshot.suggested_target_charge_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.suggested_target_charge_rate_text::numeric, 6) ELSE NULL::numeric END AS suggested_target_charge_rate,
+          CASE WHEN normalized_snapshot.relevant_erni_pct_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.relevant_erni_pct_text::numeric, 6) ELSE NULL::numeric END AS relevant_erni_pct,
+          CASE WHEN normalized_snapshot.vat_rate_pct_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN round(normalized_snapshot.vat_rate_pct_text::numeric, 6) ELSE NULL::numeric END AS vat_rate_pct,
+          CASE WHEN normalized_snapshot.umbrella_vat_chargeable_text = '' THEN NULL::boolean WHEN LOWER(normalized_snapshot.umbrella_vat_chargeable_text) IN ('true', 't', '1', 'yes', 'y', 'on') THEN true ELSE false END AS umbrella_vat_chargeable,
+          CASE
+            WHEN normalized_snapshot.requires_resolution_text = '' THEN (
+              normalized_snapshot.classification = 'TAXABLE_CHANNEL_SENSITIVE'
+              AND normalized_snapshot.source_pay_method <> ''
+              AND normalized_snapshot.target_pay_method <> ''
+              AND normalized_snapshot.source_pay_method IS DISTINCT FROM normalized_snapshot.target_pay_method
+            )
+            ELSE normalized_snapshot.requires_resolution_text IN ('true', 't', '1', 'yes', 'y', 'on')
+          END AS requires_resolution,
+          CASE
+            WHEN normalized_snapshot.is_actionable_resolution_row_text = '' THEN (
+              normalized_snapshot.source_units_text ~ '^-?[0-9]+(\.[0-9]+)?$'
+              AND normalized_snapshot.source_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$'
+              AND normalized_snapshot.source_charge_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$'
+              AND normalized_snapshot.normalized_component_key_type <> 'ADJUSTMENT_CODE'
+            )
+            ELSE normalized_snapshot.is_actionable_resolution_row_text IN ('true', 't', '1', 'yes', 'y', 'on')
+          END AS is_actionable_resolution_row
+        FROM normalized_snapshot
+      )
+      SELECT
+        'SNAPSHOT|' || typed_snapshot.snapshot_component_id::text,
+        'SNAPSHOT',
+        typed_snapshot.candidate_id,
+        typed_snapshot.case_key,
+        typed_snapshot.timesheet_id,
+        typed_snapshot.case_client_id,
+        typed_snapshot.source_basis_json,
+        typed_snapshot.normalized_source_basis_fingerprint,
+        typed_snapshot.normalized_source_family_key,
+        NULLIF(typed_snapshot.normalized_bucket_code, ''),
+        typed_snapshot.normalized_component_key_type,
+        typed_snapshot.normalized_component_key_value,
+        typed_snapshot.normalized_component_fingerprint,
+        typed_snapshot.classification,
+        typed_snapshot.source_pay_method,
+        typed_snapshot.target_pay_method,
+        typed_snapshot.source_units,
+        typed_snapshot.source_rate,
+        typed_snapshot.source_charge_rate,
+        typed_snapshot.source_pay_ex_vat,
+        typed_snapshot.source_charge_ex_vat,
+        typed_snapshot.source_margin_ex_vat,
+        typed_snapshot.suggested_target_rate,
+        typed_snapshot.suggested_target_charge_rate,
+        typed_snapshot.relevant_erni_pct,
+        typed_snapshot.vat_rate_pct,
+        typed_snapshot.umbrella_vat_chargeable,
+        typed_snapshot.charge_basis,
+        typed_snapshot.taxability_context,
+        typed_snapshot.gross_net_context,
+        typed_snapshot.reuse_mode,
+        typed_snapshot.suggested_resolution_payload_json,
+        typed_snapshot.suggested_resolution_result_json,
+        typed_snapshot.requires_resolution,
+        typed_snapshot.is_actionable_resolution_row,
+        typed_snapshot.component_json
+      FROM typed_snapshot
+      WHERE typed_snapshot.timesheet_id IS NOT NULL
+        AND typed_snapshot.case_key <> ''
+        AND typed_snapshot.normalized_source_basis_fingerprint <> ''
+        AND typed_snapshot.normalized_source_family_key <> ''
+        AND typed_snapshot.normalized_component_key_type <> ''
+        AND typed_snapshot.normalized_component_key_value <> ''
+        AND typed_snapshot.source_units IS NOT NULL
+        AND typed_snapshot.source_rate IS NOT NULL
+        AND typed_snapshot.source_charge_rate IS NOT NULL
+      ON CONFLICT (evidence_key) DO NOTHING;
+    END IF;
 
-        v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
-        IF v_matching_candidate_count = 0 THEN
-          RAISE EXCEPTION 'No snapshot baseline target found for BUCKETED resolution in session % for case_key % bucket %', p_session_id, v_case_key, v_bucket_row.bucket_ordinal;
-        ELSIF v_matching_candidate_count > 1 THEN
-          RAISE EXCEPTION 'Ambiguous BUCKETED resolution target for case_key % in session % bucket %', v_case_key, p_session_id, v_bucket_row.bucket_ordinal;
-        END IF;
+    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_session_bucket_component_evidence (
+      evidence_key text PRIMARY KEY,
+      evidence_source text NOT NULL,
+      candidate_id uuid NOT NULL,
+      case_key text NOT NULL,
+      timesheet_id uuid NOT NULL,
+      contract_id uuid NULL,
+      client_id uuid NULL,
+      source_basis_json jsonb NOT NULL,
+      source_basis_fingerprint text NOT NULL,
+      source_family_key text NOT NULL,
+      bucket_code text NULL,
+      component_key_type text NOT NULL,
+      component_key_value text NOT NULL,
+      component_fingerprint text NULL,
+      classification text NOT NULL,
+      source_pay_method text NOT NULL,
+      target_pay_method text NOT NULL,
+      source_units numeric NOT NULL,
+      source_rate numeric NOT NULL,
+      source_charge_rate numeric NOT NULL,
+      source_pay_ex_vat numeric NOT NULL,
+      source_charge_ex_vat numeric NOT NULL,
+      source_margin_ex_vat numeric NOT NULL,
+      suggested_target_rate numeric NULL,
+      suggested_target_charge_rate numeric NOT NULL,
+      category_identity text NOT NULL,
+      resolution_context_json jsonb NOT NULL,
+      decision_context_key text NOT NULL,
+      suggested_resolution_payload_json jsonb NOT NULL,
+      suggested_resolution_result_json jsonb NOT NULL,
+      requires_resolution boolean NOT NULL,
+      is_actionable_resolution_row boolean NOT NULL,
+      component_state_json jsonb NOT NULL
+    ) ON COMMIT DROP;
 
-        UPDATE _tmp_bpay_session_bucket_resolution
-        SET matched_candidate_id = v_matching_candidate_ids[1]
-        WHERE _tmp_bpay_session_bucket_resolution.bucket_ordinal = v_bucket_row.bucket_ordinal;
-      ELSE
-        SELECT COUNT(*)::integer
-        INTO v_target_match_count
-        FROM public.banking_pay_snapshot_case_component_state AS snapshot_component
-        WHERE snapshot_component.snapshot_run_id = v_session_row.source_snapshot_run_id
-          AND snapshot_component.candidate_id = v_candidate_id
-          AND snapshot_component.case_key = v_case_key
-          AND COALESCE(snapshot_component.timesheet_id::text, '') = COALESCE(v_bucket_row.timesheet_id::text, '')
-          AND COALESCE(snapshot_component.source_basis_fingerprint, '') = v_bucket_row.source_basis_fingerprint
-          AND COALESCE(snapshot_component.source_family_key, '') = v_bucket_row.source_family_key
-          AND COALESCE(snapshot_component.bucket_code, '') = COALESCE(v_bucket_row.bucket_code, '')
-          AND COALESCE(snapshot_component.component_key_type, '') = v_bucket_row.component_key_type
-          AND COALESCE(snapshot_component.component_key_value, '') = v_bucket_row.component_key_value;
+    TRUNCATE TABLE _tmp_bpay_session_bucket_component_evidence;
 
-        IF v_target_match_count = 0 THEN
-          RAISE EXCEPTION 'No matching BUCKETED snapshot baseline target found for candidate % in session % bucket %', v_candidate_id, p_session_id, v_bucket_row.bucket_ordinal;
-        ELSIF v_target_match_count > 1 THEN
-          RAISE EXCEPTION 'Ambiguous BUCKETED snapshot baseline target found for candidate % in session % bucket %', v_candidate_id, p_session_id, v_bucket_row.bucket_ordinal;
-        END IF;
+    INSERT INTO _tmp_bpay_session_bucket_component_evidence (
+      evidence_key,
+      evidence_source,
+      candidate_id,
+      case_key,
+      timesheet_id,
+      contract_id,
+      client_id,
+      source_basis_json,
+      source_basis_fingerprint,
+      source_family_key,
+      bucket_code,
+      component_key_type,
+      component_key_value,
+      component_fingerprint,
+      classification,
+      source_pay_method,
+      target_pay_method,
+      source_units,
+      source_rate,
+      source_charge_rate,
+      source_pay_ex_vat,
+      source_charge_ex_vat,
+      source_margin_ex_vat,
+      suggested_target_rate,
+      suggested_target_charge_rate,
+      category_identity,
+      resolution_context_json,
+      decision_context_key,
+      suggested_resolution_payload_json,
+      suggested_resolution_result_json,
+      requires_resolution,
+      is_actionable_resolution_row,
+      component_state_json
+    )
+    WITH enriched_raw AS (
+      SELECT
+        raw_component.*,
+        timesheet_row.contract_id,
+        COALESCE(current_financial.client_id, raw_component.case_client_id) AS trusted_client_id,
+        COALESCE(raw_component.source_pay_ex_vat, round(raw_component.source_units * raw_component.source_rate, 2)) AS effective_source_pay_ex_vat,
+        COALESCE(raw_component.source_charge_ex_vat, round(raw_component.source_units * raw_component.source_charge_rate, 2)) AS effective_source_charge_ex_vat
+      FROM _tmp_bpay_session_bucket_component_raw AS raw_component
+      LEFT JOIN public.timesheets AS timesheet_row
+        ON timesheet_row.timesheet_id = raw_component.timesheet_id
+      LEFT JOIN LATERAL (
+        SELECT
+          financial_row.candidate_id,
+          financial_row.client_id
+        FROM public.timesheets_financials AS financial_row
+        WHERE financial_row.timesheet_id = raw_component.timesheet_id
+          AND financial_row.is_current = true
+        ORDER BY financial_row.timesheet_version DESC, financial_row.updated_at DESC, financial_row.id DESC
+        LIMIT 1
+      ) AS current_financial ON true
+      WHERE current_financial.candidate_id IS NULL
+         OR current_financial.candidate_id = raw_component.candidate_id
+    ), categorized_raw AS (
+      SELECT
+        enriched_raw.*,
+        COALESCE(
+          enriched_raw.source_margin_ex_vat,
+          round(enriched_raw.effective_source_charge_ex_vat - enriched_raw.effective_source_pay_ex_vat, 2)
+        ) AS effective_source_margin_ex_vat,
+        COALESCE(enriched_raw.suggested_target_charge_rate, enriched_raw.source_charge_rate) AS effective_suggested_target_charge_rate,
+        CASE
+          WHEN enriched_raw.component_key_type IN ('TS_DAY', 'TS_TOTAL') THEN concat_ws(
+            '|',
+            'WORKED_TIME',
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.bucket_code, ''))), ''), '~')
+          )
+          WHEN enriched_raw.component_key_type IN ('ADDITIONAL_CODE', 'ADDITIONAL_UNIT', 'ADDITIONAL_UNITS', 'PAY_CODE') THEN concat_ws(
+            '|',
+            enriched_raw.component_key_type,
+            COALESCE(NULLIF(UPPER(BTRIM(enriched_raw.component_key_value)), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'additional_code', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'additional_unit_code', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'pay_code', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'additional_unit_name', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'additional_unit_description', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'additional_name', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'additional_description', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'additional_code_name', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'additional_code_description', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'pay_code_name', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'pay_code_description', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'name', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'description', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.component_state_json->>'label', ''))), ''), '~')
+          )
+          ELSE concat_ws(
+            '|',
+            COALESCE(NULLIF(enriched_raw.component_key_type, ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(enriched_raw.component_key_value)), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.bucket_code, ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'code', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'name', ''))), ''), '~'),
+            COALESCE(NULLIF(UPPER(BTRIM(COALESCE(enriched_raw.source_basis_json->>'description', ''))), ''), '~')
+          )
+        END AS category_identity
+      FROM enriched_raw
+    ), contextualized_raw AS (
+      SELECT
+        categorized_raw.*,
+        jsonb_strip_nulls(
+          jsonb_build_object(
+            'resolution_family', 'BUCKETED',
+            'classification', NULLIF(categorized_raw.classification, ''),
+            'component_semantics', NULLIF(categorized_raw.component_key_type, ''),
+            'category_identity', categorized_raw.category_identity,
+            'source_pay_method', NULLIF(categorized_raw.source_pay_method, ''),
+            'target_pay_method', NULLIF(categorized_raw.target_pay_method, ''),
+            'source_rate', round(categorized_raw.source_rate, 6),
+            'source_charge_rate', round(categorized_raw.source_charge_rate, 6)
+          )
+          || jsonb_build_object(
+            'suggested_target_charge_rate', categorized_raw.effective_suggested_target_charge_rate,
+            'relevant_erni_pct', categorized_raw.relevant_erni_pct,
+            'vat_rate_pct', categorized_raw.vat_rate_pct,
+            'umbrella_vat_chargeable', categorized_raw.umbrella_vat_chargeable,
+            'charge_basis', COALESCE(NULLIF(UPPER(BTRIM(COALESCE(categorized_raw.charge_basis, ''))), ''), 'FIXED_SOURCE_CHARGE'),
+            'taxability_context', categorized_raw.taxability_context,
+            'gross_net_context', categorized_raw.gross_net_context,
+            'reuse_mode', categorized_raw.reuse_mode
+          )
+        ) AS resolution_context_json
+      FROM categorized_raw
+    )
+    SELECT
+      contextualized_raw.evidence_key,
+      contextualized_raw.evidence_source,
+      contextualized_raw.candidate_id,
+      contextualized_raw.case_key,
+      contextualized_raw.timesheet_id,
+      contextualized_raw.contract_id,
+      contextualized_raw.trusted_client_id,
+      contextualized_raw.source_basis_json,
+      contextualized_raw.source_basis_fingerprint,
+      contextualized_raw.source_family_key,
+      contextualized_raw.bucket_code,
+      contextualized_raw.component_key_type,
+      contextualized_raw.component_key_value,
+      contextualized_raw.component_fingerprint,
+      contextualized_raw.classification,
+      contextualized_raw.source_pay_method,
+      contextualized_raw.target_pay_method,
+      contextualized_raw.source_units,
+      contextualized_raw.source_rate,
+      contextualized_raw.source_charge_rate,
+      contextualized_raw.effective_source_pay_ex_vat,
+      contextualized_raw.effective_source_charge_ex_vat,
+      contextualized_raw.effective_source_margin_ex_vat,
+      contextualized_raw.suggested_target_rate,
+      contextualized_raw.effective_suggested_target_charge_rate,
+      contextualized_raw.category_identity,
+      contextualized_raw.resolution_context_json,
+      md5(contextualized_raw.resolution_context_json::text),
+      contextualized_raw.suggested_resolution_payload_json,
+      contextualized_raw.suggested_resolution_result_json,
+      contextualized_raw.requires_resolution,
+      contextualized_raw.is_actionable_resolution_row,
+      contextualized_raw.component_state_json
+    FROM contextualized_raw;
 
-        UPDATE _tmp_bpay_session_bucket_resolution
-        SET matched_candidate_id = v_candidate_id
-        WHERE _tmp_bpay_session_bucket_resolution.bucket_ordinal = v_bucket_row.bucket_ordinal;
+    FOR v_bucket_row IN
+      SELECT input_bucket.*
+      FROM _tmp_bpay_session_bucket_resolution AS input_bucket
+      ORDER BY input_bucket.bucket_ordinal
+    LOOP
+      SELECT
+        COUNT(*)::integer,
+        (array_agg(component_evidence.evidence_key ORDER BY component_evidence.evidence_key))[1],
+        (array_agg(component_evidence.candidate_id ORDER BY component_evidence.candidate_id))[1]
+      INTO
+        v_target_match_count,
+        v_anchor_evidence_key,
+        v_bucket_matched_candidate_id
+      FROM _tmp_bpay_session_bucket_component_evidence AS component_evidence
+      WHERE component_evidence.case_key = v_case_key
+        AND (v_candidate_id IS NULL OR component_evidence.candidate_id = v_candidate_id)
+        AND (
+          v_bucket_row.timesheet_id IS NULL
+          OR component_evidence.timesheet_id = v_bucket_row.timesheet_id
+        )
+        AND component_evidence.source_basis_fingerprint = v_bucket_row.source_basis_fingerprint
+        AND component_evidence.source_family_key = v_bucket_row.source_family_key
+        AND COALESCE(component_evidence.bucket_code, '') = COALESCE(v_bucket_row.bucket_code, '')
+        AND component_evidence.component_key_type = v_bucket_row.component_key_type
+        AND component_evidence.component_key_value = v_bucket_row.component_key_value
+        AND round(component_evidence.source_units, 6) = round(v_bucket_row.source_units, 6)
+        AND round(component_evidence.source_rate, 6) = round(v_bucket_row.source_rate, 6)
+        AND round(component_evidence.source_charge_rate, 6) = round(v_bucket_row.source_charge_rate, 6)
+        AND component_evidence.requires_resolution = true
+        AND component_evidence.is_actionable_resolution_row = true;
+
+      IF v_target_match_count = 0 THEN
+        RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND',
+                  'session_id', p_session_id::text,
+                  'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
+                  'case_key', v_case_key,
+                  'bucket_ordinal', v_bucket_row.bucket_ordinal
+                )::text;
+      ELSIF v_target_match_count > 1 THEN
+        RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS',
+                  'session_id', p_session_id::text,
+                  'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
+                  'case_key', v_case_key,
+                  'bucket_ordinal', v_bucket_row.bucket_ordinal
+                )::text;
       END IF;
+
+      UPDATE _tmp_bpay_session_bucket_resolution AS update_bucket
+      SET matched_candidate_id = v_bucket_matched_candidate_id,
+          anchor_evidence_key = v_anchor_evidence_key,
+          decision_context_key = component_evidence.decision_context_key,
+          category_identity = component_evidence.category_identity
+      FROM _tmp_bpay_session_bucket_component_evidence AS component_evidence
+      WHERE update_bucket.bucket_ordinal = v_bucket_row.bucket_ordinal
+        AND component_evidence.evidence_key = v_anchor_evidence_key;
     END LOOP;
 
-    IF v_candidate_id IS NULL THEN
-      SELECT COALESCE(array_agg(DISTINCT tmp_bucket.matched_candidate_id ORDER BY tmp_bucket.matched_candidate_id), ARRAY[]::uuid[])
-      INTO v_matching_candidate_ids
-      FROM _tmp_bpay_session_bucket_resolution AS tmp_bucket
-      WHERE tmp_bucket.matched_candidate_id IS NOT NULL;
+    SELECT COALESCE(array_agg(DISTINCT input_bucket.matched_candidate_id ORDER BY input_bucket.matched_candidate_id), ARRAY[]::uuid[])
+    INTO v_matching_candidate_ids
+    FROM _tmp_bpay_session_bucket_resolution AS input_bucket
+    WHERE input_bucket.matched_candidate_id IS NOT NULL;
 
-      v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
-      IF v_matching_candidate_count = 0 THEN
-        RAISE EXCEPTION 'Unable to resolve candidate_id for BUCKETED resolution in session % case_key %', p_session_id, v_case_key;
-      ELSIF v_matching_candidate_count > 1 THEN
-        RAISE EXCEPTION 'BUCKETED resolution payload spans multiple candidates for session % case_key %', p_session_id, v_case_key;
-      END IF;
-
-      v_resolved_candidate_id := v_matching_candidate_ids[1];
-    ELSE
-      v_resolved_candidate_id := v_candidate_id;
+    v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
+    IF v_matching_candidate_count = 0 THEN
+      RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND',
+                'session_id', p_session_id::text,
+                'case_key', v_case_key
+              )::text;
+    ELSIF v_matching_candidate_count > 1 THEN
+      RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS',
+                'session_id', p_session_id::text,
+                'case_key', v_case_key
+              )::text;
     END IF;
+
+    v_resolved_candidate_id := v_matching_candidate_ids[1];
+
+    IF v_candidate_id IS NOT NULL AND v_resolved_candidate_id <> v_candidate_id THEN
+      RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND',
+                'session_id', p_session_id::text,
+                'candidate_id', v_candidate_id::text,
+                'case_key', v_case_key
+              )::text;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM _tmp_bpay_session_candidate_scope AS candidate_scope
+      WHERE candidate_scope.candidate_id = v_resolved_candidate_id
+    ) THEN
+      RAISE EXCEPTION 'WORKBENCH_SESSION_CANDIDATE_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_SESSION_CANDIDATE_NOT_FOUND',
+                'session_id', p_session_id::text,
+                'candidate_id', v_resolved_candidate_id::text
+              )::text;
+    END IF;
+
+    SELECT COALESCE(array_agg(DISTINCT component_evidence.timesheet_id ORDER BY component_evidence.timesheet_id), ARRAY[]::uuid[])
+    INTO v_matching_timesheet_ids
+    FROM _tmp_bpay_session_bucket_resolution AS input_bucket
+    JOIN _tmp_bpay_session_bucket_component_evidence AS component_evidence
+      ON component_evidence.evidence_key = input_bucket.anchor_evidence_key;
+
+    IF COALESCE(array_length(v_matching_timesheet_ids, 1), 0) <> 1 THEN
+      RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS',
+                'session_id', p_session_id::text,
+                'candidate_id', v_resolved_candidate_id::text,
+                'case_key', v_case_key
+              )::text;
+    END IF;
+
+    v_anchor_timesheet_id := v_matching_timesheet_ids[1];
+
+    IF v_linked_timesheet_id IS NOT NULL AND v_linked_timesheet_id <> v_anchor_timesheet_id THEN
+      RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND',
+                'session_id', p_session_id::text,
+                'candidate_id', v_resolved_candidate_id::text,
+                'case_key', v_case_key,
+                'timesheet_id', v_linked_timesheet_id::text
+              )::text;
+    END IF;
+
+    SELECT
+      component_evidence.contract_id,
+      component_evidence.client_id
+    INTO
+      v_anchor_contract_id,
+      v_anchor_client_id
+    FROM _tmp_bpay_session_bucket_component_evidence AS component_evidence
+    WHERE component_evidence.candidate_id = v_resolved_candidate_id
+      AND component_evidence.timesheet_id = v_anchor_timesheet_id
+      AND component_evidence.case_key = v_case_key
+    ORDER BY component_evidence.evidence_key
+    LIMIT 1;
+
+    IF v_resolve_all_linked_timesheets
+       AND v_anchor_contract_id IS NULL
+       AND v_anchor_client_id IS NULL THEN
+      RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND',
+                'session_id', p_session_id::text,
+                'candidate_id', v_resolved_candidate_id::text,
+                'case_key', v_case_key,
+                'reason', 'LINKED_SCOPE_CLIENT_NOT_AVAILABLE'
+              )::text;
+    END IF;
+
+    IF v_resolve_all_linked_timesheets AND EXISTS (
+      SELECT 1
+      FROM _tmp_bpay_session_bucket_resolution AS input_bucket
+      JOIN _tmp_bpay_session_bucket_component_evidence AS component_evidence
+        ON component_evidence.evidence_key = input_bucket.anchor_evidence_key
+      WHERE component_evidence.classification = ''
+         OR component_evidence.source_pay_method = ''
+         OR component_evidence.target_pay_method = ''
+         OR component_evidence.category_identity = ''
+    ) THEN
+      RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND',
+                'session_id', p_session_id::text,
+                'candidate_id', v_resolved_candidate_id::text,
+                'case_key', v_case_key,
+                'reason', 'LINKED_DECISION_CONTEXT_INCOMPLETE'
+              )::text;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM _tmp_bpay_session_bucket_resolution AS input_bucket
+      WHERE input_bucket.anchor_evidence_key IS NULL
+         OR input_bucket.decision_context_key IS NULL
+         OR input_bucket.category_identity IS NULL
+    ) THEN
+      RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND',
+                'session_id', p_session_id::text,
+                'candidate_id', v_resolved_candidate_id::text,
+                'case_key', v_case_key,
+                'reason', 'VALIDATED_COMPONENT_CONTEXT_NOT_ATTACHED'
+              )::text;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM _tmp_bpay_session_bucket_resolution AS input_bucket
+      GROUP BY input_bucket.decision_context_key
+      HAVING COUNT(DISTINCT (input_bucket.resolution_mode || '|' || round(input_bucket.target_rate, 2)::text)) > 1
+    ) THEN
+      RAISE EXCEPTION 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS',
+                'session_id', p_session_id::text,
+                'candidate_id', v_resolved_candidate_id::text,
+                'case_key', v_case_key,
+                'reason', 'CONFLICTING_RATE_DECISIONS'
+              )::text;
+    END IF;
+
+    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_session_bucket_decision (
+      decision_context_key text PRIMARY KEY,
+      resolution_mode text NOT NULL,
+      target_rate numeric NOT NULL,
+      source_bucket_ordinal integer NOT NULL
+    ) ON COMMIT DROP;
+
+    TRUNCATE TABLE _tmp_bpay_session_bucket_decision;
+
+    INSERT INTO _tmp_bpay_session_bucket_decision (
+      decision_context_key,
+      resolution_mode,
+      target_rate,
+      source_bucket_ordinal
+    )
+    SELECT
+      input_bucket.decision_context_key,
+      MIN(input_bucket.resolution_mode),
+      MIN(input_bucket.target_rate),
+      MIN(input_bucket.bucket_ordinal)
+    FROM _tmp_bpay_session_bucket_resolution AS input_bucket
+    GROUP BY input_bucket.decision_context_key;
+
+    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_session_target_bucket_resolution (
+      resolution_identity_key text PRIMARY KEY,
+      candidate_id uuid NOT NULL,
+      case_key text NOT NULL,
+      timesheet_id uuid NOT NULL,
+      contract_id uuid NULL,
+      client_id uuid NULL,
+      source_basis_json jsonb NOT NULL,
+      source_basis_fingerprint text NOT NULL,
+      source_family_key text NOT NULL,
+      bucket_code text NULL,
+      component_key_type text NOT NULL,
+      component_key_value text NOT NULL,
+      component_fingerprint text NULL,
+      classification text NOT NULL,
+      source_pay_method text NOT NULL,
+      target_pay_method text NOT NULL,
+      source_units numeric NOT NULL,
+      source_rate numeric NOT NULL,
+      source_charge_rate numeric NOT NULL,
+      source_pay_ex_vat numeric NOT NULL,
+      source_charge_ex_vat numeric NOT NULL,
+      source_margin_ex_vat numeric NOT NULL,
+      resolution_mode text NOT NULL,
+      target_rate numeric NOT NULL,
+      target_pay_ex_vat numeric NOT NULL,
+      target_charge_ex_vat numeric NOT NULL,
+      target_margin_ex_vat numeric NOT NULL,
+      margin_delta_ex_vat numeric NOT NULL,
+      decision_context_key text NOT NULL,
+      category_identity text NOT NULL,
+      suggested_resolution_payload_json jsonb NOT NULL,
+      suggested_resolution_result_json jsonb NOT NULL,
+      component_state_json jsonb NOT NULL,
+      applied_via_linked_scope boolean NOT NULL,
+      source_bucket_ordinal integer NOT NULL
+    ) ON COMMIT DROP;
+
+    TRUNCATE TABLE _tmp_bpay_session_target_bucket_resolution;
+
+    INSERT INTO _tmp_bpay_session_target_bucket_resolution (
+      resolution_identity_key,
+      candidate_id,
+      case_key,
+      timesheet_id,
+      contract_id,
+      client_id,
+      source_basis_json,
+      source_basis_fingerprint,
+      source_family_key,
+      bucket_code,
+      component_key_type,
+      component_key_value,
+      component_fingerprint,
+      classification,
+      source_pay_method,
+      target_pay_method,
+      source_units,
+      source_rate,
+      source_charge_rate,
+      source_pay_ex_vat,
+      source_charge_ex_vat,
+      source_margin_ex_vat,
+      resolution_mode,
+      target_rate,
+      target_pay_ex_vat,
+      target_charge_ex_vat,
+      target_margin_ex_vat,
+      margin_delta_ex_vat,
+      decision_context_key,
+      category_identity,
+      suggested_resolution_payload_json,
+      suggested_resolution_result_json,
+      component_state_json,
+      applied_via_linked_scope,
+      source_bucket_ordinal
+    )
+    SELECT
+      concat_ws(
+        '|',
+        'BUCKETED',
+        COALESCE(NULLIF(component_evidence.case_key, ''), '~'),
+        component_evidence.timesheet_id::text,
+        COALESCE(NULLIF(component_evidence.source_basis_fingerprint, ''), '~'),
+        COALESCE(NULLIF(component_evidence.source_family_key, ''), '~'),
+        COALESCE(NULLIF(component_evidence.bucket_code, ''), '~'),
+        COALESCE(NULLIF(component_evidence.component_key_type, ''), '~'),
+        COALESCE(NULLIF(component_evidence.component_key_value, ''), '~')
+      ),
+      component_evidence.candidate_id,
+      component_evidence.case_key,
+      component_evidence.timesheet_id,
+      component_evidence.contract_id,
+      component_evidence.client_id,
+      component_evidence.source_basis_json,
+      component_evidence.source_basis_fingerprint,
+      component_evidence.source_family_key,
+      component_evidence.bucket_code,
+      component_evidence.component_key_type,
+      component_evidence.component_key_value,
+      component_evidence.component_fingerprint,
+      component_evidence.classification,
+      component_evidence.source_pay_method,
+      component_evidence.target_pay_method,
+      component_evidence.source_units,
+      component_evidence.source_rate,
+      component_evidence.source_charge_rate,
+      component_evidence.source_pay_ex_vat,
+      component_evidence.source_charge_ex_vat,
+      component_evidence.source_margin_ex_vat,
+      input_bucket.resolution_mode,
+      input_bucket.target_rate,
+      round(component_evidence.source_units * input_bucket.target_rate, 2),
+      component_evidence.source_charge_ex_vat,
+      round(component_evidence.source_charge_ex_vat - round(component_evidence.source_units * input_bucket.target_rate, 2), 2),
+      round(component_evidence.source_pay_ex_vat - round(component_evidence.source_units * input_bucket.target_rate, 2), 2),
+      component_evidence.decision_context_key,
+      component_evidence.category_identity,
+      component_evidence.suggested_resolution_payload_json,
+      component_evidence.suggested_resolution_result_json,
+      component_evidence.component_state_json,
+      false,
+      input_bucket.bucket_ordinal
+    FROM _tmp_bpay_session_bucket_resolution AS input_bucket
+    JOIN _tmp_bpay_session_bucket_component_evidence AS component_evidence
+      ON component_evidence.evidence_key = input_bucket.anchor_evidence_key;
+
+    IF v_resolve_all_linked_timesheets THEN
+      INSERT INTO _tmp_bpay_session_target_bucket_resolution (
+        resolution_identity_key,
+        candidate_id,
+        case_key,
+        timesheet_id,
+        contract_id,
+        client_id,
+        source_basis_json,
+        source_basis_fingerprint,
+        source_family_key,
+        bucket_code,
+        component_key_type,
+        component_key_value,
+        component_fingerprint,
+        classification,
+        source_pay_method,
+        target_pay_method,
+        source_units,
+        source_rate,
+        source_charge_rate,
+        source_pay_ex_vat,
+        source_charge_ex_vat,
+        source_margin_ex_vat,
+        resolution_mode,
+        target_rate,
+        target_pay_ex_vat,
+        target_charge_ex_vat,
+        target_margin_ex_vat,
+        margin_delta_ex_vat,
+        decision_context_key,
+        category_identity,
+        suggested_resolution_payload_json,
+        suggested_resolution_result_json,
+        component_state_json,
+        applied_via_linked_scope,
+        source_bucket_ordinal
+      )
+      SELECT
+        concat_ws(
+          '|',
+          'BUCKETED',
+          COALESCE(NULLIF(component_evidence.case_key, ''), '~'),
+          component_evidence.timesheet_id::text,
+          COALESCE(NULLIF(component_evidence.source_basis_fingerprint, ''), '~'),
+          COALESCE(NULLIF(component_evidence.source_family_key, ''), '~'),
+          COALESCE(NULLIF(component_evidence.bucket_code, ''), '~'),
+          COALESCE(NULLIF(component_evidence.component_key_type, ''), '~'),
+          COALESCE(NULLIF(component_evidence.component_key_value, ''), '~')
+        ),
+        component_evidence.candidate_id,
+        component_evidence.case_key,
+        component_evidence.timesheet_id,
+        component_evidence.contract_id,
+        component_evidence.client_id,
+        component_evidence.source_basis_json,
+        component_evidence.source_basis_fingerprint,
+        component_evidence.source_family_key,
+        component_evidence.bucket_code,
+        component_evidence.component_key_type,
+        component_evidence.component_key_value,
+        component_evidence.component_fingerprint,
+        component_evidence.classification,
+        component_evidence.source_pay_method,
+        component_evidence.target_pay_method,
+        component_evidence.source_units,
+        component_evidence.source_rate,
+        component_evidence.source_charge_rate,
+        component_evidence.source_pay_ex_vat,
+        component_evidence.source_charge_ex_vat,
+        component_evidence.source_margin_ex_vat,
+        bucket_decision.resolution_mode,
+        bucket_decision.target_rate,
+        round(component_evidence.source_units * bucket_decision.target_rate, 2),
+        component_evidence.source_charge_ex_vat,
+        round(component_evidence.source_charge_ex_vat - round(component_evidence.source_units * bucket_decision.target_rate, 2), 2),
+        round(component_evidence.source_pay_ex_vat - round(component_evidence.source_units * bucket_decision.target_rate, 2), 2),
+        component_evidence.decision_context_key,
+        component_evidence.category_identity,
+        component_evidence.suggested_resolution_payload_json,
+        component_evidence.suggested_resolution_result_json,
+        component_evidence.component_state_json,
+        true,
+        bucket_decision.source_bucket_ordinal
+      FROM _tmp_bpay_session_bucket_component_evidence AS component_evidence
+      JOIN _tmp_bpay_session_bucket_decision AS bucket_decision
+        ON bucket_decision.decision_context_key = component_evidence.decision_context_key
+      WHERE component_evidence.candidate_id = v_resolved_candidate_id
+        AND component_evidence.timesheet_id <> v_anchor_timesheet_id
+        AND component_evidence.requires_resolution = true
+        AND component_evidence.is_actionable_resolution_row = true
+        AND (
+          (
+            v_anchor_contract_id IS NOT NULL
+            AND component_evidence.contract_id = v_anchor_contract_id
+          )
+          OR (
+            v_anchor_contract_id IS NULL
+            AND component_evidence.contract_id IS NULL
+            AND component_evidence.client_id = v_anchor_client_id
+          )
+        )
+      ON CONFLICT (resolution_identity_key) DO NOTHING;
+    END IF;
+
+    SELECT COUNT(*)::integer
+    INTO v_anchor_component_count
+    FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
+    WHERE target_resolution.applied_via_linked_scope = false;
+
+    SELECT COUNT(*)::integer
+    INTO v_linked_target_component_count
+    FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
+    WHERE target_resolution.applied_via_linked_scope = true;
+
+    SELECT COUNT(DISTINCT target_resolution.timesheet_id)::integer
+    INTO v_linked_target_timesheet_count
+    FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
+    WHERE target_resolution.applied_via_linked_scope = true;
+
+    SELECT COUNT(DISTINCT target_resolution.timesheet_id)::integer
+    INTO v_materialized_target_timesheet_count
+    FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution;
+
+    IF v_resolve_all_linked_timesheets THEN
+      SELECT COUNT(*)::integer
+      INTO v_skipped_mismatch_count
+      FROM _tmp_bpay_session_bucket_component_evidence AS component_evidence
+      WHERE component_evidence.candidate_id = v_resolved_candidate_id
+        AND component_evidence.timesheet_id <> v_anchor_timesheet_id
+        AND component_evidence.requires_resolution = true
+        AND component_evidence.is_actionable_resolution_row = true
+        AND (
+          (
+            v_anchor_contract_id IS NOT NULL
+            AND component_evidence.contract_id = v_anchor_contract_id
+          )
+          OR (
+            v_anchor_contract_id IS NULL
+            AND component_evidence.contract_id IS NULL
+            AND component_evidence.client_id = v_anchor_client_id
+          )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM _tmp_bpay_session_bucket_decision AS bucket_decision
+          WHERE bucket_decision.decision_context_key = component_evidence.decision_context_key
+        );
+    ELSE
+      v_skipped_mismatch_count := 0;
+    END IF;
+
+    v_linked_scope_type := CASE
+      WHEN NOT v_resolve_all_linked_timesheets THEN 'SELF_ONLY'
+      WHEN v_anchor_contract_id IS NOT NULL THEN 'CONTRACT'
+      ELSE 'DAILY_SAME_BASIS'
+    END;
 
     INSERT INTO _tmp_bpay_session_case_resolution_existing
     SELECT existing_resolution.*
     FROM public.banking_pay_workbench_session_case_resolutions AS existing_resolution
     WHERE existing_resolution.session_id = p_session_id
       AND existing_resolution.candidate_id = v_resolved_candidate_id
-      AND existing_resolution.case_key = v_case_key
       AND existing_resolution.resolution_family = 'BUCKETED'
       AND (
-        v_linked_timesheet_id IS NULL
-        OR existing_resolution.timesheet_id = v_linked_timesheet_id
-        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'linked_timesheet_id', '')), '') = v_linked_timesheet_id::text
-        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'timesheet_id', '')), '') = v_linked_timesheet_id::text
-      )
-      AND (
-        v_finance_case_id_text = ''
-        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') IS NULL
-        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') = v_finance_case_id_text
+        existing_resolution.case_key = v_case_key
+        OR EXISTS (
+          SELECT 1
+          FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
+          WHERE target_resolution.resolution_identity_key = existing_resolution.resolution_identity_key
+        )
       );
 
     SELECT COUNT(*)::integer
     INTO v_existing_deleted_count
-    FROM _tmp_bpay_session_case_resolution_existing;
+    FROM _tmp_bpay_session_case_resolution_existing AS existing_resolution;
 
     IF v_existing_deleted_count > 0 THEN
       DELETE FROM public.banking_pay_workbench_session_case_resolutions AS delete_resolution
       WHERE delete_resolution.id IN (
-        SELECT temp_existing.id
-        FROM _tmp_bpay_session_case_resolution_existing AS temp_existing
+        SELECT existing_resolution.id
+        FROM _tmp_bpay_session_case_resolution_existing AS existing_resolution
       );
     END IF;
 
-    FOR v_bucket_row IN
-      SELECT *
-      FROM _tmp_bpay_session_bucket_resolution
-      ORDER BY bucket_ordinal
+    FOR v_target_resolution_row IN
+      SELECT target_resolution.*
+      FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
+      ORDER BY
+        target_resolution.timesheet_id,
+        target_resolution.component_key_type,
+        target_resolution.component_key_value,
+        COALESCE(target_resolution.bucket_code, ''),
+        target_resolution.source_basis_fingerprint
     LOOP
       v_existing_row := NULL;
-      SELECT temp_existing.*
+      SELECT existing_resolution.*
       INTO v_existing_row
-      FROM _tmp_bpay_session_case_resolution_existing AS temp_existing
-      WHERE temp_existing.resolution_identity_key = v_bucket_row.resolution_identity_key
+      FROM _tmp_bpay_session_case_resolution_existing AS existing_resolution
+      WHERE existing_resolution.resolution_identity_key = v_target_resolution_row.resolution_identity_key
       LIMIT 1;
 
-      v_normalized_payload_json := jsonb_strip_nulls(
-        (COALESCE(v_resolution_payload_json, '{}'::jsonb) - 'bucket_resolutions' - 'resolution_mode' - 'mode' - 'candidate_id' - 'case_key' - 'resolution_family' - 'timesheet_id' - 'linked_timesheet_id' - 'target_rate' - 'source_units' - 'source_rate' - 'source_charge_rate')
+      v_target_resolution_result_json := jsonb_strip_nulls(
+        jsonb_build_object(
+          'target_units', round(v_target_resolution_row.source_units, 6),
+          'target_rate', round(v_target_resolution_row.target_rate, 2),
+          'target_amount_ex_vat', round(v_target_resolution_row.target_pay_ex_vat, 2),
+          'target_pay_ex_vat', round(v_target_resolution_row.target_pay_ex_vat, 2),
+          'target_charge_ex_vat', round(v_target_resolution_row.target_charge_ex_vat, 2),
+          'target_margin_ex_vat', round(v_target_resolution_row.target_margin_ex_vat, 2),
+          'margin_delta_ex_vat', round(v_target_resolution_row.margin_delta_ex_vat, 2),
+          'source_pay_ex_vat', round(v_target_resolution_row.source_pay_ex_vat, 2),
+          'source_charge_ex_vat', round(v_target_resolution_row.source_charge_ex_vat, 2),
+          'source_margin_ex_vat', round(v_target_resolution_row.source_margin_ex_vat, 2)
+        )
+      );
+
+      v_target_bucket_payload_json := jsonb_strip_nulls(
+        jsonb_build_object(
+          'timesheet_id', v_target_resolution_row.timesheet_id::text,
+          'finance_component_id', NULLIF(BTRIM(COALESCE(v_target_resolution_row.component_state_json->>'finance_component_id', '')), ''),
+          'source_basis_json', CASE WHEN v_target_resolution_row.source_basis_json = '{}'::jsonb THEN NULL ELSE v_target_resolution_row.source_basis_json END,
+          'source_basis_fingerprint', NULLIF(v_target_resolution_row.source_basis_fingerprint, ''),
+          'source_family_key', NULLIF(v_target_resolution_row.source_family_key, ''),
+          'bucket_code', v_target_resolution_row.bucket_code,
+          'component_key_type', NULLIF(v_target_resolution_row.component_key_type, ''),
+          'component_key_value', NULLIF(v_target_resolution_row.component_key_value, ''),
+          'component_fingerprint', v_target_resolution_row.component_fingerprint,
+          'classification', NULLIF(v_target_resolution_row.classification, '')
+        )
         || jsonb_build_object(
-          'case_key', v_case_key,
+          'source_pay_method', NULLIF(v_target_resolution_row.source_pay_method, ''),
+          'target_pay_method', NULLIF(v_target_resolution_row.target_pay_method, ''),
+          'source_units', round(v_target_resolution_row.source_units, 6),
+          'target_units', round(v_target_resolution_row.source_units, 6),
+          'source_rate', round(v_target_resolution_row.source_rate, 6),
+          'source_charge_rate', round(v_target_resolution_row.source_charge_rate, 6),
+          'source_pay_ex_vat', round(v_target_resolution_row.source_pay_ex_vat, 2),
+          'source_charge_ex_vat', round(v_target_resolution_row.source_charge_ex_vat, 2),
+          'source_margin_ex_vat', round(v_target_resolution_row.source_margin_ex_vat, 2),
+          'resolution_mode', v_target_resolution_row.resolution_mode
+        )
+        || jsonb_build_object(
+          'target_rate', round(v_target_resolution_row.target_rate, 2),
+          'target_amount_ex_vat', round(v_target_resolution_row.target_pay_ex_vat, 2),
+          'target_pay_ex_vat', round(v_target_resolution_row.target_pay_ex_vat, 2),
+          'target_charge_ex_vat', round(v_target_resolution_row.target_charge_ex_vat, 2),
+          'target_margin_ex_vat', round(v_target_resolution_row.target_margin_ex_vat, 2),
+          'margin_delta_ex_vat', round(v_target_resolution_row.margin_delta_ex_vat, 2),
+          'decision_context_key', v_target_resolution_row.decision_context_key,
+          'category_identity', v_target_resolution_row.category_identity,
+          'suggested_resolution_payload_json', CASE WHEN v_target_resolution_row.suggested_resolution_payload_json = '{}'::jsonb THEN NULL ELSE v_target_resolution_row.suggested_resolution_payload_json END,
+          'suggested_resolution_result_json', CASE WHEN v_target_resolution_row.suggested_resolution_result_json = '{}'::jsonb THEN NULL ELSE v_target_resolution_row.suggested_resolution_result_json END
+        )
+        || jsonb_build_object(
+          'saved_resolution_payload_json', jsonb_build_object(
+            'resolution_family', 'BUCKETED',
+            'resolution_mode', v_target_resolution_row.resolution_mode,
+            'target_pay_method', NULLIF(v_target_resolution_row.target_pay_method, ''),
+            'target_units', round(v_target_resolution_row.source_units, 6),
+            'target_rate', round(v_target_resolution_row.target_rate, 2),
+            'decision_context_key', v_target_resolution_row.decision_context_key
+          ),
+          'saved_resolution_result_json', v_target_resolution_result_json,
+          'applied_via_linked_scope', v_target_resolution_row.applied_via_linked_scope,
+          'source_anchor_case_key', v_case_key,
+          'source_anchor_timesheet_id', v_anchor_timesheet_id::text,
+          'resolved_rate_cancel_scope', 'TIMESHEET_ONLY'
+        )
+      );
+
+      v_linked_scope_json := jsonb_strip_nulls(
+        jsonb_build_object(
+          'linked_scope_type', v_linked_scope_type,
+          'contract_id', CASE WHEN v_anchor_contract_id IS NULL THEN NULL ELSE v_anchor_contract_id::text END,
+          'client_id', CASE WHEN v_anchor_client_id IS NULL THEN NULL ELSE v_anchor_client_id::text END,
+          'source_anchor_case_key', v_case_key,
+          'source_anchor_timesheet_id', v_anchor_timesheet_id::text,
+          'target_case_key', v_target_resolution_row.case_key,
+          'target_timesheet_id', v_target_resolution_row.timesheet_id::text,
+          'requested_resolve_all_linked_timesheets', v_resolve_all_linked_timesheets,
+          'applied_via_linked_scope', v_target_resolution_row.applied_via_linked_scope,
+          'resolved_rate_cancel_scope', 'TIMESHEET_ONLY'
+        )
+      );
+
+      v_normalized_payload_json := jsonb_strip_nulls(
+        (
+          COALESCE(v_resolution_payload_json, '{}'::jsonb)
+          - 'bucket_resolutions'
+          - 'resolution_mode'
+          - 'mode'
+          - 'candidate_id'
+          - 'case_key'
+          - 'resolution_family'
+          - 'timesheet_id'
+          - 'linked_timesheet_id'
+          - 'target_rate'
+          - 'source_units'
+          - 'source_rate'
+          - 'source_charge_rate'
+          - 'resolve_all_linked_timesheets'
+          - 'linked_resolution_scope_json'
+        )
+        || jsonb_build_object(
+          'case_key', v_target_resolution_row.case_key,
           'candidate_id', v_resolved_candidate_id::text,
           'finance_case_id', CASE WHEN v_finance_case_id_text = '' THEN NULL ELSE v_finance_case_id_text END,
-          'linked_timesheet_id', CASE WHEN v_linked_timesheet_id IS NULL THEN NULL ELSE v_linked_timesheet_id::text END,
-          'timesheet_id', CASE WHEN v_linked_timesheet_id IS NULL THEN NULL ELSE v_linked_timesheet_id::text END,
+          'linked_timesheet_id', v_target_resolution_row.timesheet_id::text,
+          'timesheet_id', v_target_resolution_row.timesheet_id::text,
           'resolution_family', 'BUCKETED',
-          'resolve_all_linked_timesheets', v_resolve_all_linked_timesheets,
-          'bucket_resolutions', jsonb_build_array(
-            jsonb_strip_nulls(
-              jsonb_build_object(
-                'timesheet_id', CASE WHEN v_bucket_row.timesheet_id IS NULL THEN NULL ELSE v_bucket_row.timesheet_id::text END,
-                'source_basis_json', CASE WHEN v_bucket_row.source_basis_json = '{}'::jsonb THEN NULL ELSE v_bucket_row.source_basis_json END,
-                'source_basis_fingerprint', NULLIF(v_bucket_row.source_basis_fingerprint, ''),
-                'source_family_key', NULLIF(v_bucket_row.source_family_key, ''),
-                'bucket_code', v_bucket_row.bucket_code,
-                'component_key_type', NULLIF(v_bucket_row.component_key_type, ''),
-                'component_key_value', NULLIF(v_bucket_row.component_key_value, ''),
-                'source_units', round(v_bucket_row.source_units, 6),
-                'source_rate', round(v_bucket_row.source_rate, 6),
-                'source_charge_rate', round(v_bucket_row.source_charge_rate, 6),
-                'resolution_mode', v_bucket_row.resolution_mode,
-                'target_rate', round(v_bucket_row.target_rate, 2)
-              )
-            )
-          )
+          'resolve_all_linked_timesheets', false,
+          'requested_resolve_all_linked_timesheets', v_resolve_all_linked_timesheets,
+          'applied_via_linked_scope', v_target_resolution_row.applied_via_linked_scope,
+          'source_anchor_case_key', v_case_key
+        )
+        || jsonb_build_object(
+          'source_anchor_timesheet_id', v_anchor_timesheet_id::text,
+          'linked_resolution_scope_json', v_linked_scope_json,
+          'resolved_rate_cancel_scope', 'TIMESHEET_ONLY',
+          'decision_context_key', v_target_resolution_row.decision_context_key,
+          'category_identity', v_target_resolution_row.category_identity,
+          'bucket_resolutions', jsonb_build_array(v_target_bucket_payload_json)
         )
       );
 
@@ -55622,15 +57167,15 @@ BEGIN
       VALUES (
         p_session_id,
         v_resolved_candidate_id,
-        v_case_key,
+        v_target_resolution_row.case_key,
         'BUCKETED',
-        v_bucket_row.resolution_identity_key,
-        v_bucket_row.timesheet_id,
-        NULLIF(v_bucket_row.source_basis_fingerprint, ''),
-        NULLIF(v_bucket_row.source_family_key, ''),
-        v_bucket_row.bucket_code,
-        NULLIF(v_bucket_row.component_key_type, ''),
-        NULLIF(v_bucket_row.component_key_value, ''),
+        v_target_resolution_row.resolution_identity_key,
+        v_target_resolution_row.timesheet_id,
+        NULLIF(v_target_resolution_row.source_basis_fingerprint, ''),
+        NULLIF(v_target_resolution_row.source_family_key, ''),
+        v_target_resolution_row.bucket_code,
+        NULLIF(v_target_resolution_row.component_key_type, ''),
+        NULLIF(v_target_resolution_row.component_key_value, ''),
         v_normalized_payload_json,
         v_now,
         v_now
@@ -56033,12 +57578,20 @@ BEGIN
     'case_resolution_ids', v_case_resolution_ids,
     'resolution_identity_keys', v_resolution_identity_keys,
     'case_resolution_count', jsonb_array_length(v_case_resolution_ids),
+    'anchor_component_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_anchor_component_count ELSE NULL END,
+    'linked_target_timesheet_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_linked_target_timesheet_count ELSE NULL END,
+    'linked_target_component_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_linked_target_component_count ELSE NULL END,
+    'materialized_target_timesheet_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_materialized_target_timesheet_count ELSE NULL END,
+    'skipped_mismatch_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_skipped_mismatch_count ELSE NULL END,
     'state_changed', true,
     'action', v_action,
     'durable_result', CASE WHEN v_resolution_family = 'TAXABLE_CHANNEL_RESTRUCTURE' THEN v_taxable_result_json ELSE NULL END
   );
 END;
 $function$;
+
+
+
 
 
 
@@ -163800,16 +165353,12 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_line_work_seed(
-  p_session_id uuid,
-  p_candidate_id uuid,
-  p_cursor_json jsonb DEFAULT NULL::jsonb,
-  p_limit integer DEFAULT 100
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_line_work_seed(p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -163822,6 +165371,11 @@ DECLARE
   v_error_count integer := 0;
   v_new_pending_count integer := 0;
   v_new_error_count integer := 0;
+  v_new_line_count integer := 0;
+  v_pending_transition_count integer := 0;
+  v_requeued_pending_count integer := 0;
+  v_ready_to_pending_count integer := 0;
+  v_failed_to_pending_count integer := 0;
   v_has_more boolean := false;
   v_next_cursor jsonb := NULL::jsonb;
   v_next_scope_status text := 'MATERIALISED';
@@ -164059,6 +165613,17 @@ BEGIN
   )), '')::integer, 0);
   v_new_pending_count := COALESCE(NULLIF(BTRIM(COALESCE(v_seed_result->>'new_pending_count', '')), '')::integer, 0);
   v_new_error_count := COALESCE(NULLIF(BTRIM(COALESCE(v_seed_result->>'new_error_count', '')), '')::integer, 0);
+  v_new_line_count := COALESCE(
+    NULLIF(BTRIM(COALESCE(v_seed_result->>'new_line_count', '')), '')::integer,
+    COALESCE(v_new_pending_count, 0) + COALESCE(v_new_error_count, 0)
+  );
+  v_pending_transition_count := COALESCE(
+    NULLIF(BTRIM(COALESCE(v_seed_result->>'pending_transition_count', '')), '')::integer,
+    COALESCE(v_new_pending_count, 0)
+  );
+  v_requeued_pending_count := COALESCE(NULLIF(BTRIM(COALESCE(v_seed_result->>'requeued_pending_count', '')), '')::integer, 0);
+  v_ready_to_pending_count := COALESCE(NULLIF(BTRIM(COALESCE(v_seed_result->>'ready_to_pending_count', '')), '')::integer, 0);
+  v_failed_to_pending_count := COALESCE(NULLIF(BTRIM(COALESCE(v_seed_result->>'failed_to_pending_count', '')), '')::integer, 0);
   v_has_more := COALESCE(NULLIF(BTRIM(COALESCE(v_seed_result->>'has_more', '')), '')::boolean, false);
   v_next_cursor := COALESCE(v_seed_result->'next_cursor', NULL::jsonb);
 
@@ -164105,18 +165670,23 @@ BEGIN
   UPDATE public.banking_pay_workbench_sessions AS session_update
   SET line_units_total = GREATEST(
         COALESCE(session_update.line_units_total, 0)
-        + COALESCE(v_new_pending_count, 0)
-        + COALESCE(v_new_error_count, 0),
+        + COALESCE(v_new_line_count, 0),
         0
       ),
       line_units_pending = GREATEST(
         COALESCE(session_update.line_units_pending, 0)
-        + COALESCE(v_new_pending_count, 0),
+        + COALESCE(v_pending_transition_count, 0),
+        0
+      ),
+      line_units_ready = GREATEST(
+        COALESCE(session_update.line_units_ready, 0)
+        - COALESCE(v_ready_to_pending_count, 0),
         0
       ),
       line_units_failed = GREATEST(
         COALESCE(session_update.line_units_failed, 0)
-        + COALESCE(v_new_error_count, 0),
+        + COALESCE(v_new_error_count, 0)
+        - COALESCE(v_failed_to_pending_count, 0),
         0
       ),
       scope_pending_count = GREATEST(
@@ -164200,6 +165770,11 @@ BEGIN
       'error_count', COALESCE(v_error_count, 0),
       'new_pending_count', COALESCE(v_new_pending_count, 0),
       'new_error_count', COALESCE(v_new_error_count, 0),
+      'new_line_count', COALESCE(v_new_line_count, 0),
+      'pending_transition_count', COALESCE(v_pending_transition_count, 0),
+      'requeued_pending_count', COALESCE(v_requeued_pending_count, 0),
+      'ready_to_pending_count', COALESCE(v_ready_to_pending_count, 0),
+      'failed_to_pending_count', COALESCE(v_failed_to_pending_count, 0),
       'source', 'CLASSIFIED_PREVIEW_LINES',
       'count_unknown', true
     ),
@@ -164207,6 +165782,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 
@@ -164493,16 +166070,13 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_line_work_process_chunk(
-  p_session_id uuid,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_cursor_json jsonb DEFAULT NULL::jsonb,
-  p_limit integer DEFAULT 100
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_line_work_process_chunk(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -165005,6 +166579,9 @@ BEGIN
     SELECT DISTINCT process_rows.candidate_id
     FROM pg_temp._tmp_pay_wb_line_process AS process_rows
     WHERE process_rows.page_ordinal <= v_limit
+    UNION
+    SELECT p_candidate_id
+    WHERE p_candidate_id IS NOT NULL
   ), candidate_new_status AS (
     SELECT
       affected_candidates.candidate_id,
@@ -165145,7 +166722,10 @@ BEGIN
     'processed_count', COALESCE(v_processed_count, 0),
     'ready_count_delta', COALESCE(v_ready_delta, 0),
     'skipped_count', COALESCE(v_skipped_count, 0),
-    'error_count', COALESCE(v_error_count, 0)
+    'error_count', COALESCE(v_error_count, 0),
+    'terminal_reconciliation_only', COALESCE(v_processed_count, 0) = 0
+      AND p_candidate_id IS NOT NULL
+      AND jsonb_array_length(COALESCE(v_affected_candidate_sample, '[]'::jsonb)) > 0
   )
   || jsonb_build_object(
     'next_cursor', v_next_cursor,
@@ -165160,6 +166740,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
@@ -173379,7 +174962,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_seed_candidate_preview_line_source(p_session_id uuid, p_candidate_id uuid, p_context_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -173647,15 +175229,19 @@ BEGIN
     PERFORM public.pay_preview_candidate_collect_scope(v_context_json, p_candidate_id);
   END IF;
 
-  v_classifier_context_json := v_context_json
-    - 'workbench_session_id'
-    - 'workbenchSessionId'
-    - 'pay_workbench_session_id'
-    - 'session_id'
-    - 'workbench'
-    - 'line_work'
-    - 'line_materialise_cursor'
-    - 'line_work_cursor';
+  v_classifier_context_json := (
+    v_context_json
+      - 'workbench_session_id'
+      - 'workbenchSessionId'
+      - 'pay_workbench_session_id'
+      - 'session_id'
+      - 'workbench'
+      - 'line_work'
+      - 'line_materialise_cursor'
+      - 'line_work_cursor'
+  ) || jsonb_build_object(
+    'workbench_resolution_session_id', p_session_id::text
+  );
 
   v_classifier_result := public.pay_preview_candidate_build_canonical_lines(
     p_context_json => v_classifier_context_json,
@@ -173755,6 +175341,25 @@ BEGIN
           WHEN base_rows_raw.requested_timesheet_id IS NOT NULL
            AND COALESCE(base_requested_canonical.canonical_timesheet_id, base_rows_raw.requested_timesheet_id) IS DISTINCT FROM base_rows_raw.requested_timesheet_id
           THEN jsonb_build_object('rotation_requested_timesheet_id', base_rows_raw.requested_timesheet_id::text)
+          ELSE '{}'::jsonb
+        END
+        || CASE
+          WHEN LOWER(BTRIM(COALESCE(base_rows_raw.line_json#>>'{case_resolution_summary,has_resolved_rate}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          THEN jsonb_build_object(
+            'has_resolved_rate', true,
+            'resolved_rate_family', NULLIF(BTRIM(COALESCE(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_family}', '')), ''),
+            'resolved_rate_case_key', NULLIF(BTRIM(COALESCE(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_case_key}', '')), ''),
+            'resolved_rate_timesheet_id', NULLIF(BTRIM(COALESCE(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_timesheet_id}', '')), ''),
+            'resolved_rate_candidate_id', NULLIF(BTRIM(COALESCE(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_candidate_id}', '')), ''),
+            'resolved_rate_source_anchor_case_key', NULLIF(BTRIM(COALESCE(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_source_anchor_case_key}', '')), ''),
+            'resolved_rate_source_anchor_timesheet_id', NULLIF(BTRIM(COALESCE(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_source_anchor_timesheet_id}', '')), ''),
+            'resolved_rate_applied_via_linked_scope', LOWER(BTRIM(COALESCE(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_applied_via_linked_scope}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+            'resolved_rate_clear_payload_json', CASE
+              WHEN jsonb_typeof(base_rows_raw.line_json#>'{case_resolution_summary,resolved_rate_clear_payload_json}') = 'object'
+                THEN base_rows_raw.line_json#>'{case_resolution_summary,resolved_rate_clear_payload_json}'
+              ELSE NULL::jsonb
+            END
+          )
           ELSE '{}'::jsonb
         END
       ) AS line_json,
@@ -174269,62 +175874,6 @@ BEGIN
           )
           ELSE '{}'::jsonb
         END
-        || CASE
-          WHEN base_rows.target_section = 'cases_resolutions'
-           AND jsonb_typeof(base_rows.line_json->'case_resolution_summary') = 'object'
-           AND LOWER(BTRIM(COALESCE(base_rows.line_json->'case_resolution_summary'->>'case_needs_resolution', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-           AND LOWER(BTRIM(COALESCE(base_rows.line_json->'case_resolution_summary'->>'case_resolution_satisfied_now', ''))) IN ('false', 'f', '0', 'no', 'n', 'off')
-           AND NULLIF(BTRIM(COALESCE(base_rows.line_json->'case_resolution_summary'->>'resolution_family', '')), '') IS NOT NULL
-           AND NULLIF(BTRIM(COALESCE(base_rows.line_json->'case_resolution_summary'->>'resolution_action_label', '')), '') IS NOT NULL
-          THEN jsonb_build_object(
-            'resolution_family', base_rows.line_json->'case_resolution_summary'->>'resolution_family',
-            'resolution_action_label', base_rows.line_json->'case_resolution_summary'->>'resolution_action_label',
-            'case_needs_resolution', true,
-            'case_resolution_satisfied_now', false,
-            'unresolved_taxable_count', base_rows.line_json->'case_resolution_summary'->'unresolved_taxable_count',
-            'unresolved_taxable_amount_ex_vat', base_rows.line_json->'case_resolution_summary'->'unresolved_taxable_amount_ex_vat',
-            'blocked_case_amount_ex_vat', base_rows.line_json->'case_resolution_summary'->'blocked_case_amount_ex_vat',
-            'open_reimbursement_count', base_rows.line_json->'case_resolution_summary'->'open_reimbursement_count',
-            'stale_count', base_rows.line_json->'case_resolution_summary'->'stale_count',
-            'is_mixed_case', base_rows.line_json->'case_resolution_summary'->'is_mixed_case',
-            'linked_resolution_scope_json', base_rows.line_json->'case_resolution_summary'->'linked_resolution_scope_json',
-            '__case_entry', jsonb_strip_nulls(
-              CASE
-                WHEN jsonb_typeof(base_rows.line_json->'__case_entry') = 'object' THEN base_rows.line_json->'__case_entry'
-                ELSE '{}'::jsonb
-              END
-              || jsonb_strip_nulls(jsonb_build_object(
-                'candidate_id', base_rows.line_json->>'candidate_id',
-                'candidate_display_name', COALESCE(base_rows.line_json->>'candidate_display_name', base_rows.line_json->>'display_name'),
-                'candidate_tms_ref', COALESCE(base_rows.line_json->>'candidate_tms_ref', base_rows.line_json->>'tms_ref'),
-                'finance_case_id', base_rows.line_json->>'finance_case_id',
-                'case_key', base_rows.line_json->>'case_key',
-                'case_type', base_rows.line_json->>'case_type',
-                'linked_timesheet_id', COALESCE(base_rows.line_json->>'linked_timesheet_id', base_rows.line_json->>'timesheet_id', base_rows.line_json->>'real_business_timesheet_id'),
-                'timesheet_id', COALESCE(base_rows.line_json->>'timesheet_id', base_rows.line_json->>'real_business_timesheet_id'),
-                'client_id', base_rows.line_json->>'client_id',
-                'client_name', base_rows.line_json->>'client_name',
-                'contract_id', base_rows.line_json->>'contract_id',
-                'pay_channel', base_rows.line_json->>'pay_channel',
-                'current_pay_method', base_rows.line_json->>'pay_channel',
-                'week_ending_date', base_rows.line_json->>'week_ending_date',
-                'case_amount', base_rows.line_json->'amount_ex_vat',
-                'amount_ex_vat', base_rows.line_json->'amount_ex_vat',
-                'excluded_from_run', COALESCE(base_rows.line_json->'excluded_from_run', base_rows.line_json->'exclude_from_run'),
-                'resolution_family', base_rows.line_json->'case_resolution_summary'->>'resolution_family',
-                'resolution_action_label', base_rows.line_json->'case_resolution_summary'->>'resolution_action_label',
-                'case_needs_resolution', true,
-                'case_resolution_satisfied_now', false,
-                'unresolved_taxable_count', base_rows.line_json->'case_resolution_summary'->'unresolved_taxable_count',
-                'stale_count', base_rows.line_json->'case_resolution_summary'->'stale_count',
-                'is_mixed_case', base_rows.line_json->'case_resolution_summary'->'is_mixed_case',
-                'blocked_reason_codes', base_rows.line_json->'blocked_reason_codes',
-                'linked_resolution_scope_json', base_rows.line_json->'case_resolution_summary'->'linked_resolution_scope_json'
-              ))
-            )
-          )
-          ELSE '{}'::jsonb
-        END
       ) AS seed_line_json
     FROM base_rows
     WHERE base_rows.target_section IN ('cases_resolutions', 'blocked_for_pay')
@@ -174542,6 +176091,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 

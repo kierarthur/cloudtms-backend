@@ -11547,86 +11547,8 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 
 
 
-
-
-
-
-
-
-
 async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const safeDecisionErrors = {
-      WORKBENCH_SESSION_CANDIDATE_NOT_FOUND: {
-        message: 'The candidate is no longer part of this payment preview. Refresh the preview and try again.'
-      },
-      WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND: {
-        message: 'The payment preview changed before this decision could be saved. Refresh the preview and try again.'
-      },
-      WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS: {
-        message: 'The payment preview contains conflicting case evidence. Refresh the preview and try again.'
-      },
-      WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND: {
-        message: 'The payment preview changed before this rate decision could be saved. Refresh the preview and try again.'
-      },
-      WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS: {
-        message: 'The payment preview contains conflicting rate components. Refresh the preview and try again.'
-      }
-    };
-    const safeErrorParts = [];
-    const appendSafeErrorPart = (value) => {
-      const text = String(value ?? '').trim();
-      if (text) safeErrorParts.push(text);
-    };
-    if (errorInput instanceof Error) {
-      appendSafeErrorPart(errorInput.name);
-      appendSafeErrorPart(errorInput.message);
-      appendSafeErrorPart(errorInput.code);
-      appendSafeErrorPart(errorInput.error_code);
-      appendSafeErrorPart(errorInput.details);
-      appendSafeErrorPart(errorInput.hint);
-      appendSafeErrorPart(errorInput.body);
-      appendSafeErrorPart(errorInput.json?.code);
-      appendSafeErrorPart(errorInput.json?.message);
-      appendSafeErrorPart(errorInput.json?.details);
-      appendSafeErrorPart(errorInput.cause?.message ?? errorInput.cause);
-    } else if (errorInput && typeof errorInput === 'object') {
-      appendSafeErrorPart(errorInput.code);
-      appendSafeErrorPart(errorInput.error_code);
-      appendSafeErrorPart(errorInput.message);
-      appendSafeErrorPart(errorInput.reason);
-      appendSafeErrorPart(errorInput.details?.code);
-      appendSafeErrorPart(errorInput.details?.message);
-      appendSafeErrorPart(errorInput.details?.reason);
-      try {
-        appendSafeErrorPart(JSON.stringify(errorInput));
-      } catch (_) {}
-    } else {
-      appendSafeErrorPart(errorInput);
-    }
-    const safeErrorText = safeErrorParts.join(' ').toUpperCase();
-    const safeErrorCode = Object.keys(safeDecisionErrors).find((code) => (
-      new RegExp(`(^|[^A-Z0-9_])${code}($|[^A-Z0-9_])`).test(safeErrorText)
-    ));
-    if (safeErrorCode) {
-      const title = 'Payment decision could not be saved';
-      const message = safeDecisionErrors[safeErrorCode].message;
-      const safePayload = {
-        ok: false,
-        error_code: safeErrorCode,
-        code: safeErrorCode,
-        title,
-        message,
-        user_message: message,
-        error: message,
-        friendly_error: { title, message },
-        user_action: 'REFRESH_AND_RETRY',
-        confirm_label: 'OK',
-        severity: 'warning',
-        http_status: 409
-      };
-      return withCORS(env, req, new Response(JSON.stringify(safePayload), { status: 409, headers: JSON_HEADERS }));
-    }
 
     const isErrorObject = errorInput instanceof Error;
     const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
@@ -11773,6 +11695,115 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     } catch {
       return null;
     }
+  };
+  const knownCaseResolutionConflictCopy = Object.freeze({
+    WORKBENCH_SESSION_CANDIDATE_NOT_FOUND: {
+      title: 'Payment candidate changed',
+      message: 'This candidate is no longer part of the current payment preview. Refresh the preview and try again.'
+    },
+    WORKBENCH_ROW_BACKED_CASE_BASELINE_NOT_FOUND: {
+      title: 'Payment case changed',
+      message: 'The current case details no longer match the preview you opened. Refresh the preview and review the latest case before saving.'
+    },
+    WORKBENCH_ROW_BACKED_CASE_BASELINE_AMBIGUOUS: {
+      title: 'Payment case needs refreshing',
+      message: 'The current preview contains more than one matching case. Refresh the preview and review the latest case before saving.'
+    },
+    WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_NOT_FOUND: {
+      title: 'Suggested-rate details changed',
+      message: 'One or more suggested-rate components no longer match the current preview. Refresh the preview and try again.'
+    },
+    WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS: {
+      title: 'Suggested-rate details need refreshing',
+      message: 'The current preview contains more than one matching suggested-rate component. Refresh the preview and try again.'
+    }
+  });
+  const extractKnownCaseResolutionConflictCode = (errorInput) => {
+    const knownCodes = Object.keys(knownCaseResolutionConflictCopy);
+    const seenObjects = new Set();
+    const seenStrings = new Set();
+    const queue = [errorInput];
+    const nestedKeys = [
+      'error_code', 'errorCode', 'code', 'message', 'details', 'detail', 'body', 'json',
+      'payload', 'data', 'cause', 'error', 'rpc_error', 'rpcError', 'original_error',
+      'originalError', 'response', 'result'
+    ];
+    const matchCode = (value) => {
+      const text = String(value == null ? '' : value).trim().toUpperCase();
+      if (!text) return null;
+      if (Object.prototype.hasOwnProperty.call(knownCaseResolutionConflictCopy, text)) return text;
+      for (const code of knownCodes) {
+        const start = text.indexOf(code);
+        if (start < 0) continue;
+        const before = start > 0 ? text[start - 1] : '';
+        const after = start + code.length < text.length ? text[start + code.length] : '';
+        if ((!before || !/[A-Z0-9_]/.test(before)) && (!after || !/[A-Z0-9_]/.test(after))) return code;
+      }
+      return null;
+    };
+
+    for (let inspected = 0; queue.length > 0 && inspected < 64; inspected += 1) {
+      const current = queue.shift();
+      if (current == null) continue;
+
+      if (typeof current === 'string') {
+        const text = current.trim();
+        if (!text || seenStrings.has(text)) continue;
+        seenStrings.add(text);
+        const directMatch = matchCode(text);
+        if (directMatch) return directMatch;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object') queue.push(parsed);
+        } catch {}
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+          try {
+            const parsedEmbedded = JSON.parse(text.slice(firstBrace, lastBrace + 1));
+            if (parsedEmbedded && typeof parsedEmbedded === 'object') queue.push(parsedEmbedded);
+          } catch {}
+        }
+        continue;
+      }
+
+      if (typeof current !== 'object' || seenObjects.has(current)) continue;
+      seenObjects.add(current);
+      if (current instanceof Error) queue.push(current.message, current.cause);
+      for (const key of nestedKeys) {
+        try {
+          if (Object.prototype.hasOwnProperty.call(current, key)) queue.push(current[key]);
+        } catch {}
+      }
+    }
+    return null;
+  };
+  const buildKnownCaseResolutionConflict = (code) => {
+    const copy = knownCaseResolutionConflictCopy[code];
+    if (!copy) return null;
+    const payload = {
+      ok: false,
+      error_code: code,
+      code,
+      title: copy.title,
+      message: copy.message,
+      error: copy.message,
+      user_message: copy.message,
+      user_action: 'REFRESH_AND_RETRY',
+      confirm_label: 'OK',
+      severity: 'warning',
+      http_status: 409,
+      status_code: 409,
+      friendly_error: {
+        title: copy.title,
+        message: copy.message,
+        error_code: code,
+        user_action: 'REFRESH_AND_RETRY',
+        confirm_label: 'OK',
+        severity: 'warning'
+      }
+    };
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers: JSON_HEADERS }));
   };
   const readUuid = (value) => {
     const text = trimStr(value);
@@ -12154,9 +12185,17 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
       }
     }));
   } catch (e) {
+    const knownConflictCode = extractKnownCaseResolutionConflictCode(e);
+    if (knownConflictCode) {
+      return buildKnownCaseResolutionConflict(knownConflictCode);
+    }
     return buildFriendlyFailure(500, e);
   }
 }
+
+
+
+
 
 
 
@@ -66510,6 +66549,9 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   }));
 }
 
+
+
+
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -66651,7 +66693,7 @@ async function handleTimesheetsSummary(env, req) {
       if (!Object.prototype.hasOwnProperty.call(o, 'summary_stage')) o.summary_stage = null;
 
       const payStatus = String(o.pay_status_code || '').trim().toUpperCase();
-      o.pay_status_code = ['PAID', 'PARTIALLY_PAID', 'PROCESSING', 'OVERPAID', 'ADVANCED', 'UNPAID'].includes(payStatus)
+      o.pay_status_code = ['PAID', 'PARTIALLY_PAID', 'PROCESSING', 'ADVANCED', 'OVERPAID', 'UNPAID'].includes(payStatus)
         ? payStatus
         : 'UNPAID';
 
@@ -66906,8 +66948,6 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
-
-
 
 
 
