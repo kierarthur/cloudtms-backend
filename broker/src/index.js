@@ -52845,7 +52845,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 
 
 
-
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -54637,8 +54636,11 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       || Object.prototype.hasOwnProperty.call(shell, 'same_week_paye_override_used')
       || Object.prototype.hasOwnProperty.call(scope, 'same_week_paye_override_persisted')
       || Object.prototype.hasOwnProperty.call(scope, 'same_week_paye_override_used');
-    const overridePersisted = booleanFrom(shell.same_week_paye_override_persisted ?? shell.same_week_paye_override_used ?? scope.same_week_paye_override_persisted ?? scope.same_week_paye_override_used);
-    if (channel === 'UMBRELLA' && hasOverridePersistedFlag) {
+    const overridePersisted = booleanFrom(shell.same_week_paye_override_persisted)
+      || booleanFrom(shell.same_week_paye_override_used)
+      || booleanFrom(scope.same_week_paye_override_persisted)
+      || booleanFrom(scope.same_week_paye_override_used);
+    if (channel === 'UMBRELLA' && overridePersisted === true) {
       throw new Error('UMBRELLA_BATCH_SHELL_RETURNED_PAYE_OVERRIDE_PROOF');
     }
     if (channel === 'PAYE' && sameWeekPayeOverrideCurrentlyRequired === true && hasOverridePersistedFlag && overridePersisted !== true) {
@@ -55651,6 +55653,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
 
 
 
