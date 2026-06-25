@@ -43309,6 +43309,7 @@ $function$;
 
 
 
+
 DROP FUNCTION IF EXISTS public.pay_workbench_session_get_candidate_preview(uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_candidate_preview(
