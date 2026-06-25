@@ -12193,6 +12193,79 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
   }
 }
 
+async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const fail = (httpStatus, errorCode, message) => ({
+    ok: false,
+    http_status: httpStatus,
+    error_code: errorCode,
+    code: errorCode,
+    message
+  });
+
+  const token = trimStr(reauthToken);
+  if (!token) {
+    return fail(
+      400,
+      'PAYE_SAME_WEEK_OVERRIDE_REAUTH_REQUIRED',
+      'Complete password reauthentication and 2FA before creating this PAYE draft. No draft has been created.'
+    );
+  }
+
+  const currentUserId = trimStr(user && user.id);
+  if (!currentUserId) {
+    return fail(401, 'UNAUTHORIZED', 'Your session is no longer valid. Sign in again before creating this PAYE draft.');
+  }
+
+  let verifiedToken = null;
+  try {
+    verifiedToken = await verifyToken(sessionSecret(env), token);
+  } catch {
+    verifiedToken = null;
+  }
+  if (!verifiedToken || verifiedToken.ok !== true) {
+    return fail(
+      401,
+      'PAYE_SAME_WEEK_OVERRIDE_REAUTH_INVALID',
+      'PAYE override verification is invalid or has expired. Complete verification again. No draft has been created.'
+    );
+  }
+
+  const payload = verifiedToken.payload && typeof verifiedToken.payload === 'object' && !Array.isArray(verifiedToken.payload)
+    ? verifiedToken.payload
+    : {};
+  const tokenType = trimStr(payload.typ);
+  const purpose = trimStr(payload.purpose).toUpperCase();
+  const subjectUserId = trimStr(payload.sub);
+  const issuedAtUnix = Number(payload.iat);
+  const expiresAtUnix = Number(payload.exp);
+  const nowUnix = Math.floor(Date.now() / 1000);
+
+  const tokenIsValid = tokenType === 'reauth'
+    && purpose === 'PAYE_SAME_WEEK_OVERRIDE'
+    && subjectUserId === currentUserId
+    && Number.isFinite(issuedAtUnix)
+    && Number.isFinite(expiresAtUnix)
+    && issuedAtUnix <= nowUnix + 60
+    && expiresAtUnix > nowUnix
+    && expiresAtUnix > issuedAtUnix;
+
+  if (!tokenIsValid) {
+    return fail(
+      401,
+      'PAYE_SAME_WEEK_OVERRIDE_REAUTH_INVALID',
+      'PAYE override verification is invalid or has expired. Complete verification again. No draft has been created.'
+    );
+  }
+
+  return {
+    ok: true,
+    verified_by_user_id: currentUserId,
+    verified_at_utc: new Date(issuedAtUnix * 1000).toISOString(),
+    expires_at_utc: new Date(expiresAtUnix * 1000).toISOString(),
+    reauth_purpose: 'PAYE_SAME_WEEK_OVERRIDE'
+  };
+}
 
 
 
@@ -23353,8 +23426,6 @@ async function handleBankingPayDraftCreateOperationLookup(env, req, user, sessio
     return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
   }
 }
-
-
 async function handleBankingPayCreateDraft(env, req, user, ctx) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -23443,6 +23514,52 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     return fallback;
   };
   const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  const normaliseDraftScope = (value, fallback = 'ALL') => {
+    const normalise = (candidate) => {
+      const raw = upperTrim(candidate)
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      if (!raw) return null;
+
+      if ([
+        'ALL',
+        'BOTH',
+        'MIXED',
+        'ALL_PAY_CHANNELS',
+        'BOTH_PAY_CHANNELS',
+        'PAYE_AND_UMBRELLA',
+        'PAYE_UMBRELLA',
+        'PAYE_PLUS_UMBRELLA',
+        'PAYE_WITH_UMBRELLA',
+        'BOTH_PAYE_UMBRELLA',
+        'BOTH_PAYE_AND_UMBRELLA',
+        'PAYE_AND_NON_PAYE',
+        'PAYE_NON_PAYE'
+      ].includes(raw)) return 'ALL';
+
+      if ([
+        'PAYE',
+        'PAYE_ONLY',
+        'ONLY_PAYE',
+        'PAYE_PAY'
+      ].includes(raw)) return 'PAYE';
+
+      if ([
+        'UMBRELLA',
+        'UMBRELLAS',
+        'UMBRELLA_ONLY',
+        'ONLY_UMBRELLA',
+        'UMBRELLA_PAY',
+        'NON_PAYE',
+        'NONPAYE',
+        'NON_PAYE_ONLY',
+        'NONPAYE_ONLY'
+      ].includes(raw)) return 'UMBRELLA';
+
+      return null;
+    };
+    return normalise(value) || normalise(fallback) || 'ALL';
+  };
   const hasOwn = (source, key) => isPlainObject(source) && Object.prototype.hasOwnProperty.call(source, key);
   const normalizeVersion = (value) => {
     const text = trimStr(value);
@@ -24011,9 +24128,27 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       }), 'banking_pay_operation_find_active_draft_create');
       const activeSource = isPlainObject(activeLookup.operation) ? activeLookup.operation : activeLookup;
       if (classifyExistingDraftCreateOperation(activeSource) !== 'HEALTHY_ACTIVE') return null;
-      return typeof buildBankingPayOperationPublicPayload === 'function'
+      const publicPayload = typeof buildBankingPayOperationPublicPayload === 'function'
         ? buildBankingPayOperationPublicPayload(activeSource, { mode: 'PROGRESS_LIGHT' })
         : activeSource;
+      const operationId = trimStr(activeSource.operation_id || activeSource.id || publicPayload.operation_id || publicPayload.id || '');
+      let inputJson = isPlainObject(activeSource.input_json) ? cloneJson(activeSource.input_json) : null;
+      if (!inputJson && uuidRe.test(operationId)) {
+        try {
+          const { rows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${encodeURIComponent(operationId)}&select=id,input_json&limit=1`,
+            false
+          );
+          const row = Array.isArray(rows) && rows.length > 0 && isPlainObject(rows[0]) ? rows[0] : null;
+          inputJson = row && isPlainObject(row.input_json) ? cloneJson(row.input_json) : null;
+        } catch {}
+      }
+      return {
+        operation_id: uuidRe.test(operationId) ? operationId : null,
+        public_payload: publicPayload,
+        input_json: isPlainObject(inputJson) ? inputJson : {}
+      };
     } catch {
       return null;
     }
@@ -24096,13 +24231,50 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     return fail(400, 'BANKING_CREATE_DRAFT_INVALID_PAY_DATE', 'Select a valid pay date, then try again. No payment batch has been created.', { field: 'pay_date', session_id: sessionId });
   }
 
-  const payChannelScopeRaw = upperTrim(body.pay_channel_scope || body.payChannelScope || body.scope || 'ALL') || 'ALL';
-  const payChannelScope = ['ALL', 'PAYE', 'UMBRELLA', 'LOANS'].includes(payChannelScopeRaw) ? payChannelScopeRaw : null;
-  if (!payChannelScope) {
-    return fail(400, 'BANKING_CREATE_DRAFT_INVALID_INPUT', 'Payment batch could not be created. Refresh Banking preview and try again.', { field: 'pay_channel_scope', session_id: sessionId });
+  const previewDecisions = isPlainObject(body.preview_decisions_json)
+    ? cloneJson(body.preview_decisions_json)
+    : (isPlainObject(body.previewDecisionsJson) ? cloneJson(body.previewDecisionsJson) : {});
+  const payChannelScope = normaliseDraftScope(
+    body.pay_channel_scope
+      || body.payChannelScope
+      || body.draft_scope
+      || body.draftScope
+      || body.scope
+      || previewDecisions.pay_channel_scope
+      || previewDecisions.payChannelScope
+      || previewDecisions.draft_scope
+      || previewDecisions.draftScope
+      || 'ALL',
+    'ALL'
+  );
+  if (!payChannelScope || !['ALL', 'PAYE', 'UMBRELLA'].includes(payChannelScope)) {
+    return fail(400, 'BANKING_CREATE_DRAFT_INVALID_INPUT', 'Payment batch could not be created. Choose Both PAYE and Umbrella, PAYE only, or Umbrella only, then try again.', { field: 'pay_channel_scope', session_id: sessionId });
   }
 
-  const previewDecisions = isPlainObject(body.preview_decisions_json) ? cloneJson(body.preview_decisions_json) : {};
+  const preflightOnly = booleanFrom(body.preflight_only ?? body.preflightOnly);
+  const sameWeekPayeOverrideReason = trimStr(
+    body.same_week_paye_override_reason
+      || body.sameWeekPayeOverrideReason
+      || body.override_reason
+      || body.overrideReason
+      || ''
+  );
+  const sameWeekPayeOverrideContinue = booleanFrom(
+    body.same_week_paye_override_continue
+      ?? body.sameWeekPayeOverrideContinue
+      ?? body.override_continue
+      ?? body.overrideContinue
+  );
+  const sameWeekPayeReauthToken = trimStr(
+    body.same_week_paye_reauth_token
+      || body.sameWeekPayeReauthToken
+      || body.reauth_token
+      || body.reauthToken
+      || ''
+  );
+  if (sameWeekPayeOverrideReason.length > 2000) {
+    return fail(400, 'PAYE_SAME_WEEK_OVERRIDE_REASON_TOO_LONG', 'The PAYE override reason is too long. Shorten it and try again. No draft has been created.', { field: 'same_week_paye_override_reason', maximum_length: 2000, session_id: sessionId });
+  }
   const rawSelectedPreviewRowIds = Array.isArray(body.selected_preview_row_ids)
     ? body.selected_preview_row_ids
     : (Array.isArray(body.selectedPreviewRowIds) ? body.selectedPreviewRowIds : (Array.isArray(previewDecisions.selected_preview_row_ids) ? previewDecisions.selected_preview_row_ids : []));
@@ -24132,12 +24304,6 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   let sourceSnapshotRunId = trimStr(body.source_snapshot_run_id || body.sourceSnapshotRunId) || null;
   let sessionSignature = trimStr(body.session_signature || body.sessionSignature || '') || null;
   let authoritativeReadinessSnapshot = null;
-
-  const healthyActiveOperation = await findHealthyActiveDraftCreateOperation(actorUserId, sessionId);
-  if (healthyActiveOperation) {
-    scheduleDraftCreateDrainBestEffort(healthyActiveOperation);
-    return buildCreateDraftOperationResponse(healthyActiveOperation, { reused: true });
-  }
 
   const initialReadiness = await readAuthoritativeProgress(sessionId, sessionVersion);
   if (!initialReadiness || initialReadiness.ok !== true || initialReadiness.gate_ready !== true) {
@@ -24245,6 +24411,170 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   }
 
   authoritativeReadinessSnapshot = finalReadiness;
+
+  const scopeCounts = selectedPreviewRowContracts.reduce((counts, contract) => {
+    const channel = upperTrim(contract && contract.pay_channel);
+    if (channel === 'PAYE') counts.paye_rows += 1;
+    if (channel === 'UMBRELLA') counts.umbrella_rows += 1;
+    return counts;
+  }, { paye_rows: 0, umbrella_rows: 0 });
+  const payeRowsIncluded = scopeCounts.paye_rows > 0 && payChannelScope !== 'UMBRELLA';
+  const umbrellaRowsIncluded = scopeCounts.umbrella_rows > 0 && payChannelScope !== 'PAYE';
+  let payeGuardrails = null;
+  let verifiedSameWeekPayeOverride = null;
+
+  const buildActionRequiredPayload = (code, title, message, choices, extra = {}) => ({
+    ok: true,
+    preflight: true,
+    can_start: false,
+    action_required: true,
+    operation_started: false,
+    no_operation_started: true,
+    no_batch_created: true,
+    code,
+    error_code: code,
+    title,
+    message,
+    choices,
+    pay_channel_scope: payChannelScope,
+    scope_counts: scopeCounts,
+    ui: {
+      code,
+      title,
+      message,
+      choices,
+      detail: trimStr(extra.detail || '') || null
+    },
+    guardrail: payeGuardrails,
+    ...extra
+  });
+
+  if (payeRowsIncluded) {
+    try {
+      payeGuardrails = unwrapRpc(await sbRpc(env, 'pay_paye_guardrails', {
+        p_pay_date: payDate,
+        p_ignore_pay_batch_id: null,
+        p_actor_user_id: actorUserId
+      }, {
+        routeClass: 'BANKING_PAY_GUARDRAIL',
+        purpose: preflightOnly ? 'CREATE_DRAFT_PREFLIGHT_PAYE_GUARDRAIL' : 'CREATE_DRAFT_PAYE_GUARDRAIL',
+        timeoutMs: 8000,
+        bankingPay: true
+      }), 'pay_paye_guardrails');
+    } catch (error) {
+      return fail(503, 'PAYE_GUARDRAIL_CHECK_FAILED', 'CloudTMS could not check the PAYE draft guardrails. Refresh Banking and try again. No draft has been created.', {
+        session_id: sessionId,
+        pay_date: payDate,
+        pay_channel_scope: payChannelScope,
+        reason: String(error && error.message ? error.message : error)
+      });
+    }
+
+    if (!isPlainObject(payeGuardrails) || payeGuardrails.ok !== true) {
+      return fail(503, 'PAYE_GUARDRAIL_RESPONSE_INVALID', 'CloudTMS could not confirm the PAYE draft guardrails. Refresh Banking and try again. No draft has been created.', {
+        session_id: sessionId,
+        pay_date: payDate,
+        pay_channel_scope: payChannelScope,
+        guardrail: payeGuardrails
+      });
+    }
+
+    const activeUi = isPlainObject(payeGuardrails.ui) && isPlainObject(payeGuardrails.ui.active) ? payeGuardrails.ui.active : {};
+    const hasExistingPayeDraft = payeGuardrails.create_paye_blocked === true || payeGuardrails.has_existing_paye_draft === true;
+    const sameWeekOverrideRequired = !hasExistingPayeDraft && payeGuardrails.override_required === true;
+
+    if (hasExistingPayeDraft) {
+      const choices = umbrellaRowsIncluded && payChannelScope === 'ALL'
+        ? ['CREATE_UMBRELLA_ONLY', 'CANCEL']
+        : ['CANCEL'];
+      const title = trimStr(activeUi.title) || 'Existing PAYE draft already exists';
+      const message = trimStr(activeUi.message) || 'A PAYE draft batch already exists. Cancel or delete the existing PAYE draft before creating another PAYE draft.';
+      const payload = buildActionRequiredPayload('PAYE_DRAFT_ALREADY_EXISTS', title, message, choices, {
+        hard_block: true,
+        override_available: false,
+        existing_paye_draft: payeGuardrails.existing_paye_draft || null,
+        detail: umbrellaRowsIncluded && payChannelScope === 'ALL'
+          ? 'You can create the selected Umbrella draft only, or cancel.'
+          : 'Cancel or delete the existing PAYE draft before creating another PAYE draft.'
+      });
+      if (preflightOnly) return response(200, payload);
+      return response(409, Object.assign({}, payload, { ok: false, preflight: false, create_draft_unavailable: true }));
+    }
+
+    if (sameWeekOverrideRequired) {
+      const proofSupplied = sameWeekPayeOverrideContinue === true && !!sameWeekPayeOverrideReason && !!sameWeekPayeReauthToken;
+      if (!proofSupplied) {
+        const choices = payChannelScope === 'ALL' && umbrellaRowsIncluded
+          ? ['CREATE_UMBRELLA_ONLY', 'VERIFY_AND_CREATE_BOTH', 'CANCEL']
+          : ['VERIFY_AND_CREATE_PAYE', 'CANCEL'];
+        const title = trimStr(activeUi.title) || 'A PAYE batch already exists for this payroll week';
+        const message = trimStr(activeUi.message) || 'Creating another PAYE batch for the same Monday-based payroll week is override-only.';
+        const payload = buildActionRequiredPayload(
+          payChannelScope === 'ALL' && umbrellaRowsIncluded
+            ? 'PAYE_SAME_WEEK_OVERRIDE_CHOICE_REQUIRED'
+            : 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED',
+          title,
+          message,
+          choices,
+          {
+            hard_block: false,
+            override_available: true,
+            same_week_non_draft_paye_batches: Array.isArray(payeGuardrails.same_week_non_draft_paye_batches) ? payeGuardrails.same_week_non_draft_paye_batches : [],
+            detail: payChannelScope === 'ALL' && umbrellaRowsIncluded
+              ? 'Choose Umbrella only, verify and create PAYE + Umbrella, or cancel.'
+              : 'Complete password reauthentication, 2FA, an explicit reason, and confirmation to create the PAYE draft.'
+          }
+        );
+        if (preflightOnly) return response(200, payload);
+        return response(409, Object.assign({}, payload, { ok: false, preflight: false, create_draft_unavailable: true }));
+      }
+
+      if (typeof verifyPayeSameWeekOverrideReauth !== 'function') {
+        return fail(503, 'PAYE_SAME_WEEK_OVERRIDE_VERIFIER_UNAVAILABLE', 'PAYE override verification is not available. Refresh Banking and try again. No draft has been created.', { session_id: sessionId });
+      }
+      const verification = await verifyPayeSameWeekOverrideReauth(env, user, sameWeekPayeReauthToken);
+      if (!verification || verification.ok !== true) {
+        return fail(Number(verification && verification.http_status) || 401, trimStr(verification && verification.error_code) || 'PAYE_SAME_WEEK_OVERRIDE_REAUTH_INVALID', trimStr(verification && verification.message) || 'PAYE override verification failed or expired. No draft has been created.', {
+          session_id: sessionId,
+          pay_date: payDate,
+          pay_channel_scope: payChannelScope
+        });
+      }
+
+      verifiedSameWeekPayeOverride = {
+        used: true,
+        continue: true,
+        reason: sameWeekPayeOverrideReason,
+        verified: true,
+        verified_by_user_id: verification.verified_by_user_id,
+        verified_at_utc: verification.verified_at_utc,
+        reauth_purpose: 'PAYE_SAME_WEEK_OVERRIDE',
+        guardrail_code: 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED',
+        pay_date: payDate,
+        pay_week_start: trimStr(payeGuardrails.pay_week_start) || null,
+        pay_week_end: trimStr(payeGuardrails.pay_week_end) || null
+      };
+    }
+  }
+
+  if (preflightOnly) {
+    return response(200, {
+      ok: true,
+      preflight: true,
+      can_start: true,
+      action_required: false,
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true,
+      pay_channel_scope: payChannelScope,
+      scope_counts: scopeCounts,
+      selected_preview_row_count: selectedCount,
+      guardrail: payeGuardrails,
+      override_required: !!(payeGuardrails && payeGuardrails.override_required === true),
+      override_verified: verifiedSameWeekPayeOverride ? true : false
+    });
+  }
+
   const selectedHashInput = selectedEconomicKeys.length > 0 ? selectedEconomicKeys : (selectedPreviewRowIds.length > 0 ? selectedPreviewRowIds : { row_backed_selection: true, session_id: sessionId, selected_count: selectedCount, session_version: sessionVersion });
   const selectedPreviewRowHash = await sha256Hex(stableStringify(selectedHashInput));
   const idempotencyHash = await sha256Hex(stableStringify({
@@ -24254,7 +24584,15 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     pay_channel_scope: payChannelScope,
     selected_preview_row_hash: selectedPreviewRowHash,
     session_version: sessionVersion,
-    session_signature: sessionSignature
+    session_signature: sessionSignature,
+    same_week_paye_override: verifiedSameWeekPayeOverride ? {
+      used: true,
+      reason: verifiedSameWeekPayeOverride.reason,
+      verified_by_user_id: verifiedSameWeekPayeOverride.verified_by_user_id,
+      verified_at_utc: verifiedSameWeekPayeOverride.verified_at_utc,
+      reauth_purpose: verifiedSameWeekPayeOverride.reauth_purpose,
+      guardrail_code: verifiedSameWeekPayeOverride.guardrail_code
+    } : { used: false }
   }));
 
   const buildDraftCreateOperationInputFromSessionSelection = () => ({
@@ -24269,6 +24607,18 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     week_ending_cutoff_date: weekEndingCutoffDate,
     week_ending_cutoff: weekEndingCutoffDate,
     pay_channel_scope: payChannelScope,
+    draft_scope: payChannelScope,
+    same_week_paye_override: verifiedSameWeekPayeOverride,
+    same_week_paye_override_json: verifiedSameWeekPayeOverride,
+    same_week_paye_override_used: verifiedSameWeekPayeOverride ? true : false,
+    same_week_paye_override_reason: verifiedSameWeekPayeOverride ? verifiedSameWeekPayeOverride.reason : null,
+    same_week_paye_override_verified_at_utc: verifiedSameWeekPayeOverride ? verifiedSameWeekPayeOverride.verified_at_utc : null,
+    same_week_paye_override_verified_by_user_id: verifiedSameWeekPayeOverride ? verifiedSameWeekPayeOverride.verified_by_user_id : null,
+    override_reason: verifiedSameWeekPayeOverride ? verifiedSameWeekPayeOverride.reason : null,
+    override_continue: verifiedSameWeekPayeOverride ? true : false,
+    override_verified: verifiedSameWeekPayeOverride ? true : false,
+    override_verified_by_user_id: verifiedSameWeekPayeOverride ? verifiedSameWeekPayeOverride.verified_by_user_id : null,
+    override_verified_at_utc: verifiedSameWeekPayeOverride ? verifiedSameWeekPayeOverride.verified_at_utc : null,
     selected_rows_total: selectedCount,
     selected_preview_row_count: selectedCount,
     selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
@@ -24300,6 +24650,46 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     draft_source: 'banking_pay_workbench_preview_rows',
     final_result_shape: 'handleBankingPayCreateDraft'
   });
+
+  const healthyActiveOperation = await findHealthyActiveDraftCreateOperation(actorUserId, sessionId);
+  if (healthyActiveOperation) {
+    const activeInput = isPlainObject(healthyActiveOperation.input_json) ? healthyActiveOperation.input_json : {};
+    const activeScope = normaliseDraftScope(activeInput.pay_channel_scope || activeInput.payChannelScope || activeInput.draft_scope || 'ALL', 'ALL');
+    const activeSelectedHash = trimStr(activeInput.selected_preview_row_hash || activeInput.selectedPreviewRowHash || '');
+    const activePayDate = parseDate(activeInput.pay_date || activeInput.payDate);
+    const activeProof = isPlainObject(activeInput.same_week_paye_override)
+      ? activeInput.same_week_paye_override
+      : (isPlainObject(activeInput.same_week_paye_override_json) ? activeInput.same_week_paye_override_json : {});
+    const requestedProofUsed = !!verifiedSameWeekPayeOverride;
+    const activeProofUsed = activeProof.used === true && activeProof.verified === true;
+    const activeProofMatches = requestedProofUsed === activeProofUsed
+      && (!requestedProofUsed || (
+        trimStr(activeProof.reason) === trimStr(verifiedSameWeekPayeOverride.reason)
+        && trimStr(activeProof.verified_by_user_id) === trimStr(verifiedSameWeekPayeOverride.verified_by_user_id)
+        && trimStr(activeProof.verified_at_utc) === trimStr(verifiedSameWeekPayeOverride.verified_at_utc)
+        && upperTrim(activeProof.reauth_purpose) === 'PAYE_SAME_WEEK_OVERRIDE'
+        && upperTrim(activeProof.guardrail_code) === 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED'
+      ));
+    const contextMatches = activeScope === payChannelScope
+      && activeSelectedHash === selectedPreviewRowHash
+      && activePayDate === payDate
+      && activeProofMatches;
+    if (!contextMatches) {
+      return fail(409, 'BANKING_PAY_CREATE_DRAFT_ACTIVE_CONTEXT_MISMATCH', 'A different draft-create operation is already running for this Banking Pay session. Let it finish, refresh Banking, then try again.', {
+        session_id: sessionId,
+        requested_pay_channel_scope: payChannelScope,
+        active_pay_channel_scope: activeScope,
+        requested_selected_preview_row_hash: selectedPreviewRowHash,
+        active_selected_preview_row_hash: activeSelectedHash || null,
+        requested_override_used: requestedProofUsed,
+        active_override_used: activeProofUsed,
+        operation_id: healthyActiveOperation.operation_id || null
+      });
+    }
+    const publicPayload = isPlainObject(healthyActiveOperation.public_payload) ? healthyActiveOperation.public_payload : {};
+    scheduleDraftCreateDrainBestEffort(publicPayload);
+    return buildCreateDraftOperationResponse(publicPayload, { reused: true });
+  }
 
   try {
     const operationPayload = await startBankingPayOperation(env, {
@@ -24334,6 +24724,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     });
   }
 }
+
 
 
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
@@ -51771,7 +52162,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 
 
 
-
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -51784,6 +52174,9 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   };
 
   const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
   const enc = encodeURIComponent;
   const operation = safeObject(operationRow);
   const operationId = String(operation.operation_id || operation.id || '').trim();
@@ -51964,8 +52357,94 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   const selectedPreviewRowCount = Array.isArray(selectedPreviewRowIds)
     ? selectedPreviewRowIds.length
     : Math.max(0, Number.isFinite(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) ? Math.trunc(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) : 0);
-  const payChannelScope = String(inputJson.pay_channel_scope || inputJson.payChannelScope || 'ALL').trim().toUpperCase() || 'ALL';
-  const sameWeekPayeOverrideJson = safeObject(inputJson.same_week_paye_override_json || inputJson.sameWeekPayeOverrideJson);
+  const normalisePayChannelScopeForDraftCreate = (value, fallback = 'ALL') => {
+    const normalise = (candidate) => {
+      const raw = upperTrim(candidate)
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      if (!raw) return null;
+
+      if ([
+        'ALL',
+        'BOTH',
+        'MIXED',
+        'ALL_PAY_CHANNELS',
+        'BOTH_PAY_CHANNELS',
+        'PAYE_AND_UMBRELLA',
+        'PAYE_UMBRELLA',
+        'PAYE_PLUS_UMBRELLA',
+        'PAYE_WITH_UMBRELLA',
+        'BOTH_PAYE_UMBRELLA',
+        'BOTH_PAYE_AND_UMBRELLA',
+        'PAYE_AND_NON_PAYE',
+        'PAYE_NON_PAYE'
+      ].includes(raw)) return 'ALL';
+
+      if ([
+        'PAYE',
+        'PAYE_ONLY',
+        'ONLY_PAYE',
+        'PAYE_PAY'
+      ].includes(raw)) return 'PAYE';
+
+      if ([
+        'UMBRELLA',
+        'UMBRELLAS',
+        'UMBRELLA_ONLY',
+        'ONLY_UMBRELLA',
+        'UMBRELLA_PAY',
+        'NON_PAYE',
+        'NONPAYE',
+        'NON_PAYE_ONLY',
+        'NONPAYE_ONLY'
+      ].includes(raw)) return 'UMBRELLA';
+
+      return null;
+    };
+
+    return normalise(value) || normalise(fallback) || 'ALL';
+  };
+  const payChannelScope = normalisePayChannelScopeForDraftCreate(
+    inputJson.pay_channel_scope ||
+      inputJson.payChannelScope ||
+      inputJson.draft_scope ||
+      inputJson.draftScope ||
+      inputJson.scope ||
+      'ALL',
+    'ALL'
+  );
+  const rawSameWeekPayeOverrideJson = safeObject(
+    inputJson.same_week_paye_override
+      || inputJson.sameWeekPayeOverride
+      || inputJson.same_week_paye_override_json
+      || inputJson.sameWeekPayeOverrideJson
+  );
+  const sameWeekPayeOverrideReason = trimStr(rawSameWeekPayeOverrideJson.reason || inputJson.same_week_paye_override_reason || inputJson.override_reason || '');
+  const sameWeekPayeOverrideVerifiedByUserId = trimStr(rawSameWeekPayeOverrideJson.verified_by_user_id || inputJson.same_week_paye_override_verified_by_user_id || inputJson.override_verified_by_user_id || '');
+  const sameWeekPayeOverrideVerifiedAtUtc = trimStr(rawSameWeekPayeOverrideJson.verified_at_utc || inputJson.same_week_paye_override_verified_at_utc || inputJson.override_verified_at_utc || '');
+  const sameWeekPayeOverrideVerifiedAtMs = Date.parse(sameWeekPayeOverrideVerifiedAtUtc);
+  const sameWeekPayeOverrideProofValid = payChannelScope !== 'UMBRELLA'
+    && booleanFrom(rawSameWeekPayeOverrideJson.used ?? inputJson.same_week_paye_override_used)
+    && booleanFrom(rawSameWeekPayeOverrideJson.continue ?? inputJson.override_continue)
+    && booleanFrom(rawSameWeekPayeOverrideJson.verified ?? inputJson.override_verified)
+    && !!sameWeekPayeOverrideReason
+    && sameWeekPayeOverrideVerifiedByUserId === actorUserId
+    && Number.isFinite(sameWeekPayeOverrideVerifiedAtMs)
+    && upperTrim(rawSameWeekPayeOverrideJson.reauth_purpose) === 'PAYE_SAME_WEEK_OVERRIDE'
+    && upperTrim(rawSameWeekPayeOverrideJson.guardrail_code) === 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED';
+  const sameWeekPayeOverrideJson = sameWeekPayeOverrideProofValid ? {
+    used: true,
+    continue: true,
+    reason: sameWeekPayeOverrideReason,
+    verified: true,
+    verified_by_user_id: sameWeekPayeOverrideVerifiedByUserId,
+    verified_at_utc: new Date(sameWeekPayeOverrideVerifiedAtMs).toISOString(),
+    reauth_purpose: 'PAYE_SAME_WEEK_OVERRIDE',
+    guardrail_code: 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED',
+    pay_date: trimStr(rawSameWeekPayeOverrideJson.pay_date || inputJson.pay_date) || null,
+    pay_week_start: trimStr(rawSameWeekPayeOverrideJson.pay_week_start) || null,
+    pay_week_end: trimStr(rawSameWeekPayeOverrideJson.pay_week_end) || null
+  } : {};
   const draftCreatePhaseOrder = [
     'VALIDATE_SESSION',
     'SYNC_SELECTED_ROWS',
@@ -52993,17 +53472,92 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         p_actor_user_id: actorUserId,
         p_selected_preview_row_ids: selectedPreviewRowIds,
         p_pay_channel_scope: payChannelScope,
-        p_override_reason: inputJson.override_reason || null,
-        p_override_continue: inputJson.override_continue === true,
-        p_override_verified: inputJson.override_verified === true,
-        p_override_verified_by_user_id: inputJson.override_verified_by_user_id || null,
-        p_override_verified_at_utc: inputJson.override_verified_at_utc || null,
+        p_override_reason: sameWeekPayeOverrideProofValid ? sameWeekPayeOverrideJson.reason : null,
+        p_override_continue: sameWeekPayeOverrideProofValid,
+        p_override_verified: sameWeekPayeOverrideProofValid,
+        p_override_verified_by_user_id: sameWeekPayeOverrideProofValid ? sameWeekPayeOverrideJson.verified_by_user_id : null,
+        p_override_verified_at_utc: sameWeekPayeOverrideProofValid ? sameWeekPayeOverrideJson.verified_at_utc : null,
         p_operation_id: operationId,
         p_operation_mode: true,
         p_allow_legacy_unchunked: false
       }), 'pay_workbench_prepare_draft');
-      if (validation.ok === false) return finishFailedWithCleanup( null, { code: 'DRAFT_SESSION_VALIDATION_FAILED', message: 'Draft session validation failed.', validation });
-      return lockProgress('RUNNING', 'SYNC_SELECTED_ROWS', { status_text: 'Selected payment rows checked.', validation });
+      if (validation.ok === false) return finishFailedWithCleanup(null, { code: 'DRAFT_SESSION_VALIDATION_FAILED', message: 'Draft session validation failed.', validation });
+
+      const validationNextPhase = upperTrim(validation.next_phase);
+      const validationOverride = safeObject(validation.same_week_paye_override);
+      const overrideRequired = booleanFrom(validationOverride.override_required);
+      const overrideVerified = booleanFrom(validationOverride.override_verified);
+      const overrideReasonPresent = booleanFrom(validationOverride.override_reason_present);
+      const overrideContinue = booleanFrom(validationOverride.override_continue);
+      const scopeBlocked = booleanFrom(validationOverride.scope_blocked);
+      const createBlocked = booleanFrom(validationOverride.create_blocked);
+      const blockReasonCode = upperTrim(validationOverride.block_reason_code);
+      const requiresPayeAction = validationNextPhase === 'AWAIT_SAME_WEEK_PAYE_OVERRIDE'
+        || scopeBlocked
+        || createBlocked
+        || (overrideRequired && (!overrideVerified || !overrideReasonPresent || !overrideContinue));
+
+      if (requiresPayeAction) {
+        const hardBlock = createBlocked || blockReasonCode === 'PAYE_DRAFT_ALREADY_EXISTS';
+        const payeRows = Math.max(0, Math.trunc(Number(validation.paye_selected_row_sample_count) || 0));
+        const umbrellaRows = Math.max(0, Math.trunc(Number(validation.umbrella_selected_row_sample_count) || 0));
+        const actionCode = hardBlock
+          ? 'PAYE_DRAFT_ALREADY_EXISTS'
+          : (payChannelScope === 'ALL' && umbrellaRows > 0 ? 'PAYE_SAME_WEEK_OVERRIDE_CHOICE_REQUIRED' : 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED');
+        const choices = hardBlock
+          ? (payChannelScope === 'ALL' && umbrellaRows > 0 ? ['CREATE_UMBRELLA_ONLY', 'CANCEL'] : ['CANCEL'])
+          : (payChannelScope === 'ALL' && umbrellaRows > 0
+            ? ['CREATE_UMBRELLA_ONLY', 'VERIFY_AND_CREATE_BOTH', 'CANCEL']
+            : ['VERIFY_AND_CREATE_PAYE', 'CANCEL']);
+        const message = trimStr(validationOverride.block_message || validation.message)
+          || (hardBlock
+            ? 'A PAYE draft already exists. Cancel or delete it before creating another PAYE draft.'
+            : 'A same-week PAYE override must be verified before creating this PAYE draft.');
+        const actionResult = {
+          ok: false,
+          action_required: true,
+          requires_user_action: true,
+          no_batch_created: true,
+          no_batch_shell_created: true,
+          operation_id: operationId,
+          workbench_session_id: workbenchSessionId,
+          pay_channel_scope: payChannelScope,
+          code: actionCode,
+          error_code: actionCode,
+          message,
+          choices,
+          scope_counts: { paye_rows: payeRows, umbrella_rows: umbrellaRows },
+          validation,
+          ui: {
+            code: actionCode,
+            title: hardBlock ? 'Existing PAYE draft already exists' : 'A PAYE batch already exists for this payroll week',
+            message,
+            choices
+          }
+        };
+        return finish('FAILED', actionResult, actionResult);
+      }
+
+      if (validationNextPhase && validationNextPhase !== 'SEED_CANDIDATE_SCOPE') {
+        return finish('FAILED', {
+          ok: false,
+          no_batch_created: true,
+          code: 'DRAFT_SESSION_VALIDATION_NEXT_PHASE_INVALID',
+          error_code: 'DRAFT_SESSION_VALIDATION_NEXT_PHASE_INVALID',
+          message: 'Draft validation returned an unexpected next phase. No draft batch has been created.',
+          validation
+        }, {
+          code: 'DRAFT_SESSION_VALIDATION_NEXT_PHASE_INVALID',
+          message: 'Draft validation returned an unexpected next phase.',
+          validation
+        });
+      }
+
+      return lockProgress('RUNNING', 'SYNC_SELECTED_ROWS', {
+        status_text: 'Selected payment rows checked.',
+        validation,
+        same_week_paye_override_verified: sameWeekPayeOverrideProofValid
+      });
     }
 
     if (phase === 'SYNC_SELECTED_ROWS') {
