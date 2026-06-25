@@ -12193,14 +12193,21 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
   }
 }
 
+
+
+
+
 async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
-  const fail = (httpStatus, errorCode, message) => ({
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const fail = (httpStatus, errorCode, message, details = {}) => ({
     ok: false,
     http_status: httpStatus,
     error_code: errorCode,
     code: errorCode,
-    message
+    message,
+    details: details && typeof details === 'object' && !Array.isArray(details) ? details : {}
   });
 
   const token = trimStr(reauthToken);
@@ -12213,8 +12220,16 @@ async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
   }
 
   const currentUserId = trimStr(user && user.id);
-  if (!currentUserId) {
+  if (!uuidRe.test(currentUserId)) {
     return fail(401, 'UNAUTHORIZED', 'Your session is no longer valid. Sign in again before creating this PAYE draft.');
+  }
+
+  if (typeof sessionSecret !== 'function' || typeof verifyToken !== 'function') {
+    return fail(
+      503,
+      'PAYE_SAME_WEEK_OVERRIDE_REAUTH_VERIFIER_UNAVAILABLE',
+      'PAYE override verification is not available. Refresh Banking and try again. No draft has been created.'
+    );
   }
 
   let verifiedToken = null;
@@ -12226,7 +12241,7 @@ async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
   if (!verifiedToken || verifiedToken.ok !== true) {
     return fail(
       401,
-      'PAYE_SAME_WEEK_OVERRIDE_REAUTH_INVALID',
+      'PAYE_SAME_WEEK_REAUTH_INVALID',
       'PAYE override verification is invalid or has expired. Complete verification again. No draft has been created.'
     );
   }
@@ -12234,12 +12249,16 @@ async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
   const payload = verifiedToken.payload && typeof verifiedToken.payload === 'object' && !Array.isArray(verifiedToken.payload)
     ? verifiedToken.payload
     : {};
-  const tokenType = trimStr(payload.typ);
-  const purpose = trimStr(payload.purpose).toUpperCase();
+  const tokenType = trimStr(payload.typ).toLowerCase();
+  const purpose = upperTrim(payload.purpose);
   const subjectUserId = trimStr(payload.sub);
   const issuedAtUnix = Number(payload.iat);
   const expiresAtUnix = Number(payload.exp);
   const nowUnix = Math.floor(Date.now() / 1000);
+  const twoFactorFailedFlag = payload.tfa_verified === false
+    || payload.two_factor_verified === false
+    || payload.mfa_verified === false
+    || payload.reauth_verified === false;
 
   const tokenIsValid = tokenType === 'reauth'
     && purpose === 'PAYE_SAME_WEEK_OVERRIDE'
@@ -12248,30 +12267,33 @@ async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
     && Number.isFinite(expiresAtUnix)
     && issuedAtUnix <= nowUnix + 60
     && expiresAtUnix > nowUnix
-    && expiresAtUnix > issuedAtUnix;
+    && expiresAtUnix > issuedAtUnix
+    && twoFactorFailedFlag !== true;
 
   if (!tokenIsValid) {
     return fail(
       401,
-      'PAYE_SAME_WEEK_OVERRIDE_REAUTH_INVALID',
-      'PAYE override verification is invalid or has expired. Complete verification again. No draft has been created.'
+      'PAYE_SAME_WEEK_REAUTH_INVALID',
+      'PAYE override verification is invalid or has expired. Complete verification again. No draft has been created.',
+      {
+        purpose_valid: purpose === 'PAYE_SAME_WEEK_OVERRIDE',
+        subject_valid: subjectUserId === currentUserId,
+        token_type_valid: tokenType === 'reauth',
+        expired: Number.isFinite(expiresAtUnix) ? expiresAtUnix <= nowUnix : true,
+        two_factor_failed: twoFactorFailedFlag === true
+      }
     );
   }
 
   return {
     ok: true,
+    verified: true,
     verified_by_user_id: currentUserId,
-    verified_at_utc: new Date(issuedAtUnix * 1000).toISOString(),
+    verified_at_utc: new Date().toISOString(),
     expires_at_utc: new Date(expiresAtUnix * 1000).toISOString(),
     reauth_purpose: 'PAYE_SAME_WEEK_OVERRIDE'
   };
 }
-
-
-
-
-
-
 
 
 async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId) {
@@ -12427,29 +12449,171 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     return uuidRe.test(text) ? text : '';
   };
 
+  const operationRaw = trimStr(body.operation ?? body.action ?? body.mode).toUpperCase();
+  const operation = ['LIST', 'LIST_CLEARABLE', 'LIST_CLEARABLE_RESOLVED_RATES', 'LIST_RESOLVED_TIMESHEETS'].includes(operationRaw)
+    ? 'LIST_CLEARABLE'
+    : 'CLEAR';
+  if (operationRaw && ![
+    'LIST', 'LIST_CLEARABLE', 'LIST_CLEARABLE_RESOLVED_RATES', 'LIST_RESOLVED_TIMESHEETS',
+    'CLEAR', 'CLEAR_RESOLUTION', 'CLEAR_RESOLVED_RATE', 'BULK_CLEAR'
+  ].includes(operationRaw)) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
+  }
+
+  const readPositiveInteger = (value) => {
+    const text = trimStr(value);
+    if (!/^[0-9]{1,18}$/.test(text)) return null;
+    const number = Number(text);
+    return Number.isSafeInteger(number) && number >= 1 ? number : null;
+  };
+  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(body, key);
+  const getArrayAlias = (...keys) => {
+    for (const key of keys) {
+      if (hasOwn(key)) return { provided: true, value: body[key] };
+    }
+    return { provided: false, value: [] };
+  };
+  const readUuidArray = (input, maxItems = 500) => {
+    if (!Array.isArray(input)) return { ok: false, values: [] };
+    if (input.length > maxItems) return { ok: false, values: [], tooLarge: true };
+    const values = [];
+    const seen = new Set();
+    for (const value of input) {
+      const uuid = readUuid(value);
+      if (!uuid) return { ok: false, values: [] };
+      if (seen.has(uuid)) continue;
+      seen.add(uuid);
+      values.push(uuid);
+    }
+    return { ok: true, values };
+  };
+
   const caseKey = trimStr(body.case_key ?? body.caseKey);
   const candidateId = readUuid(body.candidate_id ?? body.candidateId);
   const financeCaseId = readUuid(body.finance_case_id ?? body.financeCaseId);
-  const linkedTimesheetId = readUuid(body.linked_timesheet_id ?? body.linkedTimesheetId ?? body.timesheet_id ?? body.timesheetId);
+  const linkedTimesheetRaw = body.linked_timesheet_id ?? body.linkedTimesheetId ?? body.timesheet_id ?? body.timesheetId;
+  const linkedTimesheetId = readUuid(linkedTimesheetRaw);
+  const resolutionFamily = trimStr(body.resolution_family ?? body.resolutionFamily).toUpperCase();
+  const expectedVersionRaw = body.expected_session_version ?? body.expectedSessionVersion ?? body.session_version ?? body.sessionVersion;
+  const expectedSessionVersion = expectedVersionRaw == null || trimStr(expectedVersionRaw) === ''
+    ? null
+    : readPositiveInteger(expectedVersionRaw);
 
-  if (!caseKey) {
-    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY' });
-  }
   if ((body.candidate_id !== undefined || body.candidateId !== undefined) && !candidateId) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
   }
   if ((body.finance_case_id !== undefined || body.financeCaseId !== undefined) && !financeCaseId) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE' });
   }
-  if ((body.linked_timesheet_id !== undefined || body.linkedTimesheetId !== undefined || body.timesheet_id !== undefined || body.timesheetId !== undefined) && !linkedTimesheetId) {
+  if (linkedTimesheetRaw !== undefined && linkedTimesheetRaw !== null && trimStr(linkedTimesheetRaw) !== '' && !linkedTimesheetId) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET' });
+  }
+  if (expectedVersionRaw !== undefined && expectedVersionRaw !== null && trimStr(expectedVersionRaw) !== '' && expectedSessionVersion == null) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SESSION_VERSION' });
+  }
+
+  const selectedTimesheetAlias = getArrayAlias('selected_timesheet_ids', 'selectedTimesheetIds', 'timesheet_ids', 'timesheetIds');
+  const selectedTimesheetResult = selectedTimesheetAlias.provided
+    ? readUuidArray(selectedTimesheetAlias.value)
+    : { ok: true, values: [] };
+  if (!selectedTimesheetResult.ok) {
+    return buildFriendlyFailure(400, {
+      code: selectedTimesheetResult.tooLarge
+        ? 'WORKBENCH_MODAL_ACTION_SELECTED_ROWS_TOO_LARGE'
+        : 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS'
+    });
+  }
+
+  const selectedCaseKeysAlias = getArrayAlias('selected_case_keys', 'selectedCaseKeys');
+  const selectedCaseKeys = [];
+  if (selectedCaseKeysAlias.provided) {
+    if (!Array.isArray(selectedCaseKeysAlias.value) || selectedCaseKeysAlias.value.length > 500) {
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS' });
+    }
+    for (const value of selectedCaseKeysAlias.value) {
+      const text = trimStr(value);
+      const match = text.match(/^timesheet:([0-9a-f]{8}-[0-9a-f]{4}-[1-5]?[0-9a-f]{3}-[89ab]?[0-9a-f]{3}-[0-9a-f]{12})$/i);
+      const uuid = match ? readUuid(match[1]) : '';
+      if (!uuid) {
+        return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS' });
+      }
+      selectedCaseKeys.push(`timesheet:${uuid}`);
+      if (!selectedTimesheetResult.values.includes(uuid)) selectedTimesheetResult.values.push(uuid);
+    }
+  }
+
+  const selectedIdentitiesAlias = getArrayAlias('selected_case_identities', 'selectedCaseIdentities');
+  const selectedCaseIdentities = [];
+  if (selectedIdentitiesAlias.provided) {
+    if (!Array.isArray(selectedIdentitiesAlias.value) || selectedIdentitiesAlias.value.length > 500) {
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS' });
+    }
+    for (const identity of selectedIdentitiesAlias.value) {
+      if (!identity || typeof identity !== 'object' || Array.isArray(identity)) {
+        return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS' });
+      }
+      const identityCaseKey = trimStr(identity.case_key ?? identity.caseKey);
+      const caseKeyMatch = identityCaseKey.match(/^timesheet:([0-9a-f-]{36})$/i);
+      const identityTimesheetId = readUuid(
+        identity.timesheet_id ?? identity.timesheetId ?? identity.linked_timesheet_id ?? identity.linkedTimesheetId ?? (caseKeyMatch ? caseKeyMatch[1] : '')
+      );
+      if (!identityTimesheetId) {
+        return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS' });
+      }
+      selectedCaseIdentities.push({
+        timesheet_id: identityTimesheetId,
+        linked_timesheet_id: identityTimesheetId,
+        case_key: identityCaseKey || `timesheet:${identityTimesheetId}`
+      });
+      if (!selectedTimesheetResult.values.includes(identityTimesheetId)) selectedTimesheetResult.values.push(identityTimesheetId);
+    }
+  }
+
+  if (selectedTimesheetResult.values.length > 500) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_SELECTED_ROWS_TOO_LARGE' });
+  }
+  if (operation === 'LIST_CLEARABLE' && !candidateId) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
+  }
+  if (operation === 'CLEAR' && !caseKey && selectedTimesheetResult.values.length === 0) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY' });
   }
 
   const resolutionPayloadJson = {
-    case_key: caseKey,
+    operation,
+    ...(caseKey ? { case_key: caseKey } : {}),
     ...(candidateId ? { candidate_id: candidateId } : {}),
     ...(financeCaseId ? { finance_case_id: financeCaseId } : {}),
-    ...(linkedTimesheetId ? { linked_timesheet_id: linkedTimesheetId, timesheet_id: linkedTimesheetId } : {})
+    ...(linkedTimesheetId ? { linked_timesheet_id: linkedTimesheetId, timesheet_id: linkedTimesheetId } : {}),
+    ...(resolutionFamily ? { resolution_family: resolutionFamily } : {}),
+    ...(expectedSessionVersion != null ? { expected_session_version: expectedSessionVersion } : {}),
+    ...(selectedTimesheetResult.values.length ? { selected_timesheet_ids: selectedTimesheetResult.values } : {}),
+    ...(selectedCaseKeys.length ? { selected_case_keys: selectedCaseKeys } : {}),
+    ...(selectedCaseIdentities.length ? { selected_case_identities: selectedCaseIdentities } : {})
+  };
+
+  const resolveJobId = (payloadObj) => {
+    const candidates = [
+      payloadObj?.job_id,
+      payloadObj?.jobId,
+      payloadObj?.pending_job_id,
+      payloadObj?.pendingJobId,
+      payloadObj?.enqueue_result?.job_id,
+      payloadObj?.enqueue_result?.jobId,
+      payloadObj?.enqueue_result?.job_ids?.[0],
+      payloadObj?.enqueue_result?.jobIds?.[0],
+      payloadObj?.enqueue_result?.session_recompute_job_ids?.[0],
+      payloadObj?.enqueue_result?.sessionRecomputeJobIds?.[0],
+      payloadObj?.job_ids?.[0],
+      payloadObj?.jobIds?.[0],
+      payloadObj?.session_recompute_job_ids?.[0],
+      payloadObj?.sessionRecomputeJobIds?.[0]
+    ];
+    for (const value of candidates) {
+      const uuid = readUuid(value);
+      if (uuid) return uuid;
+    }
+    return '';
   };
 
   try {
@@ -12457,7 +12621,7 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
       env,
       `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
       `?id=eq.${enc(id)}` +
-      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&select=id,actor_user_id,status,version,discarded_at_utc,replacement_session_id,source_snapshot_run_id` +
       `&limit=1`,
       false
     );
@@ -12466,8 +12630,18 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     if (!sessionRow) {
       return buildFriendlyFailure(404, { code: 'WORKBENCH_SESSION_NOT_FOUND' });
     }
-    if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
+    if (
+      String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN' ||
+      !!sessionRow.discarded_at_utc ||
+      !!sessionRow.replacement_session_id
+    ) {
       return buildFriendlyFailure(409, { code: 'OBSOLETE_SESSION' });
+    }
+    if (expectedSessionVersion != null && Number(sessionRow.version) !== expectedSessionVersion) {
+      return buildFriendlyFailure(409, { code: 'STALE_SESSION' }, {}, {
+        expected_session_version: expectedSessionVersion,
+        current_session_version: Number(sessionRow.version) || null
+      });
     }
 
     const rpcRes = await sbRpc(env, 'pay_workbench_session_clear_case_resolution', {
@@ -12478,11 +12652,15 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
 
     const payload = unwrapRpc(rpcRes, 'pay_workbench_session_clear_case_resolution');
     const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-    const fastLaneCandidateId = readUuid(payloadObj.candidate_id ?? payloadObj.candidateId);
-    const fastLaneJobId = readUuid(payloadObj.job_id ?? payloadObj.jobId);
-    const fastLaneShouldRun = payloadObj.no_op !== true && !!fastLaneCandidateId && !!fastLaneJobId;
+    const fastLaneCandidateId = readUuid(payloadObj.candidate_id ?? payloadObj.candidateId ?? candidateId);
+    const fastLaneJobId = resolveJobId(payloadObj);
+    const fastLaneShouldRun = operation === 'CLEAR' && payloadObj.no_op !== true && !!fastLaneCandidateId && !!fastLaneJobId;
 
-    let responsePayload = payloadObj;
+    let responsePayload = {
+      ...payloadObj,
+      operation: trimStr(payloadObj.operation || operation),
+      job_id: fastLaneJobId || null
+    };
     if (fastLaneShouldRun && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
       try {
         const fastLane = await runInteractiveWorkbenchCandidateFastLane(
@@ -12494,12 +12672,12 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
           'SESSION_CASE_RESOLUTION_CLEAR'
         );
         responsePayload = {
-          ...payloadObj,
+          ...responsePayload,
           fast_lane: cloneJson(fastLane)
         };
       } catch (fastLaneError) {
         responsePayload = {
-          ...payloadObj,
+          ...responsePayload,
           fast_lane: {
             ok: true,
             best_effort: true,
@@ -12521,6 +12699,11 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     return buildFriendlyFailure(500, e);
   }
 }
+
+
+
+
+
 
 async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
@@ -23426,6 +23609,8 @@ async function handleBankingPayDraftCreateOperationLookup(env, req, user, sessio
     return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
   }
 }
+
+
 async function handleBankingPayCreateDraft(env, req, user, ctx) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -23441,20 +23626,46 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     return typeof withCORS === 'function' ? withCORS(env, req, res) : res;
   };
   const fail = (status, code, message, details = {}) => {
+    const safeDetails = isPlainObject(details) ? details : {};
+    const safeTitle = trimStr(safeDetails.title || safeDetails.friendly_title || safeDetails.friendlyTitle || '');
     const raw = {
       ok: false,
       create_draft_unavailable: true,
       can_retry: status >= 500 || status === 409,
       error_code: code,
       code,
+      ...(safeTitle ? { title: safeTitle } : {}),
       message,
-      details: isPlainObject(details) ? details : {}
+      details: safeDetails,
+      details_json: safeDetails,
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true,
+      ...(safeDetails.scope ? { scope: safeDetails.scope } : {}),
+      ...(safeDetails.pay_channel_scope ? { pay_channel_scope: safeDetails.pay_channel_scope } : {}),
+      ...(safeDetails.scope_counts ? { scope_counts: safeDetails.scope_counts } : {}),
+      ...(Array.isArray(safeDetails.allowed_values) ? { allowed_values: safeDetails.allowed_values } : {})
     };
     let friendly = raw;
     try {
       if (typeof makeBankingFriendlyErrorPayload === 'function') friendly = makeBankingFriendlyErrorPayload(raw, { action: 'CREATE_DRAFT' });
     } catch {}
-    return response(status, Object.assign({}, isPlainObject(friendly) ? friendly : raw, { ok: false, create_draft_unavailable: true }));
+    return response(status, Object.assign({}, isPlainObject(friendly) ? friendly : raw, {
+      ok: false,
+      create_draft_unavailable: true,
+      error_code: code,
+      code,
+      ...(safeTitle ? { title: safeTitle } : {}),
+      details: safeDetails,
+      details_json: safeDetails,
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true,
+      ...(safeDetails.scope ? { scope: safeDetails.scope } : {}),
+      ...(safeDetails.pay_channel_scope ? { pay_channel_scope: safeDetails.pay_channel_scope } : {}),
+      ...(safeDetails.scope_counts ? { scope_counts: safeDetails.scope_counts } : {}),
+      ...(Array.isArray(safeDetails.allowed_values) ? { allowed_values: safeDetails.allowed_values } : {})
+    }));
   };
   const parseDate = (value) => {
     const raw = trimStr(value);
@@ -23514,7 +23725,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     return fallback;
   };
   const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
-  const normaliseDraftScope = (value, fallback = 'ALL') => {
+  const normaliseDraftScope = (value, fallback = null) => {
     const normalise = (candidate) => {
       const raw = upperTrim(candidate)
         .replace(/[^A-Z0-9]+/g, '_')
@@ -23558,7 +23769,11 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
 
       return null;
     };
-    return normalise(value) || normalise(fallback) || 'ALL';
+
+    const resolved = normalise(value);
+    if (resolved) return resolved;
+    if (trimStr(value)) return null;
+    return normalise(fallback);
   };
   const hasOwn = (source, key) => isPlainObject(source) && Object.prototype.hasOwnProperty.call(source, key);
   const normalizeVersion = (value) => {
@@ -23921,7 +24136,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   };
   const fetchCurrentSessionSelectionForCreateDraft = async (sessionIdValue, scopeValue = 'ALL', readinessSnapshot = null) => {
     const id = trimStr(sessionIdValue);
-    const scope = upperTrim(scopeValue || 'ALL') || 'ALL';
+    const scope = normaliseDraftScope(scopeValue) || 'ALL';
     const readiness = isPlainObject(readinessSnapshot) ? readinessSnapshot : {};
     const expectedSessionVersion = normalizeVersion(readiness.session_version_normalized ?? readiness.session_version);
     if (!uuidRe.test(id)) {
@@ -24010,14 +24225,20 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     }
 
     const allowedEconomicKeyTypes = new Set(['TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE', 'EXPENSE_CODE', 'MANUAL_CARRY_FORWARD']);
+    const allEligibleRows = [];
     const selectedRows = [];
     const invalidRows = [];
+
+    const rowIsWithinRequestedScope = (payChannel) => {
+      if (scope !== 'PAYE' && scope !== 'UMBRELLA') return true;
+      return payChannel === scope;
+    };
 
     for (const previewRow of previewRows) {
       const row = isPlainObject(previewRow) ? previewRow : {};
       const rowJson = isPlainObject(row.row_json) ? row.row_json : {};
       const previewContract = isPlainObject(rowJson.preview_contract) ? rowJson.preview_contract : {};
-      const contract = buildCreateDraftSelectedPreviewRowContract(row, selectedRows.length);
+      const contract = buildCreateDraftSelectedPreviewRowContract(row, allEligibleRows.length);
       const reasons = [];
       const rowId = trimStr(row.id || '');
       const candidateId = trimStr(row.candidate_id || contract.candidate_id || '');
@@ -24026,8 +24247,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       const payChannel = upperTrim(contract.pay_channel || '');
       const keyType = upperTrim(contract.key_type || '');
       const keyValue = trimStr(contract.key_value || '');
-
-      if ((scope === 'PAYE' || scope === 'UMBRELLA') && payChannel && payChannel !== scope) continue;
+      const withinRequestedScope = rowIsWithinRequestedScope(payChannel);
 
       if (!uuidRe.test(rowId)) reasons.push('PREVIEW_ROW_ID_INVALID');
       if (!uuidRe.test(candidateId)) reasons.push('CANDIDATE_ID_INVALID');
@@ -24047,11 +24267,29 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       if (!['PAYE', 'UMBRELLA'].includes(payChannel)) reasons.push('PAY_CHANNEL_NOT_DRAFT_ELIGIBLE');
 
       if (reasons.length > 0) {
-        invalidRows.push({ preview_row_id: rowId || null, reasons });
-      } else {
-        selectedRows.push(row);
+        if (withinRequestedScope) invalidRows.push({ preview_row_id: rowId || null, pay_channel: payChannel || null, reasons });
+        continue;
       }
+
+      allEligibleRows.push(row);
+      if (withinRequestedScope) selectedRows.push(row);
     }
+
+    const scopeCounts = allEligibleRows.reduce((counts, row) => {
+      const contract = buildCreateDraftSelectedPreviewRowContract(row, counts.selected_ready_total);
+      const channel = upperTrim(contract.pay_channel || '');
+      counts.selected_ready_total += 1;
+      if (channel === 'PAYE') counts.selected_ready_paye += 1;
+      if (channel === 'UMBRELLA') counts.selected_ready_umbrella += 1;
+      return counts;
+    }, {
+      selected_ready_total: 0,
+      selected_ready_paye: 0,
+      selected_ready_umbrella: 0,
+      selected_ready_for_scope: selectedRows.length,
+      pay_channel_scope: scope
+    });
+    scopeCounts.selected_ready_for_scope = selectedRows.length;
 
     if (invalidRows.length > 0) {
       return {
@@ -24060,6 +24298,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
         selected_preview_row_ids: [],
         session_version: sessionVersionRaw,
         session_version_normalized: sessionVersionValue,
+        scope_counts: scopeCounts,
         invalid_row_count: invalidRows.length,
         invalid_rows: invalidRows.slice(0, 25)
       };
@@ -24074,12 +24313,34 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       selectedIds.push(rowId);
     }
 
+    const allSelectedIds = [];
+    const allSeenIds = new Set();
+    for (const selectedRow of allEligibleRows) {
+      const rowId = trimStr(selectedRow.id || '');
+      if (!uuidRe.test(rowId) || allSeenIds.has(rowId)) continue;
+      allSeenIds.add(rowId);
+      allSelectedIds.push(rowId);
+    }
+
     const selectedPreviewRowContracts = selectedRows.map((selectedRow, index) => buildCreateDraftSelectedPreviewRowContract(selectedRow, index));
     const selectedEconomicKeys = selectedPreviewRowContracts.map((contract) => buildCreateDraftEconomicKeyContract(contract));
+    const allSelectedPreviewRowContracts = allEligibleRows.map((selectedRow, index) => buildCreateDraftSelectedPreviewRowContract(selectedRow, index));
+    const allSelectedEconomicKeys = allSelectedPreviewRowContracts.map((contract) => buildCreateDraftEconomicKeyContract(contract));
+
+    const noRowsForScope = selectedIds.length <= 0;
+    const noRowsCode = scope === 'PAYE' || scope === 'UMBRELLA'
+      ? 'BANKING_PAY_CREATE_DRAFT_NO_ROWS_FOR_SCOPE'
+      : 'BANKING_CREATE_DRAFT_NO_SELECTED_ROWS_CURRENT_VERSION';
+    const noRowsMessage = scope === 'PAYE'
+      ? 'No PAYE rows are available for Create Draft. Choose Umbrella only or select PAYE-ready rows.'
+      : (scope === 'UMBRELLA'
+          ? 'No Umbrella rows are available for Create Draft. Choose PAYE only or select Umbrella-ready rows.'
+          : 'No selected Ready to Pay rows are available for Create Draft.');
 
     return {
-      ok: selectedIds.length > 0,
-      error_code: selectedIds.length > 0 ? null : 'BANKING_CREATE_DRAFT_NO_SELECTED_ROWS_CURRENT_VERSION',
+      ok: !noRowsForScope,
+      error_code: noRowsForScope ? noRowsCode : null,
+      message: noRowsForScope ? noRowsMessage : null,
       session_id: id,
       session_version: sessionVersionRaw,
       session_version_normalized: sessionVersionValue,
@@ -24089,6 +24350,10 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       session_signature: trimStr(sessionRow.session_signature || '') || null,
       pay_date: trimStr(sessionRow.pay_date || '') || null,
       week_ending_cutoff: trimStr(sessionRow.week_ending_cutoff || '') || null,
+      pay_channel_scope: scope,
+      scope_counts: scopeCounts,
+      all_selected_preview_row_ids: allSelectedIds,
+      all_selected_preview_row_count: allSelectedIds.length,
       selected_preview_row_ids: selectedIds,
       selected_row_count: selectedIds.length,
       server_selected_preview_row_ids_provided: sessionRow.server_selected_preview_row_ids_provided === true,
@@ -24097,9 +24362,12 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       selected_preview_row_contracts: selectedPreviewRowContracts,
       draft_selected_preview_row_contracts: selectedPreviewRowContracts,
       selected_economic_keys: selectedEconomicKeys,
-      draft_selected_economic_keys: selectedEconomicKeys
+      draft_selected_economic_keys: selectedEconomicKeys,
+      all_selected_preview_row_contracts: allSelectedPreviewRowContracts,
+      all_selected_economic_keys: allSelectedEconomicKeys
     };
   };
+
   const isActiveDraftCreateStatus = (value) => ['RUNNING', 'CONTINUING', 'WAITING_RETRY'].includes(upperTrim(value));
   const isTerminalDraftCreateStatus = (value) => ['COMPLETE', 'COMPLETED', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED'].includes(upperTrim(value));
   const classifyExistingDraftCreateOperation = (operationLike) => {
@@ -24234,22 +24502,79 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   const previewDecisions = isPlainObject(body.preview_decisions_json)
     ? cloneJson(body.preview_decisions_json)
     : (isPlainObject(body.previewDecisionsJson) ? cloneJson(body.previewDecisionsJson) : {});
-  const payChannelScope = normaliseDraftScope(
-    body.pay_channel_scope
-      || body.payChannelScope
-      || body.draft_scope
-      || body.draftScope
-      || body.scope
-      || previewDecisions.pay_channel_scope
-      || previewDecisions.payChannelScope
-      || previewDecisions.draft_scope
-      || previewDecisions.draftScope
-      || 'ALL',
-    'ALL'
-  );
-  if (!payChannelScope || !['ALL', 'PAYE', 'UMBRELLA'].includes(payChannelScope)) {
-    return fail(400, 'BANKING_CREATE_DRAFT_INVALID_INPUT', 'Payment batch could not be created. Choose Both PAYE and Umbrella, PAYE only, or Umbrella only, then try again.', { field: 'pay_channel_scope', session_id: sessionId });
+  const collectDraftScopeEntries = () => {
+    const entries = [];
+    const addScopeEntry = (source, owner, key) => {
+      if (!isPlainObject(owner) || !Object.prototype.hasOwnProperty.call(owner, key)) return;
+      const raw = trimStr(owner[key]);
+      if (!raw) return;
+      const value = normaliseDraftScope(raw);
+      entries.push({
+        source: `${source}.${key}`,
+        raw,
+        value: value || null,
+        invalid: !value
+      });
+    };
+
+    addScopeEntry('body', body, 'pay_channel_scope');
+    addScopeEntry('body', body, 'payChannelScope');
+    addScopeEntry('body', body, 'draft_scope');
+    addScopeEntry('body', body, 'draftScope');
+    addScopeEntry('body', body, 'scope');
+    addScopeEntry('preview_decisions_json', previewDecisions, 'pay_channel_scope');
+    addScopeEntry('preview_decisions_json', previewDecisions, 'payChannelScope');
+    addScopeEntry('preview_decisions_json', previewDecisions, 'draft_scope');
+    addScopeEntry('preview_decisions_json', previewDecisions, 'draftScope');
+    addScopeEntry('preview_decisions_json', previewDecisions, 'scope');
+    return entries;
+  };
+  const resolvePayChannelScope = () => {
+    const entries = collectDraftScopeEntries();
+    const invalidEntries = entries.filter((entry) => entry.invalid);
+    if (invalidEntries.length > 0) {
+      return {
+        ok: false,
+        error_code: 'BANKING_PAY_CREATE_DRAFT_INVALID_SCOPE',
+        message: 'Create Draft scope is not valid. Choose Both PAYE and Umbrella, PAYE only, or Umbrella only, then try again.',
+        entries,
+        invalid_entries: invalidEntries
+      };
+    }
+
+    const distinctScopes = Array.from(new Set(entries.map((entry) => entry.value).filter(Boolean)));
+    if (distinctScopes.length > 1) {
+      return {
+        ok: false,
+        error_code: 'BANKING_PAY_CREATE_DRAFT_SCOPE_CONFLICT',
+        message: 'Create Draft scope is inconsistent. Choose one draft scope, then try again.',
+        entries,
+        scope_values: distinctScopes
+      };
+    }
+
+    return {
+      ok: true,
+      scope: distinctScopes[0] || 'ALL',
+      entries
+    };
+  };
+  const payChannelScopeResolution = resolvePayChannelScope();
+  if (!payChannelScopeResolution || payChannelScopeResolution.ok !== true) {
+    return fail(400, payChannelScopeResolution?.error_code || 'BANKING_PAY_CREATE_DRAFT_INVALID_SCOPE', payChannelScopeResolution?.message || 'Create Draft scope is not valid. Choose Both PAYE and Umbrella, PAYE only, or Umbrella only, then try again.', {
+      field: 'pay_channel_scope',
+      session_id: sessionId,
+      title: 'Create Draft scope is not valid',
+      allowed_values: ['ALL', 'PAYE', 'UMBRELLA'],
+      scope_entries: payChannelScopeResolution?.entries || [],
+      invalid_entries: payChannelScopeResolution?.invalid_entries || [],
+      scope_values: payChannelScopeResolution?.scope_values || [],
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true
+    });
   }
+  const payChannelScope = payChannelScopeResolution.scope || 'ALL';
 
   const preflightOnly = booleanFrom(body.preflight_only ?? body.preflightOnly);
   const sameWeekPayeOverrideReason = trimStr(
@@ -24364,6 +24689,29 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
         limit: 100
       });
     }
+
+    if (currentSelection && currentSelection.error_code === 'BANKING_PAY_CREATE_DRAFT_NO_ROWS_FOR_SCOPE') {
+      const scopeCounts = isPlainObject(currentSelection.scope_counts) ? currentSelection.scope_counts : {};
+      const scopeLabel = payChannelScope === 'PAYE' ? 'PAYE' : (payChannelScope === 'UMBRELLA' ? 'Umbrella' : 'selected');
+      const message = trimStr(currentSelection.message) || `No ${scopeLabel} rows are available for Create Draft.`;
+      return fail(409, 'BANKING_PAY_CREATE_DRAFT_NO_ROWS_FOR_SCOPE', message, {
+        session_id: sessionId,
+        pay_channel_scope: payChannelScope,
+        scope: payChannelScope,
+        title: payChannelScope === 'PAYE'
+          ? 'No PAYE rows available'
+          : (payChannelScope === 'UMBRELLA' ? 'No Umbrella rows available' : 'No selected rows available'),
+        scope_counts: scopeCounts,
+        selected_ready_total: scopeCounts.selected_ready_total ?? null,
+        selected_ready_paye: scopeCounts.selected_ready_paye ?? null,
+        selected_ready_umbrella: scopeCounts.selected_ready_umbrella ?? null,
+        supplied_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+        operation_started: false,
+        no_operation_started: true,
+        no_batch_created: true
+      });
+    }
+
     return rejectWorkbenchNotReady(sessionId, 'CURRENT_SELECTION_READ', {
       ...postSyncReadiness,
       blocker_codes: uniqueStrings([
@@ -24412,19 +24760,62 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
 
   authoritativeReadinessSnapshot = finalReadiness;
 
-  const scopeCounts = selectedPreviewRowContracts.reduce((counts, contract) => {
+  const authoritativeScopeCounts = isPlainObject(currentSelection.scope_counts) ? currentSelection.scope_counts : {};
+  const scopedContractCounts = selectedPreviewRowContracts.reduce((counts, contract) => {
     const channel = upperTrim(contract && contract.pay_channel);
     if (channel === 'PAYE') counts.paye_rows += 1;
     if (channel === 'UMBRELLA') counts.umbrella_rows += 1;
     return counts;
   }, { paye_rows: 0, umbrella_rows: 0 });
-  const payeRowsIncluded = scopeCounts.paye_rows > 0 && payChannelScope !== 'UMBRELLA';
-  const umbrellaRowsIncluded = scopeCounts.umbrella_rows > 0 && payChannelScope !== 'PAYE';
+  const scopeCounts = {
+    paye_rows: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_paye)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_paye))) : scopedContractCounts.paye_rows,
+    umbrella_rows: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_umbrella)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_umbrella))) : scopedContractCounts.umbrella_rows,
+    selected_ready_total: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_total)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_total))) : selectedPreviewRowContracts.length,
+    selected_ready_paye: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_paye)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_paye))) : scopedContractCounts.paye_rows,
+    selected_ready_umbrella: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_umbrella)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_umbrella))) : scopedContractCounts.umbrella_rows,
+    selected_ready_for_scope: Number.isFinite(Number(authoritativeScopeCounts.selected_ready_for_scope)) ? Math.max(0, Math.trunc(Number(authoritativeScopeCounts.selected_ready_for_scope))) : selectedPreviewRowContracts.length,
+    pay_channel_scope: payChannelScope
+  };
+  const payeRowsIncluded = scopedContractCounts.paye_rows > 0 && payChannelScope !== 'UMBRELLA';
+  const umbrellaRowsIncluded = scopedContractCounts.umbrella_rows > 0 && payChannelScope !== 'PAYE';
   let payeGuardrails = null;
   let verifiedSameWeekPayeOverride = null;
 
+  const readPayeGuardrailsForCreateDraft = async (purpose) => {
+    try {
+      const guardrailPayload = unwrapRpc(await sbRpc(env, 'pay_paye_guardrails', {
+        p_pay_date: payDate,
+        p_ignore_pay_batch_id: null,
+        p_actor_user_id: actorUserId
+      }, {
+        routeClass: 'BANKING_PAY_GUARDRAIL',
+        purpose: trimStr(purpose) || 'CREATE_DRAFT_PAYE_GUARDRAIL',
+        timeoutMs: 8000,
+        bankingPay: true
+      }), 'pay_paye_guardrails');
+
+      if (!isPlainObject(guardrailPayload) || guardrailPayload.ok !== true) {
+        return {
+          ok: false,
+          error_code: 'PAYE_GUARDRAIL_RESPONSE_INVALID',
+          message: 'CloudTMS could not confirm the PAYE draft guardrails. Refresh Banking and try again. No draft has been created.',
+          guardrail: guardrailPayload
+        };
+      }
+
+      return { ok: true, guardrail: guardrailPayload };
+    } catch (error) {
+      return {
+        ok: false,
+        error_code: 'PAYE_GUARDRAIL_CHECK_FAILED',
+        message: 'CloudTMS could not check the PAYE draft guardrails. Refresh Banking and try again. No draft has been created.',
+        reason: String(error && error.message ? error.message : error)
+      };
+    }
+  };
+
   const buildActionRequiredPayload = (code, title, message, choices, extra = {}) => ({
-    ok: true,
+    ok: false,
     preflight: true,
     can_start: false,
     action_required: true,
@@ -24450,34 +24841,17 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   });
 
   if (payeRowsIncluded) {
-    try {
-      payeGuardrails = unwrapRpc(await sbRpc(env, 'pay_paye_guardrails', {
-        p_pay_date: payDate,
-        p_ignore_pay_batch_id: null,
-        p_actor_user_id: actorUserId
-      }, {
-        routeClass: 'BANKING_PAY_GUARDRAIL',
-        purpose: preflightOnly ? 'CREATE_DRAFT_PREFLIGHT_PAYE_GUARDRAIL' : 'CREATE_DRAFT_PAYE_GUARDRAIL',
-        timeoutMs: 8000,
-        bankingPay: true
-      }), 'pay_paye_guardrails');
-    } catch (error) {
-      return fail(503, 'PAYE_GUARDRAIL_CHECK_FAILED', 'CloudTMS could not check the PAYE draft guardrails. Refresh Banking and try again. No draft has been created.', {
+    const guardrailRead = await readPayeGuardrailsForCreateDraft(preflightOnly ? 'CREATE_DRAFT_PREFLIGHT_PAYE_GUARDRAIL' : 'CREATE_DRAFT_PAYE_GUARDRAIL');
+    if (!guardrailRead || guardrailRead.ok !== true) {
+      return fail(503, guardrailRead?.error_code || 'PAYE_GUARDRAIL_CHECK_FAILED', guardrailRead?.message || 'CloudTMS could not check the PAYE draft guardrails. Refresh Banking and try again. No draft has been created.', {
         session_id: sessionId,
         pay_date: payDate,
         pay_channel_scope: payChannelScope,
-        reason: String(error && error.message ? error.message : error)
+        reason: guardrailRead?.reason || null,
+        guardrail: guardrailRead?.guardrail || null
       });
     }
-
-    if (!isPlainObject(payeGuardrails) || payeGuardrails.ok !== true) {
-      return fail(503, 'PAYE_GUARDRAIL_RESPONSE_INVALID', 'CloudTMS could not confirm the PAYE draft guardrails. Refresh Banking and try again. No draft has been created.', {
-        session_id: sessionId,
-        pay_date: payDate,
-        pay_channel_scope: payChannelScope,
-        guardrail: payeGuardrails
-      });
-    }
+    payeGuardrails = guardrailRead.guardrail;
 
     const activeUi = isPlainObject(payeGuardrails.ui) && isPlainObject(payeGuardrails.ui.active) ? payeGuardrails.ui.active : {};
     const hasExistingPayeDraft = payeGuardrails.create_paye_blocked === true || payeGuardrails.has_existing_paye_draft === true;
@@ -24534,7 +24908,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       }
       const verification = await verifyPayeSameWeekOverrideReauth(env, user, sameWeekPayeReauthToken);
       if (!verification || verification.ok !== true) {
-        return fail(Number(verification && verification.http_status) || 401, trimStr(verification && verification.error_code) || 'PAYE_SAME_WEEK_OVERRIDE_REAUTH_INVALID', trimStr(verification && verification.message) || 'PAYE override verification failed or expired. No draft has been created.', {
+        return fail(Number(verification && verification.http_status) || 401, trimStr(verification && verification.error_code) || 'PAYE_SAME_WEEK_REAUTH_INVALID', trimStr(verification && verification.message) || 'PAYE override verification failed or expired. No draft has been created.', {
           session_id: sessionId,
           pay_date: payDate,
           pay_channel_scope: payChannelScope
@@ -24557,6 +24931,76 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     }
   }
 
+  if (!preflightOnly && payeRowsIncluded) {
+    const finalGuardrailRead = await readPayeGuardrailsForCreateDraft('CREATE_DRAFT_FINAL_PAYE_GUARDRAIL_RECHECK');
+    if (!finalGuardrailRead || finalGuardrailRead.ok !== true) {
+      return fail(503, finalGuardrailRead?.error_code || 'PAYE_GUARDRAIL_CHECK_FAILED', finalGuardrailRead?.message || 'CloudTMS could not re-check the PAYE draft guardrails. Refresh Banking and try again. No draft has been created.', {
+        session_id: sessionId,
+        pay_date: payDate,
+        pay_channel_scope: payChannelScope,
+        reason: finalGuardrailRead?.reason || null,
+        guardrail: finalGuardrailRead?.guardrail || null,
+        operation_started: false,
+        no_operation_started: true,
+        no_batch_created: true
+      });
+    }
+
+    payeGuardrails = finalGuardrailRead.guardrail;
+    const finalActiveUi = isPlainObject(payeGuardrails.ui) && isPlainObject(payeGuardrails.ui.active) ? payeGuardrails.ui.active : {};
+    const finalHasExistingPayeDraft = payeGuardrails.create_paye_blocked === true || payeGuardrails.has_existing_paye_draft === true;
+    const finalSameWeekOverrideRequired = !finalHasExistingPayeDraft && payeGuardrails.override_required === true;
+
+    if (finalHasExistingPayeDraft) {
+      const choices = umbrellaRowsIncluded && payChannelScope === 'ALL'
+        ? ['CREATE_UMBRELLA_ONLY', 'CANCEL']
+        : ['CANCEL'];
+      const title = trimStr(finalActiveUi.title) || 'Existing PAYE draft already exists';
+      const message = trimStr(finalActiveUi.message) || 'A PAYE draft batch already exists. Cancel or delete the existing PAYE draft before creating another PAYE draft.';
+      const payload = buildActionRequiredPayload('PAYE_DRAFT_ALREADY_EXISTS', title, message, choices, {
+        hard_block: true,
+        override_available: false,
+        existing_paye_draft: payeGuardrails.existing_paye_draft || null,
+        detail: umbrellaRowsIncluded && payChannelScope === 'ALL'
+          ? 'You can create the selected Umbrella draft only, or cancel.'
+          : 'Cancel or delete the existing PAYE draft before creating another PAYE draft.'
+      });
+      return response(409, Object.assign({}, payload, { ok: false, preflight: false, create_draft_unavailable: true }));
+    }
+
+    if (finalSameWeekOverrideRequired) {
+      if (!verifiedSameWeekPayeOverride || verifiedSameWeekPayeOverride.verified !== true) {
+        const choices = payChannelScope === 'ALL' && umbrellaRowsIncluded
+          ? ['CREATE_UMBRELLA_ONLY', 'VERIFY_AND_CREATE_BOTH', 'CANCEL']
+          : ['VERIFY_AND_CREATE_PAYE', 'CANCEL'];
+        const title = trimStr(finalActiveUi.title) || 'A PAYE batch already exists for this payroll week';
+        const message = trimStr(finalActiveUi.message) || 'Creating another PAYE batch for the same Monday-based payroll week is override-only.';
+        const payload = buildActionRequiredPayload(
+          payChannelScope === 'ALL' && umbrellaRowsIncluded
+            ? 'PAYE_SAME_WEEK_OVERRIDE_CHOICE_REQUIRED'
+            : 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED',
+          title,
+          message,
+          choices,
+          {
+            hard_block: false,
+            override_available: true,
+            same_week_non_draft_paye_batches: Array.isArray(payeGuardrails.same_week_non_draft_paye_batches) ? payeGuardrails.same_week_non_draft_paye_batches : [],
+            detail: payChannelScope === 'ALL' && umbrellaRowsIncluded
+              ? 'Choose Umbrella only, verify and create PAYE + Umbrella, or cancel.'
+              : 'Complete password reauthentication, 2FA, an explicit reason, and confirmation to create the PAYE draft.'
+          }
+        );
+        return response(409, Object.assign({}, payload, { ok: false, preflight: false, create_draft_unavailable: true }));
+      }
+
+      verifiedSameWeekPayeOverride.pay_week_start = trimStr(payeGuardrails.pay_week_start) || verifiedSameWeekPayeOverride.pay_week_start || null;
+      verifiedSameWeekPayeOverride.pay_week_end = trimStr(payeGuardrails.pay_week_end) || verifiedSameWeekPayeOverride.pay_week_end || null;
+    } else if (verifiedSameWeekPayeOverride) {
+      verifiedSameWeekPayeOverride = null;
+    }
+  }
+
   if (preflightOnly) {
     return response(200, {
       ok: true,
@@ -24567,6 +25011,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       no_operation_started: true,
       no_batch_created: true,
       pay_channel_scope: payChannelScope,
+      scope: payChannelScope,
       scope_counts: scopeCounts,
       selected_preview_row_count: selectedCount,
       guardrail: payeGuardrails,
@@ -24724,6 +25169,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     });
   }
 }
+
 
 
 
@@ -52162,6 +52608,9 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 
 
 
+
+
+
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -52178,6 +52627,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   const upperTrim = (value) => trimStr(value).toUpperCase();
   const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
   const enc = encodeURIComponent;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const operation = safeObject(operationRow);
   const operationId = String(operation.operation_id || operation.id || '').trim();
   const inputJson = safeObject(operation.input_json);
@@ -52357,81 +52807,201 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   const selectedPreviewRowCount = Array.isArray(selectedPreviewRowIds)
     ? selectedPreviewRowIds.length
     : Math.max(0, Number.isFinite(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) ? Math.trunc(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) : 0);
-  const normalisePayChannelScopeForDraftCreate = (value, fallback = 'ALL') => {
-    const normalise = (candidate) => {
-      const raw = upperTrim(candidate)
-        .replace(/[^A-Z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
-      if (!raw) return null;
+  const normalisePayChannelScopeForDraftCreate = (value) => {
+    const raw = upperTrim(value)
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    if (!raw) return null;
 
-      if ([
-        'ALL',
-        'BOTH',
-        'MIXED',
-        'ALL_PAY_CHANNELS',
-        'BOTH_PAY_CHANNELS',
-        'PAYE_AND_UMBRELLA',
-        'PAYE_UMBRELLA',
-        'PAYE_PLUS_UMBRELLA',
-        'PAYE_WITH_UMBRELLA',
-        'BOTH_PAYE_UMBRELLA',
-        'BOTH_PAYE_AND_UMBRELLA',
-        'PAYE_AND_NON_PAYE',
-        'PAYE_NON_PAYE'
-      ].includes(raw)) return 'ALL';
-
-      if ([
-        'PAYE',
-        'PAYE_ONLY',
-        'ONLY_PAYE',
-        'PAYE_PAY'
-      ].includes(raw)) return 'PAYE';
-
-      if ([
-        'UMBRELLA',
-        'UMBRELLAS',
-        'UMBRELLA_ONLY',
-        'ONLY_UMBRELLA',
-        'UMBRELLA_PAY',
-        'NON_PAYE',
-        'NONPAYE',
-        'NON_PAYE_ONLY',
-        'NONPAYE_ONLY'
-      ].includes(raw)) return 'UMBRELLA';
-
-      return null;
-    };
-
-    return normalise(value) || normalise(fallback) || 'ALL';
-  };
-  const payChannelScope = normalisePayChannelScopeForDraftCreate(
-    inputJson.pay_channel_scope ||
-      inputJson.payChannelScope ||
-      inputJson.draft_scope ||
-      inputJson.draftScope ||
-      inputJson.scope ||
+    if ([
       'ALL',
-    'ALL'
-  );
-  const rawSameWeekPayeOverrideJson = safeObject(
-    inputJson.same_week_paye_override
-      || inputJson.sameWeekPayeOverride
-      || inputJson.same_week_paye_override_json
-      || inputJson.sameWeekPayeOverrideJson
-  );
-  const sameWeekPayeOverrideReason = trimStr(rawSameWeekPayeOverrideJson.reason || inputJson.same_week_paye_override_reason || inputJson.override_reason || '');
-  const sameWeekPayeOverrideVerifiedByUserId = trimStr(rawSameWeekPayeOverrideJson.verified_by_user_id || inputJson.same_week_paye_override_verified_by_user_id || inputJson.override_verified_by_user_id || '');
-  const sameWeekPayeOverrideVerifiedAtUtc = trimStr(rawSameWeekPayeOverrideJson.verified_at_utc || inputJson.same_week_paye_override_verified_at_utc || inputJson.override_verified_at_utc || '');
+      'BOTH',
+      'MIXED',
+      'ALL_PAY_CHANNELS',
+      'BOTH_PAY_CHANNELS',
+      'PAYE_AND_UMBRELLA',
+      'PAYE_UMBRELLA',
+      'PAYE_PLUS_UMBRELLA',
+      'PAYE_WITH_UMBRELLA',
+      'BOTH_PAYE_UMBRELLA',
+      'BOTH_PAYE_AND_UMBRELLA',
+      'PAYE_AND_NON_PAYE',
+      'PAYE_NON_PAYE'
+    ].includes(raw)) return 'ALL';
+
+    if ([
+      'PAYE',
+      'PAYE_ONLY',
+      'ONLY_PAYE',
+      'PAYE_PAY'
+    ].includes(raw)) return 'PAYE';
+
+    if ([
+      'UMBRELLA',
+      'UMBRELLAS',
+      'UMBRELLA_ONLY',
+      'ONLY_UMBRELLA',
+      'UMBRELLA_PAY',
+      'NON_PAYE',
+      'NONPAYE',
+      'NON_PAYE_ONLY',
+      'NONPAYE_ONLY'
+    ].includes(raw)) return 'UMBRELLA';
+
+    return null;
+  };
+  const hasOwnInputJsonValue = (key) => Object.prototype.hasOwnProperty.call(inputJson, key) && trimStr(inputJson[key]) !== '';
+  const collectStoredPayChannelScopeEntries = () => {
+    const entries = [];
+    for (const key of ['pay_channel_scope', 'payChannelScope', 'draft_scope', 'draftScope', 'scope']) {
+      if (!hasOwnInputJsonValue(key)) continue;
+      const raw = trimStr(inputJson[key]);
+      const value = normalisePayChannelScopeForDraftCreate(raw);
+      entries.push({ source: `input_json.${key}`, raw, value: value || null, invalid: !value });
+    }
+    return entries;
+  };
+  const resolveStoredPayChannelScope = () => {
+    const entries = collectStoredPayChannelScopeEntries();
+    const invalidEntries = entries.filter((entry) => entry.invalid);
+    if (invalidEntries.length > 0) {
+      return {
+        ok: false,
+        code: 'BANKING_PAY_CREATE_DRAFT_INVALID_SCOPE',
+        message: 'Create Draft scope stored on the operation is not valid. No draft batch has been created.',
+        entries,
+        invalid_entries: invalidEntries
+      };
+    }
+    const distinctScopes = Array.from(new Set(entries.map((entry) => entry.value).filter(Boolean)));
+    if (distinctScopes.length > 1) {
+      return {
+        ok: false,
+        code: 'BANKING_PAY_CREATE_DRAFT_SCOPE_CONFLICT',
+        message: 'Create Draft scope stored on the operation is inconsistent. No draft batch has been created.',
+        entries,
+        scope_values: distinctScopes
+      };
+    }
+    return { ok: true, scope: distinctScopes[0] || 'ALL', entries };
+  };
+  const storedPayChannelScopeResolution = resolveStoredPayChannelScope();
+  const payChannelScope = storedPayChannelScopeResolution.ok === true ? storedPayChannelScopeResolution.scope : 'ALL';
+  const nestedSameWeekPayeOverride = safeObject(inputJson.same_week_paye_override || inputJson.sameWeekPayeOverride);
+  const secondaryNestedSameWeekPayeOverride = safeObject(inputJson.same_week_paye_override_json || inputJson.sameWeekPayeOverrideJson);
+  const proofProblems = [];
+  const proofStringValue = (value) => trimStr(value);
+  const proofBoolValue = (value) => booleanFrom(value);
+  const proofTimestampMs = (value) => Date.parse(trimStr(value));
+  const proofSourceObjectHasValues = (value) => {
+    const objectValue = safeObject(value);
+    return proofBoolValue(objectValue.used)
+      || proofBoolValue(objectValue.continue)
+      || proofBoolValue(objectValue.verified)
+      || !!proofStringValue(objectValue.reason)
+      || !!proofStringValue(objectValue.verified_by_user_id)
+      || !!proofStringValue(objectValue.verified_at_utc)
+      || !!proofStringValue(objectValue.reauth_purpose)
+      || !!proofStringValue(objectValue.guardrail_code)
+      || !!proofStringValue(objectValue.pay_date)
+      || !!proofStringValue(objectValue.pay_week_start)
+      || !!proofStringValue(objectValue.pay_week_end);
+  };
+  const proofObjectsConflict = (left, right) => {
+    const leftObject = safeObject(left);
+    const rightObject = safeObject(right);
+    const keys = ['used', 'continue', 'verified', 'reason', 'verified_by_user_id', 'verified_at_utc', 'reauth_purpose', 'guardrail_code', 'pay_date', 'pay_week_start', 'pay_week_end'];
+    for (const key of keys) {
+      const leftHas = Object.prototype.hasOwnProperty.call(leftObject, key) && trimStr(leftObject[key]) !== '';
+      const rightHas = Object.prototype.hasOwnProperty.call(rightObject, key) && trimStr(rightObject[key]) !== '';
+      if (!leftHas && !rightHas) continue;
+      if (['used', 'continue', 'verified'].includes(key)) {
+        if (proofBoolValue(leftObject[key]) !== proofBoolValue(rightObject[key])) return true;
+      } else if (key === 'verified_at_utc') {
+        const leftMs = proofTimestampMs(leftObject[key]);
+        const rightMs = proofTimestampMs(rightObject[key]);
+        if (!Number.isFinite(leftMs) || !Number.isFinite(rightMs) || leftMs !== rightMs) return true;
+      } else if (proofStringValue(leftObject[key]) !== proofStringValue(rightObject[key])) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const canonicalSameWeekPayeOverrideJson = proofSourceObjectHasValues(nestedSameWeekPayeOverride)
+    ? nestedSameWeekPayeOverride
+    : (proofSourceObjectHasValues(secondaryNestedSameWeekPayeOverride) ? secondaryNestedSameWeekPayeOverride : {});
+  if (proofSourceObjectHasValues(nestedSameWeekPayeOverride)
+      && proofSourceObjectHasValues(secondaryNestedSameWeekPayeOverride)
+      && proofObjectsConflict(nestedSameWeekPayeOverride, secondaryNestedSameWeekPayeOverride)) {
+    proofProblems.push({ code: 'PAYE_OVERRIDE_NESTED_PROOF_CONFLICT', field: 'same_week_paye_override_json' });
+  }
+  for (const key of ['same_week_paye_reauth_token', 'sameWeekPayeReauthToken', 'reauth_token', 'reauthToken']) {
+    if (hasOwnInputJsonValue(key)) proofProblems.push({ code: 'PAYE_OVERRIDE_RAW_REAUTH_TOKEN_PRESENT', field: key });
+  }
+  const compareTopLevelProofBoolean = (key, nestedKey) => {
+    if (!Object.prototype.hasOwnProperty.call(inputJson, key) || trimStr(inputJson[key]) === '') return;
+    const topLevelValue = proofBoolValue(inputJson[key]);
+    if (!proofSourceObjectHasValues(canonicalSameWeekPayeOverrideJson)) {
+      if (topLevelValue !== true) return;
+      proofProblems.push({ code: 'PAYE_OVERRIDE_TOP_LEVEL_PROOF_WITHOUT_CANONICAL_NESTED_PROOF', field: key });
+      return;
+    }
+    if (topLevelValue !== proofBoolValue(canonicalSameWeekPayeOverrideJson[nestedKey])) {
+      proofProblems.push({ code: 'PAYE_OVERRIDE_TOP_LEVEL_PROOF_CONFLICT', field: key, nested_field: nestedKey });
+    }
+  };
+  const compareTopLevelProofString = (key, nestedKey) => {
+    if (!Object.prototype.hasOwnProperty.call(inputJson, key) || trimStr(inputJson[key]) === '') return;
+    if (!proofSourceObjectHasValues(canonicalSameWeekPayeOverrideJson)) {
+      proofProblems.push({ code: 'PAYE_OVERRIDE_TOP_LEVEL_PROOF_WITHOUT_CANONICAL_NESTED_PROOF', field: key });
+      return;
+    }
+    if (proofStringValue(inputJson[key]) !== proofStringValue(canonicalSameWeekPayeOverrideJson[nestedKey])) {
+      proofProblems.push({ code: 'PAYE_OVERRIDE_TOP_LEVEL_PROOF_CONFLICT', field: key, nested_field: nestedKey });
+    }
+  };
+  const compareTopLevelProofTimestamp = (key, nestedKey) => {
+    if (!Object.prototype.hasOwnProperty.call(inputJson, key) || trimStr(inputJson[key]) === '') return;
+    if (!proofSourceObjectHasValues(canonicalSameWeekPayeOverrideJson)) {
+      proofProblems.push({ code: 'PAYE_OVERRIDE_TOP_LEVEL_PROOF_WITHOUT_CANONICAL_NESTED_PROOF', field: key });
+      return;
+    }
+    const topMs = proofTimestampMs(inputJson[key]);
+    const nestedMs = proofTimestampMs(canonicalSameWeekPayeOverrideJson[nestedKey]);
+    if (!Number.isFinite(topMs) || !Number.isFinite(nestedMs) || topMs !== nestedMs) {
+      proofProblems.push({ code: 'PAYE_OVERRIDE_TOP_LEVEL_PROOF_CONFLICT', field: key, nested_field: nestedKey });
+    }
+  };
+  compareTopLevelProofBoolean('same_week_paye_override_used', 'used');
+  compareTopLevelProofBoolean('override_continue', 'continue');
+  compareTopLevelProofBoolean('override_verified', 'verified');
+  compareTopLevelProofString('same_week_paye_override_reason', 'reason');
+  compareTopLevelProofString('override_reason', 'reason');
+  compareTopLevelProofString('same_week_paye_override_verified_by_user_id', 'verified_by_user_id');
+  compareTopLevelProofString('override_verified_by_user_id', 'verified_by_user_id');
+  compareTopLevelProofTimestamp('same_week_paye_override_verified_at_utc', 'verified_at_utc');
+  compareTopLevelProofTimestamp('override_verified_at_utc', 'verified_at_utc');
+
+  const sameWeekPayeOverrideReason = trimStr(canonicalSameWeekPayeOverrideJson.reason || '');
+  const sameWeekPayeOverrideVerifiedByUserId = trimStr(canonicalSameWeekPayeOverrideJson.verified_by_user_id || '');
+  const sameWeekPayeOverrideVerifiedAtUtc = trimStr(canonicalSameWeekPayeOverrideJson.verified_at_utc || '');
   const sameWeekPayeOverrideVerifiedAtMs = Date.parse(sameWeekPayeOverrideVerifiedAtUtc);
-  const sameWeekPayeOverrideProofValid = payChannelScope !== 'UMBRELLA'
-    && booleanFrom(rawSameWeekPayeOverrideJson.used ?? inputJson.same_week_paye_override_used)
-    && booleanFrom(rawSameWeekPayeOverrideJson.continue ?? inputJson.override_continue)
-    && booleanFrom(rawSameWeekPayeOverrideJson.verified ?? inputJson.override_verified)
+  const canonicalProofHasMeaningfulValues = proofSourceObjectHasValues(canonicalSameWeekPayeOverrideJson);
+  const sameWeekPayeOverrideProofStructurallyValid = payChannelScope !== 'UMBRELLA'
+    && booleanFrom(canonicalSameWeekPayeOverrideJson.used)
+    && booleanFrom(canonicalSameWeekPayeOverrideJson.continue)
+    && booleanFrom(canonicalSameWeekPayeOverrideJson.verified)
     && !!sameWeekPayeOverrideReason
     && sameWeekPayeOverrideVerifiedByUserId === actorUserId
     && Number.isFinite(sameWeekPayeOverrideVerifiedAtMs)
-    && upperTrim(rawSameWeekPayeOverrideJson.reauth_purpose) === 'PAYE_SAME_WEEK_OVERRIDE'
-    && upperTrim(rawSameWeekPayeOverrideJson.guardrail_code) === 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED';
+    && upperTrim(canonicalSameWeekPayeOverrideJson.reauth_purpose) === 'PAYE_SAME_WEEK_OVERRIDE'
+    && upperTrim(canonicalSameWeekPayeOverrideJson.guardrail_code) === 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED';
+  if (canonicalProofHasMeaningfulValues && payChannelScope === 'UMBRELLA') {
+    proofProblems.push({ code: 'PAYE_OVERRIDE_PROOF_NOT_ALLOWED_FOR_UMBRELLA_OPERATION', field: 'same_week_paye_override' });
+  } else if (canonicalProofHasMeaningfulValues && sameWeekPayeOverrideProofStructurallyValid !== true) {
+    proofProblems.push({ code: 'PAYE_OVERRIDE_CANONICAL_PROOF_INCOMPLETE_OR_INVALID', field: 'same_week_paye_override' });
+  }
+  const sameWeekPayeOverrideProofValid = proofProblems.length <= 0 && sameWeekPayeOverrideProofStructurallyValid;
   const sameWeekPayeOverrideJson = sameWeekPayeOverrideProofValid ? {
     used: true,
     continue: true,
@@ -52441,10 +53011,27 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     verified_at_utc: new Date(sameWeekPayeOverrideVerifiedAtMs).toISOString(),
     reauth_purpose: 'PAYE_SAME_WEEK_OVERRIDE',
     guardrail_code: 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED',
-    pay_date: trimStr(rawSameWeekPayeOverrideJson.pay_date || inputJson.pay_date) || null,
-    pay_week_start: trimStr(rawSameWeekPayeOverrideJson.pay_week_start) || null,
-    pay_week_end: trimStr(rawSameWeekPayeOverrideJson.pay_week_end) || null
+    pay_date: trimStr(canonicalSameWeekPayeOverrideJson.pay_date || inputJson.pay_date) || null,
+    pay_week_start: trimStr(canonicalSameWeekPayeOverrideJson.pay_week_start) || null,
+    pay_week_end: trimStr(canonicalSameWeekPayeOverrideJson.pay_week_end) || null
   } : {};
+  const operationInputContractError = storedPayChannelScopeResolution.ok !== true
+    ? {
+        code: storedPayChannelScopeResolution.code || 'BANKING_PAY_CREATE_DRAFT_INVALID_SCOPE',
+        message: storedPayChannelScopeResolution.message || 'Create Draft scope stored on the operation is not valid. No draft batch has been created.',
+        pay_channel_scope: payChannelScope,
+        scope_entries: storedPayChannelScopeResolution.entries || [],
+        invalid_entries: storedPayChannelScopeResolution.invalid_entries || [],
+        scope_values: storedPayChannelScopeResolution.scope_values || []
+      }
+    : (proofProblems.length > 0
+      ? {
+          code: 'PAYE_OVERRIDE_PROOF_INVALID_FOR_DRAFT_OPERATION',
+          message: 'PAYE same-week override proof stored on the draft operation is not valid. No further draft mutation has been performed.',
+          pay_channel_scope: payChannelScope,
+          proof_problems: proofProblems
+        }
+      : null);
   const draftCreatePhaseOrder = [
     'VALIDATE_SESSION',
     'SYNC_SELECTED_ROWS',
@@ -52467,7 +53054,17 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     'COMPLETE'
   ];
   const phaseIndexFor = (phaseName) => {
-    const idx = draftCreatePhaseOrder.indexOf(String(phaseName || '').trim().toUpperCase());
+    const normalisedPhaseName = String(phaseName || '').trim().toUpperCase();
+    let effectivePhaseName = normalisedPhaseName;
+    if (!draftCreatePhaseOrder.includes(effectivePhaseName)) {
+      for (const candidatePhase of ['CREATE_BATCH_SHELLS', 'INSERT_CANDIDATES', 'INSERT_ITEMS', 'FINALISE_RESERVATIONS', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS']) {
+        if (normalisedPhaseName.startsWith(candidatePhase)) {
+          effectivePhaseName = candidatePhase;
+          break;
+        }
+      }
+    }
+    const idx = draftCreatePhaseOrder.indexOf(effectivePhaseName);
     return idx >= 0 ? idx + 1 : null;
   };
   const uniqueDraftUuidArray = (values) => uniqueUuidArray(Array.isArray(values) ? values : []);
@@ -52688,7 +53285,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return Array.from(map.values());
   };
 
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const isUuid = (value) => uuidRe.test(String(value || '').trim());
   const uniqueUuidArray = (values) => {
     const out = [];
@@ -53465,7 +54061,369 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     };
   };
 
+  const payeAuthorityMutationPhases = new Set([
+    'CREATE_BATCH_SHELLS',
+    'SEED_DRAFT_CHUNKS',
+    'INSERT_CANDIDATES',
+    'INSERT_ITEMS',
+    'APPLY_FINANCE_ADJUSTMENTS',
+    'FINALISE_RESERVATIONS',
+    'POPULATE_CANDIDATE_SUMMARIES',
+    'CREATE_TIMESHEET_SNAPSHOTS',
+    'BUILD_ITEM_BREAKDOWNS',
+    'ASSERT_INTEGRITY'
+  ]);
+  let sameWeekPayeOverrideCurrentlyRequired = null;
+  const phaseIsAtOrAfter = (currentPhase, thresholdPhase) => {
+    const currentIndex = phaseIndexFor(currentPhase);
+    const thresholdIndex = phaseIndexFor(thresholdPhase);
+    return currentIndex !== null && thresholdIndex !== null && currentIndex >= thresholdIndex;
+  };
+  const buildDraftCreateAuthorityFailurePayload = (code, message, extra = {}) => {
+    const errorCode = upperTrim(code) || 'PAYE_OVERRIDE_PROOF_INVALID_FOR_DRAFT_OPERATION';
+    const details = safeObject(extra);
+    const currentPhase = upperTrim(details.phase || phase) || phase;
+    const shellPhaseOrAfter = phaseIsAtOrAfter(currentPhase, 'CREATE_BATCH_SHELLS');
+    const shellMayAlreadyExist = phaseIsAtOrAfter(currentPhase, 'SEED_DRAFT_CHUNKS') || currentPhase.includes('AFTER_SHELL');
+    return Object.assign({}, details, {
+      ok: false,
+      action_required: details.action_required === true,
+      requires_user_action: details.requires_user_action === true || details.action_required === true,
+      code: errorCode,
+      error_code: errorCode,
+      message: trimStr(message) || 'Draft create operation failed before any further draft mutation was allowed.',
+      phase: currentPhase,
+      operation_id: operationId,
+      workbench_session_id: workbenchSessionId,
+      pay_channel_scope: payChannelScope,
+      no_batch_created: shellMayAlreadyExist ? details.no_batch_created === true : true,
+      no_batch_shell_created: shellMayAlreadyExist ? details.no_batch_shell_created === true : true,
+      no_new_batch_created: true,
+      policy_x_authority: 'PRE_DRAFT_ROW_BACKED_PREVIEW_TO_POST_DRAFT_FROZEN_ARTEFACTS'
+    });
+  };
+  const finishDraftCreateAuthorityFailure = async (code, message, extra = {}) => {
+    const payload = buildDraftCreateAuthorityFailurePayload(code, message, extra);
+    if (phaseIsAtOrAfter(payload.phase, 'CREATE_BATCH_SHELLS')) {
+      return finishFailedWithCleanup(null, payload, { phase: payload.phase });
+    }
+    return finish('FAILED', payload, payload);
+  };
+  const fetchPayBatchRowsForPayeAuthority = async (payBatchIds) => {
+    const ids = uniqueUuidArray(payBatchIds || []);
+    if (!ids.length) return [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batches?id=in.(${ids.map(enc).join(',')})&select=id,status,batch_kind_fixed,source_workbench_session_id,source_snapshot_run_id,source_session_version,same_week_paye_override_used,same_week_paye_override_reason,same_week_paye_override_verified_at_utc,same_week_paye_override_verified_by_user_id&limit=${Math.max(1, ids.length)}`,
+        false
+      );
+      return Array.isArray(rows) ? rows : [];
+    } catch (error) {
+      throw new Error(`PAYE_AUTHORITY_PAY_BATCH_READ_FAILED:${String(error?.message || error || '')}`);
+    }
+  };
+  const payBatchProofMatchesOperationProof = (batchRow) => {
+    const row = safeObject(batchRow);
+    if (!sameWeekPayeOverrideProofValid) return false;
+    const used = booleanFrom(row.same_week_paye_override_used);
+    const reason = trimStr(row.same_week_paye_override_reason || '');
+    const verifiedBy = trimStr(row.same_week_paye_override_verified_by_user_id || '');
+    const verifiedAtMs = Date.parse(trimStr(row.same_week_paye_override_verified_at_utc || ''));
+    return used === true
+      && reason === sameWeekPayeOverrideJson.reason
+      && verifiedBy === sameWeekPayeOverrideJson.verified_by_user_id
+      && Number.isFinite(verifiedAtMs)
+      && verifiedAtMs === Date.parse(sameWeekPayeOverrideJson.verified_at_utc);
+  };
+  const getOperationInputContractFailure = () => {
+    if (!operationInputContractError) return null;
+    return buildDraftCreateAuthorityFailurePayload(
+      operationInputContractError.code,
+      operationInputContractError.message,
+      Object.assign({}, operationInputContractError, {
+        phase,
+        validation_stage: 'INPUT_CONTRACT_VALIDATION',
+        action_required: false,
+        no_batch_created: true,
+        no_batch_shell_created: true
+      })
+    );
+  };
+  const assertPayeAuthorityInvariant = async (currentPhase = phase) => {
+    const phaseName = upperTrim(currentPhase) || phase;
+    const scopes = await fetchCandidateScopes('&order=pay_channel.asc,chunk_sequence.asc,id.asc&limit=50000');
+    const scopeRows = Array.isArray(scopes) ? scopes : [];
+    const payeScopeRows = scopeRows.filter((scopeRow) => upperTrim(scopeRow && scopeRow.pay_channel) === 'PAYE');
+    const umbrellaScopeRows = scopeRows.filter((scopeRow) => upperTrim(scopeRow && scopeRow.pay_channel) === 'UMBRELLA');
+    const payeBatchIds = uniqueUuidArray(payeScopeRows.map((scopeRow) => scopeRow && scopeRow.pay_batch_id));
+    const umbrellaBatchIds = uniqueUuidArray(umbrellaScopeRows.map((scopeRow) => scopeRow && scopeRow.pay_batch_id));
+    const inputContracts = Array.isArray(inputJson.selected_preview_row_contracts)
+      ? inputJson.selected_preview_row_contracts
+      : (Array.isArray(inputJson.draft_selected_preview_row_contracts) ? inputJson.draft_selected_preview_row_contracts : []);
+    const inputHasPayeRows = inputContracts.some((contract) => upperTrim(contract && contract.pay_channel) === 'PAYE');
+    const payePotentiallyIncluded = payChannelScope === 'PAYE'
+      || (payChannelScope === 'ALL' && (payeScopeRows.length > 0 || inputHasPayeRows));
+
+    if (payChannelScope === 'UMBRELLA' || !payePotentiallyIncluded) {
+      if (umbrellaBatchIds.length > 0) {
+        const umbrellaBatchRows = await fetchPayBatchRowsForPayeAuthority(umbrellaBatchIds);
+        const umbrellaRowsWithProof = umbrellaBatchRows.filter((batchRow) => booleanFrom(batchRow.same_week_paye_override_used)
+          || trimStr(batchRow.same_week_paye_override_reason || '')
+          || trimStr(batchRow.same_week_paye_override_verified_at_utc || '')
+          || trimStr(batchRow.same_week_paye_override_verified_by_user_id || ''));
+        if (umbrellaRowsWithProof.length > 0) {
+          return {
+            ok: false,
+            response: await finishDraftCreateAuthorityFailure(
+              'UMBRELLA_BATCH_HAS_PAYE_OVERRIDE_PROOF',
+              'Umbrella draft batch shell incorrectly contains PAYE same-week override proof. Draft creation has been stopped.',
+              {
+                phase: phaseName,
+                paye_authority_scope: 'UMBRELLA_PROOF_FORBIDDEN',
+                umbrella_pay_batch_ids: umbrellaRowsWithProof.map((batchRow) => batchRow.id).filter(Boolean)
+              }
+            )
+          };
+        }
+      }
+      sameWeekPayeOverrideCurrentlyRequired = false;
+      return { ok: true, paye_in_scope: false, paye_batch_ids: [], umbrella_batch_ids: umbrellaBatchIds };
+    }
+
+    if (payeBatchIds.length > 1) {
+      return {
+        ok: false,
+        response: await finishDraftCreateAuthorityFailure(
+          'PAYE_DRAFT_CREATE_MULTIPLE_PAYE_SHELLS',
+          'Draft creation found multiple PAYE batch shells for this operation and has stopped before further mutation.',
+          { phase: phaseName, paye_batch_ids: payeBatchIds }
+        )
+      };
+    }
+
+    const ignoredPayeBatchId = payeBatchIds.length === 1 ? payeBatchIds[0] : null;
+    let payeGuardrails = null;
+    try {
+      payeGuardrails = unwrapRpcPayload(await sbRpc(env, 'pay_paye_guardrails', {
+        p_pay_date: inputJson.pay_date || inputJson.payDate || null,
+        p_ignore_pay_batch_id: ignoredPayeBatchId,
+        p_actor_user_id: actorUserId
+      }, {
+        routeClass: 'BANKING_PAY_GUARDRAIL',
+        purpose: `DRAFT_CREATE_RUNNER_${phaseName}_PAYE_AUTHORITY`,
+        timeoutMs: 8000,
+        bankingPay: true
+      }), 'pay_paye_guardrails');
+    } catch (error) {
+      return {
+        ok: false,
+        response: await finishDraftCreateAuthorityFailure(
+          'PAYE_GUARDRAIL_CHECK_FAILED',
+          'CloudTMS could not check PAYE guardrails before draft mutation. Draft creation has been stopped.',
+          { phase: phaseName, reason: String(error?.message || error || '') }
+        )
+      };
+    }
+
+    if (!payeGuardrails || payeGuardrails.ok !== true) {
+      return {
+        ok: false,
+        response: await finishDraftCreateAuthorityFailure(
+          'PAYE_GUARDRAIL_RESPONSE_INVALID',
+          'CloudTMS could not confirm PAYE guardrails before draft mutation. Draft creation has been stopped.',
+          { phase: phaseName, guardrail: payeGuardrails }
+        )
+      };
+    }
+
+    const hasExistingPayeDraft = payeGuardrails.create_paye_blocked === true || payeGuardrails.has_existing_paye_draft === true;
+    const sameWeekOverrideRequired = hasExistingPayeDraft !== true && payeGuardrails.override_required === true;
+    sameWeekPayeOverrideCurrentlyRequired = sameWeekOverrideRequired;
+
+    if (hasExistingPayeDraft) {
+      return {
+        ok: false,
+        response: await finishDraftCreateAuthorityFailure(
+          'PAYE_DRAFT_ALREADY_EXISTS',
+          'A PAYE draft already exists. Draft creation has stopped before further mutation.',
+          {
+            phase: phaseName,
+            action_required: true,
+            choices: payChannelScope === 'ALL' && umbrellaScopeRows.length > 0 ? ['CREATE_UMBRELLA_ONLY', 'CANCEL'] : ['CANCEL'],
+            guardrail: payeGuardrails,
+            existing_paye_draft: payeGuardrails.existing_paye_draft || null
+          }
+        )
+      };
+    }
+
+    if (sameWeekOverrideRequired && sameWeekPayeOverrideProofValid !== true) {
+      return {
+        ok: false,
+        response: await finishDraftCreateAuthorityFailure(
+          'PAYE_SAME_WEEK_OVERRIDE_REQUIRED',
+          'A same-week PAYE override must be verified before creating or continuing this PAYE draft.',
+          {
+            phase: phaseName,
+            action_required: true,
+            choices: payChannelScope === 'ALL' && umbrellaScopeRows.length > 0 ? ['CREATE_UMBRELLA_ONLY', 'VERIFY_AND_CREATE_BOTH', 'CANCEL'] : ['VERIFY_AND_CREATE_PAYE', 'CANCEL'],
+            guardrail: payeGuardrails,
+            same_week_paye_override: {
+              override_required: true,
+              override_verified: false,
+              override_reason_present: false,
+              override_continue: false,
+              scope_blocked: true,
+              block_reason_code: 'SAME_WEEK_OVERRIDE_REASON_REQUIRED'
+            }
+          }
+        )
+      };
+    }
+
+    const payeBatchRows = await fetchPayBatchRowsForPayeAuthority(payeBatchIds);
+    for (const payeBatchRow of payeBatchRows) {
+      const status = upperTrim(payeBatchRow.status || '');
+      const batchKind = upperTrim(payeBatchRow.batch_kind_fixed || '');
+      if (status && status !== 'DRAFT') {
+        return {
+          ok: false,
+          response: await finishDraftCreateAuthorityFailure(
+            'PAYE_DRAFT_SHELL_STATUS_INVALID',
+            'Existing PAYE draft shell is no longer a draft. Draft creation has stopped before further mutation.',
+            { phase: phaseName, pay_batch_id: payeBatchRow.id || null, batch_status: status }
+          )
+        };
+      }
+      if (batchKind && batchKind !== 'PAYE') {
+        return {
+          ok: false,
+          response: await finishDraftCreateAuthorityFailure(
+            'PAYE_DRAFT_SHELL_CHANNEL_MISMATCH',
+            'Existing PAYE draft shell has the wrong pay channel. Draft creation has stopped before further mutation.',
+            { phase: phaseName, pay_batch_id: payeBatchRow.id || null, batch_kind_fixed: batchKind }
+          )
+        };
+      }
+      if (sameWeekOverrideRequired && !payBatchProofMatchesOperationProof(payeBatchRow)) {
+        return {
+          ok: false,
+          response: await finishDraftCreateAuthorityFailure(
+            'PAYE_OVERRIDE_PROOF_INVALID_FOR_DRAFT_OPERATION',
+            'PAYE same-week override proof on the existing draft shell does not match the verified operation proof. Draft creation has been stopped.',
+            { phase: phaseName, pay_batch_id: payeBatchRow.id || null, guardrail: payeGuardrails }
+          )
+        };
+      }
+    }
+
+    if (umbrellaBatchIds.length > 0) {
+      const umbrellaBatchRows = await fetchPayBatchRowsForPayeAuthority(umbrellaBatchIds);
+      const umbrellaRowsWithProof = umbrellaBatchRows.filter((batchRow) => booleanFrom(batchRow.same_week_paye_override_used)
+        || trimStr(batchRow.same_week_paye_override_reason || '')
+        || trimStr(batchRow.same_week_paye_override_verified_at_utc || '')
+        || trimStr(batchRow.same_week_paye_override_verified_by_user_id || ''));
+      if (umbrellaRowsWithProof.length > 0) {
+        return {
+          ok: false,
+          response: await finishDraftCreateAuthorityFailure(
+            'UMBRELLA_BATCH_HAS_PAYE_OVERRIDE_PROOF',
+            'Umbrella draft batch shell incorrectly contains PAYE same-week override proof. Draft creation has been stopped.',
+            {
+              phase: phaseName,
+              paye_authority_scope: 'UMBRELLA_PROOF_FORBIDDEN',
+              umbrella_pay_batch_ids: umbrellaRowsWithProof.map((batchRow) => batchRow.id).filter(Boolean)
+            }
+          )
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      paye_in_scope: true,
+      paye_batch_ids: payeBatchIds,
+      umbrella_batch_ids: umbrellaBatchIds,
+      guardrail: payeGuardrails,
+      same_week_override_required: sameWeekOverrideRequired,
+      same_week_override_verified: sameWeekPayeOverrideProofValid === true
+    };
+  };
+
+  const buildChannelSpecificShellInputJson = (payChannel) => {
+    const channel = upperTrim(payChannel);
+    let shellInput = {};
+    try { shellInput = JSON.parse(JSON.stringify(inputJson)); } catch { shellInput = Object.assign({}, inputJson); }
+    for (const key of ['same_week_paye_reauth_token', 'sameWeekPayeReauthToken', 'reauth_token', 'reauthToken']) delete shellInput[key];
+    if (channel === 'PAYE' && sameWeekPayeOverrideProofValid === true && sameWeekPayeOverrideCurrentlyRequired !== false) {
+      shellInput.same_week_paye_override = sameWeekPayeOverrideJson;
+      shellInput.same_week_paye_override_json = sameWeekPayeOverrideJson;
+      shellInput.same_week_paye_override_used = true;
+      shellInput.same_week_paye_override_reason = sameWeekPayeOverrideJson.reason;
+      shellInput.same_week_paye_override_verified_at_utc = sameWeekPayeOverrideJson.verified_at_utc;
+      shellInput.same_week_paye_override_verified_by_user_id = sameWeekPayeOverrideJson.verified_by_user_id;
+      shellInput.override_reason = sameWeekPayeOverrideJson.reason;
+      shellInput.override_continue = true;
+      shellInput.override_verified = true;
+      shellInput.override_verified_by_user_id = sameWeekPayeOverrideJson.verified_by_user_id;
+      shellInput.override_verified_at_utc = sameWeekPayeOverrideJson.verified_at_utc;
+      return shellInput;
+    }
+
+    delete shellInput.same_week_paye_override;
+    delete shellInput.sameWeekPayeOverride;
+    delete shellInput.same_week_paye_override_json;
+    delete shellInput.sameWeekPayeOverrideJson;
+    delete shellInput.same_week_paye_override_reason;
+    delete shellInput.same_week_paye_override_verified_at_utc;
+    delete shellInput.same_week_paye_override_verified_by_user_id;
+    delete shellInput.same_week_paye_override_used;
+    delete shellInput.override_reason;
+    delete shellInput.override_continue;
+    delete shellInput.override_verified;
+    delete shellInput.override_verified_by_user_id;
+    delete shellInput.override_verified_at_utc;
+    return shellInput;
+  };
+
+  const validateShellResultForChannel = (payChannel, shellResult) => {
+    const channel = upperTrim(payChannel);
+    const shell = safeObject(shellResult);
+    const scope = safeObject(shell.scope);
+    const returnedChannel = upperTrim(shell.pay_channel || shell.payChannel || scope.pay_channel || scope.payChannel || '');
+    if (!returnedChannel) {
+      throw new Error(`DRAFT_BATCH_SHELL_CHANNEL_MISSING:${channel}`);
+    }
+    if (returnedChannel !== channel) {
+      throw new Error(`DRAFT_BATCH_SHELL_CHANNEL_MISMATCH:${channel}:${returnedChannel}`);
+    }
+    const hasOverridePersistedFlag = Object.prototype.hasOwnProperty.call(shell, 'same_week_paye_override_persisted')
+      || Object.prototype.hasOwnProperty.call(shell, 'same_week_paye_override_used')
+      || Object.prototype.hasOwnProperty.call(scope, 'same_week_paye_override_persisted')
+      || Object.prototype.hasOwnProperty.call(scope, 'same_week_paye_override_used');
+    const overridePersisted = booleanFrom(shell.same_week_paye_override_persisted ?? shell.same_week_paye_override_used ?? scope.same_week_paye_override_persisted ?? scope.same_week_paye_override_used);
+    if (channel === 'UMBRELLA' && hasOverridePersistedFlag) {
+      throw new Error('UMBRELLA_BATCH_SHELL_RETURNED_PAYE_OVERRIDE_PROOF');
+    }
+    if (channel === 'PAYE' && sameWeekPayeOverrideCurrentlyRequired === true && hasOverridePersistedFlag && overridePersisted !== true) {
+      throw new Error('PAYE_BATCH_SHELL_RETURNED_WITHOUT_REQUIRED_OVERRIDE_PROOF');
+    }
+    return true;
+  };
+
+
   try {
+    const contractFailure = getOperationInputContractFailure();
+    if (contractFailure) {
+      return await finishDraftCreateAuthorityFailure(contractFailure.code, contractFailure.message, contractFailure);
+    }
+
+    if (payeAuthorityMutationPhases.has(phase)) {
+      const authorityInvariant = await assertPayeAuthorityInvariant(phase);
+      if (!authorityInvariant || authorityInvariant.ok !== true) return authorityInvariant.response;
+    }
+
     if (phase === 'INITIALISE' || phase === 'VALIDATE_SESSION') {
       const validation = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_prepare_draft', {
         p_session_id: workbenchSessionId,
@@ -53794,10 +54752,13 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           p_actor_user_id: actorUserId,
           p_batch_kind: inputJson.batch_kind || inputJson.batchKind || 'STANDARD_PAYRUN',
           p_pay_channel: payChannel,
-          p_input_json: inputJson
+          p_input_json: buildChannelSpecificShellInputJson(payChannel)
         }), 'pay_batch_shell_ensure_from_operation');
+        validateShellResultForChannel(payChannel, shell);
         shellResults.push(shell);
       }
+      const postShellAuthorityInvariant = await assertPayeAuthorityInvariant('CREATE_BATCH_SHELLS_AFTER_SHELLS');
+      if (!postShellAuthorityInvariant || postShellAuthorityInvariant.ok !== true) return postShellAuthorityInvariant.response;
       return lockProgress('RUNNING', 'SEED_DRAFT_CHUNKS', { status_text: 'Draft batch shell created.', batch_shells: shellResults });
     }
 
@@ -54455,7 +55416,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
-
 
 
 
