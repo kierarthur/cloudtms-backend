@@ -44963,20 +44963,19 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows(
-  p_session_id uuid,
-  p_selected_preview_row_ids jsonb,
-  p_actor_user_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows(p_session_id uuid, p_selected_preview_row_ids jsonb, p_actor_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
   v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
   v_input jsonb := COALESCE(p_selected_preview_row_ids, '[]'::jsonb);
+  v_input_type text := COALESCE(jsonb_typeof(COALESCE(p_selected_preview_row_ids, '[]'::jsonb)), 'null');
   v_select_ids_source jsonb := '[]'::jsonb;
   v_deselect_ids_source jsonb := '[]'::jsonb;
   v_selected_ids jsonb := '[]'::jsonb;
@@ -44984,11 +44983,17 @@ DECLARE
   v_missing_ids jsonb := '[]'::jsonb;
   v_stale_selection_ids jsonb := '[]'::jsonb;
   v_non_draftable_ids jsonb := '[]'::jsonb;
+  v_conflicting_ids jsonb := '[]'::jsonb;
+  v_server_selected_ids jsonb := '[]'::jsonb;
   v_current_selected_count integer := 0;
   v_selected_delta integer := 0;
   v_deselected_delta integer := 0;
   v_updated_count integer := 0;
   v_rejected_non_draftable_count integer := 0;
+  v_forced_synthetic_cleanup_count integer := 0;
+  v_replace_omitted_count integer := 0;
+  v_replace_mode boolean := false;
+  v_selection_mode text := 'ROW_PATCH_CAPPED_CONTRACT_GUARDED';
   v_audit_after_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
@@ -45022,10 +45027,11 @@ BEGIN
     RAISE EXCEPTION 'banking_pay_workbench_session % is not OPEN', p_session_id;
   END IF;
 
-  IF jsonb_typeof(v_input) = 'array' THEN
+  IF v_input_type = 'array' THEN
+    v_replace_mode := true;
     v_select_ids_source := v_input;
     v_deselect_ids_source := '[]'::jsonb;
-  ELSIF jsonb_typeof(v_input) = 'object' THEN
+  ELSIF v_input_type = 'object' THEN
     v_select_ids_source := CASE
       WHEN jsonb_typeof(v_input->'select_preview_row_ids') = 'array' THEN COALESCE(v_input->'select_preview_row_ids', '[]'::jsonb)
       WHEN jsonb_typeof(v_input->'selected_preview_row_ids') = 'array' THEN COALESCE(v_input->'selected_preview_row_ids', '[]'::jsonb)
@@ -45038,9 +45044,47 @@ BEGIN
       WHEN jsonb_typeof(v_input->'deselect_row_ids') = 'array' THEN COALESCE(v_input->'deselect_row_ids', '[]'::jsonb)
       ELSE '[]'::jsonb
     END;
+    v_replace_mode :=
+      LOWER(BTRIM(COALESCE(
+        v_input->>'replace_selected_preview_row_ids',
+        v_input->>'replaceSelectedPreviewRowIds',
+        v_input->>'replace_selected_rows',
+        v_input->>'replaceSelectedRows',
+        v_input->>'replace',
+        'false'
+      ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR LOWER(BTRIM(COALESCE(
+        v_input->>'selected_preview_row_ids_provided',
+        v_input->>'selectedPreviewRowIdsProvided',
+        v_input->>'server_selected_preview_row_ids_provided',
+        v_input->>'serverSelectedPreviewRowIdsProvided',
+        v_input->>'selected_rows_provided',
+        v_input->>'selectedRowsProvided',
+        'false'
+      ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(
+        v_input->>'selection_mode',
+        v_input->>'selectionMode',
+        v_input->>'mode',
+        ''
+      ))) IN (
+        'EXPLICIT_REPLACE',
+        'AUTHORITATIVE_REPLACE',
+        'REPLACE',
+        'REPLACE_SELECTED_ROWS',
+        'REPLACE_SELECTED_PREVIEW_ROW_IDS',
+        'SET',
+        'SET_SELECTED_ROWS',
+        'SET_SELECTED_PREVIEW_ROW_IDS'
+      );
   ELSE
     RAISE EXCEPTION 'selected_preview_row_ids must be a JSON array or object';
   END IF;
+
+  v_selection_mode := CASE
+    WHEN v_replace_mode THEN 'REPLACE_CAPPED_CONTRACT_GUARDED'
+    ELSE 'ROW_PATCH_CAPPED_CONTRACT_GUARDED'
+  END;
 
   IF jsonb_array_length(v_select_ids_source) > 100 OR jsonb_array_length(v_deselect_ids_source) > 100 THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_SESSION_SET_SELECTED_ROWS_INPUT_TOO_LARGE'
@@ -45054,21 +45098,46 @@ BEGIN
             )::text;
   END IF;
 
-  DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_selection_ids;
-  CREATE TEMP TABLE _tmp_pay_wb_selection_ids ON COMMIT DROP AS
-  SELECT DISTINCT BTRIM(select_id.value) AS supplied_id,
+  DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_selection_input_raw;
+  CREATE TEMP TABLE _tmp_pay_wb_selection_input_raw ON COMMIT DROP AS
+  SELECT BTRIM(select_id.value) AS supplied_id,
          'SELECT'::text AS action,
-         MIN(select_id.ordinality) AS first_ordinality
+         select_id.ordinality::bigint AS first_ordinality
   FROM jsonb_array_elements_text(v_select_ids_source) WITH ORDINALITY AS select_id(value, ordinality)
   WHERE BTRIM(select_id.value) <> ''
-  GROUP BY BTRIM(select_id.value)
   UNION ALL
-  SELECT DISTINCT BTRIM(deselect_id.value) AS supplied_id,
+  SELECT BTRIM(deselect_id.value) AS supplied_id,
          'DESELECT'::text AS action,
-         MIN(deselect_id.ordinality) AS first_ordinality
+         deselect_id.ordinality::bigint AS first_ordinality
   FROM jsonb_array_elements_text(v_deselect_ids_source) WITH ORDINALITY AS deselect_id(value, ordinality)
-  WHERE BTRIM(deselect_id.value) <> ''
-  GROUP BY BTRIM(deselect_id.value);
+  WHERE BTRIM(deselect_id.value) <> '';
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(conflicting_ids.supplied_id) ORDER BY conflicting_ids.supplied_id), '[]'::jsonb)
+  INTO v_conflicting_ids
+  FROM (
+    SELECT input_raw.supplied_id
+    FROM pg_temp._tmp_pay_wb_selection_input_raw AS input_raw
+    GROUP BY input_raw.supplied_id
+    HAVING COUNT(DISTINCT input_raw.action) > 1
+  ) AS conflicting_ids;
+
+  IF jsonb_array_length(COALESCE(v_conflicting_ids, '[]'::jsonb)) > 0 THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_SESSION_SET_SELECTED_ROWS_CONFLICTING_ACTIONS'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_SESSION_SET_SELECTED_ROWS_CONFLICTING_ACTIONS',
+              'session_id', p_session_id::text,
+              'conflicting_preview_row_ids', COALESCE(v_conflicting_ids, '[]'::jsonb)
+            )::text;
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_selection_ids;
+  CREATE TEMP TABLE _tmp_pay_wb_selection_ids ON COMMIT DROP AS
+  SELECT input_raw.supplied_id,
+         input_raw.action,
+         MIN(input_raw.first_ordinality)::bigint AS first_ordinality
+  FROM pg_temp._tmp_pay_wb_selection_input_raw AS input_raw
+  GROUP BY input_raw.supplied_id, input_raw.action;
 
   SELECT COALESCE(jsonb_agg(to_jsonb(selection_ids.supplied_id) ORDER BY selection_ids.action, selection_ids.first_ordinality), '[]'::jsonb)
   INTO v_stale_selection_ids
@@ -45117,149 +45186,315 @@ BEGIN
     RAISE EXCEPTION 'selected preview row ids are not present in current session scope: %', v_missing_ids::text;
   END IF;
 
-  SELECT COALESCE(jsonb_agg(to_jsonb(matched_rows.preview_row_id) ORDER BY matched_rows.first_ordinality), '[]'::jsonb),
+  DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_selection_matched_rows;
+  CREATE TEMP TABLE _tmp_pay_wb_selection_matched_rows ON COMMIT DROP AS
+  SELECT DISTINCT ON (preview_row.id)
+         preview_row.id,
+         selection_ids.supplied_id,
+         selection_ids.action,
+         selection_ids.first_ordinality,
+         preview_row.row_ordinal,
+         COALESCE(preview_row.selected, false) AS was_selected,
+         preview_row.selected AS previous_selected,
+         preview_row.selection_state AS previous_selection_state,
+         contract_check.contract_json,
+         synthetic_check.is_synthetic_resolved_total,
+         CASE
+           WHEN selection_ids.action = 'DESELECT' THEN false
+           ELSE LOWER(BTRIM(COALESCE(contract_check.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+             AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'materialisable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+             AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+             AND COALESCE(contract_check.contract_json->>'target_section', '') = 'canonical_preview_lines'
+             AND UPPER(BTRIM(COALESCE(contract_check.contract_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+             AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+             AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+             AND COALESCE(contract_check.contract_json->>'key_type', '') <> ''
+             AND COALESCE(contract_check.contract_json->>'key_value', '') <> ''
+             AND (
+               UPPER(BTRIM(COALESCE(contract_check.contract_json->>'key_type', ''))) <> 'TS_DAY'
+               OR COALESCE(contract_check.contract_json->>'key_value', '') ~ '^\d{4}-\d{2}-\d{2}$'
+             )
+             AND UPPER(BTRIM(COALESCE(contract_check.contract_json->>'source_kind', ''))) NOT IN (
+               'TIMESHEET_SNAPSHOT',
+               'TIMESHEET_SNAPSHOT_EVIDENCE',
+               'RAW_TIMESHEET_SNAPSHOT',
+               'INTERNAL_ONLY',
+               'NO_DELTA',
+               'EXCLUDED'
+             )
+             AND preview_row.row_key NOT LIKE 'timesheet_snapshot:%'
+             AND synthetic_check.is_synthetic_resolved_total IS NOT TRUE
+         END AS is_selectable
+  FROM pg_temp._tmp_pay_wb_selection_ids AS selection_ids
+  JOIN public.banking_pay_workbench_preview_rows AS preview_row
+    ON preview_row.session_id = p_session_id
+   AND preview_row.session_version = v_session_row.version
+   AND (preview_row.id::text = selection_ids.supplied_id OR preview_row.row_key = selection_ids.supplied_id)
+   AND (
+     selection_ids.action = 'DESELECT'
+     OR UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+   )
+  CROSS JOIN LATERAL (
+    SELECT public.pay_workbench_preview_line_contract_ok(
+      p_line_json => COALESCE(preview_row.row_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'line_key', preview_row.row_key,
+          'row_key', preview_row.row_key,
+          'section', preview_row.section,
+          'target_section', preview_row.section,
+          'key_type', preview_row.key_type,
+          'key_value', preview_row.key_value
+        ),
+      p_economic_key_json => jsonb_build_object(
+        'key_type', preview_row.key_type,
+        'key_value', preview_row.key_value
+      ),
+      p_target_section => preview_row.section
+    ) AS contract_json
+  ) AS contract_check
+  CROSS JOIN LATERAL (
+    SELECT (
+      preview_row.timesheet_id IS NOT NULL
+      AND UPPER(BTRIM(COALESCE(
+        preview_row.key_type,
+        preview_row.row_json#>>'{economic_key,key_type}',
+        preview_row.row_json->>'component_key_type',
+        preview_row.row_json->>'key_type',
+        ''
+      ))) = 'TS_TOTAL'
+      AND UPPER(BTRIM(COALESCE(
+        preview_row.key_value,
+        preview_row.row_json#>>'{economic_key,key_value}',
+        preview_row.row_json->>'component_key_value',
+        preview_row.row_json->>'key_value',
+        ''
+      ))) = 'TOTAL'
+      AND LOWER(BTRIM(COALESCE(
+        preview_row.row_key,
+        preview_row.row_json->>'row_key',
+        preview_row.row_json->>'line_key',
+        preview_row.row_json->>'source_ref',
+        preview_row.row_json#>>'{source_basis,row_key}',
+        preview_row.row_json#>>'{source_basis,line_key}',
+        preview_row.row_json#>>'{source_basis,source_ref}',
+        preview_row.row_json#>>'{source_basis_json,row_key}',
+        preview_row.row_json#>>'{source_basis_json,line_key}',
+        preview_row.row_json#>>'{source_basis_json,source_ref}',
+        ''
+      ))) LIKE '%:non_segment:total%'
+      AND EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_preview_rows AS sibling_row
+        WHERE sibling_row.session_id = preview_row.session_id
+          AND sibling_row.session_version = preview_row.session_version
+          AND sibling_row.id <> preview_row.id
+          AND sibling_row.timesheet_id = preview_row.timesheet_id
+          AND lower(COALESCE(NULLIF(BTRIM(sibling_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+          AND UPPER(BTRIM(COALESCE(sibling_row.status, ''))) = 'READY'
+          AND UPPER(BTRIM(COALESCE(
+            sibling_row.key_type,
+            sibling_row.row_json#>>'{economic_key,key_type}',
+            sibling_row.row_json->>'component_key_type',
+            sibling_row.row_json->>'key_type',
+            ''
+          ))) = 'TS_DAY'
+          AND COALESCE(
+            sibling_row.key_value,
+            sibling_row.row_json#>>'{economic_key,key_value}',
+            sibling_row.row_json->>'component_key_value',
+            sibling_row.row_json->>'key_value',
+            ''
+          ) ~ '^\d{4}-\d{2}-\d{2}$'
+      )
+    ) AS is_synthetic_resolved_total
+  ) AS synthetic_check
+  ORDER BY preview_row.id, selection_ids.first_ordinality;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(non_draftable.preview_row_id) ORDER BY non_draftable.first_ordinality, non_draftable.preview_row_id), '[]'::jsonb),
          COUNT(*)::integer
   INTO v_non_draftable_ids, v_rejected_non_draftable_count
   FROM (
-    SELECT preview_row.id::text AS preview_row_id,
-           selection_ids.first_ordinality
-    FROM pg_temp._tmp_pay_wb_selection_ids AS selection_ids
-    JOIN public.banking_pay_workbench_preview_rows AS preview_row
-      ON preview_row.session_id = p_session_id
-     AND preview_row.session_version = v_session_row.version
-     AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
-     AND (preview_row.id::text = selection_ids.supplied_id OR preview_row.row_key = selection_ids.supplied_id)
-    CROSS JOIN LATERAL (
-      SELECT public.pay_workbench_preview_line_contract_ok(
-        p_line_json => COALESCE(preview_row.row_json, '{}'::jsonb)
-          || jsonb_build_object(
-            'line_key', preview_row.row_key,
-            'row_key', preview_row.row_key,
-            'section', preview_row.section,
-            'target_section', preview_row.section,
-            'key_type', preview_row.key_type,
-            'key_value', preview_row.key_value
-          ),
-        p_economic_key_json => jsonb_build_object(
-          'key_type', preview_row.key_type,
-          'key_value', preview_row.key_value
-        ),
-        p_target_section => preview_row.section
-      ) AS contract_json
-    ) AS contract_check
-    WHERE selection_ids.action = 'SELECT'
-      AND (
-        LOWER(BTRIM(COALESCE(contract_check.contract_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
-        OR LOWER(BTRIM(COALESCE(contract_check.contract_json->>'materialisable', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
-        OR LOWER(BTRIM(COALESCE(contract_check.contract_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
-        OR COALESCE(contract_check.contract_json->>'target_section', '') <> 'canonical_preview_lines'
-        OR UPPER(BTRIM(COALESCE(contract_check.contract_json->>'presentation_section', ''))) <> 'READY_TO_PAY'
-        OR LOWER(BTRIM(COALESCE(contract_check.contract_json->>'draftable', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
-        OR LOWER(BTRIM(COALESCE(contract_check.contract_json->>'is_ready_for_draft', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
-        OR COALESCE(contract_check.contract_json->>'key_type', '') = ''
-        OR COALESCE(contract_check.contract_json->>'key_value', '') = ''
-        OR (
-          UPPER(BTRIM(COALESCE(contract_check.contract_json->>'key_type', ''))) = 'TS_DAY'
-          AND COALESCE(contract_check.contract_json->>'key_value', '') !~ '^\d{4}-\d{2}-\d{2}$'
-        )
-        OR UPPER(BTRIM(COALESCE(contract_check.contract_json->>'source_kind', ''))) IN (
-          'TIMESHEET_SNAPSHOT',
-          'TIMESHEET_SNAPSHOT_EVIDENCE',
-          'RAW_TIMESHEET_SNAPSHOT',
-          'INTERNAL_ONLY',
-          'NO_DELTA',
-          'EXCLUDED'
-        )
-        OR preview_row.row_key LIKE 'timesheet_snapshot:%'
-      )
-  ) AS matched_rows;
+    SELECT DISTINCT matched_rows.id::text AS preview_row_id,
+           matched_rows.first_ordinality
+    FROM pg_temp._tmp_pay_wb_selection_matched_rows AS matched_rows
+    WHERE matched_rows.action = 'SELECT'
+      AND matched_rows.is_selectable IS NOT TRUE
+  ) AS non_draftable;
 
-  WITH matched_rows AS (
-    SELECT preview_row.id,
-           selection_ids.action,
-           selection_ids.first_ordinality,
-           COALESCE(preview_row.selected, false) AS was_selected,
+  DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_replace_omitted_rows;
+  CREATE TEMP TABLE _tmp_pay_wb_replace_omitted_rows ON COMMIT DROP AS
+  SELECT preview_row.id,
+         COALESCE(preview_row.selected, false) AS was_selected,
+         (1000000000::bigint + ROW_NUMBER() OVER (ORDER BY preview_row.row_ordinal, preview_row.id))::bigint AS first_ordinality
+  FROM public.banking_pay_workbench_preview_rows AS preview_row
+  WHERE v_replace_mode
+    AND preview_row.session_id = p_session_id
+    AND preview_row.session_version = v_session_row.version
+    AND lower(COALESCE(NULLIF(BTRIM(preview_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+    AND COALESCE(preview_row.selected, false) = true
+    AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) = 'SELECTED'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_temp._tmp_pay_wb_selection_matched_rows AS matched_rows
+      WHERE matched_rows.id = preview_row.id
+        AND matched_rows.action = 'SELECT'
+    );
+
+  SELECT COUNT(*)::integer
+  INTO v_replace_omitted_count
+  FROM pg_temp._tmp_pay_wb_replace_omitted_rows AS omitted_rows;
+
+  DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_synthetic_cleanup_rows;
+  CREATE TEMP TABLE _tmp_pay_wb_synthetic_cleanup_rows ON COMMIT DROP AS
+  SELECT preview_row.id,
+         COALESCE(preview_row.selected, false) AS was_selected,
+         (2000000000::bigint + ROW_NUMBER() OVER (ORDER BY preview_row.row_ordinal, preview_row.id))::bigint AS first_ordinality
+  FROM public.banking_pay_workbench_preview_rows AS preview_row
+  CROSS JOIN LATERAL (
+    SELECT (
+      preview_row.timesheet_id IS NOT NULL
+      AND UPPER(BTRIM(COALESCE(
+        preview_row.key_type,
+        preview_row.row_json#>>'{economic_key,key_type}',
+        preview_row.row_json->>'component_key_type',
+        preview_row.row_json->>'key_type',
+        ''
+      ))) = 'TS_TOTAL'
+      AND UPPER(BTRIM(COALESCE(
+        preview_row.key_value,
+        preview_row.row_json#>>'{economic_key,key_value}',
+        preview_row.row_json->>'component_key_value',
+        preview_row.row_json->>'key_value',
+        ''
+      ))) = 'TOTAL'
+      AND LOWER(BTRIM(COALESCE(
+        preview_row.row_key,
+        preview_row.row_json->>'row_key',
+        preview_row.row_json->>'line_key',
+        preview_row.row_json->>'source_ref',
+        preview_row.row_json#>>'{source_basis,row_key}',
+        preview_row.row_json#>>'{source_basis,line_key}',
+        preview_row.row_json#>>'{source_basis,source_ref}',
+        preview_row.row_json#>>'{source_basis_json,row_key}',
+        preview_row.row_json#>>'{source_basis_json,line_key}',
+        preview_row.row_json#>>'{source_basis_json,source_ref}',
+        ''
+      ))) LIKE '%:non_segment:total%'
+      AND EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_preview_rows AS sibling_row
+        WHERE sibling_row.session_id = preview_row.session_id
+          AND sibling_row.session_version = preview_row.session_version
+          AND sibling_row.id <> preview_row.id
+          AND sibling_row.timesheet_id = preview_row.timesheet_id
+          AND lower(COALESCE(NULLIF(BTRIM(sibling_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+          AND UPPER(BTRIM(COALESCE(sibling_row.status, ''))) = 'READY'
+          AND UPPER(BTRIM(COALESCE(
+            sibling_row.key_type,
+            sibling_row.row_json#>>'{economic_key,key_type}',
+            sibling_row.row_json->>'component_key_type',
+            sibling_row.row_json->>'key_type',
+            ''
+          ))) = 'TS_DAY'
+          AND COALESCE(
+            sibling_row.key_value,
+            sibling_row.row_json#>>'{economic_key,key_value}',
+            sibling_row.row_json->>'component_key_value',
+            sibling_row.row_json->>'key_value',
+            ''
+          ) ~ '^\d{4}-\d{2}-\d{2}$'
+      )
+    ) AS is_synthetic_resolved_total
+  ) AS synthetic_check
+  WHERE preview_row.session_id = p_session_id
+    AND preview_row.session_version = v_session_row.version
+    AND lower(COALESCE(NULLIF(BTRIM(preview_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+    AND COALESCE(preview_row.selected, false) = true
+    AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) = 'SELECTED'
+    AND synthetic_check.is_synthetic_resolved_total;
+
+  SELECT COUNT(*)::integer
+  INTO v_forced_synthetic_cleanup_count
+  FROM pg_temp._tmp_pay_wb_synthetic_cleanup_rows AS cleanup_rows;
+
+  DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_update_actions;
+  CREATE TEMP TABLE _tmp_pay_wb_update_actions ON COMMIT DROP AS
+  WITH raw_actions AS (
+    SELECT matched_rows.id,
            CASE
-             WHEN selection_ids.action = 'DESELECT' THEN false
-             ELSE LOWER(BTRIM(COALESCE(contract_check.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-               AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'materialisable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-               AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-               AND COALESCE(contract_check.contract_json->>'target_section', '') = 'canonical_preview_lines'
-               AND UPPER(BTRIM(COALESCE(contract_check.contract_json->>'presentation_section', ''))) = 'READY_TO_PAY'
-               AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-               AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-               AND COALESCE(contract_check.contract_json->>'key_type', '') <> ''
-               AND COALESCE(contract_check.contract_json->>'key_value', '') <> ''
-               AND (
-                 UPPER(BTRIM(COALESCE(contract_check.contract_json->>'key_type', ''))) <> 'TS_DAY'
-                 OR COALESCE(contract_check.contract_json->>'key_value', '') ~ '^\d{4}-\d{2}-\d{2}$'
-               )
-               AND UPPER(BTRIM(COALESCE(contract_check.contract_json->>'source_kind', ''))) NOT IN (
-                 'TIMESHEET_SNAPSHOT',
-                 'TIMESHEET_SNAPSHOT_EVIDENCE',
-                 'RAW_TIMESHEET_SNAPSHOT',
-                 'INTERNAL_ONLY',
-                 'NO_DELTA',
-                 'EXCLUDED'
-               )
-               AND preview_row.row_key NOT LIKE 'timesheet_snapshot:%'
-           END AS is_selectable
-    FROM pg_temp._tmp_pay_wb_selection_ids AS selection_ids
-    JOIN public.banking_pay_workbench_preview_rows AS preview_row
-      ON preview_row.session_id = p_session_id
-     AND preview_row.session_version = v_session_row.version
-     AND (preview_row.id::text = selection_ids.supplied_id OR preview_row.row_key = selection_ids.supplied_id)
-     AND (
-       selection_ids.action = 'DESELECT'
-       OR UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
-     )
-    CROSS JOIN LATERAL (
-      SELECT public.pay_workbench_preview_line_contract_ok(
-        p_line_json => COALESCE(preview_row.row_json, '{}'::jsonb)
-          || jsonb_build_object(
-            'line_key', preview_row.row_key,
-            'row_key', preview_row.row_key,
-            'section', preview_row.section,
-            'target_section', preview_row.section,
-            'key_type', preview_row.key_type,
-            'key_value', preview_row.key_value
-          ),
-        p_economic_key_json => jsonb_build_object(
-          'key_type', preview_row.key_type,
-          'key_value', preview_row.key_value
-        ),
-        p_target_section => preview_row.section
-      ) AS contract_json
-    ) AS contract_check
-  ), updated_rows AS (
+             WHEN matched_rows.action = 'SELECT' AND matched_rows.is_selectable THEN 'SELECT'::text
+             WHEN matched_rows.action = 'SELECT' THEN 'REJECT_SELECT'::text
+             ELSE 'DESELECT'::text
+           END AS action,
+           matched_rows.was_selected,
+           matched_rows.first_ordinality
+    FROM pg_temp._tmp_pay_wb_selection_matched_rows AS matched_rows
+    UNION ALL
+    SELECT omitted_rows.id,
+           'DESELECT'::text AS action,
+           omitted_rows.was_selected,
+           omitted_rows.first_ordinality
+    FROM pg_temp._tmp_pay_wb_replace_omitted_rows AS omitted_rows
+    UNION ALL
+    SELECT cleanup_rows.id,
+           'DESELECT'::text AS action,
+           cleanup_rows.was_selected,
+           cleanup_rows.first_ordinality
+    FROM pg_temp._tmp_pay_wb_synthetic_cleanup_rows AS cleanup_rows
+  )
+  SELECT DISTINCT ON (raw_actions.id)
+         raw_actions.id,
+         raw_actions.action,
+         raw_actions.was_selected,
+         raw_actions.first_ordinality
+  FROM raw_actions
+  ORDER BY raw_actions.id,
+           CASE raw_actions.action
+             WHEN 'DESELECT' THEN 1
+             WHEN 'REJECT_SELECT' THEN 2
+             WHEN 'SELECT' THEN 3
+             ELSE 4
+           END,
+           raw_actions.first_ordinality;
+
+  WITH updated_rows AS (
     UPDATE public.banking_pay_workbench_preview_rows AS preview_row
     SET selected = CASE
-          WHEN matched_rows.action = 'SELECT' AND matched_rows.is_selectable THEN true
-          WHEN matched_rows.action = 'SELECT' AND matched_rows.is_selectable IS NOT TRUE THEN false
-          WHEN matched_rows.action = 'DESELECT' THEN false
-          ELSE preview_row.selected
+          WHEN update_actions.action = 'SELECT' THEN true
+          ELSE false
         END,
         selection_state = CASE
-          WHEN matched_rows.action = 'SELECT' AND matched_rows.is_selectable THEN 'SELECTED'
-          WHEN matched_rows.action = 'SELECT' AND matched_rows.is_selectable IS NOT TRUE THEN 'NOT_SELECTABLE'
-          WHEN matched_rows.action = 'DESELECT' THEN 'UNSELECTED'
-          ELSE preview_row.selection_state
+          WHEN update_actions.action = 'SELECT' THEN 'SELECTED'
+          WHEN update_actions.action = 'REJECT_SELECT' THEN 'NOT_SELECTABLE'
+          ELSE 'UNSELECTED'
         END,
         updated_at_utc = v_now
-    FROM matched_rows
-    WHERE preview_row.id = matched_rows.id
-    RETURNING preview_row.id, matched_rows.action, matched_rows.was_selected, preview_row.selected, matched_rows.first_ordinality
+    FROM pg_temp._tmp_pay_wb_update_actions AS update_actions
+    WHERE preview_row.id = update_actions.id
+    RETURNING preview_row.id,
+              update_actions.action,
+              update_actions.was_selected,
+              preview_row.selected,
+              update_actions.first_ordinality
   )
   SELECT
-    COALESCE((SELECT jsonb_agg(to_jsonb(updated_rows.id::text) ORDER BY updated_rows.first_ordinality) FROM updated_rows WHERE updated_rows.action = 'SELECT' AND updated_rows.selected), '[]'::jsonb),
-    COALESCE((SELECT jsonb_agg(to_jsonb(updated_rows.id::text) ORDER BY updated_rows.first_ordinality) FROM updated_rows WHERE updated_rows.action = 'DESELECT'), '[]'::jsonb),
+    COALESCE((SELECT jsonb_agg(to_jsonb(updated_rows.id::text) ORDER BY updated_rows.first_ordinality, updated_rows.id) FROM updated_rows WHERE updated_rows.action = 'DESELECT'), '[]'::jsonb),
     COALESCE((SELECT COUNT(*)::integer FROM updated_rows WHERE updated_rows.action = 'SELECT' AND updated_rows.was_selected IS NOT TRUE AND updated_rows.selected), 0),
     COALESCE((SELECT COUNT(*)::integer FROM updated_rows WHERE updated_rows.action = 'DESELECT' AND updated_rows.was_selected), 0),
     COALESCE((SELECT COUNT(*)::integer FROM updated_rows), 0)
-  INTO v_selected_ids, v_deselected_ids, v_selected_delta, v_deselected_delta, v_updated_count;
+  INTO v_deselected_ids, v_selected_delta, v_deselected_delta, v_updated_count;
 
-  SELECT COUNT(*)::integer
-  INTO v_current_selected_count
+  DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_current_selected_rows;
+  CREATE TEMP TABLE _tmp_pay_wb_current_selected_rows ON COMMIT DROP AS
+  SELECT selected_count_row.id,
+         selected_count_row.row_ordinal,
+         selected_count_row.row_key,
+         selected_count_row.row_json,
+         selected_count_row.timesheet_id,
+         selected_count_row.key_type,
+         selected_count_row.key_value,
+         selected_contract.contract_json,
+         synthetic_check.is_synthetic_resolved_total
   FROM public.banking_pay_workbench_preview_rows AS selected_count_row
   CROSS JOIN LATERAL (
     SELECT public.pay_workbench_preview_line_contract_ok(
@@ -45279,26 +45514,112 @@ BEGIN
       p_target_section => selected_count_row.section
     ) AS contract_json
   ) AS selected_contract
+  CROSS JOIN LATERAL (
+    SELECT (
+      selected_count_row.timesheet_id IS NOT NULL
+      AND UPPER(BTRIM(COALESCE(
+        selected_count_row.key_type,
+        selected_count_row.row_json#>>'{economic_key,key_type}',
+        selected_count_row.row_json->>'component_key_type',
+        selected_count_row.row_json->>'key_type',
+        ''
+      ))) = 'TS_TOTAL'
+      AND UPPER(BTRIM(COALESCE(
+        selected_count_row.key_value,
+        selected_count_row.row_json#>>'{economic_key,key_value}',
+        selected_count_row.row_json->>'component_key_value',
+        selected_count_row.row_json->>'key_value',
+        ''
+      ))) = 'TOTAL'
+      AND LOWER(BTRIM(COALESCE(
+        selected_count_row.row_key,
+        selected_count_row.row_json->>'row_key',
+        selected_count_row.row_json->>'line_key',
+        selected_count_row.row_json->>'source_ref',
+        selected_count_row.row_json#>>'{source_basis,row_key}',
+        selected_count_row.row_json#>>'{source_basis,line_key}',
+        selected_count_row.row_json#>>'{source_basis,source_ref}',
+        selected_count_row.row_json#>>'{source_basis_json,row_key}',
+        selected_count_row.row_json#>>'{source_basis_json,line_key}',
+        selected_count_row.row_json#>>'{source_basis_json,source_ref}',
+        ''
+      ))) LIKE '%:non_segment:total%'
+      AND EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_preview_rows AS sibling_row
+        WHERE sibling_row.session_id = selected_count_row.session_id
+          AND sibling_row.session_version = selected_count_row.session_version
+          AND sibling_row.id <> selected_count_row.id
+          AND sibling_row.timesheet_id = selected_count_row.timesheet_id
+          AND lower(COALESCE(NULLIF(BTRIM(sibling_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+          AND UPPER(BTRIM(COALESCE(sibling_row.status, ''))) = 'READY'
+          AND UPPER(BTRIM(COALESCE(
+            sibling_row.key_type,
+            sibling_row.row_json#>>'{economic_key,key_type}',
+            sibling_row.row_json->>'component_key_type',
+            sibling_row.row_json->>'key_type',
+            ''
+          ))) = 'TS_DAY'
+          AND COALESCE(
+            sibling_row.key_value,
+            sibling_row.row_json#>>'{economic_key,key_value}',
+            sibling_row.row_json->>'component_key_value',
+            sibling_row.row_json->>'key_value',
+            ''
+          ) ~ '^\d{4}-\d{2}-\d{2}$'
+      )
+    ) AS is_synthetic_resolved_total
+  ) AS synthetic_check
   WHERE selected_count_row.session_id = p_session_id
     AND selected_count_row.session_version = v_session_row.version
+    AND lower(COALESCE(NULLIF(BTRIM(selected_count_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
     AND UPPER(BTRIM(COALESCE(selected_count_row.status, ''))) = 'READY'
     AND COALESCE(selected_count_row.selected, false) = true
-    AND UPPER(BTRIM(COALESCE(selected_count_row.selection_state, ''))) = 'SELECTED'
-    AND LOWER(BTRIM(COALESCE(selected_contract.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-    AND LOWER(BTRIM(COALESCE(selected_contract.contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-    AND COALESCE(selected_contract.contract_json->>'target_section', '') = 'canonical_preview_lines'
-    AND UPPER(BTRIM(COALESCE(selected_contract.contract_json->>'presentation_section', ''))) = 'READY_TO_PAY';
+    AND UPPER(BTRIM(COALESCE(selected_count_row.selection_state, ''))) = 'SELECTED';
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(current_selected.id::text) ORDER BY current_selected.row_ordinal, current_selected.id), '[]'::jsonb),
+         COUNT(*)::integer
+  INTO v_selected_ids, v_current_selected_count
+  FROM pg_temp._tmp_pay_wb_current_selected_rows AS current_selected
+  WHERE LOWER(BTRIM(COALESCE(current_selected.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND LOWER(BTRIM(COALESCE(current_selected.contract_json->>'materialisable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND LOWER(BTRIM(COALESCE(current_selected.contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND COALESCE(current_selected.contract_json->>'target_section', '') = 'canonical_preview_lines'
+    AND UPPER(BTRIM(COALESCE(current_selected.contract_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+    AND LOWER(BTRIM(COALESCE(current_selected.contract_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND LOWER(BTRIM(COALESCE(current_selected.contract_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND COALESCE(current_selected.contract_json->>'key_type', '') <> ''
+    AND COALESCE(current_selected.contract_json->>'key_value', '') <> ''
+    AND (
+      UPPER(BTRIM(COALESCE(current_selected.contract_json->>'key_type', ''))) <> 'TS_DAY'
+      OR COALESCE(current_selected.contract_json->>'key_value', '') ~ '^\d{4}-\d{2}-\d{2}$'
+    )
+    AND UPPER(BTRIM(COALESCE(current_selected.contract_json->>'source_kind', ''))) NOT IN (
+      'TIMESHEET_SNAPSHOT',
+      'TIMESHEET_SNAPSHOT_EVIDENCE',
+      'RAW_TIMESHEET_SNAPSHOT',
+      'INTERNAL_ONLY',
+      'NO_DELTA',
+      'EXCLUDED'
+    )
+    AND current_selected.row_key NOT LIKE 'timesheet_snapshot:%'
+    AND current_selected.is_synthetic_resolved_total IS NOT TRUE;
+
+  v_server_selected_ids := CASE WHEN v_replace_mode THEN COALESCE(v_selected_ids, '[]'::jsonb) ELSE '[]'::jsonb END;
 
   UPDATE public.banking_pay_workbench_sessions AS session_row
   SET selected_row_count = COALESCE(v_current_selected_count, 0),
-      server_selected_preview_row_ids = '[]'::jsonb,
-      server_selected_preview_row_ids_provided = false,
+      server_selected_preview_row_ids = COALESCE(v_server_selected_ids, '[]'::jsonb),
+      server_selected_preview_row_ids_provided = COALESCE(v_replace_mode, false),
       progress_json = COALESCE(session_row.progress_json, '{}'::jsonb)
         || jsonb_build_object(
           'last_selection_update_at_utc', v_now::text,
           'last_selection_selected_delta', COALESCE(v_selected_delta, 0),
           'last_selection_deselected_delta', COALESCE(v_deselected_delta, 0),
-          'last_selection_rejected_non_draftable_count', COALESCE(v_rejected_non_draftable_count, 0)
+          'last_selection_rejected_non_draftable_count', COALESCE(v_rejected_non_draftable_count, 0),
+          'last_selection_mode', v_selection_mode,
+          'last_selection_forced_synthetic_cleanup_count', COALESCE(v_forced_synthetic_cleanup_count, 0),
+          'last_selection_replace_omitted_count', COALESCE(v_replace_omitted_count, 0)
         ),
       progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
       progress_updated_at_utc = v_now,
@@ -45307,6 +45628,7 @@ BEGIN
 
   v_audit_after_json := jsonb_build_object(
     'id', p_session_id::text,
+    'selection_mode', v_selection_mode,
     'selected_preview_row_ids', COALESCE(v_selected_ids, '[]'::jsonb),
     'deselected_preview_row_ids', COALESCE(v_deselected_ids, '[]'::jsonb),
     'rejected_non_draftable_preview_row_ids', COALESCE(v_non_draftable_ids, '[]'::jsonb),
@@ -45314,16 +45636,19 @@ BEGIN
     'updated_preview_row_count', COALESCE(v_updated_count, 0),
     'selected_delta', COALESCE(v_selected_delta, 0),
     'deselected_delta', COALESCE(v_deselected_delta, 0),
+    'forced_synthetic_cleanup_count', COALESCE(v_forced_synthetic_cleanup_count, 0),
+    'replace_omitted_count', COALESCE(v_replace_omitted_count, 0),
+    'server_selected_preview_row_ids_provided', COALESCE(v_replace_mode, false),
     'updated_at_utc', v_now
   );
 
   PERFORM public._audit_insert(
     'banking_pay_workbench_session',
     p_session_id::text,
-    'SESSION_SELECTED_ROWS_PATCHED',
+    CASE WHEN v_replace_mode THEN 'SESSION_SELECTED_ROWS_REPLACED' ELSE 'SESSION_SELECTED_ROWS_PATCHED' END,
     NULL::jsonb,
     v_audit_after_json,
-    'SESSION_SELECTED_ROWS_PATCHED',
+    CASE WHEN v_replace_mode THEN 'SESSION_SELECTED_ROWS_REPLACED' ELSE 'SESSION_SELECTED_ROWS_PATCHED' END,
     p_actor_user_id
   );
 
@@ -45334,21 +45659,22 @@ BEGIN
     'session_version', v_session_row.version,
     'selected_preview_row_ids', COALESCE(v_selected_ids, '[]'::jsonb),
     'deselected_preview_row_ids', COALESCE(v_deselected_ids, '[]'::jsonb),
-    'selected_preview_row_ids_provided', false,
-    'server_selected_preview_row_ids', '[]'::jsonb,
-    'server_selected_preview_row_ids_provided', false,
+    'selected_preview_row_ids_provided', COALESCE(v_replace_mode, false),
+    'server_selected_preview_row_ids', COALESCE(v_server_selected_ids, '[]'::jsonb),
+    'server_selected_preview_row_ids_provided', COALESCE(v_replace_mode, false),
     'selected_delta', COALESCE(v_selected_delta, 0),
     'deselected_delta', COALESCE(v_deselected_delta, 0),
     'updated_preview_row_count', COALESCE(v_updated_count, 0),
     'dropped_non_draftable_preview_row_ids', COALESCE(v_non_draftable_ids, '[]'::jsonb),
     'rejected_non_draftable_preview_row_ids', COALESCE(v_non_draftable_ids, '[]'::jsonb),
     'rejected_non_draftable_preview_row_count', COALESCE(v_rejected_non_draftable_count, 0),
+    'forced_synthetic_cleanup_count', COALESCE(v_forced_synthetic_cleanup_count, 0),
+    'replace_omitted_count', COALESCE(v_replace_omitted_count, 0),
     'selected_row_count', COALESCE(v_current_selected_count, 0),
-    'selection_mode', 'ROW_PATCH_CAPPED_CONTRACT_GUARDED'
+    'selection_mode', v_selection_mode
   );
 END;
 $function$;
-
 
 
 
