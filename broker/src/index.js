@@ -11545,9 +11545,7 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 }
 
 
-
-
-async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId) {
+async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId, ctx = null) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
     const isErrorObject = errorInput instanceof Error;
@@ -12150,7 +12148,8 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
           fastLaneCandidateId,
           actorUserId,
           fastLaneJobId,
-          'SESSION_CASE_RESOLUTION_APPLY'
+          'SESSION_CASE_RESOLUTION_APPLY',
+          ctx
         );
         responsePayload = {
           ...payloadObj,
@@ -12192,6 +12191,7 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     return buildFriendlyFailure(500, e);
   }
 }
+
 
 
 
@@ -12296,7 +12296,7 @@ async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
 }
 
 
-async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId) {
+async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId, ctx = null) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
     const isErrorObject = errorInput instanceof Error;
@@ -12669,7 +12669,8 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
           fastLaneCandidateId,
           actorUserId,
           fastLaneJobId,
-          'SESSION_CASE_RESOLUTION_CLEAR'
+          'SESSION_CASE_RESOLUTION_CLEAR',
+          ctx
         );
         responsePayload = {
           ...responsePayload,
@@ -12704,8 +12705,7 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
 
 
 
-
-async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, sessionId) {
+async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, sessionId, ctx = null) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
     const isErrorObject = errorInput instanceof Error;
@@ -12913,7 +12913,8 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
           fastLaneCandidateId,
           actorUserId,
           fastLaneJobId,
-          'SESSION_TIMESHEET_EXCLUSION'
+          'SESSION_TIMESHEET_EXCLUSION',
+          ctx
         );
         responsePayload = {
           ...payloadObj,
@@ -12943,8 +12944,6 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
     return buildFriendlyFailure(500, e);
   }
 }
-
-
 
 
 
@@ -13375,8 +13374,6 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
   return execute();
 }
 
-
-
 async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -13504,6 +13501,18 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
       try { console.error('[BANKING_PAY_WORKBENCH_SESSION_OPEN_DIAGNOSTIC_LOG_FAILED]', String(logError?.message || logError)); } catch {}
     }
   };
+  const logWorkbenchOpenDiag = (eventName, payload = {}, severity = 'info') => {
+    try {
+      if (typeof logBankingPayWorkbenchDiag === 'function') {
+        logBankingPayWorkbenchDiag(env, eventName, {
+          ...payload,
+          origin: payload.origin || 'handleBankingPayWorkbenchSessionOpen',
+          request_id: diagnosticTraceId,
+          trace_id: diagnosticTraceId
+        }, { severity });
+      }
+    } catch {}
+  };
   const attachDiagnosticToError = (error, stage, rpcName, extra = {}) => {
     const err = error instanceof Error ? error : new Error(String(error == null ? 'Unknown error' : error));
     try {
@@ -13567,6 +13576,7 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
   const sourceSessionId = trimStr(body.source_session_id || body.sourceSessionId || '');
 
   const execute = async () => {
+    const openStartedAtMs = Date.now();
     try {
       const openRpcArgs = {
         p_actor_user_id: actorUserId,
@@ -13661,19 +13671,65 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
         || (Array.isArray(body.refresh_job_ids) && body.refresh_job_ids.length > 0)
         || !!trimStr(body.mutation_context || body.mutationContext || '');
 
+      const nonNegativeCount = (...values) => {
+        for (const value of values) {
+          const n = Number(value);
+          if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+        }
+        return 0;
+      };
+      const progressState = trimStr(openPayload.progress_state || openPayload.phase || progressPayload.progress_state || progressPayload.phase || '').toUpperCase();
+      const readyState = progressPayload.ready === true || progressPayload.ready_flag === true || progressPayload.ready_empty === true || ['READY', 'READY_EMPTY'].includes(progressState);
+      const jobCounts = {
+        queued: nonNegativeCount(openPayload.job_counts?.queued, openPayload.job_counts?.queued_count, openPayload.queued_jobs, openPayload.queued_job_count, progressPayload.job_counts?.queued, progressPayload.queued_jobs),
+        running: nonNegativeCount(openPayload.job_counts?.running, openPayload.job_counts?.running_count, openPayload.running_jobs, openPayload.running_job_count, progressPayload.job_counts?.running, progressPayload.running_jobs),
+        active: nonNegativeCount(openPayload.job_counts?.active, openPayload.job_counts?.active_count, openPayload.active_jobs, progressPayload.job_counts?.active, progressPayload.active_jobs),
+        due: nonNegativeCount(openPayload.job_counts?.due, openPayload.job_counts?.due_count, openPayload.due_jobs, openPayload.due_job_count, progressPayload.job_counts?.due, progressPayload.due_jobs)
+      };
+      const scopeCounts = {
+        total: nonNegativeCount(openPayload.scope_total_count, progressPayload.scope_total_count, progressPayload.total_count),
+        ready: nonNegativeCount(openPayload.scope_ready_count, progressPayload.scope_ready_count, progressPayload.completed_count),
+        pending: nonNegativeCount(openPayload.scope_pending_count, progressPayload.scope_pending_count, progressPayload.pending_count, progressPayload.pending_candidates),
+        failed: nonNegativeCount(openPayload.scope_failed_count, progressPayload.scope_failed_count, progressPayload.failed_count, progressPayload.failed_candidates)
+      };
+      const candidateCounts = {
+        dirty: nonNegativeCount(openPayload.candidate_counts?.dirty, progressPayload.candidate_counts?.dirty, openPayload.dirty_candidate_count, progressPayload.dirty_candidate_count),
+        pending: nonNegativeCount(openPayload.candidate_counts?.pending, progressPayload.candidate_counts?.pending, openPayload.pending_candidate_count, progressPayload.pending_candidate_count),
+        processing: nonNegativeCount(openPayload.candidate_counts?.processing, progressPayload.candidate_counts?.processing, openPayload.processing_candidate_count, progressPayload.processing_candidate_count)
+      };
+      const lineCounts = {
+        pending: nonNegativeCount(openPayload.line_units_pending, openPayload.pending_line_units, progressPayload.line_units_pending, progressPayload.pending_line_units),
+        materialisation_pending: nonNegativeCount(openPayload.materialisation_pending_count, progressPayload.materialisation_pending_count)
+      };
+      const nextAction = trimStr(openPayload.next_recommended_action || progressPayload.next_recommended_action || progressPayload.next_action || '');
+      const nudgeReasons = [];
+      if (openAction === 'WORKBENCH_SESSION_CREATED') nudgeReasons.push('SESSION_CREATED');
+      if (!readyState && progressState && !['READY', 'READY_EMPTY'].includes(progressState)) nudgeReasons.push(`PROGRESS_${progressState}`);
+      if (workQueued) nudgeReasons.push('WORK_QUEUED');
+      if (jobCounts.queued > 0 || jobCounts.running > 0 || jobCounts.active > 0 || jobCounts.due > 0) nudgeReasons.push('JOBS_DUE');
+      if (candidateCounts.dirty > 0 || candidateCounts.pending > 0 || candidateCounts.processing > 0) nudgeReasons.push('CANDIDATES_PENDING');
+      if (scopeCounts.pending > 0 || lineCounts.pending > 0 || lineCounts.materialisation_pending > 0) nudgeReasons.push('WORK_UNITS_PENDING');
+      if (/SEED|PROCESS|MATERIALISE|MATERIALIZE|READINESS|DRAIN|RECOMPUTE|REFRESH/i.test(nextAction)) nudgeReasons.push(`NEXT_ACTION_${nextAction.toUpperCase()}`);
+      const shouldNudge = nudgeReasons.length > 0 && !(readyState && nudgeReasons.length === 1 && nudgeReasons[0] === 'SESSION_CREATED' && workQueued !== true);
+      const nudgeReason = nudgeReasons[0] || 'NO_WORK_DUE';
+
       let backgroundDrainNudge = {
         ok: true,
         scheduled: false,
         skipped: true,
-        code: openAction === 'WORKBENCH_SESSION_CREATED'
+        code: shouldNudge
           ? 'BANKING_PAY_WORKBENCH_NUDGE_HELPER_UNAVAILABLE'
-          : 'BANKING_PAY_WORKBENCH_SESSION_ATTACHED_NO_NUDGE'
+          : 'BANKING_PAY_WORKBENCH_OPEN_NO_NUDGE_NEEDED',
+        reason: nudgeReason
       };
 
-      if (openAction === 'WORKBENCH_SESSION_CREATED' && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+      if (shouldNudge && typeof nudgeBankingPayWorkbenchDrain === 'function') {
         try {
           backgroundDrainNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
-            origin: 'WORKBENCH_SHARED_SESSION_CREATED',
+            origin: openAction === 'WORKBENCH_SESSION_CREATED' ? 'WORKBENCH_SHARED_SESSION_CREATED' : 'WORKBENCH_SHARED_SESSION_ATTACHED_PENDING',
+            reason: nudgeReason,
+            sessionId,
+            actorUserId,
             budgetProfile: 'NUDGE',
             profile: 'NUDGE'
           });
@@ -13682,10 +13738,30 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
             ok: false,
             scheduled: false,
             code: 'BANKING_PAY_WORKBENCH_OPEN_NUDGE_FAILED',
+            reason: nudgeReason,
             message: String(nudgeError?.message || nudgeError || 'Workbench drain nudge failed')
           };
         }
       }
+
+      logWorkbenchOpenDiag('WORKBENCH_SESSION_OPEN', {
+        session_id: sessionId,
+        open_action: openAction,
+        session_version: openPayload.session_version ?? openPayload.version ?? null,
+        progress_state: progressState || null,
+        ready: readyState,
+        work_queued: workQueued,
+        job_counts: jobCounts,
+        scope_counts: scopeCounts,
+        candidate_counts: candidateCounts,
+        line_counts: lineCounts,
+        next_recommended_action: nextAction || null,
+        should_nudge: shouldNudge,
+        nudge_reason: nudgeReason,
+        nudge_scheduled: backgroundDrainNudge && (backgroundDrainNudge.scheduled === true || backgroundDrainNudge.already_running === true),
+        wait_until_used: backgroundDrainNudge && backgroundDrainNudge.wait_until_used === true,
+        elapsed_ms: Math.max(0, Date.now() - openStartedAtMs)
+      });
 
       return withCORS(env, req, ok({
         ok: true,
@@ -13720,6 +13796,9 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
           || backgroundDrainNudge.already_running === true
         ),
         background_drain_wait_until_used: backgroundDrainNudge && backgroundDrainNudge.wait_until_used === true,
+        background_drain_should_nudge: shouldNudge,
+        background_drain_reason: nudgeReason,
+        background_drain_wait_until_available: !!(ctx && typeof ctx.waitUntil === 'function'),
         destructive_flags_ignored: destructiveFlagsIgnored,
         shared_session: true,
         attach_only_open: true,
@@ -13953,9 +14032,60 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     per_job_rpc_fanout: false
   };
 
+  const logCronDiag = (eventName, payload = {}, severity = 'info') => {
+    try {
+      if (typeof logBankingPayWorkbenchDiag === 'function') {
+        logBankingPayWorkbenchDiag(env, eventName, {
+          ...baseResult,
+          ...payload,
+          origin,
+          session_id: sessionId,
+          candidate_id: candidateId
+        }, { severity });
+      }
+    } catch {}
+  };
+  const finishCronTick = (result, severity = 'info') => {
+    const safe = isPlainObject(result) ? result : {};
+    const drain = isPlainObject(safe.drain_result) ? safe.drain_result : {};
+    logCronDiag('WORKBENCH_CRON_TICK_END', {
+      ok: safe.ok === true,
+      skipped: safe.skipped === true,
+      code: safe.code || safe.error_code || null,
+      error_code: safe.error_code || safe.code || null,
+      message: safe.message || null,
+      tick_elapsed_ms: safe.tick_elapsed_ms ?? Math.max(0, Date.now() - tickStartedAtMs),
+      drain_result_summary: {
+        ok: drain.ok !== false,
+        claimed: metricInt(drain, ['claimed', 'claimed_count']),
+        processed: metricInt(drain, ['processed', 'processed_count']),
+        succeeded: metricInt(drain, ['succeeded', 'succeeded_count']),
+        failed: metricInt(drain, ['failed', 'failed_count']),
+        dead: metricInt(drain, ['dead', 'dead_count']),
+        more_due: metricBoolean(drain, 'more_due', safe.more_due === true),
+        stop_reason: trimStr(drain.stop_reason || safe.stop_reason || '') || null,
+        budget_exhausted: metricBoolean(drain, 'budget_exhausted', safe.budget_exhausted === true),
+        elapsed_ms: metricInt(drain, ['elapsed_ms'])
+      }
+    }, severity);
+    return result;
+  };
+
+  logCronDiag('WORKBENCH_CRON_TICK_START', {
+    requested_profile: requestedProfile || null,
+    budget_profile: budgetProfile,
+    enabled,
+    claim_limit: claimLimit,
+    max_passes: maxPasses,
+    max_jobs: maxJobs,
+    max_rows: maxRows,
+    max_runtime_ms: maxRuntimeMs,
+    allowed_job_types: allowedJobTypes
+  });
+
   if (!enabled) {
     const metrics = coreMetrics({}, { more_due: false, stop_reason: 'DISABLED' });
-    return {
+    return finishCronTick({
       ...baseResult,
       ...metrics,
       ok: true,
@@ -13971,12 +14101,12 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
         budget_exhausted: false,
         made_progress: false
       }
-    };
+    });
   }
 
   if (typeof drainBankingPayWorkbenchJobs !== 'function') {
     const metrics = coreMetrics({}, { more_due: true, stop_reason: 'DRAIN_UNAVAILABLE' });
-    return {
+    return finishCronTick({
       ...baseResult,
       ...metrics,
       ok: false,
@@ -13992,7 +14122,7 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
         budget_exhausted: false,
         made_progress: false
       }
-    };
+    }, 'warn');
   }
 
   try {
@@ -14020,7 +14150,7 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     const normalizedDrainResult = isPlainObject(drainResult) ? drainResult : { ok: false, more_due: true, stop_reason: 'INVALID_DRAIN_RESULT' };
     const metrics = coreMetrics(normalizedDrainResult, { more_due: true, stop_reason: 'INVALID_DRAIN_RESULT' });
 
-    return {
+    return finishCronTick({
       ...baseResult,
       ...metrics,
       ok: normalizedDrainResult.ok !== false,
@@ -14031,14 +14161,14 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
       completed_at_utc: new Date().toISOString(),
       tick_elapsed_ms: Math.max(0, Date.now() - tickStartedAtMs),
       drain_result: normalizedDrainResult
-    };
+    }, normalizedDrainResult.ok === false ? 'warn' : 'info');
   } catch (error) {
     const metrics = coreMetrics({}, { more_due: true, stop_reason: 'RPC_ERROR' });
     const errorCode = error && (error.code || error.error_code || error.name)
       ? String(error.code || error.error_code || error.name)
       : 'BANKING_PAY_WORKBENCH_CRON_FAILED';
     const message = error && error.message ? String(error.message) : String(error || 'Banking Pay workbench cron failed');
-    return {
+    return finishCronTick({
       ...baseResult,
       ...metrics,
       ok: false,
@@ -14057,9 +14187,27 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
         budget_exhausted: false,
         made_progress: false
       }
-    };
+    }, 'warn');
   }
 }
+
+function bankingPayWorkbenchLogsEnabled(env) {
+  try {
+    const source = (env && typeof env === 'object') ? env : {};
+    const truthy = (value) => {
+      if (value === true || value === 1) return true;
+      if (value === false || value === 0 || value == null) return false;
+      const text = String(value).trim().toUpperCase();
+      return text === 'TRUE' || text === '1' || text === 'YES' || text === 'ON';
+    };
+    return truthy(source.WORKBENCH_LOGS)
+      || truthy(source.workbenchlogs)
+      || truthy(source.BANKING_PAY_WORKBENCH_LOGS);
+  } catch {
+    return false;
+  }
+}
+
 
 
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
@@ -14168,10 +14316,46 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     scheduled_worker_is_durable_fallback: false
   };
 
+  const logNudgeDiag = (eventName, payload = {}, severity = 'info') => {
+    try {
+      if (typeof logBankingPayWorkbenchDiag === 'function') {
+        logBankingPayWorkbenchDiag(env, eventName, {
+          ...commonMetadata,
+          ...payload,
+          origin: payload.origin || requestedOrigin || origin,
+          session_id: requestedSessionIdValue,
+          candidate_id: requestedCandidateIdValue,
+          reason: trimStr(source.reason || source.nudge_reason || source.mutation_type || source.source || requestedOrigin || '') || null,
+          ctx_present: !!ctx,
+          wait_until_available: !!(ctx && typeof ctx.waitUntil === 'function')
+        }, { severity });
+      }
+    } catch {}
+  };
+  const returnNudgeResult = (result, eventName = 'WORKBENCH_DRAIN_NUDGE_SCHEDULED', severity = 'info') => {
+    const safeResult = isPlainObject(result) ? result : {};
+    logNudgeDiag(eventName, {
+      ...safeResult,
+      scheduled: safeResult.scheduled === true,
+      wait_until_used: safeResult.wait_until_used === true,
+      fire_and_forget: safeResult.scheduled === true && safeResult.wait_until_used !== true,
+      immediate: true
+    }, severity);
+    return result;
+  };
+
+  logNudgeDiag('WORKBENCH_DRAIN_NUDGE_REQUESTED', {
+    requested_origin: requestedOrigin,
+    requested_budget_profile: requestedProfile,
+    session_id: requestedSessionIdValue,
+    candidate_id: requestedCandidateIdValue,
+    actor_user_id: requestedActorUserIdValue
+  });
+
   if (Object.prototype.hasOwnProperty.call(source, 'enabled')) {
     const enabledText = String(source.enabled).trim().toLowerCase();
     if (source.enabled === false || enabledText === 'false' || enabledText === '0') {
-      return {
+      return returnNudgeResult({
         ...commonMetadata,
         ok: true,
         scheduled: false,
@@ -14180,12 +14364,12 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
         code: 'BANKING_PAY_WORKBENCH_NUDGE_DISABLED',
         wait_until_used: false,
         continuation_scheduled: false
-      };
+      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
     }
   }
 
   if (typeof bankingPayWorkbenchCronTick !== 'function') {
-    return {
+    return returnNudgeResult({
       ...commonMetadata,
       ok: false,
       scheduled: false,
@@ -14194,7 +14378,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       code: 'BANKING_PAY_WORKBENCH_CRON_TICK_UNAVAILABLE',
       wait_until_used: false,
       continuation_scheduled: false
-    };
+    }, 'WORKBENCH_DRAIN_NUDGE_FAILED', 'warn');
   }
 
   const root = globalThis || {};
@@ -14210,7 +14394,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   if (map && map.has(singleFlightKey)) {
     const rawActiveEntry = map.get(singleFlightKey);
     if (rawActiveEntry && typeof rawActiveEntry.then === 'function') {
-      return {
+      return returnNudgeResult({
         ...commonMetadata,
         ok: true,
         scheduled: false,
@@ -14223,7 +14407,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
         code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING_LEGACY_ENTRY',
         wait_until_used: null,
         continuation_scheduled: true
-      };
+      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
     }
 
     const activeEntry = isPlainObject(rawActiveEntry) && rawActiveEntry.promise
@@ -14236,7 +14420,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       activeEntry.last_coalesced_at_utc = new Date().toISOString();
       activeEntry.last_requested_origin = requestedOrigin;
       try { map.set(singleFlightKey, activeEntry); } catch {}
-      return {
+      return returnNudgeResult({
         ...commonMetadata,
         ok: true,
         scheduled: false,
@@ -14249,7 +14433,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
         wait_until_used: activeEntry.wait_until_used === true,
         continuation_scheduled: true,
         final_burst_summary: isPlainObject(activeEntry.final_summary) ? activeEntry.final_summary : null
-      };
+      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
     }
 
     try { map.delete(singleFlightKey); } catch {}
@@ -14284,6 +14468,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   }
 
   const hasWaitUntil = !!(ctx && typeof ctx.waitUntil === 'function');
+  let waitUntilUsed = false;
   const entry = {
     promise: null,
     started_at_utc: new Date().toISOString(),
@@ -14296,7 +14481,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     first_tick_summary: null,
     coalesced_final_check_summary: null,
     final_summary: null,
-    wait_until_used: hasWaitUntil,
+    wait_until_used: false,
     requested_origin: requestedOrigin
   };
 
@@ -14406,6 +14591,10 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       entry.accepting_coalesced_wakes = false;
       entry.final_summary = failureSummary;
       entry.completed_at_utc = new Date().toISOString();
+      logNudgeDiag('WORKBENCH_DRAIN_NUDGE_FAILED', {
+        ...failureSummary,
+        error_message: failureSummary.message
+      }, 'warn');
       try {
         console.warn('[nudgeBankingPayWorkbenchDrain] Global workbench drain nudge failed:', failureSummary.message);
       } catch {}
@@ -14426,28 +14615,117 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   if (hasWaitUntil) {
     try {
       ctx.waitUntil(promise);
-    } catch {
+      waitUntilUsed = true;
+      entry.wait_until_used = true;
+    } catch (waitUntilError) {
+      waitUntilUsed = false;
+      entry.wait_until_used = false;
+      logNudgeDiag('WORKBENCH_DRAIN_NUDGE_FAILED', {
+        code: 'BANKING_PAY_WORKBENCH_WAIT_UNTIL_FAILED',
+        scheduled: true,
+        wait_until_used: false,
+        error_message: String(waitUntilError?.message || waitUntilError || 'ctx.waitUntil failed')
+      }, 'warn');
       promise.catch(() => {});
     }
   } else {
     promise.catch(() => {});
   }
 
-  return {
+  return returnNudgeResult({
     ...commonMetadata,
     ok: true,
     scheduled: true,
     already_running: false,
-    wait_until_used: hasWaitUntil,
+    wait_until_used: waitUntilUsed,
     continuation_scheduled: true,
     code: 'BANKING_PAY_WORKBENCH_NUDGE_SCHEDULED',
     active_started_at_utc: entry.started_at_utc,
     coalesced_wake_count: 0,
     budget_resolved_by: 'bankingPayWorkbenchCronTick'
-  };
+  }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
 }
-
-
+function logBankingPayWorkbenchDiag(env, eventName, payload = {}, options = {}) {
+  try {
+    if (typeof bankingPayWorkbenchLogsEnabled === 'function' && bankingPayWorkbenchLogsEnabled(env) !== true) return;
+    const sourcePayload = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const opts = (options && typeof options === 'object' && !Array.isArray(options)) ? options : {};
+    const truthy = (value) => {
+      if (value === true || value === 1) return true;
+      if (value === false || value === 0 || value == null) return false;
+      const text = String(value).trim().toUpperCase();
+      return text === 'TRUE' || text === '1' || text === 'YES' || text === 'ON';
+    };
+    const verboseEnabled = truthy(env?.WORKBENCH_LOGS_VERBOSE) || truthy(env?.BANKING_PAY_WORKBENCH_LOGS_VERBOSE) || truthy(opts.verbose);
+    const safeIdentifierKeys = new Set([
+      'event', 'server_utc', 'origin', 'severity', 'session_id', 'sessionid', 'candidate_id', 'candidateid',
+      'job_id', 'jobid', 'operation_id', 'operationid', 'request_id', 'requestid', 'trace_id', 'traceid',
+      'actor_user_id', 'actoruserid', 'worker_id', 'workerid', 'mutation_type', 'stage', 'reason', 'code',
+      'error_code', 'status', 'phase', 'progress_state', 'stop_reason', 'budget_profile', 'worker_scope'
+    ]);
+    const unsafeExactKeys = new Set([
+      'payload_json', 'preview_rows', 'rows', 'line_items', 'canonical_preview_lines_json',
+      'effective_canonical_preview_lines_json', 'timesheet_snapshots_json', 'bank_payload_json',
+      'payment_payload_json', 'provider_payload_json', 'remittance_payload_json'
+    ]);
+    const normalizeKey = (key) => String(key || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    const keepKey = (key) => {
+      const normalized = normalizeKey(key);
+      if (!normalized) return false;
+      if (safeIdentifierKeys.has(normalized)) return true;
+      if (unsafeExactKeys.has(normalized)) return false;
+      if (/(^|_)name($|_)/.test(normalized)) return false;
+      if (/(^|_)(email|phone|mobile|address|postcode|bank|account|sort_code|iban|bic|payee|remittance|ni_number|national_insurance|tax_code)($|_)/.test(normalized)) return false;
+      if (/(^|_)(payload|preview_rows|line_items|timesheet_snapshots|bank_payload|payment_payload|provider_payload|remittance_payload)($|_)/.test(normalized)) return false;
+      return true;
+    };
+    const sanitize = (value, depth = 0) => {
+      if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
+      if (typeof value === 'string') return value.length > 220 && !verboseEnabled ? `${value.slice(0, 220)}…` : value;
+      if (Array.isArray(value)) {
+        const limit = verboseEnabled ? 50 : 12;
+        const out = value.slice(0, limit).map((item) => sanitize(item, depth + 1));
+        if (value.length > limit) out.push(`…${value.length - limit} more`);
+        return out;
+      }
+      if (typeof value === 'object') {
+        if (depth >= (verboseEnabled ? 5 : 3)) return '[object]';
+        const out = {};
+        for (const [key, child] of Object.entries(value)) {
+          if (!keepKey(key)) continue;
+          out[key] = sanitize(child, depth + 1);
+        }
+        return out;
+      }
+      return String(value);
+    };
+    const event = String(eventName || sourcePayload.event || 'WORKBENCH_DIAG').trim() || 'WORKBENCH_DIAG';
+    const severity = String(opts.severity || sourcePayload.severity || (event.endsWith('_FAILED') ? 'warn' : 'info')).trim().toLowerCase() || 'info';
+    const record = sanitize({
+      ...sourcePayload,
+      event,
+      server_utc: new Date().toISOString(),
+      origin: sourcePayload.origin || opts.origin || null,
+      severity,
+      session_id: sourcePayload.session_id || sourcePayload.sessionId || null,
+      candidate_id: sourcePayload.candidate_id || sourcePayload.candidateId || null,
+      job_id: sourcePayload.job_id || sourcePayload.jobId || null,
+      operation_id: sourcePayload.operation_id || sourcePayload.operationId || null,
+      request_id: sourcePayload.request_id || sourcePayload.requestId || opts.request_id || opts.requestId || null,
+      trace_id: sourcePayload.trace_id || sourcePayload.traceId || opts.trace_id || opts.traceId || null
+    });
+    const line = `[BANKING_PAY_WORKBENCH_DIAG] ${JSON.stringify(record)}`;
+    if (severity === 'warn' || severity === 'warning' || severity === 'error' || severity === 'fail' || severity === 'failed') {
+      console.warn(line);
+    } else {
+      console.info(line);
+    }
+  } catch {}
+}
 
 async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -24530,9 +24808,93 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     return fail(400, 'BANKING_CREATE_DRAFT_INVALID_PAY_DATE', 'Select a valid pay date, then try again. No payment batch has been created.', { field: 'pay_date', session_id: sessionId });
   }
 
-  const previewDecisions = isPlainObject(body.preview_decisions_json)
-    ? cloneJson(body.preview_decisions_json)
-    : (isPlainObject(body.previewDecisionsJson) ? cloneJson(body.previewDecisionsJson) : {});
+  const createDraftRouteMutationDecisionKeys = [
+    'case_resolutions', 'caseResolutions',
+    'component_resolutions', 'componentResolutions'
+  ];
+  const createDraftRouteDisplayCaseDecisionKeys = [
+    'case_resolution_states', 'caseResolutionStates',
+    'cases_resolutions', 'casesResolutions',
+    'blocked_case_states', 'blockedCaseStates',
+    'safe_case_states', 'safeCaseStates',
+    'ready_to_pay_now', 'readyToPayNow',
+    'draftable_now', 'draftableNow',
+    'ready_preview_lines', 'readyPreviewLines',
+    'canonical_preview_lines', 'canonicalPreviewLines',
+    'blocked_for_pay', 'blockedForPay',
+    'blocked_for_pay_now', 'blockedForPayNow',
+    'blocked_now', 'blockedNow',
+    'blocked_preview_lines', 'blockedPreviewLines'
+  ];
+  const createDraftRouteAllowedDecisionKeys = new Set([
+    'selected_preview_row_ids', 'selectedPreviewRowIds',
+    '__selected_preview_row_mode', 'selected_preview_row_mode', 'selectedPreviewRowMode',
+    'pay_channel_scope', 'payChannelScope', 'draft_scope', 'draftScope', 'scope',
+    'session_id', 'sessionId', 'workbench_session_id', 'workbenchSessionId',
+    'session_version', 'sessionVersion',
+    'snapshot_run_id', 'snapshotRunId', 'source_snapshot_run_id', 'sourceSnapshotRunId',
+    'session_signature', 'sessionSignature',
+    'candidate_filter_id', 'candidateFilterId', 'client_filter_id', 'clientFilterId',
+    'draft_selected_preview_row_ids', 'draftSelectedPreviewRowIds',
+    'scoped_selected_preview_row_ids', 'scopedSelectedPreviewRowIds',
+    'draft_selected_preview_row_contracts', 'draftSelectedPreviewRowContracts',
+    'selected_preview_row_contracts', 'selectedPreviewRowContracts',
+    'scoped_selected_preview_row_contracts', 'scopedSelectedPreviewRowContracts',
+    'draft_selected_economic_keys', 'draftSelectedEconomicKeys',
+    'selected_economic_keys', 'selectedEconomicKeys',
+    'scoped_selected_economic_keys', 'scopedSelectedEconomicKeys',
+    'scope_counts', 'scopeCounts'
+  ]);
+  const countObjectKeys = (value) => isPlainObject(value) ? Object.keys(value).length : null;
+  const countArrayItems = (value) => Array.isArray(value) ? value.length : null;
+  const summariseCreateDraftRouteDecisionKeys = (decisionLike, bodyLike = null) => {
+    const decisions = isPlainObject(decisionLike) ? decisionLike : {};
+    const requestBody = isPlainObject(bodyLike) ? bodyLike : {};
+    const hasDecisionKey = (key) => Object.prototype.hasOwnProperty.call(decisions, key);
+    const hasBodyKey = (key) => Object.prototype.hasOwnProperty.call(requestBody, key);
+    const caseResolutionSource = hasDecisionKey('case_resolutions') ? decisions.case_resolutions : (hasDecisionKey('caseResolutions') ? decisions.caseResolutions : undefined);
+    const componentResolutionSource = hasDecisionKey('component_resolutions') ? decisions.component_resolutions : (hasDecisionKey('componentResolutions') ? decisions.componentResolutions : undefined);
+    return {
+      has_case_resolutions_key: hasDecisionKey('case_resolutions') || hasDecisionKey('caseResolutions') || hasBodyKey('case_resolutions') || hasBodyKey('caseResolutions'),
+      case_resolutions_key_count: countObjectKeys(caseResolutionSource),
+      has_component_resolutions_key: hasDecisionKey('component_resolutions') || hasDecisionKey('componentResolutions') || hasBodyKey('component_resolutions') || hasBodyKey('componentResolutions'),
+      component_resolutions_key_count: countObjectKeys(componentResolutionSource),
+      case_state_array_counts: {
+        case_resolution_states: countArrayItems(decisions.case_resolution_states),
+        caseResolutionStates: countArrayItems(decisions.caseResolutionStates),
+        cases_resolutions: countArrayItems(decisions.cases_resolutions),
+        casesResolutions: countArrayItems(decisions.casesResolutions),
+        blocked_case_states: countArrayItems(decisions.blocked_case_states),
+        safe_case_states: countArrayItems(decisions.safe_case_states)
+      }
+    };
+  };
+  const sanitizePreviewDecisionsForCreateDraftRoute = (decisionLike) => {
+    const source = isPlainObject(decisionLike) ? decisionLike : {};
+    const out = {};
+    for (const [key, value] of Object.entries(source)) {
+      if (!createDraftRouteAllowedDecisionKeys.has(key)) continue;
+      if (Array.isArray(value)) {
+        out[key] = cloneJson(value) || [];
+      } else if (isPlainObject(value)) {
+        out[key] = cloneJson(value) || {};
+      } else if (value !== undefined) {
+        out[key] = value;
+      }
+    }
+    for (const key of createDraftRouteMutationDecisionKeys) delete out[key];
+    for (const key of createDraftRouteDisplayCaseDecisionKeys) delete out[key];
+    return out;
+  };
+
+  const rawPreviewDecisions = isPlainObject(body.preview_decisions_json)
+    ? (cloneJson(body.preview_decisions_json) || {})
+    : (isPlainObject(body.previewDecisionsJson) ? (cloneJson(body.previewDecisionsJson) || {}) : {});
+  const createDraftDecisionKeyDiagnosticsBeforeSanitise = summariseCreateDraftRouteDecisionKeys(rawPreviewDecisions, body);
+  const previewDecisions = sanitizePreviewDecisionsForCreateDraftRoute(rawPreviewDecisions);
+  const createDraftDecisionKeyDiagnosticsAfterSanitise = summariseCreateDraftRouteDecisionKeys(previewDecisions, {});
+  const createDraftCaseResolutionKeysIgnored = createDraftDecisionKeyDiagnosticsBeforeSanitise.has_case_resolutions_key === true
+    || createDraftDecisionKeyDiagnosticsBeforeSanitise.has_component_resolutions_key === true;
   const collectDraftScopeEntries = () => {
     const entries = [];
     const addScopeEntry = (source, owner, key) => {
@@ -24737,25 +25099,60 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   sourceSnapshotRunId = initialReadiness.source_snapshot_run_id || sourceSnapshotRunId;
   sessionSignature = initialReadiness.session_signature || sessionSignature;
 
-  if (selectedPreviewRowIds.length > 0 || isPlainObject(body.case_resolutions) || isPlainObject(body.caseResolutions)) {
+  if (selectedPreviewRowIds.length > 0) {
     if (typeof normalizeBankingPayPreviewDecisions === 'function' && typeof syncBankingPayPreviewDecisionsToSession === 'function') {
-      const merged = cloneJson(previewDecisions) || {};
-      if (selectedPreviewRowIds.length > 0) merged.selected_preview_row_ids = selectedPreviewRowIds;
-      if (Object.prototype.hasOwnProperty.call(body, 'case_resolutions')) merged.case_resolutions = cloneJson(body.case_resolutions);
-      if (Object.prototype.hasOwnProperty.call(body, 'caseResolutions')) merged.case_resolutions = cloneJson(body.caseResolutions);
-      const normalised = normalizeBankingPayPreviewDecisions(merged);
+      const merged = sanitizePreviewDecisionsForCreateDraftRoute(previewDecisions);
+      merged.selected_preview_row_ids = selectedPreviewRowIds;
+      merged.selected_preview_row_mode = selectedPreviewRowMode || 'EXPLICIT_IDS';
+      merged.pay_channel_scope = payChannelScope;
+      merged.draft_scope = payChannelScope;
+      merged.session_id = sessionId;
+      if (sessionVersion != null) merged.session_version = sessionVersion;
+      if (sourceSnapshotRunId) merged.source_snapshot_run_id = sourceSnapshotRunId;
+      if (sessionSignature) merged.session_signature = sessionSignature;
+      const normalised = normalizeBankingPayPreviewDecisions(merged, {
+        selection_only: true,
+        decision_sync_context: 'CREATE_DRAFT_SELECTION_SYNC',
+        ignore_empty_case_resolutions: true
+      });
       if (!normalised || normalised.ok !== true) {
-        return fail(400, 'BANKING_CREATE_DRAFT_INVALID_SELECTION', 'Payment batch could not be created. Review the selected payment rows, refresh the preview, then try again.', { session_id: sessionId });
-      }
-      try {
-        decisionSync = await syncBankingPayPreviewDecisionsToSession(env, actorUserId, sessionId, normalised);
-      } catch (error) {
-        return fail(409, 'BANKING_CREATE_DRAFT_SELECTED_ROWS_INVALID', 'Payment batch could not be created. Review the selected payment rows, refresh the preview, then try again.', {
+        return fail(400, 'BANKING_CREATE_DRAFT_INVALID_SELECTION', 'Payment batch could not be created. Review the selected payment rows, refresh the preview, then try again.', {
           session_id: sessionId,
-          reason: String(error && error.message ? error.message : error)
+          decision_sync_context: 'CREATE_DRAFT_SELECTION_SYNC',
+          case_resolution_keys_present: createDraftDecisionKeyDiagnosticsBeforeSanitise.has_case_resolutions_key === true,
+          case_resolution_keys_ignored: createDraftCaseResolutionKeysIgnored,
+          decision_key_diagnostics_before_sanitise: createDraftDecisionKeyDiagnosticsBeforeSanitise,
+          decision_key_diagnostics_after_sanitise: createDraftDecisionKeyDiagnosticsAfterSanitise
         });
       }
-    } else if (selectedPreviewRowIds.length > 0) {
+      try {
+        decisionSync = await syncBankingPayPreviewDecisionsToSession(env, actorUserId, sessionId, normalised, {
+          selection_only: true,
+          decision_sync_context: 'CREATE_DRAFT_SELECTION_SYNC',
+          allow_case_resolution_clear: false,
+          allow_case_resolution_apply: false
+        });
+      } catch (error) {
+        const operationPlan = isPlainObject(error?.operation_plan) ? error.operation_plan : {};
+        return fail(409, 'BANKING_CREATE_DRAFT_SELECTED_ROWS_INVALID', 'Payment batch could not be created. Review the selected payment rows, refresh the preview, then try again.', {
+          session_id: sessionId,
+          reason: String(error && error.message ? error.message : error),
+          decision_sync_context: 'CREATE_DRAFT_SELECTION_SYNC',
+          operation_plan_counts: {
+            clear_case_resolution_count: Array.isArray(operationPlan.clear_case_resolutions) ? operationPlan.clear_case_resolutions.length : (Number.isFinite(Number(error?.clear_operation_count)) ? Math.max(0, Math.trunc(Number(error.clear_operation_count))) : 0),
+            apply_case_resolution_count: Array.isArray(operationPlan.apply_case_resolutions) ? operationPlan.apply_case_resolutions.length : (Number.isFinite(Number(error?.apply_operation_count)) ? Math.max(0, Math.trunc(Number(error.apply_operation_count))) : 0),
+            selected_rows_provided: error?.selected_rows_provided === true || operationPlan.selected_rows_provided === true
+          },
+          clear_case_resolution_count: Array.isArray(operationPlan.clear_case_resolutions) ? operationPlan.clear_case_resolutions.length : 0,
+          apply_case_resolution_count: Array.isArray(operationPlan.apply_case_resolutions) ? operationPlan.apply_case_resolutions.length : 0,
+          selected_rows_provided: error?.selected_rows_provided === true || operationPlan.selected_rows_provided === true,
+          case_resolution_keys_present: createDraftDecisionKeyDiagnosticsBeforeSanitise.has_case_resolutions_key === true,
+          case_resolution_keys_ignored: createDraftCaseResolutionKeysIgnored,
+          case_resolution_key_diagnostics_before_sanitise: createDraftDecisionKeyDiagnosticsBeforeSanitise,
+          case_resolution_key_diagnostics_after_sanitise: createDraftDecisionKeyDiagnosticsAfterSanitise
+        });
+      }
+    } else {
       return fail(409, 'BANKING_CREATE_DRAFT_SELECTION_SYNC_UNAVAILABLE', 'Selected row changes could not be applied. Refresh Banking preview and try again.', { session_id: sessionId });
     }
   }
@@ -25407,8 +25804,6 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     });
   }
 }
-
-
 
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
@@ -36607,9 +37002,7 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
 
 
 
-
-
-async function handleBankingPaySnoozeUpsert(env, req, user) {
+async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -36967,7 +37360,8 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
           fastLaneCandidateId,
           String(user?.id || '').trim(),
           null,
-          'BANKING_PAY_SNOOZE_UPSERT'
+          'BANKING_PAY_SNOOZE_UPSERT',
+          ctx
         );
         responsePayload = {
           ...canonical,
@@ -37001,8 +37395,6 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 
 
 async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
@@ -37164,7 +37556,7 @@ async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
   }
 }
 
-async function handleBankingPaySnoozeClear(env, req, user) {
+async function handleBankingPaySnoozeClear(env, req, user, ctx = null) {
   const authUser = user || await requireUser(env, req, ['admin']);
   if (!authUser) return withCORS(env, req, unauthorized());
 
@@ -37323,7 +37715,8 @@ async function handleBankingPaySnoozeClear(env, req, user) {
           fastLaneCandidateId,
           String(authUser?.id || '').trim(),
           null,
-          'BANKING_PAY_SNOOZE_CLEAR'
+          'BANKING_PAY_SNOOZE_CLEAR',
+          ctx
         );
         responsePayload = {
           ...canonical,
@@ -37353,7 +37746,6 @@ async function handleBankingPaySnoozeClear(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear snooze')));
   }
 }
-
 
 
 async function ensureRailPayeeMapForHash(env, { provider, rail_env, entity_kind, entity_id, bank_details_hash, actor_user_id } = {}) {
@@ -61154,8 +61546,7 @@ async function collectRailUpdatesForBankingPayOperation(env, options = {}) {
   });
 }
 
-
-async function handleBankingPayPayeeReadinessEnsure(env, req, user) {
+async function handleBankingPayPayeeReadinessEnsure(env, req, user, ctx = null) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -61385,7 +61776,8 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user) {
           effectiveCandidateId,
           actorUserId || null,
           null,
-          'PAYEE_READINESS_ENSURE'
+          'PAYEE_READINESS_ENSURE',
+          ctx
         );
       } catch (e) {
         fastLane = {
@@ -61439,6 +61831,7 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to run payee readiness')));
   }
 }
+
 
 
 async function handleTimesheetUnauthorise(env, req, timesheetId) {
@@ -78278,7 +78671,7 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
 }
 
 
-async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidateId, actorUserId, existingSessionJobId = null, originLabel = '') {
+async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidateId, actorUserId, existingSessionJobId = null, originLabel = '', ctx = null) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const normalizedSessionId = trimStr(sessionId);
@@ -78291,6 +78684,30 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
   const validActorUserId = uuidRe.test(normalizedActorUserId) ? normalizedActorUserId : null;
   const validExistingSessionJobId = uuidRe.test(normalizedExistingSessionJobId) ? normalizedExistingSessionJobId : null;
   const startedAtUtc = new Date().toISOString();
+  const ctxPresent = !!ctx;
+  const waitUntilAvailable = !!(ctx && typeof ctx.waitUntil === 'function');
+  const logPostMutationNudge = (payload = {}, severity = 'info') => {
+    try {
+      if (typeof logBankingPayWorkbenchDiag === 'function') {
+        logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
+          origin: normalizedOriginLabel,
+          mutation_type: normalizedOriginLabel,
+          session_id: validSessionId,
+          candidate_id: validCandidateId,
+          job_id: validExistingSessionJobId,
+          actor_user_id: validActorUserId,
+          candidate_ids_count: validCandidateId ? 1 : 0,
+          candidate_ids_sample: validCandidateId ? [validCandidateId] : [],
+          job_ids_count: validExistingSessionJobId ? 1 : 0,
+          job_ids_sample: validExistingSessionJobId ? [validExistingSessionJobId] : [],
+          ctx_present: ctxPresent,
+          wait_until_available: waitUntilAvailable,
+          wait_until_used: payload.wait_until_used === true,
+          ...payload
+        }, { severity });
+      }
+    } catch {}
+  };
 
   const result = {
     ok: true,
@@ -78326,6 +78743,9 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
     background_drain_nudge: null,
     background_drain_nudge_scheduled: false,
     scheduled_worker_is_durable_fallback: true,
+    ctx_present: ctxPresent,
+    wait_until_available: waitUntilAvailable,
+    wait_until_used: false,
     error: null,
     started_at_utc: startedAtUtc,
     completed_at_utc: null,
@@ -78370,15 +78790,28 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
       message: 'The immediate Banking Pay worker wake is unavailable; the scheduled worker remains the durable fallback.'
     };
     pushStep('background_refresh_nudge_unavailable', {
-      scheduled_worker_is_durable_fallback: true
+      scheduled_worker_is_durable_fallback: true,
+      wait_until_used: result.wait_until_used === true
     });
     result.completed_at_utc = new Date().toISOString();
     return result;
   }
 
   try {
-    const wake = nudgeBankingPayWorkbenchDrain(env, null, {
+    logPostMutationNudge({
+      stage: 'REQUESTED',
+      scheduled: false,
+      wait_until_used: false
+    });
+    const wake = nudgeBankingPayWorkbenchDrain(env, ctx, {
       origin: normalizedOriginLabel,
+      reason: 'POST_MUTATION_WORKBENCH_REFRESH',
+      mutation_type: normalizedOriginLabel,
+      sessionId: validSessionId,
+      candidateId: validCandidateId,
+      actorUserId: validActorUserId,
+      job_id: validExistingSessionJobId,
+      operation_id: validExistingSessionJobId,
       budgetProfile: 'NUDGE',
       profile: 'NUDGE'
     });
@@ -78388,6 +78821,14 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
       result.worker_wake &&
       (result.worker_wake.scheduled === true || result.worker_wake.already_running === true)
     );
+    result.wait_until_used = result.worker_wake?.wait_until_used === true;
+    logPostMutationNudge({
+      stage: 'SCHEDULED',
+      scheduled: result.worker_wake?.scheduled === true,
+      already_running: result.worker_wake?.already_running === true,
+      wait_until_used: result.wait_until_used,
+      worker_scope: result.worker_wake?.worker_scope || 'GLOBAL'
+    });
     pushStep('background_refresh_nudge_submitted', {
       scheduled: result.worker_wake?.scheduled === true,
       already_running: result.worker_wake?.already_running === true,
@@ -78406,6 +78847,12 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
       message: result.error.message
     };
     result.background_drain_nudge = result.worker_wake;
+    logPostMutationNudge({
+      stage: 'FAILED',
+      scheduled: false,
+      wait_until_used: false,
+      error_message: result.error.message
+    }, 'warn');
     pushStep('background_refresh_nudge_failed', {
       error: result.error,
       scheduled_worker_is_durable_fallback: true
@@ -78417,10 +78864,7 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
 }
 
 
-
-
-
-async function handleBankingPaymentAdvanceCreate(env, req, user) {
+async function handleBankingPaymentAdvanceCreate(env, req, user, ctx = null) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -78613,7 +79057,8 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
           candidateId,
           String(user?.id || '').trim(),
           null,
-          'BANKING_PAYMENT_ADVANCE_CREATE'
+          'BANKING_PAYMENT_ADVANCE_CREATE',
+          ctx
         );
         responsePayload = {
           ...payloadObj,
@@ -78644,7 +79089,9 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
   }
 }
 
-async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) {
+
+
+async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId, ctx = null) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -78861,7 +79308,8 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
           optionalCandidateId,
           String(user?.id || '').trim(),
           null,
-          'BANKING_PAYMENT_ADVANCE_UPDATE'
+          'BANKING_PAYMENT_ADVANCE_UPDATE',
+          ctx
         );
         responsePayload = {
           ...payloadObj,
@@ -78892,7 +79340,10 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
   }
 }
 
-async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
+
+
+
+async function handleBankingManualCreditAdjustmentCreate(env, req, user, ctx = null) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -78996,7 +79447,8 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
           candidateId,
           String(user?.id || '').trim(),
           null,
-          'BANKING_MANUAL_CREDIT_ADJUSTMENT_CREATE'
+          'BANKING_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+          ctx
         );
         responsePayload = {
           ...payloadObj,
@@ -79027,7 +79479,7 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
   }
 }
 
-async function handleBankingManualCreditAdjustmentUpdate(env, req, user, financeCaseId) {
+async function handleBankingManualCreditAdjustmentUpdate(env, req, user, financeCaseId, ctx = null) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -79162,7 +79614,8 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
           optionalCandidateId,
           String(user?.id || '').trim(),
           null,
-          'BANKING_MANUAL_CREDIT_ADJUSTMENT_UPDATE'
+          'BANKING_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+          ctx
         );
         responsePayload = {
           ...payloadObj,
@@ -79193,7 +79646,7 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
   }
 }
 
-async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
+async function handleBankingManualDebtAdjustmentCreate(env, req, user, ctx = null) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -79387,7 +79840,8 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
           candidateId,
           String(user?.id || '').trim(),
           null,
-          'BANKING_MANUAL_DEBT_ADJUSTMENT_CREATE'
+          'BANKING_MANUAL_DEBT_ADJUSTMENT_CREATE',
+          ctx
         );
         responsePayload = {
           ...payloadObj,
@@ -79419,7 +79873,7 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
 }
 
 
-async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCaseId) {
+async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCaseId, ctx = null) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -79619,7 +80073,8 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
           optionalCandidateId,
           String(user?.id || '').trim(),
           null,
-          'BANKING_MANUAL_DEBT_ADJUSTMENT_UPDATE'
+          'BANKING_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+          ctx
         );
         responsePayload = {
           ...payloadObj,
@@ -157864,7 +158319,9 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
 }
 
 
-async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
+
+
+async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = null) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -158398,6 +158855,33 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       let backgroundNudge = null;
       let immediateDrainError = null;
       let backgroundNudgeError = null;
+      const logCancellationPostMutationNudge = (payload = {}, severity = 'info') => {
+        try {
+          if (typeof logBankingPayWorkbenchDiag === 'function') {
+            const candidateIds = Array.isArray(payload.candidate_ids_sample)
+              ? payload.candidate_ids_sample.filter((value) => uuidRe.test(trimText(value))).slice(0, 8)
+              : [];
+            const jobIds = Array.isArray(payload.job_ids_sample)
+              ? payload.job_ids_sample.filter((value) => uuidRe.test(trimText(value))).slice(0, 8)
+              : [];
+            logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
+              origin: 'PAYMENT_CANCEL_POST_REPLACEMENT_CONTINUATION',
+              mutation_type: 'PAYMENT_CANCEL_NOT_SENT_AND_RECALCULATE',
+              session_id: replacementSessionId,
+              source_session_id: workbenchContext.session_id,
+              actor_user_id: actorUserId,
+              candidate_ids_count: candidateIds.length,
+              candidate_ids_sample: candidateIds,
+              job_ids_count: jobIds.length,
+              job_ids_sample: jobIds,
+              ctx_present: !!ctx,
+              wait_until_available: !!(ctx && typeof ctx.waitUntil === 'function'),
+              wait_until_used: payload.wait_until_used === true,
+              ...payload
+            }, { severity });
+          }
+        } catch {}
+      };
 
       try {
         if (typeof drainBankingPayWorkbenchJobs === 'function') {
@@ -158428,12 +158912,26 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
       try {
         if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
-          backgroundNudge = nudgeBankingPayWorkbenchDrain(env, null, {
+          logCancellationPostMutationNudge({
+            stage: 'REQUESTED',
+            scheduled: false,
+            wait_until_used: false
+          });
+          backgroundNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
             origin: 'PAYMENT_CANCEL_POST_REPLACEMENT_CONTINUATION',
+            reason: 'POST_MUTATION_WORKBENCH_REFRESH',
+            mutation_type: 'PAYMENT_CANCEL_NOT_SENT_AND_RECALCULATE',
             budgetProfile: 'NUDGE',
             profile: 'NUDGE',
             sessionId: replacementSessionId,
             actorUserId
+          });
+          logCancellationPostMutationNudge({
+            stage: 'SCHEDULED',
+            scheduled: backgroundNudge?.scheduled === true,
+            already_running: backgroundNudge?.already_running === true,
+            wait_until_used: backgroundNudge?.wait_until_used === true,
+            worker_scope: backgroundNudge?.worker_scope || 'GLOBAL'
           });
         } else {
           backgroundNudgeError = {
@@ -158446,6 +158944,12 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
           code: trimText(nudgeError?.code || nudgeError?.error_code || 'BANKING_PAY_WORKBENCH_NUDGE_FAILED') || 'BANKING_PAY_WORKBENCH_NUDGE_FAILED',
           message: trimText(nudgeError?.message || nudgeError || 'Workbench drain nudge failed.') || 'Workbench drain nudge failed.'
         };
+        logCancellationPostMutationNudge({
+          stage: 'FAILED',
+          scheduled: false,
+          wait_until_used: false,
+          error_message: backgroundNudgeError.message
+        }, 'warn');
       }
 
       workbenchWorkerWake = {
@@ -158496,6 +159000,8 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     return rpcErrorResponse(e, 'PAYMENT_CANCEL_NOT_SENT_RECALCULATE_FAILED', 'Unable to cancel selected payments.');
   }
 }
+
+
 
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const unwrapRow = (value) => {
@@ -161102,6 +161608,42 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   );
 
   const maxStageWorkUnitsPerJob = 100;
+  const sampleUuidValuesFromJobs = (jobRows, keys, limit = 8) => {
+    const out = [];
+    const seen = new Set();
+    for (const job of Array.isArray(jobRows) ? jobRows : []) {
+      if (!isPlainObject(job)) continue;
+      for (const key of keys) {
+        const value = trimStr(job[key] || job.stage_result?.[key] || job.payload_json?.[key] || '');
+        if (!uuidRe.test(value) || seen.has(value)) continue;
+        seen.add(value);
+        out.push(value);
+        if (out.length >= limit) return out;
+      }
+    }
+    return out;
+  };
+  const jobTypeCountsFromJobs = (jobRows) => {
+    const counts = {};
+    for (const job of Array.isArray(jobRows) ? jobRows : []) {
+      const type = canonicalJobType(job) || 'UNKNOWN';
+      counts[type] = Math.max(0, Number(counts[type]) || 0) + 1;
+    }
+    return counts;
+  };
+  const logDrainDiag = (eventName, payload = {}, severity = 'info') => {
+    try {
+      if (typeof logBankingPayWorkbenchDiag === 'function') {
+        logBankingPayWorkbenchDiag(env, eventName, {
+          ...payload,
+          origin,
+          worker_id: workerId,
+          session_id: sessionId,
+          candidate_id: candidateId
+        }, { severity });
+      }
+    } catch {}
+  };
   const startedAtUtc = new Date().toISOString();
   const startedAtMs = Date.now();
   const sessionId = uuidRe.test(sessionFilterId) ? sessionFilterId : null;
@@ -161132,6 +161674,16 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const jobs = [];
   const errors = [];
   const passSummaries = [];
+
+  logDrainDiag('WORKBENCH_DRAIN_START', {
+    budget_profile: budgetProfile,
+    max_passes: maxPasses,
+    max_rows: maxRows,
+    max_jobs: maxJobs,
+    max_runtime_ms: maxRuntimeMs,
+    claim_limit: claimLimit,
+    allowed_job_types: allowedJobTypes
+  });
 
   while (stopReason === null) {
     const elapsedBeforePass = Math.max(0, Date.now() - startedAtMs);
@@ -161217,6 +161769,22 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         more_due: true,
         error_code: errorCode
       });
+      logDrainDiag('WORKBENCH_DRAIN_PASS_RESULT', {
+        pass_number: passCount,
+        rpc_call_count: rpcCallCount,
+        claimed: 0,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        dead: 0,
+        obsolete_skipped: 0,
+        row_units_processed: 0,
+        more_due: true,
+        stop_reason: 'RPC_ERROR',
+        elapsed_ms: Math.max(0, Date.now() - passStartedAtMs),
+        error_code: errorCode,
+        error_message: message
+      }, 'warn');
       break;
     }
 
@@ -161290,6 +161858,26 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       dead_stale_count: passDeadStale,
       row_units_processed: passWorkUnits,
       more_due: passMoreDue
+    });
+    logDrainDiag('WORKBENCH_DRAIN_PASS_RESULT', {
+      pass_number: passCount,
+      rpc_call_count: rpcCallCount,
+      claimed: passClaimed,
+      processed: passProcessed,
+      succeeded: passSucceeded,
+      failed: passFailed,
+      dead: passDead,
+      obsolete_skipped: passObsoleteSkipped,
+      continuations_created: passContinuationsCreated,
+      continuations_reused: passContinuationsReused,
+      row_units_processed: passWorkUnits,
+      more_due: passMoreDue,
+      stop_reason: passMoreDue ? null : 'NO_MORE_DUE',
+      elapsed_ms: Math.max(0, Date.now() - passStartedAtMs),
+      session_ids_sample: sampleUuidValuesFromJobs(passJobs, ['session_id', 'workbench_session_id']),
+      candidate_ids_sample: sampleUuidValuesFromJobs(passJobs, ['candidate_id']),
+      job_ids_sample: sampleUuidValuesFromJobs(passJobs, ['id', 'job_id']),
+      job_type_counts: jobTypeCountsFromJobs(passJobs)
     });
 
     if (!passMoreDue) {
@@ -161391,6 +161979,28 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     errors
   };
 
+  logDrainDiag('WORKBENCH_DRAIN_END', {
+    stop_reason: result.stop_reason,
+    budget_exhausted: budgetExhausted,
+    more_due: moreDue,
+    elapsed_ms: elapsedMs,
+    pass_count: result.pass_count,
+    rpc_call_count: result.rpc_call_count,
+    claimed: claimedCount,
+    processed: processedCount,
+    succeeded: succeededCount,
+    failed: failedCount,
+    dead: deadCount,
+    obsolete_skipped: obsoleteSkippedCount,
+    continuations_created: continuationsCreated,
+    continuations_reused: continuationsReused,
+    row_units_processed: rowUnitsProcessed,
+    session_ids_sample: sampleUuidValuesFromJobs(jobs, ['session_id', 'workbench_session_id']),
+    candidate_ids_sample: sampleUuidValuesFromJobs(jobs, ['candidate_id']),
+    job_ids_sample: sampleUuidValuesFromJobs(jobs, ['id', 'job_id']),
+    job_type_counts: jobTypeCountsFromJobs(jobs)
+  }, transportError ? 'warn' : 'info');
+
   try {
     const logPayload = {
       origin,
@@ -161417,8 +162027,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
   return result;
 }
-
-
 
 
 
@@ -163397,6 +164005,8 @@ function normalizeBankingPayPreviewDecisions(input, options = {}) {
 }
 
 
+
+
 async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, sessionId, normalizedInput, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const cloneJson = (value) => {
@@ -163410,6 +164020,24 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
   const upperTrim = (value) => trimStr(value).toUpperCase();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const enc = encodeURIComponent;
+
+  const syncOptions = isPlainObject(options) ? options : {};
+  const optionFlagTrue = (value) => {
+    if (value === true) return true;
+    if (value === false || value == null) return false;
+    const text = upperTrim(value);
+    return text === 'TRUE' || text === '1' || text === 'YES' || text === 'ON';
+  };
+  const optionFlagFalse = (value) => {
+    if (value === false) return true;
+    if (value === true || value == null) return false;
+    const text = upperTrim(value);
+    return text === 'FALSE' || text === '0' || text === 'NO' || text === 'OFF';
+  };
+  const decisionSyncContext = upperTrim(syncOptions.decision_sync_context || syncOptions.decisionSyncContext || syncOptions.context || '') || 'PREVIEW_DECISION_SYNC';
+  const selectionOnly = optionFlagTrue(syncOptions.selection_only ?? syncOptions.selectionOnly) || decisionSyncContext === 'CREATE_DRAFT_SELECTION_SYNC';
+  const allowCaseResolutionApply = !selectionOnly && !optionFlagFalse(syncOptions.allow_case_resolution_apply ?? syncOptions.allowCaseResolutionApply);
+  const allowCaseResolutionClear = !selectionOnly && optionFlagTrue(syncOptions.allow_case_resolution_clear ?? syncOptions.allowCaseResolutionClear);
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -163588,11 +164216,16 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
   const clearCaseResolutionOperations = [];
   const applyCaseResolutionOperations = [];
   let unchangedCaseResolutionCount = 0;
+  let caseResolutionDecisionsIgnoredForSelectionOnly = false;
+  let caseResolutionApplySuppressedCount = 0;
+  let caseResolutionClearSuppressedCount = 0;
   let selectedRowsProvided = false;
   let desiredSelectedRows = [];
   let selectedRowsUnchangedResult = null;
 
-  if (normalized.explicit.case_resolutions === true) {
+  if (normalized.explicit.case_resolutions === true && selectionOnly) {
+    caseResolutionDecisionsIgnoredForSelectionOnly = true;
+  } else if (normalized.explicit.case_resolutions === true) {
     const existingRes = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_session_case_resolutions` +
@@ -163623,7 +164256,11 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
 
     for (const [existingIdentityKey, existingRow] of existingByIdentityKey.entries()) {
       if (desiredByIdentityKey.has(existingIdentityKey)) continue;
-      clearCaseResolutionOperations.push(buildExistingResolutionPayloadForClear(existingRow));
+      if (allowCaseResolutionClear) {
+        clearCaseResolutionOperations.push(buildExistingResolutionPayloadForClear(existingRow));
+      } else {
+        caseResolutionClearSuppressedCount += 1;
+      }
     }
 
     for (const [desiredIdentityKey, desiredPayload] of desiredByIdentityKey.entries()) {
@@ -163638,7 +164275,11 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
         continue;
       }
 
-      applyCaseResolutionOperations.push(desiredPayload);
+      if (allowCaseResolutionApply) {
+        applyCaseResolutionOperations.push(desiredPayload);
+      } else {
+        caseResolutionApplySuppressedCount += 1;
+      }
     }
   }
 
@@ -163667,6 +164308,14 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
   }
 
   const operationPlan = {
+    decision_sync_context: decisionSyncContext,
+    selection_only: selectionOnly,
+    allow_case_resolution_apply: allowCaseResolutionApply,
+    allow_case_resolution_clear: allowCaseResolutionClear,
+    case_resolution_keys_present: normalized.explicit.case_resolutions === true,
+    case_resolution_decisions_ignored_for_selection_only: caseResolutionDecisionsIgnoredForSelectionOnly,
+    case_resolution_apply_suppressed_count: caseResolutionApplySuppressedCount,
+    case_resolution_clear_suppressed_count: caseResolutionClearSuppressedCount,
     clear_case_resolutions: clearCaseResolutionOperations,
     apply_case_resolutions: applyCaseResolutionOperations,
     selected_preview_row_ids: selectedRowsProvided ? desiredSelectedRows : [],
@@ -163675,7 +164324,39 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
     expected_session_version: sessionRow.version
   };
 
-  const aggregateRpc = await sbRpc(env, 'pay_workbench_session_apply_decision_operations', {
+  if (clearCaseResolutionOperations.length <= 0 && applyCaseResolutionOperations.length <= 0 && selectedRowsProvided !== true) {
+    return {
+      ok: true,
+      session_id: sessionIdText,
+      snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id || '') || null,
+      source_snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id || '') || null,
+      session_version: sessionRow.version ?? null,
+      progress_state: null,
+      progress_counter_version: null,
+      applied_case_resolution_results: [],
+      cleared_case_resolution_results: [],
+      unchanged_case_resolution_count: unchangedCaseResolutionCount,
+      selected_rows_result: selectedRowsUnchangedResult,
+      state_changed: false,
+      touched_candidate_ids: [],
+      job_ids: [],
+      operation_plan: operationPlan,
+      clear_operation_count: 0,
+      apply_operation_count: 0,
+      selected_rows_provided: false,
+      decision_sync_context: decisionSyncContext,
+      selection_only: selectionOnly,
+      case_resolution_decisions_ignored_for_selection_only: caseResolutionDecisionsIgnoredForSelectionOnly,
+      case_resolution_apply_suppressed_count: caseResolutionApplySuppressedCount,
+      case_resolution_clear_suppressed_count: caseResolutionClearSuppressedCount,
+      network_rpc_fanout_performed: false,
+      aggregate_decision_rpc_performed: false
+    };
+  }
+
+  let aggregateRpc;
+  try {
+    aggregateRpc = await sbRpc(env, 'pay_workbench_session_apply_decision_operations', {
     p_session_id: sessionIdText,
     p_actor_user_id: actorIdText,
     p_operation_plan_json: operationPlan,
@@ -163686,10 +164367,27 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
     timeoutMs: 15000,
     bankingPay: true
   });
+  } catch (error) {
+    try {
+      error.operation_plan = operationPlan;
+      error.decision_sync_context = decisionSyncContext;
+      error.clear_operation_count = clearCaseResolutionOperations.length;
+      error.apply_operation_count = applyCaseResolutionOperations.length;
+      error.selected_rows_provided = selectedRowsProvided;
+    } catch {}
+    throw error;
+  }
   const aggregateResult = unwrapRpc(aggregateRpc, 'pay_workbench_session_apply_decision_operations');
 
   if (aggregateResult.ok === false) {
-    throw new Error(trimStr(aggregateResult.message || aggregateResult.error || aggregateResult.error_code || aggregateResult.code) || 'Decision operations could not be applied');
+    const aggregateError = new Error(trimStr(aggregateResult.message || aggregateResult.error || aggregateResult.error_code || aggregateResult.code) || 'Decision operations could not be applied');
+    aggregateError.operation_plan = operationPlan;
+    aggregateError.decision_sync_context = decisionSyncContext;
+    aggregateError.clear_operation_count = clearCaseResolutionOperations.length;
+    aggregateError.apply_operation_count = applyCaseResolutionOperations.length;
+    aggregateError.selected_rows_provided = selectedRowsProvided;
+    aggregateError.aggregate_result = aggregateResult;
+    throw aggregateError;
   }
 
   const result = {
@@ -163727,13 +164425,17 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
     clear_operation_count: clearCaseResolutionOperations.length,
     apply_operation_count: applyCaseResolutionOperations.length,
     selected_rows_provided: selectedRowsProvided,
-    network_rpc_fanout_performed: false
+    decision_sync_context: decisionSyncContext,
+    selection_only: selectionOnly,
+    case_resolution_decisions_ignored_for_selection_only: caseResolutionDecisionsIgnoredForSelectionOnly,
+    case_resolution_apply_suppressed_count: caseResolutionApplySuppressedCount,
+    case_resolution_clear_suppressed_count: caseResolutionClearSuppressedCount,
+    network_rpc_fanout_performed: false,
+    aggregate_decision_rpc_performed: true
   };
 
   return result;
 }
-
-
 
 
 
@@ -168371,7 +169073,7 @@ if (p.startsWith('/api/banking/')) {
   const m = cancelMatch || recalcMatch;
 
   if (m && req.method === 'POST') {
-    return handleBankingPayBatchCancel(env, req, user, m.id);
+    return handleBankingPayBatchCancel(env, req, user, m.id, ctx);
   }
 }
 
@@ -168449,7 +169151,7 @@ if (req.method === 'PUT' && p === '/api/banking/alerts/preferences') {
 }
 
 if (req.method === 'POST' && p === '/api/banking/pay/payee-readiness/ensure') {
-  return handleBankingPayPayeeReadinessEnsure(env, req, user);
+  return handleBankingPayPayeeReadinessEnsure(env, req, user, ctx);
 }
 
 if (req.method === 'POST' && p === '/api/banking/pay/payee-map/ensure') {
@@ -168468,7 +169170,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/payee-map/ensure') {
 }
 
 if (req.method === 'POST' && p === '/api/banking/pay/snooze/upsert') {
-  return handleBankingPaySnoozeUpsert(env, req, user);
+  return handleBankingPaySnoozeUpsert(env, req, user, ctx);
 }
 
 {
@@ -168500,7 +169202,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/snooze/upsert') {
 }
 
 if (req.method === 'POST' && p === '/api/banking/pay/snooze/clear') {
-  return handleBankingPaySnoozeClear(env, req, user);
+  return handleBankingPaySnoozeClear(env, req, user, ctx);
 }
 
 if (req.method === 'POST' && p === '/api/banking/pay/bank-name-check/override') {
@@ -168515,34 +169217,34 @@ if (req.method === 'GET' && p === '/api/banking/finance/loans-snoozes') {
 }
 
 if (req.method === 'POST' && p === '/api/banking/finance/payment-advances') {
-  return handleBankingPaymentAdvanceCreate(env, req, user);
+  return handleBankingPaymentAdvanceCreate(env, req, user, ctx);
 }
 
 {
   const m = matchPath(p, '/api/banking/finance/payment-advances/:id');
   if (m && req.method === 'PATCH') {
-    return handleBankingPaymentAdvanceUpdate(env, req, user, m.id);
+    return handleBankingPaymentAdvanceUpdate(env, req, user, m.id, ctx);
   }
 }
 if (req.method === 'POST' && p === '/api/banking/finance/manual-credit-adjustments') {
-  return handleBankingManualCreditAdjustmentCreate(env, req, user);
+  return handleBankingManualCreditAdjustmentCreate(env, req, user, ctx);
 }
 
 {
   const m = matchPath(p, '/api/banking/finance/manual-credit-adjustments/:id');
   if (m && req.method === 'PATCH') {
-    return handleBankingManualCreditAdjustmentUpdate(env, req, user, m.id);
+    return handleBankingManualCreditAdjustmentUpdate(env, req, user, m.id, ctx);
   }
 }
 
 if (req.method === 'POST' && p === '/api/banking/finance/manual-debt-adjustments') {
-  return handleBankingManualDebtAdjustmentCreate(env, req, user);
+  return handleBankingManualDebtAdjustmentCreate(env, req, user, ctx);
 }
 
 {
   const m = matchPath(p, '/api/banking/finance/manual-debt-adjustments/:id');
   if (m && req.method === 'PATCH') {
-    return handleBankingManualDebtAdjustmentUpdate(env, req, user, m.id);
+    return handleBankingManualDebtAdjustmentUpdate(env, req, user, m.id, ctx);
   }
 }
 
@@ -168658,7 +169360,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/auth-token/action') {
 {
   const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/case-resolution\/clear$/i);
   if (m && req.method === 'POST') {
-    return handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, m[1]);
+    return handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, m[1], ctx);
   }
 }
 {
@@ -168674,14 +169376,14 @@ if (req.method === 'POST' && p === '/api/banking/pay/auth-token/action') {
 {
   const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/case-resolution$/i);
   if (m && req.method === 'POST') {
-    return handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, m[1]);
+    return handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, m[1], ctx);
   }
 }
 
 {
   const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/timesheet-exclusion$/i);
   if (m && req.method === 'POST') {
-    return handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, m[1]);
+    return handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, m[1], ctx);
   }
 }
 
@@ -168861,7 +169563,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
   {
     const m = matchPath(p, '/api/banking/pay/batch/:id/cancel');
     if (m && req.method === 'POST') {
-      return handleBankingPayBatchCancel(env, req, user, m.id);
+      return handleBankingPayBatchCancel(env, req, user, m.id, ctx);
     }
   }
 
