@@ -14209,7 +14209,6 @@ function bankingPayWorkbenchLogsEnabled(env) {
 }
 
 
-
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -14223,11 +14222,18 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     }
     return fallback;
   };
+  const numberInRange = (value, fallback, min, max) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.trunc(n)));
+  };
   const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
   const sumMetric = (first, second, keys) => numberFrom(first, keys, 0) + numberFrom(second, keys, 0);
   const combineTickResults = (firstLike, secondLike, startedAtMs) => {
     const first = isPlainObject(firstLike) ? firstLike : {};
     const second = isPlainObject(secondLike) ? secondLike : {};
+    const firstSegments = Array.isArray(first.burst_segments) ? first.burst_segments : [first];
+    const secondSegments = Array.isArray(second.burst_segments) ? second.burst_segments : [second];
     const passCount = sumMetric(first, second, ['pass_count']);
     const claimed = sumMetric(first, second, ['claimed', 'claimed_count']);
     const processed = sumMetric(first, second, ['processed', 'processed_count']);
@@ -14278,12 +14284,86 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       made_progress: booleanFrom(first.made_progress) || booleanFrom(second.made_progress) || claimed > 0 || processed > 0,
       aggregate_db_worker: true,
       per_job_rpc_fanout: false,
-      coalesced_final_check_performed: true,
-      burst_segments: [first, second]
+      coalesced_final_check_performed: booleanFrom(first.coalesced_final_check_performed)
+        || booleanFrom(second.coalesced_final_check_performed)
+        || upperTrim(second.origin || '').includes('COALESCED_FINAL_CHECK'),
+      auto_continuation_performed: booleanFrom(first.auto_continuation_performed) || booleanFrom(second.auto_continuation_performed),
+      auto_continuation_count: sumMetric(first, second, ['auto_continuation_count']),
+      burst_segments: firstSegments.concat(secondSegments).filter((segment) => isPlainObject(segment))
     };
   };
 
   const source = isPlainObject(options) ? options : {};
+  const maxStageWorkUnitsPerJob = 25;
+  const safeAutoContinuationStopReasons = new Set([
+    'MORE_DUE',
+    'MAX_RUNTIME_NEAR_EXHAUSTED',
+    'MAX_RUNTIME',
+    'MAX_PASSES',
+    'MAX_JOBS',
+    'MAX_ROWS'
+  ]);
+  const unsafeAutoContinuationStopReasons = new Set([
+    'RPC_ERROR',
+    'NO_PROGRESS',
+    'DRAIN_UNAVAILABLE',
+    'DISABLED',
+    'BANKING_PAY_WORKBENCH_DRAIN_RPC_INVALID_RESPONSE'
+  ]);
+  const maxAutoContinuationBursts = numberInRange(
+    source.maxAutoContinuationBursts ?? source.max_auto_continuation_bursts,
+    3,
+    0,
+    8
+  );
+  const maxAutoContinuationRuntimeMs = numberInRange(
+    source.maxAutoContinuationRuntimeMs ?? source.max_auto_continuation_runtime_ms,
+    28000,
+    5000,
+    60000
+  );
+  const autoContinuationPerBurstMaxRuntimeMs = numberInRange(
+    source.autoContinuationPerBurstMaxRuntimeMs ?? source.auto_continuation_per_burst_max_runtime_ms,
+    10000,
+    1000,
+    15000
+  );
+  const autoContinuationMinRuntimeMs = numberInRange(
+    source.autoContinuationMinRuntimeMs ?? source.auto_continuation_min_runtime_ms,
+    7000,
+    1000,
+    15000
+  );
+  const autoContinuationMaxPasses = numberInRange(
+    source.autoContinuationMaxPasses ?? source.auto_continuation_max_passes,
+    1,
+    1,
+    2
+  );
+  const autoContinuationClaimLimitMax = numberInRange(
+    source.autoContinuationClaimLimitMax ?? source.auto_continuation_claim_limit_max,
+    10,
+    1,
+    50
+  );
+  const autoContinuationMaxJobs = numberInRange(
+    source.autoContinuationMaxJobs ?? source.auto_continuation_max_jobs,
+    50,
+    1,
+    150
+  );
+  const autoContinuationMaxRows = numberInRange(
+    source.autoContinuationMaxRows ?? source.auto_continuation_max_rows,
+    500,
+    maxStageWorkUnitsPerJob,
+    5000
+  );
+  const autoContinuationDelayMs = numberInRange(
+    source.autoContinuationDelayMs ?? source.auto_continuation_delay_ms,
+    0,
+    0,
+    1000
+  );
   const requestedSessionId = trimStr(source.sessionId || source.session_id || '');
   const requestedCandidateId = trimStr(source.candidateId || source.candidate_id || '');
   const requestedActorUserId = trimStr(source.actorUserId || source.actor_user_id || '');
@@ -14313,7 +14393,15 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     bounded_continuation: true,
     durable_cron_fallback: true,
     cron_remains_recovery_fallback: true,
-    scheduled_worker_is_durable_fallback: false
+    scheduled_worker_is_durable_fallback: false,
+    auto_continuation_enabled: maxAutoContinuationBursts > 0,
+    auto_continuation_requires_wait_until: true,
+    max_auto_continuation_bursts: maxAutoContinuationBursts,
+    max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
+    auto_continuation_per_burst_max_runtime_ms: autoContinuationPerBurstMaxRuntimeMs,
+    auto_continuation_max_passes: autoContinuationMaxPasses,
+    auto_continuation_claim_limit_max: autoContinuationClaimLimitMax,
+    workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob
   };
 
   const logNudgeDiag = (eventName, payload = {}, severity = 'info') => {
@@ -14467,6 +14555,68 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     if (Object.prototype.hasOwnProperty.call(source, key)) passthroughOptions[key] = source[key];
   }
 
+  const canAutoContinueFrom = (summaryLike) => {
+    const summary = isPlainObject(summaryLike) ? summaryLike : {};
+    const stopReason = upperTrim(summary.stop_reason || '');
+    const failedCount = numberFrom(summary, ['failed', 'failed_count'], 0);
+    const staleRecoveryErrorCount = numberFrom(summary, ['supplemental_stale_recovery_error_count', 'stale_recovery_error_count'], 0);
+    const madeProgress = booleanFrom(summary.made_progress)
+      || numberFrom(summary, ['claimed', 'claimed_count'], 0) > 0
+      || numberFrom(summary, ['processed', 'processed_count'], 0) > 0
+      || numberFrom(summary, ['recovered_stale_count'], 0) > 0
+      || numberFrom(summary, ['dead_stale_count'], 0) > 0
+      || numberFrom(summary, ['continuations_created', 'continuation_created_count'], 0) > 0
+      || numberFrom(summary, ['continuations_reused', 'continuation_reused_count'], 0) > 0;
+
+    return booleanFrom(summary.more_due)
+      && summary.ok !== false
+      && madeProgress
+      && failedCount === 0
+      && staleRecoveryErrorCount === 0
+      && !unsafeAutoContinuationStopReasons.has(stopReason)
+      && safeAutoContinuationStopReasons.has(stopReason || 'MORE_DUE');
+  };
+
+  const buildAutoContinuationOptions = (previousSummaryLike, continuationIndex, remainingRuntimeMs) => {
+    const previousSummary = isPlainObject(previousSummaryLike) ? previousSummaryLike : {};
+    const previousClaimLimit = numberFrom(
+      previousSummary,
+      ['claim_limit', 'requested_claim_limit'],
+      numberFrom(passthroughOptions, ['claimLimit', 'claim_limit'], 5)
+    );
+    const previousMaxJobs = numberFrom(previousSummary, ['max_jobs'], autoContinuationMaxJobs);
+    const previousMaxRows = numberFrom(previousSummary, ['max_rows'], autoContinuationMaxRows);
+    const continuationClaimLimit = Math.max(1, Math.min(autoContinuationClaimLimitMax, Math.max(1, previousClaimLimit)));
+    const continuationMaxJobs = Math.max(1, Math.min(autoContinuationMaxJobs, Math.max(1, previousMaxJobs)));
+    const continuationMaxRows = Math.max(
+      maxStageWorkUnitsPerJob,
+      Math.min(autoContinuationMaxRows, Math.max(maxStageWorkUnitsPerJob, previousMaxRows))
+    );
+    const continuationRuntimeMs = Math.max(
+      autoContinuationMinRuntimeMs,
+      Math.min(autoContinuationPerBurstMaxRuntimeMs, Math.max(autoContinuationMinRuntimeMs, remainingRuntimeMs))
+    );
+    const continuationOptions = {
+      ...passthroughOptions,
+      origin: `BANKING_PAY_WORKBENCH_GLOBAL_NUDGE_AUTO_CONTINUATION_${continuationIndex}`,
+      budgetProfile: 'NUDGE',
+      profile: 'NUDGE',
+      claimLimit: continuationClaimLimit,
+      maxPasses: autoContinuationMaxPasses,
+      maxJobs: continuationMaxJobs,
+      maxRows: continuationMaxRows,
+      maxRuntimeMs: continuationRuntimeMs
+    };
+    delete continuationOptions.claim_limit;
+    delete continuationOptions.max_passes;
+    delete continuationOptions.max_jobs;
+    delete continuationOptions.max_rows;
+    delete continuationOptions.max_runtime_ms;
+    return continuationOptions;
+  };
+
+  const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+
   const hasWaitUntil = !!(ctx && typeof ctx.waitUntil === 'function');
   let waitUntilUsed = false;
   const entry = {
@@ -14490,79 +14640,259 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     .then(async () => {
       const firstTick = await bankingPayWorkbenchCronTick(env, passthroughOptions);
       entry.first_tick_summary = isPlainObject(firstTick) ? firstTick : {};
-      let finalSummary = entry.first_tick_summary;
+      let finalSummary = {
+        ...entry.first_tick_summary,
+        coalesced_final_check_performed: false,
+        coalesced_final_check_skipped: false,
+        workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
+        elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
+      };
+      let autoContinuationCount = 0;
+      let autoContinuationSkipReason = null;
+      const autoContinuationSummaries = [];
+      const coalescedFinalCheckSummaries = [];
+      let coalescedWakeCountHandled = 0;
 
-      if (entry.coalesced_wake_requested) {
-        const originalMaxPasses = numberFrom(firstTick, ['max_passes'], 4);
-        const originalMaxJobs = numberFrom(firstTick, ['max_jobs'], 150);
-        const originalMaxRows = numberFrom(firstTick, ['max_rows'], 5000);
-        const originalMaxRuntimeMs = numberFrom(firstTick, ['max_runtime_ms'], 25000);
-        const usedPasses = numberFrom(firstTick, ['pass_count'], 0);
-        const usedJobs = Math.max(
-          numberFrom(firstTick, ['claimed', 'claimed_count'], 0),
-          numberFrom(firstTick, ['processed', 'processed_count'], 0)
+      const runCoalescedFinalCheck = async (baseSummaryLike, triggerReason = 'COALESCED_WAKE') => {
+        const baseSummary = isPlainObject(baseSummaryLike) ? baseSummaryLike : {};
+        const wakeCountToHandle = Math.max(
+          coalescedWakeCountHandled,
+          Math.max(0, Number(entry.coalesced_wake_count) || 0)
         );
-        const usedRows = numberFrom(firstTick, ['row_units_processed', 'work_units_processed'], 0);
-        const remainingPasses = Math.max(0, originalMaxPasses - usedPasses);
-        const remainingJobs = Math.max(0, originalMaxJobs - usedJobs);
-        const remainingRows = Math.max(0, originalMaxRows - usedRows);
-        const remainingRuntimeMs = Math.max(0, originalMaxRuntimeMs - Math.max(0, Date.now() - entry.started_at_ms));
-        const originalClaimLimit = Math.max(1, numberFrom(firstTick, ['claim_limit'], 50));
-        const rowBoundedClaimLimit = Math.floor(remainingRows / 100);
-        const finalCheckClaimLimit = Math.min(50, originalClaimLimit, remainingJobs, rowBoundedClaimLimit);
-        const firstStopReason = upperTrim(firstTick && firstTick.stop_reason);
-        const finalCheckAllowed = remainingPasses > 0
-          && remainingJobs > 0
-          && remainingRows >= 100
-          && remainingRuntimeMs >= 1000
-          && finalCheckClaimLimit > 0
-          && !['RPC_ERROR', 'DRAIN_UNAVAILABLE', 'DISABLED'].includes(firstStopReason);
+        const elapsedForCoalescedMs = Math.max(0, Date.now() - entry.started_at_ms);
+        const remainingCoalescedRuntimeMs = Math.max(0, maxAutoContinuationRuntimeMs - elapsedForCoalescedMs);
+        const baseStopReason = upperTrim(baseSummary.stop_reason || '');
+        const baseClaimLimit = Math.max(1, numberFrom(
+          baseSummary,
+          ['claim_limit', 'requested_claim_limit'],
+          numberFrom(passthroughOptions, ['claimLimit', 'claim_limit'], 5)
+        ));
+        const rowBoundedClaimLimit = Math.floor(autoContinuationMaxRows / maxStageWorkUnitsPerJob);
+        const finalCheckClaimLimit = Math.min(
+          50,
+          autoContinuationClaimLimitMax,
+          baseClaimLimit,
+          autoContinuationMaxJobs,
+          rowBoundedClaimLimit
+        );
+        const safeTriggerReason = upperTrim(triggerReason).replace(/[^A-Z0-9_]/g, '_') || 'COALESCED_WAKE';
+        const finalCheckSkipReason = !hasWaitUntil
+          ? 'WAIT_UNTIL_UNAVAILABLE'
+          : (entry.wait_until_used !== true
+              ? 'WAIT_UNTIL_NOT_ACCEPTED'
+              : (remainingCoalescedRuntimeMs < autoContinuationMinRuntimeMs
+                  ? 'MAX_AUTO_CONTINUATION_RUNTIME'
+                  : (finalCheckClaimLimit <= 0
+                      ? 'NO_SAFE_CLAIM_BUDGET'
+                      : (unsafeAutoContinuationStopReasons.has(baseStopReason)
+                          ? baseStopReason || 'NOT_ALLOWED'
+                          : null))));
 
-        if (finalCheckAllowed) {
-          const finalCheckOptions = {
-            ...passthroughOptions,
-            origin: 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE_COALESCED_FINAL_CHECK',
-            budgetProfile: 'NUDGE',
-            profile: 'NUDGE',
-            claimLimit: finalCheckClaimLimit,
-            maxPasses: 1,
-            maxJobs: remainingJobs,
-            maxRows: remainingRows,
-            maxRuntimeMs: remainingRuntimeMs
-          };
-          delete finalCheckOptions.claim_limit;
-          delete finalCheckOptions.max_passes;
-          delete finalCheckOptions.max_jobs;
-          delete finalCheckOptions.max_rows;
-          delete finalCheckOptions.max_runtime_ms;
-
-          const finalCheck = await bankingPayWorkbenchCronTick(env, finalCheckOptions);
-          entry.coalesced_final_check_summary = isPlainObject(finalCheck) ? finalCheck : {};
-          finalSummary = combineTickResults(firstTick, finalCheck, entry.started_at_ms);
-        } else {
-          finalSummary = {
-            ...entry.first_tick_summary,
-            coalesced_final_check_performed: false,
+        if (finalCheckSkipReason) {
+          coalescedWakeCountHandled = wakeCountToHandle;
+          return {
+            ...baseSummary,
+            coalesced_final_check_performed: booleanFrom(baseSummary.coalesced_final_check_performed),
             coalesced_final_check_skipped: true,
-            coalesced_final_check_skip_reason: remainingPasses <= 0
-              ? 'MAX_PASSES'
-              : (remainingJobs <= 0
-                  ? 'MAX_JOBS'
-                  : (remainingRows < 100
-                      ? 'MAX_ROWS'
-                      : (remainingRuntimeMs < 1000
-                          ? 'MAX_RUNTIME'
-                          : (finalCheckClaimLimit <= 0 ? 'NO_SAFE_CLAIM_BUDGET' : firstStopReason || 'NOT_ALLOWED')))),
+            coalesced_final_check_skip_reason: finalCheckSkipReason,
+            coalesced_wake_count_handled: coalescedWakeCountHandled,
+            coalesced_wake_count_observed: Math.max(0, Number(entry.coalesced_wake_count) || 0),
+            latest_coalesced_wake_trigger_reason: safeTriggerReason,
+            workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
             elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
           };
         }
-      } else {
-        finalSummary = {
-          ...entry.first_tick_summary,
-          coalesced_final_check_performed: false,
-          coalesced_final_check_skipped: false,
-          elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
+
+        const finalCheckOptions = {
+          ...passthroughOptions,
+          origin: `BANKING_PAY_WORKBENCH_GLOBAL_NUDGE_${safeTriggerReason}_FINAL_CHECK`,
+          budgetProfile: 'NUDGE',
+          profile: 'NUDGE',
+          claimLimit: finalCheckClaimLimit,
+          maxPasses: 1,
+          maxJobs: autoContinuationMaxJobs,
+          maxRows: autoContinuationMaxRows,
+          maxRuntimeMs: Math.max(
+            autoContinuationMinRuntimeMs,
+            Math.min(autoContinuationPerBurstMaxRuntimeMs, remainingCoalescedRuntimeMs)
+          )
         };
+        delete finalCheckOptions.claim_limit;
+        delete finalCheckOptions.max_passes;
+        delete finalCheckOptions.max_jobs;
+        delete finalCheckOptions.max_rows;
+        delete finalCheckOptions.max_runtime_ms;
+
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_COALESCED_FINAL_CHECK_START', {
+          coalesced_wake_trigger_reason: safeTriggerReason,
+          coalesced_wake_count_to_handle: wakeCountToHandle,
+          coalesced_wake_count_current: Math.max(0, Number(entry.coalesced_wake_count) || 0),
+          previous_stop_reason: baseStopReason,
+          final_check_claim_limit: finalCheckOptions.claimLimit,
+          final_check_max_jobs: finalCheckOptions.maxJobs,
+          final_check_max_rows: finalCheckOptions.maxRows,
+          final_check_max_runtime_ms: finalCheckOptions.maxRuntimeMs,
+          remaining_coalesced_runtime_ms: remainingCoalescedRuntimeMs
+        });
+
+        const finalCheck = await bankingPayWorkbenchCronTick(env, finalCheckOptions);
+        const finalCheckSummary = isPlainObject(finalCheck) ? finalCheck : {};
+        entry.coalesced_final_check_summary = finalCheckSummary;
+        coalescedFinalCheckSummaries.push(finalCheckSummary);
+        coalescedWakeCountHandled = Math.max(coalescedWakeCountHandled, wakeCountToHandle);
+
+        const combinedSummary = {
+          ...combineTickResults(baseSummary, finalCheckSummary, entry.started_at_ms),
+          coalesced_final_check_performed: true,
+          coalesced_final_check_skipped: false,
+          coalesced_final_check_summaries: coalescedFinalCheckSummaries.slice(),
+          coalesced_wake_count_handled: coalescedWakeCountHandled,
+          coalesced_wake_count_observed: Math.max(0, Number(entry.coalesced_wake_count) || 0),
+          latest_coalesced_wake_trigger_reason: safeTriggerReason,
+          workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob
+        };
+
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_COALESCED_FINAL_CHECK_RESULT', {
+          coalesced_wake_trigger_reason: safeTriggerReason,
+          coalesced_wake_count_handled: coalescedWakeCountHandled,
+          stop_reason: combinedSummary.stop_reason,
+          more_due: booleanFrom(combinedSummary.more_due),
+          made_progress: booleanFrom(combinedSummary.made_progress),
+          claimed: numberFrom(finalCheckSummary, ['claimed', 'claimed_count'], 0),
+          processed: numberFrom(finalCheckSummary, ['processed', 'processed_count'], 0),
+          failed: numberFrom(finalCheckSummary, ['failed', 'failed_count'], 0),
+          row_units_processed: numberFrom(finalCheckSummary, ['row_units_processed', 'work_units_processed'], 0)
+        });
+
+        return combinedSummary;
+      };
+
+      let controlLoopSafetyCount = 0;
+      while (controlLoopSafetyCount < (maxAutoContinuationBursts + 8)) {
+        controlLoopSafetyCount += 1;
+
+        if (entry.coalesced_wake_count > coalescedWakeCountHandled) {
+          finalSummary = await runCoalescedFinalCheck(
+            finalSummary,
+            coalescedWakeCountHandled === 0 ? 'INITIAL_COALESCED_WAKE' : 'LATE_COALESCED_WAKE'
+          );
+          continue;
+        }
+
+        if (!canAutoContinueFrom(finalSummary)) break;
+
+        if (maxAutoContinuationBursts <= 0) {
+          autoContinuationSkipReason = 'AUTO_CONTINUATION_DISABLED';
+          break;
+        }
+        if (!hasWaitUntil) {
+          autoContinuationSkipReason = 'WAIT_UNTIL_UNAVAILABLE';
+          break;
+        }
+        if (entry.wait_until_used !== true) {
+          autoContinuationSkipReason = 'WAIT_UNTIL_NOT_ACCEPTED';
+          break;
+        }
+        if (autoContinuationCount >= maxAutoContinuationBursts) {
+          autoContinuationSkipReason = 'MAX_AUTO_CONTINUATION_BURSTS';
+          break;
+        }
+
+        const elapsedForAutoContinuationMs = Math.max(0, Date.now() - entry.started_at_ms);
+        const remainingAutoContinuationRuntimeMs = Math.max(0, maxAutoContinuationRuntimeMs - elapsedForAutoContinuationMs);
+        if (remainingAutoContinuationRuntimeMs < autoContinuationMinRuntimeMs) {
+          autoContinuationSkipReason = 'MAX_AUTO_CONTINUATION_RUNTIME';
+          break;
+        }
+
+        if (autoContinuationDelayMs > 0) await sleepMs(autoContinuationDelayMs);
+
+        const continuationIndex = autoContinuationCount + 1;
+        const autoContinuationOptions = buildAutoContinuationOptions(
+          finalSummary,
+          continuationIndex,
+          remainingAutoContinuationRuntimeMs
+        );
+
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_AUTO_CONTINUATION_START', {
+          auto_continuation_index: continuationIndex,
+          max_auto_continuation_bursts: maxAutoContinuationBursts,
+          remaining_auto_continuation_runtime_ms: remainingAutoContinuationRuntimeMs,
+          previous_stop_reason: upperTrim(finalSummary.stop_reason || ''),
+          previous_more_due: booleanFrom(finalSummary.more_due),
+          previous_made_progress: booleanFrom(finalSummary.made_progress),
+          continuation_claim_limit: autoContinuationOptions.claimLimit,
+          continuation_max_passes: autoContinuationOptions.maxPasses,
+          continuation_max_jobs: autoContinuationOptions.maxJobs,
+          continuation_max_rows: autoContinuationOptions.maxRows,
+          continuation_max_runtime_ms: autoContinuationOptions.maxRuntimeMs
+        });
+
+        const autoContinuationTick = await bankingPayWorkbenchCronTick(env, autoContinuationOptions);
+        const autoContinuationSummary = isPlainObject(autoContinuationTick) ? autoContinuationTick : {};
+        autoContinuationCount += 1;
+        autoContinuationSummaries.push(autoContinuationSummary);
+        finalSummary = {
+          ...combineTickResults(finalSummary, autoContinuationSummary, entry.started_at_ms),
+          auto_continuation_performed: true,
+          auto_continuation_skipped: false,
+          auto_continuation_count: autoContinuationCount,
+          auto_continuation_summaries: autoContinuationSummaries.slice(),
+          latest_auto_continuation_stop_reason: upperTrim(autoContinuationSummary.stop_reason || ''),
+          workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
+          cron_remains_recovery_fallback: true
+        };
+
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_AUTO_CONTINUATION_RESULT', {
+          auto_continuation_index: autoContinuationCount,
+          stop_reason: finalSummary.stop_reason,
+          more_due: booleanFrom(finalSummary.more_due),
+          made_progress: booleanFrom(finalSummary.made_progress),
+          claimed: numberFrom(autoContinuationSummary, ['claimed', 'claimed_count'], 0),
+          processed: numberFrom(autoContinuationSummary, ['processed', 'processed_count'], 0),
+          failed: numberFrom(autoContinuationSummary, ['failed', 'failed_count'], 0),
+          row_units_processed: numberFrom(autoContinuationSummary, ['row_units_processed', 'work_units_processed'], 0)
+        });
+      }
+
+      if (controlLoopSafetyCount >= (maxAutoContinuationBursts + 8)
+          && booleanFrom(finalSummary.more_due)
+          && !autoContinuationSkipReason) {
+        autoContinuationSkipReason = 'CONTROL_LOOP_GUARD';
+      }
+
+      if (!autoContinuationSkipReason && booleanFrom(finalSummary.more_due) && !canAutoContinueFrom(finalSummary)) {
+        autoContinuationSkipReason = 'UNSAFE_OR_NO_PROGRESS';
+      }
+
+      finalSummary = {
+        ...finalSummary,
+        auto_continuation_performed: autoContinuationCount > 0,
+        auto_continuation_count: autoContinuationCount,
+        auto_continuation_summaries: autoContinuationSummaries,
+        auto_continuation_skipped: autoContinuationSkipReason != null,
+        auto_continuation_skip_reason: autoContinuationSkipReason,
+        max_auto_continuation_bursts: maxAutoContinuationBursts,
+        max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
+        auto_continuation_requires_wait_until: true,
+        auto_continuation_wait_until_available: hasWaitUntil,
+        auto_continuation_wait_until_used: entry.wait_until_used === true,
+        coalesced_final_check_summaries: coalescedFinalCheckSummaries,
+        coalesced_wake_count_handled: coalescedWakeCountHandled,
+        coalesced_wake_count_observed: Math.max(0, Number(entry.coalesced_wake_count) || 0),
+        cron_remains_recovery_fallback: true,
+        elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
+      };
+
+      if (autoContinuationSkipReason) {
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_AUTO_CONTINUATION_SKIPPED', {
+          auto_continuation_count: autoContinuationCount,
+          auto_continuation_skip_reason: autoContinuationSkipReason,
+          final_stop_reason: upperTrim(finalSummary.stop_reason || ''),
+          final_more_due: booleanFrom(finalSummary.more_due),
+          final_made_progress: booleanFrom(finalSummary.made_progress),
+          elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
+        }, autoContinuationSkipReason === 'UNSAFE_OR_NO_PROGRESS' ? 'warn' : 'info');
       }
 
       entry.accepting_coalesced_wakes = false;
@@ -14639,12 +14969,20 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     already_running: false,
     wait_until_used: waitUntilUsed,
     continuation_scheduled: true,
+    auto_continuation_scheduled: maxAutoContinuationBursts > 0 && waitUntilUsed,
+    max_auto_continuation_bursts: maxAutoContinuationBursts,
+    max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
+    workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
     code: 'BANKING_PAY_WORKBENCH_NUDGE_SCHEDULED',
     active_started_at_utc: entry.started_at_utc,
     coalesced_wake_count: 0,
     budget_resolved_by: 'bankingPayWorkbenchCronTick'
   }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
 }
+
+
+
+
 function logBankingPayWorkbenchDiag(env, eventName, payload = {}, options = {}) {
   try {
     if (typeof bankingPayWorkbenchLogsEnabled === 'function' && bankingPayWorkbenchLogsEnabled(env) !== true) return;

@@ -29736,13 +29736,37 @@ begin
           coalesce(ctsr.ready_segment_rows_json, '[]'::jsonb) as ready_segment_rows_json,
           coalesce(ctsr.blocked_visible_segment_rows_json, '[]'::jsonb) as blocked_visible_segment_rows_json,
           coalesce(ctsr.visible_segment_rows_json, '[]'::jsonb) as visible_segment_rows_json,
-          round(
-            coalesce(ctl.amount_ex_vat, 0)
-            - coalesce(ctsr.ready_segment_amount_ex_vat, 0)
-            - coalesce(ctsr.blocked_visible_segment_amount_ex_vat, 0)
-            - coalesce(ctsr.hidden_indefinite_segment_amount_ex_vat, 0),
-            2
-          ) as non_segment_amount_ex_vat,
+          (
+            coalesce(ctsr.total_segment_count, 0) > 0
+            and (
+              lower(btrim(coalesce(ctl.case_resolution_summary_json->>'has_resolved_rate', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+              or lower(btrim(coalesce(ctl.case_resolution_summary_json->>'resolved_rate_applied', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+              or lower(btrim(coalesce(ctl.case_resolution_summary_json->>'resolved_rate_active', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+              or (
+                coalesce(ctl.case_resolution_summary_json->>'resolved_rate_component_count', '') ~ '^[0-9]+$'
+                and (ctl.case_resolution_summary_json->>'resolved_rate_component_count')::integer > 0
+              )
+            )
+          ) as resolved_segment_rows_replace_source_total,
+          case
+            when coalesce(ctsr.total_segment_count, 0) > 0
+             and (
+               lower(btrim(coalesce(ctl.case_resolution_summary_json->>'has_resolved_rate', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+               or lower(btrim(coalesce(ctl.case_resolution_summary_json->>'resolved_rate_applied', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+               or lower(btrim(coalesce(ctl.case_resolution_summary_json->>'resolved_rate_active', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+               or (
+                 coalesce(ctl.case_resolution_summary_json->>'resolved_rate_component_count', '') ~ '^[0-9]+$'
+                 and (ctl.case_resolution_summary_json->>'resolved_rate_component_count')::integer > 0
+               )
+             ) then 0::numeric
+            else round(
+              coalesce(ctl.amount_ex_vat, 0)
+              - coalesce(ctsr.ready_segment_amount_ex_vat, 0)
+              - coalesce(ctsr.blocked_visible_segment_amount_ex_vat, 0)
+              - coalesce(ctsr.hidden_indefinite_segment_amount_ex_vat, 0),
+              2
+            )
+          end as non_segment_amount_ex_vat,
           (ctl.snooze_id is not null) as has_active_timesheet_snooze,
           (coalesce(ctsr.active_segment_snooze_count, 0) > 0) as has_active_segment_snoozes
         from canonical_timesheet_lines ctl
@@ -29974,7 +29998,8 @@ begin
               'section_amount_display', ctpp.ready_section_amount_display,
               'section_segment_rows', ctpp.ready_segment_rows_json,
               'section_segment_count', jsonb_array_length(coalesce(ctpp.ready_segment_rows_json, '[]'::jsonb)),
-              'section_non_segment_amount_ex_vat', ctpp.non_segment_amount_ex_vat
+              'section_non_segment_amount_ex_vat', ctpp.non_segment_amount_ex_vat,
+              'resolved_segment_rows_replace_source_total', coalesce(ctpp.resolved_segment_rows_replace_source_total, false)
             )
             || jsonb_build_object(
               'has_active_timesheet_snooze', ctpp.has_active_timesheet_snooze,
@@ -31061,7 +31086,6 @@ begin
   );
 end;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_case_component_rows(p_context_json jsonb, p_candidate_id uuid)
@@ -46486,6 +46510,7 @@ DECLARE
   v_scope_expects_item_count integer := 0;
   v_candidate_scope_ids jsonb := '[]'::jsonb;
   v_repaired_existing_item_link_count integer := 0;
+  v_synthetic_total_item_rows jsonb := '[]'::jsonb;
   v_pay_date date := NULL::date;
   v_vat_rate_pct numeric := NULL::numeric;
 BEGIN
@@ -46561,6 +46586,128 @@ BEGIN
 
   IF v_vat_rate_pct IS NULL THEN
     RAISE EXCEPTION 'VAT rate not found for pay_batch % pay_date %', p_pay_batch_id, v_pay_date;
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+           'allocation_row_id', allocation_row.id::text,
+           'candidate_scope_id', allocation_row.candidate_scope_id::text,
+           'source_ref', allocation_row.source_ref,
+           'timesheet_id', allocation_identity.timesheet_id_text,
+           'key_type', allocation_identity.key_type,
+           'key_value', allocation_identity.key_value,
+           'allocated_amount', allocation_row.allocated_amount,
+           'reason', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ITEM_BLOCKED'
+         ) ORDER BY allocation_row.sort_order, allocation_row.id), '[]'::jsonb)
+  INTO v_synthetic_total_item_rows
+  FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+  CROSS JOIN LATERAL (
+    SELECT
+      NULLIF(BTRIM(COALESCE(
+        allocation_row.allocation_basis_json#>>'{economic_key,timesheet_id}',
+        allocation_row.allocation_basis_json->>'timesheet_id',
+        allocation_row.allocation_basis_json#>>'{line,timesheet_id}',
+        allocation_row.allocation_basis_json#>>'{line,real_business_timesheet_id}',
+        ''
+      )), '') AS timesheet_id_text,
+      UPPER(NULLIF(BTRIM(COALESCE(
+        allocation_row.allocation_basis_json#>>'{economic_key,key_type}',
+        allocation_row.allocation_basis_json->>'key_type',
+        allocation_row.allocation_basis_json#>>'{line,economic_key,key_type}',
+        allocation_row.allocation_basis_json#>>'{line,key_type}',
+        allocation_row.allocation_basis_json#>>'{line,component_key_type}',
+        ''
+      )), '')) AS key_type,
+      NULLIF(BTRIM(COALESCE(
+        allocation_row.allocation_basis_json#>>'{economic_key,key_value}',
+        allocation_row.allocation_basis_json->>'key_value',
+        allocation_row.allocation_basis_json#>>'{line,economic_key,key_value}',
+        allocation_row.allocation_basis_json#>>'{line,key_value}',
+        allocation_row.allocation_basis_json#>>'{line,component_key_value}',
+        ''
+      )), '') AS key_value,
+      LOWER(BTRIM(COALESCE(
+        allocation_row.source_ref,
+        allocation_row.allocation_basis_json#>>'{line,row_key}',
+        allocation_row.allocation_basis_json#>>'{line,line_key}',
+        allocation_row.allocation_basis_json#>>'{line,source_ref}',
+        allocation_row.allocation_basis_json->>'row_key',
+        allocation_row.allocation_basis_json->>'line_key',
+        allocation_row.allocation_basis_json->>'source_ref',
+        ''
+      ))) AS identity_text
+  ) AS allocation_identity
+  WHERE allocation_row.operation_id = p_operation_id
+    AND allocation_row.candidate_scope_id IN (
+      SELECT supplied_scope.candidate_scope_id_text::uuid
+      FROM jsonb_array_elements_text(v_candidate_scope_ids) AS supplied_scope(candidate_scope_id_text)
+    )
+    AND UPPER(BTRIM(COALESCE(allocation_row.status, ''))) NOT IN ('FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'SKIPPED', 'VOIDED')
+    AND allocation_identity.key_type = 'TS_TOTAL'
+    AND UPPER(BTRIM(COALESCE(allocation_identity.key_value, ''))) = 'TOTAL'
+    AND allocation_identity.identity_text LIKE '%:non_segment:total%'
+    AND (
+      lower(btrim(coalesce(allocation_row.allocation_basis_json->>'resolved_segment_rows_replace_source_total', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,resolved_segment_rows_replace_source_total}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json->>'has_resolved_rate', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_applied}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_active}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR (
+        COALESCE(allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_component_count}', '') ~ '^[0-9]+$'
+        AND (allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_component_count}')::integer > 0
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operation_candidate_allocation_rows AS sibling_allocation_row
+        CROSS JOIN LATERAL (
+          SELECT
+            NULLIF(BTRIM(COALESCE(
+              sibling_allocation_row.allocation_basis_json#>>'{economic_key,timesheet_id}',
+              sibling_allocation_row.allocation_basis_json->>'timesheet_id',
+              sibling_allocation_row.allocation_basis_json#>>'{line,timesheet_id}',
+              sibling_allocation_row.allocation_basis_json#>>'{line,real_business_timesheet_id}',
+              ''
+            )), '') AS timesheet_id_text,
+            UPPER(NULLIF(BTRIM(COALESCE(
+              sibling_allocation_row.allocation_basis_json#>>'{economic_key,key_type}',
+              sibling_allocation_row.allocation_basis_json->>'key_type',
+              sibling_allocation_row.allocation_basis_json#>>'{line,economic_key,key_type}',
+              sibling_allocation_row.allocation_basis_json#>>'{line,key_type}',
+              sibling_allocation_row.allocation_basis_json#>>'{line,component_key_type}',
+              ''
+            )), '')) AS key_type,
+            LOWER(BTRIM(COALESCE(
+              sibling_allocation_row.source_ref,
+              sibling_allocation_row.allocation_basis_json#>>'{line,row_key}',
+              sibling_allocation_row.allocation_basis_json#>>'{line,line_key}',
+              sibling_allocation_row.allocation_basis_json#>>'{line,source_ref}',
+              sibling_allocation_row.allocation_basis_json->>'row_key',
+              sibling_allocation_row.allocation_basis_json->>'line_key',
+              sibling_allocation_row.allocation_basis_json->>'source_ref',
+              ''
+            ))) AS identity_text
+        ) AS sibling_identity
+        WHERE sibling_allocation_row.operation_id = allocation_row.operation_id
+          AND sibling_allocation_row.candidate_scope_id = allocation_row.candidate_scope_id
+          AND sibling_allocation_row.id IS DISTINCT FROM allocation_row.id
+          AND UPPER(BTRIM(COALESCE(sibling_allocation_row.status, ''))) NOT IN ('FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'SKIPPED', 'VOIDED')
+          AND sibling_identity.key_type = 'TS_DAY'
+          AND sibling_identity.identity_text LIKE '%:segment:%'
+          AND sibling_identity.timesheet_id_text IS NOT DISTINCT FROM allocation_identity.timesheet_id_text
+      )
+    );
+
+  IF jsonb_array_length(COALESCE(v_synthetic_total_item_rows, '[]'::jsonb)) > 0 THEN
+    RAISE EXCEPTION 'RESOLVED_SYNTHETIC_TOTAL_ROW_ITEM_BLOCKED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ITEM_BLOCKED',
+              'operation_id', p_operation_id::text,
+              'pay_batch_id', p_pay_batch_id::text,
+              'synthetic_total_item_rows', COALESCE(v_synthetic_total_item_rows, '[]'::jsonb),
+              'message', 'A stale resolved-timesheet synthetic total row reached item creation. Refresh Banking Pay and try Create Draft again.'
+            )::text;
   END IF;
 
   WITH existing_linked_items AS (
@@ -46972,6 +47119,58 @@ BEGIN
       'failed_item_rows', 0,
       'has_more', false
     );
+  END IF;
+
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+           'allocation_row_id', allocation_row.id::text,
+           'candidate_scope_id', allocation_row.candidate_scope_id::text,
+           'source_ref', allocation_row.source_ref,
+           'timesheet_id', allocation_row.allocation_basis_json#>>'{economic_key,timesheet_id}',
+           'key_type', COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_type}', allocation_row.allocation_basis_json->>'key_type'),
+           'key_value', COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_value}', allocation_row.allocation_basis_json->>'key_value'),
+           'allocated_amount', allocation_row.allocated_amount,
+           'reason', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ITEM_BLOCKED'
+         ) ORDER BY allocation_row.sort_order, allocation_row.id), '[]'::jsonb)
+  INTO v_synthetic_total_item_rows
+  FROM pg_temp.tmp_pay_batch_item_allocation_page AS allocation_row
+  WHERE UPPER(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_type}', allocation_row.allocation_basis_json->>'key_type', ''))) = 'TS_TOTAL'
+    AND UPPER(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_value}', allocation_row.allocation_basis_json->>'key_value', ''))) = 'TOTAL'
+    AND LOWER(BTRIM(COALESCE(allocation_row.source_ref, allocation_row.allocation_basis_json#>>'{line,row_key}', allocation_row.allocation_basis_json#>>'{line,line_key}', allocation_row.allocation_basis_json#>>'{line,source_ref}', allocation_row.allocation_basis_json->>'row_key', allocation_row.allocation_basis_json->>'line_key', ''))) LIKE '%:non_segment:total%'
+    AND (
+      lower(btrim(coalesce(allocation_row.allocation_basis_json->>'resolved_segment_rows_replace_source_total', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,resolved_segment_rows_replace_source_total}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json->>'has_resolved_rate', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_applied}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_active}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR (
+        COALESCE(allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_component_count}', '') ~ '^[0-9]+$'
+        AND (allocation_row.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_component_count}')::integer > 0
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operation_candidate_scope AS scope_row
+        CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(scope_row.selected_canonical_preview_lines_json) = 'array' THEN scope_row.selected_canonical_preview_lines_json ELSE '[]'::jsonb END) AS selected_line(line_json)
+        WHERE scope_row.operation_id = p_operation_id
+          AND scope_row.id = allocation_row.candidate_scope_id
+          AND UPPER(BTRIM(COALESCE(selected_line.line_json#>>'{economic_key,key_type}', selected_line.line_json->>'key_type', ''))) = 'TS_DAY'
+          AND LOWER(BTRIM(COALESCE(selected_line.line_json->>'row_key', selected_line.line_json->>'line_key', selected_line.line_json->>'source_ref', ''))) LIKE '%:segment:%'
+          AND COALESCE(selected_line.line_json#>>'{economic_key,timesheet_id}', selected_line.line_json->>'timesheet_id', selected_line.line_json->>'real_business_timesheet_id', '') = COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,timesheet_id}', allocation_row.allocation_basis_json#>>'{line,timesheet_id}', allocation_row.allocation_basis_json#>>'{line,real_business_timesheet_id}', '')
+      )
+    );
+
+  IF jsonb_array_length(COALESCE(v_synthetic_total_item_rows, '[]'::jsonb)) > 0 THEN
+    RAISE EXCEPTION 'RESOLVED_SYNTHETIC_TOTAL_ROW_ITEM_BLOCKED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ITEM_BLOCKED',
+              'operation_id', p_operation_id::text,
+              'pay_batch_id', p_pay_batch_id::text,
+              'synthetic_total_item_rows', COALESCE(v_synthetic_total_item_rows, '[]'::jsonb),
+              'message', 'A stale resolved-timesheet synthetic total row reached item creation. Refresh Banking Pay and try Create Draft again.'
+            )::text;
   END IF;
 
   PERFORM 1
@@ -47726,7 +47925,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -59915,24 +60113,12 @@ DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, te
 DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz, uuid, boolean, boolean);
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
-  p_session_id uuid,
-  p_actor_user_id uuid,
-  p_selected_preview_row_ids jsonb DEFAULT NULL::jsonb,
-  p_pay_channel_scope text DEFAULT NULL::text,
-  p_override_reason text DEFAULT NULL::text,
-  p_override_continue boolean DEFAULT false,
-  p_override_verified boolean DEFAULT false,
-  p_override_verified_by_user_id uuid DEFAULT NULL::uuid,
-  p_override_verified_at_utc timestamptz DEFAULT NULL::timestamptz,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_operation_mode boolean DEFAULT false,
-  p_allow_legacy_unchunked boolean DEFAULT false
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(p_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb DEFAULT NULL::jsonb, p_pay_channel_scope text DEFAULT NULL::text, p_override_reason text DEFAULT NULL::text, p_override_continue boolean DEFAULT false, p_override_verified boolean DEFAULT false, p_override_verified_by_user_id uuid DEFAULT NULL::uuid, p_override_verified_at_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_operation_id uuid DEFAULT NULL::uuid, p_operation_mode boolean DEFAULT false, p_allow_legacy_unchunked boolean DEFAULT false)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -59965,6 +60151,8 @@ DECLARE
   v_current_unready_selected_exists boolean := false;
   v_malformed_selected_exists boolean := false;
   v_malformed_selected_sample jsonb := '[]'::jsonb;
+  v_synthetic_total_selected_exists boolean := false;
+  v_synthetic_total_selected_sample jsonb := '[]'::jsonb;
   v_direct_current_selection_match_count integer := 0;
   v_current_ready_selected_row_count integer := 0;
   v_selection_resolved_to_current boolean := false;
@@ -60563,6 +60751,57 @@ BEGIN
     ) AS preview_contract_json
   FROM selected_rows;
 
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+           'preview_row_id', synthetic_total_rows.id::text,
+           'row_key', synthetic_total_rows.row_key,
+           'candidate_id', synthetic_total_rows.candidate_id::text,
+           'timesheet_id', CASE WHEN synthetic_total_rows.timesheet_id IS NULL THEN NULL ELSE synthetic_total_rows.timesheet_id::text END,
+           'key_type', synthetic_total_rows.key_type,
+           'key_value', synthetic_total_rows.key_value,
+           'amount_ex_vat', synthetic_total_rows.row_json->>'amount_ex_vat',
+           'reason', 'RESOLVED_SYNTHETIC_TOTAL_ROW_SELECTED'
+         ) ORDER BY synthetic_total_rows.row_ordinal, synthetic_total_rows.id), '[]'::jsonb)
+  INTO v_synthetic_total_selected_sample
+  FROM pg_temp.tmp_pay_workbench_prepare_draft_selected_sample AS synthetic_total_rows
+  WHERE UPPER(BTRIM(COALESCE(synthetic_total_rows.key_type, synthetic_total_rows.row_json#>>'{economic_key,key_type}', ''))) = 'TS_TOTAL'
+    AND UPPER(BTRIM(COALESCE(synthetic_total_rows.key_value, synthetic_total_rows.row_json#>>'{economic_key,key_value}', ''))) = 'TOTAL'
+    AND LOWER(BTRIM(COALESCE(synthetic_total_rows.row_key, synthetic_total_rows.row_json->>'row_key', synthetic_total_rows.row_json->>'line_key', synthetic_total_rows.row_json->>'source_ref', ''))) LIKE '%:non_segment:total%'
+    AND (
+      lower(btrim(coalesce(synthetic_total_rows.row_json->>'resolved_segment_rows_replace_source_total', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json->>'has_resolved_rate', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json#>>'{case_resolution_summary,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_applied}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_active}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR (
+        COALESCE(synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_component_count}', '') ~ '^[0-9]+$'
+        AND (synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_component_count}')::integer > 0
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM pg_temp.tmp_pay_workbench_prepare_draft_selected_sample AS sibling_segment
+        WHERE sibling_segment.candidate_id = synthetic_total_rows.candidate_id
+          AND sibling_segment.timesheet_id IS NOT DISTINCT FROM synthetic_total_rows.timesheet_id
+          AND UPPER(BTRIM(COALESCE(sibling_segment.key_type, sibling_segment.row_json#>>'{economic_key,key_type}', ''))) = 'TS_DAY'
+          AND LOWER(BTRIM(COALESCE(sibling_segment.row_key, sibling_segment.row_json->>'row_key', sibling_segment.row_json->>'line_key', sibling_segment.row_json->>'source_ref', ''))) LIKE '%:segment:%'
+      )
+    );
+
+  v_synthetic_total_selected_exists := jsonb_array_length(COALESCE(v_synthetic_total_selected_sample, '[]'::jsonb)) > 0;
+
+  IF COALESCE(v_synthetic_total_selected_exists, false) THEN
+    RAISE EXCEPTION 'RESOLVED_SYNTHETIC_TOTAL_ROW_NOT_DRAFTABLE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'RESOLVED_SYNTHETIC_TOTAL_ROW_NOT_DRAFTABLE',
+              'session_id', p_session_id::text,
+              'session_version', v_session_row.version,
+              'operation_id', p_operation_id::text,
+              'synthetic_total_selected_preview_rows', COALESCE(v_synthetic_total_selected_sample, '[]'::jsonb),
+              'message', 'A selected resolved timesheet row is stale and cannot be drafted. Refresh Banking Pay and try Create Draft again.'
+            )::text;
+  END IF;
+
   SELECT EXISTS (
            SELECT 1
            FROM pg_temp.tmp_pay_workbench_prepare_draft_selected_sample AS malformed_sample
@@ -60760,7 +60999,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_claim_job_now(p_job_id uuid, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone)
@@ -169682,6 +169920,7 @@ DECLARE
   v_inserted integer := 0;
   v_reused integer := 0;
   v_malformed_allocation_preview_rows jsonb := '[]'::jsonb;
+  v_synthetic_total_allocation_preview_rows jsonb := '[]'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -170074,6 +170313,55 @@ BEGIN
             )::text;
   END IF;
 
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+           'preview_row_id', CASE WHEN synthetic_total_rows.preview_row_id IS NULL THEN NULL ELSE synthetic_total_rows.preview_row_id::text END,
+           'row_key', synthetic_total_rows.row_key,
+           'candidate_id', synthetic_total_rows.candidate_id::text,
+           'candidate_scope_id', synthetic_total_rows.candidate_scope_id::text,
+           'timesheet_id', CASE WHEN synthetic_total_rows.timesheet_id IS NULL THEN NULL ELSE synthetic_total_rows.timesheet_id::text END,
+           'key_type', synthetic_total_rows.key_type,
+           'key_value', synthetic_total_rows.key_value,
+           'allocated_amount', synthetic_total_rows.allocated_amount,
+           'reason', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ALLOCATION_BLOCKED'
+         ) ORDER BY synthetic_total_rows.row_ordinal, synthetic_total_rows.preview_row_id), '[]'::jsonb)
+  INTO v_synthetic_total_allocation_preview_rows
+  FROM pg_temp.tmp_pay_workbench_allocation_preview_candidates AS synthetic_total_rows
+  WHERE UPPER(BTRIM(COALESCE(synthetic_total_rows.key_type, synthetic_total_rows.row_json#>>'{economic_key,key_type}', ''))) = 'TS_TOTAL'
+    AND UPPER(BTRIM(COALESCE(synthetic_total_rows.key_value, synthetic_total_rows.row_json#>>'{economic_key,key_value}', ''))) = 'TOTAL'
+    AND LOWER(BTRIM(COALESCE(synthetic_total_rows.source_ref, synthetic_total_rows.row_key, synthetic_total_rows.row_json->>'row_key', synthetic_total_rows.row_json->>'line_key', synthetic_total_rows.row_json->>'source_ref', ''))) LIKE '%:non_segment:total%'
+    AND (
+      lower(btrim(coalesce(synthetic_total_rows.row_json->>'resolved_segment_rows_replace_source_total', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json->>'has_resolved_rate', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json#>>'{case_resolution_summary,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_applied}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_active}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR (
+        COALESCE(synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_component_count}', '') ~ '^[0-9]+$'
+        AND (synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_component_count}')::integer > 0
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM pg_temp.tmp_pay_workbench_allocation_preview_candidates AS sibling_segment
+        WHERE sibling_segment.candidate_id = synthetic_total_rows.candidate_id
+          AND sibling_segment.candidate_scope_id = synthetic_total_rows.candidate_scope_id
+          AND sibling_segment.timesheet_id IS NOT DISTINCT FROM synthetic_total_rows.timesheet_id
+          AND UPPER(BTRIM(COALESCE(sibling_segment.key_type, sibling_segment.row_json#>>'{economic_key,key_type}', ''))) = 'TS_DAY'
+          AND LOWER(BTRIM(COALESCE(sibling_segment.source_ref, sibling_segment.row_key, sibling_segment.row_json->>'row_key', sibling_segment.row_json->>'line_key', sibling_segment.row_json->>'source_ref', ''))) LIKE '%:segment:%'
+      )
+    );
+
+  IF jsonb_array_length(COALESCE(v_synthetic_total_allocation_preview_rows, '[]'::jsonb)) > 0 THEN
+    RAISE EXCEPTION 'RESOLVED_SYNTHETIC_TOTAL_ROW_ALLOCATION_BLOCKED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ALLOCATION_BLOCKED',
+              'operation_id', p_operation_id::text,
+              'synthetic_total_allocation_preview_rows', COALESCE(v_synthetic_total_allocation_preview_rows, '[]'::jsonb),
+              'message', 'A stale resolved-timesheet synthetic total row reached allocation scope. Refresh Banking Pay and try Create Draft again.'
+            )::text;
+  END IF;
+
   DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_allocation_expected_rows;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_allocation_expected_rows ON COMMIT DROP AS
   WITH selected_preview_rows AS (
@@ -170119,6 +170407,11 @@ BEGIN
     selected_preview_rows.candidate_scope_id,
     selected_preview_rows.pay_batch_id,
     selected_preview_rows.candidate_id,
+    selected_preview_rows.preview_row_id,
+    selected_preview_rows.row_key,
+    selected_preview_rows.timesheet_id,
+    selected_preview_rows.key_type,
+    selected_preview_rows.key_value,
     selected_preview_rows.pay_channel,
     selected_preview_rows.finance_case_id,
     selected_preview_rows.finance_component_id,
@@ -170155,6 +170448,55 @@ BEGIN
     ) AS allocation_basis_json,
     selected_preview_rows.row_ordinal AS sort_order
   FROM selected_preview_rows;
+
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+           'preview_row_id', synthetic_total_rows.preview_row_id::text,
+           'row_key', synthetic_total_rows.row_key,
+           'candidate_id', synthetic_total_rows.candidate_id::text,
+           'candidate_scope_id', synthetic_total_rows.candidate_scope_id::text,
+           'timesheet_id', CASE WHEN synthetic_total_rows.timesheet_id IS NULL THEN NULL ELSE synthetic_total_rows.timesheet_id::text END,
+           'key_type', synthetic_total_rows.key_type,
+           'key_value', synthetic_total_rows.key_value,
+           'allocated_amount', synthetic_total_rows.allocated_amount,
+           'reason', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ALLOCATION_BLOCKED'
+         ) ORDER BY synthetic_total_rows.sort_order, synthetic_total_rows.preview_row_id), '[]'::jsonb)
+  INTO v_synthetic_total_allocation_preview_rows
+  FROM pg_temp.tmp_pay_workbench_allocation_expected_rows AS synthetic_total_rows
+  WHERE UPPER(BTRIM(COALESCE(synthetic_total_rows.key_type, synthetic_total_rows.allocation_basis_json#>>'{economic_key,key_type}', ''))) = 'TS_TOTAL'
+    AND UPPER(BTRIM(COALESCE(synthetic_total_rows.key_value, synthetic_total_rows.allocation_basis_json#>>'{economic_key,key_value}', ''))) = 'TOTAL'
+    AND LOWER(BTRIM(COALESCE(synthetic_total_rows.source_ref, synthetic_total_rows.row_key, synthetic_total_rows.allocation_basis_json#>>'{line,row_key}', synthetic_total_rows.allocation_basis_json#>>'{line,line_key}', synthetic_total_rows.allocation_basis_json#>>'{line,source_ref}', ''))) LIKE '%:non_segment:total%'
+    AND (
+      lower(btrim(coalesce(synthetic_total_rows.allocation_basis_json#>>'{line,resolved_segment_rows_replace_source_total}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.allocation_basis_json#>>'{line,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.allocation_basis_json#>>'{line,case_resolution_summary,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_applied}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_active}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR (
+        COALESCE(synthetic_total_rows.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_component_count}', '') ~ '^[0-9]+$'
+        AND (synthetic_total_rows.allocation_basis_json#>>'{line,case_resolution_summary,resolved_rate_component_count}')::integer > 0
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM pg_temp.tmp_pay_workbench_allocation_expected_rows AS sibling_segment
+        WHERE sibling_segment.candidate_id = synthetic_total_rows.candidate_id
+          AND sibling_segment.candidate_scope_id = synthetic_total_rows.candidate_scope_id
+          AND sibling_segment.timesheet_id IS NOT DISTINCT FROM synthetic_total_rows.timesheet_id
+          AND UPPER(BTRIM(COALESCE(sibling_segment.key_type, sibling_segment.allocation_basis_json#>>'{economic_key,key_type}', ''))) = 'TS_DAY'
+          AND LOWER(BTRIM(COALESCE(sibling_segment.source_ref, sibling_segment.row_key, sibling_segment.allocation_basis_json#>>'{line,row_key}', sibling_segment.allocation_basis_json#>>'{line,line_key}', sibling_segment.allocation_basis_json#>>'{line,source_ref}', ''))) LIKE '%:segment:%'
+      )
+    );
+
+  IF jsonb_array_length(COALESCE(v_synthetic_total_allocation_preview_rows, '[]'::jsonb)) > 0 THEN
+    RAISE EXCEPTION 'RESOLVED_SYNTHETIC_TOTAL_ROW_ALLOCATION_BLOCKED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ALLOCATION_BLOCKED',
+              'operation_id', p_operation_id::text,
+              'synthetic_total_allocation_preview_rows', COALESCE(v_synthetic_total_allocation_preview_rows, '[]'::jsonb),
+              'message', 'A stale resolved-timesheet synthetic total row reached allocation. Refresh Banking Pay and try Create Draft again.'
+            )::text;
+  END IF;
 
   SELECT COUNT(*)::integer
   INTO v_expected_count
@@ -170268,24 +170610,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_scope_seed(
-  p_operation_id uuid,
-  p_workbench_session_id uuid,
-  p_actor_user_id uuid,
-  p_selected_preview_row_ids jsonb DEFAULT NULL::jsonb,
-  p_pay_channel_scope text DEFAULT NULL::text,
-  p_same_week_paye_override_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS TABLE(
-  candidate_scope_count integer,
-  selected_row_count integer,
-  timesheet_count integer,
-  finance_case_count integer,
-  pay_channel_count integer
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_scope_seed(p_operation_id uuid, p_workbench_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb DEFAULT NULL::jsonb, p_pay_channel_scope text DEFAULT NULL::text, p_same_week_paye_override_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS TABLE(candidate_scope_count integer, selected_row_count integer, timesheet_count integer, finance_case_count integer, pay_channel_count integer)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -170301,6 +170630,7 @@ DECLARE
   v_stale_selection_ids jsonb := '[]'::jsonb;
   v_missing_selection_ids jsonb := '[]'::jsonb;
   v_malformed_selected_preview_rows jsonb := '[]'::jsonb;
+  v_synthetic_total_selected_preview_rows jsonb := '[]'::jsonb;
   v_selection_resolved_to_current boolean := false;
   v_resolved_current_selection_ids jsonb := '[]'::jsonb;
   v_resolved_selection_match_count integer := 0;
@@ -170893,6 +171223,54 @@ BEGIN
               'workbench_session_id', p_workbench_session_id::text,
               'malformed_selected_preview_rows', COALESCE(v_malformed_selected_preview_rows, '[]'::jsonb),
               'message', 'Selected preview rows are not valid draftable Ready to Pay rows. Refresh the preview and try again.'
+            )::text;
+  END IF;
+
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+           'preview_row_id', synthetic_total_rows.preview_row_id::text,
+           'row_key', synthetic_total_rows.row_key,
+           'candidate_id', synthetic_total_rows.candidate_id::text,
+           'timesheet_id', CASE WHEN synthetic_total_rows.timesheet_id IS NULL THEN NULL ELSE synthetic_total_rows.timesheet_id::text END,
+           'key_type', synthetic_total_rows.key_type,
+           'key_value', synthetic_total_rows.key_value,
+           'amount_ex_vat', synthetic_total_rows.amount_ex_vat,
+           'reason', 'RESOLVED_SYNTHETIC_TOTAL_ROW_SELECTED'
+         ) ORDER BY synthetic_total_rows.row_ordinal, synthetic_total_rows.preview_row_id), '[]'::jsonb)
+  INTO v_synthetic_total_selected_preview_rows
+  FROM pg_temp.tmp_pay_workbench_draft_scope_selected_candidates AS synthetic_total_rows
+  WHERE UPPER(BTRIM(COALESCE(synthetic_total_rows.key_type, synthetic_total_rows.row_json#>>'{economic_key,key_type}', ''))) = 'TS_TOTAL'
+    AND UPPER(BTRIM(COALESCE(synthetic_total_rows.key_value, synthetic_total_rows.row_json#>>'{economic_key,key_value}', ''))) = 'TOTAL'
+    AND LOWER(BTRIM(COALESCE(synthetic_total_rows.row_key, synthetic_total_rows.row_json->>'row_key', synthetic_total_rows.row_json->>'line_key', synthetic_total_rows.row_json->>'source_ref', ''))) LIKE '%:non_segment:total%'
+    AND (
+      lower(btrim(coalesce(synthetic_total_rows.row_json->>'resolved_segment_rows_replace_source_total', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json->>'has_resolved_rate', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json#>>'{case_resolution_summary,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_applied}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(btrim(coalesce(synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_active}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+      OR (
+        COALESCE(synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_component_count}', '') ~ '^[0-9]+$'
+        AND (synthetic_total_rows.row_json#>>'{case_resolution_summary,resolved_rate_component_count}')::integer > 0
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM pg_temp.tmp_pay_workbench_draft_scope_selected_candidates AS sibling_segment
+        WHERE sibling_segment.candidate_id = synthetic_total_rows.candidate_id
+          AND sibling_segment.timesheet_id IS NOT DISTINCT FROM synthetic_total_rows.timesheet_id
+          AND UPPER(BTRIM(COALESCE(sibling_segment.key_type, sibling_segment.row_json#>>'{economic_key,key_type}', ''))) = 'TS_DAY'
+          AND LOWER(BTRIM(COALESCE(sibling_segment.row_key, sibling_segment.row_json->>'row_key', sibling_segment.row_json->>'line_key', sibling_segment.row_json->>'source_ref', ''))) LIKE '%:segment:%'
+      )
+    );
+
+  IF jsonb_array_length(COALESCE(v_synthetic_total_selected_preview_rows, '[]'::jsonb)) > 0 THEN
+    RAISE EXCEPTION 'RESOLVED_SYNTHETIC_TOTAL_ROW_NOT_DRAFTABLE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'RESOLVED_SYNTHETIC_TOTAL_ROW_NOT_DRAFTABLE',
+              'operation_id', p_operation_id::text,
+              'workbench_session_id', p_workbench_session_id::text,
+              'synthetic_total_selected_preview_rows', COALESCE(v_synthetic_total_selected_preview_rows, '[]'::jsonb),
+              'message', 'A selected resolved timesheet row is stale and cannot be drafted. Refresh Banking Pay and try Create Draft again.'
             )::text;
   END IF;
 
@@ -176324,6 +176702,7 @@ DECLARE
   v_retired_materialised_count integer := 0;
   v_retired_failed_count integer := 0;
   v_retired_other_count integer := 0;
+  v_retired_preview_row_count integer := 0;
   v_superseded_preview_row_count integer := 0;
   v_source_row_count integer := 0;
   v_materialisable_count integer := 0;
@@ -176711,6 +177090,43 @@ BEGIN
       base_rows_raw.is_excluded_from_allocation,
       base_rows_raw.target_section,
       base_rows_raw.line_type,
+      (
+        lower(btrim(coalesce(base_rows_raw.line_json->>'has_resolved_rate', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(base_rows_raw.line_json#>>'{case_resolution_summary,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_applied}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_active}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+        or (
+          coalesce(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_component_count}', '') ~ '^[0-9]+$'
+          and (base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_component_count}')::integer > 0
+        )
+      ) AS has_resolved_rate,
+      jsonb_array_length(
+        CASE
+          WHEN jsonb_typeof(coalesce(base_rows_raw.line_json->'section_segment_rows', base_rows_raw.line_json->'segment_rows')) = 'array'
+            THEN coalesce(base_rows_raw.line_json->'section_segment_rows', base_rows_raw.line_json->'segment_rows')
+          ELSE '[]'::jsonb
+        END
+      ) > 0 AS has_timesheet_segment_rows,
+      (
+        lower(btrim(coalesce(base_rows_raw.line_json->>'resolved_segment_rows_replace_source_total', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+        and (
+          lower(btrim(coalesce(base_rows_raw.line_json->>'has_resolved_rate', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(base_rows_raw.line_json#>>'{case_resolution_summary,has_resolved_rate}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_applied}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_active}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+          or (
+            coalesce(base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_component_count}', '') ~ '^[0-9]+$'
+            and (base_rows_raw.line_json#>>'{case_resolution_summary,resolved_rate_component_count}')::integer > 0
+          )
+        )
+        and jsonb_array_length(
+          CASE
+            WHEN jsonb_typeof(coalesce(base_rows_raw.line_json->'section_segment_rows', base_rows_raw.line_json->'segment_rows')) = 'array'
+              THEN coalesce(base_rows_raw.line_json->'section_segment_rows', base_rows_raw.line_json->'segment_rows')
+            ELSE '[]'::jsonb
+          END
+        ) > 0
+      ) AS resolved_segment_rows_replace_source_total,
       COALESCE(base_requested_canonical.canonical_timesheet_id, base_rows_raw.requested_timesheet_id) AS timesheet_id,
       base_rows_raw.parent_line_key
     FROM base_rows_raw
@@ -176773,7 +177189,7 @@ BEGIN
           'source_basis_json', segment_rows.segment_json
         )
         || jsonb_build_object(
-          'case_components', segment_case_components.non_fixed_case_components_json
+          'case_components', segment_case_components.segment_case_components_json
         )
       ) AS seed_line_json
     FROM base_rows
@@ -176793,22 +177209,54 @@ BEGIN
         AND jsonb_typeof(segment_element.value) = 'object'
     ) AS segment_rows
     CROSS JOIN LATERAL (
-      SELECT COALESCE(
-        jsonb_agg(component_element.value ORDER BY component_element.ordinality),
-        '[]'::jsonb
-      ) AS non_fixed_case_components_json
-      FROM jsonb_array_elements(
-        CASE
-          WHEN jsonb_typeof(base_rows.line_json->'case_components') = 'array' THEN base_rows.line_json->'case_components'
-          ELSE '[]'::jsonb
-        END
-      ) WITH ORDINALITY AS component_element(value, ordinality)
-      WHERE NOT (
-        component_element.value IS NOT NULL
-        AND jsonb_typeof(component_element.value) = 'object'
-        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
-        AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+      WITH segment_identity AS (
+        SELECT
+          NULLIF(BTRIM(COALESCE(segment_rows.segment_json->>'work_date', segment_rows.segment_json->>'date', '')), '') AS work_date,
+          NULLIF(BTRIM(COALESCE(segment_rows.segment_json->>'segment_id', '')), '') AS segment_id,
+          NULLIF(BTRIM(COALESCE(segment_rows.segment_json->>'segment_key', '')), '') AS segment_key,
+          NULLIF(BTRIM(COALESCE(segment_rows.segment_json->>'segment_stable_key', '')), '') AS segment_stable_key
+      ), component_candidates AS (
+        SELECT
+          component_element.value,
+          component_element.ordinality,
+          UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', component_element.value->>'key_type', '')), '')) AS component_key_type,
+          NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', component_element.value->>'key_value', '')), '') AS component_key_value,
+          NULLIF(BTRIM(COALESCE(component_element.value->>'work_date', component_element.value->>'date', component_element.value->>'source_work_date', component_element.value#>>'{source_basis_json,work_date}', component_element.value#>>'{source_basis_json,date}', '')), '') AS component_work_date,
+          NULLIF(BTRIM(COALESCE(component_element.value->>'segment_id', component_element.value#>>'{source_basis_json,segment_id}', '')), '') AS component_segment_id,
+          NULLIF(BTRIM(COALESCE(component_element.value->>'segment_key', component_element.value#>>'{source_basis_json,segment_key}', '')), '') AS component_segment_key,
+          NULLIF(BTRIM(COALESCE(component_element.value->>'segment_stable_key', component_element.value#>>'{source_basis_json,segment_stable_key}', '')), '') AS component_segment_stable_key
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(base_rows.line_json->'case_components') = 'array' THEN base_rows.line_json->'case_components'
+            ELSE '[]'::jsonb
+          END
+        ) WITH ORDINALITY AS component_element(value, ordinality)
+        WHERE component_element.value IS NOT NULL
+          AND jsonb_typeof(component_element.value) = 'object'
+          AND NOT (
+            UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+            AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+          )
+      ), matched_components AS (
+        SELECT component_candidates.value, component_candidates.ordinality
+        FROM component_candidates
+        CROSS JOIN segment_identity
+        WHERE (
+          segment_identity.work_date IS NOT NULL
+          AND (
+            component_candidates.component_work_date = segment_identity.work_date
+            OR (component_candidates.component_key_type = 'TS_DAY' AND component_candidates.component_key_value = segment_identity.work_date)
+          )
+        )
+        OR (segment_identity.segment_id IS NOT NULL AND component_candidates.component_segment_id = segment_identity.segment_id)
+        OR (segment_identity.segment_key IS NOT NULL AND component_candidates.component_segment_key = segment_identity.segment_key)
+        OR (segment_identity.segment_stable_key IS NOT NULL AND component_candidates.component_segment_stable_key = segment_identity.segment_stable_key)
       )
+      SELECT COALESCE(
+        (SELECT jsonb_agg(matched_components.value ORDER BY matched_components.ordinality) FROM matched_components),
+        (SELECT jsonb_agg(component_candidates.value ORDER BY component_candidates.ordinality) FROM component_candidates),
+        '[]'::jsonb
+      ) AS segment_case_components_json
     ) AS segment_case_components
     WHERE base_rows.target_section = 'canonical_preview_lines'
       AND base_rows.line_type = 'TIMESHEET_PAYMENT'
@@ -176939,6 +177387,11 @@ BEGIN
     WHERE base_rows.target_section = 'canonical_preview_lines'
       AND base_rows.line_type = 'TIMESHEET_PAYMENT'
       AND LOWER(BTRIM(COALESCE(base_rows.line_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND NOT (
+        COALESCE(base_rows.has_resolved_rate, false)
+        AND COALESCE(base_rows.has_timesheet_segment_rows, false)
+        AND COALESCE(base_rows.resolved_segment_rows_replace_source_total, false)
+      )
       AND ROUND(COALESCE(non_segment_amounts.non_segment_amount_ex_vat, 0), 2) <> 0
   ), finance_component_rows AS (
     SELECT
@@ -177354,7 +177807,11 @@ BEGIN
               'is_ready_for_draft', false,
               'materialisation_suppressed', true,
               'materialised_no_visible_preview_row', true,
-              'retired_reason', 'SOURCE_LINE_NO_LONGER_CURRENT',
+              'retired_reason', CASE
+                WHEN LOWER(BTRIM(COALESCE(line_work.line_key, ''))) LIKE '%:non_segment:total%'
+                THEN 'RESOLVED_SYNTHETIC_TOTAL_ROW_RETIRED'
+                ELSE 'SOURCE_LINE_NO_LONGER_CURRENT'
+              END,
               'retired_at_utc', v_now::text,
               'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
             )
@@ -177363,28 +177820,78 @@ BEGIN
           updated_at_utc = v_now
       FROM retirement_candidates
       WHERE line_work.id = retirement_candidates.id
-      RETURNING retirement_candidates.existing_status
+      RETURNING
+        retirement_candidates.existing_status,
+        retirement_candidates.timesheet_id,
+        retirement_candidates.line_key
+    ), retired_preview_rows AS (
+      UPDATE public.banking_pay_workbench_preview_rows AS preview_row
+      SET status = 'SUPERSEDED',
+          selected = false,
+          selection_state = 'SUPERSEDED',
+          row_json = COALESCE(preview_row.row_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'materialisation_suppressed', true,
+              'materialisation_suppressed_reason', CASE
+                WHEN LOWER(BTRIM(COALESCE(retired_line_work.line_key, ''))) LIKE '%:non_segment:total%'
+                THEN 'RESOLVED_SYNTHETIC_TOTAL_ROW_RETIRED'
+                ELSE 'SOURCE_LINE_NO_LONGER_CURRENT'
+              END,
+              'materialisation_suppressed_at_utc', v_now::text,
+              'materialised_no_visible_preview_row', true,
+              'retired_source_line_key', retired_line_work.line_key,
+              'retired_at_utc', v_now::text,
+              'retired_reason', CASE
+                WHEN LOWER(BTRIM(COALESCE(retired_line_work.line_key, ''))) LIKE '%:non_segment:total%'
+                THEN 'RESOLVED_SEGMENT_ROWS_REPLACE_SYNTHETIC_TOTAL'
+                ELSE 'SOURCE_LINE_NO_LONGER_CURRENT'
+              END
+            ),
+          updated_at_utc = v_now
+      FROM retired_line_work
+      WHERE preview_row.session_id = p_session_id
+        AND preview_row.candidate_id = p_candidate_id
+        AND preview_row.row_key = retired_line_work.line_key
+        AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) <> 'SUPERSEDED'
+      RETURNING preview_row.id
+    ), retired_counts AS (
+      SELECT
+        COUNT(*)::integer AS retired_line_count,
+        COUNT(*) FILTER (WHERE retired_line_work.existing_status IN ('PENDING', 'QUEUED', 'RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED', 'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'DIRTY'))::integer AS retired_pending_count,
+        COUNT(*) FILTER (WHERE retired_line_work.existing_status = 'READY')::integer AS retired_ready_count,
+        COUNT(*) FILTER (WHERE retired_line_work.existing_status IN ('MATERIALISED', 'MATERIALIZED'))::integer AS retired_materialised_count,
+        COUNT(*) FILTER (WHERE retired_line_work.existing_status IN ('ERROR', 'FAILED'))::integer AS retired_failed_count,
+        COUNT(*) FILTER (
+          WHERE retired_line_work.existing_status NOT IN (
+            'PENDING', 'QUEUED', 'RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED',
+            'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'DIRTY',
+            'READY', 'MATERIALISED', 'MATERIALIZED', 'ERROR', 'FAILED'
+          )
+        )::integer AS retired_other_count
+      FROM retired_line_work
+    ), retired_preview_counts AS (
+      SELECT COUNT(*)::integer AS retired_preview_row_count
+      FROM retired_preview_rows
     )
     SELECT
-      COUNT(*)::integer,
-      COUNT(*) FILTER (WHERE retired_line_work.existing_status IN ('PENDING', 'QUEUED', 'RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED', 'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'DIRTY'))::integer,
-      COUNT(*) FILTER (WHERE retired_line_work.existing_status = 'READY')::integer,
-      COUNT(*) FILTER (WHERE retired_line_work.existing_status IN ('MATERIALISED', 'MATERIALIZED'))::integer,
-      COUNT(*) FILTER (WHERE retired_line_work.existing_status IN ('ERROR', 'FAILED'))::integer,
-      COUNT(*) FILTER (
-        WHERE retired_line_work.existing_status NOT IN (
-          'PENDING', 'QUEUED', 'RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED',
-          'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'DIRTY',
-          'READY', 'MATERIALISED', 'MATERIALIZED', 'ERROR', 'FAILED'
-        )
-      )::integer
+      retired_counts.retired_line_count,
+      retired_counts.retired_pending_count,
+      retired_counts.retired_ready_count,
+      retired_counts.retired_materialised_count,
+      retired_counts.retired_failed_count,
+      retired_counts.retired_other_count,
+      retired_preview_counts.retired_preview_row_count
     INTO v_retired_line_count,
          v_retired_pending_count,
          v_retired_ready_count,
          v_retired_materialised_count,
          v_retired_failed_count,
-         v_retired_other_count
-    FROM retired_line_work;
+         v_retired_other_count,
+         v_retired_preview_row_count
+    FROM retired_counts
+    CROSS JOIN retired_preview_counts;
+
+    v_superseded_preview_row_count := COALESCE(v_superseded_preview_row_count, 0) + COALESCE(v_retired_preview_row_count, 0);
   END IF;
 
   DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_preview_line_seed_page;
@@ -177586,6 +178093,7 @@ BEGIN
     'retired_materialised_count', COALESCE(v_retired_materialised_count, 0),
     'retired_failed_count', COALESCE(v_retired_failed_count, 0),
     'retired_other_count', COALESCE(v_retired_other_count, 0),
+    'retired_preview_row_count', COALESCE(v_retired_preview_row_count, 0),
     'superseded_preview_row_count', COALESCE(v_superseded_preview_row_count, 0)
   )
   || jsonb_build_object(
@@ -177597,7 +178105,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
