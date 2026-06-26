@@ -120064,6 +120064,9 @@ function derivePayBatchRouteDisplay(context = {}) {
 }
 
 
+
+
+
 async function patchTsfinCommon(env, req, timesheetId, patch) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -120880,6 +120883,81 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     }
   }).catch(() => {});
 
+  let lifecycleSignaturePayload = null;
+  let lifecycleSignatureObject = null;
+  let lifecycleSignature = '';
+  let lifecycleSignatureError = null;
+
+  const adoptLifecycleSignaturePayload = (payload) => {
+    const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
+    const signatureText = String(
+      obj?.backend_row_signature ||
+      obj?.mutation_row_signature ||
+      obj?.row_signature ||
+      obj?.expected_row_signature ||
+      obj?.signature ||
+      ''
+    ).trim();
+    if (!signatureText) return false;
+    lifecycleSignatureObject = obj;
+    lifecycleSignature = signatureText;
+    return true;
+  };
+
+  try {
+    lifecycleSignaturePayload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+      p_timesheet_id: currentTimesheetId,
+      p_contract_week_id: cw?.id || null,
+      p_include_payload: false
+    }, {
+      timeoutMs: 8000
+    });
+
+    adoptLifecycleSignaturePayload(lifecycleSignaturePayload);
+  } catch (signatureErr) {
+    lifecycleSignatureError = signatureErr;
+  }
+
+  if (!lifecycleSignature) {
+    try {
+      const affectedRowsPayload = await sbRpc(env, 'timesheet_lifecycle_affected_rows_v1', {
+        p_items: [{
+          row_key: `timesheet:${currentTimesheetId}`,
+          timesheet_id: currentTimesheetId,
+          current_timesheet_id: currentTimesheetId,
+          expected_timesheet_id: currentTimesheetId,
+          contract_week_id: cw?.id || null,
+          booking_id: resolved.booking_id || null,
+          context: 'timesheet_modal'
+        }],
+        p_context: 'timesheet_modal',
+        p_actor_user_id: user.id || null
+      }, {
+        timeoutMs: 8000
+      });
+
+      const affectedRow = Array.isArray(affectedRowsPayload?.rows) ? (affectedRowsPayload.rows[0] || null) : null;
+      if (affectedRow) {
+        adoptLifecycleSignaturePayload({
+          backend_row_signature: affectedRow.backend_row_signature || null,
+          mutation_row_signature: affectedRow.mutation_row_signature || affectedRow.backend_row_signature || affectedRow.row_signature || null,
+          row_signature: affectedRow.row_signature || affectedRow.backend_row_signature || null,
+          expected_row_signature: affectedRow.expected_row_signature || affectedRow.backend_row_signature || affectedRow.row_signature || null,
+          signature: affectedRow.render_signature || affectedRow.signature || affectedRow.backend_row_signature || affectedRow.row_signature || null,
+          current_timesheet_id: affectedRow.current_timesheet_id || affectedRow.timesheet_id || currentTimesheetId,
+          timesheet_id: affectedRow.timesheet_id || affectedRow.current_timesheet_id || currentTimesheetId,
+          contract_week_id: affectedRow.contract_week_id || cw?.id || null
+        });
+      }
+    } catch (fallbackErr) {
+      lifecycleSignatureError = fallbackErr || lifecycleSignatureError;
+    }
+  }
+
+  if (!lifecycleSignature) {
+    return serverError(`TSFIN lifecycle signature refresh failed: ${String(lifecycleSignatureError?.message || lifecycleSignatureError || 'no signature returned')}`);
+  }
+
   return ok({
     updated: true,
     tsfin: after,
@@ -120887,9 +120965,17 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
     current_timesheet_id: currentTimesheetId,
     current_version: resolved.current_version ?? null,
-    was_stale: !!resolved.was_stale
+    was_stale: !!resolved.was_stale,
+    backend_row_signature: lifecycleSignature,
+    mutation_row_signature: lifecycleSignature,
+    row_signature: lifecycleSignature,
+    expected_row_signature: lifecycleSignature,
+    lifecycle_signature: lifecycleSignatureObject || null,
+    contract_week_id: cw?.id || null
   });
 }
+
+
 
 // ============================================================
 // UPDATED: handleTimesheetEvidenceAdd / handleTimesheetEvidenceUpdateKind
