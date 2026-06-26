@@ -23024,6 +23024,8 @@ DROP FUNCTION IF EXISTS public.pay_workbench_claim_due_jobs(integer, timestamptz
 DROP FUNCTION IF EXISTS public.pay_workbench_claim_due_jobs(integer, timestamptz, uuid, uuid, jsonb);
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_claim_due_jobs(p_limit integer DEFAULT 25, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_allowed_job_types text[] DEFAULT NULL::text[])
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -23064,6 +23066,7 @@ DECLARE
   v_stale_canonical_job_type text := NULL::text;
   v_stale_failed_line_work_count integer := 0;
   v_allowed_job_types text[] := NULL::text[];
+  v_stale_recovery_limit integer := 0;
 BEGIN
   IF p_allowed_job_types IS NOT NULL THEN
     SELECT ARRAY(
@@ -23113,6 +23116,7 @@ BEGIN
   END IF;
 
   v_stale_cutoff := v_cutoff - make_interval(secs => v_stale_running_seconds);
+  v_stale_recovery_limit := LEAST(v_limit, 3);
 
   FOR v_stale_row IN
     WITH stale_candidates AS (
@@ -23142,8 +23146,8 @@ BEGIN
           stale_job.created_at_utc
         ) AS last_activity_utc
       FROM public.banking_pay_workbench_jobs AS stale_job
-      WHERE UPPER(BTRIM(COALESCE(stale_job.status, ''))) IN ('RUNNING', 'PROCESSING', 'CLAIMED', 'IN_PROGRESS')
-        AND UPPER(BTRIM(COALESCE(stale_job.job_type, ''))) IN (
+      WHERE stale_job.status = 'RUNNING'
+        AND stale_job.job_type IN (
           'WORKBENCH_SESSION_SCOPE_SEED',
           'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
           'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
@@ -23188,7 +23192,7 @@ BEGIN
         stale_job.created_at_utc ASC,
         stale_job.id ASC
       FOR UPDATE SKIP LOCKED
-      LIMIT v_limit
+      LIMIT v_stale_recovery_limit
     )
     SELECT
       stale_candidates.id,
@@ -23862,6 +23866,7 @@ BEGIN
         AND (p_candidate_id IS NULL OR claim_job.candidate_id = p_candidate_id)
         AND (
           v_allowed_job_types IS NULL
+          OR claim_job.job_type = ANY(v_allowed_job_types)
           OR UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) = ANY(v_allowed_job_types)
           OR (
             CASE
@@ -23970,6 +23975,7 @@ BEGIN
     'stale_cutoff_utc', v_stale_cutoff,
     'stale_running_seconds', v_stale_running_seconds,
     'limit', v_limit,
+    'stale_recovery_limit', v_stale_recovery_limit,
     'filtered_session_id', CASE WHEN p_session_id IS NULL THEN NULL ELSE p_session_id::text END,
     'filtered_candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
     'allowed_job_types', CASE WHEN v_allowed_job_types IS NULL THEN NULL ELSE to_jsonb(v_allowed_job_types) END,
@@ -23984,6 +23990,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_complete_job(p_job_id uuid, p_result_json jsonb DEFAULT '{}'::jsonb)
@@ -61683,17 +61690,32 @@ BEGIN
     );
 
     FOR v_scope_row IN
-      WITH affected_scope AS (
+      WITH candidate_open_scope AS (
+        SELECT
+          scope_candidate.session_id,
+          scope_candidate.candidate_id,
+          session_row.actor_user_id,
+          session_row.pay_date,
+          MAX(session_row.pay_date) OVER (
+            PARTITION BY session_row.actor_user_id
+          ) AS latest_actor_open_pay_date
+        FROM public.banking_pay_workbench_session_scope AS scope_candidate
+        JOIN public.banking_pay_workbench_sessions AS session_row
+          ON session_row.id = scope_candidate.session_id
+        WHERE session_row.status = 'OPEN'
+          AND session_row.discarded_at_utc IS NULL
+          AND scope_candidate.candidate_id = v_candidate_id
+      ),
+      affected_scope AS (
         UPDATE public.banking_pay_workbench_session_scope AS scope_row
         SET status = 'PENDING',
             dirty = true,
             error_json = NULL::jsonb,
             updated_at_utc = v_now
-        FROM public.banking_pay_workbench_sessions AS session_row
-        WHERE session_row.id = scope_row.session_id
-          AND UPPER(BTRIM(COALESCE(session_row.status, ''))) = 'OPEN'
-          AND session_row.discarded_at_utc IS NULL
-          AND scope_row.candidate_id = v_candidate_id
+        FROM candidate_open_scope AS target_scope
+        WHERE target_scope.session_id = scope_row.session_id
+          AND target_scope.candidate_id = scope_row.candidate_id
+          AND target_scope.pay_date = target_scope.latest_actor_open_pay_date
         RETURNING scope_row.session_id, scope_row.candidate_id
       )
       SELECT affected_scope.session_id, affected_scope.candidate_id
@@ -61801,7 +61823,6 @@ BEGIN
   END IF;
 END;
 $function$;
-
 
 
 
@@ -183922,18 +183943,33 @@ BEGIN
   FROM bumped_counters AS bumped_counter
   WHERE bumped_counter.entity_key = 'pay_candidate:' || fanout_candidate.candidate_id::text;
 
-  WITH affected_scope AS (
+  WITH candidate_open_scope AS (
+    SELECT
+      scope_row.session_id,
+      scope_row.candidate_id,
+      open_session.actor_user_id,
+      open_session.pay_date,
+      MAX(open_session.pay_date) OVER (
+        PARTITION BY open_session.actor_user_id
+      ) AS latest_actor_open_pay_date
+    FROM public.banking_pay_workbench_session_scope AS scope_row
+    JOIN public.banking_pay_workbench_sessions AS open_session
+      ON open_session.id = scope_row.session_id
+    JOIN pg_temp.pay_workbench_dirty_fanout_candidates AS fanout_candidate
+      ON fanout_candidate.candidate_id = scope_row.candidate_id
+    WHERE open_session.status = 'OPEN'
+      AND open_session.discarded_at_utc IS NULL
+  ),
+  affected_scope AS (
     UPDATE public.banking_pay_workbench_session_scope AS scope_update
     SET status = 'PENDING',
         dirty = true,
         error_json = NULL::jsonb,
         updated_at_utc = v_now
-    FROM public.banking_pay_workbench_sessions AS open_session,
-         pg_temp.pay_workbench_dirty_fanout_candidates AS fanout_candidate
-    WHERE open_session.id = scope_update.session_id
-      AND open_session.status = 'OPEN'
-      AND open_session.discarded_at_utc IS NULL
-      AND fanout_candidate.candidate_id = scope_update.candidate_id
+    FROM candidate_open_scope AS target_scope
+    WHERE target_scope.session_id = scope_update.session_id
+      AND target_scope.candidate_id = scope_update.candidate_id
+      AND target_scope.pay_date = target_scope.latest_actor_open_pay_date
     RETURNING scope_update.session_id,
               scope_update.candidate_id
   )
@@ -184110,6 +184146,8 @@ BEGIN
     );
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress_light(
@@ -185225,19 +185263,11 @@ BEGIN
 END;
 $function$;
 
-
-
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2(
-  p_actor_user_id uuid,
-  p_pay_date date,
-  p_week_ending_cutoff date,
-  p_filters_json jsonb,
-  p_session_signature text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -185277,6 +185307,8 @@ DECLARE
   v_available_sections_json jsonb := '[]'::jsonb;
   v_progress_payload_json jsonb := '{}'::jsonb;
   v_response_json jsonb := '{}'::jsonb;
+  v_retired_old_session_count integer := 0;
+  v_retired_old_session_ids jsonb := '[]'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('BOOTSTRAP');
 
@@ -185321,6 +185353,16 @@ BEGIN
             )::text;
   END IF;
 
+  -- Serialise all opens for the same actor before taking the narrower
+  -- pay-date-specific lock.  The session signature currently includes the
+  -- pay date in several caller fallbacks, so signature-only uniqueness does
+  -- not retire older pay-week sessions.  This actor-level lock prevents two
+  -- concurrent opens for adjacent pay dates from both remaining OPEN.
+  PERFORM pg_advisory_xact_lock(
+    pg_catalog.hashtext('public.pay_workbench_session_open_shared_v2.actor'),
+    pg_catalog.hashtext(p_actor_user_id::text)
+  );
+
   PERFORM pg_advisory_xact_lock(
     pg_catalog.hashtext('public.pay_workbench_session_open_shared_v2'),
     pg_catalog.hashtext(
@@ -185329,6 +185371,58 @@ BEGIN
       || '|week_ending_cutoff:' || v_effective_week_ending_cutoff::text
     )
   );
+
+  WITH retired_old_sessions AS (
+    UPDATE public.banking_pay_workbench_sessions AS old_session
+    SET status = 'DISCARDED',
+        discarded_at_utc = COALESCE(old_session.discarded_at_utc, v_now),
+        updated_at_utc = v_now,
+        progress_state = 'DISCARDED',
+        progress_json = jsonb_strip_nulls(
+          COALESCE(old_session.progress_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'discard_reason', 'SUPERSEDED_BY_NEWER_PAY_DATE_WORKBENCH',
+            'discarded_by_function', 'pay_workbench_session_open_shared_v2',
+            'superseded_at_utc', v_now::text,
+            'superseded_by_pay_date', p_pay_date::text,
+            'superseded_by_week_ending_cutoff', v_effective_week_ending_cutoff::text,
+            'superseded_by_actor_user_id', p_actor_user_id::text,
+            'superseded_by_session_signature', v_session_signature
+          )
+        ),
+        progress_counter_version = COALESCE(old_session.progress_counter_version, 0) + 1,
+        progress_updated_at_utc = v_now
+    WHERE old_session.actor_user_id = p_actor_user_id
+      AND old_session.status = 'OPEN'
+      AND old_session.discarded_at_utc IS NULL
+      AND old_session.pay_date < p_pay_date
+    RETURNING old_session.id
+  )
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(retired_old_sessions.id::text ORDER BY retired_old_sessions.id::text), '[]'::jsonb)
+  INTO v_retired_old_session_count,
+       v_retired_old_session_ids
+  FROM retired_old_sessions;
+
+  IF COALESCE(v_retired_old_session_count, 0) > 0 THEN
+    PERFORM public._audit_insert(
+      'banking_pay_workbench_session',
+      p_actor_user_id::text,
+      'WORKBENCH_OLDER_PAY_DATE_SESSIONS_DISCARDED',
+      NULL::jsonb,
+      jsonb_build_object(
+        'actor_user_id', p_actor_user_id::text,
+        'new_pay_date', p_pay_date::text,
+        'new_week_ending_cutoff', v_effective_week_ending_cutoff::text,
+        'new_session_signature', v_session_signature,
+        'retired_session_count', v_retired_old_session_count,
+        'retired_session_ids', v_retired_old_session_ids,
+        'reason', 'SUPERSEDED_BY_NEWER_PAY_DATE_WORKBENCH'
+      ),
+      'SESSION_OPEN_SHARED_V2_RETIRE_OLDER_PAY_DATE',
+      p_actor_user_id
+    );
+  END IF;
 
   SELECT existing_session.*
   INTO v_session_row
@@ -185797,7 +185891,9 @@ BEGIN
       'root_job_limit', CASE WHEN v_root_job_id IS NULL THEN NULL ELSE 100 END,
       'row_backed_scope', true,
       'candidate_ids_returned', false,
-      'requires_paging', true
+      'requires_paging', true,
+      'retired_old_session_count', COALESCE(v_retired_old_session_count, 0),
+      'retired_old_session_ids', COALESCE(v_retired_old_session_ids, '[]'::jsonb)
     )
     || jsonb_build_object(
       'progress_state', v_session_row.progress_state,
@@ -185896,6 +185992,8 @@ BEGIN
   RETURN v_response_json;
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_replace_after_mutation(
   p_actor_user_id uuid,
@@ -186361,19 +186459,13 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_worker_drain_chunk(
-  p_limit integer DEFAULT 5,
-  p_now_utc timestamptz DEFAULT NULL::timestamptz,
-  p_session_id uuid DEFAULT NULL::uuid,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_allowed_job_types text[] DEFAULT NULL::text[],
-  p_worker_id text DEFAULT NULL::text,
-  p_lease_seconds integer DEFAULT 180
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_worker_drain_chunk(p_limit integer DEFAULT 5, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_allowed_job_types text[] DEFAULT NULL::text[], p_worker_id text DEFAULT NULL::text, p_lease_seconds integer DEFAULT 180)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -186441,6 +186533,8 @@ DECLARE
   v_next_cursor_json jsonb := NULL::jsonb;
   v_continuation_payload_json jsonb := '{}'::jsonb;
   v_claimed_count integer := 0;
+  v_processed_claimed_job_ids uuid[] := ARRAY[]::uuid[];
+  v_requeued_unprocessed_claimed_count integer := 0;
   v_processed_count integer := 0;
   v_succeeded_count integer := 0;
   v_failed_count integer := 0;
@@ -186459,8 +186553,19 @@ DECLARE
   v_supplemental_stale_recovery_error_count integer := 0;
   v_more_due boolean := false;
   v_job_results_json jsonb := '[]'::jsonb;
+  v_started_at_utc timestamptz := clock_timestamp();
+  v_phase_started_at_utc timestamptz := clock_timestamp();
+  v_elapsed_ms integer := 0;
+  v_claim_elapsed_ms integer := 0;
+  v_supplemental_stale_elapsed_ms integer := 0;
+  v_final_more_due_elapsed_ms integer := 0;
+  v_stop_reason text := NULL::text;
+  v_max_runtime_ms integer := 12000;
+  v_min_phase_budget_ms integer := 1500;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKER_CHUNK');
+  v_started_at_utc := clock_timestamp();
+  v_phase_started_at_utc := clock_timestamp();
 
   IF p_allowed_job_types IS NULL THEN
     v_allowed_job_types := v_supported_job_types;
@@ -186656,7 +186761,7 @@ BEGIN
       stale_job.created_at_utc ASC,
       stale_job.id ASC
     FOR UPDATE OF stale_job SKIP LOCKED
-    LIMIT v_limit
+    LIMIT LEAST(v_limit, 2)
   LOOP
     v_supplemental_stale_error_json := jsonb_build_object(
       'code', 'WORKBENCH_SUPPORTED_JOB_STALE_LEASE_EXPIRED',
@@ -186724,37 +186829,113 @@ BEGIN
     END;
   END LOOP;
 
-  v_claim_result := public.pay_workbench_claim_due_jobs(
-    p_limit => v_limit,
-    p_now_utc => v_cutoff,
-    p_session_id => p_session_id,
-    p_candidate_id => p_candidate_id,
-    p_allowed_job_types => v_allowed_job_types
-  );
+  v_supplemental_stale_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_phase_started_at_utc)) * 1000)::integer);
+  v_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer);
 
-  v_claimed_jobs_json := CASE
-    WHEN jsonb_typeof(v_claim_result->'claimed') = 'array'
-      THEN COALESCE(v_claim_result->'claimed', '[]'::jsonb)
-    ELSE '[]'::jsonb
-  END;
+  IF v_elapsed_ms >= (v_max_runtime_ms - v_min_phase_budget_ms) THEN
+    v_claim_result := jsonb_build_object(
+      'ok', true,
+      'claimed', '[]'::jsonb,
+      'claimed_count', 0,
+      'recovered_stale_count', 0,
+      'dead_stale_count', 0,
+      'skipped_claim_due_to_budget', true
+    );
+    v_claimed_jobs_json := '[]'::jsonb;
+    v_claimed_count := 0;
+    v_recovered_stale_count := v_supplemental_stale_recovered_count;
+    v_dead_stale_count := v_supplemental_stale_terminal_count;
+    v_dead_count := v_dead_stale_count;
+    v_more_due := true;
+    v_stop_reason := 'MAX_RUNTIME_NEAR_EXHAUSTED';
+  ELSE
+    v_phase_started_at_utc := clock_timestamp();
+    v_claim_result := public.pay_workbench_claim_due_jobs(
+      p_limit => v_limit,
+      p_now_utc => v_cutoff,
+      p_session_id => p_session_id,
+      p_candidate_id => p_candidate_id,
+      p_allowed_job_types => v_allowed_job_types
+    );
+    v_claim_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_phase_started_at_utc)) * 1000)::integer);
 
-  v_claimed_count := COALESCE(jsonb_array_length(v_claimed_jobs_json), 0);
-  v_recovered_stale_count := v_supplemental_stale_recovered_count + CASE
-    WHEN COALESCE(v_claim_result->>'recovered_stale_count', '') ~ '^[0-9]+$'
-      THEN (v_claim_result->>'recovered_stale_count')::integer
-    ELSE 0
-  END;
-  v_dead_stale_count := v_supplemental_stale_terminal_count + CASE
-    WHEN COALESCE(v_claim_result->>'dead_stale_count', '') ~ '^[0-9]+$'
-      THEN (v_claim_result->>'dead_stale_count')::integer
-    ELSE 0
-  END;
-  v_dead_count := v_dead_stale_count;
+    v_claimed_jobs_json := CASE
+      WHEN jsonb_typeof(v_claim_result->'claimed') = 'array'
+        THEN COALESCE(v_claim_result->'claimed', '[]'::jsonb)
+      ELSE '[]'::jsonb
+    END;
+
+    v_claimed_count := COALESCE(jsonb_array_length(v_claimed_jobs_json), 0);
+    v_recovered_stale_count := v_supplemental_stale_recovered_count + CASE
+      WHEN COALESCE(v_claim_result->>'recovered_stale_count', '') ~ '^[0-9]+$'
+        THEN (v_claim_result->>'recovered_stale_count')::integer
+      ELSE 0
+    END;
+    v_dead_stale_count := v_supplemental_stale_terminal_count + CASE
+      WHEN COALESCE(v_claim_result->>'dead_stale_count', '') ~ '^[0-9]+$'
+        THEN (v_claim_result->>'dead_stale_count')::integer
+      ELSE 0
+    END;
+    v_dead_count := v_dead_stale_count;
+  END IF;
 
   FOR v_claimed_job_json IN
     SELECT claimed_job.value
     FROM jsonb_array_elements(v_claimed_jobs_json) AS claimed_job(value)
   LOOP
+    v_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer);
+    IF v_elapsed_ms >= (v_max_runtime_ms - v_min_phase_budget_ms) THEN
+      WITH claimed_unprocessed_jobs AS (
+        SELECT (claimed_unprocessed_job.value->>'job_id')::uuid AS job_id
+        FROM jsonb_array_elements(v_claimed_jobs_json) AS claimed_unprocessed_job(value)
+        WHERE BTRIM(COALESCE(claimed_unprocessed_job.value->>'job_id', ''))
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND NOT (
+            (claimed_unprocessed_job.value->>'job_id')::uuid
+              = ANY(COALESCE(v_processed_claimed_job_ids, ARRAY[]::uuid[]))
+          )
+      ),
+      requeued_unprocessed_jobs AS (
+        UPDATE public.banking_pay_workbench_jobs AS unprocessed_job
+        SET status = 'QUEUED',
+            attempt_count = GREATEST(COALESCE(unprocessed_job.attempt_count, 1) - 1, 0),
+            run_at_utc = LEAST(COALESCE(unprocessed_job.run_at_utc, v_cutoff), v_cutoff),
+            started_at_utc = NULL::timestamptz,
+            completed_at_utc = NULL::timestamptz,
+            failed_at_utc = NULL::timestamptz,
+            last_error_json = jsonb_build_object(
+              'code', 'WORKBENCH_CLAIM_RELEASED_DUE_TO_WORKER_BUDGET',
+              'message', 'Claimed Banking Pay workbench job was released without processing because the worker was near its runtime budget.',
+              'worker_id', v_worker_id,
+              'released_at_utc', v_now::text,
+              'stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
+            ),
+            payload_json = jsonb_strip_nulls(
+              COALESCE(unprocessed_job.payload_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'claim_released_due_to_worker_budget', true,
+                'claim_released_at_utc', v_now::text,
+                'claim_released_by_worker_id', v_worker_id,
+                'claim_release_stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
+              )
+            ),
+            updated_at_utc = v_now
+        FROM claimed_unprocessed_jobs AS claimed_unprocessed_job
+        WHERE unprocessed_job.id = claimed_unprocessed_job.job_id
+          AND unprocessed_job.status = 'RUNNING'
+          AND unprocessed_job.completed_at_utc IS NULL
+          AND unprocessed_job.failed_at_utc IS NULL
+        RETURNING unprocessed_job.id
+      )
+      SELECT COUNT(*)::integer
+      INTO v_requeued_unprocessed_claimed_count
+      FROM requeued_unprocessed_jobs;
+
+      v_more_due := true;
+      v_stop_reason := 'MAX_RUNTIME_NEAR_EXHAUSTED';
+      EXIT;
+    END IF;
+
     v_job_row := NULL;
     v_session_row := NULL;
     v_job_id := NULL::uuid;
@@ -186982,7 +187163,7 @@ BEGIN
           END,
           1
         ),
-        100
+        25
       );
 
       IF v_canonical_job_type = ANY(ARRAY[
@@ -187156,6 +187337,11 @@ BEGIN
           'WORKBENCH_JOB_OBSOLETE_SKIPPED',
           NULL::uuid
         );
+
+        IF v_job_row.id IS NOT NULL
+           AND NOT (v_job_row.id = ANY(COALESCE(v_processed_claimed_job_ids, ARRAY[]::uuid[]))) THEN
+          v_processed_claimed_job_ids := array_append(v_processed_claimed_job_ids, v_job_row.id);
+        END IF;
 
         v_processed_count := v_processed_count + 1;
         v_obsolete_skipped_count := v_obsolete_skipped_count + 1;
@@ -187446,6 +187632,11 @@ BEGIN
               ELSE 0
             END;
 
+        IF v_job_row.id IS NOT NULL
+           AND NOT (v_job_row.id = ANY(COALESCE(v_processed_claimed_job_ids, ARRAY[]::uuid[]))) THEN
+          v_processed_claimed_job_ids := array_append(v_processed_claimed_job_ids, v_job_row.id);
+        END IF;
+
         v_processed_count := v_processed_count + 1;
         v_succeeded_count := v_succeeded_count + 1;
         v_job_results_json := v_job_results_json || jsonb_build_array(
@@ -187578,6 +187769,11 @@ BEGIN
         v_final_failure_status := 'FAILED';
       END;
 
+      IF v_job_id IS NOT NULL
+         AND NOT (v_job_id = ANY(COALESCE(v_processed_claimed_job_ids, ARRAY[]::uuid[]))) THEN
+        v_processed_claimed_job_ids := array_append(v_processed_claimed_job_ids, v_job_id);
+      END IF;
+
       v_processed_count := v_processed_count + 1;
       v_failed_count := v_failed_count + 1;
 
@@ -187606,58 +187802,75 @@ BEGIN
     END;
   END LOOP;
 
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.banking_pay_workbench_jobs AS due_job
-    WHERE due_job.status = 'QUEUED'
-      AND due_job.run_at_utc <= GREATEST(v_cutoff, v_now)
-      AND (p_session_id IS NULL OR due_job.session_id = p_session_id)
-      AND (p_candidate_id IS NULL OR due_job.candidate_id = p_candidate_id)
-      AND (
-        CASE
-          WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) IN (
-            'WORKBENCH_SESSION_SCOPE_SEED',
-            'SESSION_SCOPE_SEED',
-            'WORKBENCH_SCOPE_SEED',
-            'WORKBENCH_SCOPE_SEED_PAGE',
-            'SCOPE_SEED_PAGE'
-          ) THEN 'WORKBENCH_SESSION_SCOPE_SEED'
-          WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) IN (
-            'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
-            'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE',
-            'CANDIDATE_LINE_WORK_SEED',
-            'CANDIDATE_LINE_WORK_SEED_PAGE',
-            'LINE_WORK_SEED_PAGE',
-            'SNAPSHOT_CANDIDATE_REFRESH',
-            'CANDIDATE_REFRESH'
-          ) THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
-          WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) IN (
-            'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
-            'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK',
-            'CANDIDATE_LINE_WORK_PROCESS',
-            'CANDIDATE_LINE_WORK_PROCESS_CHUNK',
-            'LINE_WORK_PROCESS',
-            'LINE_WORK_PROCESS_CHUNK'
-          ) THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
-          WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) IN (
-            'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
-            'WORKBENCH_PREVIEW_ROWS_MATERIALIZE',
-            'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK',
-            'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK',
-            'PREVIEW_ROWS_MATERIALISE',
-            'PREVIEW_ROWS_MATERIALIZE',
-            'PREVIEW_ROWS_MATERIALISE_CHUNK',
-            'PREVIEW_ROWS_MATERIALIZE_CHUNK',
-            'PREVIEW_ROW_MATERIALISE_CHUNK',
-            'PREVIEW_ROW_MATERIALIZE_CHUNK'
-          ) THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
-          WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) = 'CONTRACT_CLIENT_DIRTY_FANOUT'
-            THEN 'CONTRACT_CLIENT_DIRTY_FANOUT'
-          ELSE UPPER(BTRIM(COALESCE(due_job.job_type, '')))
-        END
-      ) = ANY(v_allowed_job_types)
-  )
-  INTO v_more_due;
+  IF v_stop_reason IS NULL THEN
+    v_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer);
+    IF v_elapsed_ms >= (v_max_runtime_ms - v_min_phase_budget_ms) THEN
+      v_more_due := true;
+      v_stop_reason := 'MAX_RUNTIME_NEAR_EXHAUSTED';
+      v_final_more_due_elapsed_ms := 0;
+    ELSE
+      v_phase_started_at_utc := clock_timestamp();
+        SELECT EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_jobs AS due_job
+          WHERE due_job.status = 'QUEUED'
+            AND due_job.run_at_utc <= GREATEST(v_cutoff, v_now)
+            AND (p_session_id IS NULL OR due_job.session_id = p_session_id)
+            AND (p_candidate_id IS NULL OR due_job.candidate_id = p_candidate_id)
+            AND (
+              CASE
+                WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) IN (
+                  'WORKBENCH_SESSION_SCOPE_SEED',
+                  'SESSION_SCOPE_SEED',
+                  'WORKBENCH_SCOPE_SEED',
+                  'WORKBENCH_SCOPE_SEED_PAGE',
+                  'SCOPE_SEED_PAGE'
+                ) THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+                WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) IN (
+                  'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+                  'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE',
+                  'CANDIDATE_LINE_WORK_SEED',
+                  'CANDIDATE_LINE_WORK_SEED_PAGE',
+                  'LINE_WORK_SEED_PAGE',
+                  'SNAPSHOT_CANDIDATE_REFRESH',
+                  'CANDIDATE_REFRESH'
+                ) THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+                WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) IN (
+                  'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+                  'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK',
+                  'CANDIDATE_LINE_WORK_PROCESS',
+                  'CANDIDATE_LINE_WORK_PROCESS_CHUNK',
+                  'LINE_WORK_PROCESS',
+                  'LINE_WORK_PROCESS_CHUNK'
+                ) THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+                WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) IN (
+                  'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
+                  'WORKBENCH_PREVIEW_ROWS_MATERIALIZE',
+                  'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK',
+                  'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK',
+                  'PREVIEW_ROWS_MATERIALISE',
+                  'PREVIEW_ROWS_MATERIALIZE',
+                  'PREVIEW_ROWS_MATERIALISE_CHUNK',
+                  'PREVIEW_ROWS_MATERIALIZE_CHUNK',
+                  'PREVIEW_ROW_MATERIALISE_CHUNK',
+                  'PREVIEW_ROW_MATERIALIZE_CHUNK'
+                ) THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+                WHEN UPPER(BTRIM(COALESCE(due_job.job_type, ''))) = 'CONTRACT_CLIENT_DIRTY_FANOUT'
+                  THEN 'CONTRACT_CLIENT_DIRTY_FANOUT'
+                ELSE UPPER(BTRIM(COALESCE(due_job.job_type, '')))
+              END
+            ) = ANY(v_allowed_job_types)
+        )
+        INTO v_more_due;
+      v_final_more_due_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_phase_started_at_utc)) * 1000)::integer);
+      IF COALESCE(v_more_due, false) THEN
+        v_stop_reason := 'MORE_DUE';
+      ELSE
+        v_stop_reason := 'NO_MORE_DUE';
+      END IF;
+    END IF;
+  END IF;
+
 
   RETURN jsonb_build_object(
       'ok', v_failed_count = 0 AND v_supplemental_stale_recovery_error_count = 0,
@@ -187683,7 +187896,12 @@ BEGIN
       'obsolete_skipped', v_obsolete_skipped_count,
       'continuations_created', v_continuations_created,
       'continuations_reused', v_continuations_reused,
-      'more_due', COALESCE(v_more_due, false)
+      'requeued_unprocessed_claimed', COALESCE(v_requeued_unprocessed_claimed_count, 0),
+      'more_due', COALESCE(v_more_due, false),
+      'stop_reason', COALESCE(v_stop_reason, CASE WHEN COALESCE(v_more_due, false) THEN 'MORE_DUE' ELSE 'NO_MORE_DUE' END),
+      'elapsed_ms', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer),
+      'max_runtime_ms', v_max_runtime_ms,
+      'near_deadline', COALESCE(v_stop_reason, '') = 'MAX_RUNTIME_NEAR_EXHAUSTED'
     )
     || jsonb_build_object(
       'claimed_count', v_claimed_count,
@@ -187694,16 +187912,22 @@ BEGIN
       'obsolete_skipped_count', v_obsolete_skipped_count,
       'continuation_created_count', v_continuations_created,
       'continuation_reused_count', v_continuations_reused,
+      'requeued_unprocessed_claimed_count', COALESCE(v_requeued_unprocessed_claimed_count, 0),
       'recovered_stale_count', v_recovered_stale_count,
       'dead_stale_count', v_dead_stale_count,
       'supplemental_recovered_stale_count', v_supplemental_stale_recovered_count,
       'supplemental_terminal_stale_count', v_supplemental_stale_terminal_count,
       'supplemental_stale_recovery_error_count', v_supplemental_stale_recovery_error_count,
       'claim_result', COALESCE(v_claim_result, '{}'::jsonb),
+      'stale_recovery_elapsed_ms', COALESCE(v_supplemental_stale_elapsed_ms, 0),
+      'claim_elapsed_ms', COALESCE(v_claim_elapsed_ms, 0),
+      'final_more_due_elapsed_ms', COALESCE(v_final_more_due_elapsed_ms, 0),
       'jobs', COALESCE(v_job_results_json, '[]'::jsonb)
     );
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_decision_operations(
   p_session_id uuid,

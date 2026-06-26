@@ -161542,7 +161542,6 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
 }
 
 
-
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -161623,9 +161622,9 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const stageResult = isPlainObject(job.stage_result) ? job.stage_result : {};
     const stageLimit = numberInRange(
       stageResult.limit ?? stageResult.p_limit ?? stageResult.page_limit ?? stageResult.chunk_size,
-      100,
+      25,
       1,
-      100
+      25
     );
     const jobType = canonicalJobType(job);
     let parsed = { found: false, value: 0 };
@@ -161671,10 +161670,22 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const maxRuntimeMsMax = numberInRange(sourceOptions.maxRuntimeMsMax ?? sourceOptions.max_runtime_ms_max, 30000, 1000, 30000);
   const profileClaimLimitMax = budgetProfile === 'NUDGE' ? Math.min(claimLimitMax, 50) : claimLimitMax;
   const claimLimit = numberInRange(sourceOptions.claimLimit ?? sourceOptions.claim_limit, 5, 1, profileClaimLimitMax);
-  const maxPasses = numberInRange(sourceOptions.maxPasses ?? sourceOptions.max_passes, 1, 1, 4);
+  const maxPasses = numberInRange(sourceOptions.maxPasses ?? sourceOptions.max_passes, budgetProfile === 'NUDGE' ? 4 : 2, 1, 4);
   const maxJobs = numberInRange(sourceOptions.maxJobs ?? sourceOptions.max_jobs, Math.min(maxJobsMax, claimLimit * maxPasses), 1, maxJobsMax);
   const maxRows = numberInRange(sourceOptions.maxRows ?? sourceOptions.max_rows, 500, 1, maxRowsMax);
   const maxRuntimeMs = numberInRange(sourceOptions.maxRuntimeMs ?? sourceOptions.max_runtime_ms, 10000, 1000, maxRuntimeMsMax);
+  const minimumRpcBudgetMs = numberInRange(
+    sourceOptions.minimumRpcBudgetMs ?? sourceOptions.minimum_rpc_budget_ms,
+    budgetProfile === 'NUDGE' ? 7000 : 8000,
+    1000,
+    Math.max(1000, maxRuntimeMsMax)
+  );
+  const rpcSafetyBufferMs = numberInRange(
+    sourceOptions.rpcSafetyBufferMs ?? sourceOptions.rpc_safety_buffer_ms,
+    750,
+    100,
+    5000
+  );
   const origin = trimStr(sourceOptions.origin) || 'WORKBENCH_JOB_DRAIN';
   const actorUserId = trimStr(sourceOptions.actorUserId || sourceOptions.actor_user_id);
   const sessionFilterId = trimStr(sourceOptions.sessionId || sourceOptions.session_id);
@@ -161693,7 +161704,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     3600
   );
 
-  const maxStageWorkUnitsPerJob = 100;
+  const maxStageWorkUnitsPerJob = 25;
   const sampleUuidValuesFromJobs = (jobRows, keys, limit = 8) => {
     const out = [];
     const seen = new Set();
@@ -161767,6 +161778,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     max_rows: maxRows,
     max_jobs: maxJobs,
     max_runtime_ms: maxRuntimeMs,
+    minimum_rpc_budget_ms: minimumRpcBudgetMs,
+    rpc_safety_buffer_ms: rpcSafetyBufferMs,
     claim_limit: claimLimit,
     allowed_job_types: allowedJobTypes
   });
@@ -161797,10 +161810,20 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       moreDue = true;
       break;
     }
-    if (remainingRuntimeMs <= 100) {
-      stopReason = 'MAX_RUNTIME';
+    if (remainingRuntimeMs < minimumRpcBudgetMs) {
+      stopReason = 'MAX_RUNTIME_NEAR_EXHAUSTED';
       budgetExhausted = true;
       moreDue = true;
+      logDrainDiag('WORKBENCH_DRAIN_BUDGET_GUARD_STOP', {
+        elapsed_ms: elapsedBeforePass,
+        remaining_runtime_ms: remainingRuntimeMs,
+        minimum_rpc_budget_ms: minimumRpcBudgetMs,
+        pass_count: passCount,
+        rpc_call_count: rpcCallCount,
+        made_progress: madeProgress,
+        claimed: claimedCount,
+        processed: processedCount
+      });
       break;
     }
 
@@ -161808,7 +161831,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const effectiveLimit = Math.max(1, Math.min(100, claimLimit, remainingJobs, rowBoundedJobLimit));
     const passNowUtc = explicitNowUtc || new Date().toISOString();
     const passStartedAtMs = Date.now();
-    const passTimeoutMs = Math.max(100, Math.min(30000, remainingRuntimeMs - 50));
+    const passTimeoutMs = Math.max(1000, Math.min(30000, remainingRuntimeMs - rpcSafetyBufferMs));
     const rpcArgs = {
       p_limit: effectiveLimit,
       p_now_utc: passNowUtc,
@@ -161887,6 +161910,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const passDeadStale = countFrom(aggregate, ['dead_stale_count']);
     const passStaleRecoveryErrors = countFrom(aggregate, ['supplemental_stale_recovery_error_count']);
     const passMoreDue = booleanFrom(aggregate.more_due);
+    const passStopReason = upperTrim(aggregate.stop_reason || '');
     const passJobs = Array.isArray(aggregate.jobs) ? aggregate.jobs.filter((job) => isPlainObject(job)) : [];
 
     let passWorkUnits = 0;
@@ -161943,7 +161967,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       recovered_stale_count: passRecoveredStale,
       dead_stale_count: passDeadStale,
       row_units_processed: passWorkUnits,
-      more_due: passMoreDue
+      more_due: passMoreDue,
+      db_stop_reason: passStopReason || null
     });
     logDrainDiag('WORKBENCH_DRAIN_PASS_RESULT', {
       pass_number: passCount,
@@ -161958,7 +161983,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       continuations_reused: passContinuationsReused,
       row_units_processed: passWorkUnits,
       more_due: passMoreDue,
-      stop_reason: passMoreDue ? null : 'NO_MORE_DUE',
+      stop_reason: passStopReason || (passMoreDue ? null : 'NO_MORE_DUE'),
       elapsed_ms: Math.max(0, Date.now() - passStartedAtMs),
       session_ids_sample: sampleUuidValuesFromJobs(passJobs, ['session_id', 'workbench_session_id']),
       candidate_ids_sample: sampleUuidValuesFromJobs(passJobs, ['candidate_id']),
@@ -161972,6 +161997,13 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       break;
     }
 
+    if (passStopReason === 'MAX_RUNTIME_NEAR_EXHAUSTED') {
+      stopReason = 'MAX_RUNTIME_NEAR_EXHAUSTED';
+      budgetExhausted = true;
+      moreDue = true;
+      break;
+    }
+
     if (passClaimed === 0 && passProcessed === 0) {
       stopReason = 'NO_PROGRESS';
       moreDue = true;
@@ -161981,6 +162013,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const elapsedAfterPass = Math.max(0, Date.now() - startedAtMs);
     if (elapsedAfterPass >= maxRuntimeMs) {
       stopReason = 'MAX_RUNTIME';
+      budgetExhausted = true;
+      moreDue = true;
+    } else if (Math.max(0, maxRuntimeMs - elapsedAfterPass) < minimumRpcBudgetMs) {
+      stopReason = 'MAX_RUNTIME_NEAR_EXHAUSTED';
       budgetExhausted = true;
       moreDue = true;
     } else if (Math.max(claimedCount, processedCount) >= maxJobs) {
@@ -162023,6 +162059,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     max_jobs: maxJobs,
     max_rows: maxRows,
     max_runtime_ms: maxRuntimeMs,
+    minimum_rpc_budget_ms: minimumRpcBudgetMs,
+    rpc_safety_buffer_ms: rpcSafetyBufferMs,
     claim_limit_max: claimLimitMax,
     max_jobs_max: maxJobsMax,
     max_rows_max: maxRowsMax,
@@ -169896,7 +169934,8 @@ if (req.method === 'POST' && p === '/api/assignment-band-mappings')   return han
 // NEW: Timesheet unauthorise (guarded write)
 {
   const m = matchPath(p, '/api/timesheets/:id/unauthorise');
-  if (m && req.method === 'POST') return handleTimesheetUnauthorise(env, req, m.id);
+  if (m && req.method === 'POST') return handleTimesheetUnauthorise(env, req, m.id, ctx);
+
 }
 
 // NEW: Import column aliases (Grade/Assignment header name config)
@@ -170727,11 +170766,11 @@ if (req.method === 'POST' && p === '/api/timesheets/manual-daily-create-options'
       }
       {
         const m = matchPath(p, '/api/timesheets/:id/authorise');
-        if (m && req.method === 'POST') return handleTimesheetAuthoriseGeneric(env, req, m.id);
+        if (m && req.method === 'POST') return handleTimesheetAuthoriseGeneric(env, req, m.id, ctx);
       }
       {
         const m = matchPath(p, '/api/timesheets/:id/tsfin/expenses');
-        if (m && req.method === 'PATCH') return handleTsfinExpensesPatch(env, req, m.id);
+        if (m && req.method === 'PATCH') return handleTsfinExpensesPatch(env, req, m.id, ctx);
       }
 
     {
