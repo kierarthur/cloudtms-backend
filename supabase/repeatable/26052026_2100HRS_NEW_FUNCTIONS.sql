@@ -62731,13 +62731,14 @@ $function$;
 
 
 CREATE OR REPLACE FUNCTION public._pay_batch_item_source_reservation_amount_ex_vat(p_pay_batch_item_id uuid)
-RETURNS numeric(12,2)
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
+ RETURNS numeric
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
+  v_pay_batch_id uuid;
+  v_timesheet_id uuid;
   v_item_type text;
   v_finance_case_id uuid;
   v_finance_component_id uuid;
@@ -62747,8 +62748,17 @@ DECLARE
   v_frozen_resolution_mode public.pay_finance_component_resolution_mode_enum;
   v_frozen_resolution_payload_json jsonb;
   v_frozen_resolution_result_json jsonb;
+  v_frozen_component_key_type text;
+  v_frozen_component_key_value text;
   v_frozen_component_snapshot_json jsonb;
   v_frozen_source_basis_json jsonb;
+  v_single_breakdown_meta_json jsonb := '{}'::jsonb;
+  v_breakdown_count integer := 0;
+  v_breakdown_source_amount_ex_vat numeric;
+  v_breakdown_source_component_count integer := 0;
+  v_resolved_key_type text;
+  v_resolved_key_value text;
+  v_key_resolution_failure_reason text;
   v_source_text text;
   v_has_source_target_split boolean;
 BEGIN
@@ -62757,18 +62767,32 @@ BEGIN
   END IF;
 
   SELECT
-    upper(nullif(btrim(coalesce(pbi.item_type, '')), '')),
-    pbi.finance_case_id,
-    pbi.finance_component_id,
-    pbi.amount_ex_vat,
-    pbi.frozen_source_amount,
-    pbi.frozen_target_amount_ex_vat,
-    pbi.frozen_resolution_mode,
-    pbi.frozen_resolution_payload_json,
-    pbi.frozen_resolution_result_json,
-    coalesce(pbi.frozen_component_snapshot_json, '{}'::jsonb),
-    coalesce(pbi.frozen_source_basis_json, '{}'::jsonb)
+    pay_batch_candidate_row.pay_batch_id,
+    pay_batch_item_row.timesheet_id,
+    UPPER(NULLIF(BTRIM(COALESCE(pay_batch_item_row.item_type, '')), '')),
+    pay_batch_item_row.finance_case_id,
+    pay_batch_item_row.finance_component_id,
+    pay_batch_item_row.amount_ex_vat,
+    pay_batch_item_row.frozen_source_amount,
+    pay_batch_item_row.frozen_target_amount_ex_vat,
+    pay_batch_item_row.frozen_resolution_mode,
+    pay_batch_item_row.frozen_resolution_payload_json,
+    pay_batch_item_row.frozen_resolution_result_json,
+    pay_batch_item_row.frozen_component_key_type,
+    pay_batch_item_row.frozen_component_key_value,
+    CASE
+      WHEN jsonb_typeof(COALESCE(pay_batch_item_row.frozen_component_snapshot_json, '{}'::jsonb)) = 'object'
+        THEN COALESCE(pay_batch_item_row.frozen_component_snapshot_json, '{}'::jsonb)
+      ELSE '{}'::jsonb
+    END,
+    CASE
+      WHEN jsonb_typeof(COALESCE(pay_batch_item_row.frozen_source_basis_json, '{}'::jsonb)) = 'object'
+        THEN COALESCE(pay_batch_item_row.frozen_source_basis_json, '{}'::jsonb)
+      ELSE '{}'::jsonb
+    END
   INTO
+    v_pay_batch_id,
+    v_timesheet_id,
     v_item_type,
     v_finance_case_id,
     v_finance_component_id,
@@ -62778,10 +62802,15 @@ BEGIN
     v_frozen_resolution_mode,
     v_frozen_resolution_payload_json,
     v_frozen_resolution_result_json,
+    v_frozen_component_key_type,
+    v_frozen_component_key_value,
     v_frozen_component_snapshot_json,
     v_frozen_source_basis_json
-  FROM public.pay_batch_items AS pbi
-  WHERE pbi.id = p_pay_batch_item_id;
+  FROM public.pay_batch_items AS pay_batch_item_row
+  JOIN public.pay_batch_candidates AS pay_batch_candidate_row
+    ON pay_batch_candidate_row.id = pay_batch_item_row.pay_batch_candidate_id
+  WHERE pay_batch_item_row.id = p_pay_batch_item_id
+  LIMIT 1;
 
   IF NOT FOUND THEN
     RETURN NULL::numeric(12,2);
@@ -62791,8 +62820,237 @@ BEGIN
     RETURN NULL::numeric(12,2);
   END IF;
 
+  SELECT
+    COUNT(*)::integer,
+    CASE
+      WHEN COUNT(*) = 1 THEN (ARRAY_AGG(breakdown_row.meta_json ORDER BY breakdown_row.id))[1]
+      ELSE '{}'::jsonb
+    END
+  INTO
+    v_breakdown_count,
+    v_single_breakdown_meta_json
+  FROM public.pay_batch_item_breakdowns AS breakdown_row
+  WHERE breakdown_row.pay_batch_item_id = p_pay_batch_item_id;
+
+  IF jsonb_typeof(COALESCE(v_single_breakdown_meta_json, '{}'::jsonb)) <> 'object' THEN
+    v_single_breakdown_meta_json := '{}'::jsonb;
+  END IF;
+
+  SELECT
+    resolved_key_row.key_type,
+    resolved_key_row.key_value,
+    resolved_key_row.key_resolution_failure_reason
+  INTO
+    v_resolved_key_type,
+    v_resolved_key_value,
+    v_key_resolution_failure_reason
+  FROM public._pay_policy_x_resolve_post_draft_economic_key(
+    p_pay_batch_item_id => p_pay_batch_item_id,
+    p_pay_batch_id => v_pay_batch_id,
+    p_timesheet_id => v_timesheet_id,
+    p_item_type => v_item_type,
+    p_frozen_key_type => v_frozen_component_key_type,
+    p_frozen_key_value => v_frozen_component_key_value,
+    p_frozen_component_snapshot_json => v_frozen_component_snapshot_json,
+    p_frozen_source_basis_json => v_frozen_source_basis_json,
+    p_breakdown_meta_json => v_single_breakdown_meta_json,
+    p_target_snapshot_json => NULL::jsonb
+  ) AS resolved_key_row
+  LIMIT 1;
+
+  IF v_key_resolution_failure_reason IS NOT NULL
+     OR v_resolved_key_type IS NULL
+     OR BTRIM(COALESCE(v_resolved_key_type, '')) = ''
+     OR v_resolved_key_value IS NULL
+     OR BTRIM(COALESCE(v_resolved_key_value, '')) = ''
+     OR (v_resolved_key_type = 'TS_DAY' AND v_resolved_key_value !~ '^\d{4}-\d{2}-\d{2}$') THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  v_has_source_target_split :=
+       v_finance_case_id IS NOT NULL
+    OR v_finance_component_id IS NOT NULL
+    OR v_frozen_target_amount_ex_vat IS NOT NULL
+    OR v_frozen_resolution_mode IS NOT NULL
+    OR v_frozen_resolution_payload_json IS NOT NULL
+    OR v_frozen_resolution_result_json IS NOT NULL
+    OR v_frozen_component_snapshot_json ? 'target_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_pay_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_pay_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'frozen_target_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_rate'
+    OR v_frozen_component_snapshot_json ? 'target_units'
+    OR v_frozen_component_snapshot_json ? 'resolution_mode'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_mode'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_payload_json'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_result_json';
+
+  IF v_has_source_target_split THEN
+    WITH breakdown_source_rows AS (
+      SELECT
+        (
+          SELECT source_candidates.source_text_value::numeric
+          FROM (
+            VALUES
+              (breakdown_row.meta_json->>'source_reservation_amount_ex_vat'),
+              (breakdown_row.meta_json->>'source_entitlement_amount_ex_vat'),
+              (breakdown_row.meta_json->>'source_amount_ex_vat'),
+              (breakdown_row.meta_json->>'source_pay_ex_vat'),
+              (breakdown_row.meta_json->>'source_pay_amount_ex_vat'),
+              (breakdown_row.meta_json->>'basis_source_amount_ex_vat'),
+              (breakdown_row.meta_json->>'reserved_source_amount'),
+              (breakdown_row.meta_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{source_basis_json,source_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{source_basis_json,source_pay_ex_vat}'),
+              (breakdown_row.meta_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{source_basis_json,pay_ex_vat}'),
+              (breakdown_row.meta_json#>>'{source_basis_json,pay_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{source_basis_json,amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_reservation_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_entitlement_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_pay_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_pay_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,basis_source_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,reserved_source_amount}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_reservation_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_entitlement_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_pay_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_pay_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,basis_source_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,pay_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,pay_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_payload_json,source_reservation_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_payload_json,source_entitlement_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_payload_json,source_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_payload_json,source_pay_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_payload_json,source_pay_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_result_json,source_reservation_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_result_json,source_entitlement_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_result_json,source_amount_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_result_json,source_pay_ex_vat}'),
+              (breakdown_row.meta_json#>>'{resolution_result_json,source_pay_amount_ex_vat}')
+          ) AS source_candidates(source_text_value)
+          WHERE source_candidates.source_text_value IS NOT NULL
+            AND BTRIM(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          LIMIT 1
+        ) AS source_amount_ex_vat
+      FROM public.pay_batch_item_breakdowns AS breakdown_row
+      WHERE breakdown_row.pay_batch_item_id = p_pay_batch_item_id
+    )
+    SELECT
+      COUNT(*)::integer,
+      (COUNT(*) FILTER (WHERE breakdown_source_rows.source_amount_ex_vat IS NOT NULL))::integer,
+      CASE
+        WHEN COUNT(*) > 0
+         AND COUNT(*) FILTER (WHERE breakdown_source_rows.source_amount_ex_vat IS NOT NULL) = COUNT(*)
+          THEN ROUND(ABS(SUM(breakdown_source_rows.source_amount_ex_vat)), 2)::numeric(12,2)
+        ELSE NULL::numeric(12,2)
+      END
+    INTO
+      v_breakdown_count,
+      v_breakdown_source_component_count,
+      v_breakdown_source_amount_ex_vat
+    FROM breakdown_source_rows;
+
+    IF COALESCE(v_breakdown_count, 0) > 0
+       AND COALESCE(v_breakdown_source_component_count, 0) = COALESCE(v_breakdown_count, 0)
+       AND v_breakdown_source_amount_ex_vat IS NOT NULL THEN
+      RETURN v_breakdown_source_amount_ex_vat;
+    END IF;
+  END IF;
+
   IF v_frozen_source_amount IS NOT NULL THEN
-    RETURN round(abs(v_frozen_source_amount), 2)::numeric(12,2);
+    RETURN ROUND(ABS(v_frozen_source_amount), 2)::numeric(12,2);
+  END IF;
+
+  IF v_has_source_target_split THEN
+    SELECT source_candidates.source_text_value
+    INTO v_source_text
+    FROM (
+      VALUES
+        (v_frozen_component_snapshot_json->>'source_reservation_amount_ex_vat'),
+        (v_frozen_component_snapshot_json->>'source_entitlement_amount_ex_vat'),
+        (v_frozen_component_snapshot_json->>'source_amount_ex_vat'),
+        (v_frozen_component_snapshot_json->>'source_pay_ex_vat'),
+        (v_frozen_component_snapshot_json->>'source_pay_amount_ex_vat'),
+        (v_frozen_component_snapshot_json->>'basis_source_amount_ex_vat'),
+        (v_frozen_component_snapshot_json->>'reserved_source_amount'),
+        (v_frozen_component_snapshot_json->>'frozen_source_amount'),
+        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
+        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
+        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_amount_ex_vat}'),
+        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_ex_vat}'),
+        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
+        (v_frozen_component_snapshot_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
+        (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_ex_vat}'),
+        (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_amount_ex_vat}'),
+        (v_frozen_component_snapshot_json#>>'{source_basis_json,amount_ex_vat}'),
+        (v_frozen_source_basis_json->>'source_reservation_amount_ex_vat'),
+        (v_frozen_source_basis_json->>'source_entitlement_amount_ex_vat'),
+        (v_frozen_source_basis_json->>'source_amount_ex_vat'),
+        (v_frozen_source_basis_json->>'source_pay_ex_vat'),
+        (v_frozen_source_basis_json->>'source_pay_amount_ex_vat'),
+        (v_frozen_source_basis_json->>'basis_source_amount_ex_vat'),
+        (v_frozen_source_basis_json->>'reserved_source_amount'),
+        (v_frozen_source_basis_json->>'frozen_source_amount'),
+        (v_frozen_source_basis_json->>'pay_ex_vat'),
+        (v_frozen_source_basis_json->>'pay_amount_ex_vat'),
+        (v_frozen_source_basis_json->>'amount_ex_vat'),
+        (v_frozen_source_basis_json->>'pay_amount'),
+        (v_frozen_resolution_payload_json->>'source_reservation_amount_ex_vat'),
+        (v_frozen_resolution_payload_json->>'source_entitlement_amount_ex_vat'),
+        (v_frozen_resolution_payload_json->>'source_amount_ex_vat'),
+        (v_frozen_resolution_payload_json->>'source_pay_ex_vat'),
+        (v_frozen_resolution_payload_json->>'source_pay_amount_ex_vat'),
+        (v_frozen_resolution_result_json->>'source_reservation_amount_ex_vat'),
+        (v_frozen_resolution_result_json->>'source_entitlement_amount_ex_vat'),
+        (v_frozen_resolution_result_json->>'source_amount_ex_vat'),
+        (v_frozen_resolution_result_json->>'source_pay_ex_vat'),
+        (v_frozen_resolution_result_json->>'source_pay_amount_ex_vat'),
+        (v_single_breakdown_meta_json->>'source_reservation_amount_ex_vat'),
+        (v_single_breakdown_meta_json->>'source_entitlement_amount_ex_vat'),
+        (v_single_breakdown_meta_json->>'source_amount_ex_vat'),
+        (v_single_breakdown_meta_json->>'source_pay_ex_vat'),
+        (v_single_breakdown_meta_json->>'source_pay_amount_ex_vat'),
+        (v_single_breakdown_meta_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{source_basis_json,source_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{source_basis_json,source_pay_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{source_basis_json,pay_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{source_basis_json,pay_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{source_basis_json,amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_reservation_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_entitlement_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_pay_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_pay_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,basis_source_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_reservation_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_entitlement_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_pay_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_pay_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,basis_source_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,pay_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,pay_amount_ex_vat}'),
+        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,amount_ex_vat}')
+    ) AS source_candidates(source_text_value)
+    WHERE source_candidates.source_text_value IS NOT NULL
+      AND BTRIM(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
+    LIMIT 1;
+
+    IF v_source_text IS NOT NULL THEN
+      RETURN ROUND(ABS(v_source_text::numeric), 2)::numeric(12,2);
+    END IF;
+
+    RETURN NULL::numeric(12,2);
   END IF;
 
   SELECT source_candidates.source_text_value
@@ -62827,45 +63085,73 @@ BEGIN
       (v_frozen_source_basis_json->>'pay_ex_vat'),
       (v_frozen_source_basis_json->>'pay_amount_ex_vat'),
       (v_frozen_source_basis_json->>'amount_ex_vat'),
-      (v_frozen_source_basis_json->>'pay_amount')
+      (v_frozen_source_basis_json->>'pay_amount'),
+      (v_frozen_resolution_payload_json->>'source_reservation_amount_ex_vat'),
+      (v_frozen_resolution_payload_json->>'source_entitlement_amount_ex_vat'),
+      (v_frozen_resolution_payload_json->>'source_amount_ex_vat'),
+      (v_frozen_resolution_payload_json->>'source_pay_ex_vat'),
+      (v_frozen_resolution_payload_json->>'source_pay_amount_ex_vat'),
+      (v_frozen_resolution_result_json->>'source_reservation_amount_ex_vat'),
+      (v_frozen_resolution_result_json->>'source_entitlement_amount_ex_vat'),
+      (v_frozen_resolution_result_json->>'source_amount_ex_vat'),
+      (v_frozen_resolution_result_json->>'source_pay_ex_vat'),
+      (v_frozen_resolution_result_json->>'source_pay_amount_ex_vat'),
+      (v_single_breakdown_meta_json->>'source_reservation_amount_ex_vat'),
+      (v_single_breakdown_meta_json->>'source_entitlement_amount_ex_vat'),
+      (v_single_breakdown_meta_json->>'source_amount_ex_vat'),
+      (v_single_breakdown_meta_json->>'source_pay_ex_vat'),
+      (v_single_breakdown_meta_json->>'source_pay_amount_ex_vat'),
+      (v_single_breakdown_meta_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{source_basis_json,source_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{source_basis_json,source_pay_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{source_basis_json,pay_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{source_basis_json,pay_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{source_basis_json,amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_reservation_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_entitlement_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_pay_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_pay_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,basis_source_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_reservation_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_entitlement_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_pay_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_pay_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,basis_source_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,pay_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,pay_amount_ex_vat}'),
+      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,amount_ex_vat}')
   ) AS source_candidates(source_text_value)
   WHERE source_candidates.source_text_value IS NOT NULL
-    AND btrim(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
+    AND BTRIM(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
   LIMIT 1;
 
   IF v_source_text IS NOT NULL THEN
-    RETURN round(abs(v_source_text::numeric), 2)::numeric(12,2);
+    RETURN ROUND(ABS(v_source_text::numeric), 2)::numeric(12,2);
   END IF;
-
-  v_has_source_target_split :=
-       v_finance_case_id IS NOT NULL
-    OR v_finance_component_id IS NOT NULL
-    OR v_frozen_target_amount_ex_vat IS NOT NULL
-    OR v_frozen_resolution_mode IS NOT NULL
-    OR v_frozen_resolution_payload_json IS NOT NULL
-    OR v_frozen_resolution_result_json IS NOT NULL
-    OR v_frozen_component_snapshot_json ? 'target_amount_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'target_pay_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'target_pay_amount_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'frozen_target_amount_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'target_rate'
-    OR v_frozen_component_snapshot_json ? 'target_units'
-    OR v_frozen_component_snapshot_json ? 'resolution_mode'
-    OR v_frozen_component_snapshot_json ? 'saved_resolution_mode'
-    OR v_frozen_component_snapshot_json ? 'saved_resolution_payload_json'
-    OR v_frozen_component_snapshot_json ? 'saved_resolution_result_json';
 
   IF v_has_source_target_split THEN
     RETURN NULL::numeric(12,2);
   END IF;
 
   IF v_amount_ex_vat IS NOT NULL THEN
-    RETURN round(abs(v_amount_ex_vat), 2)::numeric(12,2);
+    RETURN ROUND(ABS(v_amount_ex_vat), 2)::numeric(12,2);
   END IF;
 
   RETURN NULL::numeric(12,2);
 END;
 $function$;
+
+
+
+
+
+
+
 create or replace function public.pay_finance_case_taxable_channel_restructure_suggestion(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
@@ -81130,21 +81416,15 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_get_section_page(uuid, text, jsonb, integer, uuid, jsonb, jsonb);
 
-CREATE OR REPLACE FUNCTION public.pay_batch_get_section_page(
-  p_pay_batch_id uuid,
-  p_section text,
-  p_cursor_json jsonb DEFAULT NULL::jsonb,
-  p_limit integer DEFAULT 100,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_filters_json jsonb DEFAULT '{}'::jsonb,
-  p_sort_json jsonb DEFAULT '{}'::jsonb,
-  p_purpose text DEFAULT NULL::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-SET search_path TO 'public'
+
+
+
+
+CREATE OR REPLACE FUNCTION public.pay_batch_get_section_page(p_pay_batch_id uuid, p_section text, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100, p_actor_user_id uuid DEFAULT NULL::uuid, p_filters_json jsonb DEFAULT '{}'::jsonb, p_sort_json jsonb DEFAULT '{}'::jsonb, p_purpose text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_batch public.pay_batches%ROWTYPE;
@@ -81358,7 +81638,7 @@ BEGIN
   ));
 
   IF v_section = 'overview_items' THEN
-    WITH page_rows AS (
+    WITH raw_item_rows AS (
       SELECT
         pay_batch_item_page.id,
         pay_batch_item_page.pay_batch_candidate_id,
@@ -81577,8 +81857,183 @@ BEGIN
           ) AS unit_name
       ) AS display_line
       WHERE pay_batch_candidate_page.pay_batch_id = p_pay_batch_id
-        AND (v_cursor_id IS NULL OR pay_batch_item_page.id > v_cursor_id)
-      ORDER BY pay_batch_item_page.id ASC
+
+    ),
+    raw_item_rows_with_grouping AS (
+      SELECT
+        raw_item_rows.*,
+        raw_item_rows.item_type AS source_item_type,
+        CASE
+          WHEN UPPER(NULLIF(BTRIM(COALESCE(raw_item_rows.item_type, '')), '')) = 'SEGMENT_DELTA'
+           AND raw_item_rows.timesheet_id IS NOT NULL
+           AND UPPER(NULLIF(BTRIM(COALESCE(raw_item_rows.frozen_component_key_type, '')), '')) = 'TS_DAY'
+            THEN 'TIMESHEET_PAYMENT'
+          WHEN UPPER(NULLIF(BTRIM(COALESCE(raw_item_rows.item_type, '')), '')) = 'EXPENSE_DELTA'
+           AND raw_item_rows.timesheet_id IS NOT NULL
+            THEN 'EXPENSE'
+          WHEN UPPER(NULLIF(BTRIM(COALESCE(raw_item_rows.item_type, '')), '')) = 'MILEAGE_DELTA'
+           AND raw_item_rows.timesheet_id IS NOT NULL
+            THEN 'MILEAGE'
+          ELSE 'ITEM'
+        END AS overview_group_kind,
+        CASE
+          WHEN UPPER(NULLIF(BTRIM(COALESCE(raw_item_rows.item_type, '')), '')) = 'SEGMENT_DELTA'
+           AND raw_item_rows.timesheet_id IS NOT NULL
+           AND UPPER(NULLIF(BTRIM(COALESCE(raw_item_rows.frozen_component_key_type, '')), '')) = 'TS_DAY'
+            THEN CONCAT_WS('|', 'TIMESHEET_PAYMENT', raw_item_rows.pay_batch_candidate_id::text, COALESCE(raw_item_rows.pay_channel, ''), raw_item_rows.timesheet_id::text, COALESCE(raw_item_rows.week_ending_date, ''))
+          WHEN UPPER(NULLIF(BTRIM(COALESCE(raw_item_rows.item_type, '')), '')) = 'EXPENSE_DELTA'
+           AND raw_item_rows.timesheet_id IS NOT NULL
+            THEN CONCAT_WS('|', 'EXPENSE', raw_item_rows.pay_batch_candidate_id::text, COALESCE(raw_item_rows.pay_channel, ''), raw_item_rows.timesheet_id::text, COALESCE(raw_item_rows.week_ending_date, ''))
+          WHEN UPPER(NULLIF(BTRIM(COALESCE(raw_item_rows.item_type, '')), '')) = 'MILEAGE_DELTA'
+           AND raw_item_rows.timesheet_id IS NOT NULL
+            THEN CONCAT_WS('|', 'MILEAGE', raw_item_rows.pay_batch_candidate_id::text, COALESCE(raw_item_rows.pay_channel, ''), raw_item_rows.timesheet_id::text, COALESCE(raw_item_rows.week_ending_date, ''))
+          ELSE CONCAT_WS('|', 'ITEM', raw_item_rows.id::text)
+        END AS overview_group_key
+      FROM raw_item_rows
+    ),
+    grouped_rows AS (
+      SELECT
+        (ARRAY_AGG(raw_item_rows_with_grouping.id ORDER BY raw_item_rows_with_grouping.id ASC))[1] AS id,
+        (ARRAY_AGG(raw_item_rows_with_grouping.pay_batch_candidate_id ORDER BY raw_item_rows_with_grouping.id ASC))[1] AS pay_batch_candidate_id,
+        (ARRAY_AGG(raw_item_rows_with_grouping.candidate_id ORDER BY raw_item_rows_with_grouping.id ASC))[1] AS candidate_id,
+        (ARRAY_AGG(raw_item_rows_with_grouping.candidate_tms_ref ORDER BY raw_item_rows_with_grouping.id ASC))[1] AS candidate_tms_ref,
+        (ARRAY_AGG(raw_item_rows_with_grouping.candidate_display_name ORDER BY raw_item_rows_with_grouping.id ASC))[1] AS candidate_display_name,
+        CASE
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'TIMESHEET_PAYMENT' THEN 'TIMESHEET_PAYMENT'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'EXPENSE' THEN 'EXPENSE'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'MILEAGE' THEN 'MILEAGE'
+          ELSE (ARRAY_AGG(raw_item_rows_with_grouping.item_type ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+        END AS item_type,
+        (ARRAY_AGG(raw_item_rows_with_grouping.source_item_type ORDER BY raw_item_rows_with_grouping.id ASC))[1] AS source_item_type,
+        (ARRAY_AGG(raw_item_rows_with_grouping.timesheet_id ORDER BY raw_item_rows_with_grouping.id ASC))[1] AS timesheet_id,
+        (ARRAY_AGG(raw_item_rows_with_grouping.pay_channel ORDER BY raw_item_rows_with_grouping.id ASC))[1] AS pay_channel,
+        (ARRAY_AGG(raw_item_rows_with_grouping.source_ref ORDER BY raw_item_rows_with_grouping.id ASC) FILTER (WHERE raw_item_rows_with_grouping.source_ref IS NOT NULL))[1] AS source_ref,
+        (ARRAY_AGG(raw_item_rows_with_grouping.source_reference ORDER BY raw_item_rows_with_grouping.id ASC) FILTER (WHERE raw_item_rows_with_grouping.source_reference IS NOT NULL))[1] AS source_reference,
+        CASE
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'TIMESHEET_PAYMENT' THEN 'Timesheet payment'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'EXPENSE' THEN 'Expense'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'MILEAGE' THEN 'Mileage'
+          ELSE (ARRAY_AGG(raw_item_rows_with_grouping.description ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+        END AS description,
+        ROUND(SUM(COALESCE(raw_item_rows_with_grouping.amount_ex_vat, 0)), 2)::numeric(12,2) AS amount_ex_vat,
+        ROUND(SUM(COALESCE(raw_item_rows_with_grouping.amount_vat, 0)), 2)::numeric(12,2) AS amount_vat,
+        ROUND(SUM(COALESCE(raw_item_rows_with_grouping.amount_inc_vat, 0)), 2)::numeric(12,2) AS amount_inc_vat,
+        CASE
+          WHEN BOOL_OR(raw_item_rows_with_grouping.frozen_target_amount_ex_vat IS NOT NULL)
+            THEN ROUND(SUM(COALESCE(raw_item_rows_with_grouping.frozen_target_amount_ex_vat, raw_item_rows_with_grouping.amount_ex_vat, 0)), 2)::numeric(12,2)
+          ELSE NULL::numeric(12,2)
+        END AS frozen_target_amount_ex_vat,
+        CASE
+          WHEN BOOL_OR(raw_item_rows_with_grouping.frozen_target_amount_vat IS NOT NULL)
+            THEN ROUND(SUM(COALESCE(raw_item_rows_with_grouping.frozen_target_amount_vat, raw_item_rows_with_grouping.amount_vat, 0)), 2)::numeric(12,2)
+          ELSE NULL::numeric(12,2)
+        END AS frozen_target_amount_vat,
+        CASE
+          WHEN BOOL_OR(raw_item_rows_with_grouping.frozen_target_amount_inc_vat IS NOT NULL)
+            THEN ROUND(SUM(COALESCE(raw_item_rows_with_grouping.frozen_target_amount_inc_vat, raw_item_rows_with_grouping.amount_inc_vat, 0)), 2)::numeric(12,2)
+          ELSE NULL::numeric(12,2)
+        END AS frozen_target_amount_inc_vat,
+        CASE
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM'
+            THEN (ARRAY_AGG(raw_item_rows_with_grouping.frozen_component_key_type ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+          ELSE NULL::text
+        END AS frozen_component_key_type,
+        CASE
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM'
+            THEN (ARRAY_AGG(raw_item_rows_with_grouping.frozen_component_key_value ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+          ELSE NULL::text
+        END AS frozen_component_key_value,
+        CASE
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM'
+            THEN (ARRAY_AGG(raw_item_rows_with_grouping.frozen_component_classification ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+          ELSE NULL::text
+        END AS frozen_component_classification,
+        CASE
+          WHEN COUNT(*) = 1 THEN (ARRAY_AGG(raw_item_rows_with_grouping.frozen_source_basis_json ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+          ELSE '{}'::jsonb
+        END AS frozen_source_basis_json,
+        CASE
+          WHEN COUNT(*) = 1 THEN (ARRAY_AGG(raw_item_rows_with_grouping.frozen_component_snapshot_json ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+          ELSE '{}'::jsonb
+        END AS frozen_component_snapshot_json,
+        (ARRAY_AGG(raw_item_rows_with_grouping.frozen_source_pay_method ORDER BY raw_item_rows_with_grouping.id ASC) FILTER (WHERE raw_item_rows_with_grouping.frozen_source_pay_method IS NOT NULL))[1] AS frozen_source_pay_method,
+        (ARRAY_AGG(raw_item_rows_with_grouping.frozen_target_pay_method ORDER BY raw_item_rows_with_grouping.id ASC) FILTER (WHERE raw_item_rows_with_grouping.frozen_target_pay_method IS NOT NULL))[1] AS frozen_target_pay_method,
+        CASE
+          WHEN COUNT(*) = 1 THEN (ARRAY_AGG(raw_item_rows_with_grouping.frozen_resolution_mode ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+          ELSE NULL
+        END AS frozen_resolution_mode,
+        CASE
+          WHEN COUNT(*) = 1 THEN (ARRAY_AGG(raw_item_rows_with_grouping.frozen_resolution_payload_json ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+          ELSE '{}'::jsonb
+        END AS frozen_resolution_payload_json,
+        CASE
+          WHEN COUNT(*) = 1 THEN (ARRAY_AGG(raw_item_rows_with_grouping.frozen_resolution_result_json ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+          ELSE '{}'::jsonb
+        END AS frozen_resolution_result_json,
+        (ARRAY_AGG(raw_item_rows_with_grouping.pay_bank_transfer_id ORDER BY raw_item_rows_with_grouping.id ASC) FILTER (WHERE raw_item_rows_with_grouping.pay_bank_transfer_id IS NOT NULL))[1] AS pay_bank_transfer_id,
+        (ARRAY_AGG(raw_item_rows_with_grouping.payee_name ORDER BY raw_item_rows_with_grouping.id ASC) FILTER (WHERE raw_item_rows_with_grouping.payee_name IS NOT NULL))[1] AS payee_name,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.first_breakdown_id ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::uuid END AS first_breakdown_id,
+        CASE
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'TIMESHEET_PAYMENT' THEN 'TIMESHEET_PAYMENT'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'EXPENSE' THEN 'EXPENSE'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'MILEAGE' THEN 'MILEAGE'
+          ELSE (ARRAY_AGG(raw_item_rows_with_grouping.line_kind ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+        END AS line_kind,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.bucket_code ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::text END AS bucket_code,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.breakdown_unit_name ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::text END AS breakdown_unit_name,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.breakdown_units ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::numeric END AS breakdown_units,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.breakdown_rate ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::numeric END AS breakdown_rate,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.breakdown_amount_ex_vat ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::numeric END AS breakdown_amount_ex_vat,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.breakdowns_json ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE '[]'::jsonb END AS breakdowns_json,
+        (ARRAY_AGG(raw_item_rows_with_grouping.week_ending_date ORDER BY raw_item_rows_with_grouping.id ASC) FILTER (WHERE raw_item_rows_with_grouping.week_ending_date IS NOT NULL))[1] AS week_ending_date,
+        (ARRAY_AGG(raw_item_rows_with_grouping.client_name ORDER BY raw_item_rows_with_grouping.id ASC) FILTER (WHERE raw_item_rows_with_grouping.client_name IS NOT NULL))[1] AS client_name,
+        (ARRAY_AGG(raw_item_rows_with_grouping.role ORDER BY raw_item_rows_with_grouping.id ASC) FILTER (WHERE raw_item_rows_with_grouping.role IS NOT NULL))[1] AS role,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.worked_date ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::text END AS worked_date,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.source_rate ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::text END AS source_rate,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.source_charge_rate ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::text END AS source_charge_rate,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.additional_code ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::text END AS additional_code,
+        CASE
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'TIMESHEET_PAYMENT' THEN 'Timesheet payment'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'EXPENSE' THEN 'Expense'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'MILEAGE' THEN 'Mileage'
+          ELSE (ARRAY_AGG(raw_item_rows_with_grouping.unit_name ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+        END AS unit_name,
+        CASE
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'TIMESHEET_PAYMENT' THEN 'Timesheet payment'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'EXPENSE' THEN 'Expense'
+          WHEN raw_item_rows_with_grouping.overview_group_kind = 'MILEAGE' THEN 'Mileage'
+          ELSE (ARRAY_AGG(raw_item_rows_with_grouping.unit_label ORDER BY raw_item_rows_with_grouping.id ASC))[1]
+        END AS unit_label,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.units ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::numeric END AS units,
+        CASE WHEN raw_item_rows_with_grouping.overview_group_kind = 'ITEM' THEN (ARRAY_AGG(raw_item_rows_with_grouping.rate ORDER BY raw_item_rows_with_grouping.id ASC))[1] ELSE NULL::numeric END AS rate,
+        raw_item_rows_with_grouping.overview_group_kind,
+        (COUNT(*) > 1)::boolean AS overview_grouped,
+        COUNT(*)::integer AS overview_grouped_item_count,
+        TO_JSONB(ARRAY_AGG(raw_item_rows_with_grouping.id::text ORDER BY raw_item_rows_with_grouping.id ASC)) AS pay_batch_item_ids,
+        COALESCE(
+          jsonb_agg(
+            jsonb_strip_nulls(jsonb_build_object(
+              'pay_batch_item_id', raw_item_rows_with_grouping.id::text,
+              'key_type', raw_item_rows_with_grouping.frozen_component_key_type,
+              'key_value', raw_item_rows_with_grouping.frozen_component_key_value
+            ))
+            ORDER BY raw_item_rows_with_grouping.id ASC
+          ) FILTER (
+            WHERE raw_item_rows_with_grouping.frozen_component_key_type IS NOT NULL
+               OR raw_item_rows_with_grouping.frozen_component_key_value IS NOT NULL
+          ),
+          '[]'::jsonb
+        ) AS grouped_frozen_economic_keys
+      FROM raw_item_rows_with_grouping
+      GROUP BY
+        raw_item_rows_with_grouping.overview_group_key,
+        raw_item_rows_with_grouping.overview_group_kind
+    ),
+    page_rows AS (
+      SELECT grouped_rows.*
+      FROM grouped_rows
+      WHERE v_cursor_id IS NULL OR grouped_rows.id > v_cursor_id
+      ORDER BY grouped_rows.id ASC
       LIMIT (v_limit + 1)
     )
     SELECT
@@ -81587,6 +82042,7 @@ BEGIN
           jsonb_build_object(
             'id', page_rows.id::text,
             'pay_batch_item_id', page_rows.id::text,
+            'pay_batch_item_ids', COALESCE(page_rows.pay_batch_item_ids, '[]'::jsonb),
             'pay_batch_candidate_id', page_rows.pay_batch_candidate_id::text,
             'candidate_id', page_rows.candidate_id::text,
             'candidate_tms_ref', page_rows.candidate_tms_ref,
@@ -81594,6 +82050,10 @@ BEGIN
             'candidate_name', page_rows.candidate_display_name,
             'payee_name', COALESCE(page_rows.payee_name, page_rows.candidate_display_name),
             'item_type', page_rows.item_type,
+            'source_item_type', page_rows.source_item_type,
+            'overview_group_kind', page_rows.overview_group_kind,
+            'overview_grouped', page_rows.overview_grouped,
+            'overview_grouped_item_count', page_rows.overview_grouped_item_count,
             'timesheet_id', CASE WHEN page_rows.timesheet_id IS NULL THEN NULL ELSE page_rows.timesheet_id::text END,
             'pay_channel', page_rows.pay_channel,
             'source_ref', page_rows.source_ref,
@@ -81607,6 +82067,7 @@ BEGIN
             'frozen_target_amount_inc_vat', page_rows.frozen_target_amount_inc_vat,
             'frozen_economic_key_type', page_rows.frozen_component_key_type,
             'frozen_economic_key_value', page_rows.frozen_component_key_value,
+            'grouped_frozen_economic_keys', COALESCE(page_rows.grouped_frozen_economic_keys, '[]'::jsonb),
             'pay_bank_transfer_id', CASE WHEN page_rows.pay_bank_transfer_id IS NULL THEN NULL::text ELSE page_rows.pay_bank_transfer_id::text END,
             'draft_not_submitted', COALESCE(UPPER(BTRIM(COALESCE(v_batch.status, ''))) IN ('DRAFT','DRAFT_CREATED'), false)
               AND COALESCE(UPPER(BTRIM(COALESCE(v_batch.execution_commit_state, 'NOT_SUBMITTED'))) IN ('', 'NOT_SUBMITTED', 'NONE'), true)
@@ -81647,7 +82108,9 @@ BEGIN
               'worked_date', page_rows.worked_date,
               'source_rate', page_rows.source_rate,
               'source_charge_rate', page_rows.source_charge_rate,
-              'additional_code', page_rows.additional_code
+              'additional_code', page_rows.additional_code,
+              'overview_group_kind', page_rows.overview_group_kind,
+              'overview_grouped_item_count', page_rows.overview_grouped_item_count
             ))
           )
         )
@@ -81658,7 +82121,8 @@ BEGIN
     INTO v_items, v_raw_count, v_last_cursor_text
     FROM page_rows;
 
-  ELSIF v_section = 'candidates' THEN
+  
+ELSIF v_section = 'candidates' THEN
     WITH page_rows AS (
       SELECT
         pay_batch_candidate_page.*,
@@ -82638,6 +83102,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
