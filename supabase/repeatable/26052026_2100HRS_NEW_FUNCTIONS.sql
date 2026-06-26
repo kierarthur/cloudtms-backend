@@ -52605,17 +52605,11 @@ DROP FUNCTION IF EXISTS public.pay_batch_build_item_breakdowns(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_build_item_breakdowns(uuid, uuid, uuid, jsonb);
 
 
-
-CREATE OR REPLACE FUNCTION public.pay_batch_build_item_breakdowns(
-  p_pay_batch_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_batch_build_item_breakdowns(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_operation_id uuid DEFAULT NULL::uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -52693,6 +52687,73 @@ BEGIN
       END
     ) WITH ORDINALITY AS component_entry(component_json, component_ordinal)
       ON item_page.item_type = 'SEGMENT_DELTA'
+    CROSS JOIN LATERAL (
+      SELECT
+        UPPER(NULLIF(BTRIM(COALESCE(
+          item_page.frozen_component_key_type,
+          item_page.frozen_source_basis_json->>'key_type',
+          item_page.frozen_source_basis_json#>>'{economic_key,key_type}',
+          item_page.frozen_component_snapshot_json->>'component_key_type',
+          item_page.frozen_component_snapshot_json#>>'{source_basis_json,component_key_type}',
+          item_page.frozen_component_snapshot_json#>>'{source_basis_json,key_type}',
+          ''
+        )), '')) AS item_economic_key_type,
+        NULLIF(BTRIM(COALESCE(
+          item_page.frozen_component_key_value,
+          item_page.frozen_source_basis_json->>'key_value',
+          item_page.frozen_source_basis_json#>>'{economic_key,key_value}',
+          item_page.frozen_component_snapshot_json->>'component_key_value',
+          item_page.frozen_component_snapshot_json#>>'{source_basis_json,component_key_value}',
+          item_page.frozen_component_snapshot_json#>>'{source_basis_json,key_value}',
+          ''
+        )), '') AS item_economic_key_value,
+        LOWER(NULLIF(BTRIM(COALESCE(
+          CASE WHEN item_page.timesheet_id IS NULL THEN NULL ELSE item_page.timesheet_id::text END,
+          item_page.frozen_source_basis_json->>'timesheet_id',
+          item_page.frozen_source_basis_json#>>'{economic_key,timesheet_id}',
+          item_page.frozen_component_snapshot_json->>'timesheet_id',
+          item_page.frozen_component_snapshot_json#>>'{source_basis_json,timesheet_id}',
+          ''
+        )), '')) AS item_timesheet_id_text
+    ) AS item_match
+    CROSS JOIN LATERAL (
+      SELECT
+        UPPER(NULLIF(BTRIM(COALESCE(
+          component_entry.component_json->>'component_key_type',
+          component_entry.component_json->>'key_type',
+          component_entry.component_json#>>'{economic_key,key_type}',
+          component_entry.component_json#>>'{source_basis_json,component_key_type}',
+          component_entry.component_json#>>'{source_basis_json,key_type}',
+          component_entry.component_json#>>'{source_basis_json,economic_key,key_type}',
+          ''
+        )), '')) AS component_economic_key_type,
+        NULLIF(BTRIM(COALESCE(
+          component_entry.component_json->>'component_key_value',
+          component_entry.component_json->>'key_value',
+          component_entry.component_json#>>'{economic_key,key_value}',
+          component_entry.component_json#>>'{source_basis_json,component_key_value}',
+          component_entry.component_json#>>'{source_basis_json,key_value}',
+          component_entry.component_json#>>'{source_basis_json,economic_key,key_value}',
+          ''
+        )), '') AS component_economic_key_value,
+        NULLIF(BTRIM(COALESCE(
+          component_entry.component_json#>>'{source_basis_json,work_date}',
+          component_entry.component_json->>'work_date',
+          component_entry.component_json#>>'{source_basis_json,date}',
+          component_entry.component_json->>'date',
+          component_entry.component_json->>'source_work_date',
+          ''
+        )), '') AS component_work_date_value,
+        LOWER(NULLIF(BTRIM(COALESCE(
+          component_entry.component_json->>'timesheet_id',
+          component_entry.component_json->>'real_business_timesheet_id',
+          component_entry.component_json#>>'{economic_key,timesheet_id}',
+          component_entry.component_json#>>'{source_basis_json,timesheet_id}',
+          component_entry.component_json#>>'{source_basis_json,real_business_timesheet_id}',
+          component_entry.component_json#>>'{source_basis_json,economic_key,timesheet_id}',
+          ''
+        )), '')) AS component_timesheet_id_text
+    ) AS component_match
     WHERE component_entry.component_json IS NOT NULL
       AND jsonb_typeof(component_entry.component_json) = 'object'
       AND (
@@ -52701,6 +52762,41 @@ BEGIN
         OR COALESCE(component_entry.component_json->>'target_units', component_entry.component_json->>'source_units', component_entry.component_json #>> '{source_basis_json,source_units}', component_entry.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
         OR COALESCE(component_entry.component_json->>'target_rate', component_entry.component_json->>'source_rate', component_entry.component_json #>> '{source_basis_json,source_rate}', component_entry.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
         OR COALESCE(component_entry.component_json->>'target_pay_ex_vat', component_entry.component_json->>'target_amount_ex_vat', component_entry.component_json->>'component_amount_ex_vat', component_entry.component_json->>'preview_component_amount_ex_vat', component_entry.component_json->>'ready_preview_amount_ex_vat', component_entry.component_json->>'source_pay_ex_vat', component_entry.component_json->>'source_amount_ex_vat', component_entry.component_json #>> '{source_basis_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+      )
+      AND (
+        (
+          item_match.item_economic_key_type = 'TS_DAY'
+          AND item_match.item_economic_key_value IS NOT NULL
+          AND (
+            component_match.component_economic_key_type = 'TS_DAY'
+            OR component_match.component_economic_key_type IS NULL
+          )
+          AND (
+            component_match.component_work_date_value = item_match.item_economic_key_value
+            OR component_match.component_economic_key_value = item_match.item_economic_key_value
+          )
+          AND (
+            component_match.component_timesheet_id_text IS NULL
+            OR (
+              item_match.item_timesheet_id_text IS NOT NULL
+              AND component_match.component_timesheet_id_text = item_match.item_timesheet_id_text
+            )
+          )
+        )
+        OR (
+          item_match.item_economic_key_type IS NOT NULL
+          AND item_match.item_economic_key_type <> 'TS_DAY'
+          AND item_match.item_economic_key_value IS NOT NULL
+          AND component_match.component_economic_key_type = item_match.item_economic_key_type
+          AND component_match.component_economic_key_value = item_match.item_economic_key_value
+          AND (
+            component_match.component_timesheet_id_text IS NULL
+            OR (
+              item_match.item_timesheet_id_text IS NOT NULL
+              AND component_match.component_timesheet_id_text = item_match.item_timesheet_id_text
+            )
+          )
+        )
       )
   ), segment_component_derived AS (
     SELECT
@@ -187293,7 +187389,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_worker_drain_chunk(p_limit integer DEFAULT 5, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_allowed_job_types text[] DEFAULT NULL::text[], p_worker_id text DEFAULT NULL::text, p_lease_seconds integer DEFAULT 180)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -187393,8 +187488,12 @@ DECLARE
   v_supplemental_stale_elapsed_ms integer := 0;
   v_final_more_due_elapsed_ms integer := 0;
   v_stop_reason text := NULL::text;
-  v_max_runtime_ms integer := 12000;
-  v_min_phase_budget_ms integer := 1500;
+  v_max_runtime_ms integer := 8000;
+  v_min_phase_budget_ms integer := 2500;
+  v_due_queued_count integer := 0;
+  v_claimable_count integer := 0;
+  v_running_count integer := 0;
+  v_stale_running_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKER_CHUNK');
   v_started_at_utc := clock_timestamp();
@@ -188191,6 +188290,59 @@ BEGIN
           )
         );
       ELSE
+        v_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer);
+        IF v_elapsed_ms >= (v_max_runtime_ms - v_min_phase_budget_ms) THEN
+          WITH claimed_unprocessed_jobs AS (
+            SELECT (claimed_unprocessed_job.value->>'job_id')::uuid AS job_id
+            FROM jsonb_array_elements(v_claimed_jobs_json) AS claimed_unprocessed_job(value)
+            WHERE BTRIM(COALESCE(claimed_unprocessed_job.value->>'job_id', ''))
+                  ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              AND NOT (
+                (claimed_unprocessed_job.value->>'job_id')::uuid
+                  = ANY(COALESCE(v_processed_claimed_job_ids, ARRAY[]::uuid[]))
+              )
+          ),
+          requeued_unprocessed_jobs AS (
+            UPDATE public.banking_pay_workbench_jobs AS unprocessed_job
+            SET status = 'QUEUED',
+                attempt_count = GREATEST(COALESCE(unprocessed_job.attempt_count, 1) - 1, 0),
+                run_at_utc = LEAST(COALESCE(unprocessed_job.run_at_utc, v_cutoff), v_cutoff),
+                started_at_utc = NULL::timestamptz,
+                completed_at_utc = NULL::timestamptz,
+                failed_at_utc = NULL::timestamptz,
+                last_error_json = jsonb_build_object(
+                  'code', 'WORKBENCH_CLAIM_RELEASED_BEFORE_STAGE_DUE_TO_WORKER_BUDGET',
+                  'message', 'Claimed Banking Pay workbench job was released before starting a stage because the worker was near its runtime budget.',
+                  'worker_id', v_worker_id,
+                  'released_at_utc', v_now::text,
+                  'stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
+                ),
+                payload_json = jsonb_strip_nulls(
+                  COALESCE(unprocessed_job.payload_json, '{}'::jsonb)
+                  || jsonb_build_object(
+                    'claim_released_before_stage_due_to_worker_budget', true,
+                    'claim_released_at_utc', v_now::text,
+                    'claim_released_by_worker_id', v_worker_id,
+                    'claim_release_stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
+                  )
+                ),
+                updated_at_utc = v_now
+            FROM claimed_unprocessed_jobs AS claimed_unprocessed_job
+            WHERE unprocessed_job.id = claimed_unprocessed_job.job_id
+              AND unprocessed_job.status = 'RUNNING'
+              AND unprocessed_job.completed_at_utc IS NULL
+              AND unprocessed_job.failed_at_utc IS NULL
+            RETURNING unprocessed_job.id
+          )
+          SELECT COUNT(*)::integer
+          INTO v_requeued_unprocessed_claimed_count
+          FROM requeued_unprocessed_jobs;
+
+          v_more_due := true;
+          v_stop_reason := 'MAX_RUNTIME_NEAR_EXHAUSTED';
+          EXIT;
+        END IF;
+
         IF v_canonical_job_type = 'WORKBENCH_SESSION_SCOPE_SEED' THEN
           v_stage_result := public.pay_workbench_session_seed_scope_chunk(
             p_session_id => v_job_row.session_id,
@@ -188705,6 +188857,88 @@ BEGIN
   END IF;
 
 
+  BEGIN
+    SELECT
+      COALESCE(COUNT(*) FILTER (
+        WHERE diag_job.status = 'QUEUED'
+          AND diag_job.run_at_utc <= GREATEST(v_cutoff, v_now)
+      ), 0)::integer,
+      COALESCE(COUNT(*) FILTER (
+        WHERE diag_job.status = 'QUEUED'
+          AND diag_job.run_at_utc <= GREATEST(v_cutoff, v_now)
+      ), 0)::integer,
+      COALESCE(COUNT(*) FILTER (
+        WHERE diag_job.status = 'RUNNING'
+      ), 0)::integer,
+      COALESCE(COUNT(*) FILTER (
+        WHERE diag_job.status = 'RUNNING'
+          AND COALESCE(
+            diag_job.updated_at_utc,
+            diag_job.started_at_utc,
+            diag_job.run_at_utc,
+            diag_job.created_at_utc
+          ) <= (GREATEST(v_cutoff, v_now) - make_interval(secs => v_lease_seconds))
+      ), 0)::integer
+    INTO
+      v_due_queued_count,
+      v_claimable_count,
+      v_running_count,
+      v_stale_running_count
+    FROM public.banking_pay_workbench_jobs AS diag_job
+    CROSS JOIN LATERAL (
+      SELECT CASE
+        WHEN UPPER(BTRIM(COALESCE(diag_job.job_type, ''))) IN (
+          'WORKBENCH_SESSION_SCOPE_SEED',
+          'SESSION_SCOPE_SEED',
+          'WORKBENCH_SCOPE_SEED',
+          'WORKBENCH_SCOPE_SEED_PAGE',
+          'SCOPE_SEED_PAGE'
+        ) THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+        WHEN UPPER(BTRIM(COALESCE(diag_job.job_type, ''))) IN (
+          'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+          'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE',
+          'CANDIDATE_LINE_WORK_SEED',
+          'CANDIDATE_LINE_WORK_SEED_PAGE',
+          'LINE_WORK_SEED_PAGE',
+          'SNAPSHOT_CANDIDATE_REFRESH',
+          'CANDIDATE_REFRESH'
+        ) THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+        WHEN UPPER(BTRIM(COALESCE(diag_job.job_type, ''))) IN (
+          'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+          'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK',
+          'CANDIDATE_LINE_WORK_PROCESS',
+          'CANDIDATE_LINE_WORK_PROCESS_CHUNK',
+          'LINE_WORK_PROCESS',
+          'LINE_WORK_PROCESS_CHUNK'
+        ) THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+        WHEN UPPER(BTRIM(COALESCE(diag_job.job_type, ''))) IN (
+          'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
+          'WORKBENCH_PREVIEW_ROWS_MATERIALIZE',
+          'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK',
+          'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK',
+          'PREVIEW_ROWS_MATERIALISE',
+          'PREVIEW_ROWS_MATERIALIZE',
+          'PREVIEW_ROWS_MATERIALISE_CHUNK',
+          'PREVIEW_ROWS_MATERIALIZE_CHUNK',
+          'PREVIEW_ROW_MATERIALISE_CHUNK',
+          'PREVIEW_ROW_MATERIALIZE_CHUNK'
+        ) THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+        WHEN UPPER(BTRIM(COALESCE(diag_job.job_type, ''))) = 'CONTRACT_CLIENT_DIRTY_FANOUT'
+          THEN 'CONTRACT_CLIENT_DIRTY_FANOUT'
+        ELSE UPPER(BTRIM(COALESCE(diag_job.job_type, '')))
+      END AS canonical_job_type
+    ) AS diag_job_type
+    WHERE diag_job.status IN ('QUEUED', 'RUNNING')
+      AND (p_session_id IS NULL OR diag_job.session_id = p_session_id)
+      AND (p_candidate_id IS NULL OR diag_job.candidate_id = p_candidate_id)
+      AND diag_job_type.canonical_job_type = ANY(v_allowed_job_types);
+  EXCEPTION WHEN OTHERS THEN
+    v_due_queued_count := 0;
+    v_claimable_count := 0;
+    v_running_count := 0;
+    v_stale_running_count := 0;
+  END;
+
   RETURN jsonb_build_object(
       'ok', v_failed_count = 0 AND v_supplemental_stale_recovery_error_count = 0,
       'worker_id', v_worker_id,
@@ -188755,6 +188989,10 @@ BEGIN
       'stale_recovery_elapsed_ms', COALESCE(v_supplemental_stale_elapsed_ms, 0),
       'claim_elapsed_ms', COALESCE(v_claim_elapsed_ms, 0),
       'final_more_due_elapsed_ms', COALESCE(v_final_more_due_elapsed_ms, 0),
+      'due_queued_count', COALESCE(v_due_queued_count, 0),
+      'claimable_count', COALESCE(v_claimable_count, 0),
+      'running_count', COALESCE(v_running_count, 0),
+      'stale_running_count', COALESCE(v_stale_running_count, 0),
       'jobs', COALESCE(v_job_results_json, '[]'::jsonb)
     );
 END;

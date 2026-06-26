@@ -162276,6 +162276,7 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
 }
 
 
+
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -162402,7 +162403,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const maxJobsMax = numberInRange(sourceOptions.maxJobsMax ?? sourceOptions.max_jobs_max, 150, 1, 150);
   const maxRowsMax = numberInRange(sourceOptions.maxRowsMax ?? sourceOptions.max_rows_max, 5000, 1, 5000);
   const maxRuntimeMsMax = numberInRange(sourceOptions.maxRuntimeMsMax ?? sourceOptions.max_runtime_ms_max, 30000, 1000, 30000);
-  const profileClaimLimitMax = budgetProfile === 'NUDGE' ? Math.min(claimLimitMax, 50) : claimLimitMax;
+  const profileClaimLimitMax = budgetProfile === 'NUDGE' ? Math.min(claimLimitMax, 10) : claimLimitMax;
   const claimLimit = numberInRange(sourceOptions.claimLimit ?? sourceOptions.claim_limit, 5, 1, profileClaimLimitMax);
   const maxPasses = numberInRange(sourceOptions.maxPasses ?? sourceOptions.max_passes, budgetProfile === 'NUDGE' ? 4 : 2, 1, 4);
   const maxJobs = numberInRange(sourceOptions.maxJobs ?? sourceOptions.max_jobs, Math.min(maxJobsMax, claimLimit * maxPasses), 1, maxJobsMax);
@@ -162431,9 +162432,12 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     sourceOptions.worker_id ||
     `BANKING_PAY_WORKBENCH:${budgetProfile || 'DEFAULT'}:${origin}`
   ).slice(0, 200) || 'BANKING_PAY_WORKBENCH_DB_WORKER';
+  const defaultLeaseSeconds = budgetProfile === 'NUDGE'
+    ? 25
+    : Math.max(25, Math.ceil(maxRuntimeMs / 1000) + 30);
   const leaseSeconds = numberInRange(
     sourceOptions.leaseSeconds ?? sourceOptions.lease_seconds,
-    Math.max(25, Math.ceil(maxRuntimeMs / 1000) + 30),
+    defaultLeaseSeconds,
     25,
     3600
   );
@@ -162515,6 +162519,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     minimum_rpc_budget_ms: minimumRpcBudgetMs,
     rpc_safety_buffer_ms: rpcSafetyBufferMs,
     claim_limit: claimLimit,
+    claim_limit_effective_max: profileClaimLimitMax,
+    db_worker_default_lease_seconds: defaultLeaseSeconds,
     allowed_job_types: allowedJobTypes
   });
 
@@ -162643,6 +162649,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const passRecoveredStale = countFrom(aggregate, ['recovered_stale_count']);
     const passDeadStale = countFrom(aggregate, ['dead_stale_count']);
     const passStaleRecoveryErrors = countFrom(aggregate, ['supplemental_stale_recovery_error_count']);
+    const passDueQueuedCount = countFrom(aggregate, ['due_queued_count', 'due_queued']);
+    const passClaimableCount = countFrom(aggregate, ['claimable_count', 'claimable_due_count']);
+    const passRunningCount = countFrom(aggregate, ['running_count', 'running_due_count']);
+    const passStaleRunningCount = countFrom(aggregate, ['stale_running_count']);
     const passMoreDue = booleanFrom(aggregate.more_due);
     const passStopReason = upperTrim(aggregate.stop_reason || '');
     const passJobs = Array.isArray(aggregate.jobs) ? aggregate.jobs.filter((job) => isPlainObject(job)) : [];
@@ -162700,6 +162710,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       continuations_reused: passContinuationsReused,
       recovered_stale_count: passRecoveredStale,
       dead_stale_count: passDeadStale,
+      due_queued_count: passDueQueuedCount,
+      claimable_count: passClaimableCount,
+      running_count: passRunningCount,
+      stale_running_count: passStaleRunningCount,
       row_units_processed: passWorkUnits,
       more_due: passMoreDue,
       db_stop_reason: passStopReason || null
@@ -162715,6 +162729,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       obsolete_skipped: passObsoleteSkipped,
       continuations_created: passContinuationsCreated,
       continuations_reused: passContinuationsReused,
+      due_queued_count: passDueQueuedCount,
+      claimable_count: passClaimableCount,
+      running_count: passRunningCount,
+      stale_running_count: passStaleRunningCount,
       row_units_processed: passWorkUnits,
       more_due: passMoreDue,
       stop_reason: passStopReason || (passMoreDue ? null : 'NO_MORE_DUE'),
@@ -162821,6 +162839,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     recovered_stale_count: recoveredStaleCount,
     dead_stale_count: deadStaleCount,
     supplemental_stale_recovery_error_count: staleRecoveryErrorCount,
+    due_queued_count: countFrom(lastAggregate, ['due_queued_count', 'due_queued']),
+    claimable_count: countFrom(lastAggregate, ['claimable_count', 'claimable_due_count']),
+    running_count: countFrom(lastAggregate, ['running_count', 'running_due_count']),
+    stale_running_count: countFrom(lastAggregate, ['stale_running_count']),
     row_units_processed: rowUnitsProcessed,
     work_units_processed: rowUnitsProcessed,
     pass_count: passCount,
@@ -162853,6 +162875,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     continuations_created: continuationsCreated,
     continuations_reused: continuationsReused,
     row_units_processed: rowUnitsProcessed,
+    due_queued_count: result.due_queued_count,
+    claimable_count: result.claimable_count,
+    running_count: result.running_count,
+    stale_running_count: result.stale_running_count,
     session_ids_sample: sampleUuidValuesFromJobs(jobs, ['session_id', 'workbench_session_id']),
     candidate_ids_sample: sampleUuidValuesFromJobs(jobs, ['candidate_id']),
     job_ids_sample: sampleUuidValuesFromJobs(jobs, ['id', 'job_id']),
@@ -162874,6 +162900,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       continuations_created: continuationsCreated,
       continuations_reused: continuationsReused,
       row_units_processed: rowUnitsProcessed,
+      due_queued_count: result.due_queued_count,
+      claimable_count: result.claimable_count,
+      running_count: result.running_count,
+      stale_running_count: result.stale_running_count,
       more_due: moreDue,
       stop_reason: result.stop_reason,
       budget_exhausted: budgetExhausted,
@@ -162885,6 +162915,9 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
   return result;
 }
+
+
+
 
 
 
