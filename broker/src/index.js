@@ -170981,7 +170981,7 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
       {
   
         const tsfinExp = matchPath(p, '/api/tsfin/:timesheet_id/expenses');
-        if (tsfinExp && req.method === 'PATCH')                              handleTsfinPatchExpenses(env, req, tsfinExp.timesheet_id, ctx);
+        if (tsfinExp && req.method === 'PATCH')                              return handleTsfinPatchExpenses(env, req, tsfinExp.timesheet_id, ctx);
 
         const tsfinMil = matchPath(p, '/api/tsfin/:timesheet_id/mileage');
         if (tsfinMil && req.method === 'PATCH')                              return handleTsfinPatchMileage(env, req, tsfinMil.timesheet_id);
