@@ -23025,7 +23025,6 @@ DROP FUNCTION IF EXISTS public.pay_workbench_claim_due_jobs(integer, timestamptz
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_claim_due_jobs(p_limit integer DEFAULT 25, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_allowed_job_types text[] DEFAULT NULL::text[])
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -23037,6 +23036,7 @@ DECLARE
   v_now timestamptz := now();
   v_cutoff timestamptz := COALESCE(p_now_utc, v_now);
   v_stale_running_seconds integer := 180;
+  v_configured_lease_seconds integer := NULL::integer;
   v_stale_cutoff timestamptz := NULL::timestamptz;
   v_recovered_stale jsonb := '[]'::jsonb;
   v_dead_stale jsonb := '[]'::jsonb;
@@ -23113,6 +23113,16 @@ BEGIN
     v_stale_running_seconds := 25;
   ELSE
     v_stale_running_seconds := 180;
+  END IF;
+
+  SELECT sd.banking_pay_workbench_db_worker_lease_seconds
+  INTO v_configured_lease_seconds
+  FROM public.settings_defaults AS sd
+  WHERE sd.id = 1
+  LIMIT 1;
+
+  IF v_configured_lease_seconds IS NOT NULL THEN
+    v_stale_running_seconds := LEAST(GREATEST(v_configured_lease_seconds, 25), 3600);
   END IF;
 
   v_stale_cutoff := v_cutoff - make_interval(secs => v_stale_running_seconds);
@@ -167495,17 +167505,20 @@ END;
 $function$;
 
 
-
-CREATE OR REPLACE FUNCTION public.banking_pay_hot_path_budget_apply(
-  p_route_class text DEFAULT 'DISPLAY'::text
-)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.banking_pay_hot_path_budget_apply(p_route_class text DEFAULT 'DISPLAY'::text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_route_class text := UPPER(REPLACE(NULLIF(BTRIM(COALESCE(p_route_class, 'DISPLAY')), ''), '-', '_'));
+  v_statement_timeout_ms integer := 5000;
+  v_lock_timeout_ms integer := 1000;
+  v_idle_tx_timeout_ms integer := 15000;
+  v_settings_statement_timeout_ms integer := NULL::integer;
+  v_settings_lock_timeout_ms integer := NULL::integer;
+  v_settings_idle_tx_timeout_ms integer := NULL::integer;
 BEGIN
   IF v_route_class IN (
     'DISPLAY',
@@ -167523,13 +167536,14 @@ BEGIN
     'RPC_CHANGES_PING',
     'CHANGES_PING'
   ) THEN
-    PERFORM set_config('statement_timeout', '3000', true);
-    PERFORM set_config('lock_timeout', '750', true);
-    PERFORM set_config('idle_in_transaction_session_timeout', '10000', true);
+    v_statement_timeout_ms := 3000;
+    v_lock_timeout_ms := 750;
+    v_idle_tx_timeout_ms := 10000;
 
   ELSIF v_route_class IN (
     'PREVIEW_CHUNK',
     'WORKBENCH_CHUNK',
+    'WORKBENCH_WORKER_CHUNK',
     'EXECUTION_CHUNK',
     'WORKER_CHUNK',
     'PROVIDER_CHUNK',
@@ -167538,9 +167552,9 @@ BEGIN
     'TRANSFER_SCOPE_CHUNK',
     'FRESHNESS_CHUNK'
   ) THEN
-    PERFORM set_config('statement_timeout', '15000', true);
-    PERFORM set_config('lock_timeout', '1500', true);
-    PERFORM set_config('idle_in_transaction_session_timeout', '30000', true);
+    v_statement_timeout_ms := 15000;
+    v_lock_timeout_ms := 1500;
+    v_idle_tx_timeout_ms := 30000;
 
   ELSIF v_route_class IN (
     'DIAGNOSTIC',
@@ -167550,17 +167564,42 @@ BEGIN
     'EXPORT',
     'ADMIN'
   ) THEN
-    PERFORM set_config('statement_timeout', '30000', true);
-    PERFORM set_config('lock_timeout', '3000', true);
-    PERFORM set_config('idle_in_transaction_session_timeout', '60000', true);
+    v_statement_timeout_ms := 30000;
+    v_lock_timeout_ms := 3000;
+    v_idle_tx_timeout_ms := 60000;
 
   ELSE
-    PERFORM set_config('statement_timeout', '5000', true);
-    PERFORM set_config('lock_timeout', '1000', true);
-    PERFORM set_config('idle_in_transaction_session_timeout', '15000', true);
+    v_statement_timeout_ms := 5000;
+    v_lock_timeout_ms := 1000;
+    v_idle_tx_timeout_ms := 15000;
   END IF;
+
+  IF v_route_class IN ('WORKBENCH_CHUNK', 'WORKBENCH_WORKER_CHUNK') THEN
+    SELECT
+      sd.banking_pay_workbench_db_statement_timeout_ms,
+      sd.banking_pay_workbench_db_lock_timeout_ms,
+      sd.banking_pay_workbench_db_idle_tx_timeout_ms
+    INTO
+      v_settings_statement_timeout_ms,
+      v_settings_lock_timeout_ms,
+      v_settings_idle_tx_timeout_ms
+    FROM public.settings_defaults AS sd
+    WHERE sd.id = 1
+    LIMIT 1;
+
+    v_statement_timeout_ms := LEAST(GREATEST(COALESCE(v_settings_statement_timeout_ms, v_statement_timeout_ms), 1000), 30000);
+    v_lock_timeout_ms := LEAST(GREATEST(COALESCE(v_settings_lock_timeout_ms, v_lock_timeout_ms), 100), 5000);
+    v_idle_tx_timeout_ms := LEAST(GREATEST(COALESCE(v_settings_idle_tx_timeout_ms, v_idle_tx_timeout_ms), 5000), 60000);
+  END IF;
+
+  PERFORM set_config('statement_timeout', v_statement_timeout_ms::text, true);
+  PERFORM set_config('lock_timeout', v_lock_timeout_ms::text, true);
+  PERFORM set_config('idle_in_transaction_session_timeout', v_idle_tx_timeout_ms::text, true);
 END;
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_contract_client_dirty()
  RETURNS trigger
@@ -187899,7 +187938,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_worker_drain_chunk(p_limit integer DEFAULT 5, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_allowed_job_types text[] DEFAULT NULL::text[], p_worker_id text DEFAULT NULL::text, p_lease_seconds integer DEFAULT 180)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -188001,12 +188039,52 @@ DECLARE
   v_stop_reason text := NULL::text;
   v_max_runtime_ms integer := 8000;
   v_min_phase_budget_ms integer := 2500;
+  v_stage_work_units_per_job integer := 25;
+  v_job_retry_base_seconds integer := 30;
+  v_job_retry_max_seconds integer := 900;
+  v_settings_db_worker_lease_seconds integer := NULL::integer;
+  v_settings_db_worker_max_runtime_ms integer := NULL::integer;
+  v_settings_db_worker_min_phase_budget_ms integer := NULL::integer;
+  v_settings_stage_work_units_per_job integer := NULL::integer;
+  v_settings_job_retry_base_seconds integer := NULL::integer;
+  v_settings_job_retry_max_seconds integer := NULL::integer;
   v_due_queued_count integer := 0;
   v_claimable_count integer := 0;
   v_running_count integer := 0;
   v_stale_running_count integer := 0;
 BEGIN
-  PERFORM public.banking_pay_hot_path_budget_apply('WORKER_CHUNK');
+  SELECT
+    sd.banking_pay_workbench_db_worker_lease_seconds,
+    sd.banking_pay_workbench_db_worker_max_runtime_ms,
+    sd.banking_pay_workbench_db_worker_min_phase_budget_ms,
+    sd.banking_pay_workbench_stage_work_units_per_job,
+    sd.banking_pay_workbench_job_retry_base_seconds,
+    sd.banking_pay_workbench_job_retry_max_seconds
+  INTO
+    v_settings_db_worker_lease_seconds,
+    v_settings_db_worker_max_runtime_ms,
+    v_settings_db_worker_min_phase_budget_ms,
+    v_settings_stage_work_units_per_job,
+    v_settings_job_retry_base_seconds,
+    v_settings_job_retry_max_seconds
+  FROM public.settings_defaults AS sd
+  WHERE sd.id = 1
+  LIMIT 1;
+
+  v_lease_seconds := LEAST(GREATEST(COALESCE(v_settings_db_worker_lease_seconds, p_lease_seconds, 180), 25), 3600);
+  v_stage_work_units_per_job := LEAST(GREATEST(COALESCE(v_settings_stage_work_units_per_job, 25), 1), 100);
+  v_max_runtime_ms := LEAST(GREATEST(COALESCE(v_settings_db_worker_max_runtime_ms, 8000), 1000), 30000);
+  v_min_phase_budget_ms := LEAST(
+    GREATEST(COALESCE(v_settings_db_worker_min_phase_budget_ms, 2500), 250),
+    GREATEST(250, v_max_runtime_ms - 250)
+  );
+  v_job_retry_base_seconds := LEAST(GREATEST(COALESCE(v_settings_job_retry_base_seconds, 30), 5), 3600);
+  v_job_retry_max_seconds := LEAST(
+    GREATEST(COALESCE(v_settings_job_retry_max_seconds, 900), v_job_retry_base_seconds),
+    86400
+  );
+
+  PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_WORKER_CHUNK');
   v_started_at_utc := clock_timestamp();
   v_phase_started_at_utc := clock_timestamp();
 
@@ -188095,6 +188173,8 @@ BEGIN
             ),
             3600
           )
+        WHEN v_settings_db_worker_lease_seconds IS NOT NULL
+          THEN v_lease_seconds
         WHEN p_session_id IS NOT NULL
              AND normalized_stale_job.canonical_job_type IN (
                'WORKBENCH_SESSION_SCOPE_SEED',
@@ -188181,6 +188261,8 @@ BEGIN
                     ),
                     3600
                   )
+                WHEN v_settings_db_worker_lease_seconds IS NOT NULL
+                  THEN v_lease_seconds
                 WHEN p_session_id IS NOT NULL
                      AND normalized_stale_job.canonical_job_type IN (
                        'WORKBENCH_SESSION_SCOPE_SEED',
@@ -188606,7 +188688,7 @@ BEGIN
           END,
           1
         ),
-        25
+        v_stage_work_units_per_job
       );
 
       IF v_canonical_job_type = ANY(ARRAY[
@@ -189201,8 +189283,8 @@ BEGIN
       END IF;
 
       v_retry_after_seconds := LEAST(
-        GREATEST(COALESCE(v_job_row.attempt_count, 1) * 30, 30),
-        900
+        GREATEST(COALESCE(v_job_row.attempt_count, 1) * v_job_retry_base_seconds, v_job_retry_base_seconds),
+        v_job_retry_max_seconds
       );
 
       v_error_json := jsonb_strip_nulls(
@@ -189479,6 +189561,10 @@ BEGIN
       'stop_reason', COALESCE(v_stop_reason, CASE WHEN COALESCE(v_more_due, false) THEN 'MORE_DUE' ELSE 'NO_MORE_DUE' END),
       'elapsed_ms', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer),
       'max_runtime_ms', v_max_runtime_ms,
+      'min_phase_budget_ms', v_min_phase_budget_ms,
+      'stage_work_units_per_job', v_stage_work_units_per_job,
+      'job_retry_base_seconds', v_job_retry_base_seconds,
+      'job_retry_max_seconds', v_job_retry_max_seconds,
       'near_deadline', COALESCE(v_stop_reason, '') = 'MAX_RUNTIME_NEAR_EXHAUSTED'
     )
     || jsonb_build_object(
