@@ -41453,6 +41453,7 @@ DROP FUNCTION IF EXISTS public.pay_preview_candidate_collect_scope(jsonb, uuid);
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(
   p_context_json jsonb,
   p_candidate_id uuid DEFAULT NULL::uuid,
@@ -41797,7 +41798,12 @@ begin
       ),
       count(source_page.timesheet_id)::integer,
       COALESCE((SELECT count(*)::integer FROM source_remaining_ids), 0),
-      max(source_page.timesheet_id)
+      (
+        SELECT ordered_source_page.timesheet_id
+        FROM source_page AS ordered_source_page
+        ORDER BY ordered_source_page.timesheet_id DESC
+        LIMIT 1
+      )
     INTO
       v_targeted_timesheet_ids_json,
       v_linked_timesheet_ids_json,
@@ -41882,7 +41888,12 @@ begin
       COALESCE(jsonb_agg(candidate_source_page.timesheet_id ORDER BY candidate_source_page.timesheet_id), '[]'::jsonb),
       count(candidate_source_page.timesheet_id)::integer,
       COALESCE((SELECT count(*)::integer FROM candidate_source_timesheets), 0),
-      max(candidate_source_page.timesheet_id)
+      (
+        SELECT ordered_candidate_source_page.timesheet_id
+        FROM candidate_source_page AS ordered_candidate_source_page
+        ORDER BY ordered_candidate_source_page.timesheet_id DESC
+        LIMIT 1
+      )
     INTO
       v_targeted_timesheet_ids_json,
       v_source_build_target_page_count,
