@@ -62490,7 +62490,6 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user, ctx = null) 
   }
 }
 
-
 async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -62712,8 +62711,8 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     if (typeof logBankingPayWorkbenchDiag === 'function') {
       logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
         origin: 'TIMESHEET_UNAUTHORISE',
-        reason: 'POST_MUTATION_WORKBENCH_REFRESH',
-        mutation_type: 'TIMESHEET_UNAUTHORISE',
+        reason: 'PAYMENT_ELIGIBILITY_REMOVED',
+        mutation_type: 'TIMESHEET_UNAUTHORISED',
         actor_user_id: user?.id || null,
         timesheet_id: finalTimesheetId || requestedTimesheetId || null,
         current_timesheet_id: finalTimesheetId || null
@@ -62722,8 +62721,9 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
       nudgeBankingPayWorkbenchDrain(env, ctx, {
         origin: 'TIMESHEET_UNAUTHORISE',
-        reason: 'POST_MUTATION_WORKBENCH_REFRESH',
-        mutation_type: 'TIMESHEET_UNAUTHORISE',
+        reason: 'PAYMENT_ELIGIBILITY_REMOVED',
+        mutation_type: 'TIMESHEET_UNAUTHORISED',
+        timesheetId: finalTimesheetId || requestedTimesheetId || null,
         actorUserId: user?.id || null,
         budgetProfile: 'NUDGE'
       });
@@ -62755,6 +62755,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
+
 
 
 
@@ -75270,9 +75271,7 @@ async function handleTimesheetLifecycleAffectedRows(env, req) {
   }
 }
 
-
-
-async function handleBulkTimesheetAuthoriseSelected(env, req) {
+async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -75498,6 +75497,33 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
     if (cwId && affectedContractWeekIds.indexOf(cwId) === -1) affectedContractWeekIds.push(cwId);
   }
 
+  try {
+    if (successCount > 0) {
+      if (typeof logBankingPayWorkbenchDiag === 'function') {
+        logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
+          origin: 'TIMESHEET_AUTHORISE',
+          reason: 'PAYMENT_ELIGIBILITY_RESTORED',
+          mutation_type: 'TIMESHEET_AUTHORISED',
+          actor_user_id: user?.id || null,
+          bulk_action: true,
+          success_count: successCount,
+          failure_count: failureCount,
+          timesheet_ids: affectedTimesheetIds,
+          contract_week_ids: affectedContractWeekIds
+        });
+      }
+      if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
+        nudgeBankingPayWorkbenchDrain(env, ctx, {
+          origin: 'TIMESHEET_AUTHORISE',
+          reason: 'PAYMENT_ELIGIBILITY_RESTORED',
+          mutation_type: 'TIMESHEET_AUTHORISED',
+          actorUserId: user?.id || null,
+          budgetProfile: 'NUDGE'
+        });
+      }
+    }
+  } catch {}
+
   return withCORS(env, req, ok({
     ok: batchCompleted,
     batch_completed: batchCompleted,
@@ -75521,8 +75547,7 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
 }
 
 
-
-async function handleBulkTimesheetUnauthoriseSelected(env, req) {
+async function handleBulkTimesheetUnauthoriseSelected(env, req, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -75644,7 +75669,7 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
             contract_week_id: result.contract_week_id || null,
             booking_id: result.booking_id || null,
             row_key: result.current_timesheet_id || result.timesheet_id ? `timesheet:${result.current_timesheet_id || result.timesheet_id}` : null,
-            context: 'bulk_authorise'
+            context: 'bulk_unauthorise'
           });
         }
       }
@@ -75747,6 +75772,33 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
     if (tsId && affectedTimesheetIds.indexOf(tsId) === -1) affectedTimesheetIds.push(tsId);
     if (cwId && affectedContractWeekIds.indexOf(cwId) === -1) affectedContractWeekIds.push(cwId);
   }
+
+  try {
+    if (successCount > 0) {
+      if (typeof logBankingPayWorkbenchDiag === 'function') {
+        logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
+          origin: 'TIMESHEET_UNAUTHORISE',
+          reason: 'PAYMENT_ELIGIBILITY_REMOVED',
+          mutation_type: 'TIMESHEET_UNAUTHORISED',
+          actor_user_id: user?.id || null,
+          bulk_action: true,
+          success_count: successCount,
+          failure_count: failureCount,
+          timesheet_ids: affectedTimesheetIds,
+          contract_week_ids: affectedContractWeekIds
+        });
+      }
+      if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
+        nudgeBankingPayWorkbenchDrain(env, ctx, {
+          origin: 'TIMESHEET_UNAUTHORISE',
+          reason: 'PAYMENT_ELIGIBILITY_REMOVED',
+          mutation_type: 'TIMESHEET_UNAUTHORISED',
+          actorUserId: user?.id || null,
+          budgetProfile: 'NUDGE'
+        });
+      }
+    }
+  } catch {}
 
   return withCORS(env, req, ok({
     ok: batchCompleted,
@@ -120470,7 +120522,6 @@ async function handleUpdateClient(env, req, clientId) {
 // - Stores expenses_description as notes/metadata only (string or JSON-stringified)
 // ============================================================
 
-
 async function handleTsfinPatchExpenses(env, req, timesheetId, ctx = null) {
   const body = await parseJSONBody(req).catch(() => ({}));
 
@@ -120498,19 +120549,13 @@ async function handleTsfinPatchExpenses(env, req, timesheetId, ctx = null) {
   try {
     if (response && Number(response.status || 0) >= 200 && Number(response.status || 0) < 300) {
       if (typeof logBankingPayWorkbenchDiag === 'function') {
-        logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
+        logBankingPayWorkbenchDiag(env, 'BANKING_PAY_NUDGE_SKIPPED', {
           origin: 'TSFIN_EXPENSES_PATCH',
-          reason: 'POST_MUTATION_WORKBENCH_REFRESH',
+          reason: 'NOT_PAYMENT_ELIGIBILITY_BOUNDARY',
           mutation_type: 'TSFIN_EXPENSES_PATCH',
-          timesheet_id: timesheetId || null
-        });
-      }
-      if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
-        nudgeBankingPayWorkbenchDrain(env, ctx, {
-          origin: 'TSFIN_EXPENSES_PATCH',
-          reason: 'POST_MUTATION_WORKBENCH_REFRESH',
-          mutation_type: 'TSFIN_EXPENSES_PATCH',
-          budgetProfile: 'NUDGE'
+          timesheet_id: timesheetId || null,
+          banking_pay_work_scheduled: false,
+          workbench_drain_scheduled: false
         });
       }
     }
@@ -120518,7 +120563,6 @@ async function handleTsfinPatchExpenses(env, req, timesheetId, ctx = null) {
 
   return withCORS(env, req, response);
 }
-
 
 
 // 4) PATCH /api/tsfin/:id/mileage  (mileage_units + pay/charge + rates)
@@ -144157,7 +144201,6 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   return { picked: lease.length, ok, fail, write: wr };
 }
 
-
 async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null) {
   const enc = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
@@ -144488,8 +144531,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     if (typeof logBankingPayWorkbenchDiag === 'function') {
       logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
         origin: 'TIMESHEET_AUTHORISE',
-        reason: 'POST_MUTATION_WORKBENCH_REFRESH',
-        mutation_type: 'TIMESHEET_AUTHORISE',
+        reason: 'PAYMENT_ELIGIBILITY_RESTORED',
+        mutation_type: 'TIMESHEET_AUTHORISED',
         actor_user_id: user?.id || null,
         timesheet_id: finalTimesheetId || requestedTimesheetId || null,
         current_timesheet_id: finalTimesheetId || null
@@ -144498,8 +144541,9 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
       nudgeBankingPayWorkbenchDrain(env, ctx, {
         origin: 'TIMESHEET_AUTHORISE',
-        reason: 'POST_MUTATION_WORKBENCH_REFRESH',
-        mutation_type: 'TIMESHEET_AUTHORISE',
+        reason: 'PAYMENT_ELIGIBILITY_RESTORED',
+        mutation_type: 'TIMESHEET_AUTHORISED',
+        timesheetId: finalTimesheetId || requestedTimesheetId || null,
         actorUserId: user?.id || null,
         budgetProfile: 'NUDGE'
       });
@@ -144552,6 +144596,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
+
+
 
 
 
@@ -145273,7 +145319,7 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
 }
 
 
-async function handleContractWeekManualAuthorise(env, req, weekId) {
+async function handleContractWeekManualAuthorise(env, req, weekId, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -145610,6 +145656,31 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
   const backendRowSignature = firstString(rpcPayload.backend_row_signature, rpcPayload.row_signature);
   const affectedRows = affectedRowsFor(rpcPayload, finalTimesheetId, finalContractWeekId);
 
+  try {
+    if (typeof logBankingPayWorkbenchDiag === 'function') {
+      logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
+        origin: 'TIMESHEET_AUTHORISE',
+        reason: 'PAYMENT_ELIGIBILITY_RESTORED',
+        mutation_type: 'TIMESHEET_AUTHORISED',
+        actor_user_id: user?.id || null,
+        timesheet_id: finalTimesheetId || linkedTimesheetId || null,
+        current_timesheet_id: finalTimesheetId || null,
+        contract_week_id: finalContractWeekId || contractWeekId || null,
+        source_route: 'CONTRACT_WEEK_MANUAL_AUTHORISE'
+      });
+    }
+    if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
+      nudgeBankingPayWorkbenchDrain(env, ctx, {
+        origin: 'TIMESHEET_AUTHORISE',
+        reason: 'PAYMENT_ELIGIBILITY_RESTORED',
+        mutation_type: 'TIMESHEET_AUTHORISED',
+        timesheetId: finalTimesheetId || linkedTimesheetId || null,
+        actorUserId: user?.id || null,
+        budgetProfile: 'NUDGE'
+      });
+    }
+  } catch {}
+
   return withCORS(env, req, ok({
     ok: true,
     success: true,
@@ -145636,6 +145707,8 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
     warnings: Array.isArray(rpcPayload.warnings) ? rpcPayload.warnings : []
   }));
 }
+
+
 
 
 
