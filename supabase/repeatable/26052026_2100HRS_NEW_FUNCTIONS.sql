@@ -189509,6 +189509,7 @@ DECLARE
   v_settings_db_worker_min_phase_budget_ms integer := NULL::integer;
   v_settings_stage_work_units_per_job integer := NULL::integer;
   v_settings_defaults_json jsonb := '{}'::jsonb;
+  v_worker_budget_profile text := 'GENERIC';
   v_scope_seed_work_units_per_job integer := 25;
   v_source_build_work_units_per_job integer := 10;
   v_line_seed_work_units_per_job integer := 50;
@@ -189544,12 +189545,44 @@ BEGIN
   LIMIT 1;
 
   v_lease_seconds := LEAST(GREATEST(COALESCE(v_settings_db_worker_lease_seconds, p_lease_seconds, 180), 25), 3600);
+  v_worker_budget_profile := CASE
+    WHEN UPPER(BTRIM(COALESCE(v_worker_id, ''))) LIKE '%NUDGE%' THEN 'NUDGE'
+    WHEN UPPER(BTRIM(COALESCE(v_worker_id, ''))) LIKE '%CRON%'
+      OR UPPER(BTRIM(COALESCE(v_worker_id, ''))) LIKE '%SCHEDULED%'
+      OR UPPER(BTRIM(COALESCE(v_worker_id, ''))) LIKE '%TICK%' THEN 'CRON'
+    ELSE 'GENERIC'
+  END;
   v_stage_work_units_per_job := LEAST(GREATEST(COALESCE(v_settings_stage_work_units_per_job, 25), 1), 100);
-  v_scope_seed_work_units_per_job := LEAST(GREATEST(COALESCE(CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_scope_seed_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_scope_seed_units_per_job')::integer ELSE NULL::integer END, v_stage_work_units_per_job), 1), 100);
-  v_source_build_work_units_per_job := LEAST(GREATEST(COALESCE(CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_source_build_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_source_build_units_per_job')::integer ELSE NULL::integer END, v_stage_work_units_per_job), 1), 100);
-  v_line_seed_work_units_per_job := LEAST(GREATEST(COALESCE(CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_line_seed_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_line_seed_units_per_job')::integer ELSE NULL::integer END, v_stage_work_units_per_job), 1), 100);
-  v_line_process_work_units_per_job := LEAST(GREATEST(COALESCE(CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_line_process_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_line_process_units_per_job')::integer ELSE NULL::integer END, v_stage_work_units_per_job), 1), 100);
-  v_preview_materialise_work_units_per_job := LEAST(GREATEST(COALESCE(CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_preview_mat_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_preview_mat_units_per_job')::integer ELSE NULL::integer END, v_stage_work_units_per_job), 1), 100);
+  v_scope_seed_work_units_per_job := LEAST(GREATEST(COALESCE(
+    CASE WHEN v_worker_budget_profile = 'NUDGE' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_nudge_scope_seed_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_nudge_scope_seed_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN v_worker_budget_profile = 'CRON' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_cron_scope_seed_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_cron_scope_seed_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_scope_seed_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_scope_seed_units_per_job')::integer ELSE NULL::integer END,
+    v_stage_work_units_per_job
+  ), 1), 100);
+  v_source_build_work_units_per_job := LEAST(GREATEST(COALESCE(
+    CASE WHEN v_worker_budget_profile = 'NUDGE' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_nudge_source_build_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_nudge_source_build_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN v_worker_budget_profile = 'CRON' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_cron_source_build_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_cron_source_build_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_source_build_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_source_build_units_per_job')::integer ELSE NULL::integer END,
+    v_stage_work_units_per_job
+  ), 1), 100);
+  v_line_seed_work_units_per_job := LEAST(GREATEST(COALESCE(
+    CASE WHEN v_worker_budget_profile = 'NUDGE' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_nudge_line_seed_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_nudge_line_seed_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN v_worker_budget_profile = 'CRON' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_cron_line_seed_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_cron_line_seed_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_line_seed_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_line_seed_units_per_job')::integer ELSE NULL::integer END,
+    v_stage_work_units_per_job
+  ), 1), 100);
+  v_line_process_work_units_per_job := LEAST(GREATEST(COALESCE(
+    CASE WHEN v_worker_budget_profile = 'NUDGE' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_nudge_line_process_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_nudge_line_process_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN v_worker_budget_profile = 'CRON' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_cron_line_process_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_cron_line_process_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_line_process_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_line_process_units_per_job')::integer ELSE NULL::integer END,
+    v_stage_work_units_per_job
+  ), 1), 100);
+  v_preview_materialise_work_units_per_job := LEAST(GREATEST(COALESCE(
+    CASE WHEN v_worker_budget_profile = 'NUDGE' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_nudge_preview_mat_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_nudge_preview_mat_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN v_worker_budget_profile = 'CRON' AND COALESCE(v_settings_defaults_json->>'banking_pay_workbench_cron_preview_mat_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_cron_preview_mat_units_per_job')::integer ELSE NULL::integer END,
+    CASE WHEN COALESCE(v_settings_defaults_json->>'banking_pay_workbench_preview_mat_units_per_job', '') ~ '^[0-9]{1,9}$' THEN (v_settings_defaults_json->>'banking_pay_workbench_preview_mat_units_per_job')::integer ELSE NULL::integer END,
+    v_stage_work_units_per_job
+  ), 1), 100);
   v_max_runtime_ms := LEAST(GREATEST(COALESCE(v_settings_db_worker_max_runtime_ms, 8000), 1000), 30000);
   v_min_phase_budget_ms := LEAST(
     GREATEST(COALESCE(v_settings_db_worker_min_phase_budget_ms, 2500), 250),
@@ -191119,6 +191152,7 @@ BEGIN
   RETURN jsonb_build_object(
       'ok', v_failed_count = 0 AND v_supplemental_stale_recovery_error_count = 0,
       'worker_id', v_worker_id,
+      'worker_budget_profile', v_worker_budget_profile,
       'lease_seconds', v_lease_seconds,
       'server_utc', v_now,
       'cutoff_utc', v_cutoff,
@@ -191186,7 +191220,6 @@ BEGIN
     );
 END;
 $function$;
-
 
 
 
