@@ -34134,7 +34134,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_entitlement_rows(p_context_json jsonb, p_candidate_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -34170,6 +34169,7 @@ declare
   v_requires_payee_map boolean := false;
   v_paye_guardrails jsonb := '{}'::jsonb;
   v_overpayment_sync_mode boolean := false;
+  v_source_build_mode boolean := false;
 
   v_now timestamptz := now();
   v_workbench_session_id uuid := NULL::uuid;
@@ -34195,6 +34195,22 @@ begin
     OR LOWER(BTRIM(COALESCE(v_context_json->>'emit_raw_overpayment_components', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
     OR LOWER(BTRIM(COALESCE(v_context_json#>>'{preview_decisions_json,emit_raw_overpayment_components}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
+  v_source_build_mode := (
+    LOWER(BTRIM(COALESCE(
+      v_context_json->>'source_build_mode',
+      v_context_json->>'workbench_source_build_mode',
+      v_context_json #>> '{source_build,enabled}',
+      v_context_json #>> '{workbench,source_build_mode}',
+      ''
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR UPPER(BTRIM(COALESCE(
+      v_context_json->>'job_type',
+      v_context_json #>> '{job,type}',
+      v_context_json #>> '{source_build,job_type}',
+      v_context_json #>> '{workbench,job_type}',
+      ''
+    ))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+  );
 
   v_workbench_session_id_text := NULLIF(BTRIM(COALESCE(
     v_context_json->>'workbench_session_id',
@@ -34235,7 +34251,7 @@ begin
     v_line_work_cursor_ordinal := 0;
   END;
 
-  IF v_workbench_session_id IS NOT NULL THEN
+  IF v_workbench_session_id IS NOT NULL AND COALESCE(v_source_build_mode, false) IS NOT TRUE THEN
     PERFORM 1
     FROM public.banking_pay_workbench_sessions AS workbench_session
     WHERE workbench_session.id = v_workbench_session_id
@@ -36634,8 +36650,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 
