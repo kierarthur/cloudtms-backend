@@ -60601,6 +60601,77 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       actor_user_id: user?.id || null
     });
 
+    const detailsUrl = new URL(req.url);
+    const detailsMode = String(detailsUrl.searchParams.get('mode') || '').trim().toLowerCase();
+    const detailsPurpose = String(detailsUrl.searchParams.get('purpose') || '').trim().toLowerCase();
+    const lifecycleOnlyMode = detailsMode === 'lifecycle' || detailsPurpose === 'lifecycle_patch';
+    if (lifecycleOnlyMode) {
+      const lightweight = await fetchTimesheetLifecycleLightweightRow(env, {
+        action: 'LIFECYCLE',
+        timesheetId,
+        requestedTimesheetId: timesheetId,
+        context: 'timesheet_modal',
+        actorUserId: user?.id || null,
+        timeoutMs: 8000
+      }).catch((err) => ({
+        ok: false,
+        error_code: 'LIGHTWEIGHT_LIFECYCLE_ROW_FAILED',
+        message: String(err?.message || err || 'Lightweight lifecycle row failed'),
+        row: null,
+        rows: [],
+        lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+          action: 'LIFECYCLE',
+          requestedTimesheetId: timesheetId
+        })
+      }));
+
+      const bundle = lightweight.lifecycle_patch_bundle || buildTimesheetLifecyclePatchFromMutation({
+        action: 'LIFECYCLE',
+        requestedTimesheetId: timesheetId
+      });
+
+      wlog('finish_lifecycle_only', {
+        response_mode: lightweight.ok && lightweight.row ? 'LIGHTWEIGHT_LIFECYCLE_ROW' : 'LIGHTWEIGHT_LIFECYCLE_ROW_UNAVAILABLE',
+        immediate_lifecycle_patch_available: !!bundle.immediate_lifecycle_patch_available,
+        requires_full_details_refresh: !!bundle.requires_full_details_refresh
+      });
+
+      return withCORS(env, req, ok({
+        ok: true,
+        mode: 'lifecycle',
+        purpose: 'lifecycle_patch',
+        response_mode: lightweight.ok && lightweight.row ? 'LIGHTWEIGHT_LIFECYCLE_ROW' : 'LIGHTWEIGHT_LIFECYCLE_ROW_UNAVAILABLE',
+        requested_timesheet_id: timesheetId,
+        current_timesheet_id: lightweight.row?.current_timesheet_id || bundle.lifecycle_patch?.current_timesheet_id || null,
+        timesheet_id: lightweight.row?.timesheet_id || bundle.lifecycle_patch?.timesheet_id || null,
+        current_version: lightweight.row?.current_version ?? bundle.lifecycle_patch?.current_version ?? null,
+        booking_id: lightweight.row?.booking_id || bundle.lifecycle_patch?.booking_id || null,
+        contract_week_id: lightweight.row?.contract_week_id || bundle.lifecycle_patch?.contract_week_id || null,
+        candidate_id: lightweight.row?.candidate_id || bundle.lifecycle_patch?.candidate_id || null,
+        processing_status: lightweight.row?.processing_status || bundle.lifecycle_patch?.processing_status || null,
+        authorised: lightweight.row?.authorised ?? bundle.lifecycle_patch?.authorised ?? null,
+        is_authorised: lightweight.row?.is_authorised ?? bundle.lifecycle_patch?.is_authorised ?? null,
+        ready_to_pay: lightweight.row?.ready_to_pay ?? bundle.lifecycle_patch?.ready_to_pay ?? null,
+        backend_row_signature: lightweight.row?.backend_row_signature || bundle.lifecycle_patch?.backend_row_signature || null,
+        mutation_row_signature: lightweight.row?.mutation_row_signature || bundle.lifecycle_patch?.mutation_row_signature || null,
+        row_signature: lightweight.row?.row_signature || bundle.lifecycle_patch?.row_signature || null,
+        expected_row_signature: lightweight.row?.expected_row_signature || bundle.lifecycle_patch?.expected_row_signature || null,
+        lifecycle_patch: bundle.lifecycle_patch,
+        row: lightweight.row || null,
+        rows: lightweight.rows || [],
+        affected_rows: lightweight.rows || [],
+        refresh_hints: bundle.refresh_hints,
+        permission_state_patch_complete: bundle.permission_state_patch_complete,
+        priority_badges_patch_complete: bundle.priority_badges_patch_complete,
+        immediate_lifecycle_patch_available: bundle.immediate_lifecycle_patch_available,
+        requires_affected_row_refresh: bundle.requires_affected_row_refresh,
+        requires_full_details_refresh: bundle.requires_full_details_refresh,
+        refresh_required: bundle.refresh_required,
+        missing: Array.isArray(lightweight.missing) ? lightweight.missing : [],
+        removed: Array.isArray(lightweight.removed) ? lightweight.removed : []
+      }));
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Resolve stale/historical timesheet_id -> current by booking_id
     // ─────────────────────────────────────────────────────────────
@@ -61713,7 +61784,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       if (allIds.length) {
         const chunkSize = 200;
 
-        let lookedUp = false;
         try {
           for (let i = 0; i < allIds.length; i += chunkSize) {
             const chunk = allIds.slice(i, i + chunkSize);
@@ -61730,30 +61800,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
               if (id && no) invoice_no_by_invoice_id[id] = no;
             }
           }
-          lookedUp = true;
-        } catch {
-          lookedUp = false;
-        }
-
-        if (!lookedUp) {
-          try {
-            for (let i = 0; i < allIds.length; i += chunkSize) {
-              const chunk = allIds.slice(i, i + chunkSize);
-              const { rows: invRows2 } = await sbFetch(
-                env,
-                `${env.SUPABASE_URL}/rest/v1/v_invoices_summary` +
-                  `?select=id,invoice_no` +
-                  `&id=in.(${chunk.map(encodeURIComponent).join(',')})`
-              );
-
-              for (const r of (invRows2 || [])) {
-                const id = r?.id != null ? String(r.id).trim() : '';
-                const no = (r?.invoice_no != null) ? String(r.invoice_no).trim() : '';
-                if (id && no) invoice_no_by_invoice_id[id] = no;
-              }
-            }
-          } catch {}
-        }
+        } catch {}
       }
     } catch {}
 
@@ -61952,6 +61999,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
+
+
+
 
 async function collectRailUpdatesForBankingPayOperation(env, options = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -63144,10 +63194,37 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     }
   } catch {}
 
+  const lifecyclePatchBundle = buildTimesheetLifecyclePatchFromMutation({
+    action: 'UNAUTHORISE',
+    requestedTimesheetId,
+    currentTimesheetId: finalTimesheetId,
+    currentVersion: rpcPayload.current_version ?? guard.resolved?.current_version ?? null,
+    contractWeekId: rpcPayload.contract_week_id || null,
+    bookingId: rpcPayload.booking_id || guard.resolved?.booking_id || null,
+    candidateId: rpcPayload.candidate_id || null,
+    atomicRpcPayload: rpcPayload,
+    guardResult: guard,
+    previousProcessingStatus: previousStatus || null,
+    newProcessingStatus: newStatus || 'PENDING_AUTH',
+    backendRowSignature,
+    rowSignature: backendRowSignature,
+    expectedRowSignature: backendRowSignature || expectedRowSignature || null,
+    authorised: false,
+    authorisedAtUtc: null,
+    authorisedAtServer: null,
+    readyToPay: false,
+    existingAffectedRows: affectedRowsFor(rpcPayload, finalTimesheetId),
+    staleMarkers: {
+      was_stale: rpcPayload.was_stale != null ? !!rpcPayload.was_stale : !!guard.resolved?.was_stale,
+      timesheet_moved: !!(requestedTimesheetId && finalTimesheetId && requestedTimesheetId !== finalTimesheetId)
+    }
+  });
+
   return withCORS(env, req, ok({
     ok: true,
     success: true,
     unauthorised: true,
+    authorised: false,
     tsfin_updated: true,
     operation: rpcPayload.operation || 'timesheet_unauthorise',
     processing_status: newStatus || null,
@@ -63162,10 +63239,18 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     current_version: rpcPayload.current_version ?? guard.resolved?.current_version ?? null,
     was_stale: rpcPayload.was_stale != null ? !!rpcPayload.was_stale : !!guard.resolved?.was_stale,
     backend_row_signature: backendRowSignature || null,
+    mutation_row_signature: backendRowSignature || null,
     row_signature: backendRowSignature || null,
-    affected_rows: affectedRowsFor(rpcPayload, finalTimesheetId),
-    requires_affected_row_refresh: true,
-    refresh_required: true,
+    expected_row_signature: backendRowSignature || null,
+    lifecycle_patch: lifecyclePatchBundle.lifecycle_patch,
+    affected_rows: lifecyclePatchBundle.affected_rows,
+    refresh_hints: lifecyclePatchBundle.refresh_hints,
+    permission_state_patch_complete: lifecyclePatchBundle.permission_state_patch_complete,
+    priority_badges_patch_complete: lifecyclePatchBundle.priority_badges_patch_complete,
+    immediate_lifecycle_patch_available: lifecyclePatchBundle.immediate_lifecycle_patch_available,
+    requires_affected_row_refresh: lifecyclePatchBundle.requires_affected_row_refresh,
+    requires_full_details_refresh: lifecyclePatchBundle.requires_full_details_refresh,
+    refresh_required: lifecyclePatchBundle.refresh_required,
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
@@ -75392,7 +75477,6 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
 }
 
 
-
 async function handleTimesheetLifecycleAffectedRows(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -75631,6 +75715,102 @@ async function handleTimesheetLifecycleAffectedRows(env, req) {
     }));
   }
 
+  const wantsOneRowLifecycleFallback = !!(
+    items.length === 1 &&
+    (
+      inheritedContext === 'timesheet_modal' ||
+      normalizeContext(urlObj.searchParams.get('mode')) === 'timesheet_modal' ||
+      trimStr(urlObj.searchParams.get('mode')).toLowerCase() === 'lifecycle' ||
+      trimStr(urlObj.searchParams.get('purpose')).toLowerCase() === 'lifecycle_patch' ||
+      trimStr(urlObj.searchParams.get('response_mode')).toUpperCase() === 'LIGHTWEIGHT_LIFECYCLE_ROW'
+    )
+  );
+
+  if (wantsOneRowLifecycleFallback) {
+    const item = items[0] || {};
+    const lightweight = await fetchTimesheetLifecycleLightweightRow(env, {
+      action: 'LIFECYCLE_FALLBACK',
+      timesheetId: item.timesheet_id || item.previous_timesheet_id || null,
+      currentTimesheetId: item.timesheet_id || null,
+      contractWeekId: item.contract_week_id || null,
+      bookingId: item.booking_id || null,
+      previousRowKey: item.previous_row_key || null,
+      previousTimesheetId: item.previous_timesheet_id || null,
+      previousBucket: item.previous_bucket || null,
+      context: inheritedContext || 'timesheet_modal',
+      actorUserId: user?.id || null,
+      timeoutMs: 8000
+    }).catch((err) => ({
+      ok: false,
+      error_code: 'LIGHTWEIGHT_LIFECYCLE_ROW_FAILED',
+      message: String(err?.message || err || 'Lightweight lifecycle row failed'),
+      rows: [],
+      row: null,
+      lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+        action: 'LIFECYCLE_FALLBACK',
+        requestedTimesheetId: item.timesheet_id || item.previous_timesheet_id || null,
+        currentTimesheetId: item.timesheet_id || null,
+        contractWeekId: item.contract_week_id || null,
+        bookingId: item.booking_id || null
+      })
+    }));
+
+    const bundle = lightweight.lifecycle_patch_bundle || buildTimesheetLifecyclePatchFromMutation({
+      action: 'LIFECYCLE_FALLBACK',
+      requestedTimesheetId: item.timesheet_id || item.previous_timesheet_id || null,
+      currentTimesheetId: item.timesheet_id || null,
+      contractWeekId: item.contract_week_id || null,
+      bookingId: item.booking_id || null
+    });
+
+    if (lightweight.ok && lightweight.row) {
+      return withCORS(env, req, ok({
+        ok: true,
+        context: inheritedContext || 'timesheet_modal',
+        requested_count: items.length,
+        response_mode: 'LIGHTWEIGHT_LIFECYCLE_ROW',
+        rows: lightweight.rows || [lightweight.row],
+        affected_rows: lightweight.rows || [lightweight.row],
+        missing: Array.isArray(lightweight.missing) ? lightweight.missing : [],
+        removed: Array.isArray(lightweight.removed) ? lightweight.removed : [],
+        lifecycle_patch: bundle.lifecycle_patch,
+        refresh_hints: bundle.refresh_hints,
+        permission_state_patch_complete: bundle.permission_state_patch_complete,
+        priority_badges_patch_complete: bundle.priority_badges_patch_complete,
+        immediate_lifecycle_patch_available: bundle.immediate_lifecycle_patch_available,
+        requires_affected_row_refresh: bundle.requires_affected_row_refresh,
+        requires_full_details_refresh: bundle.requires_full_details_refresh,
+        refresh_required: bundle.refresh_required,
+        count_deltas: {},
+        cache_invalidation_hints: {
+          changed_domains: ['timesheet_lifecycle'],
+          context: inheritedContext || 'timesheet_modal'
+        }
+      }));
+    }
+
+    return withCORS(env, req, ok({
+      ok: true,
+      context: inheritedContext || 'timesheet_modal',
+      requested_count: items.length,
+      response_mode: 'LIGHTWEIGHT_LIFECYCLE_ROW_UNAVAILABLE',
+      rows: [],
+      affected_rows: [],
+      missing: [{ input: item, error_code: lightweight.error_code || 'LIGHTWEIGHT_LIFECYCLE_ROW_UNAVAILABLE' }],
+      removed: [],
+      lifecycle_patch: bundle.lifecycle_patch,
+      refresh_hints: bundle.refresh_hints,
+      permission_state_patch_complete: false,
+      priority_badges_patch_complete: false,
+      immediate_lifecycle_patch_available: false,
+      requires_affected_row_refresh: true,
+      requires_full_details_refresh: true,
+      refresh_required: true,
+      count_deltas: {},
+      cache_invalidation_hints: { changed_domains: ['timesheet_lifecycle'], context: inheritedContext || 'timesheet_modal' }
+    }));
+  }
+
   try {
     const rpcRes = await sbRpc(env, 'timesheet_lifecycle_affected_rows_v1', {
       p_items: items,
@@ -75684,6 +75864,747 @@ async function handleTimesheetLifecycleAffectedRows(env, req) {
     }));
   }
 }
+
+async function fetchTimesheetLifecycleLightweightRow(env, input = {}) {
+  const isPlainObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
+  const src = isPlainObject(input) ? input : {};
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const firstString = function firstString() {
+    for (let index = 0; index < arguments.length; index += 1) {
+      const text = trimStr(arguments[index]);
+      if (text) return text;
+    }
+    return '';
+  };
+  const toBoolOrNull = (value) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value == null) return null;
+    const text = trimStr(value).toLowerCase();
+    if (!text) return null;
+    if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return null;
+  };
+  const jsonObject = (value) => isPlainObject(value) ? value : {};
+  const unwrapRpcPayload = (payload, fnName) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) out = out[fnName];
+    if (typeof out === 'string') {
+      try { out = JSON.parse(out); } catch {}
+    }
+    return isPlainObject(out) ? out : {};
+  };
+
+  const requestedTimesheetId = firstString(src.requestedTimesheetId, src.requested_timesheet_id, src.timesheetId, src.timesheet_id, src.currentTimesheetId, src.current_timesheet_id);
+  const directCurrentTimesheetId = firstString(src.currentTimesheetId, src.current_timesheet_id, src.timesheetId, src.timesheet_id);
+  const contractWeekId = firstString(src.contractWeekId, src.contract_week_id, src.weekId, src.week_id);
+  const bookingIdInput = firstString(src.bookingId, src.booking_id);
+  const context = firstString(src.context, src.source_context, 'timesheet_modal').toLowerCase() || 'timesheet_modal';
+  const action = firstString(src.action, src.actionType, 'LIFECYCLE');
+  const actorUserId = firstString(src.actorUserId, src.actor_user_id);
+
+  let resolved = isPlainObject(src.resolved) ? src.resolved : null;
+  if (!resolved && requestedTimesheetId && typeof resolveTimesheetToCurrent === 'function') {
+    try { resolved = await resolveTimesheetToCurrent(env, requestedTimesheetId); } catch { resolved = null; }
+  }
+
+  const currentTimesheetId = firstString(resolved?.current_timesheet_id, directCurrentTimesheetId, requestedTimesheetId);
+  const bookingId = firstString(resolved?.booking_id, bookingIdInput);
+  const currentVersion = resolved?.current_version ?? src.currentVersion ?? src.current_version ?? null;
+  const wasStale = resolved?.was_stale === true || !!(requestedTimesheetId && currentTimesheetId && requestedTimesheetId !== currentTimesheetId);
+
+  const item = {
+    context,
+    row_key: currentTimesheetId ? `timesheet:${currentTimesheetId}` : (contractWeekId ? `contract_week:${contractWeekId}` : null),
+    requested_timesheet_id: requestedTimesheetId || null,
+    timesheet_id: currentTimesheetId || requestedTimesheetId || null,
+    current_timesheet_id: currentTimesheetId || requestedTimesheetId || null,
+    expected_timesheet_id: currentTimesheetId || requestedTimesheetId || null,
+    contract_week_id: contractWeekId || null,
+    booking_id: bookingId || null,
+    previous_row_key: firstString(src.previousRowKey, src.previous_row_key) || null,
+    previous_timesheet_id: firstString(src.previousTimesheetId, src.previous_timesheet_id) || null,
+    previous_bucket: firstString(src.previousBucket, src.previous_bucket) || null
+  };
+
+  if (!item.timesheet_id && !item.contract_week_id && !item.booking_id) {
+    return {
+      ok: false,
+      error_code: 'INVALID_IDENTITY',
+      message: 'timesheet_id, contract_week_id, or booking_id is required for lightweight lifecycle row.',
+      row: null,
+      rows: [],
+      lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+        action,
+        requestedTimesheetId: requestedTimesheetId || null,
+        currentTimesheetId: currentTimesheetId || null,
+        contractWeekId: contractWeekId || null,
+        bookingId: bookingId || null,
+        staleMarkers: { was_stale: wasStale }
+      })
+    };
+  }
+
+  let payload = null;
+  try {
+    const rpcRes = await sbRpc(env, 'timesheet_lifecycle_affected_rows_v1', {
+      p_items: [item],
+      p_context: context,
+      p_actor_user_id: actorUserId || null
+    }, { timeoutMs: Number(src.timeoutMs || src.timeout_ms || 8000) });
+    payload = unwrapRpcPayload(rpcRes, 'timesheet_lifecycle_affected_rows_v1');
+  } catch (err) {
+    return {
+      ok: false,
+      error_code: /timeout|timed out|55P03|57014|LOCK_TIMEOUT/i.test(String(err?.message || err || '')) ? 'LOCK_TIMEOUT' : 'LIGHTWEIGHT_LIFECYCLE_ROW_FAILED',
+      message: String(err?.message || err || 'Lightweight lifecycle row failed'),
+      row: null,
+      rows: [],
+      lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+        action,
+        requestedTimesheetId: requestedTimesheetId || null,
+        currentTimesheetId: currentTimesheetId || null,
+        currentVersion,
+        contractWeekId: contractWeekId || null,
+        bookingId: bookingId || null,
+        staleMarkers: { was_stale: wasStale }
+      })
+    };
+  }
+
+  if (!payload || payload.ok === false) {
+    const code = firstString(payload?.error_code, payload?.code, 'LIGHTWEIGHT_LIFECYCLE_ROW_FAILED');
+    return {
+      ok: false,
+      error_code: code,
+      message: firstString(payload?.message, 'Lightweight lifecycle row failed'),
+      payload: payload || {},
+      row: null,
+      rows: [],
+      lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+        action,
+        requestedTimesheetId: requestedTimesheetId || null,
+        currentTimesheetId: currentTimesheetId || null,
+        currentVersion,
+        contractWeekId: contractWeekId || null,
+        bookingId: bookingId || null,
+        staleMarkers: { was_stale: wasStale }
+      })
+    };
+  }
+
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const rawRow = rows[0] || null;
+  if (!rawRow || typeof rawRow !== 'object' || Array.isArray(rawRow)) {
+    return {
+      ok: false,
+      error_code: 'LIGHTWEIGHT_LIFECYCLE_ROW_NOT_FOUND',
+      message: 'No lightweight lifecycle row was returned.',
+      payload,
+      row: null,
+      rows: [],
+      missing: Array.isArray(payload.missing) ? payload.missing : [],
+      removed: Array.isArray(payload.removed) ? payload.removed : [],
+      lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+        action,
+        requestedTimesheetId: requestedTimesheetId || null,
+        currentTimesheetId: currentTimesheetId || null,
+        currentVersion,
+        contractWeekId: contractWeekId || null,
+        bookingId: bookingId || null,
+        staleMarkers: { was_stale: wasStale }
+      })
+    };
+  }
+
+  const identity = jsonObject(rawRow.identity);
+  const status = jsonObject(rawRow.status);
+  const actions = jsonObject(rawRow.actions);
+  const display = jsonObject(rawRow.display);
+  const rowCurrentTimesheetId = firstString(rawRow.current_timesheet_id, rawRow.timesheet_id, identity.current_timesheet_id, identity.timesheet_id, currentTimesheetId);
+  const rowContractWeekId = firstString(rawRow.contract_week_id, identity.contract_week_id, contractWeekId);
+  const rowBookingId = firstString(rawRow.booking_id, identity.booking_id, bookingId);
+  const rowCandidateId = firstString(rawRow.candidate_id, display.candidate_id);
+  const processingStatus = firstString(rawRow.processing_status, status.processing_status);
+  const signature = firstString(rawRow.backend_row_signature, rawRow.mutation_row_signature, rawRow.row_signature, rawRow.render_signature, rawRow.signature);
+  const authorised = toBoolOrNull(status.is_authorised ?? rawRow.is_authorised ?? rawRow.authorised);
+  const readyToPay = toBoolOrNull(rawRow.ready_to_pay ?? status.ready_to_pay ?? display.ready_to_pay);
+
+  const row = {
+    ...rawRow,
+    response_mode: 'LIGHTWEIGHT_LIFECYCLE_ROW',
+    context,
+    timesheet_id: rowCurrentTimesheetId || null,
+    current_timesheet_id: rowCurrentTimesheetId || null,
+    requested_timesheet_id: requestedTimesheetId || identity.requested_timesheet_id || null,
+    current_version: currentVersion ?? rawRow.current_version ?? null,
+    contract_week_id: rowContractWeekId || null,
+    booking_id: rowBookingId || null,
+    candidate_id: rowCandidateId || null,
+    processing_status: processingStatus || null,
+    authorised,
+    is_authorised: authorised,
+    ready_to_pay: readyToPay,
+    backend_row_signature: signature || null,
+    mutation_row_signature: signature || null,
+    row_signature: signature || null,
+    expected_row_signature: signature || firstString(src.expectedRowSignature, src.expected_row_signature) || null,
+    identity: {
+      ...identity,
+      requested_timesheet_id: requestedTimesheetId || identity.requested_timesheet_id || null,
+      timesheet_id: rowCurrentTimesheetId || null,
+      current_timesheet_id: rowCurrentTimesheetId || null,
+      contract_week_id: rowContractWeekId || null,
+      booking_id: rowBookingId || null,
+      row_key: firstString(identity.row_key, rawRow.row_key, rowCurrentTimesheetId ? `timesheet:${rowCurrentTimesheetId}` : null) || null
+    },
+    status: {
+      ...status,
+      processing_status: processingStatus || null,
+      is_authorised: authorised,
+      ready_to_pay: readyToPay
+    },
+    actions: {
+      ...actions
+    },
+    stale_markers: {
+      was_stale: wasStale,
+      timesheet_moved: !!(requestedTimesheetId && rowCurrentTimesheetId && requestedTimesheetId !== rowCurrentTimesheetId),
+      moved_from_timesheet_id: requestedTimesheetId && rowCurrentTimesheetId && requestedTimesheetId !== rowCurrentTimesheetId ? requestedTimesheetId : null,
+      moved_to_timesheet_id: requestedTimesheetId && rowCurrentTimesheetId && requestedTimesheetId !== rowCurrentTimesheetId ? rowCurrentTimesheetId : null
+    }
+  };
+
+  const lifecyclePatchBundle = buildTimesheetLifecyclePatchFromMutation({
+    action,
+    requestedTimesheetId: requestedTimesheetId || row.requested_timesheet_id || null,
+    currentTimesheetId: rowCurrentTimesheetId || null,
+    currentVersion: currentVersion ?? null,
+    contractWeekId: rowContractWeekId || null,
+    bookingId: rowBookingId || null,
+    candidateId: rowCandidateId || null,
+    newProcessingStatus: processingStatus || null,
+    authorised,
+    readyToPay,
+    backendRowSignature: signature || null,
+    rowSignature: signature || null,
+    expectedRowSignature: signature || firstString(src.expectedRowSignature, src.expected_row_signature) || null,
+    existingAffectedRows: [row],
+    sourceRow: row,
+    staleMarkers: row.stale_markers
+  });
+
+  return {
+    ok: true,
+    response_mode: 'LIGHTWEIGHT_LIFECYCLE_ROW',
+    payload,
+    row: lifecyclePatchBundle.affected_rows[0] || row,
+    rows: lifecyclePatchBundle.affected_rows,
+    missing: Array.isArray(payload.missing) ? payload.missing : [],
+    removed: Array.isArray(payload.removed) ? payload.removed : [],
+    lifecycle_patch_bundle: lifecyclePatchBundle
+  };
+}
+function buildTimesheetLifecyclePatchFromMutation(input = {}) {
+  const isPlainObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
+  const src = isPlainObject(input) ? input : {};
+  const payload = isPlainObject(src.atomicRpcPayload) ? src.atomicRpcPayload
+    : (isPlainObject(src.rpcPayload) ? src.rpcPayload
+      : (isPlainObject(src.payload) ? src.payload : {}));
+  const guard = isPlainObject(src.guardResult) ? src.guardResult : {};
+  const guardResolved = isPlainObject(guard.resolved) ? guard.resolved : {};
+  const tsfinRow = isPlainObject(src.tsfinRow) ? src.tsfinRow
+    : (isPlainObject(src.tsfin) ? src.tsfin : {});
+  const currentTimesheetRow = isPlainObject(src.currentTimesheetRow) ? src.currentTimesheetRow
+    : (isPlainObject(src.currentRow) ? src.currentRow
+      : (isPlainObject(src.timesheetRow) ? src.timesheetRow : {}));
+  const sourceRow = isPlainObject(src.sourceRow) ? src.sourceRow : {};
+  const staleInput = isPlainObject(src.staleMarkers) ? src.staleMarkers
+    : (isPlainObject(src.stale_markers) ? src.stale_markers : {});
+  const sourceIdentity = isPlainObject(sourceRow.identity) ? sourceRow.identity : {};
+  const sourceStatus = isPlainObject(sourceRow.status) ? sourceRow.status : {};
+  const sourceActions = isPlainObject(sourceRow.actions) ? sourceRow.actions : {};
+  const sourceDisplay = isPlainObject(sourceRow.display) ? sourceRow.display : {};
+
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const firstValue = function firstValue() {
+    for (let index = 0; index < arguments.length; index += 1) {
+      const value = arguments[index];
+      if (value !== undefined && value !== null && trimStr(value) !== '') return value;
+    }
+    return null;
+  };
+  const firstString = function firstString() {
+    const value = firstValue.apply(null, arguments);
+    const text = trimStr(value);
+    return text || '';
+  };
+  const upper = (value) => trimStr(value).toUpperCase();
+  const hasOwn = (obj, key) => !!(obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key));
+  const toBoolOrNull = (value) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value == null) return null;
+    const text = trimStr(value).toLowerCase();
+    if (!text) return null;
+    if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return null;
+  };
+  const boolWithDefault = (value, fallback = false) => {
+    const parsed = toBoolOrNull(value);
+    return parsed == null ? !!fallback : parsed;
+  };
+  const normalizeAction = (value) => {
+    const text = upper(value);
+    if (!text) return '';
+    if (text.includes('UNAUTHORISE') || text.includes('UNAUTHORIZE')) return 'UNAUTHORISE';
+    if (text.includes('AUTHORISE') || text.includes('AUTHORIZE')) return 'AUTHORISE';
+    if (text.includes('SAVE') || text.includes('PATCH') || text.includes('UPDATE')) return 'SAVE';
+    if (text === 'LIFECYCLE' || text === 'LIFECYCLE_REFRESH' || text === 'LIFECYCLE_FALLBACK') return text;
+    return text;
+  };
+
+  const action = normalizeAction(firstValue(src.action, src.actionType, payload.action, payload.operation, 'SAVE')) || 'SAVE';
+  const requestedTimesheetId = firstString(
+    src.requestedTimesheetId,
+    src.requested_timesheet_id,
+    payload.requested_timesheet_id,
+    guardResolved.requested_timesheet_id,
+    sourceIdentity.requested_timesheet_id,
+    sourceRow.requested_timesheet_id,
+    src.timesheetId,
+    payload.timesheet_id
+  ) || null;
+  const currentTimesheetId = firstString(
+    src.currentTimesheetId,
+    src.current_timesheet_id,
+    payload.current_timesheet_id,
+    payload.timesheet_id,
+    guardResolved.current_timesheet_id,
+    sourceIdentity.current_timesheet_id,
+    sourceIdentity.timesheet_id,
+    sourceRow.current_timesheet_id,
+    sourceRow.timesheet_id,
+    requestedTimesheetId
+  ) || null;
+  const currentVersionRaw = firstValue(
+    src.currentVersion,
+    src.current_version,
+    payload.current_version,
+    payload.timesheet_version,
+    guardResolved.current_version,
+    currentTimesheetRow.version,
+    tsfinRow.timesheet_version,
+    sourceIdentity.current_version,
+    sourceRow.current_version
+  );
+  const currentVersionNumber = Number(currentVersionRaw);
+  const currentVersion = Number.isFinite(currentVersionNumber) ? currentVersionNumber : (currentVersionRaw ?? null);
+  const contractWeekId = firstString(
+    src.contractWeekId,
+    src.contract_week_id,
+    payload.contract_week_id,
+    guardResolved.contract_week_id,
+    sourceIdentity.contract_week_id,
+    sourceRow.contract_week_id
+  ) || null;
+  const bookingId = firstString(
+    src.bookingId,
+    src.booking_id,
+    payload.booking_id,
+    guardResolved.booking_id,
+    sourceIdentity.booking_id,
+    sourceRow.booking_id
+  ) || null;
+  const candidateId = firstString(
+    src.candidateId,
+    src.candidate_id,
+    payload.candidate_id,
+    tsfinRow.candidate_id,
+    currentTimesheetRow.candidate_id,
+    sourceDisplay.candidate_id,
+    sourceRow.candidate_id
+  ) || null;
+  const processingStatus = firstString(
+    src.newProcessingStatus,
+    src.new_processing_status,
+    src.processingStatus,
+    src.processing_status,
+    payload.new_processing_status,
+    payload.processing_status,
+    payload.processing_status_after,
+    tsfinRow.processing_status,
+    sourceStatus.processing_status,
+    sourceRow.processing_status,
+    action === 'UNAUTHORISE' ? 'PENDING_AUTH' : null
+  ) || null;
+  const previousProcessingStatus = firstString(
+    src.previousProcessingStatus,
+    src.previous_processing_status,
+    payload.previous_processing_status,
+    payload.previous_status,
+    payload.processing_status_before,
+    sourceStatus.previous_processing_status,
+    sourceRow.previous_processing_status
+  ) || null;
+  const summaryStage = firstString(
+    src.summaryStage,
+    src.summary_stage,
+    payload.summary_stage,
+    sourceStatus.summary_stage,
+    sourceDisplay.summary_stage,
+    sourceRow.summary_stage
+  ) || null;
+
+  const requestExpectedRowSignature = firstString(
+    src.requestExpectedRowSignature,
+    src.expectedRowSignature,
+    src.expected_row_signature,
+    payload.request_expected_row_signature,
+    payload.expected_row_signature,
+    sourceRow.expected_row_signature
+  ) || null;
+  const backendRowSignature = firstString(
+    src.backendRowSignature,
+    src.backend_row_signature,
+    src.rowSignature,
+    src.row_signature,
+    payload.backend_row_signature,
+    payload.mutation_row_signature,
+    payload.row_signature,
+    payload.signature,
+    sourceRow.backend_row_signature,
+    sourceRow.mutation_row_signature,
+    sourceRow.row_signature,
+    sourceRow.render_signature,
+    sourceRow.signature
+  ) || null;
+  const rowSignature = backendRowSignature || null;
+  const expectedRowSignature = backendRowSignature || requestExpectedRowSignature || null;
+
+  let authorised = null;
+  if (action === 'UNAUTHORISE') {
+    authorised = false;
+  } else if (action === 'AUTHORISE') {
+    authorised = true;
+  } else {
+    authorised = toBoolOrNull(firstValue(
+      src.authorised,
+      src.is_authorised,
+      payload.authorised,
+      payload.is_authorised,
+      sourceStatus.is_authorised,
+      sourceStatus.authorised,
+      sourceRow.is_authorised,
+      sourceRow.authorised
+    ));
+    if (authorised == null) {
+      const authorisedStamp = firstString(
+        src.authorisedAtUtc,
+        src.authorised_at_utc,
+        src.authorisedAtServer,
+        src.authorised_at_server,
+        payload.authorised_at_utc,
+        payload.authorised_at_server,
+        tsfinRow.authorised_at_utc,
+        currentTimesheetRow.authorised_at_server,
+        sourceStatus.authorised_at_utc,
+        sourceStatus.authorised_at_server
+      );
+      if (authorisedStamp) authorised = true;
+      else if (hasOwn(currentTimesheetRow, 'authorised_at_server') || hasOwn(tsfinRow, 'authorised_at_utc')) authorised = false;
+    }
+  }
+
+  const authorisedAtUtc = action === 'UNAUTHORISE' ? null : (firstString(
+    src.authorisedAtUtc,
+    src.authorised_at_utc,
+    payload.authorised_at_utc,
+    tsfinRow.authorised_at_utc,
+    sourceStatus.authorised_at_utc
+  ) || null);
+  const authorisedAtServer = action === 'UNAUTHORISE' ? null : (firstString(
+    src.authorisedAtServer,
+    src.authorised_at_server,
+    payload.authorised_at_server,
+    currentTimesheetRow.authorised_at_server,
+    sourceStatus.authorised_at_server
+  ) || null);
+  const unauthorisedAtUtc = action === 'UNAUTHORISE'
+    ? (firstString(src.unauthorisedAtUtc, src.unauthorised_at_utc, payload.unauthorised_at_utc, payload.revoked_at, currentTimesheetRow.revoked_at) || null)
+    : null;
+
+  let readyToPay = toBoolOrNull(firstValue(
+    src.readyToPay,
+    src.ready_to_pay,
+    payload.ready_to_pay,
+    payload.readyToPay,
+    sourceStatus.ready_to_pay,
+    sourceRow.ready_to_pay,
+    sourceDisplay.ready_to_pay
+  ));
+  if (action === 'UNAUTHORISE') readyToPay = false;
+
+  const paid = boolWithDefault(firstValue(src.isPaid, src.is_paid, payload.is_paid, tsfinRow.is_paid, sourceStatus.is_paid, sourceRow.is_paid), false)
+    || !!firstString(src.paidAtUtc, src.paid_at_utc, payload.paid_at_utc, tsfinRow.paid_at_utc, sourceStatus.paid_at_utc);
+  const invoiceLocked = boolWithDefault(firstValue(src.isInvoiceLocked, src.is_invoice_locked, payload.is_invoice_locked, sourceStatus.is_invoice_locked, sourceRow.is_invoice_locked), false)
+    || !!firstString(src.lockedByInvoiceId, src.locked_by_invoice_id, payload.locked_by_invoice_id, tsfinRow.locked_by_invoice_id);
+  const locked = boolWithDefault(firstValue(src.isLocked, src.is_locked, payload.is_locked, sourceStatus.is_locked, sourceRow.is_locked), false) || paid || invoiceLocked;
+  const qrUnsignedBlocked = boolWithDefault(firstValue(src.qrUnsignedBlocked, src.qr_unsigned_blocked, payload.qr_unsigned_blocked, sourceStatus.qr_unsigned_blocked), false);
+  const processingStatusUpper = upper(processingStatus);
+
+  const stateAfter = (() => {
+    if (action === 'UNAUTHORISE') return 'UNAUTHORISED';
+    if (action === 'AUTHORISE') return 'AUTHORISED';
+    if (authorised === true) return 'AUTHORISED';
+    if (authorised === false) return 'UNAUTHORISED';
+    return processingStatusUpper || null;
+  })();
+
+  const canEdit = authorised === false && !locked;
+  const canAuthorise = !!(
+    authorised === false &&
+    !locked &&
+    !qrUnsignedBlocked &&
+    currentTimesheetId &&
+    (!processingStatusUpper || ['PENDING_AUTH', 'READY_FOR_HR'].includes(processingStatusUpper))
+  );
+  const canUnauthorise = !!(authorised === true && !locked && currentTimesheetId);
+  const footerActionHints = {
+    can_authorise: hasOwn(sourceActions, 'can_authorise') ? boolWithDefault(sourceActions.can_authorise, canAuthorise) : canAuthorise,
+    can_unauthorise: hasOwn(sourceActions, 'can_unauthorise') ? boolWithDefault(sourceActions.can_unauthorise, canUnauthorise) : canUnauthorise,
+    can_save: canEdit,
+    can_edit: canEdit,
+    read_only: !canEdit,
+    disabled_reasons: Array.isArray(sourceActions.disabled_reasons)
+      ? sourceActions.disabled_reasons
+      : [
+          locked ? 'TIMESHEET_LOCKED' : null,
+          paid ? 'TIMESHEET_PAID' : null,
+          invoiceLocked ? 'TIMESHEET_LOCKED_BY_INVOICE' : null,
+          qrUnsignedBlocked ? 'AWAITING_SIGNED_QR' : null,
+          authorised === true ? 'AUTHORISED_READ_ONLY' : null
+        ].filter(Boolean)
+  };
+  const editPermissionHints = {
+    can_edit: canEdit,
+    can_save: canEdit,
+    read_only: !canEdit,
+    mode: canEdit ? 'EDITABLE_UNAUTHORISED' : (authorised === true ? 'READ_ONLY_AUTHORISED' : (locked ? 'READ_ONLY_LOCKED' : 'READ_ONLY')),
+    reason: canEdit ? null : (authorised === true ? 'AUTHORISED_READ_ONLY' : (locked ? 'TIMESHEET_LOCKED' : null)),
+    requires_full_details_refresh: false
+  };
+  const dirtyState = {
+    is_dirty: action === 'SAVE' ? false : boolWithDefault(firstValue(src.isDirty, src.is_dirty, payload.is_dirty, sourceStatus.is_dirty, sourceRow.is_dirty), false),
+    clean: action === 'SAVE' ? true : !boolWithDefault(firstValue(src.isDirty, src.is_dirty, payload.is_dirty, sourceStatus.is_dirty, sourceRow.is_dirty), false),
+    save_applied: action === 'SAVE'
+  };
+  const staleMarkers = {
+    was_stale: boolWithDefault(firstValue(src.wasStale, src.was_stale, staleInput.was_stale, staleInput.wasStale, payload.was_stale, guardResolved.was_stale, sourceRow.was_stale), false),
+    timesheet_moved: boolWithDefault(firstValue(src.timesheetMoved, src.timesheet_moved, staleInput.timesheet_moved, staleInput.timesheetMoved, payload.timesheet_moved, sourceRow.timesheet_moved), false) || !!(requestedTimesheetId && currentTimesheetId && requestedTimesheetId !== currentTimesheetId),
+    stale_write_detected: boolWithDefault(firstValue(src.staleWriteDetected, src.stale_write_detected, staleInput.stale_write_detected, staleInput.staleWriteDetected, payload.stale_write_detected), false),
+    moved_from_timesheet_id: firstString(staleInput.moved_from_timesheet_id, staleInput.movedFromTimesheetId) || (requestedTimesheetId && currentTimesheetId && requestedTimesheetId !== currentTimesheetId ? requestedTimesheetId : null),
+    moved_to_timesheet_id: firstString(staleInput.moved_to_timesheet_id, staleInput.movedToTimesheetId) || (requestedTimesheetId && currentTimesheetId && requestedTimesheetId !== currentTimesheetId ? currentTimesheetId : null)
+  };
+
+  const identityComplete = !!currentTimesheetId;
+  const rowSignatureComplete = !!backendRowSignature;
+  const processingStatusComplete = !!processingStatus;
+  const authorisedComplete = authorised !== null;
+  const permissionStatePatchComplete = !!(identityComplete && rowSignatureComplete && processingStatusComplete && authorisedComplete);
+  const priorityBadgesPatchComplete = !!(identityComplete && rowSignatureComplete && processingStatusComplete && authorisedComplete);
+  const immediateLifecyclePatchAvailable = !!(permissionStatePatchComplete && priorityBadgesPatchComplete);
+  const requiresAffectedRowRefresh = !immediateLifecyclePatchAvailable;
+  const requiresFullDetailsRefresh = !immediateLifecyclePatchAvailable;
+  const refreshRequired = requiresAffectedRowRefresh || requiresFullDetailsRefresh;
+
+  const priorityBadgeHints = {
+    state: stateAfter,
+    authorised,
+    is_authorised: authorised,
+    processing_status: processingStatus,
+    summary_stage: summaryStage,
+    ready_to_pay: readyToPay,
+    is_dirty: dirtyState.is_dirty,
+    is_stale: staleMarkers.was_stale || staleMarkers.stale_write_detected,
+    timesheet_moved: staleMarkers.timesheet_moved,
+    can_edit: editPermissionHints.can_edit,
+    can_save: editPermissionHints.can_save,
+    can_authorise: footerActionHints.can_authorise,
+    can_unauthorise: footerActionHints.can_unauthorise,
+    read_only: editPermissionHints.read_only,
+    permission_state_patch_complete: permissionStatePatchComplete,
+    priority_badges_patch_complete: priorityBadgesPatchComplete
+  };
+
+  const refreshHints = {
+    blocking_required: refreshRequired,
+    priority_domains: [
+      { domain: 'timesheet_identity', complete: identityComplete, permission_critical: true },
+      { domain: 'row_signature', complete: rowSignatureComplete, permission_critical: true },
+      { domain: 'processing_status', complete: processingStatusComplete, permission_critical: true },
+      { domain: 'authorisation_state', complete: authorisedComplete, permission_critical: true },
+      { domain: 'edit_permissions', complete: permissionStatePatchComplete, permission_critical: true },
+      { domain: 'footer_actions', complete: permissionStatePatchComplete, permission_critical: true },
+      { domain: 'priority_badges', complete: priorityBadgesPatchComplete, permission_critical: false }
+    ],
+    lazy_domains: [
+      { domain: 'full_timesheet_details', refresh: 'lazy', blocking: false },
+      { domain: 'tab_hydration', refresh: 'lazy', blocking: false },
+      { domain: 'evidence', refresh: 'lazy', blocking: false },
+      { domain: 'validations', refresh: 'lazy', blocking: false },
+      { domain: 'pay_state_economics', refresh: 'lazy', blocking: false },
+      { domain: 'invoice_enrichment', refresh: 'lazy', blocking: false }
+    ],
+    requires_affected_row_refresh: requiresAffectedRowRefresh,
+    requires_full_details_refresh: requiresFullDetailsRefresh,
+    refresh_required: refreshRequired
+  };
+
+  const lifecyclePatch = {
+    action,
+    state_after: stateAfter,
+    requested_timesheet_id: requestedTimesheetId,
+    current_timesheet_id: currentTimesheetId,
+    timesheet_id: currentTimesheetId,
+    current_version: currentVersion ?? null,
+    contract_week_id: contractWeekId,
+    booking_id: bookingId,
+    candidate_id: candidateId,
+    previous_processing_status: previousProcessingStatus,
+    processing_status: processingStatus,
+    new_processing_status: processingStatus,
+    summary_stage: summaryStage,
+    authorised,
+    is_authorised: authorised,
+    authorised_at_utc: authorisedAtUtc,
+    authorised_at_server: authorisedAtServer,
+    unauthorised_at_utc: unauthorisedAtUtc,
+    ready_to_pay: readyToPay,
+    backend_row_signature: backendRowSignature,
+    mutation_row_signature: backendRowSignature,
+    row_signature: rowSignature,
+    expected_row_signature: expectedRowSignature,
+    request_expected_row_signature: requestExpectedRowSignature,
+    edit_permission_hints: editPermissionHints,
+    footer_action_hints: footerActionHints,
+    priority_badge_hints: priorityBadgeHints,
+    dirty_state: dirtyState,
+    stale_markers: staleMarkers,
+    patch_completeness: {
+      identity_complete: identityComplete,
+      row_signature_complete: rowSignatureComplete,
+      processing_status_complete: processingStatusComplete,
+      authorised_state_complete: authorisedComplete,
+      permission_state_patch_complete: permissionStatePatchComplete,
+      priority_badges_patch_complete: priorityBadgesPatchComplete,
+      immediate_lifecycle_patch_available: immediateLifecyclePatchAvailable
+    },
+    requires_affected_row_refresh: requiresAffectedRowRefresh,
+    requires_full_details_refresh: requiresFullDetailsRefresh,
+    refresh_required: refreshRequired
+  };
+
+  const normalizeAffectedRow = (row) => {
+    const base = isPlainObject(row) ? row : {};
+    const baseIdentity = isPlainObject(base.identity) ? base.identity : {};
+    const baseStatus = isPlainObject(base.status) ? base.status : {};
+    const baseActions = isPlainObject(base.actions) ? base.actions : {};
+    const rowTimesheetId = firstString(base.timesheet_id, base.current_timesheet_id, baseIdentity.current_timesheet_id, baseIdentity.timesheet_id, currentTimesheetId) || null;
+    const rowContractWeekId = firstString(base.contract_week_id, baseIdentity.contract_week_id, contractWeekId) || null;
+    const rowBookingId = firstString(base.booking_id, baseIdentity.booking_id, bookingId) || null;
+    const rowKey = firstString(base.row_key, baseIdentity.row_key, rowTimesheetId ? `timesheet:${rowTimesheetId}` : (rowContractWeekId ? `contract_week:${rowContractWeekId}` : null)) || null;
+    return {
+      ...base,
+      response_mode: base.response_mode || 'MUTATION_LIFECYCLE_PATCH',
+      timesheet_id: rowTimesheetId,
+      current_timesheet_id: rowTimesheetId,
+      requested_timesheet_id: firstString(base.requested_timesheet_id, baseIdentity.requested_timesheet_id, requestedTimesheetId) || null,
+      contract_week_id: rowContractWeekId,
+      booking_id: rowBookingId,
+      candidate_id: firstString(base.candidate_id, base.display?.candidate_id, candidateId) || null,
+      row_key: rowKey,
+      current_version: firstValue(base.current_version, currentVersion),
+      processing_status: firstString(base.processing_status, baseStatus.processing_status, processingStatus) || null,
+      previous_processing_status: firstString(base.previous_processing_status, previousProcessingStatus) || null,
+      authorised,
+      is_authorised: authorised,
+      ready_to_pay: readyToPay,
+      backend_row_signature: firstString(base.backend_row_signature, backendRowSignature) || null,
+      mutation_row_signature: firstString(base.mutation_row_signature, backendRowSignature) || null,
+      row_signature: firstString(base.row_signature, rowSignature) || null,
+      expected_row_signature: firstString(base.expected_row_signature, expectedRowSignature) || null,
+      identity: {
+        ...baseIdentity,
+        timesheet_id: rowTimesheetId,
+        current_timesheet_id: rowTimesheetId,
+        requested_timesheet_id: firstString(baseIdentity.requested_timesheet_id, requestedTimesheetId) || null,
+        contract_week_id: rowContractWeekId,
+        booking_id: rowBookingId,
+        row_key: rowKey
+      },
+      status: {
+        ...baseStatus,
+        state_after: stateAfter,
+        processing_status: firstString(baseStatus.processing_status, processingStatus) || null,
+        is_authorised: authorised,
+        authorised,
+        ready_to_pay: readyToPay,
+        is_paid: paid,
+        is_invoice_locked: invoiceLocked,
+        is_locked: locked,
+        qr_unsigned_blocked: qrUnsignedBlocked
+      },
+      actions: {
+        ...baseActions,
+        ...footerActionHints
+      },
+      edit_permission_hints: {
+        ...(isPlainObject(base.edit_permission_hints) ? base.edit_permission_hints : {}),
+        ...editPermissionHints
+      },
+      footer_action_hints: {
+        ...(isPlainObject(base.footer_action_hints) ? base.footer_action_hints : {}),
+        ...footerActionHints
+      },
+      priority_badge_hints: {
+        ...(isPlainObject(base.priority_badge_hints) ? base.priority_badge_hints : {}),
+        ...priorityBadgeHints
+      },
+      stale_markers: {
+        ...(isPlainObject(base.stale_markers) ? base.stale_markers : {}),
+        ...staleMarkers
+      },
+      patch_completeness: lifecyclePatch.patch_completeness,
+      refresh_hints: refreshHints
+    };
+  };
+
+  const existingAffectedRows = Array.isArray(src.existingAffectedRows) ? src.existingAffectedRows
+    : (Array.isArray(src.affected_rows) ? src.affected_rows
+      : (Array.isArray(payload.affected_rows) ? payload.affected_rows
+        : (Array.isArray(sourceRow.affected_rows) ? sourceRow.affected_rows : [])));
+  const affectedRows = (existingAffectedRows.length ? existingAffectedRows : [{}]).map(normalizeAffectedRow);
+
+  return {
+    lifecycle_patch: lifecyclePatch,
+    affected_rows: affectedRows,
+    refresh_hints: refreshHints,
+    permission_state_patch_complete: permissionStatePatchComplete,
+    priority_badges_patch_complete: priorityBadgesPatchComplete,
+    immediate_lifecycle_patch_available: immediateLifecyclePatchAvailable,
+    requires_affected_row_refresh: requiresAffectedRowRefresh,
+    requires_full_details_refresh: requiresFullDetailsRefresh,
+    refresh_required: refreshRequired
+  };
+}
+
+
+
+
 
 async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
@@ -120935,7 +121856,6 @@ async function handleUpdateClient(env, req, clientId) {
 // - Mileage evidence enforced via timesheet_evidence.kind = 'MILEAGE'
 // - Stores expenses_description as notes/metadata only (string or JSON-stringified)
 // ============================================================
-
 async function handleTsfinPatchExpenses(env, req, timesheetId, ctx = null) {
   const body = await parseJSONBody(req).catch(() => ({}));
 
@@ -120979,6 +121899,9 @@ async function handleTsfinPatchExpenses(env, req, timesheetId, ctx = null) {
 }
 
 
+
+
+
 // 4) PATCH /api/tsfin/:id/mileage  (mileage_units + pay/charge + rates)
 async function handleTsfinPatchMileage(env, req, timesheetId) {
   const body = await parseJSONBody(req).catch(() => ({}));
@@ -120998,6 +121921,11 @@ async function handleTsfinPatchMileage(env, req, timesheetId) {
     }
   }));
 }
+
+
+
+
+
 function derivePayBatchRouteDisplay(context = {}) {
   const ctx = context && typeof context === 'object' && !Array.isArray(context) ? context : {};
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -121231,8 +122159,6 @@ function derivePayBatchRouteDisplay(context = {}) {
 
 
 
-
-
 async function patchTsfinCommon(env, req, timesheetId, patch) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -121259,7 +122185,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     );
   }
 
-  const topLevelAllowed = new Set(['expected_timesheet_id', 'reason', 'expenses', 'mileage', 'po']);
+  const topLevelAllowed = new Set(['expected_timesheet_id', 'reason', 'expenses', 'mileage', 'po', '_save_domain']);
   const topLevelUnexpected = Object.keys(patch).filter((key) => !topLevelAllowed.has(key));
   if (topLevelUnexpected.length) {
     return blockedResponse(
@@ -121808,7 +122734,80 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   }
 
   if (!Object.keys(upd).length) {
-    return ok({ updated: false, tsfin: before });
+    let lifecycleSignatureObject = null;
+    let lifecycleSignature = '';
+    try {
+      const signaturePayload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+        p_timesheet_id: currentTimesheetId,
+        p_contract_week_id: cw?.id || null,
+        p_include_payload: false
+      }, { timeoutMs: 8000 });
+      const signatureObj = Array.isArray(signaturePayload) ? (signaturePayload[0] || null) : signaturePayload;
+      const signatureText = String(
+        signatureObj?.backend_row_signature ||
+        signatureObj?.mutation_row_signature ||
+        signatureObj?.row_signature ||
+        signatureObj?.expected_row_signature ||
+        signatureObj?.signature ||
+        ''
+      ).trim();
+      if (signatureText) {
+        lifecycleSignatureObject = signatureObj;
+        lifecycleSignature = signatureText;
+      }
+    } catch {}
+
+    const savePatchBundle = buildTimesheetLifecyclePatchFromMutation({
+      action: 'SAVE',
+      requestedTimesheetId: resolved.requested_timesheet_id || timesheetId || null,
+      currentTimesheetId,
+      currentVersion: resolved.current_version ?? null,
+      contractWeekId: cw?.id || null,
+      bookingId: resolved.booking_id || null,
+      candidateId: before?.candidate_id || null,
+      tsfinRow: before,
+      currentTimesheetRow: currentTs,
+      newProcessingStatus: before?.processing_status || null,
+      backendRowSignature: lifecycleSignature || null,
+      rowSignature: lifecycleSignature || null,
+      expectedRowSignature: lifecycleSignature || null,
+      authorised: false,
+      readyToPay: null,
+      staleMarkers: { was_stale: !!resolved.was_stale }
+    });
+
+    return ok({
+      updated: false,
+      tsfin: before,
+      save_domain: patch._save_domain || (patch.expenses ? 'EXPENSES' : (patch.mileage ? 'MILEAGE' : (patch.po ? 'PO' : 'TSFIN'))),
+      booking_id: resolved.booking_id || null,
+      requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
+      current_timesheet_id: currentTimesheetId,
+      timesheet_id: currentTimesheetId,
+      current_version: resolved.current_version ?? null,
+      was_stale: !!resolved.was_stale,
+      processing_status: before?.processing_status || null,
+      authorised: false,
+      contract_week_id: cw?.id || null,
+      backend_row_signature: lifecycleSignature || null,
+      mutation_row_signature: lifecycleSignature || null,
+      row_signature: lifecycleSignature || null,
+      expected_row_signature: lifecycleSignature || null,
+      lifecycle_signature: lifecycleSignatureObject || null,
+      lifecycle_patch: savePatchBundle.lifecycle_patch,
+      affected_rows: savePatchBundle.affected_rows,
+      refresh_hints: savePatchBundle.refresh_hints,
+      priority_badge_hints: savePatchBundle.lifecycle_patch?.priority_badge_hints || null,
+      dirty_state: { is_dirty: false, clean: true, save_applied: false, no_change: true },
+      save_patch_available: savePatchBundle.immediate_lifecycle_patch_available,
+      authorise_preflight_refresh_required: !lifecycleSignature,
+      permission_state_patch_complete: savePatchBundle.permission_state_patch_complete,
+      priority_badges_patch_complete: savePatchBundle.priority_badges_patch_complete,
+      immediate_lifecycle_patch_available: savePatchBundle.immediate_lifecycle_patch_available,
+      requires_affected_row_refresh: savePatchBundle.requires_affected_row_refresh,
+      requires_full_details_refresh: savePatchBundle.requires_full_details_refresh,
+      refresh_required: savePatchBundle.refresh_required
+    });
   }
 
   const beforeExpPay = round2(num0(before.expenses_pay_ex_vat));
@@ -122124,22 +123123,59 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     return serverError(`TSFIN lifecycle signature refresh failed: ${String(lifecycleSignatureError?.message || lifecycleSignatureError || 'no signature returned')}`);
   }
 
+  const savePatchBundle = buildTimesheetLifecyclePatchFromMutation({
+    action: 'SAVE',
+    requestedTimesheetId: resolved.requested_timesheet_id || timesheetId || null,
+    currentTimesheetId,
+    currentVersion: resolved.current_version ?? null,
+    contractWeekId: cw?.id || null,
+    bookingId: resolved.booking_id || null,
+    candidateId: after?.candidate_id || before?.candidate_id || null,
+    tsfinRow: after || before,
+    currentTimesheetRow: currentTs,
+    newProcessingStatus: after?.processing_status || before?.processing_status || null,
+    backendRowSignature: lifecycleSignature,
+    rowSignature: lifecycleSignature,
+    expectedRowSignature: lifecycleSignature,
+    authorised: false,
+    readyToPay: null,
+    staleMarkers: { was_stale: !!resolved.was_stale }
+  });
+
   return ok({
     updated: true,
     tsfin: after,
+    save_domain: patch._save_domain || (patch.expenses ? 'EXPENSES' : (patch.mileage ? 'MILEAGE' : (patch.po ? 'PO' : 'TSFIN'))),
     booking_id: resolved.booking_id || null,
     requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
     current_timesheet_id: currentTimesheetId,
+    timesheet_id: currentTimesheetId,
     current_version: resolved.current_version ?? null,
     was_stale: !!resolved.was_stale,
+    processing_status: after?.processing_status || before?.processing_status || null,
+    authorised: false,
+    contract_week_id: cw?.id || null,
     backend_row_signature: lifecycleSignature,
     mutation_row_signature: lifecycleSignature,
     row_signature: lifecycleSignature,
     expected_row_signature: lifecycleSignature,
     lifecycle_signature: lifecycleSignatureObject || null,
-    contract_week_id: cw?.id || null
+    lifecycle_patch: savePatchBundle.lifecycle_patch,
+    affected_rows: savePatchBundle.affected_rows,
+    refresh_hints: savePatchBundle.refresh_hints,
+    priority_badge_hints: savePatchBundle.lifecycle_patch?.priority_badge_hints || null,
+    dirty_state: { is_dirty: false, clean: true, save_applied: true },
+    save_patch_available: savePatchBundle.immediate_lifecycle_patch_available,
+    authorise_preflight_refresh_required: !lifecycleSignature,
+    permission_state_patch_complete: savePatchBundle.permission_state_patch_complete,
+    priority_badges_patch_complete: savePatchBundle.priority_badges_patch_complete,
+    immediate_lifecycle_patch_available: savePatchBundle.immediate_lifecycle_patch_available,
+    requires_affected_row_refresh: savePatchBundle.requires_affected_row_refresh,
+    requires_full_details_refresh: savePatchBundle.requires_full_details_refresh,
+    refresh_required: savePatchBundle.refresh_required
   });
 }
+
 
 
 
@@ -144615,6 +145651,8 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   return { picked: lease.length, ok, fail, write: wr };
 }
 
+
+
 async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null) {
   const enc = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
@@ -144984,6 +146022,32 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     hr_validation_required_for_invoice: boolish(rpcPayload.hr_validation_required_for_invoice)
   };
 
+  const lifecyclePatchBundle = buildTimesheetLifecyclePatchFromMutation({
+    action: 'AUTHORISE',
+    requestedTimesheetId,
+    currentTimesheetId: finalTimesheetId,
+    currentVersion: decision.current_version,
+    contractWeekId: rpcPayload.contract_week_id || null,
+    bookingId: decision.booking_id || null,
+    candidateId: rpcPayload.candidate_id || null,
+    atomicRpcPayload: rpcPayload,
+    guardResult: guard,
+    previousProcessingStatus: rpcPayload.previous_processing_status || null,
+    newProcessingStatus: rpcPayload.new_processing_status || rpcPayload.processing_status || null,
+    backendRowSignature,
+    rowSignature: backendRowSignature,
+    expectedRowSignature: backendRowSignature || expectedRowSignature || null,
+    authorised: true,
+    authorisedAtUtc: rpcPayload.authorised_at_utc || rpcPayload.authorised_at || now,
+    authorisedAtServer: rpcPayload.authorised_at_server || now,
+    readyToPay: rpcPayload.ready_to_pay,
+    existingAffectedRows: affectedRowsFor(rpcPayload, finalTimesheetId),
+    staleMarkers: {
+      was_stale: decision.was_stale,
+      timesheet_moved: !!(requestedTimesheetId && finalTimesheetId && requestedTimesheetId !== finalTimesheetId)
+    }
+  });
+
   return withCORS(env, req, ok({
     ok: true,
     success: true,
@@ -145003,16 +146067,21 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     current_version: decision.current_version,
     was_stale: decision.was_stale,
     backend_row_signature: backendRowSignature || null,
+    mutation_row_signature: backendRowSignature || null,
     row_signature: backendRowSignature || null,
-    affected_rows: affectedRowsFor(rpcPayload, finalTimesheetId),
-    requires_affected_row_refresh: true,
-    refresh_required: true,
+    expected_row_signature: backendRowSignature || null,
+    lifecycle_patch: lifecyclePatchBundle.lifecycle_patch,
+    affected_rows: lifecyclePatchBundle.affected_rows,
+    refresh_hints: lifecyclePatchBundle.refresh_hints,
+    permission_state_patch_complete: lifecyclePatchBundle.permission_state_patch_complete,
+    priority_badges_patch_complete: lifecyclePatchBundle.priority_badges_patch_complete,
+    immediate_lifecycle_patch_available: lifecyclePatchBundle.immediate_lifecycle_patch_available,
+    requires_affected_row_refresh: lifecyclePatchBundle.requires_affected_row_refresh,
+    requires_full_details_refresh: lifecyclePatchBundle.requires_full_details_refresh,
+    refresh_required: lifecyclePatchBundle.refresh_required,
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
-
-
-
 
 
 async function handleContractWeekManualDraftUpsert(env, req, weekId) {
