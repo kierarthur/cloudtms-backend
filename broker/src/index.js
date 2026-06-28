@@ -55958,9 +55958,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 }
 
 
-
-
-
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -58423,19 +58420,61 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         });
       }
 
+      const replacementAdoptionContract = {
+        ok: true,
+        action: 'ADOPT_REPLACEMENT_SESSION',
+        next_recommended_action: 'ADOPT_REPLACEMENT_SESSION',
+        source_session_id: workbenchSessionId,
+        source_session_version: replacement.source_session_version ?? expectedSourceVersion,
+        source_session_signature: inputJson.source_session_signature || inputJson.sourceSessionSignature || null,
+        source_session_discarded: true,
+        source_session_obsolete: true,
+        replacement_available: true,
+        replacement_session_id: replacementSessionId,
+        replacement_session_version: replacementSessionVersion,
+        replacement_session_signature: replacementSessionSignature,
+        replacement_snapshot_run_id: replacementSnapshotRunId,
+        replacement_idempotency_key: replacement.replacement_idempotency_key || replacementIdempotencyKey,
+        replacement_pay_date: replacementPayDate,
+        replacement_week_ending_cutoff: replacementWeekEndingCutoff,
+        current_workbench_session_id: replacementSessionId,
+        refreshed_session_id: replacementSessionId,
+        refreshed_session_signature: replacementSessionSignature,
+        refreshed_session_version: replacementSessionVersion,
+        preview_reopen_required: false,
+        requires_new_session: false
+      };
+      const hasWaitUntil = (value) => !!(value && typeof value === 'object' && typeof value.waitUntil === 'function');
+      const replacementDrainCtx = hasWaitUntil(options.ctx) ? options.ctx
+        : (hasWaitUntil(options.executionContext) ? options.executionContext
+          : (hasWaitUntil(options.execution_context) ? options.execution_context
+            : (hasWaitUntil(options.context) ? options.context
+              : (hasWaitUntil(options.waitUntilContext) ? options.waitUntilContext
+                : (hasWaitUntil(options.wait_until_context) ? options.wait_until_context
+                  : (hasWaitUntil(options.req) ? options.req : null))))));
       let workerWake = {
         ok: true,
         scheduled: false,
         skipped: true,
         code: 'BANKING_PAY_WORKBENCH_NUDGE_UNAVAILABLE',
+        worker_scope: 'SESSION',
+        requested_session_id: replacementSessionId,
         scheduled_worker_is_durable_fallback: true
       };
       if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
         try {
-          workerWake = nudgeBankingPayWorkbenchDrain(env, options.ctx || options.executionContext || options.execution_context || null, {
+          workerWake = nudgeBankingPayWorkbenchDrain(env, replacementDrainCtx, {
             origin: 'DRAFT_CREATE_POST_CREATE_REPLACEMENT',
             budgetProfile: 'NUDGE',
-            profile: 'NUDGE'
+            profile: 'NUDGE',
+            sessionId: replacementSessionId,
+            session_id: replacementSessionId,
+            replacementSessionId,
+            replacement_session_id: replacementSessionId,
+            sourceSessionId: workbenchSessionId,
+            source_session_id: workbenchSessionId,
+            actorUserId,
+            actor_user_id: actorUserId
           });
         } catch (wakeError) {
           workerWake = {
@@ -58443,6 +58482,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
             scheduled: false,
             code: 'DRAFT_CREATE_REPLACEMENT_NUDGE_FAILED',
             message: String(wakeError?.message || wakeError || 'Replacement workbench nudge failed'),
+            worker_scope: 'SESSION',
+            requested_session_id: replacementSessionId,
             scheduled_worker_is_durable_fallback: true
           };
         }
@@ -58470,6 +58511,11 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         idempotency_reused: replacement.idempotency_reused === true,
         replacement_idempotency_key: replacement.replacement_idempotency_key || replacementIdempotencyKey,
         replacement_session: Object.keys(replacementSessionContract).length ? replacementSessionContract : replacement,
+        replacement_adoption_contract: replacementAdoptionContract,
+        adoption_contract: replacementAdoptionContract,
+        next_recommended_action: 'ADOPT_REPLACEMENT_SESSION',
+        action: 'ADOPT_REPLACEMENT_SESSION',
+        adopt_replacement_session: true,
         current_workbench_session_id: replacementSessionId,
         refreshed_session_id: replacementSessionId,
         refreshed_session_signature: replacementSessionSignature,
@@ -58491,6 +58537,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
         worker_wake: workerWake,
         worker_wake_scheduled: workerWake?.scheduled === true || workerWake?.already_running === true,
+        worker_wake_session_scoped: String(workerWake?.worker_scope || '').toUpperCase() === 'SESSION' || workerWake?.session_scoped === true,
+        worker_wake_wait_until_available: workerWake?.wait_until_available === true || workerWake?.wait_until_used === true,
         scheduled_worker_is_durable_fallback: true,
         warning: null
       };
@@ -58520,6 +58568,11 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         replacement_snapshot_run_id: replacementSnapshotRunId,
         replacement_idempotency_key: replacement.replacement_idempotency_key || replacementIdempotencyKey,
         replacement_session: Object.keys(replacementSessionContract).length ? replacementSessionContract : replacement,
+        replacement_adoption_contract: replacementAdoptionContract,
+        adoption_contract: replacementAdoptionContract,
+        next_recommended_action: 'ADOPT_REPLACEMENT_SESSION',
+        action: 'ADOPT_REPLACEMENT_SESSION',
+        adopt_replacement_session: true,
         current_workbench_session_id: replacementSessionId,
         refreshed_session_id: replacementSessionId,
         refreshed_session_signature: replacementSessionSignature,
@@ -58529,6 +58582,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         snapshot_refresh_job_ids: [],
         worker_wake: workerWake,
         worker_wake_scheduled: workerWake?.scheduled === true || workerWake?.already_running === true,
+        worker_wake_session_scoped: String(workerWake?.worker_scope || '').toUpperCase() === 'SESSION' || workerWake?.session_scoped === true,
+        worker_wake_wait_until_available: workerWake?.wait_until_available === true || workerWake?.wait_until_used === true,
         scheduled_worker_is_durable_fallback: true
       });
     }
@@ -58596,6 +58651,13 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         progressJson.replacement_idempotency_key ||
         ''
       ).trim() || null;
+      const replacementAdoptionContract = safeObject(
+        refresh.replacement_adoption_contract ||
+        refresh.adoption_contract ||
+        progressJson.replacement_adoption_contract ||
+        progressJson.adoption_contract ||
+        {}
+      );
 
       if (!isUuid(replacementSessionId) || replacementSessionVersion === null) {
         const retryDelaySeconds = 10;
@@ -58633,6 +58695,40 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         replacement_snapshot_run_id: replacementSnapshotRunId,
         replacement_idempotency_key: replacementIdempotencyKey,
         replacement_session: Object.keys(replacementSessionContract).length ? replacementSessionContract : safeObject(refresh),
+        replacement_adoption_contract: Object.assign({
+          ok: true,
+          action: 'ADOPT_REPLACEMENT_SESSION',
+          next_recommended_action: 'ADOPT_REPLACEMENT_SESSION',
+          source_session_id: workbenchSessionId,
+          source_session_version: refresh.source_session_version ?? inputJson.source_session_version ?? inputJson.sourceSessionVersion ?? null,
+          source_session_signature: inputJson.source_session_signature || inputJson.sourceSessionSignature || null,
+          source_session_discarded: true,
+          source_session_obsolete: true,
+          replacement_available: true,
+          replacement_session_id: replacementSessionId,
+          replacement_session_version: replacementSessionVersion,
+          replacement_session_signature: replacementSessionSignature,
+          replacement_snapshot_run_id: replacementSnapshotRunId,
+          replacement_idempotency_key: replacementIdempotencyKey,
+          current_workbench_session_id: replacementSessionId,
+          refreshed_session_id: replacementSessionId,
+          refreshed_session_signature: replacementSessionSignature,
+          refreshed_session_version: replacementSessionVersion,
+          preview_reopen_required: false,
+          requires_new_session: false
+        }, replacementAdoptionContract),
+        adoption_contract: Object.assign({
+          ok: true,
+          action: 'ADOPT_REPLACEMENT_SESSION',
+          next_recommended_action: 'ADOPT_REPLACEMENT_SESSION',
+          source_session_id: workbenchSessionId,
+          replacement_session_id: replacementSessionId,
+          replacement_session_version: replacementSessionVersion,
+          replacement_session_signature: replacementSessionSignature
+        }, replacementAdoptionContract),
+        next_recommended_action: 'ADOPT_REPLACEMENT_SESSION',
+        action: 'ADOPT_REPLACEMENT_SESSION',
+        adopt_replacement_session: true,
         current_workbench_session_id: replacementSessionId,
         refreshed_session_id: replacementSessionId,
         refreshed_session_signature: replacementSessionSignature,
@@ -58670,6 +58766,11 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         replacement_snapshot_run_id: replacementSnapshotRunId,
         replacement_idempotency_key: replacementIdempotencyKey,
         replacement_session: postCreateRefresh.replacement_session,
+        replacement_adoption_contract: postCreateRefresh.replacement_adoption_contract,
+        adoption_contract: postCreateRefresh.adoption_contract || postCreateRefresh.replacement_adoption_contract,
+        next_recommended_action: 'ADOPT_REPLACEMENT_SESSION',
+        action: 'ADOPT_REPLACEMENT_SESSION',
+        adopt_replacement_session: true,
         current_workbench_session_id: replacementSessionId,
         refreshed_session_id: replacementSessionId,
         refreshed_session_signature: replacementSessionSignature,
@@ -58720,6 +58821,10 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           replacement_session_id: replacementSessionId,
           replacement_session_signature: replacementSessionSignature,
           replacement_session_version: replacementSessionVersion,
+          replacement_adoption_contract: postCreateRefresh.replacement_adoption_contract,
+          adoption_contract: postCreateRefresh.adoption_contract || postCreateRefresh.replacement_adoption_contract,
+          next_recommended_action: 'ADOPT_REPLACEMENT_SESSION',
+          action: 'ADOPT_REPLACEMENT_SESSION',
           adopted_replacement_session: true,
           consumed: false,
           preview_reopen_required: false
@@ -58769,6 +58874,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
 
 
 
@@ -71928,9 +72034,6 @@ async function handleTimesheetsSummary(env, req) {
   }
 }
 
-
-
-
 function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
   const startedAt = Date.now();
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -72174,6 +72277,13 @@ function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
         lock_seconds: lockSeconds,
         allowBackendRunnerOwned: true,
         allow_backend_runner_owned: true,
+        req: options.req || (targetOperationType === 'DRAFT_CREATE' && ctx && typeof ctx.waitUntil === 'function' ? ctx : null),
+        ctx,
+        executionContext: ctx,
+        execution_context: ctx,
+        context: ctx,
+        waitUntilContext: ctx,
+        wait_until_context: ctx,
         operationTypes: targetOperationType ? [targetOperationType] : Array.from(supportedOperationTypes),
         operation_types: targetOperationType ? [targetOperationType] : Array.from(supportedOperationTypes),
         source: `${source}.immediateDrain`,
@@ -72315,6 +72425,9 @@ function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
     });
   }
 }
+
+
+
 
 async function touchBankingPayBatchPaymentStateChanged(env, payBatchId, options = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
