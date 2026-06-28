@@ -53561,7 +53561,17 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
     filtersHash: stableStringify(filters || {}),
     sortHash: stableStringify(sort || {}),
     currentSectionHash: stableStringify(currentSectionJson || {}),
-    changedSinceVersion: changedSinceVersion == null ? null : String(changedSinceVersion)
+    changedSinceVersion: changedSinceVersion == null ? null : String(changedSinceVersion),
+    keyParts: [
+      String(rpcPurpose || '').trim() || 'SECTION_PAGE',
+      String(limit == null ? '' : limit),
+      normaliseUiPurpose(actionContext, section, actionContext),
+      normaliseRouteToken(currentTab || ''),
+      stableStringify(filters || {}),
+      stableStringify(sort || {}),
+      stableStringify(currentSectionJson || {}),
+      changedSinceVersion == null ? '' : String(changedSinceVersion)
+    ]
   });
 
   const id = trimText(payBatchId);
@@ -53802,7 +53812,7 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
     const singleFlightSort = parseJson(body.sort_json ?? body.sortJson ?? body.sort ?? url.searchParams.get('sort'), {});
     const singleFlightCurrentSectionJson = parseJson(body.current_section_json ?? body.currentSectionJson ?? url.searchParams.get('current_section_json') ?? url.searchParams.get('currentSectionJson'), {});
     const singleFlightChangedSinceVersion = body.changed_since_version ?? body.changedSinceVersion ?? url.searchParams.get('changed_since_version') ?? url.searchParams.get('changedSinceVersion') ?? null;
-    const singleFlightCurrentTab = normaliseRouteToken(body.current_tab || body.currentTab || url.searchParams.get('current_tab') || url.searchParams.get('currentTab') || '');
+    const singleFlightCurrentTab = normaliseRouteToken(body.current_tab || body.currentTab || singleFlightCurrentSectionJson.current_tab || singleFlightCurrentSectionJson.currentTab || url.searchParams.get('current_tab') || url.searchParams.get('currentTab') || '');
     return withBankingPaySingleFlight(buildSectionSingleFlightKey({
       section: singleFlightSection,
       cursor: singleFlightCursor,
@@ -53819,8 +53829,6 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
   }
   return execute();
 }
-
-
 async function advanceBankingPaySettlementOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
