@@ -179867,8 +179867,35 @@ DECLARE
   v_session_progress_update_applied boolean := false;
   v_session_progress_lock_skipped boolean := false;
   v_session_progress_update_row_count integer := 0;
+  v_diag_phase_started_at timestamptz := v_started_at_utc;
+  v_budget_apply_elapsed_ms numeric := 0;
+  v_initial_validation_elapsed_ms numeric := 0;
+  v_overpayment_sync_elapsed_ms numeric := 0;
+  v_preview_context_elapsed_ms numeric := 0;
+  v_collect_call_wall_elapsed_ms numeric := 0;
+  v_canonical_call_wall_elapsed_ms numeric := 0;
+  v_temp_transform_elapsed_ms numeric := 0;
+  v_temp_counts_elapsed_ms numeric := 0;
+  v_scope_timesheet_temp_elapsed_ms numeric := 0;
+  v_final_revalidation_elapsed_ms numeric := 0;
+  v_source_retire_elapsed_ms numeric := 0;
+  v_source_upsert_elapsed_ms numeric := 0;
+  v_source_write_guard_elapsed_ms numeric := 0;
+  v_current_source_count_elapsed_ms numeric := 0;
+  v_reconciliation_defer_elapsed_ms numeric := 0;
+  v_next_cursor_elapsed_ms numeric := 0;
+  v_scope_update_elapsed_ms numeric := 0;
+  v_session_progress_update_elapsed_ms numeric := 0;
+  v_residual_elapsed_ms numeric := 0;
+  v_residual_wall_elapsed_ms numeric := 0;
+  v_residual_measured_elapsed_ms numeric := 0;
+  v_residual_unattributed_elapsed_ms numeric := 0;
+  v_source_build_timing_json jsonb := '{}'::jsonb;
 BEGIN
+  v_diag_phase_started_at := clock_timestamp();
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
+  v_budget_apply_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
 
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_ID_REQUIRED'
@@ -180276,6 +180303,9 @@ BEGIN
     'false'
   ))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
+  v_initial_validation_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
+
   IF COALESCE(v_first_source_page, true)
      AND v_candidate_pay_channel_scope IN ('PAYE', 'UMBRELLA')
      AND (COALESCE(v_sync_completed, false) IS NOT TRUE OR COALESCE(v_existing_source_row_count, 0) = 0) THEN
@@ -180348,6 +180378,9 @@ BEGIN
     v_sync_completed := true;
   END IF;
 
+  v_overpayment_sync_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
+
   v_preview_decisions_json := COALESCE(v_session_row.filters_json, '{}'::jsonb)
     || COALESCE(v_payload_json, '{}'::jsonb)
     || jsonb_build_object(
@@ -180412,12 +180445,18 @@ BEGIN
     'overpayment_sync_pay_channel_scope', v_candidate_pay_channel_scope
   );
 
+  v_preview_context_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
+
   v_collect_result := public.pay_preview_candidate_collect_scope(
     p_context_json => v_context_json,
     p_candidate_id => p_candidate_id,
     p_cursor_json => v_cursor_json,
     p_limit => v_limit
   );
+
+  v_collect_call_wall_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
 
   v_collect_diagnostics_json := CASE
     WHEN jsonb_typeof(v_collect_result->'source_build_collect_diagnostics') = 'object'
@@ -180448,10 +180487,15 @@ BEGIN
   v_timesheet_filter_applied_early := LOWER(BTRIM(COALESCE(v_collect_diagnostics_json->>'timesheet_filter_applied_early', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_large_aggregation_avoided := LOWER(BTRIM(COALESCE(v_collect_diagnostics_json->>'large_aggregation_avoided', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
+  v_diag_phase_started_at := clock_timestamp();
+
   v_canonical_result := public.pay_preview_candidate_build_canonical_lines(
     p_context_json => v_context_json,
     p_candidate_id => p_candidate_id
   );
+
+  v_canonical_call_wall_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
 
   v_canonical_diagnostics_json := CASE
     WHEN jsonb_typeof(v_canonical_result->'source_build_canonical_diagnostics') = 'object'
@@ -180482,6 +180526,8 @@ BEGIN
               'candidate_id', p_candidate_id::text
             )::text;
   END IF;
+
+  v_diag_phase_started_at := clock_timestamp();
 
   DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_preview_line_seed_source;
   CREATE TEMPORARY TABLE pg_temp._tmp_pay_wb_preview_line_seed_source ON COMMIT DROP AS
@@ -181215,6 +181261,8 @@ BEGIN
   SELECT numbered_rows.*
   FROM numbered_rows;
 
+  v_temp_transform_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
 
   SELECT COUNT(*)::integer
   INTO v_source_canonical_preview_line_count
@@ -181231,6 +181279,9 @@ BEGIN
   INTO v_timesheets_seen
   FROM pg_temp._tmp_pay_wb_preview_line_seed_source AS source_timesheet_rows
   WHERE source_timesheet_rows.timesheet_id IS NOT NULL;
+
+  v_temp_counts_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
 
   DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_source_build_scope_timesheet_ids;
   CREATE TEMPORARY TABLE pg_temp._tmp_pay_wb_source_build_scope_timesheet_ids ON COMMIT DROP AS
@@ -181257,6 +181308,9 @@ BEGIN
       WHERE source_rows.timesheet_id IS NOT NULL
     ) AS parsed_scope_ids
     WHERE parsed_scope_ids.timesheet_id IS NOT NULL;
+
+  v_scope_timesheet_temp_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
 
   SELECT final_session_row.*
   INTO v_session_row
@@ -181318,6 +181372,9 @@ BEGIN
             )::text;
   END IF;
 
+  v_final_revalidation_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
+
   IF v_requested_refresh_scope_kind = 'CANDIDATE_FULL_LIVE'
      AND COALESCE(v_first_source_page, true) THEN
     UPDATE public.banking_pay_workbench_candidate_source_lines AS source_line_retire
@@ -181362,6 +181419,9 @@ BEGIN
 
     GET DIAGNOSTICS v_source_rows_superseded = ROW_COUNT;
   END IF;
+
+  v_source_retire_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
 
   WITH source_rows_to_upsert AS (
     SELECT
@@ -181488,6 +181548,9 @@ BEGIN
        v_next_source_ordinal
   FROM upserted_source_rows;
 
+  v_source_upsert_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
+
   IF COALESCE(v_materialisable_source_line_count, 0) > 0
      AND COALESCE(v_source_rows_written, 0) = 0 THEN
     SELECT final_session_row.*
@@ -181562,6 +181625,9 @@ BEGIN
     END IF;
   END IF;
 
+  v_source_write_guard_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
+
   SELECT COUNT(*)::integer
   INTO v_current_source_row_count
   FROM public.banking_pay_workbench_candidate_source_lines AS current_source_rows
@@ -181571,6 +181637,9 @@ BEGIN
     AND current_source_rows.source_change_seq = v_source_change_seq
     AND current_source_rows.source_build_run_id = v_source_build_run_id
     AND current_source_rows.status = 'CURRENT';
+
+  v_current_source_count_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
 
   IF COALESCE(v_current_source_row_count, 0) > 0 THEN
     v_source_reconcile_result := jsonb_build_object(
@@ -181593,6 +181662,9 @@ BEGIN
     v_reconciled_source_build_jobs_superseded := 0;
   END IF;
 
+  v_reconciliation_defer_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
+
   IF COALESCE(v_has_more, false) AND v_source_cursor_out_json IS NOT NULL THEN
     v_next_cursor_json := COALESCE(v_source_cursor_out_json, '{}'::jsonb)
       || jsonb_build_object(
@@ -181614,6 +181686,9 @@ BEGIN
   v_cursor_advanced := v_next_cursor_json IS NOT NULL
     AND v_next_cursor_json IS DISTINCT FROM COALESCE(v_cursor_json, '{}'::jsonb);
 
+  v_next_cursor_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+  v_diag_phase_started_at := clock_timestamp();
+
   UPDATE public.banking_pay_workbench_session_scope AS scope_update
   SET status = CASE
         WHEN COALESCE(v_has_more, false) THEN 'SOURCE_BUILD_PENDING'
@@ -181625,6 +181700,48 @@ BEGIN
       updated_at_utc = v_now
   WHERE scope_update.session_id = p_session_id
     AND scope_update.candidate_id = p_candidate_id;
+
+  v_scope_update_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+
+  v_source_build_timing_json := jsonb_build_object(
+    'timing_version', 'source_build_residual_v1',
+    'complete', false,
+    'source_build_run_id', v_source_build_run_id::text,
+    'source_change_seq', v_source_change_seq,
+    'session_version', v_session_version,
+    'source_page_count', COALESCE(v_source_page_count, 0),
+    'source_rows_written', COALESCE(v_source_rows_written, 0),
+    'materialisable_source_line_count', COALESCE(v_materialisable_source_line_count, 0),
+    'source_rows_seen', COALESCE(v_source_canonical_preview_line_count, 0),
+    'phase_elapsed_ms', jsonb_build_object(
+      'budget_apply', COALESCE(v_budget_apply_elapsed_ms, 0),
+      'initial_validation', COALESCE(v_initial_validation_elapsed_ms, 0),
+      'overpayment_sync', COALESCE(v_overpayment_sync_elapsed_ms, 0),
+      'preview_context_build', COALESCE(v_preview_context_elapsed_ms, 0),
+      'collect_call_wall', COALESCE(v_collect_call_wall_elapsed_ms, 0),
+      'collect_reported', COALESCE(v_collect_elapsed_ms, 0),
+      'canonical_call_wall', COALESCE(v_canonical_call_wall_elapsed_ms, 0),
+      'canonical_reported', COALESCE(v_canonical_elapsed_ms, 0)
+    )
+    || jsonb_build_object(
+      'temp_transform', COALESCE(v_temp_transform_elapsed_ms, 0),
+      'temp_counts', COALESCE(v_temp_counts_elapsed_ms, 0),
+      'scope_timesheet_temp', COALESCE(v_scope_timesheet_temp_elapsed_ms, 0),
+      'final_revalidation', COALESCE(v_final_revalidation_elapsed_ms, 0),
+      'source_retire', COALESCE(v_source_retire_elapsed_ms, 0),
+      'source_upsert', COALESCE(v_source_upsert_elapsed_ms, 0),
+      'source_write_guard', COALESCE(v_source_write_guard_elapsed_ms, 0),
+      'current_source_count', COALESCE(v_current_source_count_elapsed_ms, 0)
+    )
+    || jsonb_build_object(
+      'reconciliation_defer', COALESCE(v_reconciliation_defer_elapsed_ms, 0),
+      'next_cursor', COALESCE(v_next_cursor_elapsed_ms, 0),
+      'scope_update', COALESCE(v_scope_update_elapsed_ms, 0),
+      'session_progress_update', COALESCE(v_session_progress_update_elapsed_ms, 0)
+    )
+  );
+
+  v_diag_phase_started_at := clock_timestamp();
 
   BEGIN
     PERFORM 1
@@ -181677,6 +181794,7 @@ BEGIN
             || jsonb_build_object(
               'last_source_build_collect_diagnostics', COALESCE(v_collect_diagnostics_json, '{}'::jsonb),
               'last_source_build_canonical_diagnostics', COALESCE(v_canonical_diagnostics_json, '{}'::jsonb),
+              'last_source_build_timing', COALESCE(v_source_build_timing_json, '{}'::jsonb),
               'terminal_readiness_deferred', true,
               'terminal_readiness_deferred_to', 'pay_workbench_complete_job',
               'session_progress_update_locking', 'NOWAIT',
@@ -181706,7 +181824,81 @@ BEGIN
       v_session_progress_update_row_count := 0;
   END;
 
+  v_session_progress_update_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+
   v_total_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_started_at_utc)) * 1000.0)::numeric, 3);
+  v_residual_elapsed_ms := round(GREATEST(COALESCE(v_total_elapsed_ms, 0) - COALESCE(v_collect_elapsed_ms, 0) - COALESCE(v_canonical_elapsed_ms, 0), 0), 3);
+  v_residual_wall_elapsed_ms := round(GREATEST(COALESCE(v_total_elapsed_ms, 0) - COALESCE(v_collect_call_wall_elapsed_ms, 0) - COALESCE(v_canonical_call_wall_elapsed_ms, 0), 0), 3);
+  v_residual_measured_elapsed_ms := round((
+    COALESCE(v_budget_apply_elapsed_ms, 0)
+    + COALESCE(v_initial_validation_elapsed_ms, 0)
+    + COALESCE(v_overpayment_sync_elapsed_ms, 0)
+    + COALESCE(v_preview_context_elapsed_ms, 0)
+    + COALESCE(v_temp_transform_elapsed_ms, 0)
+    + COALESCE(v_temp_counts_elapsed_ms, 0)
+    + COALESCE(v_scope_timesheet_temp_elapsed_ms, 0)
+    + COALESCE(v_final_revalidation_elapsed_ms, 0)
+    + COALESCE(v_source_retire_elapsed_ms, 0)
+    + COALESCE(v_source_upsert_elapsed_ms, 0)
+    + COALESCE(v_source_write_guard_elapsed_ms, 0)
+    + COALESCE(v_current_source_count_elapsed_ms, 0)
+    + COALESCE(v_reconciliation_defer_elapsed_ms, 0)
+    + COALESCE(v_next_cursor_elapsed_ms, 0)
+    + COALESCE(v_scope_update_elapsed_ms, 0)
+    + COALESCE(v_session_progress_update_elapsed_ms, 0)
+  )::numeric, 3);
+  v_residual_unattributed_elapsed_ms := round(GREATEST(COALESCE(v_residual_wall_elapsed_ms, 0) - COALESCE(v_residual_measured_elapsed_ms, 0), 0), 3);
+
+  v_source_build_timing_json := jsonb_build_object(
+    'timing_version', 'source_build_residual_v1',
+    'complete', true,
+    'source_build_run_id', v_source_build_run_id::text,
+    'source_change_seq', v_source_change_seq,
+    'session_version', v_session_version,
+    'source_page_count', COALESCE(v_source_page_count, 0),
+    'source_rows_written', COALESCE(v_source_rows_written, 0),
+    'materialisable_source_line_count', COALESCE(v_materialisable_source_line_count, 0),
+    'source_rows_seen', COALESCE(v_source_canonical_preview_line_count, 0),
+    'elapsed_summary_ms', jsonb_build_object(
+      'total', COALESCE(v_total_elapsed_ms, 0),
+      'collect_reported', COALESCE(v_collect_elapsed_ms, 0),
+      'collect_call_wall', COALESCE(v_collect_call_wall_elapsed_ms, 0),
+      'canonical_reported', COALESCE(v_canonical_elapsed_ms, 0),
+      'canonical_call_wall', COALESCE(v_canonical_call_wall_elapsed_ms, 0),
+      'residual_reported_basis', COALESCE(v_residual_elapsed_ms, 0),
+      'residual_wall_basis', COALESCE(v_residual_wall_elapsed_ms, 0),
+      'residual_measured_components', COALESCE(v_residual_measured_elapsed_ms, 0),
+      'residual_unattributed', COALESCE(v_residual_unattributed_elapsed_ms, 0)
+    )
+  )
+  || jsonb_build_object(
+    'phase_elapsed_ms', jsonb_build_object(
+      'budget_apply', COALESCE(v_budget_apply_elapsed_ms, 0),
+      'initial_validation', COALESCE(v_initial_validation_elapsed_ms, 0),
+      'overpayment_sync', COALESCE(v_overpayment_sync_elapsed_ms, 0),
+      'preview_context_build', COALESCE(v_preview_context_elapsed_ms, 0),
+      'collect_call_wall', COALESCE(v_collect_call_wall_elapsed_ms, 0),
+      'collect_reported', COALESCE(v_collect_elapsed_ms, 0),
+      'canonical_call_wall', COALESCE(v_canonical_call_wall_elapsed_ms, 0),
+      'canonical_reported', COALESCE(v_canonical_elapsed_ms, 0)
+    )
+    || jsonb_build_object(
+      'temp_transform', COALESCE(v_temp_transform_elapsed_ms, 0),
+      'temp_counts', COALESCE(v_temp_counts_elapsed_ms, 0),
+      'scope_timesheet_temp', COALESCE(v_scope_timesheet_temp_elapsed_ms, 0),
+      'final_revalidation', COALESCE(v_final_revalidation_elapsed_ms, 0),
+      'source_retire', COALESCE(v_source_retire_elapsed_ms, 0),
+      'source_upsert', COALESCE(v_source_upsert_elapsed_ms, 0),
+      'source_write_guard', COALESCE(v_source_write_guard_elapsed_ms, 0),
+      'current_source_count', COALESCE(v_current_source_count_elapsed_ms, 0)
+    )
+    || jsonb_build_object(
+      'reconciliation_defer', COALESCE(v_reconciliation_defer_elapsed_ms, 0),
+      'next_cursor', COALESCE(v_next_cursor_elapsed_ms, 0),
+      'scope_update', COALESCE(v_scope_update_elapsed_ms, 0),
+      'session_progress_update', COALESCE(v_session_progress_update_elapsed_ms, 0)
+    )
+  );
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -181766,6 +181958,16 @@ BEGIN
     'classifier_elapsed_ms', COALESCE(v_classifier_elapsed_ms, 0),
     'classifier_timing_source', 'canonical_elapsed_ms',
     'total_elapsed_ms', COALESCE(v_total_elapsed_ms, 0),
+    'collect_call_wall_elapsed_ms', COALESCE(v_collect_call_wall_elapsed_ms, 0),
+    'canonical_call_wall_elapsed_ms', COALESCE(v_canonical_call_wall_elapsed_ms, 0),
+    'source_build_residual_elapsed_ms', COALESCE(v_residual_elapsed_ms, 0),
+    'source_build_residual_wall_elapsed_ms', COALESCE(v_residual_wall_elapsed_ms, 0),
+    'source_build_residual_measured_elapsed_ms', COALESCE(v_residual_measured_elapsed_ms, 0),
+    'source_build_residual_unattributed_elapsed_ms', COALESCE(v_residual_unattributed_elapsed_ms, 0),
+    'source_build_temp_transform_elapsed_ms', COALESCE(v_temp_transform_elapsed_ms, 0),
+    'source_build_source_upsert_elapsed_ms', COALESCE(v_source_upsert_elapsed_ms, 0),
+    'source_build_session_progress_update_elapsed_ms', COALESCE(v_session_progress_update_elapsed_ms, 0),
+    'source_build_timing', COALESCE(v_source_build_timing_json, '{}'::jsonb),
     'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
   )
   || jsonb_build_object(
@@ -181782,6 +181984,7 @@ BEGIN
       'candidate_lock_scope', 'SESSION_SCOPE_ROW_FOR_UPDATE',
       'session_progress_update_applied', COALESCE(v_session_progress_update_applied, false),
       'session_progress_lock_skipped', COALESCE(v_session_progress_lock_skipped, false),
+      'timing', COALESCE(v_source_build_timing_json, '{}'::jsonb),
       'source_build_reconciliation_deferred_to_complete_job', COALESCE(v_current_source_row_count, 0) > 0,
       'source_row_identity', jsonb_build_object(
         'session_id', p_session_id::text,
@@ -181794,6 +181997,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 

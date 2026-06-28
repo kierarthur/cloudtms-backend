@@ -13633,6 +13633,7 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
   }
 }
 
+
 async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, sessionId) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -13652,6 +13653,128 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
     } catch {}
     return safeObject(payload);
   };
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const boolFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  const countFrom = (value, fallback = 0) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : fallback;
+  };
+  const compactProgressForPreviewPage = (payloadLike) => {
+    const payload = safeObject(payloadLike);
+    const progress = isPlainObject(payload.progress) ? payload.progress : payload;
+    const jobCounts = isPlainObject(progress.job_counts) ? progress.job_counts : (isPlainObject(payload.job_counts) ? payload.job_counts : {});
+    const lineCounts = isPlainObject(progress.line_counts) ? progress.line_counts : (isPlainObject(payload.line_counts) ? payload.line_counts : {});
+    const candidateCounts = isPlainObject(progress.candidate_counts) ? progress.candidate_counts : (isPlainObject(payload.candidate_counts) ? payload.candidate_counts : {});
+    const hasOwn = (objectLike, key) => isPlainObject(objectLike) && Object.prototype.hasOwnProperty.call(objectLike, key);
+    const readyKnown = ['ready', 'ready_flag'].some((key) => hasOwn(progress, key) || hasOwn(payload, key));
+    const statusText = trimStr(progress.status || progress.session_status || payload.status || payload.session_status || '') || null;
+    const phaseText = trimStr(progress.phase || progress.progress_state || payload.phase || payload.progress_state || '') || null;
+    const progressContractPresent = !!(
+      readyKnown ||
+      statusText ||
+      phaseText ||
+      hasOwn(progress, 'job_counts') ||
+      hasOwn(payload, 'job_counts') ||
+      hasOwn(progress, 'line_counts') ||
+      hasOwn(payload, 'line_counts') ||
+      hasOwn(progress, 'candidate_counts') ||
+      hasOwn(payload, 'candidate_counts') ||
+      hasOwn(progress, 'queued_job_count') ||
+      hasOwn(payload, 'queued_job_count') ||
+      hasOwn(progress, 'running_job_count') ||
+      hasOwn(payload, 'running_job_count')
+    );
+    return {
+      session_id: trimStr(progress.session_id || payload.session_id || id) || id,
+      progress_contract_present: progressContractPresent,
+      status: statusText,
+      phase: phaseText,
+      progress_state: trimStr(progress.progress_state || progress.phase || payload.progress_state || payload.phase || '') || null,
+      ready: readyKnown ? (progress.ready === true || progress.ready_flag === true || payload.ready === true || payload.ready_flag === true) : null,
+      ready_flag: readyKnown ? (progress.ready === true || progress.ready_flag === true || payload.ready === true || payload.ready_flag === true) : null,
+      obsolete: progress.obsolete === true || progress.session_obsolete === true || payload.obsolete === true || payload.session_obsolete === true,
+      read_only: progress.read_only === true || payload.read_only === true,
+      job_counts: {
+        total: countFrom(jobCounts.total ?? jobCounts.total_count ?? progress.job_total_count ?? payload.job_total_count, 0),
+        queued: countFrom(jobCounts.queued ?? jobCounts.queued_count ?? progress.queued_job_count ?? payload.queued_job_count, 0),
+        running: countFrom(jobCounts.running ?? jobCounts.running_count ?? progress.running_job_count ?? payload.running_job_count, 0),
+        due: countFrom(jobCounts.due ?? jobCounts.due_count ?? progress.due_job_count ?? payload.due_job_count, 0),
+        unresolved_failed: countFrom(jobCounts.unresolved_failed ?? jobCounts.unresolved_failed_count ?? progress.unresolved_failed_job_count ?? payload.unresolved_failed_job_count, 0),
+        unresolved_dead: countFrom(jobCounts.unresolved_dead ?? jobCounts.unresolved_dead_count ?? progress.unresolved_dead_job_count ?? payload.unresolved_dead_job_count, 0)
+      },
+      line_counts: {
+        total: countFrom(lineCounts.total ?? lineCounts.total_count ?? progress.line_units_total ?? payload.line_units_total, 0),
+        ready: countFrom(lineCounts.ready ?? lineCounts.ready_count ?? progress.line_units_ready ?? payload.line_units_ready, 0),
+        pending: countFrom(lineCounts.pending ?? lineCounts.pending_count ?? progress.line_units_pending ?? payload.line_units_pending, 0),
+        ready_not_materialised: countFrom(lineCounts.ready_not_materialised ?? lineCounts.readyNotMaterialised ?? lineCounts.ready_not_materialised_count ?? progress.line_units_ready ?? payload.line_units_ready, 0),
+        failed: countFrom(lineCounts.failed ?? lineCounts.failed_count ?? progress.line_units_failed ?? payload.line_units_failed, 0),
+        unknown: countFrom(lineCounts.unknown ?? lineCounts.unknown_count ?? progress.line_units_unknown ?? payload.line_units_unknown, 0)
+      },
+      candidate_counts: {
+        total: countFrom(candidateCounts.total ?? candidateCounts.total_count ?? progress.total_candidates ?? progress.total_count ?? payload.total_candidates ?? payload.total_count, 0),
+        ready: countFrom(candidateCounts.ready ?? candidateCounts.ready_count ?? progress.ready_candidates ?? progress.ready_count ?? payload.ready_candidates ?? payload.ready_count, 0),
+        pending: countFrom(candidateCounts.pending ?? candidateCounts.pending_count ?? progress.pending_candidates ?? progress.pending_count ?? payload.pending_candidates ?? payload.pending_count, 0),
+        processing: countFrom(candidateCounts.processing ?? candidateCounts.processing_count ?? progress.processing_candidates ?? payload.processing_candidates, 0),
+        materialisation_pending: countFrom(candidateCounts.materialisation_pending ?? candidateCounts.materialization_pending ?? candidateCounts.materialisation_pending_count ?? candidateCounts.materialization_pending_count ?? progress.materialisation_pending_candidates ?? progress.materialization_pending_candidates ?? payload.materialisation_pending_candidates ?? payload.materialization_pending_candidates, 0),
+        dirty: countFrom(candidateCounts.dirty ?? candidateCounts.dirty_count ?? progress.dirty_candidates ?? payload.dirty_candidates, 0),
+        failed: countFrom(candidateCounts.failed ?? candidateCounts.failed_count ?? progress.failed_candidates ?? progress.failed_count ?? payload.failed_candidates ?? payload.failed_count, 0),
+        unknown: countFrom(candidateCounts.unknown ?? candidateCounts.unknown_count ?? progress.unknown_candidates ?? payload.unknown_candidates, 0),
+        unseeded: countFrom(candidateCounts.unseeded ?? candidateCounts.unseeded_count ?? progress.unseeded_candidates ?? payload.unseeded_candidates, 0)
+      }
+    };
+  };
+  const authoritativePreviewPageReadiness = (payloadLike) => {
+    const compact = compactProgressForPreviewPage(payloadLike);
+    const status = upperTrim(compact.status || '');
+    const phase = upperTrim(compact.phase || compact.progress_state || status || '');
+    const jobCounts = compact.job_counts || {};
+    const lineCounts = compact.line_counts || {};
+    const candidateCounts = compact.candidate_counts || {};
+    const queuedOrRunningJobs = countFrom(jobCounts.queued, 0) + countFrom(jobCounts.running, 0) + countFrom(jobCounts.due, 0);
+    const unresolvedTerminalJobs = countFrom(jobCounts.unresolved_failed, 0) + countFrom(jobCounts.unresolved_dead, 0);
+    const pendingCandidateWork = countFrom(candidateCounts.pending, 0)
+      + countFrom(candidateCounts.processing, 0)
+      + countFrom(candidateCounts.materialisation_pending, 0)
+      + countFrom(candidateCounts.dirty, 0)
+      + countFrom(candidateCounts.unknown, 0)
+      + countFrom(candidateCounts.unseeded, 0);
+    const pendingLineWork = countFrom(lineCounts.pending, 0)
+      + countFrom(lineCounts.ready_not_materialised, 0)
+      + countFrom(lineCounts.unknown, 0);
+    const failedPreviewWork = countFrom(candidateCounts.failed, 0) + countFrom(lineCounts.failed, 0);
+    const explicitlyNotReady = compact.ready === false
+      || compact.ready_flag === false
+      || compact.obsolete === true
+      || ['SOURCE_BUILDING', 'LINE_WORK_SEEDING', 'PROCESSING_LINE_WORK', 'REFRESHING_CANDIDATES', 'MATERIALISING_PREVIEW_ROWS', 'MATERIALIZING_PREVIEW_ROWS', 'REBASE_REQUIRED', 'DISCARDED'].includes(phase)
+      || ['DISCARDED', 'CLOSED', 'FAILED', 'ERROR'].includes(status)
+      || queuedOrRunningJobs > 0
+      || unresolvedTerminalJobs > 0
+      || pendingCandidateWork > 0
+      || pendingLineWork > 0
+      || failedPreviewWork > 0;
+    const explicitlyReady = !explicitlyNotReady && (
+      compact.ready === true ||
+      compact.ready_flag === true ||
+      phase === 'READY' ||
+      phase === 'READY_EMPTY' ||
+      status === 'READY' ||
+      status === 'READY_EMPTY'
+    );
+    return {
+      available: compact.progress_contract_present === true,
+      ready: explicitlyReady,
+      not_ready: explicitlyNotReady || !explicitlyReady,
+      compact,
+      phase: phase || null,
+      status: status || null,
+      queued_or_running_jobs: queuedOrRunningJobs,
+      unresolved_terminal_jobs: unresolvedTerminalJobs,
+      pending_candidate_work: pendingCandidateWork,
+      pending_line_work: pendingLineWork,
+      failed_preview_work: failedPreviewWork
+    };
+  };
+
   const jsonResponse = (status, payload) => {
     const headers = new Headers(typeof JSON_HEADERS !== 'undefined' ? JSON_HEADERS : { 'Content-Type': 'application/json' });
     headers.set('Content-Type', 'application/json; charset=utf-8');
@@ -13680,6 +13803,18 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
 
   const execute = async () => {
     try {
+      let progressPayload = null;
+      let progressReadFailed = false;
+      let progressReadError = null;
+      try {
+        progressPayload = unwrapRpc(await sbRpc(env, 'pay_workbench_session_get_progress_light', {
+          p_session_id: id
+        }, { routeClass: 'PREVIEW_PROGRESS', purpose: 'PREVIEW_PAGE_PROGRESS_GATE', timeoutMs: 6000, bankingPay: true }), 'pay_workbench_session_get_progress_light');
+      } catch (progressError) {
+        progressReadFailed = true;
+        progressReadError = trimStr(progressError?.message || progressError?.error || progressError) || 'Progress readiness could not be loaded';
+      }
+
       const payload = unwrapRpc(await sbRpc(env, 'pay_workbench_session_get_preview_page', {
         p_session_id: id,
         p_section: section,
@@ -13688,7 +13823,10 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
       }, { routeClass: 'PREVIEW_PROGRESS', purpose: 'PREVIEW_PAGE', timeoutMs: 8000, bankingPay: true }), 'pay_workbench_session_get_preview_page');
       const requestedSection = trimStr(payload.requested_section || payload.requestedSection || section).toLowerCase() || section;
       const resolvedSection = trimStr(payload.resolved_section || payload.resolvedSection || payload.section || section).toLowerCase() || section;
-      return withCORS(env, req, ok({
+      const readiness = progressReadFailed ? null : authoritativePreviewPageReadiness(progressPayload);
+      const progressCompact = readiness?.compact || null;
+      const progressSaysNotReady = readiness?.available === true && readiness.ready !== true;
+      const responsePayload = {
         ...payload,
         ok: payload.ok !== false,
         session_id: payload.session_id || id,
@@ -13698,8 +13836,35 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
         section_alias_applied: payload.section_alias_applied === true || (requestedSection !== resolvedSection),
         section: trimStr(payload.section || resolvedSection).toLowerCase() || resolvedSection,
         limit,
-        requires_paging: true
-      }));
+        requires_paging: true,
+        session_progress_available: readiness?.available === true,
+        session_progress_read_failed: progressReadFailed,
+        session_progress_read_error: progressReadError,
+        session_progress: progressCompact,
+        session_progress_ready: readiness?.ready === true,
+        authoritative_ready_source: readiness?.available === true ? 'session_progress' : 'preview_page'
+      };
+
+      if (progressSaysNotReady) {
+        responsePayload.ready = false;
+        responsePayload.ready_flag = false;
+        responsePayload.preview_ready = false;
+        responsePayload.workbench_ready = false;
+        responsePayload.building = true;
+        responsePayload.workbench_building = true;
+        responsePayload.pending_refresh = true;
+        responsePayload.refresh_pending = true;
+        responsePayload.preview_refresh_pending = true;
+        responsePayload.next_recommended_action = 'WAIT_FOR_WORKER';
+        responsePayload.phase = progressCompact?.phase || responsePayload.phase || null;
+        responsePayload.progress_state = progressCompact?.progress_state || progressCompact?.phase || responsePayload.progress_state || null;
+        responsePayload.job_counts = progressCompact?.job_counts || responsePayload.job_counts || null;
+        responsePayload.line_counts = progressCompact?.line_counts || responsePayload.line_counts || null;
+        responsePayload.candidate_counts = progressCompact?.candidate_counts || responsePayload.candidate_counts || null;
+        responsePayload.status_text = trimStr(responsePayload.status_text || responsePayload.message || '') || 'Payment preview is still refreshing.';
+      }
+
+      return withCORS(env, req, ok(responsePayload));
     } catch (e) {
       const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
         ? makeBankingFriendlyErrorPayload(e, { action: 'WORKBENCH_SESSION_PREVIEW_PAGE', session_id: id })
@@ -13713,6 +13878,7 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
   }
   return execute();
 }
+
 
 async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -14772,6 +14938,8 @@ function bankingPayWorkbenchLogsEnabled(env) {
     return false;
   }
 }
+
+
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -15007,6 +15175,19 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     ? `BANKING_PAY_WORKBENCH_SESSION_DRAIN:${requestedSessionIdValue}`
     : 'BANKING_PAY_WORKBENCH_GLOBAL_DRAIN';
 
+  const activeEntryMaxAgeMs = numberInRange(
+    cachedAutoSetting('activeEntryMaxAgeMs', 'active_entry_max_age_ms', cachedAutoContinuationSettings.active_entry_max_age_ms),
+    Math.max(12000, Math.min(30000, autoContinuationPerBurstMaxRuntimeMs + 5000, maxAutoContinuationRuntimeMs + 5000)),
+    10000,
+    90000
+  );
+  const activeEntryNoProgressMaxAgeMs = numberInRange(
+    cachedAutoSetting('activeEntryNoProgressMaxAgeMs', 'active_entry_no_progress_max_age_ms', cachedAutoContinuationSettings.active_entry_no_progress_max_age_ms),
+    Math.max(10000, Math.min(activeEntryMaxAgeMs, autoContinuationPerBurstMaxRuntimeMs + 5000)),
+    8000,
+    Math.max(10000, activeEntryMaxAgeMs)
+  );
+
   const commonMetadata = {
     origin,
     requested_origin: requestedOrigin,
@@ -15033,6 +15214,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     auto_continuation_per_burst_max_runtime_ms: autoContinuationPerBurstMaxRuntimeMs,
     auto_continuation_min_runtime_ms: autoContinuationMinRuntimeMs,
     lock_contention_retry_delay_ms: lockContentionRetryDelayMs,
+    active_entry_max_age_ms: activeEntryMaxAgeMs,
+    active_entry_no_progress_max_age_ms: activeEntryNoProgressMaxAgeMs,
     auto_continuation_max_passes: autoContinuationMaxPasses,
     auto_continuation_claim_limit_max: autoContinuationClaimLimitMax,
     auto_continuation_max_jobs: autoContinuationMaxJobs,
@@ -15142,96 +15325,180 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   }
   const map = root.__bankingPayWorkbenchDrainNudges;
 
+  const parseTimeMs = (value) => {
+    const text = trimStr(value);
+    if (!text) return 0;
+    const ms = Date.parse(text);
+    return Number.isFinite(ms) ? ms : 0;
+  };
+  const summaryLooksSettled = (summaryLike) => {
+    const summary = isPlainObject(summaryLike) ? summaryLike : {};
+    if (!Object.keys(summary).length) return false;
+    const stopReason = upperTrim(summary.stop_reason || '');
+    return summary.ok === false
+      || booleanFrom(summary.terminal)
+      || booleanFrom(summary.completed)
+      || ['NO_MORE_DUE', 'DISABLED', 'DRAIN_UNAVAILABLE', 'RPC_ERROR', 'UNSAFE_OR_NO_PROGRESS'].includes(stopReason)
+      || Object.prototype.hasOwnProperty.call(summary, 'completed_at_utc');
+  };
+  const activeEntryAgeMs = (entryLike) => {
+    const entry = isPlainObject(entryLike) ? entryLike : {};
+    const startedMs = Number(entry.started_at_ms) || parseTimeMs(entry.started_at_utc) || 0;
+    return startedMs > 0 ? Math.max(0, Date.now() - startedMs) : Number.POSITIVE_INFINITY;
+  };
+  const activeEntryStalenessReason = (entryLike) => {
+    const entry = isPlainObject(entryLike) ? entryLike : null;
+    if (!entry) return 'INVALID_ACTIVE_ENTRY';
+    if (!entry.promise || typeof entry.promise.then !== 'function') return 'MISSING_ACTIVE_PROMISE';
+    if (entry.settled === true || entry.completed === true) return 'ACTIVE_PROMISE_SETTLED';
+    if (entry.completed_at_utc || entry.settled_at_utc) return 'ACTIVE_ENTRY_COMPLETED';
+    if (entry.wait_until_upgrade_failed === true && entry.wait_until_used !== true) return 'WAIT_UNTIL_UPGRADE_FAILED';
+    const ageMs = activeEntryAgeMs(entry);
+    const entryMaxAgeMs = numberInRange(entry.stale_after_ms, activeEntryMaxAgeMs, 10000, 120000);
+    const entryNoProgressMaxAgeMs = numberInRange(entry.no_progress_stale_after_ms, activeEntryNoProgressMaxAgeMs, 8000, Math.max(10000, entryMaxAgeMs));
+    const lastProgressMs = parseTimeMs(entry.last_progress_at_utc);
+    const noProgressAgeMs = lastProgressMs > 0 ? Math.max(0, Date.now() - lastProgressMs) : ageMs;
+    if (!Number.isFinite(ageMs) || ageMs > entryMaxAgeMs) return 'ACTIVE_ENTRY_TTL_EXPIRED';
+    if (entry.wait_until_used === true && ageMs > autoContinuationMinRuntimeMs && noProgressAgeMs > entryNoProgressMaxAgeMs) return 'ACTIVE_ENTRY_NO_RECENT_PROGRESS';
+    if (entry.wait_until_used !== true && ageMs > Math.min(entryMaxAgeMs, entryNoProgressMaxAgeMs)) return 'ACTIVE_ENTRY_NO_WAIT_UNTIL_STALE';
+    if (entry.accepting_coalesced_wakes === false && summaryLooksSettled(entry.final_summary)) return 'ACTIVE_ENTRY_FINALISED';
+    const expiresAtMs = parseTimeMs(entry.expires_at_utc);
+    if (expiresAtMs > 0 && Date.now() > expiresAtMs) return 'ACTIVE_ENTRY_EXPIRED_AT_REACHED';
+    return null;
+  };
+  const summaryMadeProgress = (summaryLike) => {
+    const summary = isPlainObject(summaryLike) ? summaryLike : {};
+    return booleanFrom(summary.made_progress)
+      || numberFrom(summary, ['claimed', 'claimed_count'], 0) > 0
+      || numberFrom(summary, ['processed', 'processed_count'], 0) > 0
+      || numberFrom(summary, ['succeeded', 'succeeded_count'], 0) > 0
+      || numberFrom(summary, ['row_units_processed', 'work_units_processed'], 0) > 0
+      || numberFrom(summary, ['continuations_created', 'continuation_created_count'], 0) > 0
+      || numberFrom(summary, ['continuations_reused', 'continuation_reused_count'], 0) > 0;
+  };
+  const markEntryProgress = (summaryLike, reason = '') => {
+    if (!entry || !summaryMadeProgress(summaryLike)) return;
+    entry.last_progress_at_utc = new Date().toISOString();
+    entry.last_progress_reason = trimStr(reason) || null;
+    entry.last_progress_summary = isPlainObject(summaryLike) ? summaryLike : null;
+  };
+
   if (map && map.has(singleFlightKey)) {
     const rawActiveEntry = map.get(singleFlightKey);
     if (rawActiveEntry && typeof rawActiveEntry.then === 'function') {
-      return returnNudgeResult({
-        ...commonMetadata,
-        ok: true,
-        scheduled: false,
-        already_running: true,
-        coalesced_into_active_drain: false,
-        coalesced_wake_deferred_to_cron: true,
-        coalesced_wake_count: null,
-        active_started_at_utc: null,
-        active_budget_profile: budgetProfile,
-        code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING_LEGACY_ENTRY',
-        wait_until_used: null,
-        continuation_scheduled: true
-      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
-    }
+      try { map.delete(singleFlightKey); } catch {}
+      logNudgeDiag('WORKBENCH_DRAIN_NUDGE_STALE_ACTIVE_CLEARED', {
+        stale_active_reason: 'LEGACY_PROMISE_ENTRY_UNTRACKABLE',
+        active_entry_max_age_ms: activeEntryMaxAgeMs,
+        requested_origin: requestedOrigin,
+        will_schedule_fresh_drain: true
+      }, 'warn');
+    } else {
+      const activeEntry = isPlainObject(rawActiveEntry) && rawActiveEntry.promise
+        ? rawActiveEntry
+        : null;
+      const staleReason = activeEntryStalenessReason(activeEntry);
 
-    const activeEntry = isPlainObject(rawActiveEntry) && rawActiveEntry.promise
-      ? rawActiveEntry
-      : null;
+      if (staleReason) {
+        try { map.delete(singleFlightKey); } catch {}
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_STALE_ACTIVE_CLEARED', {
+          stale_active_reason: staleReason,
+          active_started_at_utc: activeEntry?.started_at_utc || null,
+          active_age_ms: activeEntry ? activeEntryAgeMs(activeEntry) : null,
+          active_entry_max_age_ms: activeEntry?.stale_after_ms || activeEntryMaxAgeMs,
+          active_entry_no_progress_max_age_ms: activeEntry?.no_progress_stale_after_ms || activeEntryNoProgressMaxAgeMs,
+          active_wait_until_used: activeEntry?.wait_until_used === true,
+          active_budget_profile: activeEntry?.budget_profile || budgetProfile,
+          active_final_stop_reason: upperTrim(activeEntry?.final_summary?.stop_reason || '') || null,
+          active_final_more_due: activeEntry?.final_summary ? booleanFrom(activeEntry.final_summary.more_due) : null,
+          requested_origin: requestedOrigin,
+          will_schedule_fresh_drain: true
+        }, 'warn');
+      } else if (activeEntry && activeEntry.accepting_coalesced_wakes !== false) {
+        let activeWaitUntilUpgradeAttempted = false;
+        let activeWaitUntilUpgradeSucceeded = activeEntry.wait_until_used === true;
+        let activeWaitUntilUpgradeErrorMessage = null;
 
-    if (activeEntry && activeEntry.accepting_coalesced_wakes !== false) {
-      let activeWaitUntilUpgradeAttempted = false;
-      let activeWaitUntilUpgradeSucceeded = activeEntry.wait_until_used === true;
-      let activeWaitUntilUpgradeErrorMessage = null;
-
-      if (!activeWaitUntilUpgradeSucceeded
-          && activeEntry.promise
-          && typeof activeEntry.promise.then === 'function'
-          && ctx
-          && typeof ctx.waitUntil === 'function') {
-        activeWaitUntilUpgradeAttempted = true;
-        try {
-          ctx.waitUntil(activeEntry.promise);
-          activeEntry.wait_until_used = true;
-          activeEntry.wait_until_upgraded_at_utc = new Date().toISOString();
-          activeEntry.wait_until_upgraded_origin = requestedOrigin;
-          activeWaitUntilUpgradeSucceeded = true;
-          logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADED', {
-            active_started_at_utc: activeEntry.started_at_utc || null,
-            active_budget_profile: activeEntry.budget_profile || budgetProfile,
-            coalesced_wake_count: Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1,
-            wait_until_used: true,
-            requested_origin: requestedOrigin
-          });
-        } catch (waitUntilError) {
-          activeEntry.wait_until_upgrade_failed = true;
-          activeEntry.wait_until_upgrade_failed_at_utc = new Date().toISOString();
-          activeEntry.wait_until_upgrade_error_message = String(waitUntilError?.message || waitUntilError || 'ctx.waitUntil upgrade failed');
-          activeWaitUntilUpgradeSucceeded = false;
-          activeWaitUntilUpgradeErrorMessage = activeEntry.wait_until_upgrade_error_message;
-          logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADE_FAILED', {
-            active_started_at_utc: activeEntry.started_at_utc || null,
-            active_budget_profile: activeEntry.budget_profile || budgetProfile,
-            wait_until_used: false,
-            requested_origin: requestedOrigin,
-            error_message: activeWaitUntilUpgradeErrorMessage
-          }, 'warn');
-          try { activeEntry.promise.catch(() => {}); } catch {}
+        if (!activeWaitUntilUpgradeSucceeded
+            && activeEntry.promise
+            && typeof activeEntry.promise.then === 'function'
+            && ctx
+            && typeof ctx.waitUntil === 'function') {
+          activeWaitUntilUpgradeAttempted = true;
+          try {
+            ctx.waitUntil(activeEntry.promise);
+            activeEntry.wait_until_used = true;
+            activeEntry.wait_until_upgraded_at_utc = new Date().toISOString();
+            activeEntry.wait_until_upgraded_origin = requestedOrigin;
+            activeWaitUntilUpgradeSucceeded = true;
+            logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADED', {
+              active_started_at_utc: activeEntry.started_at_utc || null,
+              active_budget_profile: activeEntry.budget_profile || budgetProfile,
+              active_age_ms: activeEntryAgeMs(activeEntry),
+              active_entry_max_age_ms: activeEntry.stale_after_ms || activeEntryMaxAgeMs,
+              active_entry_no_progress_max_age_ms: activeEntry.no_progress_stale_after_ms || activeEntryNoProgressMaxAgeMs,
+              coalesced_wake_count: Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1,
+              wait_until_used: true,
+              requested_origin: requestedOrigin
+            });
+          } catch (waitUntilError) {
+            activeEntry.wait_until_upgrade_failed = true;
+            activeEntry.wait_until_upgrade_failed_at_utc = new Date().toISOString();
+            activeEntry.wait_until_upgrade_error_message = String(waitUntilError?.message || waitUntilError || 'ctx.waitUntil upgrade failed');
+            activeWaitUntilUpgradeSucceeded = false;
+            activeWaitUntilUpgradeErrorMessage = activeEntry.wait_until_upgrade_error_message;
+            logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADE_FAILED', {
+              active_started_at_utc: activeEntry.started_at_utc || null,
+              active_budget_profile: activeEntry.budget_profile || budgetProfile,
+              active_age_ms: activeEntryAgeMs(activeEntry),
+              wait_until_used: false,
+              requested_origin: requestedOrigin,
+              error_message: activeWaitUntilUpgradeErrorMessage
+            }, 'warn');
+            try { activeEntry.promise.catch(() => {}); } catch {}
+          }
         }
+
+        activeEntry.coalesced_wake_requested = true;
+        activeEntry.coalesced_wake_count = Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1;
+        activeEntry.last_coalesced_at_utc = new Date().toISOString();
+        activeEntry.last_requested_origin = requestedOrigin;
+        try { map.set(singleFlightKey, activeEntry); } catch {}
+        return returnNudgeResult({
+          ...commonMetadata,
+          ok: true,
+          scheduled: false,
+          already_running: true,
+          coalesced_into_active_drain: true,
+          coalesced_wake_count: activeEntry.coalesced_wake_count,
+          active_started_at_utc: activeEntry.started_at_utc || null,
+          active_age_ms: activeEntryAgeMs(activeEntry),
+          active_entry_max_age_ms: activeEntry.stale_after_ms || activeEntryMaxAgeMs,
+          active_entry_no_progress_max_age_ms: activeEntry.no_progress_stale_after_ms || activeEntryNoProgressMaxAgeMs,
+          active_expires_at_utc: activeEntry.expires_at_utc || null,
+          active_last_progress_at_utc: activeEntry.last_progress_at_utc || null,
+          active_budget_profile: activeEntry.budget_profile || budgetProfile,
+          code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING',
+          wait_until_used: activeEntry.wait_until_used === true,
+          active_wait_until_upgrade_attempted: activeWaitUntilUpgradeAttempted,
+          active_wait_until_upgraded: activeWaitUntilUpgradeAttempted && activeWaitUntilUpgradeSucceeded,
+          active_wait_until_upgrade_error_message: activeWaitUntilUpgradeErrorMessage,
+          continuation_scheduled: true,
+          final_burst_summary: isPlainObject(activeEntry.final_summary) ? activeEntry.final_summary : null
+        }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
+      } else {
+        try { map.delete(singleFlightKey); } catch {}
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_STALE_ACTIVE_CLEARED', {
+          stale_active_reason: 'ACTIVE_ENTRY_NOT_ACCEPTING_COALESCED_WAKES',
+          active_started_at_utc: activeEntry?.started_at_utc || null,
+          active_age_ms: activeEntry ? activeEntryAgeMs(activeEntry) : null,
+          requested_origin: requestedOrigin,
+          will_schedule_fresh_drain: true
+        }, 'info');
       }
-
-      activeEntry.coalesced_wake_requested = true;
-      activeEntry.coalesced_wake_count = Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1;
-      activeEntry.last_coalesced_at_utc = new Date().toISOString();
-      activeEntry.last_requested_origin = requestedOrigin;
-      try { map.set(singleFlightKey, activeEntry); } catch {}
-      return returnNudgeResult({
-        ...commonMetadata,
-        ok: true,
-        scheduled: false,
-        already_running: true,
-        coalesced_into_active_drain: true,
-        coalesced_wake_count: activeEntry.coalesced_wake_count,
-        active_started_at_utc: activeEntry.started_at_utc || null,
-        active_budget_profile: activeEntry.budget_profile || budgetProfile,
-        code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING',
-        wait_until_used: activeEntry.wait_until_used === true,
-        active_wait_until_upgrade_attempted: activeWaitUntilUpgradeAttempted,
-        active_wait_until_upgraded: activeWaitUntilUpgradeAttempted && activeWaitUntilUpgradeSucceeded,
-        active_wait_until_upgrade_error_message: activeWaitUntilUpgradeErrorMessage,
-        continuation_scheduled: true,
-        final_burst_summary: isPlainObject(activeEntry.final_summary) ? activeEntry.final_summary : null
-      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
     }
-
-    try { map.delete(singleFlightKey); } catch {}
   }
+
 
   const passthroughOptions = {
     origin,
@@ -15433,6 +15700,9 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     promise: null,
     started_at_utc: new Date().toISOString(),
     started_at_ms: Date.now(),
+    stale_after_ms: activeEntryMaxAgeMs,
+    no_progress_stale_after_ms: activeEntryNoProgressMaxAgeMs,
+    expires_at_utc: new Date(Date.now() + activeEntryMaxAgeMs).toISOString(),
     budget_profile: budgetProfile,
     budget_options: { ...passthroughOptions },
     coalesced_wake_requested: false,
@@ -15442,7 +15712,12 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     coalesced_final_check_summary: null,
     final_summary: null,
     wait_until_used: false,
-    requested_origin: requestedOrigin
+    requested_origin: requestedOrigin,
+    settled: false,
+    settled_at_utc: null,
+    last_progress_at_utc: null,
+    last_progress_reason: null,
+    last_progress_summary: null
   };
 
   let promise = null;
@@ -15450,6 +15725,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     .then(async () => {
       const firstTick = await bankingPayWorkbenchCronTick(env, passthroughOptions);
       entry.first_tick_summary = isPlainObject(firstTick) ? firstTick : {};
+      markEntryProgress(entry.first_tick_summary, 'FIRST_TICK');
       applyEffectiveControlsFromSummary(entry.first_tick_summary);
       let finalSummary = {
         ...entry.first_tick_summary,
@@ -15551,6 +15827,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
 
         const finalCheck = await bankingPayWorkbenchCronTick(env, finalCheckOptions);
         const finalCheckSummary = isPlainObject(finalCheck) ? finalCheck : {};
+        markEntryProgress(finalCheckSummary, 'COALESCED_FINAL_CHECK');
         entry.coalesced_final_check_summary = finalCheckSummary;
         coalescedFinalCheckSummaries.push(finalCheckSummary);
         coalescedWakeCountHandled = Math.max(coalescedWakeCountHandled, wakeCountToHandle);
@@ -15650,6 +15927,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
 
             const lockContentionTick = await bankingPayWorkbenchCronTick(env, lockContentionRetryOptions);
             const lockContentionSummary = isPlainObject(lockContentionTick) ? lockContentionTick : {};
+            markEntryProgress(lockContentionSummary, 'LOCK_CONTENTION_RETRY');
             lockContentionRetryPerformed = true;
             lockContentionRetrySummary = lockContentionSummary;
             autoContinuationCount += 1;
@@ -15755,6 +16033,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
 
         const autoContinuationTick = await bankingPayWorkbenchCronTick(env, autoContinuationOptions);
         const autoContinuationSummary = isPlainObject(autoContinuationTick) ? autoContinuationTick : {};
+        markEntryProgress(autoContinuationSummary, `AUTO_CONTINUATION_${continuationIndex}`);
         autoContinuationCount += 1;
         autoContinuationSummaries.push(autoContinuationSummary);
         finalSummary = {
@@ -15833,6 +16112,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
           });
           const globalTailTick = await bankingPayWorkbenchCronTick(env, globalTailOptions);
           const globalTailSummary = isPlainObject(globalTailTick) ? globalTailTick : {};
+          markEntryProgress(globalTailSummary, 'GLOBAL_TAIL');
           finalSummary = {
             ...combineTickResults(finalSummary, globalTailSummary, entry.started_at_ms),
             session_scoped_global_tail_performed: true,
@@ -15904,6 +16184,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       entry.accepting_coalesced_wakes = false;
       entry.final_summary = finalSummary;
       entry.completed_at_utc = new Date().toISOString();
+      entry.settled = true;
+      entry.settled_at_utc = entry.completed_at_utc;
       return finalSummary;
     })
     .catch((error) => {
@@ -15927,6 +16209,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       entry.accepting_coalesced_wakes = false;
       entry.final_summary = failureSummary;
       entry.completed_at_utc = new Date().toISOString();
+      entry.settled = true;
+      entry.settled_at_utc = entry.completed_at_utc;
       logNudgeDiag('WORKBENCH_DRAIN_NUDGE_FAILED', {
         ...failureSummary,
         error_message: failureSummary.message
@@ -15938,6 +16222,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     })
     .finally(() => {
       entry.accepting_coalesced_wakes = false;
+      entry.settled = true;
+      entry.settled_at_utc = entry.settled_at_utc || new Date().toISOString();
       try {
         if (map && map.get(singleFlightKey) === entry) map.delete(singleFlightKey);
       } catch {}
@@ -15953,6 +16239,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       ctx.waitUntil(promise);
       waitUntilUsed = true;
       entry.wait_until_used = true;
+      entry.wait_until_attached_at_utc = new Date().toISOString();
     } catch (waitUntilError) {
       waitUntilUsed = false;
       entry.wait_until_used = false;
@@ -15978,6 +16265,9 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     auto_continuation_scheduled: maxAutoContinuationBursts > 0 && waitUntilUsed,
     max_auto_continuation_bursts: maxAutoContinuationBursts,
     max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
+    active_entry_max_age_ms: activeEntryMaxAgeMs,
+    active_entry_no_progress_max_age_ms: activeEntryNoProgressMaxAgeMs,
+    active_expires_at_utc: entry.expires_at_utc || null,
     workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
     code: 'BANKING_PAY_WORKBENCH_NUDGE_SCHEDULED',
     active_started_at_utc: entry.started_at_utc,
@@ -15985,6 +16275,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     budget_resolved_by: 'bankingPayWorkbenchCronTick'
   }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
 }
+
 
 async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -165596,6 +165887,7 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
   return summary;
 }
 
+
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -165998,6 +166290,112 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     return counts;
   };
 
+  const roundedNumberOrNull = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.round(n * 1000) / 1000 : null;
+  };
+  const addRoundedValue = (target, key, value) => {
+    const n = roundedNumberOrNull(value);
+    if (n === null) return;
+    target[key] = Math.round(((Number(target[key]) || 0) + n) * 1000) / 1000;
+  };
+  const sourceBuildTimingSummaryFromJobs = (jobRows, sampleLimit = 3) => {
+    const sourceJobs = (Array.isArray(jobRows) ? jobRows : [])
+      .filter((job) => isPlainObject(job) && canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD');
+    const directNumberKeys = [
+      'total_elapsed_ms',
+      'collect_elapsed_ms',
+      'canonical_elapsed_ms',
+      'classifier_elapsed_ms',
+      'collect_call_wall_elapsed_ms',
+      'canonical_call_wall_elapsed_ms',
+      'source_build_residual_elapsed_ms',
+      'source_build_residual_wall_elapsed_ms',
+      'source_build_residual_measured_elapsed_ms',
+      'source_build_residual_unattributed_elapsed_ms',
+      'source_build_temp_transform_elapsed_ms',
+      'source_build_source_upsert_elapsed_ms',
+      'source_build_session_progress_update_elapsed_ms'
+    ];
+    const phaseElapsedKeys = [
+      'budget_apply',
+      'initial_validation',
+      'overpayment_sync',
+      'preview_context_build',
+      'collect_call_wall',
+      'collect_reported',
+      'canonical_call_wall',
+      'canonical_reported',
+      'temp_transform',
+      'temp_counts',
+      'scope_timesheet_temp',
+      'final_revalidation',
+      'source_retire',
+      'source_upsert',
+      'source_write_guard',
+      'current_source_count',
+      'reconciliation_defer',
+      'next_cursor',
+      'scope_update',
+      'session_progress_update'
+    ];
+    const elapsedSummaryKeys = [
+      'total',
+      'collect_reported',
+      'collect_call_wall',
+      'canonical_reported',
+      'canonical_call_wall',
+      'residual_reported_basis',
+      'residual_wall_basis',
+      'residual_measured_components',
+      'residual_unattributed'
+    ];
+    const directTotals = {};
+    const phaseTotals = {};
+    const elapsedSummaryTotals = {};
+    const samples = [];
+    let timingPayloadCount = 0;
+
+    for (const job of sourceJobs) {
+      const stageResult = isPlainObject(job.stage_result) ? job.stage_result : job;
+      for (const key of directNumberKeys) addRoundedValue(directTotals, key, stageResult[key]);
+      const timing = isPlainObject(stageResult.source_build_timing) ? stageResult.source_build_timing : {};
+      const phaseElapsed = isPlainObject(timing.phase_elapsed_ms) ? timing.phase_elapsed_ms : {};
+      const elapsedSummary = isPlainObject(timing.elapsed_summary_ms) ? timing.elapsed_summary_ms : {};
+      if (Object.keys(timing).length > 0) timingPayloadCount += 1;
+      for (const key of phaseElapsedKeys) addRoundedValue(phaseTotals, key, phaseElapsed[key]);
+      for (const key of elapsedSummaryKeys) addRoundedValue(elapsedSummaryTotals, key, elapsedSummary[key]);
+      if (samples.length < sampleLimit) {
+        samples.push({
+          job_id: trimStr(job.id || job.job_id || '') || null,
+          candidate_id: trimStr(job.candidate_id || stageResult.candidate_id || '') || null,
+          source_page_count: countFrom(stageResult, ['source_page_count', 'page_count'], 0),
+          source_rows_written: countFrom(stageResult, ['source_rows_written', 'source_rows_read'], 0),
+          source_rows_seen: countFrom(stageResult, ['source_rows_seen', 'source_canonical_preview_line_count'], 0),
+          materialisable_source_line_count: countFrom(stageResult, ['materialisable_source_line_count'], 0),
+          total_elapsed_ms: roundedNumberOrNull(stageResult.total_elapsed_ms),
+          collect_elapsed_ms: roundedNumberOrNull(stageResult.collect_elapsed_ms),
+          canonical_elapsed_ms: roundedNumberOrNull(stageResult.canonical_elapsed_ms),
+          source_build_residual_elapsed_ms: roundedNumberOrNull(stageResult.source_build_residual_elapsed_ms),
+          source_build_temp_transform_elapsed_ms: roundedNumberOrNull(stageResult.source_build_temp_transform_elapsed_ms),
+          source_build_source_upsert_elapsed_ms: roundedNumberOrNull(stageResult.source_build_source_upsert_elapsed_ms),
+          source_build_session_progress_update_elapsed_ms: roundedNumberOrNull(stageResult.source_build_session_progress_update_elapsed_ms),
+          elapsed_summary_ms: Object.keys(elapsedSummary).length > 0 ? safeLogJson(elapsedSummary) : null,
+          phase_elapsed_ms: Object.keys(phaseElapsed).length > 0 ? safeLogJson(phaseElapsed) : null
+        });
+      }
+    }
+
+    return {
+      source_build_timing_job_count: sourceJobs.length,
+      source_build_timing_payload_count: timingPayloadCount,
+      source_build_timing_elapsed_ms: directTotals,
+      source_build_timing_elapsed_summary_ms: elapsedSummaryTotals,
+      source_build_timing_phase_elapsed_ms: phaseTotals,
+      source_build_timing_samples: samples
+    };
+  };
+
   const startedAtUtc = new Date().toISOString();
   const startedAtMs = Date.now();
   const sessionId = uuidRe.test(sessionFilterId) ? sessionFilterId : null;
@@ -166255,6 +166653,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     madeProgress = madeProgress || passClaimed > 0 || passProcessed > 0 || passRecoveredStale > 0 || passDeadStale > 0;
     if (sourceOnly && (passClaimed > 0 || passProcessed > 0 || passContinuationsCreated > 0 || passContinuationsReused > 0)) downstreamWorkMayBeDue = true;
 
+    const sourceBuildTimingSummary = sourceBuildTimingSummaryFromJobs(passJobs);
     const summary = {
       route: context.route || (sourceOnly ? 'SOURCE_BUILD_PARALLEL' : 'NORMAL'),
       pass_number: context.pass_number ?? passCount,
@@ -166294,7 +166693,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       source_build_cursor_advanced_count: passJobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD' && booleanFrom(job.cursor_advanced ?? job.stage_result?.cursor_advanced)).length,
       more_due: passMoreDue,
       db_stop_reason: passStopReason || null,
-      job_type_counts: jobTypeCountsFromJobs(passJobs)
+      job_type_counts: jobTypeCountsFromJobs(passJobs),
+      ...sourceBuildTimingSummary
     };
     passSummaries.push(summary);
 
@@ -166781,6 +167181,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     if (transportError || sourceBuildOnlyAssertionFailed || budgetExhausted) return true;
     return normalMoreDue || sourceBuildMoreDue || downstreamWorkMayBeDue;
   })();
+  const finalSourceBuildTimingSummary = sourceBuildTimingSummaryFromJobs(jobs);
   const result = {
     ...lastAggregate,
     ok: transportError === null && !sourceBuildOnlyAssertionFailed && failedCount === 0 && staleRecoveryErrorCount === 0,
@@ -166894,6 +167295,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_targeted_payload_received_count: jobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD' && booleanFrom(job.targeted_payload_received ?? job.stage_result?.targeted_payload_received)).length,
     source_build_fallback_used_count: jobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD' && booleanFrom(job.fallback_used ?? job.stage_result?.fallback_used)).length,
     source_build_cursor_advanced_count: jobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD' && booleanFrom(job.cursor_advanced ?? job.stage_result?.cursor_advanced)).length,
+    ...finalSourceBuildTimingSummary,
     pass_summaries: passSummaries,
     jobs,
     errors
@@ -166943,7 +167345,13 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_only_assertion_passed: !sourceBuildOnlyAssertionFailed,
     source_build_jobs_processed: result.source_build_jobs_processed,
     source_rows_written: result.source_rows_written,
-    source_page_count: result.source_page_count
+    source_page_count: result.source_page_count,
+    source_build_timing_job_count: result.source_build_timing_job_count,
+    source_build_timing_payload_count: result.source_build_timing_payload_count,
+    source_build_timing_elapsed_ms: result.source_build_timing_elapsed_ms,
+    source_build_timing_elapsed_summary_ms: result.source_build_timing_elapsed_summary_ms,
+    source_build_timing_phase_elapsed_ms: result.source_build_timing_phase_elapsed_ms,
+    source_build_timing_samples: result.source_build_timing_samples
   }, transportError || sourceBuildOnlyAssertionFailed ? 'warn' : 'info');
 
   try {
@@ -166982,7 +167390,13 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       source_build_parallel_bursts: sourceBuildParallelBursts,
       source_build_parallel_burst_count: sourceBuildParallelBurstCount,
       source_build_lane_claim_limit: sourceBuildLaneClaimLimit,
-      source_build_only_assertion_passed: !sourceBuildOnlyAssertionFailed
+      source_build_only_assertion_passed: !sourceBuildOnlyAssertionFailed,
+      source_build_timing_job_count: result.source_build_timing_job_count,
+      source_build_timing_payload_count: result.source_build_timing_payload_count,
+      source_build_timing_elapsed_ms: result.source_build_timing_elapsed_ms,
+      source_build_timing_elapsed_summary_ms: result.source_build_timing_elapsed_summary_ms,
+      source_build_timing_phase_elapsed_ms: result.source_build_timing_phase_elapsed_ms,
+      source_build_timing_samples: result.source_build_timing_samples
     };
     if (transportError || sourceBuildOnlyAssertionFailed) console.warn('[drainBankingPayWorkbenchJobs] bounded aggregate drain stopped', logPayload);
     else console.info('[drainBankingPayWorkbenchJobs] bounded aggregate drain', logPayload);
@@ -166990,6 +167404,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
   return result;
 }
+
+
 
 
 
