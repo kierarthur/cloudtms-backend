@@ -14939,7 +14939,6 @@ function bankingPayWorkbenchLogsEnabled(env) {
   }
 }
 
-
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -15082,7 +15081,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     'MAX_RUNTIME',
     'MAX_PASSES',
     'MAX_JOBS',
-    'MAX_ROWS'
+    'MAX_ROWS',
+    'SOURCE_BUILD_PARALLEL_BURSTS'
   ]);
   const unsafeAutoContinuationStopReasons = new Set([
     'RPC_ERROR',
@@ -15156,6 +15156,18 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     250,
     3000
   );
+  const activeEntryMaxAgeMs = numberInRange(
+    cachedAutoSetting('activeEntryMaxAgeMs', 'active_entry_max_age_ms', cachedAutoContinuationSettings.active_entry_max_age_ms),
+    Math.max(30000, maxAutoContinuationRuntimeMs + 15000),
+    5000,
+    120000
+  );
+  const activeEntryNoProgressMaxAgeMs = numberInRange(
+    cachedAutoSetting('activeEntryNoProgressMaxAgeMs', 'active_entry_no_progress_max_age_ms', cachedAutoContinuationSettings.active_entry_no_progress_max_age_ms),
+    Math.max(15000, autoContinuationMinRuntimeMs * 2),
+    5000,
+    60000
+  );
   const settingsSource = trimStr(cachedWorkbenchSettings.settings_source || cachedWorkbenchSettings.settingsSource || '') || (isPlainObject(cachedWorkbenchSettings) && Object.keys(cachedWorkbenchSettings).length ? 'settings_defaults:id=1' : 'fallback');
   const settingsDefaultsUpdatedAt = trimStr(cachedWorkbenchSettings.settings_defaults_updated_at || cachedWorkbenchSettings.settingsDefaultsUpdatedAt || cachedSettingsDefaults.settings_defaults_updated_at || '') || null;
   const settingsDefaultsVersion = trimStr(cachedWorkbenchSettings.settings_defaults_version || cachedWorkbenchSettings.settingsDefaultsVersion || settingsDefaultsUpdatedAt || '') || null;
@@ -15174,19 +15186,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const singleFlightKey = sessionScopedNudge
     ? `BANKING_PAY_WORKBENCH_SESSION_DRAIN:${requestedSessionIdValue}`
     : 'BANKING_PAY_WORKBENCH_GLOBAL_DRAIN';
-
-  const activeEntryMaxAgeMs = numberInRange(
-    cachedAutoSetting('activeEntryMaxAgeMs', 'active_entry_max_age_ms', cachedAutoContinuationSettings.active_entry_max_age_ms),
-    Math.max(12000, Math.min(30000, autoContinuationPerBurstMaxRuntimeMs + 5000, maxAutoContinuationRuntimeMs + 5000)),
-    10000,
-    90000
-  );
-  const activeEntryNoProgressMaxAgeMs = numberInRange(
-    cachedAutoSetting('activeEntryNoProgressMaxAgeMs', 'active_entry_no_progress_max_age_ms', cachedAutoContinuationSettings.active_entry_no_progress_max_age_ms),
-    Math.max(10000, Math.min(activeEntryMaxAgeMs, autoContinuationPerBurstMaxRuntimeMs + 5000)),
-    8000,
-    Math.max(10000, activeEntryMaxAgeMs)
-  );
 
   const commonMetadata = {
     origin,
@@ -15214,12 +15213,12 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     auto_continuation_per_burst_max_runtime_ms: autoContinuationPerBurstMaxRuntimeMs,
     auto_continuation_min_runtime_ms: autoContinuationMinRuntimeMs,
     lock_contention_retry_delay_ms: lockContentionRetryDelayMs,
-    active_entry_max_age_ms: activeEntryMaxAgeMs,
-    active_entry_no_progress_max_age_ms: activeEntryNoProgressMaxAgeMs,
     auto_continuation_max_passes: autoContinuationMaxPasses,
     auto_continuation_claim_limit_max: autoContinuationClaimLimitMax,
     auto_continuation_max_jobs: autoContinuationMaxJobs,
     auto_continuation_max_rows: autoContinuationMaxRows,
+    active_entry_max_age_ms: activeEntryMaxAgeMs,
+    active_entry_no_progress_max_age_ms: activeEntryNoProgressMaxAgeMs,
     settings_source: settingsSource,
     settings_defaults_updated_at: settingsDefaultsUpdatedAt,
     settings_defaults_version: settingsDefaultsVersion,
@@ -15245,6 +15244,29 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   };
   const applyEffectiveControlsFromSummary = (summaryLike) => {
     const summary = isPlainObject(summaryLike) ? summaryLike : {};
+    const applyTextMetadata = (summaryKey, camelKey, metadataKey, passthroughCamelKey, passthroughSnakeKey = null) => {
+      const value = trimStr(summary[summaryKey] ?? summary[camelKey] ?? '');
+      if (!value) return;
+      commonMetadata[metadataKey] = value;
+      try {
+        if (typeof passthroughOptions === 'object' && passthroughOptions) {
+          if (passthroughCamelKey) passthroughOptions[passthroughCamelKey] = value;
+          if (passthroughSnakeKey) passthroughOptions[passthroughSnakeKey] = value;
+        }
+      } catch {}
+    };
+    const applyNumericPassthrough = (summaryKey, camelKey, passthroughCamelKey, min = 0, max = Number.MAX_SAFE_INTEGER) => {
+      if (!Object.prototype.hasOwnProperty.call(summary, summaryKey) && !Object.prototype.hasOwnProperty.call(summary, camelKey)) return;
+      const n = Number(summary[summaryKey] ?? summary[camelKey]);
+      if (!Number.isFinite(n)) return;
+      const value = Math.max(min, Math.min(max, Math.trunc(n)));
+      try {
+        if (typeof passthroughOptions === 'object' && passthroughOptions && passthroughCamelKey) {
+          passthroughOptions[passthroughCamelKey] = value;
+        }
+      } catch {}
+    };
+
     maxStageWorkUnitsPerJob = numberInRange(summary.stage_work_units_per_job ?? summary.workbench_stage_work_units_per_job, maxStageWorkUnitsPerJob, 1, 100);
     maxAutoContinuationBursts = numberInRange(summary.max_auto_continuation_bursts, maxAutoContinuationBursts, 0, 8);
     maxAutoContinuationRuntimeMs = numberInRange(summary.max_auto_continuation_runtime_ms, maxAutoContinuationRuntimeMs, 5000, 60000);
@@ -15254,6 +15276,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     autoContinuationClaimLimitMax = numberInRange(summary.auto_continuation_claim_limit_max, autoContinuationClaimLimitMax, 1, 50);
     autoContinuationMaxJobs = numberInRange(summary.auto_continuation_max_jobs, autoContinuationMaxJobs, 1, 150);
     autoContinuationMaxRows = numberInRange(summary.auto_continuation_max_rows, autoContinuationMaxRows, Math.max(1, maxStageWorkUnitsPerJob), 5000);
+
     commonMetadata.auto_continuation_enabled = maxAutoContinuationBursts > 0;
     commonMetadata.max_auto_continuation_bursts = maxAutoContinuationBursts;
     commonMetadata.max_auto_continuation_runtime_ms = maxAutoContinuationRuntimeMs;
@@ -15263,7 +15286,26 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     commonMetadata.auto_continuation_claim_limit_max = autoContinuationClaimLimitMax;
     commonMetadata.auto_continuation_max_jobs = autoContinuationMaxJobs;
     commonMetadata.auto_continuation_max_rows = autoContinuationMaxRows;
+    commonMetadata.active_entry_max_age_ms = activeEntryMaxAgeMs;
+    commonMetadata.active_entry_no_progress_max_age_ms = activeEntryNoProgressMaxAgeMs;
     commonMetadata.workbench_stage_work_units_per_job = maxStageWorkUnitsPerJob;
+
+    applyTextMetadata('settings_source', 'settingsSource', 'settings_source', 'settingsSource', 'settings_source');
+    applyTextMetadata('settings_defaults_updated_at', 'settingsDefaultsUpdatedAt', 'settings_defaults_updated_at', 'settingsDefaultsUpdatedAt', 'settings_defaults_updated_at');
+    applyTextMetadata('settings_defaults_version', 'settingsDefaultsVersion', 'settings_defaults_version', 'settingsDefaultsVersion', 'settings_defaults_version');
+    applyTextMetadata('settings_hash', 'settingsHash', 'settings_hash', 'settingsHash', 'settings_hash');
+
+    applyNumericPassthrough('stage_work_units_per_job', 'workbench_stage_work_units_per_job', 'stageWorkUnitsPerJob', 1, 100);
+    applyNumericPassthrough('db_worker_lease_seconds', 'dbWorkerLeaseSeconds', 'dbWorkerLeaseSeconds', 1, 3600);
+    applyNumericPassthrough('db_worker_max_runtime_ms', 'dbWorkerMaxRuntimeMs', 'dbWorkerMaxRuntimeMs', 1000, 30000);
+    applyNumericPassthrough('db_worker_min_phase_budget_ms', 'dbWorkerMinPhaseBudgetMs', 'dbWorkerMinPhaseBudgetMs', 250, 15000);
+    applyNumericPassthrough('job_retry_base_seconds', 'jobRetryBaseSeconds', 'jobRetryBaseSeconds', 5, 3600);
+    applyNumericPassthrough('job_retry_max_seconds', 'jobRetryMaxSeconds', 'jobRetryMaxSeconds', 5, 86400);
+    applyNumericPassthrough('db_statement_timeout_ms', 'dbStatementTimeoutMs', 'dbStatementTimeoutMs', 1000, 30000);
+    applyNumericPassthrough('db_lock_timeout_ms', 'dbLockTimeoutMs', 'dbLockTimeoutMs', 100, 5000);
+    applyNumericPassthrough('db_idle_tx_timeout_ms', 'dbIdleTxTimeoutMs', 'dbIdleTxTimeoutMs', 5000, 60000);
+    applyNumericPassthrough('source_build_parallel_bursts', 'sourceBuildParallelBursts', 'sourceBuildParallelBursts', 0, 16);
+    applyNumericPassthrough('source_build_units_per_job', 'sourceBuildWorkUnitsPerJob', 'sourceBuildWorkUnitsPerJob', 1, 100);
   };
 
   const returnNudgeResult = (result, eventName = 'WORKBENCH_DRAIN_NUDGE_SCHEDULED', severity = 'info') => {
@@ -15325,180 +15367,120 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   }
   const map = root.__bankingPayWorkbenchDrainNudges;
 
-  const parseTimeMs = (value) => {
-    const text = trimStr(value);
-    if (!text) return 0;
-    const ms = Date.parse(text);
-    return Number.isFinite(ms) ? ms : 0;
-  };
-  const summaryLooksSettled = (summaryLike) => {
-    const summary = isPlainObject(summaryLike) ? summaryLike : {};
-    if (!Object.keys(summary).length) return false;
-    const stopReason = upperTrim(summary.stop_reason || '');
-    return summary.ok === false
-      || booleanFrom(summary.terminal)
-      || booleanFrom(summary.completed)
-      || ['NO_MORE_DUE', 'DISABLED', 'DRAIN_UNAVAILABLE', 'RPC_ERROR', 'UNSAFE_OR_NO_PROGRESS'].includes(stopReason)
-      || Object.prototype.hasOwnProperty.call(summary, 'completed_at_utc');
-  };
-  const activeEntryAgeMs = (entryLike) => {
-    const entry = isPlainObject(entryLike) ? entryLike : {};
-    const startedMs = Number(entry.started_at_ms) || parseTimeMs(entry.started_at_utc) || 0;
-    return startedMs > 0 ? Math.max(0, Date.now() - startedMs) : Number.POSITIVE_INFINITY;
-  };
-  const activeEntryStalenessReason = (entryLike) => {
-    const entry = isPlainObject(entryLike) ? entryLike : null;
-    if (!entry) return 'INVALID_ACTIVE_ENTRY';
-    if (!entry.promise || typeof entry.promise.then !== 'function') return 'MISSING_ACTIVE_PROMISE';
-    if (entry.settled === true || entry.completed === true) return 'ACTIVE_PROMISE_SETTLED';
-    if (entry.completed_at_utc || entry.settled_at_utc) return 'ACTIVE_ENTRY_COMPLETED';
-    if (entry.wait_until_upgrade_failed === true && entry.wait_until_used !== true) return 'WAIT_UNTIL_UPGRADE_FAILED';
-    const ageMs = activeEntryAgeMs(entry);
-    const entryMaxAgeMs = numberInRange(entry.stale_after_ms, activeEntryMaxAgeMs, 10000, 120000);
-    const entryNoProgressMaxAgeMs = numberInRange(entry.no_progress_stale_after_ms, activeEntryNoProgressMaxAgeMs, 8000, Math.max(10000, entryMaxAgeMs));
-    const lastProgressMs = parseTimeMs(entry.last_progress_at_utc);
-    const noProgressAgeMs = lastProgressMs > 0 ? Math.max(0, Date.now() - lastProgressMs) : ageMs;
-    if (!Number.isFinite(ageMs) || ageMs > entryMaxAgeMs) return 'ACTIVE_ENTRY_TTL_EXPIRED';
-    if (entry.wait_until_used === true && ageMs > autoContinuationMinRuntimeMs && noProgressAgeMs > entryNoProgressMaxAgeMs) return 'ACTIVE_ENTRY_NO_RECENT_PROGRESS';
-    if (entry.wait_until_used !== true && ageMs > Math.min(entryMaxAgeMs, entryNoProgressMaxAgeMs)) return 'ACTIVE_ENTRY_NO_WAIT_UNTIL_STALE';
-    if (entry.accepting_coalesced_wakes === false && summaryLooksSettled(entry.final_summary)) return 'ACTIVE_ENTRY_FINALISED';
-    const expiresAtMs = parseTimeMs(entry.expires_at_utc);
-    if (expiresAtMs > 0 && Date.now() > expiresAtMs) return 'ACTIVE_ENTRY_EXPIRED_AT_REACHED';
-    return null;
-  };
-  const summaryMadeProgress = (summaryLike) => {
-    const summary = isPlainObject(summaryLike) ? summaryLike : {};
-    return booleanFrom(summary.made_progress)
-      || numberFrom(summary, ['claimed', 'claimed_count'], 0) > 0
-      || numberFrom(summary, ['processed', 'processed_count'], 0) > 0
-      || numberFrom(summary, ['succeeded', 'succeeded_count'], 0) > 0
-      || numberFrom(summary, ['row_units_processed', 'work_units_processed'], 0) > 0
-      || numberFrom(summary, ['continuations_created', 'continuation_created_count'], 0) > 0
-      || numberFrom(summary, ['continuations_reused', 'continuation_reused_count'], 0) > 0;
-  };
-  const markEntryProgress = (summaryLike, reason = '') => {
-    if (!entry || !summaryMadeProgress(summaryLike)) return;
-    entry.last_progress_at_utc = new Date().toISOString();
-    entry.last_progress_reason = trimStr(reason) || null;
-    entry.last_progress_summary = isPlainObject(summaryLike) ? summaryLike : null;
-  };
-
   if (map && map.has(singleFlightKey)) {
     const rawActiveEntry = map.get(singleFlightKey);
     if (rawActiveEntry && typeof rawActiveEntry.then === 'function') {
-      try { map.delete(singleFlightKey); } catch {}
-      logNudgeDiag('WORKBENCH_DRAIN_NUDGE_STALE_ACTIVE_CLEARED', {
-        stale_active_reason: 'LEGACY_PROMISE_ENTRY_UNTRACKABLE',
-        active_entry_max_age_ms: activeEntryMaxAgeMs,
-        requested_origin: requestedOrigin,
-        will_schedule_fresh_drain: true
-      }, 'warn');
-    } else {
-      const activeEntry = isPlainObject(rawActiveEntry) && rawActiveEntry.promise
-        ? rawActiveEntry
-        : null;
-      const staleReason = activeEntryStalenessReason(activeEntry);
+      return returnNudgeResult({
+        ...commonMetadata,
+        ok: true,
+        scheduled: false,
+        already_running: true,
+        coalesced_into_active_drain: false,
+        coalesced_wake_deferred_to_cron: true,
+        coalesced_wake_count: null,
+        active_started_at_utc: null,
+        active_budget_profile: budgetProfile,
+        code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING_LEGACY_ENTRY',
+        wait_until_used: null,
+        continuation_scheduled: true
+      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
+    }
 
-      if (staleReason) {
+    let activeEntry = isPlainObject(rawActiveEntry) && rawActiveEntry.promise
+      ? rawActiveEntry
+      : null;
+
+    if (activeEntry) {
+      const nowMs = Date.now();
+      const activeStartedAtMs = Number(activeEntry.started_at_ms) || Date.parse(activeEntry.started_at_utc || '') || nowMs;
+      const activeAgeMs = Math.max(0, nowMs - activeStartedAtMs);
+      const activeLastProgressAtMs = Number(activeEntry.last_progress_at_ms) || activeStartedAtMs;
+      const activeNoProgressAgeMs = Math.max(0, nowMs - activeLastProgressAtMs);
+      const activeFinalSummary = isPlainObject(activeEntry.final_summary) ? activeEntry.final_summary : null;
+      const activeMadeProgress = booleanFrom(activeEntry.last_made_progress) || booleanFrom(activeFinalSummary?.made_progress);
+      const activeEntryStale = activeAgeMs > activeEntryMaxAgeMs || (!activeMadeProgress && activeNoProgressAgeMs > activeEntryNoProgressMaxAgeMs);
+      if (activeEntryStale) {
         try { map.delete(singleFlightKey); } catch {}
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_STALE_ACTIVE_CLEARED', {
-          stale_active_reason: staleReason,
-          active_started_at_utc: activeEntry?.started_at_utc || null,
-          active_age_ms: activeEntry ? activeEntryAgeMs(activeEntry) : null,
-          active_entry_max_age_ms: activeEntry?.stale_after_ms || activeEntryMaxAgeMs,
-          active_entry_no_progress_max_age_ms: activeEntry?.no_progress_stale_after_ms || activeEntryNoProgressMaxAgeMs,
-          active_wait_until_used: activeEntry?.wait_until_used === true,
-          active_budget_profile: activeEntry?.budget_profile || budgetProfile,
-          active_final_stop_reason: upperTrim(activeEntry?.final_summary?.stop_reason || '') || null,
-          active_final_more_due: activeEntry?.final_summary ? booleanFrom(activeEntry.final_summary.more_due) : null,
-          requested_origin: requestedOrigin,
-          will_schedule_fresh_drain: true
-        }, 'warn');
-      } else if (activeEntry && activeEntry.accepting_coalesced_wakes !== false) {
-        let activeWaitUntilUpgradeAttempted = false;
-        let activeWaitUntilUpgradeSucceeded = activeEntry.wait_until_used === true;
-        let activeWaitUntilUpgradeErrorMessage = null;
-
-        if (!activeWaitUntilUpgradeSucceeded
-            && activeEntry.promise
-            && typeof activeEntry.promise.then === 'function'
-            && ctx
-            && typeof ctx.waitUntil === 'function') {
-          activeWaitUntilUpgradeAttempted = true;
-          try {
-            ctx.waitUntil(activeEntry.promise);
-            activeEntry.wait_until_used = true;
-            activeEntry.wait_until_upgraded_at_utc = new Date().toISOString();
-            activeEntry.wait_until_upgraded_origin = requestedOrigin;
-            activeWaitUntilUpgradeSucceeded = true;
-            logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADED', {
-              active_started_at_utc: activeEntry.started_at_utc || null,
-              active_budget_profile: activeEntry.budget_profile || budgetProfile,
-              active_age_ms: activeEntryAgeMs(activeEntry),
-              active_entry_max_age_ms: activeEntry.stale_after_ms || activeEntryMaxAgeMs,
-              active_entry_no_progress_max_age_ms: activeEntry.no_progress_stale_after_ms || activeEntryNoProgressMaxAgeMs,
-              coalesced_wake_count: Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1,
-              wait_until_used: true,
-              requested_origin: requestedOrigin
-            });
-          } catch (waitUntilError) {
-            activeEntry.wait_until_upgrade_failed = true;
-            activeEntry.wait_until_upgrade_failed_at_utc = new Date().toISOString();
-            activeEntry.wait_until_upgrade_error_message = String(waitUntilError?.message || waitUntilError || 'ctx.waitUntil upgrade failed');
-            activeWaitUntilUpgradeSucceeded = false;
-            activeWaitUntilUpgradeErrorMessage = activeEntry.wait_until_upgrade_error_message;
-            logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADE_FAILED', {
-              active_started_at_utc: activeEntry.started_at_utc || null,
-              active_budget_profile: activeEntry.budget_profile || budgetProfile,
-              active_age_ms: activeEntryAgeMs(activeEntry),
-              wait_until_used: false,
-              requested_origin: requestedOrigin,
-              error_message: activeWaitUntilUpgradeErrorMessage
-            }, 'warn');
-            try { activeEntry.promise.catch(() => {}); } catch {}
-          }
-        }
-
-        activeEntry.coalesced_wake_requested = true;
-        activeEntry.coalesced_wake_count = Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1;
-        activeEntry.last_coalesced_at_utc = new Date().toISOString();
-        activeEntry.last_requested_origin = requestedOrigin;
-        try { map.set(singleFlightKey, activeEntry); } catch {}
-        return returnNudgeResult({
-          ...commonMetadata,
-          ok: true,
-          scheduled: false,
-          already_running: true,
-          coalesced_into_active_drain: true,
-          coalesced_wake_count: activeEntry.coalesced_wake_count,
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_ENTRY_EVICTED', {
           active_started_at_utc: activeEntry.started_at_utc || null,
-          active_age_ms: activeEntryAgeMs(activeEntry),
-          active_entry_max_age_ms: activeEntry.stale_after_ms || activeEntryMaxAgeMs,
-          active_entry_no_progress_max_age_ms: activeEntry.no_progress_stale_after_ms || activeEntryNoProgressMaxAgeMs,
-          active_expires_at_utc: activeEntry.expires_at_utc || null,
-          active_last_progress_at_utc: activeEntry.last_progress_at_utc || null,
-          active_budget_profile: activeEntry.budget_profile || budgetProfile,
-          code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING',
-          wait_until_used: activeEntry.wait_until_used === true,
-          active_wait_until_upgrade_attempted: activeWaitUntilUpgradeAttempted,
-          active_wait_until_upgraded: activeWaitUntilUpgradeAttempted && activeWaitUntilUpgradeSucceeded,
-          active_wait_until_upgrade_error_message: activeWaitUntilUpgradeErrorMessage,
-          continuation_scheduled: true,
-          final_burst_summary: isPlainObject(activeEntry.final_summary) ? activeEntry.final_summary : null
-        }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
-      } else {
-        try { map.delete(singleFlightKey); } catch {}
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_STALE_ACTIVE_CLEARED', {
-          stale_active_reason: 'ACTIVE_ENTRY_NOT_ACCEPTING_COALESCED_WAKES',
-          active_started_at_utc: activeEntry?.started_at_utc || null,
-          active_age_ms: activeEntry ? activeEntryAgeMs(activeEntry) : null,
-          requested_origin: requestedOrigin,
-          will_schedule_fresh_drain: true
-        }, 'info');
+          active_age_ms: activeAgeMs,
+          active_no_progress_age_ms: activeNoProgressAgeMs,
+          active_entry_max_age_ms: activeEntryMaxAgeMs,
+          active_entry_no_progress_max_age_ms: activeEntryNoProgressMaxAgeMs,
+          active_made_progress: activeMadeProgress,
+          final_burst_summary: activeFinalSummary
+        }, 'warn');
+        activeEntry = null;
       }
     }
-  }
 
+    if (activeEntry && activeEntry.accepting_coalesced_wakes !== false) {
+      let activeWaitUntilUpgradeAttempted = false;
+      let activeWaitUntilUpgradeSucceeded = activeEntry.wait_until_used === true;
+      let activeWaitUntilUpgradeErrorMessage = null;
+
+      if (!activeWaitUntilUpgradeSucceeded
+          && activeEntry.promise
+          && typeof activeEntry.promise.then === 'function'
+          && ctx
+          && typeof ctx.waitUntil === 'function') {
+        activeWaitUntilUpgradeAttempted = true;
+        try {
+          ctx.waitUntil(activeEntry.promise);
+          activeEntry.wait_until_used = true;
+          activeEntry.wait_until_upgraded_at_utc = new Date().toISOString();
+          activeEntry.wait_until_upgraded_origin = requestedOrigin;
+          activeWaitUntilUpgradeSucceeded = true;
+          logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADED', {
+            active_started_at_utc: activeEntry.started_at_utc || null,
+            active_budget_profile: activeEntry.budget_profile || budgetProfile,
+            coalesced_wake_count: Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1,
+            wait_until_used: true,
+            requested_origin: requestedOrigin
+          });
+        } catch (waitUntilError) {
+          activeEntry.wait_until_upgrade_failed = true;
+          activeEntry.wait_until_upgrade_failed_at_utc = new Date().toISOString();
+          activeEntry.wait_until_upgrade_error_message = String(waitUntilError?.message || waitUntilError || 'ctx.waitUntil upgrade failed');
+          activeWaitUntilUpgradeSucceeded = false;
+          activeWaitUntilUpgradeErrorMessage = activeEntry.wait_until_upgrade_error_message;
+          logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADE_FAILED', {
+            active_started_at_utc: activeEntry.started_at_utc || null,
+            active_budget_profile: activeEntry.budget_profile || budgetProfile,
+            wait_until_used: false,
+            requested_origin: requestedOrigin,
+            error_message: activeWaitUntilUpgradeErrorMessage
+          }, 'warn');
+          try { activeEntry.promise.catch(() => {}); } catch {}
+        }
+      }
+
+      activeEntry.coalesced_wake_requested = true;
+      activeEntry.coalesced_wake_count = Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1;
+      activeEntry.last_coalesced_at_utc = new Date().toISOString();
+      activeEntry.last_requested_origin = requestedOrigin;
+      try { map.set(singleFlightKey, activeEntry); } catch {}
+      return returnNudgeResult({
+        ...commonMetadata,
+        ok: true,
+        scheduled: false,
+        already_running: true,
+        coalesced_into_active_drain: true,
+        coalesced_wake_count: activeEntry.coalesced_wake_count,
+        active_started_at_utc: activeEntry.started_at_utc || null,
+        active_budget_profile: activeEntry.budget_profile || budgetProfile,
+        code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING',
+        wait_until_used: activeEntry.wait_until_used === true,
+        active_wait_until_upgrade_attempted: activeWaitUntilUpgradeAttempted,
+        active_wait_until_upgraded: activeWaitUntilUpgradeAttempted && activeWaitUntilUpgradeSucceeded,
+        active_wait_until_upgrade_error_message: activeWaitUntilUpgradeErrorMessage,
+        continuation_scheduled: true,
+        final_burst_summary: isPlainObject(activeEntry.final_summary) ? activeEntry.final_summary : null
+      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
+    }
+
+    try { map.delete(singleFlightKey); } catch {}
+  }
 
   const passthroughOptions = {
     origin,
@@ -15700,9 +15682,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     promise: null,
     started_at_utc: new Date().toISOString(),
     started_at_ms: Date.now(),
-    stale_after_ms: activeEntryMaxAgeMs,
-    no_progress_stale_after_ms: activeEntryNoProgressMaxAgeMs,
-    expires_at_utc: new Date(Date.now() + activeEntryMaxAgeMs).toISOString(),
     budget_profile: budgetProfile,
     budget_options: { ...passthroughOptions },
     coalesced_wake_requested: false,
@@ -15713,11 +15692,24 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     final_summary: null,
     wait_until_used: false,
     requested_origin: requestedOrigin,
-    settled: false,
-    settled_at_utc: null,
-    last_progress_at_utc: null,
-    last_progress_reason: null,
-    last_progress_summary: null
+    last_progress_at_ms: Date.now(),
+    last_made_progress: false
+  };
+
+  const recordEntryProgress = (summaryLike) => {
+    const summary = isPlainObject(summaryLike) ? summaryLike : {};
+    const madeProgress = booleanFrom(summary.made_progress)
+      || numberFrom(summary, ['claimed', 'claimed_count'], 0) > 0
+      || numberFrom(summary, ['processed', 'processed_count'], 0) > 0
+      || numberFrom(summary, ['succeeded', 'succeeded_count'], 0) > 0
+      || numberFrom(summary, ['source_build_jobs_processed'], 0) > 0
+      || numberFrom(summary, ['source_rows_written'], 0) > 0
+      || numberFrom(summary, ['continuations_created', 'continuation_created_count'], 0) > 0
+      || numberFrom(summary, ['continuations_reused', 'continuation_reused_count'], 0) > 0;
+    if (!madeProgress) return false;
+    entry.last_progress_at_ms = Date.now();
+    entry.last_made_progress = true;
+    return true;
   };
 
   let promise = null;
@@ -15725,8 +15717,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     .then(async () => {
       const firstTick = await bankingPayWorkbenchCronTick(env, passthroughOptions);
       entry.first_tick_summary = isPlainObject(firstTick) ? firstTick : {};
-      markEntryProgress(entry.first_tick_summary, 'FIRST_TICK');
       applyEffectiveControlsFromSummary(entry.first_tick_summary);
+      recordEntryProgress(entry.first_tick_summary);
       let finalSummary = {
         ...entry.first_tick_summary,
         coalesced_final_check_performed: false,
@@ -15827,7 +15819,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
 
         const finalCheck = await bankingPayWorkbenchCronTick(env, finalCheckOptions);
         const finalCheckSummary = isPlainObject(finalCheck) ? finalCheck : {};
-        markEntryProgress(finalCheckSummary, 'COALESCED_FINAL_CHECK');
         entry.coalesced_final_check_summary = finalCheckSummary;
         coalescedFinalCheckSummaries.push(finalCheckSummary);
         coalescedWakeCountHandled = Math.max(coalescedWakeCountHandled, wakeCountToHandle);
@@ -15842,6 +15833,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
           latest_coalesced_wake_trigger_reason: safeTriggerReason,
           workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob
         };
+        recordEntryProgress(combinedSummary);
 
         logNudgeDiag('WORKBENCH_DRAIN_NUDGE_COALESCED_FINAL_CHECK_RESULT', {
           coalesced_wake_trigger_reason: safeTriggerReason,
@@ -15927,7 +15919,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
 
             const lockContentionTick = await bankingPayWorkbenchCronTick(env, lockContentionRetryOptions);
             const lockContentionSummary = isPlainObject(lockContentionTick) ? lockContentionTick : {};
-            markEntryProgress(lockContentionSummary, 'LOCK_CONTENTION_RETRY');
             lockContentionRetryPerformed = true;
             lockContentionRetrySummary = lockContentionSummary;
             autoContinuationCount += 1;
@@ -15945,6 +15936,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
               workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
               cron_remains_recovery_fallback: true
             };
+            recordEntryProgress(finalSummary);
 
             logNudgeDiag('WORKBENCH_DRAIN_NUDGE_LOCK_CONTENTION_RETRY_RESULT', {
               auto_continuation_index: autoContinuationCount,
@@ -16009,6 +16001,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
           max_auto_continuation_bursts: maxAutoContinuationBursts,
           auto_continuation_min_runtime_ms: autoContinuationMinRuntimeMs,
           will_continue: true,
+          reason: upperTrim(finalSummary.stop_reason || '') === 'SOURCE_BUILD_PARALLEL_BURSTS' ? 'SAFE_BOUNDED_SOURCE_BUILD_MORE_DUE' : 'SAFE_MORE_DUE',
           reason_if_false: null,
           continuation_claim_limit: autoContinuationOptions.claimLimit,
           continuation_max_passes: autoContinuationOptions.maxPasses,
@@ -16033,7 +16026,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
 
         const autoContinuationTick = await bankingPayWorkbenchCronTick(env, autoContinuationOptions);
         const autoContinuationSummary = isPlainObject(autoContinuationTick) ? autoContinuationTick : {};
-        markEntryProgress(autoContinuationSummary, `AUTO_CONTINUATION_${continuationIndex}`);
         autoContinuationCount += 1;
         autoContinuationSummaries.push(autoContinuationSummary);
         finalSummary = {
@@ -16046,6 +16038,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
           workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
           cron_remains_recovery_fallback: true
         };
+        recordEntryProgress(finalSummary);
 
         logNudgeDiag('WORKBENCH_DRAIN_NUDGE_AUTO_CONTINUATION_RESULT', {
           auto_continuation_index: autoContinuationCount,
@@ -16070,7 +16063,14 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       }
 
       if (!autoContinuationSkipReason && booleanFrom(finalSummary.more_due) && !canAutoContinueFrom(finalSummary)) {
-        autoContinuationSkipReason = 'UNSAFE_OR_NO_PROGRESS';
+        const stopReasonForSkip = upperTrim(finalSummary.stop_reason || '');
+        const madeProgressForSkip = booleanFrom(finalSummary.made_progress)
+          || numberFrom(finalSummary, ['claimed', 'claimed_count'], 0) > 0
+          || numberFrom(finalSummary, ['processed', 'processed_count'], 0) > 0
+          || numberFrom(finalSummary, ['succeeded', 'succeeded_count'], 0) > 0;
+        autoContinuationSkipReason = madeProgressForSkip && stopReasonForSkip === 'SOURCE_BUILD_PARALLEL_BURSTS'
+          ? 'BOUNDED_SOURCE_BUILD_SLICE_AWAITING_NEXT_NUDGE'
+          : 'UNSAFE_OR_NO_PROGRESS';
       }
 
       if (sessionScopedNudge
@@ -16112,13 +16112,13 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
           });
           const globalTailTick = await bankingPayWorkbenchCronTick(env, globalTailOptions);
           const globalTailSummary = isPlainObject(globalTailTick) ? globalTailTick : {};
-          markEntryProgress(globalTailSummary, 'GLOBAL_TAIL');
           finalSummary = {
             ...combineTickResults(finalSummary, globalTailSummary, entry.started_at_ms),
             session_scoped_global_tail_performed: true,
             session_scoped_global_tail_summary: globalTailSummary,
             workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob
           };
+          recordEntryProgress(finalSummary);
           logNudgeDiag('WORKBENCH_DRAIN_NUDGE_GLOBAL_TAIL_RESULT', {
             stop_reason: finalSummary.stop_reason,
             more_due: booleanFrom(finalSummary.more_due),
@@ -16184,8 +16184,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       entry.accepting_coalesced_wakes = false;
       entry.final_summary = finalSummary;
       entry.completed_at_utc = new Date().toISOString();
-      entry.settled = true;
-      entry.settled_at_utc = entry.completed_at_utc;
       return finalSummary;
     })
     .catch((error) => {
@@ -16209,8 +16207,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       entry.accepting_coalesced_wakes = false;
       entry.final_summary = failureSummary;
       entry.completed_at_utc = new Date().toISOString();
-      entry.settled = true;
-      entry.settled_at_utc = entry.completed_at_utc;
       logNudgeDiag('WORKBENCH_DRAIN_NUDGE_FAILED', {
         ...failureSummary,
         error_message: failureSummary.message
@@ -16222,8 +16218,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     })
     .finally(() => {
       entry.accepting_coalesced_wakes = false;
-      entry.settled = true;
-      entry.settled_at_utc = entry.settled_at_utc || new Date().toISOString();
       try {
         if (map && map.get(singleFlightKey) === entry) map.delete(singleFlightKey);
       } catch {}
@@ -16239,7 +16233,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       ctx.waitUntil(promise);
       waitUntilUsed = true;
       entry.wait_until_used = true;
-      entry.wait_until_attached_at_utc = new Date().toISOString();
     } catch (waitUntilError) {
       waitUntilUsed = false;
       entry.wait_until_used = false;
@@ -16265,9 +16258,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     auto_continuation_scheduled: maxAutoContinuationBursts > 0 && waitUntilUsed,
     max_auto_continuation_bursts: maxAutoContinuationBursts,
     max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
-    active_entry_max_age_ms: activeEntryMaxAgeMs,
-    active_entry_no_progress_max_age_ms: activeEntryNoProgressMaxAgeMs,
-    active_expires_at_utc: entry.expires_at_utc || null,
     workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
     code: 'BANKING_PAY_WORKBENCH_NUDGE_SCHEDULED',
     active_started_at_utc: entry.started_at_utc,
@@ -16275,7 +16265,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     budget_resolved_by: 'bankingPayWorkbenchCronTick'
   }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
 }
-
 
 async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -17530,6 +17519,7 @@ async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sess
 async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionId, ctx = null) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const toCount = (value) => {
     const n = Number(value);
@@ -17616,6 +17606,166 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
     return withCORS(env, req, new Response(JSON.stringify({ ...(isPlainObject(friendlyPayload) ? friendlyPayload : {}), ok: false }), { status, headers: JSON_HEADERS }));
   };
 
+  const readJobCounts = (progress) => {
+    const src = isPlainObject(progress) ? progress : {};
+    const counts = isPlainObject(src.job_counts) ? src.job_counts : (isPlainObject(src.jobCounts) ? src.jobCounts : {});
+    return {
+      queued: toCount(counts.queued ?? counts.queued_count ?? counts.queuedJobs ?? src.queued_jobs ?? src.queued_job_count),
+      running: toCount(counts.running ?? counts.running_count ?? counts.runningJobs ?? src.running_jobs ?? src.running_job_count),
+      unresolved_failed: toCount(counts.unresolved_failed ?? counts.unresolvedFailed ?? counts.failed_unresolved ?? src.unresolved_failed_jobs ?? src.unresolved_failed_job_count ?? src.unresolved_failed),
+      unresolved_dead: toCount(counts.unresolved_dead ?? counts.unresolvedDead ?? counts.dead_unresolved ?? src.unresolved_dead_jobs ?? src.unresolved_dead_job_count ?? src.unresolved_dead)
+    };
+  };
+  const progressPendingPhases = new Set([
+    'REFRESHING',
+    'REFRESHING_CANDIDATES',
+    'SEEDING_SCOPE',
+    'SCOPE_SEEDING',
+    'SOURCE_BUILDING',
+    'SEEDING_LINE_WORK',
+    'LINE_WORK_SEEDING',
+    'PROCESSING_LINE_WORK',
+    'MATERIALISING_PREVIEW_ROWS',
+    'MATERIALIZING_PREVIEW_ROWS',
+    'PARTIAL_READY',
+    'WORKBENCH_JOBS_RUNNING',
+    'WAIT_FOR_WORKER',
+    'BUILDING',
+    'PROCESSING'
+  ]);
+  const logProgressNudgeDiag = (eventName, payload = {}, options = {}) => {
+    try {
+      if (typeof logBankingPayWorkbenchDiag === 'function') {
+        logBankingPayWorkbenchDiag(env, eventName, {
+          origin: 'WORKBENCH_PROGRESS_PENDING',
+          route: 'WORKBENCH_SESSION_PROGRESS',
+          session_id: id,
+          actor_user_id: actorUserId,
+          ctx_present: !!ctx,
+          wait_until_available: !!(ctx && typeof ctx.waitUntil === 'function'),
+          ...payload
+        }, options);
+      }
+    } catch {}
+  };
+  const evaluateProgressNudge = (progress) => {
+    const src = isPlainObject(progress) ? progress : {};
+    const jobCounts = readJobCounts(src);
+    const phase = upperTrim(src.phase || src.current_phase || src.progress_phase || '');
+    const status = upperTrim(src.session_status || src.workbench_session_status || src.status || 'OPEN');
+    const obsolete = src.session_obsolete === true || src.obsolete === true || src.active_session_obsolete === true;
+    const replacementRequired = src.replacement_available === true || !!trimStr(src.replacement_session_id || '') || src.rebase_required === true || src.requires_new_session === true;
+    const unresolvedFailures = jobCounts.unresolved_failed > 0 || jobCounts.unresolved_dead > 0 || toCount(src.failed_count ?? src.failed_candidates) > 0 || toCount(src.line_units_error ?? src.line_units_failed ?? src.error_line_units) > 0;
+    const pendingCandidates = toCount(src.pending_candidates ?? src.pending_count ?? src.scope_pending);
+    const pendingLineUnits = toCount(src.line_units_pending ?? src.pending_line_units);
+    const readyLineUnits = toCount(src.line_units_ready ?? src.ready_line_units);
+    const cursorRemaining = src.scope_cursor_remaining === true || !!src.scope_next_cursor_json || !!src.scope_next_cursor;
+    const scopeSeedIncomplete = src.scope_seed_complete === false;
+    const ready = src.ready === true || src.ready_flag === true || upperTrim(src.phase || src.status || '') === 'READY';
+    const workDue = ready !== true && (
+      jobCounts.queued > 0 ||
+      jobCounts.running > 0 ||
+      pendingCandidates > 0 ||
+      pendingLineUnits > 0 ||
+      readyLineUnits > 0 ||
+      cursorRemaining ||
+      scopeSeedIncomplete ||
+      progressPendingPhases.has(phase)
+    );
+    const base = {
+      phase,
+      status,
+      ready,
+      obsolete,
+      replacement_required: replacementRequired,
+      job_counts: jobCounts,
+      pending_candidates: pendingCandidates,
+      line_units_pending: pendingLineUnits,
+      line_units_ready: readyLineUnits,
+      scope_seed_complete: src.scope_seed_complete === true
+    };
+    if (!workDue) return { ...base, should_nudge: false, reason: 'NO_WORK_DUE' };
+    if (obsolete || replacementRequired) return { ...base, should_nudge: false, reason: 'SESSION_OBSOLETE_OR_REPLACED' };
+    if (status && status !== 'OPEN' && status !== 'READY' && status !== 'REFRESHING') return { ...base, should_nudge: false, reason: 'SESSION_NOT_OPEN' };
+    if (unresolvedFailures) return { ...base, should_nudge: false, reason: 'UNRESOLVED_FAILED_OR_DEAD_JOBS' };
+    return { ...base, should_nudge: true, reason: 'WORKBENCH_PROGRESS_PENDING' };
+  };
+  const scheduleProgressNudge = (progress) => {
+    const decision = evaluateProgressNudge(progress);
+    if (!decision.should_nudge) {
+      logProgressNudgeDiag(`WORKBENCH_PROGRESS_NUDGE_SKIPPED_${decision.reason}`, decision);
+      return {
+        attempted: false,
+        scheduled: false,
+        skipped: true,
+        code: decision.reason,
+        reason: decision.reason,
+        decision
+      };
+    }
+    logProgressNudgeDiag('WORKBENCH_PROGRESS_NUDGE_REQUESTED', decision);
+    try {
+      if (typeof nudgeBankingPayWorkbenchDrain !== 'function') {
+        logProgressNudgeDiag('WORKBENCH_PROGRESS_NUDGE_SKIPPED_HELPER_UNAVAILABLE', decision, { severity: 'warn' });
+        return {
+          attempted: true,
+          scheduled: false,
+          skipped: true,
+          code: 'NUDGE_HELPER_UNAVAILABLE',
+          reason: 'NUDGE_HELPER_UNAVAILABLE',
+          decision
+        };
+      }
+      const nudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+        origin: 'WORKBENCH_PROGRESS_PENDING',
+        requestedOrigin: 'WORKBENCH_PROGRESS_PENDING',
+        sessionId: id,
+        actorUserId,
+        budgetProfile: 'NUDGE',
+        reason: decision.reason,
+        source: 'handleBankingPayWorkbenchSessionProgress',
+        trigger: 'PROGRESS_POLL',
+        progress_phase: decision.phase,
+        progress_ready: decision.ready,
+        progress_job_counts: decision.job_counts
+      });
+      const scheduled = !!(nudge && (nudge.scheduled === true || nudge.continuation_scheduled === true || nudge.auto_continuation_scheduled === true || nudge.already_running === true));
+      const alreadyRunning = !!(nudge && nudge.already_running === true);
+      logProgressNudgeDiag(alreadyRunning ? 'WORKBENCH_PROGRESS_NUDGE_SKIPPED_ALREADY_RUNNING' : (scheduled ? 'WORKBENCH_PROGRESS_NUDGE_SCHEDULED' : 'WORKBENCH_PROGRESS_NUDGE_SKIPPED_NOT_SCHEDULED'), {
+        ...decision,
+        scheduled,
+        already_running: alreadyRunning,
+        nudge_scheduled: nudge?.scheduled === true,
+        continuation_scheduled: nudge?.continuation_scheduled === true,
+        auto_continuation_scheduled: nudge?.auto_continuation_scheduled === true,
+        nudge_code: nudge?.code || null,
+        nudge_reason: nudge?.reason || nudge?.skip_reason || null
+      }, scheduled ? {} : { severity: alreadyRunning ? 'info' : 'warn' });
+      return {
+        attempted: true,
+        scheduled,
+        skipped: !scheduled,
+        already_running: alreadyRunning,
+        code: alreadyRunning ? 'ALREADY_RUNNING' : (scheduled ? 'WORKBENCH_PROGRESS_NUDGE_SCHEDULED' : 'WORKBENCH_PROGRESS_NUDGE_NOT_SCHEDULED'),
+        reason: decision.reason,
+        decision,
+        nudge
+      };
+    } catch (e) {
+      const msg = String(e?.message || e || '');
+      logProgressNudgeDiag('WORKBENCH_PROGRESS_NUDGE_FAILED', { ...decision, error: msg }, { severity: 'warn' });
+      return {
+        attempted: true,
+        scheduled: false,
+        skipped: true,
+        code: 'WORKBENCH_PROGRESS_NUDGE_FAILED',
+        reason: msg,
+        decision,
+        nudge: { ok: false, scheduled: false, error: msg }
+      };
+    }
+  };
+
   const actorUserId = trimStr(user?.id);
   const id = trimStr(sessionId || new URL(req.url).searchParams.get('session_id') || new URL(req.url).searchParams.get('sessionId'));
   if (!uuidRe.test(actorUserId)) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -17644,6 +17794,14 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
 
       const progressPayload = normaliseProgress(progressRaw, { session_id: id });
       const resolvedSessionId = trimStr(progressPayload.session_id || id) || id;
+      const progressNudge = scheduleProgressNudge(progressPayload);
+      const drainResult = progressNudge.nudge || {
+        ok: true,
+        scheduled: false,
+        skipped: progressNudge.skipped !== false,
+        code: progressNudge.code || 'WORKBENCH_PROGRESS_NUDGE_NOT_ATTEMPTED',
+        reason: progressNudge.reason || null
+      };
       return withCORS(env, req, ok({
         ok: true,
         session_id: resolvedSessionId,
@@ -17658,20 +17816,16 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
         replacement_session_version: progressPayload.replacement_session_version ?? null,
         rebase_required: progressPayload.rebase_required === true,
         requires_new_session: progressPayload.requires_new_session === true,
-        drain_attempted: false,
-        drain_result: {
-          ok: true,
-          skipped: true,
-          code: 'WORKBENCH_PROGRESS_READ_ONLY'
-        },
-        drain_scheduled: false,
-        drain_nudge: {
-          ok: true,
-          scheduled: false,
-          skipped: true,
-          code: 'WORKBENCH_PROGRESS_READ_ONLY'
-        },
-        read_only: true,
+        drain_attempted: progressNudge.attempted === true,
+        drain_result: drainResult,
+        drain_scheduled: progressNudge.scheduled === true,
+        drain_nudge: drainResult,
+        read_only: progressNudge.attempted !== true,
+        progress_triggered_nudge: progressNudge.attempted === true,
+        progress_nudge_scheduled: progressNudge.scheduled === true,
+        progress_nudge_already_running: progressNudge.already_running === true,
+        progress_nudge_reason: progressNudge.reason || progressNudge.code || null,
+        progress_nudge_decision: progressNudge.decision || null,
         server_time_utc: new Date().toISOString()
       }));
     } catch (e) {
@@ -17692,8 +17846,6 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
   }
   return execute();
 }
-
-
 
 
 
@@ -174804,13 +174956,13 @@ if (req.method === 'POST' && p === '/api/banking/pay/workbench/session/open') {
     return handleBankingPayDraftCreateOperationLookup(env, req, user, m.id);
   }
 }
-
 {
   const m = matchPath(p, '/api/banking/pay/workbench/session/:id/progress');
   if (m && req.method === 'GET') {
-    return handleBankingPayWorkbenchSessionProgress(env, req, user, m.id);
+    return handleBankingPayWorkbenchSessionProgress(env, req, user, m.id, ctx);
   }
 }
+
 
 {
   const m = matchPath(p, '/api/banking/pay/workbench/session/:id');
