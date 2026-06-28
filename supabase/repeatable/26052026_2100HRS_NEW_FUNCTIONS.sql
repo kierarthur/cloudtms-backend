@@ -23347,6 +23347,10 @@ DECLARE
   v_stale_failed_source_row_count integer := 0;
   v_allowed_job_types text[] := NULL::text[];
   v_stale_recovery_limit integer := 0;
+  v_preclaim_due_queued_count integer := 0;
+  v_preclaim_due_queued_sample jsonb := '[]'::jsonb;
+  v_claim_lock_contention_detected boolean := false;
+  v_claim_lock_contention_count integer := 0;
 BEGIN
   IF p_allowed_job_types IS NOT NULL THEN
     SELECT ARRAY(
@@ -24226,6 +24230,68 @@ BEGIN
     END IF;
   END LOOP;
 
+  BEGIN
+    WITH visible_due AS (
+      SELECT
+        claim_job.id,
+        claim_job.job_type,
+        claim_job.priority,
+        claim_job.run_at_utc,
+        claim_job.session_id,
+        claim_job.candidate_id,
+        claim_job.created_at_utc
+      FROM public.banking_pay_workbench_jobs AS claim_job
+      WHERE claim_job.status = 'QUEUED'
+        AND claim_job.run_at_utc <= v_cutoff
+        AND (p_session_id IS NULL OR claim_job.session_id = p_session_id)
+        AND (p_candidate_id IS NULL OR claim_job.candidate_id = p_candidate_id)
+        AND (
+          v_allowed_job_types IS NULL
+          OR claim_job.job_type = ANY(v_allowed_job_types)
+          OR UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) = ANY(v_allowed_job_types)
+          OR (
+            CASE
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE')
+                THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_SOURCE_BUILD', 'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK', 'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE', 'CANDIDATE_SOURCE_BUILD', 'CANDIDATE_SOURCE_BUILD_CHUNK', 'SOURCE_BUILD', 'SOURCE_BUILD_PAGE')
+                THEN 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH')
+                THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK')
+                THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK')
+                THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+              ELSE UPPER(BTRIM(COALESCE(claim_job.job_type, '')))
+            END
+          ) = ANY(v_allowed_job_types)
+        )
+      ORDER BY claim_job.priority ASC, claim_job.run_at_utc ASC, claim_job.created_at_utc ASC, claim_job.id ASC
+      LIMIT v_limit
+    )
+    SELECT
+      COALESCE(COUNT(*), 0)::integer,
+      COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'job_id', visible_due.id::text,
+            'job_type', visible_due.job_type,
+            'priority', visible_due.priority,
+            'run_at_utc', visible_due.run_at_utc,
+            'session_id', CASE WHEN visible_due.session_id IS NULL THEN NULL ELSE visible_due.session_id::text END,
+            'candidate_id', CASE WHEN visible_due.candidate_id IS NULL THEN NULL ELSE visible_due.candidate_id::text END,
+            'created_at_utc', visible_due.created_at_utc
+          )
+          ORDER BY visible_due.priority ASC, visible_due.run_at_utc ASC, visible_due.created_at_utc ASC, visible_due.id ASC
+        ),
+        '[]'::jsonb
+      )
+    INTO v_preclaim_due_queued_count, v_preclaim_due_queued_sample
+    FROM visible_due;
+  EXCEPTION WHEN OTHERS THEN
+    v_preclaim_due_queued_count := 0;
+    v_preclaim_due_queued_sample := '[]'::jsonb;
+  END;
+
   FOR v_claimed_row IN
     WITH claim AS (
       SELECT
@@ -24351,6 +24417,17 @@ BEGIN
     );
   END LOOP;
 
+  v_claim_lock_contention_detected := (
+    v_claimed_count = 0
+    AND v_preclaim_due_queued_count > 0
+    AND v_recovered_stale_count = 0
+    AND v_dead_stale_count = 0
+  );
+  v_claim_lock_contention_count := CASE
+    WHEN v_claim_lock_contention_detected THEN v_preclaim_due_queued_count
+    ELSE 0
+  END;
+
   RETURN jsonb_build_object(
     'ok', true,
     'server_utc', v_now,
@@ -24359,6 +24436,15 @@ BEGIN
     'stale_running_seconds', v_stale_running_seconds,
     'limit', v_limit,
     'stale_recovery_limit', v_stale_recovery_limit,
+    'due_queued_count', v_preclaim_due_queued_count,
+    'visible_due_queued_count', v_preclaim_due_queued_count,
+    'claimable_count', CASE WHEN v_claim_lock_contention_detected THEN 0 ELSE v_preclaim_due_queued_count END,
+    'claimable_due_count', CASE WHEN v_claim_lock_contention_detected THEN 0 ELSE v_preclaim_due_queued_count END,
+    'claim_lock_contention_detected', v_claim_lock_contention_detected,
+    'lock_contention_detected', v_claim_lock_contention_detected,
+    'claim_lock_contention_count', v_claim_lock_contention_count,
+    'lock_contention_count', v_claim_lock_contention_count,
+    'claim_lock_contention_sample', COALESCE(v_preclaim_due_queued_sample, '[]'::jsonb),
     'filtered_session_id', CASE WHEN p_session_id IS NULL THEN NULL ELSE p_session_id::text END,
     'filtered_candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
     'allowed_job_types', CASE WHEN v_allowed_job_types IS NULL THEN NULL ELSE to_jsonb(v_allowed_job_types) END,
@@ -24373,7 +24459,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_complete_job(p_job_id uuid, p_result_json jsonb DEFAULT '{}'::jsonb)
@@ -190441,6 +190526,9 @@ DECLARE
   v_claimable_count integer := 0;
   v_running_count integer := 0;
   v_stale_running_count integer := 0;
+  v_claim_lock_contention_detected boolean := false;
+  v_claim_lock_contention_count integer := 0;
+  v_claim_lock_contention_sample jsonb := '[]'::jsonb;
   v_budget_claim_limit integer := 1;
 BEGIN
   SELECT
@@ -190863,6 +190951,24 @@ BEGIN
       ELSE 0
     END;
     v_dead_count := v_dead_stale_count;
+
+    v_claim_lock_contention_detected := LOWER(COALESCE(
+      v_claim_result->>'claim_lock_contention_detected',
+      v_claim_result->>'lock_contention_detected',
+      'false'
+    )) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_claim_lock_contention_count := CASE
+      WHEN COALESCE(v_claim_result->>'claim_lock_contention_count', '') ~ '^[0-9]+$'
+        THEN (v_claim_result->>'claim_lock_contention_count')::integer
+      WHEN COALESCE(v_claim_result->>'lock_contention_count', '') ~ '^[0-9]+$'
+        THEN (v_claim_result->>'lock_contention_count')::integer
+      ELSE 0
+    END;
+    v_claim_lock_contention_sample := CASE
+      WHEN jsonb_typeof(v_claim_result->'claim_lock_contention_sample') = 'array'
+        THEN COALESCE(v_claim_result->'claim_lock_contention_sample', '[]'::jsonb)
+      ELSE '[]'::jsonb
+    END;
   END IF;
 
   FOR v_claimed_job_json IN
@@ -192068,6 +192174,21 @@ BEGIN
     v_stale_running_count := 0;
   END;
 
+  IF v_claim_lock_contention_detected
+     AND v_claimed_count = 0
+     AND v_processed_count = 0
+     AND v_failed_count = 0
+     AND v_dead_count = 0
+     AND v_supplemental_stale_recovery_error_count = 0
+     AND COALESCE(v_more_due, false) THEN
+    v_more_due := true;
+    v_stop_reason := 'LOCKED_BY_CONCURRENT_WORKER';
+    v_claimable_count := 0;
+    IF COALESCE(v_claim_lock_contention_count, 0) <= 0 THEN
+      v_claim_lock_contention_count := GREATEST(COALESCE(v_due_queued_count, 0), 0);
+    END IF;
+  END IF;
+
   RETURN jsonb_build_object(
       'ok', v_failed_count = 0 AND v_supplemental_stale_recovery_error_count = 0,
       'worker_id', v_worker_id,
@@ -192094,6 +192215,11 @@ BEGIN
       'continuations_created', v_continuations_created,
       'continuations_reused', v_continuations_reused,
       'requeued_unprocessed_claimed', COALESCE(v_requeued_unprocessed_claimed_count, 0),
+      'claim_lock_contention_detected', COALESCE(v_claim_lock_contention_detected, false),
+      'lock_contention_detected', COALESCE(v_claim_lock_contention_detected, false),
+      'claim_lock_contention_count', COALESCE(v_claim_lock_contention_count, 0),
+      'lock_contention_count', COALESCE(v_claim_lock_contention_count, 0),
+      'concurrent_worker_progress_expected', COALESCE(v_claim_lock_contention_detected, false),
       'more_due', COALESCE(v_more_due, false),
       'stop_reason', COALESCE(v_stop_reason, CASE WHEN COALESCE(v_more_due, false) THEN 'MORE_DUE' ELSE 'NO_MORE_DUE' END),
       'elapsed_ms', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer),
@@ -192127,6 +192253,7 @@ BEGIN
       'supplemental_terminal_stale_count', v_supplemental_stale_terminal_count,
       'supplemental_stale_recovery_error_count', v_supplemental_stale_recovery_error_count,
       'claim_result', COALESCE(v_claim_result, '{}'::jsonb),
+      'claim_lock_contention_sample', COALESCE(v_claim_lock_contention_sample, '[]'::jsonb),
       'stale_recovery_elapsed_ms', COALESCE(v_supplemental_stale_elapsed_ms, 0),
       'claim_elapsed_ms', COALESCE(v_claim_elapsed_ms, 0),
       'budget_claim_limit', COALESCE(v_budget_claim_limit, 1),

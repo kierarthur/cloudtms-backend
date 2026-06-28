@@ -14697,7 +14697,6 @@ function bankingPayWorkbenchLogsEnabled(env) {
     return false;
   }
 }
-
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -14849,6 +14848,11 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     'DISABLED',
     'BANKING_PAY_WORKBENCH_DRAIN_RPC_INVALID_RESPONSE'
   ]);
+  const lockContentionStopReasons = new Set([
+    'LOCKED_BY_CONCURRENT_WORKER',
+    'CLAIM_LOCK_CONTENTION',
+    'CONCURRENT_WORKER_LOCK_CONTENTION'
+  ]);
   let maxAutoContinuationBursts = numberInRange(
     cachedAutoSetting('maxAutoContinuationBursts', 'max_auto_continuation_bursts', cachedAutoContinuationSettings.max_bursts),
     3,
@@ -14903,6 +14907,12 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     0,
     1000
   );
+  const lockContentionRetryDelayMs = numberInRange(
+    cachedAutoSetting('lockContentionRetryDelayMs', 'lock_contention_retry_delay_ms', cachedAutoContinuationSettings.lock_contention_retry_delay_ms),
+    1250,
+    250,
+    3000
+  );
   const settingsSource = trimStr(cachedWorkbenchSettings.settings_source || cachedWorkbenchSettings.settingsSource || '') || (isPlainObject(cachedWorkbenchSettings) && Object.keys(cachedWorkbenchSettings).length ? 'settings_defaults:id=1' : 'fallback');
   const settingsDefaultsUpdatedAt = trimStr(cachedWorkbenchSettings.settings_defaults_updated_at || cachedWorkbenchSettings.settingsDefaultsUpdatedAt || cachedSettingsDefaults.settings_defaults_updated_at || '') || null;
   const settingsDefaultsVersion = trimStr(cachedWorkbenchSettings.settings_defaults_version || cachedWorkbenchSettings.settingsDefaultsVersion || settingsDefaultsUpdatedAt || '') || null;
@@ -14947,6 +14957,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
     auto_continuation_per_burst_max_runtime_ms: autoContinuationPerBurstMaxRuntimeMs,
     auto_continuation_min_runtime_ms: autoContinuationMinRuntimeMs,
+    lock_contention_retry_delay_ms: lockContentionRetryDelayMs,
     auto_continuation_max_passes: autoContinuationMaxPasses,
     auto_continuation_claim_limit_max: autoContinuationClaimLimitMax,
     auto_continuation_max_jobs: autoContinuationMaxJobs,
@@ -15235,6 +15246,50 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   passthroughOptions.settingsDefaultsVersion = settingsDefaultsVersion;
   passthroughOptions.settingsHash = settingsHash;
 
+  const isLockContentionSummary = (summaryLike) => {
+    const summary = isPlainObject(summaryLike) ? summaryLike : {};
+    const drain = isPlainObject(summary.drain_result) ? summary.drain_result : {};
+    const claimResult = isPlainObject(drain.claim_result) ? drain.claim_result : {};
+    const stopReason = upperTrim(summary.stop_reason || drain.stop_reason || claimResult.stop_reason || '');
+    const failedCount = Math.max(
+      numberFrom(summary, ['failed', 'failed_count'], 0),
+      numberFrom(drain, ['failed', 'failed_count'], 0),
+      numberFrom(claimResult, ['failed', 'failed_count'], 0)
+    );
+    const deadCount = Math.max(
+      numberFrom(summary, ['dead', 'dead_count'], 0),
+      numberFrom(drain, ['dead', 'dead_count'], 0),
+      numberFrom(claimResult, ['dead', 'dead_count'], 0)
+    );
+    const staleRecoveryErrorCount = Math.max(
+      numberFrom(summary, ['supplemental_stale_recovery_error_count', 'stale_recovery_error_count'], 0),
+      numberFrom(drain, ['supplemental_stale_recovery_error_count', 'stale_recovery_error_count'], 0),
+      numberFrom(claimResult, ['supplemental_stale_recovery_error_count', 'stale_recovery_error_count'], 0)
+    );
+    const lockContentionCount = Math.max(
+      numberFrom(summary, ['claim_lock_contention_count', 'lock_contention_count'], 0),
+      numberFrom(drain, ['claim_lock_contention_count', 'lock_contention_count'], 0),
+      numberFrom(claimResult, ['claim_lock_contention_count', 'lock_contention_count'], 0)
+    );
+
+    return failedCount === 0
+      && deadCount === 0
+      && staleRecoveryErrorCount === 0
+      && (
+        lockContentionStopReasons.has(stopReason)
+        || booleanFrom(summary.claim_lock_contention_detected)
+        || booleanFrom(summary.lock_contention_detected)
+        || booleanFrom(summary.concurrent_worker_progress_expected)
+        || booleanFrom(drain.claim_lock_contention_detected)
+        || booleanFrom(drain.lock_contention_detected)
+        || booleanFrom(drain.concurrent_worker_progress_expected)
+        || booleanFrom(claimResult.claim_lock_contention_detected)
+        || booleanFrom(claimResult.lock_contention_detected)
+        || booleanFrom(claimResult.concurrent_worker_progress_expected)
+        || lockContentionCount > 0
+      );
+  };
+
   const canAutoContinueFrom = (summaryLike) => {
     const summary = isPlainObject(summaryLike) ? summaryLike : {};
     const stopReason = upperTrim(summary.stop_reason || '');
@@ -15330,6 +15385,9 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       };
       let autoContinuationCount = 0;
       let autoContinuationSkipReason = null;
+      let lockContentionRetryPerformed = false;
+      let lockContentionRetrySummary = null;
+      let lockContentionRetryActualDelayMs = null;
       const autoContinuationSummaries = [];
       const coalescedFinalCheckSummaries = [];
       let coalescedWakeCountHandled = 0;
@@ -15460,6 +15518,100 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
           continue;
         }
 
+        if (isLockContentionSummary(finalSummary)) {
+          if (!lockContentionRetryPerformed
+              && maxAutoContinuationBursts > 0
+              && hasWaitUntil
+              && entry.wait_until_used === true
+              && autoContinuationCount < maxAutoContinuationBursts) {
+            const elapsedForLockContentionRetryMs = Math.max(0, Date.now() - entry.started_at_ms);
+            const remainingBeforeLockContentionDelayMs = Math.max(0, maxAutoContinuationRuntimeMs - elapsedForLockContentionRetryMs);
+            if (remainingBeforeLockContentionDelayMs < autoContinuationMinRuntimeMs) {
+              autoContinuationSkipReason = 'MAX_AUTO_CONTINUATION_RUNTIME';
+              break;
+            }
+
+            const lockContentionDelayMs = Math.min(
+              lockContentionRetryDelayMs,
+              Math.max(0, remainingBeforeLockContentionDelayMs - autoContinuationMinRuntimeMs)
+            );
+            lockContentionRetryActualDelayMs = lockContentionDelayMs;
+            if (lockContentionDelayMs > 0) await sleepMs(lockContentionDelayMs);
+
+            const remainingLockContentionRuntimeMs = Math.max(0, maxAutoContinuationRuntimeMs - Math.max(0, Date.now() - entry.started_at_ms));
+            if (remainingLockContentionRuntimeMs < autoContinuationMinRuntimeMs) {
+              autoContinuationSkipReason = 'MAX_AUTO_CONTINUATION_RUNTIME';
+              break;
+            }
+
+            const continuationIndex = autoContinuationCount + 1;
+            const lockContentionRetryOptions = buildAutoContinuationOptions(
+              finalSummary,
+              continuationIndex,
+              remainingLockContentionRuntimeMs
+            );
+            lockContentionRetryOptions.origin = `${sessionScopedNudge ? 'BANKING_PAY_WORKBENCH_SESSION_NUDGE' : 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE'}_LOCK_CONTENTION_RETRY_${continuationIndex}`;
+            lockContentionRetryOptions.claimLimit = Math.max(
+              1,
+              Math.min(
+                autoContinuationClaimLimitMax,
+                numberFrom(finalSummary, ['claim_lock_contention_count', 'lock_contention_count', 'due_queued_count', 'claimable_count'], lockContentionRetryOptions.claimLimit)
+              )
+            );
+
+            logNudgeDiag('WORKBENCH_DRAIN_NUDGE_LOCK_CONTENTION_RETRY_START', {
+              auto_continuation_index: continuationIndex,
+              previous_stop_reason: upperTrim(finalSummary.stop_reason || ''),
+              previous_more_due: booleanFrom(finalSummary.more_due),
+              previous_claim_lock_contention_count: numberFrom(finalSummary, ['claim_lock_contention_count', 'lock_contention_count'], 0),
+              lock_contention_retry_delay_ms: lockContentionDelayMs,
+              remaining_auto_continuation_runtime_ms: remainingLockContentionRuntimeMs,
+              continuation_claim_limit: lockContentionRetryOptions.claimLimit,
+              continuation_max_passes: lockContentionRetryOptions.maxPasses,
+              continuation_max_jobs: lockContentionRetryOptions.maxJobs,
+              continuation_max_rows: lockContentionRetryOptions.maxRows,
+              continuation_max_runtime_ms: lockContentionRetryOptions.maxRuntimeMs
+            });
+
+            const lockContentionTick = await bankingPayWorkbenchCronTick(env, lockContentionRetryOptions);
+            const lockContentionSummary = isPlainObject(lockContentionTick) ? lockContentionTick : {};
+            lockContentionRetryPerformed = true;
+            lockContentionRetrySummary = lockContentionSummary;
+            autoContinuationCount += 1;
+            autoContinuationSummaries.push(lockContentionSummary);
+            finalSummary = {
+              ...combineTickResults(finalSummary, lockContentionSummary, entry.started_at_ms),
+              lock_contention_retry_performed: true,
+              lock_contention_retry_summary: lockContentionSummary,
+              lock_contention_retry_delay_ms: lockContentionDelayMs,
+              auto_continuation_performed: true,
+              auto_continuation_skipped: false,
+              auto_continuation_count: autoContinuationCount,
+              auto_continuation_summaries: autoContinuationSummaries.slice(),
+              latest_auto_continuation_stop_reason: upperTrim(lockContentionSummary.stop_reason || ''),
+              workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
+              cron_remains_recovery_fallback: true
+            };
+
+            logNudgeDiag('WORKBENCH_DRAIN_NUDGE_LOCK_CONTENTION_RETRY_RESULT', {
+              auto_continuation_index: autoContinuationCount,
+              stop_reason: finalSummary.stop_reason,
+              more_due: booleanFrom(finalSummary.more_due),
+              made_progress: booleanFrom(finalSummary.made_progress),
+              claimed: numberFrom(lockContentionSummary, ['claimed', 'claimed_count'], 0),
+              processed: numberFrom(lockContentionSummary, ['processed', 'processed_count'], 0),
+              failed: numberFrom(lockContentionSummary, ['failed', 'failed_count'], 0),
+              row_units_processed: numberFrom(lockContentionSummary, ['row_units_processed', 'work_units_processed'], 0),
+              claim_lock_contention_detected: isLockContentionSummary(lockContentionSummary),
+              claim_lock_contention_count: numberFrom(lockContentionSummary, ['claim_lock_contention_count', 'lock_contention_count'], 0)
+            });
+            continue;
+          }
+
+          autoContinuationSkipReason = 'LOCKED_BY_CONCURRENT_WORKER';
+          break;
+        }
+
         if (!canAutoContinueFrom(finalSummary)) break;
 
         if (maxAutoContinuationBursts <= 0) {
@@ -15559,6 +15711,10 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
         autoContinuationSkipReason = 'CONTROL_LOOP_GUARD';
       }
 
+      if (!autoContinuationSkipReason && booleanFrom(finalSummary.more_due) && isLockContentionSummary(finalSummary)) {
+        autoContinuationSkipReason = 'LOCKED_BY_CONCURRENT_WORKER';
+      }
+
       if (!autoContinuationSkipReason && booleanFrom(finalSummary.more_due) && !canAutoContinueFrom(finalSummary)) {
         autoContinuationSkipReason = 'UNSAFE_OR_NO_PROGRESS';
       }
@@ -15566,6 +15722,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       if (sessionScopedNudge
           && source.globalTailPass !== false
           && entry.wait_until_used === true
+          && !isLockContentionSummary(finalSummary)
           && unsafeAutoContinuationStopReasons.has(upperTrim(finalSummary.stop_reason || '')) !== true) {
         const elapsedForGlobalTailMs = Math.max(0, Date.now() - entry.started_at_ms);
         const remainingGlobalTailRuntimeMs = Math.max(0, maxAutoContinuationRuntimeMs - elapsedForGlobalTailMs);
@@ -15624,6 +15781,9 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
         auto_continuation_performed: autoContinuationCount > 0,
         auto_continuation_count: autoContinuationCount,
         auto_continuation_summaries: autoContinuationSummaries,
+        lock_contention_retry_performed: lockContentionRetryPerformed,
+        lock_contention_retry_summary: lockContentionRetrySummary,
+        lock_contention_retry_delay_ms: lockContentionRetryPerformed ? lockContentionRetryActualDelayMs : null,
         auto_continuation_skipped: autoContinuationSkipReason != null,
         auto_continuation_skip_reason: autoContinuationSkipReason,
         max_auto_continuation_bursts: maxAutoContinuationBursts,
@@ -15750,7 +15910,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     budget_resolved_by: 'bankingPayWorkbenchCronTick'
   }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
 }
-
 
 async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -165037,7 +165196,6 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
   return summary;
 }
 
-
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -165081,6 +165239,27 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     return { found: false, value: 0 };
   };
   const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  const lockContentionStopReasons = new Set([
+    'LOCKED_BY_CONCURRENT_WORKER',
+    'CLAIM_LOCK_CONTENTION',
+    'CONCURRENT_WORKER_LOCK_CONTENTION'
+  ]);
+  const isLockContentionAggregate = (aggregateLike) => {
+    const aggregate = isPlainObject(aggregateLike) ? aggregateLike : {};
+    const claimResult = isPlainObject(aggregate.claim_result) ? aggregate.claim_result : {};
+    const stopReason = upperTrim(aggregate.stop_reason || aggregate.db_stop_reason || claimResult.stop_reason || '');
+    return lockContentionStopReasons.has(stopReason)
+      || booleanFrom(aggregate.claim_lock_contention_detected)
+      || booleanFrom(aggregate.lock_contention_detected)
+      || booleanFrom(aggregate.concurrent_worker_progress_expected)
+      || booleanFrom(claimResult.claim_lock_contention_detected)
+      || booleanFrom(claimResult.lock_contention_detected)
+      || booleanFrom(claimResult.concurrent_worker_progress_expected)
+      || Math.max(
+        countFrom(aggregate, ['claim_lock_contention_count', 'lock_contention_count'], 0),
+        countFrom(claimResult, ['claim_lock_contention_count', 'lock_contention_count'], 0)
+      ) > 0;
+  };
   const normalizeAllowedJobTypes = (value) => {
     if (value === undefined || value === null || value === '') return null;
     const rawValues = Array.isArray(value) ? value : String(value).split(',');
@@ -165408,6 +165587,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   let madeProgress = false;
   let stopReason = null;
   let budgetExhausted = false;
+  let lockContentionDetected = false;
+  let lockContentionCount = 0;
   let lastAggregate = {};
   let lastEffectiveLimit = 0;
   let transportError = null;
@@ -165643,6 +165824,12 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const passClaimableCount = countFrom(aggregate, ['claimable_count', 'claimable_due_count']);
     const passRunningCount = countFrom(aggregate, ['running_count', 'running_due_count']);
     const passStaleRunningCount = countFrom(aggregate, ['stale_running_count']);
+    const passClaimResult = isPlainObject(aggregate.claim_result) ? aggregate.claim_result : {};
+    const passLockContentionDetected = isLockContentionAggregate(aggregate);
+    const passLockContentionCount = Math.max(
+      countFrom(aggregate, ['claim_lock_contention_count', 'lock_contention_count'], 0),
+      countFrom(passClaimResult, ['claim_lock_contention_count', 'lock_contention_count'], 0)
+    );
     const passMoreDue = booleanFrom(aggregate.more_due);
     const passStopReason = upperTrim(aggregate.stop_reason || '');
     const passJobs = Array.isArray(aggregate.jobs) ? aggregate.jobs.filter((job) => isPlainObject(job)) : [];
@@ -165684,6 +165871,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     staleRecoveryErrorCount += passStaleRecoveryErrors;
     rowUnitsProcessed += passWorkUnits;
     moreDue = passMoreDue;
+    if (passLockContentionDetected) {
+      lockContentionDetected = true;
+      lockContentionCount += Math.max(0, passLockContentionCount || passDueQueuedCount || 0);
+    }
     madeProgress = madeProgress || passClaimed > 0 || passProcessed > 0 || passRecoveredStale > 0 || passDeadStale > 0;
 
     passSummaries.push({
@@ -165705,6 +165896,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       claimable_count: passClaimableCount,
       running_count: passRunningCount,
       stale_running_count: passStaleRunningCount,
+      claim_lock_contention_detected: passLockContentionDetected,
+      lock_contention_detected: passLockContentionDetected,
+      claim_lock_contention_count: passLockContentionCount,
+      lock_contention_count: passLockContentionCount,
+      concurrent_worker_progress_expected: passLockContentionDetected,
       row_units_processed: passWorkUnits,
       source_build_jobs_processed: passJobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD').length,
       source_rows_written: passJobs.reduce((sum, job) => sum + (canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD' ? countFrom(job.stage_result || job, ['source_rows_written', 'source_rows_read'], 0) : 0), 0),
@@ -165733,6 +165929,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       claimable_count: passClaimableCount,
       running_count: passRunningCount,
       stale_running_count: passStaleRunningCount,
+      claim_lock_contention_detected: passLockContentionDetected,
+      lock_contention_detected: passLockContentionDetected,
+      claim_lock_contention_count: passLockContentionCount,
+      lock_contention_count: passLockContentionCount,
+      concurrent_worker_progress_expected: passLockContentionDetected,
       row_units_processed: passWorkUnits,
       more_due: passMoreDue,
       stop_reason: passStopReason || (passMoreDue ? null : 'NO_MORE_DUE'),
@@ -165772,6 +165973,18 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       break;
     }
 
+    if (passLockContentionDetected
+        && passMoreDue
+        && passClaimed === 0
+        && passProcessed === 0
+        && passFailed === 0
+        && passDead === 0
+        && passStaleRecoveryErrors === 0) {
+      stopReason = 'LOCKED_BY_CONCURRENT_WORKER';
+      moreDue = true;
+      break;
+    }
+
     if (passClaimed === 0 && passProcessed === 0) {
       stopReason = 'NO_PROGRESS';
       moreDue = true;
@@ -165804,6 +166017,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
   const completedAtUtc = new Date().toISOString();
   const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+  const lastClaimResult = isPlainObject(lastAggregate.claim_result) ? lastAggregate.claim_result : {};
   const result = {
     ...lastAggregate,
     ok: transportError === null && failedCount === 0 && staleRecoveryErrorCount === 0,
@@ -165874,6 +166088,17 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     claimable_count: countFrom(lastAggregate, ['claimable_count', 'claimable_due_count']),
     running_count: countFrom(lastAggregate, ['running_count', 'running_due_count']),
     stale_running_count: countFrom(lastAggregate, ['stale_running_count']),
+    claim_lock_contention_detected: lockContentionDetected || isLockContentionAggregate(lastAggregate),
+    lock_contention_detected: lockContentionDetected || isLockContentionAggregate(lastAggregate),
+    claim_lock_contention_count: lockContentionCount || Math.max(
+      countFrom(lastAggregate, ['claim_lock_contention_count', 'lock_contention_count'], 0),
+      countFrom(lastClaimResult, ['claim_lock_contention_count', 'lock_contention_count'], 0)
+    ),
+    lock_contention_count: lockContentionCount || Math.max(
+      countFrom(lastAggregate, ['claim_lock_contention_count', 'lock_contention_count'], 0),
+      countFrom(lastClaimResult, ['claim_lock_contention_count', 'lock_contention_count'], 0)
+    ),
+    concurrent_worker_progress_expected: lockContentionDetected || isLockContentionAggregate(lastAggregate),
     row_units_processed: rowUnitsProcessed,
     work_units_processed: rowUnitsProcessed,
     pass_count: passCount,
@@ -165921,6 +166146,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     claimable_count: result.claimable_count,
     running_count: result.running_count,
     stale_running_count: result.stale_running_count,
+    claim_lock_contention_detected: result.claim_lock_contention_detected,
+    lock_contention_detected: result.lock_contention_detected,
+    claim_lock_contention_count: result.claim_lock_contention_count,
+    lock_contention_count: result.lock_contention_count,
+    concurrent_worker_progress_expected: result.concurrent_worker_progress_expected,
     session_ids_sample: sampleUuidValuesFromJobs(jobs, ['session_id', 'workbench_session_id']),
     candidate_ids_sample: sampleUuidValuesFromJobs(jobs, ['candidate_id']),
     job_ids_sample: sampleUuidValuesFromJobs(jobs, ['id', 'job_id']),
@@ -165949,6 +166179,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       claimable_count: result.claimable_count,
       running_count: result.running_count,
       stale_running_count: result.stale_running_count,
+      claim_lock_contention_detected: result.claim_lock_contention_detected,
+      lock_contention_detected: result.lock_contention_detected,
+      claim_lock_contention_count: result.claim_lock_contention_count,
+      lock_contention_count: result.lock_contention_count,
+      concurrent_worker_progress_expected: result.concurrent_worker_progress_expected,
       more_due: moreDue,
       stop_reason: result.stop_reason,
       budget_exhausted: budgetExhausted,
@@ -165962,6 +166197,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
   return result;
 }
+
 
 
 async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
