@@ -178512,8 +178512,6 @@ BEGIN
 END;
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_stage_continuation(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_job_type text DEFAULT NULL::text, p_cursor_json jsonb DEFAULT NULL::jsonb, p_source_job_id uuid DEFAULT NULL::uuid, p_result_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT NULL::text, p_priority integer DEFAULT NULL::integer, p_limit integer DEFAULT NULL::integer)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -178569,6 +178567,7 @@ DECLARE
   v_source_build_run_id_token text := 'none';
   v_source_change_seq_token text := 'none';
   v_refresh_scope_kind text := NULL::text;
+  v_source_build_allow_full_fallback boolean := false;
   v_pay_channel_scope text := NULL::text;
   v_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
   v_linked_timesheet_ids_json jsonb := '[]'::jsonb;
@@ -178721,31 +178720,134 @@ BEGIN
     NULLIF(BTRIM(COALESCE(p_cursor_json->>'source_change_seq', '')), ''),
     'none'
   );
-  v_refresh_scope_kind := COALESCE(
-    NULLIF(UPPER(BTRIM(COALESCE(v_result_json->>'refresh_scope_kind', ''))), ''),
-    NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json->>'refresh_scope_kind', ''))), ''),
-    NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json#>>'{source_build,refresh_scope_kind}', ''))), ''),
-    NULLIF(UPPER(BTRIM(COALESCE(p_cursor_json->>'requested_refresh_scope_kind', ''))), ''),
-    NULL::text
-  );
+  /*
+    A source-build result reports two related but different scopes:
+      - requested_refresh_scope_kind: the caller's semantic scope for this run;
+      - refresh_scope_kind / actual_refresh_scope_kind: the collection strategy used for this page.
+
+    Full-live candidate builds intentionally page through internally targeted timesheet
+    sets to avoid large aggregation.  Cursor continuations must preserve the requested
+    scope, not the page's actual internal strategy; otherwise a CANDIDATE_FULL_LIVE
+    run can be mis-enqueued as TARGETED_TIMESHEETS with no requested ids.
+  */
+  IF v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+     AND UPPER(BTRIM(COALESCE(v_reason, ''))) = 'SOURCE_BUILD_CURSOR_CONTINUATION' THEN
+    v_refresh_scope_kind := COALESCE(
+      NULLIF(UPPER(BTRIM(COALESCE(p_cursor_json->>'requested_refresh_scope_kind', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_result_json->>'requested_refresh_scope_kind', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_result_json#>>'{source_build_diagnostics,collect,requested_refresh_scope_kind}', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json->>'refresh_scope_kind', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json#>>'{source_build,refresh_scope_kind}', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_result_json->>'refresh_scope_kind', ''))), ''),
+      NULL::text
+    );
+  ELSIF v_job_type IN ('WORKBENCH_CANDIDATE_SOURCE_BUILD', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED') THEN
+    v_refresh_scope_kind := COALESCE(
+      NULLIF(UPPER(BTRIM(COALESCE(v_result_json->>'requested_refresh_scope_kind', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_result_json#>>'{source_build_diagnostics,collect,requested_refresh_scope_kind}', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json->>'refresh_scope_kind', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json#>>'{source_build,refresh_scope_kind}', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(p_cursor_json->>'requested_refresh_scope_kind', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_result_json->>'refresh_scope_kind', ''))), ''),
+      NULL::text
+    );
+  ELSE
+    v_refresh_scope_kind := COALESCE(
+      NULLIF(UPPER(BTRIM(COALESCE(v_result_json->>'refresh_scope_kind', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json->>'refresh_scope_kind', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json#>>'{source_build,refresh_scope_kind}', ''))), ''),
+      NULLIF(UPPER(BTRIM(COALESCE(p_cursor_json->>'requested_refresh_scope_kind', ''))), ''),
+      NULL::text
+    );
+  END IF;
+
+  IF v_refresh_scope_kind NOT IN ('TARGETED_TIMESHEETS', 'CANDIDATE_FULL_LIVE') THEN
+    v_refresh_scope_kind := CASE
+      WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN 'CANDIDATE_FULL_LIVE'
+      ELSE NULL::text
+    END;
+  END IF;
+
   v_pay_channel_scope := COALESCE(
     NULLIF(UPPER(BTRIM(COALESCE(v_result_json->>'pay_channel_scope', ''))), ''),
     NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json->>'pay_channel_scope', ''))), ''),
     NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json#>>'{source_build,pay_channel_scope}', ''))), ''),
     NULL::text
   );
-  v_targeted_timesheet_ids_json := CASE
-    WHEN jsonb_typeof(v_result_json->'targeted_timesheet_ids') = 'array' THEN v_result_json->'targeted_timesheet_ids'
-    WHEN jsonb_typeof(v_source_job_row.payload_json->'targeted_timesheet_ids') = 'array' THEN v_source_job_row.payload_json->'targeted_timesheet_ids'
-    WHEN jsonb_typeof(v_source_job_row.payload_json#>'{source_build,targeted_timesheet_ids}') = 'array' THEN v_source_job_row.payload_json#>'{source_build,targeted_timesheet_ids}'
-    ELSE '[]'::jsonb
-  END;
-  v_linked_timesheet_ids_json := CASE
-    WHEN jsonb_typeof(v_result_json->'linked_timesheet_ids') = 'array' THEN v_result_json->'linked_timesheet_ids'
-    WHEN jsonb_typeof(v_source_job_row.payload_json->'linked_timesheet_ids') = 'array' THEN v_source_job_row.payload_json->'linked_timesheet_ids'
-    WHEN jsonb_typeof(v_source_job_row.payload_json#>'{source_build,linked_timesheet_ids}') = 'array' THEN v_source_job_row.payload_json#>'{source_build,linked_timesheet_ids}'
-    ELSE '[]'::jsonb
-  END;
+
+  SELECT scope_arrays.array_json
+  INTO v_targeted_timesheet_ids_json
+  FROM (
+    VALUES
+      (10, v_source_job_row.payload_json->'targeted_timesheet_ids_requested'),
+      (20, v_source_job_row.payload_json#>'{source_build,targeted_timesheet_ids_requested}'),
+      (30, v_source_job_row.payload_json->'targeted_timesheet_ids'),
+      (40, v_source_job_row.payload_json#>'{source_build,targeted_timesheet_ids}'),
+      (50, v_result_json->'targeted_timesheet_ids_requested'),
+      (60, v_result_json#>'{source_build,targeted_timesheet_ids_requested}'),
+      (70, v_result_json->'targeted_timesheet_ids'),
+      (80, v_result_json#>'{source_build,targeted_timesheet_ids}')
+  ) AS scope_arrays(priority, array_json)
+  WHERE jsonb_typeof(scope_arrays.array_json) = 'array'
+    AND jsonb_array_length(scope_arrays.array_json) > 0
+  ORDER BY scope_arrays.priority
+  LIMIT 1;
+
+  v_targeted_timesheet_ids_json := COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb);
+
+  SELECT scope_arrays.array_json
+  INTO v_linked_timesheet_ids_json
+  FROM (
+    VALUES
+      (10, v_source_job_row.payload_json->'linked_timesheet_ids_requested'),
+      (20, v_source_job_row.payload_json#>'{source_build,linked_timesheet_ids_requested}'),
+      (30, v_source_job_row.payload_json->'linked_timesheet_ids'),
+      (40, v_source_job_row.payload_json#>'{source_build,linked_timesheet_ids}'),
+      (50, v_result_json->'linked_timesheet_ids_requested'),
+      (60, v_result_json#>'{source_build,linked_timesheet_ids_requested}'),
+      (70, v_result_json->'linked_timesheet_ids'),
+      (80, v_result_json#>'{source_build,linked_timesheet_ids}')
+  ) AS scope_arrays(priority, array_json)
+  WHERE jsonb_typeof(scope_arrays.array_json) = 'array'
+    AND jsonb_array_length(scope_arrays.array_json) > 0
+  ORDER BY scope_arrays.priority
+  LIMIT 1;
+
+  v_linked_timesheet_ids_json := COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb);
+
+  IF v_job_type IN ('WORKBENCH_CANDIDATE_SOURCE_BUILD', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED')
+     AND v_refresh_scope_kind = 'CANDIDATE_FULL_LIVE' THEN
+    v_targeted_timesheet_ids_json := '[]'::jsonb;
+    v_linked_timesheet_ids_json := '[]'::jsonb;
+  END IF;
+
+  v_source_build_allow_full_fallback := LOWER(BTRIM(COALESCE(
+    NULLIF(BTRIM(COALESCE(v_result_json->>'source_build_allow_full_fallback', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_result_json#>>'{source_build,allow_full_fallback}', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_source_job_row.payload_json->>'source_build_allow_full_fallback', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_source_job_row.payload_json#>>'{source_build,allow_full_fallback}', '')), ''),
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  IF v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+     AND v_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+     AND jsonb_array_length(COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb)) = 0
+     AND jsonb_array_length(COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)) = 0
+     AND COALESCE(v_source_build_allow_full_fallback, false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CONTINUATION_TARGETED_IDS_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_CONTINUATION_TARGETED_IDS_REQUIRED',
+              'session_id', p_session_id::text,
+              'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+              'job_type', v_job_type,
+              'source_job_id', CASE WHEN p_source_job_id IS NULL THEN NULL ELSE p_source_job_id::text END,
+              'reason', v_reason,
+              'refresh_scope_kind', v_refresh_scope_kind,
+              'cursor_requested_refresh_scope_kind', NULLIF(UPPER(BTRIM(COALESCE(p_cursor_json->>'requested_refresh_scope_kind', ''))), ''),
+              'message', 'Refusing to enqueue TARGETED_TIMESHEETS source-build continuation without targeted_timesheet_ids or linked_timesheet_ids.'
+            )::text;
+  END IF;
   v_source_seed_cursor_json := jsonb_strip_nulls(jsonb_build_object(
     'source_build_run_id', NULLIF(v_source_build_run_id_token, 'none'),
     'source_change_seq', CASE WHEN v_source_change_seq_token ~ '^[0-9]{1,18}$' THEN v_source_change_seq_token::bigint ELSE NULL::bigint END,
@@ -178989,7 +179091,37 @@ BEGIN
           'targeted_timesheet_ids_requested', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
           'linked_timesheet_ids_requested', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
           'pay_channel_scope', v_pay_channel_scope,
+          'source_build_allow_full_fallback', COALESCE(v_source_build_allow_full_fallback, false),
           'source_build_cursor', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_SEED' THEN v_source_seed_cursor_json ELSE v_cursor_json END
+        )
+        || jsonb_build_object(
+          'source_build', jsonb_strip_nulls(
+            CASE
+              WHEN jsonb_typeof(v_source_job_row.payload_json->'source_build') = 'object'
+                THEN COALESCE(v_source_job_row.payload_json->'source_build', '{}'::jsonb)
+              ELSE '{}'::jsonb
+            END
+            || jsonb_build_object(
+              'required', v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+              'run_id', NULLIF(v_source_build_run_id_token, 'none'),
+              'source_build_run_id', NULLIF(v_source_build_run_id_token, 'none'),
+              'source_change_seq', CASE WHEN v_source_change_seq_token ~ '^[0-9]{1,18}$' THEN v_source_change_seq_token::bigint ELSE NULL::bigint END,
+              'source_change_sequence', CASE WHEN v_source_change_seq_token ~ '^[0-9]{1,18}$' THEN v_source_change_seq_token::bigint ELSE NULL::bigint END,
+              'session_version', COALESCE(v_session_row.version, 0),
+              'source_snapshot_run_id', v_session_row.source_snapshot_run_id::text,
+              'session_signature', v_session_row.session_signature,
+              'refresh_scope_kind', v_refresh_scope_kind,
+              'targeted_timesheet_ids', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
+              'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
+              'targeted_timesheet_ids_requested', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
+              'linked_timesheet_ids_requested', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
+              'pay_channel_scope', v_pay_channel_scope,
+              'allow_full_fallback', COALESCE(v_source_build_allow_full_fallback, false),
+              'limit', v_limit,
+              'cursor', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_SEED' THEN v_source_seed_cursor_json ELSE v_cursor_json END,
+              'reason', v_reason
+            )
+          )
         )
       ELSE '{}'::jsonb
     END
@@ -179277,6 +179409,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_source_build_chunk(p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_payload_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -179311,6 +179444,9 @@ DECLARE
   v_payload_snapshot_run_id uuid := NULL::uuid;
   v_payload_session_signature text := NULL::text;
   v_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
+  v_payload_refresh_scope_kind text := NULL::text;
+  v_cursor_requested_refresh_scope_kind text := NULL::text;
+  v_source_build_cursor_continuation boolean := false;
   v_requested_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
   v_actual_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
   v_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
@@ -179622,13 +179758,52 @@ BEGIN
             )::text;
   END IF;
 
-  v_refresh_scope_kind := NULLIF(UPPER(BTRIM(COALESCE(
+  v_payload_refresh_scope_kind := NULLIF(UPPER(BTRIM(COALESCE(
     v_payload_json->>'refresh_scope_kind',
     v_payload_json#>>'{source_build,refresh_scope_kind}',
     v_payload_json#>>'{preview_decisions_json,refresh_scope_kind}',
-    v_cursor_json->>'requested_refresh_scope_kind',
-    'CANDIDATE_FULL_LIVE'
+    ''
   ))), '');
+
+  IF v_payload_refresh_scope_kind NOT IN ('TARGETED_TIMESHEETS', 'CANDIDATE_FULL_LIVE') THEN
+    v_payload_refresh_scope_kind := NULL::text;
+  END IF;
+
+  v_cursor_requested_refresh_scope_kind := NULLIF(UPPER(BTRIM(COALESCE(
+    v_cursor_json->>'requested_refresh_scope_kind',
+    ''
+  ))), '');
+
+  IF v_cursor_requested_refresh_scope_kind NOT IN ('TARGETED_TIMESHEETS', 'CANDIDATE_FULL_LIVE') THEN
+    v_cursor_requested_refresh_scope_kind := NULL::text;
+  END IF;
+
+  v_source_build_cursor_continuation := (
+    (
+      LOWER(BTRIM(COALESCE(v_payload_json->>'continuation', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(
+        v_payload_json->>'reason',
+        v_payload_json->>'continuation_reason',
+        v_payload_json#>>'{source_build,reason}',
+        ''
+      ))) = 'SOURCE_BUILD_CURSOR_CONTINUATION'
+    )
+    AND (
+      NULLIF(BTRIM(COALESCE(v_cursor_json->>'last_timesheet_id', '')), '') IS NOT NULL
+      OR NULLIF(BTRIM(COALESCE(v_cursor_json->>'last_source_ordinal', '')), '') IS NOT NULL
+    )
+  );
+
+  v_refresh_scope_kind := COALESCE(
+    CASE
+      WHEN COALESCE(v_source_build_cursor_continuation, false)
+        THEN v_cursor_requested_refresh_scope_kind
+      ELSE NULL::text
+    END,
+    v_payload_refresh_scope_kind,
+    v_cursor_requested_refresh_scope_kind,
+    'CANDIDATE_FULL_LIVE'
+  );
 
   IF v_refresh_scope_kind NOT IN ('TARGETED_TIMESHEETS', 'CANDIDATE_FULL_LIVE') THEN
     v_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
@@ -180951,7 +181126,9 @@ BEGIN
         'session_id', p_session_id::text,
         'candidate_id', p_candidate_id::text,
         'source_snapshot_run_id', v_session_row.source_snapshot_run_id::text,
-        'session_signature', v_session_row.session_signature
+        'session_signature', v_session_row.session_signature,
+        'source_page_limit', v_limit,
+        'requested_refresh_scope_kind', v_requested_refresh_scope_kind
       );
   ELSE
     v_next_cursor_json := NULL::jsonb;
