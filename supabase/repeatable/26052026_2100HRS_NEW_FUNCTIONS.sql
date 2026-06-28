@@ -18970,8 +18970,10 @@ DECLARE
   v_include_correction_summary boolean := false;
   v_rows jsonb := '[]'::jsonb;
   v_returned_count integer := 0;
+  v_total_count integer := 0;
   v_has_more boolean := false;
   v_next_offset integer := NULL::integer;
+  v_previous_offset integer := NULL::integer;
   v_actor_is_valid boolean := true;
   v_cached_alert_hash text := 'banking_alert_signal:v3:' || MD5('');
   v_cached_summary_hash text := 'banking_alert_summary:v3:' || MD5('');
@@ -19049,6 +19051,12 @@ BEGIN
       v_cached_alert_summary := '{}'::jsonb;
     END IF;
   END IF;
+
+  SELECT COUNT(*)::integer
+  INTO v_total_count
+  FROM public.pay_batches AS pay_batch_count
+  WHERE v_status IS NULL
+     OR UPPER(COALESCE(pay_batch_count.status, '')) = v_status;
 
   WITH page_source AS (
     SELECT
@@ -19171,7 +19179,7 @@ BEGIN
     WHERE v_status IS NULL
        OR UPPER(COALESCE(pay_batch_row.status, '')) = v_status
     ORDER BY pay_batch_row.created_at_utc DESC, pay_batch_row.id DESC
-    LIMIT (v_limit + 1)
+    LIMIT v_limit
     OFFSET v_offset
   ),
   page_json AS (
@@ -19254,7 +19262,6 @@ BEGIN
         )
       ) AS row_json
     FROM page_source
-    WHERE page_source.row_ordinal <= v_limit
   )
   SELECT
     COALESCE(jsonb_agg(page_json.row_json ORDER BY page_json.row_ordinal), '[]'::jsonb),
@@ -19265,13 +19272,10 @@ BEGIN
   FROM page_json;
 
   v_returned_count := COALESCE(v_returned_count, 0);
-  v_has_more := v_returned_count > v_limit;
-  IF v_has_more THEN
-    v_next_offset := v_offset + v_limit;
-    v_returned_count := v_limit;
-  ELSE
-    v_next_offset := NULL::integer;
-  END IF;
+  v_total_count := COALESCE(v_total_count, 0);
+  v_has_more := (v_offset + v_returned_count) < v_total_count;
+  v_next_offset := CASE WHEN v_has_more THEN v_offset + v_limit ELSE NULL::integer END;
+  v_previous_offset := CASE WHEN v_offset > 0 THEN GREATEST(0, v_offset - v_limit) ELSE NULL::integer END;
 
   RETURN jsonb_strip_nulls(
     jsonb_build_object(
@@ -19280,11 +19284,14 @@ BEGIN
       'limit', v_limit,
       'offset', v_offset,
       'next_offset', v_next_offset,
+      'previous_offset', v_previous_offset,
       'has_more', v_has_more,
       'returned_count', v_returned_count,
-      'total_count', NULL::integer,
-      'known_total_count', false,
+      'count', v_total_count,
+      'total_count', v_total_count,
+      'known_total_count', true,
       'rows', COALESCE(v_rows, '[]'::jsonb),
+      'items', COALESCE(v_rows, '[]'::jsonb),
       'diagnostics_included', false,
       'diagnostics_requested', v_include_diagnostics,
       'alerts_requested', v_include_alerts,
@@ -179528,6 +179535,7 @@ DECLARE
   v_payload_snapshot_run_id_text text := NULL::text;
   v_payload_snapshot_run_id uuid := NULL::uuid;
   v_payload_session_signature text := NULL::text;
+  v_initial_session_signature text := NULL::text;
   v_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
   v_payload_refresh_scope_kind text := NULL::text;
   v_cursor_requested_refresh_scope_kind text := NULL::text;
@@ -179616,8 +179624,7 @@ BEGIN
   SELECT session_row.*
   INTO v_session_row
   FROM public.banking_pay_workbench_sessions AS session_row
-  WHERE session_row.id = p_session_id
-  FOR UPDATE;
+  WHERE session_row.id = p_session_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_NOT_FOUND'
@@ -179638,6 +179645,8 @@ BEGIN
               'status', v_session_row.status
             )::text;
   END IF;
+
+  v_initial_session_signature := v_session_row.session_signature;
 
   SELECT scope_row.status
   INTO v_scope_status
@@ -180055,31 +180064,11 @@ BEGIN
       p_exclude_timesheet_ids => v_exclude_timesheet_ids
     );
 
-    UPDATE public.banking_pay_workbench_sessions AS sync_session_update
-    SET progress_json = COALESCE(sync_session_update.progress_json, '{}'::jsonb)
-          || jsonb_build_object(
-            'overpayment_sync_completed_by_candidate',
-            COALESCE(sync_session_update.progress_json->'overpayment_sync_completed_by_candidate', '{}'::jsonb)
-            || jsonb_build_object(
-              p_candidate_id::text,
-              jsonb_build_object(
-                'completed', true,
-                'completed_at_utc', v_now::text,
-                'pay_channel_scope', v_candidate_pay_channel_scope,
-                'source_build_run_id', v_source_build_run_id::text,
-                'result', COALESCE(v_sync_result, '{}'::jsonb)
-              )
-            )
-          ),
-        progress_updated_at_utc = v_now,
-        updated_at_utc = v_now
-    WHERE sync_session_update.id = p_session_id;
-
-    SELECT refreshed_session_row.*
-    INTO v_session_row
-    FROM public.banking_pay_workbench_sessions AS refreshed_session_row
-    WHERE refreshed_session_row.id = p_session_id;
-
+    /* The overpayment sync itself is complete, but the session progress marker is
+       deliberately deferred until the short final revalidation/update block.
+       Updating banking_pay_workbench_sessions here would hold a broad session-row
+       lock across collect/canonical/source-build work and would serialize
+       different candidates in the same workbench session. */
     v_sync_completed := true;
   END IF;
 
@@ -180993,6 +180982,67 @@ BEGIN
     ) AS parsed_scope_ids
     WHERE parsed_scope_ids.timesheet_id IS NOT NULL;
 
+  SELECT final_session_row.*
+  INTO v_session_row
+  FROM public.banking_pay_workbench_sessions AS final_session_row
+  WHERE final_session_row.id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_NOT_FOUND_FINAL'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_NOT_FOUND_FINAL',
+              'session_id', p_session_id::text,
+              'session_lock_scope', 'FINAL_REVALIDATION_ONLY'
+            )::text;
+  END IF;
+
+  IF UPPER(BTRIM(COALESCE(v_session_row.status, ''))) <> 'OPEN'
+     OR v_session_row.discarded_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_NOT_OPEN_FINAL'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_NOT_OPEN_FINAL',
+              'session_id', p_session_id::text,
+              'status', v_session_row.status,
+              'session_lock_scope', 'FINAL_REVALIDATION_ONLY'
+            )::text;
+  END IF;
+
+  IF v_session_version IS DISTINCT FROM COALESCE(v_session_row.version, 1) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_VERSION_STALE_FINAL'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_VERSION_STALE_FINAL',
+              'payload_session_version', v_session_version,
+              'current_session_version', COALESCE(v_session_row.version, 1),
+              'session_lock_scope', 'FINAL_REVALIDATION_ONLY'
+            )::text;
+  END IF;
+
+  IF v_payload_snapshot_run_id IS DISTINCT FROM v_session_row.source_snapshot_run_id THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SNAPSHOT_RUN_ID_MISMATCH_FINAL'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SNAPSHOT_RUN_ID_MISMATCH_FINAL',
+              'payload_source_snapshot_run_id', CASE WHEN v_payload_snapshot_run_id IS NULL THEN NULL ELSE v_payload_snapshot_run_id::text END,
+              'session_source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+              'session_lock_scope', 'FINAL_REVALIDATION_ONLY'
+            )::text;
+  END IF;
+
+  IF v_initial_session_signature IS DISTINCT FROM v_session_row.session_signature THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_SIGNATURE_STALE_FINAL'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_SESSION_SIGNATURE_STALE_FINAL',
+              'initial_session_signature', v_initial_session_signature,
+              'current_session_signature', v_session_row.session_signature,
+              'session_lock_scope', 'FINAL_REVALIDATION_ONLY'
+            )::text;
+  END IF;
+
   IF v_requested_refresh_scope_kind = 'CANDIDATE_FULL_LIVE'
      AND COALESCE(v_first_source_page, true) THEN
     UPDATE public.banking_pay_workbench_candidate_source_lines AS source_line_retire
@@ -181237,6 +181287,23 @@ BEGIN
   UPDATE public.banking_pay_workbench_sessions AS session_update
   SET progress_state = 'REFRESHING_CANDIDATES',
       progress_json = COALESCE(session_update.progress_json, '{}'::jsonb)
+        || CASE
+          WHEN COALESCE(v_sync_completed, false) THEN jsonb_build_object(
+            'overpayment_sync_completed_by_candidate',
+            COALESCE(session_update.progress_json->'overpayment_sync_completed_by_candidate', '{}'::jsonb)
+            || jsonb_build_object(
+              p_candidate_id::text,
+              jsonb_build_object(
+                'completed', true,
+                'completed_at_utc', v_now::text,
+                'pay_channel_scope', v_candidate_pay_channel_scope,
+                'source_build_run_id', v_source_build_run_id::text,
+                'result', COALESCE(v_sync_result, '{}'::jsonb)
+              )
+            )
+          )
+          ELSE '{}'::jsonb
+        END
         || jsonb_build_object(
           'phase', 'SOURCE_BUILDING',
           'last_source_build_candidate_id', p_candidate_id::text,
@@ -181277,6 +181344,8 @@ BEGIN
     'source_build_run_id', v_source_build_run_id::text,
     'source_snapshot_run_id', v_session_row.source_snapshot_run_id::text,
     'session_signature', v_session_row.session_signature,
+    'session_lock_scope', 'FINAL_REVALIDATION_ONLY',
+    'candidate_lock_scope', 'SESSION_SCOPE_ROW_FOR_UPDATE',
     'limit', v_limit,
     'refresh_scope_kind', v_actual_refresh_scope_kind,
     'requested_refresh_scope_kind', v_requested_refresh_scope_kind,
@@ -181317,6 +181386,7 @@ BEGIN
     'collect_elapsed_ms', COALESCE(v_collect_elapsed_ms, 0),
     'canonical_elapsed_ms', COALESCE(v_canonical_elapsed_ms, 0),
     'classifier_elapsed_ms', COALESCE(v_classifier_elapsed_ms, 0),
+    'classifier_timing_source', 'canonical_elapsed_ms',
     'total_elapsed_ms', COALESCE(v_total_elapsed_ms, 0),
     'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
   )
@@ -181330,6 +181400,8 @@ BEGIN
       'collect', COALESCE(v_collect_diagnostics_json, '{}'::jsonb),
       'canonical', COALESCE(v_canonical_diagnostics_json, '{}'::jsonb),
       'source_table', 'public.banking_pay_workbench_candidate_source_lines',
+      'session_lock_scope', 'FINAL_REVALIDATION_ONLY',
+      'candidate_lock_scope', 'SESSION_SCOPE_ROW_FOR_UPDATE',
       'source_row_identity', jsonb_build_object(
         'session_id', p_session_id::text,
         'candidate_id', p_candidate_id::text,
@@ -181341,7 +181413,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public._pay_batch_status_display_label(
   p_status text,
