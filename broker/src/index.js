@@ -48926,10 +48926,6 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 // Replacement function: handleContractWeekManualUpsert (patched source lines 39943-44494)
 
 
-
-
-
-
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
  
@@ -49048,6 +49044,76 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      } catch {}
    };
  
+   const manualUpsertSignatureDiagText = (v) => {
+     const s = String(v == null ? '' : v).trim();
+     return s || null;
+   };
+   const manualUpsertSignatureDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+   const manualUpsertSignatureDiagSignature = (obj) => {
+     if (!obj || typeof obj !== 'object') {
+       const s = manualUpsertSignatureDiagText(obj);
+       return {
+         present: !!s,
+         backend_row_signature: null,
+         row_signature: null,
+         expected_row_signature: null,
+         current_row_signature: null,
+         signature: s
+       };
+     }
+     const backend = manualUpsertSignatureDiagText(obj.backend_row_signature);
+     const row = manualUpsertSignatureDiagText(obj.row_signature);
+     const expected = manualUpsertSignatureDiagText(obj.expected_row_signature);
+     const current = manualUpsertSignatureDiagText(obj.current_row_signature);
+     const generic = manualUpsertSignatureDiagText(obj.signature || obj.render_signature);
+     return {
+       present: !!(backend || row || expected || current || generic),
+       backend_row_signature: backend,
+       row_signature: row,
+       expected_row_signature: expected,
+       current_row_signature: current,
+       signature: backend || row || expected || current || generic || null
+     };
+   };
+   const manualUpsertSignatureDiagResponseContains = (payload) => ({
+     ok: Object.prototype.hasOwnProperty.call(payload || {}, 'ok'),
+     success: Object.prototype.hasOwnProperty.call(payload || {}, 'success'),
+     backend_row_signature: !!manualUpsertSignatureDiagText(payload?.backend_row_signature),
+     row_signature: !!manualUpsertSignatureDiagText(payload?.row_signature),
+     expected_row_signature: !!manualUpsertSignatureDiagText(payload?.expected_row_signature),
+     current_row_signature: !!manualUpsertSignatureDiagText(payload?.current_row_signature),
+     affected_rows: Array.isArray(payload?.affected_rows),
+     affected_rows_count: Array.isArray(payload?.affected_rows) ? payload.affected_rows.length : null,
+     cache_invalidation_hints: !!(payload?.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object'),
+     count_deltas: !!(payload?.count_deltas && typeof payload.count_deltas === 'object'),
+     evidence_summary: !!(payload?.evidence_summary && typeof payload.evidence_summary === 'object'),
+     refresh_required: payload?.refresh_required === true,
+     requires_affected_row_refresh: payload?.requires_affected_row_refresh === true
+   });
+   const manualUpsertSignatureLog = (step, extra = {}) => {
+     try {
+       let routePath = null;
+       try { routePath = new URL(req?.url || '').pathname; } catch {}
+       console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+         tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+         handler: 'handleContractWeekManualUpsert',
+         route_family: 'WEEKLY_MANUAL_UPSERT',
+         step,
+         route_path: routePath,
+         week_id: String(weekId || ''),
+         contract_week_id: manualUpsertTimingContractWeekId,
+         timesheet_id: manualUpsertTimingTimesheetId,
+         expected_row_signature_present: !!expectedRowSignature,
+         expected_row_signature: expectedRowSignature || null,
+         response_context: bulkResponseContext,
+         bulk_process_response_requested: bulkProcessResponseRequested,
+         bulk_authorise_response_requested: bulkAuthoriseResponseRequested,
+         server_utc: new Date().toISOString(),
+         ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+       }));
+     } catch {}
+   };
+ 
    wlog('request_parsed', {
      actor_user_id: user?.id || null,
      body_keys: (body && typeof body === 'object') ? Object.keys(body) : [],
@@ -49056,6 +49122,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      bulk_patch_response_requested: bulkPatchResponseRequested,
      bulk_response_context: bulkResponseContext,
      expected_row_signature_present: !!expectedRowSignature
+   });
+
+   manualUpsertSignatureLog('received', {
+     body_keys: manualUpsertSignatureDiagKeys(body),
+     expected_timesheet_id: body?.expected_timesheet_id ? String(body.expected_timesheet_id) : null,
+     qr_action: String(body?.qr_action || body?.qrAction || '').trim().toUpperCase() || null,
+     bulk_patch_response_requested: bulkPatchResponseRequested,
+     bulk_response_context: bulkResponseContext
    });
  
    // ✅ Guarded write (only enforced when a current timesheet already exists for this week)
@@ -49135,6 +49209,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      wlog('resolved_existing_week_timesheet', {
        requested_timesheet_id: currentTimesheetIdForWeek,
        resolved: resTs
+     });
+
+     manualUpsertSignatureLog('resolved_existing_week_timesheet', {
+       requested_timesheet_id: currentTimesheetIdForWeek,
+       current_timesheet_id: resolvedCurrentTimesheetId || null,
+       current_version: resTs?.current_version ?? null,
+       booking_id: resTs?.booking_id || null,
+       was_stale: !!resTs?.was_stale
      });
  
      if (String(resTs.current_timesheet_id) !== String(currentTimesheetIdForWeek)) {
@@ -51762,6 +51844,21 @@ const expenseEvidenceKindCategories = {
          p_expected_row_signature: expectedRowSignature || null
        };
  
+   manualUpsertSignatureLog('before_write', {
+     rpc_function_name: rpcFunctionName,
+     contract_week_id: cw?.id || weekId || null,
+     existing_current_timesheet_id: currentTimesheetIdForWeek || null,
+     target_timesheet_id_for_write: targetTimesheetIdForWrite || null,
+     target_timesheet_version_for_write: targetTimesheetVersionForWrite ?? null,
+     will_create_now: !!willCreateNow,
+     will_rotate_now: !!willRotateNow,
+     qr_action: qrAction || null,
+     expected_row_signature: expectedRowSignature || null,
+     actual_schedule_segment_count: Array.isArray(actual_schedule_json) ? actual_schedule_json.length : null,
+     bulk_patch_response_requested: bulkPatchResponseRequested,
+     response_context: bulkResponseContext
+   });
+
    let rpcRes;
    try {
      wlog('sql_rpc_started', {
@@ -51772,6 +51869,12 @@ const expenseEvidenceKindCategories = {
      });
      rpcRes = await sbRpc(env, rpcFunctionName, rpcArgs);
      wlog('sql_rpc_completed', {
+       rpc_function_name: rpcFunctionName,
+       contract_week_id: cw.id || null,
+       timesheet_id: targetTimesheetIdForWrite || currentTimesheetIdForWeek || null,
+       response_context: bulkResponseContext
+     });
+     manualUpsertSignatureLog('sql_rpc_completed', {
        rpc_function_name: rpcFunctionName,
        contract_week_id: cw.id || null,
        timesheet_id: targetTimesheetIdForWrite || currentTimesheetIdForWeek || null,
@@ -51810,6 +51913,14 @@ const expenseEvidenceKindCategories = {
      }
  
      if (rpcErr.message === 'ROW_SIGNATURE_MISMATCH') {
+       manualUpsertSignatureLog('row_signature_mismatch', {
+         source: 'rpc_exception',
+         rpc_function_name: rpcFunctionName,
+         expected_row_signature: expectedRowSignature || detailObj?.expected_row_signature || null,
+         current_row_signature: detailObj?.current_row_signature || null,
+         current_timesheet_id: detailObj?.current_timesheet_id || currentTimesheetIdForWeek || null,
+         contract_week_id: cw.id || weekId || null
+       });
        return withCORS(
          env,
          req,
@@ -52001,6 +52112,14 @@ const expenseEvidenceKindCategories = {
          return withCORS(env, req, new Response(JSON.stringify({ ...conflictPayload, error: 'TIMESHEET_MOVED', error_code: 'TIMESHEET_MOVED' }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
        }
        if (message === 'ROW_SIGNATURE_MISMATCH' || errorCode === 'ROW_SIGNATURE_MISMATCH') {
+         manualUpsertSignatureLog('row_signature_mismatch', {
+           source: 'bulk_payload',
+           rpc_function_name: rpcFunctionName,
+           expected_row_signature: bulkPayload.expected_row_signature || expectedRowSignature || detailJson?.expected_row_signature || null,
+           current_row_signature: bulkPayload.current_row_signature || detailJson?.current_row_signature || null,
+           current_timesheet_id: bulkPayload.current_timesheet_id || currentTimesheetIdForWeek || null,
+           contract_week_id: bulkPayload.contract_week_id || cw.id || weekId || null
+         });
          return withCORS(env, req, new Response(JSON.stringify({
            ...conflictPayload,
            error: 'ROW_SIGNATURE_MISMATCH',
@@ -52130,6 +52249,21 @@ const expenseEvidenceKindCategories = {
        used_schedule: true
      };
 
+     manualUpsertSignatureLog('response_shape', {
+       response_variant: bulkAuthoriseResponseRequested ? 'bulk_authorise' : 'bulk_process',
+       status: 200,
+       rpc_function_name: rpcFunctionName,
+       contract_week_id: responsePayload.contract_week_id || null,
+       current_timesheet_id: finalCurrentTimesheetId,
+       backend_row_signature: finalBackendRowSignature,
+       row_signature: finalBackendRowSignature,
+       processing_status: responsePayload.processing_status || null,
+       created_now: responsePayload.created_now,
+       current_version: responsePayload.current_version ?? null,
+       response_signature: manualUpsertSignatureDiagSignature(responsePayload),
+       response_contains: manualUpsertSignatureDiagResponseContains(responsePayload)
+     });
+
      wlog(bulkAuthoriseResponseRequested ? 'finish_bulk_authorise_minimal' : 'finish_bulk_process_minimal', {
        final_timesheet_id: finalCurrentTimesheetId,
        final_version: responsePayload.current_version,
@@ -52158,6 +52292,14 @@ const expenseEvidenceKindCategories = {
      const errorCode = String(standardPayload.error_code || standardPayload.error || standardPayload.message || '').trim();
      const message = String(standardPayload.message || standardPayload.error || standardPayload.error_code || 'Contract week manual upsert failed').trim();
      if (message === 'ROW_SIGNATURE_MISMATCH' || errorCode === 'ROW_SIGNATURE_MISMATCH') {
+       manualUpsertSignatureLog('row_signature_mismatch', {
+         source: 'standard_payload',
+         rpc_function_name: rpcFunctionName,
+         expected_row_signature: expectedRowSignature || standardPayload.expected_row_signature || null,
+         current_row_signature: standardPayload.current_row_signature || null,
+         current_timesheet_id: standardPayload.current_timesheet_id || currentTimesheetIdForWeek || null,
+         contract_week_id: standardPayload.contract_week_id || cw.id || weekId || null
+       });
        return withCORS(env, req, new Response(JSON.stringify({
          error: 'ROW_SIGNATURE_MISMATCH',
          error_code: 'ROW_SIGNATURE_MISMATCH',
@@ -52240,6 +52382,21 @@ const expenseEvidenceKindCategories = {
      used_schedule: true
    };
 
+   manualUpsertSignatureLog('response_shape', {
+     response_variant: 'standard',
+     status: 200,
+     rpc_function_name: rpcFunctionName,
+     contract_week_id: responsePayload.contract_week_id || null,
+     current_timesheet_id: finalCurrentTimesheetId,
+     backend_row_signature: finalBackendRowSignature,
+     row_signature: finalBackendRowSignature,
+     processing_status: responsePayload.processing_status || null,
+     created_now: responsePayload.created_now,
+     current_version: responsePayload.current_version ?? null,
+     response_signature: manualUpsertSignatureDiagSignature(responsePayload),
+     response_contains: manualUpsertSignatureDiagResponseContains(responsePayload)
+   });
+
    wlog('finish_minimal', {
      final_timesheet_id: finalCurrentTimesheetId,
      final_version: responsePayload.current_version,
@@ -52252,6 +52409,8 @@ const expenseEvidenceKindCategories = {
 
    return withCORS(env, req, ok(responsePayload));
  }
+
+
 
 function formatCloudTmsLondonDate(value) {
   const fallback = 'Not recorded';
@@ -62209,7 +62368,6 @@ async function handleTimesheetPdf(env, req, timesheetId) {
 // BE FIX: expected guard + resolve CW-linked timesheet to CURRENT before mutating TS/TSFIN; strict 409 payload
 
 
-
 async function handleTimesheetUpdateReference(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -62220,11 +62378,116 @@ async function handleTimesheetUpdateReference(env, req, timesheetId) {
   try { body = await parseJSONBody(req); }
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
+  const referenceSaveDiagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const referenceSaveDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+  const referenceSaveDiagSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = referenceSaveDiagText(obj);
+      return {
+        present: !!s,
+        backend_row_signature: null,
+        mutation_row_signature: null,
+        row_signature: null,
+        expected_row_signature: null,
+        current_row_signature: null,
+        signature: s
+      };
+    }
+    const backend = referenceSaveDiagText(obj.backend_row_signature);
+    const mutation = referenceSaveDiagText(obj.mutation_row_signature);
+    const row = referenceSaveDiagText(obj.row_signature);
+    const expected = referenceSaveDiagText(obj.expected_row_signature);
+    const current = referenceSaveDiagText(obj.current_row_signature);
+    const generic = referenceSaveDiagText(obj.signature || obj.render_signature);
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const referenceSaveDiagResponseContains = (payload) => ({
+    backend_row_signature: !!referenceSaveDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!referenceSaveDiagText(payload?.mutation_row_signature),
+    row_signature: !!referenceSaveDiagText(payload?.row_signature),
+    expected_row_signature: !!referenceSaveDiagText(payload?.expected_row_signature),
+    current_row_signature: !!referenceSaveDiagText(payload?.current_row_signature),
+    timesheet: !!(payload && typeof payload === 'object' && payload.timesheet && typeof payload.timesheet === 'object'),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    refresh_required: payload?.refresh_required === true,
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true,
+    reference_number_present: referenceSaveDiagText(payload?.reference_number) ? true : false
+  });
+  const referenceSaveDiagLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req?.url || '').pathname; } catch {}
+      console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTimesheetUpdateReference',
+        route_family: 'REFERENCE',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: timesheetId || null,
+        expected_timesheet_id: body?.expected_timesheet_id || null,
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+  const fetchReferenceSaveLifecycleSignatureDiag = async (pTimesheetId, pContractWeekId = null) => {
+    if (!pTimesheetId) return { ok: false, skipped: true, reason: 'NO_TIMESHEET_ID' };
+    try {
+      const payload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+        p_timesheet_id: pTimesheetId,
+        p_contract_week_id: pContractWeekId || null,
+        p_include_payload: false
+      }, { timeoutMs: 8000 });
+      const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
+      const signature = referenceSaveDiagSignature(obj);
+      return {
+        ok: signature.present,
+        source: 'timesheet_lifecycle_signature_v1',
+        signature,
+        payload_field_names: referenceSaveDiagKeys(obj)
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        source: 'timesheet_lifecycle_signature_v1',
+        error: String(err?.message || err || '').slice(0, 300)
+      };
+    }
+  };
+
   const expectedTimesheetId = body?.expected_timesheet_id || null;
+  referenceSaveDiagLog('received', {
+    body_keys: referenceSaveDiagKeys(body),
+    reference_number_present: referenceSaveDiagText(body?.reference_number) ? true : false
+  });
+
   const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
-  if (!guard.ok) return guard.res;
+  if (!guard.ok) {
+    referenceSaveDiagLog('guard_failed', {
+      status: guard?.res?.status || null
+    });
+    return guard.res;
+  }
 
   const currentTimesheetId = guard.resolved.current_timesheet_id;
+  referenceSaveDiagLog('resolved_current', {
+    current_timesheet_id: currentTimesheetId || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    booking_id: guard.resolved.booking_id || null,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  });
 
   const currentTs = await sbGetOne(
     env,
@@ -62238,11 +62501,20 @@ async function handleTimesheetUpdateReference(env, req, timesheetId) {
   const nextReferenceNumberRaw = String(body?.reference_number ?? '').trim();
   const nextReferenceNumber = nextReferenceNumberRaw || null;
   const currentReferenceNumber = String(currentTs.reference_number ?? '').trim() || null;
+  const beforeSignatureDiag = await fetchReferenceSaveLifecycleSignatureDiag(currentTimesheetId, null);
   const now = nowIso();
 
   const nextReferenceSetAt = nextReferenceNumber
     ? ((nextReferenceNumber !== currentReferenceNumber) ? now : (currentTs.reference_set_at || now))
     : null;
+
+  referenceSaveDiagLog('before_write', {
+    current_timesheet_id: currentTimesheetId || null,
+    before_reference_number_present: currentReferenceNumber ? true : false,
+    next_reference_number_present: nextReferenceNumber ? true : false,
+    reference_will_change: nextReferenceNumber !== currentReferenceNumber,
+    before_signature: beforeSignatureDiag
+  });
 
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
@@ -62257,17 +62529,38 @@ async function handleTimesheetUpdateReference(env, req, timesheetId) {
     }
   );
 
-  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  if (!res.ok) {
+    const errText = await res.text();
+    referenceSaveDiagLog('write_failed', {
+      status: res.status || null,
+      current_timesheet_id: currentTimesheetId || null,
+      error_text: String(errText || '').slice(0, 500)
+    });
+    return withCORS(env, req, serverError(errText));
+  }
   const row = (await res.json().catch(() => []))[0];
+  const afterSignatureDiag = await fetchReferenceSaveLifecycleSignatureDiag(currentTimesheetId, null);
 
-  return withCORS(env, req, ok({
+  const responsePayload = {
     ...row,
     booking_id: guard.resolved.booking_id || null,
     requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
     current_timesheet_id: currentTimesheetId,
     current_version: guard.resolved.current_version ?? null,
     was_stale: !!guard.resolved.was_stale
-  }));
+  };
+
+  referenceSaveDiagLog('response_shape', {
+    status: 200,
+    current_timesheet_id: currentTimesheetId || null,
+    before_signature: beforeSignatureDiag,
+    after_signature: afterSignatureDiag,
+    response_signature: referenceSaveDiagSignature(responsePayload),
+    response_contains: referenceSaveDiagResponseContains(responsePayload),
+    reference_number_present: referenceSaveDiagText(row?.reference_number) ? true : false
+  });
+
+  return withCORS(env, req, ok(responsePayload));
 }
 
 async function handleContractWeekManualDraftDetails(env, req, weekId) {
@@ -65155,6 +65448,9 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user, ctx = null) 
   }
 }
 
+
+
+
 async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -65228,6 +65524,89 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       context: 'timesheet_modal'
     }];
   };
+  const lifecycleSignatureDiagText = (value) => {
+    const text = String(value == null ? '' : value).trim();
+    return text || null;
+  };
+  const lifecycleSignatureDiagObjectKeys = (obj) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return [];
+    return Object.keys(obj).sort();
+  };
+  const lifecycleSignatureDiagSignature = (obj) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      const signatureText = lifecycleSignatureDiagText(obj);
+      return {
+        present: !!signatureText,
+        backend_row_signature: null,
+        mutation_row_signature: null,
+        row_signature: null,
+        expected_row_signature: null,
+        current_row_signature: null,
+        signature: signatureText
+      };
+    }
+
+    const backend = lifecycleSignatureDiagText(obj.backend_row_signature || obj.backendRowSignature);
+    const mutation = lifecycleSignatureDiagText(obj.mutation_row_signature || obj.mutationRowSignature);
+    const row = lifecycleSignatureDiagText(obj.row_signature || obj.rowSignature);
+    const expected = lifecycleSignatureDiagText(obj.expected_row_signature || obj.expectedRowSignature);
+    const current = lifecycleSignatureDiagText(obj.current_row_signature || obj.currentRowSignature);
+    const generic = lifecycleSignatureDiagText(obj.signature || obj.render_signature || obj.renderSignature);
+
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const lifecycleSignatureDiagResponseContains = (payload) => ({
+    ok: Object.prototype.hasOwnProperty.call(payload || {}, 'ok'),
+    success: Object.prototype.hasOwnProperty.call(payload || {}, 'success'),
+    authorised: Object.prototype.hasOwnProperty.call(payload || {}, 'authorised'),
+    unauthorised: Object.prototype.hasOwnProperty.call(payload || {}, 'unauthorised'),
+    backend_row_signature: !!lifecycleSignatureDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!lifecycleSignatureDiagText(payload?.mutation_row_signature),
+    row_signature: !!lifecycleSignatureDiagText(payload?.row_signature),
+    expected_row_signature: !!lifecycleSignatureDiagText(payload?.expected_row_signature),
+    current_row_signature: !!lifecycleSignatureDiagText(payload?.current_row_signature),
+    decision: !!(payload?.decision && typeof payload.decision === 'object'),
+    lifecycle_patch: !!(payload?.lifecycle_patch && typeof payload.lifecycle_patch === 'object'),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    affected_rows_count: Array.isArray(payload?.affected_rows) ? payload.affected_rows.length : null,
+    refresh_hints: !!(payload?.refresh_hints && typeof payload.refresh_hints === 'object'),
+    cache_invalidation_hints: !!(payload?.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object'),
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true,
+    requires_full_details_refresh: payload?.requires_full_details_refresh === true,
+    refresh_required: payload?.refresh_required === true,
+    permission_state_patch_complete: payload?.permission_state_patch_complete === true,
+    priority_badges_patch_complete: payload?.priority_badges_patch_complete === true,
+    immediate_lifecycle_patch_available: payload?.immediate_lifecycle_patch_available === true
+  });
+  const lifecycleSignatureLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try {
+        routePath = new URL(req?.url || '').pathname;
+      } catch {}
+      console.log('[TIMESHEET_LIFECYCLE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_LIFECYCLE_SIGNATURE_DIAG',
+        handler: 'handleTimesheetUnauthorise',
+        route_family: 'TIMESHEET_UNAUTHORISE',
+        lifecycle_action: 'UNAUTHORISE',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: trimStr(timesheetId) || null,
+        actor_user_id: user?.id || null,
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+
   const mutationErrorResponse = (rawCode, detailObj, options = {}) => {
     const code = firstString(rawCode, detailObj?.error_code, detailObj?.error, 'UNAUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
@@ -65274,6 +65653,14 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       });
     }
     if (code === 'ROW_SIGNATURE_MISMATCH') {
+      lifecycleSignatureLog('row_signature_mismatch', {
+        source: 'mutation_error_response',
+        raw_code: code,
+        expected_row_signature: firstString(detailObj?.expected_row_signature, options.expectedRowSignature) || null,
+        current_row_signature: firstString(detailObj?.current_row_signature) || null,
+        current_timesheet_id: currentTimesheetId || null,
+        contract_week_id: firstString(detailObj?.contract_week_id) || null
+      });
       return withJson(409, {
         error: 'ROW_SIGNATURE_MISMATCH',
         error_code: 'ROW_SIGNATURE_MISMATCH',
@@ -65331,13 +65718,56 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     body.rowSignature
   );
 
+  lifecycleSignatureLog('request_received', {
+    expected_timesheet_id: expectedTimesheetId || null,
+    expected_row_signature_present: !!expectedRowSignature,
+    request_signature: lifecycleSignatureDiagSignature({
+      expected_row_signature: firstString(body.expected_row_signature, body.expectedRowSignature) || null,
+      backend_row_signature: firstString(body.backend_row_signature, body.backendRowSignature) || null,
+      mutation_row_signature: firstString(body.mutation_row_signature, body.mutationRowSignature) || null,
+      row_signature: firstString(body.row_signature, body.rowSignature) || null
+    }),
+    request_signature_fields: {
+      expected_row_signature: Object.prototype.hasOwnProperty.call(body, 'expected_row_signature'),
+      expectedRowSignature: Object.prototype.hasOwnProperty.call(body, 'expectedRowSignature'),
+      backend_row_signature: Object.prototype.hasOwnProperty.call(body, 'backend_row_signature'),
+      backendRowSignature: Object.prototype.hasOwnProperty.call(body, 'backendRowSignature'),
+      mutation_row_signature: Object.prototype.hasOwnProperty.call(body, 'mutation_row_signature'),
+      mutationRowSignature: Object.prototype.hasOwnProperty.call(body, 'mutationRowSignature'),
+      row_signature: Object.prototype.hasOwnProperty.call(body, 'row_signature'),
+      rowSignature: Object.prototype.hasOwnProperty.call(body, 'rowSignature')
+    }
+  });
+
   const guard = await guardCurrentTimesheetWrite(env, req, requestedTimesheetId, expectedTimesheetId);
-  if (!guard.ok) return guard.res;
+  if (!guard.ok) {
+    lifecycleSignatureLog('guard_failed', {
+      expected_timesheet_id: expectedTimesheetId || null,
+      expected_row_signature: expectedRowSignature || null
+    });
+    return guard.res;
+  }
 
   const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+  lifecycleSignatureLog('guard_resolved', {
+    requested_timesheet_id: requestedTimesheetId || null,
+    expected_timesheet_id: expectedTimesheetId || null,
+    current_timesheet_id: currentTimesheetId || null,
+    current_version: guard.resolved?.current_version ?? null,
+    booking_id: guard.resolved?.booking_id || null,
+    was_stale: !!guard.resolved?.was_stale,
+    expected_row_signature: expectedRowSignature || null
+  });
   const now = nowIso();
   let rpcPayload = null;
   try {
+    lifecycleSignatureLog('before_rpc', {
+      rpc_function_name: 'timesheet_unauthorise_atomic',
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null,
+      expected_row_signature: expectedRowSignature || null
+    });
     const rpcRes = await sbRpc(env, 'timesheet_unauthorise_atomic', {
       p_timesheet_id: requestedTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
@@ -65346,9 +65776,27 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       p_expected_row_signature: expectedRowSignature || null
     }, { timeoutMs: 12000 });
     rpcPayload = unwrapRpcPayload(rpcRes, 'timesheet_unauthorise_atomic');
+    lifecycleSignatureLog('rpc_completed', {
+      rpc_function_name: 'timesheet_unauthorise_atomic',
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null,
+      payload_signature: lifecycleSignatureDiagSignature(rpcPayload),
+      payload_keys: lifecycleSignatureDiagObjectKeys(rpcPayload)
+    });
   } catch (err) {
     const rpcErr = parseRpcFailure(err);
     const detailObj = rpcErr.detailJson || parseMaybeJsonObj(rpcErr.details) || {};
+    lifecycleSignatureLog('rpc_failed', {
+      rpc_function_name: 'timesheet_unauthorise_atomic',
+      status: rpcErr.status || null,
+      message: rpcErr.message || null,
+      code: rpcErr.code || null,
+      expected_row_signature: expectedRowSignature || detailObj?.expected_row_signature || null,
+      current_row_signature: detailObj?.current_row_signature || null,
+      current_timesheet_id: detailObj?.current_timesheet_id || currentTimesheetId || null,
+      contract_week_id: detailObj?.contract_week_id || null
+    });
     return mutationErrorResponse(rpcErr.message || rpcErr.code, detailObj, {
       currentTimesheetId,
       expectedTimesheetId,
@@ -65357,8 +65805,26 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     });
   }
 
-  if (!rpcPayload) return withCORS(env, req, serverError('timesheet_unauthorise_atomic returned no payload'));
+  if (!rpcPayload) {
+    lifecycleSignatureLog('rpc_payload_missing', {
+      rpc_function_name: 'timesheet_unauthorise_atomic',
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null,
+      expected_row_signature: expectedRowSignature || null
+    });
+    return withCORS(env, req, serverError('timesheet_unauthorise_atomic returned no payload'));
+  }
   if (rpcPayload.ok === false || rpcPayload.success === false) {
+    lifecycleSignatureLog('rpc_payload_not_ok', {
+      rpc_function_name: 'timesheet_unauthorise_atomic',
+      current_timesheet_id: firstString(rpcPayload.current_timesheet_id, rpcPayload.timesheet_id, currentTimesheetId) || null,
+      expected_row_signature: expectedRowSignature || rpcPayload.expected_row_signature || null,
+      current_row_signature: rpcPayload.current_row_signature || null,
+      error_code: firstString(rpcPayload.error_code, rpcPayload.error, rpcPayload.message) || null,
+      payload_signature: lifecycleSignatureDiagSignature(rpcPayload),
+      payload_keys: lifecycleSignatureDiagObjectKeys(rpcPayload)
+    });
     return mutationErrorResponse(firstString(rpcPayload.error_code, rpcPayload.error, rpcPayload.message), rpcPayload, {
       currentTimesheetId,
       expectedTimesheetId,
@@ -65421,6 +65887,48 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     }
   });
 
+  lifecycleSignatureLog('response_shape', {
+    status: 200,
+    rpc_function_name: 'timesheet_unauthorise_atomic',
+    requested_timesheet_id: requestedTimesheetId || null,
+    expected_timesheet_id: expectedTimesheetId || null,
+    current_timesheet_id: finalTimesheetId || null,
+    contract_week_id: rpcPayload.contract_week_id || null,
+    booking_id: rpcPayload.booking_id || guard.resolved?.booking_id || null,
+    current_version: rpcPayload.current_version ?? guard.resolved?.current_version ?? null,
+    was_stale: rpcPayload.was_stale != null ? !!rpcPayload.was_stale : !!guard.resolved?.was_stale,
+    processing_status_before: previousStatus || null,
+    processing_status_after: newStatus || null,
+    expected_row_signature: expectedRowSignature || null,
+    backend_row_signature: backendRowSignature || null,
+    response_signature: lifecycleSignatureDiagSignature({
+      backend_row_signature: backendRowSignature || null,
+      mutation_row_signature: backendRowSignature || null,
+      row_signature: backendRowSignature || null,
+      expected_row_signature: backendRowSignature || null
+    }),
+    response_contains: lifecycleSignatureDiagResponseContains({
+      ok: true,
+      success: true,
+      unauthorised: true,
+      authorised: false,
+      backend_row_signature: backendRowSignature || null,
+      mutation_row_signature: backendRowSignature || null,
+      row_signature: backendRowSignature || null,
+      expected_row_signature: backendRowSignature || null,
+      lifecycle_patch: lifecyclePatchBundle.lifecycle_patch,
+      affected_rows: lifecyclePatchBundle.affected_rows,
+      refresh_hints: lifecyclePatchBundle.refresh_hints,
+      permission_state_patch_complete: lifecyclePatchBundle.permission_state_patch_complete,
+      priority_badges_patch_complete: lifecyclePatchBundle.priority_badges_patch_complete,
+      immediate_lifecycle_patch_available: lifecyclePatchBundle.immediate_lifecycle_patch_available,
+      requires_affected_row_refresh: lifecyclePatchBundle.requires_affected_row_refresh,
+      requires_full_details_refresh: lifecyclePatchBundle.requires_full_details_refresh,
+      refresh_required: lifecyclePatchBundle.refresh_required,
+      cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
+    })
+  });
+
   return withCORS(env, req, ok({
     ok: true,
     success: true,
@@ -65455,7 +65963,6 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
-
 
 
 
@@ -65934,6 +66441,8 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
   }
 }
 
+
+
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -66000,6 +66509,116 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     String(body?.operation || '').trim().toUpperCase() === 'PROCESS'
   );
 
+  let dailyManualSaveDiagCurrentTimesheetId = null;
+  const dailyManualSaveDiagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const dailyManualSaveDiagNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const dailyManualSaveDiagRound2 = (v) => Math.round(dailyManualSaveDiagNum(v) * 100) / 100;
+  const dailyManualSaveDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+  const dailyManualSaveDiagTimesheet = (row) => {
+    if (!row || typeof row !== 'object') return null;
+    return {
+      timesheet_id: row.timesheet_id || null,
+      booking_id: row.booking_id || null,
+      version: row.version ?? null,
+      is_current: row.is_current === true,
+      status: row.status || null,
+      sheet_scope: row.sheet_scope || null,
+      submission_mode: row.submission_mode || null,
+      authorised: row.authorised_at_server != null && String(row.authorised_at_server).trim() !== '',
+      authorised_at_server: row.authorised_at_server || null,
+      revoked_at: row.revoked_at || null,
+      qr_status: row.qr_status || null,
+      worked_start_iso: row.worked_start_iso || null,
+      worked_end_iso: row.worked_end_iso || null,
+      break_start_iso: row.break_start_iso || null,
+      break_end_iso: row.break_end_iso || null,
+      break_minutes: row.break_minutes ?? null,
+      worked_minutes: row.worked_minutes ?? null,
+      reference_number_present: dailyManualSaveDiagText(row.reference_number) ? true : false,
+      updated_at: row.updated_at || null
+    };
+  };
+  const dailyManualSaveDiagTsfin = (row) => {
+    if (!row || typeof row !== 'object') return null;
+    return {
+      tsfin_id: row.id || null,
+      timesheet_id: row.timesheet_id || null,
+      is_current: row.is_current === true,
+      processing_status: row.processing_status || null,
+      updated_at: row.updated_at || null,
+      total_hours: dailyManualSaveDiagRound2(row.total_hours),
+      hours_day: dailyManualSaveDiagRound2(row.hours_day),
+      hours_night: dailyManualSaveDiagRound2(row.hours_night),
+      hours_sat: dailyManualSaveDiagRound2(row.hours_sat),
+      hours_sun: dailyManualSaveDiagRound2(row.hours_sun),
+      hours_bh: dailyManualSaveDiagRound2(row.hours_bh),
+      total_pay_ex_vat: dailyManualSaveDiagRound2(row.total_pay_ex_vat),
+      total_charge_ex_vat: dailyManualSaveDiagRound2(row.total_charge_ex_vat),
+      margin_ex_vat: dailyManualSaveDiagRound2(row.margin_ex_vat),
+      expenses_pay_ex_vat: dailyManualSaveDiagRound2(row.expenses_pay_ex_vat),
+      expenses_charge_ex_vat: dailyManualSaveDiagRound2(row.expenses_charge_ex_vat),
+      mileage_units: dailyManualSaveDiagRound2(row.mileage_units),
+      mileage_pay_ex_vat: dailyManualSaveDiagRound2(row.mileage_pay_ex_vat),
+      mileage_charge_ex_vat: dailyManualSaveDiagRound2(row.mileage_charge_ex_vat),
+      paid: !!row.paid_at_utc,
+      locked_by_invoice: !!row.locked_by_invoice_id
+    };
+  };
+  const dailyManualSaveDiagResponseContains = (payload) => ({
+    timesheet: !!(payload?.timesheet && typeof payload.timesheet === 'object'),
+    tsfin: !!(payload?.tsfin && typeof payload.tsfin === 'object'),
+    row_signature: !!dailyManualSaveDiagText(payload?.row_signature),
+    backend_row_signature: !!dailyManualSaveDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!dailyManualSaveDiagText(payload?.mutation_row_signature),
+    expected_row_signature: !!dailyManualSaveDiagText(payload?.expected_row_signature),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    affected_rows_count: Array.isArray(payload?.affected_rows) ? payload.affected_rows.length : null,
+    row_patch: !!(payload?.row_patch && typeof payload.row_patch === 'object'),
+    row_patches: Array.isArray(payload?.row_patches),
+    data_row: !!(payload?.data_row && typeof payload.data_row === 'object'),
+    cache_invalidation_hints: !!(payload?.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object'),
+    refresh_required: payload?.refresh_required === true,
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true,
+    summary_row_hint: !!(payload?.summary_row_hint && typeof payload.summary_row_hint === 'object')
+  });
+  const dailyManualSaveSignatureLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req.url).pathname; } catch {}
+      console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTimesheetDailyManualUpsert',
+        route_family: 'DAILY_MANUAL_UPSERT',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: timesheetId || null,
+        current_timesheet_id: dailyManualSaveDiagCurrentTimesheetId || null,
+        expected_row_signature_present: !!expectedRowSignature,
+        expected_row_signature: expectedRowSignature || null,
+        response_context: bulkResponseContext,
+        bulk_process_response_requested: bulkProcessMode,
+        bulk_authorise_response_requested: bulkAuthoriseMode,
+        minimal_lifecycle_mutation: minimalLifecycleMutation,
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+
+  dailyManualSaveSignatureLog('received', {
+    body_keys: dailyManualSaveDiagKeys(body),
+    expected_timesheet_id: body?.expected_timesheet_id || null,
+    schedule_json_present: Object.prototype.hasOwnProperty.call(body || {}, 'schedule_json'),
+    reference_number_present: Object.prototype.hasOwnProperty.call(body || {}, 'reference_number'),
+    response_context: bulkResponseContext
+  });
+
   if (bulkProcessMode && processNowIntent) {
     return withCORS(
       env,
@@ -66022,6 +66641,14 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
   // From here on, always act on the CURRENT timesheet row.
   let currentTimesheetId = guard.resolved.current_timesheet_id;
+  dailyManualSaveDiagCurrentTimesheetId = currentTimesheetId || null;
+  dailyManualSaveSignatureLog('guard_resolved_current', {
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId || null,
+    current_timesheet_id: currentTimesheetId || null,
+    booking_id: guard.resolved.booking_id || null,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  });
 
   const has = (k) => Object.prototype.hasOwnProperty.call(body || {}, k);
 
@@ -66636,8 +67263,18 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   if (!tsfin) return withCORS(env, req, serverError('No TSFIN snapshot found'));
 
   if (tsfin.locked_by_invoice_id) {
+    dailyManualSaveSignatureLog('blocked_invoice_locked', {
+      status: 400,
+      timesheet: dailyManualSaveDiagTimesheet(ts),
+      tsfin: dailyManualSaveDiagTsfin(tsfin)
+    });
     return bad('Timesheet already invoiced; cannot edit');
   }
+
+  dailyManualSaveSignatureLog('before_write', {
+    timesheet: dailyManualSaveDiagTimesheet(ts),
+    tsfin: dailyManualSaveDiagTsfin(tsfin)
+  });
 
   const isDailyManualCurrentlyUnprocessed = (value) =>
     String(value || '').trim().toUpperCase() === 'UNPROCESSED';
@@ -66956,6 +67593,23 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     patchBody.reference_set_at = nextReferenceSetAt;
   }
 
+  dailyManualSaveSignatureLog('timesheet_patch_request', {
+    current_timesheet_id: currentTimesheetId || null,
+    changed_fields: Object.keys(patchBody || {}).sort(),
+    patch_contains: {
+      worked_start_iso: Object.prototype.hasOwnProperty.call(patchBody, 'worked_start_iso'),
+      worked_end_iso: Object.prototype.hasOwnProperty.call(patchBody, 'worked_end_iso'),
+      worked_minutes: Object.prototype.hasOwnProperty.call(patchBody, 'worked_minutes'),
+      break_start_iso: Object.prototype.hasOwnProperty.call(patchBody, 'break_start_iso'),
+      break_end_iso: Object.prototype.hasOwnProperty.call(patchBody, 'break_end_iso'),
+      break_minutes: Object.prototype.hasOwnProperty.call(patchBody, 'break_minutes'),
+      actual_schedule_json: Object.prototype.hasOwnProperty.call(patchBody, 'actual_schedule_json'),
+      reference_number: Object.prototype.hasOwnProperty.call(patchBody, 'reference_number')
+    },
+    rotated: rotated === true,
+    rotate_reason: rotateReason || null
+  });
+
   const patchRes = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
@@ -66982,6 +67636,12 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       `&is_current=eq.true` +
       `&select=*`
   );
+
+  dailyManualSaveSignatureLog('after_timesheet_patch', {
+    current_timesheet_id: currentTimesheetId || null,
+    timesheet_before: dailyManualSaveDiagTimesheet(tsBefore),
+    timesheet_after: dailyManualSaveDiagTimesheet(updatedTs)
+  });
 
    // 7) Rebuild DAILY snapshot (TSFIN) — SQL-first (band no-guess enforced)
   try {
@@ -67037,6 +67697,13 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       ).catch(() => finAfter);
     }
   }
+
+  dailyManualSaveSignatureLog('after_tsfin_rebuild', {
+    current_timesheet_id: currentTimesheetId || null,
+    tsfin_before: dailyManualSaveDiagTsfin(finBefore),
+    tsfin_after: dailyManualSaveDiagTsfin(finAfter),
+    was_unprocessed_before: wasUnprocessedBefore
+  });
 
   // ─────────────────────────────────────────────────────────────
   // MINIMAL TIMESHEET AUDIT: log HOURS_CHANGED only when meaningful
@@ -67261,6 +67928,12 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       `&select=*`
   ).catch(() => updatedTs || ts || null);
 
+  dailyManualSaveSignatureLog('final_loaded', {
+    current_timesheet_id: currentTimesheetId || null,
+    timesheet: dailyManualSaveDiagTimesheet(finalTs),
+    tsfin: dailyManualSaveDiagTsfin(finAfter)
+  });
+
   if (bulkPatchResponseRequested) {
     const manualChanged = !!(
       shouldPatchActualSchedule ||
@@ -67289,6 +67962,28 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     };
 
     if (minimalLifecycleMutation) {
+      dailyManualSaveSignatureLog('response_shape', {
+        response_variant: 'minimal_lifecycle_mutation',
+        status: 200,
+        current_timesheet_id: currentTimesheetId || null,
+        response_contains: {
+          timesheet: false,
+          tsfin: false,
+          row_signature: false,
+          backend_row_signature: false,
+          mutation_row_signature: false,
+          expected_row_signature: false,
+          affected_rows: true,
+          affected_rows_count: 1,
+          row_patch: false,
+          row_patches: false,
+          data_row: false,
+          cache_invalidation_hints: true,
+          refresh_required: true,
+          requires_affected_row_refresh: true,
+          summary_row_hint: true
+        }
+      });
       return withCORS(env, req, ok({
         ok: true,
         success: true,
@@ -67393,6 +68088,30 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       invalidate_evidence: false
     };
 
+    dailyManualSaveSignatureLog('response_shape', {
+      response_variant: 'bulk_patch',
+      status: 200,
+      current_timesheet_id: currentTimesheetId || null,
+      row_signature: rowSignature || null,
+      backend_row_signature: rowSignature || null,
+      timesheet: dailyManualSaveDiagTimesheet(finalTs),
+      tsfin: dailyManualSaveDiagTsfin(finAfter),
+      response_contains: dailyManualSaveDiagResponseContains({
+        timesheet: finalTs || null,
+        tsfin: finAfter || null,
+        row_patch: rowPatch,
+        row_patches: [rowPatch],
+        data_row: bulkRow,
+        row_signature: rowSignature,
+        backend_row_signature: rowSignature,
+        affected_rows: [{ row_key: rowKey }],
+        cache_invalidation_hints: cacheHints,
+        refresh_required: true,
+        requires_affected_row_refresh: true,
+        summary_row_hint: {}
+      })
+    });
+
     return withCORS(env, req, ok({
       timesheet_id: currentTimesheetId,
       booking_id: guard.resolved.booking_id || null,
@@ -67463,6 +68182,21 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     }));
   }
 
+
+  dailyManualSaveSignatureLog('response_shape', {
+    response_variant: 'standard',
+    status: 200,
+    current_timesheet_id: currentTimesheetId || null,
+    timesheet: dailyManualSaveDiagTimesheet(finalTs),
+    tsfin: dailyManualSaveDiagTsfin(finAfter),
+    response_contains: dailyManualSaveDiagResponseContains({
+      timesheet: finalTs || null,
+      tsfin: finAfter || null,
+      summary_row_hint: {},
+      refresh_required: false,
+      requires_affected_row_refresh: false
+    })
+  });
 
   return withCORS(env, req, ok({
     timesheet_id: currentTimesheetId,
@@ -69505,7 +70239,6 @@ function isImportAuthoritativeEvidenceContext(summary) {
   );
 }
 
-
 async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
@@ -69551,12 +70284,100 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
 
+
+  const handleTimesheetEvidenceReturnToQueueDiagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const handleTimesheetEvidenceReturnToQueueDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+  const handleTimesheetEvidenceReturnToQueueDiagSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = handleTimesheetEvidenceReturnToQueueDiagText(obj);
+      return { present: !!s, backend_row_signature: null, mutation_row_signature: null, row_signature: null, expected_row_signature: null, current_row_signature: null, signature: s };
+    }
+    const backend = handleTimesheetEvidenceReturnToQueueDiagText(obj.backend_row_signature);
+    const mutation = handleTimesheetEvidenceReturnToQueueDiagText(obj.mutation_row_signature);
+    const row = handleTimesheetEvidenceReturnToQueueDiagText(obj.row_signature);
+    const expected = handleTimesheetEvidenceReturnToQueueDiagText(obj.expected_row_signature);
+    const current = handleTimesheetEvidenceReturnToQueueDiagText(obj.current_row_signature);
+    const generic = handleTimesheetEvidenceReturnToQueueDiagText(obj.signature || obj.render_signature);
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const handleTimesheetEvidenceReturnToQueueDiagResponseContains = (payload) => ({
+    ok: Object.prototype.hasOwnProperty.call(payload || {}, 'ok'),
+    evidence: !!(payload?.evidence && typeof payload.evidence === 'object'),
+    queue_id: !!handleTimesheetEvidenceReturnToQueueDiagText(payload?.queue_id),
+    returned_to_queue: Object.prototype.hasOwnProperty.call(payload || {}, 'returned_to_queue'),
+    backend_row_signature: !!handleTimesheetEvidenceReturnToQueueDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!handleTimesheetEvidenceReturnToQueueDiagText(payload?.mutation_row_signature),
+    row_signature: !!handleTimesheetEvidenceReturnToQueueDiagText(payload?.row_signature),
+    expected_row_signature: !!handleTimesheetEvidenceReturnToQueueDiagText(payload?.expected_row_signature),
+    current_row_signature: !!handleTimesheetEvidenceReturnToQueueDiagText(payload?.current_row_signature),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    refresh_required: payload?.refresh_required === true,
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true
+  });
+  const handleTimesheetEvidenceReturnToQueueDiagLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req?.url || '').pathname; } catch {}
+      console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTimesheetEvidenceReturnToQueue',
+        route_family: 'EVIDENCE_RETURN_TO_QUEUE',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: tsId || null,
+        evidence_id: typeof evidenceId === 'undefined' ? null : (evidenceId || null),
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+  const fetchhandleTimesheetEvidenceReturnToQueueLifecycleSignatureDiag = async (pTimesheetId, pContractWeekId = null) => {
+    if (!pTimesheetId) return { ok: false, skipped: true, reason: 'NO_TIMESHEET_ID' };
+    try {
+      const payload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+        p_timesheet_id: pTimesheetId,
+        p_contract_week_id: pContractWeekId || null,
+        p_include_payload: false
+      }, { timeoutMs: 8000 });
+      const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
+      const signature = handleTimesheetEvidenceReturnToQueueDiagSignature(obj);
+      return { ok: signature.present, source: 'timesheet_lifecycle_signature_v1', signature, payload_field_names: handleTimesheetEvidenceReturnToQueueDiagKeys(obj) };
+    } catch (err) {
+      return { ok: false, source: 'timesheet_lifecycle_signature_v1', error: String(err?.message || err || '').slice(0, 300) };
+    }
+  };
+
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  handleTimesheetEvidenceReturnToQueueDiagLog('received', {
+    body_keys: handleTimesheetEvidenceReturnToQueueDiagKeys(body),
+    expected_timesheet_id: expected || null,
+    queue_id_present: handleTimesheetEvidenceReturnToQueueDiagText(body?.queue_id || body?.queueId || body?.expected_queue_id || body?.expectedQueueId) ? true : false,
+    expected_storage_key_present: handleTimesheetEvidenceReturnToQueueDiagText(body?.expected_storage_key || body?.expectedStorageKey || body?.storage_key || body?.storageKey) ? true : false
+  });
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
   const resolved = await resolveTimesheetToCurrent(env, tsId);
-  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  if (!resolved) {
+    handleTimesheetEvidenceReturnToQueueDiagLog('timesheet_not_found', { status: 404 });
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
   const currentTsId = resolved.current_timesheet_id;
+  handleTimesheetEvidenceReturnToQueueDiagLog('resolved_current', {
+    current_timesheet_id: currentTsId || null,
+    requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+    was_stale: !!resolved.was_stale
+  });
 
   if (String(expected) !== String(currentTsId)) {
     return withCORS(
@@ -69993,7 +70814,8 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
                 { entity: 'timesheets', subject_id: currentTsId, req }
               );
             } catch {}
-            return withCORS(env, req, ok({
+            const afterSignatureDiag = await fetchhandleTimesheetEvidenceReturnToQueueLifecycleSignatureDiag(currentTsId, null);
+            const responsePayload = {
               returned_to_queue: true,
               evidence_already_returned: true,
               idempotent_return_to_queue: true,
@@ -70007,7 +70829,18 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
               manual_pdf_clear_retry_count: clearResult.retry_count || 0,
               manual_pdf_clear_wait_ms: clearResult.wait_ms || 0,
               manual_pdf_clear_completed_after_retry: clearResult.completed_after_retry === true
-            }));
+            };
+            handleTimesheetEvidenceReturnToQueueDiagLog('response_shape', {
+              mode: 'idempotent_existing_returned_queue_row',
+              status: 200,
+              current_timesheet_id: currentTsId || null,
+              evidence_id: evidenceId || null,
+              queue_id: expectedQueueId || null,
+              after_signature: afterSignatureDiag,
+              response_signature: handleTimesheetEvidenceReturnToQueueDiagSignature(responsePayload),
+              response_contains: handleTimesheetEvidenceReturnToQueueDiagResponseContains(responsePayload)
+            });
+            return withCORS(env, req, ok(responsePayload));
           }
           return returnToQueueFinishFailedResponse();
         }
@@ -70052,6 +70885,17 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
         )
       );
     }
+
+    const beforeSignatureDiag = await fetchhandleTimesheetEvidenceReturnToQueueLifecycleSignatureDiag(currentTsId, null);
+    handleTimesheetEvidenceReturnToQueueDiagLog('before_write', {
+      current_timesheet_id: currentTsId || null,
+      evidence_id: evidenceId || null,
+      evidence_kind: ev?.kind || null,
+      storage_key_present: !!storageKey,
+      expected_queue_id_present: !!expectedQueueId,
+      expected_storage_key_present: !!expectedStorageKey,
+      before_signature: beforeSignatureDiag
+    });
 
     const storageBasename = storageKey.split('/').pop() || 'file';
     const displayName = trimStr(ev.display_name) || storageBasename;
@@ -70454,7 +71298,8 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
       );
     } catch {}
 
-    return withCORS(env, req, ok({
+    const afterSignatureDiag = await fetchhandleTimesheetEvidenceReturnToQueueLifecycleSignatureDiag(currentTsId, null);
+    const responsePayload = {
       returned_to_queue: true,
       requested_timesheet_id: resolved.requested_timesheet_id || tsId,
       current_timesheet_id: currentTsId,
@@ -70469,7 +71314,22 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
       manual_pdf_clear_retry_count: manualPdfClearStats.retry_count || 0,
       manual_pdf_clear_wait_ms: manualPdfClearStats.wait_ms || 0,
       manual_pdf_clear_completed_after_retry: manualPdfClearStats.completed_after_retry === true
-    }));
+    };
+    handleTimesheetEvidenceReturnToQueueDiagLog('response_shape', {
+      mode: returnedQueueMode || null,
+      status: 200,
+      current_timesheet_id: currentTsId || null,
+      evidence_id: evidenceId || null,
+      evidence_kind: evKind || null,
+      queue_id: queueRowId || null,
+      manual_pdf_clear_required: shouldClearManualPdf === true,
+      before_signature: beforeSignatureDiag,
+      after_signature: afterSignatureDiag,
+      response_signature: handleTimesheetEvidenceReturnToQueueDiagSignature(responsePayload),
+      response_contains: handleTimesheetEvidenceReturnToQueueDiagResponseContains(responsePayload)
+    });
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     if (isRetryableReturnToQueueDbIssue(e)) {
       return returnToQueueFinishFailedResponse();
@@ -70477,6 +71337,8 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     return withCORS(env, req, serverError(`Failed to return timesheet evidence to queue: ${e?.message || e}`));
   }
 }
+
+
 
 
 
@@ -92315,6 +93177,7 @@ async function handleRemittancesSend(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // 2) TIMESHEETS — PAY STATE
 // ───────────────────────────────────────────────────────────────────────────────
+
 async function handleTimesheetPayHold(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -92323,12 +93186,98 @@ async function handleTimesheetPayHold(env, req, timesheetId) {
   try { body = await parseJSONBody(req); }
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
+  const payHoldSaveDiagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const payHoldSaveDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+  const payHoldSaveDiagSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = payHoldSaveDiagText(obj);
+      return { present: !!s, backend_row_signature: null, mutation_row_signature: null, row_signature: null, expected_row_signature: null, current_row_signature: null, signature: s };
+    }
+    const backend = payHoldSaveDiagText(obj.backend_row_signature);
+    const mutation = payHoldSaveDiagText(obj.mutation_row_signature);
+    const row = payHoldSaveDiagText(obj.row_signature);
+    const expected = payHoldSaveDiagText(obj.expected_row_signature);
+    const current = payHoldSaveDiagText(obj.current_row_signature);
+    const generic = payHoldSaveDiagText(obj.signature || obj.render_signature);
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const payHoldSaveDiagResponseContains = (payload) => ({
+    updated: Object.prototype.hasOwnProperty.call(payload || {}, 'updated'),
+    row: !!(payload?.row && typeof payload.row === 'object'),
+    backend_row_signature: !!payHoldSaveDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!payHoldSaveDiagText(payload?.mutation_row_signature),
+    row_signature: !!payHoldSaveDiagText(payload?.row_signature),
+    expected_row_signature: !!payHoldSaveDiagText(payload?.expected_row_signature),
+    current_row_signature: !!payHoldSaveDiagText(payload?.current_row_signature),
+    refresh_required: payload?.refresh_required === true,
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true
+  });
+  const payHoldSaveDiagLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req?.url || '').pathname; } catch {}
+      console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTimesheetPayHold',
+        route_family: 'PAY_HOLD',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: timesheetId || null,
+        expected_timesheet_id: body?.expected_timesheet_id || null,
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+  const fetchPayHoldLifecycleSignatureDiag = async (pTimesheetId, pContractWeekId = null) => {
+    if (!pTimesheetId) return { ok: false, skipped: true, reason: 'NO_TIMESHEET_ID' };
+    try {
+      const payload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+        p_timesheet_id: pTimesheetId,
+        p_contract_week_id: pContractWeekId || null,
+        p_include_payload: false
+      }, { timeoutMs: 8000 });
+      const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
+      const signature = payHoldSaveDiagSignature(obj);
+      return { ok: signature.present, source: 'timesheet_lifecycle_signature_v1', signature, payload_field_names: payHoldSaveDiagKeys(obj) };
+    } catch (err) {
+      return { ok: false, source: 'timesheet_lifecycle_signature_v1', error: String(err?.message || err || '').slice(0, 300) };
+    }
+  };
+
   // NEW: guarded write (optimistic concurrency)
   const expectedTimesheetId = body?.expected_timesheet_id || null;
+  payHoldSaveDiagLog('received', {
+    body_keys: payHoldSaveDiagKeys(body),
+    on_hold_requested: body?.on_hold === true,
+    reason_present: payHoldSaveDiagText(body?.reason) ? true : false
+  });
+
   const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
-  if (!guard.ok) return guard.res;
+  if (!guard.ok) {
+    payHoldSaveDiagLog('guard_failed', { status: guard?.res?.status || null });
+    return guard.res;
+  }
 
   const currentTimesheetId = guard.resolved.current_timesheet_id;
+  payHoldSaveDiagLog('resolved_current', {
+    current_timesheet_id: currentTimesheetId || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    booking_id: guard.resolved.booking_id || null,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  });
 
   const onHold = body?.on_hold === true;
   const reason = (body?.reason || '').trim() || null;
@@ -92338,22 +93287,36 @@ async function handleTimesheetPayHold(env, req, timesheetId) {
     ? { pay_on_hold: true, pay_on_hold_reason: reason, pay_on_hold_since_utc: new Date().toISOString() }
     : { pay_on_hold: false, pay_on_hold_reason: null, pay_on_hold_since_utc: null };
 
+  const beforeSignatureDiag = await fetchPayHoldLifecycleSignatureDiag(currentTimesheetId, null);
+  payHoldSaveDiagLog('before_write', {
+    current_timesheet_id: currentTimesheetId || null,
+    on_hold_requested: onHold,
+    reason_present: reason ? true : false,
+    before_signature: beforeSignatureDiag
+  });
+
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=eq.${enc(currentTimesheetId)}`,
     { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
   );
   if (!res.ok) {
     const t = await res.text();
+    payHoldSaveDiagLog('write_failed', {
+      status: res.status || null,
+      current_timesheet_id: currentTimesheetId || null,
+      error_text: String(t || '').slice(0, 500)
+    });
     return withCORS(env, req, serverError(`Failed to update pay hold: ${t}`));
   }
   const json = await res.json().catch(() => []);
   const row = Array.isArray(json) ? json[0] : json;
+  const afterSignatureDiag = await fetchPayHoldLifecycleSignatureDiag(currentTimesheetId, null);
 
   await writeAudit(env, user, onHold ? 'PAY_HOLD_SET' : 'PAY_HOLD_CLEARED', {
     reason,
   }, { entity: 'timesheet', subject_id: currentTimesheetId, reason: 'PAYMENT', correlation_id: null, req });
 
-  return withCORS(env, req, ok({
+  const responsePayload = {
     updated: true,
     on_hold: onHold,
     row,
@@ -92363,9 +93326,27 @@ async function handleTimesheetPayHold(env, req, timesheetId) {
     current_timesheet_id: currentTimesheetId,
     current_version: guard.resolved.current_version ?? null,
     was_stale: !!guard.resolved.was_stale
-  }));
-}
+  };
 
+  payHoldSaveDiagLog('response_shape', {
+    status: 200,
+    current_timesheet_id: currentTimesheetId || null,
+    before_signature: beforeSignatureDiag,
+    after_signature: afterSignatureDiag,
+    row_summary: row && typeof row === 'object' ? {
+      id: row.id || null,
+      timesheet_id: row.timesheet_id || null,
+      pay_on_hold: row.pay_on_hold === true,
+      pay_on_hold_reason_present: payHoldSaveDiagText(row.pay_on_hold_reason) ? true : false,
+      pay_on_hold_since_utc: row.pay_on_hold_since_utc || null,
+      updated_at: row.updated_at || null
+    } : null,
+    response_signature: payHoldSaveDiagSignature(responsePayload),
+    response_contains: payHoldSaveDiagResponseContains(responsePayload)
+  });
+
+  return withCORS(env, req, ok(responsePayload));
+}
 
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -102740,6 +103721,7 @@ async function handleHrAutoprocessClients(env, req) {
   }
 }
 
+
 async function handleTsfinUpdateSegments(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -102747,11 +103729,97 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
 
   const body = await parseJSONBody(req).catch(() => null);
 
+  const segmentsSaveDiagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const segmentsSaveDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+  const segmentsSaveDiagSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = segmentsSaveDiagText(obj);
+      return { present: !!s, backend_row_signature: null, mutation_row_signature: null, row_signature: null, expected_row_signature: null, current_row_signature: null, signature: s };
+    }
+    const backend = segmentsSaveDiagText(obj.backend_row_signature);
+    const mutation = segmentsSaveDiagText(obj.mutation_row_signature);
+    const row = segmentsSaveDiagText(obj.row_signature);
+    const expected = segmentsSaveDiagText(obj.expected_row_signature);
+    const current = segmentsSaveDiagText(obj.current_row_signature);
+    const generic = segmentsSaveDiagText(obj.signature || obj.render_signature);
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const segmentsSaveDiagResponseContains = (payload) => ({
+    updated: Object.prototype.hasOwnProperty.call(payload || {}, 'updated'),
+    updated_row: !!(payload?.updated && typeof payload.updated === 'object'),
+    backend_row_signature: !!segmentsSaveDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!segmentsSaveDiagText(payload?.mutation_row_signature),
+    row_signature: !!segmentsSaveDiagText(payload?.row_signature),
+    expected_row_signature: !!segmentsSaveDiagText(payload?.expected_row_signature),
+    current_row_signature: !!segmentsSaveDiagText(payload?.current_row_signature),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    refresh_required: payload?.refresh_required === true,
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true
+  });
+  const segmentsSaveDiagLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req?.url || '').pathname; } catch {}
+      console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTsfinUpdateSegments',
+        route_family: 'TSFIN_SEGMENTS',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: timesheetId || null,
+        expected_timesheet_id: body?.expected_timesheet_id || null,
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+  const fetchSegmentsLifecycleSignatureDiag = async (pTimesheetId, pContractWeekId = null) => {
+    if (!pTimesheetId) return { ok: false, skipped: true, reason: 'NO_TIMESHEET_ID' };
+    try {
+      const payload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+        p_timesheet_id: pTimesheetId,
+        p_contract_week_id: pContractWeekId || null,
+        p_include_payload: false
+      }, { timeoutMs: 8000 });
+      const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
+      const signature = segmentsSaveDiagSignature(obj);
+      return { ok: signature.present, source: 'timesheet_lifecycle_signature_v1', signature, payload_field_names: segmentsSaveDiagKeys(obj) };
+    } catch (err) {
+      return { ok: false, source: 'timesheet_lifecycle_signature_v1', error: String(err?.message || err || '').slice(0, 300) };
+    }
+  };
+
   // NEW: guarded write (optimistic concurrency) — timesheet rotation safety
   const expectedTimesheetId = body?.expected_timesheet_id || null;
+  segmentsSaveDiagLog('received', {
+    body_keys: segmentsSaveDiagKeys(body),
+    segment_update_count: Array.isArray(body?.segments) ? body.segments.length : 0
+  });
+
   const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
-  if (!guard.ok) return guard.res;
+  if (!guard.ok) {
+    segmentsSaveDiagLog('guard_failed', { status: guard?.res?.status || null });
+    return guard.res;
+  }
   const currentTimesheetId = guard.resolved.current_timesheet_id;
+  segmentsSaveDiagLog('resolved_current', {
+    current_timesheet_id: currentTimesheetId || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    booking_id: guard.resolved.booking_id || null,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  });
 
   const segUpdates = Array.isArray(body?.segments) ? body.segments : [];
   if (!segUpdates.length) {
@@ -102760,6 +103828,8 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
 
   const enc = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  const beforeSignatureDiag = await fetchSegmentsLifecycleSignatureDiag(currentTimesheetId, null);
 
   const { rows: currentTsRows } = await sbFetch(
     env,
@@ -102878,8 +103948,23 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
   }
 
   if (!updateMap.size) {
+    segmentsSaveDiagLog('blocked_no_valid_segment_updates', {
+      status: 400,
+      current_timesheet_id: currentTimesheetId || null
+    });
     return withCORS(env, req, badRequest('No valid segment_id entries to update'));
   }
+
+  segmentsSaveDiagLog('before_write', {
+    current_timesheet_id: currentTimesheetId || null,
+    segment_update_count: updateMap.size,
+    current_snapshot_id: fin?.id || null,
+    current_basis: basis || null,
+    invoice_breakdown_mode: breakdown?.mode || null,
+    segment_count_before: Array.isArray(breakdown?.segments) ? breakdown.segments.length : null,
+    allow_invoice_target_change: allowInvoiceTargetChange,
+    before_signature: beforeSignatureDiag
+  });
 
   // Pre-validate invoice_target_week_start changes
   if (!allowInvoiceTargetChange) {
@@ -103023,7 +104108,13 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
 
     usedLockedRpc = true;
   } catch (e) {
-    if (!isMissingRpc(e)) throw e;
+    if (!isMissingRpc(e)) {
+      segmentsSaveDiagLog('locked_rpc_failed', {
+        current_timesheet_id: currentTimesheetId || null,
+        error_text: String(e?.message || e || '').slice(0, 500)
+      });
+      throw e;
+    }
     usedLockedRpc = false;
   }
 
@@ -103114,6 +104205,11 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
     );
     if (!res.ok) {
       const t = await res.text().catch(() => '');
+      segmentsSaveDiagLog('legacy_patch_failed', {
+        status: res.status || null,
+        current_timesheet_id: currentTimesheetId || null,
+        error_text: String(t || '').slice(0, 500)
+      });
       return withCORS(env, req, serverError(`Failed to update segments: ${t}`));
     }
     const updatedArr = await res.json().catch(() => []);
@@ -103131,7 +104227,9 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
     { entity: 'timesheet', subject_id: currentTimesheetId, reason: 'PAYMENT', req }
   );
 
-  return withCORS(env, req, ok({
+  const afterSignatureDiag = await fetchSegmentsLifecycleSignatureDiag(currentTimesheetId, null);
+
+  const responsePayload = {
     updated,
     // NEW: return resolution metadata so FE can adopt the current id if needed
     booking_id: guard.resolved.booking_id || null,
@@ -103139,8 +104237,31 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
     current_timesheet_id: currentTimesheetId,
     current_version: guard.resolved.current_version ?? null,
     was_stale: !!guard.resolved.was_stale
-  }));
+  };
+
+  segmentsSaveDiagLog('response_shape', {
+    status: 200,
+    current_timesheet_id: currentTimesheetId || null,
+    used_locked_rpc: usedLockedRpc === true,
+    segment_update_count: updateMap.size,
+    before_signature: beforeSignatureDiag,
+    after_signature: afterSignatureDiag,
+    updated_summary: updated && typeof updated === 'object' ? {
+      id: updated.id || null,
+      timesheet_id: updated.timesheet_id || null,
+      total_pay_ex_vat: updated.total_pay_ex_vat ?? null,
+      total_charge_ex_vat: updated.total_charge_ex_vat ?? null,
+      margin_ex_vat: updated.margin_ex_vat ?? null,
+      updated_at: updated.updated_at || null
+    } : null,
+    response_signature: segmentsSaveDiagSignature(responsePayload),
+    response_contains: segmentsSaveDiagResponseContains(responsePayload)
+  });
+
+  return withCORS(env, req, ok(responsePayload));
 }
+
+
 async function handleNhspInvoiceCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -124070,9 +125191,36 @@ async function handleTsfinPatchExpenses(env, req, timesheetId, ctx = null) {
   // allow either top-level fields or nested { expenses: {...} }
   const src = (body && typeof body.expenses === 'object' && body.expenses) ? body.expenses : body;
 
+  const hasOwn = (obj, key) => !!(obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key));
+  const cleanSig = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const firstSig = (...vals) => {
+    for (const v of vals) {
+      const s = cleanSig(v);
+      if (s) return s;
+    }
+    return null;
+  };
+
   const response = await patchTsfinCommon(env, req, timesheetId, {
     expected_timesheet_id: body?.expected_timesheet_id ?? src?.expected_timesheet_id,
     reason: body?.reason ?? src?.reason ?? null,
+    _save_domain: 'EXPENSES',
+    _diag_request_signature_fields: {
+      expected_timesheet_id_present: hasOwn(body, 'expected_timesheet_id') || hasOwn(src, 'expected_timesheet_id'),
+      expected_row_signature_present: hasOwn(body, 'expected_row_signature') || hasOwn(src, 'expected_row_signature'),
+      backend_row_signature_present: hasOwn(body, 'backend_row_signature') || hasOwn(src, 'backend_row_signature'),
+      mutation_row_signature_present: hasOwn(body, 'mutation_row_signature') || hasOwn(src, 'mutation_row_signature'),
+      row_signature_present: hasOwn(body, 'row_signature') || hasOwn(src, 'row_signature'),
+      current_row_signature_present: hasOwn(body, 'current_row_signature') || hasOwn(src, 'current_row_signature'),
+      expected_row_signature: firstSig(body?.expected_row_signature, src?.expected_row_signature),
+      backend_row_signature: firstSig(body?.backend_row_signature, src?.backend_row_signature),
+      mutation_row_signature: firstSig(body?.mutation_row_signature, src?.mutation_row_signature),
+      row_signature: firstSig(body?.row_signature, src?.row_signature),
+      current_row_signature: firstSig(body?.current_row_signature, src?.current_row_signature)
+    },
     expenses: {
       travel_pay_ex_vat: src?.travel_pay_ex_vat,
       travel_charge_ex_vat: src?.travel_charge_ex_vat,
@@ -124107,17 +125255,124 @@ async function handleTsfinPatchExpenses(env, req, timesheetId, ctx = null) {
 }
 
 
-
-
-
 // 4) PATCH /api/tsfin/:id/mileage  (mileage_units + pay/charge + rates)
+
+
 async function handleTsfinPatchMileage(env, req, timesheetId) {
   const body = await parseJSONBody(req).catch(() => ({}));
 
   // allow either top-level fields or nested { mileage: {...} }
   const src = (body && typeof body.mileage === 'object' && body.mileage) ? body.mileage : body;
 
-  return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
+  const diagHasOwn = (obj, key) => !!(obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key));
+  const diagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const diagFirstText = (...values) => {
+    for (const value of values) {
+      const s = diagText(value);
+      if (s) return s;
+    }
+    return null;
+  };
+  const diagExtractSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = diagText(obj);
+      return {
+        present: !!s,
+        backend_row_signature: null,
+        mutation_row_signature: null,
+        row_signature: null,
+        expected_row_signature: null,
+        current_row_signature: null,
+        signature: s
+      };
+    }
+    const backend = diagText(obj.backend_row_signature);
+    const mutation = diagText(obj.mutation_row_signature);
+    const row = diagText(obj.row_signature);
+    const expected = diagText(obj.expected_row_signature);
+    const current = diagText(obj.current_row_signature);
+    const generic = diagText(obj.signature || obj.render_signature);
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const diagResponseContains = (payload) => {
+    const lp = payload?.lifecycle_patch && typeof payload.lifecycle_patch === 'object' ? payload.lifecycle_patch : null;
+    return {
+      updated: Object.prototype.hasOwnProperty.call(payload || {}, 'updated'),
+      tsfin: !!(payload?.tsfin && typeof payload.tsfin === 'object'),
+      timesheet: !!(payload?.timesheet && typeof payload.timesheet === 'object'),
+      backend_row_signature: !!diagText(payload?.backend_row_signature),
+      mutation_row_signature: !!diagText(payload?.mutation_row_signature),
+      row_signature: !!diagText(payload?.row_signature),
+      expected_row_signature: !!diagText(payload?.expected_row_signature),
+      current_row_signature: !!diagText(payload?.current_row_signature),
+      lifecycle_signature: !!payload?.lifecycle_signature,
+      lifecycle_signature_has_signature: diagExtractSignature(payload?.lifecycle_signature).present,
+      lifecycle_patch: !!lp,
+      lifecycle_patch_backend_row_signature: !!diagText(lp?.backend_row_signature),
+      lifecycle_patch_mutation_row_signature: !!diagText(lp?.mutation_row_signature),
+      lifecycle_patch_row_signature: !!diagText(lp?.row_signature),
+      lifecycle_patch_expected_row_signature: !!diagText(lp?.expected_row_signature),
+      affected_rows: Array.isArray(payload?.affected_rows),
+      affected_rows_count: Array.isArray(payload?.affected_rows) ? payload.affected_rows.length : null,
+      action_flags: !!(payload?.action_flags || lp?.action_flags),
+      priority_badge_hints: !!(payload?.priority_badge_hints || lp?.priority_badge_hints),
+      refresh_hints: !!payload?.refresh_hints,
+      dirty_state: !!payload?.dirty_state,
+      save_patch_available: payload?.save_patch_available === true,
+      immediate_lifecycle_patch_available: payload?.immediate_lifecycle_patch_available === true,
+      requires_affected_row_refresh: payload?.requires_affected_row_refresh === true,
+      requires_full_details_refresh: payload?.requires_full_details_refresh === true,
+      refresh_required: payload?.refresh_required === true,
+      authorise_preflight_refresh_required: payload?.authorise_preflight_refresh_required === true
+    };
+  };
+  const diagRequestSignatureFields = {
+    expected_timesheet_id_present: diagHasOwn(body, 'expected_timesheet_id') || diagHasOwn(src, 'expected_timesheet_id'),
+    expected_row_signature_present: diagHasOwn(body, 'expected_row_signature') || diagHasOwn(src, 'expected_row_signature'),
+    backend_row_signature_present: diagHasOwn(body, 'backend_row_signature') || diagHasOwn(src, 'backend_row_signature'),
+    mutation_row_signature_present: diagHasOwn(body, 'mutation_row_signature') || diagHasOwn(src, 'mutation_row_signature'),
+    row_signature_present: diagHasOwn(body, 'row_signature') || diagHasOwn(src, 'row_signature'),
+    current_row_signature_present: diagHasOwn(body, 'current_row_signature') || diagHasOwn(src, 'current_row_signature'),
+    expected_row_signature: diagFirstText(body?.expected_row_signature, src?.expected_row_signature),
+    backend_row_signature: diagFirstText(body?.backend_row_signature, src?.backend_row_signature),
+    mutation_row_signature: diagFirstText(body?.mutation_row_signature, src?.mutation_row_signature),
+    row_signature: diagFirstText(body?.row_signature, src?.row_signature),
+    current_row_signature: diagFirstText(body?.current_row_signature, src?.current_row_signature)
+  };
+  const logTsfinMileageSignatureDiag = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req.url).pathname; } catch {}
+      console.log('[TSFIN_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TSFIN_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTsfinPatchMileage',
+        route_family: 'MILEAGE',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: timesheetId || null,
+        expected_timesheet_id: body?.expected_timesheet_id ?? src?.expected_timesheet_id ?? null,
+        request_signature_fields: diagRequestSignatureFields,
+        patch_field_names: Object.keys(src && typeof src === 'object' ? src : {}).filter((key) => src[key] !== undefined).sort(),
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+
+  logTsfinMileageSignatureDiag('received');
+
+  const response = await patchTsfinCommon(env, req, timesheetId, {
     expected_timesheet_id: body?.expected_timesheet_id ?? src?.expected_timesheet_id,
     reason: body?.reason ?? src?.reason ?? null,
     mileage: {
@@ -124127,10 +125382,31 @@ async function handleTsfinPatchMileage(env, req, timesheetId) {
       pay_rate: src?.pay_rate,
       charge_rate: src?.charge_rate
     }
-  }));
+  });
+
+  try {
+    const payload = await response.clone().json().catch(() => null);
+    logTsfinMileageSignatureDiag('response_shape', {
+      status: Number(response.status || 0) || null,
+      ok: !!response.ok,
+      current_timesheet_id: payload?.current_timesheet_id || payload?.timesheet_id || null,
+      requested_timesheet_id: payload?.requested_timesheet_id || timesheetId || null,
+      contract_week_id: payload?.contract_week_id || null,
+      updated: payload?.updated === true,
+      save_domain: payload?.save_domain || null,
+      response_signature: diagExtractSignature(payload || null),
+      lifecycle_patch_signature: diagExtractSignature(payload?.lifecycle_patch || null),
+      response_contains: diagResponseContains(payload || {})
+    });
+  } catch (e) {
+    logTsfinMileageSignatureDiag('response_shape_log_failed', {
+      status: Number(response?.status || 0) || null,
+      error: String(e?.message || e || '').slice(0, 300)
+    });
+  }
+
+  return withCORS(env, req, response);
 }
-
-
 
 
 
@@ -124366,7 +125642,6 @@ function derivePayBatchRouteDisplay(context = {}) {
 }
 
 
-
 async function patchTsfinCommon(env, req, timesheetId, patch) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -124393,7 +125668,15 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     );
   }
 
-  const topLevelAllowed = new Set(['expected_timesheet_id', 'reason', 'expenses', 'mileage', 'po', '_save_domain']);
+  const topLevelAllowed = new Set([
+    'expected_timesheet_id',
+    'reason',
+    'expenses',
+    'mileage',
+    'po',
+    '_save_domain',
+    '_diag_request_signature_fields'
+  ]);
   const topLevelUnexpected = Object.keys(patch).filter((key) => !topLevelAllowed.has(key));
   if (topLevelUnexpected.length) {
     return blockedResponse(
@@ -124403,6 +125686,223 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
       { fields: topLevelUnexpected }
     );
   }
+
+  const diagNum0 = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const diagRound2 = (v) => Math.round(diagNum0(v) * 100) / 100;
+  const diagString = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const diagErrorText = (err) => {
+    const s = String(err?.message || err || '').trim();
+    return s ? s.slice(0, 300) : null;
+  };
+  const diagPath = (() => {
+    try {
+      return new URL(req.url).pathname;
+    } catch {
+      return null;
+    }
+  })();
+  const diagSaveDomain = String(
+    patch._save_domain ||
+    (patch.expenses ? 'EXPENSES' : (patch.mileage ? 'MILEAGE' : (patch.po ? 'PO' : 'TSFIN')))
+  ).toUpperCase();
+
+  const diagSectionPresence = {
+    expenses: !!patch.expenses,
+    mileage: !!patch.mileage,
+    po: !!patch.po
+  };
+
+  const diagChangedFieldNames = (obj) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return [];
+    return Object.keys(obj).filter((key) => obj[key] !== undefined);
+  };
+
+  const diagExtractSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = diagString(obj);
+      return {
+        present: !!s,
+        backend_row_signature: null,
+        mutation_row_signature: null,
+        row_signature: null,
+        expected_row_signature: null,
+        current_row_signature: null,
+        signature: s
+      };
+    }
+
+    const backend = diagString(obj.backend_row_signature);
+    const mutation = diagString(obj.mutation_row_signature);
+    const row = diagString(obj.row_signature);
+    const expected = diagString(obj.expected_row_signature);
+    const current = diagString(obj.current_row_signature);
+    const generic = diagString(obj.signature || obj.render_signature);
+
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+
+  const diagTsfinSummary = (row) => {
+    if (!row || typeof row !== 'object') return null;
+    return {
+      tsfin_id: row.id || null,
+      timesheet_id: row.timesheet_id || null,
+      is_current: row.is_current === true,
+      is_stale: row.is_stale === true,
+      stale_reason: row.stale_reason || null,
+      processing_status: row.processing_status || null,
+      updated_at: row.updated_at || null,
+      computed_at_utc: row.computed_at_utc || null,
+      authorised_at_utc: row.authorised_at_utc || null,
+      paid: !!row.paid_at_utc,
+      locked_by_invoice: !!row.locked_by_invoice_id,
+      travel_pay_ex_vat: diagRound2(row.travel_pay_ex_vat),
+      travel_charge_ex_vat: diagRound2(row.travel_charge_ex_vat),
+      accommodation_pay_ex_vat: diagRound2(row.accommodation_pay_ex_vat),
+      accommodation_charge_ex_vat: diagRound2(row.accommodation_charge_ex_vat),
+      other_pay_ex_vat: diagRound2(row.other_pay_ex_vat),
+      other_charge_ex_vat: diagRound2(row.other_charge_ex_vat),
+      expenses_pay_ex_vat: diagRound2(row.expenses_pay_ex_vat),
+      expenses_charge_ex_vat: diagRound2(row.expenses_charge_ex_vat),
+      mileage_units: diagRound2(row.mileage_units),
+      mileage_pay_ex_vat: diagRound2(row.mileage_pay_ex_vat),
+      mileage_charge_ex_vat: diagRound2(row.mileage_charge_ex_vat),
+      mileage_pay_rate: row.mileage_pay_rate == null ? null : diagRound2(row.mileage_pay_rate),
+      mileage_charge_rate: row.mileage_charge_rate == null ? null : diagRound2(row.mileage_charge_rate),
+      additional_pay_ex_vat: diagRound2(row.additional_pay_ex_vat),
+      additional_charge_ex_vat: diagRound2(row.additional_charge_ex_vat),
+      total_pay_ex_vat: diagRound2(row.total_pay_ex_vat),
+      total_charge_ex_vat: diagRound2(row.total_charge_ex_vat),
+      margin_ex_vat: diagRound2(row.margin_ex_vat),
+      po_number_present: diagString(row.po_number) ? true : false
+    };
+  };
+
+  const diagTimesheetSummary = (row) => {
+    if (!row || typeof row !== 'object') return null;
+    return {
+      timesheet_id: row.timesheet_id || null,
+      is_current: row.is_current === true,
+      contract_id: row.contract_id || null,
+      authorised: row.authorised_at_server != null && String(row.authorised_at_server).trim() !== '',
+      authorised_at_server: row.authorised_at_server || null,
+      revoked: row.revoked_at != null && String(row.revoked_at).trim() !== '',
+      revoked_at: row.revoked_at || null,
+      sheet_scope: row.sheet_scope || null,
+      submission_mode: row.submission_mode || null,
+      line_type: row.line_type || null,
+      is_adjustment: row.is_adjustment === true,
+      qr_status: row.qr_status || null
+    };
+  };
+
+  const diagResponseContains = (payload) => {
+    const lp = payload?.lifecycle_patch && typeof payload.lifecycle_patch === 'object' ? payload.lifecycle_patch : null;
+    const tsfin = payload?.tsfin && typeof payload.tsfin === 'object' ? payload.tsfin : null;
+    return {
+      updated: Object.prototype.hasOwnProperty.call(payload || {}, 'updated'),
+      tsfin: !!tsfin,
+      timesheet: !!(payload?.timesheet && typeof payload.timesheet === 'object'),
+      backend_row_signature: !!diagString(payload?.backend_row_signature),
+      mutation_row_signature: !!diagString(payload?.mutation_row_signature),
+      row_signature: !!diagString(payload?.row_signature),
+      expected_row_signature: !!diagString(payload?.expected_row_signature),
+      lifecycle_signature: !!payload?.lifecycle_signature,
+      lifecycle_signature_has_signature: diagExtractSignature(payload?.lifecycle_signature).present,
+      lifecycle_patch: !!lp,
+      lifecycle_patch_backend_row_signature: !!diagString(lp?.backend_row_signature),
+      lifecycle_patch_mutation_row_signature: !!diagString(lp?.mutation_row_signature),
+      lifecycle_patch_row_signature: !!diagString(lp?.row_signature),
+      lifecycle_patch_expected_row_signature: !!diagString(lp?.expected_row_signature),
+      affected_rows: Array.isArray(payload?.affected_rows),
+      affected_rows_count: Array.isArray(payload?.affected_rows) ? payload.affected_rows.length : null,
+      action_flags: !!(payload?.action_flags || lp?.action_flags),
+      priority_badge_hints: !!(payload?.priority_badge_hints || lp?.priority_badge_hints),
+      refresh_hints: !!payload?.refresh_hints,
+      dirty_state: !!payload?.dirty_state,
+      save_patch_available: payload?.save_patch_available === true,
+      immediate_lifecycle_patch_available: payload?.immediate_lifecycle_patch_available === true,
+      requires_affected_row_refresh: payload?.requires_affected_row_refresh === true,
+      requires_full_details_refresh: payload?.requires_full_details_refresh === true,
+      refresh_required: payload?.refresh_required === true,
+      permission_state_patch_complete: payload?.permission_state_patch_complete === true,
+      priority_badges_patch_complete: payload?.priority_badges_patch_complete === true
+    };
+  };
+
+  const logTsfinSaveDiag = (step, details = {}) => {
+    try {
+      const payload = {
+        tag: 'TSFIN_SAVE_SIGNATURE_DIAG',
+        handler: 'patchTsfinCommon',
+        step,
+        route_family: diagSaveDomain,
+        route_path: diagPath,
+        requested_timesheet_id: timesheetId || null,
+        expected_timesheet_id: patch?.expected_timesheet_id || null,
+        patch_sections: diagSectionPresence,
+        patch_field_names: {
+          expenses: diagChangedFieldNames(patch?.expenses),
+          mileage: diagChangedFieldNames(patch?.mileage),
+          po: diagChangedFieldNames(patch?.po)
+        },
+        request_signature_fields: patch?._diag_request_signature_fields || null,
+        server_utc: new Date().toISOString(),
+        ...details
+      };
+      console.log('[TSFIN_SAVE_SIGNATURE_DIAG]', JSON.stringify(payload));
+    } catch (err) {
+      try {
+        console.log('[TSFIN_SAVE_SIGNATURE_DIAG]', {
+          handler: 'patchTsfinCommon',
+          step,
+          route_family: diagSaveDomain,
+          requested_timesheet_id: timesheetId || null,
+          log_error: diagErrorText(err)
+        });
+      } catch {}
+    }
+  };
+
+  const fetchLifecycleSignatureForDiag = async (pTimesheetId, pContractWeekId) => {
+    try {
+      const payload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+        p_timesheet_id: pTimesheetId,
+        p_contract_week_id: pContractWeekId || null,
+        p_include_payload: false
+      }, { timeoutMs: 8000 });
+
+      const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
+      const signature = diagExtractSignature(obj);
+      return {
+        ok: signature.present,
+        source: 'timesheet_lifecycle_signature_v1',
+        signature,
+        payload_field_names: obj && typeof obj === 'object' ? Object.keys(obj).slice(0, 50) : []
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        source: 'timesheet_lifecycle_signature_v1',
+        error: diagErrorText(err)
+      };
+    }
+  };
+
+  logTsfinSaveDiag('received');
 
   const rejectUnsupportedNestedFields = (sectionName, value, allowedFields) => {
     if (value === undefined || value === null) return null;
@@ -124432,7 +125932,13 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     'other_charge_ex_vat',
     'description'
   ]));
-  if (expensesFieldError) return expensesFieldError;
+  if (expensesFieldError) {
+    logTsfinSaveDiag('blocked_nested_fields', {
+      section: 'expenses',
+      status: expensesFieldError.status || 400
+    });
+    return expensesFieldError;
+  }
 
   const mileageFieldError = rejectUnsupportedNestedFields('mileage', patch.mileage, new Set([
     'mileage_units',
@@ -124441,22 +125947,49 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     'pay_rate',
     'charge_rate'
   ]));
-  if (mileageFieldError) return mileageFieldError;
+  if (mileageFieldError) {
+    logTsfinSaveDiag('blocked_nested_fields', {
+      section: 'mileage',
+      status: mileageFieldError.status || 400
+    });
+    return mileageFieldError;
+  }
 
   const poFieldError = rejectUnsupportedNestedFields('po', patch.po, new Set(['number']));
-  if (poFieldError) return poFieldError;
+  if (poFieldError) {
+    logTsfinSaveDiag('blocked_nested_fields', {
+      section: 'po',
+      status: poFieldError.status || 400
+    });
+    return poFieldError;
+  }
 
   const expected = (patch && patch.expected_timesheet_id) ? String(patch.expected_timesheet_id) : '';
   if (!expected) {
+    logTsfinSaveDiag('blocked_missing_expected_timesheet_id', {
+      status: 400
+    });
     return badRequest('expected_timesheet_id is required');
   }
 
   const resolved = await resolveTimesheetToCurrent(env, timesheetId);
   if (!resolved || !resolved.current_timesheet_id) {
+    logTsfinSaveDiag('blocked_not_found_after_resolve', {
+      status: 404,
+      resolved_present: !!resolved
+    });
     return notFound('Timesheet not found');
   }
 
   const currentTimesheetId = String(resolved.current_timesheet_id);
+  logTsfinSaveDiag('resolved_current', {
+    current_timesheet_id: currentTimesheetId,
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
+    booking_id: resolved.booking_id || null,
+    current_version: resolved.current_version ?? null,
+    was_stale: !!resolved.was_stale
+  });
+
   if (expected !== currentTimesheetId) {
     const payload = {
       error: 'TIMESHEET_MOVED',
@@ -124465,6 +125998,12 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
       current_timesheet_id: resolved.current_timesheet_id || null,
       current_version: resolved.current_version != null ? resolved.current_version : null
     };
+    logTsfinSaveDiag('blocked_timesheet_moved', {
+      status: 409,
+      current_timesheet_id: currentTimesheetId,
+      requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
+      current_version: resolved.current_version ?? null
+    });
     return jsonResponse(409, payload);
   }
 
@@ -124475,13 +126014,24 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
       `&is_current=eq.true` +
       `&select=timesheet_id,is_current,contract_id,authorised_at_server,revoked_at,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id,qr_status,additional_units_week,additional_units_per_day`
   );
-  if (!currentTs) return notFound('Timesheet not found');
+  if (!currentTs) {
+    logTsfinSaveDiag('blocked_current_timesheet_not_found', {
+      status: 404,
+      current_timesheet_id: currentTimesheetId
+    });
+    return notFound('Timesheet not found');
+  }
 
   const isCurrentRow = currentTs.is_current === true;
   const hasAuthorisedAtServer = currentTs.authorised_at_server != null && String(currentTs.authorised_at_server).trim() !== '';
   const hasRevokedAt = currentTs.revoked_at != null && String(currentTs.revoked_at).trim() !== '';
 
   if (isCurrentRow && hasAuthorisedAtServer && !hasRevokedAt) {
+    logTsfinSaveDiag('blocked_authorised_edit', {
+      status: 409,
+      current_timesheet_id: currentTimesheetId,
+      timesheet: diagTimesheetSummary(currentTs)
+    });
     return blockedResponse(
       'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
       'This timesheet is authorised. Unauthorise it before changing expenses or mileage.'
@@ -124489,7 +126039,13 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   }
 
   const before = await fetchCurrentTsfin(env, currentTimesheetId);
-  if (!before) return notFound('TSFIN current row not found');
+  if (!before) {
+    logTsfinSaveDiag('blocked_tsfin_current_not_found', {
+      status: 404,
+      current_timesheet_id: currentTimesheetId
+    });
+    return notFound('TSFIN current row not found');
+  }
 
   const summary = await sbGetOne(
     env,
@@ -124516,6 +126072,15 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
       `&select=id,totals_json,additional_seq,submission_mode_snapshot,is_adjustment` +
       `&limit=1`
   ).catch(() => null);
+
+  const beforeSignatureDiag = await fetchLifecycleSignatureForDiag(currentTimesheetId, cw?.id || null);
+  logTsfinSaveDiag('before_write', {
+    current_timesheet_id: currentTimesheetId,
+    contract_week_id: cw?.id || null,
+    timesheet: diagTimesheetSummary(currentTs),
+    before: diagTsfinSummary(before),
+    before_signature: beforeSignatureDiag
+  });
 
   const yes = (v) => {
     if (v === true) return true;
@@ -124561,6 +126126,11 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   };
 
   if (isImportAuthoritativeEvidenceContext(classificationContext)) {
+    logTsfinSaveDiag('blocked_import_authoritative', {
+      status: 409,
+      current_timesheet_id: currentTimesheetId,
+      contract_week_id: cw?.id || null
+    });
     return blockedResponse(
       'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED',
       'This original import-authoritative timesheet is view-only for direct expenses. Create an additional manual timesheet for expenses.'
@@ -124578,6 +126148,13 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     !!classificationContext?.segment_stable_key;
 
   if (segmentOnlyTarget) {
+    logTsfinSaveDiag('blocked_segment_context', {
+      status: 409,
+      current_timesheet_id: currentTimesheetId,
+      contract_week_id: cw?.id || null,
+      line_type: lineTypeU || null,
+      sheet_scope: sheetScopeU || null
+    });
     return blockedResponse(
       'SEGMENT_CONTEXT_EXPENSES_BLOCKED',
       'This segment-only context cannot be amended via parent-level expense or mileage endpoints.'
@@ -124776,6 +126353,11 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     if (!nonneg(xp.travel_pay_ex_vat) || !nonneg(xp.travel_charge_ex_vat) ||
         !nonneg(xp.accommodation_pay_ex_vat) || !nonneg(xp.accommodation_charge_ex_vat) ||
         !nonneg(xp.other_pay_ex_vat) || !nonneg(xp.other_charge_ex_vat)) {
+      logTsfinSaveDiag('blocked_invalid_expense_values', {
+        status: 400,
+        current_timesheet_id: currentTimesheetId,
+        contract_week_id: cw?.id || null
+      });
       return badRequest('Expense values must be >= 0');
     }
   }
@@ -124783,11 +126365,22 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   if (patch.mileage) {
     const ml = patch.mileage;
     if (!nonneg(ml.mileage_units) || !nonneg(ml.pay_ex_vat) || !nonneg(ml.charge_ex_vat) || !nonneg(ml.pay_rate) || !nonneg(ml.charge_rate)) {
+      logTsfinSaveDiag('blocked_invalid_mileage_values', {
+        status: 400,
+        current_timesheet_id: currentTimesheetId,
+        contract_week_id: cw?.id || null
+      });
       return badRequest('Mileage values must be >= 0');
     }
   }
 
   if ((before.paid_at_utc || summary?.paid_at_utc) && patch.po && hasOwn(patch.po, 'number')) {
+    logTsfinSaveDiag('blocked_paid_po_edit', {
+      status: 409,
+      current_timesheet_id: currentTimesheetId,
+      contract_week_id: cw?.id || null,
+      before: diagTsfinSummary(before)
+    });
     return blockedResponse(
       'TIMESHEET_PAID_EDIT_BLOCKED',
       'This timesheet has been paid and its purchase order cannot be amended directly.'
@@ -124797,6 +126390,14 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const segmentInvoiceLocked = hasAnySegmentInvoiceLock(before) || Number(summary?.invoice_segments_locked || 0) > 0;
   const wholeInvoiceLocked = !!(before.locked_by_invoice_id || summary?.locked_by_invoice_id);
   if (wholeInvoiceLocked || segmentInvoiceLocked) {
+    logTsfinSaveDiag('blocked_invoice_locked', {
+      status: 409,
+      current_timesheet_id: currentTimesheetId,
+      contract_week_id: cw?.id || null,
+      whole_invoice_locked: wholeInvoiceLocked,
+      segment_invoice_locked: segmentInvoiceLocked,
+      before: diagTsfinSummary(before)
+    });
     return blockedResponse(
       segmentInvoiceLocked ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED' : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED',
       segmentInvoiceLocked
@@ -124844,8 +126445,22 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     const payRatePatch = explicitFiniteRate(ml, 'pay_rate');
     const chargeRatePatch = explicitFiniteRate(ml, 'charge_rate');
 
-    if (payRatePatch.supplied && !payRatePatch.valid) return badRequest('Mileage values must be >= 0');
-    if (chargeRatePatch.supplied && !chargeRatePatch.valid) return badRequest('Mileage values must be >= 0');
+    if (payRatePatch.supplied && !payRatePatch.valid) {
+      logTsfinSaveDiag('blocked_invalid_mileage_pay_rate', {
+        status: 400,
+        current_timesheet_id: currentTimesheetId,
+        contract_week_id: cw?.id || null
+      });
+      return badRequest('Mileage values must be >= 0');
+    }
+    if (chargeRatePatch.supplied && !chargeRatePatch.valid) {
+      logTsfinSaveDiag('blocked_invalid_mileage_charge_rate', {
+        status: 400,
+        current_timesheet_id: currentTimesheetId,
+        contract_week_id: cw?.id || null
+      });
+      return badRequest('Mileage values must be >= 0');
+    }
 
     mileageUnitsTouched = ml.mileage_units !== undefined;
     mileagePayExplicit = ml.pay_ex_vat !== undefined;
@@ -124860,6 +126475,14 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     if (mileageChargeRateSupplied) afterMileageChargeRate = chargeRatePatch.value;
 
     if (afterMileageUnits > 0 && (afterMileagePayRate == null || afterMileageChargeRate == null)) {
+      logTsfinSaveDiag('blocked_mileage_rate_missing', {
+        status: 400,
+        current_timesheet_id: currentTimesheetId,
+        contract_week_id: cw?.id || null,
+        after_mileage_units: round2(afterMileageUnits),
+        pay_rate_present: afterMileagePayRate != null,
+        charge_rate_present: afterMileageChargeRate != null
+      });
       return blockedResponse(
         'MILEAGE_RATE_MISSING',
         'Mileage rates are missing, so mileage cannot be saved. Check the stored mileage rates, then try again.',
@@ -124899,6 +126522,12 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   }
 
   if (missing.length) {
+    logTsfinSaveDiag('blocked_evidence_required', {
+      status: 400,
+      current_timesheet_id: currentTimesheetId,
+      contract_week_id: cw?.id || null,
+      missing
+    });
     return evidenceError(missing);
   }
 
@@ -124984,7 +126613,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
       staleMarkers: { was_stale: !!resolved.was_stale }
     });
 
-    return ok({
+    const responsePayload = {
       updated: false,
       tsfin: before,
       save_domain: patch._save_domain || (patch.expenses ? 'EXPENSES' : (patch.mileage ? 'MILEAGE' : (patch.po ? 'PO' : 'TSFIN'))),
@@ -125015,7 +126644,20 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
       requires_affected_row_refresh: savePatchBundle.requires_affected_row_refresh,
       requires_full_details_refresh: savePatchBundle.requires_full_details_refresh,
       refresh_required: savePatchBundle.refresh_required
+    };
+
+    logTsfinSaveDiag('response_shape', {
+      current_timesheet_id: currentTimesheetId,
+      contract_week_id: cw?.id || null,
+      updated: false,
+      before: diagTsfinSummary(before),
+      after: diagTsfinSummary(before),
+      before_signature: beforeSignatureDiag,
+      after_signature: diagExtractSignature(lifecycleSignatureObject || lifecycleSignature),
+      response_contains: diagResponseContains(responsePayload)
     });
+
+    return ok(responsePayload);
   }
 
   const beforeExpPay = round2(num0(before.expenses_pay_ex_vat));
@@ -125155,6 +126797,31 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   upd.stale_reason = null;
   upd.updated_at = nowISO;
 
+  logTsfinSaveDiag('patch_request', {
+    current_timesheet_id: currentTimesheetId,
+    contract_week_id: cw?.id || null,
+    changed_fields: Object.keys(upd).sort(),
+    before: diagTsfinSummary(before),
+    planned_after_summary: {
+      travel_pay_ex_vat: round2(afterTravelPay),
+      travel_charge_ex_vat: round2(afterTravelChg),
+      accommodation_pay_ex_vat: round2(afterAccomPay),
+      accommodation_charge_ex_vat: round2(afterAccomChg),
+      other_pay_ex_vat: round2(afterOtherPay),
+      other_charge_ex_vat: round2(afterOtherChg),
+      expenses_pay_ex_vat: round2(afterExpPay),
+      expenses_charge_ex_vat: round2(afterExpChg),
+      mileage_units: round2(afterMileageUnits),
+      mileage_pay_ex_vat: round2(afterMilPay),
+      mileage_charge_ex_vat: round2(afterMilChg),
+      additional_pay_ex_vat: round2(addPay),
+      additional_charge_ex_vat: round2(addChg),
+      total_pay_ex_vat: round2(totalPay),
+      total_charge_ex_vat: round2(totalChg),
+      margin_ex_vat: round2(margin)
+    }
+  });
+
   const url =
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
     `?timesheet_id=eq.${encodeURIComponent(currentTimesheetId)}` +
@@ -125169,11 +126836,19 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
   if (!res.ok) {
     const t = await res.text();
+    logTsfinSaveDiag('patch_failed', {
+      status: res.status,
+      current_timesheet_id: currentTimesheetId,
+      contract_week_id: cw?.id || null,
+      error_text: String(t || '').slice(0, 500)
+    });
     return serverError(`TSFIN update failed: ${t}`);
   }
 
   const json = await res.json().catch(() => []);
   const after = Array.isArray(json) ? json[0] : json;
+  let contractWeekExpenseDraftSynced = false;
+
   if ((patch.expenses || patch.mileage) && cw?.id && after) {
     const existingTotals = (cw.totals_json && typeof cw.totals_json === 'object' && !Array.isArray(cw.totals_json))
       ? cw.totals_json
@@ -125203,9 +126878,26 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
     if (!cwSyncRes.ok) {
       const t = await cwSyncRes.text().catch(() => '');
+      logTsfinSaveDiag('contract_week_expense_draft_sync_failed', {
+        status: cwSyncRes.status,
+        current_timesheet_id: currentTimesheetId,
+        contract_week_id: cw?.id || null,
+        after: diagTsfinSummary(after),
+        error_text: String(t || '').slice(0, 500)
+      });
       return serverError(`Contract week expense draft sync failed: ${t}`);
     }
+
+    contractWeekExpenseDraftSynced = true;
   }
+
+  logTsfinSaveDiag('after_write', {
+    current_timesheet_id: currentTimesheetId,
+    contract_week_id: cw?.id || null,
+    before: diagTsfinSummary(before),
+    after: diagTsfinSummary(after),
+    contract_week_expense_draft_synced: contractWeekExpenseDraftSynced
+  });
 
   await insertAuditEvent(env, req, {
     object_type: 'timesheets_financials',
@@ -125260,6 +126952,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   let lifecycleSignatureObject = null;
   let lifecycleSignature = '';
   let lifecycleSignatureError = null;
+  let lifecycleSignatureFallbackUsed = false;
 
   const adoptLifecycleSignaturePayload = (payload) => {
     const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
@@ -125311,6 +127004,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
       const affectedRow = Array.isArray(affectedRowsPayload?.rows) ? (affectedRowsPayload.rows[0] || null) : null;
       if (affectedRow) {
+        lifecycleSignatureFallbackUsed = true;
         adoptLifecycleSignaturePayload({
           backend_row_signature: affectedRow.backend_row_signature || null,
           mutation_row_signature: affectedRow.mutation_row_signature || affectedRow.backend_row_signature || affectedRow.row_signature || null,
@@ -125327,7 +127021,27 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     }
   }
 
+  logTsfinSaveDiag('after_signature', {
+    current_timesheet_id: currentTimesheetId,
+    contract_week_id: cw?.id || null,
+    before_signature: beforeSignatureDiag,
+    after_signature: diagExtractSignature(lifecycleSignatureObject || lifecycleSignature),
+    lifecycle_signature_rpc_payload_shape: lifecycleSignatureObject && typeof lifecycleSignatureObject === 'object'
+      ? Object.keys(lifecycleSignatureObject).slice(0, 50)
+      : [],
+    lifecycle_signature_fallback_used: lifecycleSignatureFallbackUsed,
+    lifecycle_signature_error: lifecycleSignatureError ? diagErrorText(lifecycleSignatureError) : null
+  });
+
   if (!lifecycleSignature) {
+    logTsfinSaveDiag('signature_failure', {
+      status: 500,
+      current_timesheet_id: currentTimesheetId,
+      contract_week_id: cw?.id || null,
+      before: diagTsfinSummary(before),
+      after: diagTsfinSummary(after),
+      lifecycle_signature_error: diagErrorText(lifecycleSignatureError) || 'no signature returned'
+    });
     return serverError(`TSFIN lifecycle signature refresh failed: ${String(lifecycleSignatureError?.message || lifecycleSignatureError || 'no signature returned')}`);
   }
 
@@ -125350,7 +127064,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     staleMarkers: { was_stale: !!resolved.was_stale }
   });
 
-  return ok({
+  const responsePayload = {
     updated: true,
     tsfin: after,
     save_domain: patch._save_domain || (patch.expenses ? 'EXPENSES' : (patch.mileage ? 'MILEAGE' : (patch.po ? 'PO' : 'TSFIN'))),
@@ -125381,10 +127095,21 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     requires_affected_row_refresh: savePatchBundle.requires_affected_row_refresh,
     requires_full_details_refresh: savePatchBundle.requires_full_details_refresh,
     refresh_required: savePatchBundle.refresh_required
+  };
+
+  logTsfinSaveDiag('response_shape', {
+    current_timesheet_id: currentTimesheetId,
+    contract_week_id: cw?.id || null,
+    updated: true,
+    before: diagTsfinSummary(before),
+    after: diagTsfinSummary(after),
+    before_signature: beforeSignatureDiag,
+    after_signature: diagExtractSignature(lifecycleSignatureObject || lifecycleSignature),
+    response_contains: diagResponseContains(responsePayload)
   });
+
+  return ok(responsePayload);
 }
-
-
 
 
 // ============================================================
@@ -125443,12 +127168,100 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
     return withCORS(env, req, badRequest('Invalid JSON payload'));
   }
 
+
+  const handleTimesheetEvidenceAddDiagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const handleTimesheetEvidenceAddDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+  const handleTimesheetEvidenceAddDiagSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = handleTimesheetEvidenceAddDiagText(obj);
+      return { present: !!s, backend_row_signature: null, mutation_row_signature: null, row_signature: null, expected_row_signature: null, current_row_signature: null, signature: s };
+    }
+    const backend = handleTimesheetEvidenceAddDiagText(obj.backend_row_signature);
+    const mutation = handleTimesheetEvidenceAddDiagText(obj.mutation_row_signature);
+    const row = handleTimesheetEvidenceAddDiagText(obj.row_signature);
+    const expected = handleTimesheetEvidenceAddDiagText(obj.expected_row_signature);
+    const current = handleTimesheetEvidenceAddDiagText(obj.current_row_signature);
+    const generic = handleTimesheetEvidenceAddDiagText(obj.signature || obj.render_signature);
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const handleTimesheetEvidenceAddDiagResponseContains = (payload) => ({
+    ok: Object.prototype.hasOwnProperty.call(payload || {}, 'ok'),
+    evidence: !!(payload?.evidence && typeof payload.evidence === 'object'),
+    queue_id: !!handleTimesheetEvidenceAddDiagText(payload?.queue_id),
+    returned_to_queue: Object.prototype.hasOwnProperty.call(payload || {}, 'returned_to_queue'),
+    backend_row_signature: !!handleTimesheetEvidenceAddDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!handleTimesheetEvidenceAddDiagText(payload?.mutation_row_signature),
+    row_signature: !!handleTimesheetEvidenceAddDiagText(payload?.row_signature),
+    expected_row_signature: !!handleTimesheetEvidenceAddDiagText(payload?.expected_row_signature),
+    current_row_signature: !!handleTimesheetEvidenceAddDiagText(payload?.current_row_signature),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    refresh_required: payload?.refresh_required === true,
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true
+  });
+  const handleTimesheetEvidenceAddDiagLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req?.url || '').pathname; } catch {}
+      console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTimesheetEvidenceAdd',
+        route_family: 'EVIDENCE_ADD',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: tsId || null,
+        evidence_id: typeof evidenceId === 'undefined' ? null : (evidenceId || null),
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+  const fetchhandleTimesheetEvidenceAddLifecycleSignatureDiag = async (pTimesheetId, pContractWeekId = null) => {
+    if (!pTimesheetId) return { ok: false, skipped: true, reason: 'NO_TIMESHEET_ID' };
+    try {
+      const payload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+        p_timesheet_id: pTimesheetId,
+        p_contract_week_id: pContractWeekId || null,
+        p_include_payload: false
+      }, { timeoutMs: 8000 });
+      const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
+      const signature = handleTimesheetEvidenceAddDiagSignature(obj);
+      return { ok: signature.present, source: 'timesheet_lifecycle_signature_v1', signature, payload_field_names: handleTimesheetEvidenceAddDiagKeys(obj) };
+    } catch (err) {
+      return { ok: false, source: 'timesheet_lifecycle_signature_v1', error: String(err?.message || err || '').slice(0, 300) };
+    }
+  };
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  handleTimesheetEvidenceAddDiagLog('received', {
+    body_keys: handleTimesheetEvidenceAddDiagKeys(body),
+    expected_timesheet_id: expected || null,
+    kind: body?.kind ? String(body.kind).trim().toUpperCase() : null,
+    storage_key_present: handleTimesheetEvidenceAddDiagText(body?.storage_key) ? true : false
+  });
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
   const resolved = await resolveTimesheetToCurrent(env, tsId);
-  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  if (!resolved) {
+    handleTimesheetEvidenceAddDiagLog('timesheet_not_found', { status: 404 });
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
   const currentTsId = resolved.current_timesheet_id;
+  handleTimesheetEvidenceAddDiagLog('resolved_current', {
+    current_timesheet_id: currentTsId || null,
+    requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+    current_version: resolved.current_version ?? null,
+    was_stale: !!resolved.was_stale
+  });
 
   if (String(expected) !== String(currentTsId)) {
     return withCORS(
@@ -125582,6 +127395,8 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       };
     }
 
+    const beforeSignatureDiag = await fetchhandleTimesheetEvidenceAddLifecycleSignatureDiag(currentTsId, null);
+
     const { rows: existingRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
@@ -125595,13 +127410,26 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
     ) || null;
 
     if (sameStorageExisting && String(sameStorageExisting.kind || '').trim().toUpperCase() === kind) {
-      return withCORS(env, req, ok({
+      const afterSignatureDiag = await fetchhandleTimesheetEvidenceAddLifecycleSignatureDiag(currentTsId, null);
+      const responsePayload = {
         ok: true,
         requested_timesheet_id: resolved.requested_timesheet_id || tsId,
         current_timesheet_id: currentTsId,
         was_stale: !!resolved.was_stale,
         evidence: sameStorageExisting
-      }));
+      };
+      handleTimesheetEvidenceAddDiagLog('response_shape', {
+        mode: 'idempotent_existing_evidence',
+        status: 200,
+        current_timesheet_id: currentTsId || null,
+        evidence_kind: kind || null,
+        evidence_id: sameStorageExisting?.id || null,
+        before_signature: beforeSignatureDiag,
+        after_signature: afterSignatureDiag,
+        response_signature: handleTimesheetEvidenceAddDiagSignature(responsePayload),
+        response_contains: handleTimesheetEvidenceAddDiagResponseContains(responsePayload)
+      });
+      return withCORS(env, req, ok(responsePayload));
     }
 
     if (kind === 'TIMESHEET') {
@@ -125613,6 +127441,15 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
         return withCORS(env, req, badRequest('Only one TIMESHEET evidence file may be attached to a timesheet at a time'));
       }
     }
+
+    handleTimesheetEvidenceAddDiagLog('before_write', {
+      current_timesheet_id: currentTsId || null,
+      evidence_kind: kind || null,
+      display_name_present: handleTimesheetEvidenceAddDiagText(displayNameIn) ? true : false,
+      storage_key_present: !!finalStorageKey,
+      existing_evidence_count: existingEvidence.length,
+      before_signature: beforeSignatureDiag
+    });
 
     const nowIso = new Date().toISOString();
 
@@ -125693,13 +127530,27 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       );
     } catch {}
 
-    return withCORS(env, req, ok({
+    const afterSignatureDiag = await fetchhandleTimesheetEvidenceAddLifecycleSignatureDiag(currentTsId, null);
+    const responsePayload = {
       ok: true,
       requested_timesheet_id: resolved.requested_timesheet_id || tsId,
       current_timesheet_id: currentTsId,
       was_stale: !!resolved.was_stale,
       evidence: row || null
-    }));
+    };
+    handleTimesheetEvidenceAddDiagLog('response_shape', {
+      mode: 'inserted',
+      status: 200,
+      current_timesheet_id: currentTsId || null,
+      evidence_kind: kind || null,
+      evidence_id: row?.id || null,
+      before_signature: beforeSignatureDiag,
+      after_signature: afterSignatureDiag,
+      response_signature: handleTimesheetEvidenceAddDiagSignature(responsePayload),
+      response_contains: handleTimesheetEvidenceAddDiagResponseContains(responsePayload)
+    });
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to add timesheet evidence: ${e?.message || e}`));
   }
@@ -125754,12 +127605,98 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
     return withCORS(env, req, badRequest('Invalid JSON payload'));
   }
 
+
+  const handleTimesheetEvidenceUpdateKindDiagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const handleTimesheetEvidenceUpdateKindDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+  const handleTimesheetEvidenceUpdateKindDiagSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = handleTimesheetEvidenceUpdateKindDiagText(obj);
+      return { present: !!s, backend_row_signature: null, mutation_row_signature: null, row_signature: null, expected_row_signature: null, current_row_signature: null, signature: s };
+    }
+    const backend = handleTimesheetEvidenceUpdateKindDiagText(obj.backend_row_signature);
+    const mutation = handleTimesheetEvidenceUpdateKindDiagText(obj.mutation_row_signature);
+    const row = handleTimesheetEvidenceUpdateKindDiagText(obj.row_signature);
+    const expected = handleTimesheetEvidenceUpdateKindDiagText(obj.expected_row_signature);
+    const current = handleTimesheetEvidenceUpdateKindDiagText(obj.current_row_signature);
+    const generic = handleTimesheetEvidenceUpdateKindDiagText(obj.signature || obj.render_signature);
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const handleTimesheetEvidenceUpdateKindDiagResponseContains = (payload) => ({
+    ok: Object.prototype.hasOwnProperty.call(payload || {}, 'ok'),
+    evidence: !!(payload?.evidence && typeof payload.evidence === 'object'),
+    queue_id: !!handleTimesheetEvidenceUpdateKindDiagText(payload?.queue_id),
+    returned_to_queue: Object.prototype.hasOwnProperty.call(payload || {}, 'returned_to_queue'),
+    backend_row_signature: !!handleTimesheetEvidenceUpdateKindDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!handleTimesheetEvidenceUpdateKindDiagText(payload?.mutation_row_signature),
+    row_signature: !!handleTimesheetEvidenceUpdateKindDiagText(payload?.row_signature),
+    expected_row_signature: !!handleTimesheetEvidenceUpdateKindDiagText(payload?.expected_row_signature),
+    current_row_signature: !!handleTimesheetEvidenceUpdateKindDiagText(payload?.current_row_signature),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    refresh_required: payload?.refresh_required === true,
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true
+  });
+  const handleTimesheetEvidenceUpdateKindDiagLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req?.url || '').pathname; } catch {}
+      console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTimesheetEvidenceUpdateKind',
+        route_family: 'EVIDENCE_UPDATE_KIND',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: tsId || null,
+        evidence_id: typeof evidenceId === 'undefined' ? null : (evidenceId || null),
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+  const fetchhandleTimesheetEvidenceUpdateKindLifecycleSignatureDiag = async (pTimesheetId, pContractWeekId = null) => {
+    if (!pTimesheetId) return { ok: false, skipped: true, reason: 'NO_TIMESHEET_ID' };
+    try {
+      const payload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+        p_timesheet_id: pTimesheetId,
+        p_contract_week_id: pContractWeekId || null,
+        p_include_payload: false
+      }, { timeoutMs: 8000 });
+      const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
+      const signature = handleTimesheetEvidenceUpdateKindDiagSignature(obj);
+      return { ok: signature.present, source: 'timesheet_lifecycle_signature_v1', signature, payload_field_names: handleTimesheetEvidenceUpdateKindDiagKeys(obj) };
+    } catch (err) {
+      return { ok: false, source: 'timesheet_lifecycle_signature_v1', error: String(err?.message || err || '').slice(0, 300) };
+    }
+  };
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  handleTimesheetEvidenceUpdateKindDiagLog('received', {
+    body_keys: handleTimesheetEvidenceUpdateKindDiagKeys(body),
+    expected_timesheet_id: expected || null,
+    requested_kind: body?.kind ? String(body.kind).trim().toUpperCase() : null
+  });
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
   const resolved = await resolveTimesheetToCurrent(env, tsId);
-  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  if (!resolved) {
+    handleTimesheetEvidenceUpdateKindDiagLog('timesheet_not_found', { status: 404 });
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
   const currentTsId = resolved.current_timesheet_id;
+  handleTimesheetEvidenceUpdateKindDiagLog('resolved_current', {
+    current_timesheet_id: currentTsId || null,
+    requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+    was_stale: !!resolved.was_stale
+  });
 
   if (String(expected) !== String(currentTsId)) {
     return withCORS(
@@ -125837,14 +127774,30 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
     const oldKindU = String(oldKind || '').toUpperCase();
     const newKindU = String(newKind || '').toUpperCase();
 
+    const beforeSignatureDiag = await fetchhandleTimesheetEvidenceUpdateKindLifecycleSignatureDiag(currentTsId, null);
+
     if (oldKindU === newKindU) {
-      return withCORS(env, req, ok({
+      const afterSignatureDiag = await fetchhandleTimesheetEvidenceUpdateKindLifecycleSignatureDiag(currentTsId, null);
+      const responsePayload = {
         ok: true,
         requested_timesheet_id: resolved.requested_timesheet_id || tsId,
         current_timesheet_id: currentTsId,
         was_stale: !!resolved.was_stale,
         evidence: ev
-      }));
+      };
+      handleTimesheetEvidenceUpdateKindDiagLog('response_shape', {
+        mode: 'idempotent_same_kind',
+        status: 200,
+        current_timesheet_id: currentTsId || null,
+        evidence_id: evidenceId || null,
+        old_kind: oldKindU || null,
+        new_kind: newKindU || null,
+        before_signature: beforeSignatureDiag,
+        after_signature: afterSignatureDiag,
+        response_signature: handleTimesheetEvidenceUpdateKindDiagSignature(responsePayload),
+        response_contains: handleTimesheetEvidenceUpdateKindDiagResponseContains(responsePayload)
+      });
+      return withCORS(env, req, ok(responsePayload));
     }
 
     const originalStorageKey = (ev.storage_key != null) ? String(ev.storage_key).trim().replace(/^\/+/, '') : '';
@@ -125881,6 +127834,15 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
 
     const patchPayload = { kind: newKind };
     if (newKindU === 'TIMESHEET') patchPayload.storage_key = updatedStorageKey;
+
+    handleTimesheetEvidenceUpdateKindDiagLog('before_write', {
+      current_timesheet_id: currentTsId || null,
+      evidence_id: evidenceId || null,
+      old_kind: oldKindU || null,
+      new_kind: newKindU || null,
+      storage_key_present: !!updatedStorageKey,
+      before_signature: beforeSignatureDiag
+    });
 
     const patchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
@@ -126006,20 +127968,32 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       );
     } catch {}
 
-    return withCORS(env, req, ok({
+    const afterSignatureDiag = await fetchhandleTimesheetEvidenceUpdateKindLifecycleSignatureDiag(currentTsId, null);
+    const responsePayload = {
       ok: true,
       requested_timesheet_id: resolved.requested_timesheet_id || tsId,
       current_timesheet_id: currentTsId,
       was_stale: !!resolved.was_stale,
       evidence: updated || { ok: true }
-    }));
+    };
+    handleTimesheetEvidenceUpdateKindDiagLog('response_shape', {
+      mode: 'updated_kind',
+      status: 200,
+      current_timesheet_id: currentTsId || null,
+      evidence_id: evidenceId || null,
+      old_kind: oldKindU || null,
+      new_kind: newKindU || null,
+      before_signature: beforeSignatureDiag,
+      after_signature: afterSignatureDiag,
+      response_signature: handleTimesheetEvidenceUpdateKindDiagSignature(responsePayload),
+      response_contains: handleTimesheetEvidenceUpdateKindDiagResponseContains(responsePayload)
+    });
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to update evidence kind: ${e?.message || e}`));
   }
 }
-
-
-
 
 async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
@@ -126060,12 +128034,97 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const handleTimesheetEvidenceDeleteDiagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const handleTimesheetEvidenceDeleteDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+  const handleTimesheetEvidenceDeleteDiagSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = handleTimesheetEvidenceDeleteDiagText(obj);
+      return { present: !!s, backend_row_signature: null, mutation_row_signature: null, row_signature: null, expected_row_signature: null, current_row_signature: null, signature: s };
+    }
+    const backend = handleTimesheetEvidenceDeleteDiagText(obj.backend_row_signature);
+    const mutation = handleTimesheetEvidenceDeleteDiagText(obj.mutation_row_signature);
+    const row = handleTimesheetEvidenceDeleteDiagText(obj.row_signature);
+    const expected = handleTimesheetEvidenceDeleteDiagText(obj.expected_row_signature);
+    const current = handleTimesheetEvidenceDeleteDiagText(obj.current_row_signature);
+    const generic = handleTimesheetEvidenceDeleteDiagText(obj.signature || obj.render_signature);
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const handleTimesheetEvidenceDeleteDiagResponseContains = (payload) => ({
+    ok: Object.prototype.hasOwnProperty.call(payload || {}, 'ok'),
+    evidence: !!(payload?.evidence && typeof payload.evidence === 'object'),
+    queue_id: !!handleTimesheetEvidenceDeleteDiagText(payload?.queue_id),
+    returned_to_queue: Object.prototype.hasOwnProperty.call(payload || {}, 'returned_to_queue'),
+    backend_row_signature: !!handleTimesheetEvidenceDeleteDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!handleTimesheetEvidenceDeleteDiagText(payload?.mutation_row_signature),
+    row_signature: !!handleTimesheetEvidenceDeleteDiagText(payload?.row_signature),
+    expected_row_signature: !!handleTimesheetEvidenceDeleteDiagText(payload?.expected_row_signature),
+    current_row_signature: !!handleTimesheetEvidenceDeleteDiagText(payload?.current_row_signature),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    refresh_required: payload?.refresh_required === true,
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true
+  });
+  const handleTimesheetEvidenceDeleteDiagLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req?.url || '').pathname; } catch {}
+      console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTimesheetEvidenceDelete',
+        route_family: 'EVIDENCE_DELETE',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: tsId || null,
+        evidence_id: typeof evidenceId === 'undefined' ? null : (evidenceId || null),
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+  const fetchhandleTimesheetEvidenceDeleteLifecycleSignatureDiag = async (pTimesheetId, pContractWeekId = null) => {
+    if (!pTimesheetId) return { ok: false, skipped: true, reason: 'NO_TIMESHEET_ID' };
+    try {
+      const payload = await sbRpc(env, 'timesheet_lifecycle_signature_v1', {
+        p_timesheet_id: pTimesheetId,
+        p_contract_week_id: pContractWeekId || null,
+        p_include_payload: false
+      }, { timeoutMs: 8000 });
+      const obj = Array.isArray(payload) ? (payload[0] || null) : payload;
+      const signature = handleTimesheetEvidenceDeleteDiagSignature(obj);
+      return { ok: signature.present, source: 'timesheet_lifecycle_signature_v1', signature, payload_field_names: handleTimesheetEvidenceDeleteDiagKeys(obj) };
+    } catch (err) {
+      return { ok: false, source: 'timesheet_lifecycle_signature_v1', error: String(err?.message || err || '').slice(0, 300) };
+    }
+  };
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  handleTimesheetEvidenceDeleteDiagLog('received', {
+    body_keys: handleTimesheetEvidenceDeleteDiagKeys(body),
+    expected_timesheet_id: expected || null
+  });
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
   const resolved = await resolveTimesheetToCurrent(env, tsId);
-  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  if (!resolved) {
+    handleTimesheetEvidenceDeleteDiagLog('timesheet_not_found', { status: 404 });
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
   const currentTsId = resolved.current_timesheet_id;
+  handleTimesheetEvidenceDeleteDiagLog('resolved_current', {
+    current_timesheet_id: currentTsId || null,
+    requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+    was_stale: !!resolved.was_stale
+  });
 
   if (String(expected) !== String(currentTsId)) {
     return withCORS(
@@ -126124,8 +128183,17 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       tsMeta = tsRows?.[0] || null;
     } catch {}
 
+    const beforeSignatureDiag = await fetchhandleTimesheetEvidenceDeleteLifecycleSignatureDiag(currentTsId, null);
     const storageKeyRaw = ev.storage_key || null;
     const storageKeyForR2 = storageKeyRaw ? String(storageKeyRaw).trim().replace(/^\/+/, '') : null;
+
+    handleTimesheetEvidenceDeleteDiagLog('before_write', {
+      current_timesheet_id: currentTsId || null,
+      evidence_id: evidenceId || null,
+      evidence_kind: ev?.kind || null,
+      storage_key_present: !!storageKeyForR2,
+      before_signature: beforeSignatureDiag
+    });
 
     try {
       if (storageKeyForR2) {
@@ -126239,16 +128307,30 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       );
     } catch {}
 
-    return withCORS(env, req, ok({
+    const afterSignatureDiag = await fetchhandleTimesheetEvidenceDeleteLifecycleSignatureDiag(currentTsId, null);
+    const responsePayload = {
       ok: true,
       requested_timesheet_id: resolved.requested_timesheet_id || tsId,
       current_timesheet_id: currentTsId,
       was_stale: !!resolved.was_stale
-    }));
+    };
+    handleTimesheetEvidenceDeleteDiagLog('response_shape', {
+      status: 200,
+      current_timesheet_id: currentTsId || null,
+      evidence_id: evidenceId || null,
+      evidence_kind: ev?.kind || null,
+      before_signature: beforeSignatureDiag,
+      after_signature: afterSignatureDiag,
+      response_signature: handleTimesheetEvidenceDeleteDiagSignature(responsePayload),
+      response_contains: handleTimesheetEvidenceDeleteDiagResponseContains(responsePayload)
+    });
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${e?.message || e}`));
   }
 }
+
 
 
 
@@ -146083,16 +148165,147 @@ async function insertAuditEvent(env, req, args) {
 
 // -------------------- public handlers --------------------
 
-
-
 async function handleTsfinPatchPO(env, req, timesheetId) {
   const body = await parseJSONBody(req).catch(() => ({}));
-  return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
+
+  const diagHasOwn = (obj, key) => !!(obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key));
+  const diagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const diagFirstText = (...values) => {
+    for (const value of values) {
+      const s = diagText(value);
+      if (s) return s;
+    }
+    return null;
+  };
+  const diagExtractSignature = (obj) => {
+    if (!obj || typeof obj !== 'object') {
+      const s = diagText(obj);
+      return {
+        present: !!s,
+        backend_row_signature: null,
+        mutation_row_signature: null,
+        row_signature: null,
+        expected_row_signature: null,
+        current_row_signature: null,
+        signature: s
+      };
+    }
+    const backend = diagText(obj.backend_row_signature);
+    const mutation = diagText(obj.mutation_row_signature);
+    const row = diagText(obj.row_signature);
+    const expected = diagText(obj.expected_row_signature);
+    const current = diagText(obj.current_row_signature);
+    const generic = diagText(obj.signature || obj.render_signature);
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const diagResponseContains = (payload) => {
+    const lp = payload?.lifecycle_patch && typeof payload.lifecycle_patch === 'object' ? payload.lifecycle_patch : null;
+    return {
+      updated: Object.prototype.hasOwnProperty.call(payload || {}, 'updated'),
+      tsfin: !!(payload?.tsfin && typeof payload.tsfin === 'object'),
+      timesheet: !!(payload?.timesheet && typeof payload.timesheet === 'object'),
+      backend_row_signature: !!diagText(payload?.backend_row_signature),
+      mutation_row_signature: !!diagText(payload?.mutation_row_signature),
+      row_signature: !!diagText(payload?.row_signature),
+      expected_row_signature: !!diagText(payload?.expected_row_signature),
+      current_row_signature: !!diagText(payload?.current_row_signature),
+      lifecycle_signature: !!payload?.lifecycle_signature,
+      lifecycle_signature_has_signature: diagExtractSignature(payload?.lifecycle_signature).present,
+      lifecycle_patch: !!lp,
+      lifecycle_patch_backend_row_signature: !!diagText(lp?.backend_row_signature),
+      lifecycle_patch_mutation_row_signature: !!diagText(lp?.mutation_row_signature),
+      lifecycle_patch_row_signature: !!diagText(lp?.row_signature),
+      lifecycle_patch_expected_row_signature: !!diagText(lp?.expected_row_signature),
+      affected_rows: Array.isArray(payload?.affected_rows),
+      affected_rows_count: Array.isArray(payload?.affected_rows) ? payload.affected_rows.length : null,
+      action_flags: !!(payload?.action_flags || lp?.action_flags),
+      priority_badge_hints: !!(payload?.priority_badge_hints || lp?.priority_badge_hints),
+      refresh_hints: !!payload?.refresh_hints,
+      dirty_state: !!payload?.dirty_state,
+      save_patch_available: payload?.save_patch_available === true,
+      immediate_lifecycle_patch_available: payload?.immediate_lifecycle_patch_available === true,
+      requires_affected_row_refresh: payload?.requires_affected_row_refresh === true,
+      requires_full_details_refresh: payload?.requires_full_details_refresh === true,
+      refresh_required: payload?.refresh_required === true,
+      authorise_preflight_refresh_required: payload?.authorise_preflight_refresh_required === true
+    };
+  };
+  const diagRequestSignatureFields = {
+    expected_timesheet_id_present: diagHasOwn(body, 'expected_timesheet_id'),
+    expected_row_signature_present: diagHasOwn(body, 'expected_row_signature'),
+    backend_row_signature_present: diagHasOwn(body, 'backend_row_signature'),
+    mutation_row_signature_present: diagHasOwn(body, 'mutation_row_signature'),
+    row_signature_present: diagHasOwn(body, 'row_signature'),
+    current_row_signature_present: diagHasOwn(body, 'current_row_signature'),
+    expected_row_signature: diagFirstText(body?.expected_row_signature),
+    backend_row_signature: diagFirstText(body?.backend_row_signature),
+    mutation_row_signature: diagFirstText(body?.mutation_row_signature),
+    row_signature: diagFirstText(body?.row_signature),
+    current_row_signature: diagFirstText(body?.current_row_signature)
+  };
+  const logTsfinPoSignatureDiag = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req.url).pathname; } catch {}
+      console.log('[TSFIN_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TSFIN_SAVE_SIGNATURE_DIAG',
+        handler: 'handleTsfinPatchPO',
+        route_family: 'PO',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: timesheetId || null,
+        expected_timesheet_id: body?.expected_timesheet_id ?? null,
+        request_signature_fields: diagRequestSignatureFields,
+        patch_field_names: ['number'].filter((key) => body && body[key] !== undefined),
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+
+  logTsfinPoSignatureDiag('received');
+
+  const response = await patchTsfinCommon(env, req, timesheetId, {
     expected_timesheet_id: body?.expected_timesheet_id,
     reason: body?.reason ?? null,
     po: { number: body?.number }
-  }));
+  });
+
+  try {
+    const payload = await response.clone().json().catch(() => null);
+    logTsfinPoSignatureDiag('response_shape', {
+      status: Number(response.status || 0) || null,
+      ok: !!response.ok,
+      current_timesheet_id: payload?.current_timesheet_id || payload?.timesheet_id || null,
+      requested_timesheet_id: payload?.requested_timesheet_id || timesheetId || null,
+      contract_week_id: payload?.contract_week_id || null,
+      updated: payload?.updated === true,
+      save_domain: payload?.save_domain || null,
+      response_signature: diagExtractSignature(payload || null),
+      lifecycle_patch_signature: diagExtractSignature(payload?.lifecycle_patch || null),
+      response_contains: diagResponseContains(payload || {})
+    });
+  } catch (e) {
+    logTsfinPoSignatureDiag('response_shape_log_failed', {
+      status: Number(response?.status || 0) || null,
+      error: String(e?.message || e || '').slice(0, 300)
+    });
+  }
+
+  return withCORS(env, req, response);
 }
+
 
  async function computeWeeklyAdditionalFromTs(env, ts, cw, contract, policyOverride = null) {
     let additional_units_json = {};
@@ -147942,6 +150155,89 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       context: 'timesheet_modal'
     }];
   };
+  const lifecycleSignatureDiagText = (value) => {
+    const text = String(value == null ? '' : value).trim();
+    return text || null;
+  };
+  const lifecycleSignatureDiagObjectKeys = (obj) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return [];
+    return Object.keys(obj).sort();
+  };
+  const lifecycleSignatureDiagSignature = (obj) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      const signatureText = lifecycleSignatureDiagText(obj);
+      return {
+        present: !!signatureText,
+        backend_row_signature: null,
+        mutation_row_signature: null,
+        row_signature: null,
+        expected_row_signature: null,
+        current_row_signature: null,
+        signature: signatureText
+      };
+    }
+
+    const backend = lifecycleSignatureDiagText(obj.backend_row_signature || obj.backendRowSignature);
+    const mutation = lifecycleSignatureDiagText(obj.mutation_row_signature || obj.mutationRowSignature);
+    const row = lifecycleSignatureDiagText(obj.row_signature || obj.rowSignature);
+    const expected = lifecycleSignatureDiagText(obj.expected_row_signature || obj.expectedRowSignature);
+    const current = lifecycleSignatureDiagText(obj.current_row_signature || obj.currentRowSignature);
+    const generic = lifecycleSignatureDiagText(obj.signature || obj.render_signature || obj.renderSignature);
+
+    return {
+      present: !!(backend || mutation || row || expected || current || generic),
+      backend_row_signature: backend,
+      mutation_row_signature: mutation,
+      row_signature: row,
+      expected_row_signature: expected,
+      current_row_signature: current,
+      signature: backend || mutation || row || expected || current || generic || null
+    };
+  };
+  const lifecycleSignatureDiagResponseContains = (payload) => ({
+    ok: Object.prototype.hasOwnProperty.call(payload || {}, 'ok'),
+    success: Object.prototype.hasOwnProperty.call(payload || {}, 'success'),
+    authorised: Object.prototype.hasOwnProperty.call(payload || {}, 'authorised'),
+    unauthorised: Object.prototype.hasOwnProperty.call(payload || {}, 'unauthorised'),
+    backend_row_signature: !!lifecycleSignatureDiagText(payload?.backend_row_signature),
+    mutation_row_signature: !!lifecycleSignatureDiagText(payload?.mutation_row_signature),
+    row_signature: !!lifecycleSignatureDiagText(payload?.row_signature),
+    expected_row_signature: !!lifecycleSignatureDiagText(payload?.expected_row_signature),
+    current_row_signature: !!lifecycleSignatureDiagText(payload?.current_row_signature),
+    decision: !!(payload?.decision && typeof payload.decision === 'object'),
+    lifecycle_patch: !!(payload?.lifecycle_patch && typeof payload.lifecycle_patch === 'object'),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    affected_rows_count: Array.isArray(payload?.affected_rows) ? payload.affected_rows.length : null,
+    refresh_hints: !!(payload?.refresh_hints && typeof payload.refresh_hints === 'object'),
+    cache_invalidation_hints: !!(payload?.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object'),
+    requires_affected_row_refresh: payload?.requires_affected_row_refresh === true,
+    requires_full_details_refresh: payload?.requires_full_details_refresh === true,
+    refresh_required: payload?.refresh_required === true,
+    permission_state_patch_complete: payload?.permission_state_patch_complete === true,
+    priority_badges_patch_complete: payload?.priority_badges_patch_complete === true,
+    immediate_lifecycle_patch_available: payload?.immediate_lifecycle_patch_available === true
+  });
+  const lifecycleSignatureLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try {
+        routePath = new URL(req?.url || '').pathname;
+      } catch {}
+      console.log('[TIMESHEET_LIFECYCLE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_LIFECYCLE_SIGNATURE_DIAG',
+        handler: 'handleTimesheetAuthoriseGeneric',
+        route_family: 'TIMESHEET_AUTHORISE',
+        lifecycle_action: 'AUTHORISE',
+        step,
+        route_path: routePath,
+        requested_timesheet_id: trimStr(timesheetId) || null,
+        actor_user_id: user?.id || null,
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+
   const mutationErrorResponse = (rawCode, detailObj, options = {}) => {
     const code = firstString(rawCode, detailObj?.error_code, detailObj?.error, 'AUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
@@ -147990,6 +150286,14 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       });
     }
     if (code === 'ROW_SIGNATURE_MISMATCH') {
+      lifecycleSignatureLog('row_signature_mismatch', {
+        source: 'mutation_error_response',
+        raw_code: code,
+        expected_row_signature: firstString(detailObj?.expected_row_signature, options.expectedRowSignature) || null,
+        current_row_signature: firstString(detailObj?.current_row_signature) || null,
+        current_timesheet_id: currentTimesheetId || null,
+        contract_week_id: firstString(detailObj?.contract_week_id) || null
+      });
       return withJson(409, {
         error: 'ROW_SIGNATURE_MISMATCH',
         error_code: 'ROW_SIGNATURE_MISMATCH',
@@ -148057,10 +150361,46 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     body.rowSignature
   );
 
+  lifecycleSignatureLog('request_received', {
+    expected_timesheet_id: expectedTimesheetId || null,
+    expected_row_signature_present: !!expectedRowSignature,
+    request_signature: lifecycleSignatureDiagSignature({
+      expected_row_signature: firstString(body.expected_row_signature, body.expectedRowSignature) || null,
+      backend_row_signature: firstString(body.backend_row_signature, body.backendRowSignature) || null,
+      mutation_row_signature: firstString(body.mutation_row_signature, body.mutationRowSignature) || null,
+      row_signature: firstString(body.row_signature, body.rowSignature) || null
+    }),
+    request_signature_fields: {
+      expected_row_signature: Object.prototype.hasOwnProperty.call(body, 'expected_row_signature'),
+      expectedRowSignature: Object.prototype.hasOwnProperty.call(body, 'expectedRowSignature'),
+      backend_row_signature: Object.prototype.hasOwnProperty.call(body, 'backend_row_signature'),
+      backendRowSignature: Object.prototype.hasOwnProperty.call(body, 'backendRowSignature'),
+      mutation_row_signature: Object.prototype.hasOwnProperty.call(body, 'mutation_row_signature'),
+      mutationRowSignature: Object.prototype.hasOwnProperty.call(body, 'mutationRowSignature'),
+      row_signature: Object.prototype.hasOwnProperty.call(body, 'row_signature'),
+      rowSignature: Object.prototype.hasOwnProperty.call(body, 'rowSignature')
+    }
+  });
+
   const guard = await guardCurrentTimesheetWrite(env, req, requestedTimesheetId, expectedTimesheetId);
-  if (!guard.ok) return guard.res;
+  if (!guard.ok) {
+    lifecycleSignatureLog('guard_failed', {
+      expected_timesheet_id: expectedTimesheetId || null,
+      expected_row_signature: expectedRowSignature || null
+    });
+    return guard.res;
+  }
 
   const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+  lifecycleSignatureLog('guard_resolved', {
+    requested_timesheet_id: requestedTimesheetId || null,
+    expected_timesheet_id: expectedTimesheetId || null,
+    current_timesheet_id: currentTimesheetId || null,
+    current_version: guard.resolved?.current_version ?? null,
+    booking_id: guard.resolved?.booking_id || null,
+    was_stale: !!guard.resolved?.was_stale,
+    expected_row_signature: expectedRowSignature || null
+  });
   const now = nowIso();
   const warnings = [];
 
@@ -148073,6 +150413,17 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   ).catch(() => null);
 
   if (!tsBefore?.timesheet_id) return withCORS(env, req, notFound('Timesheet not found'));
+
+  lifecycleSignatureLog('before_authorise_precheck', {
+    current_timesheet_id: currentTimesheetId || null,
+    sheet_scope: tsBefore.sheet_scope || null,
+    authorised_at_server_present: !!tsBefore.authorised_at_server,
+    qr_status: tsBefore.qr_status || null,
+    qr_token_present: !!trimStr(tsBefore.qr_token),
+    qr_generated_at_present: !!tsBefore.qr_generated_at,
+    qr_scanned_at_present: !!tsBefore.qr_scanned_at,
+    qr_signed_hash_present: !!trimStr(tsBefore.qr_signed_hash)
+  });
 
   const qrStatus = String(tsBefore.qr_status || '').trim().toUpperCase();
   const qrToken = trimStr(tsBefore.qr_token);
@@ -148147,6 +150498,13 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
 
   let rpcPayload = null;
   try {
+    lifecycleSignatureLog('before_rpc', {
+      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null,
+      expected_row_signature: expectedRowSignature || null
+    });
     const rpcRes = await sbRpc(env, 'timesheet_authorise_generic_atomic', {
       p_timesheet_id: requestedTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
@@ -148155,9 +150513,27 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       p_expected_row_signature: expectedRowSignature || null
     }, { timeoutMs: 12000 });
     rpcPayload = unwrapRpcPayload(rpcRes, 'timesheet_authorise_generic_atomic');
+    lifecycleSignatureLog('rpc_completed', {
+      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null,
+      payload_signature: lifecycleSignatureDiagSignature(rpcPayload),
+      payload_keys: lifecycleSignatureDiagObjectKeys(rpcPayload)
+    });
   } catch (err) {
     const rpcErr = parseRpcFailure(err);
     const detailObj = rpcErr.detailJson || parseMaybeJsonObj(rpcErr.details) || {};
+    lifecycleSignatureLog('rpc_failed', {
+      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      status: rpcErr.status || null,
+      message: rpcErr.message || null,
+      code: rpcErr.code || null,
+      expected_row_signature: expectedRowSignature || detailObj?.expected_row_signature || null,
+      current_row_signature: detailObj?.current_row_signature || null,
+      current_timesheet_id: detailObj?.current_timesheet_id || currentTimesheetId || null,
+      contract_week_id: detailObj?.contract_week_id || null
+    });
     return mutationErrorResponse(rpcErr.message || rpcErr.code, detailObj, {
       currentTimesheetId,
       expectedTimesheetId,
@@ -148166,8 +150542,26 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     });
   }
 
-  if (!rpcPayload) return withCORS(env, req, serverError('timesheet_authorise_generic_atomic returned no payload'));
+  if (!rpcPayload) {
+    lifecycleSignatureLog('rpc_payload_missing', {
+      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null,
+      expected_row_signature: expectedRowSignature || null
+    });
+    return withCORS(env, req, serverError('timesheet_authorise_generic_atomic returned no payload'));
+  }
   if (rpcPayload.ok === false || rpcPayload.success === false) {
+    lifecycleSignatureLog('rpc_payload_not_ok', {
+      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      current_timesheet_id: firstString(rpcPayload.current_timesheet_id, rpcPayload.timesheet_id, currentTimesheetId) || null,
+      expected_row_signature: expectedRowSignature || rpcPayload.expected_row_signature || null,
+      current_row_signature: rpcPayload.current_row_signature || null,
+      error_code: firstString(rpcPayload.error_code, rpcPayload.error, rpcPayload.message) || null,
+      payload_signature: lifecycleSignatureDiagSignature(rpcPayload),
+      payload_keys: lifecycleSignatureDiagObjectKeys(rpcPayload)
+    });
     return mutationErrorResponse(firstString(rpcPayload.error_code, rpcPayload.error, rpcPayload.message), rpcPayload, {
       currentTimesheetId,
       expectedTimesheetId,
@@ -148256,6 +150650,48 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     }
   });
 
+  lifecycleSignatureLog('response_shape', {
+    status: 200,
+    rpc_function_name: 'timesheet_authorise_generic_atomic',
+    requested_timesheet_id: requestedTimesheetId || null,
+    expected_timesheet_id: expectedTimesheetId || null,
+    current_timesheet_id: finalTimesheetId || null,
+    contract_week_id: rpcPayload.contract_week_id || null,
+    booking_id: decision.booking_id || null,
+    current_version: decision.current_version ?? null,
+    was_stale: decision.was_stale,
+    processing_status_before: rpcPayload.previous_processing_status || null,
+    processing_status_after: rpcPayload.new_processing_status || rpcPayload.processing_status || null,
+    expected_row_signature: expectedRowSignature || null,
+    backend_row_signature: backendRowSignature || null,
+    response_signature: lifecycleSignatureDiagSignature({
+      backend_row_signature: backendRowSignature || null,
+      mutation_row_signature: backendRowSignature || null,
+      row_signature: backendRowSignature || null,
+      expected_row_signature: backendRowSignature || null
+    }),
+    response_contains: lifecycleSignatureDiagResponseContains({
+      ok: true,
+      success: true,
+      authorised: true,
+      backend_row_signature: backendRowSignature || null,
+      mutation_row_signature: backendRowSignature || null,
+      row_signature: backendRowSignature || null,
+      expected_row_signature: backendRowSignature || null,
+      decision,
+      lifecycle_patch: lifecyclePatchBundle.lifecycle_patch,
+      affected_rows: lifecyclePatchBundle.affected_rows,
+      refresh_hints: lifecyclePatchBundle.refresh_hints,
+      permission_state_patch_complete: lifecyclePatchBundle.permission_state_patch_complete,
+      priority_badges_patch_complete: lifecyclePatchBundle.priority_badges_patch_complete,
+      immediate_lifecycle_patch_available: lifecyclePatchBundle.immediate_lifecycle_patch_available,
+      requires_affected_row_refresh: lifecyclePatchBundle.requires_affected_row_refresh,
+      requires_full_details_refresh: lifecyclePatchBundle.requires_full_details_refresh,
+      refresh_required: lifecyclePatchBundle.refresh_required,
+      cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
+    })
+  });
+
   return withCORS(env, req, ok({
     ok: true,
     success: true,
@@ -148292,6 +150728,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
 }
 
 
+
 async function handleContractWeekManualDraftUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
@@ -148305,13 +150742,72 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
+  const draftSaveDiagText = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    return s || null;
+  };
+  const draftSaveDiagKeys = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? Object.keys(obj).sort() : [];
+  const draftSaveDiagResponseContains = (payload) => ({
+    updated: Object.prototype.hasOwnProperty.call(payload || {}, 'updated'),
+    contract_week_id: !!draftSaveDiagText(payload?.id || payload?.week_id || payload?.contract_week_id),
+    totals_json: !!(payload?.totals_json && typeof payload.totals_json === 'object'),
+    planned_schedule_json: Array.isArray(payload?.planned_schedule_json),
+    status: !!draftSaveDiagText(payload?.status),
+    timesheet_id: !!draftSaveDiagText(payload?.timesheet_id),
+    backend_row_signature: !!draftSaveDiagText(payload?.backend_row_signature),
+    row_signature: !!draftSaveDiagText(payload?.row_signature),
+    expected_row_signature: !!draftSaveDiagText(payload?.expected_row_signature),
+    affected_rows: Array.isArray(payload?.affected_rows),
+    refresh_required: payload?.refresh_required === true
+  });
+  const draftSaveDiagLog = (step, extra = {}) => {
+    try {
+      let routePath = null;
+      try { routePath = new URL(req?.url || '').pathname; } catch {}
+      console.log('[TIMESHEET_SAVE_SIGNATURE_DIAG]', JSON.stringify({
+        tag: 'TIMESHEET_SAVE_SIGNATURE_DIAG',
+        handler: 'handleContractWeekManualDraftUpsert',
+        route_family: 'CONTRACT_WEEK_MANUAL_DRAFT_UPSERT',
+        step,
+        route_path: routePath,
+        contract_week_id: weekId || null,
+        server_utc: new Date().toISOString(),
+        ...(extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+
+  draftSaveDiagLog('received', {
+    body_keys: draftSaveDiagKeys(body),
+    has_expenses_draft: Object.prototype.hasOwnProperty.call(body || {}, 'expenses_draft'),
+    has_planned_schedule_json: Object.prototype.hasOwnProperty.call(body || {}, 'planned_schedule_json'),
+    has_actual_schedule_json: Object.prototype.hasOwnProperty.call(body || {}, 'actual_schedule_json'),
+    has_schedule_json: Object.prototype.hasOwnProperty.call(body || {}, 'schedule_json'),
+    has_additional_units_week: Object.prototype.hasOwnProperty.call(body || {}, 'additional_units_week'),
+    has_additional_units_per_day: Object.prototype.hasOwnProperty.call(body || {}, 'additional_units_per_day')
+  });
+
   // Load contract_week. The schedule draft path remains MANUAL-only, but an
   // expenses-only draft may be saved for any supported unprocessed planned week.
   const cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json,totals_json,status,additional_seq,is_adjustment`
   );
-  if (!cw) return withCORS(env, req, notFound('Week not found'));
+  if (!cw) {
+    draftSaveDiagLog('week_not_found', { status: 404 });
+    return withCORS(env, req, notFound('Week not found'));
+  }
+
+  draftSaveDiagLog('contract_week_loaded', {
+    contract_week_id: cw?.id || weekId || null,
+    contract_id: cw?.contract_id || null,
+    week_ending_date: cw?.week_ending_date || null,
+    status: cw?.status || null,
+    submission_mode_snapshot: cw?.submission_mode_snapshot || null,
+    existing_timesheet_id: cw?.timesheet_id || null,
+    planned_schedule_rows: Array.isArray(cw?.planned_schedule_json) ? cw.planned_schedule_json.length : null,
+    totals_json_present: !!(cw?.totals_json && typeof cw.totals_json === 'object')
+  });
 
   if (cw.timesheet_id) {
     return withCORS(env, req, badRequest('This week already has a timesheet; draft save is not allowed.'));
@@ -148548,6 +151044,19 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
       patch.is_adjustment = true;
     }
 
+    draftSaveDiagLog('before_write', {
+      save_domain: 'EXPENSES_DRAFT',
+      contract_week_id: cw?.id || weekId || null,
+      status: cw?.status || null,
+      keep_empty_additional_manual_adjustment_week: keepEmptyAdditionalManualAdjustmentWeek,
+      expense_categories_present: {
+        mileage: Number(expensesDraft?.mileage_units || 0) > 0,
+        travel: Number(expensesDraft?.travel_pay || 0) > 0 || Number(expensesDraft?.travel_charge || 0) > 0,
+        accommodation: Number(expensesDraft?.accommodation_pay || 0) > 0 || Number(expensesDraft?.accommodation_charge || 0) > 0,
+        other: Number(expensesDraft?.other_pay || 0) > 0 || Number(expensesDraft?.other_charge || 0) > 0
+      }
+    });
+
     const res = await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
       {
@@ -148558,11 +151067,26 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     );
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
+      draftSaveDiagLog('write_failed', {
+        save_domain: 'EXPENSES_DRAFT',
+        status: res.status || null,
+        contract_week_id: cw?.id || weekId || null,
+        error_text: String(txt || '').slice(0, 500)
+      });
       return withCORS(env, req, serverError(txt || 'Failed to patch contract_week expenses draft'));
     }
     const json = await res.json().catch(() => []);
     const row = Array.isArray(json) ? (json[0] || null) : json;
-    return withCORS(env, req, ok(row || { updated: true, week_id: weekId, expenses_draft: expensesDraft }));
+    const responsePayload = row || { updated: true, week_id: weekId, expenses_draft: expensesDraft };
+    draftSaveDiagLog('response_shape', {
+      save_domain: 'EXPENSES_DRAFT',
+      status: 200,
+      contract_week_id: row?.id || weekId || null,
+      response_contains: draftSaveDiagResponseContains(responsePayload),
+      planned_schedule_rows: Array.isArray(row?.planned_schedule_json) ? row.planned_schedule_json.length : null,
+      timesheet_id: row?.timesheet_id || null
+    });
+    return withCORS(env, req, ok(responsePayload));
   }
 
   if (mode !== 'MANUAL') {
@@ -148986,6 +151510,19 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     };
   }
 
+  draftSaveDiagLog('before_write', {
+    save_domain: 'SCHEDULE_DRAFT',
+    contract_week_id: cw?.id || weekId || null,
+    status: cw?.status || null,
+    mode,
+    planned_schedule_rows: Array.isArray(planned_schedule_json) ? planned_schedule_json.length : null,
+    hours,
+    additional_units_week_present: additionalUnitsWeek !== undefined,
+    additional_units_per_day_present: additionalUnitsPerDay !== undefined,
+    expenses_draft_present: expensesDraft !== undefined,
+    keep_empty_additional_manual_adjustment_week: keepEmptyAdditionalManualAdjustmentWeek
+  });
+
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
     {
@@ -149000,14 +151537,31 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
 
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
+    draftSaveDiagLog('write_failed', {
+      save_domain: 'SCHEDULE_DRAFT',
+      status: res.status || null,
+      contract_week_id: cw?.id || weekId || null,
+      error_text: String(txt || '').slice(0, 500)
+    });
     return withCORS(env, req, serverError(txt || 'Failed to patch contract_week'));
   }
 
   const json = await res.json().catch(() => []);
   const row = Array.isArray(json) ? (json[0] || null) : json;
+  const responsePayload = row || { updated: true, week_id: weekId, hours };
 
-  return withCORS(env, req, ok(row || { updated: true, week_id: weekId, hours }));
+  draftSaveDiagLog('response_shape', {
+    save_domain: 'SCHEDULE_DRAFT',
+    status: 200,
+    contract_week_id: row?.id || weekId || null,
+    response_contains: draftSaveDiagResponseContains(responsePayload),
+    planned_schedule_rows: Array.isArray(row?.planned_schedule_json) ? row.planned_schedule_json.length : null,
+    timesheet_id: row?.timesheet_id || null
+  });
+
+  return withCORS(env, req, ok(responsePayload));
 }
+
 
 
 async function handleContractWeekManualAuthorise(env, req, weekId, ctx = null) {
