@@ -2117,16 +2117,10 @@ $function$;
 DROP FUNCTION IF EXISTS public.timesheet_authorise_generic_atomic(uuid, uuid, uuid, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.timesheet_authorise_generic_atomic(uuid, uuid, uuid, timestamp with time zone, text);
 
-CREATE OR REPLACE FUNCTION public.timesheet_authorise_generic_atomic(
-  p_timesheet_id uuid,
-  p_expected_timesheet_id uuid,
-  p_actor_user_id uuid,
-  p_now_utc timestamp with time zone DEFAULT now(),
-  p_expected_row_signature text DEFAULT NULL::text
-)
+CREATE OR REPLACE FUNCTION public.timesheet_authorise_generic_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
- VOLATILE SECURITY DEFINER
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -2155,8 +2149,24 @@ DECLARE
   v_force_ready_for_invoice boolean := false;
   v_error_state text := NULL;
   v_error_message text := NULL;
+  v_diag_started_at timestamptz := clock_timestamp();
+  v_summary_refresh_json jsonb := '{}'::jsonb;
 BEGIN
   PERFORM set_config('lock_timeout', '2500ms', true);
+
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    p_timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'entry',
+      'timesheet_id', p_timesheet_id,
+      'expected_timesheet_id', p_expected_timesheet_id,
+      'actor_user_id_present', p_actor_user_id IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   IF p_timesheet_id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_PAYLOAD', DETAIL = jsonb_build_object('field', 'p_timesheet_id')::text;
@@ -2179,6 +2189,19 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'TARGET_NOT_FOUND', DETAIL = jsonb_build_object('timesheet_id', p_timesheet_id)::text;
   END IF;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_requested_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'requested_timesheet_resolved',
+      'timesheet_id', v_requested_ts.timesheet_id,
+      'is_current', COALESCE(v_requested_ts.is_current, false),
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   IF COALESCE(v_requested_ts.is_current, false) THEN
     v_current_ts := v_requested_ts;
   ELSE
@@ -2199,6 +2222,19 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'EXPECTED_TIMESHEET_MISMATCH', DETAIL = jsonb_build_object('expected_timesheet_id', p_expected_timesheet_id, 'current_timesheet_id', v_current_ts.timesheet_id)::text;
   END IF;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'current_timesheet_locked',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   SELECT tf.*
     INTO v_current_tsfin
   FROM public.timesheets_financials AS tf
@@ -2211,6 +2247,21 @@ BEGIN
   IF v_current_tsfin.id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'TARGET_NOT_FOUND', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'reason', 'NO_TSFIN')::text;
   END IF;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'tsfin_locked',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'tsfin_id', v_current_tsfin.id,
+      'old_processing_status', v_current_tsfin.processing_status::text,
+      'old_authorised_present', v_current_tsfin.authorised_at_utc IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   IF v_current_ts.contract_id IS NOT NULL THEN
     SELECT COALESCE(c.requires_hr, false)
@@ -2344,12 +2395,45 @@ BEGIN
     ELSE 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
   END;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'before_signature_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'tsfin_id', v_current_tsfin.id,
+      'current_row_signature_present', v_current_row_signature IS NOT NULL,
+      'expected_row_signature_present', v_expected_row_signature IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
+  PERFORM set_config('cloudtms.lifecycle_mutation_context', 'timesheet_authorise', true);
+  PERFORM set_config('cloudtms.lifecycle_target_timesheet_id', v_current_ts.timesheet_id::text, true);
+  PERFORM set_config('cloudtms.lifecycle_defer_summary_refresh', 'on', true);
+
   UPDATE public.timesheets AS ts
      SET authorised_at_server = v_now,
          updated_at = v_now
    WHERE ts.timesheet_id = v_current_ts.timesheet_id
      AND ts.is_current = true
    RETURNING * INTO v_current_ts;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'timesheets_update_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'new_authorised_present', v_current_ts.authorised_at_server IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   UPDATE public.timesheets_financials AS tf
      SET processing_status = v_new_status,
@@ -2360,6 +2444,22 @@ BEGIN
      AND tf.is_current = true
    RETURNING * INTO v_current_tsfin;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'tsfin_update_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'tsfin_id', v_current_tsfin.id,
+      'old_processing_status', v_prev_status::text,
+      'new_processing_status', v_current_tsfin.processing_status::text,
+      'new_authorised_present', v_current_tsfin.authorised_at_utc IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   IF v_contract_week.id IS NOT NULL THEN
     UPDATE public.contract_weeks AS cw
        SET status = 'AUTHORISED'::public.contract_week_status_enum,
@@ -2368,8 +2468,43 @@ BEGIN
      RETURNING * INTO v_contract_week;
   END IF;
 
+  PERFORM set_config('cloudtms.lifecycle_defer_summary_refresh', 'off', true);
+
+  v_summary_refresh_json := public.pay_timesheet_summary_pay_state_refresh(
+    p_timesheet_ids => ARRAY[v_current_ts.timesheet_id],
+    p_actor_user_id => p_actor_user_id
+  );
+
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'explicit_summary_refresh_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'refresh_result', COALESCE(v_summary_refresh_json, '{}'::jsonb),
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   v_after_signature_json := public.timesheet_lifecycle_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
   v_after_row_signature := NULLIF(BTRIM(COALESCE(v_after_signature_json ->> 'backend_row_signature', v_after_signature_json ->> 'row_signature', v_after_signature_json ->> 'signature', '')), '');
+
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'after_signature_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'row_signature_present', v_after_row_signature IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   PERFORM public._audit_insert(
     'timesheet',
@@ -2379,6 +2514,33 @@ BEGIN
     jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, 'new_processing_status', v_new_status::text, 'authorised_at_utc', v_now, 'authorised_by_user_id', p_actor_user_id, 'new_row_signature', v_after_row_signature),
     'TIMESHEET_AUTHORISE',
     p_actor_user_id
+  );
+
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'audit_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'return',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'new_processing_status', v_new_status::text,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
   );
 
   RETURN jsonb_build_object(
@@ -2404,6 +2566,19 @@ BEGIN
   );
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE, v_error_message = MESSAGE_TEXT;
+  PERFORM public._temp_diag_log(
+    'TEMP_AUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    p_timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_authorise_generic_atomic',
+      'stage', 'exception',
+      'timesheet_id', p_timesheet_id,
+      'sqlstate', v_error_state,
+      'error_message', v_error_message,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
   IF v_error_state IN ('55P03', '57014') THEN
     RAISE EXCEPTION USING MESSAGE = 'LOCK_TIMEOUT', DETAIL = jsonb_build_object('timesheet_id', p_timesheet_id)::text;
   END IF;
@@ -2412,20 +2587,13 @@ END;
 $function$;
 
 
-
 DROP FUNCTION IF EXISTS public.timesheet_unauthorise_atomic(uuid, uuid, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.timesheet_unauthorise_atomic(uuid, uuid, uuid, timestamp with time zone, text);
 
-CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_atomic(
-  p_timesheet_id uuid,
-  p_expected_timesheet_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_now_utc timestamp with time zone DEFAULT now(),
-  p_expected_row_signature text DEFAULT NULL::text
-)
+CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
- VOLATILE SECURITY DEFINER
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -2444,8 +2612,24 @@ DECLARE
   v_after_row_signature text := NULL;
   v_error_state text := NULL;
   v_error_message text := NULL;
+  v_diag_started_at timestamptz := clock_timestamp();
+  v_summary_refresh_json jsonb := '{}'::jsonb;
 BEGIN
   PERFORM set_config('lock_timeout', '2500ms', true);
+
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    p_timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'entry',
+      'timesheet_id', p_timesheet_id,
+      'expected_timesheet_id', p_expected_timesheet_id,
+      'actor_user_id_present', p_actor_user_id IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   IF p_timesheet_id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_PAYLOAD', DETAIL = jsonb_build_object('field', 'p_timesheet_id')::text;
@@ -2464,6 +2648,19 @@ BEGIN
   IF v_requested_ts.timesheet_id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'TARGET_NOT_FOUND', DETAIL = jsonb_build_object('timesheet_id', p_timesheet_id)::text;
   END IF;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_requested_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'requested_timesheet_resolved',
+      'timesheet_id', v_requested_ts.timesheet_id,
+      'is_current', COALESCE(v_requested_ts.is_current, false),
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   IF COALESCE(v_requested_ts.is_current, false) THEN
     v_current_ts := v_requested_ts;
@@ -2485,6 +2682,19 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'EXPECTED_TIMESHEET_MISMATCH', DETAIL = jsonb_build_object('expected_timesheet_id', p_expected_timesheet_id, 'current_timesheet_id', v_current_ts.timesheet_id)::text;
   END IF;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'current_timesheet_locked',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   SELECT tf.*
     INTO v_current_tsfin
   FROM public.timesheets_financials AS tf
@@ -2497,6 +2707,21 @@ BEGIN
   IF v_current_tsfin.id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'TARGET_NOT_FOUND', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'reason', 'NO_TSFIN')::text;
   END IF;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'tsfin_locked',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'tsfin_id', v_current_tsfin.id,
+      'old_processing_status', v_current_tsfin.processing_status::text,
+      'old_authorised_present', v_current_tsfin.authorised_at_utc IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   SELECT cw.*
     INTO v_contract_week
@@ -2537,12 +2762,45 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'ROW_SIGNATURE_MISMATCH', DETAIL = jsonb_build_object('expected_row_signature', v_expected_row_signature, 'current_row_signature', v_current_row_signature, 'current_timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END)::text;
   END IF;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'before_signature_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'tsfin_id', v_current_tsfin.id,
+      'current_row_signature_present', v_current_row_signature IS NOT NULL,
+      'expected_row_signature_present', v_expected_row_signature IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
+  PERFORM set_config('cloudtms.lifecycle_mutation_context', 'timesheet_unauthorise', true);
+  PERFORM set_config('cloudtms.lifecycle_target_timesheet_id', v_current_ts.timesheet_id::text, true);
+  PERFORM set_config('cloudtms.lifecycle_defer_summary_refresh', 'on', true);
+
   UPDATE public.timesheets AS ts
      SET authorised_at_server = NULL,
          updated_at = v_now
    WHERE ts.timesheet_id = v_current_ts.timesheet_id
      AND ts.is_current = true
    RETURNING * INTO v_current_ts;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'timesheets_update_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'new_authorised_present', v_current_ts.authorised_at_server IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   UPDATE public.timesheets_financials AS tf
      SET processing_status = v_new_status,
@@ -2552,6 +2810,22 @@ BEGIN
    WHERE tf.id = v_current_tsfin.id
      AND tf.is_current = true
    RETURNING * INTO v_current_tsfin;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'tsfin_update_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'tsfin_id', v_current_tsfin.id,
+      'old_processing_status', v_prev_status::text,
+      'new_processing_status', v_current_tsfin.processing_status::text,
+      'new_authorised_present', v_current_tsfin.authorised_at_utc IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   IF v_current_ts.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum THEN
     IF v_contract_week.id IS NULL THEN
@@ -2575,8 +2849,43 @@ BEGIN
      RETURNING * INTO v_contract_week;
   END IF;
 
+  PERFORM set_config('cloudtms.lifecycle_defer_summary_refresh', 'off', true);
+
+  v_summary_refresh_json := public.pay_timesheet_summary_pay_state_refresh(
+    p_timesheet_ids => ARRAY[v_current_ts.timesheet_id],
+    p_actor_user_id => p_actor_user_id
+  );
+
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'explicit_summary_refresh_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'refresh_result', COALESCE(v_summary_refresh_json, '{}'::jsonb),
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   v_after_signature_json := public.timesheet_lifecycle_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
   v_after_row_signature := NULLIF(BTRIM(COALESCE(v_after_signature_json ->> 'backend_row_signature', v_after_signature_json ->> 'row_signature', v_after_signature_json ->> 'signature', '')), '');
+
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'after_signature_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'row_signature_present', v_after_row_signature IS NOT NULL,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   PERFORM public._audit_insert(
     'timesheet',
@@ -2586,6 +2895,33 @@ BEGIN
     jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, 'new_processing_status', v_new_status::text, 'new_row_signature', v_after_row_signature),
     'TIMESHEET_UNAUTHORISE',
     p_actor_user_id
+  );
+
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'audit_done',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    v_current_ts.timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'return',
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+      'new_processing_status', v_new_status::text,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
   );
 
   RETURN jsonb_build_object(
@@ -2608,6 +2944,19 @@ BEGIN
   );
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE, v_error_message = MESSAGE_TEXT;
+  PERFORM public._temp_diag_log(
+    'TEMP_UNAUTHORISE_STAGE',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    p_timesheet_id::text,
+    jsonb_build_object(
+      'function_name', 'timesheet_unauthorise_atomic',
+      'stage', 'exception',
+      'timesheet_id', p_timesheet_id,
+      'sqlstate', v_error_state,
+      'error_message', v_error_message,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
   IF v_error_state IN ('55P03', '57014') THEN
     RAISE EXCEPTION USING MESSAGE = 'LOCK_TIMEOUT', DETAIL = jsonb_build_object('timesheet_id', p_timesheet_id)::text;
   END IF;

@@ -60404,23 +60404,31 @@ $function$;
 
 
 
-
-
-CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_refresh(
-  p_timesheet_ids uuid[],
-  p_actor_user_id uuid DEFAULT NULL::uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_refresh(p_timesheet_ids uuid[], p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_requested_ids uuid[] := ARRAY[]::uuid[];
   v_target_ids uuid[] := ARRAY[]::uuid[];
   v_refreshed_count integer := 0;
   v_legacy_state_rows_updated integer := 0;
+  v_diag_started_at timestamptz := clock_timestamp();
 BEGIN
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN COALESCE(CARDINALITY(p_timesheet_ids), 0) > 0 THEN p_timesheet_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_refresh',
+      'stage', 'entry',
+      'requested_count_raw', COALESCE(CARDINALITY(p_timesheet_ids), 0),
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   SELECT COALESCE(
     ARRAY_AGG(DISTINCT input_rows.timesheet_id ORDER BY input_rows.timesheet_id),
     ARRAY[]::uuid[]
@@ -60429,7 +60437,32 @@ BEGIN
   FROM UNNEST(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_rows(timesheet_id)
   WHERE input_rows.timesheet_id IS NOT NULL;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN COALESCE(CARDINALITY(v_requested_ids), 0) > 0 THEN v_requested_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_refresh',
+      'stage', 'requested_ids_normalised',
+      'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   IF COALESCE(CARDINALITY(v_requested_ids), 0) = 0 THEN
+    PERFORM public._temp_diag_log(
+      'TEMP_SUMMARY_REFRESH_STAGE',
+      'TEMP_SUMMARY_REFRESH',
+      NULL::text,
+      jsonb_build_object(
+        'function_name', 'pay_timesheet_summary_pay_state_refresh',
+        'stage', 'return_zero_requested',
+        'requested_count', 0,
+        'target_count', 0,
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+
     RETURN jsonb_build_object(
       'ok', true,
       'requested_count', 0,
@@ -60460,7 +60493,33 @@ BEGIN
     ON target_timesheet.timesheet_id = resolved_rows.target_timesheet_id
   WHERE resolved_rows.target_timesheet_id IS NOT NULL;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN COALESCE(CARDINALITY(v_requested_ids), 0) > 0 THEN v_requested_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_refresh',
+      'stage', 'rotation_scope_done',
+      'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+      'target_count', COALESCE(CARDINALITY(v_target_ids), 0),
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   IF COALESCE(CARDINALITY(v_target_ids), 0) = 0 THEN
+    PERFORM public._temp_diag_log(
+      'TEMP_SUMMARY_REFRESH_STAGE',
+      'TEMP_SUMMARY_REFRESH',
+      CASE WHEN COALESCE(CARDINALITY(v_requested_ids), 0) > 0 THEN v_requested_ids[1]::text ELSE NULL::text END,
+      jsonb_build_object(
+        'function_name', 'pay_timesheet_summary_pay_state_refresh',
+        'stage', 'return_zero_target',
+        'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+        'target_count', 0,
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+
     RETURN jsonb_build_object(
       'ok', true,
       'requested_count', CARDINALITY(v_requested_ids),
@@ -60928,6 +60987,20 @@ BEGIN
 
   GET DIAGNOSTICS v_refreshed_count = ROW_COUNT;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN COALESCE(CARDINALITY(v_target_ids), 0) > 0 THEN v_target_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_refresh',
+      'stage', 'pay_state_refresh_done',
+      'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+      'target_count', COALESCE(CARDINALITY(v_target_ids), 0),
+      'refreshed_count', v_refreshed_count,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   WITH legacy_projection AS MATERIALIZED (
     SELECT DISTINCT
       rotation_rows.family_timesheet_id,
@@ -60973,6 +61046,36 @@ BEGIN
     );
 
   GET DIAGNOSTICS v_legacy_state_rows_updated = ROW_COUNT;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN COALESCE(CARDINALITY(v_target_ids), 0) > 0 THEN v_target_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_refresh',
+      'stage', 'legacy_state_updated',
+      'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+      'target_count', COALESCE(CARDINALITY(v_target_ids), 0),
+      'refreshed_count', v_refreshed_count,
+      'legacy_state_rows_updated', v_legacy_state_rows_updated,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN COALESCE(CARDINALITY(v_target_ids), 0) > 0 THEN v_target_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_refresh',
+      'stage', 'return',
+      'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+      'target_count', COALESCE(CARDINALITY(v_target_ids), 0),
+      'refreshed_count', v_refreshed_count,
+      'legacy_state_rows_updated', v_legacy_state_rows_updated,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -63199,8 +63302,26 @@ DECLARE
   v_umbrella_id_old uuid := NULL::uuid;
   v_umbrella_id_new uuid := NULL::uuid;
   v_scope_job_id text;
+  v_diag_started_at timestamptz := clock_timestamp();
+  v_lifecycle_context text := NULLIF(BTRIM(COALESCE(current_setting('cloudtms.lifecycle_mutation_context', true), '')), '');
+  v_lifecycle_dedupe_keys text := '';
+  v_lifecycle_dedupe_token text := '';
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
+
+  PERFORM public._temp_diag_log(
+    'TEMP_TRIGGER_DIRTY_STAGE',
+    'TEMP_BANKING_PAY_DIRTY',
+    NULL::text,
+    jsonb_build_object(
+      'function_name', 'pay_workbench_mark_candidate_dirty',
+      'stage', 'entry',
+      'trigger_table', v_trigger_table,
+      'trigger_op', TG_OP,
+      'mutation_context', v_lifecycle_context,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   IF TG_OP <> 'DELETE' THEN
     v_new_row := to_jsonb(NEW);
@@ -63257,6 +63378,20 @@ BEGIN
     );
 
     IF v_old_payment_eligible IS NOT TRUE AND v_new_payment_eligible IS NOT TRUE THEN
+      PERFORM public._temp_diag_log(
+        'TEMP_TRIGGER_DIRTY_STAGE',
+        'TEMP_BANKING_PAY_DIRTY',
+        COALESCE(v_new_timesheet_id::text, v_old_timesheet_id::text),
+        jsonb_build_object(
+          'function_name', 'pay_workbench_mark_candidate_dirty',
+          'stage', 'early_return_ordinary_unauthorised_edit',
+          'trigger_table', v_trigger_table,
+          'trigger_op', TG_OP,
+          'old_authorised_present', v_old_payment_eligible,
+          'new_authorised_present', v_new_payment_eligible,
+          'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+        )
+      );
       RETURN NEW;
     END IF;
   ELSIF TG_OP = 'UPDATE' AND v_trigger_table = 'timesheets_financials' THEN
@@ -63282,6 +63417,21 @@ BEGIN
         OR NULLIF(BTRIM(COALESCE(v_old_row->>'remittance_send_count', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_new_row->>'remittance_send_count', '')), '');
 
       IF v_tsfin_payability_state_changed IS NOT TRUE THEN
+        PERFORM public._temp_diag_log(
+          'TEMP_TRIGGER_DIRTY_STAGE',
+          'TEMP_BANKING_PAY_DIRTY',
+          COALESCE(v_new_timesheet_id::text, v_old_timesheet_id::text),
+          jsonb_build_object(
+            'function_name', 'pay_workbench_mark_candidate_dirty',
+            'stage', 'early_return_ordinary_unauthorised_edit',
+            'trigger_table', v_trigger_table,
+            'trigger_op', TG_OP,
+            'old_authorised_present', v_old_payment_eligible,
+            'new_authorised_present', v_new_payment_eligible,
+            'payability_state_changed', v_tsfin_payability_state_changed,
+            'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+          )
+        );
         RETURN NEW;
       END IF;
     END IF;
@@ -63451,8 +63601,61 @@ BEGIN
     END IF;
   END IF;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_TRIGGER_DIRTY_STAGE',
+    'TEMP_BANKING_PAY_DIRTY',
+    CASE WHEN COALESCE(array_length(v_targeted_timesheet_uuid_ids, 1), 0) > 0 THEN v_targeted_timesheet_uuid_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_workbench_mark_candidate_dirty',
+      'stage', 'candidate_ids_resolved',
+      'trigger_table', v_trigger_table,
+      'trigger_op', TG_OP,
+      'mutation_context', v_lifecycle_context,
+      'candidate_count', COALESCE(array_length(v_candidate_ids, 1), 0),
+      'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_uuid_ids, 1), 0),
+      'linked_timesheet_count', COALESCE(array_length(v_linked_timesheet_uuid_ids, 1), 0),
+      'refresh_scope_kind', v_refresh_scope_kind,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   FOREACH v_candidate_id IN ARRAY v_candidate_ids
   LOOP
+    IF v_lifecycle_context IN ('timesheet_authorise', 'timesheet_unauthorise') THEN
+      v_lifecycle_dedupe_token := '|LIFECYCLE_DIRTY:'
+        || v_lifecycle_context
+        || ':' || v_candidate_id::text
+        || ':' || COALESCE(array_to_string(v_targeted_timesheet_uuid_ids, ','), '')
+        || '|';
+      v_lifecycle_dedupe_keys := COALESCE(current_setting('cloudtms.pay_dirty_dedupe_keys', true), '');
+
+      IF POSITION(v_lifecycle_dedupe_token IN v_lifecycle_dedupe_keys) > 0 THEN
+        PERFORM public._temp_diag_log(
+          'TEMP_TRIGGER_DIRTY_STAGE',
+          'TEMP_BANKING_PAY_DIRTY',
+          CASE WHEN COALESCE(array_length(v_targeted_timesheet_uuid_ids, 1), 0) > 0 THEN v_targeted_timesheet_uuid_ids[1]::text ELSE NULL::text END,
+          jsonb_build_object(
+            'function_name', 'pay_workbench_mark_candidate_dirty',
+            'stage', 'dedupe_skip_lifecycle_duplicate',
+            'trigger_table', v_trigger_table,
+            'trigger_op', TG_OP,
+            'mutation_context', v_lifecycle_context,
+            'candidate_id', v_candidate_id,
+            'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_uuid_ids, 1), 0),
+            'linked_timesheet_count', COALESCE(array_length(v_linked_timesheet_uuid_ids, 1), 0),
+            'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+          )
+        );
+        CONTINUE;
+      END IF;
+
+      PERFORM set_config(
+        'cloudtms.pay_dirty_dedupe_keys',
+        LEFT(v_lifecycle_dedupe_keys || v_lifecycle_dedupe_token, 60000),
+        true
+      );
+    END IF;
+
     PERFORM public._change_bump('pay_candidate:' || v_candidate_id::text);
 
     SELECT COALESCE(change_counter.seq, 0)
@@ -63645,6 +63848,27 @@ BEGIN
       END IF;
     END LOOP;
   END LOOP;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_TRIGGER_DIRTY_STAGE',
+    'TEMP_BANKING_PAY_DIRTY',
+    CASE WHEN COALESCE(array_length(v_targeted_timesheet_uuid_ids, 1), 0) > 0 THEN v_targeted_timesheet_uuid_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_workbench_mark_candidate_dirty',
+      'stage', 'return',
+      'trigger_table', v_trigger_table,
+      'trigger_op', TG_OP,
+      'mutation_context', v_lifecycle_context,
+      'candidate_count', COALESCE(array_length(v_candidate_ids, 1), 0),
+      'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_uuid_ids, 1), 0),
+      'linked_timesheet_count', COALESCE(array_length(v_linked_timesheet_uuid_ids, 1), 0),
+      'dirty_scope_count', v_dirty_scope_count,
+      'dirty_line_count', v_dirty_line_count,
+      'dirty_preview_count', v_dirty_preview_count,
+      'jobs_queued', v_jobs_queued,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
 
   IF TG_OP = 'DELETE' THEN
     RETURN OLD;
@@ -193379,17 +193603,53 @@ $function$;
 
 
 CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_temp'
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_chunk_ids uuid[] := ARRAY[]::uuid[];
   v_offset integer := 1;
   v_total integer := 0;
+  v_diag_started_at timestamptz := clock_timestamp();
+  v_chunk_started_at timestamptz;
+  v_refresh_result jsonb := '{}'::jsonb;
 BEGIN
+
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    NULL::text,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_refresh_trigger',
+      'stage', 'entry',
+      'trigger_table', TG_TABLE_NAME,
+      'trigger_op', TG_OP,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
+  IF COALESCE(current_setting('cloudtms.lifecycle_defer_summary_refresh', true), '') = 'on'
+     AND TG_TABLE_NAME IN ('timesheets', 'timesheets_financials') THEN
+    PERFORM public._temp_diag_log(
+      'TEMP_SUMMARY_REFRESH_STAGE',
+      'TEMP_SUMMARY_REFRESH',
+      NULL::text,
+      jsonb_build_object(
+        'function_name', 'pay_timesheet_summary_pay_state_refresh_trigger',
+        'stage', 'deferred_by_lifecycle_context',
+        'trigger_table', TG_TABLE_NAME,
+        'trigger_op', TG_OP,
+        'mutation_context', NULLIF(current_setting('cloudtms.lifecycle_mutation_context', true), ''),
+        'target_timesheet_id', NULLIF(current_setting('cloudtms.lifecycle_target_timesheet_id', true), ''),
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+    RETURN NULL;
+  END IF;
+
   IF TG_TABLE_SCHEMA <> 'public' THEN
     RETURN NULL;
   END IF;
@@ -193411,42 +193671,52 @@ BEGIN
         FROM new_rows
         JOIN old_rows
           ON old_rows.id = new_rows.id
-        WHERE new_rows.timesheet_id IS DISTINCT FROM old_rows.timesheet_id
-           OR new_rows.is_current IS DISTINCT FROM old_rows.is_current
-           OR new_rows.basis IS DISTINCT FROM old_rows.basis
-           OR new_rows.candidate_id IS DISTINCT FROM old_rows.candidate_id
-           OR new_rows.client_id IS DISTINCT FROM old_rows.client_id
-           OR new_rows.pay_method IS DISTINCT FROM old_rows.pay_method
-           OR new_rows.policy_snapshot_json IS DISTINCT FROM old_rows.policy_snapshot_json
-           OR new_rows.rate_source_refs_json IS DISTINCT FROM old_rows.rate_source_refs_json
-           OR new_rows.hours_day IS DISTINCT FROM old_rows.hours_day
-           OR new_rows.hours_night IS DISTINCT FROM old_rows.hours_night
-           OR new_rows.hours_sat IS DISTINCT FROM old_rows.hours_sat
-           OR new_rows.hours_sun IS DISTINCT FROM old_rows.hours_sun
-           OR new_rows.hours_bh IS DISTINCT FROM old_rows.hours_bh
-           OR new_rows.pay_day IS DISTINCT FROM old_rows.pay_day
-           OR new_rows.pay_night IS DISTINCT FROM old_rows.pay_night
-           OR new_rows.pay_sat IS DISTINCT FROM old_rows.pay_sat
-           OR new_rows.pay_sun IS DISTINCT FROM old_rows.pay_sun
-           OR new_rows.pay_bh IS DISTINCT FROM old_rows.pay_bh
-           OR new_rows.total_pay_ex_vat IS DISTINCT FROM old_rows.total_pay_ex_vat
-           OR new_rows.invoice_breakdown_json IS DISTINCT FROM old_rows.invoice_breakdown_json
-           OR new_rows.additional_units_json IS DISTINCT FROM old_rows.additional_units_json
-           OR new_rows.additional_pay_ex_vat IS DISTINCT FROM old_rows.additional_pay_ex_vat
-           OR new_rows.expenses_pay_ex_vat IS DISTINCT FROM old_rows.expenses_pay_ex_vat
-           OR new_rows.travel_pay_ex_vat IS DISTINCT FROM old_rows.travel_pay_ex_vat
-           OR new_rows.accommodation_pay_ex_vat IS DISTINCT FROM old_rows.accommodation_pay_ex_vat
-           OR new_rows.other_pay_ex_vat IS DISTINCT FROM old_rows.other_pay_ex_vat
-           OR new_rows.mileage_pay_ex_vat IS DISTINCT FROM old_rows.mileage_pay_ex_vat
-           OR new_rows.worked_start_iso IS DISTINCT FROM old_rows.worked_start_iso
-           OR new_rows.worked_end_iso IS DISTINCT FROM old_rows.worked_end_iso
-           OR new_rows.break_start_iso IS DISTINCT FROM old_rows.break_start_iso
-           OR new_rows.break_end_iso IS DISTINCT FROM old_rows.break_end_iso
-           OR new_rows.break_minutes IS DISTINCT FROM old_rows.break_minutes
-           OR new_rows.actual_schedule_json IS DISTINCT FROM old_rows.actual_schedule_json
-           OR new_rows.pay_on_hold IS DISTINCT FROM old_rows.pay_on_hold
-           OR new_rows.paid_at_utc IS DISTINCT FROM old_rows.paid_at_utc
-           OR new_rows.authorised_at_utc IS DISTINCT FROM old_rows.authorised_at_utc
+        WHERE (
+             new_rows.timesheet_id IS DISTINCT FROM old_rows.timesheet_id
+             OR new_rows.is_current IS DISTINCT FROM old_rows.is_current
+             OR new_rows.basis IS DISTINCT FROM old_rows.basis
+             OR new_rows.candidate_id IS DISTINCT FROM old_rows.candidate_id
+             OR new_rows.client_id IS DISTINCT FROM old_rows.client_id
+             OR new_rows.pay_method IS DISTINCT FROM old_rows.pay_method
+             OR new_rows.policy_snapshot_json IS DISTINCT FROM old_rows.policy_snapshot_json
+             OR new_rows.rate_source_refs_json IS DISTINCT FROM old_rows.rate_source_refs_json
+             OR new_rows.hours_day IS DISTINCT FROM old_rows.hours_day
+             OR new_rows.hours_night IS DISTINCT FROM old_rows.hours_night
+             OR new_rows.hours_sat IS DISTINCT FROM old_rows.hours_sat
+             OR new_rows.hours_sun IS DISTINCT FROM old_rows.hours_sun
+             OR new_rows.hours_bh IS DISTINCT FROM old_rows.hours_bh
+             OR new_rows.pay_day IS DISTINCT FROM old_rows.pay_day
+             OR new_rows.pay_night IS DISTINCT FROM old_rows.pay_night
+             OR new_rows.pay_sat IS DISTINCT FROM old_rows.pay_sat
+             OR new_rows.pay_sun IS DISTINCT FROM old_rows.pay_sun
+             OR new_rows.pay_bh IS DISTINCT FROM old_rows.pay_bh
+             OR new_rows.total_pay_ex_vat IS DISTINCT FROM old_rows.total_pay_ex_vat
+             OR new_rows.invoice_breakdown_json IS DISTINCT FROM old_rows.invoice_breakdown_json
+             OR new_rows.additional_units_json IS DISTINCT FROM old_rows.additional_units_json
+             OR new_rows.additional_pay_ex_vat IS DISTINCT FROM old_rows.additional_pay_ex_vat
+             OR new_rows.expenses_pay_ex_vat IS DISTINCT FROM old_rows.expenses_pay_ex_vat
+             OR new_rows.travel_pay_ex_vat IS DISTINCT FROM old_rows.travel_pay_ex_vat
+             OR new_rows.accommodation_pay_ex_vat IS DISTINCT FROM old_rows.accommodation_pay_ex_vat
+             OR new_rows.other_pay_ex_vat IS DISTINCT FROM old_rows.other_pay_ex_vat
+             OR new_rows.mileage_pay_ex_vat IS DISTINCT FROM old_rows.mileage_pay_ex_vat
+             OR new_rows.worked_start_iso IS DISTINCT FROM old_rows.worked_start_iso
+             OR new_rows.worked_end_iso IS DISTINCT FROM old_rows.worked_end_iso
+             OR new_rows.break_start_iso IS DISTINCT FROM old_rows.break_start_iso
+             OR new_rows.break_end_iso IS DISTINCT FROM old_rows.break_end_iso
+             OR new_rows.break_minutes IS DISTINCT FROM old_rows.break_minutes
+             OR new_rows.actual_schedule_json IS DISTINCT FROM old_rows.actual_schedule_json
+             OR new_rows.pay_on_hold IS DISTINCT FROM old_rows.pay_on_hold
+             OR new_rows.paid_at_utc IS DISTINCT FROM old_rows.paid_at_utc
+             OR new_rows.authorised_at_utc IS DISTINCT FROM old_rows.authorised_at_utc
+           )
+          AND (
+             new_rows.timesheet_id IS DISTINCT FROM old_rows.timesheet_id
+             OR new_rows.is_current IS DISTINCT FROM old_rows.is_current
+             OR new_rows.authorised_at_utc IS NOT NULL
+             OR old_rows.authorised_at_utc IS NOT NULL
+             OR new_rows.pay_on_hold IS DISTINCT FROM old_rows.pay_on_hold
+             OR new_rows.paid_at_utc IS DISTINCT FROM old_rows.paid_at_utc
+           )
       ),
       affected_rows AS (
         SELECT changed_rows.new_timesheet_id AS timesheet_id
@@ -193929,6 +194199,21 @@ BEGIN
   WHERE input_ids.timesheet_id IS NOT NULL;
 
   v_total := COALESCE(CARDINALITY(v_timesheet_ids), 0);
+
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN v_total > 0 THEN v_timesheet_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_refresh_trigger',
+      'stage', 'timesheet_ids_collected',
+      'trigger_table', TG_TABLE_NAME,
+      'trigger_op', TG_OP,
+      'targeted_timesheet_count', v_total,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   v_offset := 1;
 
   WHILE v_offset <= v_total LOOP
@@ -193940,17 +194225,64 @@ BEGIN
     FROM UNNEST(v_timesheet_ids) WITH ORDINALITY AS chunk_rows(timesheet_id, ordinality)
     WHERE chunk_rows.ordinality BETWEEN v_offset AND v_offset + 99;
 
-    PERFORM public.pay_timesheet_summary_pay_state_refresh(
+    v_chunk_started_at := clock_timestamp();
+
+    PERFORM public._temp_diag_log(
+      'TEMP_SUMMARY_REFRESH_STAGE',
+      'TEMP_SUMMARY_REFRESH',
+      CASE WHEN COALESCE(CARDINALITY(v_chunk_ids), 0) > 0 THEN v_chunk_ids[1]::text ELSE NULL::text END,
+      jsonb_build_object(
+        'function_name', 'pay_timesheet_summary_pay_state_refresh_trigger',
+        'stage', 'chunk_refresh_start',
+        'trigger_table', TG_TABLE_NAME,
+        'trigger_op', TG_OP,
+        'targeted_timesheet_count', COALESCE(CARDINALITY(v_chunk_ids), 0),
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+
+    v_refresh_result := public.pay_timesheet_summary_pay_state_refresh(
       p_timesheet_ids => v_chunk_ids,
       p_actor_user_id => NULL::uuid
+    );
+
+    PERFORM public._temp_diag_log(
+      'TEMP_SUMMARY_REFRESH_STAGE',
+      'TEMP_SUMMARY_REFRESH',
+      CASE WHEN COALESCE(CARDINALITY(v_chunk_ids), 0) > 0 THEN v_chunk_ids[1]::text ELSE NULL::text END,
+      jsonb_build_object(
+        'function_name', 'pay_timesheet_summary_pay_state_refresh_trigger',
+        'stage', 'chunk_refresh_done',
+        'trigger_table', TG_TABLE_NAME,
+        'trigger_op', TG_OP,
+        'targeted_timesheet_count', COALESCE(CARDINALITY(v_chunk_ids), 0),
+        'refresh_result', COALESCE(v_refresh_result, '{}'::jsonb),
+        'chunk_elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_chunk_started_at)) * 1000)::numeric, 2),
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
     );
 
     v_offset := v_offset + 100;
   END LOOP;
 
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN v_total > 0 THEN v_timesheet_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_refresh_trigger',
+      'stage', 'return',
+      'trigger_table', TG_TABLE_NAME,
+      'trigger_op', TG_OP,
+      'targeted_timesheet_count', v_total,
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
   RETURN NULL;
 END;
 $function$;
+
 
 -- Current financial truth / save / recompute.
 DROP TRIGGER IF EXISTS trg_ts_summary_pay_cache_tsfin_ai ON public.timesheets_financials;
