@@ -146520,17 +146520,12 @@ $function$;
 
 
 DROP FUNCTION IF EXISTS public.pay_payment_correction_process_chunk(uuid, integer, text);
-CREATE OR REPLACE FUNCTION public.pay_payment_correction_process_chunk(
-  p_correction_request_id uuid DEFAULT NULL::uuid,
-  p_limit integer DEFAULT 50,
-  p_worker_id text DEFAULT NULL::text,
-  p_actor_user_id uuid DEFAULT NULL::uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-VOLATILE
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_payment_correction_process_chunk(p_correction_request_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 50, p_worker_id text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
@@ -146572,6 +146567,14 @@ DECLARE
   v_chunk_carry_forward_released_count integer := 0;
   v_chunk_released_reservation_count integer := 0;
   v_chunk_restored_component_count integer := 0;
+  v_chunk_workbench_refresh_results jsonb := '[]'::jsonb;
+  v_chunk_workbench_refresh_job_ids jsonb := '[]'::jsonb;
+  v_chunk_workbench_refresh_queued_count integer := 0;
+  v_chunk_workbench_refresh_deferred_count integer := 0;
+  v_chunk_workbench_refresh_failed_count integer := 0;
+  v_chunk_workbench_refresh_status text := 'NOT_REQUIRED';
+  v_chunk_requires_workbench_session boolean := false;
+  v_result_workbench_refresh jsonb := NULL::jsonb;
   v_chunk_ambiguous_manual_blocker_count integer := 0;
   v_chunk_grouped_alert_updates jsonb := '[]'::jsonb;
   v_chunk_changed_scope_items jsonb := '[]'::jsonb;
@@ -147222,6 +147225,35 @@ BEGIN
       v_chunk_released_reservation_count := v_chunk_released_reservation_count + COALESCE(NULLIF(v_result->>'released_reservation_count', '')::integer, 0);
       v_chunk_restored_component_count := v_chunk_restored_component_count + COALESCE(NULLIF(v_result->>'restored_component_count', '')::integer, 0);
 
+
+      v_result_workbench_refresh := CASE
+        WHEN jsonb_typeof(v_result->'workbench_refresh') = 'object' THEN v_result->'workbench_refresh'
+        WHEN NULLIF(BTRIM(COALESCE(v_result->>'workbench_refresh_status', '')), '') IS NOT NULL THEN jsonb_build_object(
+          'status', v_result->>'workbench_refresh_status',
+          'queued_count', COALESCE(NULLIF(v_result->>'workbench_refresh_queued_count', '')::integer, 0),
+          'deferred_count', COALESCE(NULLIF(v_result->>'workbench_refresh_deferred_count', '')::integer, 0),
+          'failed_count', COALESCE(NULLIF(v_result->>'workbench_refresh_failed_count', '')::integer, 0),
+          'job_ids', COALESCE(v_result->'workbench_refresh_job_ids', '[]'::jsonb),
+          'requires_workbench_session', lower(BTRIM(COALESCE(v_result->>'requires_workbench_session', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        )
+        ELSE NULL::jsonb
+      END;
+
+      IF v_result_workbench_refresh IS NOT NULL THEN
+        v_chunk_workbench_refresh_results := COALESCE(v_chunk_workbench_refresh_results, '[]'::jsonb) || jsonb_build_array(v_result_workbench_refresh || jsonb_build_object('work_item_id', v_work_row.id::text));
+        v_chunk_workbench_refresh_queued_count := v_chunk_workbench_refresh_queued_count + COALESCE(NULLIF(v_result_workbench_refresh->>'queued_count', '')::integer, 0);
+        v_chunk_workbench_refresh_deferred_count := v_chunk_workbench_refresh_deferred_count + COALESCE(NULLIF(v_result_workbench_refresh->>'deferred_count', '')::integer, 0);
+        v_chunk_workbench_refresh_failed_count := v_chunk_workbench_refresh_failed_count + COALESCE(NULLIF(v_result_workbench_refresh->>'failed_count', '')::integer, 0);
+        IF lower(BTRIM(COALESCE(v_result_workbench_refresh->>'requires_workbench_session', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN
+          v_chunk_requires_workbench_session := true;
+        END IF;
+        IF jsonb_typeof(v_result_workbench_refresh->'job_ids') = 'array' THEN
+          v_chunk_workbench_refresh_job_ids := COALESCE(v_chunk_workbench_refresh_job_ids, '[]'::jsonb) || COALESCE(v_result_workbench_refresh->'job_ids', '[]'::jsonb);
+        ELSIF NULLIF(BTRIM(COALESCE(v_result_workbench_refresh->>'job_id', '')), '') IS NOT NULL THEN
+          v_chunk_workbench_refresh_job_ids := COALESCE(v_chunk_workbench_refresh_job_ids, '[]'::jsonb) || jsonb_build_array(v_result_workbench_refresh->>'job_id');
+        END IF;
+      END IF;
+
       IF EXISTS (
         SELECT 1
         FROM jsonb_array_elements(COALESCE(v_result->'blockers', CASE WHEN v_result ? 'blocker' THEN jsonb_build_array(v_result->'blocker') ELSE '[]'::jsonb END)) AS result_blockers(blocker_value)
@@ -147628,6 +147660,18 @@ BEGIN
     FROM pg_temp._tmp_payment_correction_source_event_updates AS source_event_updates;
   END IF;
 
+  SELECT COALESCE(jsonb_agg(DISTINCT job_id_values.value ORDER BY job_id_values.value), '[]'::jsonb)
+  INTO v_chunk_workbench_refresh_job_ids
+  FROM jsonb_array_elements_text(COALESCE(v_chunk_workbench_refresh_job_ids, '[]'::jsonb)) AS job_id_values(value)
+  WHERE NULLIF(BTRIM(job_id_values.value), '') IS NOT NULL;
+
+  v_chunk_workbench_refresh_status := CASE
+    WHEN COALESCE(v_chunk_workbench_refresh_failed_count, 0) > 0 THEN 'ERROR'
+    WHEN COALESCE(v_chunk_workbench_refresh_queued_count, 0) > 0 THEN 'QUEUED'
+    WHEN COALESCE(v_chunk_workbench_refresh_deferred_count, 0) > 0 OR COALESCE(v_chunk_requires_workbench_session, false) THEN 'DEFERRED_REQUIRES_WORKBENCH_SESSION'
+    ELSE 'NOT_REQUIRED'
+  END;
+
   SELECT jsonb_build_object(
     'changed_scope_items', COALESCE(v_chunk_changed_scope_items, '[]'::jsonb),
     'changed_pay_batch_item_ids', COALESCE((
@@ -147659,6 +147703,12 @@ BEGIN
     'carry_forward_released_count', COALESCE(v_chunk_carry_forward_released_count, 0),
     'released_reservation_count', COALESCE(v_chunk_released_reservation_count, 0),
     'restored_component_count', COALESCE(v_chunk_restored_component_count, 0),
+    'workbench_refresh_status', COALESCE(v_chunk_workbench_refresh_status, 'NOT_REQUIRED'),
+    'workbench_refresh_queued_count', COALESCE(v_chunk_workbench_refresh_queued_count, 0),
+    'workbench_refresh_deferred_count', COALESCE(v_chunk_workbench_refresh_deferred_count, 0),
+    'workbench_refresh_failed_count', COALESCE(v_chunk_workbench_refresh_failed_count, 0),
+    'workbench_refresh_job_ids', COALESCE(v_chunk_workbench_refresh_job_ids, '[]'::jsonb),
+    'requires_workbench_session', COALESCE(v_chunk_requires_workbench_session, false),
     'processed', COALESCE(v_processed_count, 0),
     'applied', COALESCE(v_applied_count, 0),
     'blocked', COALESCE(v_blocked_count, 0),
@@ -147751,6 +147801,21 @@ BEGIN
     'released_reservations', v_chunk_released_reservation_count,
     'restored_finance_components', v_chunk_restored_component_count,
     'grouped_alert_updates', v_chunk_grouped_alert_updates,
+    'workbench_refresh_status', COALESCE(v_chunk_workbench_refresh_status, 'NOT_REQUIRED'),
+    'workbench_refresh_queued_count', COALESCE(v_chunk_workbench_refresh_queued_count, 0),
+    'workbench_refresh_deferred_count', COALESCE(v_chunk_workbench_refresh_deferred_count, 0),
+    'workbench_refresh_failed_count', COALESCE(v_chunk_workbench_refresh_failed_count, 0),
+    'workbench_refresh_job_ids', COALESCE(v_chunk_workbench_refresh_job_ids, '[]'::jsonb),
+    'requires_workbench_session', COALESCE(v_chunk_requires_workbench_session, false),
+    'workbench_refresh', jsonb_build_object(
+      'status', COALESCE(v_chunk_workbench_refresh_status, 'NOT_REQUIRED'),
+      'queued_count', COALESCE(v_chunk_workbench_refresh_queued_count, 0),
+      'deferred_count', COALESCE(v_chunk_workbench_refresh_deferred_count, 0),
+      'failed_count', COALESCE(v_chunk_workbench_refresh_failed_count, 0),
+      'job_ids', COALESCE(v_chunk_workbench_refresh_job_ids, '[]'::jsonb),
+      'results', COALESCE(v_chunk_workbench_refresh_results, '[]'::jsonb),
+      'requires_workbench_session', COALESCE(v_chunk_requires_workbench_session, false)
+    ),
     'requires_user_action', (
       COALESCE(v_requires_user_action, false)
       OR COALESCE((v_totals->>'blocked')::integer, 0) > 0
@@ -155263,16 +155328,11 @@ BEGIN
 END;
 $function$;
 
-
-CREATE OR REPLACE FUNCTION public.pay_no_money_unwind_apply_work_item(
-  p_work_item_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-VOLATILE
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_no_money_unwind_apply_work_item(p_work_item_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_work_item public.pay_payment_correction_work_items%rowtype;
@@ -155345,6 +155405,18 @@ DECLARE
   v_provider_failure_reason_group text := NULL::text;
   v_provider_failure_reason_groups_json jsonb := '[]'::jsonb;
   v_changed_scope_json jsonb := '{}'::jsonb;
+  v_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_linked_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_linked_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
+  v_workbench_refresh_results jsonb := '[]'::jsonb;
+  v_workbench_refresh_job_ids jsonb := '[]'::jsonb;
+  v_workbench_refresh_queued_count integer := 0;
+  v_workbench_refresh_deferred_count integer := 0;
+  v_workbench_refresh_failed_count integer := 0;
+  v_workbench_refresh_status text := 'NOT_REQUIRED';
+  v_workbench_requires_session boolean := false;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -157029,48 +157101,6 @@ END IF;
 
   GET DIAGNOSTICS v_dirty_candidate_count = ROW_COUNT;
 
-  IF v_batch.source_snapshot_run_id IS NOT NULL THEN
-    FOR v_candidate_id IN
-      SELECT DISTINCT selected_refresh_candidates.candidate_id
-      FROM pg_temp._tmp_no_money_unwind_selected AS selected_refresh_candidates
-      WHERE selected_refresh_candidates.candidate_id IS NOT NULL
-      ORDER BY selected_refresh_candidates.candidate_id
-    LOOP
-      BEGIN
-        v_refresh_result := public.pay_workbench_enqueue_candidate_refresh(
-          p_snapshot_run_id => v_batch.source_snapshot_run_id,
-          p_candidate_id => v_candidate_id,
-          p_reason => 'PAYMENT_CORRECTION_NO_MONEY_UNWIND',
-          p_actor_user_id => p_actor_user_id,
-          p_payload_json => jsonb_build_object(
-            'pay_batch_id', v_work_item.pay_batch_id,
-            'correction_request_id', v_work_item.correction_request_id,
-            'work_item_id', p_work_item_id,
-            'refresh_reason', 'PAYMENT_CORRECTION_NO_MONEY_UNWIND'
-          )
-        );
-      EXCEPTION
-        WHEN OTHERS THEN
-          PERFORM public._imp_debug_audit(
-            p_actor_user_id,
-            'PAYMENT_CORRECTION_NO_MONEY_UNWIND_REFRESH_ENQUEUE_ERROR',
-            jsonb_build_object(
-              'work_item_id', p_work_item_id,
-              'candidate_id', v_candidate_id,
-              'snapshot_run_id', v_batch.source_snapshot_run_id,
-              'sqlstate', SQLSTATE,
-              'error_message', SQLERRM
-            ),
-            'pay_payment_correction',
-            p_work_item_id::text,
-            NULL::jsonb,
-            NULL::text,
-            NULL::text,
-            NULL::text
-          );
-      END;
-    END LOOP;
-  END IF;
 
 
 
@@ -157090,6 +157120,221 @@ IF NOT COALESCE(NULLIF(v_finance_resolution_result->>'ok', '')::boolean, false) 
             'correction_request_id', v_work_item.correction_request_id,
             'finance_resolution_result', v_finance_resolution_result
           )::text;
+END IF;
+
+
+IF COALESCE(v_selected_candidate_count, 0) > 0 THEN
+  IF v_batch.source_workbench_session_id IS NULL OR v_batch.source_snapshot_run_id IS NULL THEN
+    v_workbench_refresh_status := 'DEFERRED_REQUIRES_WORKBENCH_SESSION';
+    v_workbench_requires_session := true;
+    v_workbench_refresh_deferred_count := COALESCE(v_selected_candidate_count, 0);
+    v_workbench_refresh_results := jsonb_build_array(jsonb_build_object(
+      'ok', true,
+      'no_op', true,
+      'deferred', true,
+      'requires_workbench_session', true,
+      'workbench_refresh_status', 'DEFERRED_REQUIRES_WORKBENCH_SESSION',
+      'message', 'Financial no-money unwind was applied, but the source batch does not carry a row-backed workbench session/snapshot identity for targeted preview rebuild.',
+      'pay_batch_id', v_work_item.pay_batch_id::text,
+      'correction_request_id', v_work_item.correction_request_id::text,
+      'work_item_id', p_work_item_id::text,
+      'session_id', CASE WHEN v_batch.source_workbench_session_id IS NULL THEN NULL ELSE v_batch.source_workbench_session_id::text END,
+      'source_snapshot_run_id', CASE WHEN v_batch.source_snapshot_run_id IS NULL THEN NULL ELSE v_batch.source_snapshot_run_id::text END,
+      'refresh_reason', 'PAYMENT_CORRECTION_NO_MONEY_UNWIND'
+    ));
+  ELSE
+    FOR v_candidate_id IN
+      SELECT DISTINCT selected_refresh_candidates.candidate_id
+      FROM pg_temp._tmp_no_money_unwind_selected AS selected_refresh_candidates
+      WHERE selected_refresh_candidates.candidate_id IS NOT NULL
+      ORDER BY selected_refresh_candidates.candidate_id
+    LOOP
+      SELECT COALESCE(array_agg(DISTINCT selected_timesheets.timesheet_id ORDER BY selected_timesheets.timesheet_id), ARRAY[]::uuid[])
+      INTO v_targeted_timesheet_ids
+      FROM pg_temp._tmp_no_money_unwind_selected AS selected_timesheets
+      WHERE selected_timesheets.candidate_id = v_candidate_id
+        AND selected_timesheets.timesheet_id IS NOT NULL;
+
+      SELECT COALESCE(jsonb_agg(timesheet_values.timesheet_id_text ORDER BY timesheet_values.timesheet_id_text), '[]'::jsonb)
+      INTO v_targeted_timesheet_ids_json
+      FROM (
+        SELECT DISTINCT unnest(v_targeted_timesheet_ids)::text AS timesheet_id_text
+      ) AS timesheet_values;
+
+      SELECT COALESCE(array_agg(DISTINCT rotation_scope.family_timesheet_id ORDER BY rotation_scope.family_timesheet_id), ARRAY[]::uuid[])
+      INTO v_linked_timesheet_ids
+      FROM public._pay_timesheet_rotation_scope(COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])) AS rotation_scope
+      WHERE rotation_scope.family_timesheet_id IS NOT NULL;
+
+      IF COALESCE(cardinality(v_linked_timesheet_ids), 0) = 0 THEN
+        v_linked_timesheet_ids := COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[]);
+      END IF;
+
+      SELECT COALESCE(jsonb_agg(timesheet_values.timesheet_id_text ORDER BY timesheet_values.timesheet_id_text), '[]'::jsonb)
+      INTO v_linked_timesheet_ids_json
+      FROM (
+        SELECT DISTINCT unnest(v_linked_timesheet_ids)::text AS timesheet_id_text
+      ) AS timesheet_values;
+
+      v_refresh_scope_kind := CASE
+        WHEN jsonb_array_length(COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb)) > 0
+          OR jsonb_array_length(COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)) > 0
+          THEN 'TARGETED_TIMESHEETS'
+        ELSE 'CANDIDATE_FULL_LIVE'
+      END;
+
+      BEGIN
+        v_refresh_result := public.pay_workbench_enqueue_candidate_refresh(
+          p_snapshot_run_id => v_batch.source_snapshot_run_id,
+          p_candidate_id => v_candidate_id,
+          p_reason => 'PAYMENT_CORRECTION_NO_MONEY_UNWIND',
+          p_actor_user_id => v_effective_actor_user_id,
+          p_payload_json => jsonb_strip_nulls(jsonb_build_object(
+            'session_id', v_batch.source_workbench_session_id::text,
+            'source_session_id', v_batch.source_workbench_session_id::text,
+            'workbench_session_id', v_batch.source_workbench_session_id::text,
+            'session_version', v_batch.source_session_version,
+            'source_session_version', v_batch.source_session_version,
+            'snapshot_run_id', v_batch.source_snapshot_run_id::text,
+            'source_snapshot_run_id', v_batch.source_snapshot_run_id::text,
+            'operation_type', 'PAYMENT_CORRECTION_NO_MONEY_UNWIND',
+            'refresh_reason', 'PAYMENT_CORRECTION_NO_MONEY_UNWIND',
+            'fallback_reason', 'PAYMENT_CORRECTION_NO_MONEY_UNWIND',
+            'force_legacy', true,
+            'source_build_required', true,
+            'line_work_required', true,
+            'delta_refresh_required', false,
+            'refresh_scope_kind', v_refresh_scope_kind,
+            'targeted_timesheet_ids', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
+            'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
+            'pay_batch_id', v_work_item.pay_batch_id::text,
+            'correction_request_id', v_work_item.correction_request_id::text,
+            'work_item_id', p_work_item_id::text,
+            'changed_pay_batch_item_ids', COALESCE((
+              SELECT jsonb_agg(selected_values.value_text ORDER BY selected_values.value_text)
+              FROM (
+                SELECT DISTINCT selected_scope.pay_batch_item_id::text AS value_text
+                FROM pg_temp._tmp_no_money_unwind_selected AS selected_scope
+                WHERE selected_scope.pay_batch_item_id IS NOT NULL
+                  AND selected_scope.candidate_id = v_candidate_id
+              ) AS selected_values
+            ), '[]'::jsonb),
+            'changed_pay_batch_candidate_ids', COALESCE((
+              SELECT jsonb_agg(selected_values.value_text ORDER BY selected_values.value_text)
+              FROM (
+                SELECT DISTINCT selected_scope.pay_batch_candidate_id::text AS value_text
+                FROM pg_temp._tmp_no_money_unwind_selected AS selected_scope
+                WHERE selected_scope.pay_batch_candidate_id IS NOT NULL
+                  AND selected_scope.candidate_id = v_candidate_id
+              ) AS selected_values
+            ), '[]'::jsonb),
+            'changed_candidate_ids', jsonb_build_array(v_candidate_id::text),
+            'changed_transfer_ids', COALESCE((
+              SELECT jsonb_agg(selected_values.value_text ORDER BY selected_values.value_text)
+              FROM (
+                SELECT DISTINCT selected_scope.pay_bank_transfer_id::text AS value_text
+                FROM pg_temp._tmp_no_money_unwind_selected AS selected_scope
+                WHERE selected_scope.pay_bank_transfer_id IS NOT NULL
+                  AND selected_scope.candidate_id = v_candidate_id
+              ) AS selected_values
+            ), '[]'::jsonb),
+            'changed_finance_case_ids', COALESCE((
+              SELECT jsonb_agg(selected_values.value_text ORDER BY selected_values.value_text)
+              FROM (
+                SELECT DISTINCT selected_scope.finance_case_id::text AS value_text
+                FROM pg_temp._tmp_no_money_unwind_selected AS selected_scope
+                WHERE selected_scope.finance_case_id IS NOT NULL
+                  AND selected_scope.candidate_id = v_candidate_id
+              ) AS selected_values
+            ), '[]'::jsonb),
+            'changed_finance_component_ids', COALESCE((
+              SELECT jsonb_agg(selected_values.value_text ORDER BY selected_values.value_text)
+              FROM (
+                SELECT DISTINCT selected_scope.finance_component_id::text AS value_text
+                FROM pg_temp._tmp_no_money_unwind_selected AS selected_scope
+                WHERE selected_scope.finance_component_id IS NOT NULL
+                  AND selected_scope.candidate_id = v_candidate_id
+              ) AS selected_values
+            ), '[]'::jsonb),
+            'changed_reservation_ids', COALESCE((
+              SELECT jsonb_agg(selected_values.value_text ORDER BY selected_values.value_text)
+              FROM (
+                SELECT DISTINCT selected_scope.reservation_id::text AS value_text
+                FROM pg_temp._tmp_no_money_unwind_selected AS selected_scope
+                WHERE selected_scope.reservation_id IS NOT NULL
+                  AND selected_scope.candidate_id = v_candidate_id
+              ) AS selected_values
+            ), '[]'::jsonb)
+          ))
+        );
+
+        v_refresh_result := COALESCE(v_refresh_result, '{}'::jsonb) || jsonb_build_object(
+          'candidate_id', v_candidate_id::text,
+          'targeted_timesheet_ids', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
+          'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)
+        );
+        v_workbench_refresh_results := COALESCE(v_workbench_refresh_results, '[]'::jsonb) || jsonb_build_array(v_refresh_result);
+
+        IF NULLIF(BTRIM(COALESCE(v_refresh_result->>'job_id', '')), '') IS NOT NULL
+           AND lower(BTRIM(COALESCE(v_refresh_result->>'no_op', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on') THEN
+          v_workbench_refresh_queued_count := COALESCE(v_workbench_refresh_queued_count, 0) + 1;
+          v_workbench_refresh_job_ids := COALESCE(v_workbench_refresh_job_ids, '[]'::jsonb) || jsonb_build_array(v_refresh_result->>'job_id');
+        ELSIF lower(BTRIM(COALESCE(v_refresh_result->>'deferred', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+           OR lower(BTRIM(COALESCE(v_refresh_result->>'requires_workbench_session', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+           OR lower(BTRIM(COALESCE(v_refresh_result->>'no_op', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN
+          v_workbench_refresh_deferred_count := COALESCE(v_workbench_refresh_deferred_count, 0) + 1;
+          IF lower(BTRIM(COALESCE(v_refresh_result->>'requires_workbench_session', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN
+            v_workbench_requires_session := true;
+          END IF;
+        ELSE
+          v_workbench_refresh_deferred_count := COALESCE(v_workbench_refresh_deferred_count, 0) + 1;
+        END IF;
+      EXCEPTION
+        WHEN OTHERS THEN
+          v_workbench_refresh_failed_count := COALESCE(v_workbench_refresh_failed_count, 0) + 1;
+          v_workbench_refresh_results := COALESCE(v_workbench_refresh_results, '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
+            'ok', false,
+            'candidate_id', v_candidate_id::text,
+            'snapshot_run_id', v_batch.source_snapshot_run_id::text,
+            'session_id', v_batch.source_workbench_session_id::text,
+            'operation_type', 'PAYMENT_CORRECTION_NO_MONEY_UNWIND',
+            'refresh_reason', 'PAYMENT_CORRECTION_NO_MONEY_UNWIND',
+            'sqlstate', SQLSTATE,
+            'error_message', SQLERRM
+          ));
+          PERFORM public._imp_debug_audit(
+            v_effective_actor_user_id,
+            'PAYMENT_CORRECTION_NO_MONEY_UNWIND_REFRESH_ENQUEUE_ERROR',
+            jsonb_build_object(
+              'work_item_id', p_work_item_id,
+              'candidate_id', v_candidate_id,
+              'snapshot_run_id', v_batch.source_snapshot_run_id,
+              'session_id', v_batch.source_workbench_session_id,
+              'sqlstate', SQLSTATE,
+              'error_message', SQLERRM
+            ),
+            'pay_payment_correction',
+            p_work_item_id::text,
+            NULL::jsonb,
+            NULL::text,
+            NULL::text,
+            NULL::text
+          );
+      END;
+    END LOOP;
+
+    SELECT COALESCE(jsonb_agg(DISTINCT job_id_values.value ORDER BY job_id_values.value), '[]'::jsonb)
+    INTO v_workbench_refresh_job_ids
+    FROM jsonb_array_elements_text(COALESCE(v_workbench_refresh_job_ids, '[]'::jsonb)) AS job_id_values(value)
+    WHERE NULLIF(BTRIM(job_id_values.value), '') IS NOT NULL;
+
+    v_workbench_refresh_status := CASE
+      WHEN COALESCE(v_workbench_refresh_failed_count, 0) > 0 THEN 'ERROR'
+      WHEN COALESCE(v_workbench_refresh_queued_count, 0) > 0 THEN 'QUEUED'
+      WHEN COALESCE(v_workbench_refresh_deferred_count, 0) > 0 THEN 'DEFERRED_REQUIRES_WORKBENCH_SESSION'
+      ELSE 'NOT_REQUIRED'
+    END;
+  END IF;
 END IF;
 
 v_changed_scope_json := jsonb_build_object(
@@ -157162,7 +157407,14 @@ v_changed_scope_json := jsonb_build_object(
   'updated_candidate_count', COALESCE(v_updated_candidate_count, 0),
   'carry_forward_created_count', COALESCE(v_carry_forward_created_count, 0),
   'carry_forward_existing_count', COALESCE(v_carry_forward_existing_count, 0),
-  'carry_forward_released_count', COALESCE(v_carry_forward_released_count, 0)
+  'carry_forward_released_count', COALESCE(v_carry_forward_released_count, 0),
+  'workbench_refresh_status', COALESCE(v_workbench_refresh_status, 'NOT_REQUIRED'),
+  'workbench_refresh_queued_count', COALESCE(v_workbench_refresh_queued_count, 0),
+  'workbench_refresh_deferred_count', COALESCE(v_workbench_refresh_deferred_count, 0),
+  'workbench_refresh_failed_count', COALESCE(v_workbench_refresh_failed_count, 0),
+  'workbench_refresh_job_ids', COALESCE(v_workbench_refresh_job_ids, '[]'::jsonb),
+  'workbench_refresh_results', COALESCE(v_workbench_refresh_results, '[]'::jsonb),
+  'requires_workbench_session', COALESCE(v_workbench_requires_session, false)
 );
 
 v_notice_queue_result := public.pay_payment_return_admin_notice_queue(
@@ -157193,6 +157445,12 @@ v_notice_queue_result := public.pay_payment_return_admin_notice_queue(
     'provider_failure_reason_group', v_provider_failure_reason_group,
     'provider_failure_reason_groups_json', COALESCE(v_provider_failure_reason_groups_json, '[]'::jsonb),
     'changed_scope_json', COALESCE(v_changed_scope_json, '{}'::jsonb),
+    'workbench_refresh_status', COALESCE(v_workbench_refresh_status, 'NOT_REQUIRED'),
+    'workbench_refresh_queued_count', COALESCE(v_workbench_refresh_queued_count, 0),
+    'workbench_refresh_deferred_count', COALESCE(v_workbench_refresh_deferred_count, 0),
+    'workbench_refresh_failed_count', COALESCE(v_workbench_refresh_failed_count, 0),
+    'workbench_refresh_job_ids', COALESCE(v_workbench_refresh_job_ids, '[]'::jsonb),
+    'requires_workbench_session', COALESCE(v_workbench_requires_session, false),
     'applied_at_utc', v_now
   )
 );
@@ -157246,7 +157504,25 @@ v_notice_group_id := NULLIF(v_notice_queue_result->>'notice_group_id', '')::uuid
     'accepted_finance_resolution', v_finance_resolution_result,
     'classification_result', v_classification_result,
     'provider_evidence_result', COALESCE(v_provider_evidence_result, '{}'::jsonb),
-    'rail_state_summary', COALESCE(v_rail_state_summary_json, '{}'::jsonb),
+    'rail_state_summary', COALESCE(v_rail_state_summary_json, '{}'::jsonb)
+  ) || jsonb_build_object(
+    'workbench_refresh_status', COALESCE(v_workbench_refresh_status, 'NOT_REQUIRED'),
+    'workbench_refresh_queued_count', COALESCE(v_workbench_refresh_queued_count, 0),
+    'workbench_refresh_deferred_count', COALESCE(v_workbench_refresh_deferred_count, 0),
+    'workbench_refresh_failed_count', COALESCE(v_workbench_refresh_failed_count, 0),
+    'workbench_refresh_job_ids', COALESCE(v_workbench_refresh_job_ids, '[]'::jsonb),
+    'requires_workbench_session', COALESCE(v_workbench_requires_session, false),
+    'workbench_refresh', jsonb_build_object(
+      'status', COALESCE(v_workbench_refresh_status, 'NOT_REQUIRED'),
+      'queued_count', COALESCE(v_workbench_refresh_queued_count, 0),
+      'deferred_count', COALESCE(v_workbench_refresh_deferred_count, 0),
+      'failed_count', COALESCE(v_workbench_refresh_failed_count, 0),
+      'job_ids', COALESCE(v_workbench_refresh_job_ids, '[]'::jsonb),
+      'results', COALESCE(v_workbench_refresh_results, '[]'::jsonb),
+      'requires_workbench_session', COALESCE(v_workbench_requires_session, false),
+      'session_id', CASE WHEN v_batch.source_workbench_session_id IS NULL THEN NULL ELSE v_batch.source_workbench_session_id::text END,
+      'source_snapshot_run_id', CASE WHEN v_batch.source_snapshot_run_id IS NULL THEN NULL ELSE v_batch.source_snapshot_run_id::text END
+    ),
     'applied_at_utc', v_now
   );
 
@@ -157323,7 +157599,6 @@ EXCEPTION
     );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public._pay_payment_correction_validate_accepted_finance_resolution(
@@ -164721,21 +164996,11 @@ $function$;
 
 
 
-
-
-
-CREATE OR REPLACE FUNCTION public.pay_payment_confirm_no_money_and_unwind(
-  p_pay_batch_id uuid,
-  p_selection_json jsonb DEFAULT '{}'::jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_confirmation_json jsonb DEFAULT '{}'::jsonb,
-  p_reason text DEFAULT NULL::text,
-  p_idempotency_key text DEFAULT NULL::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_payment_confirm_no_money_and_unwind(p_pay_batch_id uuid, p_selection_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_confirmation_json jsonb DEFAULT '{}'::jsonb, p_reason text DEFAULT NULL::text, p_idempotency_key text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_uuid_regex text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
@@ -165438,11 +165703,26 @@ BEGIN
     'diagnostic_json', v_diagnostic_json,
     'expand_result', v_expand_result,
     'process_result', v_process_result,
+    'workbench_refresh_status', COALESCE(NULLIF(v_process_result->>'workbench_refresh_status', ''), 'NOT_REQUIRED'),
+    'workbench_refresh_queued_count', COALESCE(NULLIF(v_process_result->>'workbench_refresh_queued_count', '')::integer, 0),
+    'workbench_refresh_deferred_count', COALESCE(NULLIF(v_process_result->>'workbench_refresh_deferred_count', '')::integer, 0),
+    'workbench_refresh_failed_count', COALESCE(NULLIF(v_process_result->>'workbench_refresh_failed_count', '')::integer, 0),
+    'workbench_refresh_job_ids', COALESCE(v_process_result->'workbench_refresh_job_ids', '[]'::jsonb),
+    'requires_workbench_session', lower(BTRIM(COALESCE(v_process_result->>'requires_workbench_session', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    'workbench_refresh', COALESCE(v_process_result->'workbench_refresh', jsonb_build_object(
+      'status', COALESCE(NULLIF(v_process_result->>'workbench_refresh_status', ''), 'NOT_REQUIRED'),
+      'queued_count', COALESCE(NULLIF(v_process_result->>'workbench_refresh_queued_count', '')::integer, 0),
+      'deferred_count', COALESCE(NULLIF(v_process_result->>'workbench_refresh_deferred_count', '')::integer, 0),
+      'failed_count', COALESCE(NULLIF(v_process_result->>'workbench_refresh_failed_count', '')::integer, 0),
+      'job_ids', COALESCE(v_process_result->'workbench_refresh_job_ids', '[]'::jsonb),
+      'requires_workbench_session', lower(BTRIM(COALESCE(v_process_result->>'requires_workbench_session', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    )),
     'live_signal', v_signal_result,
     'grouped_alert_summary_impact', v_grouped_alert_updates
   );
 END;
 $function$;
+
 
 
 
@@ -196096,17 +196376,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(
-  p_target_session_id uuid,
-  p_source_session_id uuid DEFAULT NULL,
-  p_limit integer DEFAULT 100,
-  p_cursor_json jsonb DEFAULT '{}'::jsonb,
-  p_options_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(p_target_session_id uuid, p_source_session_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 100, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_options_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -196689,10 +196963,19 @@ BEGIN
           'session_id', p_target_session_id::text,
           'candidate_id', v_candidate_id::text,
           'session_version', v_target_session.version,
+          'operation_type', 'CLONE_REBASE_INELIGIBLE_SOURCE_BUILD',
+          'fallback_reason', COALESCE(v_clone_eligibility->>'reason', 'CLONE_REBASE_INELIGIBLE'),
+          'refresh_reason', COALESCE(v_clone_eligibility->>'reason', 'CLONE_REBASE_INELIGIBLE'),
           'reason', COALESCE(v_clone_eligibility->>'reason', 'CLONE_INELIGIBLE'),
           'refresh_scope_kind', 'CANDIDATE_FULL_LIVE',
           'pay_channel_scope', 'ALL',
-          'source_session_id', v_source_session_id::text
+          'source_session_id', v_source_session_id::text,
+          'clone_from_session_id', v_source_session_id::text,
+          'clone_to_session_id', p_target_session_id::text,
+          'force_legacy', true,
+          'source_build_required', true,
+          'line_work_required', true,
+          'delta_refresh_required', false
         ),
         v_now,
         v_now

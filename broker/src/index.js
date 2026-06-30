@@ -14000,7 +14000,6 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
   return execute();
 }
 
-
 async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -14200,7 +14199,9 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
   const sessionSignature = trimStr(body.session_signature || body.sessionSignature || '') || stableStringify({ kind: 'BANKING_PAY_WORKBENCH', pay_date: payDate, week_ending_cutoff: weekEndingCutoff, filters_json: filtersJson });
   const forceNewSession = body.force_new_session === true || body.forceNewSession === true;
   const discardSourceSession = body.discard_source_session === true || body.discardSourceSession === true;
-  const sourceSessionId = trimStr(body.source_session_id || body.sourceSessionId || '');
+  const sourceSessionId = trimStr(body.source_session_id || body.sourceSessionId || filtersJson.source_session_id || filtersJson.sourceSessionId || '');
+  const sourceSessionIdValid = uuidRe.test(sourceSessionId) ? sourceSessionId : '';
+  const sourcePayDate = parseIsoOrUkDateToIso(body.source_pay_date || body.sourcePayDate || filtersJson.source_pay_date || filtersJson.sourcePayDate || '') || '';
   const allowSessionRebaseSupplied = Object.prototype.hasOwnProperty.call(body, 'allowSessionRebase')
     || Object.prototype.hasOwnProperty.call(body, 'allow_session_rebase')
     || Object.prototype.hasOwnProperty.call(filtersJson, 'allowSessionRebase')
@@ -14210,7 +14211,15 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
     || filtersJson.allowSessionRebase === true
     || filtersJson.allow_session_rebase === true;
   const cloneFromSessionIdRaw = trimStr(body.cloneFromSessionId || body.clone_from_session_id || filtersJson.cloneFromSessionId || filtersJson.clone_from_session_id || '');
-  const cloneFromSessionId = uuidRe.test(cloneFromSessionIdRaw) ? cloneFromSessionIdRaw : '';
+  const explicitCloneFromSessionId = uuidRe.test(cloneFromSessionIdRaw) ? cloneFromSessionIdRaw : '';
+  const sourceSessionCanMapToClone = !!(
+    allowSessionRebase === true
+    && !explicitCloneFromSessionId
+    && sourceSessionIdValid
+    && sourcePayDate
+    && sourcePayDate !== payDate
+  );
+  const cloneFromSessionId = explicitCloneFromSessionId || (sourceSessionCanMapToClone ? sourceSessionIdValid : '');
   const rebaseSimpleRowsOnlySupplied = Object.prototype.hasOwnProperty.call(body, 'rebaseSimpleRowsOnly')
     || Object.prototype.hasOwnProperty.call(body, 'rebase_simple_rows_only')
     || Object.prototype.hasOwnProperty.call(filtersJson, 'rebaseSimpleRowsOnly')
@@ -14223,6 +14232,8 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
     ? { ...sqlFiltersJson.open_options }
     : (isPlainObject(sqlFiltersJson.options) ? { ...sqlFiltersJson.options } : {});
   if (allowSessionRebaseSupplied) sqlOpenOptions.allow_session_rebase = allowSessionRebase;
+  if (sourceSessionIdValid) sqlOpenOptions.source_session_id = sourceSessionIdValid;
+  if (sourcePayDate) sqlOpenOptions.source_pay_date = sourcePayDate;
   if (cloneFromSessionId) sqlOpenOptions.clone_from_session_id = cloneFromSessionId;
   if (rebaseSimpleRowsOnlySupplied) sqlOpenOptions.rebase_simple_rows_only = rebaseSimpleRowsOnly;
   if (Object.keys(sqlOpenOptions).length > 0) {
@@ -39057,9 +39068,7 @@ async function handleBankingPayCancelNotSentAndRecalculate(env, req, user, payBa
   }
 }
 
-
-
-async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchId) {
+async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchId, ctx = null) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
   if (!user || !user.id) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -39222,40 +39231,27 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
     return out;
   };
 
-  const boolFromBody = (body, ...keys) => {
-    for (const key of keys) {
-      if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
-      const value = body[key];
-      if (value === true) return true;
-      if (value === false) return false;
-      const text = trimText(value).toLowerCase();
-      if (['1', 'true', 't', 'yes', 'y', 'on'].includes(text)) return true;
-      if (['0', 'false', 'f', 'no', 'n', 'off'].includes(text)) return false;
-    }
-    return false;
-  };
+  const buildConfirmationJson = (body) => buildBankingPayNoMoneyConfirmationJson(body, {
+    source_handler: 'handleBankingPayConfirmNoMoneyAndUnwind'
+  });
 
-  const buildConfirmationJson = (body) => {
-    const source = safeObject(body.confirmation_json || body.confirmationJson || body.confirmation || body.provider_confirmation || body.providerConfirmation || body.bank_confirmation || body.bankConfirmation);
-    const providerReference = trimText(
-      body.provider_reference || body.providerReference || body.provider_transaction_id || body.providerTransactionId ||
-      body.provider_request_id || body.providerRequestId || body.bank_reference || body.bankReference ||
-      source.provider_reference || source.providerReference || source.provider_transaction_id || source.providerTransactionId || source.provider_request_id || source.providerRequestId || source.bank_reference || source.bankReference
-    );
-    const explanatoryNote = trimText(body.explanatory_note || body.explanatoryNote || body.note || body.reason || source.explanatory_note || source.explanatoryNote || source.note || '');
-    return {
-      ...source,
-      provider_bank_checked: source.provider_bank_checked === true || source.providerBankChecked === true || boolFromBody(body, 'provider_bank_checked', 'providerBankChecked', 'bank_checked', 'bankChecked'),
-      no_payment_made: source.no_payment_made === true || source.noPaymentMade === true || boolFromBody(body, 'no_payment_made', 'noPaymentMade', 'no_money_moved', 'noMoneyMoved'),
-      terminal_failure: source.terminal_failure === true || source.terminalFailure === true || boolFromBody(body, 'terminal_failure', 'terminalFailure', 'provider_failed', 'providerFailed'),
-      payment_cancelled: source.payment_cancelled === true || source.paymentCancelled === true || boolFromBody(body, 'payment_cancelled', 'paymentCancelled', 'provider_cancelled', 'providerCancelled'),
-      will_not_be_paid: source.will_not_be_paid === true || source.willNotBePaid === true || boolFromBody(body, 'will_not_be_paid', 'willNotBePaid', 'will_not_later_be_paid', 'willNotLaterBePaid'),
-      provider_reference: providerReference || source.provider_reference || source.providerReference || null,
-      explanatory_note: explanatoryNote || source.explanatory_note || source.explanatoryNote || null,
-      source_handler: 'handleBankingPayConfirmNoMoneyAndUnwind',
-      manual_confirmation: true
-    };
-  };
+  const noMoneyManualEvidenceReason = (confirmationJson, body) => trimText(
+    confirmationJson.provider_reference ||
+    confirmationJson.provider_ref ||
+    confirmationJson.bank_reference ||
+    confirmationJson.bank_ref ||
+    confirmationJson.rail_tx_id ||
+    confirmationJson.provider_transaction_id ||
+    confirmationJson.audit_note ||
+    confirmationJson.manual_note ||
+    confirmationJson.note ||
+    confirmationJson.explanatory_note ||
+    body.reason ||
+    body.rewind_reason ||
+    body.rewindReason ||
+    body.note ||
+    ''
+  );
 
   const readLiveSignal = async (knownVersions = {}) => {
     try {
@@ -39299,6 +39295,159 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
     };
   };
 
+
+  const extractWorkbenchRefreshNudgeContext = (payload) => {
+    const source = safeObject(payload);
+    const progress = safeObject(source.progress || source.process_result || source.chunk_result);
+    const processResult = safeObject(source.process_result || source.chunk_result || progress.process_result || progress.chunk_result);
+    const refresh = safeObject(source.workbench_refresh || progress.workbench_refresh || processResult.workbench_refresh);
+    const collectTextArray = (...values) => {
+      const out = [];
+      const push = (value) => {
+        if (Array.isArray(value)) {
+          value.forEach(push);
+          return;
+        }
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          push(value.job_id || value.jobId || value.id || '');
+          return;
+        }
+        const text = trimText(value);
+        if (text) out.push(text);
+      };
+      values.forEach(push);
+      return Array.from(new Set(out));
+    };
+    const numberFrom = (...values) => {
+      for (const value of values) {
+        const n = Number(value);
+        if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+      }
+      return 0;
+    };
+    const results = [
+      ...(Array.isArray(refresh.results) ? refresh.results : []),
+      ...(Array.isArray(processResult.workbench_refresh_results) ? processResult.workbench_refresh_results : []),
+      ...(Array.isArray(source.workbench_refresh_results) ? source.workbench_refresh_results : [])
+    ].filter((row) => row && typeof row === 'object' && !Array.isArray(row));
+    const firstResultWithSession = results.find((row) => uuidRe.test(trimText(row.session_id || row.source_session_id || row.workbench_session_id || ''))) || null;
+    const sessionId = trimText(
+      refresh.session_id ||
+      refresh.source_session_id ||
+      refresh.workbench_session_id ||
+      processResult.session_id ||
+      processResult.source_session_id ||
+      processResult.workbench_session_id ||
+      source.session_id ||
+      source.source_session_id ||
+      source.workbench_session_id ||
+      firstResultWithSession?.session_id ||
+      firstResultWithSession?.source_session_id ||
+      firstResultWithSession?.workbench_session_id ||
+      ''
+    );
+    const jobIds = collectTextArray(
+      source.workbench_refresh_job_ids,
+      progress.workbench_refresh_job_ids,
+      processResult.workbench_refresh_job_ids,
+      refresh.job_ids,
+      results.map((row) => row.job_id || row.jobId || row.id || '')
+    ).filter((value) => uuidRe.test(value));
+    const queuedCount = numberFrom(
+      source.workbench_refresh_queued_count,
+      progress.workbench_refresh_queued_count,
+      processResult.workbench_refresh_queued_count,
+      refresh.queued_count,
+      refresh.queued,
+      jobIds.length
+    );
+    return {
+      queued_count: queuedCount,
+      job_ids: jobIds,
+      session_id: uuidRe.test(sessionId) ? sessionId : '',
+      status: trimText(source.workbench_refresh_status || progress.workbench_refresh_status || processResult.workbench_refresh_status || refresh.status || ''),
+      requires_workbench_session: source.requires_workbench_session === true || progress.requires_workbench_session === true || processResult.requires_workbench_session === true || refresh.requires_workbench_session === true
+    };
+  };
+
+  const maybeNudgeNoMoneyWorkbenchRefresh = (payload) => {
+    const context = extractWorkbenchRefreshNudgeContext(payload);
+    if (context.queued_count <= 0 && context.job_ids.length <= 0) {
+      return {
+        ok: true,
+        attempted: false,
+        scheduled: false,
+        skipped: true,
+        code: 'NO_MONEY_UNWIND_WORKBENCH_REFRESH_NOT_QUEUED',
+        workbench_refresh_status: context.status || 'NOT_REQUIRED',
+        queued_count: context.queued_count,
+        job_ids: context.job_ids
+      };
+    }
+    if (!context.session_id) {
+      return {
+        ok: true,
+        attempted: false,
+        scheduled: false,
+        skipped: true,
+        code: 'NO_MONEY_UNWIND_WORKBENCH_REFRESH_SESSION_MISSING',
+        workbench_refresh_status: context.status || null,
+        queued_count: context.queued_count,
+        job_ids: context.job_ids,
+        requires_workbench_session: context.requires_workbench_session === true
+      };
+    }
+    if (typeof nudgeBankingPayWorkbenchDrain !== 'function') {
+      return {
+        ok: false,
+        attempted: false,
+        scheduled: false,
+        skipped: true,
+        code: 'NO_MONEY_UNWIND_WORKBENCH_NUDGE_HELPER_UNAVAILABLE',
+        session_id: context.session_id,
+        queued_count: context.queued_count,
+        job_ids: context.job_ids
+      };
+    }
+    try {
+      const nudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+        origin: 'PAYMENT_CONFIRM_NO_MONEY_AND_UNWIND_WORKBENCH_REFRESH',
+        reason: 'PAYMENT_CORRECTION_NO_MONEY_UNWIND_REFRESH_QUEUED',
+        sessionId: context.session_id,
+        session_id: context.session_id,
+        actorUserId: String(user.id),
+        actor_user_id: String(user.id),
+        pay_batch_id: id,
+        correction_request_id: trimText(payload?.correction_request_id || payload?.request_id || '') || null,
+        workbench_refresh_job_ids: context.job_ids,
+        budgetProfile: 'NUDGE',
+        profile: 'NUDGE'
+      });
+      return {
+        ok: !nudge || nudge.ok !== false,
+        attempted: true,
+        scheduled: !!(nudge && (nudge.scheduled === true || nudge.already_running === true || nudge.wait_until_used === true || nudge.continuation_scheduled === true)),
+        wait_until_used: !!(nudge && nudge.wait_until_used === true),
+        session_id: context.session_id,
+        queued_count: context.queued_count,
+        job_ids: context.job_ids,
+        result: nudge || null
+      };
+    } catch (nudgeError) {
+      return {
+        ok: false,
+        attempted: true,
+        scheduled: false,
+        skipped: true,
+        code: 'NO_MONEY_UNWIND_WORKBENCH_NUDGE_FAILED',
+        session_id: context.session_id,
+        queued_count: context.queued_count,
+        job_ids: context.job_ids,
+        message: String(nudgeError?.message || nudgeError || 'Workbench drain nudge failed')
+      };
+    }
+  };
+
   let body;
   try { body = await readBody(); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
@@ -39307,7 +39456,7 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
 
   const selectionJson = normaliseSelection(body);
   const confirmationJson = buildConfirmationJson(body);
-  const reason = trimText(body.reason || body.rewind_reason || body.rewindReason || body.note || confirmationJson.explanatory_note || 'Manual confirmation that provider/bank evidence shows no money moved.');
+  const reason = noMoneyManualEvidenceReason(confirmationJson, body) || null;
   const idempotencyKey = trimText(
     body.idempotency_key ||
     body.idempotencyKey ||
@@ -39326,6 +39475,7 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
       p_idempotency_key: idempotencyKey
     }), 'pay_payment_confirm_no_money_and_unwind');
 
+    const workbenchRefreshNudge = maybeNudgeNoMoneyWorkbenchRefresh(rpcResult);
     const liveSignal = await readLiveSignal(body);
     const alertSummary = await readGroupedAlertSummary();
     const carryForward = summariseCarryForward(rpcResult);
@@ -39349,7 +39499,9 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
       live_signal_version: rpcResult.live_signal_version ?? liveSignal?.version ?? null,
       payment_status_version: rpcResult.payment_status_version ?? liveSignal?.payment_status_version ?? null,
       correction_progress_version: rpcResult.correction_progress_version ?? liveSignal?.correction_progress_version ?? null,
-      overview_version: rpcResult.overview_version ?? liveSignal?.overview_version ?? null
+      overview_version: rpcResult.overview_version ?? liveSignal?.overview_version ?? null,
+      workbench_refresh_nudge: workbenchRefreshNudge || null,
+      workbench_refresh_nudge_scheduled: !!(workbenchRefreshNudge && workbenchRefreshNudge.scheduled === true)
     };
 
     return withCORS(env, req, ok(responsePayload));
@@ -79470,8 +79622,6 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
   }
 }
 
-
-
 async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -79575,6 +79725,166 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
       existing: Number(source.carry_forward_existing_count ?? progress.carry_forward_existing_count ?? totals.carry_forward_existing_count ?? totals.carry_forward_existing ?? 0) || 0,
       released: Number(source.carry_forward_released_count ?? progress.carry_forward_released_count ?? totals.carry_forward_released_count ?? totals.carry_forward_released ?? 0) || 0
     };
+  };
+
+
+  const extractWorkbenchRefreshNudgeContext = (payload) => {
+    const source = safeObject(payload);
+    const progress = safeObject(source.progress || source.process_result || source.chunk_result);
+    const processResult = safeObject(source.process_result || source.chunk_result || progress.process_result || progress.chunk_result);
+    const refresh = safeObject(source.workbench_refresh || progress.workbench_refresh || processResult.workbench_refresh);
+    const collectTextArray = (...values) => {
+      const out = [];
+      const push = (value) => {
+        if (Array.isArray(value)) {
+          value.forEach(push);
+          return;
+        }
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          push(value.job_id || value.jobId || value.id || '');
+          return;
+        }
+        const text = trimText(value);
+        if (text) out.push(text);
+      };
+      values.forEach(push);
+      return Array.from(new Set(out));
+    };
+    const numberFrom = (...values) => {
+      for (const value of values) {
+        const n = Number(value);
+        if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+      }
+      return 0;
+    };
+    const results = [
+      ...(Array.isArray(refresh.results) ? refresh.results : []),
+      ...(Array.isArray(processResult.workbench_refresh_results) ? processResult.workbench_refresh_results : []),
+      ...(Array.isArray(source.workbench_refresh_results) ? source.workbench_refresh_results : [])
+    ].filter((row) => row && typeof row === 'object' && !Array.isArray(row));
+    const firstResultWithSession = results.find((row) => uuidRe.test(trimText(row.session_id || row.source_session_id || row.workbench_session_id || ''))) || null;
+    const sessionId = trimText(
+      refresh.session_id ||
+      refresh.source_session_id ||
+      refresh.workbench_session_id ||
+      processResult.session_id ||
+      processResult.source_session_id ||
+      processResult.workbench_session_id ||
+      source.session_id ||
+      source.source_session_id ||
+      source.workbench_session_id ||
+      firstResultWithSession?.session_id ||
+      firstResultWithSession?.source_session_id ||
+      firstResultWithSession?.workbench_session_id ||
+      ''
+    );
+    const jobIds = collectTextArray(
+      source.workbench_refresh_job_ids,
+      progress.workbench_refresh_job_ids,
+      processResult.workbench_refresh_job_ids,
+      refresh.job_ids,
+      results.map((row) => row.job_id || row.jobId || row.id || '')
+    ).filter((value) => uuidRe.test(value));
+    const queuedCount = numberFrom(
+      source.workbench_refresh_queued_count,
+      progress.workbench_refresh_queued_count,
+      processResult.workbench_refresh_queued_count,
+      refresh.queued_count,
+      refresh.queued,
+      jobIds.length
+    );
+    return {
+      queued_count: queuedCount,
+      job_ids: jobIds,
+      session_id: uuidRe.test(sessionId) ? sessionId : '',
+      status: trimText(source.workbench_refresh_status || progress.workbench_refresh_status || processResult.workbench_refresh_status || refresh.status || ''),
+      requires_workbench_session: source.requires_workbench_session === true || progress.requires_workbench_session === true || processResult.requires_workbench_session === true || refresh.requires_workbench_session === true
+    };
+  };
+
+  const maybeNudgeNoMoneyWorkbenchRefresh = (payload, routeLabel) => {
+    const context = extractWorkbenchRefreshNudgeContext(payload);
+    if (context.queued_count <= 0 && context.job_ids.length <= 0) {
+      return {
+        ok: true,
+        attempted: false,
+        scheduled: false,
+        skipped: true,
+        code: 'NO_MONEY_UNWIND_WORKBENCH_REFRESH_NOT_QUEUED',
+        route: routeLabel || null,
+        workbench_refresh_status: context.status || 'NOT_REQUIRED',
+        queued_count: context.queued_count,
+        job_ids: context.job_ids
+      };
+    }
+    if (!context.session_id) {
+      return {
+        ok: true,
+        attempted: false,
+        scheduled: false,
+        skipped: true,
+        code: 'NO_MONEY_UNWIND_WORKBENCH_REFRESH_SESSION_MISSING',
+        route: routeLabel || null,
+        workbench_refresh_status: context.status || null,
+        queued_count: context.queued_count,
+        job_ids: context.job_ids,
+        requires_workbench_session: context.requires_workbench_session === true
+      };
+    }
+    if (typeof nudgeBankingPayWorkbenchDrain !== 'function') {
+      return {
+        ok: false,
+        attempted: false,
+        scheduled: false,
+        skipped: true,
+        code: 'NO_MONEY_UNWIND_WORKBENCH_NUDGE_HELPER_UNAVAILABLE',
+        route: routeLabel || null,
+        session_id: context.session_id,
+        queued_count: context.queued_count,
+        job_ids: context.job_ids
+      };
+    }
+    try {
+      const nudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+        origin: 'PAYMENT_CORRECTION_START_NO_MONEY_UNWIND_WORKBENCH_REFRESH',
+        reason: 'PAYMENT_CORRECTION_NO_MONEY_UNWIND_REFRESH_QUEUED',
+        sessionId: context.session_id,
+        session_id: context.session_id,
+        actorUserId,
+        actor_user_id: actorUserId,
+        pay_batch_id: id,
+        correction_request_id: trimText(payload?.correction_request_id || payload?.request_id || '') || null,
+        workbench_refresh_job_ids: context.job_ids,
+        requested_action: 'NO_MONEY_UNWIND_AND_RECALCULATE',
+        route: routeLabel || null,
+        budgetProfile: 'NUDGE',
+        profile: 'NUDGE'
+      });
+      return {
+        ok: !nudge || nudge.ok !== false,
+        attempted: true,
+        scheduled: !!(nudge && (nudge.scheduled === true || nudge.already_running === true || nudge.wait_until_used === true || nudge.continuation_scheduled === true)),
+        wait_until_used: !!(nudge && nudge.wait_until_used === true),
+        route: routeLabel || null,
+        session_id: context.session_id,
+        queued_count: context.queued_count,
+        job_ids: context.job_ids,
+        result: nudge || null
+      };
+    } catch (nudgeError) {
+      return {
+        ok: false,
+        attempted: true,
+        scheduled: false,
+        skipped: true,
+        code: 'NO_MONEY_UNWIND_WORKBENCH_NUDGE_FAILED',
+        route: routeLabel || null,
+        session_id: context.session_id,
+        queued_count: context.queued_count,
+        job_ids: context.job_ids,
+        message: String(nudgeError?.message || nudgeError || 'Workbench drain nudge failed')
+      };
+    }
   };
   const requirePaymentPermission = async (actorUserId) => {
     if (!uuidRe.test(actorUserId)) return { ok: false, response: unauthorized('Unauthorized') };
@@ -79796,6 +80106,26 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
   const reason = trimText(body.reason || body.correction_reason || body.correctionReason || body.note || 'Payment issue action started.');
   const idempotencyKey = trimText(body.idempotency_key || body.idempotencyKey || req.headers.get('Idempotency-Key') || req.headers.get('X-Idempotency-Key') || `payment-correction-start:${id}:${actorUserId}:${Date.now()}`);
   const buildConfirmationJson = () => safeObject(body.confirmation_json || body.confirmationJson || body.confirmation || body.provider_confirmation || body.providerConfirmation || body.bank_confirmation || body.bankConfirmation);
+  const buildNoMoneyConfirmationJson = () => buildBankingPayNoMoneyConfirmationJson(body, {
+    source_handler: 'handleBankingPayCorrectionStart'
+  });
+  const noMoneyManualEvidenceReason = (confirmationJson) => trimText(
+    confirmationJson.provider_reference ||
+    confirmationJson.provider_ref ||
+    confirmationJson.bank_reference ||
+    confirmationJson.bank_ref ||
+    confirmationJson.rail_tx_id ||
+    confirmationJson.provider_transaction_id ||
+    confirmationJson.audit_note ||
+    confirmationJson.manual_note ||
+    confirmationJson.note ||
+    confirmationJson.explanatory_note ||
+    body.reason ||
+    body.correction_reason ||
+    body.correctionReason ||
+    body.note ||
+    ''
+  );
   const reauthToken = trimText(body.reauth_token || body.reauthToken || body.payment_reauth_token || body.paymentReauthToken || '');
   const requireReauthForMutation = async () => {
     if (!reauthToken) return { ok: false, response: badRequest('Please verify your identity before continuing.') };
@@ -79834,6 +80164,7 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
     const action = upperText(body.requested_action || body.requestedAction || selectionJson.requested_action || selectionJson.requestedAction || plan.recommended_action || plan.action || plan.requested_action || '');
     let result;
     let route = action;
+    let workbenchRefreshNudge = null;
     if (action === 'PRE_PROVIDER_CANCEL_AND_RECALCULATE') {
       const reauth = await requireReauthForMutation();
       if (!reauth.ok) return withCORS(env, req, reauth.response);
@@ -79919,14 +80250,17 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
     } else if (action === 'NO_MONEY_UNWIND_AND_RECALCULATE') {
       const reauth = await requireReauthForMutation();
       if (!reauth.ok) return withCORS(env, req, reauth.response);
+      const noMoneyConfirmationJson = buildNoMoneyConfirmationJson();
+      const noMoneyReason = noMoneyManualEvidenceReason(noMoneyConfirmationJson) || null;
       result = unwrapRpc(await sbRpc(env, 'pay_payment_confirm_no_money_and_unwind', {
         p_pay_batch_id: id,
         p_selection_json: { ...selectionJson, requested_action: 'NO_MONEY_UNWIND_AND_RECALCULATE' },
         p_actor_user_id: actorUserId,
-        p_confirmation_json: { ...buildConfirmationJson(), source_handler: 'handleBankingPayCorrectionStart', manual_confirmation: true },
-        p_reason: reason,
+        p_confirmation_json: noMoneyConfirmationJson,
+        p_reason: noMoneyReason,
         p_idempotency_key: idempotencyKey
       }), 'pay_payment_confirm_no_money_and_unwind');
+      workbenchRefreshNudge = maybeNudgeNoMoneyWorkbenchRefresh(result, route);
     } else if (action === 'CHECK_PROVIDER_STATUS') {
       route = 'CHECK_PROVIDER_STATUS';
       result = await callPoll();
@@ -79993,7 +80327,9 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
       live_signal_version: result.live_signal_version ?? signal?.version ?? null,
       payment_status_version: result.payment_status_version ?? signal?.payment_status_version ?? null,
       correction_progress_version: result.correction_progress_version ?? signal?.correction_progress_version ?? null,
-      overview_version: result.overview_version ?? signal?.overview_version ?? null
+      overview_version: result.overview_version ?? signal?.overview_version ?? null,
+      workbench_refresh_nudge: result.workbench_refresh_nudge || workbenchRefreshNudge || null,
+      workbench_refresh_nudge_scheduled: !!((result.workbench_refresh_nudge || workbenchRefreshNudge) && (result.workbench_refresh_nudge || workbenchRefreshNudge).scheduled === true)
     }));
   } catch (e) {
     return rpcErrorResponse(e, 'PAYMENT_CORRECTION_START_FAILED', 'Unable to start payment issue action.');
