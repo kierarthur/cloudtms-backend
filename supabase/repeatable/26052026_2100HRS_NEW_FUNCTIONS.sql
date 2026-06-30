@@ -198776,17 +198776,11 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_patch_preview_after_batch_mutation(
-  p_session_id uuid,
-  p_pay_batch_id uuid,
-  p_operation_type text,
-  p_actor_user_id uuid DEFAULT NULL,
-  p_options_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_patch_preview_after_batch_mutation(p_session_id uuid, p_pay_batch_id uuid, p_operation_type text, p_actor_user_id uuid DEFAULT NULL::uuid, p_options_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -198826,6 +198820,18 @@ DECLARE
   v_ready_after_count integer := 0;
   v_selected_count_delta integer := 0;
   v_ready_count_delta integer := 0;
+  v_uuid_regex text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
+  v_is_cancel_delete boolean := false;
+  v_supplied_item_scope_count integer := 0;
+  v_exact_item_scope_count integer := 0;
+  v_invalid_item_scope_count integer := 0;
+  v_out_of_batch_item_scope_count integer := 0;
+  v_has_specific_scope_selector boolean := false;
+  v_whole_batch_scope_proven boolean := false;
+  v_cancel_delete_total_item_count integer := 0;
+  v_cancel_delete_voided_item_count integer := 0;
+  v_scope_resolution_mode text := NULL::text;
+  v_scope_diagnostic_json jsonb := '{}'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -198859,6 +198865,8 @@ BEGIN
       'complex_refresh_candidate_ids', '[]'::jsonb
     );
   END IF;
+
+  v_is_cancel_delete := v_operation_type IN ('DRAFT_DELETE', 'DRAFT_CANCEL');
 
   SELECT session_row.*
   INTO v_session_row
@@ -198944,6 +198952,320 @@ BEGIN
     );
   END IF;
 
+  DROP TABLE IF EXISTS pg_temp._bpay_batch_mutation_supplied_item_ids;
+  CREATE TEMP TABLE _bpay_batch_mutation_supplied_item_ids ON COMMIT DROP AS
+  WITH option_item_arrays(path_name, value_json) AS (
+    VALUES
+      ('changed_pay_batch_item_ids', v_options_json->'changed_pay_batch_item_ids'),
+      ('cancelled_pay_batch_item_ids', v_options_json->'cancelled_pay_batch_item_ids'),
+      ('voided_pay_batch_item_ids', v_options_json->'voided_pay_batch_item_ids'),
+      ('pay_batch_item_ids', v_options_json->'pay_batch_item_ids'),
+      ('selected_pay_batch_item_ids', v_options_json->'selected_pay_batch_item_ids'),
+      ('expected_pay_batch_item_ids', v_options_json->'expected_pay_batch_item_ids'),
+      ('cancellation_result.changed_pay_batch_item_ids', v_options_json#>'{cancellation_result,changed_pay_batch_item_ids}'),
+      ('cancellation_result.cancelled_pay_batch_item_ids', v_options_json#>'{cancellation_result,cancelled_pay_batch_item_ids}'),
+      ('cancellation_result.voided_pay_batch_item_ids', v_options_json#>'{cancellation_result,voided_pay_batch_item_ids}'),
+      ('cancellation_result.process_result.changed_pay_batch_item_ids', v_options_json#>'{cancellation_result,process_result,changed_pay_batch_item_ids}'),
+      ('cancellation_result.process_result.changed_scope_json.changed_pay_batch_item_ids', v_options_json#>'{cancellation_result,process_result,changed_scope_json,changed_pay_batch_item_ids}'),
+      ('cancellation_result.changed_scope_json.changed_pay_batch_item_ids', v_options_json#>'{cancellation_result,changed_scope_json,changed_pay_batch_item_ids}'),
+      ('process_result.changed_pay_batch_item_ids', v_options_json#>'{process_result,changed_pay_batch_item_ids}'),
+      ('process_result.changed_scope_json.changed_pay_batch_item_ids', v_options_json#>'{process_result,changed_scope_json,changed_pay_batch_item_ids}'),
+      ('result.changed_pay_batch_item_ids', v_options_json#>'{result,changed_pay_batch_item_ids}'),
+      ('result.changed_scope_json.changed_pay_batch_item_ids', v_options_json#>'{result,changed_scope_json,changed_pay_batch_item_ids}'),
+      ('result.process_result.changed_pay_batch_item_ids', v_options_json#>'{result,process_result,changed_pay_batch_item_ids}'),
+      ('result.process_result.changed_scope_json.changed_pay_batch_item_ids', v_options_json#>'{result,process_result,changed_scope_json,changed_pay_batch_item_ids}'),
+      ('selection_json.pay_batch_item_ids', v_options_json#>'{selection_json,pay_batch_item_ids}'),
+      ('selection_json.selected_pay_batch_item_ids', v_options_json#>'{selection_json,selected_pay_batch_item_ids}'),
+      ('selection_json.expected_pay_batch_item_ids', v_options_json#>'{selection_json,expected_pay_batch_item_ids}'),
+      ('confirmation_json.pay_batch_item_ids', v_options_json#>'{confirmation_json,pay_batch_item_ids}'),
+      ('confirmation_json.selected_pay_batch_item_ids', v_options_json#>'{confirmation_json,selected_pay_batch_item_ids}'),
+      ('confirmation_json.expected_pay_batch_item_ids', v_options_json#>'{confirmation_json,expected_pay_batch_item_ids}')
+  ), raw_item_values AS (
+    SELECT option_item_arrays.path_name,
+           item_array_values.raw_value
+    FROM option_item_arrays
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(option_item_arrays.value_json) = 'array' THEN option_item_arrays.value_json
+        ELSE '[]'::jsonb
+      END
+    ) AS item_array_values(raw_value)
+    UNION ALL
+    SELECT option_item_arrays.path_name,
+           TRIM(BOTH '"' FROM option_item_arrays.value_json::text) AS raw_value
+    FROM option_item_arrays
+    WHERE jsonb_typeof(option_item_arrays.value_json) = 'string'
+  ), cleaned_item_values AS (
+    SELECT raw_item_values.path_name,
+           NULLIF(BTRIM(COALESCE(raw_item_values.raw_value, '')), '') AS clean_value
+    FROM raw_item_values
+  )
+  SELECT DISTINCT
+    cleaned_item_values.path_name,
+    cleaned_item_values.clean_value AS raw_pay_batch_item_id,
+    CASE
+      WHEN cleaned_item_values.clean_value ~* v_uuid_regex THEN cleaned_item_values.clean_value::uuid
+      ELSE NULL::uuid
+    END AS pay_batch_item_id
+  FROM cleaned_item_values
+  WHERE cleaned_item_values.clean_value IS NOT NULL;
+
+  SELECT COUNT(DISTINCT supplied_item.pay_batch_item_id)::integer
+  INTO v_supplied_item_scope_count
+  FROM pg_temp._bpay_batch_mutation_supplied_item_ids AS supplied_item
+  WHERE supplied_item.pay_batch_item_id IS NOT NULL;
+
+  SELECT COUNT(DISTINCT supplied_item.raw_pay_batch_item_id)::integer
+  INTO v_invalid_item_scope_count
+  FROM pg_temp._bpay_batch_mutation_supplied_item_ids AS supplied_item
+  WHERE supplied_item.pay_batch_item_id IS NULL;
+
+  DROP TABLE IF EXISTS pg_temp._bpay_batch_mutation_exact_item_ids;
+  CREATE TEMP TABLE _bpay_batch_mutation_exact_item_ids ON COMMIT DROP AS
+  SELECT DISTINCT supplied_item.pay_batch_item_id
+  FROM pg_temp._bpay_batch_mutation_supplied_item_ids AS supplied_item
+  JOIN public.pay_batch_items AS exact_batch_item
+    ON exact_batch_item.id = supplied_item.pay_batch_item_id
+  JOIN public.pay_batch_candidates AS exact_batch_candidate
+    ON exact_batch_candidate.id = exact_batch_item.pay_batch_candidate_id
+  WHERE exact_batch_candidate.pay_batch_id = p_pay_batch_id
+    AND supplied_item.pay_batch_item_id IS NOT NULL;
+
+  SELECT COUNT(*)::integer
+  INTO v_exact_item_scope_count
+  FROM pg_temp._bpay_batch_mutation_exact_item_ids AS exact_item;
+
+  v_out_of_batch_item_scope_count := GREATEST(COALESCE(v_supplied_item_scope_count, 0) - COALESCE(v_exact_item_scope_count, 0), 0);
+
+  SELECT EXISTS (
+    WITH option_scope_objects(path_name, object_json) AS (
+      VALUES
+        ('root', v_options_json),
+        ('selection_json', v_options_json->'selection_json'),
+        ('confirmation_json', v_options_json->'confirmation_json'),
+        ('cancellation_result', v_options_json->'cancellation_result'),
+        ('process_result', v_options_json->'process_result'),
+        ('result', v_options_json->'result')
+    )
+    SELECT 1
+    FROM option_scope_objects
+    CROSS JOIN LATERAL jsonb_each(
+      CASE
+        WHEN jsonb_typeof(option_scope_objects.object_json) = 'object' THEN option_scope_objects.object_json
+        ELSE '{}'::jsonb
+      END
+    ) AS scope_entry(selector_key, selector_value)
+    WHERE scope_entry.selector_key = ANY(ARRAY[
+      'pay_batch_candidate_id',
+      'pay_batch_candidate_ids',
+      'payBatchCandidateId',
+      'payBatchCandidateIds',
+      'pay_bank_transfer_id',
+      'pay_bank_transfer_ids',
+      'payBankTransferId',
+      'payBankTransferIds',
+      'pay_batch_item_id',
+      'pay_batch_item_ids',
+      'payBatchItemId',
+      'payBatchItemIds',
+      'selected_pay_batch_item_ids',
+      'expected_pay_batch_item_ids',
+      'candidate_id',
+      'candidate_ids',
+      'candidateId',
+      'candidateIds',
+      'umbrella_id',
+      'umbrella_ids',
+      'umbrellaId',
+      'umbrellaIds',
+      'transfer_group_key',
+      'transfer_group_keys',
+      'transferGroupKey',
+      'transferGroupKeys',
+      'finance_case_id',
+      'finance_case_ids',
+      'financeCaseId',
+      'financeCaseIds',
+      'finance_component_id',
+      'finance_component_ids',
+      'financeComponentId',
+      'financeComponentIds',
+      'reservation_id',
+      'reservation_ids',
+      'reservationId',
+      'reservationIds',
+      'item_type',
+      'item_types',
+      'selected_scope_keys',
+      'selectedScopeKeys',
+      'selected_row_keys',
+      'selectedRowKeys',
+      'current_page_row_keys',
+      'currentPageRowKeys'
+    ]::text[])
+      AND (
+        (jsonb_typeof(scope_entry.selector_value) = 'array' AND jsonb_array_length(scope_entry.selector_value) > 0)
+        OR (jsonb_typeof(scope_entry.selector_value) = 'string' AND NULLIF(TRIM(BOTH '"' FROM scope_entry.selector_value::text), '') IS NOT NULL)
+        OR jsonb_typeof(scope_entry.selector_value) IN ('number', 'boolean', 'object')
+      )
+  )
+  INTO v_has_specific_scope_selector;
+
+  SELECT COUNT(*)::integer,
+         COUNT(*) FILTER (WHERE COALESCE(batch_item.is_voided, false) IS TRUE)::integer
+  INTO v_cancel_delete_total_item_count,
+       v_cancel_delete_voided_item_count
+  FROM public.pay_batch_candidates AS batch_candidate
+  JOIN public.pay_batch_items AS batch_item
+    ON batch_item.pay_batch_candidate_id = batch_candidate.id
+  WHERE batch_candidate.pay_batch_id = p_pay_batch_id;
+
+  WITH scope_values(raw_value) AS (
+    VALUES
+      (v_options_json->>'scope_type'),
+      (v_options_json->>'scopeType'),
+      (v_options_json->>'scope'),
+      (v_options_json->>'cancel_scope'),
+      (v_options_json->>'cancelScope'),
+      (v_options_json->>'operation_scope'),
+      (v_options_json->>'operationScope'),
+      (v_options_json#>>'{selection_json,scope_type}'),
+      (v_options_json#>>'{selection_json,scopeType}'),
+      (v_options_json#>>'{selection_json,scope}'),
+      (v_options_json#>>'{selection_json,cancel_scope}'),
+      (v_options_json#>>'{selection_json,cancelScope}'),
+      (v_options_json#>>'{selection_json,operation_scope}'),
+      (v_options_json#>>'{selection_json,operationScope}'),
+      (v_options_json#>>'{confirmation_json,scope_type}'),
+      (v_options_json#>>'{confirmation_json,scopeType}'),
+      (v_options_json#>>'{confirmation_json,scope}'),
+      (v_options_json#>>'{confirmation_json,cancel_scope}'),
+      (v_options_json#>>'{confirmation_json,cancelScope}'),
+      (v_options_json#>>'{confirmation_json,operation_scope}'),
+      (v_options_json#>>'{confirmation_json,operationScope}'),
+      (v_options_json#>>'{cancellation_result,scope_type}'),
+      (v_options_json#>>'{cancellation_result,scopeType}'),
+      (v_options_json#>>'{cancellation_result,scope}'),
+      (v_options_json#>>'{cancellation_result,cancel_scope}'),
+      (v_options_json#>>'{cancellation_result,cancelScope}'),
+      (v_options_json#>>'{cancellation_result,operation_scope}'),
+      (v_options_json#>>'{cancellation_result,operationScope}')
+  ), whole_batch_flags(raw_value) AS (
+    VALUES
+      (v_options_json->>'whole_batch'),
+      (v_options_json->>'wholeBatch'),
+      (v_options_json->>'all_items'),
+      (v_options_json->>'allItems'),
+      (v_options_json->>'delete_entire_batch'),
+      (v_options_json->>'deleteEntireBatch'),
+      (v_options_json->>'whole_batch_overview_action'),
+      (v_options_json->>'wholeBatchOverviewAction'),
+      (v_options_json#>>'{selection_json,whole_batch}'),
+      (v_options_json#>>'{selection_json,wholeBatch}'),
+      (v_options_json#>>'{selection_json,all_items}'),
+      (v_options_json#>>'{selection_json,allItems}'),
+      (v_options_json#>>'{selection_json,delete_entire_batch}'),
+      (v_options_json#>>'{selection_json,deleteEntireBatch}'),
+      (v_options_json#>>'{selection_json,whole_batch_overview_action}'),
+      (v_options_json#>>'{selection_json,wholeBatchOverviewAction}'),
+      (v_options_json#>>'{confirmation_json,whole_batch}'),
+      (v_options_json#>>'{confirmation_json,wholeBatch}'),
+      (v_options_json#>>'{confirmation_json,all_items}'),
+      (v_options_json#>>'{confirmation_json,allItems}'),
+      (v_options_json#>>'{confirmation_json,delete_entire_batch}'),
+      (v_options_json#>>'{confirmation_json,deleteEntireBatch}'),
+      (v_options_json#>>'{confirmation_json,whole_batch_overview_action}'),
+      (v_options_json#>>'{confirmation_json,wholeBatchOverviewAction}'),
+      (v_options_json#>>'{cancellation_result,whole_batch}'),
+      (v_options_json#>>'{cancellation_result,wholeBatch}'),
+      (v_options_json#>>'{cancellation_result,all_items}'),
+      (v_options_json#>>'{cancellation_result,allItems}'),
+      (v_options_json#>>'{cancellation_result,delete_entire_batch}'),
+      (v_options_json#>>'{cancellation_result,deleteEntireBatch}'),
+      (v_options_json#>>'{cancellation_result,whole_batch_overview_action}'),
+      (v_options_json#>>'{cancellation_result,wholeBatchOverviewAction}')
+  )
+  SELECT (
+    v_is_cancel_delete IS TRUE
+    AND COALESCE(v_exact_item_scope_count, 0) = 0
+    AND COALESCE(v_has_specific_scope_selector, false) IS NOT TRUE
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM scope_values AS scope_value
+        WHERE UPPER(BTRIM(COALESCE(scope_value.raw_value, ''))) IN ('BATCH', 'WHOLE_BATCH', 'ALL', 'PAY_BATCH')
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM whole_batch_flags AS whole_batch_flag
+        WHERE lower(BTRIM(COALESCE(whole_batch_flag.raw_value, ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      )
+    )
+  )
+  INTO v_whole_batch_scope_proven;
+
+  v_scope_resolution_mode := CASE
+    WHEN v_is_cancel_delete IS NOT TRUE THEN 'ACTIVE_NON_VOIDED_ITEMS'
+    WHEN COALESCE(v_exact_item_scope_count, 0) > 0 THEN 'EXACT_ITEM_IDS'
+    WHEN COALESCE(v_whole_batch_scope_proven, false) IS TRUE THEN 'WHOLE_BATCH_VOIDED_ITEMS'
+    ELSE 'UNPROVEN_CANCEL_DELETE_SCOPE'
+  END;
+
+  v_scope_diagnostic_json := jsonb_build_object(
+    'scope_resolution_mode', v_scope_resolution_mode,
+    'operation_type', v_operation_type,
+    'supplied_item_scope_count', COALESCE(v_supplied_item_scope_count, 0),
+    'exact_item_scope_count', COALESCE(v_exact_item_scope_count, 0),
+    'invalid_item_scope_count', COALESCE(v_invalid_item_scope_count, 0),
+    'out_of_batch_item_scope_count', COALESCE(v_out_of_batch_item_scope_count, 0),
+    'has_specific_scope_selector', COALESCE(v_has_specific_scope_selector, false),
+    'whole_batch_scope_proven', COALESCE(v_whole_batch_scope_proven, false),
+    'batch_item_count', COALESCE(v_cancel_delete_total_item_count, 0),
+    'voided_batch_item_count', COALESCE(v_cancel_delete_voided_item_count, 0)
+  );
+
+  IF v_is_cancel_delete IS TRUE
+     AND COALESCE(v_supplied_item_scope_count, 0) > 0
+     AND (COALESCE(v_invalid_item_scope_count, 0) > 0 OR COALESCE(v_out_of_batch_item_scope_count, 0) > 0) THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'patch_applied', false,
+      'replacement_session_required', false,
+      'fallback_required', true,
+      'fallback_reason', 'DRAFT_CANCEL_DELETE_INVALID_OR_OUT_OF_BATCH_ITEM_SCOPE',
+      'operation_type', v_operation_type,
+      'pay_batch_id', p_pay_batch_id::text,
+      'affected_candidate_count', 0,
+      'affected_row_count', 0,
+      'patched_row_count', 0,
+      'targeted_refresh_enqueued_count', 0,
+      'complex_refresh_candidate_ids', '[]'::jsonb,
+      'scope_resolution_mode', v_scope_resolution_mode,
+      'scope_diagnostic', v_scope_diagnostic_json
+    );
+  END IF;
+
+  IF v_is_cancel_delete IS TRUE
+     AND COALESCE(v_exact_item_scope_count, 0) = 0
+     AND COALESCE(v_whole_batch_scope_proven, false) IS NOT TRUE THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'patch_applied', false,
+      'replacement_session_required', false,
+      'fallback_required', true,
+      'fallback_reason', 'DRAFT_CANCEL_DELETE_ITEM_SCOPE_NOT_PROVEN',
+      'operation_type', v_operation_type,
+      'pay_batch_id', p_pay_batch_id::text,
+      'affected_candidate_count', 0,
+      'affected_row_count', 0,
+      'patched_row_count', 0,
+      'targeted_refresh_enqueued_count', 0,
+      'complex_refresh_candidate_ids', '[]'::jsonb,
+      'scope_resolution_mode', v_scope_resolution_mode,
+      'scope_diagnostic', v_scope_diagnostic_json
+    );
+  END IF;
+
   DROP TABLE IF EXISTS pg_temp._bpay_batch_mutation_keys;
   CREATE TEMP TABLE _bpay_batch_mutation_keys ON COMMIT DROP AS
   SELECT DISTINCT
@@ -198973,6 +199295,8 @@ BEGIN
       CASE WHEN batch_item.item_type = 'MILEAGE_DELTA' THEN 'MILEAGE' ELSE NULL::text END
     )), '') AS key_value,
     p_pay_batch_id AS pay_batch_id,
+    batch_item.id AS pay_batch_item_id,
+    COALESCE(batch_item.is_voided, false) AS batch_item_is_voided,
     batch_item.finance_case_id,
     batch_item.item_type,
     batch_item.pay_channel
@@ -198980,7 +199304,27 @@ BEGIN
   JOIN public.pay_batch_items AS batch_item
     ON batch_item.pay_batch_candidate_id = batch_candidate.id
   WHERE batch_candidate.pay_batch_id = p_pay_batch_id
-    AND COALESCE(batch_item.is_voided, false) IS NOT TRUE;
+    AND (
+      (
+        v_is_cancel_delete IS NOT TRUE
+        AND COALESCE(batch_item.is_voided, false) IS NOT TRUE
+      )
+      OR (
+        v_is_cancel_delete IS TRUE
+        AND COALESCE(v_exact_item_scope_count, 0) > 0
+        AND EXISTS (
+          SELECT 1
+          FROM pg_temp._bpay_batch_mutation_exact_item_ids AS exact_item
+          WHERE exact_item.pay_batch_item_id = batch_item.id
+        )
+      )
+      OR (
+        v_is_cancel_delete IS TRUE
+        AND COALESCE(v_exact_item_scope_count, 0) = 0
+        AND COALESCE(v_whole_batch_scope_proven, false) IS TRUE
+        AND COALESCE(batch_item.is_voided, false) IS TRUE
+      )
+    );
 
   SELECT COUNT(DISTINCT affected_key.candidate_id)::integer
   INTO v_affected_candidate_count
@@ -199011,6 +199355,26 @@ BEGIN
   ) AS economic_key_rows;
 
   IF COALESCE(v_affected_candidate_count, 0) = 0 THEN
+    IF v_is_cancel_delete IS TRUE
+       AND COALESCE(v_cancel_delete_voided_item_count, 0) > 0 THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'patch_applied', false,
+        'replacement_session_required', false,
+        'fallback_required', true,
+        'fallback_reason', 'DRAFT_CANCEL_DELETE_PATCH_SCOPE_EMPTY_WITH_VOIDED_ITEMS',
+        'operation_type', v_operation_type,
+        'pay_batch_id', p_pay_batch_id::text,
+        'affected_candidate_count', 0,
+        'affected_row_count', 0,
+        'patched_row_count', 0,
+        'targeted_refresh_enqueued_count', 0,
+        'complex_refresh_candidate_ids', '[]'::jsonb,
+        'scope_resolution_mode', v_scope_resolution_mode,
+        'scope_diagnostic', v_scope_diagnostic_json
+      );
+    END IF;
+
     RETURN jsonb_build_object(
       'ok', true,
       'patch_applied', true,
@@ -199019,7 +199383,9 @@ BEGIN
       'affected_row_count', 0,
       'patched_row_count', 0,
       'targeted_refresh_enqueued_count', 0,
-      'complex_refresh_candidate_ids', '[]'::jsonb
+      'complex_refresh_candidate_ids', '[]'::jsonb,
+      'scope_resolution_mode', v_scope_resolution_mode,
+      'scope_diagnostic', v_scope_diagnostic_json
     );
   END IF;
 
@@ -199322,11 +199688,11 @@ BEGIN
       v_now,
       v_now
     FROM pg_temp._bpay_batch_mutation_candidates AS candidate_row
-    WHERE candidate_row.has_missing_economic_key IS TRUE
-       OR (
-         v_operation_type IN ('DRAFT_DELETE', 'DRAFT_CANCEL')
-         AND candidate_row.has_complexity IS TRUE
-       )
+    WHERE v_operation_type IN ('DRAFT_DELETE', 'DRAFT_CANCEL')
+      AND (
+        candidate_row.has_missing_economic_key IS TRUE
+        OR candidate_row.has_complexity IS TRUE
+      )
     ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
     DO UPDATE
     SET run_at_utc = LEAST(public.banking_pay_workbench_jobs.run_at_utc, EXCLUDED.run_at_utc),
@@ -199350,22 +199716,20 @@ BEGIN
    AND active_job.status IN ('QUEUED', 'RUNNING')
   WHERE scope_update.session_id = p_session_id
     AND scope_update.candidate_id = candidate_row.candidate_id
+    AND v_operation_type IN ('DRAFT_DELETE', 'DRAFT_CANCEL')
     AND (
       candidate_row.has_missing_economic_key IS TRUE
-      OR (
-        v_operation_type IN ('DRAFT_DELETE', 'DRAFT_CANCEL')
-        AND candidate_row.has_complexity IS TRUE
-      )
+      OR candidate_row.has_complexity IS TRUE
     );
 
   SELECT COALESCE(jsonb_agg(DISTINCT candidate_row.candidate_id::text ORDER BY candidate_row.candidate_id::text), '[]'::jsonb)
   INTO v_targeted_refresh_candidate_ids_json
   FROM pg_temp._bpay_batch_mutation_candidates AS candidate_row
-  WHERE candidate_row.has_missing_economic_key IS TRUE
-     OR (
-       v_operation_type IN ('DRAFT_DELETE', 'DRAFT_CANCEL')
-       AND candidate_row.has_complexity IS TRUE
-     );
+  WHERE v_operation_type IN ('DRAFT_DELETE', 'DRAFT_CANCEL')
+    AND (
+      candidate_row.has_missing_economic_key IS TRUE
+      OR candidate_row.has_complexity IS TRUE
+    );
 
   DROP TABLE IF EXISTS pg_temp._bpay_batch_mutation_current_preview_rows;
   CREATE TEMP TABLE _bpay_batch_mutation_current_preview_rows ON COMMIT DROP AS
@@ -199439,7 +199803,9 @@ BEGIN
           'last_batch_mutation_refresh_enqueued', COALESCE(v_targeted_refresh_enqueued_count, 0),
           'last_batch_mutation_patched_row_ids', COALESCE(v_patched_row_ids_json, '[]'::jsonb),
           'last_batch_mutation_affected_candidate_ids', COALESCE(v_affected_candidate_ids_json, '[]'::jsonb),
-          'last_batch_mutation_affected_timesheet_ids', COALESCE(v_affected_timesheet_ids_json, '[]'::jsonb)
+          'last_batch_mutation_affected_timesheet_ids', COALESCE(v_affected_timesheet_ids_json, '[]'::jsonb),
+          'last_batch_mutation_scope_resolution_mode', v_scope_resolution_mode,
+          'last_batch_mutation_scope_diagnostic', COALESCE(v_scope_diagnostic_json, '{}'::jsonb)
         )
       ),
       progress_counter_version = COALESCE(session_update.progress_counter_version, 0) + 1,
@@ -199469,6 +199835,8 @@ BEGIN
     'missing_key_candidate_ids', COALESCE(v_missing_key_candidate_ids, '[]'::jsonb),
     'operation_type', v_operation_type,
     'pay_batch_id', p_pay_batch_id::text,
+    'scope_resolution_mode', v_scope_resolution_mode,
+    'scope_diagnostic', COALESCE(v_scope_diagnostic_json, '{}'::jsonb),
     'post_action_refresh', jsonb_build_object(
       'mode', 'PATCH_EXISTING_SESSION',
       'patch_applied', true,
@@ -199480,6 +199848,8 @@ BEGIN
       'affected_economic_keys', COALESCE(v_affected_economic_keys_json, '[]'::jsonb),
       'targeted_refresh_candidate_ids', COALESCE(v_targeted_refresh_candidate_ids_json, '[]'::jsonb),
       'targeted_refresh_enqueued', COALESCE(v_targeted_refresh_enqueued_count, 0) > 0,
+      'scope_resolution_mode', v_scope_resolution_mode,
+      'scope_diagnostic', COALESCE(v_scope_diagnostic_json, '{}'::jsonb),
       'shadow_compare_failed', false
     )
   );

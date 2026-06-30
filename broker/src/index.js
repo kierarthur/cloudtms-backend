@@ -167381,6 +167381,7 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
 }
 
 
+
 async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = null) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -167494,6 +167495,121 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
       created: Number(source.carry_forward_created_count ?? progress.carry_forward_created_count ?? totals.carry_forward_created_count ?? totals.carry_forward_created ?? 0) || 0,
       existing: Number(source.carry_forward_existing_count ?? progress.carry_forward_existing_count ?? totals.carry_forward_existing_count ?? totals.carry_forward_existing ?? 0) || 0,
       released: Number(source.carry_forward_released_count ?? progress.carry_forward_released_count ?? totals.carry_forward_released_count ?? totals.carry_forward_released ?? 0) || 0
+    };
+  };
+  const collectUuidStrings = (...values) => {
+    const output = [];
+    const seen = new Set();
+    const visit = (value) => {
+      if (value === null || value === undefined) return;
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+        return;
+      }
+      if (typeof value === 'object') {
+        for (const key of Object.keys(value)) visit(value[key]);
+        return;
+      }
+      const raw = trimText(value);
+      if (!raw || !uuidRe.test(raw)) return;
+      const normalized = raw.toLowerCase();
+      if (seen.has(normalized)) return;
+      seen.add(normalized);
+      output.push(normalized);
+    };
+    for (const value of values) visit(value);
+    return output;
+  };
+  const readChangedCancellationScope = (payload) => {
+    const source = safeObject(payload);
+    const processResult = safeObject(source.process_result || source.processResult || source.progress || source.chunk_result || source.chunkResult);
+    const changedScope = safeObject(
+      source.changed_scope_json || source.changedScopeJson || source.changed_scope || source.changedScope ||
+      processResult.changed_scope_json || processResult.changedScopeJson || processResult.changed_scope || processResult.changedScope
+    );
+    const changedPayBatchItemIds = collectUuidStrings(
+      source.changed_pay_batch_item_ids,
+      source.changedPayBatchItemIds,
+      source.cancelled_pay_batch_item_ids,
+      source.cancelledPayBatchItemIds,
+      source.voided_pay_batch_item_ids,
+      source.voidedPayBatchItemIds,
+      source.pay_batch_item_ids,
+      source.payBatchItemIds,
+      processResult.changed_pay_batch_item_ids,
+      processResult.changedPayBatchItemIds,
+      processResult.cancelled_pay_batch_item_ids,
+      processResult.cancelledPayBatchItemIds,
+      processResult.voided_pay_batch_item_ids,
+      processResult.voidedPayBatchItemIds,
+      processResult.pay_batch_item_ids,
+      processResult.payBatchItemIds,
+      changedScope.changed_pay_batch_item_ids,
+      changedScope.changedPayBatchItemIds,
+      changedScope.cancelled_pay_batch_item_ids,
+      changedScope.cancelledPayBatchItemIds,
+      changedScope.voided_pay_batch_item_ids,
+      changedScope.voidedPayBatchItemIds,
+      changedScope.pay_batch_item_ids,
+      changedScope.payBatchItemIds
+    );
+    const changedPayBatchCandidateIds = collectUuidStrings(
+      source.changed_pay_batch_candidate_ids,
+      source.changedPayBatchCandidateIds,
+      source.pay_batch_candidate_ids,
+      source.payBatchCandidateIds,
+      processResult.changed_pay_batch_candidate_ids,
+      processResult.changedPayBatchCandidateIds,
+      processResult.pay_batch_candidate_ids,
+      processResult.payBatchCandidateIds,
+      changedScope.changed_pay_batch_candidate_ids,
+      changedScope.changedPayBatchCandidateIds,
+      changedScope.pay_batch_candidate_ids,
+      changedScope.payBatchCandidateIds
+    );
+    const changedCandidateIds = collectUuidStrings(
+      source.changed_candidate_ids,
+      source.changedCandidateIds,
+      source.candidate_ids,
+      source.candidateIds,
+      processResult.changed_candidate_ids,
+      processResult.changedCandidateIds,
+      processResult.candidate_ids,
+      processResult.candidateIds,
+      changedScope.changed_candidate_ids,
+      changedScope.changedCandidateIds,
+      changedScope.candidate_ids,
+      changedScope.candidateIds
+    );
+    const changedTransferIds = collectUuidStrings(
+      source.changed_transfer_ids,
+      source.changedTransferIds,
+      source.pay_bank_transfer_ids,
+      source.payBankTransferIds,
+      processResult.changed_transfer_ids,
+      processResult.changedTransferIds,
+      processResult.pay_bank_transfer_ids,
+      processResult.payBankTransferIds,
+      changedScope.changed_transfer_ids,
+      changedScope.changedTransferIds,
+      changedScope.pay_bank_transfer_ids,
+      changedScope.payBankTransferIds
+    );
+    return {
+      changed_pay_batch_item_ids: changedPayBatchItemIds,
+      cancelled_pay_batch_item_ids: changedPayBatchItemIds,
+      voided_pay_batch_item_ids: changedPayBatchItemIds,
+      changed_pay_batch_candidate_ids: changedPayBatchCandidateIds,
+      changed_candidate_ids: changedCandidateIds,
+      changed_transfer_ids: changedTransferIds,
+      changed_scope_json: {
+        changed_pay_batch_item_ids: changedPayBatchItemIds,
+        cancelled_pay_batch_item_ids: changedPayBatchItemIds,
+        voided_pay_batch_item_ids: changedPayBatchItemIds,
+        changed_pay_batch_candidate_ids: changedPayBatchCandidateIds,
+        changed_candidate_ids: changedCandidateIds,
+        changed_transfer_ids: changedTransferIds
+      }
     };
   };
   const requirePaymentPermission = async (actorUserId) => {
@@ -167885,6 +168001,8 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
       p_confirmation_json: confirmationJson
     }), 'pay_payment_cancel_not_sent_and_recalculate');
 
+    const cancellationScope = readChangedCancellationScope(result);
+
     const requestedUiMode = upperText(
       body.operation_type || body.operationType ||
       body.ui_mode || body.uiMode ||
@@ -167914,10 +168032,38 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
           reason,
           idempotency_key: idempotencyKey,
           replacement_idempotency_key: replacementIdempotencyKey,
+          changed_pay_batch_item_ids: cancellationScope.changed_pay_batch_item_ids,
+          cancelled_pay_batch_item_ids: cancellationScope.cancelled_pay_batch_item_ids,
+          voided_pay_batch_item_ids: cancellationScope.voided_pay_batch_item_ids,
+          changed_pay_batch_candidate_ids: cancellationScope.changed_pay_batch_candidate_ids,
+          changed_candidate_ids: cancellationScope.changed_candidate_ids,
+          changed_transfer_ids: cancellationScope.changed_transfer_ids,
+          cancellation_result: {
+            ok: result.ok !== false,
+            correction_request_id: trimText(result.correction_request_id || result.correctionRequestId || result.request_id || result.requestId || '') || null,
+            changed_pay_batch_item_ids: cancellationScope.changed_pay_batch_item_ids,
+            cancelled_pay_batch_item_ids: cancellationScope.cancelled_pay_batch_item_ids,
+            voided_pay_batch_item_ids: cancellationScope.voided_pay_batch_item_ids,
+            changed_pay_batch_candidate_ids: cancellationScope.changed_pay_batch_candidate_ids,
+            changed_candidate_ids: cancellationScope.changed_candidate_ids,
+            changed_transfer_ids: cancellationScope.changed_transfer_ids,
+            process_result: {
+              changed_pay_batch_item_ids: cancellationScope.changed_pay_batch_item_ids,
+              cancelled_pay_batch_item_ids: cancellationScope.cancelled_pay_batch_item_ids,
+              voided_pay_batch_item_ids: cancellationScope.voided_pay_batch_item_ids,
+              changed_pay_batch_candidate_ids: cancellationScope.changed_pay_batch_candidate_ids,
+              changed_candidate_ids: cancellationScope.changed_candidate_ids,
+              changed_transfer_ids: cancellationScope.changed_transfer_ids,
+              changed_scope_json: cancellationScope.changed_scope_json
+            },
+            changed_scope_json: cancellationScope.changed_scope_json
+          },
           selection_json: selectionJson,
           confirmation_json: confirmationJson,
           source_workbench_session_id: workbenchContext.session_id,
-          expected_source_session_version: workbenchContext.session_version
+          expected_source_session_version: workbenchContext.session_version,
+          patch_existing_session_only: true,
+          replacement_session_allowed: false
         }
       }), 'pay_workbench_patch_preview_after_batch_mutation');
       const targetedRefreshEnqueuedCount = Number.isFinite(Number(patchResult.targeted_refresh_enqueued_count))
@@ -168079,6 +168225,8 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
     return rpcErrorResponse(e, 'PAYMENT_CANCEL_NOT_SENT_RECALCULATE_FAILED', 'Unable to cancel selected payments.');
   }
 }
+
+
 
 
 
