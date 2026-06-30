@@ -14357,9 +14357,41 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
       };
       const nextAction = trimStr(openPayload.next_recommended_action || progressPayload.next_recommended_action || progressPayload.next_action || '');
       const cloneRebaseResult = isPlainObject(openPayload.clone_rebase) ? openPayload.clone_rebase : {};
-      const cloneLegacyRefreshEnqueuedCount = nonNegativeCount(cloneRebaseResult.legacy_refresh_enqueued_count, cloneRebaseResult.legacyRefreshEnqueuedCount);
+      const cloneRebaseQueued = cloneRebaseResult.clone_rebase_queued === true
+        || cloneRebaseResult.queued === true
+        || trimStr(openPayload.root_job_type || '').toUpperCase() === 'WORKBENCH_SESSION_CLONE_REBASE'
+        || trimStr(openPayload.progress_state || openPayload.phase || progressPayload.progress_state || progressPayload.phase || '').toUpperCase() === 'CLONE_REBASING';
+      const cloneRebasePending = cloneRebaseQueued
+        || cloneRebaseResult.more_due === true
+        || cloneRebaseResult.has_more === true
+        || trimStr(openPayload.progress_state || openPayload.phase || progressPayload.progress_state || progressPayload.phase || '').toUpperCase() === 'CLONE_REBASING';
+      const cloneRebaseSourceSessionId = trimStr(
+        cloneRebaseResult.source_session_id
+        || cloneRebaseResult.sourceSessionId
+        || openPayload.clone_from_session_id
+        || openPayload.source_session_id
+        || cloneFromSessionId
+        || ''
+      ) || null;
+      const cloneRebaseTargetSessionId = trimStr(
+        cloneRebaseResult.target_session_id
+        || cloneRebaseResult.targetSessionId
+        || cloneRebaseResult.session_id
+        || openPayload.target_session_id
+        || sessionId
+        || ''
+      ) || sessionId;
+      const cloneRebaseState = Object.assign({}, cloneRebaseResult, {
+        clone_rebase_queued: cloneRebaseQueued,
+        clone_rebase_pending: cloneRebasePending,
+        target_session_id: cloneRebaseTargetSessionId,
+        source_session_id: cloneRebaseSourceSessionId,
+        progress_state: cloneRebasePending ? 'CLONE_REBASING' : (trimStr(openPayload.progress_state || progressPayload.progress_state || '') || null)
+      });
+      const cloneLegacyRefreshEnqueuedCount = nonNegativeCount(cloneRebaseState.legacy_refresh_enqueued_count, cloneRebaseState.legacyRefreshEnqueuedCount);
       const nudgeReasons = [];
       if (openAction === 'WORKBENCH_SESSION_CREATED') nudgeReasons.push('SESSION_CREATED');
+      if (cloneRebaseQueued || cloneRebasePending) nudgeReasons.push('CLONE_REBASE_PENDING');
       if (cloneLegacyRefreshEnqueuedCount > 0) nudgeReasons.push('CLONE_REBASE_LEGACY_REFRESH_ENQUEUED');
       if (!readyState && progressState && !['READY', 'READY_EMPTY'].includes(progressState)) nudgeReasons.push(`PROGRESS_${progressState}`);
       if (workQueued) nudgeReasons.push('WORK_QUEUED');
@@ -14433,7 +14465,13 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
           week_ending_cutoff: openPayload.week_ending_cutoff || weekEndingCutoff
         },
         open: openPayload,
-        clone_rebase: cloneRebaseResult,
+        clone_rebase: cloneRebaseState,
+        clone_rebase_queued: cloneRebaseQueued,
+        clone_rebase_pending: cloneRebasePending,
+        clone_rebase_progress_state: cloneRebasePending ? 'CLONE_REBASING' : (trimStr(openPayload.progress_state || progressPayload.progress_state || '') || null),
+        target_session_id: cloneRebaseTargetSessionId,
+        source_session_id: cloneRebaseSourceSessionId,
+        progress_state: cloneRebasePending ? 'CLONE_REBASING' : (progressState || null),
         progress: progressPayload,
         action: openAction,
         work_queued: workQueued,
@@ -14603,7 +14641,13 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
       delta_source_rows_written: metricInt(drain, ['delta_source_rows_written']),
       delta_line_rows_written: metricInt(drain, ['delta_line_rows_written']),
       delta_preview_rows_written: metricInt(drain, ['delta_preview_rows_written']),
-      delta_fallback_count: metricInt(drain, ['delta_fallback_count'])
+      delta_fallback_count: metricInt(drain, ['delta_fallback_count']),
+      clone_rebase_jobs_processed: metricInt(drain, ['clone_rebase_jobs_processed', 'clone_jobs_processed']),
+      clone_jobs_processed: metricInt(drain, ['clone_jobs_processed', 'clone_rebase_jobs_processed']),
+      clone_copied_candidate_count: metricInt(drain, ['clone_copied_candidate_count']),
+      clone_copied_preview_row_count: metricInt(drain, ['clone_copied_preview_row_count']),
+      clone_legacy_refresh_enqueued_count: metricInt(drain, ['clone_legacy_refresh_enqueued_count']),
+      clone_more_due_count: metricInt(drain, ['clone_more_due_count'])
     };
   };
 
@@ -14762,6 +14806,60 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   stageLimits.delta_refresh = effectiveDeltaUnitsPerJob;
   stageLimits.deltaRefresh = effectiveDeltaUnitsPerJob;
   stageLimits.generic = stageWorkUnitsPerJob;
+  const cloneRebaseEnabled = readBoolean(firstConfiguredValue(
+    source.cloneRebaseEnabled,
+    source.clone_rebase_enabled,
+    source.banking_pay_workbench_clone_rebase_enabled,
+    workbenchSettings.clone_rebase_enabled,
+    workbenchSettings.cloneRebaseEnabled,
+    workbenchSettings.banking_pay_workbench_clone_rebase_enabled,
+    settingsDefaults.banking_pay_workbench_clone_rebase_enabled
+  ), false);
+  const cloneRebaseUnitsPerJob = clampInt(firstConfiguredValue(
+    source.cloneRebaseUnitsPerJob,
+    source.clone_rebase_units_per_job,
+    source.banking_pay_workbench_clone_rebase_units_per_job,
+    profileStageSettings.clone_rebase,
+    profileStageSettings.cloneRebase,
+    baseStageSettings.clone_rebase,
+    baseStageSettings.cloneRebase,
+    workbenchSettings.clone_rebase_units_per_job,
+    workbenchSettings.cloneRebaseUnitsPerJob,
+    settingsDefaults.banking_pay_workbench_clone_rebase_units_per_job
+  ), 100, 1, 250);
+  const nudgeCloneRebaseUnitsPerJob = clampInt(firstConfiguredValue(
+    source.nudgeCloneRebaseUnitsPerJob,
+    source.nudge_clone_rebase_units_per_job,
+    source.banking_pay_workbench_nudge_clone_rebase_units_per_job,
+    nudgeSettings.clone_rebase_units_per_job,
+    nudgeSettings.cloneRebaseUnitsPerJob,
+    workbenchSettings.nudge_clone_rebase_units_per_job,
+    workbenchSettings.nudgeCloneRebaseUnitsPerJob,
+    settingsDefaults.banking_pay_workbench_nudge_clone_rebase_units_per_job
+  ), cloneRebaseUnitsPerJob, 1, 250);
+  const cronCloneRebaseUnitsPerJob = clampInt(firstConfiguredValue(
+    source.cronCloneRebaseUnitsPerJob,
+    source.cron_clone_rebase_units_per_job,
+    source.banking_pay_workbench_cron_clone_rebase_units_per_job,
+    cronSettings.clone_rebase_units_per_job,
+    cronSettings.cloneRebaseUnitsPerJob,
+    workbenchSettings.cron_clone_rebase_units_per_job,
+    workbenchSettings.cronCloneRebaseUnitsPerJob,
+    settingsDefaults.banking_pay_workbench_cron_clone_rebase_units_per_job
+  ), Math.max(100, cloneRebaseUnitsPerJob), 1, 250);
+  const effectiveCloneRebaseUnitsPerJob = budgetProfile === 'NUDGE' ? nudgeCloneRebaseUnitsPerJob : cronCloneRebaseUnitsPerJob;
+  const cloneRebaseBudgetMs = clampInt(firstConfiguredValue(
+    source.cloneRebaseBudgetMs,
+    source.clone_rebase_budget_ms,
+    source.banking_pay_workbench_clone_rebase_budget_ms,
+    drainSettings.clone_rebase_budget_ms,
+    drainSettings.cloneRebaseBudgetMs,
+    workbenchSettings.clone_rebase_budget_ms,
+    workbenchSettings.cloneRebaseBudgetMs,
+    settingsDefaults.banking_pay_workbench_clone_rebase_budget_ms
+  ), 3000, 500, 30000);
+  stageLimits.clone_rebase = effectiveCloneRebaseUnitsPerJob;
+  stageLimits.cloneRebase = effectiveCloneRebaseUnitsPerJob;
   const sourceBuildParallelism = clampInt(firstConfiguredValue(
     source.sourceBuildParallelism,
     source.source_build_parallelism,
@@ -14820,6 +14918,7 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   const canonicalAllowedJobType = (value) => {
     const jobType = String(value == null ? '' : value).trim().toUpperCase();
     if (['WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH'].includes(jobType)) return 'WORKBENCH_CANDIDATE_DELTA_REFRESH';
+    if (['WORKBENCH_SESSION_CLONE_REBASE', 'SESSION_CLONE_REBASE', 'CLONE_REBASE'].includes(jobType)) return 'WORKBENCH_SESSION_CLONE_REBASE';
     return jobType;
   };
   const allowedJobTypes = (() => {
@@ -14833,6 +14932,7 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
         : [
             'WORKBENCH_SESSION_SCOPE_SEED',
             'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+            'WORKBENCH_SESSION_CLONE_REBASE',
             'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
             'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
             'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
@@ -14880,6 +14980,12 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     cron_delta_units_per_job: cronDeltaUnitsPerJob,
     effective_delta_units_per_job: effectiveDeltaUnitsPerJob,
     delta_refresh_budget_ms: deltaRefreshBudgetMs,
+    clone_rebase_enabled: cloneRebaseEnabled,
+    clone_rebase_units_per_job: cloneRebaseUnitsPerJob,
+    nudge_clone_rebase_units_per_job: nudgeCloneRebaseUnitsPerJob,
+    cron_clone_rebase_units_per_job: cronCloneRebaseUnitsPerJob,
+    effective_clone_rebase_units_per_job: effectiveCloneRebaseUnitsPerJob,
+    clone_rebase_budget_ms: cloneRebaseBudgetMs,
     stage_limits: stageLimits,
     source_build_parallelism: sourceBuildParallelism,
     source_build_parallel_bursts: sourceBuildParallelBursts,
@@ -14950,7 +15056,12 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
         delta_source_rows_written: metricInt(drain, ['delta_source_rows_written']),
         delta_line_rows_written: metricInt(drain, ['delta_line_rows_written']),
         delta_preview_rows_written: metricInt(drain, ['delta_preview_rows_written']),
-        delta_fallback_count: metricInt(drain, ['delta_fallback_count'])
+        delta_fallback_count: metricInt(drain, ['delta_fallback_count']),
+        clone_rebase_jobs_processed: metricInt(drain, ['clone_rebase_jobs_processed', 'clone_jobs_processed']),
+        clone_copied_candidate_count: metricInt(drain, ['clone_copied_candidate_count']),
+        clone_copied_preview_row_count: metricInt(drain, ['clone_copied_preview_row_count']),
+        clone_legacy_refresh_enqueued_count: metricInt(drain, ['clone_legacy_refresh_enqueued_count']),
+        clone_more_due_count: metricInt(drain, ['clone_more_due_count'])
       }
     }, severity);
     return result;
@@ -14977,6 +15088,12 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     cron_delta_units_per_job: cronDeltaUnitsPerJob,
     effective_delta_units_per_job: effectiveDeltaUnitsPerJob,
     delta_refresh_budget_ms: deltaRefreshBudgetMs,
+    clone_rebase_enabled: cloneRebaseEnabled,
+    clone_rebase_units_per_job: cloneRebaseUnitsPerJob,
+    nudge_clone_rebase_units_per_job: nudgeCloneRebaseUnitsPerJob,
+    cron_clone_rebase_units_per_job: cronCloneRebaseUnitsPerJob,
+    effective_clone_rebase_units_per_job: effectiveCloneRebaseUnitsPerJob,
+    clone_rebase_budget_ms: cloneRebaseBudgetMs,
     stage_limits: stageLimits,
     source_build_parallelism: sourceBuildParallelism,
     source_build_parallel_bursts: sourceBuildParallelBursts,
@@ -15103,6 +15220,20 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
       lineSeedWorkUnitsPerJob: stageLimits.line_seed,
       lineProcessWorkUnitsPerJob: stageLimits.line_process,
       previewMaterialiseWorkUnitsPerJob: stageLimits.preview_materialise,
+      cloneRebaseWorkUnitsPerJob: stageLimits.clone_rebase,
+      clone_rebase_units_per_job: cloneRebaseUnitsPerJob,
+      nudgeCloneRebaseUnitsPerJob,
+      nudge_clone_rebase_units_per_job: nudgeCloneRebaseUnitsPerJob,
+      cronCloneRebaseUnitsPerJob,
+      cron_clone_rebase_units_per_job: cronCloneRebaseUnitsPerJob,
+      cloneRebaseEffectiveUnitsPerJob: effectiveCloneRebaseUnitsPerJob,
+      clone_rebase_effective_units_per_job: effectiveCloneRebaseUnitsPerJob,
+      cloneRebaseEnabled,
+      clone_rebase_enabled: cloneRebaseEnabled,
+      banking_pay_workbench_clone_rebase_enabled: cloneRebaseEnabled,
+      cloneRebaseBudgetMs,
+      clone_rebase_budget_ms: cloneRebaseBudgetMs,
+      banking_pay_workbench_clone_rebase_budget_ms: cloneRebaseBudgetMs,
       deltaRefreshEnabled,
       delta_refresh_enabled: deltaRefreshEnabled,
       banking_pay_workbench_delta_refresh_enabled: deltaRefreshEnabled,
@@ -15197,8 +15328,6 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     }, 'warn');
   }
 }
-
-
 function bankingPayWorkbenchLogsEnabled(env) {
   try {
     const source = (env && typeof env === 'object') ? env : {};
@@ -15254,6 +15383,11 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     const recoveredStaleCount = sumMetric(first, second, ['recovered_stale_count']);
     const deadStaleCount = sumMetric(first, second, ['dead_stale_count']);
     const rowUnitsProcessed = sumMetric(first, second, ['row_units_processed', 'work_units_processed']);
+    const cloneRebaseJobsProcessed = sumMetric(first, second, ['clone_rebase_jobs_processed']);
+    const cloneCopiedCandidateCount = sumMetric(first, second, ['clone_copied_candidate_count']);
+    const cloneCopiedPreviewRowCount = sumMetric(first, second, ['clone_copied_preview_row_count']);
+    const cloneLegacyRefreshEnqueuedCount = sumMetric(first, second, ['clone_legacy_refresh_enqueued_count']);
+    const cloneMoreDueCount = sumMetric(first, second, ['clone_more_due_count']);
     return {
       ...first,
       ...second,
@@ -15283,6 +15417,12 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       dead_stale_count: deadStaleCount,
       row_units_processed: rowUnitsProcessed,
       work_units_processed: rowUnitsProcessed,
+      clone_rebase_jobs_processed: cloneRebaseJobsProcessed,
+      clone_jobs_processed: cloneRebaseJobsProcessed,
+      clone_copied_candidate_count: cloneCopiedCandidateCount,
+      clone_copied_preview_row_count: cloneCopiedPreviewRowCount,
+      clone_legacy_refresh_enqueued_count: cloneLegacyRefreshEnqueuedCount,
+      clone_more_due_count: cloneMoreDueCount,
       pass_count: passCount,
       continuation_pass_count: Math.max(0, passCount - 1),
       rpc_call_count: sumMetric(first, second, ['rpc_call_count']),
@@ -15365,6 +15505,13 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     'DELTA_ROWS_REMAINING',
     'DELTA_MORE_DUE',
     'DELTA_PHASE_COMPLETE_MORE_DUE',
+    'CLONE_REBASE_MORE_DUE',
+    'CLONE_REBASE_BUDGET_EXHAUSTED',
+    'CLONE_REBASE_PHASE_BUDGET_EXHAUSTED',
+    'CLONE_REBASE_ROWS_REMAINING',
+    'CLONE_REBASE_CHUNK_MORE_DUE',
+    'CLONE_REBASE_PHASE_COMPLETE_MORE_DUE',
+    'WORKBENCH_SESSION_CLONE_REBASE_MORE_DUE',
     'WORKBENCH_STAGE_BUDGET_EXHAUSTED',
     'BUDGET_EXHAUSTED'
   ]);
@@ -15993,6 +16140,10 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       || numberFrom(summary, ['succeeded', 'succeeded_count'], 0) > 0
       || numberFrom(summary, ['source_build_jobs_processed'], 0) > 0
       || numberFrom(summary, ['source_rows_written'], 0) > 0
+      || numberFrom(summary, ['clone_rebase_jobs_processed', 'clone_jobs_processed'], 0) > 0
+      || numberFrom(summary, ['clone_copied_candidate_count'], 0) > 0
+      || numberFrom(summary, ['clone_copied_preview_row_count'], 0) > 0
+      || numberFrom(summary, ['clone_legacy_refresh_enqueued_count'], 0) > 0
       || numberFrom(summary, ['continuations_created', 'continuation_created_count'], 0) > 0
       || numberFrom(summary, ['continuations_reused', 'continuation_reused_count'], 0) > 0;
     if (!madeProgress) return false;
@@ -28107,9 +28258,65 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   const buildCreateDraftOperationResponse = (operationPayload, meta = {}) => {
     const reused = meta.reused === true;
     const basePayload = isPlainObject(operationPayload) ? operationPayload : {};
-    const postActionRefresh = readCreateDraftPostActionRefresh(basePayload);
+    const rawPostActionRefresh = readCreateDraftPostActionRefresh(basePayload);
+    const replacementCandidateId = trimStr(
+      (rawPostActionRefresh && (
+        rawPostActionRefresh.replacement_session_id ||
+        rawPostActionRefresh.replacementSessionId ||
+        rawPostActionRefresh.replacement_workbench_session_id ||
+        rawPostActionRefresh.replacementWorkbenchSessionId ||
+        rawPostActionRefresh.refreshed_session_id ||
+        rawPostActionRefresh.refreshedSessionId
+      )) ||
+      basePayload.replacement_session_id ||
+      basePayload.replacementSessionId ||
+      basePayload.replacement_workbench_session_id ||
+      basePayload.replacementWorkbenchSessionId ||
+      basePayload.refreshed_session_id ||
+      basePayload.refreshedSessionId ||
+      ''
+    );
+    const replacementActuallyCreated = uuidRe.test(replacementCandidateId) && (
+      (rawPostActionRefresh && (
+        rawPostActionRefresh.replacement_session_created === true ||
+        rawPostActionRefresh.replacementSessionCreated === true ||
+        rawPostActionRefresh.replacement_created === true ||
+        rawPostActionRefresh.replacementCreated === true ||
+        rawPostActionRefresh.replacement_available === true ||
+        rawPostActionRefresh.replacementAvailable === true
+      )) ||
+      basePayload.replacement_session_created === true ||
+      basePayload.replacementSessionCreated === true ||
+      basePayload.replacement_created === true ||
+      basePayload.replacementCreated === true ||
+      basePayload.replacement_available === true ||
+      basePayload.replacementAvailable === true ||
+      basePayload.workbench_session_replaced === true ||
+      basePayload.workbenchSessionReplaced === true
+    );
+    const postActionRefresh = rawPostActionRefresh ? Object.assign({}, rawPostActionRefresh, replacementActuallyCreated ? {} : {
+      replacement_available: false,
+      replacementAvailable: false,
+      replacement_session_created: false,
+      replacementSessionCreated: false,
+      replacement_session_id: null,
+      replacementSessionId: null,
+      replacement_workbench_session_id: null,
+      replacementWorkbenchSessionId: null,
+      replacement_session_version: null,
+      replacementSessionVersion: null,
+      replacement_workbench_session_version: null,
+      replacementWorkbenchSessionVersion: null,
+      adopt_replacement_session: false,
+      adoptReplacementSession: false,
+      adopted_replacement_session: false,
+      adoptedReplacementSession: false,
+      preview_reopen_required: false,
+      previewReopenRequired: false,
+      requires_new_session: false,
+      requiresNewSession: false
+    }) : null;
     const postActionNudge = scheduleCreateDraftPostActionNudgeIfNeeded(postActionRefresh);
-    const patchExistingSession = postActionRefresh && upperTrim(postActionRefresh.mode || postActionRefresh.refresh_mode || '') === 'PATCH_EXISTING_SESSION' && postActionRefresh.replacement_available !== true;
     const routeMetadata = {
       ok: true,
       create_draft_operation_started: true,
@@ -28145,22 +28352,35 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
         frontend_nudge_scheduled: postActionNudge?.scheduled === true || postActionNudge?.already_running === true
       } : {})
     } : {};
-    const patchExistingSessionMetadata = patchExistingSession ? {
+    const noReplacementSessionMetadata = replacementActuallyCreated ? {} : {
       replacement_available: false,
+      replacementAvailable: false,
+      replacement_session_created: false,
+      replacementSessionCreated: false,
       replacement_session_id: null,
+      replacementSessionId: null,
       replacement_workbench_session_id: null,
+      replacementWorkbenchSessionId: null,
       replacement_session_version: null,
+      replacementSessionVersion: null,
       replacement_workbench_session_version: null,
+      replacementWorkbenchSessionVersion: null,
       adopt_replacement_session: false,
+      adoptReplacementSession: false,
       adopted_replacement_session: false,
+      adoptedReplacementSession: false,
       preview_reopen_required: false,
+      previewReopenRequired: false,
       requires_new_session: false,
-      current_workbench_session_id: trimStr(postActionRefresh.current_workbench_session_id || postActionRefresh.session_id || sessionId) || sessionId,
-      refreshed_session_id: trimStr(postActionRefresh.refreshed_session_id || postActionRefresh.session_id || sessionId) || sessionId,
+      requiresNewSession: false,
+      workbench_session_replaced: false,
+      workbenchSessionReplaced: false,
+      current_workbench_session_id: trimStr(postActionRefresh?.current_workbench_session_id || postActionRefresh?.session_id || basePayload.current_workbench_session_id || basePayload.workbench_session_id || sessionId) || sessionId,
+      refreshed_session_id: trimStr(postActionRefresh?.refreshed_session_id || postActionRefresh?.session_id || basePayload.refreshed_session_id || basePayload.workbench_session_id || sessionId) || sessionId,
       action: upperTrim(basePayload.action) === 'ADOPT_REPLACEMENT_SESSION' ? 'PATCH_EXISTING_SESSION' : basePayload.action,
-      next_recommended_action: upperTrim(basePayload.next_recommended_action) === 'ADOPT_REPLACEMENT_SESSION' ? (postActionRefresh.next_recommended_action || null) : basePayload.next_recommended_action
-    } : {};
-    return response(200, Object.assign({}, basePayload, routeMetadata, newOperationSelectionMetadata, patchExistingSessionMetadata, postActionMetadata));
+      next_recommended_action: upperTrim(basePayload.next_recommended_action) === 'ADOPT_REPLACEMENT_SESSION' ? (postActionRefresh?.next_recommended_action || null) : basePayload.next_recommended_action
+    };
+    return response(200, Object.assign({}, basePayload, routeMetadata, newOperationSelectionMetadata, noReplacementSessionMetadata, postActionMetadata));
   };
 
   const resolveOperationIdForImmediateDrain = (operationPayload) => {
@@ -57328,9 +57548,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 }
 
 
-
-
-
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -59765,16 +59982,77 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         }
       }
       const sumPatchCount = (key) => patchResults.reduce((sum, patchResult) => {
-        const n = Number(patchResult && patchResult[key]);
-        return sum + (Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0);
+        const patch = safeObject(patchResult);
+        const nested = safeObject(patch.post_action_refresh || patch.postActionRefresh || patch.refresh || patch.post_create_refresh || patch.postCreateRefresh);
+        const patchNumber = Number(patch[key]);
+        const nestedNumber = Number(nested[key]);
+        if (Number.isFinite(patchNumber)) return sum + Math.max(0, Math.trunc(patchNumber));
+        if (Number.isFinite(nestedNumber)) return sum + Math.max(0, Math.trunc(nestedNumber));
+        return sum;
       }, 0);
-      const patchTargetedRefreshEnqueuedCount = sumPatchCount('targeted_refresh_enqueued_count');
-      const patchAffectedCandidateCount = sumPatchCount('affected_candidate_count');
-      const patchAffectedRowCount = sumPatchCount('affected_row_count');
-      const patchPatchedRowCount = sumPatchCount('patched_row_count');
-      const patchComplexCandidateIds = uniqueDraftUuidArray(patchResults.flatMap((patchResult) => Array.isArray(patchResult && patchResult.complex_refresh_candidate_ids) ? patchResult.complex_refresh_candidate_ids : []));
-      const patchReplacementRequired = patchResults.some((patchResult) => patchResult && patchResult.replacement_session_required === true);
-      const patchHardFailure = !!patchRpcFailure || patchResults.some((patchResult) => patchResult && (patchResult.ok === false || patchResult.patch_applied !== true));
+      const collectPatchUuidArray = (...keys) => uniqueDraftUuidArray(patchResults.flatMap((patchResult) => {
+        const patch = safeObject(patchResult);
+        const nested = safeObject(patch.post_action_refresh || patch.postActionRefresh || patch.refresh || patch.post_create_refresh || patch.postCreateRefresh);
+        const values = [];
+        for (const key of keys) {
+          if (Array.isArray(patch[key])) values.push(...patch[key]);
+          if (Array.isArray(nested[key])) values.push(...nested[key]);
+        }
+        return values;
+      }));
+      const collectPatchEconomicKeys = () => {
+        const values = [];
+        for (const patchResult of patchResults) {
+          const patch = safeObject(patchResult);
+          const nested = safeObject(patch.post_action_refresh || patch.postActionRefresh || patch.refresh || patch.post_create_refresh || patch.postCreateRefresh);
+          for (const key of ['affected_economic_keys', 'affectedEconomicKeys', 'economic_keys', 'economicKeys']) {
+            if (Array.isArray(patch[key])) values.push(...patch[key]);
+            if (Array.isArray(nested[key])) values.push(...nested[key]);
+          }
+        }
+        const seen = new Set();
+        const out = [];
+        for (const value of values) {
+          const stableKey = (() => {
+            try { return JSON.stringify(value); } catch { return String(value || ''); }
+          })();
+          if (!stableKey || seen.has(stableKey)) continue;
+          seen.add(stableKey);
+          out.push(value);
+        }
+        return out;
+      };
+      const patchAffectedCandidateIds = collectPatchUuidArray('affected_candidate_ids', 'affectedCandidateIds', 'candidate_ids', 'candidateIds');
+      const patchPatchedRowIds = collectPatchUuidArray('patched_row_ids', 'patchedRowIds');
+      const patchAffectedRowIds = collectPatchUuidArray('affected_row_ids', 'affectedRowIds', 'row_ids', 'rowIds');
+      const patchAffectedTimesheetIds = collectPatchUuidArray('affected_timesheet_ids', 'affectedTimesheetIds', 'timesheet_ids', 'timesheetIds');
+      const patchAffectedEconomicKeys = collectPatchEconomicKeys();
+      const patchComplexCandidateIds = collectPatchUuidArray('complex_refresh_candidate_ids', 'complexRefreshCandidateIds');
+      const patchTargetedRefreshCandidateIds = collectPatchUuidArray('targeted_refresh_candidate_ids', 'targetedRefreshCandidateIds', 'refresh_candidate_ids', 'refreshCandidateIds', 'complex_refresh_candidate_ids', 'complexRefreshCandidateIds');
+      const patchTargetedRefreshEnqueuedCount = Math.max(
+        sumPatchCount('targeted_refresh_enqueued_count'),
+        patchTargetedRefreshCandidateIds.length
+      );
+      const patchAffectedCandidateCount = Math.max(sumPatchCount('affected_candidate_count'), patchAffectedCandidateIds.length);
+      const patchAffectedRowCount = Math.max(sumPatchCount('affected_row_count'), patchAffectedRowIds.length, patchPatchedRowIds.length);
+      const patchPatchedRowCount = Math.max(sumPatchCount('patched_row_count'), patchPatchedRowIds.length);
+      const patchTargetedRefreshEnqueued = patchTargetedRefreshEnqueuedCount > 0
+        || patchResults.some((patchResult) => {
+          const patch = safeObject(patchResult);
+          const nested = safeObject(patch.post_action_refresh || patch.postActionRefresh || patch.refresh || patch.post_create_refresh || patch.postCreateRefresh);
+          return patch.targeted_refresh_enqueued === true || nested.targeted_refresh_enqueued === true;
+        });
+      const patchReplacementRequired = patchResults.some((patchResult) => {
+        const patch = safeObject(patchResult);
+        const nested = safeObject(patch.post_action_refresh || patch.postActionRefresh || patch.refresh || patch.post_create_refresh || patch.postCreateRefresh);
+        return patch.replacement_session_required === true || nested.replacement_session_required === true;
+      });
+      const patchHardFailure = !!patchRpcFailure || patchResults.some((patchResult) => {
+        const patch = safeObject(patchResult);
+        const nested = safeObject(patch.post_action_refresh || patch.postActionRefresh || patch.refresh || patch.post_create_refresh || patch.postCreateRefresh);
+        const patchApplied = patch.patch_applied === true || patch.patchApplied === true || nested.patch_applied === true || nested.patchApplied === true;
+        return patch.ok === false || nested.ok === false || patchApplied !== true;
+      });
       const basePostActionRefresh = {
         ok: !patchHardFailure,
         mode: 'PATCH_EXISTING_SESSION',
@@ -59794,11 +60072,17 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         source_session_obsolete: false,
         requires_new_session: false,
         preview_reopen_required: false,
-        targeted_refresh_enqueued: patchTargetedRefreshEnqueuedCount > 0,
+        targeted_refresh_enqueued: patchTargetedRefreshEnqueued,
         targeted_refresh_enqueued_count: patchTargetedRefreshEnqueuedCount,
         affected_candidate_count: patchAffectedCandidateCount,
+        affected_candidate_ids: patchAffectedCandidateIds,
         affected_row_count: patchAffectedRowCount,
+        affected_row_ids: patchAffectedRowIds,
         patched_row_count: patchPatchedRowCount,
+        patched_row_ids: patchPatchedRowIds,
+        affected_timesheet_ids: patchAffectedTimesheetIds,
+        affected_economic_keys: patchAffectedEconomicKeys,
+        targeted_refresh_candidate_ids: patchTargetedRefreshCandidateIds,
         complex_refresh_candidate_ids: patchComplexCandidateIds,
         pay_batch_ids: batchIds,
         created_pay_batch_ids: batchIds,
@@ -59825,7 +60109,12 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
             post_action_refresh: basePostActionRefresh,
             post_create_refresh: basePostActionRefresh,
             refresh: basePostActionRefresh,
-            patch_error: patchRpcFailure || patchResults.find((patchResult) => patchResult && (patchResult.ok === false || patchResult.patch_applied !== true)) || null,
+            patch_error: patchRpcFailure || patchResults.find((patchResult) => {
+              const patch = safeObject(patchResult);
+              const nested = safeObject(patch.post_action_refresh || patch.postActionRefresh || patch.refresh || patch.post_create_refresh || patch.postCreateRefresh);
+              const patchApplied = patch.patch_applied === true || patch.patchApplied === true || nested.patch_applied === true || nested.patchApplied === true;
+              return patch.ok === false || nested.ok === false || patchApplied !== true;
+            }) || null,
             pay_batch_ids: batchIds,
             created_pay_batch_ids: batchIds,
             skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
@@ -59847,10 +60136,10 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           replacement_created: false,
           replacement_reused: false,
           action: 'PATCH_EXISTING_SESSION',
-          next_recommended_action: patchTargetedRefreshEnqueuedCount > 0 ? 'WAIT_FOR_WORKER' : null,
+          next_recommended_action: patchTargetedRefreshEnqueued ? 'WAIT_FOR_WORKER' : null,
           warning: null
         });
-        const workerWake = patchTargetedRefreshEnqueuedCount > 0
+        const workerWake = patchTargetedRefreshEnqueued
           ? schedulePostActionPatchNudge(postActionRefresh, workbenchSessionId)
           : null;
         if (workerWake) {
@@ -59862,7 +60151,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         }
 
         return lockProgress('RUNNING', 'COMPLETE', {
-          status_text: patchTargetedRefreshEnqueuedCount > 0
+          status_text: patchTargetedRefreshEnqueued
             ? 'Draft created; existing payment preview patched and targeted refresh queued.'
             : 'Draft created and existing payment preview patched.',
           post_action_refresh: postActionRefresh,
@@ -60242,9 +60531,20 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           inputJson.sourceSessionSignature ||
           ''
         ).trim() || null;
-        const targetedRefreshEnqueuedCount = Number.isFinite(Number(effectivePatchRefresh.targeted_refresh_enqueued_count))
-          ? Math.max(0, Math.trunc(Number(effectivePatchRefresh.targeted_refresh_enqueued_count)))
-          : 0;
+        const persistedTargetedRefreshCandidateIds = uniqueDraftUuidArray(
+          effectivePatchRefresh.targeted_refresh_candidate_ids ||
+          effectivePatchRefresh.targetedRefreshCandidateIds ||
+          effectivePatchRefresh.refresh_candidate_ids ||
+          effectivePatchRefresh.refreshCandidateIds ||
+          effectivePatchRefresh.complex_refresh_candidate_ids ||
+          []
+        );
+        const targetedRefreshEnqueuedCount = Math.max(
+          Number.isFinite(Number(effectivePatchRefresh.targeted_refresh_enqueued_count))
+            ? Math.max(0, Math.trunc(Number(effectivePatchRefresh.targeted_refresh_enqueued_count)))
+            : 0,
+          persistedTargetedRefreshCandidateIds.length
+        );
         const postActionRefresh = Object.assign({}, effectivePatchRefresh, {
           ok: effectivePatchRefresh.ok !== false,
           mode: 'PATCH_EXISTING_SESSION',
@@ -60270,6 +60570,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           target_selected_after_patch: false,
           targeted_refresh_enqueued: targetedRefreshEnqueuedCount > 0 || effectivePatchRefresh.targeted_refresh_enqueued === true,
           targeted_refresh_enqueued_count: targetedRefreshEnqueuedCount,
+          targeted_refresh_candidate_ids: persistedTargetedRefreshCandidateIds,
           created_pay_batch_ids: batchIds,
           pay_batch_ids: batchIds,
           skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
@@ -60331,8 +60632,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           skipped_preview_row_count: reservationAvailability.skipped_preview_row_count,
           clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
           candidate_count: candidateIds.size,
-          dirty_candidate_ids: Array.isArray(postActionRefresh.complex_refresh_candidate_ids) ? postActionRefresh.complex_refresh_candidate_ids : [],
-          refresh_candidate_ids: Array.isArray(postActionRefresh.complex_refresh_candidate_ids) ? postActionRefresh.complex_refresh_candidate_ids : [],
+          dirty_candidate_ids: Array.isArray(postActionRefresh.complex_refresh_candidate_ids) ? postActionRefresh.complex_refresh_candidate_ids : persistedTargetedRefreshCandidateIds,
+          refresh_candidate_ids: Array.isArray(postActionRefresh.targeted_refresh_candidate_ids) ? postActionRefresh.targeted_refresh_candidate_ids : (Array.isArray(postActionRefresh.complex_refresh_candidate_ids) ? postActionRefresh.complex_refresh_candidate_ids : persistedTargetedRefreshCandidateIds),
           refresh_job_ids: [],
           snapshot_refresh_job_ids: [],
           post_action_refresh: postActionRefresh,
@@ -60629,6 +60930,9 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
+
+
 
 
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
@@ -170233,6 +170537,7 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
 
 
 
+
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -170332,6 +170637,9 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     if (['WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH'].includes(raw)) {
       return 'WORKBENCH_CANDIDATE_DELTA_REFRESH';
     }
+    if (['WORKBENCH_SESSION_CLONE_REBASE', 'SESSION_CLONE_REBASE', 'CLONE_REBASE'].includes(raw)) {
+      return 'WORKBENCH_SESSION_CLONE_REBASE';
+    }
     if (['WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH'].includes(raw)) {
       return 'WORKBENCH_CANDIDATE_LINE_WORK_SEED';
     }
@@ -170350,6 +170658,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     'WORKBENCH_SESSION_SCOPE_SEED',
     'WORKBENCH_CANDIDATE_SOURCE_BUILD',
     'WORKBENCH_CANDIDATE_DELTA_REFRESH',
+    'WORKBENCH_SESSION_CLONE_REBASE',
     'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
     'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
     'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
@@ -170449,6 +170758,80 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     ),
     3000,
     250,
+    30000
+  );
+  const cloneRebaseUnitsPerJob = numberInRange(
+    firstConfiguredValue(
+      sourceOptions.cloneRebaseUnitsPerJob,
+      sourceOptions.clone_rebase_units_per_job,
+      sourceOptions.banking_pay_workbench_clone_rebase_units_per_job,
+      drainSettings.clone_rebase_units_per_job,
+      drainSettings.cloneRebaseUnitsPerJob,
+      drainSettings.banking_pay_workbench_clone_rebase_units_per_job,
+      workbenchSettings.clone_rebase_units_per_job,
+      workbenchSettings.cloneRebaseUnitsPerJob,
+      workbenchSettings.banking_pay_workbench_clone_rebase_units_per_job,
+      settingsDefaults.banking_pay_workbench_clone_rebase_units_per_job
+    ),
+    100,
+    1,
+    250
+  );
+  const nudgeCloneRebaseUnitsPerJob = numberInRange(
+    firstConfiguredValue(
+      sourceOptions.nudgeCloneRebaseUnitsPerJob,
+      sourceOptions.nudge_clone_rebase_units_per_job,
+      sourceOptions.banking_pay_workbench_nudge_clone_rebase_units_per_job,
+      profileSettings.clone_rebase_units_per_job,
+      profileSettings.cloneRebaseUnitsPerJob,
+      workbenchSettings.nudge_clone_rebase_units_per_job,
+      workbenchSettings.nudgeCloneRebaseUnitsPerJob,
+      settingsDefaults.banking_pay_workbench_nudge_clone_rebase_units_per_job
+    ),
+    cloneRebaseUnitsPerJob,
+    1,
+    250
+  );
+  const cronCloneRebaseUnitsPerJob = numberInRange(
+    firstConfiguredValue(
+      sourceOptions.cronCloneRebaseUnitsPerJob,
+      sourceOptions.cron_clone_rebase_units_per_job,
+      sourceOptions.banking_pay_workbench_cron_clone_rebase_units_per_job,
+      profileSettings.clone_rebase_units_per_job,
+      profileSettings.cloneRebaseUnitsPerJob,
+      workbenchSettings.cron_clone_rebase_units_per_job,
+      workbenchSettings.cronCloneRebaseUnitsPerJob,
+      settingsDefaults.banking_pay_workbench_cron_clone_rebase_units_per_job
+    ),
+    Math.max(cloneRebaseUnitsPerJob, 100),
+    1,
+    250
+  );
+  const effectiveCloneRebaseUnitsPerJob = numberInRange(
+    firstConfiguredValue(
+      sourceOptions.cloneRebaseEffectiveUnitsPerJob,
+      sourceOptions.clone_rebase_effective_units_per_job,
+      budgetProfile === 'NUDGE' ? nudgeCloneRebaseUnitsPerJob : undefined,
+      budgetProfile === 'CRON' ? cronCloneRebaseUnitsPerJob : undefined,
+      cloneRebaseUnitsPerJob
+    ),
+    cloneRebaseUnitsPerJob,
+    1,
+    250
+  );
+  const cloneRebaseBudgetMs = numberInRange(
+    firstConfiguredValue(
+      sourceOptions.cloneRebaseBudgetMs,
+      sourceOptions.clone_rebase_budget_ms,
+      sourceOptions.banking_pay_workbench_clone_rebase_budget_ms,
+      drainSettings.clone_rebase_budget_ms,
+      drainSettings.cloneRebaseBudgetMs,
+      workbenchSettings.clone_rebase_budget_ms,
+      workbenchSettings.cloneRebaseBudgetMs,
+      settingsDefaults.banking_pay_workbench_clone_rebase_budget_ms
+    ),
+    3000,
+    500,
     30000
   );
 
@@ -170570,6 +170953,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     WORKBENCH_SESSION_SCOPE_SEED: numberInRange(rawStageLimits.scope_seed ?? rawStageLimits.scopeSeed ?? sourceOptions.scopeSeedWorkUnitsPerJob ?? sourceOptions.scope_seed_units_per_job, maxStageWorkUnitsPerJob, 1, 100),
     WORKBENCH_CANDIDATE_SOURCE_BUILD: numberInRange(rawStageLimits.source_build ?? rawStageLimits.sourceBuild ?? sourceOptions.sourceBuildWorkUnitsPerJob ?? sourceOptions.source_build_units_per_job, Math.min(maxStageWorkUnitsPerJob, 10), 1, 100),
     WORKBENCH_CANDIDATE_DELTA_REFRESH: numberInRange(rawStageLimits.delta_refresh ?? rawStageLimits.deltaRefresh ?? rawStageLimits.delta ?? rawStageLimits.delta_refresh_units_per_job ?? sourceOptions.deltaRefreshWorkUnitsPerJob ?? sourceOptions.delta_refresh_units_per_job, effectiveDeltaUnitsPerJob, 1, 100),
+    WORKBENCH_SESSION_CLONE_REBASE: numberInRange(rawStageLimits.clone_rebase ?? rawStageLimits.cloneRebase ?? rawStageLimits.clone ?? rawStageLimits.clone_rebase_units_per_job ?? sourceOptions.cloneRebaseWorkUnitsPerJob ?? sourceOptions.clone_rebase_units_per_job, effectiveCloneRebaseUnitsPerJob, 1, 250),
     WORKBENCH_CANDIDATE_LINE_WORK_SEED: numberInRange(rawStageLimits.line_seed ?? rawStageLimits.lineSeed ?? sourceOptions.lineSeedWorkUnitsPerJob ?? sourceOptions.line_seed_units_per_job, maxStageWorkUnitsPerJob, 1, 100),
     WORKBENCH_CANDIDATE_LINE_WORK_PROCESS: numberInRange(rawStageLimits.line_process ?? rawStageLimits.lineProcess ?? sourceOptions.lineProcessWorkUnitsPerJob ?? sourceOptions.line_process_units_per_job, maxStageWorkUnitsPerJob, 1, 100),
     WORKBENCH_PREVIEW_ROWS_MATERIALISE: numberInRange(rawStageLimits.preview_materialise ?? rawStageLimits.previewMaterialise ?? rawStageLimits.preview_mat ?? rawStageLimits.previewMat ?? sourceOptions.previewMaterialiseWorkUnitsPerJob ?? sourceOptions.preview_materialise_units_per_job, maxStageWorkUnitsPerJob, 1, 100)
@@ -170578,7 +170962,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   function stageLimitForJobType(jobType, fallback = maxStageWorkUnitsPerJob) {
     const canonical = String(jobType || '').trim().toUpperCase();
     const value = stageLimits[canonical];
-    return Number.isFinite(Number(value)) ? Math.max(1, Math.min(100, Math.trunc(Number(value)))) : fallback;
+    const maxForJobType = canonical === 'WORKBENCH_SESSION_CLONE_REBASE' ? 250 : 100;
+    return Number.isFinite(Number(value)) ? Math.max(1, Math.min(maxForJobType, Math.trunc(Number(value)))) : fallback;
   }
   const workUnitsForJob = (jobLike) => {
     const job = isPlainObject(jobLike) ? jobLike : {};
@@ -170609,6 +170994,19 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
             countFrom(stageResult, ['line_rows_written'], 0),
             countFrom(stageResult, ['preview_rows_written'], 0),
             countFrom(stageResult, ['rows_superseded'], 0)
+          )
+        };
+      }
+    }
+    else if (jobType === 'WORKBENCH_SESSION_CLONE_REBASE') {
+      parsed = numericField(stageResult, ['processed_candidate_count', 'copied_candidate_count', 'ready_empty_candidate_count', 'legacy_refresh_enqueued_count']);
+      if (!parsed.found) {
+        parsed = {
+          found: true,
+          value: Math.max(
+            countFrom(stageResult, ['copied_candidate_count'], 0),
+            countFrom(stageResult, ['ready_empty_candidate_count'], 0),
+            countFrom(stageResult, ['legacy_refresh_enqueued_count'], 0)
           )
         };
       }
@@ -170748,6 +171146,20 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       delta_preview_rows_written: deltaJobs.reduce((sum, job) => sum + deltaMetricValue(job, ['preview_rows_written']), 0),
       delta_rows_superseded: deltaJobs.reduce((sum, job) => sum + deltaMetricValue(job, ['rows_superseded']), 0),
       delta_fallback_count: deltaJobs.filter((job) => booleanFrom((isPlainObject(job.stage_result) ? job.stage_result : job).fallback_required ?? job.fallback_required)).length
+    };
+  };
+
+  const cloneMetricsFromJobs = (jobRows) => {
+    const cloneJobs = (Array.isArray(jobRows) ? jobRows : [])
+      .filter((job) => isPlainObject(job) && canonicalJobType(job) === 'WORKBENCH_SESSION_CLONE_REBASE');
+    const cloneMetricValue = (job, keys) => countFrom(isPlainObject(job.stage_result) ? job.stage_result : job, keys, 0);
+    return {
+      clone_rebase_jobs_processed: cloneJobs.length,
+      clone_jobs_processed: cloneJobs.length,
+      clone_copied_candidate_count: cloneJobs.reduce((sum, job) => sum + cloneMetricValue(job, ['copied_candidate_count']), 0),
+      clone_copied_preview_row_count: cloneJobs.reduce((sum, job) => sum + cloneMetricValue(job, ['copied_preview_row_count']), 0),
+      clone_legacy_refresh_enqueued_count: cloneJobs.reduce((sum, job) => sum + cloneMetricValue(job, ['legacy_refresh_enqueued_count']), 0),
+      clone_more_due_count: cloneJobs.filter((job) => booleanFrom((isPlainObject(job.stage_result) ? job.stage_result : job).more_due ?? (isPlainObject(job.stage_result) ? job.stage_result : job).has_more)).length
     };
   };
 
@@ -171006,6 +171418,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     cron_delta_units_per_job: cronDeltaUnitsPerJob,
     effective_delta_units_per_job: effectiveDeltaUnitsPerJob,
     delta_refresh_budget_ms: deltaRefreshBudgetMs,
+    clone_rebase_units_per_job: cloneRebaseUnitsPerJob,
+    nudge_clone_rebase_units_per_job: nudgeCloneRebaseUnitsPerJob,
+    cron_clone_rebase_units_per_job: cronCloneRebaseUnitsPerJob,
+    effective_clone_rebase_units_per_job: effectiveCloneRebaseUnitsPerJob,
+    clone_rebase_budget_ms: cloneRebaseBudgetMs,
     stage_limits: stageLimits,
     max_effective_stage_work_units_per_job: maxEffectiveStageWorkUnitsPerJob,
     db_worker_max_runtime_ms: dbWorkerMaxRuntimeMs,
@@ -171149,6 +171566,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       source_build_fallback_used_count: passJobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD' && booleanFrom(job.fallback_used ?? job.stage_result?.fallback_used)).length,
       source_build_cursor_advanced_count: passJobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD' && booleanFrom(job.cursor_advanced ?? job.stage_result?.cursor_advanced)).length,
       ...deltaMetricsFromJobs(passJobs),
+      ...cloneMetricsFromJobs(passJobs),
       more_due: passMoreDue,
       db_stop_reason: passStopReason || null,
       job_type_counts: jobTypeCountsFromJobs(passJobs),
@@ -171641,6 +172059,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   })();
   const finalSourceBuildTimingSummary = sourceBuildTimingSummaryFromJobs(jobs);
   const finalDeltaMetrics = deltaMetricsFromJobs(jobs);
+  const finalCloneMetrics = cloneMetricsFromJobs(jobs);
   const result = {
     ...lastAggregate,
     ok: transportError === null && !sourceBuildOnlyAssertionFailed && failedCount === 0 && staleRecoveryErrorCount === 0,
@@ -171674,6 +172093,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     cron_delta_units_per_job: cronDeltaUnitsPerJob,
     effective_delta_units_per_job: effectiveDeltaUnitsPerJob,
     delta_refresh_budget_ms: deltaRefreshBudgetMs,
+    clone_rebase_units_per_job: cloneRebaseUnitsPerJob,
+    nudge_clone_rebase_units_per_job: nudgeCloneRebaseUnitsPerJob,
+    cron_clone_rebase_units_per_job: cronCloneRebaseUnitsPerJob,
+    effective_clone_rebase_units_per_job: effectiveCloneRebaseUnitsPerJob,
+    clone_rebase_budget_ms: cloneRebaseBudgetMs,
     db_worker_max_runtime_ms: dbWorkerMaxRuntimeMs,
     db_worker_min_phase_budget_ms: dbWorkerMinPhaseBudgetMs,
     job_retry_base_seconds: jobRetryBaseSeconds,
@@ -171760,6 +172184,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_fallback_used_count: jobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD' && booleanFrom(job.fallback_used ?? job.stage_result?.fallback_used)).length,
     source_build_cursor_advanced_count: jobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD' && booleanFrom(job.cursor_advanced ?? job.stage_result?.cursor_advanced)).length,
     ...finalDeltaMetrics,
+    ...finalCloneMetrics,
     ...finalSourceBuildTimingSummary,
     pass_summaries: passSummaries,
     jobs,
@@ -171821,7 +172246,12 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     delta_source_rows_written: result.delta_source_rows_written,
     delta_line_rows_written: result.delta_line_rows_written,
     delta_preview_rows_written: result.delta_preview_rows_written,
-    delta_fallback_count: result.delta_fallback_count
+    delta_fallback_count: result.delta_fallback_count,
+    clone_rebase_jobs_processed: result.clone_rebase_jobs_processed,
+    clone_copied_candidate_count: result.clone_copied_candidate_count,
+    clone_copied_preview_row_count: result.clone_copied_preview_row_count,
+    clone_legacy_refresh_enqueued_count: result.clone_legacy_refresh_enqueued_count,
+    clone_more_due_count: result.clone_more_due_count
   }, transportError || sourceBuildOnlyAssertionFailed ? 'warn' : 'info');
 
   try {
@@ -171871,7 +172301,12 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       delta_source_rows_written: result.delta_source_rows_written,
       delta_line_rows_written: result.delta_line_rows_written,
       delta_preview_rows_written: result.delta_preview_rows_written,
-      delta_fallback_count: result.delta_fallback_count
+      delta_fallback_count: result.delta_fallback_count,
+      clone_rebase_jobs_processed: result.clone_rebase_jobs_processed,
+      clone_copied_candidate_count: result.clone_copied_candidate_count,
+      clone_copied_preview_row_count: result.clone_copied_preview_row_count,
+      clone_legacy_refresh_enqueued_count: result.clone_legacy_refresh_enqueued_count,
+      clone_more_due_count: result.clone_more_due_count
     };
     if (transportError || sourceBuildOnlyAssertionFailed) console.warn('[drainBankingPayWorkbenchJobs] bounded aggregate drain stopped', logPayload);
     else console.info('[drainBankingPayWorkbenchJobs] bounded aggregate drain', logPayload);
@@ -171879,7 +172314,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
   return result;
 }
-
 
 async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -171979,6 +172413,7 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
     if (!s) return '';
     if (['WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE'].includes(s)) return 'WORKBENCH_SESSION_SCOPE_SEED';
     if (['WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH'].includes(s)) return 'WORKBENCH_CANDIDATE_DELTA_REFRESH';
+    if (['WORKBENCH_SESSION_CLONE_REBASE', 'SESSION_CLONE_REBASE', 'CLONE_REBASE'].includes(s)) return 'WORKBENCH_SESSION_CLONE_REBASE';
     if (['WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE'].includes(s)) return 'WORKBENCH_CANDIDATE_LINE_WORK_SEED';
     if (['WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK'].includes(s)) return 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS';
     if (['WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK'].includes(s)) return 'WORKBENCH_PREVIEW_ROWS_MATERIALISE';
@@ -172057,7 +172492,7 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
 
   const finish = (rpcName, rpcPayload, extra = {}) => {
     const clean = compactPayload(rpcPayload);
-    const hasMore = clean.has_more === true || clean.candidate_still_pending === true || clean.still_running === true || clean.ready === false || clean.ready_flag === false;
+    const hasMore = clean.has_more === true || clean.more_due === true || clean.candidate_still_pending === true || clean.still_running === true || clean.ready === false || clean.ready_flag === false;
     return Object.assign({}, baseResult, extra, {
       ok: clean.ok !== false,
       status: clean.status || (hasMore ? 'PENDING' : 'READY'),
@@ -172127,6 +172562,38 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
       delta_refresh_required: true,
       fallback_required: result.fallback_required === true,
       fallback_reason: trimStr(result.fallback_reason || '') || null
+    });
+  }
+
+  if (jobType === 'WORKBENCH_SESSION_CLONE_REBASE') {
+    if (!uuidRe.test(sessionId)) {
+      throw makeJobError('WORKBENCH_CLONE_REBASE_INVALID_CONTEXT', 'Session clone/rebase job is missing a valid target session_id.', Object.assign({}, baseResult, { retry_after_seconds: 60 }));
+    }
+    const sourceSessionId = trimStr(payload.source_session_id || payload.clone_from_session_id || payload.sourceSessionId || payload.cloneFromSessionId);
+    const cloneCursorJson = isPlainObject(payload.cursor_json) ? payload.cursor_json : (isPlainObject(cursorJson) ? cursorJson : {});
+    const clonePayload = compactPayload(Object.assign({}, payload, {
+      source_session_id: uuidRe.test(sourceSessionId) ? sourceSessionId : null,
+      target_session_id: sessionId,
+      cursor_json: cloneCursorJson,
+      candidate_cursor: isPlainObject(payload.candidate_cursor) ? payload.candidate_cursor : cloneCursorJson,
+      clone_mode: payload.clone_mode || payload.cloneMode || 'CERTIFIED_SIMPLE_ONLY',
+      feature_flags: isPlainObject(payload.feature_flags) ? payload.feature_flags : {}
+    }));
+    const result = await rpc('pay_workbench_session_clone_eligible_rows_v1', {
+      p_target_session_id: sessionId,
+      p_source_session_id: uuidRe.test(sourceSessionId) ? sourceSessionId : null,
+      p_limit: limit,
+      p_cursor_json: cloneCursorJson,
+      p_options_json: clonePayload
+    }, 'pay_workbench_session_clone_eligible_rows_v1');
+    return finish('pay_workbench_session_clone_eligible_rows_v1', result, {
+      clone_rebase_required: true,
+      clone_rebase_applied: result.clone_rebase_applied === true,
+      source_session_id: uuidRe.test(sourceSessionId) ? sourceSessionId : null,
+      target_session_id: sessionId,
+      copied_candidate_count: Number.isFinite(Number(result.copied_candidate_count)) ? Math.max(0, Math.trunc(Number(result.copied_candidate_count))) : 0,
+      copied_preview_row_count: Number.isFinite(Number(result.copied_preview_row_count)) ? Math.max(0, Math.trunc(Number(result.copied_preview_row_count))) : 0,
+      legacy_refresh_enqueued_count: Number.isFinite(Number(result.legacy_refresh_enqueued_count)) ? Math.max(0, Math.trunc(Number(result.legacy_refresh_enqueued_count))) : 0
     });
   }
 
@@ -172220,6 +172687,7 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
 
   throw makeJobError('UNSUPPORTED_WORKBENCH_JOB_TYPE', `Unsupported Banking Pay workbench job type: ${rawJobType}${jobType && jobType !== rawJobType ? ` (${jobType})` : ''}`, Object.assign({}, baseResult, { retry_after_seconds: 300 }));
 }
+
 
 
 async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {}, options = {}) {
