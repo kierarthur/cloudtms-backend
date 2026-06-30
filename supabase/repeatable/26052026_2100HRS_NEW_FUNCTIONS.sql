@@ -22284,7 +22284,6 @@ EXCEPTION
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -22338,6 +22337,10 @@ DECLARE
   v_existing_delta_job public.banking_pay_workbench_jobs%ROWTYPE;
   v_existing_delta_projection_run_id_text text := NULL::text;
   v_delta_merge_reused_existing boolean := false;
+  v_payload_shadow_compare_required boolean := false;
+  v_payload_shadow_compare_enforced boolean := false;
+  v_shadow_compare_required boolean := false;
+  v_shadow_compare_enforced boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -22597,6 +22600,32 @@ BEGIN
     v_resolved_job_type := 'WORKBENCH_CANDIDATE_SOURCE_BUILD';
   END IF;
 
+  v_payload_shadow_compare_required := lower(BTRIM(COALESCE(
+    v_payload_json->>'shadow_compare_required',
+    v_payload_json->>'shadow_compare',
+    v_payload_json->>'shadow_mode',
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  v_payload_shadow_compare_enforced := lower(BTRIM(COALESCE(
+    v_payload_json->>'shadow_compare_enforced',
+    v_payload_json->>'enforce_shadow_compare',
+    v_payload_json->>'shadow_enforced',
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  v_shadow_compare_required := (
+    lower(BTRIM(COALESCE(v_classifier_result#>>'{complexity_flags,delta_shadow_mode}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR lower(BTRIM(COALESCE(v_classifier_result#>>'{complexity_flags,payload_shadow_mode}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR lower(BTRIM(COALESCE(v_classifier_result->>'shadow_compare_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR v_payload_shadow_compare_required
+  );
+
+  v_shadow_compare_enforced := COALESCE(v_shadow_compare_required, false) AND (
+    COALESCE(v_payload_shadow_compare_enforced, false)
+    OR lower(BTRIM(COALESCE(v_classifier_result->>'shadow_compare_enforced', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+  );
+
   IF v_resolved_mode IN ('PATCH_ONLY', 'CLONE_REBASE', 'BLOCKED') THEN
     v_no_job_reason := CASE
       WHEN v_resolved_mode = 'PATCH_ONLY' THEN COALESCE(NULLIF(v_classifier_result->>'fallback_reason', ''), 'PATCH_ONLY_NO_SOURCE_BUILD_JOB')
@@ -22757,8 +22786,8 @@ BEGIN
         'refresh_scope_kind', COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'),
         'candidate_id', p_candidate_id::text,
         'dedupe_key', v_dedupe_key,
-        'shadow_compare_required', lower(BTRIM(COALESCE(v_classifier_result->'complexity_flags'->>'delta_shadow_mode', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
-        'shadow_compare_enforced', lower(BTRIM(COALESCE(v_classifier_result->'complexity_flags'->>'fallback_on_mismatch', 'true'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+        'shadow_compare_required', COALESCE(v_shadow_compare_required, false),
+        'shadow_compare_enforced', COALESCE(v_shadow_compare_enforced, false),
         'classifier_result', v_classifier_result,
         'fallback_required', false,
         'fallback_reason', NULL::text,
@@ -23195,7 +23224,6 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
 
@@ -25083,6 +25111,9 @@ DECLARE
   v_delta_line_rows_written integer := 0;
   v_delta_preview_rows_written integer := 0;
   v_delta_rows_superseded integer := 0;
+  v_delta_shadow_compare_status text := NULL::text;
+  v_delta_shadow_compare_required boolean := false;
+  v_delta_shadow_compare_enforced boolean := false;
   v_delta_shadow_compare_failed boolean := false;
   v_clone_more_due boolean := false;
   v_clone_complete boolean := false;
@@ -25312,11 +25343,33 @@ BEGIN
     v_delta_line_rows_written := CASE WHEN COALESCE(v_result_json->>'line_rows_written', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'line_rows_written')::integer ELSE 0 END;
     v_delta_preview_rows_written := CASE WHEN COALESCE(v_result_json->>'preview_rows_written', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'preview_rows_written')::integer ELSE 0 END;
     v_delta_rows_superseded := CASE WHEN COALESCE(v_result_json->>'rows_superseded', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'rows_superseded')::integer ELSE 0 END;
+    v_delta_shadow_compare_status := UPPER(BTRIM(COALESCE(v_result_json->>'shadow_compare_status', '')));
+    v_delta_shadow_compare_required := LOWER(BTRIM(COALESCE(
+      v_result_json->>'shadow_compare_required',
+      v_job_row.payload_json->>'shadow_compare_required',
+      'false'
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_delta_shadow_compare_enforced := LOWER(BTRIM(COALESCE(
+      v_result_json->>'shadow_compare_enforced',
+      v_job_row.payload_json->>'shadow_compare_enforced',
+      'false'
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_delta_shadow_compare_enforced := COALESCE(v_delta_shadow_compare_required, false)
+      AND COALESCE(v_delta_shadow_compare_enforced, false);
     v_delta_shadow_compare_failed := LOWER(BTRIM(COALESCE(v_result_json->>'shadow_compare_failed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-      OR UPPER(BTRIM(COALESCE(v_result_json->>'shadow_compare_status', ''))) IN ('MISMATCH', 'REFERENCE_UNAVAILABLE', 'REFERENCE_MISSING', 'UNAVAILABLE');
+      OR v_delta_shadow_compare_status = 'MISMATCH'
+      OR (
+        COALESCE(v_delta_shadow_compare_enforced, false) IS TRUE
+        AND v_delta_shadow_compare_status IN ('REFERENCE_UNAVAILABLE', 'REFERENCE_MISSING', 'UNAVAILABLE')
+      );
     IF v_delta_shadow_compare_failed IS TRUE THEN
       v_delta_fallback_required := true;
-      v_delta_fallback_reason := 'SHADOW_COMPARE_MISMATCH';
+      v_delta_fallback_reason := CASE
+        WHEN COALESCE(v_delta_shadow_compare_enforced, false) IS TRUE
+         AND v_delta_shadow_compare_status IN ('REFERENCE_UNAVAILABLE', 'REFERENCE_MISSING', 'UNAVAILABLE')
+          THEN 'SHADOW_REFERENCE_UNAVAILABLE'
+        ELSE 'SHADOW_COMPARE_MISMATCH'
+      END;
     END IF;
 
     v_delta_next_cursor_json := COALESCE(v_delta_next_cursor_json, '{}'::jsonb)
@@ -25376,6 +25429,9 @@ BEGIN
             'fallback_from_delta', true,
             'fallback_reason', v_delta_fallback_reason,
             'shadow_compare_failed', COALESCE(v_delta_shadow_compare_failed, false),
+            'shadow_compare_status', NULLIF(v_delta_shadow_compare_status, ''),
+            'shadow_compare_required', COALESCE(v_delta_shadow_compare_required, false),
+            'shadow_compare_enforced', COALESCE(v_delta_shadow_compare_enforced, false),
             'projection_run_id', v_delta_projection_run_id_text,
             'projection_class', COALESCE(NULLIF(BTRIM(COALESCE(v_result_json->>'projection_class', '')), ''), NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'projection_class', '')), '')),
             'source_build_required', true,
@@ -25462,6 +25518,9 @@ BEGIN
           'fallback_from_delta', true,
           'fallback_reason', v_delta_fallback_reason,
           'shadow_compare_failed', COALESCE(v_delta_shadow_compare_failed, false),
+          'shadow_compare_status', NULLIF(v_delta_shadow_compare_status, ''),
+          'shadow_compare_required', COALESCE(v_delta_shadow_compare_required, false),
+          'shadow_compare_enforced', COALESCE(v_delta_shadow_compare_enforced, false),
           'projection_run_id', v_delta_projection_run_id_text,
           'source_build_required', true,
           'line_work_required', true,
@@ -25488,6 +25547,10 @@ BEGIN
               'delta_refresh_complete', COALESCE(v_delta_refresh_complete, false),
               'fallback_required', COALESCE(v_delta_fallback_required, false),
               'fallback_reason', v_delta_fallback_reason,
+              'shadow_compare_status', NULLIF(v_delta_shadow_compare_status, ''),
+              'shadow_compare_required', COALESCE(v_delta_shadow_compare_required, false),
+              'shadow_compare_enforced', COALESCE(v_delta_shadow_compare_enforced, false),
+              'shadow_compare_failed', COALESCE(v_delta_shadow_compare_failed, false),
               'projection_run_id', v_delta_projection_run_id_text,
               'continuation_enqueued', COALESCE(v_continuation_enqueued, false),
               'continuation_jobs', COALESCE(v_continuation_jobs, '[]'::jsonb),
@@ -25510,6 +25573,9 @@ BEGIN
       'delta_refresh_complete', COALESCE(v_delta_refresh_complete, false),
       'fallback_required', COALESCE(v_delta_fallback_required, false),
       'fallback_reason', v_delta_fallback_reason,
+      'shadow_compare_status', NULLIF(v_delta_shadow_compare_status, ''),
+      'shadow_compare_required', COALESCE(v_delta_shadow_compare_required, false),
+      'shadow_compare_enforced', COALESCE(v_delta_shadow_compare_enforced, false),
       'shadow_compare_failed', COALESCE(v_delta_shadow_compare_failed, false),
       'projection_run_id', v_delta_projection_run_id_text,
       'continuation_enqueued', COALESCE(v_continuation_enqueued, false),
@@ -26679,7 +26745,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -64021,6 +64086,14 @@ DECLARE
   v_existing_projection_run_id text := NULL::text;
   v_incoming_projection_run_id text := NULL::text;
   v_effective_projection_run_id text := NULL::text;
+  v_existing_projection_mode text := NULL::text;
+  v_incoming_projection_mode text := NULL::text;
+  v_existing_resolved_mode text := NULL::text;
+  v_incoming_resolved_mode text := NULL::text;
+  v_existing_job_type text := NULL::text;
+  v_incoming_job_type text := NULL::text;
+  v_existing_served_delta boolean := false;
+  v_incoming_served_delta boolean := false;
   v_existing_source_change_seq_text text := NULL::text;
   v_incoming_source_change_seq_text text := NULL::text;
   v_existing_source_change_seq bigint := NULL::bigint;
@@ -64087,6 +64160,12 @@ BEGIN
   v_incoming_projection_class := NULLIF(UPPER(BTRIM(COALESCE(v_incoming->>'projection_class', ''))), '');
   v_existing_projection_run_id := NULLIF(BTRIM(COALESCE(v_existing->>'projection_run_id', '')), '');
   v_incoming_projection_run_id := NULLIF(BTRIM(COALESCE(v_incoming->>'projection_run_id', '')), '');
+  v_existing_projection_mode := NULLIF(UPPER(BTRIM(COALESCE(v_existing->>'projection_mode', ''))), '');
+  v_incoming_projection_mode := NULLIF(UPPER(BTRIM(COALESCE(v_incoming->>'projection_mode', ''))), '');
+  v_existing_resolved_mode := NULLIF(UPPER(BTRIM(COALESCE(v_existing->>'resolved_mode', ''))), '');
+  v_incoming_resolved_mode := NULLIF(UPPER(BTRIM(COALESCE(v_incoming->>'resolved_mode', ''))), '');
+  v_existing_job_type := NULLIF(UPPER(BTRIM(COALESCE(v_existing->>'job_type', v_existing->>'resolved_job_type', v_existing->>'canonical_job_type', ''))), '');
+  v_incoming_job_type := NULLIF(UPPER(BTRIM(COALESCE(v_incoming->>'job_type', v_incoming->>'resolved_job_type', v_incoming->>'canonical_job_type', ''))), '');
 
   v_existing_force_legacy := lower(BTRIM(COALESCE(v_existing->>'force_legacy', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_incoming_force_legacy := lower(BTRIM(COALESCE(v_incoming->>'force_legacy', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
@@ -64138,8 +64217,37 @@ BEGIN
   v_effective_trigger_op := NULLIF(BTRIM(COALESCE(v_incoming->>'trigger_op', v_incoming->>'trigger_operation', v_existing->>'trigger_op', v_existing->>'trigger_operation', '')), '');
   v_effective_trigger_operation := NULLIF(BTRIM(COALESCE(v_incoming->>'trigger_operation', v_incoming->>'trigger_op', v_existing->>'trigger_operation', v_existing->>'trigger_op', '')), '');
 
-  v_effective_shadow_compare_enforced := v_existing_shadow_compare_enforced OR v_incoming_shadow_compare_enforced;
-  v_effective_shadow_compare_required := v_effective_shadow_compare_enforced OR v_existing_shadow_compare_required OR v_incoming_shadow_compare_required;
+  v_existing_served_delta := (
+      v_existing_projection_mode = 'DELTA'
+      OR v_existing_resolved_mode = 'DELTA'
+      OR v_existing_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+    )
+    AND v_existing_force_legacy IS NOT TRUE
+    AND v_existing_force_broad_legacy IS NOT TRUE;
+
+  v_incoming_served_delta := (
+      v_incoming_projection_mode = 'DELTA'
+      OR v_incoming_resolved_mode = 'DELTA'
+      OR v_incoming_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+    )
+    AND v_incoming_force_legacy IS NOT TRUE
+    AND v_incoming_force_broad_legacy IS NOT TRUE;
+
+  IF v_incoming_served_delta IS TRUE THEN
+    -- A fresh served-DELTA payload carries the current classifier/settings shadow decision.
+    -- Do not allow stale queued payloads to resurrect mandatory shadow enforcement.
+    v_effective_shadow_compare_required := COALESCE(v_incoming_shadow_compare_required, false);
+    v_effective_shadow_compare_enforced := COALESCE(v_incoming_shadow_compare_required, false)
+      AND COALESCE(v_incoming_shadow_compare_enforced, false);
+  ELSE
+    v_effective_shadow_compare_required := COALESCE(v_existing_shadow_compare_required, false)
+      OR COALESCE(v_incoming_shadow_compare_required, false);
+    v_effective_shadow_compare_enforced := COALESCE(v_effective_shadow_compare_required, false)
+      AND (
+        COALESCE(v_existing_shadow_compare_enforced, false)
+        OR COALESCE(v_incoming_shadow_compare_enforced, false)
+      );
+  END IF;
 
   v_existing_complex := v_existing_projection_class = ANY(v_complex_classes) OR lower(BTRIM(COALESCE(v_existing->>'complex_refresh_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_incoming_complex := v_incoming_projection_class = ANY(v_complex_classes) OR lower(BTRIM(COALESCE(v_incoming->>'complex_refresh_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
@@ -200567,16 +200675,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_delta_write_compatible_rows_v1(
-  p_session_id uuid,
-  p_candidate_id uuid,
-  p_projection_run_id uuid,
-  p_payload_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_delta_write_compatible_rows_v1(p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -200599,6 +200702,7 @@ DECLARE
   v_selected_preserved_count integer := 0;
   v_selected_cleared_count integer := 0;
   v_affected_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_targeted_cleanup_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_affected_key_count integer := 0;
   v_write_phase text := 'SUPERSEDE_PREVIEW';
   v_write_cursor_json jsonb := '{}'::jsonb;
@@ -200608,6 +200712,8 @@ DECLARE
   v_shadow_compare_enforced boolean := false;
   v_shadow_compare_status text := NULL::text;
   v_shadow_compare_passed boolean := false;
+  v_run_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_run_linked_timesheet_ids_json jsonb := '[]'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -200628,12 +200734,16 @@ BEGIN
          COALESCE(projection_run.write_cursor_json, '{}'::jsonb),
          COALESCE(projection_run.shadow_compare_required, false),
          COALESCE(projection_run.shadow_compare_enforced, false),
-         NULLIF(UPPER(BTRIM(COALESCE(projection_run.shadow_compare_status, ''))), '')
+         NULLIF(UPPER(BTRIM(COALESCE(projection_run.shadow_compare_status, ''))), ''),
+         COALESCE(projection_run.targeted_timesheet_ids, '[]'::jsonb),
+         COALESCE(projection_run.linked_timesheet_ids, '[]'::jsonb)
   INTO v_write_phase,
        v_write_cursor_json,
        v_shadow_compare_required,
        v_shadow_compare_enforced,
-       v_shadow_compare_status
+       v_shadow_compare_status,
+       v_run_targeted_timesheet_ids_json,
+       v_run_linked_timesheet_ids_json
   FROM public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run
   WHERE projection_run.id = p_projection_run_id
     AND projection_run.session_id = p_session_id
@@ -200707,6 +200817,43 @@ BEGIN
     );
   END IF;
 
+  SELECT COALESCE(array_agg(DISTINCT parsed_timesheet_id ORDER BY parsed_timesheet_id), ARRAY[]::uuid[])
+  INTO v_targeted_cleanup_timesheet_ids
+  FROM (
+    SELECT CASE WHEN value_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN value_text::uuid ELSE NULL::uuid END AS parsed_timesheet_id
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(COALESCE(v_payload_json->'targeted_timesheet_ids', '[]'::jsonb)) = 'array' THEN COALESCE(v_payload_json->'targeted_timesheet_ids', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS parsed(value_text)
+    UNION ALL
+    SELECT CASE WHEN value_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN value_text::uuid ELSE NULL::uuid END
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(COALESCE(v_payload_json->'linked_timesheet_ids', '[]'::jsonb)) = 'array' THEN COALESCE(v_payload_json->'linked_timesheet_ids', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS parsed(value_text)
+    UNION ALL
+    SELECT CASE WHEN value_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN value_text::uuid ELSE NULL::uuid END
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(COALESCE(v_run_targeted_timesheet_ids_json, '[]'::jsonb)) = 'array' THEN COALESCE(v_run_targeted_timesheet_ids_json, '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS parsed(value_text)
+    UNION ALL
+    SELECT CASE WHEN value_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN value_text::uuid ELSE NULL::uuid END
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(COALESCE(v_run_linked_timesheet_ids_json, '[]'::jsonb)) = 'array' THEN COALESCE(v_run_linked_timesheet_ids_json, '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS parsed(value_text)
+  ) AS parsed_ids
+  WHERE parsed_timesheet_id IS NOT NULL;
+
   SELECT COUNT(*)::integer
   INTO v_projection_row_count
   FROM pg_temp._bpay_delta_projection_rows AS projection_rows
@@ -200715,15 +200862,82 @@ BEGIN
     AND projection_rows.candidate_id = p_candidate_id;
 
   IF COALESCE(v_projection_row_count, 0) = 0 THEN
+    IF COALESCE(array_length(v_targeted_cleanup_timesheet_ids, 1), 0) > 0 THEN
+      UPDATE public.banking_pay_workbench_candidate_source_lines AS source_line_cleanup
+      SET status = 'SUPERSEDED',
+          source_row_json = jsonb_strip_nulls(
+            COALESCE(source_line_cleanup.source_row_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'superseded_by_projection_run_id', p_projection_run_id::text,
+              'superseded_reason', 'DELTA_ZERO_ROWS_TARGETED_TIMESHEET_NON_PAYABLE',
+              'superseded_at_utc', v_now::text,
+              'policy_x_boundary', 'PRE_DRAFT_WORKBENCH_ONLY_NO_ECONOMIC_CHANGE'
+            )
+          ),
+          updated_at_utc = v_now
+      WHERE source_line_cleanup.session_id = p_session_id
+        AND source_line_cleanup.candidate_id = p_candidate_id
+        AND source_line_cleanup.timesheet_id = ANY(v_targeted_cleanup_timesheet_ids)
+        AND UPPER(BTRIM(COALESCE(source_line_cleanup.status, ''))) IN ('CURRENT', 'DIRTY');
+      GET DIAGNOSTICS v_source_rows_superseded = ROW_COUNT;
+
+      UPDATE public.banking_pay_workbench_candidate_line_work AS line_work_cleanup
+      SET status = 'SKIPPED',
+          result_row_json = jsonb_strip_nulls(
+            COALESCE(line_work_cleanup.result_row_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'skipped_by_projection_run_id', p_projection_run_id::text,
+              'skipped_reason', 'DELTA_ZERO_ROWS_TARGETED_TIMESHEET_NON_PAYABLE',
+              'skipped_at_utc', v_now::text,
+              'policy_x_boundary', 'PRE_DRAFT_WORKBENCH_ONLY_NO_ECONOMIC_CHANGE'
+            )
+          ),
+          updated_at_utc = v_now
+      WHERE line_work_cleanup.session_id = p_session_id
+        AND line_work_cleanup.candidate_id = p_candidate_id
+        AND line_work_cleanup.timesheet_id = ANY(v_targeted_cleanup_timesheet_ids)
+        AND UPPER(BTRIM(COALESCE(line_work_cleanup.status, ''))) IN ('PENDING', 'PROCESSING', 'RUNNING', 'QUEUED', 'DIRTY', 'READY', 'MATERIALISED');
+      GET DIAGNOSTICS v_line_rows_superseded = ROW_COUNT;
+
+      UPDATE public.banking_pay_workbench_preview_rows AS preview_cleanup
+      SET status = 'SUPERSEDED',
+          selected = false,
+          selection_state = 'SUPERSEDED',
+          row_json = jsonb_strip_nulls(
+            COALESCE(preview_cleanup.row_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'superseded_by_projection_run_id', p_projection_run_id::text,
+              'superseded_reason', 'DELTA_ZERO_ROWS_TARGETED_TIMESHEET_NON_PAYABLE',
+              'superseded_at_utc', v_now::text,
+              'policy_x_boundary', 'PRE_DRAFT_WORKBENCH_ONLY_NO_ECONOMIC_CHANGE'
+            )
+          ),
+          updated_at_utc = v_now
+      WHERE preview_cleanup.session_id = p_session_id
+        AND preview_cleanup.candidate_id = p_candidate_id
+        AND preview_cleanup.timesheet_id = ANY(v_targeted_cleanup_timesheet_ids)
+        AND (
+          UPPER(BTRIM(COALESCE(preview_cleanup.status, ''))) IN ('READY', 'DIRTY', 'DELTA_PENDING')
+          OR UPPER(BTRIM(COALESCE(preview_cleanup.selection_state, ''))) IN ('SELECTED', 'DIRTY')
+          OR preview_cleanup.selected IS TRUE
+        );
+      GET DIAGNOSTICS v_preview_rows_superseded = ROW_COUNT;
+    END IF;
+
     RETURN jsonb_build_object(
       'ok', true,
       'fallback_required', false,
       'source_rows_written', 0,
       'line_rows_written', 0,
       'preview_rows_written', 0,
-      'rows_superseded', 0,
+      'rows_superseded', COALESCE(v_source_rows_superseded, 0) + COALESCE(v_line_rows_superseded, 0) + COALESCE(v_preview_rows_superseded, 0),
+      'source_rows_superseded', COALESCE(v_source_rows_superseded, 0),
+      'line_rows_superseded', COALESCE(v_line_rows_superseded, 0),
+      'preview_rows_superseded', COALESCE(v_preview_rows_superseded, 0),
+      'zero_projection_cleanup_applied', COALESCE(array_length(v_targeted_cleanup_timesheet_ids, 1), 0) > 0,
+      'zero_projection_cleanup_timesheet_count', COALESCE(array_length(v_targeted_cleanup_timesheet_ids, 1), 0),
       'selected_preserved_count', 0,
-      'selected_cleared_count', 0
+      'selected_cleared_count', COALESCE(v_preview_rows_superseded, 0)
     );
   END IF;
 
@@ -201455,6 +201669,15 @@ DECLARE
   v_write_result jsonb := '{}'::jsonb;
   v_candidate_state_result jsonb := '{}'::jsonb;
   v_shadow_result jsonb := '{}'::jsonb;
+  v_payload_shadow_mode boolean := false;
+  v_payload_shadow_compare_required boolean := false;
+  v_payload_shadow_compare_enforced boolean := false;
+  v_settings_delta_shadow_mode boolean := false;
+  v_classifier_delta_shadow_mode boolean := false;
+  v_classifier_payload_shadow_mode boolean := false;
+  v_classifier_shadow_compare_required boolean := false;
+  v_classifier_shadow_compare_enforced boolean := false;
+  v_shadow_flags_reconciled_to_not_required boolean := false;
   v_shadow_compare_required boolean := false;
   v_shadow_compare_enforced boolean := false;
   v_shadow_compare_status text := 'NOT_REQUIRED';
@@ -201535,6 +201758,11 @@ BEGIN
   FROM public.settings_defaults AS settings_row
   WHERE settings_row.id = 1
   LIMIT 1;
+
+  v_settings_delta_shadow_mode := lower(BTRIM(COALESCE(
+    v_settings_json->>'banking_pay_workbench_delta_shadow_mode',
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
   IF COALESCE(v_settings_json->>'banking_pay_workbench_delta_budget_ms', '') ~ '^[0-9]{1,9}$' THEN
     v_budget_ms := LEAST(GREATEST((v_settings_json->>'banking_pay_workbench_delta_budget_ms')::integer, 500), 30000);
@@ -201644,16 +201872,24 @@ BEGIN
     v_source_snapshot_run_id := v_session_row.source_snapshot_run_id;
   END IF;
 
-  v_shadow_compare_required := lower(BTRIM(COALESCE(
+  v_payload_shadow_mode := lower(BTRIM(COALESCE(
+    v_payload_json->>'shadow_mode',
+    v_payload_json->>'payload_shadow_mode',
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_payload_shadow_compare_required := lower(BTRIM(COALESCE(
     v_payload_json->>'shadow_compare_required',
     v_payload_json->>'shadow_compare',
     'false'
   ))) IN ('true', 't', '1', 'yes', 'y', 'on');
-  v_shadow_compare_enforced := lower(BTRIM(COALESCE(
+  v_payload_shadow_compare_enforced := lower(BTRIM(COALESCE(
     v_payload_json->>'shadow_compare_enforced',
     v_payload_json->>'enforce_shadow_compare',
+    v_payload_json->>'shadow_enforced',
     'false'
   ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_shadow_compare_required := COALESCE(v_payload_shadow_compare_required, false);
+  v_shadow_compare_enforced := COALESCE(v_payload_shadow_compare_enforced, false);
   v_fallback_allowed := lower(BTRIM(COALESCE(v_payload_json->>'fallback_allowed', 'true'))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
   v_stored_classifier_result := CASE
@@ -201769,8 +202005,16 @@ BEGIN
 
     v_projection_mode := upper(BTRIM(COALESCE(v_classifier_result->>'projection_mode', v_payload_json->>'projection_mode', 'DELTA')));
     v_projection_class := upper(BTRIM(COALESCE(v_classifier_result->>'projection_class', v_payload_json->>'projection_class', 'UNKNOWN')));
-    v_shadow_compare_required := v_shadow_compare_required OR lower(BTRIM(COALESCE(v_classifier_result->>'shadow_compare_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
-    v_shadow_compare_enforced := v_shadow_compare_enforced OR lower(BTRIM(COALESCE(v_classifier_result->>'shadow_compare_enforced', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_classifier_delta_shadow_mode := lower(BTRIM(COALESCE(v_classifier_result#>>'{complexity_flags,delta_shadow_mode}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_classifier_payload_shadow_mode := lower(BTRIM(COALESCE(v_classifier_result#>>'{complexity_flags,payload_shadow_mode}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_classifier_shadow_compare_required := lower(BTRIM(COALESCE(v_classifier_result->>'shadow_compare_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_classifier_shadow_compare_enforced := lower(BTRIM(COALESCE(v_classifier_result->>'shadow_compare_enforced', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_shadow_compare_required := COALESCE(v_shadow_compare_required, false)
+      OR COALESCE(v_classifier_delta_shadow_mode, false)
+      OR COALESCE(v_classifier_payload_shadow_mode, false)
+      OR COALESCE(v_classifier_shadow_compare_required, false);
+    v_shadow_compare_enforced := COALESCE(v_shadow_compare_required, false)
+      AND (COALESCE(v_shadow_compare_enforced, false) OR COALESCE(v_classifier_shadow_compare_enforced, false));
 
     v_targeted_json := COALESCE(v_classifier_result->'targeted_timesheet_ids', v_payload_json->'targeted_timesheet_ids', '[]'::jsonb);
     v_linked_json := COALESCE(v_classifier_result->'linked_timesheet_ids', v_payload_json->'linked_timesheet_ids', '[]'::jsonb);
@@ -202040,6 +202284,73 @@ BEGIN
     IF v_cursor_phase IN ('WRITE_COMPATIBLE_OUTPUTS', 'VERIFY_PARITY_OR_SHADOW', 'UPDATE_CANDIDATE_STATE', 'FINALISE') THEN
       v_phase := v_cursor_phase;
     END IF;
+  END IF;
+
+  v_classifier_delta_shadow_mode := lower(BTRIM(COALESCE(
+    NULLIF(v_classifier_result#>>'{complexity_flags,delta_shadow_mode}', ''),
+    NULLIF(v_stored_classifier_result#>>'{complexity_flags,delta_shadow_mode}', ''),
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_classifier_payload_shadow_mode := lower(BTRIM(COALESCE(
+    NULLIF(v_classifier_result#>>'{complexity_flags,payload_shadow_mode}', ''),
+    NULLIF(v_stored_classifier_result#>>'{complexity_flags,payload_shadow_mode}', ''),
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_classifier_shadow_compare_required := lower(BTRIM(COALESCE(
+    NULLIF(v_classifier_result->>'shadow_compare_required', ''),
+    NULLIF(v_stored_classifier_result->>'shadow_compare_required', ''),
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_classifier_shadow_compare_enforced := lower(BTRIM(COALESCE(
+    NULLIF(v_classifier_result->>'shadow_compare_enforced', ''),
+    NULLIF(v_stored_classifier_result->>'shadow_compare_enforced', ''),
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  v_shadow_compare_required := COALESCE(v_shadow_compare_required, false)
+    OR COALESCE(v_classifier_delta_shadow_mode, false)
+    OR COALESCE(v_classifier_payload_shadow_mode, false)
+    OR COALESCE(v_classifier_shadow_compare_required, false);
+  v_shadow_compare_enforced := COALESCE(v_shadow_compare_required, false)
+    AND (COALESCE(v_shadow_compare_enforced, false) OR COALESCE(v_classifier_shadow_compare_enforced, false));
+
+  IF v_projection_mode = 'DELTA'
+     AND v_projection_class = 'NORMAL_TIMESHEET'
+     AND COALESCE(v_settings_delta_shadow_mode, false) IS NOT TRUE
+     AND COALESCE(v_classifier_delta_shadow_mode, false) IS NOT TRUE
+     AND COALESCE(v_classifier_payload_shadow_mode, false) IS NOT TRUE
+     AND COALESCE(v_classifier_shadow_compare_required, false) IS NOT TRUE
+     AND COALESCE(v_payload_shadow_mode, false) IS NOT TRUE
+     AND COALESCE(v_payload_shadow_compare_required, false) IS NOT TRUE THEN
+    v_shadow_compare_required := false;
+    v_shadow_compare_enforced := false;
+    v_shadow_compare_status := 'NOT_REQUIRED';
+    v_shadow_flags_reconciled_to_not_required := true;
+
+    IF v_projection_run_id IS NOT NULL THEN
+      UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
+      SET shadow_compare_required = false,
+          shadow_compare_enforced = false,
+          shadow_compare_status = 'NOT_REQUIRED',
+          legacy_compare_status = 'NOT_REQUIRED',
+          legacy_compare_json = jsonb_build_object(
+            'compare_status', 'NOT_REQUIRED',
+            'shadow_compare_not_required', true,
+            'shadow_flags_reconciled_to_current_settings', true
+          ),
+          diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'shadow_flags_reconciled_to_not_required', true,
+              'settings_delta_shadow_mode', COALESCE(v_settings_delta_shadow_mode, false),
+              'classifier_delta_shadow_mode', COALESCE(v_classifier_delta_shadow_mode, false),
+              'classifier_payload_shadow_mode', COALESCE(v_classifier_payload_shadow_mode, false),
+              'payload_shadow_mode', COALESCE(v_payload_shadow_mode, false)
+            ),
+          updated_at_utc = v_now
+      WHERE projection_run_update.id = v_projection_run_id;
+    END IF;
+  ELSIF v_shadow_compare_enforced IS TRUE AND v_shadow_compare_required IS NOT TRUE THEN
+    v_shadow_compare_required := true;
   END IF;
 
   IF jsonb_typeof(v_targeted_json) = 'array' THEN
@@ -203116,6 +203427,11 @@ BEGIN
       SET shadow_compare_required = false,
           shadow_compare_enforced = false,
           shadow_compare_status = 'NOT_REQUIRED',
+          legacy_compare_status = 'NOT_REQUIRED',
+          legacy_compare_json = jsonb_build_object(
+            'compare_status', 'NOT_REQUIRED',
+            'shadow_compare_not_required', true
+          ),
           phase = 'UPDATE_CANDIDATE_STATE',
           cursor_json = jsonb_build_object('phase', 'UPDATE_CANDIDATE_STATE', 'cursor', '{}'::jsonb),
           updated_at_utc = v_now
@@ -203602,7 +203918,7 @@ BEGIN
       );
     END IF;
 
-    IF (v_shadow_compare_required OR v_shadow_compare_enforced)
+    IF COALESCE(v_shadow_compare_enforced, false) IS TRUE
        AND COALESCE(v_shadow_compare_status, '') NOT IN ('MATCH', 'NOT_REQUIRED') THEN
       v_fallback_reason := 'DELTA_SHADOW_COMPARE_NOT_PASSED_AT_FINALISE';
 
@@ -203885,7 +204201,14 @@ BEGIN
         fallback_required = false,
         fallback_reason = NULL::text,
         candidate_state_updated = true,
+        shadow_compare_required = COALESCE(v_shadow_compare_required, false),
+        shadow_compare_enforced = COALESCE(v_shadow_compare_enforced, false),
         shadow_compare_status = COALESCE(NULLIF(v_shadow_compare_status, ''), 'NOT_REQUIRED'),
+        legacy_compare_status = CASE
+          WHEN COALESCE(v_shadow_compare_required, false) OR COALESCE(v_shadow_compare_enforced, false)
+            THEN projection_run_update.legacy_compare_status
+          ELSE 'NOT_REQUIRED'
+        END,
         diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
           || jsonb_build_object(
             'finalise_candidate_state_updated', true,
@@ -203914,6 +204237,8 @@ BEGIN
       'made_progress', true,
       'delta_refresh_complete', true,
       'candidate_state_updated', true,
+      'shadow_compare_required', COALESCE(v_shadow_compare_required, false),
+      'shadow_compare_enforced', COALESCE(v_shadow_compare_enforced, false),
       'shadow_compare_status', COALESCE(NULLIF(v_shadow_compare_status, ''), 'NOT_REQUIRED'),
       'source_rows_written', COALESCE(v_written_source_count, 0),
       'line_rows_written', COALESCE(v_written_line_work_count, 0),
@@ -203942,6 +204267,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public._pay_workbench_dirty_payload_merge(p_existing jsonb, p_incoming jsonb)
