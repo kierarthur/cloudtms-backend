@@ -200986,6 +200986,8 @@ DECLARE
   v_selected_cleared_count integer := 0;
   v_affected_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_targeted_cleanup_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_current_source_change_seq bigint := 0;
+  v_current_session_version bigint := NULL::bigint;
   v_affected_key_count integer := 0;
   v_write_phase text := 'SUPERSEDE_PREVIEW';
   v_write_cursor_json jsonb := '{}'::jsonb;
@@ -201232,6 +201234,24 @@ BEGIN
     AND projection_rows.candidate_id = p_candidate_id
     AND projection_rows.timesheet_id IS NOT NULL;
 
+  SELECT COALESCE(MAX(projection_rows.source_change_seq), 0)::bigint,
+         COALESCE(MAX(projection_rows.session_version), NULL)::bigint
+  INTO v_current_source_change_seq,
+       v_current_session_version
+  FROM pg_temp._bpay_delta_projection_rows AS projection_rows
+  WHERE projection_rows.projection_run_id = p_projection_run_id
+    AND projection_rows.session_id = p_session_id
+    AND projection_rows.candidate_id = p_candidate_id;
+
+  SELECT COALESCE(array_agg(DISTINCT affected_scope.timesheet_id ORDER BY affected_scope.timesheet_id), ARRAY[]::uuid[])
+  INTO v_affected_timesheet_ids
+  FROM (
+    SELECT unnest(COALESCE(v_affected_timesheet_ids, ARRAY[]::uuid[])) AS timesheet_id
+    UNION ALL
+    SELECT unnest(COALESCE(v_targeted_cleanup_timesheet_ids, ARRAY[]::uuid[])) AS timesheet_id
+  ) AS affected_scope
+  WHERE affected_scope.timesheet_id IS NOT NULL;
+
   SELECT COUNT(*)::integer
   INTO v_affected_key_count
   FROM (
@@ -201251,6 +201271,7 @@ BEGIN
   FROM public.banking_pay_workbench_preview_rows AS preview_row
   WHERE preview_row.session_id = p_session_id
     AND preview_row.candidate_id = p_candidate_id
+    AND (v_current_session_version IS NULL OR preview_row.session_version IS NOT DISTINCT FROM v_current_session_version)
     AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
     AND (
       preview_row.timesheet_id = ANY(COALESCE(v_affected_timesheet_ids, ARRAY[]::uuid[]))
@@ -201275,14 +201296,18 @@ BEGIN
         COALESCE(preview_update.row_json, '{}'::jsonb)
         || jsonb_build_object(
           'superseded_by_projection_run_id', p_projection_run_id::text,
+          'superseded_by_source_change_seq', NULLIF(v_current_source_change_seq, 0),
+          'superseded_by_session_version', v_current_session_version,
           'superseded_reason', 'DELTA_REPROJECTED_AFFECTED_SCOPE',
-          'superseded_at_utc', v_now::text
+          'superseded_at_utc', v_now::text,
+          'policy_x_boundary', 'PRE_DRAFT_WORKBENCH_ONLY_NO_ECONOMIC_CHANGE'
         )
       ),
       updated_at_utc = v_now
   WHERE preview_update.session_id = p_session_id
     AND preview_update.candidate_id = p_candidate_id
-    AND UPPER(BTRIM(COALESCE(preview_update.status, ''))) = 'READY'
+    AND (v_current_session_version IS NULL OR preview_update.session_version IS NOT DISTINCT FROM v_current_session_version)
+    AND UPPER(BTRIM(COALESCE(preview_update.status, ''))) IN ('READY', 'DIRTY', 'DELTA_PENDING')
     AND (
       preview_update.timesheet_id = ANY(COALESCE(v_affected_timesheet_ids, ARRAY[]::uuid[]))
       OR EXISTS (
@@ -201341,15 +201366,20 @@ BEGIN
         COALESCE(source_update.source_row_json, '{}'::jsonb)
         || jsonb_build_object(
           'superseded_by_projection_run_id', p_projection_run_id::text,
+          'superseded_by_source_change_seq', NULLIF(v_current_source_change_seq, 0),
+          'superseded_by_session_version', v_current_session_version,
           'superseded_reason', 'DELTA_REPROJECTED_AFFECTED_SCOPE',
-          'superseded_at_utc', v_now::text
+          'superseded_at_utc', v_now::text,
+          'policy_x_boundary', 'PRE_DRAFT_WORKBENCH_ONLY_NO_ECONOMIC_CHANGE'
         )
       ),
       updated_at_utc = v_now
   WHERE source_update.session_id = p_session_id
     AND source_update.candidate_id = p_candidate_id
-    AND source_update.status = 'CURRENT'
+    AND (v_current_session_version IS NULL OR source_update.session_version IS NOT DISTINCT FROM v_current_session_version)
+    AND UPPER(BTRIM(COALESCE(source_update.status, ''))) IN ('CURRENT', 'DIRTY')
     AND source_update.timesheet_id = ANY(COALESCE(v_affected_timesheet_ids, ARRAY[]::uuid[]))
+    AND COALESCE(source_update.source_change_seq, 0) <= COALESCE(NULLIF(v_current_source_change_seq, 0), COALESCE(source_update.source_change_seq, 0))
     AND source_update.source_build_run_id IS DISTINCT FROM p_projection_run_id;
 
   GET DIAGNOSTICS v_source_rows_superseded = ROW_COUNT;
@@ -201905,7 +201935,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_delta_refresh_chunk(p_session_id uuid, p_candidate_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 25)
  RETURNS jsonb
@@ -204413,8 +204442,14 @@ BEGIN
       AND scope_row_update.candidate_id = p_candidate_id;
 
     UPDATE public.banking_pay_workbench_sessions AS session_update
-    SET scope_seeded_count = GREATEST(COALESCE(session_update.scope_seeded_count, 0) + COALESCE(v_scope_seeded_delta, 0), 0),
-        scope_ready_count = GREATEST(COALESCE(session_update.scope_ready_count, 0) + COALESCE(v_scope_ready_delta, 0), 0),
+    SET scope_seeded_count = LEAST(
+          GREATEST(COALESCE(session_update.scope_total_count, 0), 0),
+          GREATEST(COALESCE(session_update.scope_seeded_count, 0) + COALESCE(v_scope_seeded_delta, 0), 0)
+        ),
+        scope_ready_count = LEAST(
+          GREATEST(COALESCE(session_update.scope_total_count, 0), 0),
+          GREATEST(COALESCE(session_update.scope_ready_count, 0) + COALESCE(v_scope_ready_delta, 0), 0)
+        ),
         scope_pending_count = GREATEST(COALESCE(session_update.scope_pending_count, 0) + COALESCE(v_scope_pending_delta, 0), 0),
         scope_failed_count = GREATEST(COALESCE(session_update.scope_failed_count, 0) + COALESCE(v_scope_failed_delta, 0), 0),
         line_units_total = GREATEST(COALESCE(session_update.line_units_total, 0) + COALESCE(v_line_units_total_delta, 0), 0),

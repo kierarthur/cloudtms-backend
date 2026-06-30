@@ -983,6 +983,7 @@ async function loadSettingsDefaults(env) {
         _stageValue(fallbackSource, snakeKey, camelKey),
         fallbackValue
       ), fallbackValue, 1, 100);
+      const deltaRefresh = resolve('delta_refresh', 'deltaRefresh', resolve('delta', 'delta', generic));
       return {
         scope_seed: resolve('scope_seed', 'scopeSeed'),
         source_build: resolve('source_build', 'sourceBuild'),
@@ -990,30 +991,35 @@ async function loadSettingsDefaults(env) {
         line_process: resolve('line_process', 'lineProcess'),
         preview_materialise: resolve('preview_materialise', 'previewMaterialise', resolve('preview_mat', 'previewMat')),
         preview_mat: resolve('preview_mat', 'previewMat', generic),
+        delta_refresh: deltaRefresh,
+        deltaRefresh,
         generic
       };
     };
     const bpwStageLimitsFromColumns = {
       stage_work_units_per_job: row.banking_pay_workbench_stage_work_units_per_job,
-      scope_seed: _firstConfiguredValue(row.banking_pay_workbench_scope_seed_units_per_job, row.banking_pay_workbench_scope_seed_stage_work_units_per_job),
-      source_build: _firstConfiguredValue(row.banking_pay_workbench_source_build_units_per_job, row.banking_pay_workbench_source_build_stage_work_units_per_job),
-      line_seed: _firstConfiguredValue(row.banking_pay_workbench_line_seed_units_per_job, row.banking_pay_workbench_line_seed_stage_work_units_per_job),
-      line_process: _firstConfiguredValue(row.banking_pay_workbench_line_process_units_per_job, row.banking_pay_workbench_line_process_stage_work_units_per_job),
-      preview_materialise: _firstConfiguredValue(row.banking_pay_workbench_preview_materialise_units_per_job, row.banking_pay_workbench_preview_materialize_units_per_job, row.banking_pay_workbench_preview_mat_units_per_job)
+      scope_seed: _firstConfiguredValue(row.banking_pay_workbench_scope_seed_units_per_job),
+      source_build: _firstConfiguredValue(row.banking_pay_workbench_source_build_units_per_job),
+      line_seed: _firstConfiguredValue(row.banking_pay_workbench_line_seed_units_per_job),
+      line_process: _firstConfiguredValue(row.banking_pay_workbench_line_process_units_per_job),
+      preview_materialise: _firstConfiguredValue(row.banking_pay_workbench_preview_mat_units_per_job),
+      delta_refresh: row.banking_pay_workbench_delta_units_per_job
     };
     const bpwCronStageLimitsFromColumns = {
-      scope_seed: _firstConfiguredValue(row.banking_pay_workbench_cron_scope_seed_units_per_job, row.banking_pay_workbench_cron_scope_seed_stage_work_units_per_job),
-      source_build: _firstConfiguredValue(row.banking_pay_workbench_cron_source_build_units_per_job, row.banking_pay_workbench_cron_source_build_stage_work_units_per_job),
-      line_seed: _firstConfiguredValue(row.banking_pay_workbench_cron_line_seed_units_per_job, row.banking_pay_workbench_cron_line_seed_stage_work_units_per_job),
-      line_process: _firstConfiguredValue(row.banking_pay_workbench_cron_line_process_units_per_job, row.banking_pay_workbench_cron_line_process_stage_work_units_per_job),
-      preview_materialise: _firstConfiguredValue(row.banking_pay_workbench_cron_preview_materialise_units_per_job, row.banking_pay_workbench_cron_preview_materialize_units_per_job, row.banking_pay_workbench_cron_preview_mat_units_per_job)
+      scope_seed: _firstConfiguredValue(row.banking_pay_workbench_cron_scope_seed_units_per_job),
+      source_build: _firstConfiguredValue(row.banking_pay_workbench_cron_source_build_units_per_job),
+      line_seed: _firstConfiguredValue(row.banking_pay_workbench_cron_line_seed_units_per_job),
+      line_process: _firstConfiguredValue(row.banking_pay_workbench_cron_line_process_units_per_job),
+      preview_materialise: _firstConfiguredValue(row.banking_pay_workbench_cron_preview_mat_units_per_job),
+      delta_refresh: row.banking_pay_workbench_cron_delta_units_per_job
     };
     const bpwNudgeStageLimitsFromColumns = {
-      scope_seed: _firstConfiguredValue(row.banking_pay_workbench_nudge_scope_seed_units_per_job, row.banking_pay_workbench_nudge_scope_seed_stage_work_units_per_job),
-      source_build: _firstConfiguredValue(row.banking_pay_workbench_nudge_source_build_units_per_job, row.banking_pay_workbench_nudge_source_build_stage_work_units_per_job),
-      line_seed: _firstConfiguredValue(row.banking_pay_workbench_nudge_line_seed_units_per_job, row.banking_pay_workbench_nudge_line_seed_stage_work_units_per_job),
-      line_process: _firstConfiguredValue(row.banking_pay_workbench_nudge_line_process_units_per_job, row.banking_pay_workbench_nudge_line_process_stage_work_units_per_job),
-      preview_materialise: _firstConfiguredValue(row.banking_pay_workbench_nudge_preview_materialise_units_per_job, row.banking_pay_workbench_nudge_preview_materialize_units_per_job, row.banking_pay_workbench_nudge_preview_mat_units_per_job)
+      scope_seed: _firstConfiguredValue(row.banking_pay_workbench_nudge_scope_seed_units_per_job),
+      source_build: _firstConfiguredValue(row.banking_pay_workbench_nudge_source_build_units_per_job),
+      line_seed: _firstConfiguredValue(row.banking_pay_workbench_nudge_line_seed_units_per_job),
+      line_process: _firstConfiguredValue(row.banking_pay_workbench_nudge_line_process_units_per_job),
+      preview_materialise: _firstConfiguredValue(row.banking_pay_workbench_nudge_preview_mat_units_per_job),
+      delta_refresh: row.banking_pay_workbench_nudge_delta_units_per_job
     };
     const bpwStageLimits = _buildStageLimits(
       { ...bpwStageLimitsFromColumns, ...bpwStageLimitsCfg },
@@ -1040,6 +1046,22 @@ async function loadSettingsDefaults(env) {
       bpwJobRetryBaseSeconds,
       _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_job_retry_max_seconds, bpwDrainCfg.job_retry_max_seconds, bpwDrainCfg.jobRetryMaxSeconds), 900, 5, 86400)
     );
+    const bpwDeltaRefreshEnabled = _asBool(_firstConfiguredValue(row.banking_pay_workbench_delta_refresh_enabled, bpwCfg0.delta_refresh_enabled, bpwCfg0.deltaRefreshEnabled), false);
+    const bpwDeltaShadowMode = _asBool(_firstConfiguredValue(row.banking_pay_workbench_delta_shadow_mode, bpwCfg0.delta_shadow_mode, bpwCfg0.deltaShadowMode), true);
+    const bpwDeltaEnableNormalTimesheet = _asBool(_firstConfiguredValue(row.banking_pay_workbench_delta_enable_normal_timesheet, bpwCfg0.delta_enable_normal_timesheet, bpwCfg0.deltaEnableNormalTimesheet), false);
+    const bpwDeltaEnableReadinessOnly = _asBool(_firstConfiguredValue(row.banking_pay_workbench_delta_enable_readiness_only, bpwCfg0.delta_enable_readiness_only, bpwCfg0.deltaEnableReadinessOnly), false);
+    const bpwDeltaEnableReservationOnly = _asBool(_firstConfiguredValue(row.banking_pay_workbench_delta_enable_reservation_only, bpwCfg0.delta_enable_reservation_only, bpwCfg0.deltaEnableReservationOnly), false);
+    const bpwDeltaFallbackOnMismatch = _asBool(_firstConfiguredValue(row.banking_pay_workbench_delta_fallback_on_mismatch, bpwCfg0.delta_fallback_on_mismatch, bpwCfg0.deltaFallbackOnMismatch), true);
+    const bpwDeltaUnitsPerJob = _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_delta_units_per_job, bpwDrainCfg.delta_refresh_units_per_job, bpwDrainCfg.deltaRefreshUnitsPerJob, bpwCfg0.delta_refresh_units_per_job, bpwCfg0.deltaRefreshUnitsPerJob, bpwStageLimits.delta_refresh), 25, 1, 100);
+    const bpwNudgeDeltaUnitsPerJob = _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_delta_units_per_job, bpwNudgeCfg.delta_units_per_job, bpwNudgeCfg.deltaUnitsPerJob, bpwNudgeStageLimits.delta_refresh, bpwDeltaUnitsPerJob), bpwDeltaUnitsPerJob, 1, 100);
+    const bpwCronDeltaUnitsPerJob = _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_cron_delta_units_per_job, bpwCronCfg.delta_units_per_job, bpwCronCfg.deltaUnitsPerJob, bpwCronStageLimits.delta_refresh, Math.max(50, bpwDeltaUnitsPerJob)), Math.max(50, bpwDeltaUnitsPerJob), 1, 100);
+    const bpwDeltaBudgetMs = _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_delta_budget_ms, bpwDrainCfg.delta_refresh_budget_ms, bpwDrainCfg.deltaRefreshBudgetMs, bpwCfg0.delta_refresh_budget_ms, bpwCfg0.deltaRefreshBudgetMs), 3000, 250, 30000);
+    bpwStageLimits.delta_refresh = bpwDeltaUnitsPerJob;
+    bpwStageLimits.deltaRefresh = bpwDeltaUnitsPerJob;
+    bpwCronStageLimits.delta_refresh = bpwCronDeltaUnitsPerJob;
+    bpwCronStageLimits.deltaRefresh = bpwCronDeltaUnitsPerJob;
+    bpwNudgeStageLimits.delta_refresh = bpwNudgeDeltaUnitsPerJob;
+    bpwNudgeStageLimits.deltaRefresh = bpwNudgeDeltaUnitsPerJob;
     const settingsDefaultsUpdatedAt = row.updated_at || null;
     const bankingPayWorkbenchEffective = {
       cron: {
@@ -1058,7 +1080,9 @@ async function loadSettingsDefaults(env) {
         source_build_units_per_job: bpwCronStageLimits.source_build,
         line_seed_units_per_job: bpwCronStageLimits.line_seed,
         line_process_units_per_job: bpwCronStageLimits.line_process,
-        preview_materialise_units_per_job: bpwCronStageLimits.preview_materialise
+        preview_materialise_units_per_job: bpwCronStageLimits.preview_materialise,
+        delta_units_per_job: bpwCronDeltaUnitsPerJob,
+        delta_refresh_units_per_job: bpwCronDeltaUnitsPerJob
       },
       nudge: {
         enabled: _asBool(_firstConfiguredValue(row.banking_pay_workbench_nudge_enabled, bpwNudgeCfg.enabled), true),
@@ -1076,7 +1100,9 @@ async function loadSettingsDefaults(env) {
         source_build_units_per_job: bpwNudgeStageLimits.source_build,
         line_seed_units_per_job: bpwNudgeStageLimits.line_seed,
         line_process_units_per_job: bpwNudgeStageLimits.line_process,
-        preview_materialise_units_per_job: bpwNudgeStageLimits.preview_materialise
+        preview_materialise_units_per_job: bpwNudgeStageLimits.preview_materialise,
+        delta_units_per_job: bpwNudgeDeltaUnitsPerJob,
+        delta_refresh_units_per_job: bpwNudgeDeltaUnitsPerJob
       },
       drain: {
         claim_limit_max: _asBoundedInt(_firstConfiguredValue(bpwDrainCfg.claim_limit_max, bpwDrainCfg.claimLimitMax), 100, 1, 100),
@@ -1092,6 +1118,10 @@ async function loadSettingsDefaults(env) {
         line_seed_units_per_job: bpwStageLimits.line_seed,
         line_process_units_per_job: bpwStageLimits.line_process,
         preview_materialise_units_per_job: bpwStageLimits.preview_materialise,
+        delta_refresh_units_per_job: bpwDeltaUnitsPerJob,
+        deltaRefreshUnitsPerJob: bpwDeltaUnitsPerJob,
+        delta_refresh_budget_ms: bpwDeltaBudgetMs,
+        deltaRefreshBudgetMs: bpwDeltaBudgetMs,
         db_worker_lease_seconds: _asNullableBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_db_worker_lease_seconds, bpwDrainCfg.db_worker_lease_seconds, bpwDrainCfg.dbWorkerLeaseSeconds), 25, 3600),
         db_worker_max_runtime_ms: bpwDbWorkerMaxRuntimeMs,
         db_worker_min_phase_budget_ms: bpwDbWorkerMinPhaseBudgetMs,
@@ -1104,13 +1134,43 @@ async function loadSettingsDefaults(env) {
       auto_continuation: {
         max_bursts: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_auto_continuation_max_bursts, bpwAutoContinuationCfg.max_bursts, bpwAutoContinuationCfg.maxBursts), 3, 0, 8),
         max_runtime_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_auto_continuation_max_runtime_ms, bpwAutoContinuationCfg.max_runtime_ms, bpwAutoContinuationCfg.maxRuntimeMs), 28000, 5000, 60000),
-        per_burst_max_runtime_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_auto_continuation_per_burst_max_runtime_ms, row.banking_pay_workbench_auto_continuation_per_burst_max_runtime_m, bpwAutoContinuationCfg.per_burst_max_runtime_ms, bpwAutoContinuationCfg.perBurstMaxRuntimeMs), 10000, 1000, 15000),
+        per_burst_max_runtime_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_auto_continuation_per_burst_max_runtime_m, bpwAutoContinuationCfg.per_burst_max_runtime_ms, bpwAutoContinuationCfg.perBurstMaxRuntimeMs), 10000, 1000, 15000),
         min_runtime_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_auto_continuation_min_runtime_ms, bpwAutoContinuationCfg.min_runtime_ms, bpwAutoContinuationCfg.minRuntimeMs), 7000, 1000, 15000),
         max_passes: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_auto_continuation_max_passes, bpwAutoContinuationCfg.max_passes, bpwAutoContinuationCfg.maxPasses), 1, 1, 2),
         claim_limit_max: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_auto_continuation_claim_limit_max, bpwAutoContinuationCfg.claim_limit_max, bpwAutoContinuationCfg.claimLimitMax), 10, 1, 50),
         max_jobs: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_auto_continuation_max_jobs, bpwAutoContinuationCfg.max_jobs, bpwAutoContinuationCfg.maxJobs), 50, 1, 150),
         max_rows: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_auto_continuation_max_rows, bpwAutoContinuationCfg.max_rows, bpwAutoContinuationCfg.maxRows), 500, 1, 5000)
       },
+      delta_refresh_enabled: bpwDeltaRefreshEnabled,
+      deltaRefreshEnabled: bpwDeltaRefreshEnabled,
+      banking_pay_workbench_delta_refresh_enabled: bpwDeltaRefreshEnabled,
+      delta_shadow_mode: bpwDeltaShadowMode,
+      deltaShadowMode: bpwDeltaShadowMode,
+      banking_pay_workbench_delta_shadow_mode: bpwDeltaShadowMode,
+      delta_enable_normal_timesheet: bpwDeltaEnableNormalTimesheet,
+      deltaEnableNormalTimesheet: bpwDeltaEnableNormalTimesheet,
+      banking_pay_workbench_delta_enable_normal_timesheet: bpwDeltaEnableNormalTimesheet,
+      delta_enable_readiness_only: bpwDeltaEnableReadinessOnly,
+      deltaEnableReadinessOnly: bpwDeltaEnableReadinessOnly,
+      banking_pay_workbench_delta_enable_readiness_only: bpwDeltaEnableReadinessOnly,
+      delta_enable_reservation_only: bpwDeltaEnableReservationOnly,
+      deltaEnableReservationOnly: bpwDeltaEnableReservationOnly,
+      banking_pay_workbench_delta_enable_reservation_only: bpwDeltaEnableReservationOnly,
+      delta_fallback_on_mismatch: bpwDeltaFallbackOnMismatch,
+      deltaFallbackOnMismatch: bpwDeltaFallbackOnMismatch,
+      banking_pay_workbench_delta_fallback_on_mismatch: bpwDeltaFallbackOnMismatch,
+      delta_refresh_units_per_job: bpwDeltaUnitsPerJob,
+      deltaRefreshUnitsPerJob: bpwDeltaUnitsPerJob,
+      banking_pay_workbench_delta_units_per_job: bpwDeltaUnitsPerJob,
+      nudge_delta_units_per_job: bpwNudgeDeltaUnitsPerJob,
+      nudgeDeltaUnitsPerJob: bpwNudgeDeltaUnitsPerJob,
+      banking_pay_workbench_nudge_delta_units_per_job: bpwNudgeDeltaUnitsPerJob,
+      cron_delta_units_per_job: bpwCronDeltaUnitsPerJob,
+      cronDeltaUnitsPerJob: bpwCronDeltaUnitsPerJob,
+      banking_pay_workbench_cron_delta_units_per_job: bpwCronDeltaUnitsPerJob,
+      delta_refresh_budget_ms: bpwDeltaBudgetMs,
+      deltaRefreshBudgetMs: bpwDeltaBudgetMs,
+      banking_pay_workbench_delta_budget_ms: bpwDeltaBudgetMs,
       stage_limits: bpwStageLimits,
       cron_stage_limits: bpwCronStageLimits,
       nudge_stage_limits: bpwNudgeStageLimits,
@@ -1118,7 +1178,7 @@ async function loadSettingsDefaults(env) {
         enabled: _asBool(_firstConfiguredValue(row.banking_pay_workbench_rollover_enabled, bpwRolloverCfg.enabled), true),
         max_sessions_per_tick: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_rollover_max_sessions_per_tick, bpwRolloverCfg.max_sessions_per_tick, bpwRolloverCfg.maxSessionsPerTick), 5, 1, 50),
         nudge_after_create: _asBool(_firstConfiguredValue(row.banking_pay_workbench_rollover_nudge_after_create, bpwRolloverCfg.nudge_after_create, bpwRolloverCfg.nudgeAfterCreate), true),
-        scan_limit: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_rollover_scan_limit, bpwRolloverCfg.scan_limit, bpwRolloverCfg.scanLimit), 25, 1, 250)
+        scan_limit: _asBoundedInt(_firstConfiguredValue(bpwRolloverCfg.scan_limit, bpwRolloverCfg.scanLimit), 25, 1, 250)
       },
       settings_source: 'settings_defaults:id=1',
       settings_defaults_updated_at: settingsDefaultsUpdatedAt,
@@ -1132,6 +1192,16 @@ async function loadSettingsDefaults(env) {
       stage_limits: bankingPayWorkbenchEffective.stage_limits,
       cron_stage_limits: bankingPayWorkbenchEffective.cron_stage_limits,
       nudge_stage_limits: bankingPayWorkbenchEffective.nudge_stage_limits,
+      delta_refresh_enabled: bankingPayWorkbenchEffective.delta_refresh_enabled,
+      delta_enable_normal_timesheet: bankingPayWorkbenchEffective.delta_enable_normal_timesheet,
+      delta_enable_readiness_only: bankingPayWorkbenchEffective.delta_enable_readiness_only,
+      delta_enable_reservation_only: bankingPayWorkbenchEffective.delta_enable_reservation_only,
+      delta_shadow_mode: bankingPayWorkbenchEffective.delta_shadow_mode,
+      delta_fallback_on_mismatch: bankingPayWorkbenchEffective.delta_fallback_on_mismatch,
+      delta_refresh_units_per_job: bankingPayWorkbenchEffective.delta_refresh_units_per_job,
+      nudge_delta_units_per_job: bankingPayWorkbenchEffective.nudge_delta_units_per_job,
+      cron_delta_units_per_job: bankingPayWorkbenchEffective.cron_delta_units_per_job,
+      delta_refresh_budget_ms: bankingPayWorkbenchEffective.delta_refresh_budget_ms,
       rollover: bankingPayWorkbenchEffective.rollover,
       settings_defaults_updated_at: settingsDefaultsUpdatedAt
     }));
@@ -1200,6 +1270,16 @@ async function loadSettingsDefaults(env) {
       settings_defaults_updated_at: settingsDefaultsUpdatedAt,
       importConfig,
       banking_pay_workbench_effective: bankingPayWorkbenchEffective,
+      banking_pay_workbench_delta_refresh_enabled: bpwDeltaRefreshEnabled,
+      banking_pay_workbench_delta_shadow_mode: bpwDeltaShadowMode,
+      banking_pay_workbench_delta_enable_normal_timesheet: bpwDeltaEnableNormalTimesheet,
+      banking_pay_workbench_delta_enable_readiness_only: bpwDeltaEnableReadinessOnly,
+      banking_pay_workbench_delta_enable_reservation_only: bpwDeltaEnableReservationOnly,
+      banking_pay_workbench_delta_fallback_on_mismatch: bpwDeltaFallbackOnMismatch,
+      banking_pay_workbench_delta_units_per_job: bpwDeltaUnitsPerJob,
+      banking_pay_workbench_nudge_delta_units_per_job: bpwNudgeDeltaUnitsPerJob,
+      banking_pay_workbench_cron_delta_units_per_job: bpwCronDeltaUnitsPerJob,
+      banking_pay_workbench_delta_budget_ms: bpwDeltaBudgetMs,
 
       // ✅ NEW (cached)
       finance_email: financeEmail,
@@ -1320,12 +1400,14 @@ async function loadSettingsDefaults(env) {
             source_build_parallel_bursts: 4,
             source_build_runtime_floor_ms: 15000,
             source_build_lane_claim_limit: 1,
-            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 10,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
-            preview_materialise_units_per_job: 25
+            preview_materialise_units_per_job: 25,
+            delta_units_per_job: 50,
+            delta_refresh_units_per_job: 50
           },
           nudge: {
             enabled: true,
@@ -1338,12 +1420,14 @@ async function loadSettingsDefaults(env) {
             source_build_parallel_bursts: 12,
             source_build_runtime_floor_ms: 60000,
             source_build_lane_claim_limit: 1,
-            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 10,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
-            preview_materialise_units_per_job: 25
+            preview_materialise_units_per_job: 25,
+            delta_units_per_job: 25,
+            delta_refresh_units_per_job: 25
           },
           drain: {
             claim_limit_max: 100,
@@ -1353,12 +1437,16 @@ async function loadSettingsDefaults(env) {
             minimum_rpc_budget_ms: null,
             rpc_safety_buffer_ms: 750,
             stage_work_units_per_job: 25,
-            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 10,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
             preview_materialise_units_per_job: 25,
+            delta_refresh_units_per_job: 25,
+            deltaRefreshUnitsPerJob: 25,
+            delta_refresh_budget_ms: 3000,
+            deltaRefreshBudgetMs: 3000,
             db_worker_lease_seconds: null,
             db_worker_max_runtime_ms: 8000,
             db_worker_min_phase_budget_ms: 2500,
@@ -1378,9 +1466,39 @@ async function loadSettingsDefaults(env) {
             max_jobs: 50,
             max_rows: 500
           },
-          stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
-          cron_stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
-          nudge_stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
+          stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+          cron_stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, generic: 25 },
+          nudge_stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+          delta_refresh_enabled: false,
+          deltaRefreshEnabled: false,
+          banking_pay_workbench_delta_refresh_enabled: false,
+          delta_shadow_mode: false,
+          deltaShadowMode: false,
+          banking_pay_workbench_delta_shadow_mode: false,
+          delta_enable_normal_timesheet: false,
+          deltaEnableNormalTimesheet: false,
+          banking_pay_workbench_delta_enable_normal_timesheet: false,
+          delta_enable_readiness_only: false,
+          deltaEnableReadinessOnly: false,
+          banking_pay_workbench_delta_enable_readiness_only: false,
+          delta_enable_reservation_only: false,
+          deltaEnableReservationOnly: false,
+          banking_pay_workbench_delta_enable_reservation_only: false,
+          delta_fallback_on_mismatch: true,
+          deltaFallbackOnMismatch: true,
+          banking_pay_workbench_delta_fallback_on_mismatch: true,
+          delta_refresh_units_per_job: 25,
+          deltaRefreshUnitsPerJob: 25,
+          banking_pay_workbench_delta_units_per_job: 25,
+          nudge_delta_units_per_job: 25,
+          nudgeDeltaUnitsPerJob: 25,
+          banking_pay_workbench_nudge_delta_units_per_job: 25,
+          cron_delta_units_per_job: 50,
+          cronDeltaUnitsPerJob: 50,
+          banking_pay_workbench_cron_delta_units_per_job: 50,
+          delta_refresh_budget_ms: 3000,
+          deltaRefreshBudgetMs: 3000,
+          banking_pay_workbench_delta_budget_ms: 3000,
           rollover: { enabled: true, max_sessions_per_tick: 5, nudge_after_create: true, scan_limit: 25 },
           settings_source: 'fallback',
           settings_defaults_updated_at: null,
@@ -1399,12 +1517,14 @@ async function loadSettingsDefaults(env) {
             source_build_parallel_bursts: 4,
             source_build_runtime_floor_ms: 15000,
             source_build_lane_claim_limit: 1,
-            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 10,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
-            preview_materialise_units_per_job: 25
+            preview_materialise_units_per_job: 25,
+            delta_units_per_job: 50,
+            delta_refresh_units_per_job: 50
           },
           nudge: {
             enabled: true,
@@ -1417,12 +1537,14 @@ async function loadSettingsDefaults(env) {
             source_build_parallel_bursts: 12,
             source_build_runtime_floor_ms: 60000,
             source_build_lane_claim_limit: 1,
-            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 10,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
-            preview_materialise_units_per_job: 25
+            preview_materialise_units_per_job: 25,
+            delta_units_per_job: 25,
+            delta_refresh_units_per_job: 25
           },
           drain: {
             claim_limit_max: 100,
@@ -1432,12 +1554,16 @@ async function loadSettingsDefaults(env) {
             minimum_rpc_budget_ms: null,
             rpc_safety_buffer_ms: 750,
             stage_work_units_per_job: 25,
-            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 10,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
             preview_materialise_units_per_job: 25,
+            delta_refresh_units_per_job: 25,
+            deltaRefreshUnitsPerJob: 25,
+            delta_refresh_budget_ms: 3000,
+            deltaRefreshBudgetMs: 3000,
             db_worker_lease_seconds: null,
             db_worker_max_runtime_ms: 8000,
             db_worker_min_phase_budget_ms: 2500,
@@ -1457,9 +1583,39 @@ async function loadSettingsDefaults(env) {
             max_jobs: 50,
             max_rows: 500
           },
-          stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
-          cron_stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
-          nudge_stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, generic: 25 },
+          stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+          cron_stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, generic: 25 },
+          nudge_stage_limits: { scope_seed: 25, source_build: 10, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+          delta_refresh_enabled: false,
+          deltaRefreshEnabled: false,
+          banking_pay_workbench_delta_refresh_enabled: false,
+          delta_shadow_mode: false,
+          deltaShadowMode: false,
+          banking_pay_workbench_delta_shadow_mode: false,
+          delta_enable_normal_timesheet: false,
+          deltaEnableNormalTimesheet: false,
+          banking_pay_workbench_delta_enable_normal_timesheet: false,
+          delta_enable_readiness_only: false,
+          deltaEnableReadinessOnly: false,
+          banking_pay_workbench_delta_enable_readiness_only: false,
+          delta_enable_reservation_only: false,
+          deltaEnableReservationOnly: false,
+          banking_pay_workbench_delta_enable_reservation_only: false,
+          delta_fallback_on_mismatch: true,
+          deltaFallbackOnMismatch: true,
+          banking_pay_workbench_delta_fallback_on_mismatch: true,
+          delta_refresh_units_per_job: 25,
+          deltaRefreshUnitsPerJob: 25,
+          banking_pay_workbench_delta_units_per_job: 25,
+          nudge_delta_units_per_job: 25,
+          nudgeDeltaUnitsPerJob: 25,
+          banking_pay_workbench_nudge_delta_units_per_job: 25,
+          cron_delta_units_per_job: 50,
+          cronDeltaUnitsPerJob: 50,
+          banking_pay_workbench_cron_delta_units_per_job: 50,
+          delta_refresh_budget_ms: 3000,
+          deltaRefreshBudgetMs: 3000,
+          banking_pay_workbench_delta_budget_ms: 3000,
           rollover: { enabled: true, max_sessions_per_tick: 5, nudge_after_create: true, scan_limit: 25 },
           settings_source: 'fallback',
           settings_defaults_updated_at: null,
@@ -1524,6 +1680,17 @@ async function loadSettingsDefaults(env) {
         settings_defaults_version: null,
         settings_hash: 'fallback'
       },
+
+      banking_pay_workbench_delta_refresh_enabled: false,
+      banking_pay_workbench_delta_shadow_mode: false,
+      banking_pay_workbench_delta_enable_normal_timesheet: false,
+      banking_pay_workbench_delta_enable_readiness_only: false,
+      banking_pay_workbench_delta_enable_reservation_only: false,
+      banking_pay_workbench_delta_fallback_on_mismatch: true,
+      banking_pay_workbench_delta_units_per_job: 25,
+      banking_pay_workbench_nudge_delta_units_per_job: 25,
+      banking_pay_workbench_cron_delta_units_per_job: 50,
+      banking_pay_workbench_delta_budget_ms: 3000,
 
       // ✅ NEW fallbacks
       finance_email: null,
