@@ -22285,17 +22285,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(
-  p_snapshot_run_id uuid,
-  p_candidate_id uuid,
-  p_reason text DEFAULT NULL::text,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_payload_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -22730,7 +22724,8 @@ BEGIN
       || ':timesheets:' || v_delta_ids_hash;
 
     v_payload_out_json := jsonb_strip_nulls(
-      jsonb_build_object(
+      v_payload_json
+      || jsonb_build_object(
         'job_type', 'WORKBENCH_CANDIDATE_DELTA_REFRESH',
         'canonical_job_type', 'WORKBENCH_CANDIDATE_DELTA_REFRESH',
         'resolved_mode', 'DELTA',
@@ -22769,6 +22764,18 @@ BEGIN
         'fallback_reason', NULL::text,
         'force_legacy', false,
         'force_broad_legacy', false
+      )
+      || jsonb_build_object(
+        'mutation_context', NULLIF(BTRIM(COALESCE(v_payload_json->>'mutation_context', v_payload_json->>'lifecycle_mutation_context', v_payload_json->>'lifecycle_context', '')), ''),
+        'lifecycle_mutation_context', NULLIF(BTRIM(COALESCE(v_payload_json->>'lifecycle_mutation_context', v_payload_json->>'mutation_context', v_payload_json->>'lifecycle_context', '')), ''),
+        'trigger_table', NULLIF(BTRIM(COALESCE(v_payload_json->>'trigger_table', v_payload_json#>>'{trigger,table}', '')), ''),
+        'trigger_operation', NULLIF(BTRIM(COALESCE(v_payload_json->>'trigger_operation', v_payload_json->>'trigger_op', v_payload_json#>>'{trigger,operation}', '')), ''),
+        'trigger_op', NULLIF(BTRIM(COALESCE(v_payload_json->>'trigger_op', v_payload_json->>'trigger_operation', v_payload_json#>>'{trigger,operation}', '')), ''),
+        'authorise_boundary_changed', lower(BTRIM(COALESCE(v_payload_json->>'authorise_boundary_changed', v_classifier_result#>>'{complexity_flags,authorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+        'unauthorise_boundary_changed', lower(BTRIM(COALESCE(v_payload_json->>'unauthorise_boundary_changed', v_classifier_result#>>'{complexity_flags,unauthorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+        'explicit_banking_pay_action', lower(BTRIM(COALESCE(v_payload_json->>'explicit_banking_pay_action', v_classifier_result#>>'{complexity_flags,explicit_banking_pay_action}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+        'banking_pay_dirty_required', lower(BTRIM(COALESCE(v_payload_json->>'banking_pay_dirty_required', v_classifier_result->>'banking_pay_dirty_required', v_classifier_result#>>'{complexity_flags,banking_pay_dirty_required}', 'true'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+        'ordinary_timesheet_edit_save_no_dirty', lower(BTRIM(COALESCE(v_payload_json->>'ordinary_timesheet_edit_save_no_dirty', v_classifier_result#>>'{complexity_flags,ordinary_timesheet_edit_save_no_dirty}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
       )
     );
   ELSE
@@ -23188,6 +23195,8 @@ BEGIN
   ));
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_session_candidate_refresh(
@@ -63977,7 +63986,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public._pay_workbench_merge_targeted_scope_payload(p_existing jsonb, p_incoming jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -64032,6 +64040,17 @@ DECLARE
   v_incoming_shadow_compare_enforced boolean := false;
   v_effective_shadow_compare_required boolean := false;
   v_effective_shadow_compare_enforced boolean := false;
+  v_authorise_boundary_changed boolean := false;
+  v_unauthorise_boundary_changed boolean := false;
+  v_explicit_banking_pay_action boolean := false;
+  v_banking_pay_dirty_required boolean := false;
+  v_ordinary_timesheet_edit_save_no_dirty boolean := false;
+  v_existing_lifecycle_context text := NULL::text;
+  v_incoming_lifecycle_context text := NULL::text;
+  v_effective_lifecycle_context text := NULL::text;
+  v_effective_trigger_table text := NULL::text;
+  v_effective_trigger_op text := NULL::text;
+  v_effective_trigger_operation text := NULL::text;
   v_complex_classes text[] := ARRAY[
     'FINANCE_CASE',
     'PAY_ADVANCE',
@@ -64077,6 +64096,48 @@ BEGIN
   v_incoming_shadow_compare_required := lower(BTRIM(COALESCE(v_incoming->>'shadow_compare_required', v_incoming->>'shadow_compare', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_existing_shadow_compare_enforced := lower(BTRIM(COALESCE(v_existing->>'shadow_compare_enforced', v_existing->>'enforce_shadow_compare', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_incoming_shadow_compare_enforced := lower(BTRIM(COALESCE(v_incoming->>'shadow_compare_enforced', v_incoming->>'enforce_shadow_compare', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  v_authorise_boundary_changed := lower(BTRIM(COALESCE(v_existing->>'authorise_boundary_changed', v_existing->>'timesheet_authorise_boundary_changed', v_existing#>>'{complexity_flags,authorise_boundary_changed}', v_existing#>>'{classifier_result,complexity_flags,authorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR lower(BTRIM(COALESCE(v_incoming->>'authorise_boundary_changed', v_incoming->>'timesheet_authorise_boundary_changed', v_incoming#>>'{complexity_flags,authorise_boundary_changed}', v_incoming#>>'{classifier_result,complexity_flags,authorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_unauthorise_boundary_changed := lower(BTRIM(COALESCE(v_existing->>'unauthorise_boundary_changed', v_existing->>'timesheet_unauthorise_boundary_changed', v_existing#>>'{complexity_flags,unauthorise_boundary_changed}', v_existing#>>'{classifier_result,complexity_flags,unauthorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR lower(BTRIM(COALESCE(v_incoming->>'unauthorise_boundary_changed', v_incoming->>'timesheet_unauthorise_boundary_changed', v_incoming#>>'{complexity_flags,unauthorise_boundary_changed}', v_incoming#>>'{classifier_result,complexity_flags,unauthorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_existing_lifecycle_context := NULLIF(BTRIM(COALESCE(v_existing->>'lifecycle_mutation_context', v_existing->>'mutation_context', v_existing->>'lifecycle_context', '')), '');
+  v_incoming_lifecycle_context := NULLIF(BTRIM(COALESCE(v_incoming->>'lifecycle_mutation_context', v_incoming->>'mutation_context', v_incoming->>'lifecycle_context', '')), '');
+  IF lower(BTRIM(COALESCE(v_existing_lifecycle_context, ''))) IN ('timesheet_authorise', 'authorise_timesheet')
+     OR lower(BTRIM(COALESCE(v_incoming_lifecycle_context, ''))) IN ('timesheet_authorise', 'authorise_timesheet') THEN
+    v_authorise_boundary_changed := true;
+  END IF;
+  IF lower(BTRIM(COALESCE(v_existing_lifecycle_context, ''))) IN ('timesheet_unauthorise', 'unauthorise_timesheet')
+     OR lower(BTRIM(COALESCE(v_incoming_lifecycle_context, ''))) IN ('timesheet_unauthorise', 'unauthorise_timesheet') THEN
+    v_unauthorise_boundary_changed := true;
+  END IF;
+  v_effective_lifecycle_context := CASE
+    WHEN v_unauthorise_boundary_changed THEN 'timesheet_unauthorise'
+    WHEN v_authorise_boundary_changed THEN 'timesheet_authorise'
+    ELSE COALESCE(v_incoming_lifecycle_context, v_existing_lifecycle_context)
+  END;
+  v_explicit_banking_pay_action := lower(BTRIM(COALESCE(v_existing->>'explicit_banking_pay_action', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR lower(BTRIM(COALESCE(v_incoming->>'explicit_banking_pay_action', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR v_authorise_boundary_changed
+    OR v_unauthorise_boundary_changed;
+  v_ordinary_timesheet_edit_save_no_dirty := (
+      lower(BTRIM(COALESCE(v_existing->>'ordinary_timesheet_edit_save_no_dirty', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR lower(BTRIM(COALESCE(v_incoming->>'ordinary_timesheet_edit_save_no_dirty', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    )
+    AND v_explicit_banking_pay_action IS NOT TRUE
+    AND lower(BTRIM(COALESCE(v_existing->>'banking_pay_dirty_required', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND lower(BTRIM(COALESCE(v_incoming->>'banking_pay_dirty_required', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_banking_pay_dirty_required := v_ordinary_timesheet_edit_save_no_dirty IS NOT TRUE;
+  v_effective_trigger_table := CASE
+    WHEN (v_authorise_boundary_changed OR v_unauthorise_boundary_changed)
+         AND lower(BTRIM(COALESCE(v_existing->>'trigger_table', ''))) = 'timesheets' THEN 'timesheets'
+    WHEN (v_authorise_boundary_changed OR v_unauthorise_boundary_changed)
+         AND lower(BTRIM(COALESCE(v_incoming->>'trigger_table', ''))) = 'timesheets' THEN 'timesheets'
+    ELSE NULLIF(BTRIM(COALESCE(v_incoming->>'trigger_table', v_existing->>'trigger_table', '')), '')
+  END;
+  v_effective_trigger_op := NULLIF(BTRIM(COALESCE(v_incoming->>'trigger_op', v_incoming->>'trigger_operation', v_existing->>'trigger_op', v_existing->>'trigger_operation', '')), '');
+  v_effective_trigger_operation := NULLIF(BTRIM(COALESCE(v_incoming->>'trigger_operation', v_incoming->>'trigger_op', v_existing->>'trigger_operation', v_existing->>'trigger_op', '')), '');
+
   v_effective_shadow_compare_enforced := v_existing_shadow_compare_enforced OR v_incoming_shadow_compare_enforced;
   v_effective_shadow_compare_required := v_effective_shadow_compare_enforced OR v_existing_shadow_compare_required OR v_incoming_shadow_compare_required;
 
@@ -64180,6 +64241,7 @@ BEGIN
   v_effective_reason := COALESCE(v_incoming_reason, v_existing_reason);
   v_effective_projection_run_id := COALESCE(v_incoming_projection_run_id, v_existing_projection_run_id);
   v_effective_projection_class := CASE
+    WHEN v_authorise_boundary_changed OR v_unauthorise_boundary_changed THEN 'NORMAL_TIMESHEET'
     WHEN v_incoming_projection_class = 'BROAD_SESSION_REFRESH' OR v_existing_projection_class = 'BROAD_SESSION_REFRESH' OR v_effective_force_broad_legacy THEN 'BROAD_SESSION_REFRESH'
     WHEN v_incoming_projection_class = ANY(v_complex_classes) THEN v_incoming_projection_class
     WHEN v_existing_projection_class = ANY(v_complex_classes) THEN v_existing_projection_class
@@ -64212,7 +64274,17 @@ BEGIN
     )
     || jsonb_build_object(
       'shadow_compare_required', COALESCE(v_effective_shadow_compare_required, false),
-      'shadow_compare_enforced', COALESCE(v_effective_shadow_compare_enforced, false)
+      'shadow_compare_enforced', COALESCE(v_effective_shadow_compare_enforced, false),
+      'trigger_table', v_effective_trigger_table,
+      'trigger_op', v_effective_trigger_op,
+      'trigger_operation', v_effective_trigger_operation,
+      'mutation_context', v_effective_lifecycle_context,
+      'lifecycle_mutation_context', v_effective_lifecycle_context,
+      'authorise_boundary_changed', COALESCE(v_authorise_boundary_changed, false),
+      'unauthorise_boundary_changed', COALESCE(v_unauthorise_boundary_changed, false),
+      'explicit_banking_pay_action', COALESCE(v_explicit_banking_pay_action, false),
+      'banking_pay_dirty_required', COALESCE(v_banking_pay_dirty_required, true),
+      'ordinary_timesheet_edit_save_no_dirty', COALESCE(v_ordinary_timesheet_edit_save_no_dirty, false)
     );
 
   IF v_effective_scope_kind IS NOT NULL THEN
@@ -64270,6 +64342,7 @@ BEGIN
   RETURN jsonb_strip_nulls(v_result);
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clear_all_decisions(p_session_id uuid, p_actor_user_id uuid)
  RETURNS jsonb
@@ -64491,13 +64564,11 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_candidate_dirty()
-RETURNS trigger
-LANGUAGE plpgsql
-VOLATILE
-SECURITY DEFINER
-SET search_path TO 'public'
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_started_at timestamptz := clock_timestamp();
@@ -64517,11 +64588,16 @@ DECLARE
   v_old_payment_eligible boolean := false;
   v_new_payment_eligible boolean := false;
   v_authorise_boundary_changed boolean := false;
+  v_authorise_boundary_is_authorise boolean := false;
+  v_authorise_boundary_is_unauthorise boolean := false;
   v_tsfin_payability_state_changed boolean := false;
   v_lifecycle_context text := NULLIF(BTRIM(COALESCE(current_setting('cloudtms.lifecycle_mutation_context', true), '')), '');
+  v_effective_lifecycle_context text := NULL::text;
   v_lifecycle_dedupe_keys text := '';
   v_lifecycle_dedupe_token text := '';
   v_explicit_banking_pay_action boolean := false;
+  v_banking_pay_dirty_required boolean := false;
+  v_ordinary_timesheet_edit_save_no_dirty boolean := false;
   v_entity_kind_old text := '';
   v_entity_kind_new text := '';
   v_umbrella_id_old uuid := NULL::uuid;
@@ -64646,6 +64722,33 @@ BEGIN
       END IF;
     END IF;
   END IF;
+
+  IF TG_OP = 'UPDATE'
+     AND v_trigger_table IN ('timesheets', 'timesheets_financials')
+     AND v_authorise_boundary_changed IS TRUE THEN
+    IF v_new_payment_eligible IS TRUE AND v_old_payment_eligible IS NOT TRUE THEN
+      v_authorise_boundary_is_authorise := true;
+    ELSIF v_old_payment_eligible IS TRUE AND v_new_payment_eligible IS NOT TRUE THEN
+      v_authorise_boundary_is_unauthorise := true;
+    ELSIF lower(BTRIM(COALESCE(v_lifecycle_context, ''))) IN ('timesheet_authorise', 'authorise_timesheet') THEN
+      v_authorise_boundary_is_authorise := true;
+    ELSIF lower(BTRIM(COALESCE(v_lifecycle_context, ''))) IN ('timesheet_unauthorise', 'unauthorise_timesheet') THEN
+      v_authorise_boundary_is_unauthorise := true;
+    END IF;
+  END IF;
+
+  v_effective_lifecycle_context := CASE
+    WHEN v_authorise_boundary_is_unauthorise IS TRUE THEN 'timesheet_unauthorise'
+    WHEN v_authorise_boundary_is_authorise IS TRUE THEN 'timesheet_authorise'
+    WHEN lower(BTRIM(COALESCE(v_lifecycle_context, ''))) IN ('timesheet_authorise', 'authorise_timesheet') THEN 'timesheet_authorise'
+    WHEN lower(BTRIM(COALESCE(v_lifecycle_context, ''))) IN ('timesheet_unauthorise', 'unauthorise_timesheet') THEN 'timesheet_unauthorise'
+    ELSE v_lifecycle_context
+  END;
+
+  v_banking_pay_dirty_required := v_authorise_boundary_changed IS TRUE OR v_explicit_banking_pay_action IS TRUE;
+  v_ordinary_timesheet_edit_save_no_dirty := TG_OP = 'UPDATE'
+    AND v_trigger_table IN ('timesheets', 'timesheets_financials')
+    AND v_banking_pay_dirty_required IS NOT TRUE;
 
   IF v_old_timesheet_id IS NOT NULL OR v_new_timesheet_id IS NOT NULL THEN
     v_refresh_scope_kind := 'TARGETED_TIMESHEETS';
@@ -64779,6 +64882,13 @@ BEGIN
       'trigger_table', v_trigger_table,
       'trigger_op', TG_OP,
       'trigger_operation', TG_OP,
+      'mutation_context', v_effective_lifecycle_context,
+      'lifecycle_mutation_context', v_effective_lifecycle_context,
+      'authorise_boundary_changed', COALESCE(v_authorise_boundary_is_authorise, false),
+      'unauthorise_boundary_changed', COALESCE(v_authorise_boundary_is_unauthorise, false),
+      'explicit_banking_pay_action', COALESCE(v_explicit_banking_pay_action, false) OR COALESCE(v_authorise_boundary_changed, false),
+      'banking_pay_dirty_required', COALESCE(v_banking_pay_dirty_required, false),
+      'ordinary_timesheet_edit_save_no_dirty', COALESCE(v_ordinary_timesheet_edit_save_no_dirty, false),
       'scope_kind', 'CANDIDATE',
       'scope_id', v_candidate_id::text,
       'candidate_id', v_candidate_id::text,
@@ -64794,7 +64904,11 @@ BEGIN
       'line_work_action', 'SOURCE_BUILD',
       'force_legacy', false,
       'force_broad_legacy', false,
-      'projection_class', 'DIRTY_TRIGGER',
+      'projection_class', CASE
+        WHEN v_trigger_table IN ('timesheets', 'timesheets_financials')
+             AND v_authorise_boundary_changed IS TRUE THEN 'NORMAL_TIMESHEET'
+        ELSE 'DIRTY_TRIGGER'
+      END,
       'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
     );
 
@@ -64840,7 +64954,6 @@ BEGIN
   END IF;
 END;
 $function$;
-
 
 
 
@@ -201297,18 +201410,11 @@ END;
 $function$;
 
 
-
-CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_delta_refresh_chunk(
-  p_session_id uuid,
-  p_candidate_id uuid,
-  p_payload_json jsonb DEFAULT '{}'::jsonb,
-  p_cursor_json jsonb DEFAULT '{}'::jsonb,
-  p_limit integer DEFAULT 25
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_delta_refresh_chunk(p_session_id uuid, p_candidate_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 25)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -201342,6 +201448,9 @@ DECLARE
   v_write_phase text := 'NOT_STARTED';
   v_write_cursor_json jsonb := '{}'::jsonb;
   v_classifier_result jsonb := '{}'::jsonb;
+  v_stored_classifier_result jsonb := '{}'::jsonb;
+  v_effective_classifier_payload_json jsonb := '{}'::jsonb;
+  v_stored_classifier_safe_delta boolean := false;
   v_project_result jsonb := '{}'::jsonb;
   v_write_result jsonb := '{}'::jsonb;
   v_candidate_state_result jsonb := '{}'::jsonb;
@@ -201547,11 +201656,81 @@ BEGIN
   ))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_fallback_allowed := lower(BTRIM(COALESCE(v_payload_json->>'fallback_allowed', 'true'))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
+  v_stored_classifier_result := CASE
+    WHEN jsonb_typeof(COALESCE(v_payload_json->'classifier_result', '{}'::jsonb)) = 'object'
+      THEN COALESCE(v_payload_json->'classifier_result', '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_stored_classifier_safe_delta :=
+    UPPER(BTRIM(COALESCE(v_stored_classifier_result->>'resolved_mode', ''))) = 'DELTA'
+    AND UPPER(BTRIM(COALESCE(v_stored_classifier_result->>'projection_mode', v_stored_classifier_result->>'resolved_mode', ''))) = 'DELTA'
+    AND UPPER(BTRIM(COALESCE(v_stored_classifier_result->>'resolved_job_type', v_stored_classifier_result->>'job_type', ''))) = 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+    AND UPPER(BTRIM(COALESCE(v_stored_classifier_result->>'projection_class', ''))) = 'NORMAL_TIMESHEET'
+    AND lower(BTRIM(COALESCE(v_stored_classifier_result->>'fast_path_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND lower(BTRIM(COALESCE(v_stored_classifier_result->>'fallback_required', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND lower(BTRIM(COALESCE(v_stored_classifier_result->>'no_op', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND lower(BTRIM(COALESCE(v_stored_classifier_result->'complexity_flags'->>'ordinary_timesheet_edit_save_no_dirty', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND lower(BTRIM(COALESCE(v_stored_classifier_result->>'banking_pay_dirty_required', v_stored_classifier_result->'complexity_flags'->>'banking_pay_dirty_required', 'true'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND lower(BTRIM(COALESCE(v_stored_classifier_result->'complexity_flags'->>'force_legacy', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND lower(BTRIM(COALESCE(v_stored_classifier_result->'complexity_flags'->>'force_source_build', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND jsonb_typeof(COALESCE(v_stored_classifier_result->'targeted_timesheet_ids', '[]'::jsonb)) = 'array'
+    AND jsonb_array_length(COALESCE(v_stored_classifier_result->'targeted_timesheet_ids', '[]'::jsonb)) > 0;
+
   IF v_phase = 'INIT_PREFLIGHT' THEN
+    v_effective_classifier_payload_json := v_payload_json;
+
+    IF v_stored_classifier_safe_delta IS TRUE
+       AND lower(BTRIM(COALESCE(v_effective_classifier_payload_json->>'banking_pay_dirty_required', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND lower(BTRIM(COALESCE(v_effective_classifier_payload_json->>'explicit_banking_pay_action', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND NULLIF(BTRIM(COALESCE(v_effective_classifier_payload_json->>'mutation_context', v_effective_classifier_payload_json->>'lifecycle_mutation_context', '')), '') IS NULL THEN
+      v_effective_classifier_payload_json := jsonb_strip_nulls(
+        v_effective_classifier_payload_json
+        || jsonb_build_object(
+          'mutation_context', COALESCE(
+            NULLIF(BTRIM(v_stored_classifier_result->'complexity_flags'->>'mutation_context'), ''),
+            NULLIF(BTRIM(v_stored_classifier_result->'complexity_flags'->>'lifecycle_mutation_context'), ''),
+            'timesheet_unauthorise'
+          ),
+          'lifecycle_mutation_context', COALESCE(
+            NULLIF(BTRIM(v_stored_classifier_result->'complexity_flags'->>'lifecycle_mutation_context'), ''),
+            NULLIF(BTRIM(v_stored_classifier_result->'complexity_flags'->>'mutation_context'), ''),
+            'timesheet_unauthorise'
+          ),
+          'trigger_table', COALESCE(NULLIF(BTRIM(v_stored_classifier_result->'complexity_flags'->>'trigger_table'), ''), 'timesheets'),
+          'trigger_op', COALESCE(NULLIF(BTRIM(v_stored_classifier_result->'complexity_flags'->>'trigger_operation'), ''), 'UPDATE'),
+          'trigger_operation', COALESCE(NULLIF(BTRIM(v_stored_classifier_result->'complexity_flags'->>'trigger_operation'), ''), 'UPDATE'),
+          'authorise_boundary_changed', lower(BTRIM(COALESCE(v_stored_classifier_result->'complexity_flags'->>'authorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+          'unauthorise_boundary_changed', CASE
+            WHEN lower(BTRIM(COALESCE(v_stored_classifier_result->'complexity_flags'->>'unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN true
+            WHEN lower(BTRIM(COALESCE(v_stored_classifier_result->'complexity_flags'->>'authorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN false
+            ELSE true
+          END,
+          'explicit_banking_pay_action', true,
+          'banking_pay_dirty_required', true,
+          'ordinary_timesheet_edit_save_no_dirty', false,
+          'projection_class', 'NORMAL_TIMESHEET',
+          'refresh_scope_kind', COALESCE(NULLIF(BTRIM(v_stored_classifier_result->>'refresh_scope_kind'), ''), 'TARGETED_TIMESHEETS'),
+          'targeted_timesheet_ids', CASE
+            WHEN jsonb_typeof(COALESCE(v_effective_classifier_payload_json->'targeted_timesheet_ids', '[]'::jsonb)) = 'array'
+             AND jsonb_array_length(COALESCE(v_effective_classifier_payload_json->'targeted_timesheet_ids', '[]'::jsonb)) > 0
+              THEN v_effective_classifier_payload_json->'targeted_timesheet_ids'
+            ELSE COALESCE(v_stored_classifier_result->'targeted_timesheet_ids', '[]'::jsonb)
+          END,
+          'linked_timesheet_ids', CASE
+            WHEN jsonb_typeof(COALESCE(v_effective_classifier_payload_json->'linked_timesheet_ids', '[]'::jsonb)) = 'array'
+             AND jsonb_array_length(COALESCE(v_effective_classifier_payload_json->'linked_timesheet_ids', '[]'::jsonb)) > 0
+              THEN v_effective_classifier_payload_json->'linked_timesheet_ids'
+            ELSE COALESCE(v_stored_classifier_result->'linked_timesheet_ids', '[]'::jsonb)
+          END,
+          'stored_classifier_context_rehydrated', true
+        )
+      );
+    END IF;
+
     v_classifier_result := public.pay_workbench_delta_refresh_classify_v1(
       p_session_id,
       p_candidate_id,
-      v_payload_json || jsonb_build_object(
+      v_effective_classifier_payload_json || jsonb_build_object(
         'session_id', p_session_id::text,
         'candidate_id', p_candidate_id::text,
         'projection_run_id', v_projection_run_id::text,
@@ -201559,6 +201738,34 @@ BEGIN
         'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END
       )
     );
+
+    IF v_stored_classifier_safe_delta IS TRUE
+       AND (
+         UPPER(BTRIM(COALESCE(v_classifier_result->>'resolved_mode', 'LEGACY'))) <> 'DELTA'
+         OR COALESCE((v_classifier_result->>'fast_path_allowed')::boolean, false) IS NOT TRUE
+         OR UPPER(BTRIM(COALESCE(v_classifier_result->>'projection_class', 'UNKNOWN'))) <> 'NORMAL_TIMESHEET'
+       ) THEN
+      v_classifier_result := jsonb_strip_nulls(
+        v_stored_classifier_result
+        || jsonb_build_object(
+          'resolved_mode', 'DELTA',
+          'projection_mode', 'DELTA',
+          'resolved_job_type', 'WORKBENCH_CANDIDATE_DELTA_REFRESH',
+          'projection_class', 'NORMAL_TIMESHEET',
+          'fast_path_allowed', true,
+          'delta_refresh_required', true,
+          'source_build_required', false,
+          'fallback_required', false,
+          'fallback_reason', NULL::text,
+          'no_op', false,
+          'blocked', false,
+          'banking_pay_dirty_required', true,
+          'ordinary_timesheet_edit_save_no_dirty', false,
+          'classifier_recovered_from_stored_result', true,
+          'classifier_recovery_reason', 'PRESERVED_NORMAL_TIMESHEET_DELTA_CLASSIFIER_RESULT'
+        )
+      );
+    END IF;
 
     v_projection_mode := upper(BTRIM(COALESCE(v_classifier_result->>'projection_mode', v_payload_json->>'projection_mode', 'DELTA')));
     v_projection_class := upper(BTRIM(COALESCE(v_classifier_result->>'projection_class', v_payload_json->>'projection_class', 'UNKNOWN')));
@@ -203737,13 +203944,10 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public._pay_workbench_dirty_payload_merge(
-  p_existing jsonb,
-  p_incoming jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-IMMUTABLE
+CREATE OR REPLACE FUNCTION public._pay_workbench_dirty_payload_merge(p_existing jsonb, p_incoming jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ IMMUTABLE
 AS $function$
 DECLARE
   v_existing jsonb := COALESCE(p_existing, '{}'::jsonb);
@@ -203760,6 +203964,29 @@ DECLARE
   v_existing_seq bigint := 0;
   v_incoming_seq bigint := 0;
   v_incoming_has_reason_event boolean := false;
+  v_authorise_boundary_changed boolean := false;
+  v_unauthorise_boundary_changed boolean := false;
+  v_existing_authorise_boundary_changed boolean := false;
+  v_incoming_authorise_boundary_changed boolean := false;
+  v_existing_unauthorise_boundary_changed boolean := false;
+  v_incoming_unauthorise_boundary_changed boolean := false;
+  v_explicit_banking_pay_action boolean := false;
+  v_existing_explicit_banking_pay_action boolean := false;
+  v_incoming_explicit_banking_pay_action boolean := false;
+  v_existing_dirty_required boolean := false;
+  v_incoming_dirty_required boolean := false;
+  v_existing_ordinary_no_dirty boolean := false;
+  v_incoming_ordinary_no_dirty boolean := false;
+  v_banking_pay_dirty_required boolean := false;
+  v_ordinary_timesheet_edit_save_no_dirty boolean := false;
+  v_existing_lifecycle_context text := NULL::text;
+  v_incoming_lifecycle_context text := NULL::text;
+  v_effective_lifecycle_context text := NULL::text;
+  v_trigger_table text := NULL::text;
+  v_trigger_op text := NULL::text;
+  v_trigger_operation text := NULL::text;
+  v_projection_class text := NULL::text;
+  v_refresh_scope_kind text := NULL::text;
 BEGIN
   IF jsonb_typeof(v_existing) IS DISTINCT FROM 'object' THEN
     v_existing := '{}'::jsonb;
@@ -203779,6 +204006,60 @@ BEGIN
     COALESCE(CASE WHEN COALESCE(v_incoming->>'source_change_sequence', '') ~ '^\d+$' THEN (v_incoming->>'source_change_sequence')::bigint END, 0)
   );
   v_latest_source_change_seq := GREATEST(v_existing_seq, v_incoming_seq);
+
+  v_existing_authorise_boundary_changed := lower(BTRIM(COALESCE(v_existing->>'authorise_boundary_changed', v_existing->>'timesheet_authorise_boundary_changed', v_existing#>>'{complexity_flags,authorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_incoming_authorise_boundary_changed := lower(BTRIM(COALESCE(v_incoming->>'authorise_boundary_changed', v_incoming->>'timesheet_authorise_boundary_changed', v_incoming#>>'{complexity_flags,authorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_existing_unauthorise_boundary_changed := lower(BTRIM(COALESCE(v_existing->>'unauthorise_boundary_changed', v_existing->>'timesheet_unauthorise_boundary_changed', v_existing#>>'{complexity_flags,unauthorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_incoming_unauthorise_boundary_changed := lower(BTRIM(COALESCE(v_incoming->>'unauthorise_boundary_changed', v_incoming->>'timesheet_unauthorise_boundary_changed', v_incoming#>>'{complexity_flags,unauthorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_authorise_boundary_changed := v_existing_authorise_boundary_changed OR v_incoming_authorise_boundary_changed;
+  v_unauthorise_boundary_changed := v_existing_unauthorise_boundary_changed OR v_incoming_unauthorise_boundary_changed;
+
+  v_existing_lifecycle_context := NULLIF(BTRIM(COALESCE(v_existing->>'lifecycle_mutation_context', v_existing->>'mutation_context', v_existing->>'lifecycle_context', '')), '');
+  v_incoming_lifecycle_context := NULLIF(BTRIM(COALESCE(v_incoming->>'lifecycle_mutation_context', v_incoming->>'mutation_context', v_incoming->>'lifecycle_context', '')), '');
+
+  IF lower(BTRIM(COALESCE(v_existing_lifecycle_context, ''))) IN ('timesheet_authorise', 'authorise_timesheet')
+     OR lower(BTRIM(COALESCE(v_incoming_lifecycle_context, ''))) IN ('timesheet_authorise', 'authorise_timesheet') THEN
+    v_authorise_boundary_changed := true;
+  END IF;
+  IF lower(BTRIM(COALESCE(v_existing_lifecycle_context, ''))) IN ('timesheet_unauthorise', 'unauthorise_timesheet')
+     OR lower(BTRIM(COALESCE(v_incoming_lifecycle_context, ''))) IN ('timesheet_unauthorise', 'unauthorise_timesheet') THEN
+    v_unauthorise_boundary_changed := true;
+  END IF;
+
+  v_effective_lifecycle_context := CASE
+    WHEN v_unauthorise_boundary_changed THEN 'timesheet_unauthorise'
+    WHEN v_authorise_boundary_changed THEN 'timesheet_authorise'
+    ELSE COALESCE(v_incoming_lifecycle_context, v_existing_lifecycle_context)
+  END;
+
+  v_existing_explicit_banking_pay_action := lower(BTRIM(COALESCE(v_existing->>'explicit_banking_pay_action', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_incoming_explicit_banking_pay_action := lower(BTRIM(COALESCE(v_incoming->>'explicit_banking_pay_action', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_existing_dirty_required := lower(BTRIM(COALESCE(v_existing->>'banking_pay_dirty_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_incoming_dirty_required := lower(BTRIM(COALESCE(v_incoming->>'banking_pay_dirty_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_existing_ordinary_no_dirty := lower(BTRIM(COALESCE(v_existing->>'ordinary_timesheet_edit_save_no_dirty', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_incoming_ordinary_no_dirty := lower(BTRIM(COALESCE(v_incoming->>'ordinary_timesheet_edit_save_no_dirty', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  v_explicit_banking_pay_action := v_existing_explicit_banking_pay_action
+    OR v_incoming_explicit_banking_pay_action
+    OR v_authorise_boundary_changed
+    OR v_unauthorise_boundary_changed;
+  v_ordinary_timesheet_edit_save_no_dirty := (v_existing_ordinary_no_dirty OR v_incoming_ordinary_no_dirty)
+    AND v_explicit_banking_pay_action IS NOT TRUE
+    AND v_existing_dirty_required IS NOT TRUE
+    AND v_incoming_dirty_required IS NOT TRUE
+    AND v_authorise_boundary_changed IS NOT TRUE
+    AND v_unauthorise_boundary_changed IS NOT TRUE;
+  v_banking_pay_dirty_required := v_ordinary_timesheet_edit_save_no_dirty IS NOT TRUE;
+
+  v_trigger_table := CASE
+    WHEN (v_authorise_boundary_changed OR v_unauthorise_boundary_changed)
+         AND lower(BTRIM(COALESCE(v_existing->>'trigger_table', ''))) = 'timesheets' THEN 'timesheets'
+    WHEN (v_authorise_boundary_changed OR v_unauthorise_boundary_changed)
+         AND lower(BTRIM(COALESCE(v_incoming->>'trigger_table', ''))) = 'timesheets' THEN 'timesheets'
+    ELSE NULLIF(BTRIM(COALESCE(v_incoming->>'trigger_table', v_existing->>'trigger_table', '')), '')
+  END;
+  v_trigger_op := NULLIF(BTRIM(COALESCE(v_incoming->>'trigger_op', v_incoming->>'trigger_operation', v_existing->>'trigger_op', v_existing->>'trigger_operation', '')), '');
+  v_trigger_operation := NULLIF(BTRIM(COALESCE(v_incoming->>'trigger_operation', v_incoming->>'trigger_op', v_existing->>'trigger_operation', v_existing->>'trigger_op', '')), '');
 
   v_incoming_has_reason_event := (
     NULLIF(BTRIM(COALESCE(v_incoming->>'reason_latest', v_incoming->>'reason', v_incoming->>'trigger_source', '')), '') IS NOT NULL
@@ -203905,11 +204186,32 @@ BEGIN
 
   v_merged := v_existing || v_incoming;
 
+  v_projection_class := CASE
+    WHEN v_authorise_boundary_changed OR v_unauthorise_boundary_changed THEN 'NORMAL_TIMESHEET'
+    ELSE NULLIF(UPPER(BTRIM(COALESCE(v_incoming->>'projection_class', v_existing->>'projection_class', ''))), '')
+  END;
+  v_refresh_scope_kind := CASE
+    WHEN jsonb_array_length(COALESCE(v_targeted_timesheet_ids, '[]'::jsonb)) > 0 THEN 'TARGETED_TIMESHEETS'
+    ELSE NULLIF(UPPER(BTRIM(COALESCE(v_incoming->>'refresh_scope_kind', v_existing->>'refresh_scope_kind', ''))), '')
+  END;
+
   v_merged := jsonb_strip_nulls(
     v_merged
     || jsonb_build_object(
       'queue_class', 'DIRTY_TRIGGER_PRIORITY',
       'priority_class', 'DIRTY_TRIGGER_PRIORITY',
+      'trigger_table', v_trigger_table,
+      'trigger_op', v_trigger_op,
+      'trigger_operation', v_trigger_operation,
+      'mutation_context', v_effective_lifecycle_context,
+      'lifecycle_mutation_context', v_effective_lifecycle_context,
+      'authorise_boundary_changed', COALESCE(v_authorise_boundary_changed, false),
+      'unauthorise_boundary_changed', COALESCE(v_unauthorise_boundary_changed, false),
+      'explicit_banking_pay_action', COALESCE(v_explicit_banking_pay_action, false),
+      'banking_pay_dirty_required', COALESCE(v_banking_pay_dirty_required, true),
+      'ordinary_timesheet_edit_save_no_dirty', COALESCE(v_ordinary_timesheet_edit_save_no_dirty, false),
+      'projection_class', v_projection_class,
+      'refresh_scope_kind', v_refresh_scope_kind,
       'targeted_timesheet_ids', v_targeted_timesheet_ids,
       'linked_timesheet_ids', v_linked_timesheet_ids,
       'trigger_sources', v_trigger_sources,
@@ -203931,6 +204233,7 @@ BEGIN
   RETURN v_merged;
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_dirty_event_enqueue(
   p_job_type text,
@@ -205031,15 +205334,14 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_delta_refresh_classify_v1(
-  p_session_id uuid,
-  p_candidate_id uuid,
-  p_payload_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_delta_refresh_classify_v1(p_session_id uuid, p_candidate_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_payload_json jsonb := CASE
@@ -205140,6 +205442,10 @@ DECLARE
   v_no_dirty_event boolean := false;
   v_timesheet_authorise_boundary_changed boolean := false;
   v_timesheet_unauthorise_boundary_changed boolean := false;
+  v_payload_authorise_boundary_changed boolean := false;
+  v_payload_unauthorise_boundary_changed boolean := false;
+  v_payload_ordinary_no_dirty boolean := false;
+  v_payload_banking_pay_dirty_required boolean := false;
   v_explicit_banking_pay_action boolean := false;
   v_patch_after_batch_enabled boolean := true;
 BEGIN
@@ -205238,13 +205544,17 @@ BEGIN
   v_payload_shadow_mode := lower(BTRIM(COALESCE(v_payload_json->>'shadow_mode', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_bank_routing_unchanged := lower(BTRIM(COALESCE(v_payload_json->>'bank_routing_unchanged', v_payload_json->>'bank_details_unchanged', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_payee_route_unchanged := lower(BTRIM(COALESCE(v_payload_json->>'payee_route_unchanged', v_payload_json->>'payee_identity_unchanged', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_payload_banking_pay_dirty_required := lower(BTRIM(COALESCE(v_payload_json->>'banking_pay_dirty_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_payload_ordinary_no_dirty := lower(BTRIM(COALESCE(v_payload_json->>'ordinary_timesheet_edit_save_no_dirty', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
   v_explicit_banking_pay_action := lower(BTRIM(COALESCE(
     v_payload_json->>'explicit_banking_pay_action',
     v_payload_json->>'banking_pay_dirty_allowed',
     v_payload_json->>'banking_pay_refresh_intended',
+    v_payload_json->>'banking_pay_dirty_required',
     'false'
   ))) IN ('true', 't', '1', 'yes', 'y', 'on')
-  OR UPPER(BTRIM(COALESCE(v_payload_json->>'mutation_context', v_payload_json->>'lifecycle_context', v_operation_type, v_dirty_reason, ''))) IN (
+  OR UPPER(BTRIM(COALESCE(v_payload_json->>'mutation_context', v_payload_json->>'lifecycle_mutation_context', v_payload_json->>'lifecycle_context', v_operation_type, v_dirty_reason, ''))) IN (
     'TIMESHEET_AUTHORISE',
     'TIMESHEET_UNAUTHORISE',
     'AUTHORISE_TIMESHEET',
@@ -205417,9 +205727,36 @@ BEGIN
       AND NULLIF(BTRIM(COALESCE(v_new_row_json->>'authorised_at_utc', '')), '') IS NULL;
   END IF;
 
+  v_payload_authorise_boundary_changed := lower(BTRIM(COALESCE(
+    v_payload_json->>'authorise_boundary_changed',
+    v_payload_json->>'timesheet_authorise_boundary_changed',
+    v_payload_json#>>'{complexity_flags,authorise_boundary_changed}',
+    v_payload_json#>>'{classifier_result,complexity_flags,authorise_boundary_changed}',
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_payload_unauthorise_boundary_changed := lower(BTRIM(COALESCE(
+    v_payload_json->>'unauthorise_boundary_changed',
+    v_payload_json->>'timesheet_unauthorise_boundary_changed',
+    v_payload_json#>>'{complexity_flags,unauthorise_boundary_changed}',
+    v_payload_json#>>'{classifier_result,complexity_flags,unauthorise_boundary_changed}',
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  v_timesheet_authorise_boundary_changed := v_timesheet_authorise_boundary_changed
+    OR v_payload_authorise_boundary_changed
+    OR UPPER(BTRIM(COALESCE(v_payload_json->>'mutation_context', v_payload_json->>'lifecycle_mutation_context', v_payload_json->>'lifecycle_context', ''))) IN ('TIMESHEET_AUTHORISE', 'AUTHORISE_TIMESHEET');
+  v_timesheet_unauthorise_boundary_changed := v_timesheet_unauthorise_boundary_changed
+    OR v_payload_unauthorise_boundary_changed
+    OR UPPER(BTRIM(COALESCE(v_payload_json->>'mutation_context', v_payload_json->>'lifecycle_mutation_context', v_payload_json->>'lifecycle_context', ''))) IN ('TIMESHEET_UNAUTHORISE', 'UNAUTHORISE_TIMESHEET');
+
+  v_explicit_banking_pay_action := v_explicit_banking_pay_action
+    OR v_timesheet_authorise_boundary_changed
+    OR v_timesheet_unauthorise_boundary_changed;
+
   v_no_dirty_event := v_trigger_operation = 'UPDATE'
     AND v_trigger_table IN ('timesheets', 'timesheets_financials')
     AND v_explicit_banking_pay_action IS NOT TRUE
+    AND v_payload_banking_pay_dirty_required IS NOT TRUE
     AND v_timesheet_authorise_boundary_changed IS NOT TRUE
     AND v_timesheet_unauthorise_boundary_changed IS NOT TRUE;
 
@@ -205452,6 +205789,8 @@ BEGIN
         'trigger_table', v_trigger_table,
         'trigger_operation', v_trigger_operation,
         'explicit_banking_pay_action', COALESCE(v_explicit_banking_pay_action, false),
+        'banking_pay_dirty_required', COALESCE(v_payload_banking_pay_dirty_required, false),
+        'ordinary_timesheet_edit_save_no_dirty', COALESCE(v_payload_ordinary_no_dirty, true),
         'authorise_boundary_changed', COALESCE(v_timesheet_authorise_boundary_changed, false),
         'unauthorise_boundary_changed', COALESCE(v_timesheet_unauthorise_boundary_changed, false),
         'targeted_timesheet_count', COALESCE(v_targeted_count, 0),
@@ -205796,7 +206135,14 @@ BEGIN
     'clone_rebase_enabled', COALESCE(v_clone_rebase_enabled, false),
     'bank_routing_unchanged', COALESCE(v_bank_routing_unchanged, false),
     'payee_route_unchanged', COALESCE(v_payee_route_unchanged, false),
-    'readiness_identity_checked', COALESCE(v_readiness_identity_checked, false)
+    'readiness_identity_checked', COALESCE(v_readiness_identity_checked, false),
+    'explicit_banking_pay_action', COALESCE(v_explicit_banking_pay_action, false),
+    'banking_pay_dirty_required', COALESCE(v_payload_banking_pay_dirty_required, v_explicit_banking_pay_action, false),
+    'ordinary_timesheet_edit_save_no_dirty', COALESCE(v_payload_ordinary_no_dirty, false),
+    'authorise_boundary_changed', COALESCE(v_timesheet_authorise_boundary_changed, false),
+    'unauthorise_boundary_changed', COALESCE(v_timesheet_unauthorise_boundary_changed, false),
+    'trigger_table', v_trigger_table,
+    'trigger_operation', v_trigger_operation
   );
 
   IF v_would_fast_path_allowed IS TRUE THEN
@@ -205927,10 +206273,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
-
 
 
 
