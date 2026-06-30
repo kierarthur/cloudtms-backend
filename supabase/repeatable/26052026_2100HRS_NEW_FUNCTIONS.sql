@@ -201740,7 +201740,10 @@ BEGIN
         AND preview_upsert_update.is_ready_for_draft IS TRUE
         AND preview_upsert_update.selection_allowed IS TRUE
         AND LOWER(BTRIM(COALESCE(preview_upsert_update.outstanding_state_json->>'reservation_overrun_detected', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
-      );
+      )
+  WHERE preview_upsert_update.projection_run_id = p_projection_run_id
+    AND preview_upsert_update.session_id = p_session_id
+    AND preview_upsert_update.candidate_id = p_candidate_id;
 
   SELECT COUNT(*) FILTER (WHERE preview_upsert_rows.preserve_selected IS TRUE AND preview_upsert_rows.can_serve_selected IS TRUE)::integer,
          COUNT(*) FILTER (WHERE preview_upsert_rows.existing_preview_row_id IS NOT NULL AND (preview_upsert_rows.preserve_selected IS NOT TRUE OR preview_upsert_rows.can_serve_selected IS NOT TRUE))::integer
