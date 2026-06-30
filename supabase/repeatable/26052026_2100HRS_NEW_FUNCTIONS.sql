@@ -45777,16 +45777,11 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_workbench_session_get_candidate_preview(uuid, uuid);
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_candidate_preview(
-  p_session_id uuid,
-  p_candidate_id uuid,
-  p_cursor_json jsonb DEFAULT '{}'::jsonb,
-  p_limit integer DEFAULT 100
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_candidate_preview(p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 100)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
@@ -45803,6 +45798,8 @@ DECLARE
   v_next_cursor jsonb := NULL::jsonb;
   v_summary jsonb := '{}'::jsonb;
   v_candidate_state text := 'PENDING';
+  v_summary_status text := NULL::text;
+  v_effective_scope_status text := NULL::text;
   v_refreshing boolean := false;
 BEGIN
   IF p_session_id IS NULL THEN
@@ -45850,11 +45847,25 @@ BEGIN
   LIMIT 1;
 
   v_candidate_state := COALESCE(v_candidate_state_row.status, v_scope_row.status, 'PENDING');
-  v_refreshing := UPPER(BTRIM(COALESCE(v_scope_row.status, ''))) IN ('DELTA_REFRESH_PENDING', 'SOURCE_BUILD_PENDING', 'LINE_WORK_PENDING', 'PENDING');
+  v_summary_status := UPPER(BTRIM(COALESCE(v_candidate_state_row.effective_summary_fragment_json->>'status', '')));
+  IF v_summary_status = 'READY_EMPTY' THEN
+    -- The candidate-state table stores only PENDING/READY/FAILED, but the
+    -- summary fragment is the authoritative no-row state after a cleanup DELTA.
+    -- Surface READY_EMPTY to the RPC so the UI is not told the candidate is
+    -- payable/READY merely because the storage row had to use the constrained
+    -- READY value.
+    v_candidate_state := 'READY_EMPTY';
+  END IF;
+  v_effective_scope_status := CASE
+    WHEN v_summary_status = 'READY_EMPTY'
+     AND UPPER(BTRIM(COALESCE(v_scope_row.status, ''))) = 'READY' THEN 'READY_EMPTY'
+    ELSE COALESCE(v_scope_row.status, 'PENDING')
+  END;
+  v_refreshing := UPPER(BTRIM(COALESCE(v_effective_scope_status, ''))) IN ('DELTA_REFRESH_PENDING', 'SOURCE_BUILD_PENDING', 'LINE_WORK_PENDING', 'PENDING');
   v_summary := COALESCE(v_candidate_state_row.effective_summary_fragment_json, '{}'::jsonb)
     || jsonb_build_object(
       'candidate_count', 1,
-      'scope_status', COALESCE(v_scope_row.status, 'PENDING'),
+      'scope_status', COALESCE(v_effective_scope_status, 'PENDING'),
       'candidate_state', v_candidate_state,
       'refreshing', v_refreshing,
       'requires_paging', true
@@ -45969,7 +45980,7 @@ BEGIN
     'candidate_id', p_candidate_id::text,
     'session_version', v_session_row.version,
     'candidate_state', v_candidate_state,
-    'scope_status', COALESCE(v_scope_row.status, 'PENDING'),
+    'scope_status', COALESCE(v_effective_scope_status, 'PENDING'),
     'refreshing', v_refreshing,
     'pending_refresh', v_refreshing,
     'summary', v_summary,
@@ -45986,10 +45997,19 @@ BEGIN
     'next_cursor', v_next_cursor,
     'has_more', v_next_cursor IS NOT NULL,
     'cursor_scheme', 'section_row_ordinal_id',
-    'candidate_fragment_json', COALESCE(v_candidate_state_row.effective_candidate_fragment_json, '{}'::jsonb)
+    'candidate_fragment_json', jsonb_strip_nulls(
+      COALESCE(v_candidate_state_row.effective_candidate_fragment_json, '{}'::jsonb)
+      || jsonb_build_object(
+        'scope_status', COALESCE(v_effective_scope_status, 'PENDING'),
+        'candidate_state', v_candidate_state,
+        'summary_status', COALESCE(NULLIF(v_summary_status, ''), v_candidate_state),
+        'refreshing', v_refreshing
+      )
+    )
   );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clear_case_resolution(p_session_id uuid, p_actor_user_id uuid, p_resolution_payload_json jsonb)
  RETURNS jsonb
@@ -191159,13 +191179,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress_light(
-  p_session_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress_light(p_session_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -191342,6 +191360,47 @@ BEGIN
   v_clone_rebase_pending := COALESCE(v_clone_rebase_pending, false) OR UPPER(BTRIM(COALESCE(v_session_row.progress_state, ''))) = 'CLONE_REBASING';
   v_still_running := COALESCE(v_active_running_count, 0) > 0;
   v_work_queued := COALESCE(v_active_job_count, 0) > 0 OR COALESCE(v_scope_pending_count, 0) > 0 OR COALESCE(v_line_units_pending, 0) > 0 OR COALESCE(v_scope_cursor_remaining, false);
+
+  -- Use active READY preview rows as the draft/readiness source of truth. The
+  -- session counter columns are reconciled asynchronously and can otherwise keep
+  -- a just-superseded unauthorised row draftable for one polling cycle.
+  WITH active_ready_preview_rows AS (
+    SELECT preview_row.section,
+           preview_row.selected,
+           preview_row.selection_state
+    FROM public.banking_pay_workbench_preview_rows AS preview_row
+    WHERE preview_row.session_id = p_session_id
+      AND preview_row.session_version = v_session_row.version
+      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+  ), active_ready_counts AS (
+    SELECT COUNT(*)::integer AS preview_count,
+           COUNT(*) FILTER (
+             WHERE active_ready_preview_rows.selected IS TRUE
+               AND active_ready_preview_rows.selection_state = 'SELECTED'
+           )::integer AS selected_count
+    FROM active_ready_preview_rows
+  ), active_section_counts AS (
+    SELECT active_ready_preview_rows.section,
+           COUNT(*)::integer AS row_count
+    FROM active_ready_preview_rows
+    GROUP BY active_ready_preview_rows.section
+  ), active_section_json AS (
+    SELECT COALESCE(jsonb_object_agg(active_section_counts.section, active_section_counts.row_count ORDER BY active_section_counts.section), '{}'::jsonb) AS section_counts_json
+    FROM active_section_counts
+  )
+  SELECT COALESCE(active_ready_counts.preview_count, 0),
+         COALESCE(active_ready_counts.selected_count, 0),
+         COALESCE(active_section_json.section_counts_json, '{}'::jsonb)
+  INTO v_preview_row_count,
+       v_selected_row_count,
+       v_section_counts_json
+  FROM active_ready_counts
+  CROSS JOIN active_section_json;
+
+  IF COALESCE(v_work_queued, false) IS NOT TRUE THEN
+    v_line_units_ready := LEAST(COALESCE(v_line_units_ready, 0), COALESCE(v_preview_row_count, 0));
+  END IF;
+
   v_rows_available := COALESCE(v_preview_row_count, 0) > 0;
   v_selected_rows_available := COALESCE(v_selected_row_count, 0) > 0;
 
@@ -191360,7 +191419,8 @@ BEGIN
     v_phase := 'FALLING_BACK_TO_LEGACY_REFRESH';
     v_status_text := 'Refreshing candidate through the legacy source-build path.';
     v_next_recommended_action := 'BUILD_SOURCE_CHUNK';
-  ELSIF COALESCE(v_delta_refresh_pending_count, 0) > 0 OR UPPER(BTRIM(COALESCE(v_session_row.progress_state, ''))) = 'DELTA_REFRESHING' THEN
+  ELSIF COALESCE(v_delta_refresh_pending_count, 0) > 0
+     OR (UPPER(BTRIM(COALESCE(v_session_row.progress_state, ''))) = 'DELTA_REFRESHING' AND COALESCE(v_work_queued, false) IS TRUE) THEN
     v_progress_state := 'DELTA_REFRESHING';
     v_phase := 'DELTA_REFRESHING';
     v_status_text := 'Refreshing changed candidate rows.';
@@ -191371,10 +191431,23 @@ BEGIN
     v_status_text := 'Patching payment preview rows.';
     v_next_recommended_action := 'WAIT_FOR_WORKER';
   ELSE
-    v_progress_state := COALESCE(NULLIF(BTRIM(v_session_row.progress_state), ''), CASE WHEN v_work_queued THEN 'REFRESHING_CANDIDATES' ELSE 'READY' END);
-    v_phase := COALESCE(NULLIF(BTRIM(v_session_row.progress_json->>'phase'), ''), v_progress_state);
-    v_status_text := COALESCE(NULLIF(BTRIM(v_session_row.progress_json->>'status_text'), ''), CASE WHEN v_work_queued THEN 'Preparing payment preview.' ELSE 'Payment preview is ready.' END);
-    v_next_recommended_action := COALESCE(NULLIF(BTRIM(v_session_row.progress_json->>'next_recommended_action'), ''), CASE WHEN v_work_queued THEN 'WAIT_FOR_WORKER' ELSE 'READ_PREVIEW_PAGE' END);
+    v_progress_state := CASE
+      WHEN COALESCE(v_work_queued, false) IS TRUE THEN COALESCE(NULLIF(BTRIM(v_session_row.progress_state), ''), 'REFRESHING_CANDIDATES')
+      WHEN COALESCE(v_preview_row_count, 0) = 0 THEN 'READY_EMPTY'
+      ELSE 'READY'
+    END;
+    v_phase := CASE
+      WHEN COALESCE(v_work_queued, false) IS TRUE THEN COALESCE(NULLIF(BTRIM(v_session_row.progress_json->>'phase'), ''), v_progress_state)
+      ELSE 'READY'
+    END;
+    v_status_text := CASE
+      WHEN COALESCE(v_work_queued, false) IS TRUE THEN COALESCE(NULLIF(BTRIM(v_session_row.progress_json->>'status_text'), ''), 'Preparing payment preview.')
+      ELSE 'Payment preview is ready.'
+    END;
+    v_next_recommended_action := CASE
+      WHEN COALESCE(v_work_queued, false) IS TRUE THEN COALESCE(NULLIF(BTRIM(v_session_row.progress_json->>'next_recommended_action'), ''), 'WAIT_FOR_WORKER')
+      ELSE 'READ_PREVIEW_PAGE'
+    END;
   END IF;
 
   v_ready := v_replacement_required IS NOT TRUE
@@ -191498,6 +191571,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
@@ -197987,18 +198061,12 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_project_changed_timesheets_v1(
-  p_session_id uuid,
-  p_candidate_id uuid,
-  p_projection_run_id uuid,
-  p_targeted_timesheet_ids uuid[],
-  p_linked_timesheet_ids uuid[],
-  p_payload_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_project_changed_timesheets_v1(p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_targeted_timesheet_ids uuid[], p_linked_timesheet_ids uuid[], p_payload_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -198056,6 +198124,8 @@ DECLARE
   v_shadow_compare_enforced boolean := false;
   v_processed_timesheet_count integer := 0;
   v_processed_component_count integer := 0;
+  v_live_eligible_timesheet_count integer := 0;
+  v_live_ineligible_timesheet_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -198407,6 +198477,45 @@ BEGIN
     );
   END IF;
 
+  -- PRE_DRAFT_LIVE_TRUTH eligibility is a hard publication precondition for
+  -- targeted normal-timesheet DELTA. Entitlement/outstanding rows alone are not
+  -- enough: unauthorised/PENDING_AUTH live truth must be a successful zero-row
+  -- cleanup rather than a payable preview row.
+  SELECT
+    COUNT(*) FILTER (WHERE live_truth.live_pay_eligible IS TRUE)::integer,
+    COUNT(*) FILTER (WHERE live_truth.live_pay_eligible IS NOT TRUE)::integer
+  INTO v_live_eligible_timesheet_count,
+       v_live_ineligible_timesheet_count
+  FROM (
+    SELECT
+      affected_values.timesheet_id_value,
+      (
+        timesheet_row.timesheet_id IS NOT NULL
+        AND timesheet_row.authorised_at_server IS NOT NULL
+        AND timesheet_row.revoked_at IS NULL
+        AND timesheet_financial_row.timesheet_id IS NOT NULL
+        AND timesheet_financial_row.authorised_at_utc IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(timesheet_financial_row.processing_status::text, ''))) = 'READY_FOR_INVOICE'
+        AND COALESCE(timesheet_financial_row.pay_on_hold, false) IS NOT TRUE
+        AND COALESCE(timesheet_financial_row.has_rate_issue, false) IS NOT TRUE
+        AND COALESCE(timesheet_financial_row.has_pay_channel_issue, false) IS NOT TRUE
+      ) AS live_pay_eligible
+    FROM unnest(COALESCE(v_all_affected_timesheet_ids, ARRAY[]::uuid[])) AS affected_values(timesheet_id_value)
+    LEFT JOIN public.timesheets AS timesheet_row
+      ON timesheet_row.timesheet_id = affected_values.timesheet_id_value
+     AND timesheet_row.is_current = true
+    LEFT JOIN public.timesheets_financials AS timesheet_financial_row
+      ON timesheet_financial_row.timesheet_id = affected_values.timesheet_id_value
+     AND timesheet_financial_row.is_current = true
+  ) AS live_truth;
+
+  v_complexity_flags := COALESCE(v_complexity_flags, '{}'::jsonb)
+    || jsonb_build_object(
+      'pre_draft_live_truth_gate', 'STRICT_READY_FOR_INVOICE_AUTHORISED',
+      'live_pay_eligible_timesheet_count', COALESCE(v_live_eligible_timesheet_count, 0),
+      'live_pay_ineligible_timesheet_count', COALESCE(v_live_ineligible_timesheet_count, 0)
+    );
+
   DROP TABLE IF EXISTS pg_temp._bpay_delta_project_stage;
   CREATE TEMP TABLE _bpay_delta_project_stage ON COMMIT DROP AS
   WITH candidate_context AS (
@@ -198531,16 +198640,47 @@ BEGIN
       timesheet_row.week_ending_date,
       timesheet_row.line_type::text AS timesheet_line_type,
       timesheet_row.sheet_scope::text AS sheet_scope,
+      timesheet_row.authorised_at_server,
+      timesheet_row.revoked_at,
+      timesheet_row.contract_id,
+      contract_week_row.id AS contract_week_id,
+      COALESCE(timesheet_financial_row.client_id, contract_row.client_id) AS client_id,
+      client_row.name AS client_name,
+      COALESCE(timesheet_financial_row.role, contract_row.role) AS role,
+      COALESCE(timesheet_financial_row.band, timesheet_row.band, contract_row.band) AS band,
+      contract_row.display_site,
+      contract_row.ward_hint,
       COALESCE(timesheet_row.worked_start_iso, timesheet_financial_row.worked_start_iso) AS worked_start_iso,
       COALESCE(timesheet_row.worked_end_iso, timesheet_financial_row.worked_end_iso) AS worked_end_iso,
-      COALESCE(timesheet_financial_row.pay_method, candidate_context.candidate_pay_method) AS timesheet_pay_method
+      COALESCE(timesheet_financial_row.pay_method, candidate_context.candidate_pay_method) AS timesheet_pay_method,
+      timesheet_financial_row.authorised_at_utc AS financial_authorised_at_utc,
+      UPPER(BTRIM(COALESCE(timesheet_financial_row.processing_status::text, ''))) AS financial_processing_status,
+      COALESCE(timesheet_financial_row.pay_on_hold, false) AS pay_on_hold,
+      COALESCE(timesheet_financial_row.has_rate_issue, false) AS has_rate_issue,
+      COALESCE(timesheet_financial_row.has_pay_channel_issue, false) AS has_pay_channel_issue,
+      (
+        timesheet_row.authorised_at_server IS NOT NULL
+        AND timesheet_row.revoked_at IS NULL
+        AND timesheet_financial_row.timesheet_id IS NOT NULL
+        AND timesheet_financial_row.authorised_at_utc IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(timesheet_financial_row.processing_status::text, ''))) = 'READY_FOR_INVOICE'
+        AND COALESCE(timesheet_financial_row.pay_on_hold, false) IS NOT TRUE
+        AND COALESCE(timesheet_financial_row.has_rate_issue, false) IS NOT TRUE
+        AND COALESCE(timesheet_financial_row.has_pay_channel_issue, false) IS NOT TRUE
+      ) AS live_pay_eligible
     FROM public.timesheets AS timesheet_row
     LEFT JOIN public.timesheets_financials AS timesheet_financial_row
       ON timesheet_financial_row.timesheet_id = timesheet_row.timesheet_id
      AND timesheet_financial_row.is_current = true
+    LEFT JOIN public.contracts AS contract_row
+      ON contract_row.id = timesheet_row.contract_id
+    LEFT JOIN public.clients AS client_row
+      ON client_row.id = COALESCE(timesheet_financial_row.client_id, contract_row.client_id)
+    LEFT JOIN public.contract_weeks AS contract_week_row
+      ON contract_week_row.timesheet_id = timesheet_row.timesheet_id
     CROSS JOIN candidate_context
     WHERE timesheet_row.timesheet_id = ANY(v_all_affected_timesheet_ids)
-    ORDER BY timesheet_row.timesheet_id, timesheet_row.is_current DESC, timesheet_row.version DESC, timesheet_row.updated_at DESC
+    ORDER BY timesheet_row.timesheet_id, timesheet_row.is_current DESC, timesheet_row.version DESC, timesheet_row.updated_at DESC, contract_week_row.updated_at DESC NULLS LAST, contract_week_row.id
   ), projected_components AS (
     SELECT
       entitlement_rows.timesheet_id,
@@ -198548,6 +198688,21 @@ BEGIN
       current_timesheet_rows.booking_id,
       current_timesheet_rows.reference_number,
       current_timesheet_rows.week_ending_date,
+      current_timesheet_rows.contract_id,
+      current_timesheet_rows.contract_week_id,
+      current_timesheet_rows.client_id,
+      current_timesheet_rows.client_name,
+      current_timesheet_rows.role,
+      current_timesheet_rows.band,
+      current_timesheet_rows.display_site,
+      current_timesheet_rows.ward_hint,
+      current_timesheet_rows.authorised_at_server,
+      current_timesheet_rows.financial_authorised_at_utc,
+      current_timesheet_rows.financial_processing_status,
+      current_timesheet_rows.pay_on_hold,
+      current_timesheet_rows.has_rate_issue,
+      current_timesheet_rows.has_pay_channel_issue,
+      current_timesheet_rows.live_pay_eligible,
       UPPER(BTRIM(COALESCE(current_timesheet_rows.timesheet_pay_method, payee_blockers.candidate_pay_method, 'PAYE'))) AS effective_pay_method,
       entitlement_rows.key_type,
       entitlement_rows.key_value,
@@ -198557,6 +198712,8 @@ BEGIN
       entitlement_rows.outstanding_inc_vat,
       entitlement_rows.reserved_ex_vat,
       entitlement_rows.reservation_overrun_detected,
+      payee_blockers.candidate_tms_ref,
+      payee_blockers.candidate_display_name,
       payee_blockers.payee_entity_kind,
       payee_blockers.payee_entity_id,
       payee_blockers.payee_bank_hash,
@@ -198579,6 +198736,7 @@ BEGIN
     FROM entitlement_rows
     JOIN current_timesheet_rows
       ON current_timesheet_rows.timesheet_id = entitlement_rows.timesheet_id
+     AND current_timesheet_rows.live_pay_eligible IS TRUE
     CROSS JOIN payee_blockers
     LEFT JOIN LATERAL (
       SELECT scope_rows.canonical_timesheet_id
@@ -198675,7 +198833,24 @@ BEGIN
           'is_ready_for_draft', (jsonb_array_length(row_identity.blocked_reason_codes) = 0 AND row_identity.suppress_zero_or_negative_outstanding IS NOT TRUE),
           'selection_allowed', (jsonb_array_length(row_identity.blocked_reason_codes) = 0 AND row_identity.suppress_zero_or_negative_outstanding IS NOT TRUE),
           'readiness_state', CASE WHEN jsonb_array_length(row_identity.blocked_reason_codes) = 0 AND row_identity.suppress_zero_or_negative_outstanding IS NOT TRUE THEN 'READY_TO_PAY' ELSE 'BLOCKED_FOR_PAY' END,
-          'blocked_reason_codes', row_identity.blocked_reason_codes
+          'blocked_reason_codes', row_identity.blocked_reason_codes,
+          'display_name', row_identity.candidate_display_name,
+          'candidate_display_name', row_identity.candidate_display_name,
+          'candidate_name', row_identity.candidate_display_name,
+          'candidate_tms_ref', row_identity.candidate_tms_ref,
+          'client_id', CASE WHEN row_identity.client_id IS NULL THEN NULL ELSE row_identity.client_id::text END,
+          'client_name', row_identity.client_name,
+          'week_ending_date', CASE WHEN row_identity.week_ending_date IS NULL THEN NULL ELSE row_identity.week_ending_date::text END,
+          'contract_id', CASE WHEN row_identity.contract_id IS NULL THEN NULL ELSE row_identity.contract_id::text END,
+          'contract_week_id', CASE WHEN row_identity.contract_week_id IS NULL THEN NULL ELSE row_identity.contract_week_id::text END,
+          'role', row_identity.role,
+          'band', row_identity.band,
+          'display_site', row_identity.display_site,
+          'ward_hint', row_identity.ward_hint,
+          'reference_number', row_identity.reference_number,
+          'source_function', 'pay_workbench_project_changed_timesheets_v1',
+          'live_pay_eligibility_proven', true,
+          'live_pay_eligibility_status', 'ELIGIBLE'
         )
         || jsonb_build_object(
           'economic_key', jsonb_build_object(
@@ -198689,7 +198864,23 @@ BEGIN
             'component_key_value', row_identity.key_value,
             'source_pay_ex_vat', row_identity.truth_ex_vat,
             'pay_amount_ex_vat', row_identity.outstanding_ex_vat,
-            'live_truth_used', true
+            'live_truth_used', true,
+            'live_pay_eligibility_proven', true,
+            'live_pay_eligibility_status', 'ELIGIBLE',
+            'financial_processing_status', row_identity.financial_processing_status,
+            'authorised_at_server', CASE WHEN row_identity.authorised_at_server IS NULL THEN NULL ELSE row_identity.authorised_at_server::text END,
+            'financial_authorised_at_utc', CASE WHEN row_identity.financial_authorised_at_utc IS NULL THEN NULL ELSE row_identity.financial_authorised_at_utc::text END
+          ),
+          'live_pay_eligibility', jsonb_build_object(
+            'proven', true,
+            'status', 'ELIGIBLE',
+            'gate', 'STRICT_READY_FOR_INVOICE_AUTHORISED',
+            'authorised_at_server_present', row_identity.authorised_at_server IS NOT NULL,
+            'financial_authorised_at_utc_present', row_identity.financial_authorised_at_utc IS NOT NULL,
+            'financial_processing_status', row_identity.financial_processing_status,
+            'pay_on_hold', row_identity.pay_on_hold,
+            'has_rate_issue', row_identity.has_rate_issue,
+            'has_pay_channel_issue', row_identity.has_pay_channel_issue
           ),
           'outstanding_state_json', jsonb_build_object(
             'truth_ex_vat', row_identity.truth_ex_vat,
@@ -198928,6 +199119,8 @@ BEGIN
       'row_key_line_key_parity_proven', COALESCE(v_key_parity_proven, false),
       'economic_key_parity_proven', COALESCE(v_economic_key_parity_proven, false),
       'shadow_compare_enforced', COALESCE(v_shadow_compare_enforced, false),
+      'live_pay_eligibility_proven', true,
+      'live_pay_eligibility_status', 'ELIGIBLE',
       'preview_contract', stage_rows.contract_result_json
     ),
     jsonb_build_object(
@@ -199019,6 +199212,8 @@ BEGIN
     'selected_row_count', COALESCE(v_selected_row_count, 0),
     'targeted_timesheet_count', v_targeted_count,
     'affected_timesheet_count', v_affected_count,
+    'live_pay_eligible_timesheet_count', COALESCE(v_live_eligible_timesheet_count, 0),
+    'live_pay_ineligible_timesheet_count', COALESCE(v_live_ineligible_timesheet_count, 0),
     'component_offset', COALESCE(v_component_offset, 0),
     'next_component_offset', COALESCE(v_next_component_offset, 0),
     'total_projectable_row_count', COALESCE(v_total_stage_row_count, 0),
@@ -199039,6 +199234,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress_debug(
   p_session_id uuid
@@ -200957,7 +201154,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_delta_write_compatible_rows_v1(p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -201521,6 +201717,15 @@ BEGIN
     WHERE projection_rows.projection_run_id = p_projection_run_id
       AND projection_rows.session_id = p_session_id
       AND projection_rows.candidate_id = p_candidate_id
+      AND LOWER(BTRIM(COALESCE(
+        projection_rows.preview_row_json->>'live_pay_eligibility_proven',
+        projection_rows.preview_row_json#>>'{live_pay_eligibility,proven}',
+        projection_rows.source_row_json->>'live_pay_eligibility_proven',
+        projection_rows.source_row_json#>>'{live_pay_eligibility,proven}',
+        projection_rows.contract_json->>'live_pay_eligibility_proven',
+        projection_rows.contract_json#>>'{live_pay_eligibility,proven}',
+        'false'
+      ))) IN ('true', 't', '1', 'yes', 'y', 'on')
     ON CONFLICT (
       session_id,
       candidate_id,
@@ -201595,7 +201800,17 @@ BEGIN
       projection_rows.line_key,
       projection_rows.row_ordinal,
       CASE
-        WHEN projection_rows.contract_ok IS TRUE AND projection_rows.materialisable IS TRUE THEN 'MATERIALISED'
+        WHEN projection_rows.contract_ok IS TRUE
+         AND projection_rows.materialisable IS TRUE
+         AND LOWER(BTRIM(COALESCE(
+           projection_rows.preview_row_json->>'live_pay_eligibility_proven',
+           projection_rows.preview_row_json#>>'{live_pay_eligibility,proven}',
+           projection_rows.source_row_json->>'live_pay_eligibility_proven',
+           projection_rows.source_row_json#>>'{live_pay_eligibility,proven}',
+           projection_rows.contract_json->>'live_pay_eligibility_proven',
+           projection_rows.contract_json#>>'{live_pay_eligibility,proven}',
+           'false'
+         ))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN 'MATERIALISED'
         WHEN projection_rows.contract_ok IS TRUE THEN 'SKIPPED'
         ELSE 'ERROR'
       END,
@@ -201613,6 +201828,15 @@ BEGIN
           'projection_path', 'WORKBENCH_CANDIDATE_DELTA_REFRESH',
           'projection_run_id', p_projection_run_id::text,
           'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+          'live_pay_eligibility_proven', LOWER(BTRIM(COALESCE(
+            projection_rows.preview_row_json->>'live_pay_eligibility_proven',
+            projection_rows.preview_row_json#>>'{live_pay_eligibility,proven}',
+            projection_rows.source_row_json->>'live_pay_eligibility_proven',
+            projection_rows.source_row_json#>>'{live_pay_eligibility,proven}',
+            projection_rows.contract_json->>'live_pay_eligibility_proven',
+            projection_rows.contract_json#>>'{live_pay_eligibility,proven}',
+            'false'
+          ))) IN ('true', 't', '1', 'yes', 'y', 'on'),
           'economic_key', projection_rows.economic_key_json,
           'preview_contract', projection_rows.contract_json
         )
@@ -201716,6 +201940,15 @@ BEGIN
         AND NULLIF(BTRIM(COALESCE(preview_upsert_update.key_type, '')), '') IS NOT NULL
         AND NULLIF(BTRIM(COALESCE(preview_upsert_update.key_value, '')), '') IS NOT NULL
         AND COALESCE(preview_upsert_update.contract_json->>'policy_x_authority_scope', preview_upsert_update.preview_row_json->>'policy_x_authority_scope', '') = 'PRE_DRAFT_LIVE_TRUTH'
+        AND LOWER(BTRIM(COALESCE(
+          preview_upsert_update.preview_row_json->>'live_pay_eligibility_proven',
+          preview_upsert_update.preview_row_json#>>'{live_pay_eligibility,proven}',
+          preview_upsert_update.source_row_json->>'live_pay_eligibility_proven',
+          preview_upsert_update.source_row_json#>>'{live_pay_eligibility,proven}',
+          preview_upsert_update.contract_json->>'live_pay_eligibility_proven',
+          preview_upsert_update.contract_json#>>'{live_pay_eligibility,proven}',
+          'false'
+        ))) IN ('true', 't', '1', 'yes', 'y', 'on')
         AND LOWER(BTRIM(COALESCE(preview_upsert_update.preview_row_json->>'projection_certified', preview_upsert_update.contract_json->>'projection_certified', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
         AND (
           LOWER(BTRIM(COALESCE(preview_upsert_update.preview_row_json->>'row_key_line_key_parity_proven', preview_upsert_update.contract_json->>'row_key_line_key_parity_proven', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -201729,6 +201962,15 @@ BEGIN
         AND NULLIF(BTRIM(COALESCE(preview_upsert_update.key_type, '')), '') IS NOT NULL
         AND NULLIF(BTRIM(COALESCE(preview_upsert_update.key_value, '')), '') IS NOT NULL
         AND COALESCE(preview_upsert_update.contract_json->>'policy_x_authority_scope', preview_upsert_update.preview_row_json->>'policy_x_authority_scope', '') = 'PRE_DRAFT_LIVE_TRUTH'
+        AND LOWER(BTRIM(COALESCE(
+          preview_upsert_update.preview_row_json->>'live_pay_eligibility_proven',
+          preview_upsert_update.preview_row_json#>>'{live_pay_eligibility,proven}',
+          preview_upsert_update.source_row_json->>'live_pay_eligibility_proven',
+          preview_upsert_update.source_row_json#>>'{live_pay_eligibility,proven}',
+          preview_upsert_update.contract_json->>'live_pay_eligibility_proven',
+          preview_upsert_update.contract_json#>>'{live_pay_eligibility,proven}',
+          'false'
+        ))) IN ('true', 't', '1', 'yes', 'y', 'on')
         AND LOWER(BTRIM(COALESCE(preview_upsert_update.preview_row_json->>'projection_certified', preview_upsert_update.contract_json->>'projection_certified', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
         AND (
           LOWER(BTRIM(COALESCE(preview_upsert_update.preview_row_json->>'row_key_line_key_parity_proven', preview_upsert_update.contract_json->>'row_key_line_key_parity_proven', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -201933,11 +202175,13 @@ BEGIN
     'selected_cleared_count', COALESCE(v_selected_cleared_count, 0),
     'affected_timesheet_count', COALESCE(array_length(v_affected_timesheet_ids, 1), 0),
     'affected_economic_key_count', COALESCE(v_affected_key_count, 0),
+    'live_pay_eligibility_publication_guard', true,
     'write_phase', 'WRITE_COMPLETE',
     'write_cursor_json', jsonb_build_object('phase', 'WRITE_COMPLETE')
   );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_delta_refresh_chunk(p_session_id uuid, p_candidate_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 25)
  RETURNS jsonb
