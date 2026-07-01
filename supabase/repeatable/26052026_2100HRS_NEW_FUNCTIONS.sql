@@ -25001,6 +25001,7 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_complete_job(p_job_id uuid, p_result_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -25035,6 +25036,7 @@ DECLARE
   v_pending_line_work_exists boolean := false;
   v_ready_line_work_exists boolean := false;
   v_continuation_result jsonb := '{}'::jsonb;
+  v_continuation_job_id_text text := NULL::text;
   v_continuation_jobs jsonb := '[]'::jsonb;
   v_continuation_count integer := 0;
   v_continuation_enqueued boolean := false;
@@ -25406,6 +25408,39 @@ BEGIN
         p_priority => COALESCE(v_job_row.priority, 43),
         p_limit => v_payload_limit
       );
+
+      v_continuation_job_id_text := NULLIF(BTRIM(COALESCE(v_continuation_result->>'job_id', '')), '');
+
+      IF v_continuation_job_id_text IS NULL THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_DELTA_CONTINUATION_JOB_ID_MISSING'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'PAY_WORKBENCH_DELTA_CONTINUATION_JOB_ID_MISSING',
+                  'job_id', p_job_id::text,
+                  'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL ELSE v_job_row.session_id::text END,
+                  'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL ELSE v_job_row.candidate_id::text END,
+                  'projection_run_id', v_delta_projection_run_id_text,
+                  'source_change_seq', v_source_change_seq,
+                  'continuation_result', v_continuation_result,
+                  'message', 'Delta more_due completion did not receive a concrete continuation job id.'
+                )::text;
+      END IF;
+
+      IF v_continuation_job_id_text = p_job_id::text THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_DELTA_CONTINUATION_SELF_REUSE_GUARD_FAILED'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'PAY_WORKBENCH_DELTA_CONTINUATION_SELF_REUSE_GUARD_FAILED',
+                  'job_id', p_job_id::text,
+                  'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL ELSE v_job_row.session_id::text END,
+                  'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL ELSE v_job_row.candidate_id::text END,
+                  'projection_run_id', v_delta_projection_run_id_text,
+                  'source_change_seq', v_source_change_seq,
+                  'continuation_result', v_continuation_result,
+                  'message', 'Delta continuation helper returned the currently completing job as its own continuation.'
+                )::text;
+      END IF;
+
       v_continuation_jobs := jsonb_build_array(v_continuation_result);
       v_continuation_count := 1;
       v_continuation_reused_count := CASE WHEN LOWER(BTRIM(COALESCE(v_continuation_result->>'reused', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN 1 ELSE 0 END;
@@ -26745,8 +26780,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 
@@ -180748,6 +180781,8 @@ BEGIN
 END;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_stage_continuation(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_job_type text DEFAULT NULL::text, p_cursor_json jsonb DEFAULT NULL::jsonb, p_source_job_id uuid DEFAULT NULL::uuid, p_result_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT NULL::text, p_priority integer DEFAULT NULL::integer, p_limit integer DEFAULT NULL::integer)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -180831,6 +180866,10 @@ DECLARE
   v_session_progress_lock_skipped boolean := false;
   v_session_progress_lock_skip_reason text := NULL::text;
   v_session_progress_update_row_count integer := 0;
+  v_original_dedupe_key text := NULL::text;
+  v_self_reuse_prevented boolean := false;
+  v_self_reuse_retry_count integer := 0;
+  v_insert_row_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -181569,6 +181608,15 @@ BEGIN
   INTO v_superseded_stale_count
   FROM superseded_stale_jobs;
 
+  v_original_dedupe_key := v_dedupe_key;
+
+  <<continuation_insert_attempt>>
+  LOOP
+    v_job_id := NULL::uuid;
+    v_job_status := NULL::text;
+    v_job_was_inserted := false;
+    v_insert_row_count := 0;
+
   INSERT INTO public.banking_pay_workbench_jobs (
     job_type,
     status,
@@ -181712,12 +181760,162 @@ BEGIN
           THEN public.banking_pay_workbench_jobs.updated_at_utc
         ELSE v_now
       END
+  WHERE p_source_job_id IS NULL
+     OR public.banking_pay_workbench_jobs.id IS DISTINCT FROM p_source_job_id
   RETURNING public.banking_pay_workbench_jobs.id,
             public.banking_pay_workbench_jobs.status,
             (xmax = 0)
   INTO v_job_id,
        v_job_status,
        v_job_was_inserted;
+
+    GET DIAGNOSTICS v_insert_row_count = ROW_COUNT;
+
+    IF COALESCE(v_insert_row_count, 0) = 0 THEN
+      IF p_source_job_id IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM public.banking_pay_workbench_jobs AS self_reuse_source_job
+           WHERE self_reuse_source_job.id = p_source_job_id
+             AND self_reuse_source_job.dedupe_key = v_dedupe_key
+             AND UPPER(BTRIM(COALESCE(self_reuse_source_job.status, ''))) IN ('QUEUED', 'RUNNING')
+         ) THEN
+        IF v_self_reuse_prevented IS TRUE THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_CONTINUATION_SELF_REUSE_BLOCKED'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'PAY_WORKBENCH_CONTINUATION_SELF_REUSE_BLOCKED',
+                    'session_id', p_session_id::text,
+                    'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+                    'job_type', v_job_type,
+                    'source_job_id', p_source_job_id::text,
+                    'original_dedupe_key', v_original_dedupe_key,
+                    'attempted_dedupe_key', v_dedupe_key,
+                    'message', 'Continuation enqueue refused to return or update the currently running source job as its own continuation.'
+                  )::text;
+        END IF;
+
+        v_self_reuse_prevented := true;
+        v_self_reuse_retry_count := COALESCE(v_self_reuse_retry_count, 0) + 1;
+        v_original_dedupe_key := COALESCE(v_original_dedupe_key, v_dedupe_key);
+        v_dedupe_key := v_original_dedupe_key || ':after_source_job:' || p_source_job_id::text;
+
+        v_payload_json := jsonb_strip_nulls(
+          COALESCE(v_payload_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'dedupe_key', v_dedupe_key,
+            'self_reuse_prevented', true,
+            'continuation_self_reuse_prevented', true,
+            'original_dedupe_key', v_original_dedupe_key,
+            'self_reuse_safe_dedupe_key', v_dedupe_key,
+            'self_reuse_source_job_id', p_source_job_id::text
+          )
+        );
+
+        v_reuse_patch_json := COALESCE(v_reuse_patch_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'self_reuse_prevented', true,
+            'continuation_self_reuse_prevented', true,
+            'original_dedupe_key', v_original_dedupe_key,
+            'self_reuse_safe_dedupe_key', v_dedupe_key,
+            'self_reuse_source_job_id', p_source_job_id::text
+          );
+
+        CONTINUE continuation_insert_attempt;
+      END IF;
+
+      RAISE EXCEPTION 'PAY_WORKBENCH_CONTINUATION_INSERT_RETURNED_NO_ROW'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_CONTINUATION_INSERT_RETURNED_NO_ROW',
+                'session_id', p_session_id::text,
+                'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+                'job_type', v_job_type,
+                'source_job_id', CASE WHEN p_source_job_id IS NULL THEN NULL ELSE p_source_job_id::text END,
+                'dedupe_key', v_dedupe_key,
+                'message', 'Continuation insert/upsert returned no row without a recognised source-job self-reuse conflict.'
+              )::text;
+    END IF;
+
+    IF p_source_job_id IS NOT NULL
+       AND v_job_id IS NOT NULL
+       AND v_job_id = p_source_job_id THEN
+      IF v_self_reuse_prevented IS TRUE THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_CONTINUATION_SELF_REUSE_BLOCKED'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'PAY_WORKBENCH_CONTINUATION_SELF_REUSE_BLOCKED',
+                  'session_id', p_session_id::text,
+                  'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+                  'job_type', v_job_type,
+                  'source_job_id', p_source_job_id::text,
+                  'original_dedupe_key', v_original_dedupe_key,
+                  'attempted_dedupe_key', v_dedupe_key,
+                  'message', 'Continuation helper still resolved to the current source job after self-reuse retry.'
+                )::text;
+      END IF;
+
+      v_self_reuse_prevented := true;
+      v_self_reuse_retry_count := COALESCE(v_self_reuse_retry_count, 0) + 1;
+      v_original_dedupe_key := COALESCE(v_original_dedupe_key, v_dedupe_key);
+      v_dedupe_key := v_original_dedupe_key || ':after_source_job:' || p_source_job_id::text;
+
+      v_payload_json := jsonb_strip_nulls(
+        COALESCE(v_payload_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'dedupe_key', v_dedupe_key,
+          'self_reuse_prevented', true,
+          'continuation_self_reuse_prevented', true,
+          'original_dedupe_key', v_original_dedupe_key,
+          'self_reuse_safe_dedupe_key', v_dedupe_key,
+          'self_reuse_source_job_id', p_source_job_id::text
+        )
+      );
+
+      v_reuse_patch_json := COALESCE(v_reuse_patch_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'self_reuse_prevented', true,
+          'continuation_self_reuse_prevented', true,
+          'original_dedupe_key', v_original_dedupe_key,
+          'self_reuse_safe_dedupe_key', v_dedupe_key,
+          'self_reuse_source_job_id', p_source_job_id::text
+        );
+
+      CONTINUE continuation_insert_attempt;
+    END IF;
+
+    EXIT continuation_insert_attempt;
+  END LOOP;
+
+  IF p_source_job_id IS NOT NULL
+     AND v_job_id IS NOT NULL
+     AND v_job_id = p_source_job_id THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CONTINUATION_SELF_REUSE_BLOCKED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_CONTINUATION_SELF_REUSE_BLOCKED',
+              'session_id', p_session_id::text,
+              'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+              'job_type', v_job_type,
+              'source_job_id', p_source_job_id::text,
+              'original_dedupe_key', v_original_dedupe_key,
+              'dedupe_key', v_dedupe_key,
+              'message', 'Continuation helper refused to return the current source job as its own continuation.'
+            )::text;
+  END IF;
+
+  IF v_job_id IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CONTINUATION_JOB_ID_MISSING'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_CONTINUATION_JOB_ID_MISSING',
+              'session_id', p_session_id::text,
+              'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+              'job_type', v_job_type,
+              'source_job_id', CASE WHEN p_source_job_id IS NULL THEN NULL ELSE p_source_job_id::text END,
+              'dedupe_key', v_dedupe_key
+            )::text;
+  END IF;
 
   IF p_candidate_id IS NOT NULL THEN
     UPDATE public.banking_pay_workbench_session_scope AS scope_update
@@ -181800,7 +181998,10 @@ BEGIN
       'superseded_stale_running_count', COALESCE(v_superseded_stale_count, 0),
       'session_progress_update_applied', COALESCE(v_session_progress_update_applied, false),
       'session_progress_lock_skipped', COALESCE(v_session_progress_lock_skipped, false),
-      'session_progress_lock_skip_reason', v_session_progress_lock_skip_reason
+      'session_progress_lock_skip_reason', v_session_progress_lock_skip_reason,
+      'self_reuse_prevented', COALESCE(v_self_reuse_prevented, false),
+      'original_dedupe_key', CASE WHEN COALESCE(v_self_reuse_prevented, false) THEN v_original_dedupe_key ELSE NULL::text END,
+      'self_reuse_retry_count', COALESCE(v_self_reuse_retry_count, 0)
     ),
     'WORKBENCH_STAGE_CONTINUATION_ENQUEUE',
     v_actor_user_id
@@ -181839,11 +182040,13 @@ BEGIN
     'next_phase', NULLIF(v_delta_next_phase, ''),
     'delta_refresh_required', v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH',
     'source_job_id', CASE WHEN p_source_job_id IS NULL THEN NULL ELSE p_source_job_id::text END,
-    'continuation_reason', v_reason
+    'continuation_reason', v_reason,
+    'self_reuse_prevented', COALESCE(v_self_reuse_prevented, false),
+    'original_dedupe_key', CASE WHEN COALESCE(v_self_reuse_prevented, false) THEN v_original_dedupe_key ELSE NULL::text END,
+    'self_reuse_retry_count', COALESCE(v_self_reuse_retry_count, 0)
   );
 END;
 $function$;
-
 
 
 
@@ -198060,8 +198263,6 @@ BEGIN
 END;
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_project_changed_timesheets_v1(p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_targeted_timesheet_ids uuid[], p_linked_timesheet_ids uuid[], p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -198646,12 +198847,43 @@ BEGIN
       contract_week_row.id AS contract_week_id,
       COALESCE(timesheet_financial_row.client_id, contract_row.client_id) AS client_id,
       client_row.name AS client_name,
-      COALESCE(timesheet_financial_row.role, contract_row.role) AS role,
+      COALESCE(timesheet_financial_row.role, contract_row.role, timesheet_row.job_title_norm) AS role,
       COALESCE(timesheet_financial_row.band, timesheet_row.band, contract_row.band) AS band,
       contract_row.display_site,
       contract_row.ward_hint,
       COALESCE(timesheet_row.worked_start_iso, timesheet_financial_row.worked_start_iso) AS worked_start_iso,
       COALESCE(timesheet_row.worked_end_iso, timesheet_financial_row.worked_end_iso) AS worked_end_iso,
+      COALESCE(timesheet_row.break_start_iso, timesheet_financial_row.break_start_iso) AS break_start_iso,
+      COALESCE(timesheet_row.break_end_iso, timesheet_financial_row.break_end_iso) AS break_end_iso,
+      COALESCE(timesheet_row.break_minutes, timesheet_financial_row.break_minutes) AS break_minutes,
+      CASE
+        WHEN jsonb_typeof(timesheet_financial_row.actual_schedule_json) = 'object' THEN timesheet_financial_row.actual_schedule_json
+        WHEN jsonb_typeof(timesheet_financial_row.actual_schedule_json) = 'array' THEN (
+          SELECT financial_schedule_item.value
+          FROM jsonb_array_elements(timesheet_financial_row.actual_schedule_json) AS financial_schedule_item(value)
+          WHERE financial_schedule_item.value IS NOT NULL
+            AND jsonb_typeof(financial_schedule_item.value) = 'object'
+          LIMIT 1
+        )
+        WHEN jsonb_typeof(timesheet_row.actual_schedule_json) = 'object' THEN timesheet_row.actual_schedule_json
+        WHEN jsonb_typeof(timesheet_row.actual_schedule_json) = 'array' THEN (
+          SELECT timesheet_schedule_item.value
+          FROM jsonb_array_elements(timesheet_row.actual_schedule_json) AS timesheet_schedule_item(value)
+          WHERE timesheet_schedule_item.value IS NOT NULL
+            AND jsonb_typeof(timesheet_schedule_item.value) = 'object'
+          LIMIT 1
+        )
+        ELSE NULL::jsonb
+      END AS effective_daily_schedule_json,
+      COALESCE(timesheet_financial_row.invoice_breakdown_json, '{}'::jsonb) AS invoice_breakdown_json,
+      ROUND(COALESCE(timesheet_financial_row.total_hours, 0), 6) AS total_hours,
+      ROUND(COALESCE(timesheet_financial_row.total_pay_ex_vat, 0), 2) AS total_pay_ex_vat,
+      ROUND(COALESCE(timesheet_financial_row.total_charge_ex_vat, 0), 2) AS total_charge_ex_vat,
+      ROUND(COALESCE(timesheet_financial_row.hours_day, 0), 6) AS hours_day,
+      ROUND(COALESCE(timesheet_financial_row.hours_night, 0), 6) AS hours_night,
+      ROUND(COALESCE(timesheet_financial_row.hours_sat, 0), 6) AS hours_sat,
+      ROUND(COALESCE(timesheet_financial_row.hours_sun, 0), 6) AS hours_sun,
+      ROUND(COALESCE(timesheet_financial_row.hours_bh, 0), 6) AS hours_bh,
       COALESCE(timesheet_financial_row.pay_method, candidate_context.candidate_pay_method) AS timesheet_pay_method,
       timesheet_financial_row.authorised_at_utc AS financial_authorised_at_utc,
       UPPER(BTRIM(COALESCE(timesheet_financial_row.processing_status::text, ''))) AS financial_processing_status,
@@ -198680,6 +198912,7 @@ BEGIN
       ON contract_week_row.timesheet_id = timesheet_row.timesheet_id
     CROSS JOIN candidate_context
     WHERE timesheet_row.timesheet_id = ANY(v_all_affected_timesheet_ids)
+      AND timesheet_row.is_current = true
     ORDER BY timesheet_row.timesheet_id, timesheet_row.is_current DESC, timesheet_row.version DESC, timesheet_row.updated_at DESC, contract_week_row.updated_at DESC NULLS LAST, contract_week_row.id
   ), projected_components AS (
     SELECT
@@ -198696,6 +198929,23 @@ BEGIN
       current_timesheet_rows.band,
       current_timesheet_rows.display_site,
       current_timesheet_rows.ward_hint,
+      current_timesheet_rows.timesheet_line_type,
+      current_timesheet_rows.sheet_scope,
+      current_timesheet_rows.worked_start_iso,
+      current_timesheet_rows.worked_end_iso,
+      current_timesheet_rows.break_start_iso,
+      current_timesheet_rows.break_end_iso,
+      current_timesheet_rows.break_minutes,
+      current_timesheet_rows.effective_daily_schedule_json,
+      current_timesheet_rows.invoice_breakdown_json,
+      current_timesheet_rows.total_hours,
+      current_timesheet_rows.total_pay_ex_vat,
+      current_timesheet_rows.total_charge_ex_vat,
+      current_timesheet_rows.hours_day,
+      current_timesheet_rows.hours_night,
+      current_timesheet_rows.hours_sat,
+      current_timesheet_rows.hours_sun,
+      current_timesheet_rows.hours_bh,
       current_timesheet_rows.authorised_at_server,
       current_timesheet_rows.financial_authorised_at_utc,
       current_timesheet_rows.financial_processing_status,
@@ -198747,33 +198997,392 @@ BEGIN
                scope_rows.family_timesheet_id
       LIMIT 1
     ) AS scope_choice ON true
-  ), row_identity AS (
+  ), projected_timesheet_contract AS (
+    SELECT DISTINCT ON (projected_components.timesheet_id)
+      projected_components.timesheet_id,
+      projected_components.canonical_timesheet_id,
+      projected_components.booking_id,
+      projected_components.reference_number,
+      projected_components.client_id,
+      projected_components.client_name,
+      projected_components.role,
+      projected_components.band,
+      projected_components.display_site,
+      projected_components.ward_hint,
+      projected_components.sheet_scope,
+      projected_components.worked_start_iso,
+      projected_components.worked_end_iso,
+      projected_components.break_start_iso,
+      projected_components.break_end_iso,
+      projected_components.break_minutes,
+      projected_components.effective_daily_schedule_json,
+      projected_components.invoice_breakdown_json,
+      projected_components.total_hours,
+      projected_components.total_pay_ex_vat,
+      projected_components.total_charge_ex_vat,
+      projected_components.hours_day,
+      projected_components.hours_night,
+      projected_components.hours_sat,
+      projected_components.hours_sun,
+      projected_components.hours_bh
+    FROM projected_components
+    ORDER BY projected_components.timesheet_id,
+             CASE WHEN projected_components.key_type = 'TS_DAY' THEN 0 ELSE 1 END,
+             projected_components.key_type,
+             projected_components.key_value
+  ), timesheet_segment_rows AS (
+    SELECT
+      projected_timesheet_contract.timesheet_id,
+      COALESCE(
+        jsonb_agg(segment_output.segment_json ORDER BY segment_output.segment_order)
+          FILTER (WHERE segment_output.segment_json IS NOT NULL),
+        '[]'::jsonb
+      ) AS timesheet_segment_rows_json,
+      COUNT(*) FILTER (WHERE segment_output.segment_json IS NOT NULL)::integer AS timesheet_segment_count
+    FROM projected_timesheet_contract
+    LEFT JOIN LATERAL (
+      SELECT
+        segment_source.segment_order,
+        jsonb_strip_nulls(
+          jsonb_build_object(
+            'timesheet_id', projected_timesheet_contract.timesheet_id::text,
+            'real_business_timesheet_id', projected_timesheet_contract.timesheet_id::text,
+            'candidate_id', p_candidate_id::text,
+            'booking_id', projected_timesheet_contract.booking_id,
+            'segment_id', segment_source.segment_id,
+            'segment_key', segment_source.segment_key,
+            'segment_stable_key', segment_source.segment_stable_key,
+            'date', segment_source.work_date_text,
+            'work_date', segment_source.work_date_text,
+            'linked_shift_date', segment_source.work_date_text,
+            'client_id', CASE WHEN projected_timesheet_contract.client_id IS NULL THEN NULL ELSE projected_timesheet_contract.client_id::text END,
+            'client_name', projected_timesheet_contract.client_name,
+            'role', projected_timesheet_contract.role,
+            'job_title', projected_timesheet_contract.role,
+            'band', projected_timesheet_contract.band,
+            'display_site', projected_timesheet_contract.display_site,
+            'ward_hint', projected_timesheet_contract.ward_hint,
+            'ref_num', segment_source.ref_num,
+            'reference_number', projected_timesheet_contract.reference_number
+          )
+          || jsonb_build_object(
+            'start_utc', segment_source.start_utc_text,
+            'end_utc', segment_source.end_utc_text,
+            'start', segment_source.start_text,
+            'start_time', segment_source.start_text,
+            'finish', segment_source.finish_text,
+            'finish_time', segment_source.finish_text,
+            'end', segment_source.finish_text,
+            'break_start', segment_source.break_start_text,
+            'break_end', segment_source.break_end_text,
+            'break_mins', segment_source.break_mins,
+            'break_minutes', segment_source.break_mins,
+            'breaks', COALESCE(segment_source.breaks_json, '[]'::jsonb),
+            'source_pay_amount_ex_vat', segment_source.source_pay_amount_ex_vat,
+            'hours', segment_source.hours,
+            'units', segment_source.hours
+          )
+          || jsonb_build_object(
+            'snooze_identity', jsonb_strip_nulls(jsonb_build_object(
+              'identity_type', 'SEGMENT',
+              'candidate_id', p_candidate_id::text,
+              'timesheet_id', projected_timesheet_contract.timesheet_id::text,
+              'booking_id', projected_timesheet_contract.booking_id,
+              'segment_id', segment_source.segment_id,
+              'segment_key', segment_source.segment_key,
+              'segment_stable_key', segment_source.segment_stable_key,
+              'source_ref', segment_source.ref_num,
+              'date', segment_source.work_date_text
+            )),
+            'snooze_state', 'NONE',
+            'whole_timesheet_snooze_action_blocked', false,
+            'segment_snooze_action_blocked', false
+          )
+        ) AS segment_json
+      FROM (
+        SELECT
+          segment_values.ordinality::integer AS segment_order,
+          NULLIF(BTRIM(COALESCE(
+            segment_values.segment_json->>'date',
+            segment_values.segment_json->>'work_date',
+            segment_values.segment_json->>'linked_shift_date',
+            segment_values.segment_json->>'shift_date',
+            segment_values.segment_json->>'day',
+            ''
+          )), '') AS work_date_text,
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'segment_id', '')), ''),
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'segment_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'segment_stable_key', '')), ''),
+            'ts:' || projected_timesheet_contract.timesheet_id::text || ':' || segment_values.ordinality::text
+          ) AS segment_id,
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'segment_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'segment_id', '')), ''),
+            'ts:' || projected_timesheet_contract.timesheet_id::text || ':' || segment_values.ordinality::text
+          ) AS segment_key,
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'segment_stable_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'segment_id', '')), ''),
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'segment_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'date', segment_values.segment_json->>'work_date', '')), ''),
+            'timesheet:' || COALESCE(projected_timesheet_contract.booking_id, projected_timesheet_contract.timesheet_id::text) || ':' || segment_values.ordinality::text
+          ) AS segment_stable_key,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'ref_num', segment_values.segment_json->>'reference_number', projected_timesheet_contract.reference_number, '')), '') AS ref_num,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'start_utc', segment_values.segment_json->>'worked_start_utc', '')), '') AS start_utc_text,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'end_utc', segment_values.segment_json->>'finish_utc', segment_values.segment_json->>'worked_end_utc', '')), '') AS end_utc_text,
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'start', segment_values.segment_json->>'start_time', segment_values.segment_json->>'worked_start', '')), ''),
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'start_utc', segment_values.segment_json->>'worked_start_utc', '')), '') ~ '^\d{4}-\d{2}-\d{2}[ T]'
+                THEN to_char(((COALESCE(segment_values.segment_json->>'start_utc', segment_values.segment_json->>'worked_start_utc'))::timestamptz AT TIME ZONE 'Europe/London'), 'HH24:MI')
+              ELSE NULL::text
+            END
+          ) AS start_text,
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'finish', segment_values.segment_json->>'finish_time', segment_values.segment_json->>'end', segment_values.segment_json->>'end_time', segment_values.segment_json->>'worked_end', '')), ''),
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'end_utc', segment_values.segment_json->>'finish_utc', segment_values.segment_json->>'worked_end_utc', '')), '') ~ '^\d{4}-\d{2}-\d{2}[ T]'
+                THEN to_char(((COALESCE(segment_values.segment_json->>'end_utc', segment_values.segment_json->>'finish_utc', segment_values.segment_json->>'worked_end_utc'))::timestamptz AT TIME ZONE 'Europe/London'), 'HH24:MI')
+              ELSE NULL::text
+            END
+          ) AS finish_text,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'break_start', segment_values.segment_json->>'breakStart', '')), '') AS break_start_text,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'break_end', segment_values.segment_json->>'breakEnd', '')), '') AS break_end_text,
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'break_mins', segment_values.segment_json->>'break_minutes', segment_values.segment_json->>'breakMinutes', '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN ROUND((COALESCE(segment_values.segment_json->>'break_mins', segment_values.segment_json->>'break_minutes', segment_values.segment_json->>'breakMinutes'))::numeric, 0)
+            ELSE NULL::numeric
+          END AS break_mins,
+          CASE WHEN jsonb_typeof(segment_values.segment_json->'breaks') = 'array' THEN segment_values.segment_json->'breaks' ELSE '[]'::jsonb END AS breaks_json,
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'pay_amount_ex_vat', segment_values.segment_json->>'amount_ex_vat', segment_values.segment_json->>'pay_amount', '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN ROUND((COALESCE(segment_values.segment_json->>'pay_amount_ex_vat', segment_values.segment_json->>'amount_ex_vat', segment_values.segment_json->>'pay_amount'))::numeric, 2)
+            ELSE NULL::numeric
+          END AS source_pay_amount_ex_vat,
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'hours', segment_values.segment_json->>'units', '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN ROUND((COALESCE(segment_values.segment_json->>'hours', segment_values.segment_json->>'units'))::numeric, 6)
+            ELSE NULL::numeric
+          END AS hours
+        FROM jsonb_array_elements(
+          CASE
+            WHEN projected_timesheet_contract.invoice_breakdown_json IS NOT NULL
+             AND jsonb_typeof(projected_timesheet_contract.invoice_breakdown_json) = 'object'
+             AND UPPER(COALESCE(projected_timesheet_contract.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+             AND jsonb_typeof(projected_timesheet_contract.invoice_breakdown_json->'segments') = 'array'
+              THEN projected_timesheet_contract.invoice_breakdown_json->'segments'
+            ELSE '[]'::jsonb
+          END
+        ) WITH ORDINALITY AS segment_values(segment_json, ordinality)
+        WHERE segment_values.segment_json IS NOT NULL
+          AND jsonb_typeof(segment_values.segment_json) = 'object'
+
+        UNION ALL
+
+        SELECT
+          1 AS segment_order,
+          COALESCE(
+            CASE WHEN projected_timesheet_contract.worked_start_iso IS NOT NULL THEN ((projected_timesheet_contract.worked_start_iso AT TIME ZONE 'Europe/London')::date)::text ELSE NULL::text END,
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'date', '')), ''),
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'work_date', '')), ''),
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'ymd', '')), ''),
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'date_ymd', '')), '')
+          ) AS work_date_text,
+          'ts:' || projected_timesheet_contract.timesheet_id::text AS segment_id,
+          'ts:' || projected_timesheet_contract.timesheet_id::text AS segment_key,
+          'timesheet:' || COALESCE(projected_timesheet_contract.booking_id, projected_timesheet_contract.timesheet_id::text) AS segment_stable_key,
+          NULLIF(BTRIM(COALESCE(projected_timesheet_contract.reference_number, '')), '') AS ref_num,
+          CASE WHEN projected_timesheet_contract.worked_start_iso IS NULL THEN NULL::text ELSE projected_timesheet_contract.worked_start_iso::text END AS start_utc_text,
+          CASE WHEN projected_timesheet_contract.worked_end_iso IS NULL THEN NULL::text ELSE projected_timesheet_contract.worked_end_iso::text END AS end_utc_text,
+          COALESCE(
+            CASE WHEN projected_timesheet_contract.worked_start_iso IS NOT NULL THEN to_char((projected_timesheet_contract.worked_start_iso AT TIME ZONE 'Europe/London'), 'HH24:MI') ELSE NULL::text END,
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'start', '')), ''),
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'start_time', '')), ''),
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'worked_start', '')), '')
+          ) AS start_text,
+          COALESCE(
+            CASE WHEN projected_timesheet_contract.worked_end_iso IS NOT NULL THEN to_char((projected_timesheet_contract.worked_end_iso AT TIME ZONE 'Europe/London'), 'HH24:MI') ELSE NULL::text END,
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'finish', '')), ''),
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'finish_time', '')), ''),
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'end', '')), ''),
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'worked_end', '')), '')
+          ) AS finish_text,
+          COALESCE(
+            CASE WHEN projected_timesheet_contract.break_start_iso IS NOT NULL THEN to_char((projected_timesheet_contract.break_start_iso AT TIME ZONE 'Europe/London'), 'HH24:MI') ELSE NULL::text END,
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'break_start', '')), '')
+          ) AS break_start_text,
+          COALESCE(
+            CASE WHEN projected_timesheet_contract.break_end_iso IS NOT NULL THEN to_char((projected_timesheet_contract.break_end_iso AT TIME ZONE 'Europe/London'), 'HH24:MI') ELSE NULL::text END,
+            NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'break_end', '')), '')
+          ) AS break_end_text,
+          COALESCE(
+            projected_timesheet_contract.break_minutes::numeric,
+            CASE WHEN NULLIF(BTRIM(COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'break_minutes', projected_timesheet_contract.effective_daily_schedule_json->>'break_mins', projected_timesheet_contract.effective_daily_schedule_json->>'breakMinutes', '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN ROUND((COALESCE(projected_timesheet_contract.effective_daily_schedule_json->>'break_minutes', projected_timesheet_contract.effective_daily_schedule_json->>'break_mins', projected_timesheet_contract.effective_daily_schedule_json->>'breakMinutes'))::numeric, 0)
+              ELSE NULL::numeric
+            END,
+            CASE
+              WHEN projected_timesheet_contract.break_start_iso IS NOT NULL AND projected_timesheet_contract.break_end_iso IS NOT NULL
+                THEN GREATEST(0::numeric, ROUND((EXTRACT(EPOCH FROM (projected_timesheet_contract.break_end_iso - projected_timesheet_contract.break_start_iso)) / 60.0)::numeric, 0))
+              ELSE NULL::numeric
+            END
+          ) AS break_mins,
+          CASE
+            WHEN jsonb_typeof(projected_timesheet_contract.effective_daily_schedule_json->'breaks') = 'array' THEN projected_timesheet_contract.effective_daily_schedule_json->'breaks'
+            WHEN projected_timesheet_contract.break_start_iso IS NOT NULL AND projected_timesheet_contract.break_end_iso IS NOT NULL THEN jsonb_build_array(jsonb_build_object(
+              'start', to_char((projected_timesheet_contract.break_start_iso AT TIME ZONE 'Europe/London'), 'HH24:MI'),
+              'end', to_char((projected_timesheet_contract.break_end_iso AT TIME ZONE 'Europe/London'), 'HH24:MI'),
+              'break_mins', COALESCE(projected_timesheet_contract.break_minutes::numeric, GREATEST(0::numeric, ROUND((EXTRACT(EPOCH FROM (projected_timesheet_contract.break_end_iso - projected_timesheet_contract.break_start_iso)) / 60.0)::numeric, 0)))
+            ))
+            ELSE '[]'::jsonb
+          END AS breaks_json,
+          ROUND(COALESCE(projected_timesheet_contract.total_pay_ex_vat, 0), 2) AS source_pay_amount_ex_vat,
+          ROUND(COALESCE(projected_timesheet_contract.total_hours, 0), 6) AS hours
+        WHERE NOT (
+            projected_timesheet_contract.invoice_breakdown_json IS NOT NULL
+            AND jsonb_typeof(projected_timesheet_contract.invoice_breakdown_json) = 'object'
+            AND UPPER(COALESCE(projected_timesheet_contract.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+            AND jsonb_typeof(projected_timesheet_contract.invoice_breakdown_json->'segments') = 'array'
+          )
+          AND UPPER(BTRIM(COALESCE(projected_timesheet_contract.sheet_scope, ''))) = 'DAILY'
+      ) AS segment_source
+      WHERE segment_source.work_date_text ~ '^\d{4}-\d{2}-\d{2}$'
+    ) AS segment_output ON true
+    GROUP BY projected_timesheet_contract.timesheet_id
+  ), projected_component_flags AS (
     SELECT
       projected_components.*,
+      COALESCE(timesheet_segment_rows.timesheet_segment_rows_json, '[]'::jsonb) AS timesheet_segment_rows_json,
+      COALESCE(timesheet_segment_rows.timesheet_segment_count, 0) AS timesheet_segment_count,
+      BOOL_OR(projected_components.key_type = 'TS_DAY') OVER (PARTITION BY projected_components.timesheet_id) AS timesheet_has_ts_day_component
+    FROM projected_components
+    LEFT JOIN timesheet_segment_rows
+      ON timesheet_segment_rows.timesheet_id = projected_components.timesheet_id
+  ), row_identity AS (
+    SELECT
+      projected_component_flags.*,
       CASE
-        WHEN projected_components.key_type = 'TS_TOTAL' THEN projected_components.canonical_timesheet_id::text || ':non_segment:total'
-        WHEN projected_components.key_type = 'TS_DAY' THEN projected_components.canonical_timesheet_id::text || ':segment:' || lower(regexp_replace(projected_components.key_value, '[^0-9A-Za-z_-]+', '_', 'g'))
-        WHEN projected_components.key_type = 'EXPENSE_CODE' THEN projected_components.canonical_timesheet_id::text || ':component:expense:' || md5(projected_components.key_value)
-        WHEN projected_components.key_type = 'ADDITIONAL_CODE' THEN projected_components.canonical_timesheet_id::text || ':component:additional:' || md5(projected_components.key_value)
-        ELSE projected_components.canonical_timesheet_id::text || ':component:' || lower(regexp_replace(projected_components.key_type, '[^0-9A-Za-z_-]+', '_', 'g')) || ':' || md5(projected_components.key_value)
+        WHEN projected_component_flags.key_type = 'TS_TOTAL' THEN projected_component_flags.canonical_timesheet_id::text || ':non_segment:total'
+        WHEN projected_component_flags.key_type = 'TS_DAY' THEN projected_component_flags.canonical_timesheet_id::text || ':segment:' || lower(regexp_replace(projected_component_flags.key_value, '[^0-9A-Za-z_-]+', '_', 'g'))
+        WHEN projected_component_flags.key_type = 'EXPENSE_CODE' THEN projected_component_flags.canonical_timesheet_id::text || ':component:expense:' || md5(projected_component_flags.key_value)
+        WHEN projected_component_flags.key_type = 'ADDITIONAL_CODE' THEN projected_component_flags.canonical_timesheet_id::text || ':component:additional:' || md5(projected_component_flags.key_value)
+        ELSE projected_component_flags.canonical_timesheet_id::text || ':component:' || lower(regexp_replace(projected_component_flags.key_type, '[^0-9A-Za-z_-]+', '_', 'g')) || ':' || md5(projected_component_flags.key_value)
       END AS row_key,
       CASE
-        WHEN projected_components.key_type = 'TS_TOTAL' THEN projected_components.canonical_timesheet_id::text || ':non_segment:total'
-        WHEN projected_components.key_type = 'TS_DAY' THEN projected_components.canonical_timesheet_id::text || ':segment:' || lower(regexp_replace(projected_components.key_value, '[^0-9A-Za-z_-]+', '_', 'g'))
-        WHEN projected_components.key_type = 'EXPENSE_CODE' THEN projected_components.canonical_timesheet_id::text || ':component:expense:' || md5(projected_components.key_value)
-        WHEN projected_components.key_type = 'ADDITIONAL_CODE' THEN projected_components.canonical_timesheet_id::text || ':component:additional:' || md5(projected_components.key_value)
-        ELSE projected_components.canonical_timesheet_id::text || ':component:' || lower(regexp_replace(projected_components.key_type, '[^0-9A-Za-z_-]+', '_', 'g')) || ':' || md5(projected_components.key_value)
+        WHEN projected_component_flags.key_type = 'TS_TOTAL' THEN projected_component_flags.canonical_timesheet_id::text || ':non_segment:total'
+        WHEN projected_component_flags.key_type = 'TS_DAY' THEN projected_component_flags.canonical_timesheet_id::text || ':segment:' || lower(regexp_replace(projected_component_flags.key_value, '[^0-9A-Za-z_-]+', '_', 'g'))
+        WHEN projected_component_flags.key_type = 'EXPENSE_CODE' THEN projected_component_flags.canonical_timesheet_id::text || ':component:expense:' || md5(projected_component_flags.key_value)
+        WHEN projected_component_flags.key_type = 'ADDITIONAL_CODE' THEN projected_component_flags.canonical_timesheet_id::text || ':component:additional:' || md5(projected_component_flags.key_value)
+        ELSE projected_component_flags.canonical_timesheet_id::text || ':component:' || lower(regexp_replace(projected_component_flags.key_type, '[^0-9A-Za-z_-]+', '_', 'g')) || ':' || md5(projected_component_flags.key_value)
       END AS line_key,
       CASE
-        WHEN projected_components.outstanding_ex_vat <= 0 THEN true
+        WHEN projected_component_flags.outstanding_ex_vat <= 0 THEN true
         ELSE false
       END AS suppress_zero_or_negative_outstanding,
       (
-        projected_components.payee_blocked_reason_codes
-        || CASE WHEN projected_components.has_active_snooze THEN jsonb_build_array('BLOCKED_TIMESHEET_SNOOZE') ELSE '[]'::jsonb END
-        || CASE WHEN projected_components.outstanding_ex_vat <= 0 THEN jsonb_build_array('ECONOMIC_KEY_OUTSTANDING_NOT_AVAILABLE') ELSE '[]'::jsonb END
+        projected_component_flags.payee_blocked_reason_codes
+        || CASE WHEN projected_component_flags.has_active_snooze THEN jsonb_build_array('BLOCKED_TIMESHEET_SNOOZE') ELSE '[]'::jsonb END
+        || CASE WHEN projected_component_flags.outstanding_ex_vat <= 0 THEN jsonb_build_array('ECONOMIC_KEY_OUTSTANDING_NOT_AVAILABLE') ELSE '[]'::jsonb END
       ) AS blocked_reason_codes
-    FROM projected_components
+    FROM projected_component_flags
+  ), row_segment_contract AS (
+    SELECT
+      row_identity.*,
+      COALESCE(row_segments.row_segment_rows_json, '[]'::jsonb) AS row_segment_rows_json,
+      COALESCE(row_segments.row_segment_count, 0) AS row_segment_count,
+      row_segments.first_segment_json,
+      COALESCE(
+        row_segments.top_level_work_date_text,
+        CASE WHEN row_identity.key_type = 'TS_DAY' AND row_identity.key_value ~ '^\d{4}-\d{2}-\d{2}$' THEN row_identity.key_value ELSE NULL::text END
+      ) AS row_work_date_text
+    FROM row_identity
+    LEFT JOIN LATERAL (
+      WITH selected_segments AS (
+        SELECT
+          source_segment.segment_json,
+          source_segment.ordinality,
+          CASE
+            WHEN COALESCE(source_segment.segment_json->>'source_pay_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN ROUND((source_segment.segment_json->>'source_pay_amount_ex_vat')::numeric, 2)
+            ELSE NULL::numeric
+          END AS source_pay_amount_ex_vat
+        FROM jsonb_array_elements(COALESCE(row_identity.timesheet_segment_rows_json, '[]'::jsonb)) WITH ORDINALITY AS source_segment(segment_json, ordinality)
+        WHERE source_segment.segment_json IS NOT NULL
+          AND jsonb_typeof(source_segment.segment_json) = 'object'
+          AND (
+            (
+              row_identity.key_type = 'TS_DAY'
+              AND row_identity.key_value ~ '^\d{4}-\d{2}-\d{2}$'
+              AND COALESCE(source_segment.segment_json->>'date', source_segment.segment_json->>'work_date', source_segment.segment_json->>'linked_shift_date') = row_identity.key_value
+            )
+            OR (
+              row_identity.key_type = 'TS_TOTAL'
+              AND COALESCE(row_identity.timesheet_has_ts_day_component, false) IS NOT TRUE
+            )
+            OR (
+              row_identity.key_type NOT IN ('TS_DAY', 'TS_TOTAL')
+              AND COALESCE(row_identity.timesheet_segment_count, 0) = 1
+            )
+          )
+      ), selected_stats AS (
+        SELECT
+          COUNT(*)::integer AS selected_count,
+          COUNT(*) FILTER (WHERE selected_segments.source_pay_amount_ex_vat IS NOT NULL)::integer AS selected_source_amount_count
+        FROM selected_segments
+      ), materialised_segments AS (
+        SELECT
+          selected_segments.segment_json,
+          selected_segments.ordinality,
+          CASE
+            WHEN selected_stats.selected_count = 1 THEN row_identity.outstanding_ex_vat
+            WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN selected_segments.source_pay_amount_ex_vat
+            ELSE NULL::numeric
+          END AS display_amount_ex_vat
+        FROM selected_segments
+        CROSS JOIN selected_stats
+        WHERE selected_stats.selected_count > 0
+          AND (
+            selected_stats.selected_count = 1
+            OR (
+              row_identity.key_type IN ('TS_DAY', 'TS_TOTAL')
+              AND selected_stats.selected_source_amount_count = selected_stats.selected_count
+            )
+          )
+      )
+      SELECT
+        COALESCE(
+          jsonb_agg(
+            jsonb_strip_nulls(
+              materialised_segments.segment_json
+              || jsonb_build_object(
+                'presentation_section', 'READY_TO_PAY',
+                'presentation_role', 'CHILD',
+                'presentation_parent_line_id', row_identity.line_key,
+                'presentation_line_id', row_identity.line_key || ':segment:' || materialised_segments.ordinality::text,
+                'preview_parent_row_id', row_identity.row_key,
+                'component_key_type', row_identity.key_type,
+                'component_key_value', row_identity.key_value,
+                'source_basis_json', materialised_segments.segment_json
+              )
+              || CASE
+                WHEN materialised_segments.display_amount_ex_vat IS NOT NULL THEN jsonb_build_object(
+                  'pay_amount_ex_vat', ROUND(materialised_segments.display_amount_ex_vat, 2),
+                  'amount_ex_vat', ROUND(materialised_segments.display_amount_ex_vat, 2),
+                  'pay_amount', ROUND(materialised_segments.display_amount_ex_vat, 2)
+                )
+                ELSE '{}'::jsonb
+              END
+            )
+            ORDER BY materialised_segments.ordinality
+          ),
+          '[]'::jsonb
+        ) AS row_segment_rows_json,
+        COUNT(*)::integer AS row_segment_count,
+        (ARRAY_AGG(materialised_segments.segment_json ORDER BY materialised_segments.ordinality))[1] AS first_segment_json,
+        (ARRAY_AGG(COALESCE(materialised_segments.segment_json->>'date', materialised_segments.segment_json->>'work_date', materialised_segments.segment_json->>'linked_shift_date') ORDER BY materialised_segments.ordinality))[1] AS top_level_work_date_text
+      FROM materialised_segments
+    ) AS row_segments ON true
   ), line_json_rows AS (
     SELECT
       row_identity.*,
@@ -198801,6 +199410,9 @@ BEGIN
           'row_key', row_identity.row_key,
           'preview_row_id', row_identity.row_key,
           'line_id', row_identity.line_key,
+          'presentation_line_id', row_identity.line_key,
+          'presentation_parent_line_id', row_identity.line_key,
+          'presentation_role', 'PARENT',
           'source_kind', 'VALID_PREVIEW_LINE',
           'line_type', 'TIMESHEET_PAYMENT',
           'row_key_line_key_parity_proven', COALESCE(v_key_parity_proven, false),
@@ -198838,19 +199450,64 @@ BEGIN
           'candidate_display_name', row_identity.candidate_display_name,
           'candidate_name', row_identity.candidate_display_name,
           'candidate_tms_ref', row_identity.candidate_tms_ref,
+          'tms_ref', row_identity.candidate_tms_ref,
           'client_id', CASE WHEN row_identity.client_id IS NULL THEN NULL ELSE row_identity.client_id::text END,
           'client_name', row_identity.client_name,
           'week_ending_date', CASE WHEN row_identity.week_ending_date IS NULL THEN NULL ELSE row_identity.week_ending_date::text END,
           'contract_id', CASE WHEN row_identity.contract_id IS NULL THEN NULL ELSE row_identity.contract_id::text END,
           'contract_week_id', CASE WHEN row_identity.contract_week_id IS NULL THEN NULL ELSE row_identity.contract_week_id::text END,
           'role', row_identity.role,
+          'job_title', row_identity.role,
           'band', row_identity.band,
           'display_site', row_identity.display_site,
           'ward_hint', row_identity.ward_hint,
           'reference_number', row_identity.reference_number,
+          'paye_treatment', CASE WHEN row_identity.effective_pay_method = 'PAYE' THEN 'GROSS_ADD' ELSE 'NONE' END,
           'source_function', 'pay_workbench_project_changed_timesheets_v1',
           'live_pay_eligibility_proven', true,
           'live_pay_eligibility_status', 'ELIGIBLE'
+        )
+        || jsonb_build_object(
+          'date', row_identity.row_work_date_text,
+          'work_date', row_identity.row_work_date_text,
+          'linked_shift_date', row_identity.row_work_date_text,
+          'start', row_identity.first_segment_json->>'start',
+          'start_time', row_identity.first_segment_json->>'start_time',
+          'finish', row_identity.first_segment_json->>'finish',
+          'finish_time', row_identity.first_segment_json->>'finish_time',
+          'break_start', row_identity.first_segment_json->>'break_start',
+          'break_end', row_identity.first_segment_json->>'break_end',
+          'break_mins', row_identity.first_segment_json->>'break_mins',
+          'break_minutes', row_identity.first_segment_json->>'break_minutes',
+          'breaks', CASE WHEN jsonb_typeof(row_identity.first_segment_json->'breaks') = 'array' THEN row_identity.first_segment_json->'breaks' ELSE NULL::jsonb END,
+          'section_segment_rows', COALESCE(row_identity.row_segment_rows_json, '[]'::jsonb),
+          'segment_rows', COALESCE(row_identity.row_segment_rows_json, '[]'::jsonb),
+          'section_segment_count', COALESCE(row_identity.row_segment_count, 0),
+          'segment_count', COALESCE(row_identity.row_segment_count, 0)
+        )
+        || jsonb_build_object(
+          'total_segment_count', COALESCE(row_identity.timesheet_segment_count, 0),
+          'ready_segment_count', COALESCE(row_identity.row_segment_count, 0),
+          'blocked_visible_segment_count', 0,
+          'hidden_indefinite_segment_count', 0,
+          'is_partially_ready', false,
+          'is_partially_blocked', false,
+          'section_non_segment_amount_ex_vat', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN 0::numeric ELSE row_identity.outstanding_ex_vat END,
+          'resolved_segment_rows_replace_source_total', false,
+          'has_active_timesheet_snooze', false,
+          'has_active_segment_snoozes', false,
+          'active_segment_snooze_count', 0,
+          'active_segment_dated_snooze_count', 0,
+          'active_segment_indefinite_snooze_count', 0,
+          'whole_timesheet_snooze_action_blocked', false,
+          'segment_snooze_action_blocked', false,
+          'snooze_identity', jsonb_strip_nulls(jsonb_build_object(
+            'identity_type', 'TIMESHEET',
+            'candidate_id', p_candidate_id::text,
+            'timesheet_id', row_identity.timesheet_id::text,
+            'booking_id', row_identity.booking_id
+          )),
+          'snooze_state', 'NONE'
         )
         || jsonb_build_object(
           'economic_key', jsonb_build_object(
@@ -198898,7 +199555,7 @@ BEGIN
           )
         )
       ) AS line_json
-    FROM row_identity
+    FROM row_segment_contract AS row_identity
   ), economic_checked AS (
     SELECT
       line_json_rows.*,
@@ -199234,7 +199891,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress_debug(
