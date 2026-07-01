@@ -2150,7 +2150,8 @@ DECLARE
   v_error_state text := NULL;
   v_error_message text := NULL;
   v_diag_started_at timestamptz := clock_timestamp();
-  v_summary_refresh_json jsonb := '{}'::jsonb;
+  v_advance_state_refresh_json jsonb := '{}'::jsonb;
+  v_has_uncleared_advance_override boolean := false;
 BEGIN
   PERFORM set_config('lock_timeout', '2500ms', true);
 
@@ -2360,7 +2361,7 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'AWAITING_SIGNED_QR', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
   END IF;
 
-  v_before_signature_json := public.timesheet_lifecycle_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
+  v_before_signature_json := public.timesheet_lifecycle_guard_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
   v_current_row_signature := NULLIF(BTRIM(COALESCE(v_before_signature_json ->> 'backend_row_signature', v_before_signature_json ->> 'row_signature', v_before_signature_json ->> 'signature', '')), '');
   v_expected_row_signature := NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '');
   IF v_expected_row_signature IS NOT NULL AND COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
@@ -2417,6 +2418,9 @@ BEGIN
 
   UPDATE public.timesheets AS ts
      SET authorised_at_server = v_now,
+         revoked_at = NULL,
+         revoked_reason = NULL,
+         revoked_by = NULL,
          updated_at = v_now
    WHERE ts.timesheet_id = v_current_ts.timesheet_id
      AND ts.is_current = true
@@ -2470,26 +2474,51 @@ BEGIN
 
   PERFORM set_config('cloudtms.lifecycle_defer_summary_refresh', 'off', true);
 
-  v_summary_refresh_json := public.pay_timesheet_summary_pay_state_refresh(
-    p_timesheet_ids => ARRAY[v_current_ts.timesheet_id],
-    p_actor_user_id => p_actor_user_id
-  );
+  SELECT EXISTS (
+    SELECT 1
+    FROM public._pay_timesheet_rotation_scope(ARRAY[v_current_ts.timesheet_id]) AS rs
+    JOIN public.timesheet_payment_overrides AS payment_override
+      ON payment_override.timesheet_id = rs.family_timesheet_id
+    WHERE payment_override.cleared_at_utc IS NULL
+      AND UPPER(BTRIM(COALESCE(payment_override.override_type, ''))) = 'ADVANCE_THIS_PAYMENT'
+  ) INTO v_has_uncleared_advance_override;
 
-  PERFORM public._temp_diag_log(
-    'TEMP_AUTHORISE_STAGE',
-    'TEMP_TIMESHEET_LIFECYCLE',
-    v_current_ts.timesheet_id::text,
-    jsonb_build_object(
-      'function_name', 'timesheet_authorise_generic_atomic',
-      'stage', 'explicit_summary_refresh_done',
-      'timesheet_id', v_current_ts.timesheet_id,
-      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
-      'refresh_result', COALESCE(v_summary_refresh_json, '{}'::jsonb),
-      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
-    )
-  );
+  IF COALESCE(v_has_uncleared_advance_override, false) THEN
+    v_advance_state_refresh_json := public.pay_timesheet_summary_advance_state_refresh(
+      p_timesheet_id => v_current_ts.timesheet_id,
+      p_actor_user_id => p_actor_user_id
+    );
 
-  v_after_signature_json := public.timesheet_lifecycle_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
+    PERFORM public._temp_diag_log(
+      'TEMP_AUTHORISE_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      v_current_ts.timesheet_id::text,
+      jsonb_build_object(
+        'function_name', 'timesheet_authorise_generic_atomic',
+        'stage', 'advance_state_refresh_done',
+        'timesheet_id', v_current_ts.timesheet_id,
+        'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+        'refresh_result', COALESCE(v_advance_state_refresh_json, '{}'::jsonb),
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+  ELSE
+    PERFORM public._temp_diag_log(
+      'TEMP_AUTHORISE_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      v_current_ts.timesheet_id::text,
+      jsonb_build_object(
+        'function_name', 'timesheet_authorise_generic_atomic',
+        'stage', 'advance_state_refresh_skipped',
+        'timesheet_id', v_current_ts.timesheet_id,
+        'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+        'reason', 'NO_ACTIVE_ADVANCE_THIS_PAYMENT_OVERRIDE',
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+  END IF;
+
+  v_after_signature_json := public.timesheet_lifecycle_guard_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
   v_after_row_signature := NULLIF(BTRIM(COALESCE(v_after_signature_json ->> 'backend_row_signature', v_after_signature_json ->> 'row_signature', v_after_signature_json ->> 'signature', '')), '');
 
   PERFORM public._temp_diag_log(
@@ -2551,6 +2580,12 @@ BEGIN
     'current_timesheet_id', v_current_ts.timesheet_id,
     'requested_timesheet_id', v_requested_ts.timesheet_id,
     'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+    'booking_id', v_current_ts.booking_id,
+    'candidate_id', v_current_tsfin.candidate_id,
+    'authorised_at_server', v_current_ts.authorised_at_server,
+    'revoked_at', v_current_ts.revoked_at,
+    'authorised_at_utc', v_current_tsfin.authorised_at_utc,
+    'advance_state_refresh', COALESCE(v_advance_state_refresh_json, '{}'::jsonb),
     'current_version', v_current_ts.version,
     'was_stale', v_requested_ts.timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id,
     'previous_processing_status', v_prev_status::text,
@@ -2562,7 +2597,7 @@ BEGIN
     'backend_row_signature', v_after_row_signature,
     'row_signature', v_after_row_signature,
     'affected_rows', jsonb_build_array(jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, 'booking_id', v_current_ts.booking_id, 'row_key', 'timesheet:' || v_current_ts.timesheet_id::text)),
-    'cache_invalidation_hints', jsonb_build_object('changed_domains', jsonb_build_array('timesheets', 'timesheets_financials', 'contract_weeks'), 'timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END)
+    'cache_invalidation_hints', jsonb_build_object('changed_domains', CASE WHEN COALESCE(v_has_uncleared_advance_override, false) THEN jsonb_build_array('timesheets', 'timesheets_financials', 'contract_weeks', 'timesheet_summary_pay_state_cache') ELSE jsonb_build_array('timesheets', 'timesheets_financials', 'contract_weeks') END, 'timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END)
   );
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE, v_error_message = MESSAGE_TEXT;
@@ -2585,6 +2620,8 @@ EXCEPTION WHEN OTHERS THEN
   RAISE;
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public.timesheet_unauthorise_atomic(uuid, uuid, timestamp with time zone);
@@ -2613,7 +2650,8 @@ DECLARE
   v_error_state text := NULL;
   v_error_message text := NULL;
   v_diag_started_at timestamptz := clock_timestamp();
-  v_summary_refresh_json jsonb := '{}'::jsonb;
+  v_advance_state_refresh_json jsonb := '{}'::jsonb;
+  v_has_uncleared_advance_override boolean := false;
 BEGIN
   PERFORM set_config('lock_timeout', '2500ms', true);
 
@@ -2755,7 +2793,7 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'ALREADY_UNAUTHORISED', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
   END IF;
 
-  v_before_signature_json := public.timesheet_lifecycle_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
+  v_before_signature_json := public.timesheet_lifecycle_guard_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
   v_current_row_signature := NULLIF(BTRIM(COALESCE(v_before_signature_json ->> 'backend_row_signature', v_before_signature_json ->> 'row_signature', v_before_signature_json ->> 'signature', '')), '');
   v_expected_row_signature := NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '');
   IF v_expected_row_signature IS NOT NULL AND COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
@@ -2784,6 +2822,9 @@ BEGIN
 
   UPDATE public.timesheets AS ts
      SET authorised_at_server = NULL,
+         revoked_at = v_now,
+         revoked_reason = 'TIMESHEET_UNAUTHORISE',
+         revoked_by = p_actor_user_id::text,
          updated_at = v_now
    WHERE ts.timesheet_id = v_current_ts.timesheet_id
      AND ts.is_current = true
@@ -2851,26 +2892,51 @@ BEGIN
 
   PERFORM set_config('cloudtms.lifecycle_defer_summary_refresh', 'off', true);
 
-  v_summary_refresh_json := public.pay_timesheet_summary_pay_state_refresh(
-    p_timesheet_ids => ARRAY[v_current_ts.timesheet_id],
-    p_actor_user_id => p_actor_user_id
-  );
+  SELECT EXISTS (
+    SELECT 1
+    FROM public._pay_timesheet_rotation_scope(ARRAY[v_current_ts.timesheet_id]) AS rs
+    JOIN public.timesheet_payment_overrides AS payment_override
+      ON payment_override.timesheet_id = rs.family_timesheet_id
+    WHERE payment_override.cleared_at_utc IS NULL
+      AND UPPER(BTRIM(COALESCE(payment_override.override_type, ''))) = 'ADVANCE_THIS_PAYMENT'
+  ) INTO v_has_uncleared_advance_override;
 
-  PERFORM public._temp_diag_log(
-    'TEMP_UNAUTHORISE_STAGE',
-    'TEMP_TIMESHEET_LIFECYCLE',
-    v_current_ts.timesheet_id::text,
-    jsonb_build_object(
-      'function_name', 'timesheet_unauthorise_atomic',
-      'stage', 'explicit_summary_refresh_done',
-      'timesheet_id', v_current_ts.timesheet_id,
-      'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
-      'refresh_result', COALESCE(v_summary_refresh_json, '{}'::jsonb),
-      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
-    )
-  );
+  IF COALESCE(v_has_uncleared_advance_override, false) THEN
+    v_advance_state_refresh_json := public.pay_timesheet_summary_advance_state_refresh(
+      p_timesheet_id => v_current_ts.timesheet_id,
+      p_actor_user_id => p_actor_user_id
+    );
 
-  v_after_signature_json := public.timesheet_lifecycle_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
+    PERFORM public._temp_diag_log(
+      'TEMP_UNAUTHORISE_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      v_current_ts.timesheet_id::text,
+      jsonb_build_object(
+        'function_name', 'timesheet_unauthorise_atomic',
+        'stage', 'advance_state_refresh_done',
+        'timesheet_id', v_current_ts.timesheet_id,
+        'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+        'refresh_result', COALESCE(v_advance_state_refresh_json, '{}'::jsonb),
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+  ELSE
+    PERFORM public._temp_diag_log(
+      'TEMP_UNAUTHORISE_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      v_current_ts.timesheet_id::text,
+      jsonb_build_object(
+        'function_name', 'timesheet_unauthorise_atomic',
+        'stage', 'advance_state_refresh_skipped',
+        'timesheet_id', v_current_ts.timesheet_id,
+        'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+        'reason', 'NO_ACTIVE_ADVANCE_THIS_PAYMENT_OVERRIDE',
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+  END IF;
+
+  v_after_signature_json := public.timesheet_lifecycle_guard_signature_v1(v_current_ts.timesheet_id, CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, false);
   v_after_row_signature := NULLIF(BTRIM(COALESCE(v_after_signature_json ->> 'backend_row_signature', v_after_signature_json ->> 'row_signature', v_after_signature_json ->> 'signature', '')), '');
 
   PERFORM public._temp_diag_log(
@@ -2932,6 +2998,12 @@ BEGIN
     'current_timesheet_id', v_current_ts.timesheet_id,
     'requested_timesheet_id', v_requested_ts.timesheet_id,
     'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END,
+    'booking_id', v_current_ts.booking_id,
+    'candidate_id', v_current_tsfin.candidate_id,
+    'authorised_at_server', v_current_ts.authorised_at_server,
+    'revoked_at', v_current_ts.revoked_at,
+    'authorised_at_utc', v_current_tsfin.authorised_at_utc,
+    'advance_state_refresh', COALESCE(v_advance_state_refresh_json, '{}'::jsonb),
     'current_version', v_current_ts.version,
     'was_stale', v_requested_ts.timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id,
     'previous_processing_status', v_prev_status::text,
@@ -2940,7 +3012,7 @@ BEGIN
     'backend_row_signature', v_after_row_signature,
     'row_signature', v_after_row_signature,
     'affected_rows', jsonb_build_array(jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END, 'booking_id', v_current_ts.booking_id, 'row_key', 'timesheet:' || v_current_ts.timesheet_id::text)),
-    'cache_invalidation_hints', jsonb_build_object('changed_domains', jsonb_build_array('timesheets', 'timesheets_financials', 'contract_weeks'), 'timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END)
+    'cache_invalidation_hints', jsonb_build_object('changed_domains', CASE WHEN COALESCE(v_has_uncleared_advance_override, false) THEN jsonb_build_array('timesheets', 'timesheets_financials', 'contract_weeks', 'timesheet_summary_pay_state_cache') ELSE jsonb_build_array('timesheets', 'timesheets_financials', 'contract_weeks') END, 'timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', CASE WHEN v_contract_week.id IS NULL THEN NULL ELSE v_contract_week.id END)
   );
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE, v_error_message = MESSAGE_TEXT;
@@ -8422,11 +8494,8 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.timesheet_lifecycle_signature_v1(
-  p_timesheet_id uuid DEFAULT NULL::uuid,
-  p_contract_week_id uuid DEFAULT NULL::uuid,
-  p_include_payload boolean DEFAULT false
-)
+
+CREATE OR REPLACE FUNCTION public.timesheet_lifecycle_signature_v1(p_timesheet_id uuid DEFAULT NULL::uuid, p_contract_week_id uuid DEFAULT NULL::uuid, p_include_payload boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
@@ -8453,6 +8522,9 @@ DECLARE
   v_signature_payload jsonb := '{}'::jsonb;
   v_signature text := NULL;
 BEGIN
+  IF COALESCE(p_include_payload, false) IS NOT TRUE THEN
+    RETURN public.timesheet_lifecycle_guard_signature_v1(p_timesheet_id, p_contract_week_id, false);
+  END IF;
   IF p_timesheet_id IS NULL AND p_contract_week_id IS NULL THEN
     RETURN jsonb_build_object(
       'ok', false,
@@ -8818,6 +8890,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.contract_week_manual_unprocess_atomic(
