@@ -67434,7 +67434,6 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user, ctx = null) 
   }
 }
 
-
 async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -67591,6 +67590,114 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     } catch {}
   };
 
+  const isUnknownLifecycleOutcomeError = (err, parsed = null) => {
+    const status = Number(parsed?.status || err?.status || 0) || 0;
+    const name = firstString(err?.name, parsed?.payload?.name);
+    const message = [
+      parsed?.message,
+      parsed?.code,
+      parsed?.details,
+      err?.message,
+      err?.body,
+      err?.name
+    ].map((value) => String(value == null ? '' : value)).join(' ').toLowerCase();
+    return [408, 504, 524].includes(status) || String(name || '').toLowerCase() === 'aborterror' || /timeout after|rpc timesheet_unauthorise_atomic failed 408|rpc timesheet_unauthorise_atomic timed out|fetch timeout|network timeout|gateway timeout|worker timeout|aborted|request timed out|request timeout/.test(message);
+  };
+  const lifecycleOutcomeMessage = (code) => {
+    const normalized = firstString(code).toUpperCase();
+    if (normalized === 'STALE_LIFECYCLE_STATE') {
+      return 'This timesheet changed while the update was being processed. The latest timesheet details are now shown.';
+    }
+    if (normalized === 'UNKNOWN_LIFECYCLE_OUTCOME') {
+      return 'We could not confirm whether this timesheet update completed. Please close this message and try again once the timesheet details have refreshed.';
+    }
+    return 'This timesheet could not be unauthorised. The latest timesheet details are now shown. Please use the Unauthorise button again if the action is still needed.';
+  };
+  const lifecycleOutcomeResponse = (reconciliation, parsed = {}, options = {}) => {
+    const rec = (reconciliation && typeof reconciliation === 'object') ? reconciliation : {};
+    let code = firstString(options.code, rec.recommended_response_code).toUpperCase();
+    if (rec.stale_lifecycle_state === true || code === 'ROW_SIGNATURE_MISMATCH') code = 'STALE_LIFECYCLE_STATE';
+    if (!code || code === 'LIFECYCLE_TIMEOUT_SAFE_RETRY_ALLOWED') code = options.retryExhausted ? 'LIFECYCLE_TIMEOUT_RETRY_EXHAUSTED' : 'UNKNOWN_LIFECYCLE_OUTCOME';
+    if (code === 'LIFECYCLE_TIMEOUT_RECONCILED_SUCCESS') code = 'UNKNOWN_LIFECYCLE_OUTCOME';
+    const finalTimesheetId = firstString(rec.current_timesheet_id, rec.timesheet_id, currentTimesheetId, expectedTimesheetId, requestedTimesheetId);
+    const sig = firstString(rec.backend_row_signature, rec.row_signature, rec.current_row_signature);
+    const message = lifecycleOutcomeMessage(code);
+    return withJson(409, {
+      ok: false,
+      success: false,
+      error: code,
+      error_code: code,
+      message,
+      user_message: message,
+      refresh_required: true,
+      stale_lifecycle_state: code === 'STALE_LIFECYCLE_STATE',
+      unknown_lifecycle_outcome: code === 'UNKNOWN_LIFECYCLE_OUTCOME' || code === 'LIFECYCLE_TIMEOUT_RETRY_EXHAUSTED',
+      retry_exhausted: code === 'LIFECYCLE_TIMEOUT_RETRY_EXHAUSTED',
+      reconciled: rec.reconciled === true,
+      target_state_reached: false,
+      current_timesheet_id: finalTimesheetId || null,
+      timesheet_id: finalTimesheetId || null,
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      contract_week_id: firstString(rec.contract_week_id) || null,
+      booking_id: firstString(rec.booking_id, guard.resolved?.booking_id) || null,
+      candidate_id: firstString(rec.candidate_id) || null,
+      current_version: rec.current_version ?? guard.resolved?.current_version ?? null,
+      processing_status: firstString(rec.processing_status, 'PENDING_AUTH') || 'PENDING_AUTH',
+      previous_processing_status: firstString(rec.previous_processing_status) || null,
+      authorised_at_server: rec.authorised_at_server ?? null,
+      authorised_at_utc: rec.authorised_at_utc ?? null,
+      revoked_at: rec.revoked_at ?? null,
+      backend_row_signature: sig || null,
+      mutation_row_signature: sig || null,
+      row_signature: sig || null,
+      expected_row_signature: sig || expectedRowSignature || null,
+      lifecycle_patch: (rec.lifecycle_patch && typeof rec.lifecycle_patch === 'object') ? rec.lifecycle_patch : null,
+      affected_rows: Array.isArray(rec.affected_rows) && rec.affected_rows.length ? rec.affected_rows : affectedRowsFor(rec, finalTimesheetId),
+      refresh_hints: (rec.refresh_hints && typeof rec.refresh_hints === 'object') ? rec.refresh_hints : {},
+      cache_invalidation_hints: (rec.cache_invalidation_hints && typeof rec.cache_invalidation_hints === 'object') ? rec.cache_invalidation_hints : {},
+      permission_state_patch_complete: rec.permission_state_patch_complete === true,
+      priority_badges_patch_complete: rec.priority_badges_patch_complete === true,
+      immediate_lifecycle_patch_available: rec.immediate_lifecycle_patch_available === true,
+      requires_affected_row_refresh: rec.requires_affected_row_refresh !== false,
+      requires_full_details_refresh: rec.requires_full_details_refresh !== false,
+      source: 'lifecycle_timeout_reconciliation'
+    });
+  };
+  const rpcPayloadFromReconciliation = (reconciliation, operation = 'timesheet_unauthorise') => {
+    const rec = (reconciliation && typeof reconciliation === 'object') ? reconciliation : {};
+    const finalTimesheetId = firstString(rec.current_timesheet_id, rec.timesheet_id, currentTimesheetId, expectedTimesheetId, requestedTimesheetId);
+    const sig = firstString(rec.backend_row_signature, rec.row_signature, rec.current_row_signature);
+    return {
+      ok: true,
+      success: true,
+      authorised: false,
+      unauthorised: true,
+      operation,
+      requested_timesheet_id: requestedTimesheetId,
+      current_timesheet_id: finalTimesheetId || null,
+      timesheet_id: finalTimesheetId || null,
+      contract_week_id: firstString(rec.contract_week_id) || null,
+      booking_id: firstString(rec.booking_id, guard.resolved?.booking_id) || null,
+      candidate_id: firstString(rec.candidate_id) || null,
+      current_version: rec.current_version ?? guard.resolved?.current_version ?? null,
+      processing_status: firstString(rec.processing_status, 'PENDING_AUTH') || 'PENDING_AUTH',
+      new_processing_status: firstString(rec.processing_status, 'PENDING_AUTH') || 'PENDING_AUTH',
+      previous_processing_status: firstString(rec.previous_processing_status) || null,
+      authorised_at_server: null,
+      authorised_at_utc: null,
+      revoked_at: rec.revoked_at ?? now,
+      ready_to_pay: rec.ready_to_pay,
+      backend_row_signature: sig || null,
+      row_signature: sig || null,
+      affected_rows: Array.isArray(rec.affected_rows) && rec.affected_rows.length ? rec.affected_rows : affectedRowsFor(rec, finalTimesheetId),
+      cache_invalidation_hints: (rec.cache_invalidation_hints && typeof rec.cache_invalidation_hints === 'object') ? rec.cache_invalidation_hints : {},
+      was_stale: !!(requestedTimesheetId && finalTimesheetId && requestedTimesheetId !== finalTimesheetId),
+      reconciled_after_unknown_outcome: true,
+      recommended_response_code: 'LIFECYCLE_TIMEOUT_RECONCILED_SUCCESS'
+    };
+  };
+
   const mutationErrorResponse = (rawCode, detailObj, options = {}) => {
     const code = firstString(rawCode, detailObj?.error_code, detailObj?.error, 'UNAUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
@@ -67599,7 +67706,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       return withJson(409, {
         error: 'TRANSIENT_LIFECYCLE_CONFLICT',
         error_code: 'TRANSIENT_LIFECYCLE_CONFLICT',
-        message: 'The timesheet was being updated at the same time. Please try again.',
+        message: 'This timesheet could not be unauthorised because it was being updated at the same time. The latest timesheet details are now shown. Please use the Unauthorise button again if the action is still needed.',
         transient: true,
         retry_exhausted: true,
         current_timesheet_id: currentTimesheetId || null,
@@ -67622,7 +67729,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       return withJson(409, {
         error: 'CONTRACT_WEEK_NOT_FOUND_FOR_WEEKLY_TIMESHEET',
         error_code: 'CONTRACT_WEEK_NOT_FOUND_FOR_WEEKLY_TIMESHEET',
-        message: 'Cannot unauthorise: the linked contract week could not be resolved. Refresh the row and try again.',
+        message: 'Cannot unauthorise: the linked contract week could not be resolved. Refresh the timesheet and try again.',
         current_timesheet_id: currentTimesheetId || null,
         contract_week_id: firstString(detailObj?.contract_week_id) || null,
         refresh_required: true,
@@ -67659,8 +67766,9 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
         contract_week_id: firstString(detailObj?.contract_week_id) || null
       });
       return withJson(409, {
-        error: 'ROW_SIGNATURE_MISMATCH',
-        error_code: 'ROW_SIGNATURE_MISMATCH',
+        error: 'STALE_LIFECYCLE_STATE',
+        error_code: 'STALE_LIFECYCLE_STATE',
+        message: 'This timesheet changed while the update was being processed. The latest timesheet details are now shown.',
         expected_row_signature: firstString(detailObj?.expected_row_signature, options.expectedRowSignature) || null,
         current_row_signature: firstString(detailObj?.current_row_signature) || null,
         current_timesheet_id: currentTimesheetId || null,
@@ -67673,7 +67781,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       return withJson(409, {
         error: code,
         error_code: code,
-        message: code === 'LOCK_TIMEOUT' ? 'The row is currently being updated by another action. Refresh and try again.' : 'Timesheet could not be unauthorised in its current state.',
+        message: code === 'LOCK_TIMEOUT' ? 'This timesheet is currently being updated. The latest timesheet details are now required before trying again.' : 'Timesheet could not be unauthorised in its current state.',
         detail: detailObj || null,
         current_timesheet_id: currentTimesheetId || null,
         contract_week_id: firstString(detailObj?.contract_week_id) || null,
@@ -67681,7 +67789,14 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
         affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
       });
     }
-    return withCORS(env, req, serverError(firstString(options.message, rawCode, 'Failed to unauthorise timesheet')));
+    return withJson(409, {
+      error: 'UNKNOWN_LIFECYCLE_OUTCOME',
+      error_code: 'UNKNOWN_LIFECYCLE_OUTCOME',
+      message: 'This timesheet could not be unauthorised. The latest timesheet details are now shown. Please use the Unauthorise button again if the action is still needed.',
+      current_timesheet_id: currentTimesheetId || null,
+      refresh_required: true,
+      affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
+    });
   };
 
   let body = {};
@@ -67807,12 +67922,123 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       current_timesheet_id: detailObj?.current_timesheet_id || currentTimesheetId || null,
       contract_week_id: detailObj?.contract_week_id || null
     });
-    return mutationErrorResponse(rpcErr.code || rpcErr.message, detailObj, {
-      currentTimesheetId,
-      expectedTimesheetId,
-      expectedRowSignature,
-      message: rpcErr.message
-    });
+    if (isUnknownLifecycleOutcomeError(err, rpcErr)) {
+      let reconciliation = null;
+      if (typeof reconcileTimesheetLifecycleAfterUnknownOutcome === 'function') {
+        try {
+          reconciliation = await reconcileTimesheetLifecycleAfterUnknownOutcome(env, {
+            action: 'UNAUTHORISE',
+            requestedTimesheetId,
+            expectedTimesheetId,
+            expectedRowSignature,
+            actorUserId: user?.id || null,
+            routeFamily: 'TIMESHEET_UNAUTHORISE',
+            rpcFunctionName: 'timesheet_unauthorise_atomic',
+            originalError: err,
+            startedAtUtc: now,
+            guardResult: guard,
+            resolved: guard.resolved || null
+          });
+        } catch (reconcileErr) {
+          lifecycleSignatureLog('timeout_reconciliation_failed', {
+            rpc_function_name: 'timesheet_unauthorise_atomic',
+            status: Number(reconcileErr?.status || 0) || null,
+            message: String(reconcileErr?.message || reconcileErr || '') || null,
+            current_timesheet_id: currentTimesheetId || null,
+            expected_row_signature: expectedRowSignature || null
+          });
+          reconciliation = null;
+        }
+      }
+
+      lifecycleSignatureLog('timeout_reconciliation_decision', {
+        rpc_function_name: 'timesheet_unauthorise_atomic',
+        current_timesheet_id: reconciliation?.current_timesheet_id || currentTimesheetId || null,
+        target_state_reached: reconciliation?.target_state_reached === true,
+        safe_retry_allowed: reconciliation?.safe_retry_allowed === true,
+        stale_lifecycle_state: reconciliation?.stale_lifecycle_state === true,
+        recommended_response_code: reconciliation?.recommended_response_code || null,
+        backend_row_signature_present: !!firstString(reconciliation?.backend_row_signature, reconciliation?.row_signature)
+      });
+
+      if (reconciliation?.target_state_reached === true) {
+        rpcPayload = rpcPayloadFromReconciliation(reconciliation, 'timesheet_unauthorise');
+      } else if (reconciliation?.safe_retry_allowed === true) {
+        try {
+          lifecycleSignatureLog('timeout_safe_retry_before_rpc', {
+            rpc_function_name: 'timesheet_unauthorise_atomic',
+            requested_timesheet_id: requestedTimesheetId || null,
+            expected_timesheet_id: expectedTimesheetId || null,
+            current_timesheet_id: reconciliation.current_timesheet_id || currentTimesheetId || null,
+            expected_row_signature: expectedRowSignature || null
+          });
+          const retryRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_unauthorise_atomic', {
+            p_timesheet_id: requestedTimesheetId,
+            p_expected_timesheet_id: expectedTimesheetId,
+            p_actor_user_id: user?.id || null,
+            p_now_utc: now,
+            p_expected_row_signature: expectedRowSignature || null
+          }, {
+            timeoutMs: 9000,
+            lifecycleAction: 'UNAUTHORISE',
+            routeFamily: 'TIMESHEET_UNAUTHORISE',
+            requestedTimesheetId,
+            expectedTimesheetId,
+            currentTimesheetId,
+            expectedRowSignature,
+            actorUserId: user?.id || null,
+            maxAttempts: 1,
+            retryBudgetMs: 0,
+            retryDelaysMs: [0],
+            jitterMs: 0
+          });
+          rpcPayload = unwrapRpcPayload(retryRes, 'timesheet_unauthorise_atomic');
+          lifecycleSignatureLog('timeout_safe_retry_completed', {
+            rpc_function_name: 'timesheet_unauthorise_atomic',
+            payload_signature: lifecycleSignatureDiagSignature(rpcPayload),
+            payload_keys: lifecycleSignatureDiagObjectKeys(rpcPayload)
+          });
+        } catch (retryErr) {
+          const retryRpcErr = parseRpcFailure(retryErr);
+          let retryReconciliation = null;
+          if (typeof reconcileTimesheetLifecycleAfterUnknownOutcome === 'function') {
+            try {
+              retryReconciliation = await reconcileTimesheetLifecycleAfterUnknownOutcome(env, {
+                action: 'UNAUTHORISE',
+                requestedTimesheetId,
+                expectedTimesheetId,
+                expectedRowSignature,
+                actorUserId: user?.id || null,
+                routeFamily: 'TIMESHEET_UNAUTHORISE',
+                rpcFunctionName: 'timesheet_unauthorise_atomic',
+                originalError: retryErr,
+                retryError: retryErr,
+                startedAtUtc: now,
+                guardResult: guard,
+                resolved: guard.resolved || null
+              });
+            } catch {}
+          }
+          if (retryReconciliation?.target_state_reached === true) {
+            rpcPayload = rpcPayloadFromReconciliation(retryReconciliation, 'timesheet_unauthorise');
+          } else {
+            const retryCode = String(retryRpcErr.code || '').toUpperCase() === 'ROW_SIGNATURE_MISMATCH'
+              ? 'STALE_LIFECYCLE_STATE'
+              : 'LIFECYCLE_TIMEOUT_RETRY_EXHAUSTED';
+            return lifecycleOutcomeResponse(retryReconciliation || reconciliation, retryRpcErr, { retryExhausted: true, code: retryCode });
+          }
+        }
+      } else {
+        return lifecycleOutcomeResponse(reconciliation, rpcErr, { code: reconciliation?.recommended_response_code || 'UNKNOWN_LIFECYCLE_OUTCOME' });
+      }
+    } else {
+      return mutationErrorResponse(rpcErr.code || rpcErr.message, detailObj, {
+        currentTimesheetId,
+        expectedTimesheetId,
+        expectedRowSignature,
+        message: rpcErr.message
+      });
+    }
   }
 
   if (!rpcPayload) {
@@ -67823,7 +68049,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       current_timesheet_id: currentTimesheetId || null,
       expected_row_signature: expectedRowSignature || null
     });
-    return withCORS(env, req, serverError('timesheet_unauthorise_atomic returned no payload'));
+    return lifecycleOutcomeResponse(null, { code: 'UNKNOWN_LIFECYCLE_OUTCOME' }, { code: 'UNKNOWN_LIFECYCLE_OUTCOME', payloadMissing: true });
   }
   if (rpcPayload.ok === false || rpcPayload.success === false) {
     lifecycleSignatureLog('rpc_payload_not_ok', {
@@ -67973,7 +68199,6 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
-
 
 
 async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
@@ -82151,6 +82376,438 @@ async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
     stale_items: staleItems
   }));
 }
+
+
+async function reconcileTimesheetLifecycleAfterUnknownOutcome(env, input = {}) {
+  const isPlainObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
+  const src = isPlainObject(input) ? input : {};
+  const enc = encodeURIComponent;
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const firstString = function firstString() {
+    for (let index = 0; index < arguments.length; index += 1) {
+      const text = trimStr(arguments[index]);
+      if (text) return text;
+    }
+    return '';
+  };
+  const toBoolOrNull = (value) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value == null) return null;
+    const text = trimStr(value).toLowerCase();
+    if (!text) return null;
+    if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return null;
+  };
+  const upper = (value) => trimStr(value).toUpperCase();
+  const normalizeAction = (value) => {
+    const text = upper(value);
+    if (text.includes('UNAUTHORISE') || text.includes('UNAUTHORIZE')) return 'UNAUTHORISE';
+    if (text.includes('AUTHORISE') || text.includes('AUTHORIZE')) return 'AUTHORISE';
+    return text || 'AUTHORISE';
+  };
+  const compactError = (err) => {
+    if (!err) return null;
+    const json = isPlainObject(err.json) ? err.json : (isPlainObject(err.payload) ? err.payload : null);
+    return {
+      status: Number(err.status || json?.status || 0) || null,
+      code: firstString(err.code, err.error_code, json?.code, json?.error_code) || null,
+      name: firstString(err.name) || null,
+      message: firstString(err.message, json?.message, json?.error) || null
+    };
+  };
+  const log = (step, extra = {}) => {
+    try {
+      console.log('[TIMESHEET_LIFECYCLE_RECONCILE]', JSON.stringify({
+        tag: 'TIMESHEET_LIFECYCLE_RECONCILE',
+        step,
+        action,
+        requested_timesheet_id: requestedTimesheetId || null,
+        expected_timesheet_id: expectedTimesheetId || null,
+        rpc_function_name: rpcFunctionName || null,
+        actor_user_id: actorUserId || null,
+        server_utc: new Date().toISOString(),
+        ...(isPlainObject(extra) ? extra : {})
+      }));
+    } catch {}
+  };
+  const unwrapRpcPayload = (payload, fnName) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) out = out[fnName];
+    if (typeof out === 'string') {
+      try { out = JSON.parse(out); } catch {}
+    }
+    return isPlainObject(out) ? out : null;
+  };
+  const nullPatchBundle = (currentTimesheetId, extra = {}) => {
+    try {
+      if (typeof buildTimesheetLifecyclePatchFromMutation === 'function') {
+        return buildTimesheetLifecyclePatchFromMutation({
+          action,
+          requestedTimesheetId,
+          currentTimesheetId: currentTimesheetId || expectedTimesheetId || requestedTimesheetId || null,
+          currentVersion: extra.current_version ?? null,
+          contractWeekId: extra.contract_week_id || null,
+          bookingId: extra.booking_id || null,
+          candidateId: extra.candidate_id || null,
+          newProcessingStatus: extra.processing_status || null,
+          authorised: action === 'AUTHORISE' ? null : false,
+          readyToPay: extra.ready_to_pay === true ? true : (extra.ready_to_pay === false ? false : null),
+          backendRowSignature: extra.backend_row_signature || null,
+          rowSignature: extra.row_signature || extra.backend_row_signature || null,
+          expectedRowSignature: extra.backend_row_signature || expectedRowSignature || null,
+          staleMarkers: {
+            was_stale: !!(requestedTimesheetId && currentTimesheetId && requestedTimesheetId !== currentTimesheetId),
+            timesheet_moved: !!(requestedTimesheetId && currentTimesheetId && requestedTimesheetId !== currentTimesheetId)
+          }
+        });
+      }
+    } catch {}
+    return {
+      lifecycle_patch: null,
+      affected_rows: [],
+      refresh_hints: {},
+      permission_state_patch_complete: false,
+      priority_badges_patch_complete: false,
+      immediate_lifecycle_patch_available: false,
+      requires_affected_row_refresh: true,
+      requires_full_details_refresh: true,
+      refresh_required: true
+    };
+  };
+  const finish = (decision, extra = {}) => {
+    const currentId = firstString(extra.current_timesheet_id, extra.timesheet_id, expectedTimesheetId, requestedTimesheetId) || null;
+    const patchBundle = isPlainObject(extra.lifecycle_patch_bundle)
+      ? extra.lifecycle_patch_bundle
+      : nullPatchBundle(currentId, extra);
+    const sig = firstString(extra.backend_row_signature, extra.row_signature, extra.current_row_signature, extra.signature) || null;
+    const affectedRows = Array.isArray(patchBundle.affected_rows) && patchBundle.affected_rows.length
+      ? patchBundle.affected_rows
+      : (Array.isArray(extra.affected_rows) && extra.affected_rows.length ? extra.affected_rows : [{
+          timesheet_id: currentId,
+          current_timesheet_id: currentId,
+          contract_week_id: firstString(extra.contract_week_id) || null,
+          booking_id: firstString(extra.booking_id) || null,
+          row_key: currentId ? `timesheet:${currentId}` : null,
+          context: 'timesheet_modal'
+        }]);
+    const out = {
+      ok: decision !== 'READ_FAILED',
+      reconciled: decision !== 'READ_FAILED',
+      action,
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentId,
+      timesheet_id: currentId,
+      contract_week_id: firstString(extra.contract_week_id) || null,
+      booking_id: firstString(extra.booking_id) || null,
+      candidate_id: firstString(extra.candidate_id) || null,
+      current_version: extra.current_version ?? null,
+      processing_status: firstString(extra.processing_status) || null,
+      previous_processing_status: firstString(extra.previous_processing_status) || null,
+      contract_week_status: firstString(extra.contract_week_status) || null,
+      authorised_at_server: extra.authorised_at_server ?? null,
+      authorised_at_utc: extra.authorised_at_utc ?? null,
+      revoked_at: extra.revoked_at ?? null,
+      ready_to_pay: extra.ready_to_pay === true ? true : (extra.ready_to_pay === false ? false : null),
+      backend_row_signature: sig,
+      row_signature: sig,
+      current_row_signature: sig,
+      target_state_reached: extra.target_state_reached === true,
+      safe_retry_allowed: extra.safe_retry_allowed === true,
+      stale_lifecycle_state: extra.stale_lifecycle_state === true,
+      action_still_valid: extra.action_still_valid === true,
+      refresh_required: extra.target_state_reached === true ? false : true,
+      refresh_hints: isPlainObject(patchBundle.refresh_hints) ? patchBundle.refresh_hints : {},
+      cache_invalidation_hints: isPlainObject(extra.cache_invalidation_hints) ? extra.cache_invalidation_hints : {},
+      lifecycle_patch: isPlainObject(patchBundle.lifecycle_patch) ? patchBundle.lifecycle_patch : null,
+      affected_rows: affectedRows,
+      permission_state_patch_complete: patchBundle.permission_state_patch_complete === true,
+      priority_badges_patch_complete: patchBundle.priority_badges_patch_complete === true,
+      immediate_lifecycle_patch_available: patchBundle.immediate_lifecycle_patch_available === true,
+      requires_affected_row_refresh: patchBundle.requires_affected_row_refresh === true,
+      requires_full_details_refresh: patchBundle.requires_full_details_refresh === true,
+      recommended_response_code: firstString(extra.recommended_response_code) || (
+        extra.target_state_reached === true ? 'LIFECYCLE_TIMEOUT_RECONCILED_SUCCESS' :
+        extra.safe_retry_allowed === true ? 'LIFECYCLE_TIMEOUT_SAFE_RETRY_ALLOWED' :
+        extra.stale_lifecycle_state === true ? 'STALE_LIFECYCLE_STATE' :
+        'UNKNOWN_LIFECYCLE_OUTCOME'
+      ),
+      read_error: firstString(extra.read_error) || null,
+      original_error: compactError(src.originalError || src.original_error),
+      retry_error: compactError(src.retryError || src.retry_error)
+    };
+    log('decision', {
+      decision,
+      current_timesheet_id: out.current_timesheet_id,
+      contract_week_id: out.contract_week_id,
+      processing_status: out.processing_status,
+      target_state_reached: out.target_state_reached,
+      safe_retry_allowed: out.safe_retry_allowed,
+      stale_lifecycle_state: out.stale_lifecycle_state,
+      recommended_response_code: out.recommended_response_code,
+      expected_signature_present: !!expectedRowSignature,
+      fresh_signature_present: !!sig
+    });
+    return out;
+  };
+
+  const action = normalizeAction(src.action || src.lifecycleAction || src.lifecycle_action || 'AUTHORISE');
+  const requestedTimesheetId = firstString(src.requestedTimesheetId, src.requested_timesheet_id, src.timesheetId, src.timesheet_id);
+  const expectedTimesheetId = firstString(src.expectedTimesheetId, src.expected_timesheet_id, requestedTimesheetId);
+  const expectedRowSignature = firstString(src.expectedRowSignature, src.expected_row_signature, src.rowSignature, src.row_signature);
+  const actorUserId = firstString(src.actorUserId, src.actor_user_id);
+  const rpcFunctionName = firstString(src.rpcFunctionName, src.rpc_function_name);
+
+  log('start', {
+    original_error: compactError(src.originalError || src.original_error),
+    expected_signature_present: !!expectedRowSignature
+  });
+
+  if (!requestedTimesheetId && !expectedTimesheetId) {
+    return finish('READ_FAILED', {
+      read_error: 'MISSING_TIMESHEET_ID',
+      recommended_response_code: 'UNKNOWN_LIFECYCLE_OUTCOME'
+    });
+  }
+
+  let resolved = isPlainObject(src.resolved) ? src.resolved : null;
+  if (!resolved && typeof resolveTimesheetToCurrent === 'function') {
+    try { resolved = await resolveTimesheetToCurrent(env, requestedTimesheetId || expectedTimesheetId); } catch (err) {
+      log('resolve_failed', { error: compactError(err) });
+      resolved = null;
+    }
+  }
+
+  const currentTimesheetId = firstString(resolved?.current_timesheet_id, expectedTimesheetId, requestedTimesheetId);
+  const bookingIdFromResolve = firstString(resolved?.booking_id);
+  const currentVersionFromResolve = resolved?.current_version ?? null;
+  if (!currentTimesheetId) {
+    return finish('READ_FAILED', {
+      read_error: 'CURRENT_TIMESHEET_UNRESOLVED',
+      recommended_response_code: 'UNKNOWN_LIFECYCLE_OUTCOME'
+    });
+  }
+
+  let ts = null;
+  let tsfin = null;
+  let cw = null;
+  let lightweight = null;
+  let guardSignature = null;
+
+  try {
+    ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=timesheet_id,booking_id,version,is_current,sheet_scope,authorised_at_server,revoked_at,status,updated_at`
+    );
+  } catch (err) {
+    log('read_timesheet_failed', { error: compactError(err) });
+    ts = null;
+  }
+
+  if (!ts || !ts.timesheet_id) {
+    return finish('READ_FAILED', {
+      current_timesheet_id: currentTimesheetId,
+      booking_id: bookingIdFromResolve || null,
+      current_version: currentVersionFromResolve,
+      read_error: 'TIMESHEET_READ_FAILED',
+      recommended_response_code: 'UNKNOWN_LIFECYCLE_OUTCOME'
+    });
+  }
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=id,timesheet_id,is_current,processing_status,authorised_at_utc,candidate_id,locked_by_invoice_id,paid_at_utc,computed_at_utc,updated_at,created_at` +
+        `&order=computed_at_utc.desc.nullslast,updated_at.desc.nullslast,created_at.desc.nullslast,id.desc` +
+        `&limit=1`
+    );
+    tsfin = rows?.[0] || null;
+  } catch (err) {
+    log('read_tsfin_failed', { error: compactError(err) });
+    tsfin = null;
+  }
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=id,status,timesheet_id,updated_at,created_at` +
+        `&order=updated_at.desc.nullslast,created_at.desc.nullslast,id.desc` +
+        `&limit=1`
+    );
+    cw = rows?.[0] || null;
+
+    if (!cw?.id && firstString(ts?.booking_id, bookingIdFromResolve)) {
+      const bookingForWeekFallback = firstString(ts?.booking_id, bookingIdFromResolve);
+      let siblingTimesheetIds = [];
+      try {
+        const { rows: siblingRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?booking_id=eq.${enc(bookingForWeekFallback)}` +
+            `&select=timesheet_id,is_current,version,updated_at,created_at` +
+            `&order=is_current.desc,version.desc,updated_at.desc.nullslast,created_at.desc.nullslast` +
+            `&limit=25`
+        );
+        siblingTimesheetIds = Array.isArray(siblingRows)
+          ? siblingRows.map((row) => firstString(row?.timesheet_id)).filter(Boolean)
+          : [];
+      } catch (err) {
+        log('read_contract_week_booking_timesheets_failed', { error: compactError(err), booking_id: bookingForWeekFallback || null });
+        siblingTimesheetIds = [];
+      }
+
+      if (siblingTimesheetIds.length) {
+        try {
+          const inList = Array.from(new Set(siblingTimesheetIds)).map(enc).join(',');
+          const { rows: fallbackRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+              `?timesheet_id=in.(${inList})` +
+              `&select=id,status,timesheet_id,updated_at,created_at` +
+              `&order=updated_at.desc.nullslast,created_at.desc.nullslast,id.desc` +
+              `&limit=1`
+          );
+          cw = fallbackRows?.[0] || null;
+        } catch (err) {
+          log('read_contract_week_booking_fallback_failed', { error: compactError(err), booking_id: bookingForWeekFallback || null });
+        }
+      }
+    }
+  } catch (err) {
+    log('read_contract_week_failed', { error: compactError(err) });
+    cw = null;
+  }
+
+  try {
+    if (typeof fetchTimesheetLifecycleLightweightRow === 'function') {
+      lightweight = await fetchTimesheetLifecycleLightweightRow(env, {
+        action,
+        requestedTimesheetId,
+        currentTimesheetId,
+        expectedRowSignature,
+        contractWeekId: firstString(cw?.id),
+        bookingId: firstString(ts.booking_id, bookingIdFromResolve),
+        actorUserId,
+        context: 'timesheet_modal',
+        timeoutMs: 8000,
+        resolved: resolved || undefined
+      });
+      if (!cw?.id) {
+        const rowCwId = firstString(lightweight?.row?.contract_week_id, lightweight?.lifecycle_patch_bundle?.lifecycle_patch?.contract_week_id);
+        if (rowCwId) {
+          try {
+            cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(rowCwId)}&select=id,status,timesheet_id,updated_at,created_at&limit=1`);
+          } catch {}
+        }
+      }
+    }
+  } catch (err) {
+    log('lightweight_row_failed', { error: compactError(err) });
+    lightweight = null;
+  }
+
+  const contractWeekId = firstString(cw?.id, lightweight?.row?.contract_week_id, lightweight?.lifecycle_patch_bundle?.lifecycle_patch?.contract_week_id);
+  try {
+    const sigPayload = await sbRpc(env, 'timesheet_lifecycle_guard_signature_v1', {
+      p_timesheet_id: currentTimesheetId,
+      p_contract_week_id: contractWeekId || null,
+      p_include_payload: false
+    }, { timeoutMs: 8000 });
+    guardSignature = unwrapRpcPayload(sigPayload, 'timesheet_lifecycle_guard_signature_v1') || sigPayload;
+  } catch (err) {
+    log('guard_signature_failed', { error: compactError(err) });
+    guardSignature = null;
+  }
+
+  const processingStatus = firstString(tsfin?.processing_status, lightweight?.row?.processing_status, lightweight?.lifecycle_patch_bundle?.lifecycle_patch?.processing_status).toUpperCase();
+  const contractWeekStatus = firstString(cw?.status).toUpperCase();
+  const freshSignature = firstString(
+    guardSignature?.backend_row_signature,
+    guardSignature?.row_signature,
+    guardSignature?.signature,
+    lightweight?.row?.backend_row_signature,
+    lightweight?.row?.row_signature,
+    lightweight?.lifecycle_patch_bundle?.lifecycle_patch?.backend_row_signature,
+    lightweight?.lifecycle_patch_bundle?.lifecycle_patch?.row_signature
+  );
+  const authorisedAtServer = ts.authorised_at_server || null;
+  const authorisedAtUtc = tsfin?.authorised_at_utc || null;
+  const revokedAt = ts.revoked_at || null;
+  const isAuthorised = !!(authorisedAtServer || authorisedAtUtc || ['READY_FOR_INVOICE', 'READY_FOR_HR', 'AUTHORISED', 'AUTHORIZED'].includes(processingStatus) || ['AUTHORISED', 'AUTHORIZED'].includes(contractWeekStatus));
+  const isUnauthorised = !authorisedAtServer && !authorisedAtUtc && (processingStatus === 'PENDING_AUTH' || processingStatus === 'UNPROCESSED' || processingStatus === 'PENDING' || !processingStatus);
+  const lockedOrPaid = !!(tsfin?.locked_by_invoice_id || tsfin?.paid_at_utc);
+  const readyToPay = processingStatus === 'READY_FOR_INVOICE' && !lockedOrPaid;
+  const targetStateReached = action === 'UNAUTHORISE'
+    ? isUnauthorised
+    : isAuthorised;
+  const actionStillValid = action === 'UNAUTHORISE'
+    ? (isAuthorised && !lockedOrPaid)
+    : (!isAuthorised && !lockedOrPaid);
+  const expectedStillCurrent = !!(expectedRowSignature && freshSignature && expectedRowSignature === freshSignature);
+  const expectedIdStillCurrent = !!(expectedTimesheetId && currentTimesheetId && expectedTimesheetId === currentTimesheetId);
+  const safeRetryAllowed = !targetStateReached && actionStillValid && expectedIdStillCurrent && expectedStillCurrent;
+  const staleLifecycleState = !targetStateReached && !!expectedRowSignature && !!freshSignature && expectedRowSignature !== freshSignature;
+
+  const patchBundle = isPlainObject(lightweight?.lifecycle_patch_bundle)
+    ? lightweight.lifecycle_patch_bundle
+    : nullPatchBundle(currentTimesheetId, {
+        contract_week_id: contractWeekId || null,
+        booking_id: firstString(ts.booking_id, bookingIdFromResolve),
+        candidate_id: firstString(tsfin?.candidate_id),
+        current_version: ts.version ?? currentVersionFromResolve,
+        processing_status: processingStatus || null,
+        ready_to_pay: readyToPay,
+        backend_row_signature: freshSignature || null
+      });
+
+  let recommended = 'UNKNOWN_LIFECYCLE_OUTCOME';
+  if (targetStateReached) recommended = 'LIFECYCLE_TIMEOUT_RECONCILED_SUCCESS';
+  else if (safeRetryAllowed) recommended = 'LIFECYCLE_TIMEOUT_SAFE_RETRY_ALLOWED';
+  else if (staleLifecycleState) recommended = 'STALE_LIFECYCLE_STATE';
+
+  return finish('READ_OK', {
+    current_timesheet_id: currentTimesheetId,
+    timesheet_id: currentTimesheetId,
+    contract_week_id: contractWeekId || null,
+    booking_id: firstString(ts.booking_id, bookingIdFromResolve),
+    candidate_id: firstString(tsfin?.candidate_id, lightweight?.row?.candidate_id),
+    current_version: ts.version ?? currentVersionFromResolve,
+    processing_status: processingStatus || null,
+    contract_week_status: contractWeekStatus || null,
+    authorised_at_server: authorisedAtServer,
+    authorised_at_utc: authorisedAtUtc,
+    revoked_at: revokedAt,
+    backend_row_signature: freshSignature || null,
+    row_signature: freshSignature || null,
+    current_row_signature: freshSignature || null,
+    target_state_reached: targetStateReached,
+    safe_retry_allowed: safeRetryAllowed,
+    stale_lifecycle_state: staleLifecycleState,
+    action_still_valid: actionStillValid,
+    ready_to_pay: readyToPay,
+    lifecycle_patch_bundle: patchBundle,
+    affected_rows: Array.isArray(lightweight?.rows) ? lightweight.rows : [],
+    recommended_response_code: recommended,
+    cache_invalidation_hints: {
+      timesheet_ids: [currentTimesheetId].filter(Boolean),
+      contract_week_ids: [contractWeekId].filter(Boolean),
+      booking_ids: [firstString(ts.booking_id, bookingIdFromResolve)].filter(Boolean),
+      source: 'lifecycle_timeout_reconciliation'
+    }
+  });
+}
+
+
 
 async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName, rpcArgs, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -153065,8 +153722,6 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   return { picked: lease.length, ok, fail, write: wr };
 }
 
-
-
 async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null) {
   const enc = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
@@ -153231,6 +153886,113 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     } catch {}
   };
 
+  const isUnknownLifecycleOutcomeError = (err, parsed = null) => {
+    const status = Number(parsed?.status || err?.status || 0) || 0;
+    const name = firstString(err?.name, parsed?.payload?.name);
+    const message = [
+      parsed?.message,
+      parsed?.code,
+      parsed?.details,
+      err?.message,
+      err?.body,
+      err?.name
+    ].map((value) => String(value == null ? '' : value)).join(' ').toLowerCase();
+    return [408, 504, 524].includes(status) || String(name || '').toLowerCase() === 'aborterror' || /timeout after|rpc timesheet_authorise_generic_atomic failed 408|rpc timesheet_authorise_generic_atomic timed out|fetch timeout|network timeout|gateway timeout|worker timeout|aborted|request timed out|request timeout/.test(message);
+  };
+  const lifecycleOutcomeMessage = (code) => {
+    const normalized = firstString(code).toUpperCase();
+    if (normalized === 'STALE_LIFECYCLE_STATE') {
+      return 'This timesheet changed while the update was being processed. The latest timesheet details are now shown.';
+    }
+    if (normalized === 'UNKNOWN_LIFECYCLE_OUTCOME') {
+      return 'We could not confirm whether this timesheet update completed. Please close this message and try again once the timesheet details have refreshed.';
+    }
+    return 'This timesheet could not be authorised. The latest timesheet details are now shown. Please use the Authorise button again if the action is still needed.';
+  };
+  const lifecycleOutcomeResponse = (reconciliation, parsed = {}, options = {}) => {
+    const rec = (reconciliation && typeof reconciliation === 'object') ? reconciliation : {};
+    let code = firstString(options.code, rec.recommended_response_code).toUpperCase();
+    if (rec.stale_lifecycle_state === true || code === 'ROW_SIGNATURE_MISMATCH') code = 'STALE_LIFECYCLE_STATE';
+    if (!code || code === 'LIFECYCLE_TIMEOUT_SAFE_RETRY_ALLOWED') code = options.retryExhausted ? 'LIFECYCLE_TIMEOUT_RETRY_EXHAUSTED' : 'UNKNOWN_LIFECYCLE_OUTCOME';
+    if (code === 'LIFECYCLE_TIMEOUT_RECONCILED_SUCCESS') code = 'UNKNOWN_LIFECYCLE_OUTCOME';
+    const finalTimesheetId = firstString(rec.current_timesheet_id, rec.timesheet_id, currentTimesheetId, expectedTimesheetId, requestedTimesheetId);
+    const sig = firstString(rec.backend_row_signature, rec.row_signature, rec.current_row_signature);
+    const message = lifecycleOutcomeMessage(code);
+    return withJson(409, {
+      ok: false,
+      success: false,
+      error: code,
+      error_code: code,
+      message,
+      user_message: message,
+      refresh_required: true,
+      stale_lifecycle_state: code === 'STALE_LIFECYCLE_STATE',
+      unknown_lifecycle_outcome: code === 'UNKNOWN_LIFECYCLE_OUTCOME' || code === 'LIFECYCLE_TIMEOUT_RETRY_EXHAUSTED',
+      retry_exhausted: code === 'LIFECYCLE_TIMEOUT_RETRY_EXHAUSTED',
+      reconciled: rec.reconciled === true,
+      target_state_reached: false,
+      current_timesheet_id: finalTimesheetId || null,
+      timesheet_id: finalTimesheetId || null,
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      contract_week_id: firstString(rec.contract_week_id) || null,
+      booking_id: firstString(rec.booking_id, guard.resolved?.booking_id) || null,
+      candidate_id: firstString(rec.candidate_id) || null,
+      current_version: rec.current_version ?? guard.resolved?.current_version ?? null,
+      processing_status: firstString(rec.processing_status) || null,
+      previous_processing_status: firstString(rec.previous_processing_status) || null,
+      authorised_at_server: rec.authorised_at_server ?? null,
+      authorised_at_utc: rec.authorised_at_utc ?? null,
+      revoked_at: rec.revoked_at ?? null,
+      backend_row_signature: sig || null,
+      mutation_row_signature: sig || null,
+      row_signature: sig || null,
+      expected_row_signature: sig || expectedRowSignature || null,
+      lifecycle_patch: (rec.lifecycle_patch && typeof rec.lifecycle_patch === 'object') ? rec.lifecycle_patch : null,
+      affected_rows: Array.isArray(rec.affected_rows) && rec.affected_rows.length ? rec.affected_rows : affectedRowsFor(rec, finalTimesheetId),
+      refresh_hints: (rec.refresh_hints && typeof rec.refresh_hints === 'object') ? rec.refresh_hints : {},
+      cache_invalidation_hints: (rec.cache_invalidation_hints && typeof rec.cache_invalidation_hints === 'object') ? rec.cache_invalidation_hints : {},
+      permission_state_patch_complete: rec.permission_state_patch_complete === true,
+      priority_badges_patch_complete: rec.priority_badges_patch_complete === true,
+      immediate_lifecycle_patch_available: rec.immediate_lifecycle_patch_available === true,
+      requires_affected_row_refresh: rec.requires_affected_row_refresh !== false,
+      requires_full_details_refresh: rec.requires_full_details_refresh !== false,
+      source: 'lifecycle_timeout_reconciliation'
+    });
+  };
+  const rpcPayloadFromReconciliation = (reconciliation, operation = 'timesheet_authorise') => {
+    const rec = (reconciliation && typeof reconciliation === 'object') ? reconciliation : {};
+    const finalTimesheetId = firstString(rec.current_timesheet_id, rec.timesheet_id, currentTimesheetId, expectedTimesheetId, requestedTimesheetId);
+    const sig = firstString(rec.backend_row_signature, rec.row_signature, rec.current_row_signature);
+    return {
+      ok: true,
+      success: true,
+      authorised: true,
+      operation,
+      requested_timesheet_id: requestedTimesheetId,
+      current_timesheet_id: finalTimesheetId || null,
+      timesheet_id: finalTimesheetId || null,
+      contract_week_id: firstString(rec.contract_week_id) || null,
+      booking_id: firstString(rec.booking_id, guard.resolved?.booking_id) || null,
+      candidate_id: firstString(rec.candidate_id) || null,
+      current_version: rec.current_version ?? guard.resolved?.current_version ?? null,
+      processing_status: firstString(rec.processing_status) || null,
+      new_processing_status: firstString(rec.processing_status) || null,
+      previous_processing_status: firstString(rec.previous_processing_status) || null,
+      authorised_at_server: rec.authorised_at_server || now,
+      authorised_at_utc: rec.authorised_at_utc || rec.authorised_at_server || now,
+      revoked_at: rec.revoked_at ?? null,
+      ready_to_pay: rec.ready_to_pay,
+      backend_row_signature: sig || null,
+      row_signature: sig || null,
+      affected_rows: Array.isArray(rec.affected_rows) && rec.affected_rows.length ? rec.affected_rows : affectedRowsFor(rec, finalTimesheetId),
+      cache_invalidation_hints: (rec.cache_invalidation_hints && typeof rec.cache_invalidation_hints === 'object') ? rec.cache_invalidation_hints : {},
+      was_stale: !!(requestedTimesheetId && finalTimesheetId && requestedTimesheetId !== finalTimesheetId),
+      reconciled_after_unknown_outcome: true,
+      recommended_response_code: 'LIFECYCLE_TIMEOUT_RECONCILED_SUCCESS'
+    };
+  };
+
   const mutationErrorResponse = (rawCode, detailObj, options = {}) => {
     const code = firstString(rawCode, detailObj?.error_code, detailObj?.error, 'AUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
@@ -153239,7 +154001,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       return withJson(409, {
         error: 'TRANSIENT_LIFECYCLE_CONFLICT',
         error_code: 'TRANSIENT_LIFECYCLE_CONFLICT',
-        message: 'The timesheet was being updated at the same time. Please try again.',
+        message: 'This timesheet could not be authorised because it was being updated at the same time. The latest timesheet details are now shown. Please use the Authorise button again if the action is still needed.',
         transient: true,
         retry_exhausted: true,
         current_timesheet_id: currentTimesheetId || null,
@@ -153262,7 +154024,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       return withJson(409, {
         error: 'CONTRACT_WEEK_NOT_FOUND_FOR_WEEKLY_TIMESHEET',
         error_code: 'CONTRACT_WEEK_NOT_FOUND_FOR_WEEKLY_TIMESHEET',
-        message: 'Cannot authorise: the linked contract week could not be resolved. Refresh the row and try again.',
+        message: 'Cannot authorise: the linked contract week could not be resolved. Refresh the timesheet and try again.',
         current_timesheet_id: currentTimesheetId || null,
         contract_week_id: firstString(detailObj?.contract_week_id) || null,
         refresh_required: true,
@@ -153301,8 +154063,9 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
         contract_week_id: firstString(detailObj?.contract_week_id) || null
       });
       return withJson(409, {
-        error: 'ROW_SIGNATURE_MISMATCH',
-        error_code: 'ROW_SIGNATURE_MISMATCH',
+        error: 'STALE_LIFECYCLE_STATE',
+        error_code: 'STALE_LIFECYCLE_STATE',
+        message: 'This timesheet changed while the update was being processed. The latest timesheet details are now shown.',
         expected_row_signature: firstString(detailObj?.expected_row_signature, options.expectedRowSignature) || null,
         current_row_signature: firstString(detailObj?.current_row_signature) || null,
         current_timesheet_id: currentTimesheetId || null,
@@ -153325,7 +154088,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       return withJson(409, {
         error: code,
         error_code: code,
-        message: code === 'LOCK_TIMEOUT' ? 'The row is currently being updated by another action. Refresh and try again.' : 'Timesheet could not be authorised in its current state.',
+        message: code === 'LOCK_TIMEOUT' ? 'This timesheet is currently being updated. The latest timesheet details are now required before trying again.' : 'Timesheet could not be authorised in its current state.',
         detail: detailObj || null,
         current_timesheet_id: currentTimesheetId || null,
         contract_week_id: firstString(detailObj?.contract_week_id) || null,
@@ -153333,7 +154096,14 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
         affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
       });
     }
-    return withCORS(env, req, serverError(firstString(options.message, rawCode, 'Failed to authorise timesheet')));
+    return withJson(409, {
+      error: 'UNKNOWN_LIFECYCLE_OUTCOME',
+      error_code: 'UNKNOWN_LIFECYCLE_OUTCOME',
+      message: 'This timesheet could not be authorised. The latest timesheet details are now shown. Please use the Authorise button again if the action is still needed.',
+      current_timesheet_id: currentTimesheetId || null,
+      refresh_required: true,
+      affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
+    });
   };
 
   let body = {};
@@ -153553,12 +154323,123 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       current_timesheet_id: detailObj?.current_timesheet_id || currentTimesheetId || null,
       contract_week_id: detailObj?.contract_week_id || null
     });
-    return mutationErrorResponse(rpcErr.code || rpcErr.message, detailObj, {
-      currentTimesheetId,
-      expectedTimesheetId,
-      expectedRowSignature,
-      message: rpcErr.message
-    });
+    if (isUnknownLifecycleOutcomeError(err, rpcErr)) {
+      let reconciliation = null;
+      if (typeof reconcileTimesheetLifecycleAfterUnknownOutcome === 'function') {
+        try {
+          reconciliation = await reconcileTimesheetLifecycleAfterUnknownOutcome(env, {
+            action: 'AUTHORISE',
+            requestedTimesheetId,
+            expectedTimesheetId,
+            expectedRowSignature,
+            actorUserId: user?.id || null,
+            routeFamily: 'TIMESHEET_AUTHORISE',
+            rpcFunctionName: 'timesheet_authorise_generic_atomic',
+            originalError: err,
+            startedAtUtc: now,
+            guardResult: guard,
+            resolved: guard.resolved || null
+          });
+        } catch (reconcileErr) {
+          lifecycleSignatureLog('timeout_reconciliation_failed', {
+            rpc_function_name: 'timesheet_authorise_generic_atomic',
+            status: Number(reconcileErr?.status || 0) || null,
+            message: String(reconcileErr?.message || reconcileErr || '') || null,
+            current_timesheet_id: currentTimesheetId || null,
+            expected_row_signature: expectedRowSignature || null
+          });
+          reconciliation = null;
+        }
+      }
+
+      lifecycleSignatureLog('timeout_reconciliation_decision', {
+        rpc_function_name: 'timesheet_authorise_generic_atomic',
+        current_timesheet_id: reconciliation?.current_timesheet_id || currentTimesheetId || null,
+        target_state_reached: reconciliation?.target_state_reached === true,
+        safe_retry_allowed: reconciliation?.safe_retry_allowed === true,
+        stale_lifecycle_state: reconciliation?.stale_lifecycle_state === true,
+        recommended_response_code: reconciliation?.recommended_response_code || null,
+        backend_row_signature_present: !!firstString(reconciliation?.backend_row_signature, reconciliation?.row_signature)
+      });
+
+      if (reconciliation?.target_state_reached === true) {
+        rpcPayload = rpcPayloadFromReconciliation(reconciliation, 'timesheet_authorise');
+      } else if (reconciliation?.safe_retry_allowed === true) {
+        try {
+          lifecycleSignatureLog('timeout_safe_retry_before_rpc', {
+            rpc_function_name: 'timesheet_authorise_generic_atomic',
+            requested_timesheet_id: requestedTimesheetId || null,
+            expected_timesheet_id: expectedTimesheetId || null,
+            current_timesheet_id: reconciliation.current_timesheet_id || currentTimesheetId || null,
+            expected_row_signature: expectedRowSignature || null
+          });
+          const retryRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_authorise_generic_atomic', {
+            p_timesheet_id: requestedTimesheetId,
+            p_expected_timesheet_id: expectedTimesheetId,
+            p_actor_user_id: user?.id || null,
+            p_now_utc: now,
+            p_expected_row_signature: expectedRowSignature || null
+          }, {
+            timeoutMs: 9000,
+            lifecycleAction: 'AUTHORISE',
+            routeFamily: 'TIMESHEET_AUTHORISE',
+            requestedTimesheetId,
+            expectedTimesheetId,
+            currentTimesheetId,
+            expectedRowSignature,
+            actorUserId: user?.id || null,
+            maxAttempts: 1,
+            retryBudgetMs: 0,
+            retryDelaysMs: [0],
+            jitterMs: 0
+          });
+          rpcPayload = unwrapRpcPayload(retryRes, 'timesheet_authorise_generic_atomic');
+          lifecycleSignatureLog('timeout_safe_retry_completed', {
+            rpc_function_name: 'timesheet_authorise_generic_atomic',
+            payload_signature: lifecycleSignatureDiagSignature(rpcPayload),
+            payload_keys: lifecycleSignatureDiagObjectKeys(rpcPayload)
+          });
+        } catch (retryErr) {
+          const retryRpcErr = parseRpcFailure(retryErr);
+          let retryReconciliation = null;
+          if (typeof reconcileTimesheetLifecycleAfterUnknownOutcome === 'function') {
+            try {
+              retryReconciliation = await reconcileTimesheetLifecycleAfterUnknownOutcome(env, {
+                action: 'AUTHORISE',
+                requestedTimesheetId,
+                expectedTimesheetId,
+                expectedRowSignature,
+                actorUserId: user?.id || null,
+                routeFamily: 'TIMESHEET_AUTHORISE',
+                rpcFunctionName: 'timesheet_authorise_generic_atomic',
+                originalError: retryErr,
+                retryError: retryErr,
+                startedAtUtc: now,
+                guardResult: guard,
+                resolved: guard.resolved || null
+              });
+            } catch {}
+          }
+          if (retryReconciliation?.target_state_reached === true) {
+            rpcPayload = rpcPayloadFromReconciliation(retryReconciliation, 'timesheet_authorise');
+          } else {
+            const retryCode = String(retryRpcErr.code || '').toUpperCase() === 'ROW_SIGNATURE_MISMATCH'
+              ? 'STALE_LIFECYCLE_STATE'
+              : 'LIFECYCLE_TIMEOUT_RETRY_EXHAUSTED';
+            return lifecycleOutcomeResponse(retryReconciliation || reconciliation, retryRpcErr, { retryExhausted: true, code: retryCode });
+          }
+        }
+      } else {
+        return lifecycleOutcomeResponse(reconciliation, rpcErr, { code: reconciliation?.recommended_response_code || 'UNKNOWN_LIFECYCLE_OUTCOME' });
+      }
+    } else {
+      return mutationErrorResponse(rpcErr.code || rpcErr.message, detailObj, {
+        currentTimesheetId,
+        expectedTimesheetId,
+        expectedRowSignature,
+        message: rpcErr.message
+      });
+    }
   }
 
   if (!rpcPayload) {
@@ -153569,7 +154450,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       current_timesheet_id: currentTimesheetId || null,
       expected_row_signature: expectedRowSignature || null
     });
-    return withCORS(env, req, serverError('timesheet_authorise_generic_atomic returned no payload'));
+    return lifecycleOutcomeResponse(null, { code: 'UNKNOWN_LIFECYCLE_OUTCOME' }, { code: 'UNKNOWN_LIFECYCLE_OUTCOME', payloadMissing: true });
   }
   if (rpcPayload.ok === false || rpcPayload.success === false) {
     lifecycleSignatureLog('rpc_payload_not_ok', {
@@ -153745,6 +154626,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
+
 
 
 async function handleContractWeekManualDraftUpsert(env, req, weekId) {
