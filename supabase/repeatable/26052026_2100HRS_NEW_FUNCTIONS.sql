@@ -64771,6 +64771,12 @@ DECLARE
   v_timesheet_pay_state_bookkeeping_ignored boolean := false;
   v_timesheet_pay_state_noop_ignored boolean := false;
   v_timesheet_pay_state_routing_reason text := NULL::text;
+  v_tsfin_insert_authorise_like boolean := false;
+  v_tsfin_insert_not_coalesced_reason text := NULL::text;
+  v_tsfin_insert_coalesced_job_id uuid := NULL::uuid;
+  v_tsfin_insert_coalesced_projection_run_id uuid := NULL::uuid;
+  v_tsfin_insert_coalesced_session_id uuid := NULL::uuid;
+  v_tsfin_insert_coalesced_source_change_seq bigint := NULL::bigint;
   v_lifecycle_context text := NULLIF(BTRIM(COALESCE(current_setting('cloudtms.lifecycle_mutation_context', true), '')), '');
   v_effective_lifecycle_context text := NULL::text;
   v_lifecycle_dedupe_keys text := '';
@@ -65095,6 +65101,106 @@ BEGIN
 
   FOREACH v_candidate_id IN ARRAY v_candidate_ids
   LOOP
+
+    IF TG_OP = 'INSERT' AND v_trigger_table = 'timesheets_financials' THEN
+      v_tsfin_insert_not_coalesced_reason := NULL::text;
+      v_tsfin_insert_coalesced_job_id := NULL::uuid;
+      v_tsfin_insert_coalesced_projection_run_id := NULL::uuid;
+      v_tsfin_insert_coalesced_session_id := NULL::uuid;
+      v_tsfin_insert_coalesced_source_change_seq := NULL::bigint;
+      v_tsfin_insert_authorise_like := v_new_timesheet_id IS NOT NULL
+        AND COALESCE(array_length(v_targeted_timesheet_ids, 1), 0) = 1
+        AND NULLIF(BTRIM(COALESCE(v_new_row->>'authorised_at_utc', '')), '') IS NOT NULL
+        AND COALESCE(LOWER(BTRIM(COALESCE(v_new_row->>'is_current', 'true'))), 'true') NOT IN ('false', 'f', '0', 'no', 'n', 'off');
+
+      IF v_tsfin_insert_authorise_like IS TRUE THEN
+        SELECT
+          existing_delta.id,
+          CASE
+            WHEN COALESCE(existing_delta.payload_json->>'projection_run_id', '') ~* v_uuid_re
+              THEN (existing_delta.payload_json->>'projection_run_id')::uuid
+            ELSE NULL::uuid
+          END,
+          existing_delta.session_id,
+          CASE
+            WHEN COALESCE(existing_delta.payload_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+              THEN (existing_delta.payload_json->>'source_change_seq')::bigint
+            WHEN COALESCE(existing_delta.payload_json->>'source_change_sequence', '') ~ '^[0-9]{1,18}$'
+              THEN (existing_delta.payload_json->>'source_change_sequence')::bigint
+            ELSE NULL::bigint
+          END
+        INTO
+          v_tsfin_insert_coalesced_job_id,
+          v_tsfin_insert_coalesced_projection_run_id,
+          v_tsfin_insert_coalesced_session_id,
+          v_tsfin_insert_coalesced_source_change_seq
+        FROM public.banking_pay_workbench_jobs AS existing_delta
+        JOIN public.banking_pay_workbench_sessions AS existing_session
+          ON existing_session.id = existing_delta.session_id
+         AND UPPER(BTRIM(COALESCE(existing_session.status, ''))) = 'OPEN'
+         AND existing_session.discarded_at_utc IS NULL
+        WHERE existing_delta.candidate_id = v_candidate_id
+          AND existing_delta.created_at_utc >= (v_now - INTERVAL '10 minutes')
+          AND UPPER(BTRIM(COALESCE(existing_delta.status, ''))) IN ('QUEUED', 'RUNNING', 'SUCCEEDED')
+          AND UPPER(BTRIM(COALESCE(existing_delta.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
+          AND UPPER(BTRIM(COALESCE(existing_delta.payload_json->>'projection_class', ''))) = 'NORMAL_TIMESHEET'
+          AND UPPER(BTRIM(COALESCE(existing_delta.payload_json->>'trigger_table', ''))) = 'TIMESHEETS'
+          AND UPPER(BTRIM(COALESCE(existing_delta.payload_json->>'trigger_operation', existing_delta.payload_json->>'trigger_op', ''))) = 'UPDATE'
+          AND UPPER(BTRIM(COALESCE(existing_delta.payload_json->>'mutation_context', existing_delta.payload_json->>'lifecycle_mutation_context', ''))) IN ('TIMESHEET_AUTHORISE', 'AUTHORISE_TIMESHEET')
+          AND LOWER(BTRIM(COALESCE(existing_delta.payload_json->>'authorise_boundary_changed', existing_delta.payload_json#>>'{complexity_flags,authorise_boundary_changed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(existing_delta.payload_json->'targeted_timesheet_ids') = 'array'
+                  THEN existing_delta.payload_json->'targeted_timesheet_ids'
+                ELSE '[]'::jsonb
+              END
+            ) AS targeted_timesheet_id(value)
+            WHERE targeted_timesheet_id.value ~* v_uuid_re
+              AND targeted_timesheet_id.value::uuid = v_new_timesheet_id
+          )
+        ORDER BY existing_delta.created_at_utc DESC, existing_delta.id DESC
+        LIMIT 1;
+
+        IF v_tsfin_insert_coalesced_job_id IS NOT NULL THEN
+          PERFORM public._temp_diag_log(
+            'TEMP_TRIGGER_DIRTY_STAGE',
+            'TEMP_BANKING_PAY_DIRTY',
+            v_new_timesheet_id::text,
+            jsonb_build_object(
+              'function_name', 'pay_workbench_mark_candidate_dirty',
+              'stage', 'early_return_timesheet_financials_insert_authorise_coalesced_no_dirty',
+              'trigger_table', v_trigger_table,
+              'trigger_op', TG_OP,
+              'coalesced_with_timesheets_authorise_delta', true,
+              'coalesced_source_change_seq', v_tsfin_insert_coalesced_source_change_seq,
+              'coalesced_job_id', v_tsfin_insert_coalesced_job_id::text,
+              'coalesced_projection_run_id', CASE WHEN v_tsfin_insert_coalesced_projection_run_id IS NULL THEN NULL ELSE v_tsfin_insert_coalesced_projection_run_id::text END,
+              'coalesced_session_id', CASE WHEN v_tsfin_insert_coalesced_session_id IS NULL THEN NULL ELSE v_tsfin_insert_coalesced_session_id::text END,
+              'coalesced_candidate_id', v_candidate_id::text,
+              'coalesced_timesheet_id', v_new_timesheet_id::text,
+              'banking_pay_dirty_required', false,
+              'source_build_required', false,
+              'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+              'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at)) * 1000)::numeric, 2)
+            )
+          );
+          CONTINUE;
+        END IF;
+
+        v_tsfin_insert_not_coalesced_reason := 'NO_PRIOR_AUTHORISE_DELTA';
+      ELSE
+        v_tsfin_insert_not_coalesced_reason := CASE
+          WHEN v_new_timesheet_id IS NULL THEN 'NO_TARGET_TIMESHEET'
+          WHEN COALESCE(array_length(v_targeted_timesheet_ids, 1), 0) <> 1 THEN 'MULTI_OR_EMPTY_TARGET_SCOPE'
+          WHEN NULLIF(BTRIM(COALESCE(v_new_row->>'authorised_at_utc', '')), '') IS NULL THEN 'UNAUTHORISED_INSERT'
+          WHEN COALESCE(LOWER(BTRIM(COALESCE(v_new_row->>'is_current', 'true'))), 'true') IN ('false', 'f', '0', 'no', 'n', 'off') THEN 'NON_CURRENT_INSERT'
+          ELSE 'UNKNOWN_SAFE_STATE'
+        END;
+      END IF;
+    END IF;
+
     IF v_lifecycle_context IN ('timesheet_authorise', 'timesheet_unauthorise') THEN
       v_lifecycle_dedupe_token := '|LIFECYCLE_DIRTY:' || v_lifecycle_context || ':' || v_candidate_id::text || ':' || COALESCE(array_to_string(v_targeted_timesheet_ids, ','), '') || '|';
       v_lifecycle_dedupe_keys := COALESCE(current_setting('cloudtms.pay_dirty_dedupe_keys', true), '');
@@ -65116,6 +65222,8 @@ BEGIN
       'explicit_banking_pay_action', COALESCE(v_explicit_banking_pay_action, false) OR COALESCE(v_authorise_boundary_changed, false),
       'banking_pay_dirty_required', COALESCE(v_banking_pay_dirty_required, false),
       'ordinary_timesheet_edit_save_no_dirty', COALESCE(v_ordinary_timesheet_edit_save_no_dirty, false),
+      'timesheets_financials_insert_not_coalesced_reason', CASE WHEN v_trigger_table = 'timesheets_financials' AND TG_OP = 'INSERT' THEN v_tsfin_insert_not_coalesced_reason ELSE NULL END,
+      'timesheets_financials_insert_coalesced_authorise_delta', false,
       'scope_kind', 'CANDIDATE',
       'scope_id', v_candidate_id::text,
       'candidate_id', v_candidate_id::text,
@@ -65168,7 +65276,10 @@ BEGIN
     CASE WHEN COALESCE(array_length(v_targeted_timesheet_ids, 1), 0) > 0 THEN v_targeted_timesheet_ids[1]::text ELSE NULL::text END,
     jsonb_build_object(
       'function_name', 'pay_workbench_mark_candidate_dirty',
-      'stage', 'return_enqueued_dirty_priority',
+      'stage', CASE
+        WHEN v_jobs_queued = 0 AND TG_OP = 'INSERT' AND v_trigger_table = 'timesheets_financials' THEN 'return_no_dirty_after_timesheet_financials_insert_coalesced'
+        ELSE 'return_enqueued_dirty_priority'
+      END,
       'trigger_table', v_trigger_table,
       'trigger_op', TG_OP,
       'mutation_context', v_lifecycle_context,
@@ -65187,7 +65298,6 @@ BEGIN
   END IF;
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_projection_contract()
