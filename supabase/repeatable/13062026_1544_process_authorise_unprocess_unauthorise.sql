@@ -2153,7 +2153,7 @@ DECLARE
   v_advance_state_refresh_json jsonb := '{}'::jsonb;
   v_has_uncleared_advance_override boolean := false;
 BEGIN
-  PERFORM set_config('lock_timeout', '2500ms', true);
+  PERFORM set_config('lock_timeout', '300ms', true);
 
   PERFORM public._temp_diag_log(
     'TEMP_AUTHORISE_STAGE',
@@ -2627,6 +2627,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.timesheet_unauthorise_atomic(uuid, uuid, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.timesheet_unauthorise_atomic(uuid, uuid, uuid, timestamp with time zone, text);
 
+
 CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -2653,7 +2654,7 @@ DECLARE
   v_advance_state_refresh_json jsonb := '{}'::jsonb;
   v_has_uncleared_advance_override boolean := false;
 BEGIN
-  PERFORM set_config('lock_timeout', '2500ms', true);
+  PERFORM set_config('lock_timeout', '300ms', true);
 
   PERFORM public._temp_diag_log(
     'TEMP_UNAUTHORISE_STAGE',
@@ -3036,17 +3037,12 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $function$;
 
-
 DROP FUNCTION IF EXISTS public.timesheet_authorise_bulk_atomic(jsonb, uuid, timestamp with time zone);
 
-CREATE OR REPLACE FUNCTION public.timesheet_authorise_bulk_atomic(
-  p_items jsonb DEFAULT '[]'::jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_now_utc timestamp with time zone DEFAULT now()
-)
+CREATE OR REPLACE FUNCTION public.timesheet_authorise_bulk_atomic(p_items jsonb DEFAULT '[]'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
  RETURNS jsonb
  LANGUAGE plpgsql
- VOLATILE SECURITY DEFINER
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -3059,7 +3055,7 @@ DECLARE
   v_out jsonb := '{}'::jsonb;
   v_error_state text := NULL;
 BEGIN
-  PERFORM set_config('lock_timeout', '2500ms', true);
+  PERFORM set_config('lock_timeout', '300ms', true);
 
   IF p_actor_user_id IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'batch_completed', false, 'all_success', false, 'action', 'AUTHORISE', 'error_code', 'ACTOR_USER_ID_REQUIRED', 'requested_count', 0, 'success_count', 0, 'failure_count', 0, 'results', '[]'::jsonb);
@@ -3372,14 +3368,10 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.timesheet_unauthorise_bulk_atomic(jsonb, uuid, timestamp with time zone);
 
-CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_bulk_atomic(
-  p_items jsonb DEFAULT '[]'::jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_now_utc timestamp with time zone DEFAULT now()
-)
+CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_bulk_atomic(p_items jsonb DEFAULT '[]'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
  RETURNS jsonb
  LANGUAGE plpgsql
- VOLATILE SECURITY DEFINER
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -3392,7 +3384,7 @@ DECLARE
   v_out jsonb := '{}'::jsonb;
   v_error_state text := NULL;
 BEGIN
-  PERFORM set_config('lock_timeout', '2500ms', true);
+  PERFORM set_config('lock_timeout', '300ms', true);
 
   IF p_actor_user_id IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'batch_completed', false, 'all_success', false, 'action', 'UNAUTHORISE', 'error_code', 'ACTOR_USER_ID_REQUIRED', 'requested_count', 0, 'success_count', 0, 'failure_count', 0, 'results', '[]'::jsonb);

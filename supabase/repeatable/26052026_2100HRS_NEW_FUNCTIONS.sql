@@ -64736,6 +64736,9 @@ BEGIN
 END;
 $function$;
 
+
+
+-- metadata: {"object_type": "FUNCTION", "schema_name": "public", "object_name": "pay_workbench_mark_candidate_dirty", "identity_args": "", "parent_schema_name": null, "parent_object_name": null, "enabled_state": null, "trigger_function_schema": null, "trigger_function_name": null}
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_candidate_dirty()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -64763,6 +64766,11 @@ DECLARE
   v_authorise_boundary_is_authorise boolean := false;
   v_authorise_boundary_is_unauthorise boolean := false;
   v_tsfin_payability_state_changed boolean := false;
+  v_timesheet_pay_state_settlement_changed boolean := false;
+  v_timesheet_pay_state_summary_changed boolean := false;
+  v_timesheet_pay_state_bookkeeping_ignored boolean := false;
+  v_timesheet_pay_state_noop_ignored boolean := false;
+  v_timesheet_pay_state_routing_reason text := NULL::text;
   v_lifecycle_context text := NULLIF(BTRIM(COALESCE(current_setting('cloudtms.lifecycle_mutation_context', true), '')), '');
   v_effective_lifecycle_context text := NULL::text;
   v_lifecycle_dedupe_keys text := '';
@@ -64863,6 +64871,51 @@ BEGIN
     END IF;
   END IF;
 
+  IF TG_OP = 'UPDATE' AND v_trigger_table = 'timesheet_pay_state' THEN
+    v_timesheet_pay_state_settlement_changed :=
+      (v_old_row->'last_settled_snapshot_json') IS DISTINCT FROM (v_new_row->'last_settled_snapshot_json')
+      OR NULLIF(BTRIM(COALESCE(v_old_row->>'last_settled_signature', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_new_row->>'last_settled_signature', '')), '')
+      OR NULLIF(BTRIM(COALESCE(v_old_row->>'last_settled_pay_batch_id', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_new_row->>'last_settled_pay_batch_id', '')), '')
+      OR NULLIF(BTRIM(COALESCE(v_old_row->>'last_settled_at_utc', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_new_row->>'last_settled_at_utc', '')), '');
+
+    v_timesheet_pay_state_summary_changed :=
+      NULLIF(BTRIM(COALESCE(v_old_row->>'summary_pay_status_code', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_new_row->>'summary_pay_status_code', '')), '')
+      OR NULLIF(BTRIM(COALESCE(v_old_row->>'summary_pay_icon_code', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_new_row->>'summary_pay_icon_code', '')), '')
+      OR NULLIF(BTRIM(COALESCE(v_old_row->>'summary_pay_paid_at_utc', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_new_row->>'summary_pay_paid_at_utc', '')), '')
+      OR NULLIF(BTRIM(COALESCE(v_old_row->>'summary_net_delta_ex_vat', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_new_row->>'summary_net_delta_ex_vat', '')), '');
+
+    IF v_timesheet_pay_state_settlement_changed IS NOT TRUE THEN
+      v_timesheet_pay_state_bookkeeping_ignored := COALESCE(v_timesheet_pay_state_summary_changed, false);
+      v_timesheet_pay_state_noop_ignored := COALESCE(v_timesheet_pay_state_summary_changed, false) IS NOT TRUE;
+
+      PERFORM public._temp_diag_log(
+        'TEMP_TRIGGER_DIRTY_STAGE',
+        'TEMP_BANKING_PAY_DIRTY',
+        COALESCE(v_new_timesheet_id::text, v_old_timesheet_id::text),
+        jsonb_build_object(
+          'function_name', 'pay_workbench_mark_candidate_dirty',
+          'stage', CASE
+            WHEN v_timesheet_pay_state_bookkeeping_ignored IS TRUE THEN 'early_return_timesheet_pay_state_bookkeeping_no_dirty'
+            ELSE 'early_return_timesheet_pay_state_noop_no_dirty'
+          END,
+          'trigger_table', v_trigger_table,
+          'trigger_op', TG_OP,
+          'dirty_classification', CASE
+            WHEN v_timesheet_pay_state_bookkeeping_ignored IS TRUE THEN 'TIMESHEET_PAY_STATE_BOOKKEEPING_IGNORED'
+            ELSE 'TIMESHEET_PAY_STATE_NOOP_IGNORED'
+          END,
+          'timesheet_pay_state_settlement_changed', COALESCE(v_timesheet_pay_state_settlement_changed, false),
+          'timesheet_pay_state_summary_changed', COALESCE(v_timesheet_pay_state_summary_changed, false),
+          'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+          'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at)) * 1000)::numeric, 2)
+        )
+      );
+      RETURN NEW;
+    END IF;
+
+    v_timesheet_pay_state_routing_reason := 'SOURCE_BUILD_REQUIRED_PAY_STATE_SETTLED_BASELINE_CHANGE';
+  END IF;
+
   IF TG_OP = 'UPDATE' AND v_trigger_table = 'timesheets' THEN
     v_old_payment_eligible := NULLIF(BTRIM(COALESCE(v_old_row->>'authorised_at_server', '')), '') IS NOT NULL
       AND NULLIF(BTRIM(COALESCE(v_old_row->>'revoked_at', '')), '') IS NULL;
@@ -64917,7 +64970,9 @@ BEGIN
     ELSE v_lifecycle_context
   END;
 
-  v_banking_pay_dirty_required := v_authorise_boundary_changed IS TRUE OR v_explicit_banking_pay_action IS TRUE;
+  v_banking_pay_dirty_required := v_authorise_boundary_changed IS TRUE
+    OR v_explicit_banking_pay_action IS TRUE
+    OR (v_trigger_table = 'timesheet_pay_state' AND v_timesheet_pay_state_settlement_changed IS TRUE);
   v_ordinary_timesheet_edit_save_no_dirty := TG_OP = 'UPDATE'
     AND v_trigger_table IN ('timesheets', 'timesheets_financials')
     AND v_banking_pay_dirty_required IS NOT TRUE;
@@ -65066,6 +65121,12 @@ BEGIN
       'candidate_id', v_candidate_id::text,
       'reason', v_reason,
       'dirty_reason', v_reason,
+      'timesheet_pay_state_settlement_changed', CASE WHEN v_trigger_table = 'timesheet_pay_state' THEN COALESCE(v_timesheet_pay_state_settlement_changed, false) ELSE NULL END,
+      'timesheet_pay_state_summary_changed', CASE WHEN v_trigger_table = 'timesheet_pay_state' THEN COALESCE(v_timesheet_pay_state_summary_changed, false) ELSE NULL END,
+      'timesheet_pay_state_bookkeeping_ignored', CASE WHEN v_trigger_table = 'timesheet_pay_state' THEN COALESCE(v_timesheet_pay_state_bookkeeping_ignored, false) ELSE NULL END,
+      'timesheet_pay_state_noop_ignored', CASE WHEN v_trigger_table = 'timesheet_pay_state' THEN COALESCE(v_timesheet_pay_state_noop_ignored, false) ELSE NULL END,
+      'pay_state_dirty_routing_reason', CASE WHEN v_trigger_table = 'timesheet_pay_state' THEN v_timesheet_pay_state_routing_reason ELSE NULL END,
+      'source_build_required_reason', CASE WHEN v_trigger_table = 'timesheet_pay_state' THEN v_timesheet_pay_state_routing_reason ELSE NULL END,
       'refresh_scope_kind', v_refresh_scope_kind,
       'targeted_timesheet_ids', COALESCE(to_jsonb(v_targeted_timesheet_ids), '[]'::jsonb),
       'linked_timesheet_ids', '[]'::jsonb,
@@ -207814,7 +207875,7 @@ $function$;
 
 
 
-
+-- metadata: {"object_type": "FUNCTION", "schema_name": "public", "object_name": "pay_workbench_delta_refresh_classify_v1", "identity_args": "p_session_id uuid, p_candidate_id uuid, p_payload_json jsonb", "parent_schema_name": null, "parent_object_name": null, "enabled_state": null, "trigger_function_schema": null, "trigger_function_name": null}
 CREATE OR REPLACE FUNCTION public.pay_workbench_delta_refresh_classify_v1(p_session_id uuid, p_candidate_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -207926,6 +207987,11 @@ DECLARE
   v_payload_banking_pay_dirty_required boolean := false;
   v_explicit_banking_pay_action boolean := false;
   v_patch_after_batch_enabled boolean := true;
+  v_timesheet_pay_state_settlement_changed boolean := false;
+  v_timesheet_pay_state_summary_changed boolean := false;
+  v_timesheet_pay_state_bookkeeping_ignored boolean := false;
+  v_timesheet_pay_state_noop_ignored boolean := false;
+  v_timesheet_pay_state_routing_reason text := NULL::text;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -208024,6 +208090,36 @@ BEGIN
   v_payee_route_unchanged := lower(BTRIM(COALESCE(v_payload_json->>'payee_route_unchanged', v_payload_json->>'payee_identity_unchanged', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_payload_banking_pay_dirty_required := lower(BTRIM(COALESCE(v_payload_json->>'banking_pay_dirty_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_payload_ordinary_no_dirty := lower(BTRIM(COALESCE(v_payload_json->>'ordinary_timesheet_edit_save_no_dirty', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  IF v_trigger_table = 'timesheet_pay_state' THEN
+    v_timesheet_pay_state_settlement_changed := lower(BTRIM(COALESCE(
+      v_payload_json->>'timesheet_pay_state_settlement_changed',
+      v_payload_json->>'pay_state_settlement_changed',
+      v_payload_json->>'settled_baseline_changed',
+      'false'
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+    v_timesheet_pay_state_summary_changed := lower(BTRIM(COALESCE(
+      v_payload_json->>'timesheet_pay_state_summary_changed',
+      v_payload_json->>'pay_state_summary_changed',
+      v_payload_json->>'summary_only_changed',
+      'false'
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+    v_timesheet_pay_state_bookkeeping_ignored := lower(BTRIM(COALESCE(
+      v_payload_json->>'timesheet_pay_state_bookkeeping_ignored',
+      v_payload_json->>'pay_state_bookkeeping_ignored',
+      'false'
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR UPPER(BTRIM(COALESCE(v_payload_json->>'pay_state_dirty_routing_reason', ''))) = 'TIMESHEET_PAY_STATE_BOOKKEEPING_IGNORED';
+
+    v_timesheet_pay_state_noop_ignored := lower(BTRIM(COALESCE(
+      v_payload_json->>'timesheet_pay_state_noop_ignored',
+      v_payload_json->>'pay_state_noop_ignored',
+      'false'
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR UPPER(BTRIM(COALESCE(v_payload_json->>'pay_state_dirty_routing_reason', ''))) = 'TIMESHEET_PAY_STATE_NOOP_IGNORED';
+  END IF;
 
   v_explicit_banking_pay_action := lower(BTRIM(COALESCE(
     v_payload_json->>'explicit_banking_pay_action',
@@ -208456,6 +208552,12 @@ BEGIN
     'has_timesheet_pay_adjustment_credit', COALESCE(v_ts_adjustment_credit, false),
     'has_timesheet_pay_adjustment_debit', COALESCE(v_ts_adjustment_debit, false),
     'has_contract_client_dirty', COALESCE(v_has_contract_client_dirty, false),
+    'timesheet_pay_state_event', v_trigger_table = 'timesheet_pay_state',
+    'timesheet_pay_state_settlement_changed', COALESCE(v_timesheet_pay_state_settlement_changed, false),
+    'timesheet_pay_state_summary_changed', COALESCE(v_timesheet_pay_state_summary_changed, false),
+    'timesheet_pay_state_bookkeeping_ignored', COALESCE(v_timesheet_pay_state_bookkeeping_ignored, false),
+    'timesheet_pay_state_noop_ignored', COALESCE(v_timesheet_pay_state_noop_ignored, false),
+    'timesheet_pay_state_routing_reason', v_timesheet_pay_state_routing_reason,
     'invalid_targeted_uuid_count', COALESCE(v_invalid_targeted_uuid_count, 0),
     'invalid_linked_uuid_count', COALESCE(v_invalid_linked_uuid_count, 0),
     'invalid_finance_case_uuid_count', COALESCE(v_invalid_finance_case_uuid_count, 0),
@@ -208574,6 +208676,39 @@ BEGIN
       v_projection_class := 'BANK_ROUTING_CHANGE';
       v_fallback_reason := 'READINESS_CHANGE_WITH_UNVERIFIED_BANK_ROUTING_IDENTITY';
     END IF;
+  ELSIF v_trigger_table = 'timesheet_pay_state' THEN
+    IF v_timesheet_pay_state_bookkeeping_ignored IS TRUE OR v_timesheet_pay_state_noop_ignored IS TRUE THEN
+      v_projection_class := 'TIMESHEET_PAY_STATE_BOOKKEEPING';
+      v_projection_mode := 'BLOCKED';
+      v_routing_decision := 'BLOCKED';
+      v_scope_status := 'NOOP';
+      v_resolved_mode := 'BLOCKED';
+      v_would_fast_path_allowed := false;
+      v_fallback_reason := CASE
+        WHEN v_timesheet_pay_state_bookkeeping_ignored IS TRUE THEN 'TIMESHEET_PAY_STATE_BOOKKEEPING_IGNORED'
+        ELSE 'TIMESHEET_PAY_STATE_NOOP_IGNORED'
+      END;
+      v_timesheet_pay_state_routing_reason := v_fallback_reason;
+    ELSIF v_targeted_count = 0 THEN
+      v_projection_class := 'TARGET_SCOPE_MISSING';
+      v_fallback_reason := 'TARGETED_TIMESHEET_IDS_REQUIRED_FOR_PAY_STATE';
+      v_timesheet_pay_state_routing_reason := v_fallback_reason;
+    ELSIF v_valid_targeted_owner_count <> v_targeted_count THEN
+      v_projection_class := 'TARGET_SCOPE_MISSING';
+      v_fallback_reason := 'PAY_STATE_TARGETED_TIMESHEET_NOT_IN_CANDIDATE_SCOPE';
+      v_timesheet_pay_state_routing_reason := v_fallback_reason;
+    ELSIF v_linked_count > 0 AND v_valid_linked_owner_count <> v_linked_count THEN
+      v_projection_class := 'TARGET_SCOPE_MISSING';
+      v_fallback_reason := 'PAY_STATE_LINKED_TIMESHEET_NOT_IN_CANDIDATE_SCOPE';
+      v_timesheet_pay_state_routing_reason := v_fallback_reason;
+    ELSE
+      v_projection_class := 'TIMESHEET_PAY_STATE';
+      v_fallback_reason := CASE
+        WHEN v_timesheet_pay_state_settlement_changed IS TRUE THEN 'SOURCE_BUILD_REQUIRED_PAY_STATE_SETTLED_BASELINE_CHANGE'
+        ELSE 'SOURCE_BUILD_REQUIRED_PAY_STATE_UNCLASSIFIED_CHANGE'
+      END;
+      v_timesheet_pay_state_routing_reason := v_fallback_reason;
+    END IF;
   ELSIF v_trigger_table IN ('timesheets', 'timesheets_financials') THEN
     IF v_targeted_count = 0 THEN
       v_projection_class := 'TARGET_SCOPE_MISSING';
@@ -208619,6 +208754,12 @@ BEGIN
     'ordinary_timesheet_edit_save_no_dirty', COALESCE(v_payload_ordinary_no_dirty, false),
     'authorise_boundary_changed', COALESCE(v_timesheet_authorise_boundary_changed, false),
     'unauthorise_boundary_changed', COALESCE(v_timesheet_unauthorise_boundary_changed, false),
+    'timesheet_pay_state_event', v_trigger_table = 'timesheet_pay_state',
+    'timesheet_pay_state_settlement_changed', COALESCE(v_timesheet_pay_state_settlement_changed, false),
+    'timesheet_pay_state_summary_changed', COALESCE(v_timesheet_pay_state_summary_changed, false),
+    'timesheet_pay_state_bookkeeping_ignored', COALESCE(v_timesheet_pay_state_bookkeeping_ignored, false),
+    'timesheet_pay_state_noop_ignored', COALESCE(v_timesheet_pay_state_noop_ignored, false),
+    'timesheet_pay_state_routing_reason', v_timesheet_pay_state_routing_reason,
     'trigger_table', v_trigger_table,
     'trigger_operation', v_trigger_operation
   );
@@ -208751,8 +208892,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 
