@@ -15666,7 +15666,6 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     }, 'warn');
   }
 }
-
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -15834,9 +15833,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     'CLONE_REBASE_PHASE_COMPLETE_MORE_DUE',
     'WORKBENCH_SESSION_CLONE_REBASE_MORE_DUE',
     'WORKBENCH_STAGE_BUDGET_EXHAUSTED',
-    'BUDGET_EXHAUSTED',
-    'NO_PROGRESS_DUE_BUT_UNCLAIMED',
-    'NORMAL_DUE_UNCLAIMED_CONTINUATION_REQUIRED'
+    'BUDGET_EXHAUSTED'
   ]);
   const unsafeAutoContinuationStopReasons = new Set([
     'RPC_ERROR',
@@ -15925,10 +15922,31 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     5000,
     60000
   );
-  const settingsSource = trimStr(cachedWorkbenchSettings.settings_source || cachedWorkbenchSettings.settingsSource || '') || (isPlainObject(cachedWorkbenchSettings) && Object.keys(cachedWorkbenchSettings).length ? 'settings_defaults:id=1' : 'fallback');
-  const settingsDefaultsUpdatedAt = trimStr(cachedWorkbenchSettings.settings_defaults_updated_at || cachedWorkbenchSettings.settingsDefaultsUpdatedAt || cachedSettingsDefaults.settings_defaults_updated_at || '') || null;
-  const settingsDefaultsVersion = trimStr(cachedWorkbenchSettings.settings_defaults_version || cachedWorkbenchSettings.settingsDefaultsVersion || settingsDefaultsUpdatedAt || '') || null;
-  const settingsHash = trimStr(cachedWorkbenchSettings.settings_hash || cachedWorkbenchSettings.settingsHash || '') || null;
+  const cachedSettingsResolved = isPlainObject(cachedWorkbenchSettings)
+    && Object.keys(cachedWorkbenchSettings).length > 0
+    && !!trimStr(
+      cachedWorkbenchSettings.settings_source
+      || cachedWorkbenchSettings.settingsSource
+      || cachedWorkbenchSettings.settings_hash
+      || cachedWorkbenchSettings.settingsHash
+      || cachedWorkbenchSettings.settings_defaults_updated_at
+      || cachedWorkbenchSettings.settingsDefaultsUpdatedAt
+      || cachedSettingsDefaults.settings_defaults_updated_at
+      || ''
+    );
+  const settingsSource = cachedSettingsResolved
+    ? (trimStr(cachedWorkbenchSettings.settings_source || cachedWorkbenchSettings.settingsSource || '') || 'settings_defaults:id=1')
+    : 'settings_not_resolved_until_drain';
+  const settingsDefaultsUpdatedAt = cachedSettingsResolved
+    ? (trimStr(cachedWorkbenchSettings.settings_defaults_updated_at || cachedWorkbenchSettings.settingsDefaultsUpdatedAt || cachedSettingsDefaults.settings_defaults_updated_at || '') || null)
+    : null;
+  const settingsDefaultsVersion = cachedSettingsResolved
+    ? (trimStr(cachedWorkbenchSettings.settings_defaults_version || cachedWorkbenchSettings.settingsDefaultsVersion || settingsDefaultsUpdatedAt || '') || null)
+    : null;
+  const settingsHash = cachedSettingsResolved
+    ? (trimStr(cachedWorkbenchSettings.settings_hash || cachedWorkbenchSettings.settingsHash || '') || null)
+    : null;
+  const settingsDeferredToDrain = !cachedSettingsResolved;
   const requestedSessionId = trimStr(source.sessionId || source.session_id || '');
   const requestedCandidateId = trimStr(source.candidateId || source.candidate_id || '');
   const requestedActorUserId = trimStr(source.actorUserId || source.actor_user_id || '');
@@ -15994,6 +16012,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     settings_defaults_updated_at: settingsDefaultsUpdatedAt,
     settings_defaults_version: settingsDefaultsVersion,
     settings_hash: settingsHash,
+    settings_deferred_to_drain: settingsDeferredToDrain,
     workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
     lifecycle_origin_nudge: lifecycleOriginNudge,
     lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
@@ -16339,10 +16358,13 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   if (isPlainObject(cachedStageLimits) && Object.keys(cachedStageLimits).length > 0 && !Object.prototype.hasOwnProperty.call(passthroughOptions, 'stageLimits')) {
     passthroughOptions.stageLimits = cachedStageLimits;
   }
-  passthroughOptions.settingsSource = settingsSource;
-  passthroughOptions.settingsDefaultsUpdatedAt = settingsDefaultsUpdatedAt;
-  passthroughOptions.settingsDefaultsVersion = settingsDefaultsVersion;
-  passthroughOptions.settingsHash = settingsHash;
+  if (!settingsDeferredToDrain) {
+    passthroughOptions.settingsSource = settingsSource;
+    passthroughOptions.settingsDefaultsUpdatedAt = settingsDefaultsUpdatedAt;
+    passthroughOptions.settingsDefaultsVersion = settingsDefaultsVersion;
+    passthroughOptions.settingsHash = settingsHash;
+  }
+  passthroughOptions.settingsDeferredToDrain = settingsDeferredToDrain;
 
   const isLockContentionSummary = (summaryLike) => {
     const summary = isPlainObject(summaryLike) ? summaryLike : {};
@@ -16388,75 +16410,12 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       );
   };
 
-  const isNormalDueUnclaimedSummary = (summaryLike) => {
-    const summary = isPlainObject(summaryLike) ? summaryLike : {};
-    const drain = isPlainObject(summary.drain_result) ? summary.drain_result : {};
-    const claimResult = isPlainObject(drain.claim_result) ? drain.claim_result : {};
-    const stopReason = upperTrim(summary.stop_reason || drain.stop_reason || claimResult.stop_reason || '');
-    const moreDue = booleanFrom(summary.more_due) || booleanFrom(drain.more_due) || booleanFrom(claimResult.more_due);
-    const claimableCount = Math.max(
-      numberFrom(summary, ['claimable_count', 'claimable_due_count'], 0),
-      numberFrom(drain, ['claimable_count', 'claimable_due_count'], 0),
-      numberFrom(claimResult, ['claimable_count', 'claimable_due_count'], 0)
-    );
-    const dueQueuedCount = Math.max(
-      numberFrom(summary, ['due_queued_count', 'due_queued'], 0),
-      numberFrom(drain, ['due_queued_count', 'due_queued'], 0),
-      numberFrom(claimResult, ['due_queued_count', 'due_queued'], 0)
-    );
-    const claimedCount = Math.max(
-      numberFrom(summary, ['claimed', 'claimed_count'], 0),
-      numberFrom(drain, ['claimed', 'claimed_count'], 0),
-      numberFrom(claimResult, ['claimed', 'claimed_count'], 0)
-    );
-    const processedCount = Math.max(
-      numberFrom(summary, ['processed', 'processed_count'], 0),
-      numberFrom(drain, ['processed', 'processed_count'], 0),
-      numberFrom(claimResult, ['processed', 'processed_count'], 0)
-    );
-    const runningCount = Math.max(
-      numberFrom(summary, ['running_count', 'running_due_count'], 0),
-      numberFrom(drain, ['running_count', 'running_due_count'], 0),
-      numberFrom(claimResult, ['running_count', 'running_due_count'], 0)
-    );
-    const staleRunningCount = Math.max(
-      numberFrom(summary, ['stale_running_count'], 0),
-      numberFrom(drain, ['stale_running_count'], 0),
-      numberFrom(claimResult, ['stale_running_count'], 0)
-    );
-    const failedCount = Math.max(
-      numberFrom(summary, ['failed', 'failed_count'], 0),
-      numberFrom(drain, ['failed', 'failed_count'], 0),
-      numberFrom(claimResult, ['failed', 'failed_count'], 0)
-    );
-    const deadCount = Math.max(
-      numberFrom(summary, ['dead', 'dead_count'], 0),
-      numberFrom(drain, ['dead', 'dead_count'], 0),
-      numberFrom(claimResult, ['dead', 'dead_count'], 0)
-    );
-    const explicitDueUnclaimed = booleanFrom(summary.normal_due_unclaimed_detected)
-      || booleanFrom(drain.normal_due_unclaimed_detected)
-      || stopReason === 'NO_PROGRESS_DUE_BUT_UNCLAIMED'
-      || stopReason === 'NORMAL_DUE_UNCLAIMED_CONTINUATION_REQUIRED';
-    return (explicitDueUnclaimed || (moreDue && (claimableCount > 0 || dueQueuedCount > 0)))
-      && moreDue
-      && claimableCount > 0
-      && claimedCount === 0
-      && processedCount === 0
-      && runningCount === 0
-      && staleRunningCount === 0
-      && failedCount === 0
-      && deadCount === 0
-      && !isLockContentionSummary(summary);
-  };
-
   const canAutoContinueFrom = (summaryLike) => {
     const summary = isPlainObject(summaryLike) ? summaryLike : {};
     const stopReason = upperTrim(summary.stop_reason || '');
     const failedCount = numberFrom(summary, ['failed', 'failed_count'], 0);
     const deadCount = numberFrom(summary, ['dead', 'dead_count'], 0);
     const staleRecoveryErrorCount = numberFrom(summary, ['supplemental_stale_recovery_error_count', 'stale_recovery_error_count'], 0);
-    const normalDueUnclaimed = isNormalDueUnclaimedSummary(summary);
     const madeProgress = booleanFrom(summary.made_progress)
       || numberFrom(summary, ['claimed', 'claimed_count'], 0) > 0
       || numberFrom(summary, ['processed', 'processed_count'], 0) > 0
@@ -16467,12 +16426,12 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
 
     return booleanFrom(summary.more_due)
       && summary.ok !== false
-      && (madeProgress || normalDueUnclaimed)
+      && madeProgress
       && failedCount === 0
       && deadCount === 0
       && staleRecoveryErrorCount === 0
       && !unsafeAutoContinuationStopReasons.has(stopReason)
-      && (normalDueUnclaimed || stopReason === '' || safeAutoContinuationStopReasons.has(stopReason || 'MORE_DUE'));
+      && (stopReason === '' || safeAutoContinuationStopReasons.has(stopReason || 'MORE_DUE'));
   };
 
   const buildAutoContinuationOptions = (previousSummaryLike, continuationIndex, remainingRuntimeMs) => {
@@ -16833,18 +16792,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
         }
         if (autoContinuationCount >= maxAutoContinuationBursts) {
           autoContinuationSkipReason = 'MAX_AUTO_CONTINUATION_BURSTS';
-          if (isNormalDueUnclaimedSummary(finalSummary)) {
-            logNudgeDiag('MAX_AUTO_CONTINUATION_BURSTS_REACHED_DURABLE_FOLLOWUP_SCHEDULED', {
-              previous_stop_reason: upperTrim(finalSummary.stop_reason || ''),
-              previous_more_due: booleanFrom(finalSummary.more_due),
-              due_queued_count: numberFrom(finalSummary, ['due_queued_count', 'due_queued'], 0),
-              claimable_count: numberFrom(finalSummary, ['claimable_count', 'claimable_due_count'], 0),
-              auto_continuation_count: autoContinuationCount,
-              max_auto_continuation_bursts: maxAutoContinuationBursts,
-              durable_cron_fallback: true,
-              cron_remains_recovery_fallback: true
-            }, 'warn');
-          }
           break;
         }
 
@@ -16864,34 +16811,16 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
           remainingAutoContinuationRuntimeMs
         );
 
-        const normalDueUnclaimedContinuation = isNormalDueUnclaimedSummary(finalSummary);
-        if (normalDueUnclaimedContinuation) {
-          logNudgeDiag('NORMAL_DUE_CONTINUATION_SCHEDULED', {
-            previous_stop_reason: upperTrim(finalSummary.stop_reason || ''),
-            previous_more_due: booleanFrom(finalSummary.more_due),
-            previous_claimed: numberFrom(finalSummary, ['claimed', 'claimed_count'], 0),
-            previous_processed: numberFrom(finalSummary, ['processed', 'processed_count'], 0),
-            due_queued_count: numberFrom(finalSummary, ['due_queued_count', 'due_queued'], 0),
-            claimable_count: numberFrom(finalSummary, ['claimable_count', 'claimable_due_count'], 0),
-            continuation_claim_limit: autoContinuationOptions.claimLimit,
-            continuation_max_passes: autoContinuationOptions.maxPasses,
-            continuation_max_jobs: autoContinuationOptions.maxJobs,
-            continuation_max_rows: autoContinuationOptions.maxRows,
-            continuation_max_runtime_ms: autoContinuationOptions.maxRuntimeMs
-          });
-        }
-
         logNudgeDiag('WORKBENCH_DRAIN_CONTINUATION_DECISION', {
           previous_stop_reason: upperTrim(finalSummary.stop_reason || ''),
           previous_more_due: booleanFrom(finalSummary.more_due),
           previous_made_progress: booleanFrom(finalSummary.made_progress),
-          previous_normal_due_unclaimed: normalDueUnclaimedContinuation,
           remaining_auto_continuation_runtime_ms: remainingAutoContinuationRuntimeMs,
           auto_continuation_index: continuationIndex,
           max_auto_continuation_bursts: maxAutoContinuationBursts,
           auto_continuation_min_runtime_ms: autoContinuationMinRuntimeMs,
           will_continue: true,
-          reason: normalDueUnclaimedContinuation ? 'NORMAL_DUE_CONTINUATION_SCHEDULED' : (upperTrim(finalSummary.stop_reason || '') === 'SOURCE_BUILD_PARALLEL_BURSTS' ? 'SAFE_BOUNDED_SOURCE_BUILD_MORE_DUE' : 'SAFE_MORE_DUE'),
+          reason: upperTrim(finalSummary.stop_reason || '') === 'SOURCE_BUILD_PARALLEL_BURSTS' ? 'SAFE_BOUNDED_SOURCE_BUILD_MORE_DUE' : 'SAFE_MORE_DUE',
           reason_if_false: null,
           continuation_claim_limit: autoContinuationOptions.claimLimit,
           continuation_max_passes: autoContinuationOptions.maxPasses,
@@ -17155,6 +17084,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     budget_resolved_by: 'bankingPayWorkbenchCronTick'
   }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
 }
+
 
 async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -172894,8 +172824,6 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
 
   return summary;
 }
-
-
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -173740,13 +173668,25 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   let normalMoreDue = normalAllowedJobTypes !== null || !sourceBuildParallelEnabled;
   let sourceBuildMoreDue = sourceBuildParallelEnabled;
   let downstreamWorkMayBeDue = false;
-  let normalDueUnclaimedDetected = false;
-  let normalDueUnclaimedCount = 0;
-  let normalDueUnclaimedLastSummary = null;
   const jobs = [];
   const errors = [];
   const passSummaries = [];
   const sourceBuildParallelBurstSummaries = [];
+  let sourceBuildDuePreflightCount = 0;
+  let sourceBuildLaneSkippedNoDueWorkCount = 0;
+  let sourceBuildLaneSkippedNormalWorkCount = 0;
+  let normalDueRetryScheduledCount = 0;
+  let normalDueNoClaimTerminalCount = 0;
+  const sourceBuildDueJobTypes = [
+    'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+    'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
+    'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
+    'CANDIDATE_SOURCE_BUILD',
+    'CANDIDATE_SOURCE_BUILD_CHUNK',
+    'SOURCE_BUILD',
+    'SOURCE_BUILD_PAGE',
+    'WORKBENCH_SOURCE_BUILD'
+  ];
 
   const elapsedTotalMs = () => Math.max(0, Date.now() - startedAtMs);
   const remainingRuntimeMs = () => Math.max(0, effectiveMaxRuntimeMs - elapsedTotalMs());
@@ -173758,6 +173698,34 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     if (remainingRows() < Math.max(1, stageLimit)) return { ok: false, reason: 'MAX_ROWS' };
     if (remainingRuntimeMs() < minimumRpcBudgetMs) return { ok: false, reason: 'MAX_RUNTIME_NEAR_EXHAUSTED' };
     return { ok: true, reason: null };
+  };
+  const fetchDueQueuedJobCount = async (jobTypes, route = 'UNKNOWN') => {
+    const typeValues = Array.isArray(jobTypes) ? jobTypes.map((type) => upperTrim(type)).filter(Boolean) : [];
+    if (typeValues.length === 0) return { ok: true, due_queued_count: 0, route };
+    const runAt = encodeURIComponent(explicitNowUtc || new Date().toISOString());
+    const encodedTypes = typeValues.map((type) => encodeURIComponent(type)).join(',');
+    let url = `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_jobs?select=id,job_type&status=eq.QUEUED&run_at_utc=lte.${runAt}&job_type=in.(${encodedTypes})&limit=1`;
+    if (uuidRe.test(sessionId || '')) url += `&session_id=eq.${encodeURIComponent(sessionId)}`;
+    if (uuidRe.test(candidateId || '')) url += `&candidate_id=eq.${encodeURIComponent(candidateId)}`;
+    try {
+      const response = await sbFetch(env, url, { preferExactCount: true, headers: { Range: '0-0' } });
+      const rows = Array.isArray(response?.rows) ? response.rows : [];
+      const total = Number(response?.total);
+      return {
+        ok: true,
+        route,
+        due_queued_count: Number.isFinite(total) ? Math.max(0, Math.trunc(total)) : rows.length,
+        sample_job_type: trimStr(rows[0]?.job_type || '') || null
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        route,
+        due_queued_count: null,
+        error_code: upperTrim(error?.code || error?.error_code || error?.name || 'SOURCE_BUILD_DUE_PREFLIGHT_FAILED'),
+        error_message: String(error?.message || error || 'source-build due preflight failed')
+      };
+    }
   };
 
   logDrainDiag('WORKBENCH_DRAIN_START', {
@@ -173885,7 +173853,13 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       lockContentionDetected = true;
       lockContentionCount += Math.max(0, passLockContentionCount || passDueQueuedCount || 0);
     }
-    madeProgress = madeProgress || passClaimed > 0 || passProcessed > 0 || passRecoveredStale > 0 || passDeadStale > 0;
+    madeProgress = madeProgress
+      || passClaimed > 0
+      || passProcessed > 0
+      || passRecoveredStale > 0
+      || passDeadStale > 0
+      || passContinuationsCreated > 0
+      || passContinuationsReused > 0;
     if (sourceOnly && (passClaimed > 0 || passProcessed > 0 || passContinuationsCreated > 0 || passContinuationsReused > 0)) downstreamWorkMayBeDue = true;
 
     const sourceBuildTimingSummary = sourceBuildTimingSummaryFromJobs(passJobs);
@@ -173946,25 +173920,34 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
     if (passFailed > 0 || passDead > 0) await fetchAndLogFailedJobSamples(passJobs, summary);
 
+    const passContinuationProgress = passContinuationsCreated > 0 || passContinuationsReused > 0;
+    const dueClaimableNoClaim = sourceOnly !== true
+      && passMoreDue === true
+      && passClaimableCount > 0
+      && passClaimed === 0
+      && passProcessed === 0
+      && passFailed === 0
+      && passDead === 0
+      && passContinuationProgress === false
+      && passLockContentionDetected === false
+      && !['LOCKED_BY_CONCURRENT_WORKER', 'CLAIM_LOCK_CONTENTION', 'CONCURRENT_WORKER_LOCK_CONTENTION', 'MAX_RUNTIME_NEAR_EXHAUSTED', 'MAX_RUNTIME', 'MAX_JOBS', 'MAX_ROWS'].includes(passStopReason);
     return {
       claimed: passClaimed,
       processed: passProcessed,
       failed: passFailed,
       dead: passDead,
       stale_recovery_errors: passStaleRecoveryErrors,
-      more_due: passMoreDue,
-      made_progress: passClaimed > 0 || passProcessed > 0 || passRecoveredStale > 0 || passDeadStale > 0,
-      lock_contention: passLockContentionDetected,
-      stop_reason: passStopReason,
+      continuations_created: passContinuationsCreated,
+      continuations_reused: passContinuationsReused,
       due_queued_count: passDueQueuedCount,
       claimable_count: passClaimableCount,
       running_count: passRunningCount,
       stale_running_count: passStaleRunningCount,
-      claim_lock_contention_detected: passLockContentionDetected,
-      lock_contention_detected: passLockContentionDetected,
-      claim_lock_contention_count: passLockContentionCount,
-      lock_contention_count: passLockContentionCount,
-      concurrent_worker_progress_expected: passLockContentionDetected,
+      more_due: passMoreDue,
+      made_progress: passClaimed > 0 || passProcessed > 0 || passRecoveredStale > 0 || passDeadStale > 0 || passContinuationProgress,
+      due_claimable_no_claim: dueClaimableNoClaim,
+      lock_contention: passLockContentionDetected,
+      stop_reason: passStopReason,
       jobs: passJobs,
       row_units_processed: passWorkUnits
     };
@@ -174140,25 +174123,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     return { ran: true, ...recorded };
   };
 
-  const isNormalDueUnclaimedResult = (summaryLike) => {
-    const summary = isPlainObject(summaryLike) ? summaryLike : {};
-    if (summary.ran !== true) return false;
-    if (!booleanFrom(summary.more_due)) return false;
-    if (countFrom(summary, ['due_queued_count', 'due_queued']) <= 0 && countFrom(summary, ['claimable_count', 'claimable_due_count']) <= 0) return false;
-    if (countFrom(summary, ['claimable_count', 'claimable_due_count']) <= 0) return false;
-    if (countFrom(summary, ['claimed', 'claimed_count']) > 0 || countFrom(summary, ['processed', 'processed_count']) > 0) return false;
-    if (countFrom(summary, ['failed', 'failed_count']) > 0 || countFrom(summary, ['dead', 'dead_count']) > 0) return false;
-    if (countFrom(summary, ['stale_recovery_errors', 'supplemental_stale_recovery_error_count'], 0) > 0) return false;
-    if (summary.lock_contention === true
-        || booleanFrom(summary.claim_lock_contention_detected)
-        || booleanFrom(summary.lock_contention_detected)
-        || booleanFrom(summary.concurrent_worker_progress_expected)
-        || countFrom(summary, ['claim_lock_contention_count', 'lock_contention_count'], 0) > 0) return false;
-    if (countFrom(summary, ['running_count', 'running_due_count'], 0) > 0) return false;
-    if (countFrom(summary, ['stale_running_count'], 0) > 0) return false;
-    return true;
-  };
-
   const runSourceBuildParallelBursts = async () => {
     if (!sourceBuildParallelEnabled) return { ran: false, reason: 'SOURCE_BUILD_PARALLEL_DISABLED', more_due: false, made_progress: false };
     const sourceStageLimit = stageLimitForJobType('WORKBENCH_CANDIDATE_SOURCE_BUILD', Math.min(maxStageWorkUnitsPerJob, 10));
@@ -174172,6 +174136,34 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       if (!budget.ok) {
         stoppedBy = budget.reason;
         break;
+      }
+      const sourceDuePreflight = await fetchDueQueuedJobCount(sourceBuildDueJobTypes, 'SOURCE_BUILD_PARALLEL');
+      sourceBuildDuePreflightCount += 1;
+      if (sourceDuePreflight.ok === true && Math.max(0, Number(sourceDuePreflight.due_queued_count) || 0) <= 0) {
+        sourceBuildLaneSkippedNoDueWorkCount += 1;
+        sourceBuildMoreDue = false;
+        anyMoreDue = false;
+        stoppedBy = 'SOURCE_BUILD_LANE_SKIPPED_NO_DUE_WORK';
+        logDrainDiag('SOURCE_BUILD_LANE_SKIPPED_NO_DUE_WORK', {
+          burst_number: sourceBuildParallelBurstCount + 1,
+          route: 'SOURCE_BUILD_PARALLEL',
+          due_queued_count: 0,
+          normal_more_due: normalMoreDue,
+          session_id: sessionId,
+          candidate_id: candidateId,
+          remaining_jobs: remainingJobs(),
+          remaining_rows: remainingRows(),
+          remaining_runtime_ms: remainingRuntimeMs()
+        });
+        break;
+      }
+      if (sourceDuePreflight.ok !== true) {
+        logDrainDiag('WORKBENCH_SOURCE_BUILD_DUE_PREFLIGHT_FAILED', {
+          route: 'SOURCE_BUILD_PARALLEL',
+          error_code: sourceDuePreflight.error_code || null,
+          error_message: sourceDuePreflight.error_message || null,
+          will_run_lane_without_prefight_skip: true
+        }, 'warn');
       }
       const jobsLeft = remainingJobs();
       const rowsLeft = remainingRows();
@@ -174370,60 +174362,85 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         break;
       }
       if (normal.ran && normal.made_progress && sourceBuildParallelEnabled) sourceBuildMoreDue = true;
-      downstreamWorkMayBeDue = false;
-
-      if (isNormalDueUnclaimedResult(normal)) {
-        normalDueUnclaimedDetected = true;
-        normalDueUnclaimedCount += 1;
-        normalMoreDue = true;
-        sourceBuildMoreDue = false;
-        downstreamWorkMayBeDue = false;
-        normalDueUnclaimedLastSummary = {
-          route: 'NORMAL',
-          pass_number: passCount,
-          due_queued_count: countFrom(normal, ['due_queued_count', 'due_queued']),
-          claimable_count: countFrom(normal, ['claimable_count', 'claimable_due_count']),
-          claimed: countFrom(normal, ['claimed', 'claimed_count']),
-          processed: countFrom(normal, ['processed', 'processed_count']),
-          running_count: countFrom(normal, ['running_count', 'running_due_count']),
-          stale_running_count: countFrom(normal, ['stale_running_count']),
-          claim_lock_contention_count: countFrom(normal, ['claim_lock_contention_count', 'lock_contention_count'], 0),
-          db_stop_reason: upperTrim(normal.stop_reason || ''),
-          source_build_parallel_enabled: sourceBuildParallelEnabled,
-          source_build_lane_skipped: sourceBuildParallelEnabled
-        };
-
-        const retryBudget = passCount < maxPasses
-          ? canAttemptRpc(maxEffectiveStageWorkUnitsPerJob)
-          : { ok: false, reason: 'MAX_PASSES' };
-        const retryEventName = retryBudget.ok ? 'NORMAL_DUE_RETRY_SCHEDULED' : 'SOURCE_BUILD_LANE_SKIPPED_NORMAL_DUE_REMAINS';
-        logDrainDiag(retryEventName, {
-          stop_reason: 'NO_PROGRESS_DUE_BUT_UNCLAIMED',
-          more_due: true,
-          due_queued_count: normalDueUnclaimedLastSummary.due_queued_count,
-          claimable_count: normalDueUnclaimedLastSummary.claimable_count,
-          claimed: normalDueUnclaimedLastSummary.claimed,
-          processed: normalDueUnclaimedLastSummary.processed,
-          running_count: normalDueUnclaimedLastSummary.running_count,
-          stale_running_count: normalDueUnclaimedLastSummary.stale_running_count,
-          claim_lock_contention_count: normalDueUnclaimedLastSummary.claim_lock_contention_count,
-          retry_normal_pass_available: retryBudget.ok,
-          retry_normal_pass_reason_if_false: retryBudget.reason || null,
-          current_normal_pass_count: passCount,
-          max_passes: maxPasses,
-          source_build_parallel_enabled: sourceBuildParallelEnabled,
-          source_build_lane_skipped: sourceBuildParallelEnabled,
-          durable_followup_required: !retryBudget.ok
-        }, retryBudget.ok ? 'info' : 'warn');
-
-        if (retryBudget.ok) continue;
-        if (retryBudget.reason === 'MAX_JOBS' || retryBudget.reason === 'MAX_ROWS' || retryBudget.reason === 'MAX_RUNTIME_NEAR_EXHAUSTED') budgetExhausted = true;
-        stopReason = 'NO_PROGRESS_DUE_BUT_UNCLAIMED';
-        break;
+      if (normal.ran && normal.due_claimable_no_claim === true) {
+        if (passCount < maxPasses && canAttemptRpc(maxEffectiveStageWorkUnitsPerJob).ok) {
+          normalDueRetryScheduledCount += 1;
+          logDrainDiag('NORMAL_DUE_RETRY_SCHEDULED', {
+            pass_number: passCount,
+            due_queued_count: normal.due_queued_count,
+            claimable_count: normal.claimable_count,
+            claimed: normal.claimed,
+            processed: normal.processed,
+            continuations_created: normal.continuations_created,
+            continuations_reused: normal.continuations_reused,
+            route: 'NORMAL',
+            reason: 'DUE_CLAIMABLE_NO_CLAIM'
+          }, 'warn');
+          const retryNormal = await runNormalPass();
+          ranSomething = ranSomething || retryNormal.ran === true;
+          if (retryNormal.error) {
+            stopReason = 'RPC_ERROR';
+            break;
+          }
+          if (retryNormal.ran && retryNormal.made_progress && sourceBuildParallelEnabled) sourceBuildMoreDue = true;
+          if (retryNormal.ran && retryNormal.due_claimable_no_claim === true) {
+            normalDueNoClaimTerminalCount += 1;
+            stopReason = 'NO_PROGRESS_DUE_BUT_UNCLAIMED';
+            normalMoreDue = true;
+            logDrainDiag('NO_PROGRESS_DUE_BUT_UNCLAIMED', {
+              pass_number: passCount,
+              due_queued_count: retryNormal.due_queued_count,
+              claimable_count: retryNormal.claimable_count,
+              claimed: retryNormal.claimed,
+              processed: retryNormal.processed,
+              continuations_created: retryNormal.continuations_created,
+              continuations_reused: retryNormal.continuations_reused,
+              route: 'NORMAL',
+              durable_follow_up: true,
+              will_not_enter_source_build_lane: true
+            }, 'warn');
+            break;
+          }
+        } else {
+          normalDueNoClaimTerminalCount += 1;
+          stopReason = 'NO_PROGRESS_DUE_BUT_UNCLAIMED';
+          normalMoreDue = true;
+          logDrainDiag('NO_PROGRESS_DUE_BUT_UNCLAIMED', {
+            pass_number: passCount,
+            due_queued_count: normal.due_queued_count,
+            claimable_count: normal.claimable_count,
+            claimed: normal.claimed,
+            processed: normal.processed,
+            continuations_created: normal.continuations_created,
+            continuations_reused: normal.continuations_reused,
+            route: 'NORMAL',
+            durable_follow_up: true,
+            retry_skipped_reason: passCount >= maxPasses ? 'MAX_PASSES' : canAttemptRpc(maxEffectiveStageWorkUnitsPerJob).reason,
+            will_not_enter_source_build_lane: true
+          }, 'warn');
+          break;
+        }
       }
+      downstreamWorkMayBeDue = false;
     }
 
     if (sourceBuildParallelEnabled && sourceBuildMoreDue && sourceBuildParallelBurstCount < sourceBuildParallelBursts) {
+      if (normalMoreDue && !(Array.isArray(normalAllowedJobTypes) && normalAllowedJobTypes.length === 0)) {
+        sourceBuildLaneSkippedNormalWorkCount += 1;
+        logDrainDiag('SOURCE_BUILD_LANE_SKIPPED_NORMAL_WORK_REMAINS', {
+          normal_more_due: normalMoreDue,
+          pass_count: passCount,
+          max_passes: maxPasses,
+          source_build_parallel_burst_count: sourceBuildParallelBurstCount,
+          source_build_parallel_bursts: sourceBuildParallelBursts,
+          reason: passCount < maxPasses ? 'NORMAL_RETRY_AVAILABLE' : 'NORMAL_MAX_PASSES_REACHED',
+          will_enter_source_build_lane: false
+        });
+        if (passCount < maxPasses) continue;
+        stopReason = 'MAX_PASSES';
+        budgetExhausted = true;
+        break;
+      }
       const source = await runSourceBuildParallelBursts();
       ranSomething = ranSomething || source.ran === true;
       if (transportError) {
@@ -174493,7 +174510,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const lastClaimResult = isPlainObject(lastAggregate.claim_result) ? lastAggregate.claim_result : {};
   const finalMoreDue = (() => {
     if (stopReason === 'NO_MORE_DUE') return false;
-    if (normalDueUnclaimedDetected) return true;
     if (transportError || sourceBuildOnlyAssertionFailed || budgetExhausted) return true;
     return normalMoreDue || sourceBuildMoreDue || downstreamWorkMayBeDue;
   })();
@@ -174564,14 +174580,15 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_runtime_floor_ms: sourceBuildRuntimeFloorMs,
     source_build_lane_claim_limit: sourceBuildLaneClaimLimit,
     source_build_lane_allowed_job_types: sourceBuildParallelEnabled ? ['WORKBENCH_CANDIDATE_SOURCE_BUILD'] : [],
-    normal_due_unclaimed_detected: normalDueUnclaimedDetected,
-    normal_due_unclaimed_count: normalDueUnclaimedCount,
-    normal_due_unclaimed_last_summary: normalDueUnclaimedLastSummary,
-    source_build_lane_skipped_normal_due_remains: normalDueUnclaimedDetected && sourceBuildParallelEnabled,
     source_build_parallel_burst_count: sourceBuildParallelBurstCount,
     source_build_parallel_lane_rpc_count: sourceBuildParallelLaneRpcCount,
     source_build_parallel_lane_success_count: sourceBuildParallelLaneSuccessCount,
     source_build_parallel_lane_failure_count: sourceBuildParallelLaneFailureCount,
+    source_build_due_preflight_count: sourceBuildDuePreflightCount,
+    source_build_lane_skipped_no_due_work_count: sourceBuildLaneSkippedNoDueWorkCount,
+    source_build_lane_skipped_normal_work_count: sourceBuildLaneSkippedNormalWorkCount,
+    normal_due_retry_scheduled_count: normalDueRetryScheduledCount,
+    normal_due_no_claim_terminal_count: normalDueNoClaimTerminalCount,
     source_build_only_assertion_passed: !sourceBuildOnlyAssertionFailed,
     source_build_parallel_burst_summaries: sourceBuildParallelBurstSummaries,
     claimed: claimedCount,
@@ -174677,10 +174694,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_lane_claim_limit: sourceBuildLaneClaimLimit,
     source_build_runtime_floor_ms: sourceBuildRuntimeFloorMs,
     source_build_only_assertion_passed: !sourceBuildOnlyAssertionFailed,
-    normal_due_unclaimed_detected: normalDueUnclaimedDetected,
-    normal_due_unclaimed_count: normalDueUnclaimedCount,
-    normal_due_unclaimed_last_summary: normalDueUnclaimedLastSummary,
-    source_build_lane_skipped_normal_due_remains: normalDueUnclaimedDetected && sourceBuildParallelEnabled,
     source_build_jobs_processed: result.source_build_jobs_processed,
     source_rows_written: result.source_rows_written,
     source_page_count: result.source_page_count,
@@ -174739,10 +174752,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       source_build_parallel_burst_count: sourceBuildParallelBurstCount,
       source_build_lane_claim_limit: sourceBuildLaneClaimLimit,
       source_build_only_assertion_passed: !sourceBuildOnlyAssertionFailed,
-      normal_due_unclaimed_detected: normalDueUnclaimedDetected,
-      normal_due_unclaimed_count: normalDueUnclaimedCount,
-      normal_due_unclaimed_last_summary: normalDueUnclaimedLastSummary,
-      source_build_lane_skipped_normal_due_remains: normalDueUnclaimedDetected && sourceBuildParallelEnabled,
       source_build_timing_job_count: result.source_build_timing_job_count,
       source_build_timing_payload_count: result.source_build_timing_payload_count,
       source_build_timing_elapsed_ms: result.source_build_timing_elapsed_ms,
@@ -174766,6 +174775,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
   return result;
 }
+
 
 async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();

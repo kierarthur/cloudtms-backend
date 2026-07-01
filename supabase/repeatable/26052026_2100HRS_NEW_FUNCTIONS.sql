@@ -180964,7 +180964,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_stage_continuation(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_job_type text DEFAULT NULL::text, p_cursor_json jsonb DEFAULT NULL::jsonb, p_source_job_id uuid DEFAULT NULL::uuid, p_result_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT NULL::text, p_priority integer DEFAULT NULL::integer, p_limit integer DEFAULT NULL::integer)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -181032,6 +181031,7 @@ DECLARE
   v_projection_run_id_token text := 'none';
   v_projection_class text := 'UNKNOWN';
   v_delta_phase text := 'INIT_PREFLIGHT';
+  v_delta_write_phase_token text := 'none';
   v_delta_next_phase text := NULL::text;
   v_refresh_scope_kind text := NULL::text;
   v_source_build_allow_full_fallback boolean := false;
@@ -181226,6 +181226,12 @@ BEGIN
     NULLIF(UPPER(BTRIM(COALESCE(v_result_json->>'next_phase', ''))), ''),
     NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json->>'next_phase', ''))), ''),
     NULL::text
+  );
+  v_delta_write_phase_token := COALESCE(
+    NULLIF(UPPER(BTRIM(COALESCE(p_cursor_json->>'write_phase', ''))), ''),
+    NULLIF(UPPER(BTRIM(COALESCE(v_result_json->>'write_phase', ''))), ''),
+    NULLIF(UPPER(BTRIM(COALESCE(v_source_job_row.payload_json->>'write_phase', ''))), ''),
+    'none'
   );
   /*
     A source-build result reports two related but different scopes:
@@ -181542,6 +181548,7 @@ BEGIN
       || ':candidate:' || COALESCE(v_candidate_key, 'ALL')
       || ':projection_run:' || COALESCE(v_projection_run_id_token, 'none')
       || ':phase:' || COALESCE(v_delta_phase, 'INIT_PREFLIGHT')
+      || ':write_phase:' || COALESCE(v_delta_write_phase_token, 'none')
       || ':cursor_hash:' || v_cursor_token;
   ELSE
     v_dedupe_key := 'WORKBENCH_STAGE_CONTINUATION'
@@ -181962,6 +181969,22 @@ BEGIN
              AND self_reuse_source_job.dedupe_key = v_dedupe_key
              AND UPPER(BTRIM(COALESCE(self_reuse_source_job.status, ''))) IN ('QUEUED', 'RUNNING')
          ) THEN
+        IF v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_DELTA_CONTINUATION_IDENTICAL_CURSOR_SELF_REUSE_BLOCKED'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'PAY_WORKBENCH_DELTA_CONTINUATION_IDENTICAL_CURSOR_SELF_REUSE_BLOCKED',
+                    'session_id', p_session_id::text,
+                    'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+                    'source_job_id', p_source_job_id::text,
+                    'projection_run_id', COALESCE(v_projection_run_id_token, 'none'),
+                    'phase', COALESCE(v_delta_phase, 'INIT_PREFLIGHT'),
+                    'write_phase', COALESCE(v_delta_write_phase_token, 'none'),
+                    'cursor_hash', v_cursor_token,
+                    'dedupe_key', v_dedupe_key,
+                    'message', 'Delta continuation attempted to create an identical same-phase/same-cursor continuation from its own active job. The :after_source_job dedupe bypass is not allowed for delta refreshes.'
+                  )::text;
+        END IF;
         IF v_self_reuse_prevented IS TRUE THEN
           RAISE EXCEPTION 'PAY_WORKBENCH_CONTINUATION_SELF_REUSE_BLOCKED'
             USING ERRCODE = 'P0001',
@@ -182022,6 +182045,22 @@ BEGIN
     IF p_source_job_id IS NOT NULL
        AND v_job_id IS NOT NULL
        AND v_job_id = p_source_job_id THEN
+      IF v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_DELTA_CONTINUATION_IDENTICAL_CURSOR_SELF_REUSE_BLOCKED'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'PAY_WORKBENCH_DELTA_CONTINUATION_IDENTICAL_CURSOR_SELF_REUSE_BLOCKED',
+                  'session_id', p_session_id::text,
+                  'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+                  'source_job_id', p_source_job_id::text,
+                  'projection_run_id', COALESCE(v_projection_run_id_token, 'none'),
+                  'phase', COALESCE(v_delta_phase, 'INIT_PREFLIGHT'),
+                  'write_phase', COALESCE(v_delta_write_phase_token, 'none'),
+                  'cursor_hash', v_cursor_token,
+                  'dedupe_key', v_dedupe_key,
+                  'message', 'Delta continuation resolved to the current source job with an identical same-phase/same-cursor key. The :after_source_job dedupe bypass is not allowed for delta refreshes.'
+                )::text;
+      END IF;
       IF v_self_reuse_prevented IS TRUE THEN
         RAISE EXCEPTION 'PAY_WORKBENCH_CONTINUATION_SELF_REUSE_BLOCKED'
           USING ERRCODE = 'P0001',
@@ -182229,7 +182268,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -193749,7 +193787,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_worker_drain_chunk(p_limit integer DEFAULT 5, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_allowed_job_types text[] DEFAULT NULL::text[], p_worker_id text DEFAULT NULL::text, p_lease_seconds integer DEFAULT 180)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -194436,12 +194473,19 @@ BEGIN
               'stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
             ),
             payload_json = jsonb_strip_nulls(
-              COALESCE(unprocessed_job.payload_json, '{}'::jsonb)
+              (COALESCE(unprocessed_job.payload_json, '{}'::jsonb) - ARRAY[
+                'worker_id',
+                'worker_claimed_at_utc',
+                'worker_lease_seconds',
+                'worker_lease_expires_at_utc',
+                'worker_function'
+              ]::text[])
               || jsonb_build_object(
                 'claim_released_due_to_worker_budget', true,
                 'claim_released_at_utc', v_now::text,
                 'claim_released_by_worker_id', v_worker_id,
-                'claim_release_stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
+                'claim_release_stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED',
+                'claim_release_cleared_worker_lease_payload', true
               )
             ),
             updated_at_utc = v_now
@@ -194967,12 +195011,19 @@ BEGIN
                   'stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
                 ),
                 payload_json = jsonb_strip_nulls(
-                  COALESCE(unprocessed_job.payload_json, '{}'::jsonb)
+                  (COALESCE(unprocessed_job.payload_json, '{}'::jsonb) - ARRAY[
+                    'worker_id',
+                    'worker_claimed_at_utc',
+                    'worker_lease_seconds',
+                    'worker_lease_expires_at_utc',
+                    'worker_function'
+                  ]::text[])
                   || jsonb_build_object(
                     'claim_released_before_stage_due_to_worker_budget', true,
                     'claim_released_at_utc', v_now::text,
                     'claim_released_by_worker_id', v_worker_id,
-                    'claim_release_stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
+                    'claim_release_stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED',
+                    'claim_release_cleared_worker_lease_payload', true
                   )
                 ),
                 updated_at_utc = v_now
@@ -203308,6 +203359,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_delta_refresh_chunk(p_session_id uuid, p_candidate_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 25)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -203334,6 +203386,13 @@ DECLARE
   v_scope_row public.banking_pay_workbench_session_scope%ROWTYPE;
   v_projection_run_id uuid := NULL::uuid;
   v_projection_run_id_text text := NULL::text;
+  v_projection_run_status text := NULL::text;
+  v_requested_phase text := 'INIT_PREFLIGHT';
+  v_persisted_phase text := NULL::text;
+  v_requested_phase_order integer := 0;
+  v_persisted_phase_order integer := 0;
+  v_effective_phase_order integer := 0;
+  v_write_resume_recreate_limit integer := 0;
   v_source_change_seq bigint := 0;
   v_source_snapshot_run_id uuid := NULL::uuid;
   v_source_snapshot_run_id_text text := NULL::text;
@@ -203530,6 +203589,7 @@ BEGIN
   ) THEN
     v_phase := 'INIT_PREFLIGHT';
   END IF;
+  v_requested_phase := v_phase;
 
   v_phase_cursor_json := CASE
     WHEN jsonb_typeof(v_cursor_json->'cursor') = 'object' THEN COALESCE(v_cursor_json->'cursor', '{}'::jsonb)
@@ -203899,6 +203959,9 @@ BEGIN
     END IF;
 
     v_phase := 'RESOLVE_SCOPE';
+    v_projection_run_status := 'RUNNING';
+    v_persisted_phase := v_phase;
+    v_requested_phase := v_phase;
     UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
     SET phase = v_phase,
         cursor_json = jsonb_build_object('phase', v_phase, 'cursor', '{}'::jsonb),
@@ -203907,7 +203970,8 @@ BEGIN
   ELSE
     SELECT projection_run.projection_mode,
            projection_run.projection_class,
-           projection_run.phase,
+           UPPER(BTRIM(COALESCE(projection_run.status, 'RUNNING'))),
+           UPPER(BTRIM(COALESCE(projection_run.phase, 'INIT_PREFLIGHT'))),
            projection_run.cursor_json,
            projection_run.write_phase,
            projection_run.write_cursor_json,
@@ -203926,7 +203990,8 @@ BEGIN
            COALESCE(projection_run.shadow_compare_enforced, false)
     INTO v_projection_mode,
          v_projection_class,
-         v_phase,
+         v_projection_run_status,
+         v_persisted_phase,
          v_phase_cursor_json,
          v_write_phase,
          v_write_cursor_json,
@@ -203947,7 +204012,7 @@ BEGIN
     WHERE projection_run.id = v_projection_run_id
       AND projection_run.session_id = p_session_id
       AND projection_run.candidate_id = p_candidate_id
-      AND projection_run.status = 'RUNNING'
+      AND projection_run.status IN ('RUNNING', 'COMPLETED')
     FOR UPDATE;
 
     IF NOT FOUND THEN
@@ -203965,9 +204030,75 @@ BEGIN
       );
     END IF;
 
-    IF v_cursor_phase IN ('WRITE_COMPATIBLE_OUTPUTS', 'VERIFY_PARITY_OR_SHADOW', 'UPDATE_CANDIDATE_STATE', 'FINALISE') THEN
-      v_phase := v_cursor_phase;
+    IF v_projection_run_status = 'COMPLETED' THEN
+      RETURN jsonb_build_object(
+        'ok', true,
+        'job_type', 'WORKBENCH_CANDIDATE_DELTA_REFRESH',
+        'projection_run_id', v_projection_run_id::text,
+        'phase', COALESCE(NULLIF(v_persisted_phase, ''), 'FINALISE'),
+        'write_phase', COALESCE(NULLIF(v_write_phase, ''), 'WRITE_COMPLETE'),
+        'fallback_required', false,
+        'more_due', false,
+        'has_more', false,
+        'made_progress', false,
+        'delta_refresh_complete', true,
+        'stop_reason', 'DELTA_PROJECTION_RUN_ALREADY_COMPLETED'
+      );
     END IF;
+
+    IF v_cursor_phase IN ('WRITE_COMPATIBLE_OUTPUTS', 'VERIFY_PARITY_OR_SHADOW', 'UPDATE_CANDIDATE_STATE', 'FINALISE') THEN
+      v_requested_phase := v_cursor_phase;
+    END IF;
+
+    v_requested_phase_order := CASE v_requested_phase
+      WHEN 'INIT_PREFLIGHT' THEN 0
+      WHEN 'RESOLVE_SCOPE' THEN 1
+      WHEN 'PROJECT_ROWS' THEN 2
+      WHEN 'WRITE_COMPATIBLE_OUTPUTS' THEN 3
+      WHEN 'VERIFY_PARITY_OR_SHADOW' THEN 4
+      WHEN 'UPDATE_CANDIDATE_STATE' THEN 5
+      WHEN 'FINALISE' THEN 6
+      ELSE 0
+    END;
+    v_persisted_phase_order := CASE v_persisted_phase
+      WHEN 'INIT_PREFLIGHT' THEN 0
+      WHEN 'RESOLVE_SCOPE' THEN 1
+      WHEN 'PROJECT_ROWS' THEN 2
+      WHEN 'WRITE_COMPATIBLE_OUTPUTS' THEN 3
+      WHEN 'VERIFY_PARITY_OR_SHADOW' THEN 4
+      WHEN 'UPDATE_CANDIDATE_STATE' THEN 5
+      WHEN 'FINALISE' THEN 6
+      ELSE 0
+    END;
+    IF NULLIF(UPPER(BTRIM(COALESCE(v_write_phase, ''))), '') IS NOT NULL
+       AND UPPER(BTRIM(COALESCE(v_write_phase, ''))) <> 'NOT_STARTED' THEN
+      v_persisted_phase_order := GREATEST(v_persisted_phase_order, 3);
+      IF UPPER(BTRIM(COALESCE(v_write_phase, ''))) = 'WRITE_COMPLETE' THEN
+        v_persisted_phase_order := GREATEST(v_persisted_phase_order, 4);
+      END IF;
+    END IF;
+
+    v_effective_phase_order := GREATEST(v_requested_phase_order, v_persisted_phase_order);
+    v_phase := CASE v_effective_phase_order
+      WHEN 0 THEN 'INIT_PREFLIGHT'
+      WHEN 1 THEN 'RESOLVE_SCOPE'
+      WHEN 2 THEN 'PROJECT_ROWS'
+      WHEN 3 THEN 'WRITE_COMPATIBLE_OUTPUTS'
+      WHEN 4 THEN 'VERIFY_PARITY_OR_SHADOW'
+      WHEN 5 THEN 'UPDATE_CANDIDATE_STATE'
+      ELSE 'FINALISE'
+    END;
+
+    UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
+    SET diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'phase_resolver_requested_phase', v_requested_phase,
+            'phase_resolver_persisted_phase', v_persisted_phase,
+            'phase_resolver_effective_phase', v_phase,
+            'phase_resolver_write_phase', COALESCE(v_write_phase, 'NOT_STARTED')
+          ),
+        updated_at_utc = v_now
+    WHERE projection_run_update.id = v_projection_run_id;
   END IF;
 
   v_classifier_delta_shadow_mode := lower(BTRIM(COALESCE(
@@ -204223,8 +204354,14 @@ BEGIN
     TRUNCATE TABLE _bpay_delta_projection_rows;
 
     v_current_projection_cursor_json := CASE
+      WHEN v_phase = 'WRITE_COMPATIBLE_OUTPUTS' THEN '{}'::jsonb
       WHEN jsonb_typeof(v_phase_cursor_json->'cursor') = 'object' THEN COALESCE(v_phase_cursor_json->'cursor', '{}'::jsonb)
       ELSE COALESCE(v_phase_cursor_json, '{}'::jsonb)
+    END;
+    v_write_resume_recreate_limit := CASE
+      WHEN v_phase = 'WRITE_COMPATIBLE_OUTPUTS'
+        THEN LEAST(GREATEST(COALESCE(v_projected_row_count, 0), COALESCE(v_limit, 25), 25), 1000)
+      ELSE v_limit
     END;
 
     v_project_result := public.pay_workbench_project_changed_timesheets_v1(
@@ -204241,7 +204378,7 @@ BEGIN
           'session_version', COALESCE(v_session_version, v_session_row.version),
           'source_change_seq', COALESCE(v_source_change_seq, 0),
           'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
-          'limit', v_limit,
+          'limit', v_write_resume_recreate_limit,
           'cursor', v_current_projection_cursor_json,
           'shadow_compare_required', v_shadow_compare_required,
           'shadow_compare_enforced', v_shadow_compare_enforced
@@ -204343,10 +204480,21 @@ BEGIN
     END;
 
     UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
-    SET phase = CASE WHEN v_projection_more_due THEN 'PROJECT_ROWS' ELSE 'WRITE_COMPATIBLE_OUTPUTS' END,
+    SET phase = CASE
+          WHEN v_phase = 'WRITE_COMPATIBLE_OUTPUTS' THEN 'WRITE_COMPATIBLE_OUTPUTS'
+          WHEN v_projection_more_due THEN 'PROJECT_ROWS'
+          ELSE 'WRITE_COMPATIBLE_OUTPUTS'
+        END,
         cursor_json = jsonb_build_object(
-          'phase', CASE WHEN v_projection_more_due THEN 'PROJECT_ROWS' ELSE 'WRITE_COMPATIBLE_OUTPUTS' END,
-          'cursor', COALESCE(CASE WHEN v_projection_more_due THEN v_projection_cursor_json ELSE v_current_projection_cursor_json END, '{}'::jsonb)
+          'phase', CASE
+            WHEN v_phase = 'WRITE_COMPATIBLE_OUTPUTS' THEN 'WRITE_COMPATIBLE_OUTPUTS'
+            WHEN v_projection_more_due THEN 'PROJECT_ROWS'
+            ELSE 'WRITE_COMPATIBLE_OUTPUTS'
+          END,
+          'cursor', CASE
+            WHEN v_phase = 'WRITE_COMPATIBLE_OUTPUTS' THEN '{}'::jsonb
+            ELSE COALESCE(CASE WHEN v_projection_more_due THEN v_projection_cursor_json ELSE v_current_projection_cursor_json END, '{}'::jsonb)
+          END
         ),
         projected_row_count = v_projected_row_count,
         projection_fingerprint = md5(jsonb_build_object(
@@ -204362,14 +204510,45 @@ BEGIN
           || jsonb_build_object(
             'last_projection_row_count', COALESCE((v_project_result->>'projected_row_count')::integer, 0),
             'projection_more_due', v_projection_more_due,
+            'write_resume_recreate', v_phase = 'WRITE_COMPATIBLE_OUTPUTS',
+            'write_resume_recreate_limit', v_write_resume_recreate_limit,
             'row_key_line_key_parity_proven', LOWER(BTRIM(COALESCE(v_project_result->>'row_key_line_key_parity_proven', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
             'economic_key_parity_proven', LOWER(BTRIM(COALESCE(v_project_result->>'economic_key_parity_proven', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
           ),
         updated_at_utc = v_now
     WHERE projection_run_update.id = v_projection_run_id;
 
+    IF v_phase = 'WRITE_COMPATIBLE_OUTPUTS' AND v_projection_more_due THEN
+      v_fallback_reason := 'DELTA_WRITE_RECREATE_EXCEEDED_SINGLE_CHUNK';
+      UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
+      SET status = 'FALLBACK_REQUIRED',
+          fallback_required = true,
+          fallback_reason = v_fallback_reason,
+          diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'write_resume_recreate_more_due', true,
+              'write_resume_recreate_limit', v_write_resume_recreate_limit,
+              'project_result', v_project_result
+            ),
+          updated_at_utc = v_now,
+          completed_at_utc = v_now
+      WHERE projection_run_update.id = v_projection_run_id;
+      RETURN jsonb_build_object(
+        'ok', true,
+        'job_type', 'WORKBENCH_CANDIDATE_DELTA_REFRESH',
+        'projection_run_id', v_projection_run_id::text,
+        'fallback_required', true,
+        'fallback_reason', v_fallback_reason,
+        'more_due', false,
+        'has_more', false,
+        'made_progress', true,
+        'delta_refresh_complete', false,
+        'stop_reason', 'DELTA_FALLBACK_REQUIRED'
+      );
+    END IF;
+
     v_elapsed_ms := FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at)) * 1000)::integer;
-    IF v_elapsed_ms >= v_budget_cutoff_ms THEN
+    IF v_elapsed_ms >= v_budget_cutoff_ms AND v_phase = 'PROJECT_ROWS' THEN
       RETURN jsonb_build_object(
         'ok', true,
         'job_type', 'WORKBENCH_CANDIDATE_DELTA_REFRESH',
@@ -204394,6 +204573,17 @@ BEGIN
           END
         )
       );
+    ELSIF v_elapsed_ms >= v_budget_cutoff_ms AND v_phase = 'WRITE_COMPATIBLE_OUTPUTS' THEN
+      UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
+      SET diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'write_resume_project_budget_cutoff_reached', true,
+              'write_resume_project_elapsed_ms', v_elapsed_ms,
+              'write_resume_project_budget_cutoff_ms', v_budget_cutoff_ms,
+              'write_resume_project_continued_to_write', true
+            ),
+          updated_at_utc = v_now
+      WHERE projection_run_update.id = v_projection_run_id;
     END IF;
 
     SELECT COALESCE(projection_run.diagnostics_json->'pre_delta_candidate_counts', '{}'::jsonb)
@@ -205893,6 +206083,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_projection_lifecycle_repair(
   p_session_id uuid DEFAULT NULL::uuid,
