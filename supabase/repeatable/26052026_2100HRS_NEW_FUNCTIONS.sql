@@ -191420,7 +191420,10 @@ DECLARE
   v_scope_pending_count integer := 0;
   v_scope_failed_count integer := 0;
   v_line_units_total integer := 0;
+  v_line_units_total_display integer := 0;
+  v_line_units_complete integer := 0;
   v_line_units_ready integer := 0;
+  v_line_units_ready_not_materialised integer := 0;
   v_line_units_pending integer := 0;
   v_line_units_failed integer := 0;
   v_preview_row_count integer := 0;
@@ -191562,7 +191565,11 @@ BEGIN
   v_patching_preview_rows := COALESCE(v_patching_preview_rows, false) OR UPPER(BTRIM(COALESCE(v_session_row.progress_state, ''))) = 'PATCHING_PREVIEW_ROWS';
   v_clone_rebase_pending := COALESCE(v_clone_rebase_pending, false) OR UPPER(BTRIM(COALESCE(v_session_row.progress_state, ''))) = 'CLONE_REBASING';
   v_still_running := COALESCE(v_active_running_count, 0) > 0;
-  v_work_queued := COALESCE(v_active_job_count, 0) > 0 OR COALESCE(v_scope_pending_count, 0) > 0 OR COALESCE(v_line_units_pending, 0) > 0 OR COALESCE(v_scope_cursor_remaining, false);
+  v_work_queued := COALESCE(v_active_job_count, 0) > 0
+    OR COALESCE(v_scope_pending_count, 0) > 0
+    OR COALESCE(v_line_units_pending, 0) > 0
+    OR COALESCE(v_scope_cursor_remaining, false)
+    OR COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE;
 
   -- Use active READY preview rows as the draft/readiness source of truth. The
   -- session counter columns are reconciled asynchronously and can otherwise keep
@@ -191600,8 +191607,12 @@ BEGIN
   FROM active_ready_counts
   CROSS JOIN active_section_json;
 
+  v_line_units_total_display := GREATEST(COALESCE(v_line_units_total, 0), COALESCE(v_preview_row_count, 0));
+  v_line_units_complete := LEAST(COALESCE(v_preview_row_count, 0), COALESCE(v_line_units_total_display, 0));
+  v_line_units_ready_not_materialised := GREATEST(COALESCE(v_line_units_ready, 0) - COALESCE(v_line_units_complete, 0), 0);
+
   IF COALESCE(v_work_queued, false) IS NOT TRUE THEN
-    v_line_units_ready := LEAST(COALESCE(v_line_units_ready, 0), COALESCE(v_preview_row_count, 0));
+    v_line_units_ready_not_materialised := 0;
   END IF;
 
   v_rows_available := COALESCE(v_preview_row_count, 0) > 0;
@@ -191628,6 +191639,11 @@ BEGIN
     v_phase := 'DELTA_REFRESHING';
     v_status_text := 'Refreshing changed candidate rows.';
     v_next_recommended_action := 'DELTA_REFRESH_CHUNK';
+  ELSIF COALESCE(v_session_row.scope_seed_complete, false) IS NOT TRUE OR COALESCE(v_scope_cursor_remaining, false) THEN
+    v_progress_state := 'SEEDING_SCOPE';
+    v_phase := 'SEEDING_SCOPE';
+    v_status_text := 'Finding candidates for the payment preview.';
+    v_next_recommended_action := 'SEED_SCOPE_CHUNK';
   ELSIF v_patching_preview_rows THEN
     v_progress_state := 'PATCHING_PREVIEW_ROWS';
     v_phase := 'PATCHING_PREVIEW_ROWS';
@@ -191654,6 +191670,8 @@ BEGIN
   END IF;
 
   v_ready := v_replacement_required IS NOT TRUE
+    AND COALESCE(v_session_row.scope_seed_complete, false) IS TRUE
+    AND COALESCE(v_scope_cursor_remaining, false) IS NOT TRUE
     AND v_work_queued IS NOT TRUE
     AND COALESCE(v_scope_failed_count, 0) = 0
     AND COALESCE(v_line_units_failed, 0) = 0
@@ -191661,6 +191679,17 @@ BEGIN
     AND COALESCE(v_line_units_pending, 0) = 0;
   v_ready_empty := v_ready AND COALESCE(v_preview_row_count, 0) = 0;
   v_ready_for_draft := v_ready AND COALESCE(v_selected_row_count, 0) > 0;
+
+  IF v_ready THEN
+    v_line_units_ready_not_materialised := 0;
+    v_line_units_complete := COALESCE(v_line_units_total_display, 0);
+    v_progress_state := CASE WHEN v_ready_empty THEN 'READY_EMPTY' ELSE 'READY' END;
+    v_phase := v_progress_state;
+    v_status_text := CASE WHEN v_ready_empty THEN 'No payable rows found.' ELSE 'Payment preview is ready.' END;
+    v_next_recommended_action := 'READ_PREVIEW_PAGE';
+    v_patching_preview_rows := false;
+    v_clone_rebase_pending := false;
+  END IF;
 
   IF v_replacement_required THEN
     v_session_blocker_codes := v_session_blocker_codes || jsonb_build_array('REPLACEMENT_REQUIRED');
@@ -191719,8 +191748,21 @@ BEGIN
     'scope_ready_count', v_scope_ready_count,
     'scope_pending_count', v_scope_pending_count,
     'scope_failed_count', v_scope_failed_count,
-    'line_units_total', v_line_units_total,
+    'total_candidates', v_scope_total_count,
+    'total_count', v_scope_total_count,
+    'completed_candidates', LEAST(v_scope_ready_count, v_scope_total_count),
+    'completed_count', LEAST(v_scope_ready_count, v_scope_total_count),
+    'ready_candidates', LEAST(v_scope_ready_count, v_scope_total_count),
+    'pending_candidates', v_scope_pending_count,
+    'pending_count', v_scope_pending_count
+  )
+  || jsonb_build_object(
+    'failed_candidates', v_scope_failed_count,
+    'failed_count', v_scope_failed_count,
+    'line_units_total', v_line_units_total_display,
+    'line_units_complete', v_line_units_complete,
     'line_units_ready', v_line_units_ready,
+    'line_units_ready_not_materialised', v_line_units_ready_not_materialised,
     'line_units_pending', v_line_units_pending,
     'line_units_failed', v_line_units_failed,
     'preview_row_count', v_preview_row_count,
@@ -191739,7 +191781,8 @@ BEGIN
     'clone_rebase_pending', COALESCE(v_clone_rebase_pending, false),
     'candidate_counts', jsonb_build_object(
       'total', v_scope_total_count,
-      'ready', v_scope_ready_count,
+      'ready', LEAST(v_scope_ready_count, v_scope_total_count),
+      'terminal_materialised', LEAST(v_scope_ready_count, v_scope_total_count),
       'pending', v_scope_pending_count,
       'processing', v_scope_pending_count,
       'materialisation_pending', 0,
@@ -191749,9 +191792,11 @@ BEGIN
       'unseeded', GREATEST(v_scope_total_count - v_scope_seeded_count, 0)
     ),
     'line_counts', jsonb_build_object(
-      'total', v_line_units_total,
+      'total', v_line_units_total_display,
+      'complete', v_line_units_complete,
+      'materialised_or_skipped', v_line_units_complete,
       'pending', v_line_units_pending,
-      'ready_not_materialised', v_line_units_ready,
+      'ready_not_materialised', v_line_units_ready_not_materialised,
       'failed', v_line_units_failed,
       'unknown', 0
     ),
@@ -191774,8 +191819,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
