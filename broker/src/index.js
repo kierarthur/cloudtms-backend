@@ -15523,7 +15523,6 @@ function bankingPayWorkbenchLogsEnabled(env) {
   }
 }
 
-
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -15793,6 +15792,20 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const requestedProfile = upperTrim(source.budgetProfile || source.budget_profile || source.profile || '') || null;
   const budgetProfile = 'NUDGE';
   const requestedOrigin = trimStr(source.origin) || 'BANKING_PAY_WORKBENCH_NUDGE';
+  const lifecycleOriginNudge = ['TIMESHEET_AUTHORISE', 'TIMESHEET_UNAUTHORISE'].includes(upperTrim(requestedOrigin));
+  const lifecycleOriginDrainDelayMs = lifecycleOriginNudge
+    ? numberInRange(
+        firstConfiguredValue(
+          source.lifecycleOriginDrainDelayMs,
+          source.lifecycle_origin_drain_delay_ms,
+          cachedDrainSettings.lifecycle_origin_drain_delay_ms,
+          cachedDrainSettings.lifecycleOriginDrainDelayMs
+        ),
+        1500,
+        250,
+        2000
+      )
+    : 0;
   const sessionScopedNudge = !!requestedSessionIdValue;
   const origin = sessionScopedNudge ? 'BANKING_PAY_WORKBENCH_SESSION_NUDGE' : 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE';
   const singleFlightKey = sessionScopedNudge
@@ -15835,7 +15848,10 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     settings_defaults_updated_at: settingsDefaultsUpdatedAt,
     settings_defaults_version: settingsDefaultsVersion,
     settings_hash: settingsHash,
-    workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob
+    workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
+    lifecycle_origin_nudge: lifecycleOriginNudge,
+    lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
+    lifecycle_origin_debounce_non_blocking: lifecycleOriginNudge && lifecycleOriginDrainDelayMs > 0
   };
 
   const logNudgeDiag = (eventName, payload = {}, severity = 'info') => {
@@ -16306,6 +16322,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     final_summary: null,
     wait_until_used: false,
     requested_origin: requestedOrigin,
+    lifecycle_origin_nudge: lifecycleOriginNudge,
+    lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
     last_progress_at_ms: Date.now(),
     last_made_progress: false
   };
@@ -16333,6 +16351,21 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   let promise = null;
   promise = Promise.resolve()
     .then(async () => {
+      if (lifecycleOriginNudge && lifecycleOriginDrainDelayMs > 0) {
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_LIFECYCLE_DEBOUNCE_START', {
+          non_blocking_lifecycle_origin_debounce: true,
+          lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
+          requested_origin: requestedOrigin,
+          mutation_type: trimStr(source.mutation_type || source.mutationType || '') || null
+        });
+        await sleepMs(lifecycleOriginDrainDelayMs);
+        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_LIFECYCLE_DEBOUNCE_END', {
+          non_blocking_lifecycle_origin_debounce: true,
+          lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
+          requested_origin: requestedOrigin,
+          mutation_type: trimStr(source.mutation_type || source.mutationType || '') || null
+        });
+      }
       const firstTick = await bankingPayWorkbenchCronTick(env, passthroughOptions);
       entry.first_tick_summary = isPlainObject(firstTick) ? firstTick : {};
       applyEffectiveControlsFromSummary(entry.first_tick_summary);
@@ -67402,8 +67435,6 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user, ctx = null) 
 }
 
 
-
-
 async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -67564,6 +67595,19 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     const code = firstString(rawCode, detailObj?.error_code, detailObj?.error, 'UNAUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const reason = firstString(detailObj?.reason).toUpperCase();
+    if (code === 'TRANSIENT_LIFECYCLE_CONFLICT') {
+      return withJson(409, {
+        error: 'TRANSIENT_LIFECYCLE_CONFLICT',
+        error_code: 'TRANSIENT_LIFECYCLE_CONFLICT',
+        message: 'The timesheet was being updated at the same time. Please try again.',
+        transient: true,
+        retry_exhausted: true,
+        current_timesheet_id: currentTimesheetId || null,
+        expected_timesheet_id: firstString(detailObj?.expected_timesheet_id, options.expectedTimesheetId) || null,
+        refresh_required: true,
+        affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
+      });
+    }
     if ((code === 'TARGET_NOT_FOUND' || code === 'TIMESHEET_NOT_FOUND') && reason === 'NO_TSFIN') {
       return withJson(400, {
         error: 'NO_TSFIN',
@@ -67721,13 +67765,26 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       current_timesheet_id: currentTimesheetId || null,
       expected_row_signature: expectedRowSignature || null
     });
-    const rpcRes = await sbRpc(env, 'timesheet_unauthorise_atomic', {
+    const rpcRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_unauthorise_atomic', {
       p_timesheet_id: requestedTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
       p_actor_user_id: user?.id || null,
       p_now_utc: now,
       p_expected_row_signature: expectedRowSignature || null
-    }, { timeoutMs: 12000 });
+    }, {
+      timeoutMs: 12000,
+      lifecycleAction: 'UNAUTHORISE',
+      routeFamily: 'TIMESHEET_UNAUTHORISE',
+      requestedTimesheetId,
+      expectedTimesheetId,
+      currentTimesheetId,
+      expectedRowSignature,
+      actorUserId: user?.id || null,
+      maxAttempts: 4,
+      retryBudgetMs: 1800,
+      retryDelaysMs: [0, 125, 375, 850],
+      jitterMs: 75
+    });
     rpcPayload = unwrapRpcPayload(rpcRes, 'timesheet_unauthorise_atomic');
     lifecycleSignatureLog('rpc_completed', {
       rpc_function_name: 'timesheet_unauthorise_atomic',
@@ -67750,7 +67807,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       current_timesheet_id: detailObj?.current_timesheet_id || currentTimesheetId || null,
       contract_week_id: detailObj?.contract_week_id || null
     });
-    return mutationErrorResponse(rpcErr.message || rpcErr.code, detailObj, {
+    return mutationErrorResponse(rpcErr.code || rpcErr.message, detailObj, {
       currentTimesheetId,
       expectedTimesheetId,
       expectedRowSignature,
@@ -67916,7 +67973,6 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
-
 
 
 
@@ -81810,9 +81866,6 @@ function buildTimesheetLifecyclePatchFromMutation(input = {}) {
 }
 
 
-
-
-
 async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -81967,20 +82020,31 @@ async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
 
   let payload = null;
   try {
-    const rpcRes = await sbRpc(env, 'timesheet_authorise_bulk_atomic', {
+    const requestedTimesheetScope = items.map((item) => firstString(item.timesheet_id, item.current_timesheet_id, item.requested_timesheet_id)).filter(Boolean).slice(0, 20).join(',');
+    const rpcRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_authorise_bulk_atomic', {
       p_items: items,
       p_actor_user_id: user?.id || null,
       p_now_utc: nowIso()
-    }, { timeoutMs: 45000 });
+    }, {
+      timeoutMs: 45000,
+      lifecycleAction: 'BULK_AUTHORISE',
+      routeFamily: 'TIMESHEET_BULK_AUTHORISE',
+      requestedTimesheetId: requestedTimesheetScope,
+      actorUserId: user?.id || null,
+      maxAttempts: 4,
+      retryBudgetMs: 1800,
+      retryDelaysMs: [0, 125, 375, 850],
+      jitterMs: 75
+    });
     payload = unwrapRpcPayload(rpcRes, 'timesheet_authorise_bulk_atomic');
   } catch (err) {
     const errPayload = parseRpcErrorPayload(err);
     const code = firstString(errPayload.error_code, errPayload.error, errPayload.message, 'BULK_AUTHORISE_FAILED').toUpperCase();
-    const status = code === 'LOCK_TIMEOUT' ? 409 : (code === 'TOO_MANY_ITEMS' || code === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || code === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
+    const status = (code === 'LOCK_TIMEOUT' || code === 'TRANSIENT_LIFECYCLE_CONFLICT') ? 409 : (code === 'TOO_MANY_ITEMS' || code === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || code === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
     return withCORS(env, req, new Response(JSON.stringify({
       error: code,
       error_code: code,
-      message: errPayload.message || 'Failed to authorise selected timesheets',
+      message: code === 'TRANSIENT_LIFECYCLE_CONFLICT' ? 'The timesheets were being updated at the same time. Please try again.' : (errPayload.message || 'Failed to authorise selected timesheets'),
       action: 'AUTHORISE',
       requested_count: items.length,
       success_count: 0,
@@ -81991,7 +82055,7 @@ async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
 
   const topLevelCode = firstString(payload.error_code, payload.error, payload.message).toUpperCase();
   if (payload.ok === false || (payload.batch_completed === false && topLevelCode)) {
-    const status = topLevelCode === 'LOCK_TIMEOUT'
+    const status = (topLevelCode === 'LOCK_TIMEOUT' || topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT')
       ? 409
       : (topLevelCode === 'TOO_MANY_ITEMS' || topLevelCode === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || topLevelCode === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
     return withCORS(env, req, new Response(JSON.stringify({
@@ -82001,7 +82065,7 @@ async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
       has_failures: true,
       error: topLevelCode || 'BULK_AUTHORISE_FAILED',
       error_code: topLevelCode || 'BULK_AUTHORISE_FAILED',
-      message: payload.message || 'Failed to authorise selected timesheets',
+      message: topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT' ? 'The timesheets were being updated at the same time. Please try again.' : (payload.message || 'Failed to authorise selected timesheets'),
       action: payload.action || 'AUTHORISE',
       requested_count: Number(payload.requested_count || items.length || 0),
       success_count: 0,
@@ -82011,7 +82075,7 @@ async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
       affected_timesheet_ids: [],
       affected_contract_week_ids: [],
       requires_affected_row_refresh: false,
-      refresh_required: topLevelCode === 'LOCK_TIMEOUT',
+      refresh_required: topLevelCode === 'LOCK_TIMEOUT' || topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT',
       count_deltas: (payload.count_deltas && typeof payload.count_deltas === 'object') ? payload.count_deltas : {},
       cache_invalidation_hints: (payload.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object') ? payload.cache_invalidation_hints : {},
       failed_items: Array.isArray(payload.results) ? payload.results.filter((result) => result && result.success !== true) : [],
@@ -82086,6 +82150,317 @@ async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
     failed_items: failedItems,
     stale_items: staleItems
   }));
+}
+
+async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName, rpcArgs, options = {}) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const nowMs = () => Date.now();
+  const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const firstString = function firstString() {
+    for (let index = 0; index < arguments.length; index += 1) {
+      const value = trimStr(arguments[index]);
+      if (value) return value;
+    }
+    return '';
+  };
+  const parseMaybeJsonObj = (value) => {
+    if (value == null) return null;
+    if (isPlainObject(value)) return value;
+    const text = trimStr(value);
+    if (!text || (text[0] !== '{' && text[0] !== '[')) return null;
+    try {
+      const parsed = JSON.parse(text);
+      return isPlainObject(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+  const optionsObj = isPlainObject(options) ? options : {};
+  const lifecycleAction = upperTrim(optionsObj.lifecycleAction || optionsObj.lifecycle_action || rpcFunctionName || 'TIMESHEET_LIFECYCLE');
+  const requestedTimesheetId = trimStr(optionsObj.requestedTimesheetId || optionsObj.requested_timesheet_id || optionsObj.timesheetId || optionsObj.timesheet_id || '');
+  const expectedTimesheetId = trimStr(optionsObj.expectedTimesheetId || optionsObj.expected_timesheet_id || '');
+  const currentTimesheetId = trimStr(optionsObj.currentTimesheetId || optionsObj.current_timesheet_id || '');
+  const expectedRowSignature = trimStr(optionsObj.expectedRowSignature || optionsObj.expected_row_signature || '');
+  const actorUserId = trimStr(optionsObj.actorUserId || optionsObj.actor_user_id || '');
+  const routeFamily = trimStr(optionsObj.routeFamily || optionsObj.route_family || 'TIMESHEET_LIFECYCLE');
+  const rpcOptions = isPlainObject(optionsObj.rpcOptions) ? { ...optionsObj.rpcOptions } : {};
+  if (!Object.prototype.hasOwnProperty.call(rpcOptions, 'timeoutMs')) {
+    rpcOptions.timeoutMs = Number(optionsObj.timeoutMs || optionsObj.timeout_ms || 12000) || 12000;
+  }
+
+  const maxAttempts = Math.max(1, Math.min(Number(optionsObj.maxAttempts || optionsObj.max_attempts || 4) || 4, 4));
+  const retryBudgetMs = Math.max(250, Math.min(Number(optionsObj.retryBudgetMs || optionsObj.retry_budget_ms || 1800) || 1800, 2500));
+  const retryDelaysMs = Array.isArray(optionsObj.retryDelaysMs || optionsObj.retry_delays_ms)
+    ? (optionsObj.retryDelaysMs || optionsObj.retry_delays_ms).map((value) => Math.max(0, Number(value) || 0))
+    : [0, 125, 375, 850];
+  const jitterMs = Math.max(0, Math.min(Number(optionsObj.jitterMs || optionsObj.jitter_ms || 75) || 75, 150));
+  const startedAtMs = nowMs();
+
+  const businessFailureCodes = new Set([
+    'ROW_SIGNATURE_MISMATCH',
+    'EXPECTED_TIMESHEET_MISMATCH',
+    'TIMESHEET_MOVED',
+    'TIMESHEET_LOCKED_OR_PAID',
+    'TIMESHEET_LOCKED_BY_INVOICE',
+    'AUTHORISE_NOT_ALLOWED',
+    'CONTRACT_WEEK_NOT_AUTHORISABLE',
+    'ALREADY_AUTHORISED',
+    'ALREADY_UNAUTHORISED',
+    'AWAITING_SIGNED_QR',
+    'TARGET_NOT_FOUND',
+    'TIMESHEET_NOT_FOUND',
+    'NO_TSFIN',
+    'INVALID_PAYLOAD',
+    'PERMISSION_DENIED',
+    'UNAUTHORISED',
+    'UNAUTHORIZED',
+    'FORBIDDEN'
+  ]);
+  const retrySqlstates = new Set(['40P01', '55P03', '40001']);
+
+  const collectErrorStrings = (value, out, depth = 0, seen = new Set()) => {
+    if (value == null || depth > 5) return;
+    if (typeof value === 'string') {
+      const text = trimStr(value);
+      if (text) {
+        out.strings.push(text);
+        const parsed = parseMaybeJsonObj(text);
+        if (parsed) collectErrorStrings(parsed, out, depth + 1, seen);
+      }
+      return;
+    }
+    if (typeof value !== 'object') {
+      const text = trimStr(value);
+      if (text) out.strings.push(text);
+      return;
+    }
+    if (seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value.slice(0, 20)) collectErrorStrings(item, out, depth + 1, seen);
+      return;
+    }
+    for (const key of ['code', 'error_code', 'errorCode', 'sqlstate', 'sql_state', 'status', 'message', 'error', 'details', 'detail', 'hint', 'body', 'responseText']) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+      const raw = value[key];
+      const text = trimStr(raw);
+      if (text) {
+        out.strings.push(text);
+        if (['code', 'error_code', 'errorCode', 'sqlstate', 'sql_state'].includes(key)) out.codes.push(text);
+      }
+      collectErrorStrings(raw, out, depth + 1, seen);
+    }
+    for (const key of ['json', 'data', 'response', 'error', 'cause']) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) collectErrorStrings(value[key], out, depth + 1, seen);
+    }
+  };
+
+  const describeError = (err) => {
+    const collected = { strings: [], codes: [] };
+    collectErrorStrings(err, collected);
+    const joined = collected.strings.join(' | ');
+    const joinedUpper = upperTrim(joined);
+    const codesUpper = collected.codes.map(upperTrim).filter(Boolean);
+    const directCode = codesUpper.find(Boolean) || upperTrim(err?.code || err?.error_code || err?.json?.code || err?.json?.error_code || '');
+    const sqlstate = codesUpper.find((code) => retrySqlstates.has(code))
+      || (joinedUpper.match(/\b(40P01|55P03|40001)\b/) || [])[1]
+      || '';
+    const businessCode = codesUpper.find((code) => businessFailureCodes.has(code))
+      || Array.from(businessFailureCodes).find((code) => joinedUpper.includes(code))
+      || '';
+    const controlledLockTimeout = codesUpper.includes('LOCK_TIMEOUT') || directCode === 'LOCK_TIMEOUT' || /\bLOCK_TIMEOUT\b/.test(joinedUpper);
+    const lockText = /DEADLOCK DETECTED|COULD NOT OBTAIN LOCK|LOCK NOT AVAILABLE|LOCK TIMEOUT|LOCK_TIMEOUT/.test(joinedUpper);
+    const serializationText = /SERIALI[ZS]ATION FAILURE|COULD NOT SERIALI[ZS]E ACCESS/.test(joinedUpper);
+    const retryable = !businessCode && (retrySqlstates.has(sqlstate) || controlledLockTimeout || lockText || serializationText);
+    const message = firstString(err?.json?.message, err?.json?.error, err?.message, joined, 'Transient lifecycle conflict');
+    return {
+      code: sqlstate || directCode || (controlledLockTimeout ? 'LOCK_TIMEOUT' : ''),
+      sqlstate: sqlstate || null,
+      business_code: businessCode || null,
+      controlled_lock_timeout: controlledLockTimeout,
+      retryable,
+      message,
+      raw_code: directCode || null,
+      raw_joined: joined
+    };
+  };
+
+  const unwrapRpcResultPayloadForRetry = (value) => {
+    let out = value;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, rpcFunctionName)) {
+      out = out[rpcFunctionName];
+    }
+    if (typeof out === 'string') {
+      const parsed = parseMaybeJsonObj(out);
+      if (parsed) out = parsed;
+    }
+    return isPlainObject(out) ? out : null;
+  };
+
+  const describeRetryableResultPayload = (result) => {
+    const payload = unwrapRpcResultPayloadForRetry(result);
+    if (!payload) return null;
+    const payloadFailure = payload.ok === false || payload.success === false || payload.batch_completed === false;
+    if (!payloadFailure) return null;
+    const descriptor = describeError(payload);
+    return {
+      ...descriptor,
+      payload,
+      payload_failure: true,
+      message: firstString(payload.message, payload.error, descriptor.message, 'Transient lifecycle conflict')
+    };
+  };
+
+  const logAttempt = (payload = {}, severity = 'info') => {
+    try {
+      const body = {
+        tag: 'TIMESHEET_LIFECYCLE_TRANSIENT_RETRY',
+        route_family: routeFamily || 'TIMESHEET_LIFECYCLE',
+        lifecycle_action: lifecycleAction,
+        rpc_function_name: rpcFunctionName,
+        requested_timesheet_id: requestedTimesheetId || null,
+        expected_timesheet_id: expectedTimesheetId || null,
+        current_timesheet_id: currentTimesheetId || null,
+        expected_row_signature_present: !!expectedRowSignature,
+        actor_user_id: actorUserId || null,
+        retry_budget_ms: retryBudgetMs,
+        max_attempts: maxAttempts,
+        elapsed_ms: Math.max(0, nowMs() - startedAtMs),
+        server_utc: new Date().toISOString(),
+        ...(payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {})
+      };
+      const line = JSON.stringify(body);
+      if (severity === 'warn') console.warn('[TIMESHEET_LIFECYCLE_TRANSIENT_RETRY]', line);
+      else console.log('[TIMESHEET_LIFECYCLE_TRANSIENT_RETRY]', line);
+    } catch {}
+  };
+
+  const makeControlledTransientError = (descriptor, attempt) => {
+    const friendlyMessage = 'The timesheet was being updated at the same time. Please try again.';
+    const error = new Error(friendlyMessage);
+    error.name = 'TimesheetLifecycleTransientConflict';
+    error.status = 409;
+    error.code = 'TRANSIENT_LIFECYCLE_CONFLICT';
+    error.error_code = 'TRANSIENT_LIFECYCLE_CONFLICT';
+    error.details = {
+      error_code: 'TRANSIENT_LIFECYCLE_CONFLICT',
+      retry_exhausted: true,
+      rpc_function_name: rpcFunctionName,
+      lifecycle_action: lifecycleAction,
+      last_sqlstate: descriptor?.sqlstate || descriptor?.code || null,
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null
+    };
+    error.json = {
+      ok: false,
+      error: 'TRANSIENT_LIFECYCLE_CONFLICT',
+      error_code: 'TRANSIENT_LIFECYCLE_CONFLICT',
+      code: 'TRANSIENT_LIFECYCLE_CONFLICT',
+      message: friendlyMessage,
+      transient: true,
+      retry_exhausted: true,
+      attempts: attempt,
+      rpc_function_name: rpcFunctionName,
+      lifecycle_action: lifecycleAction,
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null,
+      refresh_required: true
+    };
+    return error;
+  };
+
+  let lastDescriptor = null;
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const attemptStartedAtMs = nowMs();
+    try {
+      const result = await sbRpc(env, rpcFunctionName, rpcArgs, rpcOptions);
+      const payloadDescriptor = describeRetryableResultPayload(result);
+      if (payloadDescriptor) {
+        lastDescriptor = payloadDescriptor;
+        lastError = payloadDescriptor.payload;
+        const elapsedMs = Math.max(0, nowMs() - startedAtMs);
+        const nextDelayBaseMs = retryDelaysMs[Math.min(attempt, retryDelaysMs.length - 1)] || 0;
+        const nextDelayMs = Math.max(0, Math.trunc(nextDelayBaseMs + (jitterMs ? Math.floor(Math.random() * jitterMs) : 0)));
+        const retrying = payloadDescriptor.retryable === true
+          && attempt < maxAttempts
+          && (elapsedMs + nextDelayMs) <= retryBudgetMs;
+
+        logAttempt({
+          event: retrying ? 'transient_payload_retrying' : (payloadDescriptor.retryable === true ? 'transient_payload_giving_up' : 'non_retryable_payload_returned'),
+          attempt,
+          attempt_elapsed_ms: Math.max(0, nowMs() - attemptStartedAtMs),
+          sqlstate: payloadDescriptor.sqlstate || null,
+          code: payloadDescriptor.code || null,
+          raw_code: payloadDescriptor.raw_code || null,
+          business_code: payloadDescriptor.business_code || null,
+          message: payloadDescriptor.message || null,
+          payload_failure: true,
+          retryable: payloadDescriptor.retryable === true,
+          retrying,
+          next_delay_ms: retrying ? nextDelayMs : null,
+          retry_budget_exhausted: payloadDescriptor.retryable === true && !retrying,
+          transient_conflict_controlled: payloadDescriptor.retryable === true && !retrying
+        }, retrying || payloadDescriptor.retryable === true ? 'warn' : 'info');
+
+        if (!retrying) {
+          if (payloadDescriptor.retryable === true) throw makeControlledTransientError(payloadDescriptor, attempt);
+          return result;
+        }
+        if (nextDelayMs > 0) await sleepMs(nextDelayMs);
+        continue;
+      }
+
+      if (attempt > 1) {
+        logAttempt({
+          event: 'retry_success',
+          attempt,
+          attempts_used: attempt,
+          attempt_elapsed_ms: Math.max(0, nowMs() - attemptStartedAtMs)
+        });
+      }
+      return result;
+    } catch (err) {
+      lastError = err;
+      const descriptor = describeError(err);
+      lastDescriptor = descriptor;
+      const elapsedMs = Math.max(0, nowMs() - startedAtMs);
+      const nextDelayBaseMs = retryDelaysMs[Math.min(attempt, retryDelaysMs.length - 1)] || 0;
+      const nextDelayMs = Math.max(0, Math.trunc(nextDelayBaseMs + (jitterMs ? Math.floor(Math.random() * jitterMs) : 0)));
+      const retrying = descriptor.retryable === true
+        && attempt < maxAttempts
+        && (elapsedMs + nextDelayMs) <= retryBudgetMs;
+
+      logAttempt({
+        event: retrying ? 'transient_failure_retrying' : 'failure_giving_up',
+        attempt,
+        attempt_elapsed_ms: Math.max(0, nowMs() - attemptStartedAtMs),
+        sqlstate: descriptor.sqlstate || null,
+        code: descriptor.code || null,
+        raw_code: descriptor.raw_code || null,
+        business_code: descriptor.business_code || null,
+        message: descriptor.message || null,
+        retryable: descriptor.retryable === true,
+        retrying,
+        next_delay_ms: retrying ? nextDelayMs : null,
+        retry_budget_exhausted: descriptor.retryable === true && !retrying,
+        transient_conflict_controlled: descriptor.retryable === true && !retrying
+      }, retrying ? 'warn' : (descriptor.retryable === true ? 'warn' : 'info'));
+
+      if (!retrying) {
+        if (descriptor.retryable === true) throw makeControlledTransientError(descriptor, attempt);
+        throw err;
+      }
+      if (nextDelayMs > 0) await sleepMs(nextDelayMs);
+    }
+  }
+
+  throw makeControlledTransientError(lastDescriptor || describeError(lastError), maxAttempts);
 }
 
 
@@ -82243,20 +82618,31 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req, ctx = null) {
 
   let payload = null;
   try {
-    const rpcRes = await sbRpc(env, 'timesheet_unauthorise_bulk_atomic', {
+    const requestedTimesheetScope = items.map((item) => firstString(item.timesheet_id, item.current_timesheet_id, item.requested_timesheet_id)).filter(Boolean).slice(0, 20).join(',');
+    const rpcRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_unauthorise_bulk_atomic', {
       p_items: items,
       p_actor_user_id: user?.id || null,
       p_now_utc: nowIso()
-    }, { timeoutMs: 45000 });
+    }, {
+      timeoutMs: 45000,
+      lifecycleAction: 'BULK_UNAUTHORISE',
+      routeFamily: 'TIMESHEET_BULK_UNAUTHORISE',
+      requestedTimesheetId: requestedTimesheetScope,
+      actorUserId: user?.id || null,
+      maxAttempts: 4,
+      retryBudgetMs: 1800,
+      retryDelaysMs: [0, 125, 375, 850],
+      jitterMs: 75
+    });
     payload = unwrapRpcPayload(rpcRes, 'timesheet_unauthorise_bulk_atomic');
   } catch (err) {
     const errPayload = parseRpcErrorPayload(err);
     const code = firstString(errPayload.error_code, errPayload.error, errPayload.message, 'BULK_UNAUTHORISE_FAILED').toUpperCase();
-    const status = code === 'LOCK_TIMEOUT' ? 409 : (code === 'TOO_MANY_ITEMS' || code === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || code === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
+    const status = (code === 'LOCK_TIMEOUT' || code === 'TRANSIENT_LIFECYCLE_CONFLICT') ? 409 : (code === 'TOO_MANY_ITEMS' || code === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || code === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
     return withCORS(env, req, new Response(JSON.stringify({
       error: code,
       error_code: code,
-      message: errPayload.message || 'Failed to unauthorise selected timesheets',
+      message: code === 'TRANSIENT_LIFECYCLE_CONFLICT' ? 'The timesheets were being updated at the same time. Please try again.' : (errPayload.message || 'Failed to unauthorise selected timesheets'),
       action: 'UNAUTHORISE',
       requested_count: items.length,
       success_count: 0,
@@ -82267,7 +82653,7 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req, ctx = null) {
 
   const topLevelCode = firstString(payload.error_code, payload.error, payload.message).toUpperCase();
   if (payload.ok === false || (payload.batch_completed === false && topLevelCode)) {
-    const status = topLevelCode === 'LOCK_TIMEOUT'
+    const status = (topLevelCode === 'LOCK_TIMEOUT' || topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT')
       ? 409
       : (topLevelCode === 'TOO_MANY_ITEMS' || topLevelCode === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || topLevelCode === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
     return withCORS(env, req, new Response(JSON.stringify({
@@ -82277,7 +82663,7 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req, ctx = null) {
       has_failures: true,
       error: topLevelCode || 'BULK_UNAUTHORISE_FAILED',
       error_code: topLevelCode || 'BULK_UNAUTHORISE_FAILED',
-      message: payload.message || 'Failed to unauthorise selected timesheets',
+      message: topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT' ? 'The timesheets were being updated at the same time. Please try again.' : (payload.message || 'Failed to unauthorise selected timesheets'),
       action: payload.action || 'UNAUTHORISE',
       requested_count: Number(payload.requested_count || items.length || 0),
       success_count: 0,
@@ -82287,7 +82673,7 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req, ctx = null) {
       affected_timesheet_ids: [],
       affected_contract_week_ids: [],
       requires_affected_row_refresh: false,
-      refresh_required: topLevelCode === 'LOCK_TIMEOUT',
+      refresh_required: topLevelCode === 'LOCK_TIMEOUT' || topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT',
       count_deltas: (payload.count_deltas && typeof payload.count_deltas === 'object') ? payload.count_deltas : {},
       cache_invalidation_hints: (payload.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object') ? payload.cache_invalidation_hints : {},
       failed_items: Array.isArray(payload.results) ? payload.results.filter((result) => result && result.success !== true) : [],
@@ -152849,6 +153235,19 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     const code = firstString(rawCode, detailObj?.error_code, detailObj?.error, 'AUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const reason = firstString(detailObj?.reason).toUpperCase();
+    if (code === 'TRANSIENT_LIFECYCLE_CONFLICT') {
+      return withJson(409, {
+        error: 'TRANSIENT_LIFECYCLE_CONFLICT',
+        error_code: 'TRANSIENT_LIFECYCLE_CONFLICT',
+        message: 'The timesheet was being updated at the same time. Please try again.',
+        transient: true,
+        retry_exhausted: true,
+        current_timesheet_id: currentTimesheetId || null,
+        expected_timesheet_id: firstString(detailObj?.expected_timesheet_id, options.expectedTimesheetId) || null,
+        refresh_required: true,
+        affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
+      });
+    }
     if ((code === 'TARGET_NOT_FOUND' || code === 'TIMESHEET_NOT_FOUND') && reason === 'NO_TSFIN') {
       return withJson(400, {
         error: 'NO_TSFIN',
@@ -153112,13 +153511,26 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       current_timesheet_id: currentTimesheetId || null,
       expected_row_signature: expectedRowSignature || null
     });
-    const rpcRes = await sbRpc(env, 'timesheet_authorise_generic_atomic', {
+    const rpcRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_authorise_generic_atomic', {
       p_timesheet_id: requestedTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
       p_actor_user_id: user?.id || null,
       p_now_utc: now,
       p_expected_row_signature: expectedRowSignature || null
-    }, { timeoutMs: 12000 });
+    }, {
+      timeoutMs: 12000,
+      lifecycleAction: 'AUTHORISE',
+      routeFamily: 'TIMESHEET_AUTHORISE',
+      requestedTimesheetId,
+      expectedTimesheetId,
+      currentTimesheetId,
+      expectedRowSignature,
+      actorUserId: user?.id || null,
+      maxAttempts: 4,
+      retryBudgetMs: 1800,
+      retryDelaysMs: [0, 125, 375, 850],
+      jitterMs: 75
+    });
     rpcPayload = unwrapRpcPayload(rpcRes, 'timesheet_authorise_generic_atomic');
     lifecycleSignatureLog('rpc_completed', {
       rpc_function_name: 'timesheet_authorise_generic_atomic',
@@ -153141,7 +153553,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       current_timesheet_id: detailObj?.current_timesheet_id || currentTimesheetId || null,
       contract_week_id: detailObj?.contract_week_id || null
     });
-    return mutationErrorResponse(rpcErr.message || rpcErr.code, detailObj, {
+    return mutationErrorResponse(rpcErr.code || rpcErr.message, detailObj, {
       currentTimesheetId,
       expectedTimesheetId,
       expectedRowSignature,
@@ -153333,7 +153745,6 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
-
 
 
 async function handleContractWeekManualDraftUpsert(env, req, weekId) {
