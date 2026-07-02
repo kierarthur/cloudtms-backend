@@ -31010,6 +31010,7 @@ begin
 end;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(p_context_json jsonb, p_candidate_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -31299,6 +31300,38 @@ begin
                 'break_mins', coalesce(nullif(cur_seg.seg->>'break_mins','')::numeric, nullif(cur_seg.seg->>'break_minutes','')::numeric),
                 'breaks', coalesce(cur_seg.seg->'breaks', '[]'::jsonb),
                 'ref_num', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), ''), nullif(btrim(coalesce(delta_seg.seg->>'ref_num','')), '')),
+                'nhsp_shift_id', coalesce(
+                  nullif(btrim(coalesce(cur_seg.seg->>'nhsp_shift_id','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'nhsp_shift_id','')), '')
+                ),
+                'shift_id', coalesce(
+                  nullif(btrim(coalesce(cur_seg.seg->>'shift_id','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'shift_id','')), ''),
+                  nullif(btrim(coalesce(cur_seg.seg->>'nhsp_shift_id','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'nhsp_shift_id','')), '')
+                ),
+                'external_row_key', coalesce(
+                  nullif(btrim(coalesce(cur_seg.seg->>'external_row_key','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'external_row_key','')), '')
+                ),
+                'hr_request_id', coalesce(
+                  nullif(btrim(coalesce(cur_seg.seg->>'hr_request_id','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'hr_request_id','')), '')
+                ),
+                'request_id', coalesce(
+                  nullif(btrim(coalesce(cur_seg.seg->>'request_id','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'request_id','')), ''),
+                  nullif(btrim(coalesce(cur_seg.seg->>'hr_request_id','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'hr_request_id','')), '')
+                ),
+                'source_system', coalesce(
+                  nullif(btrim(coalesce(cur_seg.seg->>'source_system','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'source_system','')), '')
+                ),
+                'latest_import_id', coalesce(
+                  nullif(btrim(coalesce(cur_seg.seg->>'latest_import_id','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'latest_import_id','')), '')
+                ),
                 'pay_amount_ex_vat', round(coalesce(nullif(delta_seg.seg->>'delta_pay_ex_vat','')::numeric,0),2),
                 'snooze_identity', jsonb_build_object(
                   'identity_type', 'TIMESHEET_SEGMENT',
@@ -31481,6 +31514,13 @@ begin
             'break_mins', cur_seg_norm.break_mins,
             'breaks', cur_seg_norm.breaks,
             'ref_num', coalesce(cur_seg_norm.ref_num, ss_match.ref_num),
+            'nhsp_shift_id', cur_seg_norm.nhsp_shift_id,
+            'shift_id', cur_seg_norm.shift_id,
+            'external_row_key', cur_seg_norm.external_row_key,
+            'hr_request_id', cur_seg_norm.hr_request_id,
+            'request_id', cur_seg_norm.request_id,
+            'source_system', cur_seg_norm.source_system,
+            'latest_import_id', cur_seg_norm.latest_import_id,
             'pay_amount_ex_vat', round(
               case
                 when ass_match.snooze_id is not null then coalesce(ttre_match.preview_component_amount_ex_vat, ss_match.delta_pay_ex_vat, ss_match.eff_delta_ex, 0)
@@ -31576,7 +31616,20 @@ begin
             nullif(btrim(coalesce(cur_seg.seg_json->>'break_end','')), '') as break_end,
             coalesce(nullif(cur_seg.seg_json->>'break_mins','')::numeric, nullif(cur_seg.seg_json->>'break_minutes','')::numeric) as break_mins,
             case when jsonb_typeof(cur_seg.seg_json->'breaks') = 'array' then cur_seg.seg_json->'breaks' else '[]'::jsonb end as breaks,
-            nullif(btrim(coalesce(cur_seg.seg_json->>'ref_num','')), '') as ref_num
+            nullif(btrim(coalesce(cur_seg.seg_json->>'ref_num','')), '') as ref_num,
+            nullif(btrim(coalesce(cur_seg.seg_json->>'nhsp_shift_id','')), '') as nhsp_shift_id,
+            coalesce(
+              nullif(btrim(coalesce(cur_seg.seg_json->>'shift_id','')), ''),
+              nullif(btrim(coalesce(cur_seg.seg_json->>'nhsp_shift_id','')), '')
+            ) as shift_id,
+            nullif(btrim(coalesce(cur_seg.seg_json->>'external_row_key','')), '') as external_row_key,
+            nullif(btrim(coalesce(cur_seg.seg_json->>'hr_request_id','')), '') as hr_request_id,
+            coalesce(
+              nullif(btrim(coalesce(cur_seg.seg_json->>'request_id','')), ''),
+              nullif(btrim(coalesce(cur_seg.seg_json->>'hr_request_id','')), '')
+            ) as request_id,
+            nullif(btrim(coalesce(cur_seg.seg_json->>'source_system','')), '') as source_system,
+            nullif(btrim(coalesce(cur_seg.seg_json->>'latest_import_id','')), '') as latest_import_id
         ) cur_seg_norm
         left join lateral (
           select
@@ -33200,6 +33253,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_case_component_rows(p_context_json jsonb, p_candidate_id uuid)
@@ -42853,13 +42908,7 @@ DROP FUNCTION IF EXISTS public.pay_preview_candidate_collect_scope(jsonb, uuid);
 
 
 
-
-CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(
-  p_context_json jsonb,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_cursor_json jsonb DEFAULT NULL::jsonb,
-  p_limit integer DEFAULT 100
-)
+CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(p_context_json jsonb, p_candidate_id uuid DEFAULT NULL::uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -44345,6 +44394,19 @@ begin
                   'hours_bh', coalesce(nullif(seg->>'hours_bh','')::numeric, 0),
                   'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean, false),
                   'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), ''),
+                  'nhsp_shift_id', nullif(btrim(coalesce(seg->>'nhsp_shift_id','')), ''),
+                  'shift_id', coalesce(
+                    nullif(btrim(coalesce(seg->>'shift_id','')), ''),
+                    nullif(btrim(coalesce(seg->>'nhsp_shift_id','')), '')
+                  ),
+                  'external_row_key', nullif(btrim(coalesce(seg->>'external_row_key','')), ''),
+                  'hr_request_id', nullif(btrim(coalesce(seg->>'hr_request_id','')), ''),
+                  'request_id', coalesce(
+                    nullif(btrim(coalesce(seg->>'request_id','')), ''),
+                    nullif(btrim(coalesce(seg->>'hr_request_id','')), '')
+                  ),
+                  'source_system', nullif(btrim(coalesce(seg->>'source_system','')), ''),
+                  'latest_import_id', nullif(btrim(coalesce(seg->>'latest_import_id','')), ''),
                   'date', nullif(btrim(coalesce(seg->>'date','')), ''),
                   'segment_key', nullif(btrim(coalesce(seg->>'segment_key','')), ''),
                   'segment_stable_key', coalesce(
@@ -111275,14 +111337,8 @@ $$;
 DROP FUNCTION IF EXISTS public.pay_remittance_build(uuid, text);
 DROP FUNCTION IF EXISTS public.pay_remittance_build(uuid, text, uuid, jsonb, integer, jsonb);
 
-CREATE OR REPLACE FUNCTION public.pay_remittance_build(
-  p_pay_batch_id uuid,
-  p_scope text DEFAULT 'ALL'::text,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_remittance_scope_ids jsonb DEFAULT NULL::jsonb,
-  p_limit integer DEFAULT NULL::integer,
-  p_cursor_json jsonb DEFAULT NULL::jsonb
-)
+
+CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text, p_operation_id uuid DEFAULT NULL::uuid, p_remittance_scope_ids jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT NULL::integer, p_cursor_json jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -112586,6 +112642,16 @@ begin
               'start_utc', nullif(btrim(coalesce(s->>'start_utc','')),''),
               'end_utc', nullif(btrim(coalesce(s->>'end_utc','')),''),
               'break_mins', coalesce(nullif(s->>'break_mins','')::numeric,0),
+              'source_system', nullif(btrim(coalesce(s->>'source_system','')), ''),
+              'external_row_key', nullif(btrim(coalesce(s->>'external_row_key','')), ''),
+              'nhsp_shift_id', nullif(btrim(coalesce(s->>'nhsp_shift_id','')), ''),
+              'shift_id', coalesce(
+                nullif(btrim(coalesce(s->>'shift_id','')), ''),
+                nullif(btrim(coalesce(s->>'nhsp_shift_id','')), '')
+              ),
+              'request_id', nullif(btrim(coalesce(s->>'request_id','')), ''),
+              'hr_request_id', nullif(btrim(coalesce(s->>'hr_request_id','')), ''),
+              'ref_num', nullif(btrim(coalesce(s->>'ref_num','')), ''),
               'breaks', coalesce(s->'breaks','[]'::jsonb)
             )
             order by
@@ -113629,6 +113695,16 @@ begin
               'start_utc', nullif(btrim(coalesce(s->>'start_utc','')),''),
               'end_utc', nullif(btrim(coalesce(s->>'end_utc','')),''),
               'break_mins', coalesce(nullif(s->>'break_mins','')::numeric,0),
+              'source_system', nullif(btrim(coalesce(s->>'source_system','')), ''),
+              'external_row_key', nullif(btrim(coalesce(s->>'external_row_key','')), ''),
+              'nhsp_shift_id', nullif(btrim(coalesce(s->>'nhsp_shift_id','')), ''),
+              'shift_id', coalesce(
+                nullif(btrim(coalesce(s->>'shift_id','')), ''),
+                nullif(btrim(coalesce(s->>'nhsp_shift_id','')), '')
+              ),
+              'request_id', nullif(btrim(coalesce(s->>'request_id','')), ''),
+              'hr_request_id', nullif(btrim(coalesce(s->>'hr_request_id','')), ''),
+              'ref_num', nullif(btrim(coalesce(s->>'ref_num','')), ''),
               'breaks', coalesce(s->'breaks','[]'::jsonb)
             )
             order by
@@ -114558,6 +114634,16 @@ begin
               'start_utc', nullif(btrim(coalesce(s->>'start_utc','')),''),
               'end_utc', nullif(btrim(coalesce(s->>'end_utc','')),''),
               'break_mins', coalesce(nullif(s->>'break_mins','')::numeric,0),
+              'source_system', nullif(btrim(coalesce(s->>'source_system','')), ''),
+              'external_row_key', nullif(btrim(coalesce(s->>'external_row_key','')), ''),
+              'nhsp_shift_id', nullif(btrim(coalesce(s->>'nhsp_shift_id','')), ''),
+              'shift_id', coalesce(
+                nullif(btrim(coalesce(s->>'shift_id','')), ''),
+                nullif(btrim(coalesce(s->>'nhsp_shift_id','')), '')
+              ),
+              'request_id', nullif(btrim(coalesce(s->>'request_id','')), ''),
+              'hr_request_id', nullif(btrim(coalesce(s->>'hr_request_id','')), ''),
+              'ref_num', nullif(btrim(coalesce(s->>'ref_num','')), ''),
               'breaks', coalesce(s->'breaks','[]'::jsonb)
             )
             order by
@@ -114988,9 +115074,6 @@ begin
   );
 end;
 $function$;
-
-
-
 
 
 
@@ -199584,7 +199667,14 @@ BEGIN
             'display_site', projected_timesheet_contract.display_site,
             'ward_hint', projected_timesheet_contract.ward_hint,
             'ref_num', segment_source.ref_num,
-            'reference_number', projected_timesheet_contract.reference_number
+            'reference_number', projected_timesheet_contract.reference_number,
+            'nhsp_shift_id', segment_source.nhsp_shift_id,
+            'shift_id', segment_source.shift_id,
+            'external_row_key', segment_source.external_row_key,
+            'hr_request_id', segment_source.hr_request_id,
+            'request_id', segment_source.request_id,
+            'source_system', segment_source.source_system,
+            'latest_import_id', segment_source.latest_import_id
           )
           || jsonb_build_object(
             'start_utc', segment_source.start_utc_text,
@@ -199649,6 +199739,19 @@ BEGIN
             NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'date', segment_values.segment_json->>'work_date', '')), ''),
             'timesheet:' || COALESCE(projected_timesheet_contract.booking_id, projected_timesheet_contract.timesheet_id::text) || ':' || segment_values.ordinality::text
           ) AS segment_stable_key,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'nhsp_shift_id','')), '') AS nhsp_shift_id,
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'shift_id','')), ''),
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'nhsp_shift_id','')), '')
+          ) AS shift_id,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'external_row_key','')), '') AS external_row_key,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'hr_request_id','')), '') AS hr_request_id,
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'request_id','')), ''),
+            NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'hr_request_id','')), '')
+          ) AS request_id,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'source_system','')), '') AS source_system,
+          NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'latest_import_id','')), '') AS latest_import_id,
           NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'ref_num', segment_values.segment_json->>'reference_number', projected_timesheet_contract.reference_number, '')), '') AS ref_num,
           NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'start_utc', segment_values.segment_json->>'worked_start_utc', '')), '') AS start_utc_text,
           NULLIF(BTRIM(COALESCE(segment_values.segment_json->>'end_utc', segment_values.segment_json->>'finish_utc', segment_values.segment_json->>'worked_end_utc', '')), '') AS end_utc_text,
@@ -199713,6 +199816,13 @@ BEGIN
           'ts:' || projected_timesheet_contract.timesheet_id::text AS segment_id,
           'ts:' || projected_timesheet_contract.timesheet_id::text AS segment_key,
           'timesheet:' || COALESCE(projected_timesheet_contract.booking_id, projected_timesheet_contract.timesheet_id::text) AS segment_stable_key,
+          NULL::text AS nhsp_shift_id,
+          NULL::text AS shift_id,
+          NULL::text AS external_row_key,
+          NULL::text AS hr_request_id,
+          NULL::text AS request_id,
+          NULL::text AS source_system,
+          NULL::text AS latest_import_id,
           NULLIF(BTRIM(COALESCE(projected_timesheet_contract.reference_number, '')), '') AS ref_num,
           CASE WHEN projected_timesheet_contract.worked_start_iso IS NULL THEN NULL::text ELSE projected_timesheet_contract.worked_start_iso::text END AS start_utc_text,
           CASE WHEN projected_timesheet_contract.worked_end_iso IS NULL THEN NULL::text ELSE projected_timesheet_contract.worked_end_iso::text END AS end_utc_text,
@@ -200412,6 +200522,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress_debug(
   p_session_id uuid

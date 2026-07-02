@@ -180587,6 +180587,43 @@ async function buildNhspWeeklySnapshot(
   const staleReason = (curFin && curFin.stale_reason != null) ? String(curFin.stale_reason) : '';
 
   const shiftsArr = Array.isArray(shifts) ? shifts : [];
+
+  const normaliseImportedSourceSystem = (value) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return null;
+    if (raw === 'HEALTHROSTER' || raw === 'HR' || raw === 'HEALTH_ROSTER') return 'HEALTHROSTER';
+    if (raw === 'NHSP') return 'NHSP';
+    return raw;
+  };
+
+  const resolveImportedWeeklyEvidenceSource = (sourceShifts, basisForEvidence) => {
+    const sourceSystems = [];
+    for (const sh of Array.isArray(sourceShifts) ? sourceShifts : []) {
+      const source = normaliseImportedSourceSystem(sh?.source_system);
+      if (source && !sourceSystems.includes(source)) sourceSystems.push(source);
+    }
+
+    if (!sourceSystems.length) {
+      const basisSource = normaliseImportedSourceSystem(basisForEvidence);
+      if (basisSource) sourceSystems.push(basisSource);
+    }
+
+    if (sourceSystems.length === 1 && sourceSystems[0] === 'HEALTHROSTER') {
+      return { source_key: 'HEALTHROSTER_WEEKLY', source_system: 'HEALTHROSTER', source_systems: sourceSystems, is_mixed: false };
+    }
+
+    if (sourceSystems.length === 1 && sourceSystems[0] === 'NHSP') {
+      return { source_key: 'NHSP_WEEKLY', source_system: 'NHSP', source_systems: sourceSystems, is_mixed: false };
+    }
+
+    if (sourceSystems.length > 1) {
+      return { source_key: 'IMPORTED_WEEKLY_MIXED', source_system: 'IMPORTED_MIXED', source_systems: sourceSystems, is_mixed: true };
+    }
+
+    return { source_key: 'IMPORTED_WEEKLY', source_system: null, source_systems: [], is_mixed: false };
+  };
+
+  const evidenceSource = resolveImportedWeeklyEvidenceSource(shiftsArr, basis);
   const allowEmptyShiftsWrite = (lockedSegsAll.length > 0) || (staleReason === 'IMPORT_CANCEL_DETACH');
 
   if (!shiftsArr.length && !allowEmptyShiftsWrite) return { ok: false, reason: 'NO_SHIFTS' };
@@ -180726,6 +180763,7 @@ async function buildNhspWeeklySnapshot(
 
       // embed stable source identity into segment JSON
       nhsp_shift_id: nhsp_shift_id || null,
+      shift_id: nhsp_shift_id || null,
       external_row_key: external_row_key || null,
 
       date: workDate,
@@ -180750,10 +180788,12 @@ async function buildNhspWeeklySnapshot(
       ref_num: segRefNum,
 
       // request_id kept as source metadata only
+      hr_request_id: (sh.hr_request_id || null) || null,
       request_id: (sh.hr_request_id || sh.request_id || null) || null,
+      latest_import_id: (sh.latest_import_id || nhspImportId || null) || null,
 
       held_back_reason: sh.held_back_reason || null,
-      source_system: sh.source_system || null
+      source_system: normaliseImportedSourceSystem(sh.source_system || basis) || evidenceSource.source_system || null
     });
   }
 
@@ -180893,14 +180933,22 @@ async function buildNhspWeeklySnapshot(
     invoice_breakdown_json,
 
     external_source_rows_json: {
-      NHSP_WEEKLY: shiftsArr.map(sh => (sh ? ({
+      [evidenceSource.source_key]: shiftsArr.map(sh => (sh ? ({
         date: sh.work_date,
-        source_system: 'NHSP',
+        source_system: normaliseImportedSourceSystem(sh.source_system || evidenceSource.source_system) || evidenceSource.source_system || null,
         reference:
           (sh.nhsp_ref_num || sh.ref_num || (sh.payload_json && (sh.payload_json.ref_num || sh.payload_json.Reference))) || null,
         nhsp_shift_id: sh.id,
+        shift_id: sh.id,
+        external_row_key: sh.external_row_key || null,
+        request_id: (sh.hr_request_id || sh.request_id || null) || null,
+        hr_request_id: (sh.hr_request_id || null) || null,
+        latest_import_id: (sh.latest_import_id || nhspImportId || null) || null,
         raw_row: sh.payload_json || null
-      }) : null)).filter(Boolean)
+      }) : null)).filter(Boolean),
+      source_system: evidenceSource.source_system || null,
+      source_systems: evidenceSource.source_systems || [],
+      evidence_kind: evidenceSource.source_key
     }
   };
 
@@ -180922,7 +180970,6 @@ async function buildNhspWeeklySnapshot(
 
   return { ok: true, snapshot };
 }
-
 
 
 // Self-bill helper: reuse existing invoice for (client, week) if possible,
