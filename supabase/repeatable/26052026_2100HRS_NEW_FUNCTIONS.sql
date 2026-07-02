@@ -192197,7 +192197,7 @@ $function$;
 CREATE OR REPLACE FUNCTION public.timesheet_lifecycle_guard_signature_v1(p_timesheet_id uuid DEFAULT NULL::uuid, p_contract_week_id uuid DEFAULT NULL::uuid, p_include_payload boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
- STABLE SECURITY DEFINER
+ VOLATILE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -192208,6 +192208,10 @@ DECLARE
 
   v_resolved_booking_id text := NULL;
   v_signature_payload jsonb := '{}'::jsonb;
+  v_component_hashes jsonb := '{}'::jsonb;
+  v_component_values jsonb := '{}'::jsonb;
+  v_diagnostic_payload jsonb := '{}'::jsonb;
+  v_temp_log_enabled boolean := false;
   v_signature text := NULL;
 BEGIN
   IF p_timesheet_id IS NULL AND p_contract_week_id IS NULL THEN
@@ -192350,6 +192354,59 @@ BEGIN
 
   v_signature := MD5(v_signature_payload::text);
 
+  IF COALESCE(p_include_payload, false) THEN
+    BEGIN
+      SELECT COALESCE(sd.temp_log, false)
+        INTO v_temp_log_enabled
+      FROM public.settings_defaults AS sd
+      ORDER BY sd.id
+      LIMIT 1;
+    EXCEPTION
+      WHEN undefined_table OR undefined_column THEN
+        v_temp_log_enabled := false;
+      WHEN OTHERS THEN
+        v_temp_log_enabled := false;
+    END;
+
+    IF COALESCE(v_temp_log_enabled, false) THEN
+      v_component_values := jsonb_strip_nulls(jsonb_build_object(
+        'identity', v_signature_payload -> 'identity',
+        'timesheet', v_signature_payload -> 'timesheet',
+        'timesheets_financials', v_signature_payload -> 'timesheets_financials',
+        'contract_week', v_signature_payload -> 'contract_week'
+      ));
+      v_component_hashes := jsonb_strip_nulls(jsonb_build_object(
+        'identity', md5(COALESCE((v_signature_payload -> 'identity')::text, 'null')),
+        'timesheet', md5(COALESCE((v_signature_payload -> 'timesheet')::text, 'null')),
+        'timesheets_financials', md5(COALESCE((v_signature_payload -> 'timesheets_financials')::text, 'null')),
+        'contract_week', md5(COALESCE((v_signature_payload -> 'contract_week')::text, 'null')),
+        'full_payload', v_signature
+      ));
+      v_diagnostic_payload := jsonb_strip_nulls(jsonb_build_object(
+        'tag', 'TIMESHEET_LIFECYCLE_SIGNATURE_PAYLOAD',
+        'function_name', 'timesheet_lifecycle_guard_signature_v1',
+        'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+        'requested_timesheet_id', p_timesheet_id,
+        'contract_week_id', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.id END,
+        'booking_id', COALESCE(v_current_ts.booking_id, v_requested_ts.booking_id, v_resolved_booking_id),
+        'signature', v_signature,
+        'backend_row_signature', v_signature,
+        'component_hashes', v_component_hashes,
+        'component_values', v_component_values
+      ));
+      PERFORM public._temp_diag_log(
+        'TIMESHEET_LIFECYCLE_SIGNATURE_PAYLOAD',
+        'TEMP_TIMESHEET_LIFECYCLE',
+        COALESCE(
+          CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END,
+          p_timesheet_id::text,
+          p_contract_week_id::text
+        ),
+        v_diagnostic_payload
+      );
+    END IF;
+  END IF;
+
   RETURN jsonb_build_object(
     'ok', true,
     'signature_version', 'timesheet_lifecycle_guard_signature_v1',
@@ -192363,7 +192420,15 @@ BEGIN
     'booking_id', COALESCE(v_current_ts.booking_id, v_requested_ts.booking_id, v_resolved_booking_id),
     'current_version', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.version END,
     'payload', CASE WHEN COALESCE(p_include_payload, false) THEN v_signature_payload ELSE NULL END
-  );
+  ) || CASE
+    WHEN COALESCE(p_include_payload, false) AND COALESCE(v_temp_log_enabled, false) THEN
+      jsonb_build_object(
+        'component_hashes', v_component_hashes,
+        'component_values', v_component_values,
+        'diagnostic_payload', v_diagnostic_payload
+      )
+    ELSE '{}'::jsonb
+  END;
 END;
 $function$;
 

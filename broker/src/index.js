@@ -50612,7 +50612,6 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 
 // Replacement function: handleContractWeekManualUpsert (patched source lines 39943-44494)
 
-
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
  
@@ -50975,34 +50974,68 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      }
    }
  
-   // Load candidate/client once for use in TS creation + QR reissue
-   const candidate = contract.candidate_id
-     ? await sbGetOne(
-         env,
-         `${env.SUPABASE_URL}/rest/v1/candidates` +
-           `?id=eq.${enc(contract.candidate_id)}&select=id,display_name,email,mileage_pay_rate`
-       )
-     : null;
- 
-   const client = contract.client_id
-     ? await sbGetOne(
-         env,
-         `${env.SUPABASE_URL}/rest/v1/clients` +
-           `?id=eq.${enc(contract.client_id)}&select=id,name,mileage_charge_rate`
-       )
-     : null;
- 
-   wlog('contract_client_candidate_loaded', {
+   // Candidate/client rows are only needed for new-timesheet identity fallbacks and
+   // expense/mileage default fallback. Existing weekly-manual hours edits do not need
+   // these REST reads, so load them lazily when a later branch proves they are required.
+   let candidate = null;
+   let client = null;
+   let candidateLoadAttempted = false;
+   let clientLoadAttempted = false;
+
+   const loadCandidateForManualUpsert = async (reason = '') => {
+     if (candidateLoadAttempted) return candidate;
+     candidateLoadAttempted = true;
+     if (!contract.candidate_id) return null;
+     candidate = await sbGetOne(
+       env,
+       `${env.SUPABASE_URL}/rest/v1/candidates` +
+         `?id=eq.${enc(contract.candidate_id)}&select=id,display_name,email,mileage_pay_rate`
+     );
+     wlog('contract_candidate_loaded', {
+       contract_id: contract?.id || null,
+       candidate_id: candidate?.id || contract?.candidate_id || null,
+       candidate_loaded: !!candidate,
+       load_reason: reason || null
+     });
+     return candidate;
+   };
+
+   const loadClientForManualUpsert = async (reason = '') => {
+     if (clientLoadAttempted) return client;
+     clientLoadAttempted = true;
+     if (!contract.client_id) return null;
+     client = await sbGetOne(
+       env,
+       `${env.SUPABASE_URL}/rest/v1/clients` +
+         `?id=eq.${enc(contract.client_id)}&select=id,name,mileage_charge_rate`
+     );
+     wlog('contract_client_loaded', {
+       contract_id: contract?.id || null,
+       client_id: client?.id || contract?.client_id || null,
+       client_loaded: !!client,
+       load_reason: reason || null
+     });
+     return client;
+   };
+
+   wlog('contract_client_candidate_load_deferred', {
      contract_id: contract?.id || null,
-     candidate_id: candidate?.id || contract?.candidate_id || null,
-     client_id: client?.id || contract?.client_id || null,
-     candidate_loaded: !!candidate,
-     client_loaded: !!client
+     candidate_id: contract?.candidate_id || null,
+     client_id: contract?.client_id || null
    });
- 
+
+   let manualUpsertBucketPolicy = null;
+   let manualUpsertBucketPolicyLoaded = false;
+   const getManualUpsertBucketPolicy = async () => {
+     if (manualUpsertBucketPolicyLoaded) return manualUpsertBucketPolicy;
+     manualUpsertBucketPolicyLoaded = true;
+     manualUpsertBucketPolicy = await loadClientTimePolicy(env, contract.client_id);
+     return manualUpsertBucketPolicy;
+   };
+
    const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
    const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
- 
+
    const unwrapSingleRpcRow = (rpcRes) => {
      if (Array.isArray(rpcRes)) {
        return (rpcRes[0] && typeof rpcRes[0] === 'object') ? rpcRes[0] : null;
@@ -52112,7 +52145,8 @@ const expenseEvidenceKindCategories = {
    let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
    try {
      if (actual_schedule_json.length) {
-       const minsByBucket = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+       const bucketPolicy = await getManualUpsertBucketPolicy();
+       const minsByBucket = await resolveBucketsFromSchedule(env, contract, actual_schedule_json, bucketPolicy);
        hours = {
          day:   +(minsByBucket.day   / 60).toFixed(2),
          night: +(minsByBucket.night / 60).toFixed(2),
@@ -52706,6 +52740,11 @@ const expenseEvidenceKindCategories = {
        : Number(ts?.version || 1);
  
    if (!ts) {
+     await Promise.all([
+       loadCandidateForManualUpsert('timesheet_create'),
+       loadClientForManualUpsert('timesheet_create')
+     ]);
+
      const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
      const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
      const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
@@ -52961,7 +53000,8 @@ const expenseEvidenceKindCategories = {
  
      let minsByBucketSeg = null;
      try {
-       minsByBucketSeg = await resolveBucketsFromSchedule(env, contract, [seg]);
+       const bucketPolicy = await getManualUpsertBucketPolicy();
+       minsByBucketSeg = await resolveBucketsFromSchedule(env, contract, [seg], bucketPolicy);
      } catch (e) {
        wlog('bad_request_segment_bucket_resolution_failed', {
          segment_index: i,
@@ -53049,39 +53089,46 @@ const expenseEvidenceKindCategories = {
      return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay.'));
    }
  
-   const fwRows = await sbRpc(env, 'settings_finance_pick', { p_date: cw.week_ending_date || null }).catch(() => []);
-   const financeWindow = Array.isArray(fwRows) ? (fwRows[0] || null) : fwRows;
- 
-   const contractMileagePay = toNumPos(contract?.mileage_pay_rate);
-   const contractMileageCharge = toNumPos(contract?.mileage_charge_rate);
-   const preservedMileagePayRate = toNumPos(preservedFin?.mileage_pay_rate);
-   const preservedMileageChargeRate = toNumPos(preservedFin?.mileage_charge_rate);
-   const financeMileagePay = toNumPos(financeWindow?.mileage_pay_defaults);
-   const financeMileageCharge = toNumPos(financeWindow?.mileage_charge_defaults);
-   const candidateMileagePay = toNumPos(candidate?.mileage_pay_rate);
-   const clientMileageCharge = toNumPos(client?.mileage_charge_rate);
- 
-   const hydratedMileagePayRate =
-     contractMileagePay ??
-     preservedMileagePayRate ??
-     financeMileagePay ??
-     candidateMileagePay ??
-     null;
- 
-   const hydratedMileageChargeRate =
-     contractMileageCharge ??
-     preservedMileageChargeRate ??
-     financeMileageCharge ??
-     clientMileageCharge ??
-     null;
- 
    const expenseHydrationNeeded =
      hasExpensesDraftKey ||
      (!hasProcessedTimesheetForWeek && (
        hasPositiveExpenseDraftClaims(expensesDraft) ||
        !!String(expensesDraft?.note || '').trim()
      ));
- 
+
+   let financeWindow = null;
+   if (expenseHydrationNeeded) {
+     const fwRows = await sbRpc(env, 'settings_finance_pick', { p_date: cw.week_ending_date || null }).catch(() => []);
+     financeWindow = Array.isArray(fwRows) ? (fwRows[0] || null) : fwRows;
+     await Promise.all([
+       loadCandidateForManualUpsert('expense_mileage_defaults'),
+       loadClientForManualUpsert('expense_mileage_defaults')
+     ]);
+   }
+
+   const contractMileagePay = toNumPos(contract?.mileage_pay_rate);
+   const contractMileageCharge = toNumPos(contract?.mileage_charge_rate);
+   const preservedMileagePayRate = toNumPos(preservedFin?.mileage_pay_rate);
+   const preservedMileageChargeRate = toNumPos(preservedFin?.mileage_charge_rate);
+   const financeMileagePay = expenseHydrationNeeded ? toNumPos(financeWindow?.mileage_pay_defaults) : null;
+   const financeMileageCharge = expenseHydrationNeeded ? toNumPos(financeWindow?.mileage_charge_defaults) : null;
+   const candidateMileagePay = expenseHydrationNeeded ? toNumPos(candidate?.mileage_pay_rate) : null;
+   const clientMileageCharge = expenseHydrationNeeded ? toNumPos(client?.mileage_charge_rate) : null;
+
+   const hydratedMileagePayRate =
+     contractMileagePay ??
+     preservedMileagePayRate ??
+     financeMileagePay ??
+     candidateMileagePay ??
+     null;
+
+   const hydratedMileageChargeRate =
+     contractMileageCharge ??
+     preservedMileageChargeRate ??
+     financeMileageCharge ??
+     clientMileageCharge ??
+     null;
+
    const finalTravelPay = expenseHydrationNeeded
      ? round2(Number(expensesDraft?.travel_pay || 0))
      : preservedTravelPay;
@@ -53922,6 +53969,12 @@ const expenseEvidenceKindCategories = {
        new_processing_status: bulkPayload.new_processing_status || bulkPayload.processing_status || null,
        backend_row_signature: finalBackendRowSignature,
        row_signature: finalBackendRowSignature,
+       lifecycle_signature_stable: bulkPayload.lifecycle_signature_stable === true ? true : false,
+       lifecycle_signature_pending_reason: String(bulkPayload.lifecycle_signature_pending_reason || 'POST_SAVE_AFFECTED_ROWS_REFRESH_REQUIRED'),
+       requires_authorise_preflight: bulkPayload.requires_authorise_preflight !== false,
+       permission_state_patch_complete: true,
+       priority_badges_patch_complete: true,
+       immediate_lifecycle_patch_available: true,
        evidence_summary: (bulkPayload.evidence_summary && typeof bulkPayload.evidence_summary === 'object') ? bulkPayload.evidence_summary : {},
        affected_rows: affectedRows,
        requires_affected_row_refresh: true,
@@ -54055,6 +54108,12 @@ const expenseEvidenceKindCategories = {
      new_processing_status: standardPayload.new_processing_status || standardPayload.processing_status || null,
      backend_row_signature: finalBackendRowSignature,
      row_signature: finalBackendRowSignature,
+     lifecycle_signature_stable: standardPayload.lifecycle_signature_stable === true ? true : false,
+     lifecycle_signature_pending_reason: String(standardPayload.lifecycle_signature_pending_reason || 'POST_SAVE_AFFECTED_ROWS_REFRESH_REQUIRED'),
+     requires_authorise_preflight: standardPayload.requires_authorise_preflight !== false,
+     permission_state_patch_complete: true,
+     priority_badges_patch_complete: true,
+     immediate_lifecycle_patch_available: true,
      evidence_summary: (standardPayload.evidence_summary && typeof standardPayload.evidence_summary === 'object') ? standardPayload.evidence_summary : {},
      affected_rows: affectedRows,
      requires_affected_row_refresh: true,
@@ -54096,6 +54155,10 @@ const expenseEvidenceKindCategories = {
 
    return withCORS(env, req, ok(responsePayload));
  }
+
+
+
+
 
 
 

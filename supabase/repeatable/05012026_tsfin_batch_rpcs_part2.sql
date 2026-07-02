@@ -468,16 +468,10 @@ select pg_notify('pgrst', 'reload schema');
 -- UPDATED: persists new TSFIN category expense columns and preserves them
 -- SAFE TO RE-RUN: CREATE OR REPLACE
 -- ============================================================
-
-
-create or replace function public.tsfin_write_snapshots_and_complete(p_rows jsonb)
-returns table (
-  ok_count integer,
-  fail_count integer,
-  errors jsonb
-)
-language plpgsql
-as $function$
+CREATE OR REPLACE FUNCTION public.tsfin_write_snapshots_and_complete(p_rows jsonb)
+ RETURNS TABLE(ok_count integer, fail_count integer, errors jsonb)
+ LANGUAGE plpgsql
+AS $function$
 declare
   v_ok int := 0;
   v_fail int := 0;
@@ -556,7 +550,22 @@ declare
   v_timesheet_version int;
   v_is_stale boolean;
   v_stale_reason text;
+  v_temp_log_enabled boolean := false;
+  v_signature_diag_json jsonb := '{}'::jsonb;
 begin
+  BEGIN
+    SELECT COALESCE(sd.temp_log, false)
+      INTO v_temp_log_enabled
+    FROM public.settings_defaults AS sd
+    ORDER BY sd.id
+    LIMIT 1;
+  EXCEPTION
+    WHEN undefined_table OR undefined_column THEN
+      v_temp_log_enabled := false;
+    WHEN OTHERS THEN
+      v_temp_log_enabled := false;
+  END;
+
   if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
     ok_count := 0;
     fail_count := 0;
@@ -1101,6 +1110,25 @@ begin
       perform public.tsfin_work_success(v_outbox_id);
       v_ok := v_ok + 1;
 
+      IF COALESCE(v_temp_log_enabled, false) THEN
+        v_signature_diag_json := public.timesheet_lifecycle_guard_signature_v1(v_timesheet_id, NULL::uuid, true);
+        PERFORM public._temp_diag_log(
+          'TSFIN_SIGNATURE_AFTER_SNAPSHOT',
+          'TEMP_TIMESHEET_LIFECYCLE',
+          v_timesheet_id::text,
+          jsonb_strip_nulls(jsonb_build_object(
+            'tag', 'TSFIN_SIGNATURE_AFTER_SNAPSHOT',
+            'function_name', 'tsfin_write_snapshots_and_complete',
+            'outbox_id', v_outbox_id,
+            'timesheet_id', v_timesheet_id,
+            'signature', NULLIF(BTRIM(COALESCE(v_signature_diag_json ->> 'backend_row_signature', v_signature_diag_json ->> 'row_signature', v_signature_diag_json ->> 'signature', '')), ''),
+            'signature_payload', v_signature_diag_json,
+            'processing_status', CASE WHEN v_processing_status IS NULL THEN NULL ELSE v_processing_status::text END,
+            'previous_financials_id', v_prev_id
+          ))
+        );
+      END IF;
+
     exception
       when others then
         v_err := sqlerrm;
@@ -1140,6 +1168,7 @@ begin
   return next;
 end;
 $function$;
+
 
 grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to service_role;
 grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to authenticated;
