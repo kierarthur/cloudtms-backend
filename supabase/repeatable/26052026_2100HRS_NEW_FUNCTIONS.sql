@@ -199841,10 +199841,6 @@ BEGIN
               row_identity.key_type = 'TS_TOTAL'
               AND COALESCE(row_identity.timesheet_has_ts_day_component, false) IS NOT TRUE
             )
-            OR (
-              row_identity.key_type NOT IN ('TS_DAY', 'TS_TOTAL')
-              AND COALESCE(row_identity.timesheet_segment_count, 0) = 1
-            )
           )
       ), selected_stats AS (
         SELECT
@@ -199856,7 +199852,8 @@ BEGIN
           selected_segments.segment_json,
           selected_segments.ordinality,
           CASE
-            WHEN selected_stats.selected_count = 1 THEN row_identity.outstanding_ex_vat
+            WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL')
+             AND selected_stats.selected_count = 1 THEN row_identity.outstanding_ex_vat
             WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN selected_segments.source_pay_amount_ex_vat
             ELSE NULL::numeric
           END AS display_amount_ex_vat
@@ -199864,7 +199861,10 @@ BEGIN
         CROSS JOIN selected_stats
         WHERE selected_stats.selected_count > 0
           AND (
-            selected_stats.selected_count = 1
+            (
+              row_identity.key_type IN ('TS_DAY', 'TS_TOTAL')
+              AND selected_stats.selected_count = 1
+            )
             OR (
               row_identity.key_type IN ('TS_DAY', 'TS_TOTAL')
               AND selected_stats.selected_source_amount_count = selected_stats.selected_count
@@ -199989,22 +199989,22 @@ BEGIN
           'live_pay_eligibility_status', 'ELIGIBLE'
         )
         || jsonb_build_object(
-          'date', row_identity.row_work_date_text,
-          'work_date', row_identity.row_work_date_text,
-          'linked_shift_date', row_identity.row_work_date_text,
-          'start', row_identity.first_segment_json->>'start',
-          'start_time', row_identity.first_segment_json->>'start_time',
-          'finish', row_identity.first_segment_json->>'finish',
-          'finish_time', row_identity.first_segment_json->>'finish_time',
-          'break_start', row_identity.first_segment_json->>'break_start',
-          'break_end', row_identity.first_segment_json->>'break_end',
-          'break_mins', row_identity.first_segment_json->>'break_mins',
-          'break_minutes', row_identity.first_segment_json->>'break_minutes',
-          'breaks', CASE WHEN jsonb_typeof(row_identity.first_segment_json->'breaks') = 'array' THEN row_identity.first_segment_json->'breaks' ELSE NULL::jsonb END,
-          'section_segment_rows', COALESCE(row_identity.row_segment_rows_json, '[]'::jsonb),
-          'segment_rows', COALESCE(row_identity.row_segment_rows_json, '[]'::jsonb),
-          'section_segment_count', COALESCE(row_identity.row_segment_count, 0),
-          'segment_count', COALESCE(row_identity.row_segment_count, 0)
+          'date', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.row_work_date_text ELSE NULL::text END,
+          'work_date', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.row_work_date_text ELSE NULL::text END,
+          'linked_shift_date', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.row_work_date_text ELSE NULL::text END,
+          'start', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.first_segment_json->>'start' ELSE NULL::text END,
+          'start_time', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.first_segment_json->>'start_time' ELSE NULL::text END,
+          'finish', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.first_segment_json->>'finish' ELSE NULL::text END,
+          'finish_time', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.first_segment_json->>'finish_time' ELSE NULL::text END,
+          'break_start', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.first_segment_json->>'break_start' ELSE NULL::text END,
+          'break_end', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.first_segment_json->>'break_end' ELSE NULL::text END,
+          'break_mins', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.first_segment_json->>'break_mins' ELSE NULL::text END,
+          'break_minutes', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN row_identity.first_segment_json->>'break_minutes' ELSE NULL::text END,
+          'breaks', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') AND jsonb_typeof(row_identity.first_segment_json->'breaks') = 'array' THEN row_identity.first_segment_json->'breaks' ELSE NULL::jsonb END,
+          'section_segment_rows', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN COALESCE(row_identity.row_segment_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'segment_rows', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN COALESCE(row_identity.row_segment_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'section_segment_count', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN COALESCE(row_identity.row_segment_count, 0) ELSE 0 END,
+          'segment_count', CASE WHEN row_identity.key_type IN ('TS_DAY', 'TS_TOTAL') THEN COALESCE(row_identity.row_segment_count, 0) ELSE 0 END
         )
         || jsonb_build_object(
           'total_segment_count', COALESCE(row_identity.timesheet_segment_count, 0),
@@ -200412,7 +200412,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress_debug(
   p_session_id uuid
