@@ -836,6 +836,12 @@ DECLARE
   v_error_constraint text := NULL;
   v_temp_log_enabled boolean := false;
   v_signature_diag_json jsonb := '{}'::jsonb;
+  v_diag_started_at timestamp with time zone := clock_timestamp();
+  v_diag_stage_started_at timestamp with time zone := clock_timestamp();
+  v_diag_elapsed_ms numeric := 0;
+  v_diag_duration_ms numeric := 0;
+  v_diag_step_index integer := 0;
+  v_staged_evidence_loop_count integer := 0;
 BEGIN
   PERFORM set_config('lock_timeout', '2500ms', true);
 
@@ -881,6 +887,49 @@ BEGIN
       AND NULLIF(regexp_replace(COALESCE(NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'storageKey', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'r2_key', '')), ''), ''), '^/+', ''), '') IS NOT NULL;
   END IF;
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'entry_payload_validated',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'has_create_json', v_create_json IS NOT NULL,
+          'has_patch_json', v_patch_json <> '{}'::jsonb,
+          'has_week_patch_json', v_week_patch_json <> '{}'::jsonb,
+          'has_tsfin_snapshot_json', v_tsfin_snapshot_json IS NOT NULL,
+          'has_rotation_json', v_rotation_json IS NOT NULL,
+          'materialise_staged_evidence', p_materialise_staged_evidence,
+          'has_queue_timesheet_materialisation_json', v_queue_timesheet_materialisation_json IS NOT NULL,
+          'suppress_timesheet_evidence_materialisation', v_suppress_timesheet_evidence_materialisation,
+          'has_selected_queue_timesheet_materialisation', v_has_selected_queue_timesheet_materialisation,
+          'expected_row_signature_present', NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '') IS NOT NULL
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   SELECT cw.*
     INTO v_week
   FROM public.contract_weeks AS cw
@@ -892,7 +941,81 @@ BEGIN
   END IF;
   v_previous_contract_week_status := v_week.status::text;
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'contract_week_locked',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'contract_id', v_week.contract_id,
+          'week_status', v_week.status::text,
+          'contract_week_timesheet_id', v_week.timesheet_id,
+          'week_ending_date', v_week.week_ending_date,
+          'previous_contract_week_status', v_previous_contract_week_status
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   PERFORM pg_advisory_xact_lock(hashtext('contract_week_staged_timesheet:' || v_week.id::text));
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'staged_timesheet_advisory_lock_acquired',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'advisory_lock_scope', 'contract_week_staged_timesheet',
+          'contract_id', v_week.contract_id,
+          'week_status', v_week.status::text
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
 
   SELECT c.*
     INTO v_contract
@@ -904,10 +1027,83 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'TARGET_NOT_FOUND', DETAIL = jsonb_build_object('contract_id', v_week.contract_id)::text;
   END IF;
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'contract_locked',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'contract_id', v_contract.id,
+          'candidate_id', v_contract.candidate_id,
+          'client_id', v_contract.client_id,
+          'pay_method_snapshot', v_contract.pay_method_snapshot,
+          'default_submission_mode', v_contract.default_submission_mode
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   IF v_week.status IN ('AUTHORISED'::public.contract_week_status_enum, 'INVOICED'::public.contract_week_status_enum, 'CANCELLED'::public.contract_week_status_enum) THEN
     RAISE EXCEPTION USING
       MESSAGE = CASE WHEN v_week.status = 'INVOICED'::public.contract_week_status_enum THEN 'INVOICED_OR_LOCKED' ELSE 'TIMESHEET_LOCKED_OR_PAID' END,
       DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'contract_week_status', v_week.status::text)::text;
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'contract_week_status_gate_checked',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'contract_week_status', v_week.status::text,
+          'locked_status_gate_passed', true
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
   END IF;
 
   IF v_week.timesheet_id IS NOT NULL THEN
@@ -947,6 +1143,46 @@ BEGIN
         MESSAGE = 'EXPECTED_TIMESHEET_MISMATCH',
         DETAIL = jsonb_build_object('expected_timesheet_id', p_expected_timesheet_id, 'current_timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', v_week.id)::text;
     END IF;
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'current_timesheet_resolved',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'contract_week_pointer_timesheet_id', v_week.timesheet_id,
+          'pointer_timesheet_id', CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id END,
+          'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+          'booking_id', CASE WHEN v_current_ts.booking_id IS NULL THEN NULL ELSE v_current_ts.booking_id END,
+          'timesheet_version', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.version END,
+          'timesheet_is_current', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.is_current END,
+          'was_stale', v_was_stale
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
   END IF;
 
   IF v_current_ts.timesheet_id IS NOT NULL THEN
@@ -992,6 +1228,85 @@ BEGIN
     END IF;
   END IF;
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'current_tsfin_and_lock_gate_checked',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+          'current_tsfin_id', CASE WHEN v_current_tsfin.id IS NULL THEN NULL ELSE v_current_tsfin.id END,
+          'previous_processing_status', v_previous_processing_status,
+          'processing_status', CASE WHEN v_current_tsfin.id IS NULL THEN NULL ELSE v_current_tsfin.processing_status::text END,
+          'paid_at_utc', CASE WHEN v_current_tsfin.id IS NULL THEN NULL ELSE v_current_tsfin.paid_at_utc END,
+          'locked_by_invoice_id', CASE WHEN v_current_tsfin.id IS NULL THEN NULL ELSE v_current_tsfin.locked_by_invoice_id END,
+          'segment_invoice_lock', v_segment_invoice_lock
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'before_signature_generation_started',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+          'expected_row_signature_input', NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), ''),
+          'patch_backend_row_signature', NULLIF(BTRIM(COALESCE(v_patch_json ->> 'backend_row_signature', '')), ''),
+          'patch_row_signature', NULLIF(BTRIM(COALESCE(v_patch_json ->> 'row_signature', '')), ''),
+          'week_patch_backend_row_signature', NULLIF(BTRIM(COALESCE(v_week_patch_json ->> 'backend_row_signature', '')), ''),
+          'week_patch_row_signature', NULLIF(BTRIM(COALESCE(v_week_patch_json ->> 'row_signature', '')), '')
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   v_before_signature_json := public.timesheet_lifecycle_guard_signature_v1(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END, v_week.id, COALESCE(v_temp_log_enabled, false));
   v_current_row_signature := NULLIF(BTRIM(COALESCE(v_before_signature_json ->> 'backend_row_signature', v_before_signature_json ->> 'row_signature', v_before_signature_json ->> 'signature', '')), '');
   v_expected_row_signature := NULLIF(BTRIM(COALESCE(p_expected_row_signature, v_patch_json ->> 'backend_row_signature', v_patch_json ->> 'row_signature', v_week_patch_json ->> 'backend_row_signature', v_week_patch_json ->> 'row_signature', '')), '');
@@ -1008,6 +1323,8 @@ BEGIN
           'stage', 'row_signature_mismatch_before_manual_upsert',
           'action', 'manual_upsert',
           'route_family', 'contract_week_manual_upsert',
+          'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3),
+          'duration_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3),
           'contract_week_id', v_week.id,
           'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
           'expected_row_signature', v_expected_row_signature,
@@ -1019,6 +1336,44 @@ BEGIN
     RAISE EXCEPTION USING
       MESSAGE = 'ROW_SIGNATURE_MISMATCH',
       DETAIL = jsonb_build_object('expected_row_signature', v_expected_row_signature, 'current_row_signature', v_current_row_signature, 'contract_week_id', v_week.id, 'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END)::text;
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'row_signature_guard_checked',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+          'current_row_signature', v_current_row_signature,
+          'expected_row_signature', v_expected_row_signature,
+          'expected_row_signature_present', v_expected_row_signature IS NOT NULL,
+          'signature_match', CASE WHEN v_expected_row_signature IS NULL THEN true ELSE COALESCE(v_current_row_signature, '') IS NOT DISTINCT FROM v_expected_row_signature END
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
   END IF;
 
   IF v_current_ts.timesheet_id IS NULL THEN
@@ -1205,6 +1560,48 @@ BEGIN
     END IF;
   END IF;
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'timesheet_identity_ready_for_patch',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'booking_id', v_current_ts.booking_id,
+          'timesheet_version', v_current_ts.version,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'rotation_action', v_rotation_action,
+          'rotation_new_timesheet_id', v_rotation_new_timesheet_id,
+          'rotation_pending_qr', v_rotation_pending_qr,
+          'has_patch_json', v_patch_json <> '{}'::jsonb
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   IF v_patch_json <> '{}'::jsonb THEN
     v_patch_rec := jsonb_populate_record(v_current_ts, v_patch_json);
     UPDATE public.timesheets AS ts
@@ -1242,6 +1639,48 @@ BEGIN
      WHERE ts.timesheet_id = v_current_ts.timesheet_id
        AND ts.is_current = true
      RETURNING * INTO v_current_ts;
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'timesheet_patch_applied',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'booking_id', v_current_ts.booking_id,
+          'timesheet_version', v_current_ts.version,
+          'timesheet_status', v_current_ts.status::text,
+          'submission_mode', v_current_ts.submission_mode::text,
+          'sheet_scope', v_current_ts.sheet_scope::text,
+          'line_type', v_current_ts.line_type::text,
+          'actual_schedule_count', CASE WHEN jsonb_typeof(v_current_ts.actual_schedule_json) = 'array' THEN jsonb_array_length(v_current_ts.actual_schedule_json) ELSE NULL END,
+          'has_patch_json', v_patch_json <> '{}'::jsonb
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
   END IF;
 
   IF p_materialise_staged_evidence AND v_has_selected_queue_timesheet_materialisation THEN
@@ -1345,6 +1784,49 @@ BEGIN
     v_attached_queue_count := v_attached_queue_count + 1;
   END IF;
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'selected_queue_materialisation_checked',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'materialise_staged_evidence', p_materialise_staged_evidence,
+          'has_selected_queue_timesheet_materialisation', v_has_selected_queue_timesheet_materialisation,
+          'selected_queue_id', v_selected_queue_id,
+          'selected_queue_storage_key', v_selected_queue_storage_key,
+          'primary_timesheet_queue_id', v_primary_timesheet_queue_id,
+          'primary_timesheet_storage_key', v_primary_timesheet_storage_key,
+          'attached_evidence_count', v_attached_evidence_count,
+          'attached_queue_count', v_attached_queue_count,
+          'duplicate_queue_count', v_duplicate_queue_count,
+          'timesheet_stage_key_count', v_timesheet_stage_key_count
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   IF p_materialise_staged_evidence THEN
     FOR v_queue_item IN
       SELECT mq.*
@@ -1354,6 +1836,7 @@ BEGIN
       ORDER BY mq.uploaded_at_utc ASC NULLS LAST, mq.id ASC
       FOR UPDATE
     LOOP
+      v_staged_evidence_loop_count := v_staged_evidence_loop_count + 1;
       v_queue_kind := UPPER(COALESCE(NULLIF(BTRIM(v_queue_item.meta_json ->> 'staged_kind'), ''), NULLIF(BTRIM(v_queue_item.meta_json ->> 'kind'), ''), NULLIF(BTRIM(v_queue_item.meta_json ->> 'attached_kind'), ''), 'TIMESHEET'));
       IF v_queue_kind NOT IN ('TIMESHEET','MILEAGE','TRAVEL','ACCOMMODATION','OTHER') THEN
         v_queue_kind := 'OTHER';
@@ -1416,6 +1899,48 @@ BEGIN
     END LOOP;
   END IF;
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'staged_evidence_materialisation_checked',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'materialise_staged_evidence', p_materialise_staged_evidence,
+          'staged_evidence_loop_count', v_staged_evidence_loop_count,
+          'attached_evidence_count', v_attached_evidence_count,
+          'attached_queue_count', v_attached_queue_count,
+          'duplicate_queue_count', v_duplicate_queue_count,
+          'timesheet_stage_key_count', v_timesheet_stage_key_count,
+          'primary_timesheet_queue_id', v_primary_timesheet_queue_id,
+          'primary_timesheet_storage_key', v_primary_timesheet_storage_key,
+          'primary_timesheet_rotation_degrees', v_primary_timesheet_rotation_deg
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   IF v_primary_timesheet_storage_key IS NOT NULL THEN
     UPDATE public.timesheets AS ts
        SET manual_pdf_r2_key = v_primary_timesheet_storage_key,
@@ -1424,6 +1949,44 @@ BEGIN
      WHERE ts.timesheet_id = v_current_ts.timesheet_id
        AND ts.is_current = true
      RETURNING * INTO v_current_ts;
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'primary_timesheet_storage_applied',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'primary_timesheet_storage_key', v_primary_timesheet_storage_key,
+          'primary_timesheet_rotation_degrees', v_primary_timesheet_rotation_deg,
+          'manual_pdf_r2_key', v_current_ts.manual_pdf_r2_key,
+          'manual_pdf_rotation_degrees', v_current_ts.manual_pdf_rotation_degrees
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
   END IF;
 
   v_week_patch_rec := jsonb_populate_record(v_week, v_week_patch_json);
@@ -1445,6 +2008,45 @@ BEGIN
    WHERE cw.id = v_week.id
    RETURNING * INTO v_week;
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'contract_week_update_done',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'contract_week_id', v_week.id,
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'new_contract_week_status', v_week.status::text,
+          'submission_mode_snapshot', v_week.submission_mode_snapshot::text,
+          'uploaded_pdf_r2_key', v_week.uploaded_pdf_r2_key,
+          'has_week_patch_json', v_week_patch_json <> '{}'::jsonb
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   IF v_tsfin_snapshot_json IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_PAYLOAD', DETAIL = jsonb_build_object('field', 'p_tsfin_snapshot_json')::text;
   END IF;
@@ -1458,11 +2060,94 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'TSFIN_SNAPSHOT_MISMATCH', DETAIL = jsonb_build_object('field', 'candidate_id', 'expected_value', v_contract.candidate_id, 'supplied_value', v_tsfin_snapshot_json ->> 'candidate_id')::text;
   END IF;
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'tsfin_snapshot_validated',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'timesheet_version', v_current_ts.version,
+          'contract_client_id', v_contract.client_id,
+          'contract_candidate_id', v_contract.candidate_id,
+          'snapshot_client_id', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'client_id', '')), ''),
+          'snapshot_candidate_id', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'candidate_id', '')), ''),
+          'snapshot_processing_status', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'processing_status', '')), ''),
+          'snapshot_total_pay_ex_vat', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'total_pay_ex_vat', '')), ''),
+          'snapshot_total_charge_ex_vat', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'total_charge_ex_vat', '')), '')
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   v_tsfin_snapshot_json := v_tsfin_snapshot_json || jsonb_build_object(
     'timesheet_id', v_current_ts.timesheet_id::text,
     'timesheet_version', v_current_ts.version,
     'processing_status', COALESCE(NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'processing_status', '')), ''), 'PENDING_AUTH')
   );
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'tsfin_write_started',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'timesheet_version', v_current_ts.version,
+          'snapshot_processing_status', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'processing_status', '')), ''),
+          'snapshot_basis', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'basis', '')), ''),
+          'snapshot_total_hours', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'total_hours', '')), ''),
+          'snapshot_total_pay_ex_vat', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'total_pay_ex_vat', '')), ''),
+          'snapshot_total_charge_ex_vat', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'total_charge_ex_vat', '')), ''),
+          'snapshot_expenses_pay_ex_vat', NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'expenses_pay_ex_vat', '')), '')
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
 
   v_tsfin_result := public.tsfin_write_current_snapshot_single_bounded(
     p_timesheet_id => v_current_ts.timesheet_id,
@@ -1472,8 +2157,83 @@ BEGIN
     p_now_utc => v_now
   );
 
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'tsfin_write_completed',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'timesheet_version', v_current_ts.version,
+          'tsfin_result_ok', COALESCE((v_tsfin_result ->> 'ok')::boolean, false),
+          'tsfin_result_code', NULLIF(BTRIM(COALESCE(v_tsfin_result ->> 'code', v_tsfin_result ->> 'error_code', '')), ''),
+          'tsfin_result_message', NULLIF(BTRIM(COALESCE(v_tsfin_result ->> 'message', v_tsfin_result ->> 'error', '')), ''),
+          'tsfin_result_keys', (SELECT jsonb_agg(result_key ORDER BY result_key) FROM jsonb_object_keys(COALESCE(v_tsfin_result, '{}'::jsonb)) AS result_keys(result_key))
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
   IF COALESCE((v_tsfin_result ->> 'ok')::boolean, false) IS DISTINCT FROM true THEN
     RAISE EXCEPTION USING MESSAGE = 'TSFIN_UPDATE_FAILED', DETAIL = COALESCE(v_tsfin_result, '{}'::jsonb)::text;
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'tsfin_write_result_checked',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'timesheet_version', v_current_ts.version,
+          'tsfin_result_ok', COALESCE((v_tsfin_result ->> 'ok')::boolean, false)
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
   END IF;
 
   SELECT tf.*
@@ -1483,6 +2243,83 @@ BEGIN
     AND tf.is_current = true
   ORDER BY tf.computed_at_utc DESC NULLS LAST, tf.updated_at DESC NULLS LAST, tf.created_at DESC NULLS LAST, tf.id DESC
   LIMIT 1;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'current_tsfin_reloaded_after_write',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'current_tsfin_id', v_current_tsfin.id,
+          'processing_status', v_current_tsfin.processing_status::text,
+          'total_hours', v_current_tsfin.total_hours,
+          'total_pay_ex_vat', v_current_tsfin.total_pay_ex_vat,
+          'total_charge_ex_vat', v_current_tsfin.total_charge_ex_vat,
+          'margin_ex_vat', v_current_tsfin.margin_ex_vat,
+          'computed_at_utc', v_current_tsfin.computed_at_utc
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'after_signature_generation_started',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'contract_week_id', v_week.id,
+          'previous_row_signature', v_current_row_signature
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
 
   v_after_signature_json := public.timesheet_lifecycle_guard_signature_v1(v_current_ts.timesheet_id, v_week.id, COALESCE(v_temp_log_enabled, false));
   v_after_row_signature := NULLIF(BTRIM(COALESCE(v_after_signature_json ->> 'backend_row_signature', v_after_signature_json ->> 'row_signature', v_after_signature_json ->> 'signature', '')), '');
@@ -1498,6 +2335,8 @@ BEGIN
         'stage', 'after_manual_upsert_signature_generated',
         'action', 'manual_upsert',
         'route_family', 'contract_week_manual_upsert',
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3),
+        'duration_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3),
         'timesheet_id', v_current_ts.timesheet_id,
         'contract_week_id', v_week.id,
         'previous_row_signature', v_current_row_signature,
@@ -1505,6 +2344,44 @@ BEGIN
         'signature_payload', v_after_signature_json
       ))
     );
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'after_signature_generated',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'contract_week_id', v_week.id,
+          'previous_row_signature', v_current_row_signature,
+          'new_row_signature', v_after_row_signature,
+          'signature_payload_present', v_after_signature_json <> '{}'::jsonb
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
   END IF;
 
   PERFORM public._audit_insert(
@@ -1533,6 +2410,86 @@ BEGIN
     'WEEKLY_MANUAL_PROCESS',
     p_actor_user_id
   );
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'audit_done',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'contract_week_id', v_week.id,
+          'audit_action', CASE WHEN v_created_now THEN 'CONTRACT_WEEK_MANUAL_TIMESHEET_CREATED_PROCESSED' ELSE 'CONTRACT_WEEK_MANUAL_TIMESHEET_UPDATED_PROCESSED' END,
+          'new_processing_status', v_current_tsfin.processing_status::text,
+          'new_row_signature', v_after_row_signature
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
+
+  IF COALESCE(v_temp_log_enabled, false) THEN
+    v_diag_step_index := v_diag_step_index + 1;
+    v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+    v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+    PERFORM public._temp_diag_log(
+      'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'return',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'week_id', p_week_id,
+          'contract_week_id', CASE WHEN v_week.id IS NULL THEN p_week_id ELSE v_week.id END,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'expected_timesheet_id', p_expected_timesheet_id,
+          'created_now', v_created_now,
+          'was_stale', v_was_stale,
+          'temp_log_enabled', v_temp_log_enabled
+        )
+        || jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'contract_week_id', v_week.id,
+          'operation', CASE WHEN v_created_now THEN 'weekly_manual_process_create' ELSE 'weekly_manual_process_update' END,
+          'new_contract_week_status', v_week.status::text,
+          'new_processing_status', v_current_tsfin.processing_status::text,
+          'new_row_signature', v_after_row_signature,
+          'attached_evidence_count', v_attached_evidence_count,
+          'attached_queue_count', v_attached_queue_count,
+          'duplicate_queue_count', v_duplicate_queue_count
+        )
+      )
+    );
+    v_diag_stage_started_at := clock_timestamp();
+  END IF;
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -1581,12 +2538,63 @@ BEGIN
 EXCEPTION
   WHEN unique_violation THEN
     GET STACKED DIAGNOSTICS v_error_constraint = CONSTRAINT_NAME;
+
+    IF COALESCE(v_temp_log_enabled, false) THEN
+      v_diag_step_index := v_diag_step_index + 1;
+      v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+      v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+      PERFORM public._temp_diag_log(
+        'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+        'TEMP_TIMESHEET_LIFECYCLE',
+        COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+        jsonb_strip_nulls(jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'exception_unique_violation',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'contract_week_id', p_week_id,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'constraint_name', v_error_constraint
+        ))
+      );
+      v_diag_stage_started_at := clock_timestamp();
+    END IF;
     IF v_error_constraint = 'uq_manual_timesheet_queue_one_active_staged_timesheet_per_contr' THEN
       RAISE EXCEPTION USING MESSAGE = 'STAGED_TIMESHEET_CONFLICT', DETAIL = jsonb_build_object('contract_week_id', p_week_id, 'constraint_name', v_error_constraint)::text;
     END IF;
     RAISE;
   WHEN OTHERS THEN
     GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE, v_error_message = MESSAGE_TEXT;
+
+    IF COALESCE(v_temp_log_enabled, false) THEN
+      v_diag_step_index := v_diag_step_index + 1;
+      v_diag_elapsed_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 3);
+      v_diag_duration_ms := ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_stage_started_at)) * 1000)::numeric, 3);
+      PERFORM public._temp_diag_log(
+        'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+        'TEMP_TIMESHEET_LIFECYCLE',
+        COALESCE(CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END, CASE WHEN v_pointer_ts.timesheet_id IS NULL THEN NULL ELSE v_pointer_ts.timesheet_id::text END, p_expected_timesheet_id::text, p_week_id::text),
+        jsonb_strip_nulls(jsonb_build_object(
+          'tag', 'TEMP_CONTRACT_WEEK_MANUAL_UPSERT_STAGE',
+          'function_name', 'contract_week_manual_upsert_atomic',
+          'stage', 'exception_others',
+          'action', 'manual_upsert',
+          'route_family', 'contract_week_manual_upsert',
+          'step_index', v_diag_step_index,
+          'elapsed_ms', v_diag_elapsed_ms,
+          'duration_ms', v_diag_duration_ms,
+          'contract_week_id', p_week_id,
+          'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN p_expected_timesheet_id ELSE v_current_ts.timesheet_id END,
+          'error_state', v_error_state,
+          'error_message', v_error_message
+        ))
+      );
+      v_diag_stage_started_at := clock_timestamp();
+    END IF;
     IF v_error_state IN ('55P03', '57014') THEN
       RAISE EXCEPTION USING MESSAGE = 'LOCK_TIMEOUT', DETAIL = jsonb_build_object('contract_week_id', p_week_id, 'error_state', v_error_state)::text;
     END IF;
