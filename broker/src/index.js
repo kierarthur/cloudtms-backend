@@ -13555,9 +13555,6 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
   }
 }
 
-
-
-
 async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
@@ -13699,17 +13696,53 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
-  const selectedPreviewRowIds = body.selected_preview_row_ids ?? body.selectedPreviewRowIds;
-  if (!Array.isArray(selectedPreviewRowIds)) {
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const normaliseRowIdArray = (value) => Array.isArray(value)
+    ? Array.from(new Set(value.map((rowId) => String(rowId || '').trim()).filter(Boolean)))
+    : [];
+  const cloneJson = (value) => {
+    try { return JSON.parse(JSON.stringify(value)); } catch { return null; }
+  };
+  const normaliseSelectionPayload = (inputBody) => {
+    const source = isPlainObject(inputBody) ? inputBody : {};
+    const selectedPreviewRowIds = source.selected_preview_row_ids ?? source.selectedPreviewRowIds;
+    if (Array.isArray(selectedPreviewRowIds) && Object.keys(source).every((key) => ['selected_preview_row_ids', 'selectedPreviewRowIds'].includes(key))) {
+      return normaliseRowIdArray(selectedPreviewRowIds);
+    }
+
+    const payload = cloneJson(source) || {};
+    for (const key of [
+      'selected_preview_row_ids', 'selectedPreviewRowIds',
+      'select_preview_row_ids', 'selectPreviewRowIds', 'select_row_ids', 'selectRowIds',
+      'deselect_preview_row_ids', 'deselectPreviewRowIds', 'deselected_preview_row_ids', 'deselectedPreviewRowIds', 'deselect_row_ids', 'deselectRowIds'
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(payload, key)) payload[key] = normaliseRowIdArray(payload[key]);
+    }
+    return payload;
+  };
+
+  const selectedRowsPayload = normaliseSelectionPayload(body);
+  const validatePayloadArrays = (payload) => {
+    if (Array.isArray(payload)) return payload.every((rowId) => typeof rowId === 'string' && !!rowId.trim());
+    if (!isPlainObject(payload)) return false;
+    for (const key of [
+      'selected_preview_row_ids', 'selectedPreviewRowIds',
+      'select_preview_row_ids', 'selectPreviewRowIds', 'select_row_ids', 'selectRowIds',
+      'deselect_preview_row_ids', 'deselectPreviewRowIds', 'deselected_preview_row_ids', 'deselectedPreviewRowIds', 'deselect_row_ids', 'deselectRowIds'
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(payload, key) && !Array.isArray(payload[key])) return false;
+    }
+    const hasArray = [
+      'selected_preview_row_ids', 'selectedPreviewRowIds',
+      'select_preview_row_ids', 'selectPreviewRowIds', 'select_row_ids', 'selectRowIds',
+      'deselect_preview_row_ids', 'deselectPreviewRowIds', 'deselected_preview_row_ids', 'deselectedPreviewRowIds', 'deselect_row_ids', 'deselectRowIds'
+    ].some((key) => Array.isArray(payload[key]));
+    const hasGlobalAction = !!String(payload.selection_action || payload.selectionAction || payload.global_selection_action || payload.globalSelectionAction || payload.action || payload.selection_mode || payload.selectionMode || payload.mode || '').trim();
+    return hasArray || hasGlobalAction;
+  };
+  if (!validatePayloadArrays(selectedRowsPayload)) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS' });
   }
-  for (const rowId of selectedPreviewRowIds) {
-    if (typeof rowId !== 'string' || !String(rowId).trim()) {
-      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS' });
-    }
-  }
-
-  const normalizedSelectedPreviewRowIds = selectedPreviewRowIds.map((rowId) => String(rowId).trim());
 
   try {
     const { rows } = await sbFetch(
@@ -13731,7 +13764,7 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
 
     const rpcRes = await sbRpc(env, 'pay_workbench_session_set_selected_rows', {
       p_session_id: id,
-      p_selected_preview_row_ids: normalizedSelectedPreviewRowIds,
+      p_selected_preview_row_ids: selectedRowsPayload,
       p_actor_user_id: actorUserId
     });
 
@@ -13741,6 +13774,8 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
     return buildFriendlyFailure(500, e);
   }
 }
+
+
 
 async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
@@ -28473,23 +28508,31 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
 
     let previewRows = [];
     try {
-      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_preview_rows?session_id=eq.${encodeURIComponent(id)}&session_version=eq.${encodeURIComponent(sessionVersionValue)}&section=eq.canonical_preview_lines&selected=eq.true&status=eq.READY&select=id,row_key,timesheet_id,key_type,key_value,candidate_id,section,status,selection_state,selected,row_json,row_ordinal&order=row_ordinal.asc,id.asc&limit=101`, false);
-      previewRows = Array.isArray(rows) ? rows : [];
+      const pageSize = 1000;
+      const maxRows = 50000;
+      let offset = 0;
+      for (;;) {
+        const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_preview_rows?session_id=eq.${encodeURIComponent(id)}&session_version=eq.${encodeURIComponent(sessionVersionValue)}&section=eq.canonical_preview_lines&selected=eq.true&status=eq.READY&select=id,row_key,timesheet_id,key_type,key_value,candidate_id,section,status,selection_state,selected,row_json,row_ordinal&order=row_ordinal.asc,id.asc&limit=${pageSize}&offset=${offset}`, false);
+        const pageRows = Array.isArray(rows) ? rows : [];
+        previewRows.push(...pageRows);
+        if (pageRows.length < pageSize) break;
+        offset += pageSize;
+        if (previewRows.length >= maxRows) {
+          return {
+            ok: false,
+            http_status: 413,
+            error_code: 'BANKING_CREATE_DRAFT_SELECTED_ROWS_TOO_MANY_FOR_OPERATION',
+            selected_preview_row_ids: [],
+            selected_row_count: previewRows.length,
+            limit: maxRows,
+            session_version: sessionVersionRaw,
+            session_version_normalized: sessionVersionValue,
+            message: 'The selected Banking Pay row set is too large to expand safely for draft creation.'
+          };
+        }
+      }
     } catch (error) {
       return { ok: false, error_code: 'BANKING_PAY_CURRENT_SELECTION_READ_FAILED', selected_preview_row_ids: [], session_version: sessionVersionRaw, session_version_normalized: sessionVersionValue, error: String(error && error.message ? error.message : error) };
-    }
-
-    if (previewRows.length > 100) {
-      return {
-        ok: false,
-        http_status: 413,
-        error_code: 'BANKING_CREATE_DRAFT_SELECTED_ROWS_TOO_MANY_FOR_OPERATION',
-        selected_preview_row_ids: [],
-        selected_row_count: previewRows.length,
-        limit: 100,
-        session_version: sessionVersionRaw,
-        session_version_normalized: sessionVersionValue
-      };
     }
 
     const selectedSyntheticResidualRowsBeforeEligibilityCheck = previewRows.filter((previewRow) => {
@@ -28891,7 +28934,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       pay_date: payDate,
       selected_rows_total: selectedCount,
       selected_preview_row_count: selectedCount,
-      selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+      selected_preview_row_ids: selectedPreviewRowIds.slice(),
       selected_preview_row_mode: selectedPreviewRowMode,
       week_ending_cutoff_date: weekEndingCutoffDate,
       decision_sync: {
@@ -29243,19 +29286,20 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   const selectedPreviewRowMode = ['ROW_IDS', 'IMPLICIT_ALL', 'EXPLICIT_IDS', 'ROW_PATCH_CAPPED_CONTRACT_GUARDED'].includes(selectedPreviewRowModeRaw) ? selectedPreviewRowModeRaw : 'ROW_IDS';
   const weekEndingCutoffDate = parseDate(body.week_ending_cutoff_date || body.weekEndingCutoffDate || body.week_ending_cutoff || body.weekEndingCutoff) || '9999-12-31';
 
-  if (requestedDraftSelectedPreviewRowIds.length > 100) {
+  const maxCreateDraftSelectedPreviewRows = 50000;
+  if (requestedDraftSelectedPreviewRowIds.length > maxCreateDraftSelectedPreviewRows) {
     return fail(413, 'BANKING_PAY_CREATE_DRAFT_DRAFT_ROWS_TOO_MANY_FOR_REQUEST', 'Too many filtered draft rows were sent with the create request. Reduce the filtered selection and try again.', {
       session_id: sessionId,
       supplied_draft_selected_row_count: requestedDraftSelectedPreviewRowIds.length,
-      limit: 100
+      limit: maxCreateDraftSelectedPreviewRows
     });
   }
 
-  if (selectedPreviewRowIds.length > 100) {
-    return fail(413, 'BANKING_CREATE_DRAFT_SELECTED_ROWS_TOO_MANY_FOR_REQUEST', 'Too many selected rows were sent with the create request. Apply selection in the workbench first, then create the draft from the row-backed selection.', {
+  if (selectedPreviewRowIds.length > maxCreateDraftSelectedPreviewRows) {
+    return fail(413, 'BANKING_CREATE_DRAFT_SELECTED_ROWS_TOO_MANY_FOR_REQUEST', 'Too many selected rows were sent with the create request. Reduce the row-backed selection and try again.', {
       session_id: sessionId,
       supplied_selected_row_count: selectedPreviewRowIds.length,
-      limit: 100
+      limit: maxCreateDraftSelectedPreviewRows
     });
   }
 
@@ -29279,7 +29323,10 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   sourceSnapshotRunId = initialReadiness.source_snapshot_run_id || sourceSnapshotRunId;
   sessionSignature = initialReadiness.session_signature || sessionSignature;
 
-  if (selectedPreviewRowIds.length > 0) {
+  const allowLegacyCreateDraftSelectionSync = selectedPreviewRowIds.length > 0
+    && selectedPreviewRowIds.length <= 100
+    && selectedPreviewRowMode !== 'IMPLICIT_ALL';
+  if (allowLegacyCreateDraftSelectionSync) {
     if (typeof normalizeBankingPayPreviewDecisions === 'function' && typeof syncBankingPayPreviewDecisionsToSession === 'function') {
       const merged = sanitizePreviewDecisionsForCreateDraftRoute(previewDecisions);
       merged.selected_preview_row_ids = selectedPreviewRowIds;
@@ -29357,7 +29404,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       return fail(413, currentSelection.error_code || 'BANKING_CREATE_DRAFT_SELECTED_ROWS_TOO_MANY_FOR_OPERATION', 'Too many current selected rows are present for one draft-create operation. Reduce the row-backed selection and try again.', {
         session_id: sessionId,
         current_selection: currentSelection || null,
-        limit: 100
+        limit: maxCreateDraftSelectedPreviewRows
       });
     }
 
@@ -29389,7 +29436,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
         selected_ready_total: scopeCounts.selected_ready_total ?? null,
         selected_ready_paye: scopeCounts.selected_ready_paye ?? null,
         selected_ready_umbrella: scopeCounts.selected_ready_umbrella ?? null,
-        supplied_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+        supplied_selected_preview_row_ids: selectedPreviewRowIds.slice(),
         operation_started: false,
         no_operation_started: true,
         no_batch_created: true
@@ -29403,13 +29450,13 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
         currentSelection && currentSelection.error_code ? currentSelection.error_code : 'WORKBENCH_STALE_SELECTION'
       ])
     }, {
-      supplied_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+      supplied_selected_preview_row_ids: selectedPreviewRowIds.slice(),
       progress_selected_count: selectedCount,
       current_selection: currentSelection || null
     });
   }
 
-  const previousSelectedIds = selectedPreviewRowIds.slice(0, 100);
+  const previousSelectedIds = selectedPreviewRowIds.slice();
   const sessionFilters = isPlainObject(currentSelection.filters_json) ? currentSelection.filters_json : {};
   const sessionCandidateFilterId = trimStr(sessionFilters.candidate_id || sessionFilters.candidateId || '');
   const sessionClientFilterId = trimStr(sessionFilters.client_id || sessionFilters.clientId || '');
@@ -29555,7 +29602,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     }
   }
 
-  selectedPreviewRowIds = effectiveDraftRowIds.slice(0, 100);
+  selectedPreviewRowIds = effectiveDraftRowIds.slice();
   selectedCount = selectedPreviewRowIds.length;
   sessionVersion = currentSelection.session_version ?? sessionVersion;
   sourceSnapshotRunId = currentSelection.source_snapshot_run_id || sourceSnapshotRunId;
@@ -29894,8 +29941,8 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     override_verified_at_utc: verifiedSameWeekPayeOverride ? verifiedSameWeekPayeOverride.verified_at_utc : null,
     selected_rows_total: selectedCount,
     selected_preview_row_count: selectedCount,
-    selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
-    draft_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+    selected_preview_row_ids: selectedPreviewRowIds.slice(),
+    draft_selected_preview_row_ids: selectedPreviewRowIds.slice(),
     selected_preview_row_contracts: selectedPreviewRowContracts,
     draft_selected_preview_row_contracts: selectedPreviewRowContracts,
     selected_economic_keys: selectedEconomicKeys,
@@ -29997,6 +30044,745 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     });
   }
 }
+
+
+
+async function handleTimesheetAdvancePayment(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const idIn = String(timesheetId || '').trim();
+  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const overrideReason =
+    String(
+      body.override_reason ??
+      body.overrideReason ??
+      body.reason ??
+      body.note ??
+      ''
+    ).trim();
+
+  const expectedTimesheetId = String(
+    body.expected_timesheet_id ??
+    body.expectedTimesheetId ??
+    ''
+  ).trim();
+
+  if (!overrideReason) {
+    return withCORS(env, req, badRequest('override_reason is required'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(idIn)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+  }
+
+  const enc = encodeURIComponent;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  let resolved = null;
+  try {
+    resolved = await resolveTimesheetToCurrent(env, idIn);
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
+  }
+
+  if (!resolved || !resolved.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  if (!resolved.booking_id) {
+    return withCORS(env, req, badRequest('Timesheet booking_id missing; cannot resolve series'));
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  if (
+    (resolved.was_stale === true && currentTimesheetId !== idIn) ||
+    (expectedTimesheetId && expectedTimesheetId !== currentTimesheetId)
+  ) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  let tsfin = null;
+  try {
+    tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,client_id` +
+        `&limit=1`
+    );
+  } catch {
+    tsfin = null;
+  }
+
+  const candidateId = (tsfin?.candidate_id != null && String(tsfin.candidate_id).trim()) ? String(tsfin.candidate_id).trim() : null;
+  if (!candidateId || !uuidRe.test(candidateId)) {
+    return withCORS(env, req, badRequest('Timesheet candidate_id not available (ts_financials missing); cannot advance-payment'));
+  }
+
+  const fetchActiveAdvanceOverride = async () => {
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_payment_overrides` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&cleared_at_utc=is.null` +
+          `&select=id,timesheet_id,candidate_id,override_type,reason,created_at_utc,created_by_user_id,consumed_by_pay_batch_id,consumed_at_utc,cleared_at_utc,cleared_by_user_id,clear_reason` +
+          `&order=created_at_utc.desc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'timesheet_payment_override_set', {
+      p_timesheet_id: currentTimesheetId,
+      p_actor_user_id: user.id,
+      p_reason: overrideReason
+    });
+
+    const payload = unwrapRpc(rpcRes, 'timesheet_payment_override_set');
+    const payState = (payload && typeof payload === 'object' && payload.pay_state && typeof payload.pay_state === 'object')
+      ? payload.pay_state
+      : null;
+
+    const overrideObj = (payload && typeof payload === 'object' && payload.override && typeof payload.override === 'object')
+      ? payload.override
+      : null;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      candidate_id: (payload && typeof payload === 'object' && payload.candidate_id != null)
+        ? String(payload.candidate_id).trim()
+        : candidateId,
+      advance_override_id: (overrideObj && overrideObj.id != null)
+        ? String(overrideObj.id).trim()
+        : null,
+      already_advanced: !!(payload && typeof payload === 'object' && payload.already_exists === true),
+      advanced: true,
+      pay_state: payState,
+      message: (payload && typeof payload === 'object' && payload.already_exists === true)
+        ? 'This timesheet is already marked to be advanced in the next eligible pay run.'
+        : 'This timesheet has been marked to be advanced in the next eligible pay run.'
+    }));
+  } catch (e) {
+    const raised = _extractDbRaisedJson(e);
+    const raisedCode = String(raised?.code || '').trim().toUpperCase();
+    const errMsg = String(
+      raised?.message ||
+      e?.json?.message ||
+      e?.message ||
+      e ||
+      'Failed to create timesheet advance override'
+    ).trim();
+    const errMsgU = errMsg.toUpperCase();
+
+    if (
+      raisedCode === 'TIMESHEET_ADVANCE_ALREADY_BATCHED'
+      || errMsgU.includes('OVERRIDE ALREADY CONSUMED BY NON-CANCELLED PAY BATCH')
+    ) {
+      const existingOverride = await fetchActiveAdvanceOverride();
+      const consumedByPayBatchId =
+        (existingOverride?.consumed_by_pay_batch_id != null && String(existingOverride.consumed_by_pay_batch_id).trim())
+          ? String(existingOverride.consumed_by_pay_batch_id).trim()
+          : null;
+
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            error: 'TIMESHEET_ADVANCE_ALREADY_BATCHED',
+            message: 'This timesheet advance has already been batched and cannot be changed here.',
+            timesheet_id: currentTimesheetId,
+            candidate_id: candidateId,
+            pay_batch_id: consumedByPayBatchId || null
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+
+    const mappedAdvanceConflictCodes = new Set([
+      'TIMESHEET_ADVANCE_ALREADY_PAID',
+      'TIMESHEET_ADVANCE_PART_PAID_NO_OUTSTANDING',
+      'TIMESHEET_ADVANCE_PAYMENT_PROCESSING',
+      'TIMESHEET_ADVANCE_NO_OUTSTANDING_PAY'
+    ]);
+
+    if (mappedAdvanceConflictCodes.has(raisedCode)) {
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            error: raisedCode,
+            message: errMsg || 'This timesheet cannot be advanced for payment.',
+            timesheet_id: currentTimesheetId,
+            candidate_id: candidateId
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+
+    return withCORS(env, req, serverError(errMsg || 'Failed to create timesheet advance override'));
+  }
+}
+
+
+
+function collectDraftTimesheetIdsFromPreview(previewJson, previewDecisionsJson) {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const asBool = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
+  };
+
+  const toNum = (v) => {
+    if (v == null) return 0;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+    const s = String(v).trim();
+    if (!s) return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const isNonZeroMoneyLike = (it) => {
+    if (!it || typeof it !== 'object') return false;
+
+    const candidates = [
+      it.payment_amount,
+      it.payment_amount_ex_vat,
+      it.payment_amount_inc_vat,
+      it.raw_delta_ex_vat,
+      it.delta_ex_vat,
+      it.amount_ex_vat,
+      it.amount
+    ];
+
+    for (const v of candidates) {
+      if (v == null) continue;
+      const n = toNum(v);
+      if (Math.round(n * 100) / 100 !== 0) return true;
+
+      const s = String(v).trim();
+      if (s && s !== '0' && s !== '0.0' && s !== '0.00') {
+        const n2 = Number(s);
+        if (!Number.isFinite(n2)) return true;
+      }
+    }
+
+    return false;
+  };
+
+  const dec = (previewDecisionsJson && typeof previewDecisionsJson === 'object' && !Array.isArray(previewDecisionsJson))
+    ? previewDecisionsJson
+    : {};
+
+  const mismatchChoices = (dec.mismatch_choices && typeof dec.mismatch_choices === 'object' && !Array.isArray(dec.mismatch_choices))
+    ? dec.mismatch_choices
+    : {};
+
+  const includeCandidateIds = Array.isArray(dec.candidate_ids) ? dec.candidate_ids : null;
+
+  const includeSetNorm = (() => {
+    if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
+    const s = new Set();
+    for (const x of includeCandidateIds) {
+      const id = String(x || '').trim();
+      if (uuidRe.test(id)) s.add(id);
+    }
+    return s.size ? s : null;
+  })();
+
+  const allCands = [];
+  try {
+    const paye = Array.isArray(previewJson?.paye_candidates) ? previewJson.paye_candidates : [];
+    const non  = Array.isArray(previewJson?.non_paye_payees) ? previewJson.non_paye_payees : [];
+    for (const c of paye) allCands.push(c);
+    for (const c of non) allCands.push(c);
+  } catch {}
+
+  const blockedTimesheetIds = new Set();
+  const doNotPayTimesheetIds = new Set();
+  const snoozedTimesheetIds = new Set();
+
+  try {
+    const blockedItems = Array.isArray(previewJson?.blocked_items) ? previewJson.blocked_items : [];
+    for (const it of blockedItems) {
+      if (!it || typeof it !== 'object') continue;
+      const tid = String(it.timesheet_id || it.timesheetId || '').trim();
+      if (uuidRe.test(tid)) blockedTimesheetIds.add(tid);
+    }
+  } catch {}
+
+  try {
+    const dnpItems = Array.isArray(previewJson?.do_not_pay_items) ? previewJson.do_not_pay_items : [];
+    for (const it of dnpItems) {
+      if (!it || typeof it !== 'object') continue;
+      const tid = String(it.timesheet_id || it.timesheetId || '').trim();
+      if (uuidRe.test(tid)) doNotPayTimesheetIds.add(tid);
+    }
+  } catch {}
+
+  try {
+    const snoozedItems = Array.isArray(previewJson?.snoozed_items) ? previewJson.snoozed_items : [];
+    for (const it of snoozedItems) {
+      if (!it || typeof it !== 'object') continue;
+      const tid = String(it.timesheet_id || it.timesheetId || '').trim();
+      if (uuidRe.test(tid)) snoozedTimesheetIds.add(tid);
+    }
+  } catch {}
+
+  const eligibleCandidateIds = new Set();
+
+  for (const c of allCands) {
+    if (!c || typeof c !== 'object') continue;
+
+    const candId = String(c.candidate_id || '').trim();
+    if (!uuidRe.test(candId)) continue;
+
+    if (includeSetNorm && !includeSetNorm.has(candId)) continue;
+
+    if (!asBool(c.has_any_delta)) continue;
+    if (!asBool(c.is_ready_for_draft)) continue;
+
+    const mismatchObj = (c.mismatch && typeof c.mismatch === 'object') ? c.mismatch : null;
+    const hasMismatch = mismatchObj ? asBool(mismatchObj.has_mismatch) : false;
+
+    if (hasMismatch) {
+      const choiceRaw = mismatchChoices[candId];
+      const choice = String(choiceRaw || '').trim().toUpperCase();
+      if (choice !== 'PAYE' && choice !== 'UMBRELLA') continue;
+    }
+
+    eligibleCandidateIds.add(candId);
+  }
+
+  const timesheetIdSet = new Set();
+  const timesheetToCandidateId = {};
+
+  for (const c of allCands) {
+    if (!c || typeof c !== 'object') continue;
+
+    const candId = String(c.candidate_id || '').trim();
+    if (!eligibleCandidateIds.has(candId)) continue;
+
+    const items = Array.isArray(c.itemisation) ? c.itemisation : [];
+    if (!items.length) continue;
+
+    for (const it of items) {
+      if (!it || typeof it !== 'object') continue;
+
+      const tid = String(it.timesheet_id || it.timesheetId || '').trim();
+      if (!uuidRe.test(tid)) continue;
+
+      if (blockedTimesheetIds.has(tid)) continue;
+      if (doNotPayTimesheetIds.has(tid)) continue;
+      if (snoozedTimesheetIds.has(tid)) continue;
+
+      const isBlockedMarker =
+        asBool(it.is_blocked) || asBool(it.blocked) || asBool(it.blocked_item) || asBool(it.isBlocked);
+      const isDoNotPayMarker =
+        asBool(it.do_not_pay) || asBool(it.is_do_not_pay) || asBool(it.doNotPay) || asBool(it.isDoNotPay);
+
+      if (isBlockedMarker) continue;
+      if (isDoNotPayMarker) continue;
+
+      if (!isNonZeroMoneyLike(it)) continue;
+
+      timesheetIdSet.add(tid);
+      if (!Object.prototype.hasOwnProperty.call(timesheetToCandidateId, tid)) {
+        timesheetToCandidateId[tid] = candId;
+      }
+    }
+  }
+
+  const timesheetIds = Array.from(timesheetIdSet).sort((a, b) => a.localeCompare(b));
+
+  return {
+    timesheetIds,
+    timesheetToCandidateId
+  };
+}
+
+
+async function tsfinBestEffortMakeReadyForDraft(env, timesheetIds, opts = {}) {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+
+  const operationId = trimStr(opts.operationId ?? opts.operation_id);
+  const lockOwner = trimStr(opts.lockOwner ?? opts.lock_owner ?? (operationId ? `tsfin-draft:${operationId}` : 'tsfin-draft'));
+  const chunkSizeRaw = Number(opts.chunkSize ?? opts.chunk_size ?? opts.maxTimesheets ?? opts.max_timesheets ?? 100);
+  const chunkSize = Number.isFinite(chunkSizeRaw) ? Math.max(1, Math.min(250, Math.trunc(chunkSizeRaw))) : 100;
+  const cursorRaw = Number(opts.cursor ?? opts.offset ?? opts.start_index ?? 0);
+  const cursor = Number.isFinite(cursorRaw) ? Math.max(0, Math.trunc(cursorRaw)) : 0;
+  const drainLimitRaw = Number(opts.drainLimit ?? opts.drain_limit ?? chunkSize);
+  const drainLimit = Number.isFinite(drainLimitRaw) ? Math.max(1, Math.min(250, Math.trunc(drainLimitRaw))) : chunkSize;
+
+  const extractTimesheetIds = (value, out = new Set()) => {
+    if (value == null) return out;
+    if (typeof value === 'string') {
+      const raw = trimStr(value);
+      if (!raw) return out;
+      if (uuidRe.test(raw)) {
+        out.add(raw);
+        return out;
+      }
+      if (raw.startsWith('[') || raw.startsWith('{')) {
+        try {
+          extractTimesheetIds(JSON.parse(raw), out);
+        } catch {}
+      }
+      return out;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) extractTimesheetIds(item, out);
+      return out;
+    }
+    if (typeof value === 'object') {
+      const direct = trimStr(value.timesheet_id || value.timesheetId || value.id || '');
+      if (uuidRe.test(direct)) out.add(direct);
+      for (const key of ['selected_timesheet_ids_json', 'selected_timesheet_ids', 'timesheet_ids', 'timesheets', 'items', 'rows']) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) extractTimesheetIds(value[key], out);
+      }
+    }
+    return out;
+  };
+
+  const deriveOperationTimesheetIds = async () => {
+    if (!operationId) return [];
+    const out = new Set();
+    let offset = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_candidate_scope?operation_id=eq.${enc(operationId)}&select=selected_timesheet_ids_json&order=chunk_sequence.asc,id.asc&limit=${pageSize}&offset=${offset}`);
+      const page = Array.isArray(rows) ? rows : [];
+      for (const row of page) extractTimesheetIds(row?.selected_timesheet_ids_json, out);
+      if (page.length < pageSize) break;
+      offset += pageSize;
+    }
+    return Array.from(out).sort((a, b) => a.localeCompare(b));
+  };
+
+  const explicitTimesheetIds = Array.from(extractTimesheetIds(Array.isArray(timesheetIds) ? timesheetIds : []));
+  const allTimesheetIds = explicitTimesheetIds.length ? explicitTimesheetIds.sort((a, b) => a.localeCompare(b)) : await deriveOperationTimesheetIds();
+  const selectedTimesheetIds = allTimesheetIds.slice(cursor, cursor + chunkSize);
+  const nextCursor = (cursor + selectedTimesheetIds.length) < allTimesheetIds.length ? cursor + selectedTimesheetIds.length : null;
+  const deferredTimesheetIds = nextCursor === null ? [] : allTimesheetIds.slice(nextCursor, Math.min(allTimesheetIds.length, nextCursor + chunkSize));
+
+  const fetchOutboxRowsForTimesheets = async (ids) => {
+    const list = Array.isArray(ids) ? ids.filter((value) => uuidRe.test(trimStr(value))) : [];
+    if (!list.length) return [];
+    const rowsOut = [];
+    for (let i = 0; i < list.length; i += 150) {
+      const part = list.slice(i, i + 150);
+      const url = `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox` +
+        `?timesheet_id=in.(${part.map(enc).join(',')})` +
+        `&select=timesheet_id,reason,attempt_count,next_attempt_at,last_error,created_at`;
+      const { rows } = await sbFetch(env, url);
+      for (const row of rows || []) rowsOut.push(row);
+    }
+    return rowsOut;
+  };
+
+  const groupOutboxRowsByReason = (rows) => {
+    const byReason = new Map();
+    for (const row of rows || []) {
+      const timesheetId = trimStr(row?.timesheet_id);
+      const reason = trimStr(row?.reason);
+      if (!uuidRe.test(timesheetId) || !reason) continue;
+      if (!byReason.has(reason)) byReason.set(reason, new Set());
+      byReason.get(reason).add(timesheetId);
+    }
+    return byReason;
+  };
+
+  const priorityBumpExistingOutboxRows = async (rows) => {
+    const byReason = groupOutboxRowsByReason(rows);
+    let bumped = 0;
+    for (const [reason, set] of byReason.entries()) {
+      const ids = Array.from(set);
+      if (!ids.length) continue;
+      try {
+        const res = await sbRpc(env, 'enqueue_ts_financials_priority', {
+          _timesheet_ids: ids,
+          _reason: reason
+        });
+        let count = 0;
+        if (typeof res === 'number') count = res;
+        else if (typeof res === 'string') {
+          const n = Number(res);
+          count = Number.isFinite(n) ? n : 0;
+        } else if (Array.isArray(res) && res[0] != null) {
+          const raw = res[0]?.enqueue_ts_financials_priority ?? res[0]?.count ?? res[0]?.row_count ?? null;
+          const n = Number(raw);
+          count = Number.isFinite(n) ? n : 0;
+        }
+        bumped += count > 0 ? count : ids.length;
+      } catch (e) {
+        try {
+          console.warn('[tsfinBestEffortMakeReadyForDraft] enqueue_ts_financials_priority failed (non-fatal)', { reason, err: String(e?.message || e || '') });
+        } catch {}
+      }
+    }
+    return bumped;
+  };
+
+  const summarizePendingRows = (rows) => {
+    const ids = Array.from(new Set((rows || [])
+      .map((row) => trimStr(row?.timesheet_id))
+      .filter((value) => uuidRe.test(value)))).sort((a, b) => a.localeCompare(b));
+    const lastErrorByTimesheetId = {};
+    for (const row of rows || []) {
+      const timesheetId = trimStr(row?.timesheet_id);
+      if (!uuidRe.test(timesheetId)) continue;
+      const lastError = trimStr(row?.last_error);
+      if (lastError && !Object.prototype.hasOwnProperty.call(lastErrorByTimesheetId, timesheetId)) lastErrorByTimesheetId[timesheetId] = lastError;
+    }
+    return { ids, lastErrorByTimesheetId };
+  };
+
+  if (!selectedTimesheetIds.length) {
+    return {
+      attempted: 0,
+      made_ready: 0,
+      still_pending: 0,
+      failed: 0,
+      remaining: 0,
+      operation_id: operationId || null,
+      lock_owner: lockOwner || null,
+      chunk_size: chunkSize,
+      cursor,
+      next_cursor: null,
+      selected_timesheet_ids: [],
+      deferred_timesheet_ids: [],
+      excludedTimesheetIds: [],
+      outboxRowsFinal: [],
+      stats: {
+        capped: false,
+        input_count: allTimesheetIds.length,
+        used_count: 0,
+        loops: 0,
+        maxLoops: 1,
+        drainLimit,
+        maxMs: 0,
+        pending_before_total: 0,
+        pending_after_total: 0,
+        processed_now: 0,
+        ran: 0,
+        picked: 0,
+        ok: 0,
+        fail: 0,
+        progress_made: false
+      },
+      lastErrorByTimesheetId: {}
+    };
+  }
+
+  let outboxRowsBefore = [];
+  try {
+    outboxRowsBefore = await fetchOutboxRowsForTimesheets(selectedTimesheetIds);
+  } catch (e) {
+    try { console.warn('[tsfinBestEffortMakeReadyForDraft] initial outbox fetch failed (non-fatal)', { err: String(e?.message || e || '') }); } catch {}
+    outboxRowsBefore = [];
+  }
+
+  const pendingBefore = summarizePendingRows(outboxRowsBefore);
+  if (!outboxRowsBefore.length) {
+    return {
+      attempted: selectedTimesheetIds.length,
+      made_ready: 0,
+      still_pending: 0,
+      failed: 0,
+      remaining: Math.max(0, allTimesheetIds.length - (cursor + selectedTimesheetIds.length)),
+      operation_id: operationId || null,
+      lock_owner: lockOwner || null,
+      chunk_size: chunkSize,
+      cursor,
+      next_cursor: nextCursor,
+      selected_timesheet_ids: selectedTimesheetIds,
+      deferred_timesheet_ids: deferredTimesheetIds,
+      excludedTimesheetIds: [],
+      outboxRowsFinal: [],
+      stats: {
+        capped: nextCursor !== null,
+        input_count: allTimesheetIds.length,
+        used_count: selectedTimesheetIds.length,
+        loops: 0,
+        maxLoops: 1,
+        drainLimit,
+        maxMs: 0,
+        pending_before_total: 0,
+        pending_after_total: 0,
+        processed_now: 0,
+        ran: 0,
+        picked: 0,
+        ok: 0,
+        fail: 0,
+        progress_made: selectedTimesheetIds.length > 0
+      },
+      lastErrorByTimesheetId: {}
+    };
+  }
+
+  await priorityBumpExistingOutboxRows(outboxRowsBefore);
+
+  const activeTimesheetIds = Array.from(new Set(outboxRowsBefore
+    .map((row) => trimStr(row?.timesheet_id))
+    .filter((value) => uuidRe.test(value))));
+
+  let workerResult = null;
+  let ran = 0;
+  let picked = 0;
+  let ok = 0;
+  let fail = 0;
+
+  if (activeTimesheetIds.length) {
+    try {
+      workerResult = await runTsfinWorkerOnce(env, {
+        limit: Math.max(1, Math.min(drainLimit, activeTimesheetIds.length)),
+        onlyTimesheetIds: activeTimesheetIds,
+        operationId: operationId || undefined,
+        lockOwner: lockOwner || undefined
+      });
+      ran = 1;
+      picked = Number(workerResult?.picked || 0);
+      ok = Number(workerResult?.ok || 0);
+      fail = Number(workerResult?.fail || 0);
+    } catch (e) {
+      fail = activeTimesheetIds.length;
+      try { console.warn('[tsfinBestEffortMakeReadyForDraft] runTsfinWorkerOnce failed (non-fatal)', { err: String(e?.message || e || '') }); } catch {}
+    }
+  }
+
+  let outboxRowsAfter = [];
+  try {
+    outboxRowsAfter = await fetchOutboxRowsForTimesheets(selectedTimesheetIds);
+  } catch {
+    outboxRowsAfter = [];
+  }
+
+  const pendingAfter = summarizePendingRows(outboxRowsAfter);
+  const madeReady = Math.max(0, pendingBefore.ids.length - pendingAfter.ids.length);
+  const stillPending = pendingAfter.ids.length;
+  const remainingDeferred = Math.max(0, allTimesheetIds.length - (cursor + selectedTimesheetIds.length));
+  const remaining = stillPending + remainingDeferred;
+
+  return {
+    attempted: activeTimesheetIds.length,
+    made_ready: madeReady,
+    still_pending: stillPending,
+    failed: Math.max(0, Number.isFinite(fail) ? fail : 0),
+    remaining,
+    operation_id: operationId || null,
+    lock_owner: lockOwner || null,
+    chunk_size: chunkSize,
+    cursor,
+    next_cursor: nextCursor,
+    selected_timesheet_ids: selectedTimesheetIds,
+    deferred_timesheet_ids: deferredTimesheetIds,
+    excludedTimesheetIds: pendingAfter.ids,
+    outboxRowsFinal: outboxRowsAfter,
+    stats: {
+      capped: nextCursor !== null,
+      input_count: allTimesheetIds.length,
+      used_count: selectedTimesheetIds.length,
+      loops: ran,
+      maxLoops: 1,
+      drainLimit,
+      maxMs: 0,
+      pending_before_total: pendingBefore.ids.length,
+      pending_after_total: pendingAfter.ids.length,
+      processed_now: madeReady,
+      ran,
+      picked: Number.isFinite(picked) ? picked : 0,
+      ok: Number.isFinite(ok) ? ok : 0,
+      fail: Number.isFinite(fail) ? fail : 0,
+      progress_made: madeReady > 0 || selectedTimesheetIds.length > 0
+    },
+    lastErrorByTimesheetId: pendingAfter.lastErrorByTimesheetId
+  };
+}
+
+
 
 
 
