@@ -47560,7 +47560,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows(p_session_id uuid, p_selected_preview_row_ids jsonb, p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -47594,6 +47593,9 @@ DECLARE
   v_requested_section text := 'canonical_preview_lines';
   v_resolved_selection_section text := 'canonical_preview_lines';
   v_audit_after_json jsonb := '{}'::jsonb;
+  v_existing_selection_intent_mode text := '';
+  v_next_selection_intent_mode text := '';
+  v_next_server_selected_ids_provided boolean := false;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -47624,6 +47626,14 @@ BEGIN
   IF UPPER(BTRIM(COALESCE(v_session_row.status, ''))) <> 'OPEN'
      OR v_session_row.discarded_at_utc IS NOT NULL THEN
     RAISE EXCEPTION 'banking_pay_workbench_session % is not OPEN', p_session_id;
+  END IF;
+
+  v_existing_selection_intent_mode := UPPER(BTRIM(COALESCE(
+    v_session_row.progress_json#>>'{selection_intent_v1,canonical_preview_lines,mode}',
+    ''
+  )));
+  IF v_existing_selection_intent_mode NOT IN ('IMPLICIT_ALL', 'EXPLICIT_INCLUDE') THEN
+    v_existing_selection_intent_mode := '';
   END IF;
 
   IF v_input_type = 'array' THEN
@@ -47776,6 +47786,10 @@ BEGIN
     v_selection_mode := CASE
       WHEN v_global_selection_action = 'SELECT_ALL_SECTION' THEN 'SECTION_SELECT_ALL_CONTRACT_GUARDED'
       ELSE 'SECTION_CLEAR_CONTRACT_GUARDED'
+    END;
+    v_next_selection_intent_mode := CASE
+      WHEN v_global_selection_action = 'SELECT_ALL_SECTION' THEN 'IMPLICIT_ALL'
+      ELSE 'EXPLICIT_INCLUDE'
     END;
 
     IF v_global_selection_action = 'SELECT_ALL_SECTION' THEN
@@ -48087,7 +48101,21 @@ BEGIN
             'last_selection_action', v_global_selection_action,
             'last_selection_section', v_resolved_selection_section,
             'last_selection_forced_synthetic_cleanup_count', COALESCE(v_forced_synthetic_cleanup_count, 0),
-            'last_selection_replace_omitted_count', COALESCE(v_replace_omitted_count, 0)
+            'last_selection_replace_omitted_count', COALESCE(v_replace_omitted_count, 0),
+            'selection_intent_v1', COALESCE(session_row.progress_json->'selection_intent_v1', '{}'::jsonb)
+              || jsonb_build_object(
+                'canonical_preview_lines', jsonb_build_object(
+                  'mode', COALESCE(v_next_selection_intent_mode, 'IMPLICIT_ALL'),
+                  'section', 'canonical_preview_lines',
+                  'identity', 'preview_row_id_with_session_section_candidate_row_key_conflict_identity',
+                  'updated_at_utc', v_now::text,
+                  'updated_by_user_id', p_actor_user_id::text,
+                  'source_selection_mode', v_selection_mode,
+                  'source_selection_action', v_global_selection_action,
+                  'server_selected_preview_row_ids_provided', true,
+                  'selected_row_count', COALESCE(v_current_selected_count, 0)
+                )
+              )
           ),
         progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
         progress_updated_at_utc = v_now,
@@ -48099,6 +48127,7 @@ BEGIN
       'selection_mode', v_selection_mode,
       'selection_action', v_global_selection_action,
       'selection_section', v_resolved_selection_section,
+      'selection_intent_mode', COALESCE(v_next_selection_intent_mode, 'IMPLICIT_ALL'),
       'selected_preview_row_ids', COALESCE(v_selected_ids, '[]'::jsonb),
       'deselected_preview_row_ids', COALESCE(v_deselected_ids, '[]'::jsonb),
       'updated_preview_row_count', COALESCE(v_updated_count, 0),
@@ -48126,6 +48155,7 @@ BEGIN
       'session_version', v_session_row.version,
       'selection_action', v_global_selection_action,
       'selection_section', v_resolved_selection_section,
+      'selection_intent_mode', COALESCE(v_next_selection_intent_mode, 'IMPLICIT_ALL'),
       'selected_preview_row_ids', COALESCE(v_selected_ids, '[]'::jsonb),
       'deselected_preview_row_ids', COALESCE(v_deselected_ids, '[]'::jsonb),
       'selected_preview_row_ids_provided', true,
@@ -48651,12 +48681,21 @@ BEGIN
     AND current_selected.row_key NOT LIKE 'timesheet_snapshot:%'
     AND current_selected.is_synthetic_resolved_total IS NOT TRUE;
 
-  v_server_selected_ids := CASE WHEN v_replace_mode THEN COALESCE(v_selected_ids, '[]'::jsonb) ELSE '[]'::jsonb END;
+  v_next_selection_intent_mode := CASE
+    WHEN v_replace_mode THEN 'EXPLICIT_INCLUDE'
+    WHEN v_existing_selection_intent_mode = 'EXPLICIT_INCLUDE' THEN 'EXPLICIT_INCLUDE'
+    ELSE 'IMPLICIT_ALL'
+  END;
+  v_next_server_selected_ids_provided := (v_next_selection_intent_mode = 'EXPLICIT_INCLUDE');
+  v_server_selected_ids := CASE
+    WHEN v_next_server_selected_ids_provided THEN COALESCE(v_selected_ids, '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
 
   UPDATE public.banking_pay_workbench_sessions AS session_row
   SET selected_row_count = COALESCE(v_current_selected_count, 0),
       server_selected_preview_row_ids = COALESCE(v_server_selected_ids, '[]'::jsonb),
-      server_selected_preview_row_ids_provided = COALESCE(v_replace_mode, false),
+      server_selected_preview_row_ids_provided = COALESCE(v_next_server_selected_ids_provided, false),
       progress_json = COALESCE(session_row.progress_json, '{}'::jsonb)
         || jsonb_build_object(
           'last_selection_update_at_utc', v_now::text,
@@ -48665,7 +48704,21 @@ BEGIN
           'last_selection_rejected_non_draftable_count', COALESCE(v_rejected_non_draftable_count, 0),
           'last_selection_mode', v_selection_mode,
           'last_selection_forced_synthetic_cleanup_count', COALESCE(v_forced_synthetic_cleanup_count, 0),
-          'last_selection_replace_omitted_count', COALESCE(v_replace_omitted_count, 0)
+          'last_selection_replace_omitted_count', COALESCE(v_replace_omitted_count, 0),
+          'selection_intent_v1', COALESCE(session_row.progress_json->'selection_intent_v1', '{}'::jsonb)
+            || jsonb_build_object(
+              'canonical_preview_lines', jsonb_build_object(
+                'mode', COALESCE(v_next_selection_intent_mode, 'IMPLICIT_ALL'),
+                'section', 'canonical_preview_lines',
+                'identity', 'preview_row_id_with_session_section_candidate_row_key_conflict_identity',
+                'updated_at_utc', v_now::text,
+                'updated_by_user_id', p_actor_user_id::text,
+                'source_selection_mode', v_selection_mode,
+                'source_selection_action', CASE WHEN v_replace_mode THEN 'REPLACE_SELECTED_ROWS' ELSE 'ROW_PATCH' END,
+                'server_selected_preview_row_ids_provided', COALESCE(v_next_server_selected_ids_provided, false),
+                'selected_row_count', COALESCE(v_current_selected_count, 0)
+              )
+            )
         ),
       progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
       progress_updated_at_utc = v_now,
@@ -48684,7 +48737,8 @@ BEGIN
     'deselected_delta', COALESCE(v_deselected_delta, 0),
     'forced_synthetic_cleanup_count', COALESCE(v_forced_synthetic_cleanup_count, 0),
     'replace_omitted_count', COALESCE(v_replace_omitted_count, 0),
-    'server_selected_preview_row_ids_provided', COALESCE(v_replace_mode, false),
+    'selection_intent_mode', COALESCE(v_next_selection_intent_mode, 'IMPLICIT_ALL'),
+    'server_selected_preview_row_ids_provided', COALESCE(v_next_server_selected_ids_provided, false),
     'updated_at_utc', v_now
   );
 
@@ -48705,9 +48759,9 @@ BEGIN
     'session_version', v_session_row.version,
     'selected_preview_row_ids', COALESCE(v_selected_ids, '[]'::jsonb),
     'deselected_preview_row_ids', COALESCE(v_deselected_ids, '[]'::jsonb),
-    'selected_preview_row_ids_provided', COALESCE(v_replace_mode, false),
+    'selected_preview_row_ids_provided', COALESCE(v_next_server_selected_ids_provided, false),
     'server_selected_preview_row_ids', COALESCE(v_server_selected_ids, '[]'::jsonb),
-    'server_selected_preview_row_ids_provided', COALESCE(v_replace_mode, false),
+    'server_selected_preview_row_ids_provided', COALESCE(v_next_server_selected_ids_provided, false),
     'selected_delta', COALESCE(v_selected_delta, 0),
     'deselected_delta', COALESCE(v_deselected_delta, 0),
     'updated_preview_row_count', COALESCE(v_updated_count, 0),
@@ -48717,11 +48771,11 @@ BEGIN
     'forced_synthetic_cleanup_count', COALESCE(v_forced_synthetic_cleanup_count, 0),
     'replace_omitted_count', COALESCE(v_replace_omitted_count, 0),
     'selected_row_count', COALESCE(v_current_selected_count, 0),
-    'selection_mode', v_selection_mode
+    'selection_mode', v_selection_mode,
+    'selection_intent_mode', COALESCE(v_next_selection_intent_mode, 'IMPLICIT_ALL')
   );
 END;
 $function$;
-
 
 
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid);
@@ -63279,6 +63333,8 @@ DECLARE
   v_resolved_current_selection_ids jsonb := '[]'::jsonb;
   v_resolved_selection_match_count integer := 0;
   v_resolved_selection_distinct_count integer := 0;
+  v_active_workbench_job_count integer := 0;
+  v_active_workbench_job_sample jsonb := '[]'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_PROGRESS');
 
@@ -63326,6 +63382,68 @@ BEGIN
 
   IF UPPER(BTRIM(COALESCE(v_session_row.status, ''))) <> 'OPEN' OR v_session_row.discarded_at_utc IS NOT NULL THEN
     RAISE EXCEPTION 'banking_pay_workbench_session % is not OPEN', p_session_id;
+  END IF;
+
+  IF v_session_row.replacement_session_id IS NOT NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'WORKBENCH_SESSION_REPLACED',
+      'message', 'This payment workbench has been replaced. Refresh the Banking Pay workbench and create the draft from the current session.',
+      'session_id', p_session_id::text,
+      'replacement_session_id', v_session_row.replacement_session_id::text
+    )::text;
+  END IF;
+
+  WITH active_workbench_jobs AS (
+    SELECT job_row.id,
+           job_row.job_type,
+           job_row.status,
+           job_row.candidate_id,
+           CASE
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH') THEN 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_SESSION_CLONE_REBASE', 'SESSION_CLONE_REBASE', 'CLONE_REBASE') THEN 'WORKBENCH_SESSION_CLONE_REBASE'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_SOURCE_BUILD', 'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK', 'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE', 'CANDIDATE_SOURCE_BUILD', 'CANDIDATE_SOURCE_BUILD_CHUNK', 'SOURCE_BUILD', 'SOURCE_BUILD_PAGE') THEN 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE') THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH') THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK') THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK') THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+             ELSE UPPER(BTRIM(COALESCE(job_row.job_type, '')))
+           END AS canonical_job_type
+    FROM public.banking_pay_workbench_jobs AS job_row
+    WHERE job_row.session_id = p_session_id
+      AND UPPER(BTRIM(COALESCE(job_row.status, ''))) IN ('QUEUED', 'RUNNING')
+  ), blocking_jobs AS (
+    SELECT active_workbench_jobs.*
+    FROM active_workbench_jobs
+    WHERE active_workbench_jobs.canonical_job_type IN (
+      'WORKBENCH_SESSION_SCOPE_SEED',
+      'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+      'WORKBENCH_CANDIDATE_DELTA_REFRESH',
+      'WORKBENCH_SESSION_CLONE_REBASE',
+      'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+      'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+      'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+    )
+  )
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(jsonb_build_object(
+           'job_id', blocking_jobs.id::text,
+           'job_type', blocking_jobs.job_type,
+           'canonical_job_type', blocking_jobs.canonical_job_type,
+           'status', blocking_jobs.status,
+           'candidate_id', CASE WHEN blocking_jobs.candidate_id IS NULL THEN NULL ELSE blocking_jobs.candidate_id::text END
+         ) ORDER BY blocking_jobs.canonical_job_type, blocking_jobs.id) FILTER (WHERE blocking_jobs.id IS NOT NULL), '[]'::jsonb)
+  INTO v_active_workbench_job_count,
+       v_active_workbench_job_sample
+  FROM blocking_jobs;
+
+  IF COALESCE(v_active_workbench_job_count, 0) > 0 THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'WORKBENCH_REFRESH_IN_PROGRESS',
+      'message', 'Banking Pay is refreshing this workbench. Wait for the refresh to finish, review the selection, and then create the draft.',
+      'session_id', p_session_id::text,
+      'active_workbench_job_count', COALESCE(v_active_workbench_job_count, 0),
+      'active_workbench_jobs', COALESCE(v_active_workbench_job_sample, '[]'::jsonb)
+    )::text;
   END IF;
 
   IF v_operation_mode IS NOT TRUE THEN
@@ -173861,8 +173979,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -173893,6 +174009,10 @@ DECLARE
   v_scope_ready_delta integer := 0;
   v_scope_failed_delta integer := 0;
   v_scope_error_candidate_count integer := 0;
+  v_selection_intent_mode text := '';
+  v_explicit_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_reconciled_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_reconciled_selected_row_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -173954,6 +174074,22 @@ BEGIN
               'status', v_session_row.status
             )::text;
   END IF;
+
+  v_selection_intent_mode := UPPER(BTRIM(COALESCE(
+    v_session_row.progress_json#>>'{selection_intent_v1,canonical_preview_lines,mode}',
+    ''
+  )));
+  IF v_selection_intent_mode NOT IN ('IMPLICIT_ALL', 'EXPLICIT_INCLUDE') THEN
+    v_selection_intent_mode := CASE
+      WHEN COALESCE(v_session_row.server_selected_preview_row_ids_provided, false) THEN 'EXPLICIT_INCLUDE'
+      ELSE ''
+    END;
+  END IF;
+  v_explicit_selected_preview_row_ids := CASE
+    WHEN jsonb_typeof(COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)) = 'array'
+      THEN COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
 
   IF p_candidate_id IS NOT NULL THEN
     SELECT COALESCE(scope_check.scope_ordinal, 0)::bigint
@@ -174489,25 +174625,47 @@ BEGIN
       END AS economic_outstanding_payload_json
     FROM selected_rows_base
   )
-  SELECT selected_rows.*,
+  SELECT selection_resolved.*,
          CASE
-           WHEN selected_rows.target_selected THEN 'SELECTED'
+           WHEN selection_resolved.effective_selected IS TRUE THEN 'SELECTED'
+           WHEN selection_resolved.target_selected IS TRUE THEN 'UNSELECTED'
            ELSE 'NOT_SELECTABLE'
-         END AS target_selection_state,
-         existing_preview.id AS existing_preview_row_id
-  FROM selected_rows
-  LEFT JOIN public.banking_pay_workbench_preview_rows AS existing_preview
-    ON existing_preview.session_id = p_session_id
-   AND existing_preview.section = selected_rows.target_section
-   AND existing_preview.candidate_id = selected_rows.candidate_id
-   AND existing_preview.row_key = selected_rows.line_key;
+         END AS effective_selection_state,
+         CASE
+           WHEN selection_resolved.target_selected THEN 'SELECTED'
+           ELSE 'NOT_SELECTABLE'
+         END AS target_selection_state
+  FROM (
+    SELECT selected_rows.*,
+           existing_preview.id AS existing_preview_row_id,
+           COALESCE(existing_preview.selected, false) AS existing_preview_selected,
+           UPPER(BTRIM(COALESCE(existing_preview.selection_state, ''))) AS existing_preview_selection_state,
+           CASE
+             WHEN selected_rows.target_selected IS NOT TRUE THEN false
+             WHEN existing_preview.id IS NOT NULL
+              AND UPPER(BTRIM(COALESCE(existing_preview.selection_state, ''))) IN ('SELECTED', 'UNSELECTED')
+              THEN COALESCE(existing_preview.selected, false)
+             WHEN COALESCE(v_selection_intent_mode, '') = 'EXPLICIT_INCLUDE' THEN EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements_text(COALESCE(v_explicit_selected_preview_row_ids, '[]'::jsonb)) AS explicit_id(value)
+               WHERE BTRIM(explicit_id.value) = existing_preview.id::text
+             )
+             ELSE true
+           END AS effective_selected
+    FROM selected_rows
+    LEFT JOIN public.banking_pay_workbench_preview_rows AS existing_preview
+      ON existing_preview.session_id = p_session_id
+     AND existing_preview.section = selected_rows.target_section
+     AND existing_preview.candidate_id = selected_rows.candidate_id
+     AND existing_preview.row_key = selected_rows.line_key
+  ) AS selection_resolved;
 
   SELECT COUNT(*)::integer
   INTO v_raw_count
   FROM pg_temp._tmp_pay_wb_preview_materialise AS materialise_rows;
 
   SELECT COUNT(*)::integer,
-         COUNT(*) FILTER (WHERE materialise_rows.target_selected)::integer
+         COUNT(*) FILTER (WHERE materialise_rows.effective_selected)::integer
   INTO v_new_preview_row_count, v_new_selected_row_count
   FROM pg_temp._tmp_pay_wb_preview_materialise AS materialise_rows
   WHERE materialise_rows.page_ordinal <= v_limit
@@ -174793,14 +174951,14 @@ BEGIN
           'scope_ordinal', selected_rows.scope_ordinal,
           'stable_row_ordinal', selected_rows.stable_row_ordinal,
           'section', selected_rows.target_section,
-          'selected', selected_rows.target_selected,
-          'selection_state', selected_rows.target_selection_state
+          'selected', selected_rows.effective_selected,
+          'selection_state', selected_rows.effective_selection_state
         ),
       selected_rows.timesheet_id,
       NULLIF(BTRIM(COALESCE(selected_rows.result_row_json#>>'{economic_key,key_type}', '')), ''),
       NULLIF(BTRIM(COALESCE(selected_rows.result_row_json#>>'{economic_key,key_value}', '')), ''),
-      selected_rows.target_selected,
-      selected_rows.target_selection_state,
+      selected_rows.effective_selected,
+      selected_rows.effective_selection_state,
       'READY',
       COALESCE(v_session_row.version, 1),
       v_now,
@@ -174813,8 +174971,8 @@ BEGIN
         timesheet_id = EXCLUDED.timesheet_id,
         key_type = EXCLUDED.key_type,
         key_value = EXCLUDED.key_value,
-        selected = EXCLUDED.selected,
-        selection_state = EXCLUDED.selection_state,
+        selected = COALESCE(EXCLUDED.selected, false),
+        selection_state = COALESCE(NULLIF(BTRIM(EXCLUDED.selection_state), ''), 'NOT_SELECTABLE'),
         status = EXCLUDED.status,
         session_version = EXCLUDED.session_version,
         updated_at_utc = v_now
@@ -175242,6 +175400,40 @@ BEGIN
       updated_at_utc = v_now
   WHERE session_row.id = p_session_id;
 
+  PERFORM public.pay_workbench_session_recompute_progress_counters(
+    p_session_id,
+    true,
+    'PREVIEW_ROWS_MATERIALISE_SELECTION_RECONCILE',
+    false
+  );
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(current_selected_preview_row.id::text) ORDER BY current_selected_preview_row.row_ordinal, current_selected_preview_row.id), '[]'::jsonb),
+         COUNT(*)::integer
+  INTO v_reconciled_selected_preview_row_ids,
+       v_reconciled_selected_row_count
+  FROM public.banking_pay_workbench_preview_rows AS current_selected_preview_row
+  WHERE current_selected_preview_row.session_id = p_session_id
+    AND current_selected_preview_row.session_version = COALESCE(v_session_row.version, 1)
+    AND lower(COALESCE(NULLIF(BTRIM(current_selected_preview_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+    AND UPPER(BTRIM(COALESCE(current_selected_preview_row.status, ''))) = 'READY'
+    AND COALESCE(current_selected_preview_row.selected, false) = true
+    AND UPPER(BTRIM(COALESCE(current_selected_preview_row.selection_state, ''))) = 'SELECTED';
+
+  UPDATE public.banking_pay_workbench_sessions AS selection_summary_session
+  SET selected_row_count = COALESCE(v_reconciled_selected_row_count, 0),
+      server_selected_preview_row_ids = CASE
+        WHEN COALESCE(v_selection_intent_mode, '') = 'EXPLICIT_INCLUDE'
+          OR COALESCE(selection_summary_session.server_selected_preview_row_ids_provided, false) IS TRUE
+          THEN COALESCE(v_reconciled_selected_preview_row_ids, '[]'::jsonb)
+        ELSE selection_summary_session.server_selected_preview_row_ids
+      END,
+      server_selected_preview_row_ids_provided = CASE
+        WHEN COALESCE(v_selection_intent_mode, '') = 'EXPLICIT_INCLUDE' THEN true
+        ELSE COALESCE(selection_summary_session.server_selected_preview_row_ids_provided, false)
+      END,
+      updated_at_utc = v_now
+  WHERE selection_summary_session.id = p_session_id;
+
   RETURN jsonb_build_object(
     'ok', true,
     'session_id', p_session_id::text,
@@ -175273,6 +175465,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_finance_case_dirty()
@@ -176269,6 +176462,7 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_scope_seed(p_operation_id uuid, p_workbench_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb DEFAULT NULL::jsonb, p_pay_channel_scope text DEFAULT NULL::text, p_same_week_paye_override_json jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(candidate_scope_count integer, selected_row_count integer, timesheet_count integer, finance_case_count integer, pay_channel_count integer)
  LANGUAGE plpgsql
@@ -176294,6 +176488,8 @@ DECLARE
   v_resolved_current_selection_ids jsonb := '[]'::jsonb;
   v_resolved_selection_match_count integer := 0;
   v_resolved_selection_distinct_count integer := 0;
+  v_active_workbench_job_count integer := 0;
+  v_active_workbench_job_sample jsonb := '[]'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -176367,6 +176563,68 @@ BEGIN
 
   IF UPPER(BTRIM(COALESCE(v_session.status, ''))) <> 'OPEN' OR v_session.discarded_at_utc IS NOT NULL THEN
     RAISE EXCEPTION 'pay_workbench_prepare_draft_scope_seed workbench session % is not OPEN', p_workbench_session_id;
+  END IF;
+
+  IF v_session.replacement_session_id IS NOT NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'WORKBENCH_SESSION_REPLACED',
+      'message', 'This payment workbench has been replaced. Refresh the Banking Pay workbench and create the draft from the current session.',
+      'session_id', p_workbench_session_id::text,
+      'replacement_session_id', v_session.replacement_session_id::text
+    )::text;
+  END IF;
+
+  WITH active_workbench_jobs AS (
+    SELECT job_row.id,
+           job_row.job_type,
+           job_row.status,
+           job_row.candidate_id,
+           CASE
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH') THEN 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_SESSION_CLONE_REBASE', 'SESSION_CLONE_REBASE', 'CLONE_REBASE') THEN 'WORKBENCH_SESSION_CLONE_REBASE'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_SOURCE_BUILD', 'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK', 'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE', 'CANDIDATE_SOURCE_BUILD', 'CANDIDATE_SOURCE_BUILD_CHUNK', 'SOURCE_BUILD', 'SOURCE_BUILD_PAGE') THEN 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE') THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH') THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK') THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+             WHEN UPPER(BTRIM(COALESCE(job_row.job_type, ''))) IN ('WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK') THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+             ELSE UPPER(BTRIM(COALESCE(job_row.job_type, '')))
+           END AS canonical_job_type
+    FROM public.banking_pay_workbench_jobs AS job_row
+    WHERE job_row.session_id = p_workbench_session_id
+      AND UPPER(BTRIM(COALESCE(job_row.status, ''))) IN ('QUEUED', 'RUNNING')
+  ), blocking_jobs AS (
+    SELECT active_workbench_jobs.*
+    FROM active_workbench_jobs
+    WHERE active_workbench_jobs.canonical_job_type IN (
+      'WORKBENCH_SESSION_SCOPE_SEED',
+      'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+      'WORKBENCH_CANDIDATE_DELTA_REFRESH',
+      'WORKBENCH_SESSION_CLONE_REBASE',
+      'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+      'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+      'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+    )
+  )
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(jsonb_build_object(
+           'job_id', blocking_jobs.id::text,
+           'job_type', blocking_jobs.job_type,
+           'canonical_job_type', blocking_jobs.canonical_job_type,
+           'status', blocking_jobs.status,
+           'candidate_id', CASE WHEN blocking_jobs.candidate_id IS NULL THEN NULL ELSE blocking_jobs.candidate_id::text END
+         ) ORDER BY blocking_jobs.canonical_job_type, blocking_jobs.id) FILTER (WHERE blocking_jobs.id IS NOT NULL), '[]'::jsonb)
+  INTO v_active_workbench_job_count,
+       v_active_workbench_job_sample
+  FROM blocking_jobs;
+
+  IF COALESCE(v_active_workbench_job_count, 0) > 0 THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'WORKBENCH_REFRESH_IN_PROGRESS',
+      'message', 'Banking Pay is refreshing this workbench. Wait for the refresh to finish, review the selection, and then create the draft.',
+      'session_id', p_workbench_session_id::text,
+      'active_workbench_job_count', COALESCE(v_active_workbench_job_count, 0),
+      'active_workbench_jobs', COALESCE(v_active_workbench_job_sample, '[]'::jsonb)
+    )::text;
   END IF;
 
   UPDATE public.banking_pay_operations AS operation_update
@@ -177244,7 +177502,6 @@ BEGIN
     COALESCE(v_pay_channel_count, 0);
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_batch_freshness_scope_seed(
@@ -202955,6 +203212,8 @@ BEGIN
 END;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_delta_write_compatible_rows_v1(p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -202996,6 +203255,10 @@ DECLARE
   v_shadow_compare_passed boolean := false;
   v_run_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
   v_run_linked_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_selection_intent_mode text := '';
+  v_explicit_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_reconciled_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_reconciled_selected_row_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -203086,6 +203349,33 @@ BEGIN
       'rows_superseded', 0
     );
   END IF;
+
+  SELECT UPPER(BTRIM(COALESCE(
+           session_row.progress_json#>>'{selection_intent_v1,canonical_preview_lines,mode}',
+           ''
+         ))),
+         CASE
+           WHEN jsonb_typeof(COALESCE(session_row.server_selected_preview_row_ids, '[]'::jsonb)) = 'array'
+             THEN COALESCE(session_row.server_selected_preview_row_ids, '[]'::jsonb)
+           ELSE '[]'::jsonb
+         END
+  INTO v_selection_intent_mode,
+       v_explicit_selected_preview_row_ids
+  FROM public.banking_pay_workbench_sessions AS session_row
+  WHERE session_row.id = p_session_id
+  LIMIT 1;
+
+  IF v_selection_intent_mode NOT IN ('IMPLICIT_ALL', 'EXPLICIT_INCLUDE') THEN
+    SELECT CASE
+             WHEN COALESCE(session_row.server_selected_preview_row_ids_provided, false) THEN 'EXPLICIT_INCLUDE'
+             ELSE ''
+           END
+    INTO v_selection_intent_mode
+    FROM public.banking_pay_workbench_sessions AS session_row
+    WHERE session_row.id = p_session_id
+    LIMIT 1;
+  END IF;
+  v_explicit_selected_preview_row_ids := COALESCE(v_explicit_selected_preview_row_ids, '[]'::jsonb);
 
   IF to_regclass('pg_temp._bpay_delta_projection_rows') IS NULL THEN
     RETURN jsonb_build_object(
@@ -203701,6 +203991,8 @@ BEGIN
   SELECT
     projection_rows.*,
     existing_preview.id AS existing_preview_row_id,
+    COALESCE(existing_preview.selected, false) AS existing_preview_selected,
+    UPPER(BTRIM(COALESCE(existing_preview.selection_state, ''))) AS existing_preview_selection_state,
     CASE
       WHEN existing_preview.id IS NULL THEN false
       WHEN existing_preview.selected IS TRUE
@@ -203731,7 +204023,9 @@ BEGIN
 
   ALTER TABLE pg_temp._bpay_delta_preview_upsert_rows
     ADD COLUMN can_publish_ready boolean NOT NULL DEFAULT false,
-    ADD COLUMN can_serve_selected boolean NOT NULL DEFAULT false;
+    ADD COLUMN can_serve_selected boolean NOT NULL DEFAULT false,
+    ADD COLUMN effective_selected boolean NOT NULL DEFAULT false,
+    ADD COLUMN effective_selection_state text NOT NULL DEFAULT 'NOT_SELECTABLE';
 
   UPDATE pg_temp._bpay_delta_preview_upsert_rows AS preview_upsert_update
   SET can_publish_ready = (
@@ -203788,8 +204082,35 @@ BEGIN
     AND preview_upsert_update.session_id = p_session_id
     AND preview_upsert_update.candidate_id = p_candidate_id;
 
-  SELECT COUNT(*) FILTER (WHERE preview_upsert_rows.preserve_selected IS TRUE AND preview_upsert_rows.can_serve_selected IS TRUE)::integer,
-         COUNT(*) FILTER (WHERE preview_upsert_rows.existing_preview_row_id IS NOT NULL AND (preview_upsert_rows.preserve_selected IS NOT TRUE OR preview_upsert_rows.can_serve_selected IS NOT TRUE))::integer
+  UPDATE pg_temp._bpay_delta_preview_upsert_rows AS preview_upsert_update
+  SET effective_selected = CASE
+        WHEN preview_upsert_update.can_serve_selected IS NOT TRUE THEN false
+        WHEN preview_upsert_update.existing_preview_row_id IS NOT NULL
+         AND preview_upsert_update.existing_preview_selection_state IN ('SELECTED', 'UNSELECTED')
+          THEN COALESCE(preview_upsert_update.existing_preview_selected, false)
+        WHEN COALESCE(v_selection_intent_mode, '') = 'EXPLICIT_INCLUDE' THEN EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(COALESCE(v_explicit_selected_preview_row_ids, '[]'::jsonb)) AS explicit_id(value)
+          WHERE BTRIM(explicit_id.value) = preview_upsert_update.existing_preview_row_id::text
+        )
+        ELSE true
+      END
+  WHERE preview_upsert_update.projection_run_id = p_projection_run_id
+    AND preview_upsert_update.session_id = p_session_id
+    AND preview_upsert_update.candidate_id = p_candidate_id;
+
+  UPDATE pg_temp._bpay_delta_preview_upsert_rows AS preview_upsert_update
+  SET effective_selection_state = CASE
+        WHEN preview_upsert_update.can_serve_selected IS NOT TRUE THEN 'NOT_SELECTABLE'
+        WHEN preview_upsert_update.effective_selected IS TRUE THEN 'SELECTED'
+        ELSE 'UNSELECTED'
+      END
+  WHERE preview_upsert_update.projection_run_id = p_projection_run_id
+    AND preview_upsert_update.session_id = p_session_id
+    AND preview_upsert_update.candidate_id = p_candidate_id;
+
+  SELECT COUNT(*) FILTER (WHERE preview_upsert_rows.existing_preview_row_id IS NOT NULL AND preview_upsert_rows.effective_selected IS TRUE)::integer,
+         COUNT(*) FILTER (WHERE preview_upsert_rows.existing_preview_row_id IS NOT NULL AND preview_upsert_rows.effective_selected IS NOT TRUE)::integer
   INTO v_selected_preserved_count,
        v_selected_cleared_count
   FROM pg_temp._bpay_delta_preview_upsert_rows AS preview_upsert_rows;
@@ -203888,16 +204209,8 @@ BEGIN
           'projection_run_id', p_projection_run_id::text,
           'projection_certified', preview_upsert_rows.can_publish_ready,
           'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
-          'selected', CASE
-            WHEN preview_upsert_rows.preserve_selected IS TRUE AND preview_upsert_rows.can_serve_selected IS TRUE THEN true
-            WHEN preview_upsert_rows.existing_preview_row_id IS NULL AND preview_upsert_rows.can_serve_selected IS TRUE THEN true
-            ELSE false
-          END,
-          'selection_state', CASE
-            WHEN preview_upsert_rows.preserve_selected IS TRUE AND preview_upsert_rows.can_serve_selected IS TRUE THEN 'SELECTED'
-            WHEN preview_upsert_rows.existing_preview_row_id IS NULL AND preview_upsert_rows.can_serve_selected IS TRUE THEN 'SELECTED'
-            ELSE 'NOT_SELECTABLE'
-          END,
+          'selected', COALESCE(preview_upsert_rows.effective_selected, false),
+          'selection_state', COALESCE(NULLIF(BTRIM(preview_upsert_rows.effective_selection_state), ''), 'NOT_SELECTABLE'),
           'outstanding_state_json', COALESCE(preview_upsert_rows.outstanding_state_json, '{}'::jsonb),
           'target_selected', LOWER(BTRIM(COALESCE(preview_upsert_rows.preview_row_json->>'target_selected', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
           'target_selection_state', COALESCE(NULLIF(BTRIM(preview_upsert_rows.preview_row_json->>'target_selection_state'), ''), CASE WHEN preview_upsert_rows.can_serve_selected IS TRUE THEN 'SELECTED' ELSE 'NOT_SELECTABLE' END),
@@ -203908,16 +204221,8 @@ BEGIN
       preview_upsert_rows.timesheet_id,
       preview_upsert_rows.key_type,
       preview_upsert_rows.key_value,
-      CASE
-        WHEN preview_upsert_rows.preserve_selected IS TRUE AND preview_upsert_rows.can_serve_selected IS TRUE THEN true
-        WHEN preview_upsert_rows.existing_preview_row_id IS NULL AND preview_upsert_rows.can_serve_selected IS TRUE THEN true
-        ELSE false
-      END,
-      CASE
-        WHEN preview_upsert_rows.preserve_selected IS TRUE AND preview_upsert_rows.can_serve_selected IS TRUE THEN 'SELECTED'
-        WHEN preview_upsert_rows.existing_preview_row_id IS NULL AND preview_upsert_rows.can_serve_selected IS TRUE THEN 'SELECTED'
-        ELSE 'NOT_SELECTABLE'
-      END,
+      COALESCE(preview_upsert_rows.effective_selected, false),
+      COALESCE(NULLIF(BTRIM(preview_upsert_rows.effective_selection_state), ''), 'NOT_SELECTABLE'),
       CASE WHEN preview_upsert_rows.can_publish_ready IS TRUE THEN 'READY' ELSE 'DELTA_PENDING' END,
       preview_upsert_rows.session_version,
       v_now,
@@ -203932,8 +204237,8 @@ BEGIN
         timesheet_id = EXCLUDED.timesheet_id,
         key_type = EXCLUDED.key_type,
         key_value = EXCLUDED.key_value,
-        selected = EXCLUDED.selected,
-        selection_state = EXCLUDED.selection_state,
+        selected = COALESCE(EXCLUDED.selected, false),
+        selection_state = COALESCE(NULLIF(BTRIM(EXCLUDED.selection_state), ''), 'NOT_SELECTABLE'),
         status = EXCLUDED.status,
         session_version = EXCLUDED.session_version,
         updated_at_utc = v_now
@@ -203942,6 +204247,42 @@ BEGIN
   SELECT COUNT(*)::integer
   INTO v_preview_rows_written
   FROM upserted_preview_rows;
+
+  IF COALESCE(v_preview_rows_written, 0) > 0 THEN
+    PERFORM public.pay_workbench_session_recompute_progress_counters(
+      p_session_id,
+      true,
+      'DELTA_WRITE_SELECTION_RECONCILE',
+      false
+    );
+
+    SELECT COALESCE(jsonb_agg(to_jsonb(current_selected_preview_row.id::text) ORDER BY current_selected_preview_row.row_ordinal, current_selected_preview_row.id), '[]'::jsonb),
+           COUNT(*)::integer
+    INTO v_reconciled_selected_preview_row_ids,
+         v_reconciled_selected_row_count
+    FROM public.banking_pay_workbench_preview_rows AS current_selected_preview_row
+    WHERE current_selected_preview_row.session_id = p_session_id
+      AND current_selected_preview_row.session_version = COALESCE(v_current_session_version, 1)
+      AND lower(COALESCE(NULLIF(BTRIM(current_selected_preview_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+      AND UPPER(BTRIM(COALESCE(current_selected_preview_row.status, ''))) = 'READY'
+      AND COALESCE(current_selected_preview_row.selected, false) = true
+      AND UPPER(BTRIM(COALESCE(current_selected_preview_row.selection_state, ''))) = 'SELECTED';
+
+    UPDATE public.banking_pay_workbench_sessions AS selection_summary_session
+    SET selected_row_count = COALESCE(v_reconciled_selected_row_count, 0),
+        server_selected_preview_row_ids = CASE
+          WHEN COALESCE(v_selection_intent_mode, '') = 'EXPLICIT_INCLUDE'
+            OR COALESCE(selection_summary_session.server_selected_preview_row_ids_provided, false) IS TRUE
+            THEN COALESCE(v_reconciled_selected_preview_row_ids, '[]'::jsonb)
+          ELSE selection_summary_session.server_selected_preview_row_ids
+        END,
+        server_selected_preview_row_ids_provided = CASE
+          WHEN COALESCE(v_selection_intent_mode, '') = 'EXPLICIT_INCLUDE' THEN true
+          ELSE COALESCE(selection_summary_session.server_selected_preview_row_ids_provided, false)
+        END,
+        updated_at_utc = v_now
+    WHERE selection_summary_session.id = p_session_id;
+  END IF;
 
   UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
   SET write_phase = 'WRITE_COUNTS',
@@ -203982,6 +204323,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_delta_refresh_chunk(p_session_id uuid, p_candidate_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 25)
