@@ -1350,7 +1350,14 @@ BEGIN
   v_tsfin_snapshot_json := v_tsfin_snapshot_json || jsonb_build_object(
     'timesheet_id', v_current_ts.timesheet_id::text,
     'timesheet_version', v_current_ts.version,
-    'processing_status', COALESCE(NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'processing_status', '')), ''), 'PENDING_AUTH')
+    'processing_status', CASE
+      WHEN COALESCE(NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'processing_status', '')), ''), 'PENDING_AUTH') = 'AWAITING_MANUAL_SIGNATURE'
+       AND v_current_ts.submission_mode = 'MANUAL'::public.submission_mode_enum
+       AND v_current_ts.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+       AND v_current_ts.qr_status IS NULL
+      THEN 'PENDING_AUTH'
+      ELSE COALESCE(NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json ->> 'processing_status', '')), ''), 'PENDING_AUTH')
+    END
   );
 
   IF COALESCE(v_temp_log_enabled, false) THEN
