@@ -62211,7 +62211,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_refresh(p_timesheet_ids uuid[], p_actor_user_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -62224,6 +62223,11 @@ DECLARE
   v_refreshed_count integer := 0;
   v_legacy_state_rows_updated integer := 0;
   v_diag_started_at timestamptz := clock_timestamp();
+  v_summary_refresh_mode text := LOWER(BTRIM(COALESCE(current_setting('cloudtms.summary_refresh_mode', true), '')));
+  v_lifecycle_context text := LOWER(BTRIM(COALESCE(current_setting('cloudtms.lifecycle_mutation_context', true), '')));
+  v_lifecycle_defer_summary_refresh boolean := COALESCE(current_setting('cloudtms.lifecycle_defer_summary_refresh', true), '') = 'on';
+  v_lightweight_result jsonb := '{}'::jsonb;
+  v_lightweight_fallback_used boolean := false;
 BEGIN
   PERFORM public._temp_diag_log(
     'TEMP_SUMMARY_REFRESH_STAGE',
@@ -62233,6 +62237,9 @@ BEGIN
       'function_name', 'pay_timesheet_summary_pay_state_refresh',
       'stage', 'entry',
       'requested_count_raw', COALESCE(CARDINALITY(p_timesheet_ids), 0),
+      'summary_refresh_mode', NULLIF(v_summary_refresh_mode, ''),
+      'mutation_context', NULLIF(v_lifecycle_context, ''),
+      'lifecycle_defer_summary_refresh', v_lifecycle_defer_summary_refresh,
       'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
     )
   );
@@ -62334,6 +62341,61 @@ BEGIN
       'target_count', 0,
       'refreshed_count', 0,
       'legacy_state_rows_updated', 0
+    );
+  END IF;
+
+  IF v_summary_refresh_mode IN ('ordinary_manual_save_lightweight', 'manual_save_lightweight', 'lightweight_manual_save')
+     OR (v_lifecycle_context = 'manual_timesheet_save' AND v_lifecycle_defer_summary_refresh IS TRUE) THEN
+    v_lightweight_result := public.pay_timesheet_summary_pay_state_patch_lightweight(
+      p_timesheet_ids => v_target_ids,
+      p_actor_user_id => p_actor_user_id,
+      p_reason => 'ordinary_manual_save'
+    );
+
+    IF COALESCE((v_lightweight_result ->> 'fallback_required')::boolean, false) IS NOT TRUE THEN
+      PERFORM public._temp_diag_log(
+        'TEMP_SUMMARY_REFRESH_STAGE',
+        'TEMP_SUMMARY_REFRESH',
+        CASE WHEN COALESCE(CARDINALITY(v_target_ids), 0) > 0 THEN v_target_ids[1]::text ELSE NULL::text END,
+        jsonb_build_object(
+          'function_name', 'pay_timesheet_summary_pay_state_refresh',
+          'stage', 'lightweight_patch_done',
+          'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+          'target_count', COALESCE(CARDINALITY(v_target_ids), 0),
+          'summary_refresh_mode', NULLIF(v_summary_refresh_mode, ''),
+          'mutation_context', NULLIF(v_lifecycle_context, ''),
+          'lightweight_result', v_lightweight_result,
+          'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+        )
+      );
+
+      RETURN jsonb_build_object(
+        'ok', true,
+        'mode', 'ordinary_manual_save_lightweight',
+        'requested_count', CARDINALITY(v_requested_ids),
+        'target_count', CARDINALITY(v_target_ids),
+        'refreshed_count', COALESCE((v_lightweight_result ->> 'patched_count')::integer, 0),
+        'legacy_state_rows_updated', COALESCE((v_lightweight_result ->> 'legacy_state_rows_updated')::integer, 0),
+        'lightweight_result', COALESCE(v_lightweight_result, '{}'::jsonb)
+      );
+    END IF;
+
+    v_lightweight_fallback_used := true;
+
+    PERFORM public._temp_diag_log(
+      'TEMP_SUMMARY_REFRESH_STAGE',
+      'TEMP_SUMMARY_REFRESH',
+      CASE WHEN COALESCE(CARDINALITY(v_target_ids), 0) > 0 THEN v_target_ids[1]::text ELSE NULL::text END,
+      jsonb_build_object(
+        'function_name', 'pay_timesheet_summary_pay_state_refresh',
+        'stage', 'lightweight_patch_fallback_to_full_refresh',
+        'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+        'target_count', COALESCE(CARDINALITY(v_target_ids), 0),
+        'summary_refresh_mode', NULLIF(v_summary_refresh_mode, ''),
+        'mutation_context', NULLIF(v_lifecycle_context, ''),
+        'lightweight_result', v_lightweight_result,
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
     );
   END IF;
 
@@ -62887,14 +62949,22 @@ BEGIN
 
   RETURN jsonb_build_object(
     'ok', true,
+    'mode', CASE
+      WHEN v_lightweight_fallback_used IS TRUE THEN 'ordinary_manual_save_full_fallback'
+      ELSE 'full_summary_refresh'
+    END,
     'requested_count', CARDINALITY(v_requested_ids),
     'target_count', CARDINALITY(v_target_ids),
     'refreshed_count', v_refreshed_count,
-    'legacy_state_rows_updated', v_legacy_state_rows_updated
+    'legacy_state_rows_updated', v_legacy_state_rows_updated,
+    'lightweight_fallback_used', v_lightweight_fallback_used,
+    'lightweight_result', CASE
+      WHEN v_lightweight_fallback_used IS TRUE THEN COALESCE(v_lightweight_result, '{}'::jsonb)
+      ELSE NULL::jsonb
+    END
   );
 END;
 $function$;
-
 
 
 
@@ -65504,6 +65574,32 @@ BEGIN
       PERFORM public._temp_diag_log('TEMP_TRIGGER_DIRTY_STAGE', 'TEMP_BANKING_PAY_DIRTY', COALESCE(v_new_timesheet_id::text, v_old_timesheet_id::text), jsonb_build_object('function_name', 'pay_workbench_mark_candidate_dirty', 'stage', 'early_return_ordinary_timesheet_financials_edit_save_no_dirty', 'trigger_table', v_trigger_table, 'trigger_op', TG_OP, 'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at)) * 1000)::numeric, 2)));
       RETURN NEW;
     END IF;
+  END IF;
+
+  IF TG_OP = 'INSERT'
+     AND v_trigger_table = 'timesheets_financials'
+     AND v_explicit_banking_pay_action IS NOT TRUE
+     AND NULLIF(BTRIM(COALESCE(v_new_row->>'authorised_at_utc', '')), '') IS NULL THEN
+    PERFORM public._temp_diag_log(
+      'TEMP_TRIGGER_DIRTY_STAGE',
+      'TEMP_BANKING_PAY_DIRTY',
+      COALESCE(v_new_timesheet_id::text, v_old_timesheet_id::text),
+      jsonb_build_object(
+        'function_name', 'pay_workbench_mark_candidate_dirty',
+        'stage', 'early_return_ordinary_timesheet_financials_insert_edit_save_no_dirty',
+        'trigger_table', v_trigger_table,
+        'trigger_op', TG_OP,
+        'mutation_context', v_lifecycle_context,
+        'authorised_at_utc_present', false,
+        'explicit_banking_pay_action', false,
+        'banking_pay_dirty_required', false,
+        'source_build_required', false,
+        'line_work_required', false,
+        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at)) * 1000)::numeric, 2)
+      )
+    );
+    RETURN NEW;
   END IF;
 
   IF TG_OP = 'UPDATE' AND v_trigger_table = 'timesheet_pay_state' THEN
@@ -197345,7 +197441,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -197383,10 +197478,15 @@ BEGIN
       NULL::text,
       jsonb_build_object(
         'function_name', 'pay_timesheet_summary_pay_state_refresh_trigger',
-        'stage', 'deferred_by_lifecycle_context',
+        'stage', CASE
+          WHEN LOWER(BTRIM(COALESCE(current_setting('cloudtms.lifecycle_mutation_context', true), ''))) = 'manual_timesheet_save'
+            THEN 'deferred_by_manual_save_context'
+          ELSE 'deferred_by_lifecycle_context'
+        END,
         'trigger_table', TG_TABLE_NAME,
         'trigger_op', TG_OP,
         'mutation_context', NULLIF(current_setting('cloudtms.lifecycle_mutation_context', true), ''),
+        'summary_refresh_mode', NULLIF(current_setting('cloudtms.summary_refresh_mode', true), ''),
         'target_timesheet_id', NULLIF(current_setting('cloudtms.lifecycle_target_timesheet_id', true), ''),
         'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
       )
@@ -198026,6 +198126,8 @@ BEGIN
   RETURN NULL;
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(p_target_session_id uuid, p_source_session_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 100, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_options_json jsonb DEFAULT '{}'::jsonb)
@@ -210650,6 +210752,732 @@ BEGIN
     'summary_badge_codes', TO_JSONB(COALESCE(v_new_badges, ARRAY[]::text[])),
     'summary_state_applies', COALESCE(v_summary_state_applies, false),
     'cache_updated', COALESCE(v_cache_updated, false)
+  );
+END;
+$function$;
+CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_patch_lightweight(p_timesheet_ids uuid[], p_actor_user_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_requested_ids uuid[] := ARRAY[]::uuid[];
+  v_target_ids uuid[] := ARRAY[]::uuid[];
+  v_patched_count integer := 0;
+  v_legacy_state_rows_updated integer := 0;
+  v_fallback_reason_codes text[] := ARRAY[]::text[];
+  v_fallback_required boolean := false;
+  v_diag_started_at timestamptz := clock_timestamp();
+BEGIN
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN COALESCE(CARDINALITY(p_timesheet_ids), 0) > 0 THEN p_timesheet_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_patch_lightweight',
+      'stage', 'entry',
+      'reason', NULLIF(BTRIM(COALESCE(p_reason, '')), ''),
+      'requested_count_raw', COALESCE(CARDINALITY(p_timesheet_ids), 0),
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
+  SELECT COALESCE(
+    ARRAY_AGG(DISTINCT input_rows.timesheet_id ORDER BY input_rows.timesheet_id),
+    ARRAY[]::uuid[]
+  )
+  INTO v_requested_ids
+  FROM UNNEST(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_rows(timesheet_id)
+  WHERE input_rows.timesheet_id IS NOT NULL;
+
+  IF COALESCE(CARDINALITY(v_requested_ids), 0) = 0 THEN
+    PERFORM public._temp_diag_log(
+      'TEMP_SUMMARY_REFRESH_STAGE',
+      'TEMP_SUMMARY_REFRESH',
+      NULL::text,
+      jsonb_build_object(
+        'function_name', 'pay_timesheet_summary_pay_state_patch_lightweight',
+        'stage', 'return_zero_requested',
+        'requested_count', 0,
+        'target_count', 0,
+        'patched_count', 0,
+        'legacy_state_rows_updated', 0,
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'mode', 'ordinary_manual_save_lightweight',
+      'requested_count', 0,
+      'target_count', 0,
+      'patched_count', 0,
+      'legacy_state_rows_updated', 0
+    );
+  END IF;
+
+  IF CARDINALITY(v_requested_ids) > 100 THEN
+    RAISE EXCEPTION 'pay_timesheet_summary_pay_state_patch_lightweight accepts at most 100 distinct timesheet ids per call';
+  END IF;
+
+  SELECT COALESCE(
+    ARRAY_AGG(DISTINCT resolved_rows.target_timesheet_id ORDER BY resolved_rows.target_timesheet_id),
+    ARRAY[]::uuid[]
+  )
+  INTO v_target_ids
+  FROM (
+    SELECT
+      COALESCE(
+        rotation_rows.canonical_timesheet_id,
+        rotation_rows.requested_timesheet_id
+      ) AS target_timesheet_id
+    FROM public._pay_timesheet_rotation_scope(v_requested_ids) AS rotation_rows
+  ) AS resolved_rows
+  JOIN public.timesheets AS target_timesheet
+    ON target_timesheet.timesheet_id = resolved_rows.target_timesheet_id
+  WHERE resolved_rows.target_timesheet_id IS NOT NULL;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN COALESCE(CARDINALITY(v_requested_ids), 0) > 0 THEN v_requested_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_patch_lightweight',
+      'stage', 'rotation_scope_done',
+      'reason', NULLIF(BTRIM(COALESCE(p_reason, '')), ''),
+      'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+      'target_count', COALESCE(CARDINALITY(v_target_ids), 0),
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
+  IF COALESCE(CARDINALITY(v_target_ids), 0) = 0 THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'mode', 'ordinary_manual_save_lightweight',
+      'requested_count', CARDINALITY(v_requested_ids),
+      'target_count', 0,
+      'patched_count', 0,
+      'legacy_state_rows_updated', 0
+    );
+  END IF;
+
+  WITH
+  target_ids AS MATERIALIZED (
+    SELECT target_values.timesheet_id
+    FROM UNNEST(v_target_ids) AS target_values(timesheet_id)
+  ),
+  target_id_array AS MATERIALIZED (
+    SELECT ARRAY_AGG(target_ids.timesheet_id ORDER BY target_ids.timesheet_id) AS timesheet_ids
+    FROM target_ids
+  ),
+  family_scope AS MATERIALIZED (
+    SELECT DISTINCT
+      rotation_rows.family_timesheet_id,
+      COALESCE(rotation_rows.canonical_timesheet_id, rotation_rows.requested_timesheet_id) AS projected_timesheet_id
+    FROM target_id_array
+    CROSS JOIN LATERAL public._pay_timesheet_rotation_scope(target_id_array.timesheet_ids) AS rotation_rows
+    WHERE rotation_rows.family_timesheet_id IS NOT NULL
+      AND COALESCE(rotation_rows.canonical_timesheet_id, rotation_rows.requested_timesheet_id) IS NOT NULL
+  ),
+  fallback_reasons AS MATERIALIZED (
+    SELECT 'PAY_BATCH_ITEM_PRESENT'::text AS reason_code
+    WHERE EXISTS (
+      SELECT 1
+      FROM family_scope
+      JOIN public.pay_batch_items AS batch_item
+        ON batch_item.timesheet_id = family_scope.family_timesheet_id
+      WHERE COALESCE(batch_item.is_voided, false) = false
+    )
+
+    UNION ALL
+
+    SELECT 'MATERIAL_LEGACY_PAY_STATE_PRESENT'::text AS reason_code
+    WHERE EXISTS (
+      SELECT 1
+      FROM family_scope
+      JOIN public.timesheet_pay_state AS legacy_state
+        ON legacy_state.timesheet_id = family_scope.family_timesheet_id
+      WHERE legacy_state.last_settled_snapshot_json IS NOT NULL
+         OR NULLIF(BTRIM(COALESCE(legacy_state.last_settled_signature, '')), '') IS NOT NULL
+         OR legacy_state.last_settled_pay_batch_id IS NOT NULL
+         OR legacy_state.last_settled_at_utc IS NOT NULL
+         OR legacy_state.summary_pay_paid_at_utc IS NOT NULL
+         OR ABS(COALESCE(legacy_state.summary_net_delta_ex_vat, 0)) > 0.01
+         OR UPPER(BTRIM(COALESCE(legacy_state.summary_pay_status_code, ''))) NOT IN ('', 'UNPAID')
+         OR UPPER(BTRIM(COALESCE(legacy_state.summary_pay_icon_code, ''))) NOT IN ('', 'NONE')
+    )
+
+    UNION ALL
+
+    SELECT 'MATERIAL_SUMMARY_CACHE_PRESENT'::text AS reason_code
+    WHERE EXISTS (
+      SELECT 1
+      FROM family_scope
+      JOIN public.timesheet_summary_pay_state_cache AS summary_cache
+        ON summary_cache.timesheet_id = family_scope.family_timesheet_id
+      WHERE COALESCE(summary_cache.summary_state_applies, false) = true
+         OR summary_cache.last_paid_at_utc IS NOT NULL
+         OR ABS(COALESCE(summary_cache.paid_to_date_ex_vat, 0)) > 0.01
+         OR ABS(COALESCE(summary_cache.reserved_ex_vat, 0)) > 0.01
+         OR ABS(COALESCE(summary_cache.outstanding_ex_vat, 0)) > 0.01
+         OR ABS(COALESCE(summary_cache.net_delta_ex_vat, 0)) > 0.01
+         OR COALESCE(summary_cache.active_processing, false) = true
+         OR UPPER(BTRIM(COALESCE(summary_cache.summary_pay_status_code, ''))) NOT IN ('', 'UNPAID')
+         OR UPPER(BTRIM(COALESCE(summary_cache.summary_pay_icon_code, ''))) NOT IN ('', 'NONE')
+         OR CARDINALITY(COALESCE(summary_cache.summary_badge_codes, ARRAY[]::text[])) > 0
+    )
+
+    UNION ALL
+
+    SELECT 'ACTIVE_PAYMENT_CORRECTION_PRESENT'::text AS reason_code
+    WHERE EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS correction_item
+      LEFT JOIN public.pay_batch_items AS correction_batch_item
+        ON correction_batch_item.id = correction_item.pay_batch_item_id
+      JOIN family_scope
+        ON family_scope.family_timesheet_id = COALESCE(
+          correction_item.timesheet_id,
+          correction_batch_item.timesheet_id
+        )
+      JOIN public.pay_payment_correction_requests AS correction_request
+        ON correction_request.id = correction_item.correction_request_id
+      WHERE correction_request.status IN (
+        'REQUESTED',
+        'AWAITING_AUTHORISATION',
+        'AUTHORISED',
+        'EXPANDED',
+        'PROCESSING',
+        'BLOCKED'
+      )
+        AND correction_item.status NOT IN ('APPLIED', 'SKIPPED')
+    )
+
+    UNION ALL
+
+    SELECT 'OPEN_FINANCE_COMPONENT_PRESENT'::text AS reason_code
+    WHERE EXISTS (
+      SELECT 1
+      FROM family_scope
+      JOIN public.pay_finance_case_components AS finance_component
+        ON finance_component.linked_timesheet_id = family_scope.family_timesheet_id
+      WHERE finance_component.closed_at_utc IS NULL
+         OR ABS(COALESCE(finance_component.remaining_source_amount, 0)) > 0.01
+    )
+
+    UNION ALL
+
+    SELECT 'ACTIVE_ADVANCE_CASE_PRESENT'::text AS reason_code
+    WHERE EXISTS (
+      SELECT 1
+      FROM family_scope
+      JOIN public.pay_advances AS pay_advance
+        ON pay_advance.linked_timesheet_id = family_scope.family_timesheet_id
+      WHERE UPPER(BTRIM(COALESCE(pay_advance.status::text, ''))) NOT IN ('', 'PAID_OFF')
+         OR ABS(COALESCE(pay_advance.outstanding_amount, 0)) > 0.01
+    )
+
+    UNION ALL
+
+    SELECT 'PAID_LOCKED_OR_PAY_ON_HOLD_TSFIN_PRESENT'::text AS reason_code
+    WHERE EXISTS (
+      SELECT 1
+      FROM family_scope
+      JOIN public.timesheets_financials AS family_financial
+        ON family_financial.timesheet_id = family_scope.family_timesheet_id
+      WHERE family_financial.paid_at_utc IS NOT NULL
+         OR family_financial.locked_by_invoice_id IS NOT NULL
+         OR family_financial.locked_at_utc IS NOT NULL
+         OR family_financial.unlocked_by_credit_note_id IS NOT NULL
+         OR COALESCE(family_financial.pay_on_hold, false) = true
+         OR family_financial.pay_on_hold_since_utc IS NOT NULL
+         OR family_financial.remittance_last_sent_at_utc IS NOT NULL
+         OR COALESCE(family_financial.remittance_send_count, 0) > 0
+    )
+  )
+  SELECT COALESCE(
+    ARRAY_AGG(fallback_reasons.reason_code ORDER BY fallback_reasons.reason_code),
+    ARRAY[]::text[]
+  )
+  INTO v_fallback_reason_codes
+  FROM fallback_reasons;
+
+  v_fallback_required := COALESCE(CARDINALITY(v_fallback_reason_codes), 0) > 0;
+
+  IF v_fallback_required IS TRUE THEN
+    PERFORM public._temp_diag_log(
+      'TEMP_SUMMARY_REFRESH_STAGE',
+      'TEMP_SUMMARY_REFRESH',
+      CASE WHEN COALESCE(CARDINALITY(v_target_ids), 0) > 0 THEN v_target_ids[1]::text ELSE NULL::text END,
+      jsonb_build_object(
+        'function_name', 'pay_timesheet_summary_pay_state_patch_lightweight',
+        'stage', 'fallback_required_full_summary_refresh',
+        'reason', NULLIF(BTRIM(COALESCE(p_reason, '')), ''),
+        'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+        'target_count', COALESCE(CARDINALITY(v_target_ids), 0),
+        'fallback_required', true,
+        'fallback_reason_codes', to_jsonb(v_fallback_reason_codes),
+        'patched_count', 0,
+        'legacy_state_rows_updated', 0,
+        'policy_x_authority_scope', 'FULL_SUMMARY_REFRESH_REQUIRED_FOR_MATERIAL_PAY_STATE',
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+      )
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'mode', 'ordinary_manual_save_lightweight',
+      'fallback_required', true,
+      'fallback_reason_codes', to_jsonb(v_fallback_reason_codes),
+      'requested_count', CARDINALITY(v_requested_ids),
+      'target_count', CARDINALITY(v_target_ids),
+      'patched_count', 0,
+      'legacy_state_rows_updated', 0
+    );
+  END IF;
+
+  WITH
+  target_ids AS MATERIALIZED (
+    SELECT target_values.timesheet_id
+    FROM UNNEST(v_target_ids) AS target_values(timesheet_id)
+  ),
+  target_id_array AS MATERIALIZED (
+    SELECT ARRAY_AGG(target_ids.timesheet_id ORDER BY target_ids.timesheet_id) AS timesheet_ids
+    FROM target_ids
+  ),
+  family_scope AS MATERIALIZED (
+    SELECT DISTINCT
+      rotation_rows.family_timesheet_id,
+      COALESCE(rotation_rows.canonical_timesheet_id, rotation_rows.requested_timesheet_id) AS projected_timesheet_id
+    FROM target_id_array
+    CROSS JOIN LATERAL public._pay_timesheet_rotation_scope(target_id_array.timesheet_ids) AS rotation_rows
+    WHERE rotation_rows.family_timesheet_id IS NOT NULL
+      AND COALESCE(rotation_rows.canonical_timesheet_id, rotation_rows.requested_timesheet_id) IS NOT NULL
+  ),
+  existing_cache AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      summary_cache.paid_to_date_ex_vat,
+      summary_cache.last_paid_at_utc,
+      summary_cache.reserved_ex_vat,
+      summary_cache.outstanding_ex_vat,
+      summary_cache.net_delta_ex_vat,
+      summary_cache.active_advance,
+      summary_cache.active_processing,
+      summary_cache.summary_state_applies,
+      summary_cache.advance_override_created_at_utc,
+      summary_cache.advance_authorisation_consumed_at_utc,
+      summary_cache.summary_pay_status_code,
+      summary_cache.summary_pay_icon_code,
+      summary_cache.summary_badge_codes
+    FROM target_ids
+    LEFT JOIN public.timesheet_summary_pay_state_cache AS summary_cache
+      ON summary_cache.timesheet_id = target_ids.timesheet_id
+  ),
+  legacy_ranked AS MATERIALIZED (
+    SELECT
+      family_scope.projected_timesheet_id AS timesheet_id,
+      legacy_state.summary_pay_status_code,
+      legacy_state.summary_pay_icon_code,
+      legacy_state.summary_pay_paid_at_utc,
+      legacy_state.summary_net_delta_ex_vat,
+      COALESCE(legacy_state.last_settled_at_utc, legacy_state.summary_pay_paid_at_utc) AS last_paid_at_utc,
+      ROW_NUMBER() OVER (
+        PARTITION BY family_scope.projected_timesheet_id
+        ORDER BY
+          CASE WHEN NULLIF(BTRIM(COALESCE(legacy_state.summary_pay_status_code, '')), '') IS NOT NULL THEN 0 ELSE 1 END,
+          COALESCE(legacy_state.last_settled_at_utc, legacy_state.summary_pay_paid_at_utc) DESC NULLS LAST,
+          family_scope.family_timesheet_id
+      ) AS row_rank
+    FROM family_scope
+    JOIN public.timesheet_pay_state AS legacy_state
+      ON legacy_state.timesheet_id = family_scope.family_timesheet_id
+  ),
+  legacy_state AS MATERIALIZED (
+    SELECT
+      legacy_ranked.timesheet_id,
+      legacy_ranked.summary_pay_status_code,
+      legacy_ranked.summary_pay_icon_code,
+      legacy_ranked.summary_pay_paid_at_utc,
+      legacy_ranked.summary_net_delta_ex_vat,
+      legacy_ranked.last_paid_at_utc
+    FROM legacy_ranked
+    WHERE legacy_ranked.row_rank = 1
+  ),
+  latest_advance_override AS MATERIALIZED (
+    SELECT DISTINCT ON (family_scope.projected_timesheet_id)
+      family_scope.projected_timesheet_id AS timesheet_id,
+      payment_override.id AS override_id,
+      payment_override.created_at_utc AS override_created_at_utc
+    FROM family_scope
+    JOIN public.timesheet_payment_overrides AS payment_override
+      ON payment_override.timesheet_id = family_scope.family_timesheet_id
+    WHERE payment_override.cleared_at_utc IS NULL
+      AND UPPER(BTRIM(COALESCE(payment_override.override_type, ''))) = 'ADVANCE_THIS_PAYMENT'
+    ORDER BY
+      family_scope.projected_timesheet_id,
+      payment_override.created_at_utc DESC,
+      payment_override.id DESC
+  ),
+  current_authorisation_state AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      GREATEST(
+        MAX(family_timesheet.authorised_at_server),
+        MAX(family_timesheet.revoked_at),
+        MAX(family_financial.authorised_at_utc)
+      ) AS authorised_at_utc
+    FROM target_ids
+    LEFT JOIN family_scope
+      ON family_scope.projected_timesheet_id = target_ids.timesheet_id
+    LEFT JOIN public.timesheets AS family_timesheet
+      ON family_timesheet.timesheet_id = family_scope.family_timesheet_id
+    LEFT JOIN public.timesheets_financials AS family_financial
+      ON family_financial.timesheet_id = family_scope.family_timesheet_id
+    GROUP BY target_ids.timesheet_id
+  ),
+  existing_display_cache AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      MAX(existing_family_cache.advance_authorisation_consumed_at_utc) AS advance_authorisation_consumed_at_utc
+    FROM target_ids
+    LEFT JOIN family_scope
+      ON family_scope.projected_timesheet_id = target_ids.timesheet_id
+    LEFT JOIN public.timesheet_summary_pay_state_cache AS existing_family_cache
+      ON existing_family_cache.timesheet_id = family_scope.family_timesheet_id
+    GROUP BY target_ids.timesheet_id
+  ),
+  advance_state_prepared AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      latest_advance_override.override_created_at_utc,
+      current_authorisation_state.authorised_at_utc,
+      CASE
+        WHEN latest_advance_override.override_created_at_utc IS NULL
+          THEN existing_display_cache.advance_authorisation_consumed_at_utc
+        WHEN existing_display_cache.advance_authorisation_consumed_at_utc
+             >= latest_advance_override.override_created_at_utc
+          THEN existing_display_cache.advance_authorisation_consumed_at_utc
+        WHEN current_authorisation_state.authorised_at_utc
+             >= latest_advance_override.override_created_at_utc
+          THEN current_authorisation_state.authorised_at_utc
+        ELSE NULL::timestamptz
+      END AS advance_authorisation_consumed_at_utc
+    FROM target_ids
+    LEFT JOIN latest_advance_override
+      ON latest_advance_override.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN current_authorisation_state
+      ON current_authorisation_state.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN existing_display_cache
+      ON existing_display_cache.timesheet_id = target_ids.timesheet_id
+  ),
+  advance_state AS MATERIALIZED (
+    SELECT
+      advance_state_prepared.timesheet_id,
+      advance_state_prepared.override_created_at_utc,
+      advance_state_prepared.advance_authorisation_consumed_at_utc,
+      (
+        advance_state_prepared.override_created_at_utc IS NOT NULL
+        AND (
+          advance_state_prepared.advance_authorisation_consumed_at_utc IS NULL
+          OR advance_state_prepared.advance_authorisation_consumed_at_utc
+               < advance_state_prepared.override_created_at_utc
+        )
+      ) AS active_advance
+    FROM advance_state_prepared
+  ),
+  active_batch_processing AS MATERIALIZED (
+    SELECT DISTINCT
+      family_scope.projected_timesheet_id AS timesheet_id
+    FROM family_scope
+    JOIN public.pay_batch_items AS batch_item
+      ON batch_item.timesheet_id = family_scope.family_timesheet_id
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id = batch_item.pay_batch_candidate_id
+    JOIN public.pay_batches AS pay_batch
+      ON pay_batch.id = batch_candidate.pay_batch_id
+    LEFT JOIN public.pay_bank_transfers AS bank_transfer
+      ON bank_transfer.id = batch_item.pay_bank_transfer_id
+     AND bank_transfer.pay_batch_id = pay_batch.id
+    LEFT JOIN LATERAL public._pay_rail_state_money_movement_classify(
+      bank_transfer.status,
+      bank_transfer.rail_state,
+      COALESCE(bank_transfer.rail_meta_json, '{}'::jsonb),
+      COALESCE(bank_transfer.rail_meta_json, '{}'::jsonb)
+    ) AS transfer_classifier
+      ON bank_transfer.id IS NOT NULL
+    WHERE COALESCE(batch_item.is_voided, false) = false
+      AND UPPER(BTRIM(COALESCE(batch_item.item_type, ''))) IN (
+        'SEGMENT_DELTA',
+        'EXPENSE_DELTA',
+        'ADJUSTMENT_DELTA',
+        'MILEAGE_DELTA'
+      )
+      AND public._pay_batch_status_is_active_reservation(pay_batch.status)
+      AND UPPER(BTRIM(COALESCE(batch_candidate.settlement_status, ''))) NOT IN (
+        'SETTLED',
+        'PAID',
+        'CONFIRMED'
+      )
+      AND batch_candidate.settled_at_utc IS NULL
+      AND COALESCE(transfer_classifier.is_final_money_moved, false) = false
+      AND COALESCE(transfer_classifier.is_terminal_no_money, false) = false
+      AND bank_transfer.completed_at_utc IS NULL
+  ),
+  active_correction_processing AS MATERIALIZED (
+    SELECT DISTINCT
+      family_scope.projected_timesheet_id AS timesheet_id
+    FROM public.pay_payment_correction_items AS correction_item
+    LEFT JOIN public.pay_batch_items AS correction_batch_item
+      ON correction_batch_item.id = correction_item.pay_batch_item_id
+    JOIN family_scope
+      ON family_scope.family_timesheet_id = COALESCE(
+        correction_item.timesheet_id,
+        correction_batch_item.timesheet_id
+      )
+    JOIN public.pay_payment_correction_requests AS correction_request
+      ON correction_request.id = correction_item.correction_request_id
+    WHERE correction_request.status IN (
+      'REQUESTED',
+      'AWAITING_AUTHORISATION',
+      'AUTHORISED',
+      'EXPANDED',
+      'PROCESSING',
+      'BLOCKED'
+    )
+      AND correction_item.status NOT IN ('APPLIED', 'SKIPPED')
+  ),
+  prepared AS MATERIALIZED (
+    SELECT
+      target_ids.timesheet_id,
+      ROUND(COALESCE(existing_cache.paid_to_date_ex_vat, 0), 2)::numeric AS paid_to_date_ex_vat,
+      COALESCE(existing_cache.last_paid_at_utc, legacy_state.last_paid_at_utc) AS last_paid_at_utc,
+      ROUND(COALESCE(existing_cache.reserved_ex_vat, 0), 2)::numeric AS reserved_ex_vat,
+      ROUND(COALESCE(existing_cache.outstanding_ex_vat, 0), 2)::numeric AS outstanding_ex_vat,
+      ROUND(COALESCE(existing_cache.net_delta_ex_vat, legacy_state.summary_net_delta_ex_vat, 0), 2)::numeric AS net_delta_ex_vat,
+      COALESCE(advance_state.active_advance, false) AS active_advance,
+      (
+        COALESCE(existing_cache.active_processing, false)
+        OR active_batch_processing.timesheet_id IS NOT NULL
+        OR active_correction_processing.timesheet_id IS NOT NULL
+      ) AS active_processing,
+      advance_state.override_created_at_utc AS advance_override_created_at_utc,
+      advance_state.advance_authorisation_consumed_at_utc,
+      COALESCE(
+        NULLIF(BTRIM(COALESCE(existing_cache.summary_pay_status_code, '')), ''),
+        NULLIF(BTRIM(COALESCE(legacy_state.summary_pay_status_code, '')), ''),
+        CASE
+          WHEN (
+            COALESCE(existing_cache.active_processing, false)
+            OR active_batch_processing.timesheet_id IS NOT NULL
+            OR active_correction_processing.timesheet_id IS NOT NULL
+          ) THEN 'PROCESSING'
+          ELSE 'UNPAID'
+        END
+      ) AS summary_pay_status_code,
+      COALESCE(
+        NULLIF(BTRIM(COALESCE(existing_cache.summary_pay_icon_code, '')), ''),
+        NULLIF(BTRIM(COALESCE(legacy_state.summary_pay_icon_code, '')), ''),
+        CASE
+          WHEN (
+            COALESCE(existing_cache.active_processing, false)
+            OR active_batch_processing.timesheet_id IS NOT NULL
+            OR active_correction_processing.timesheet_id IS NOT NULL
+          ) THEN 'CLOCK'
+          ELSE 'NONE'
+        END
+      ) AS summary_pay_icon_code,
+      ARRAY_REMOVE(
+        ARRAY_REMOVE(
+          ARRAY_REMOVE(COALESCE(existing_cache.summary_badge_codes, ARRAY[]::text[]), NULL::text),
+          '__PAY_BADGE_ADV__'
+        ),
+        '__PAY_BADGE_PROCESSING__'
+      ) AS badge_codes_without_dynamic_state,
+      COALESCE(existing_cache.summary_state_applies, false) AS existing_summary_state_applies
+    FROM target_ids
+    LEFT JOIN existing_cache
+      ON existing_cache.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN legacy_state
+      ON legacy_state.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN advance_state
+      ON advance_state.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN active_batch_processing
+      ON active_batch_processing.timesheet_id = target_ids.timesheet_id
+    LEFT JOIN active_correction_processing
+      ON active_correction_processing.timesheet_id = target_ids.timesheet_id
+  ),
+  final_values AS MATERIALIZED (
+    SELECT
+      prepared.timesheet_id,
+      prepared.paid_to_date_ex_vat,
+      prepared.last_paid_at_utc,
+      prepared.reserved_ex_vat,
+      prepared.outstanding_ex_vat,
+      prepared.net_delta_ex_vat,
+      prepared.active_advance,
+      prepared.active_processing,
+      prepared.advance_override_created_at_utc,
+      prepared.advance_authorisation_consumed_at_utc,
+      prepared.summary_pay_status_code,
+      prepared.summary_pay_icon_code,
+      ARRAY_REMOVE(
+        ARRAY[
+          CASE WHEN prepared.active_advance THEN '__PAY_BADGE_ADV__' ELSE NULL::text END,
+          CASE WHEN prepared.active_processing AND prepared.summary_pay_status_code <> 'PROCESSING' THEN '__PAY_BADGE_PROCESSING__' ELSE NULL::text END
+        ]::text[] || prepared.badge_codes_without_dynamic_state,
+        NULL::text
+      ) AS summary_badge_codes,
+      (
+        prepared.existing_summary_state_applies
+        OR prepared.active_advance
+        OR prepared.active_processing
+        OR prepared.last_paid_at_utc IS NOT NULL
+        OR ABS(COALESCE(prepared.paid_to_date_ex_vat, 0)) > 0.01
+        OR ABS(COALESCE(prepared.reserved_ex_vat, 0)) > 0.01
+        OR ABS(COALESCE(prepared.outstanding_ex_vat, 0)) > 0.01
+        OR ABS(COALESCE(prepared.net_delta_ex_vat, 0)) > 0.01
+      ) AS summary_state_applies
+    FROM prepared
+  )
+  INSERT INTO public.timesheet_summary_pay_state_cache AS summary_cache (
+    timesheet_id,
+    paid_to_date_ex_vat,
+    last_paid_at_utc,
+    reserved_ex_vat,
+    outstanding_ex_vat,
+    net_delta_ex_vat,
+    active_advance,
+    active_processing,
+    summary_state_applies,
+    advance_override_created_at_utc,
+    advance_authorisation_consumed_at_utc,
+    summary_pay_status_code,
+    summary_pay_icon_code,
+    summary_badge_codes,
+    refreshed_at_utc,
+    refreshed_by_user_id
+  )
+  SELECT
+    final_values.timesheet_id,
+    final_values.paid_to_date_ex_vat,
+    final_values.last_paid_at_utc,
+    final_values.reserved_ex_vat,
+    final_values.outstanding_ex_vat,
+    final_values.net_delta_ex_vat,
+    final_values.active_advance,
+    final_values.active_processing,
+    final_values.summary_state_applies,
+    final_values.advance_override_created_at_utc,
+    final_values.advance_authorisation_consumed_at_utc,
+    final_values.summary_pay_status_code,
+    final_values.summary_pay_icon_code,
+    final_values.summary_badge_codes,
+    clock_timestamp(),
+    p_actor_user_id
+  FROM final_values
+  ON CONFLICT (timesheet_id) DO UPDATE
+  SET
+    paid_to_date_ex_vat = EXCLUDED.paid_to_date_ex_vat,
+    last_paid_at_utc = EXCLUDED.last_paid_at_utc,
+    reserved_ex_vat = EXCLUDED.reserved_ex_vat,
+    outstanding_ex_vat = EXCLUDED.outstanding_ex_vat,
+    net_delta_ex_vat = EXCLUDED.net_delta_ex_vat,
+    active_advance = EXCLUDED.active_advance,
+    active_processing = EXCLUDED.active_processing,
+    summary_state_applies = EXCLUDED.summary_state_applies,
+    advance_override_created_at_utc = EXCLUDED.advance_override_created_at_utc,
+    advance_authorisation_consumed_at_utc = EXCLUDED.advance_authorisation_consumed_at_utc,
+    summary_pay_status_code = EXCLUDED.summary_pay_status_code,
+    summary_pay_icon_code = EXCLUDED.summary_pay_icon_code,
+    summary_badge_codes = EXCLUDED.summary_badge_codes,
+    refreshed_at_utc = EXCLUDED.refreshed_at_utc,
+    refreshed_by_user_id = EXCLUDED.refreshed_by_user_id
+  WHERE summary_cache.paid_to_date_ex_vat IS DISTINCT FROM EXCLUDED.paid_to_date_ex_vat
+     OR summary_cache.last_paid_at_utc IS DISTINCT FROM EXCLUDED.last_paid_at_utc
+     OR summary_cache.reserved_ex_vat IS DISTINCT FROM EXCLUDED.reserved_ex_vat
+     OR summary_cache.outstanding_ex_vat IS DISTINCT FROM EXCLUDED.outstanding_ex_vat
+     OR summary_cache.net_delta_ex_vat IS DISTINCT FROM EXCLUDED.net_delta_ex_vat
+     OR summary_cache.active_advance IS DISTINCT FROM EXCLUDED.active_advance
+     OR summary_cache.active_processing IS DISTINCT FROM EXCLUDED.active_processing
+     OR summary_cache.summary_state_applies IS DISTINCT FROM EXCLUDED.summary_state_applies
+     OR summary_cache.advance_override_created_at_utc IS DISTINCT FROM EXCLUDED.advance_override_created_at_utc
+     OR summary_cache.advance_authorisation_consumed_at_utc IS DISTINCT FROM EXCLUDED.advance_authorisation_consumed_at_utc
+     OR summary_cache.summary_pay_status_code IS DISTINCT FROM EXCLUDED.summary_pay_status_code
+     OR summary_cache.summary_pay_icon_code IS DISTINCT FROM EXCLUDED.summary_pay_icon_code
+     OR summary_cache.summary_badge_codes IS DISTINCT FROM EXCLUDED.summary_badge_codes
+     OR summary_cache.refreshed_by_user_id IS DISTINCT FROM EXCLUDED.refreshed_by_user_id;
+
+  GET DIAGNOSTICS v_patched_count = ROW_COUNT;
+
+  WITH legacy_projection AS MATERIALIZED (
+    SELECT DISTINCT
+      rotation_rows.family_timesheet_id,
+      COALESCE(rotation_rows.canonical_timesheet_id, rotation_rows.requested_timesheet_id) AS projected_timesheet_id
+    FROM public._pay_timesheet_rotation_scope(v_target_ids) AS rotation_rows
+    WHERE rotation_rows.family_timesheet_id IS NOT NULL
+      AND COALESCE(rotation_rows.canonical_timesheet_id, rotation_rows.requested_timesheet_id) IS NOT NULL
+  )
+  UPDATE public.timesheet_pay_state AS legacy_state
+  SET
+    summary_pay_status_code = CASE
+      WHEN summary_cache.summary_pay_status_code = 'OVERPAID' THEN 'PAID'
+      ELSE summary_cache.summary_pay_status_code
+    END,
+    summary_pay_icon_code = CASE
+      WHEN summary_cache.summary_pay_status_code = 'OVERPAID' THEN 'RED_COIN'
+      ELSE summary_cache.summary_pay_icon_code
+    END,
+    summary_pay_paid_at_utc = summary_cache.last_paid_at_utc,
+    summary_net_delta_ex_vat = summary_cache.net_delta_ex_vat
+  FROM legacy_projection
+  JOIN public.timesheet_summary_pay_state_cache AS summary_cache
+    ON summary_cache.timesheet_id = legacy_projection.projected_timesheet_id
+  WHERE legacy_state.timesheet_id = legacy_projection.family_timesheet_id
+    AND summary_cache.timesheet_id = ANY (v_target_ids)
+    AND COALESCE(summary_cache.summary_state_applies, false) = true
+    AND (
+      legacy_state.summary_pay_status_code IS DISTINCT FROM CASE
+        WHEN summary_cache.summary_pay_status_code = 'OVERPAID' THEN 'PAID'
+        ELSE summary_cache.summary_pay_status_code
+      END
+      OR legacy_state.summary_pay_icon_code IS DISTINCT FROM CASE
+        WHEN summary_cache.summary_pay_status_code = 'OVERPAID' THEN 'RED_COIN'
+        ELSE summary_cache.summary_pay_icon_code
+      END
+      OR legacy_state.summary_pay_paid_at_utc IS DISTINCT FROM summary_cache.last_paid_at_utc
+      OR legacy_state.summary_net_delta_ex_vat IS DISTINCT FROM summary_cache.net_delta_ex_vat
+    );
+
+  GET DIAGNOSTICS v_legacy_state_rows_updated = ROW_COUNT;
+
+  PERFORM public._temp_diag_log(
+    'TEMP_SUMMARY_REFRESH_STAGE',
+    'TEMP_SUMMARY_REFRESH',
+    CASE WHEN COALESCE(CARDINALITY(v_target_ids), 0) > 0 THEN v_target_ids[1]::text ELSE NULL::text END,
+    jsonb_build_object(
+      'function_name', 'pay_timesheet_summary_pay_state_patch_lightweight',
+      'stage', 'return',
+      'reason', NULLIF(BTRIM(COALESCE(p_reason, '')), ''),
+      'requested_count', COALESCE(CARDINALITY(v_requested_ids), 0),
+      'target_count', COALESCE(CARDINALITY(v_target_ids), 0),
+      'patched_count', v_patched_count,
+      'legacy_state_rows_updated', v_legacy_state_rows_updated,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH_DISPLAY_PATCH_NO_BANKING_PAY_RECALC',
+      'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'mode', 'ordinary_manual_save_lightweight',
+    'fallback_required', false,
+    'requested_count', CARDINALITY(v_requested_ids),
+    'target_count', CARDINALITY(v_target_ids),
+    'patched_count', v_patched_count,
+    'legacy_state_rows_updated', v_legacy_state_rows_updated
   );
 END;
 $function$;
