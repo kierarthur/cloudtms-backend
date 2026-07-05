@@ -22284,6 +22284,7 @@ EXCEPTION
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -22320,6 +22321,7 @@ DECLARE
   v_job_id uuid;
   v_job_status text;
   v_job_was_inserted boolean := false;
+  v_insert_row_count integer := 0;
   v_reason text := COALESCE(NULLIF(BTRIM(COALESCE(p_reason, '')), ''), 'WORKBENCH_CANDIDATE_SOURCE_BUILD');
   v_payload_out_json jsonb := '{}'::jsonb;
   v_classifier_result jsonb := '{}'::jsonb;
@@ -22334,7 +22336,13 @@ DECLARE
   v_no_job_reason text := NULL::text;
   v_delta_jobs_superseded integer := 0;
   v_delta_ids_hash text := NULL::text;
+  v_delta_coalescing_key text := NULL::text;
+  v_delta_coalescing_hash text := NULL::text;
+  v_delta_active_running_job_id uuid := NULL::uuid;
   v_existing_delta_job public.banking_pay_workbench_jobs%ROWTYPE;
+  v_existing_delta_source_change_seq bigint := 0;
+  v_existing_delta_event_count integer := 0;
+  v_merged_delta_event_count integer := 1;
   v_existing_delta_projection_run_id_text text := NULL::text;
   v_delta_merge_reused_existing boolean := false;
   v_payload_shadow_compare_required boolean := false;
@@ -22744,13 +22752,55 @@ BEGIN
       || COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)::text
     );
 
-    v_dedupe_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+    v_delta_coalescing_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
       || ':session:' || v_session_id::text
       || ':candidate:' || p_candidate_id::text
       || ':version:' || COALESCE(v_session_row.version, 0)::text
-      || ':source_change:' || COALESCE(v_source_change_seq, 0)::text
       || ':projection_class:' || v_projection_class
       || ':timesheets:' || v_delta_ids_hash;
+    v_delta_coalescing_hash := md5(v_delta_coalescing_key);
+
+    SELECT running_delta_job.id
+    INTO v_delta_active_running_job_id
+    FROM public.banking_pay_workbench_jobs AS running_delta_job
+    WHERE running_delta_job.session_id = v_session_id
+      AND running_delta_job.candidate_id = p_candidate_id
+      AND UPPER(BTRIM(COALESCE(running_delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
+      AND UPPER(BTRIM(COALESCE(running_delta_job.status, ''))) = 'RUNNING'
+      AND COALESCE(
+            NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'coalescing_key', '')), ''),
+            'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
+              || ':session:' || running_delta_job.session_id::text
+              || ':candidate:' || running_delta_job.candidate_id::text
+              || ':version:' || COALESCE(running_delta_job.payload_json->>'session_version', COALESCE(v_session_row.version, 0)::text)
+              || ':projection_class:' || UPPER(BTRIM(COALESCE(running_delta_job.payload_json->>'projection_class', 'UNKNOWN')))
+              || ':timesheets:' || md5(
+                   COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                   || ':'
+                   || COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                 )
+          ) = v_delta_coalescing_key
+    ORDER BY running_delta_job.started_at_utc ASC NULLS LAST, running_delta_job.created_at_utc ASC, running_delta_job.id ASC
+    LIMIT 1;
+
+    v_dedupe_key := CASE
+      WHEN v_delta_active_running_job_id IS NOT NULL THEN
+        'WORKBENCH_CANDIDATE_DELTA_REFRESH_WAITING'
+        || ':session:' || v_session_id::text
+        || ':candidate:' || p_candidate_id::text
+        || ':version:' || COALESCE(v_session_row.version, 0)::text
+        || ':projection_class:' || v_projection_class
+        || ':timesheets:' || v_delta_ids_hash
+        || ':after_running:' || v_delta_active_running_job_id::text
+      ELSE
+        'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
+        || ':session:' || v_session_id::text
+        || ':candidate:' || p_candidate_id::text
+        || ':version:' || COALESCE(v_session_row.version, 0)::text
+        || ':projection_class:' || v_projection_class
+        || ':timesheets:' || v_delta_ids_hash
+    END;
 
     v_payload_out_json := jsonb_strip_nulls(
       v_payload_json
@@ -22767,6 +22817,12 @@ BEGIN
         'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
         'source_change_seq', COALESCE(v_source_change_seq, 0),
         'source_change_sequence', COALESCE(v_source_change_seq, 0),
+        'latest_source_change_seq', COALESCE(v_source_change_seq, 0),
+        'delta_coalescing_key', v_delta_coalescing_key,
+        'delta_coalescing_hash', v_delta_coalescing_hash,
+        'coalesced_source_change_seqs', jsonb_build_array(COALESCE(v_source_change_seq, 0)),
+        'coalesced_event_count', 1,
+        'latest_event_at_utc', v_now::text,
         'source_build_required', false,
         'line_work_required', false,
         'delta_refresh_required', true,
@@ -22943,6 +22999,20 @@ BEGIN
       AND COALESCE(existing_delta_job.payload_json->>'session_version', '') ~ '^[0-9]{1,18}$'
       AND (existing_delta_job.payload_json->>'session_version')::bigint = COALESCE(v_session_row.version, 0)
       AND UPPER(BTRIM(COALESCE(existing_delta_job.payload_json->>'projection_class', ''))) = v_projection_class
+      AND COALESCE(
+            NULLIF(BTRIM(COALESCE(existing_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(existing_delta_job.payload_json->>'coalescing_key', '')), ''),
+            'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
+              || ':session:' || existing_delta_job.session_id::text
+              || ':candidate:' || existing_delta_job.candidate_id::text
+              || ':version:' || COALESCE(existing_delta_job.payload_json->>'session_version', COALESCE(v_session_row.version, 0)::text)
+              || ':projection_class:' || UPPER(BTRIM(COALESCE(existing_delta_job.payload_json->>'projection_class', 'UNKNOWN')))
+              || ':timesheets:' || md5(
+                   COALESCE(CASE WHEN jsonb_typeof(existing_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN existing_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                   || ':'
+                   || COALESCE(CASE WHEN jsonb_typeof(existing_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN existing_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                 )
+          ) = v_delta_coalescing_key
       AND lower(BTRIM(COALESCE(existing_delta_job.payload_json->>'force_legacy', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
       AND lower(BTRIM(COALESCE(existing_delta_job.payload_json->>'force_broad_legacy', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
     ORDER BY
@@ -22964,6 +23034,21 @@ BEGIN
         v_projection_run_id := v_existing_delta_projection_run_id_text::uuid;
       END IF;
 
+      v_existing_delta_source_change_seq := GREATEST(
+        CASE WHEN COALESCE(v_existing_delta_job.payload_json->>'latest_source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+          THEN (v_existing_delta_job.payload_json->>'latest_source_change_seq')::bigint ELSE 0::bigint END,
+        CASE WHEN COALESCE(v_existing_delta_job.payload_json->>'source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+          THEN (v_existing_delta_job.payload_json->>'source_change_seq')::bigint ELSE 0::bigint END,
+        CASE WHEN COALESCE(v_existing_delta_job.payload_json->>'source_change_sequence', '') ~ '^-?[0-9]{1,18}$'
+          THEN (v_existing_delta_job.payload_json->>'source_change_sequence')::bigint ELSE 0::bigint END
+      );
+      v_existing_delta_event_count := CASE
+        WHEN COALESCE(v_existing_delta_job.payload_json->>'coalesced_event_count', '') ~ '^[0-9]{1,9}$'
+          THEN GREATEST((v_existing_delta_job.payload_json->>'coalesced_event_count')::integer, 1)
+        ELSE 1
+      END;
+      v_merged_delta_event_count := v_existing_delta_event_count + 1;
+
       v_payload_out_json := public._pay_workbench_merge_targeted_scope_payload(
         COALESCE(v_existing_delta_job.payload_json, '{}'::jsonb),
         COALESCE(v_payload_out_json, '{}'::jsonb)
@@ -22980,11 +23065,17 @@ BEGIN
         'legacy_fallback_job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
       );
 
-      IF COALESCE(v_payload_out_json->>'source_change_seq', '') ~ '^-?[0-9]{1,18}$' THEN
-        v_source_change_seq := (v_payload_out_json->>'source_change_seq')::bigint;
-      ELSIF COALESCE(v_payload_out_json->>'source_change_sequence', '') ~ '^-?[0-9]{1,18}$' THEN
-        v_source_change_seq := (v_payload_out_json->>'source_change_sequence')::bigint;
-      END IF;
+      v_source_change_seq := GREATEST(
+        COALESCE(v_live_change_seq, 0),
+        COALESCE(v_source_change_seq, 0),
+        COALESCE(v_existing_delta_source_change_seq, 0),
+        CASE WHEN COALESCE(v_payload_out_json->>'latest_source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+          THEN (v_payload_out_json->>'latest_source_change_seq')::bigint ELSE 0::bigint END,
+        CASE WHEN COALESCE(v_payload_out_json->>'source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+          THEN (v_payload_out_json->>'source_change_seq')::bigint ELSE 0::bigint END,
+        CASE WHEN COALESCE(v_payload_out_json->>'source_change_sequence', '') ~ '^-?[0-9]{1,18}$'
+          THEN (v_payload_out_json->>'source_change_sequence')::bigint ELSE 0::bigint END
+      );
 
       SELECT COALESCE(jsonb_agg(merged_target_ids.timesheet_id_text ORDER BY merged_target_ids.timesheet_id_text), '[]'::jsonb)
       INTO v_targeted_timesheet_ids_json
@@ -23020,13 +23111,56 @@ BEGIN
         || COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)::text
       );
 
-      v_dedupe_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+      v_delta_coalescing_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
         || ':session:' || v_session_id::text
         || ':candidate:' || p_candidate_id::text
         || ':version:' || COALESCE(v_session_row.version, 0)::text
-        || ':source_change:' || COALESCE(v_source_change_seq, 0)::text
         || ':projection_class:' || v_projection_class
         || ':timesheets:' || v_delta_ids_hash;
+      v_delta_coalescing_hash := md5(v_delta_coalescing_key);
+
+      SELECT running_delta_job.id
+      INTO v_delta_active_running_job_id
+      FROM public.banking_pay_workbench_jobs AS running_delta_job
+      WHERE running_delta_job.session_id = v_session_id
+        AND running_delta_job.candidate_id = p_candidate_id
+        AND UPPER(BTRIM(COALESCE(running_delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
+        AND UPPER(BTRIM(COALESCE(running_delta_job.status, ''))) = 'RUNNING'
+        AND running_delta_job.id IS DISTINCT FROM v_existing_delta_job.id
+        AND COALESCE(
+              NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
+              NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'coalescing_key', '')), ''),
+              'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
+                || ':session:' || running_delta_job.session_id::text
+                || ':candidate:' || running_delta_job.candidate_id::text
+                || ':version:' || COALESCE(running_delta_job.payload_json->>'session_version', COALESCE(v_session_row.version, 0)::text)
+                || ':projection_class:' || UPPER(BTRIM(COALESCE(running_delta_job.payload_json->>'projection_class', 'UNKNOWN')))
+                || ':timesheets:' || md5(
+                     COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                     || ':'
+                     || COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                   )
+            ) = v_delta_coalescing_key
+      ORDER BY running_delta_job.started_at_utc ASC NULLS LAST, running_delta_job.created_at_utc ASC, running_delta_job.id ASC
+      LIMIT 1;
+
+      v_dedupe_key := CASE
+        WHEN v_delta_active_running_job_id IS NOT NULL THEN
+          'WORKBENCH_CANDIDATE_DELTA_REFRESH_WAITING'
+          || ':session:' || v_session_id::text
+          || ':candidate:' || p_candidate_id::text
+          || ':version:' || COALESCE(v_session_row.version, 0)::text
+          || ':projection_class:' || v_projection_class
+          || ':timesheets:' || v_delta_ids_hash
+          || ':after_running:' || v_delta_active_running_job_id::text
+        ELSE
+          'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
+          || ':session:' || v_session_id::text
+          || ':candidate:' || p_candidate_id::text
+          || ':version:' || COALESCE(v_session_row.version, 0)::text
+          || ':projection_class:' || v_projection_class
+          || ':timesheets:' || v_delta_ids_hash
+      END;
 
       v_payload_out_json := jsonb_strip_nulls(
         v_payload_out_json
@@ -23037,6 +23171,12 @@ BEGIN
           'projection_run_id', v_projection_run_id::text,
           'source_change_seq', COALESCE(v_source_change_seq, 0),
           'source_change_sequence', COALESCE(v_source_change_seq, 0),
+          'latest_source_change_seq', COALESCE(v_source_change_seq, 0),
+          'delta_coalescing_key', v_delta_coalescing_key,
+          'delta_coalescing_hash', v_delta_coalescing_hash,
+          'coalesced_event_count', GREATEST(COALESCE(v_merged_delta_event_count, 1), 1),
+          'coalesced_source_change_seqs', jsonb_build_array(COALESCE(v_existing_delta_source_change_seq, 0), COALESCE(v_source_change_seq, 0)),
+          'latest_event_at_utc', v_now::text,
           'scope_merge_applied', true,
           'scope_merge_at_utc', v_now::text
         )
@@ -23098,57 +23238,184 @@ BEGIN
   END IF;
 
   IF v_job_id IS NULL THEN
-  INSERT INTO public.banking_pay_workbench_jobs (
-    job_type,
-    status,
-    priority,
-    run_at_utc,
-    attempt_count,
-    max_attempts,
-    dedupe_key,
-    snapshot_run_id,
-    session_id,
-    candidate_id,
-    payload_json,
-    created_at_utc,
-    updated_at_utc,
-    started_at_utc,
-    completed_at_utc,
-    failed_at_utc,
-    last_error_json
-  )
-  VALUES (
-    v_job_type,
-    'QUEUED',
-    CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN 43 ELSE 44 END,
-    v_now,
-    0,
-    8,
-    v_dedupe_key,
-    p_snapshot_run_id,
-    v_session_id,
-    p_candidate_id,
-    v_payload_out_json,
-    v_now,
-    v_now,
-    NULL::timestamptz,
-    NULL::timestamptz,
-    NULL::timestamptz,
-    NULL::jsonb
-  )
-  ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
-  DO UPDATE
-  SET priority = LEAST(public.banking_pay_workbench_jobs.priority, EXCLUDED.priority),
-      run_at_utc = LEAST(public.banking_pay_workbench_jobs.run_at_utc, EXCLUDED.run_at_utc),
-      payload_json = public._pay_workbench_merge_targeted_scope_payload(
-        COALESCE(public.banking_pay_workbench_jobs.payload_json, '{}'::jsonb),
-        COALESCE(EXCLUDED.payload_json, '{}'::jsonb)
-      ),
-      updated_at_utc = v_now
-  RETURNING public.banking_pay_workbench_jobs.id,
-            public.banking_pay_workbench_jobs.status,
-            (xmax = 0)
-  INTO v_job_id, v_job_status, v_job_was_inserted;
+    INSERT INTO public.banking_pay_workbench_jobs AS enqueue_job (
+      job_type,
+      status,
+      priority,
+      run_at_utc,
+      attempt_count,
+      max_attempts,
+      dedupe_key,
+      snapshot_run_id,
+      session_id,
+      candidate_id,
+      payload_json,
+      created_at_utc,
+      updated_at_utc,
+      started_at_utc,
+      completed_at_utc,
+      failed_at_utc,
+      last_error_json
+    )
+    VALUES (
+      v_job_type,
+      'QUEUED',
+      CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN 43 ELSE 44 END,
+      v_now,
+      0,
+      8,
+      v_dedupe_key,
+      p_snapshot_run_id,
+      v_session_id,
+      p_candidate_id,
+      v_payload_out_json,
+      v_now,
+      v_now,
+      NULL::timestamptz,
+      NULL::timestamptz,
+      NULL::timestamptz,
+      NULL::jsonb
+    )
+    ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
+    DO UPDATE
+    SET priority = LEAST(enqueue_job.priority, EXCLUDED.priority),
+        run_at_utc = LEAST(enqueue_job.run_at_utc, EXCLUDED.run_at_utc),
+        payload_json = public._pay_workbench_merge_targeted_scope_payload(
+          COALESCE(enqueue_job.payload_json, '{}'::jsonb),
+          COALESCE(EXCLUDED.payload_json, '{}'::jsonb)
+        ),
+        updated_at_utc = v_now
+    WHERE NOT (
+      UPPER(BTRIM(COALESCE(enqueue_job.status, ''))) = 'RUNNING'
+      AND EXCLUDED.job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+    )
+    RETURNING enqueue_job.id,
+              enqueue_job.status,
+              (xmax = 0)
+    INTO v_job_id, v_job_status, v_job_was_inserted;
+
+    GET DIAGNOSTICS v_insert_row_count = ROW_COUNT;
+
+    IF COALESCE(v_insert_row_count, 0) = 0
+       AND v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN
+      SELECT running_delta_job.id
+      INTO v_delta_active_running_job_id
+      FROM public.banking_pay_workbench_jobs AS running_delta_job
+      WHERE running_delta_job.session_id = v_session_id
+        AND running_delta_job.candidate_id = p_candidate_id
+        AND UPPER(BTRIM(COALESCE(running_delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
+        AND UPPER(BTRIM(COALESCE(running_delta_job.status, ''))) = 'RUNNING'
+        AND (
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'coalescing_key', '')), ''),
+            'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
+              || ':session:' || running_delta_job.session_id::text
+              || ':candidate:' || running_delta_job.candidate_id::text
+              || ':version:' || COALESCE(running_delta_job.payload_json->>'session_version', COALESCE(v_session_row.version, 0)::text)
+              || ':projection_class:' || UPPER(BTRIM(COALESCE(running_delta_job.payload_json->>'projection_class', 'UNKNOWN')))
+              || ':timesheets:' || md5(
+                   COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                   || ':'
+                   || COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                 )
+          ) = v_delta_coalescing_key
+          OR running_delta_job.dedupe_key = v_dedupe_key
+        )
+      ORDER BY running_delta_job.started_at_utc ASC NULLS LAST, running_delta_job.created_at_utc ASC, running_delta_job.id ASC
+      LIMIT 1;
+
+      IF v_delta_active_running_job_id IS NOT NULL THEN
+        v_dedupe_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH_WAITING'
+          || ':session:' || v_session_id::text
+          || ':candidate:' || p_candidate_id::text
+          || ':version:' || COALESCE(v_session_row.version, 0)::text
+          || ':projection_class:' || v_projection_class
+          || ':timesheets:' || v_delta_ids_hash
+          || ':after_running:' || v_delta_active_running_job_id::text;
+
+        v_payload_out_json := jsonb_strip_nulls(
+          COALESCE(v_payload_out_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'dedupe_key', v_dedupe_key,
+            'delta_active_running_job_id', v_delta_active_running_job_id::text,
+            'waiting_after_running_delta_job', true,
+            'waiting_after_running_enqueued_at_utc', v_now::text,
+            'delta_running_conflict_fail_closed', true
+          )
+        );
+
+        INSERT INTO public.banking_pay_workbench_jobs AS waiting_enqueue_job (
+          job_type,
+          status,
+          priority,
+          run_at_utc,
+          attempt_count,
+          max_attempts,
+          dedupe_key,
+          snapshot_run_id,
+          session_id,
+          candidate_id,
+          payload_json,
+          created_at_utc,
+          updated_at_utc,
+          started_at_utc,
+          completed_at_utc,
+          failed_at_utc,
+          last_error_json
+        )
+        VALUES (
+          v_job_type,
+          'QUEUED',
+          43,
+          v_now,
+          0,
+          8,
+          v_dedupe_key,
+          p_snapshot_run_id,
+          v_session_id,
+          p_candidate_id,
+          v_payload_out_json,
+          v_now,
+          v_now,
+          NULL::timestamptz,
+          NULL::timestamptz,
+          NULL::timestamptz,
+          NULL::jsonb
+        )
+        ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
+        DO UPDATE
+        SET priority = LEAST(waiting_enqueue_job.priority, EXCLUDED.priority),
+            run_at_utc = LEAST(waiting_enqueue_job.run_at_utc, EXCLUDED.run_at_utc),
+            payload_json = public._pay_workbench_merge_targeted_scope_payload(
+              COALESCE(waiting_enqueue_job.payload_json, '{}'::jsonb),
+              COALESCE(EXCLUDED.payload_json, '{}'::jsonb)
+            ),
+            updated_at_utc = v_now
+        WHERE UPPER(BTRIM(COALESCE(waiting_enqueue_job.status, ''))) <> 'RUNNING'
+        RETURNING waiting_enqueue_job.id,
+                  waiting_enqueue_job.status,
+                  (xmax = 0)
+        INTO v_job_id, v_job_status, v_job_was_inserted;
+
+        GET DIAGNOSTICS v_insert_row_count = ROW_COUNT;
+      END IF;
+    END IF;
+
+    IF v_job_id IS NULL THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_ENQUEUE_CANDIDATE_REFRESH_ACTIVE_DELTA_HEAD_CONFLICT'
+        USING ERRCODE = '55000',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_ENQUEUE_CANDIDATE_REFRESH_ACTIVE_DELTA_HEAD_CONFLICT',
+                'session_id', v_session_id::text,
+                'candidate_id', p_candidate_id::text,
+                'job_type', v_job_type,
+                'delta_coalescing_key', v_delta_coalescing_key,
+                'dedupe_key', v_dedupe_key,
+                'active_running_job_id', CASE WHEN v_delta_active_running_job_id IS NULL THEN NULL ELSE v_delta_active_running_job_id::text END,
+                'message', 'A running delta refresh head was detected during enqueue conflict handling and a safe waiting-head could not be created.'
+              )::text;
+    END IF;
   END IF;
 
   UPDATE public.banking_pay_workbench_session_scope AS session_scope
@@ -23184,6 +23451,9 @@ BEGIN
       'line_work_required', v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD',
       'delta_refresh_required', v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH',
       'delta_scope_merge_reused_existing', COALESCE(v_delta_merge_reused_existing, false),
+      'delta_coalescing_key', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN v_delta_coalescing_key ELSE NULL::text END,
+      'delta_coalescing_hash', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN v_delta_coalescing_hash ELSE NULL::text END,
+      'delta_active_running_job_id', CASE WHEN v_delta_active_running_job_id IS NULL THEN NULL ELSE v_delta_active_running_job_id::text END,
       'delta_jobs_superseded_by_legacy', COALESCE(v_delta_jobs_superseded, 0)
     ),
     'WORKBENCH_CANDIDATE_REFRESH_JOB_ENQUEUE',
@@ -23219,11 +23489,15 @@ BEGIN
     'full_snapshot_job', false,
     'reused', NOT v_job_was_inserted,
     'delta_scope_merge_reused_existing', COALESCE(v_delta_merge_reused_existing, false),
+    'delta_coalescing_key', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN v_delta_coalescing_key ELSE NULL::text END,
+    'delta_coalescing_hash', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN v_delta_coalescing_hash ELSE NULL::text END,
+    'delta_active_running_job_id', CASE WHEN v_delta_active_running_job_id IS NULL THEN NULL ELSE v_delta_active_running_job_id::text END,
     'delta_jobs_superseded_by_legacy', COALESCE(v_delta_jobs_superseded, 0),
     'classifier_result', v_classifier_result
   ));
 END;
 $function$;
+
 
 
 
@@ -23802,6 +24076,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_workbench_claim_due_jobs(integer, timestamptz);
 DROP FUNCTION IF EXISTS public.pay_workbench_claim_due_jobs(integer, timestamptz, uuid, uuid, jsonb);
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_claim_due_jobs(p_limit integer DEFAULT 25, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_allowed_job_types text[] DEFAULT NULL::text[])
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -23851,6 +24126,8 @@ DECLARE
   v_preclaim_due_queued_sample jsonb := '[]'::jsonb;
   v_claim_lock_contention_detected boolean := false;
   v_claim_lock_contention_count integer := 0;
+  v_delta_queued_coalesced_count integer := 0;
+  v_delta_queued_coalesced_hot_key_count integer := 0;
   v_projection_lifecycle_repair_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_allowed_job_types IS NOT NULL THEN
@@ -24832,8 +25109,116 @@ BEGIN
     v_preclaim_due_queued_sample := '[]'::jsonb;
   END;
 
+  -- Latest-wins queue compaction for queued DELTA jobs.
+  -- This collapses repeated lifecycle flips for the same session/candidate/timesheet hot key
+  -- before expensive projection work is claimed.  It does not touch payment economics.
+  BEGIN
+    WITH queued_delta AS (
+      SELECT
+        delta_job.id,
+        delta_job.priority,
+        delta_job.run_at_utc,
+        delta_job.created_at_utc,
+        delta_job.updated_at_utc,
+        delta_job.payload_json,
+        delta_job.dedupe_key,
+        COALESCE(
+          NULLIF(BTRIM(COALESCE(delta_job.payload_json->>'delta_coalescing_key', '')), ''),
+          NULLIF(BTRIM(COALESCE(delta_job.payload_json->>'coalescing_key', '')), ''),
+          delta_job.dedupe_key
+        ) AS hot_key,
+        GREATEST(
+          CASE WHEN COALESCE(delta_job.payload_json->>'latest_source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+            THEN (delta_job.payload_json->>'latest_source_change_seq')::bigint ELSE 0::bigint END,
+          CASE WHEN COALESCE(delta_job.payload_json->>'source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+            THEN (delta_job.payload_json->>'source_change_seq')::bigint ELSE 0::bigint END,
+          CASE WHEN COALESCE(delta_job.payload_json->>'source_change_sequence', '') ~ '^-?[0-9]{1,18}$'
+            THEN (delta_job.payload_json->>'source_change_sequence')::bigint ELSE 0::bigint END
+        ) AS source_change_seq
+      FROM public.banking_pay_workbench_jobs AS delta_job
+      WHERE delta_job.status = 'QUEUED'
+        AND delta_job.run_at_utc <= v_cutoff
+        AND (p_session_id IS NULL OR delta_job.session_id = p_session_id)
+        AND (p_candidate_id IS NULL OR delta_job.candidate_id = p_candidate_id)
+        AND UPPER(BTRIM(COALESCE(delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
+        AND (
+          v_allowed_job_types IS NULL
+          OR delta_job.job_type = ANY(v_allowed_job_types)
+          OR UPPER(BTRIM(COALESCE(delta_job.job_type, ''))) = ANY(v_allowed_job_types)
+          OR 'WORKBENCH_CANDIDATE_DELTA_REFRESH' = ANY(v_allowed_job_types)
+        )
+      ORDER BY delta_job.priority ASC, delta_job.run_at_utc ASC, delta_job.created_at_utc ASC, delta_job.id ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT GREATEST(v_limit * 10, 50)
+    ),
+    ranked_delta AS (
+      SELECT
+        queued_delta.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY queued_delta.hot_key
+          ORDER BY queued_delta.source_change_seq DESC, queued_delta.priority ASC, queued_delta.run_at_utc ASC, queued_delta.updated_at_utc DESC NULLS LAST, queued_delta.created_at_utc DESC, queued_delta.id DESC
+        ) AS hot_key_rank,
+        COUNT(*) OVER (PARTITION BY queued_delta.hot_key) AS hot_key_count,
+        MAX(queued_delta.source_change_seq) OVER (PARTITION BY queued_delta.hot_key) AS latest_hot_key_seq
+      FROM queued_delta
+      WHERE NULLIF(BTRIM(COALESCE(queued_delta.hot_key, '')), '') IS NOT NULL
+    ),
+    kept_heads AS (
+      UPDATE public.banking_pay_workbench_jobs AS head_job
+      SET payload_json = jsonb_strip_nulls(
+            COALESCE(head_job.payload_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'delta_coalesced_queue_head', true,
+              'delta_coalesced_queue_duplicate_count', GREATEST(ranked_delta.hot_key_count - 1, 0),
+              'latest_source_change_seq', ranked_delta.latest_hot_key_seq,
+              'source_change_seq', ranked_delta.latest_hot_key_seq,
+              'source_change_sequence', ranked_delta.latest_hot_key_seq,
+              'claim_coalesced_at_utc', v_now::text
+            )
+          ),
+          updated_at_utc = v_now
+      FROM ranked_delta
+      WHERE head_job.id = ranked_delta.id
+        AND ranked_delta.hot_key_rank = 1
+        AND ranked_delta.hot_key_count > 1
+      RETURNING head_job.id, ranked_delta.hot_key
+    ),
+    superseded_delta AS (
+      UPDATE public.banking_pay_workbench_jobs AS obsolete_job
+      SET status = 'SUCCEEDED',
+          completed_at_utc = v_now,
+          updated_at_utc = v_now,
+          last_error_json = NULL::jsonb,
+          payload_json = jsonb_strip_nulls(
+            COALESCE(obsolete_job.payload_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'superseded_by_delta_queue_coalescing', true,
+              'superseded_by_delta_queue_coalescing_at_utc', v_now::text,
+              'superseded_reason', 'SUPERSEDED_BY_NEWER_SOURCE_CHANGE_SEQ_BEFORE_CLAIM',
+              'latest_source_change_seq', ranked_delta.latest_hot_key_seq,
+              'coalesced_hot_key', ranked_delta.hot_key
+            )
+          )
+      FROM ranked_delta
+      WHERE obsolete_job.id = ranked_delta.id
+        AND ranked_delta.hot_key_rank > 1
+      RETURNING obsolete_job.id, ranked_delta.hot_key
+    )
+    SELECT
+      COALESCE((SELECT COUNT(*) FROM superseded_delta), 0)::integer,
+      GREATEST(
+        COALESCE((SELECT COUNT(DISTINCT superseded_delta.hot_key) FROM superseded_delta), 0),
+        COALESCE((SELECT COUNT(DISTINCT kept_heads.hot_key) FROM kept_heads), 0)
+      )::integer
+    INTO v_delta_queued_coalesced_count, v_delta_queued_coalesced_hot_key_count;
+  EXCEPTION WHEN OTHERS THEN
+    -- Queue compaction is an optimisation.  Claiming must continue if diagnostic payloads are malformed.
+    v_delta_queued_coalesced_count := 0;
+    v_delta_queued_coalesced_hot_key_count := 0;
+  END;
+
   FOR v_claimed_row IN
-    WITH claim AS (
+    WITH claim_source AS (
       SELECT
         claim_job.id,
         claim_job.job_type,
@@ -24845,7 +25230,18 @@ BEGIN
         claim_job.session_id,
         claim_job.candidate_id,
         claim_job.payload_json,
-        claim_job.created_at_utc
+        claim_job.created_at_utc,
+        CASE
+          WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
+            THEN 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+          ELSE UPPER(BTRIM(COALESCE(claim_job.job_type, '')))
+        END AS canonical_job_type,
+        COALESCE(
+          NULLIF(BTRIM(COALESCE(claim_job.payload_json->>'delta_coalescing_key', '')), ''),
+          NULLIF(BTRIM(COALESCE(claim_job.payload_json->>'coalescing_key', '')), ''),
+          claim_job.dedupe_key,
+          claim_job.id::text
+        ) AS hot_key
       FROM public.banking_pay_workbench_jobs AS claim_job
       WHERE claim_job.status = 'QUEUED'
         AND claim_job.run_at_utc <= v_cutoff
@@ -24863,8 +25259,8 @@ BEGIN
                 THEN 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
               WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
                 THEN 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
-                WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_SESSION_CLONE_REBASE', 'SESSION_CLONE_REBASE', 'CLONE_REBASE')
-                  THEN 'WORKBENCH_SESSION_CLONE_REBASE'
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_SESSION_CLONE_REBASE', 'SESSION_CLONE_REBASE', 'CLONE_REBASE')
+                THEN 'WORKBENCH_SESSION_CLONE_REBASE'
               WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH')
                 THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
               WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK')
@@ -24877,6 +25273,53 @@ BEGIN
         )
       ORDER BY claim_job.priority ASC, claim_job.run_at_utc ASC, claim_job.created_at_utc ASC, claim_job.id ASC
       FOR UPDATE SKIP LOCKED
+      LIMIT GREATEST(v_limit * 5, v_limit)
+    ),
+    claim_pool AS (
+      SELECT
+        claim_source.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY CASE
+            WHEN claim_source.canonical_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN claim_source.hot_key
+            ELSE claim_source.id::text
+          END
+          ORDER BY claim_source.priority ASC, claim_source.run_at_utc ASC, claim_source.created_at_utc ASC, claim_source.id ASC
+        ) AS hot_key_rank
+      FROM claim_source
+    ),
+    claim AS (
+      SELECT claim_pool.*
+      FROM claim_pool
+      WHERE claim_pool.hot_key_rank = 1
+        AND NOT (
+          claim_pool.canonical_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+          AND EXISTS (
+            SELECT 1
+            FROM public.banking_pay_workbench_jobs AS running_delta_job
+            WHERE running_delta_job.status = 'RUNNING'
+              AND running_delta_job.id IS DISTINCT FROM claim_pool.id
+              AND running_delta_job.session_id IS NOT DISTINCT FROM claim_pool.session_id
+              AND running_delta_job.candidate_id IS NOT DISTINCT FROM claim_pool.candidate_id
+              AND UPPER(BTRIM(COALESCE(running_delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
+              AND COALESCE(
+                    NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
+                    NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'coalescing_key', '')), ''),
+                    'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
+                      || ':session:' || running_delta_job.session_id::text
+                      || ':candidate:' || running_delta_job.candidate_id::text
+                      || ':version:' || COALESCE(running_delta_job.payload_json->>'session_version', COALESCE(claim_pool.payload_json->>'session_version', '0'))
+                      || ':projection_class:' || UPPER(BTRIM(COALESCE(running_delta_job.payload_json->>'projection_class', claim_pool.payload_json->>'projection_class', 'UNKNOWN')))
+                      || ':timesheets:' || md5(
+                           COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                           || ':'
+                           || COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
+                         ),
+                    running_delta_job.dedupe_key,
+                    running_delta_job.id::text
+                  ) = claim_pool.hot_key
+          )
+        )
+      ORDER BY claim_pool.priority ASC, claim_pool.run_at_utc ASC, claim_pool.created_at_utc ASC, claim_pool.id ASC
       LIMIT v_limit
     ),
     upd AS (
@@ -24887,8 +25330,50 @@ BEGIN
           updated_at_utc = v_now,
           completed_at_utc = NULL,
           failed_at_utc = NULL,
-          last_error_json = NULL
+          last_error_json = NULL,
+          payload_json = CASE
+            WHEN claim_row.canonical_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN
+              jsonb_strip_nulls(
+                COALESCE(upd_job.payload_json, '{}'::jsonb)
+                || jsonb_build_object(
+                  'latest_source_change_seq', GREATEST(
+                    COALESCE(live_change.seq, 0),
+                    CASE WHEN COALESCE(upd_job.payload_json->>'latest_source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+                      THEN (upd_job.payload_json->>'latest_source_change_seq')::bigint ELSE 0::bigint END,
+                    CASE WHEN COALESCE(upd_job.payload_json->>'source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+                      THEN (upd_job.payload_json->>'source_change_seq')::bigint ELSE 0::bigint END,
+                    CASE WHEN COALESCE(upd_job.payload_json->>'source_change_sequence', '') ~ '^-?[0-9]{1,18}$'
+                      THEN (upd_job.payload_json->>'source_change_sequence')::bigint ELSE 0::bigint END
+                  ),
+                  'source_change_seq', GREATEST(
+                    COALESCE(live_change.seq, 0),
+                    CASE WHEN COALESCE(upd_job.payload_json->>'latest_source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+                      THEN (upd_job.payload_json->>'latest_source_change_seq')::bigint ELSE 0::bigint END,
+                    CASE WHEN COALESCE(upd_job.payload_json->>'source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+                      THEN (upd_job.payload_json->>'source_change_seq')::bigint ELSE 0::bigint END,
+                    CASE WHEN COALESCE(upd_job.payload_json->>'source_change_sequence', '') ~ '^-?[0-9]{1,18}$'
+                      THEN (upd_job.payload_json->>'source_change_sequence')::bigint ELSE 0::bigint END
+                  ),
+                  'source_change_sequence', GREATEST(
+                    COALESCE(live_change.seq, 0),
+                    CASE WHEN COALESCE(upd_job.payload_json->>'latest_source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+                      THEN (upd_job.payload_json->>'latest_source_change_seq')::bigint ELSE 0::bigint END,
+                    CASE WHEN COALESCE(upd_job.payload_json->>'source_change_seq', '') ~ '^-?[0-9]{1,18}$'
+                      THEN (upd_job.payload_json->>'source_change_seq')::bigint ELSE 0::bigint END,
+                    CASE WHEN COALESCE(upd_job.payload_json->>'source_change_sequence', '') ~ '^-?[0-9]{1,18}$'
+                      THEN (upd_job.payload_json->>'source_change_sequence')::bigint ELSE 0::bigint END
+                  ),
+                  'claim_live_source_guard_applied', true,
+                  'claim_live_source_seq', COALESCE(live_change.seq, 0),
+                  'claimed_delta_hot_key', claim_row.hot_key,
+                  'claimed_at_utc', v_now::text
+                )
+              )
+            ELSE upd_job.payload_json
+          END
       FROM claim AS claim_row
+      LEFT JOIN public.app_change_counters AS live_change
+        ON live_change.entity_key = 'pay_candidate:' || claim_row.candidate_id::text
       WHERE upd_job.id = claim_row.id
       RETURNING
         upd_job.id,
@@ -24993,6 +25478,8 @@ BEGIN
     'lock_contention_detected', v_claim_lock_contention_detected,
     'claim_lock_contention_count', v_claim_lock_contention_count,
     'lock_contention_count', v_claim_lock_contention_count,
+    'delta_queued_coalesced_count', COALESCE(v_delta_queued_coalesced_count, 0),
+    'delta_queued_coalesced_hot_key_count', COALESCE(v_delta_queued_coalesced_hot_key_count, 0),
     'claim_lock_contention_sample', COALESCE(v_preclaim_due_queued_sample, '[]'::jsonb),
     'filtered_session_id', CASE WHEN p_session_id IS NULL THEN NULL ELSE p_session_id::text END,
     'filtered_candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
@@ -25887,7 +26374,7 @@ BEGIN
     v_clone_legacy_refresh_enqueued_count := CASE WHEN COALESCE(v_result_json->>'legacy_refresh_enqueued_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'legacy_refresh_enqueued_count')::integer ELSE 0 END;
 
     IF v_clone_more_due IS TRUE THEN
-      INSERT INTO public.banking_pay_workbench_jobs (
+      INSERT INTO public.banking_pay_workbench_jobs AS clone_continuation (
         job_type,
         status,
         priority,
@@ -25929,11 +26416,11 @@ BEGIN
       )
       ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
       DO UPDATE SET
-        run_at_utc = LEAST(public.banking_pay_workbench_jobs.run_at_utc, EXCLUDED.run_at_utc),
-        priority = LEAST(public.banking_pay_workbench_jobs.priority, EXCLUDED.priority),
-        payload_json = COALESCE(public.banking_pay_workbench_jobs.payload_json, '{}'::jsonb) || EXCLUDED.payload_json,
+        run_at_utc = LEAST(clone_continuation.run_at_utc, EXCLUDED.run_at_utc),
+        priority = LEAST(clone_continuation.priority, EXCLUDED.priority),
+        payload_json = COALESCE(clone_continuation.payload_json, '{}'::jsonb) || EXCLUDED.payload_json,
         updated_at_utc = v_now
-      RETURNING public.banking_pay_workbench_jobs.id
+      RETURNING clone_continuation.id
       INTO v_clone_continuation_job_id;
 
       v_continuation_result := jsonb_build_object(
@@ -182951,7 +183438,7 @@ BEGIN
     v_job_was_inserted := false;
     v_insert_row_count := 0;
 
-  INSERT INTO public.banking_pay_workbench_jobs (
+  INSERT INTO public.banking_pay_workbench_jobs AS target_job (
     job_type,
     status,
     priority,
@@ -182992,77 +183479,77 @@ BEGIN
   ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
   DO UPDATE
   SET status = CASE
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-             AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
-             AND COALESCE(public.banking_pay_workbench_jobs.attempt_count, 0) >= GREATEST(COALESCE(public.banking_pay_workbench_jobs.max_attempts, 8), 1)
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND target_job.completed_at_utc IS NULL
+             AND target_job.failed_at_utc IS NULL
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
+             AND COALESCE(target_job.attempt_count, 0) >= GREATEST(COALESCE(target_job.max_attempts, 8), 1)
           THEN 'FAILED'
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-             AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND target_job.completed_at_utc IS NULL
+             AND target_job.failed_at_utc IS NULL
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
           THEN 'QUEUED'
-        ELSE public.banking_pay_workbench_jobs.status
+        ELSE target_job.status
       END,
       priority = CASE
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) > v_stale_cutoff
-          THEN public.banking_pay_workbench_jobs.priority
-        ELSE LEAST(public.banking_pay_workbench_jobs.priority, EXCLUDED.priority)
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) > v_stale_cutoff
+          THEN target_job.priority
+        ELSE LEAST(target_job.priority, EXCLUDED.priority)
       END,
       run_at_utc = CASE
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-             AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
-             AND COALESCE(public.banking_pay_workbench_jobs.attempt_count, 0) >= GREATEST(COALESCE(public.banking_pay_workbench_jobs.max_attempts, 8), 1)
-          THEN public.banking_pay_workbench_jobs.run_at_utc
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-             AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND target_job.completed_at_utc IS NULL
+             AND target_job.failed_at_utc IS NULL
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
+             AND COALESCE(target_job.attempt_count, 0) >= GREATEST(COALESCE(target_job.max_attempts, 8), 1)
+          THEN target_job.run_at_utc
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND target_job.completed_at_utc IS NULL
+             AND target_job.failed_at_utc IS NULL
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
           THEN v_now
-        WHEN public.banking_pay_workbench_jobs.status = 'RUNNING' THEN public.banking_pay_workbench_jobs.run_at_utc
-        ELSE LEAST(public.banking_pay_workbench_jobs.run_at_utc, EXCLUDED.run_at_utc)
+        WHEN target_job.status = 'RUNNING' THEN target_job.run_at_utc
+        ELSE LEAST(target_job.run_at_utc, EXCLUDED.run_at_utc)
       END,
       started_at_utc = CASE
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-             AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
-             AND COALESCE(public.banking_pay_workbench_jobs.attempt_count, 0) >= GREATEST(COALESCE(public.banking_pay_workbench_jobs.max_attempts, 8), 1)
-          THEN public.banking_pay_workbench_jobs.started_at_utc
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-             AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND target_job.completed_at_utc IS NULL
+             AND target_job.failed_at_utc IS NULL
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
+             AND COALESCE(target_job.attempt_count, 0) >= GREATEST(COALESCE(target_job.max_attempts, 8), 1)
+          THEN target_job.started_at_utc
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND target_job.completed_at_utc IS NULL
+             AND target_job.failed_at_utc IS NULL
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
           THEN NULL::timestamptz
-        ELSE public.banking_pay_workbench_jobs.started_at_utc
+        ELSE target_job.started_at_utc
       END,
-      completed_at_utc = public.banking_pay_workbench_jobs.completed_at_utc,
+      completed_at_utc = target_job.completed_at_utc,
       failed_at_utc = CASE
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-             AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
-             AND COALESCE(public.banking_pay_workbench_jobs.attempt_count, 0) >= GREATEST(COALESCE(public.banking_pay_workbench_jobs.max_attempts, 8), 1)
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND target_job.completed_at_utc IS NULL
+             AND target_job.failed_at_utc IS NULL
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
+             AND COALESCE(target_job.attempt_count, 0) >= GREATEST(COALESCE(target_job.max_attempts, 8), 1)
           THEN v_now
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-             AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND target_job.completed_at_utc IS NULL
+             AND target_job.failed_at_utc IS NULL
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
           THEN NULL::timestamptz
-        ELSE public.banking_pay_workbench_jobs.failed_at_utc
+        ELSE target_job.failed_at_utc
       END,
       last_error_json = CASE
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-             AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND target_job.completed_at_utc IS NULL
+             AND target_job.failed_at_utc IS NULL
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
           THEN jsonb_build_object(
             'code', CASE
-              WHEN COALESCE(public.banking_pay_workbench_jobs.attempt_count, 0) >= GREATEST(COALESCE(public.banking_pay_workbench_jobs.max_attempts, 8), 1)
+              WHEN COALESCE(target_job.attempt_count, 0) >= GREATEST(COALESCE(target_job.max_attempts, 8), 1)
                 THEN 'STALE_RUNNING_WORKBENCH_JOB_MAX_ATTEMPTS'
               ELSE 'STALE_RUNNING_WORKBENCH_JOB_RECOVERED'
             END,
@@ -183073,15 +183560,15 @@ BEGIN
             'stale_running_seconds', v_stale_running_seconds,
             'recovered_at_utc', v_now
           )
-        ELSE public.banking_pay_workbench_jobs.last_error_json
+        ELSE target_job.last_error_json
       END,
-      payload_json = COALESCE(public.banking_pay_workbench_jobs.payload_json, '{}'::jsonb)
+      payload_json = COALESCE(target_job.payload_json, '{}'::jsonb)
         || v_reuse_patch_json
         || CASE
-          WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-               AND public.banking_pay_workbench_jobs.completed_at_utc IS NULL
-               AND public.banking_pay_workbench_jobs.failed_at_utc IS NULL
-               AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) <= v_stale_cutoff
+          WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+               AND target_job.completed_at_utc IS NULL
+               AND target_job.failed_at_utc IS NULL
+               AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) <= v_stale_cutoff
             THEN jsonb_build_object(
               'stale_running_recovered_at_utc', v_now::text,
               'stale_running_recovered_by', 'pay_workbench_enqueue_stage_continuation'
@@ -183089,15 +183576,15 @@ BEGIN
           ELSE '{}'::jsonb
         END,
       updated_at_utc = CASE
-        WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_jobs.status, ''))) = 'RUNNING'
-             AND COALESCE(public.banking_pay_workbench_jobs.updated_at_utc, public.banking_pay_workbench_jobs.started_at_utc, public.banking_pay_workbench_jobs.run_at_utc, public.banking_pay_workbench_jobs.created_at_utc) > v_stale_cutoff
-          THEN public.banking_pay_workbench_jobs.updated_at_utc
+        WHEN UPPER(BTRIM(COALESCE(target_job.status, ''))) = 'RUNNING'
+             AND COALESCE(target_job.updated_at_utc, target_job.started_at_utc, target_job.run_at_utc, target_job.created_at_utc) > v_stale_cutoff
+          THEN target_job.updated_at_utc
         ELSE v_now
       END
   WHERE p_source_job_id IS NULL
-     OR public.banking_pay_workbench_jobs.id IS DISTINCT FROM p_source_job_id
-  RETURNING public.banking_pay_workbench_jobs.id,
-            public.banking_pay_workbench_jobs.status,
+     OR target_job.id IS DISTINCT FROM p_source_job_id
+  RETURNING target_job.id,
+            target_job.status,
             (xmax = 0)
   INTO v_job_id,
        v_job_status,
@@ -183508,6 +183995,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
@@ -195351,7 +195839,7 @@ BEGIN
       'dirty_priority_cap_reached', v_dirty_priority_cap_reached
     )
   );
-  v_started_at_utc := clock_timestamp();
+  -- Keep the original whole-RPC start time; dirty-priority work must count toward the drain wall-clock budget.
   v_phase_started_at_utc := clock_timestamp();
 
   IF p_allowed_job_types IS NULL THEN
@@ -195685,7 +196173,7 @@ BEGIN
     v_dead_stale_count := v_supplemental_stale_terminal_count;
     v_dead_count := v_dead_stale_count;
     v_more_due := true;
-    v_stop_reason := 'MAX_RUNTIME_NEAR_EXHAUSTED';
+    v_stop_reason := 'WORKER_DRAIN_BUDGET_EXHAUSTED';
   ELSE
     v_phase_started_at_utc := clock_timestamp();
     v_budget_claim_limit := LEAST(
@@ -195775,7 +196263,7 @@ BEGIN
               'message', 'Claimed Banking Pay workbench job was released without processing because the worker was near its runtime budget.',
               'worker_id', v_worker_id,
               'released_at_utc', v_now::text,
-              'stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
+              'stop_reason', 'WORKER_DRAIN_BUDGET_EXHAUSTED'
             ),
             payload_json = jsonb_strip_nulls(
               (COALESCE(unprocessed_job.payload_json, '{}'::jsonb) - ARRAY[
@@ -195789,7 +196277,7 @@ BEGIN
                 'claim_released_due_to_worker_budget', true,
                 'claim_released_at_utc', v_now::text,
                 'claim_released_by_worker_id', v_worker_id,
-                'claim_release_stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED',
+                'claim_release_stop_reason', 'WORKER_DRAIN_BUDGET_EXHAUSTED',
                 'claim_release_cleared_worker_lease_payload', true
               )
             ),
@@ -195806,7 +196294,7 @@ BEGIN
       FROM requeued_unprocessed_jobs;
 
       v_more_due := true;
-      v_stop_reason := 'MAX_RUNTIME_NEAR_EXHAUSTED';
+      v_stop_reason := 'WORKER_DRAIN_BUDGET_EXHAUSTED';
       EXIT;
     END IF;
 
@@ -196313,7 +196801,7 @@ BEGIN
                   'message', 'Claimed Banking Pay workbench job was released before starting a stage because the worker was near its runtime budget.',
                   'worker_id', v_worker_id,
                   'released_at_utc', v_now::text,
-                  'stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED'
+                  'stop_reason', 'WORKER_DRAIN_BUDGET_EXHAUSTED'
                 ),
                 payload_json = jsonb_strip_nulls(
                   (COALESCE(unprocessed_job.payload_json, '{}'::jsonb) - ARRAY[
@@ -196327,7 +196815,7 @@ BEGIN
                     'claim_released_before_stage_due_to_worker_budget', true,
                     'claim_released_at_utc', v_now::text,
                     'claim_released_by_worker_id', v_worker_id,
-                    'claim_release_stop_reason', 'MAX_RUNTIME_NEAR_EXHAUSTED',
+                    'claim_release_stop_reason', 'WORKER_DRAIN_BUDGET_EXHAUSTED',
                     'claim_release_cleared_worker_lease_payload', true
                   )
                 ),
@@ -196344,7 +196832,7 @@ BEGIN
           FROM requeued_unprocessed_jobs;
 
           v_more_due := true;
-          v_stop_reason := 'MAX_RUNTIME_NEAR_EXHAUSTED';
+          v_stop_reason := 'WORKER_DRAIN_BUDGET_EXHAUSTED';
           EXIT;
         END IF;
 
@@ -196919,7 +197407,7 @@ BEGIN
     v_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer);
     IF v_elapsed_ms >= (v_max_runtime_ms - v_min_phase_budget_ms) THEN
       v_more_due := true;
-      v_stop_reason := 'MAX_RUNTIME_NEAR_EXHAUSTED';
+      v_stop_reason := 'WORKER_DRAIN_BUDGET_EXHAUSTED';
       v_final_more_due_elapsed_ms := 0;
     ELSE
       v_phase_started_at_utc := clock_timestamp();
@@ -197172,7 +197660,7 @@ BEGIN
       ),
       'job_retry_base_seconds', v_job_retry_base_seconds,
       'job_retry_max_seconds', v_job_retry_max_seconds,
-      'near_deadline', COALESCE(v_stop_reason, '') = 'MAX_RUNTIME_NEAR_EXHAUSTED'
+      'near_deadline', COALESCE(v_stop_reason, '') = 'WORKER_DRAIN_BUDGET_EXHAUSTED'
     )
     || jsonb_build_object(
       'claimed_count', v_claimed_count,
@@ -197217,6 +197705,7 @@ BEGIN
     );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_decision_operations(
@@ -209692,15 +210181,14 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_dirty_apply_job_process(
-  p_job_id uuid,
-  p_limit integer DEFAULT 100
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-VOLATILE
-SECURITY DEFINER
-SET search_path TO 'public'
+
+
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_dirty_apply_job_process(p_job_id uuid, p_limit integer DEFAULT 100)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_started_at timestamptz := clock_timestamp();
@@ -209973,7 +210461,19 @@ BEGIN
           'processed_candidate_id', v_candidate_id::text,
           'dirty_scope_count', v_scope_count,
           'dirty_line_count', v_line_work_total,
-          'dirty_preview_count', v_preview_total
+          'dirty_preview_count', v_preview_total,
+          'dirty_apply_row_marking_applied', true,
+          'actual_refresh_job_id', NULLIF(BTRIM(COALESCE(v_refresh_result->>'job_id', '')), ''),
+          'actual_refresh_job_type', NULLIF(BTRIM(COALESCE(v_refresh_result->>'job_type', v_refresh_result->>'canonical_job_type', '')), ''),
+          'actual_refresh_scope_status', NULLIF(BTRIM(COALESCE(v_refresh_result->>'scope_status', '')), ''),
+          'source_build_required', lower(BTRIM(COALESCE(v_refresh_result->>'source_build_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+          'delta_refresh_required', lower(BTRIM(COALESCE(v_refresh_result->>'delta_refresh_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+          'line_work_action', CASE
+            WHEN lower(BTRIM(COALESCE(v_refresh_result->>'delta_refresh_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+              THEN 'DIRTY_ROW_MARKING_ONLY_DELTA_REFRESH'
+            ELSE 'SOURCE_BUILD_OR_LEGACY_REFRESH'
+          END,
+          'refresh_enqueue_result', COALESCE(v_refresh_result, '{}'::jsonb)
         )
       ),
       updated_at_utc = v_now
@@ -209996,6 +210496,18 @@ BEGIN
     'sessions_touched', v_session_count,
     'jobs_queued', v_jobs_queued,
     'processed_source_change_seq', v_processed_source_change_seq,
+    'dirty_apply_row_marking_applied', true,
+    'actual_refresh_job_id', NULLIF(BTRIM(COALESCE(v_refresh_result->>'job_id', '')), ''),
+    'actual_refresh_job_type', NULLIF(BTRIM(COALESCE(v_refresh_result->>'job_type', v_refresh_result->>'canonical_job_type', '')), ''),
+    'actual_refresh_scope_status', NULLIF(BTRIM(COALESCE(v_refresh_result->>'scope_status', '')), ''),
+    'source_build_required', lower(BTRIM(COALESCE(v_refresh_result->>'source_build_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    'delta_refresh_required', lower(BTRIM(COALESCE(v_refresh_result->>'delta_refresh_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    'line_work_action', CASE
+      WHEN lower(BTRIM(COALESCE(v_refresh_result->>'delta_refresh_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        THEN 'DIRTY_ROW_MARKING_ONLY_DELTA_REFRESH'
+      ELSE 'SOURCE_BUILD_OR_LEGACY_REFRESH'
+    END,
+    'refresh_enqueue_result', COALESCE(v_refresh_result, '{}'::jsonb),
     'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at)) * 1000)::numeric, 2)
   );
 END;

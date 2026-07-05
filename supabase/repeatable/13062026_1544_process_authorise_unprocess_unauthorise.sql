@@ -8,6 +8,7 @@ DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, js
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text);
 
+
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(p_week_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_timesheet_create_json jsonb DEFAULT NULL::jsonb, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_rotation_json jsonb DEFAULT NULL::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_materialise_staged_evidence boolean DEFAULT true, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text, p_queue_timesheet_materialisation_json jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1802,9 +1803,66 @@ BEGIN
     'timesheet_financials_id', v_current_tsfin.id,
     'backend_row_signature', v_after_row_signature,
     'row_signature', v_after_row_signature,
-    'lifecycle_signature_stable', false,
-    'lifecycle_signature_pending_reason', 'POST_SAVE_AFFECTED_ROWS_REFRESH_REQUIRED',
-    'requires_authorise_preflight', true,
+    'expected_row_signature', v_after_row_signature,
+    'lifecycle_signature_stable', v_after_row_signature IS NOT NULL,
+    'lifecycle_signature_pending_reason', CASE WHEN v_after_row_signature IS NULL THEN 'POST_SAVE_ROW_SIGNATURE_UNAVAILABLE' ELSE NULL::text END,
+    'requires_authorise_preflight', v_after_row_signature IS NULL,
+    'requires_affected_row_refresh', v_after_row_signature IS NULL,
+    'refresh_required', v_after_row_signature IS NULL,
+    'permission_state_patch_complete', v_after_row_signature IS NOT NULL,
+    'priority_badges_patch_complete', v_after_row_signature IS NOT NULL,
+    'immediate_lifecycle_patch_available', v_after_row_signature IS NOT NULL,
+    'lifecycle_patch', jsonb_strip_nulls(jsonb_build_object(
+      'timesheet_id', v_current_ts.timesheet_id,
+      'current_timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', v_week.id,
+      'booking_id', v_current_ts.booking_id,
+      'timesheet_status', v_current_ts.status::text,
+      'status', v_current_ts.status::text,
+      'contract_week_status', v_week.status::text,
+      'processing_status', v_current_tsfin.processing_status::text,
+      'tsfin_processing_status', v_current_tsfin.processing_status::text,
+      'timesheet_financials_id', v_current_tsfin.id,
+      'is_current', v_current_ts.is_current,
+      'tsfin_is_current', v_current_tsfin.is_current,
+      'authorised_at_server', v_current_ts.authorised_at_server,
+      'revoked_at', v_current_ts.revoked_at,
+      'row_signature', v_after_row_signature,
+      'backend_row_signature', v_after_row_signature,
+      'expected_row_signature', v_after_row_signature,
+      'lifecycle_signature_stable', v_after_row_signature IS NOT NULL,
+      'lifecycle_signature_pending_reason', CASE WHEN v_after_row_signature IS NULL THEN 'POST_SAVE_ROW_SIGNATURE_UNAVAILABLE' ELSE NULL::text END,
+      'permission_state_patch_complete', v_after_row_signature IS NOT NULL,
+      'priority_badges_patch_complete', v_after_row_signature IS NOT NULL,
+      'immediate_lifecycle_patch_available', v_after_row_signature IS NOT NULL,
+      'requires_network_before_authorise', v_after_row_signature IS NULL,
+      'refresh_required', v_after_row_signature IS NULL,
+      'row_stale', v_after_row_signature IS NULL,
+      'lifecycle_refresh_failed', v_after_row_signature IS NULL
+    )),
+    'timesheet', jsonb_strip_nulls(jsonb_build_object(
+      'timesheet_id', v_current_ts.timesheet_id,
+      'contract_week_id', v_week.id,
+      'booking_id', v_current_ts.booking_id,
+      'status', v_current_ts.status::text,
+      'is_current', v_current_ts.is_current,
+      'authorised_at_server', v_current_ts.authorised_at_server,
+      'revoked_at', v_current_ts.revoked_at,
+      'row_signature', v_after_row_signature,
+      'backend_row_signature', v_after_row_signature
+    )),
+    'tsfin', jsonb_strip_nulls(jsonb_build_object(
+      'id', v_current_tsfin.id,
+      'timesheet_id', v_current_tsfin.timesheet_id,
+      'is_current', v_current_tsfin.is_current,
+      'processing_status', v_current_tsfin.processing_status::text,
+      'total_hours', v_current_tsfin.total_hours,
+      'total_pay_ex_vat', v_current_tsfin.total_pay_ex_vat,
+      'total_charge_ex_vat', v_current_tsfin.total_charge_ex_vat,
+      'margin_ex_vat', v_current_tsfin.margin_ex_vat,
+      'computed_at_utc', v_current_tsfin.computed_at_utc,
+      'updated_at', v_current_tsfin.updated_at
+    )),
     'summary_pay_state_refresh', COALESCE(v_summary_refresh_result, '{}'::jsonb),
     'evidence_summary', jsonb_build_object(
       'attached_evidence_count', v_attached_evidence_count,
@@ -1815,12 +1873,24 @@ BEGIN
       'selected_queue_timesheet_queue_id', v_selected_queue_id,
       'selected_queue_timesheet_storage_key', v_selected_queue_storage_key
     ),
-    'affected_rows', jsonb_build_array(jsonb_build_object(
+    'affected_rows', jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
       'timesheet_id', v_current_ts.timesheet_id,
+      'current_timesheet_id', v_current_ts.timesheet_id,
       'contract_week_id', v_week.id,
       'booking_id', v_current_ts.booking_id,
+      'timesheet_status', v_current_ts.status::text,
+      'contract_week_status', v_week.status::text,
+      'processing_status', v_current_tsfin.processing_status::text,
+      'tsfin_processing_status', v_current_tsfin.processing_status::text,
+      'row_signature', v_after_row_signature,
+      'backend_row_signature', v_after_row_signature,
+      'expected_row_signature', v_after_row_signature,
+      'permission_state_patch_complete', v_after_row_signature IS NOT NULL,
+      'priority_badges_patch_complete', v_after_row_signature IS NOT NULL,
+      'immediate_lifecycle_patch_available', v_after_row_signature IS NOT NULL,
+      'requires_network_before_authorise', v_after_row_signature IS NULL,
       'row_key', 'timesheet:' || v_current_ts.timesheet_id::text
-    )),
+    ))),
     'cache_invalidation_hints', jsonb_build_object(
       'changed_domains', jsonb_build_array('timesheets', 'timesheets_financials', 'timesheet_summary_pay_state_cache', 'timesheet_pay_state', 'contract_weeks', 'timesheet_evidence', 'manual_timesheet_queue'),
       'contract_week_id', v_week.id,
@@ -1894,6 +1964,8 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
+
 
 DROP FUNCTION IF EXISTS public.timesheet_daily_manual_process_atomic(uuid, uuid, uuid, jsonb, jsonb, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.timesheet_daily_manual_process_atomic(uuid, uuid, uuid, jsonb, jsonb, timestamp with time zone, text);

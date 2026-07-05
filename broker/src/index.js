@@ -51398,6 +51398,7 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 
 // Replacement function: handleContractWeekManualUpsert (patched source lines 39943-44494)
 
+
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
  
@@ -54730,6 +54731,29 @@ const expenseEvidenceKindCategories = {
            context: bulkResponseContext
          }];
 
+     const affectedRowHasAuthoritativeLifecyclePatch = affectedRows.some((row) => !!(
+       row && typeof row === 'object' && (
+         row.immediate_lifecycle_patch_available === true ||
+         row.permission_state_patch_complete === true ||
+         row.priority_badges_patch_complete === true ||
+         String(row.row_signature || row.backend_row_signature || row.expected_row_signature || '').trim()
+       )
+     ));
+     const saveResponseHasRowSignature = !!finalBackendRowSignature;
+     const authoritativeLifecyclePatchAvailable = !!(
+       saveResponseHasRowSignature && (
+         bulkPayload.lifecycle_signature_stable === true ||
+         bulkPayload.immediate_lifecycle_patch_available === true ||
+         bulkPayload.permission_state_patch_complete === true ||
+         bulkPayload.priority_badges_patch_complete === true ||
+         (bulkPayload.lifecycle_patch && typeof bulkPayload.lifecycle_patch === 'object') ||
+         affectedRowHasAuthoritativeLifecyclePatch
+       )
+     );
+     const lifecycleSignaturePendingReason = authoritativeLifecyclePatchAvailable
+       ? null
+       : String(bulkPayload.lifecycle_signature_pending_reason || (saveResponseHasRowSignature ? 'POST_SAVE_AFFECTED_ROWS_REFRESH_REQUIRED' : 'POST_SAVE_ROW_SIGNATURE_UNAVAILABLE'));
+
      const responsePayload = {
        ok: bulkPayload.ok !== false,
        success: bulkPayload.success !== false,
@@ -54755,16 +54779,20 @@ const expenseEvidenceKindCategories = {
        new_processing_status: bulkPayload.new_processing_status || bulkPayload.processing_status || null,
        backend_row_signature: finalBackendRowSignature,
        row_signature: finalBackendRowSignature,
-       lifecycle_signature_stable: bulkPayload.lifecycle_signature_stable === true ? true : false,
-       lifecycle_signature_pending_reason: String(bulkPayload.lifecycle_signature_pending_reason || 'POST_SAVE_AFFECTED_ROWS_REFRESH_REQUIRED'),
-       requires_authorise_preflight: bulkPayload.requires_authorise_preflight !== false,
-       permission_state_patch_complete: true,
-       priority_badges_patch_complete: true,
-       immediate_lifecycle_patch_available: true,
+       expected_row_signature: finalBackendRowSignature,
+       lifecycle_signature_stable: authoritativeLifecyclePatchAvailable,
+       lifecycle_signature_pending_reason: lifecycleSignaturePendingReason,
+       requires_authorise_preflight: authoritativeLifecyclePatchAvailable ? false : true,
+       permission_state_patch_complete: authoritativeLifecyclePatchAvailable,
+       priority_badges_patch_complete: authoritativeLifecyclePatchAvailable,
+       immediate_lifecycle_patch_available: authoritativeLifecyclePatchAvailable,
+       lifecycle_patch: (bulkPayload.lifecycle_patch && typeof bulkPayload.lifecycle_patch === 'object') ? bulkPayload.lifecycle_patch : (affectedRows[0] || null),
+       timesheet: (bulkPayload.timesheet && typeof bulkPayload.timesheet === 'object') ? bulkPayload.timesheet : null,
+       tsfin: (bulkPayload.tsfin && typeof bulkPayload.tsfin === 'object') ? bulkPayload.tsfin : null,
        evidence_summary: (bulkPayload.evidence_summary && typeof bulkPayload.evidence_summary === 'object') ? bulkPayload.evidence_summary : {},
        affected_rows: affectedRows,
-       requires_affected_row_refresh: true,
-       refresh_required: true,
+       requires_affected_row_refresh: authoritativeLifecyclePatchAvailable ? false : true,
+       refresh_required: authoritativeLifecyclePatchAvailable ? false : true,
        cache_invalidation_hints: (bulkPayload.cache_invalidation_hints && typeof bulkPayload.cache_invalidation_hints === 'object') ? bulkPayload.cache_invalidation_hints : {
          changed_domains: ['timesheets', 'timesheets_financials', 'contract_weeks', 'timesheet_evidence', 'manual_timesheet_queue'],
          contract_week_id: bulkPayload.contract_week_id || cw.id || null,
@@ -54874,6 +54902,29 @@ const expenseEvidenceKindCategories = {
          context: bulkResponseContext
        }];
 
+   const affectedRowHasAuthoritativeLifecyclePatch = affectedRows.some((row) => !!(
+     row && typeof row === 'object' && (
+       row.immediate_lifecycle_patch_available === true ||
+       row.permission_state_patch_complete === true ||
+       row.priority_badges_patch_complete === true ||
+       String(row.row_signature || row.backend_row_signature || row.expected_row_signature || '').trim()
+     )
+   ));
+   const saveResponseHasRowSignature = !!finalBackendRowSignature;
+   const authoritativeLifecyclePatchAvailable = !!(
+     saveResponseHasRowSignature && (
+       standardPayload.lifecycle_signature_stable === true ||
+       standardPayload.immediate_lifecycle_patch_available === true ||
+       standardPayload.permission_state_patch_complete === true ||
+       standardPayload.priority_badges_patch_complete === true ||
+       (standardPayload.lifecycle_patch && typeof standardPayload.lifecycle_patch === 'object') ||
+       affectedRowHasAuthoritativeLifecyclePatch
+     )
+   );
+   const lifecycleSignaturePendingReason = authoritativeLifecyclePatchAvailable
+     ? null
+     : String(standardPayload.lifecycle_signature_pending_reason || (saveResponseHasRowSignature ? 'POST_SAVE_AFFECTED_ROWS_REFRESH_REQUIRED' : 'POST_SAVE_ROW_SIGNATURE_UNAVAILABLE'));
+
    const responsePayload = {
      ok: standardPayload.ok !== false,
      success: standardPayload.success !== false,
@@ -54894,16 +54945,20 @@ const expenseEvidenceKindCategories = {
      new_processing_status: standardPayload.new_processing_status || standardPayload.processing_status || null,
      backend_row_signature: finalBackendRowSignature,
      row_signature: finalBackendRowSignature,
-     lifecycle_signature_stable: standardPayload.lifecycle_signature_stable === true ? true : false,
-     lifecycle_signature_pending_reason: String(standardPayload.lifecycle_signature_pending_reason || 'POST_SAVE_AFFECTED_ROWS_REFRESH_REQUIRED'),
-     requires_authorise_preflight: standardPayload.requires_authorise_preflight !== false,
-     permission_state_patch_complete: true,
-     priority_badges_patch_complete: true,
-     immediate_lifecycle_patch_available: true,
+     expected_row_signature: finalBackendRowSignature,
+     lifecycle_signature_stable: authoritativeLifecyclePatchAvailable,
+     lifecycle_signature_pending_reason: lifecycleSignaturePendingReason,
+     requires_authorise_preflight: authoritativeLifecyclePatchAvailable ? false : true,
+     permission_state_patch_complete: authoritativeLifecyclePatchAvailable,
+     priority_badges_patch_complete: authoritativeLifecyclePatchAvailable,
+     immediate_lifecycle_patch_available: authoritativeLifecyclePatchAvailable,
+     lifecycle_patch: (standardPayload.lifecycle_patch && typeof standardPayload.lifecycle_patch === 'object') ? standardPayload.lifecycle_patch : (affectedRows[0] || null),
+     timesheet: (standardPayload.timesheet && typeof standardPayload.timesheet === 'object') ? standardPayload.timesheet : null,
+     tsfin: (standardPayload.tsfin && typeof standardPayload.tsfin === 'object') ? standardPayload.tsfin : null,
      evidence_summary: (standardPayload.evidence_summary && typeof standardPayload.evidence_summary === 'object') ? standardPayload.evidence_summary : {},
      affected_rows: affectedRows,
-     requires_affected_row_refresh: true,
-     refresh_required: true,
+     requires_affected_row_refresh: authoritativeLifecyclePatchAvailable ? false : true,
+     refresh_required: authoritativeLifecyclePatchAvailable ? false : true,
      cache_invalidation_hints: (standardPayload.cache_invalidation_hints && typeof standardPayload.cache_invalidation_hints === 'object') ? standardPayload.cache_invalidation_hints : {
        changed_domains: ['timesheets', 'timesheets_financials', 'contract_weeks', 'timesheet_evidence', 'manual_timesheet_queue'],
        contract_week_id: standardPayload.contract_week_id || cw.id || null,
@@ -54941,6 +54996,12 @@ const expenseEvidenceKindCategories = {
 
    return withCORS(env, req, ok(responsePayload));
  }
+
+
+
+
+
+
 
 
 
