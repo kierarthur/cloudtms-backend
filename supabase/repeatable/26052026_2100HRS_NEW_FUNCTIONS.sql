@@ -22752,12 +22752,14 @@ BEGIN
       || COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)::text
     );
 
-    v_delta_coalescing_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
-      || ':session:' || v_session_id::text
-      || ':candidate:' || p_candidate_id::text
-      || ':version:' || COALESCE(v_session_row.version, 0)::text
-      || ':projection_class:' || v_projection_class
-      || ':timesheets:' || v_delta_ids_hash;
+    v_delta_coalescing_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+    || ':session:' || COALESCE(v_session_id::text, 'none')
+    || ':version:' || COALESCE(COALESCE(v_session_row.version, 0), 0)::text
+    || ':projection_mode:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''), 'DELTA'))), ''), 'DELTA')
+    || ':projection_class:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(NULLIF(v_projection_class, ''), 'UNKNOWN'))), ''), 'UNKNOWN')
+    || ':refresh_scope:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), ''), 'TARGETED_TIMESHEETS'))), ''), 'TARGETED_TIMESHEETS')
+    || ':candidate:' || COALESCE(p_candidate_id::text, 'none')
+    || ':timesheets:' || COALESCE(v_delta_ids_hash, md5('[]:[]'));
     v_delta_coalescing_hash := md5(v_delta_coalescing_key);
 
     SELECT running_delta_job.id
@@ -22767,39 +22769,145 @@ BEGIN
       AND running_delta_job.candidate_id = p_candidate_id
       AND UPPER(BTRIM(COALESCE(running_delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
       AND UPPER(BTRIM(COALESCE(running_delta_job.status, ''))) = 'RUNNING'
-      AND COALESCE(
-            NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
-            NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'coalescing_key', '')), ''),
-            'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
-              || ':session:' || running_delta_job.session_id::text
-              || ':candidate:' || running_delta_job.candidate_id::text
-              || ':version:' || COALESCE(running_delta_job.payload_json->>'session_version', COALESCE(v_session_row.version, 0)::text)
-              || ':projection_class:' || UPPER(BTRIM(COALESCE(running_delta_job.payload_json->>'projection_class', 'UNKNOWN')))
+      AND (
+            SELECT
+              'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+              || ':session:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                running_delta_job.session_id::text,
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'session_id',
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_id',
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'source_session_id',
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'target_session_id',
+                ''
+              )), ''), 'none')
+              || ':version:' || COALESCE(
+                CASE
+                  WHEN delta_family_values.session_version_text ~ '^-?[0-9]{1,18}$'
+                    THEN delta_family_values.session_version_text::bigint
+                  ELSE COALESCE(COALESCE(v_session_row.version, 0), 0)::bigint
+                END,
+                0
+              )::text
+              || ':projection_mode:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                NULLIF(delta_family_values.projection_mode_text, ''),
+                NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''),
+                'DELTA'
+              ))), ''), 'DELTA')
+              || ':projection_class:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                NULLIF(delta_family_values.projection_class_text, ''),
+                NULLIF(v_projection_class, ''),
+                'UNKNOWN'
+              ))), ''), 'UNKNOWN')
+              || ':refresh_scope:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                NULLIF(delta_family_values.refresh_scope_kind_text, ''),
+                NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), ''),
+                CASE
+                  WHEN jsonb_array_length(COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)) > 0
+                    OR jsonb_array_length(COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)) > 0
+                    THEN 'TARGETED_TIMESHEETS'
+                  ELSE 'CANDIDATE_FULL_LIVE'
+                END
+              ))), ''), 'CANDIDATE_FULL_LIVE')
+              || ':candidate:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                running_delta_job.candidate_id::text,
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'candidate_id',
+                ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{candidate,id}'),
+                ''
+              )), ''), 'none')
               || ':timesheets:' || md5(
-                   COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                   || ':'
-                   || COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                 )
+                COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)::text
+                || ':'
+                || COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)::text
+              )
+            FROM (
+              SELECT
+                NULLIF(BTRIM(COALESCE(
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'session_version',
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_version',
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'version',
+                  CASE WHEN COALESCE(v_session_row.version, 0) IS NULL THEN NULL ELSE (COALESCE(v_session_row.version, 0))::text END,
+                  '0'
+                )), '') AS session_version_text,
+                UPPER(BTRIM(COALESCE(
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'projection_mode', ''),
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'resolved_mode', ''),
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'mode', ''),
+                  NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''),
+                  'DELTA'
+                ))) AS projection_mode_text,
+                UPPER(BTRIM(COALESCE(
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'projection_class', ''),
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'classifier_projection_class', ''),
+                  NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{classifier_result,projection_class}'), ''),
+                  NULLIF(v_projection_class, ''),
+                  'UNKNOWN'
+                ))) AS projection_class_text,
+                UPPER(BTRIM(COALESCE(
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'refresh_scope_kind', ''),
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'scope_kind', ''),
+                  NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{source_build,refresh_scope_kind}'), ''),
+                  NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{preview_decisions_json,refresh_scope_kind}'), ''),
+                  NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), '')
+                ))) AS refresh_scope_kind_text
+            ) AS delta_family_values
+            CROSS JOIN (
+              SELECT COALESCE(jsonb_agg(delta_family_targeted_sorted.timesheet_id_text ORDER BY delta_family_targeted_sorted.timesheet_id_text), '[]'::jsonb) AS targeted_timesheet_ids_json
+              FROM (
+                SELECT DISTINCT NULLIF(BTRIM(delta_family_targeted_raw.value), '') AS timesheet_id_text
+                FROM jsonb_array_elements_text(
+                  CASE
+                    WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'array'
+                      THEN (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids'
+                    WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'string'
+                      THEN jsonb_build_array((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_ids')
+                    WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')
+                    WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')
+                    WHEN NULLIF(BTRIM(COALESCE(
+                           (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                           (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id',
+                           ''
+                         )), '') IS NOT NULL
+                      THEN jsonb_build_array(COALESCE(
+                        (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                        (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id'
+                      ))
+                    ELSE '[]'::jsonb
+                  END
+                ) AS delta_family_targeted_raw(value)
+                WHERE NULLIF(BTRIM(delta_family_targeted_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              ) AS delta_family_targeted_sorted
+            ) AS delta_family_targeted
+            CROSS JOIN (
+              SELECT COALESCE(jsonb_agg(delta_family_linked_sorted.timesheet_id_text ORDER BY delta_family_linked_sorted.timesheet_id_text), '[]'::jsonb) AS linked_timesheet_ids_json
+              FROM (
+                SELECT DISTINCT NULLIF(BTRIM(delta_family_linked_raw.value), '') AS timesheet_id_text
+                FROM jsonb_array_elements_text(
+                  CASE
+                    WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'array'
+                      THEN (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids'
+                    WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'string'
+                      THEN jsonb_build_array((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'linked_timesheet_ids')
+                    WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')
+                    WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')
+                    ELSE '[]'::jsonb
+                  END
+                ) AS delta_family_linked_raw(value)
+                WHERE NULLIF(BTRIM(delta_family_linked_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              ) AS delta_family_linked_sorted
+            ) AS delta_family_linked
           ) = v_delta_coalescing_key
     ORDER BY running_delta_job.started_at_utc ASC NULLS LAST, running_delta_job.created_at_utc ASC, running_delta_job.id ASC
     LIMIT 1;
 
     v_dedupe_key := CASE
       WHEN v_delta_active_running_job_id IS NOT NULL THEN
-        'WORKBENCH_CANDIDATE_DELTA_REFRESH_WAITING'
-        || ':session:' || v_session_id::text
-        || ':candidate:' || p_candidate_id::text
-        || ':version:' || COALESCE(v_session_row.version, 0)::text
-        || ':projection_class:' || v_projection_class
-        || ':timesheets:' || v_delta_ids_hash
-        || ':after_running:' || v_delta_active_running_job_id::text
+        v_delta_coalescing_key || ':waiting_after_running:' || v_delta_active_running_job_id::text
       ELSE
-        'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
-        || ':session:' || v_session_id::text
-        || ':candidate:' || p_candidate_id::text
-        || ':version:' || COALESCE(v_session_row.version, 0)::text
-        || ':projection_class:' || v_projection_class
-        || ':timesheets:' || v_delta_ids_hash
+        v_delta_coalescing_key
     END;
 
     v_payload_out_json := jsonb_strip_nulls(
@@ -22819,6 +22927,8 @@ BEGIN
         'source_change_sequence', COALESCE(v_source_change_seq, 0),
         'latest_source_change_seq', COALESCE(v_source_change_seq, 0),
         'delta_coalescing_key', v_delta_coalescing_key,
+        'delta_family_key', v_delta_coalescing_key,
+        'normalised_delta_family_key', v_delta_coalescing_key,
         'delta_coalescing_hash', v_delta_coalescing_hash,
         'coalesced_source_change_seqs', jsonb_build_array(COALESCE(v_source_change_seq, 0)),
         'coalesced_event_count', 1,
@@ -22996,22 +23106,136 @@ BEGIN
       AND existing_delta_job.candidate_id = p_candidate_id
       AND UPPER(BTRIM(COALESCE(existing_delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
       AND UPPER(BTRIM(COALESCE(existing_delta_job.status, ''))) = 'QUEUED'
-      AND COALESCE(existing_delta_job.payload_json->>'session_version', '') ~ '^[0-9]{1,18}$'
-      AND (existing_delta_job.payload_json->>'session_version')::bigint = COALESCE(v_session_row.version, 0)
-      AND UPPER(BTRIM(COALESCE(existing_delta_job.payload_json->>'projection_class', ''))) = v_projection_class
-      AND COALESCE(
-            NULLIF(BTRIM(COALESCE(existing_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
-            NULLIF(BTRIM(COALESCE(existing_delta_job.payload_json->>'coalescing_key', '')), ''),
-            'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
-              || ':session:' || existing_delta_job.session_id::text
-              || ':candidate:' || existing_delta_job.candidate_id::text
-              || ':version:' || COALESCE(existing_delta_job.payload_json->>'session_version', COALESCE(v_session_row.version, 0)::text)
-              || ':projection_class:' || UPPER(BTRIM(COALESCE(existing_delta_job.payload_json->>'projection_class', 'UNKNOWN')))
+      AND (
+            SELECT
+              'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+              || ':session:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                existing_delta_job.session_id::text,
+                (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'session_id',
+                (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_id',
+                (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'source_session_id',
+                (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'target_session_id',
+                ''
+              )), ''), 'none')
+              || ':version:' || COALESCE(
+                CASE
+                  WHEN delta_family_values.session_version_text ~ '^-?[0-9]{1,18}$'
+                    THEN delta_family_values.session_version_text::bigint
+                  ELSE COALESCE(COALESCE(v_session_row.version, 0), 0)::bigint
+                END,
+                0
+              )::text
+              || ':projection_mode:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                NULLIF(delta_family_values.projection_mode_text, ''),
+                NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''),
+                'DELTA'
+              ))), ''), 'DELTA')
+              || ':projection_class:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                NULLIF(delta_family_values.projection_class_text, ''),
+                NULLIF(v_projection_class, ''),
+                'UNKNOWN'
+              ))), ''), 'UNKNOWN')
+              || ':refresh_scope:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                NULLIF(delta_family_values.refresh_scope_kind_text, ''),
+                NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), ''),
+                CASE
+                  WHEN jsonb_array_length(COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)) > 0
+                    OR jsonb_array_length(COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)) > 0
+                    THEN 'TARGETED_TIMESHEETS'
+                  ELSE 'CANDIDATE_FULL_LIVE'
+                END
+              ))), ''), 'CANDIDATE_FULL_LIVE')
+              || ':candidate:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                existing_delta_job.candidate_id::text,
+                (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'candidate_id',
+                ((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>>'{candidate,id}'),
+                ''
+              )), ''), 'none')
               || ':timesheets:' || md5(
-                   COALESCE(CASE WHEN jsonb_typeof(existing_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN existing_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                   || ':'
-                   || COALESCE(CASE WHEN jsonb_typeof(existing_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN existing_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                 )
+                COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)::text
+                || ':'
+                || COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)::text
+              )
+            FROM (
+              SELECT
+                NULLIF(BTRIM(COALESCE(
+                  (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'session_version',
+                  (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_version',
+                  (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'version',
+                  CASE WHEN COALESCE(v_session_row.version, 0) IS NULL THEN NULL ELSE (COALESCE(v_session_row.version, 0))::text END,
+                  '0'
+                )), '') AS session_version_text,
+                UPPER(BTRIM(COALESCE(
+                  NULLIF((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'projection_mode', ''),
+                  NULLIF((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'resolved_mode', ''),
+                  NULLIF((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'mode', ''),
+                  NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''),
+                  'DELTA'
+                ))) AS projection_mode_text,
+                UPPER(BTRIM(COALESCE(
+                  NULLIF((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'projection_class', ''),
+                  NULLIF((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'classifier_projection_class', ''),
+                  NULLIF(((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>>'{classifier_result,projection_class}'), ''),
+                  NULLIF(v_projection_class, ''),
+                  'UNKNOWN'
+                ))) AS projection_class_text,
+                UPPER(BTRIM(COALESCE(
+                  NULLIF((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'refresh_scope_kind', ''),
+                  NULLIF((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'scope_kind', ''),
+                  NULLIF(((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>>'{source_build,refresh_scope_kind}'), ''),
+                  NULLIF(((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>>'{preview_decisions_json,refresh_scope_kind}'), ''),
+                  NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), '')
+                ))) AS refresh_scope_kind_text
+            ) AS delta_family_values
+            CROSS JOIN (
+              SELECT COALESCE(jsonb_agg(delta_family_targeted_sorted.timesheet_id_text ORDER BY delta_family_targeted_sorted.timesheet_id_text), '[]'::jsonb) AS targeted_timesheet_ids_json
+              FROM (
+                SELECT DISTINCT NULLIF(BTRIM(delta_family_targeted_raw.value), '') AS timesheet_id_text
+                FROM jsonb_array_elements_text(
+                  CASE
+                    WHEN jsonb_typeof((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'array'
+                      THEN (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids'
+                    WHEN jsonb_typeof((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'string'
+                      THEN jsonb_build_array((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_ids')
+                    WHEN jsonb_typeof(((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')
+                    WHEN jsonb_typeof(((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')
+                    WHEN NULLIF(BTRIM(COALESCE(
+                           (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                           (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id',
+                           ''
+                         )), '') IS NOT NULL
+                      THEN jsonb_build_array(COALESCE(
+                        (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                        (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id'
+                      ))
+                    ELSE '[]'::jsonb
+                  END
+                ) AS delta_family_targeted_raw(value)
+                WHERE NULLIF(BTRIM(delta_family_targeted_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              ) AS delta_family_targeted_sorted
+            ) AS delta_family_targeted
+            CROSS JOIN (
+              SELECT COALESCE(jsonb_agg(delta_family_linked_sorted.timesheet_id_text ORDER BY delta_family_linked_sorted.timesheet_id_text), '[]'::jsonb) AS linked_timesheet_ids_json
+              FROM (
+                SELECT DISTINCT NULLIF(BTRIM(delta_family_linked_raw.value), '') AS timesheet_id_text
+                FROM jsonb_array_elements_text(
+                  CASE
+                    WHEN jsonb_typeof((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'array'
+                      THEN (COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids'
+                    WHEN jsonb_typeof((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'string'
+                      THEN jsonb_build_array((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))->>'linked_timesheet_ids')
+                    WHEN jsonb_typeof(((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')
+                    WHEN jsonb_typeof(((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(existing_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')
+                    ELSE '[]'::jsonb
+                  END
+                ) AS delta_family_linked_raw(value)
+                WHERE NULLIF(BTRIM(delta_family_linked_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              ) AS delta_family_linked_sorted
+            ) AS delta_family_linked
           ) = v_delta_coalescing_key
       AND lower(BTRIM(COALESCE(existing_delta_job.payload_json->>'force_legacy', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
       AND lower(BTRIM(COALESCE(existing_delta_job.payload_json->>'force_broad_legacy', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -23111,12 +23335,14 @@ BEGIN
         || COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)::text
       );
 
-      v_delta_coalescing_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
-        || ':session:' || v_session_id::text
-        || ':candidate:' || p_candidate_id::text
-        || ':version:' || COALESCE(v_session_row.version, 0)::text
-        || ':projection_class:' || v_projection_class
-        || ':timesheets:' || v_delta_ids_hash;
+      v_delta_coalescing_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+    || ':session:' || COALESCE(v_session_id::text, 'none')
+    || ':version:' || COALESCE(COALESCE(v_session_row.version, 0), 0)::text
+    || ':projection_mode:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''), 'DELTA'))), ''), 'DELTA')
+    || ':projection_class:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(NULLIF(v_projection_class, ''), 'UNKNOWN'))), ''), 'UNKNOWN')
+    || ':refresh_scope:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), ''), 'TARGETED_TIMESHEETS'))), ''), 'TARGETED_TIMESHEETS')
+    || ':candidate:' || COALESCE(p_candidate_id::text, 'none')
+    || ':timesheets:' || COALESCE(v_delta_ids_hash, md5('[]:[]'));
       v_delta_coalescing_hash := md5(v_delta_coalescing_key);
 
       SELECT running_delta_job.id
@@ -23127,39 +23353,145 @@ BEGIN
         AND UPPER(BTRIM(COALESCE(running_delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
         AND UPPER(BTRIM(COALESCE(running_delta_job.status, ''))) = 'RUNNING'
         AND running_delta_job.id IS DISTINCT FROM v_existing_delta_job.id
-        AND COALESCE(
-              NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
-              NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'coalescing_key', '')), ''),
-              'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
-                || ':session:' || running_delta_job.session_id::text
-                || ':candidate:' || running_delta_job.candidate_id::text
-                || ':version:' || COALESCE(running_delta_job.payload_json->>'session_version', COALESCE(v_session_row.version, 0)::text)
-                || ':projection_class:' || UPPER(BTRIM(COALESCE(running_delta_job.payload_json->>'projection_class', 'UNKNOWN')))
+        AND (
+              SELECT
+                'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+                || ':session:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                  running_delta_job.session_id::text,
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'session_id',
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_id',
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'source_session_id',
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'target_session_id',
+                  ''
+                )), ''), 'none')
+                || ':version:' || COALESCE(
+                  CASE
+                    WHEN delta_family_values.session_version_text ~ '^-?[0-9]{1,18}$'
+                      THEN delta_family_values.session_version_text::bigint
+                    ELSE COALESCE(COALESCE(v_session_row.version, 0), 0)::bigint
+                  END,
+                  0
+                )::text
+                || ':projection_mode:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                  NULLIF(delta_family_values.projection_mode_text, ''),
+                  NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''),
+                  'DELTA'
+                ))), ''), 'DELTA')
+                || ':projection_class:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                  NULLIF(delta_family_values.projection_class_text, ''),
+                  NULLIF(v_projection_class, ''),
+                  'UNKNOWN'
+                ))), ''), 'UNKNOWN')
+                || ':refresh_scope:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                  NULLIF(delta_family_values.refresh_scope_kind_text, ''),
+                  NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), ''),
+                  CASE
+                    WHEN jsonb_array_length(COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)) > 0
+                      OR jsonb_array_length(COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)) > 0
+                      THEN 'TARGETED_TIMESHEETS'
+                    ELSE 'CANDIDATE_FULL_LIVE'
+                  END
+                ))), ''), 'CANDIDATE_FULL_LIVE')
+                || ':candidate:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                  running_delta_job.candidate_id::text,
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'candidate_id',
+                  ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{candidate,id}'),
+                  ''
+                )), ''), 'none')
                 || ':timesheets:' || md5(
-                     COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                     || ':'
-                     || COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                   )
+                  COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)::text
+                  || ':'
+                  || COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)::text
+                )
+              FROM (
+                SELECT
+                  NULLIF(BTRIM(COALESCE(
+                    (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'session_version',
+                    (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_version',
+                    (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'version',
+                    CASE WHEN COALESCE(v_session_row.version, 0) IS NULL THEN NULL ELSE (COALESCE(v_session_row.version, 0))::text END,
+                    '0'
+                  )), '') AS session_version_text,
+                  UPPER(BTRIM(COALESCE(
+                    NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'projection_mode', ''),
+                    NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'resolved_mode', ''),
+                    NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'mode', ''),
+                    NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''),
+                    'DELTA'
+                  ))) AS projection_mode_text,
+                  UPPER(BTRIM(COALESCE(
+                    NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'projection_class', ''),
+                    NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'classifier_projection_class', ''),
+                    NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{classifier_result,projection_class}'), ''),
+                    NULLIF(v_projection_class, ''),
+                    'UNKNOWN'
+                  ))) AS projection_class_text,
+                  UPPER(BTRIM(COALESCE(
+                    NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'refresh_scope_kind', ''),
+                    NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'scope_kind', ''),
+                    NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{source_build,refresh_scope_kind}'), ''),
+                    NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{preview_decisions_json,refresh_scope_kind}'), ''),
+                    NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), '')
+                  ))) AS refresh_scope_kind_text
+              ) AS delta_family_values
+              CROSS JOIN (
+                SELECT COALESCE(jsonb_agg(delta_family_targeted_sorted.timesheet_id_text ORDER BY delta_family_targeted_sorted.timesheet_id_text), '[]'::jsonb) AS targeted_timesheet_ids_json
+                FROM (
+                  SELECT DISTINCT NULLIF(BTRIM(delta_family_targeted_raw.value), '') AS timesheet_id_text
+                  FROM jsonb_array_elements_text(
+                    CASE
+                      WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'array'
+                        THEN (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids'
+                      WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'string'
+                        THEN jsonb_build_array((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_ids')
+                      WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')) = 'array'
+                        THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')
+                      WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')) = 'array'
+                        THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')
+                      WHEN NULLIF(BTRIM(COALESCE(
+                             (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                             (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id',
+                             ''
+                           )), '') IS NOT NULL
+                        THEN jsonb_build_array(COALESCE(
+                          (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                          (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id'
+                        ))
+                      ELSE '[]'::jsonb
+                    END
+                  ) AS delta_family_targeted_raw(value)
+                  WHERE NULLIF(BTRIM(delta_family_targeted_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                ) AS delta_family_targeted_sorted
+              ) AS delta_family_targeted
+              CROSS JOIN (
+                SELECT COALESCE(jsonb_agg(delta_family_linked_sorted.timesheet_id_text ORDER BY delta_family_linked_sorted.timesheet_id_text), '[]'::jsonb) AS linked_timesheet_ids_json
+                FROM (
+                  SELECT DISTINCT NULLIF(BTRIM(delta_family_linked_raw.value), '') AS timesheet_id_text
+                  FROM jsonb_array_elements_text(
+                    CASE
+                      WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'array'
+                        THEN (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids'
+                      WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'string'
+                        THEN jsonb_build_array((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'linked_timesheet_ids')
+                      WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')) = 'array'
+                        THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')
+                      WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')) = 'array'
+                        THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')
+                      ELSE '[]'::jsonb
+                    END
+                  ) AS delta_family_linked_raw(value)
+                  WHERE NULLIF(BTRIM(delta_family_linked_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                ) AS delta_family_linked_sorted
+              ) AS delta_family_linked
             ) = v_delta_coalescing_key
       ORDER BY running_delta_job.started_at_utc ASC NULLS LAST, running_delta_job.created_at_utc ASC, running_delta_job.id ASC
       LIMIT 1;
 
       v_dedupe_key := CASE
         WHEN v_delta_active_running_job_id IS NOT NULL THEN
-          'WORKBENCH_CANDIDATE_DELTA_REFRESH_WAITING'
-          || ':session:' || v_session_id::text
-          || ':candidate:' || p_candidate_id::text
-          || ':version:' || COALESCE(v_session_row.version, 0)::text
-          || ':projection_class:' || v_projection_class
-          || ':timesheets:' || v_delta_ids_hash
-          || ':after_running:' || v_delta_active_running_job_id::text
+          v_delta_coalescing_key || ':waiting_after_running:' || v_delta_active_running_job_id::text
         ELSE
-          'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
-          || ':session:' || v_session_id::text
-          || ':candidate:' || p_candidate_id::text
-          || ':version:' || COALESCE(v_session_row.version, 0)::text
-          || ':projection_class:' || v_projection_class
-          || ':timesheets:' || v_delta_ids_hash
+          v_delta_coalescing_key
       END;
 
       v_payload_out_json := jsonb_strip_nulls(
@@ -23173,6 +23505,8 @@ BEGIN
           'source_change_sequence', COALESCE(v_source_change_seq, 0),
           'latest_source_change_seq', COALESCE(v_source_change_seq, 0),
           'delta_coalescing_key', v_delta_coalescing_key,
+          'delta_family_key', v_delta_coalescing_key,
+          'normalised_delta_family_key', v_delta_coalescing_key,
           'delta_coalescing_hash', v_delta_coalescing_hash,
           'coalesced_event_count', GREATEST(COALESCE(v_merged_delta_event_count, 1), 1),
           'coalesced_source_change_seqs', jsonb_build_array(COALESCE(v_existing_delta_source_change_seq, 0), COALESCE(v_source_change_seq, 0)),
@@ -23306,19 +23640,136 @@ BEGIN
         AND UPPER(BTRIM(COALESCE(running_delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
         AND UPPER(BTRIM(COALESCE(running_delta_job.status, ''))) = 'RUNNING'
         AND (
-          COALESCE(
-            NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
-            NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'coalescing_key', '')), ''),
-            'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
-              || ':session:' || running_delta_job.session_id::text
-              || ':candidate:' || running_delta_job.candidate_id::text
-              || ':version:' || COALESCE(running_delta_job.payload_json->>'session_version', COALESCE(v_session_row.version, 0)::text)
-              || ':projection_class:' || UPPER(BTRIM(COALESCE(running_delta_job.payload_json->>'projection_class', 'UNKNOWN')))
+          (
+            SELECT
+              'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+              || ':session:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                running_delta_job.session_id::text,
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'session_id',
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_id',
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'source_session_id',
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'target_session_id',
+                ''
+              )), ''), 'none')
+              || ':version:' || COALESCE(
+                CASE
+                  WHEN delta_family_values.session_version_text ~ '^-?[0-9]{1,18}$'
+                    THEN delta_family_values.session_version_text::bigint
+                  ELSE COALESCE(COALESCE(v_session_row.version, 0), 0)::bigint
+                END,
+                0
+              )::text
+              || ':projection_mode:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                NULLIF(delta_family_values.projection_mode_text, ''),
+                NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''),
+                'DELTA'
+              ))), ''), 'DELTA')
+              || ':projection_class:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                NULLIF(delta_family_values.projection_class_text, ''),
+                NULLIF(v_projection_class, ''),
+                'UNKNOWN'
+              ))), ''), 'UNKNOWN')
+              || ':refresh_scope:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                NULLIF(delta_family_values.refresh_scope_kind_text, ''),
+                NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), ''),
+                CASE
+                  WHEN jsonb_array_length(COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)) > 0
+                    OR jsonb_array_length(COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)) > 0
+                    THEN 'TARGETED_TIMESHEETS'
+                  ELSE 'CANDIDATE_FULL_LIVE'
+                END
+              ))), ''), 'CANDIDATE_FULL_LIVE')
+              || ':candidate:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                running_delta_job.candidate_id::text,
+                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'candidate_id',
+                ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{candidate,id}'),
+                ''
+              )), ''), 'none')
               || ':timesheets:' || md5(
-                   COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                   || ':'
-                   || COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                 )
+                COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)::text
+                || ':'
+                || COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)::text
+              )
+            FROM (
+              SELECT
+                NULLIF(BTRIM(COALESCE(
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'session_version',
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_version',
+                  (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'version',
+                  CASE WHEN COALESCE(v_session_row.version, 0) IS NULL THEN NULL ELSE (COALESCE(v_session_row.version, 0))::text END,
+                  '0'
+                )), '') AS session_version_text,
+                UPPER(BTRIM(COALESCE(
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'projection_mode', ''),
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'resolved_mode', ''),
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'mode', ''),
+                  NULLIF(COALESCE(NULLIF(v_projection_mode, 'LEGACY'), 'DELTA'), ''),
+                  'DELTA'
+                ))) AS projection_mode_text,
+                UPPER(BTRIM(COALESCE(
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'projection_class', ''),
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'classifier_projection_class', ''),
+                  NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{classifier_result,projection_class}'), ''),
+                  NULLIF(v_projection_class, ''),
+                  'UNKNOWN'
+                ))) AS projection_class_text,
+                UPPER(BTRIM(COALESCE(
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'refresh_scope_kind', ''),
+                  NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'scope_kind', ''),
+                  NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{source_build,refresh_scope_kind}'), ''),
+                  NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{preview_decisions_json,refresh_scope_kind}'), ''),
+                  NULLIF(COALESCE(NULLIF(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE'), 'TARGETED_TIMESHEETS'), '')
+                ))) AS refresh_scope_kind_text
+            ) AS delta_family_values
+            CROSS JOIN (
+              SELECT COALESCE(jsonb_agg(delta_family_targeted_sorted.timesheet_id_text ORDER BY delta_family_targeted_sorted.timesheet_id_text), '[]'::jsonb) AS targeted_timesheet_ids_json
+              FROM (
+                SELECT DISTINCT NULLIF(BTRIM(delta_family_targeted_raw.value), '') AS timesheet_id_text
+                FROM jsonb_array_elements_text(
+                  CASE
+                    WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'array'
+                      THEN (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids'
+                    WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'string'
+                      THEN jsonb_build_array((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_ids')
+                    WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')
+                    WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')
+                    WHEN NULLIF(BTRIM(COALESCE(
+                           (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                           (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id',
+                           ''
+                         )), '') IS NOT NULL
+                      THEN jsonb_build_array(COALESCE(
+                        (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                        (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id'
+                      ))
+                    ELSE '[]'::jsonb
+                  END
+                ) AS delta_family_targeted_raw(value)
+                WHERE NULLIF(BTRIM(delta_family_targeted_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              ) AS delta_family_targeted_sorted
+            ) AS delta_family_targeted
+            CROSS JOIN (
+              SELECT COALESCE(jsonb_agg(delta_family_linked_sorted.timesheet_id_text ORDER BY delta_family_linked_sorted.timesheet_id_text), '[]'::jsonb) AS linked_timesheet_ids_json
+              FROM (
+                SELECT DISTINCT NULLIF(BTRIM(delta_family_linked_raw.value), '') AS timesheet_id_text
+                FROM jsonb_array_elements_text(
+                  CASE
+                    WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'array'
+                      THEN (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids'
+                    WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'string'
+                      THEN jsonb_build_array((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'linked_timesheet_ids')
+                    WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')
+                    WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')) = 'array'
+                      THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')
+                    ELSE '[]'::jsonb
+                  END
+                ) AS delta_family_linked_raw(value)
+                WHERE NULLIF(BTRIM(delta_family_linked_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              ) AS delta_family_linked_sorted
+            ) AS delta_family_linked
           ) = v_delta_coalescing_key
           OR running_delta_job.dedupe_key = v_dedupe_key
         )
@@ -23326,13 +23777,7 @@ BEGIN
       LIMIT 1;
 
       IF v_delta_active_running_job_id IS NOT NULL THEN
-        v_dedupe_key := 'WORKBENCH_CANDIDATE_DELTA_REFRESH_WAITING'
-          || ':session:' || v_session_id::text
-          || ':candidate:' || p_candidate_id::text
-          || ':version:' || COALESCE(v_session_row.version, 0)::text
-          || ':projection_class:' || v_projection_class
-          || ':timesheets:' || v_delta_ids_hash
-          || ':after_running:' || v_delta_active_running_job_id::text;
+        v_dedupe_key := v_delta_coalescing_key || ':waiting_after_running:' || v_delta_active_running_job_id::text;
 
         v_payload_out_json := jsonb_strip_nulls(
           COALESCE(v_payload_out_json, '{}'::jsonb)
@@ -23497,7 +23942,6 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
 
@@ -24310,8 +24754,8 @@ BEGIN
         stale_job.run_at_utc ASC,
         stale_job.created_at_utc ASC,
         stale_job.id ASC
-      FOR UPDATE SKIP LOCKED
       LIMIT v_stale_recovery_limit
+      FOR UPDATE SKIP LOCKED
     )
     SELECT
       stale_candidates.id,
@@ -25122,10 +25566,136 @@ BEGIN
         delta_job.updated_at_utc,
         delta_job.payload_json,
         delta_job.dedupe_key,
-        COALESCE(
-          NULLIF(BTRIM(COALESCE(delta_job.payload_json->>'delta_coalescing_key', '')), ''),
-          NULLIF(BTRIM(COALESCE(delta_job.payload_json->>'coalescing_key', '')), ''),
-          delta_job.dedupe_key
+        (
+          SELECT
+            'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+            || ':session:' || COALESCE(NULLIF(BTRIM(COALESCE(
+              delta_job.session_id::text,
+              (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'session_id',
+              (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'workbench_session_id',
+              (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'source_session_id',
+              (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'target_session_id',
+              ''
+            )), ''), 'none')
+            || ':version:' || COALESCE(
+              CASE
+                WHEN delta_family_values.session_version_text ~ '^-?[0-9]{1,18}$'
+                  THEN delta_family_values.session_version_text::bigint
+                ELSE COALESCE(NULL::bigint, 0)::bigint
+              END,
+              0
+            )::text
+            || ':projection_mode:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+              NULLIF(delta_family_values.projection_mode_text, ''),
+              NULLIF(NULL::text, ''),
+              'DELTA'
+            ))), ''), 'DELTA')
+            || ':projection_class:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+              NULLIF(delta_family_values.projection_class_text, ''),
+              NULLIF(NULL::text, ''),
+              'UNKNOWN'
+            ))), ''), 'UNKNOWN')
+            || ':refresh_scope:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+              NULLIF(delta_family_values.refresh_scope_kind_text, ''),
+              NULLIF(NULL::text, ''),
+              CASE
+                WHEN jsonb_array_length(COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)) > 0
+                  OR jsonb_array_length(COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)) > 0
+                  THEN 'TARGETED_TIMESHEETS'
+                ELSE 'CANDIDATE_FULL_LIVE'
+              END
+            ))), ''), 'CANDIDATE_FULL_LIVE')
+            || ':candidate:' || COALESCE(NULLIF(BTRIM(COALESCE(
+              delta_job.candidate_id::text,
+              (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'candidate_id',
+              ((COALESCE(delta_job.payload_json, '{}'::jsonb))#>>'{candidate,id}'),
+              ''
+            )), ''), 'none')
+            || ':timesheets:' || md5(
+              COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)::text
+              || ':'
+              || COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)::text
+            )
+          FROM (
+            SELECT
+              NULLIF(BTRIM(COALESCE(
+                (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'session_version',
+                (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'workbench_session_version',
+                (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'version',
+                CASE WHEN NULL::bigint IS NULL THEN NULL ELSE (NULL::bigint)::text END,
+                '0'
+              )), '') AS session_version_text,
+              UPPER(BTRIM(COALESCE(
+                NULLIF((COALESCE(delta_job.payload_json, '{}'::jsonb))->>'projection_mode', ''),
+                NULLIF((COALESCE(delta_job.payload_json, '{}'::jsonb))->>'resolved_mode', ''),
+                NULLIF((COALESCE(delta_job.payload_json, '{}'::jsonb))->>'mode', ''),
+                NULLIF(NULL::text, ''),
+                'DELTA'
+              ))) AS projection_mode_text,
+              UPPER(BTRIM(COALESCE(
+                NULLIF((COALESCE(delta_job.payload_json, '{}'::jsonb))->>'projection_class', ''),
+                NULLIF((COALESCE(delta_job.payload_json, '{}'::jsonb))->>'classifier_projection_class', ''),
+                NULLIF(((COALESCE(delta_job.payload_json, '{}'::jsonb))#>>'{classifier_result,projection_class}'), ''),
+                NULLIF(NULL::text, ''),
+                'UNKNOWN'
+              ))) AS projection_class_text,
+              UPPER(BTRIM(COALESCE(
+                NULLIF((COALESCE(delta_job.payload_json, '{}'::jsonb))->>'refresh_scope_kind', ''),
+                NULLIF((COALESCE(delta_job.payload_json, '{}'::jsonb))->>'scope_kind', ''),
+                NULLIF(((COALESCE(delta_job.payload_json, '{}'::jsonb))#>>'{source_build,refresh_scope_kind}'), ''),
+                NULLIF(((COALESCE(delta_job.payload_json, '{}'::jsonb))#>>'{preview_decisions_json,refresh_scope_kind}'), ''),
+                NULLIF(NULL::text, '')
+              ))) AS refresh_scope_kind_text
+          ) AS delta_family_values
+          CROSS JOIN (
+            SELECT COALESCE(jsonb_agg(delta_family_targeted_sorted.timesheet_id_text ORDER BY delta_family_targeted_sorted.timesheet_id_text), '[]'::jsonb) AS targeted_timesheet_ids_json
+            FROM (
+              SELECT DISTINCT NULLIF(BTRIM(delta_family_targeted_raw.value), '') AS timesheet_id_text
+              FROM jsonb_array_elements_text(
+                CASE
+                  WHEN jsonb_typeof((COALESCE(delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'array'
+                    THEN (COALESCE(delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids'
+                  WHEN jsonb_typeof((COALESCE(delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'string'
+                    THEN jsonb_build_array((COALESCE(delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_ids')
+                  WHEN jsonb_typeof(((COALESCE(delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')) = 'array'
+                    THEN ((COALESCE(delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')
+                  WHEN jsonb_typeof(((COALESCE(delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')) = 'array'
+                    THEN ((COALESCE(delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')
+                  WHEN NULLIF(BTRIM(COALESCE(
+                         (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                         (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'timesheet_id',
+                         ''
+                       )), '') IS NOT NULL
+                    THEN jsonb_build_array(COALESCE(
+                      (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                      (COALESCE(delta_job.payload_json, '{}'::jsonb))->>'timesheet_id'
+                    ))
+                  ELSE '[]'::jsonb
+                END
+              ) AS delta_family_targeted_raw(value)
+              WHERE NULLIF(BTRIM(delta_family_targeted_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            ) AS delta_family_targeted_sorted
+          ) AS delta_family_targeted
+          CROSS JOIN (
+            SELECT COALESCE(jsonb_agg(delta_family_linked_sorted.timesheet_id_text ORDER BY delta_family_linked_sorted.timesheet_id_text), '[]'::jsonb) AS linked_timesheet_ids_json
+            FROM (
+              SELECT DISTINCT NULLIF(BTRIM(delta_family_linked_raw.value), '') AS timesheet_id_text
+              FROM jsonb_array_elements_text(
+                CASE
+                  WHEN jsonb_typeof((COALESCE(delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'array'
+                    THEN (COALESCE(delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids'
+                  WHEN jsonb_typeof((COALESCE(delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'string'
+                    THEN jsonb_build_array((COALESCE(delta_job.payload_json, '{}'::jsonb))->>'linked_timesheet_ids')
+                  WHEN jsonb_typeof(((COALESCE(delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')) = 'array'
+                    THEN ((COALESCE(delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')
+                  WHEN jsonb_typeof(((COALESCE(delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')) = 'array'
+                    THEN ((COALESCE(delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')
+                  ELSE '[]'::jsonb
+                END
+              ) AS delta_family_linked_raw(value)
+              WHERE NULLIF(BTRIM(delta_family_linked_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            ) AS delta_family_linked_sorted
+          ) AS delta_family_linked
         ) AS hot_key,
         GREATEST(
           CASE WHEN COALESCE(delta_job.payload_json->>'latest_source_change_seq', '') ~ '^-?[0-9]{1,18}$'
@@ -25148,8 +25718,8 @@ BEGIN
           OR 'WORKBENCH_CANDIDATE_DELTA_REFRESH' = ANY(v_allowed_job_types)
         )
       ORDER BY delta_job.priority ASC, delta_job.run_at_utc ASC, delta_job.created_at_utc ASC, delta_job.id ASC
-      FOR UPDATE SKIP LOCKED
       LIMIT GREATEST(v_limit * 10, 50)
+      FOR UPDATE SKIP LOCKED
     ),
     ranked_delta AS (
       SELECT
@@ -25173,7 +25743,10 @@ BEGIN
               'latest_source_change_seq', ranked_delta.latest_hot_key_seq,
               'source_change_seq', ranked_delta.latest_hot_key_seq,
               'source_change_sequence', ranked_delta.latest_hot_key_seq,
-              'claim_coalesced_at_utc', v_now::text
+              'claim_coalesced_at_utc', v_now::text,
+              'delta_family_key', ranked_delta.hot_key,
+              'normalised_delta_family_key', ranked_delta.hot_key,
+              'delta_coalescing_key', ranked_delta.hot_key
             )
           ),
           updated_at_utc = v_now
@@ -25196,7 +25769,9 @@ BEGIN
               'superseded_by_delta_queue_coalescing_at_utc', v_now::text,
               'superseded_reason', 'SUPERSEDED_BY_NEWER_SOURCE_CHANGE_SEQ_BEFORE_CLAIM',
               'latest_source_change_seq', ranked_delta.latest_hot_key_seq,
-              'coalesced_hot_key', ranked_delta.hot_key
+              'coalesced_hot_key', ranked_delta.hot_key,
+              'delta_family_key', ranked_delta.hot_key,
+              'normalised_delta_family_key', ranked_delta.hot_key
             )
           )
       FROM ranked_delta
@@ -25236,12 +25811,145 @@ BEGIN
             THEN 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
           ELSE UPPER(BTRIM(COALESCE(claim_job.job_type, '')))
         END AS canonical_job_type,
-        COALESCE(
-          NULLIF(BTRIM(COALESCE(claim_job.payload_json->>'delta_coalescing_key', '')), ''),
-          NULLIF(BTRIM(COALESCE(claim_job.payload_json->>'coalescing_key', '')), ''),
-          claim_job.dedupe_key,
-          claim_job.id::text
-        ) AS hot_key
+        CASE
+          WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH') THEN
+            (
+              SELECT
+                'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+                || ':session:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                  claim_job.session_id::text,
+                  (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'session_id',
+                  (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'workbench_session_id',
+                  (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'source_session_id',
+                  (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'target_session_id',
+                  ''
+                )), ''), 'none')
+                || ':version:' || COALESCE(
+                  CASE
+                    WHEN delta_family_values.session_version_text ~ '^-?[0-9]{1,18}$'
+                      THEN delta_family_values.session_version_text::bigint
+                    ELSE COALESCE(NULL::bigint, 0)::bigint
+                  END,
+                  0
+                )::text
+                || ':projection_mode:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                  NULLIF(delta_family_values.projection_mode_text, ''),
+                  NULLIF(NULL::text, ''),
+                  'DELTA'
+                ))), ''), 'DELTA')
+                || ':projection_class:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                  NULLIF(delta_family_values.projection_class_text, ''),
+                  NULLIF(NULL::text, ''),
+                  'UNKNOWN'
+                ))), ''), 'UNKNOWN')
+                || ':refresh_scope:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                  NULLIF(delta_family_values.refresh_scope_kind_text, ''),
+                  NULLIF(NULL::text, ''),
+                  CASE
+                    WHEN jsonb_array_length(COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)) > 0
+                      OR jsonb_array_length(COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)) > 0
+                      THEN 'TARGETED_TIMESHEETS'
+                    ELSE 'CANDIDATE_FULL_LIVE'
+                  END
+                ))), ''), 'CANDIDATE_FULL_LIVE')
+                || ':candidate:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                  claim_job.candidate_id::text,
+                  (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'candidate_id',
+                  ((COALESCE(claim_job.payload_json, '{}'::jsonb))#>>'{candidate,id}'),
+                  ''
+                )), ''), 'none')
+                || ':timesheets:' || md5(
+                  COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)::text
+                  || ':'
+                  || COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)::text
+                )
+              FROM (
+                SELECT
+                  NULLIF(BTRIM(COALESCE(
+                    (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'session_version',
+                    (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'workbench_session_version',
+                    (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'version',
+                    CASE WHEN NULL::bigint IS NULL THEN NULL ELSE (NULL::bigint)::text END,
+                    '0'
+                  )), '') AS session_version_text,
+                  UPPER(BTRIM(COALESCE(
+                    NULLIF((COALESCE(claim_job.payload_json, '{}'::jsonb))->>'projection_mode', ''),
+                    NULLIF((COALESCE(claim_job.payload_json, '{}'::jsonb))->>'resolved_mode', ''),
+                    NULLIF((COALESCE(claim_job.payload_json, '{}'::jsonb))->>'mode', ''),
+                    NULLIF(NULL::text, ''),
+                    'DELTA'
+                  ))) AS projection_mode_text,
+                  UPPER(BTRIM(COALESCE(
+                    NULLIF((COALESCE(claim_job.payload_json, '{}'::jsonb))->>'projection_class', ''),
+                    NULLIF((COALESCE(claim_job.payload_json, '{}'::jsonb))->>'classifier_projection_class', ''),
+                    NULLIF(((COALESCE(claim_job.payload_json, '{}'::jsonb))#>>'{classifier_result,projection_class}'), ''),
+                    NULLIF(NULL::text, ''),
+                    'UNKNOWN'
+                  ))) AS projection_class_text,
+                  UPPER(BTRIM(COALESCE(
+                    NULLIF((COALESCE(claim_job.payload_json, '{}'::jsonb))->>'refresh_scope_kind', ''),
+                    NULLIF((COALESCE(claim_job.payload_json, '{}'::jsonb))->>'scope_kind', ''),
+                    NULLIF(((COALESCE(claim_job.payload_json, '{}'::jsonb))#>>'{source_build,refresh_scope_kind}'), ''),
+                    NULLIF(((COALESCE(claim_job.payload_json, '{}'::jsonb))#>>'{preview_decisions_json,refresh_scope_kind}'), ''),
+                    NULLIF(NULL::text, '')
+                  ))) AS refresh_scope_kind_text
+              ) AS delta_family_values
+              CROSS JOIN (
+                SELECT COALESCE(jsonb_agg(delta_family_targeted_sorted.timesheet_id_text ORDER BY delta_family_targeted_sorted.timesheet_id_text), '[]'::jsonb) AS targeted_timesheet_ids_json
+                FROM (
+                  SELECT DISTINCT NULLIF(BTRIM(delta_family_targeted_raw.value), '') AS timesheet_id_text
+                  FROM jsonb_array_elements_text(
+                    CASE
+                      WHEN jsonb_typeof((COALESCE(claim_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'array'
+                        THEN (COALESCE(claim_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids'
+                      WHEN jsonb_typeof((COALESCE(claim_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'string'
+                        THEN jsonb_build_array((COALESCE(claim_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_ids')
+                      WHEN jsonb_typeof(((COALESCE(claim_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')) = 'array'
+                        THEN ((COALESCE(claim_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')
+                      WHEN jsonb_typeof(((COALESCE(claim_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')) = 'array'
+                        THEN ((COALESCE(claim_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')
+                      WHEN NULLIF(BTRIM(COALESCE(
+                             (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                             (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'timesheet_id',
+                             ''
+                           )), '') IS NOT NULL
+                        THEN jsonb_build_array(COALESCE(
+                          (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                          (COALESCE(claim_job.payload_json, '{}'::jsonb))->>'timesheet_id'
+                        ))
+                      ELSE '[]'::jsonb
+                    END
+                  ) AS delta_family_targeted_raw(value)
+                  WHERE NULLIF(BTRIM(delta_family_targeted_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                ) AS delta_family_targeted_sorted
+              ) AS delta_family_targeted
+              CROSS JOIN (
+                SELECT COALESCE(jsonb_agg(delta_family_linked_sorted.timesheet_id_text ORDER BY delta_family_linked_sorted.timesheet_id_text), '[]'::jsonb) AS linked_timesheet_ids_json
+                FROM (
+                  SELECT DISTINCT NULLIF(BTRIM(delta_family_linked_raw.value), '') AS timesheet_id_text
+                  FROM jsonb_array_elements_text(
+                    CASE
+                      WHEN jsonb_typeof((COALESCE(claim_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'array'
+                        THEN (COALESCE(claim_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids'
+                      WHEN jsonb_typeof((COALESCE(claim_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'string'
+                        THEN jsonb_build_array((COALESCE(claim_job.payload_json, '{}'::jsonb))->>'linked_timesheet_ids')
+                      WHEN jsonb_typeof(((COALESCE(claim_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')) = 'array'
+                        THEN ((COALESCE(claim_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')
+                      WHEN jsonb_typeof(((COALESCE(claim_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')) = 'array'
+                        THEN ((COALESCE(claim_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')
+                      ELSE '[]'::jsonb
+                    END
+                  ) AS delta_family_linked_raw(value)
+                  WHERE NULLIF(BTRIM(delta_family_linked_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                ) AS delta_family_linked_sorted
+              ) AS delta_family_linked
+            )
+          ELSE COALESCE(
+            NULLIF(BTRIM(COALESCE(claim_job.payload_json->>'coalescing_key', '')), ''),
+            claim_job.dedupe_key,
+            claim_job.id::text
+          )
+        END AS hot_key
       FROM public.banking_pay_workbench_jobs AS claim_job
       WHERE claim_job.status = 'QUEUED'
         AND claim_job.run_at_utc <= v_cutoff
@@ -25272,8 +25980,8 @@ BEGIN
           ) = ANY(v_allowed_job_types)
         )
       ORDER BY claim_job.priority ASC, claim_job.run_at_utc ASC, claim_job.created_at_utc ASC, claim_job.id ASC
-      FOR UPDATE SKIP LOCKED
       LIMIT GREATEST(v_limit * 5, v_limit)
+      FOR UPDATE SKIP LOCKED
     ),
     claim_pool AS (
       SELECT
@@ -25301,21 +26009,136 @@ BEGIN
               AND running_delta_job.session_id IS NOT DISTINCT FROM claim_pool.session_id
               AND running_delta_job.candidate_id IS NOT DISTINCT FROM claim_pool.candidate_id
               AND UPPER(BTRIM(COALESCE(running_delta_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
-              AND COALESCE(
-                    NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'delta_coalescing_key', '')), ''),
-                    NULLIF(BTRIM(COALESCE(running_delta_job.payload_json->>'coalescing_key', '')), ''),
-                    'WORKBENCH_CANDIDATE_DELTA_REFRESH_HEAD'
-                      || ':session:' || running_delta_job.session_id::text
-                      || ':candidate:' || running_delta_job.candidate_id::text
-                      || ':version:' || COALESCE(running_delta_job.payload_json->>'session_version', COALESCE(claim_pool.payload_json->>'session_version', '0'))
-                      || ':projection_class:' || UPPER(BTRIM(COALESCE(running_delta_job.payload_json->>'projection_class', claim_pool.payload_json->>'projection_class', 'UNKNOWN')))
+              AND (
+                    SELECT
+                      'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+                      || ':session:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                        running_delta_job.session_id::text,
+                        (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'session_id',
+                        (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_id',
+                        (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'source_session_id',
+                        (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'target_session_id',
+                        ''
+                      )), ''), 'none')
+                      || ':version:' || COALESCE(
+                        CASE
+                          WHEN delta_family_values.session_version_text ~ '^-?[0-9]{1,18}$'
+                            THEN delta_family_values.session_version_text::bigint
+                          ELSE COALESCE(CASE WHEN COALESCE(claim_pool.payload_json->>'session_version', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json->>'session_version')::bigint ELSE NULL::bigint END, 0)::bigint
+                        END,
+                        0
+                      )::text
+                      || ':projection_mode:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                        NULLIF(delta_family_values.projection_mode_text, ''),
+                        NULLIF(NULLIF(UPPER(BTRIM(COALESCE(claim_pool.payload_json->>'projection_mode', claim_pool.payload_json->>'resolved_mode', ''))), ''), ''),
+                        'DELTA'
+                      ))), ''), 'DELTA')
+                      || ':projection_class:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                        NULLIF(delta_family_values.projection_class_text, ''),
+                        NULLIF(NULLIF(UPPER(BTRIM(COALESCE(claim_pool.payload_json->>'projection_class', ''))), ''), ''),
+                        'UNKNOWN'
+                      ))), ''), 'UNKNOWN')
+                      || ':refresh_scope:' || COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+                        NULLIF(delta_family_values.refresh_scope_kind_text, ''),
+                        NULLIF(NULLIF(UPPER(BTRIM(COALESCE(claim_pool.payload_json->>'refresh_scope_kind', ''))), ''), ''),
+                        CASE
+                          WHEN jsonb_array_length(COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)) > 0
+                            OR jsonb_array_length(COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)) > 0
+                            THEN 'TARGETED_TIMESHEETS'
+                          ELSE 'CANDIDATE_FULL_LIVE'
+                        END
+                      ))), ''), 'CANDIDATE_FULL_LIVE')
+                      || ':candidate:' || COALESCE(NULLIF(BTRIM(COALESCE(
+                        running_delta_job.candidate_id::text,
+                        (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'candidate_id',
+                        ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{candidate,id}'),
+                        ''
+                      )), ''), 'none')
                       || ':timesheets:' || md5(
-                           COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'targeted_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                           || ':'
-                           || COALESCE(CASE WHEN jsonb_typeof(running_delta_job.payload_json->'linked_timesheet_ids') = 'array' THEN running_delta_job.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END, '[]'::jsonb)::text
-                         ),
-                    running_delta_job.dedupe_key,
-                    running_delta_job.id::text
+                        COALESCE(delta_family_targeted.targeted_timesheet_ids_json, '[]'::jsonb)::text
+                        || ':'
+                        || COALESCE(delta_family_linked.linked_timesheet_ids_json, '[]'::jsonb)::text
+                      )
+                    FROM (
+                      SELECT
+                        NULLIF(BTRIM(COALESCE(
+                          (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'session_version',
+                          (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'workbench_session_version',
+                          (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'version',
+                          CASE WHEN CASE WHEN COALESCE(claim_pool.payload_json->>'session_version', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json->>'session_version')::bigint ELSE NULL::bigint END IS NULL THEN NULL ELSE (CASE WHEN COALESCE(claim_pool.payload_json->>'session_version', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json->>'session_version')::bigint ELSE NULL::bigint END)::text END,
+                          '0'
+                        )), '') AS session_version_text,
+                        UPPER(BTRIM(COALESCE(
+                          NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'projection_mode', ''),
+                          NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'resolved_mode', ''),
+                          NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'mode', ''),
+                          NULLIF(NULLIF(UPPER(BTRIM(COALESCE(claim_pool.payload_json->>'projection_mode', claim_pool.payload_json->>'resolved_mode', ''))), ''), ''),
+                          'DELTA'
+                        ))) AS projection_mode_text,
+                        UPPER(BTRIM(COALESCE(
+                          NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'projection_class', ''),
+                          NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'classifier_projection_class', ''),
+                          NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{classifier_result,projection_class}'), ''),
+                          NULLIF(NULLIF(UPPER(BTRIM(COALESCE(claim_pool.payload_json->>'projection_class', ''))), ''), ''),
+                          'UNKNOWN'
+                        ))) AS projection_class_text,
+                        UPPER(BTRIM(COALESCE(
+                          NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'refresh_scope_kind', ''),
+                          NULLIF((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'scope_kind', ''),
+                          NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{source_build,refresh_scope_kind}'), ''),
+                          NULLIF(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>>'{preview_decisions_json,refresh_scope_kind}'), ''),
+                          NULLIF(NULLIF(UPPER(BTRIM(COALESCE(claim_pool.payload_json->>'refresh_scope_kind', ''))), ''), '')
+                        ))) AS refresh_scope_kind_text
+                    ) AS delta_family_values
+                    CROSS JOIN (
+                      SELECT COALESCE(jsonb_agg(delta_family_targeted_sorted.timesheet_id_text ORDER BY delta_family_targeted_sorted.timesheet_id_text), '[]'::jsonb) AS targeted_timesheet_ids_json
+                      FROM (
+                        SELECT DISTINCT NULLIF(BTRIM(delta_family_targeted_raw.value), '') AS timesheet_id_text
+                        FROM jsonb_array_elements_text(
+                          CASE
+                            WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'array'
+                              THEN (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids'
+                            WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'targeted_timesheet_ids') = 'string'
+                              THEN jsonb_build_array((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_ids')
+                            WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')) = 'array'
+                              THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,targeted_timesheet_ids}')
+                            WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')) = 'array'
+                              THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,targeted_timesheet_ids}')
+                            WHEN NULLIF(BTRIM(COALESCE(
+                                   (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                                   (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id',
+                                   ''
+                                 )), '') IS NOT NULL
+                              THEN jsonb_build_array(COALESCE(
+                                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'targeted_timesheet_id',
+                                (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'timesheet_id'
+                              ))
+                            ELSE '[]'::jsonb
+                          END
+                        ) AS delta_family_targeted_raw(value)
+                        WHERE NULLIF(BTRIM(delta_family_targeted_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                      ) AS delta_family_targeted_sorted
+                    ) AS delta_family_targeted
+                    CROSS JOIN (
+                      SELECT COALESCE(jsonb_agg(delta_family_linked_sorted.timesheet_id_text ORDER BY delta_family_linked_sorted.timesheet_id_text), '[]'::jsonb) AS linked_timesheet_ids_json
+                      FROM (
+                        SELECT DISTINCT NULLIF(BTRIM(delta_family_linked_raw.value), '') AS timesheet_id_text
+                        FROM jsonb_array_elements_text(
+                          CASE
+                            WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'array'
+                              THEN (COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids'
+                            WHEN jsonb_typeof((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->'linked_timesheet_ids') = 'string'
+                              THEN jsonb_build_array((COALESCE(running_delta_job.payload_json, '{}'::jsonb))->>'linked_timesheet_ids')
+                            WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')) = 'array'
+                              THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{source_build,linked_timesheet_ids}')
+                            WHEN jsonb_typeof(((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')) = 'array'
+                              THEN ((COALESCE(running_delta_job.payload_json, '{}'::jsonb))#>'{preview_decisions_json,linked_timesheet_ids}')
+                            ELSE '[]'::jsonb
+                          END
+                        ) AS delta_family_linked_raw(value)
+                        WHERE NULLIF(BTRIM(delta_family_linked_raw.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                      ) AS delta_family_linked_sorted
+                    ) AS delta_family_linked
                   ) = claim_pool.hot_key
           )
         )
@@ -25366,6 +26189,9 @@ BEGIN
                   'claim_live_source_guard_applied', true,
                   'claim_live_source_seq', COALESCE(live_change.seq, 0),
                   'claimed_delta_hot_key', claim_row.hot_key,
+                  'delta_family_key', claim_row.hot_key,
+                  'normalised_delta_family_key', claim_row.hot_key,
+                  'delta_coalescing_key', claim_row.hot_key,
                   'claimed_at_utc', v_now::text
                 )
               )
@@ -25499,6 +26325,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_complete_job(p_job_id uuid, p_result_json jsonb DEFAULT '{}'::jsonb)
@@ -26287,7 +27114,7 @@ BEGIN
         failed_at_utc = NULL,
         last_error_json = NULL,
         payload_json = COALESCE(update_delta_job.payload_json, '{}'::jsonb)
-          || jsonb_build_object('result_json', v_result_json)
+          || jsonb_build_object('result_json', public.pay_workbench_compact_job_result_json(v_result_json))
           || jsonb_build_object(
             'completion_json', jsonb_build_object(
               'delta_completion_handled', true,
@@ -26472,7 +27299,7 @@ BEGIN
         failed_at_utc = NULL,
         last_error_json = NULL,
         payload_json = COALESCE(update_clone_job.payload_json, '{}'::jsonb)
-          || jsonb_build_object('result_json', v_result_json)
+          || jsonb_build_object('result_json', public.pay_workbench_compact_job_result_json(v_result_json))
           || jsonb_build_object(
             'completion_json', jsonb_build_object(
               'clone_rebase_completion_handled', true,
@@ -26888,7 +27715,7 @@ BEGIN
         failed_at_utc = NULL,
         last_error_json = NULL,
         payload_json = COALESCE(update_job.payload_json, '{}'::jsonb)
-          || jsonb_build_object('result_json', v_result_json)
+          || jsonb_build_object('result_json', public.pay_workbench_compact_job_result_json(v_result_json))
           || jsonb_build_object(
             'completion_json', jsonb_build_object(
               'continuation_enqueued', v_continuation_enqueued,
@@ -27523,6 +28350,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
@@ -66301,6 +67129,35 @@ BEGIN
       'banking_pay_patch'
     );
 
+  IF TG_OP = 'INSERT'
+     AND v_trigger_table = 'timesheets'
+     AND v_explicit_banking_pay_action IS NOT TRUE
+     AND lower(BTRIM(COALESCE(v_lifecycle_context, ''))) IN ('manual_timesheet_save', 'ordinary_timesheet_save', 'timesheet_manual_save', 'manual_save')
+     AND NULLIF(BTRIM(COALESCE(v_new_row->>'authorised_at_server', v_new_row->>'authorised_at_utc', '')), '') IS NULL
+     AND NULLIF(BTRIM(COALESCE(v_new_row->>'revoked_at', v_new_row->>'revoked_at_utc', '')), '') IS NULL THEN
+    PERFORM public._temp_diag_log(
+      'TEMP_TRIGGER_DIRTY_STAGE',
+      'TEMP_BANKING_PAY_DIRTY',
+      COALESCE(v_new_timesheet_id::text, v_old_timesheet_id::text),
+      jsonb_build_object(
+        'function_name', 'pay_workbench_mark_candidate_dirty',
+        'stage', 'early_return_ordinary_timesheet_insert_save_no_dirty',
+        'trigger_table', v_trigger_table,
+        'trigger_op', TG_OP,
+        'mutation_context', v_lifecycle_context,
+        'authorised_at_server_present', false,
+        'revoked_at_present', false,
+        'explicit_banking_pay_action', false,
+        'banking_pay_dirty_required', false,
+        'source_build_required', false,
+        'line_work_required', false,
+        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+        'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at)) * 1000)::numeric, 2)
+      )
+    );
+    RETURN NEW;
+  END IF;
+
   IF TG_OP = 'UPDATE' AND v_trigger_table = 'timesheets' THEN
     v_authorise_boundary_changed :=
       NULLIF(BTRIM(COALESCE(v_old_row->>'authorised_at_server', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_new_row->>'authorised_at_server', '')), '')
@@ -66770,6 +67627,8 @@ BEGIN
   END IF;
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_projection_contract()
@@ -183998,7 +184857,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_source_build_chunk(p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_payload_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -185994,7 +186852,11 @@ BEGIN
             || CASE
               WHEN COALESCE(v_sync_completed, false) THEN jsonb_build_object(
                 'overpayment_sync_completed_by_candidate',
-                COALESCE(session_update.progress_json->'overpayment_sync_completed_by_candidate', '{}'::jsonb)
+                CASE
+                  WHEN jsonb_typeof(session_update.progress_json->'overpayment_sync_completed_by_candidate') = 'object'
+                    THEN COALESCE(session_update.progress_json->'overpayment_sync_completed_by_candidate', '{}'::jsonb)
+                  ELSE '{}'::jsonb
+                END
                 || jsonb_build_object(
                   p_candidate_id::text,
                   jsonb_build_object(
@@ -186002,7 +186864,10 @@ BEGIN
                     'completed_at_utc', v_now::text,
                     'pay_channel_scope', v_candidate_pay_channel_scope,
                     'source_build_run_id', v_source_build_run_id::text,
-                    'result', COALESCE(v_sync_result, '{}'::jsonb)
+                    'session_version', v_session_version,
+                    'source_change_seq', v_source_change_seq,
+                    'result_code', COALESCE(NULLIF(BTRIM(COALESCE(v_sync_result->>'code', v_sync_result->>'status', v_sync_result->>'result_code', '')), ''), 'OK'),
+                    'ok', CASE WHEN v_sync_result ? 'ok' THEN v_sync_result->'ok' ELSE to_jsonb(true) END
                   )
                 )
               )
@@ -186025,8 +186890,21 @@ BEGIN
               'next_recommended_action', CASE WHEN COALESCE(v_has_more, false) THEN 'BUILD_SOURCE_CHUNK' ELSE 'SEED_LINE_WORK_CHUNK' END
             )
             || jsonb_build_object(
-              'last_source_build_collect_diagnostics', COALESCE(v_collect_diagnostics_json, '{}'::jsonb),
-              'last_source_build_canonical_diagnostics', COALESCE(v_canonical_diagnostics_json, '{}'::jsonb),
+              'last_source_build_collect_diagnostics', jsonb_strip_nulls(jsonb_build_object(
+                'has_more', COALESCE(v_has_more, false),
+                'source_page_count', COALESCE(v_source_page_count, 0),
+                'source_remaining_after_cursor_count', COALESCE(v_source_remaining_after_cursor_count, 0),
+                'collect_elapsed_ms', COALESCE(v_collect_elapsed_ms, 0),
+                'fallback_used', COALESCE(v_fallback_used, false),
+                'fallback_reason', v_fallback_reason,
+                'candidate_filter_applied_early', COALESCE(v_candidate_filter_applied_early, false),
+                'timesheet_filter_applied_early', COALESCE(v_timesheet_filter_applied_early, false),
+                'large_aggregation_avoided', COALESCE(v_large_aggregation_avoided, false)
+              )),
+              'last_source_build_canonical_diagnostics', jsonb_strip_nulls(jsonb_build_object(
+                'canonical_elapsed_ms', COALESCE(v_canonical_elapsed_ms, 0),
+                'collect_called_inside_canonical', COALESCE(v_collect_called_inside_canonical, false)
+              )),
               'last_source_build_timing', COALESCE(v_source_build_timing_json, '{}'::jsonb),
               'terminal_readiness_deferred', true,
               'terminal_readiness_deferred_to', 'pay_workbench_complete_job',
@@ -186239,6 +187117,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public._pay_batch_status_display_label(
   p_status text,
@@ -194563,9 +195443,9 @@ BEGIN
         )
         ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
         DO UPDATE
-        SET run_at_utc = LEAST(public.banking_pay_workbench_jobs.run_at_utc, EXCLUDED.run_at_utc),
-            priority = LEAST(public.banking_pay_workbench_jobs.priority, EXCLUDED.priority),
-            payload_json = COALESCE(public.banking_pay_workbench_jobs.payload_json, '{}'::jsonb) || EXCLUDED.payload_json,
+        SET run_at_utc = LEAST(clone_job.run_at_utc, EXCLUDED.run_at_utc),
+            priority = LEAST(clone_job.priority, EXCLUDED.priority),
+            payload_json = COALESCE(clone_job.payload_json, '{}'::jsonb) || EXCLUDED.payload_json,
             updated_at_utc = v_now
         RETURNING clone_job.id
         INTO v_root_job_id;
@@ -195025,6 +195905,7 @@ BEGIN
   RETURN v_response_json;
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_replace_after_mutation(
@@ -195816,7 +196697,7 @@ BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_WORKER_CHUNK');
 
   v_dirty_priority_result := public.pay_workbench_dirty_apply_jobs_chunk(
-    p_limit => v_limit,
+    p_limit => 1,
     p_now_utc => v_cutoff,
     p_session_id => p_session_id,
     p_candidate_id => p_candidate_id,
@@ -196086,8 +196967,8 @@ BEGIN
       stale_job.run_at_utc ASC,
       stale_job.created_at_utc ASC,
       stale_job.id ASC
+    LIMIT 1
     FOR UPDATE OF stale_job SKIP LOCKED
-    LIMIT LEAST(v_limit, 2)
   LOOP
     v_supplemental_stale_error_json := jsonb_build_object(
       'code', 'WORKBENCH_SUPPORTED_JOB_STALE_LEASE_EXPIRED',
@@ -196176,16 +197057,10 @@ BEGIN
     v_stop_reason := 'WORKER_DRAIN_BUDGET_EXHAUSTED';
   ELSE
     v_phase_started_at_utc := clock_timestamp();
-    v_budget_claim_limit := LEAST(
-      v_limit,
-      GREATEST(
-        1,
-        FLOOR(
-          GREATEST(v_max_runtime_ms - v_elapsed_ms, 0)::numeric
-          / GREATEST(v_min_phase_budget_ms, 1)::numeric
-        )::integer
-      )
-    );
+    -- One worker RPC may claim exactly one normal stage job.  Stage functions
+    -- still process their own bounded, set-based p_limit units; concurrency is
+    -- not used as the fix for queue safety.
+    v_budget_claim_limit := 1;
 
     v_claim_result := public.pay_workbench_claim_due_jobs(
       p_limit => v_budget_claim_limit,
@@ -197705,7 +198580,6 @@ BEGIN
     );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_decision_operations(
@@ -211774,17 +212648,16 @@ REFERENCING OLD TABLE AS old_rows
 FOR EACH STATEMENT
 EXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_compact_progress_json(
-  p_progress_json jsonb DEFAULT '{}'::jsonb,
-  p_keep_active_jobs boolean DEFAULT true
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-IMMUTABLE
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_compact_progress_json(p_progress_json jsonb DEFAULT '{}'::jsonb, p_keep_active_jobs boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ IMMUTABLE
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_progress_json jsonb := '{}'::jsonb;
+  v_active_jobs_original_count integer := 0;
+  v_active_jobs_retained_json jsonb := '[]'::jsonb;
 BEGIN
   v_progress_json := CASE
     WHEN jsonb_typeof(COALESCE(p_progress_json, '{}'::jsonb)) = 'object'
@@ -211835,6 +212708,30 @@ BEGIN
   IF COALESCE(p_keep_active_jobs, true) IS TRUE THEN
     IF jsonb_typeof(v_progress_json->'active_jobs') IS DISTINCT FROM 'array' THEN
       v_progress_json := v_progress_json - 'active_jobs';
+    ELSE
+      v_active_jobs_original_count := jsonb_array_length(v_progress_json->'active_jobs');
+      IF v_active_jobs_original_count > 20 THEN
+        SELECT COALESCE(jsonb_agg(active_job_item.value ORDER BY active_job_item.ordinality), '[]'::jsonb)
+        INTO v_active_jobs_retained_json
+        FROM (
+          SELECT retained_jobs.value, retained_jobs.ordinality
+          FROM jsonb_array_elements(v_progress_json->'active_jobs') WITH ORDINALITY AS retained_jobs(value, ordinality)
+          ORDER BY retained_jobs.ordinality DESC
+          LIMIT 20
+        ) AS active_job_item;
+
+        v_progress_json := jsonb_set(
+            v_progress_json,
+            ARRAY['active_jobs'],
+            COALESCE(v_active_jobs_retained_json, '[]'::jsonb),
+            true
+          )
+          || jsonb_build_object(
+            'active_jobs_truncated', true,
+            'active_jobs_original_count', v_active_jobs_original_count,
+            'active_jobs_retained_count', jsonb_array_length(COALESCE(v_active_jobs_retained_json, '[]'::jsonb))
+          );
+      END IF;
     END IF;
   ELSE
     v_progress_json := v_progress_json
@@ -212781,3 +213678,200 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.pay_workbench_delta_refresh_family_key(
+  p_session_id uuid,
+  p_candidate_id uuid,
+  p_payload_json jsonb DEFAULT '{}'::jsonb,
+  p_fallback_session_version bigint DEFAULT NULL::bigint,
+  p_fallback_projection_mode text DEFAULT NULL::text,
+  p_fallback_projection_class text DEFAULT NULL::text,
+  p_fallback_refresh_scope_kind text DEFAULT NULL::text
+)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_payload_json jsonb := CASE
+    WHEN jsonb_typeof(COALESCE(p_payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_payload_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+  v_session_id_text text := NULLIF(BTRIM(COALESCE(
+    CASE WHEN p_session_id IS NULL THEN NULL ELSE p_session_id::text END,
+    v_payload_json->>'session_id',
+    v_payload_json->>'workbench_session_id',
+    v_payload_json->>'source_session_id',
+    v_payload_json->>'target_session_id',
+    ''
+  )), '');
+  v_candidate_id_text text := NULLIF(BTRIM(COALESCE(
+    CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+    v_payload_json->>'candidate_id',
+    v_payload_json#>>'{candidate,id}',
+    ''
+  )), '');
+  v_session_version_text text := NULLIF(BTRIM(COALESCE(
+    v_payload_json->>'session_version',
+    v_payload_json->>'workbench_session_version',
+    v_payload_json->>'version',
+    CASE WHEN p_fallback_session_version IS NULL THEN NULL ELSE p_fallback_session_version::text END,
+    '0'
+  )), '');
+  v_session_version bigint := 0;
+  v_projection_mode text := UPPER(BTRIM(COALESCE(
+    NULLIF(v_payload_json->>'projection_mode', ''),
+    NULLIF(v_payload_json->>'resolved_mode', ''),
+    NULLIF(v_payload_json->>'mode', ''),
+    NULLIF(p_fallback_projection_mode, ''),
+    'DELTA'
+  )));
+  v_projection_class text := UPPER(BTRIM(COALESCE(
+    NULLIF(v_payload_json->>'projection_class', ''),
+    NULLIF(v_payload_json->>'classifier_projection_class', ''),
+    NULLIF(v_payload_json#>>'{classifier_result,projection_class}', ''),
+    NULLIF(p_fallback_projection_class, ''),
+    'UNKNOWN'
+  )));
+  v_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_linked_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_timesheet_family_hash text := NULL::text;
+  v_refresh_scope_kind text := NULL::text;
+BEGIN
+  IF v_session_version_text ~ '^-?[0-9]{1,18}$' THEN
+    v_session_version := v_session_version_text::bigint;
+  ELSE
+    v_session_version := COALESCE(p_fallback_session_version, 0);
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(sorted_ids.timesheet_id_text ORDER BY sorted_ids.timesheet_id_text), '[]'::jsonb)
+  INTO v_targeted_timesheet_ids_json
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(raw_ids.value), '') AS timesheet_id_text
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(v_payload_json->'targeted_timesheet_ids') = 'array' THEN v_payload_json->'targeted_timesheet_ids'
+        WHEN jsonb_typeof(v_payload_json->'targeted_timesheet_ids') = 'string' THEN jsonb_build_array(v_payload_json->>'targeted_timesheet_ids')
+        WHEN jsonb_typeof(v_payload_json#>'{source_build,targeted_timesheet_ids}') = 'array' THEN v_payload_json#>'{source_build,targeted_timesheet_ids}'
+        WHEN jsonb_typeof(v_payload_json#>'{preview_decisions_json,targeted_timesheet_ids}') = 'array' THEN v_payload_json#>'{preview_decisions_json,targeted_timesheet_ids}'
+        WHEN NULLIF(BTRIM(COALESCE(v_payload_json->>'targeted_timesheet_id', v_payload_json->>'timesheet_id', '')), '') IS NOT NULL THEN jsonb_build_array(COALESCE(v_payload_json->>'targeted_timesheet_id', v_payload_json->>'timesheet_id'))
+        ELSE '[]'::jsonb
+      END
+    ) AS raw_ids(value)
+    WHERE NULLIF(BTRIM(raw_ids.value), '') ~* v_uuid_re
+  ) AS sorted_ids;
+
+  SELECT COALESCE(jsonb_agg(sorted_ids.timesheet_id_text ORDER BY sorted_ids.timesheet_id_text), '[]'::jsonb)
+  INTO v_linked_timesheet_ids_json
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(raw_ids.value), '') AS timesheet_id_text
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(v_payload_json->'linked_timesheet_ids') = 'array' THEN v_payload_json->'linked_timesheet_ids'
+        WHEN jsonb_typeof(v_payload_json->'linked_timesheet_ids') = 'string' THEN jsonb_build_array(v_payload_json->>'linked_timesheet_ids')
+        WHEN jsonb_typeof(v_payload_json#>'{source_build,linked_timesheet_ids}') = 'array' THEN v_payload_json#>'{source_build,linked_timesheet_ids}'
+        WHEN jsonb_typeof(v_payload_json#>'{preview_decisions_json,linked_timesheet_ids}') = 'array' THEN v_payload_json#>'{preview_decisions_json,linked_timesheet_ids}'
+        ELSE '[]'::jsonb
+      END
+    ) AS raw_ids(value)
+    WHERE NULLIF(BTRIM(raw_ids.value), '') ~* v_uuid_re
+  ) AS sorted_ids;
+
+  v_refresh_scope_kind := UPPER(BTRIM(COALESCE(
+    NULLIF(v_payload_json->>'refresh_scope_kind', ''),
+    NULLIF(v_payload_json->>'scope_kind', ''),
+    NULLIF(v_payload_json#>>'{source_build,refresh_scope_kind}', ''),
+    NULLIF(v_payload_json#>>'{preview_decisions_json,refresh_scope_kind}', ''),
+    NULLIF(p_fallback_refresh_scope_kind, ''),
+    CASE
+      WHEN jsonb_array_length(COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb)) > 0
+        OR jsonb_array_length(COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)) > 0
+      THEN 'TARGETED_TIMESHEETS'
+      ELSE 'CANDIDATE_FULL_LIVE'
+    END
+  )));
+
+  v_timesheet_family_hash := md5(COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb)::text || ':' || COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)::text);
+
+  RETURN 'WORKBENCH_CANDIDATE_DELTA_REFRESH_FAMILY'
+    || ':session:' || COALESCE(v_session_id_text, 'none')
+    || ':version:' || COALESCE(v_session_version, 0)::text
+    || ':projection_mode:' || COALESCE(NULLIF(v_projection_mode, ''), 'DELTA')
+    || ':projection_class:' || COALESCE(NULLIF(v_projection_class, ''), 'UNKNOWN')
+    || ':refresh_scope:' || COALESCE(NULLIF(v_refresh_scope_kind, ''), 'CANDIDATE_FULL_LIVE')
+    || ':candidate:' || COALESCE(v_candidate_id_text, 'none')
+    || ':timesheets:' || v_timesheet_family_hash;
+END;
+$function$;
+CREATE OR REPLACE FUNCTION public.pay_workbench_compact_job_result_json(p_result_json jsonb DEFAULT '{}'::jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_result_json jsonb := CASE
+    WHEN jsonb_typeof(COALESCE(p_result_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_result_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_next_cursor_json jsonb := CASE
+    WHEN jsonb_typeof(v_result_json->'next_cursor_json') = 'object' THEN v_result_json->'next_cursor_json'
+    WHEN jsonb_typeof(v_result_json->'next_cursor') = 'object' THEN v_result_json->'next_cursor'
+    WHEN jsonb_typeof(v_result_json->'nextCursorJson') = 'object' THEN v_result_json->'nextCursorJson'
+    WHEN jsonb_typeof(v_result_json->'nextCursor') = 'object' THEN v_result_json->'nextCursor'
+    ELSE NULL::jsonb
+  END;
+  v_targeted_timesheet_ids jsonb := CASE
+    WHEN jsonb_typeof(v_result_json->'targeted_timesheet_ids') = 'array' THEN v_result_json->'targeted_timesheet_ids'
+    ELSE NULL::jsonb
+  END;
+  v_linked_timesheet_ids jsonb := CASE
+    WHEN jsonb_typeof(v_result_json->'linked_timesheet_ids') = 'array' THEN v_result_json->'linked_timesheet_ids'
+    ELSE NULL::jsonb
+  END;
+BEGIN
+  RETURN jsonb_strip_nulls(jsonb_build_object(
+    'ok', CASE WHEN v_result_json ? 'ok' THEN v_result_json->'ok' ELSE NULL END,
+    'has_more', CASE WHEN v_result_json ? 'has_more' THEN v_result_json->'has_more' WHEN v_result_json ? 'more_due' THEN v_result_json->'more_due' ELSE NULL END,
+    'more_due', CASE WHEN v_result_json ? 'more_due' THEN v_result_json->'more_due' WHEN v_result_json ? 'has_more' THEN v_result_json->'has_more' ELSE NULL END,
+    'next_cursor_json', v_next_cursor_json,
+    'next_cursor', v_next_cursor_json,
+    'processed_count', CASE WHEN v_result_json ? 'processed_count' THEN v_result_json->'processed_count' ELSE NULL END,
+    'seeded_count', CASE WHEN v_result_json ? 'seeded_count' THEN v_result_json->'seeded_count' ELSE NULL END,
+    'new_scope_count', CASE WHEN v_result_json ? 'new_scope_count' THEN v_result_json->'new_scope_count' ELSE NULL END,
+    'ready_count_delta', CASE WHEN v_result_json ? 'ready_count_delta' THEN v_result_json->'ready_count_delta' ELSE NULL END,
+    'materialised_count', CASE WHEN v_result_json ? 'materialised_count' THEN v_result_json->'materialised_count' WHEN v_result_json ? 'materialized_count' THEN v_result_json->'materialized_count' ELSE NULL END,
+    'error_count', CASE WHEN v_result_json ? 'error_count' THEN v_result_json->'error_count' WHEN v_result_json ? 'materialisation_error_count' THEN v_result_json->'materialisation_error_count' ELSE NULL END,
+    'source_rows_written', CASE WHEN v_result_json ? 'source_rows_written' THEN v_result_json->'source_rows_written' ELSE NULL END,
+    'current_source_row_count', CASE WHEN v_result_json ? 'current_source_row_count' THEN v_result_json->'current_source_row_count' ELSE NULL END,
+    'line_rows_written', CASE WHEN v_result_json ? 'line_rows_written' THEN v_result_json->'line_rows_written' ELSE NULL END,
+    'preview_rows_written', CASE WHEN v_result_json ? 'preview_rows_written' THEN v_result_json->'preview_rows_written' ELSE NULL END,
+    'source_build_run_id', NULLIF(BTRIM(COALESCE(v_result_json->>'source_build_run_id', '')), ''),
+    'session_id', NULLIF(BTRIM(COALESCE(v_result_json->>'session_id', v_result_json->>'workbench_session_id', '')), ''),
+    'candidate_id', NULLIF(BTRIM(COALESCE(v_result_json->>'candidate_id', '')), ''),
+    'snapshot_run_id', NULLIF(BTRIM(COALESCE(v_result_json->>'snapshot_run_id', v_result_json->>'source_snapshot_run_id', '')), ''),
+    'projection_run_id', NULLIF(BTRIM(COALESCE(v_result_json->>'projection_run_id', v_result_json->>'delta_projection_run_id', '')), ''),
+    'timesheet_id', NULLIF(BTRIM(COALESCE(v_result_json->>'timesheet_id', v_result_json->>'targeted_timesheet_id', v_result_json->>'real_business_timesheet_id', '')), ''),
+    'real_business_timesheet_id', NULLIF(BTRIM(COALESCE(v_result_json->>'real_business_timesheet_id', v_result_json->>'timesheet_id', '')), ''),
+    'source_change_seq', CASE WHEN v_result_json ? 'source_change_seq' THEN v_result_json->'source_change_seq' ELSE NULL END,
+    'source_change_sequence', CASE WHEN v_result_json ? 'source_change_sequence' THEN v_result_json->'source_change_sequence' WHEN v_result_json ? 'source_change_seq' THEN v_result_json->'source_change_seq' ELSE NULL END,
+    'session_version', CASE WHEN v_result_json ? 'session_version' THEN v_result_json->'session_version' ELSE NULL END,
+    'projection_mode', NULLIF(BTRIM(COALESCE(v_result_json->>'projection_mode', '')), ''),
+    'projection_class', NULLIF(BTRIM(COALESCE(v_result_json->>'projection_class', '')), ''),
+    'refresh_scope_kind', NULLIF(BTRIM(COALESCE(v_result_json->>'refresh_scope_kind', '')), ''),
+    'targeted_timesheet_ids', v_targeted_timesheet_ids,
+    'linked_timesheet_ids', v_linked_timesheet_ids,
+    'fallback_required', CASE WHEN v_result_json ? 'fallback_required' THEN v_result_json->'fallback_required' ELSE NULL END,
+    'fallback_reason', NULLIF(BTRIM(COALESCE(v_result_json->>'fallback_reason', '')), ''),
+    'delta_refresh_complete', CASE WHEN v_result_json ? 'delta_refresh_complete' THEN v_result_json->'delta_refresh_complete' ELSE NULL END,
+    'made_progress', CASE WHEN v_result_json ? 'made_progress' THEN v_result_json->'made_progress' ELSE NULL END,
+    'shadow_compare_required', CASE WHEN v_result_json ? 'shadow_compare_required' THEN v_result_json->'shadow_compare_required' ELSE NULL END,
+    'shadow_compare_enforced', CASE WHEN v_result_json ? 'shadow_compare_enforced' THEN v_result_json->'shadow_compare_enforced' ELSE NULL END,
+    'shadow_compare_failed', CASE WHEN v_result_json ? 'shadow_compare_failed' THEN v_result_json->'shadow_compare_failed' ELSE NULL END,
+    'shadow_compare_status', NULLIF(BTRIM(COALESCE(v_result_json->>'shadow_compare_status', '')), ''),
+    'phase', NULLIF(BTRIM(COALESCE(v_result_json->>'phase', v_result_json->>'next_phase', '')), ''),
+    'write_phase', NULLIF(BTRIM(COALESCE(v_result_json->>'write_phase', '')), '')
+  ));
+END;
+$function$;
