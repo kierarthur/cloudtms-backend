@@ -24846,6 +24846,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_workbench_claim_due_jobs(integer, timestamptz);
 DROP FUNCTION IF EXISTS public.pay_workbench_claim_due_jobs(integer, timestamptz, uuid, uuid, jsonb);
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_claim_due_jobs(p_limit integer DEFAULT 25, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_allowed_job_types text[] DEFAULT NULL::text[])
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -26414,6 +26415,22 @@ BEGIN
         claim_job.candidate_id,
         claim_job.payload_json,
         claim_job.created_at_utc,
+        public._pay_workbench_candidate_serial_candidate_id(claim_job.candidate_id, claim_job.payload_json) AS candidate_serial_candidate_id,
+        public._pay_workbench_candidate_serial_key(public._pay_workbench_candidate_serial_candidate_id(claim_job.candidate_id, claim_job.payload_json)) AS candidate_serial_key,
+        public._pay_workbench_candidate_serial_is_candidate_job(claim_job.job_type, claim_job.candidate_id, claim_job.payload_json) AS candidate_serial_required,
+        (
+          lower(BTRIM(COALESCE(claim_job.payload_json->>'continuation', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR UPPER(BTRIM(COALESCE(claim_job.payload_json->>'run_mode', ''))) IN ('BOUNDED_CONTINUATION', 'CONTINUATION', 'STAGE_CONTINUATION')
+          OR lower(BTRIM(COALESCE(claim_job.payload_json->>'fallback_from_delta', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR (
+            lower(BTRIM(COALESCE(claim_job.payload_json->>'source_build_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+            AND NULLIF(BTRIM(COALESCE(claim_job.payload_json->>'fallback_reason', '')), '') IS NOT NULL
+          )
+          OR (
+            NULLIF(BTRIM(COALESCE(claim_job.payload_json->>'source_job_id', claim_job.payload_json->>'continuation_source_job_id', claim_job.payload_json->>'bounded_continuation_source_job_id', '')), '') IS NOT NULL
+            AND UPPER(BTRIM(COALESCE(claim_job.payload_json->>'run_mode', ''))) NOT IN ('LATEST_STATE_HEAD', 'LATEST_RERUN_AFTER_RUNNING')
+          )
+        ) AS candidate_serial_is_chain_continuation,
         CASE
           WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH')
             THEN 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
@@ -26608,13 +26625,43 @@ BEGIN
             ELSE claim_source.id::text
           END
           ORDER BY claim_source.priority ASC, claim_source.run_at_utc ASC, claim_source.created_at_utc ASC, claim_source.id ASC
-        ) AS hot_key_rank
+        ) AS hot_key_rank,
+        ROW_NUMBER() OVER (
+          PARTITION BY COALESCE(claim_source.candidate_serial_key, claim_source.id::text)
+          ORDER BY
+            CASE WHEN claim_source.candidate_serial_required IS TRUE AND claim_source.candidate_serial_is_chain_continuation IS TRUE THEN 0 ELSE 1 END ASC,
+            claim_source.priority ASC,
+            claim_source.run_at_utc ASC,
+            claim_source.created_at_utc ASC,
+            claim_source.id ASC
+        ) AS candidate_serial_rank
       FROM claim_source
     ),
     claim AS (
       SELECT claim_pool.*
       FROM claim_pool
+      CROSS JOIN LATERAL (
+        SELECT public._pay_workbench_candidate_serial_active_state(
+          claim_pool.id,
+          claim_pool.candidate_serial_candidate_id,
+          claim_pool.job_type,
+          claim_pool.payload_json,
+          v_now
+        ) AS state_json
+      ) AS candidate_serial_state
       WHERE claim_pool.hot_key_rank = 1
+        AND (
+          claim_pool.candidate_serial_required IS NOT TRUE
+          OR claim_pool.candidate_serial_rank = 1
+        )
+        AND (
+          claim_pool.candidate_serial_required IS NOT TRUE
+          OR pg_try_advisory_xact_lock(hashtextextended(claim_pool.candidate_serial_key, 24062027))
+        )
+        AND (
+          claim_pool.candidate_serial_required IS NOT TRUE
+          OR lower(BTRIM(COALESCE(candidate_serial_state.state_json->>'blocked', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        )
         AND (
           claim_pool.canonical_job_type <> 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
           OR pg_try_advisory_xact_lock(hashtextextended(COALESCE(NULLIF(BTRIM(claim_pool.hot_key), ''), claim_pool.id::text), 24062026))
@@ -26876,14 +26923,34 @@ BEGIN
                   'delta_family_key', claim_row.hot_key,
                   'normalised_delta_family_key', claim_row.hot_key,
                   'delta_coalescing_key', claim_row.hot_key,
-                  'claimed_at_utc', v_now::text
+                  'claimed_at_utc', v_now::text,
+                  'candidate_serial_key', CASE WHEN claim_row.candidate_serial_required IS TRUE THEN claim_row.candidate_serial_key ELSE NULL END,
+                  'candidate_serial_candidate_id', CASE WHEN claim_row.candidate_serial_candidate_id IS NULL THEN NULL ELSE claim_row.candidate_serial_candidate_id::text END,
+                  'candidate_serial_active_chain_id', CASE WHEN claim_row.candidate_serial_required IS TRUE THEN COALESCE(NULLIF(BTRIM(COALESCE(upd_job.payload_json->>'candidate_serial_active_chain_id', '')), ''), NULLIF(BTRIM(COALESCE(upd_job.payload_json->>'source_job_id', '')), ''), upd_job.id::text) ELSE NULL END,
+                  'candidate_serial_source_job_id', NULLIF(BTRIM(COALESCE(upd_job.payload_json->>'source_job_id', '')), ''),
+                  'candidate_serial_started_at_utc', CASE WHEN claim_row.candidate_serial_required IS TRUE THEN v_now::text ELSE NULL END,
+                  'candidate_serial_reason', CASE WHEN claim_row.candidate_serial_required IS TRUE THEN 'CANDIDATE_SERIAL_CLAIM_GRANTED' ELSE NULL END
                 )
               )
-            ELSE upd_job.payload_json
+            ELSE
+              CASE WHEN claim_row.candidate_serial_required IS TRUE THEN
+                jsonb_strip_nulls(
+                  COALESCE(upd_job.payload_json, '{}'::jsonb)
+                  || jsonb_build_object(
+                    'claimed_at_utc', v_now::text,
+                    'candidate_serial_key', claim_row.candidate_serial_key,
+                    'candidate_serial_candidate_id', CASE WHEN claim_row.candidate_serial_candidate_id IS NULL THEN NULL ELSE claim_row.candidate_serial_candidate_id::text END,
+                    'candidate_serial_active_chain_id', COALESCE(NULLIF(BTRIM(COALESCE(upd_job.payload_json->>'candidate_serial_active_chain_id', '')), ''), NULLIF(BTRIM(COALESCE(upd_job.payload_json->>'source_job_id', '')), ''), upd_job.id::text),
+                    'candidate_serial_source_job_id', NULLIF(BTRIM(COALESCE(upd_job.payload_json->>'source_job_id', '')), ''),
+                    'candidate_serial_started_at_utc', v_now::text,
+                    'candidate_serial_reason', 'CANDIDATE_SERIAL_CLAIM_GRANTED'
+                  )
+                )
+              ELSE upd_job.payload_json END
           END
       FROM claim AS claim_row
       LEFT JOIN public.app_change_counters AS live_change
-        ON live_change.entity_key = 'pay_candidate:' || claim_row.candidate_id::text
+        ON live_change.entity_key = 'pay_candidate:' || COALESCE(claim_row.candidate_serial_candidate_id, claim_row.candidate_id)::text
       WHERE upd_job.id = claim_row.id
       RETURNING
         upd_job.id,
@@ -26954,11 +27021,29 @@ BEGIN
         'started_at_utc', v_claimed_row.started_at_utc,
         'snapshot_run_id', CASE WHEN v_claimed_row.snapshot_run_id IS NULL THEN NULL ELSE v_claimed_row.snapshot_run_id::text END,
         'session_id', CASE WHEN v_claimed_row.session_id IS NULL THEN NULL ELSE v_claimed_row.session_id::text END,
-        'candidate_id', CASE WHEN v_claimed_row.candidate_id IS NULL THEN NULL ELSE v_claimed_row.candidate_id::text END
+        'candidate_id', CASE WHEN v_claimed_row.candidate_id IS NULL THEN NULL ELSE v_claimed_row.candidate_id::text END,
+        'candidate_serial_key', v_claimed_row.payload_json->>'candidate_serial_key',
+        'candidate_serial_active_chain_id', v_claimed_row.payload_json->>'candidate_serial_active_chain_id'
       ),
       'WORKBENCH_JOB_CLAIMED',
       NULL
     );
+
+    IF NULLIF(BTRIM(COALESCE(v_claimed_row.payload_json->>'candidate_serial_key', '')), '') IS NOT NULL THEN
+      PERFORM public._pay_workbench_candidate_serial_audit(
+        'CANDIDATE_SERIAL_CLAIM_GRANTED',
+        v_claimed_row.id,
+        public._pay_workbench_candidate_serial_candidate_id(v_claimed_row.candidate_id, v_claimed_row.payload_json),
+        jsonb_build_object(
+          'job_type', v_claimed_row.job_type,
+          'candidate_serial_key', v_claimed_row.payload_json->>'candidate_serial_key',
+          'candidate_serial_active_chain_id', v_claimed_row.payload_json->>'candidate_serial_active_chain_id',
+          'claimed_at_utc', v_now::text
+        ),
+        'CANDIDATE_SERIAL_CLAIM_GRANTED',
+        NULL::uuid
+      );
+    END IF;
   END LOOP;
 
   v_claim_lock_contention_detected := (
@@ -27013,8 +27098,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_complete_job(p_job_id uuid, p_result_json jsonb DEFAULT '{}'::jsonb)
@@ -184980,6 +185063,18 @@ BEGIN
     'session_signature_token', v_session_signature_token,
     'actor_user_id', CASE WHEN v_actor_user_id IS NULL THEN NULL ELSE v_actor_user_id::text END,
     'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+    'candidate_serial_key', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE public._pay_workbench_candidate_serial_key(p_candidate_id) END,
+    'candidate_serial_candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+    'candidate_serial_active_chain_id', CASE
+      WHEN p_candidate_id IS NULL THEN NULL
+      ELSE COALESCE(
+        NULLIF(BTRIM(COALESCE(v_source_job_row.payload_json->>'candidate_serial_active_chain_id', '')), ''),
+        CASE WHEN p_source_job_id IS NULL THEN NULL ELSE p_source_job_id::text END
+      )
+    END,
+    'candidate_serial_source_job_id', CASE WHEN p_source_job_id IS NULL THEN NULL ELSE p_source_job_id::text END,
+    'candidate_serial_reason', 'CANDIDATE_SERIAL_CONTINUATION_QUEUED',
+    'candidate_serial_continuation', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE true END,
     'job_type', v_job_type,
     'dedupe_key', v_dedupe_key,
     'continuation', true
@@ -212358,19 +212453,12 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_dirty_apply_jobs_chunk(
-  p_limit integer DEFAULT 5,
-  p_now_utc timestamptz DEFAULT NULL::timestamptz,
-  p_session_id uuid DEFAULT NULL::uuid,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_worker_id text DEFAULT NULL::text,
-  p_lease_seconds integer DEFAULT 180
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-VOLATILE
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_dirty_apply_jobs_chunk(p_limit integer DEFAULT 5, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_worker_id text DEFAULT NULL::text, p_lease_seconds integer DEFAULT 180)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_started_at timestamptz := clock_timestamp();
@@ -212423,8 +212511,18 @@ BEGIN
   WHILE v_processed < v_limit LOOP
     v_job := NULL;
 
-    WITH next_job AS (
-      SELECT claim_job.id
+    WITH candidate_pool AS (
+      SELECT
+        claim_job.id,
+        claim_job.job_type,
+        claim_job.priority,
+        claim_job.run_at_utc,
+        claim_job.created_at_utc,
+        claim_job.candidate_id,
+        claim_job.payload_json,
+        public._pay_workbench_candidate_serial_candidate_id(claim_job.candidate_id, claim_job.payload_json) AS candidate_serial_candidate_id,
+        public._pay_workbench_candidate_serial_key(public._pay_workbench_candidate_serial_candidate_id(claim_job.candidate_id, claim_job.payload_json)) AS candidate_serial_key,
+        public._pay_workbench_candidate_serial_is_candidate_job(claim_job.job_type, claim_job.candidate_id, claim_job.payload_json) AS candidate_serial_required
       FROM public.banking_pay_workbench_jobs AS claim_job
       WHERE claim_job.status = 'QUEUED'
         AND claim_job.run_at_utc <= v_now
@@ -212436,6 +212534,34 @@ BEGIN
         AND (p_session_id IS NULL OR claim_job.session_id = p_session_id OR claim_job.payload_json->>'session_id' = p_session_id::text OR claim_job.payload_json->>'source_session_id' = p_session_id::text)
       ORDER BY claim_job.run_at_utc ASC, claim_job.priority ASC, claim_job.created_at_utc ASC, claim_job.id ASC
       FOR UPDATE SKIP LOCKED
+      LIMIT GREATEST(v_limit * 5, 10)
+    ), ranked_pool AS (
+      SELECT
+        candidate_pool.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY COALESCE(candidate_pool.candidate_serial_key, candidate_pool.id::text)
+          ORDER BY candidate_pool.run_at_utc ASC, candidate_pool.priority ASC, candidate_pool.created_at_utc ASC, candidate_pool.id ASC
+        ) AS candidate_serial_rank
+      FROM candidate_pool
+    ), next_job AS (
+      SELECT ranked_pool.id,
+             ranked_pool.candidate_serial_required,
+             ranked_pool.candidate_serial_key,
+             ranked_pool.candidate_serial_candidate_id
+      FROM ranked_pool
+      CROSS JOIN LATERAL (
+        SELECT public._pay_workbench_candidate_serial_active_state(
+          ranked_pool.id,
+          ranked_pool.candidate_serial_candidate_id,
+          ranked_pool.job_type,
+          ranked_pool.payload_json,
+          v_now
+        ) AS state_json
+      ) AS candidate_serial_state
+      WHERE (ranked_pool.candidate_serial_required IS NOT TRUE OR ranked_pool.candidate_serial_rank = 1)
+        AND (ranked_pool.candidate_serial_required IS NOT TRUE OR pg_try_advisory_xact_lock(hashtextextended(ranked_pool.candidate_serial_key, 24062027)))
+        AND (ranked_pool.candidate_serial_required IS NOT TRUE OR lower(BTRIM(COALESCE(candidate_serial_state.state_json->>'blocked', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on'))
+      ORDER BY ranked_pool.run_at_utc ASC, ranked_pool.priority ASC, ranked_pool.created_at_utc ASC, ranked_pool.id ASC
       LIMIT 1
     ), claimed AS (
       UPDATE public.banking_pay_workbench_jobs AS update_job
@@ -212446,7 +212572,15 @@ BEGIN
           last_error_json = NULL::jsonb,
           payload_json = public._pay_workbench_dirty_payload_merge(
             COALESCE(update_job.payload_json, '{}'::jsonb),
-            jsonb_build_object('claimed_at_utc', v_now::text, 'claimed_by_worker_id', v_worker_id)
+            jsonb_strip_nulls(jsonb_build_object(
+              'claimed_at_utc', v_now::text,
+              'claimed_by_worker_id', v_worker_id,
+              'candidate_serial_key', CASE WHEN next_job.candidate_serial_required IS TRUE THEN next_job.candidate_serial_key ELSE NULL END,
+              'candidate_serial_candidate_id', CASE WHEN next_job.candidate_serial_candidate_id IS NULL THEN NULL ELSE next_job.candidate_serial_candidate_id::text END,
+              'candidate_serial_active_chain_id', CASE WHEN next_job.candidate_serial_required IS TRUE THEN COALESCE(NULLIF(BTRIM(COALESCE(update_job.payload_json->>'candidate_serial_active_chain_id', '')), ''), NULLIF(BTRIM(COALESCE(update_job.payload_json->>'source_job_id', '')), ''), update_job.id::text) ELSE NULL END,
+              'candidate_serial_started_at_utc', CASE WHEN next_job.candidate_serial_required IS TRUE THEN v_now::text ELSE NULL END,
+              'candidate_serial_reason', CASE WHEN next_job.candidate_serial_required IS TRUE THEN 'CANDIDATE_SERIAL_CLAIM_GRANTED' ELSE NULL END
+            ))
           )
       FROM next_job
       WHERE update_job.id = next_job.id
@@ -212460,6 +212594,23 @@ BEGIN
 
     v_processed := v_processed + 1;
     PERFORM public._temp_diag_log('TEMP_TRIGGER_DIRTY_STAGE', 'TEMP_BANKING_PAY_DIRTY', v_job.id::text, jsonb_build_object('function_name', 'pay_workbench_dirty_apply_jobs_chunk', 'stage', 'dirty_priority_claimed', 'job_id', v_job.id::text, 'job_type', v_job.job_type, 'dedupe_key', v_job.dedupe_key, 'priority', v_job.priority, 'queue_class', COALESCE(v_job.payload_json->>'queue_class', '')));
+
+    IF NULLIF(BTRIM(COALESCE(v_job.payload_json->>'candidate_serial_key', '')), '') IS NOT NULL THEN
+      PERFORM public._pay_workbench_candidate_serial_audit(
+        'CANDIDATE_SERIAL_CLAIM_GRANTED',
+        v_job.id,
+        public._pay_workbench_candidate_serial_candidate_id(v_job.candidate_id, v_job.payload_json),
+        jsonb_build_object(
+          'job_type', v_job.job_type,
+          'candidate_serial_key', v_job.payload_json->>'candidate_serial_key',
+          'candidate_serial_active_chain_id', v_job.payload_json->>'candidate_serial_active_chain_id',
+          'claimed_by_worker_id', v_worker_id,
+          'claimed_at_utc', v_now::text
+        ),
+        'CANDIDATE_SERIAL_CLAIM_GRANTED',
+        NULL::uuid
+      );
+    END IF;
 
     BEGIN
       IF v_job.job_type = 'WORKBENCH_CANDIDATE_DIRTY_APPLY' THEN
@@ -212597,6 +212748,8 @@ END;
 $function$;
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_dirty_apply_job_process(p_job_id uuid, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -212639,6 +212792,8 @@ DECLARE
   v_dirty_marking_skipped boolean := false;
   v_is_authorise_delta_targeted boolean := false;
   v_lifecycle_context text := NULL::text;
+  v_candidate_serial_state jsonb := '{}'::jsonb;
+  v_candidate_serial_blocked boolean := false;
 BEGIN
   SELECT job_row.*
   INTO v_job
@@ -212666,6 +212821,79 @@ BEGIN
   IF v_candidate_id IS NULL THEN
     RAISE EXCEPTION 'Candidate dirty apply job % has no candidate_id', p_job_id
       USING ERRCODE = '22023';
+  END IF;
+
+  v_candidate_serial_state := public._pay_workbench_candidate_serial_active_state(
+    p_job_id,
+    v_candidate_id,
+    v_job.job_type,
+    v_payload,
+    v_now
+  );
+  v_candidate_serial_blocked := lower(BTRIM(COALESCE(v_candidate_serial_state->>'blocked', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  IF v_candidate_serial_blocked IS TRUE THEN
+    UPDATE public.banking_pay_workbench_jobs AS delayed_job
+    SET status = 'QUEUED',
+        run_at_utc = GREATEST(COALESCE(delayed_job.run_at_utc, v_now), v_now + interval '5 seconds'),
+        started_at_utc = NULL,
+        updated_at_utc = v_now,
+        payload_json = public._pay_workbench_dirty_payload_merge(
+          COALESCE(delayed_job.payload_json, '{}'::jsonb),
+          jsonb_strip_nulls(jsonb_build_object(
+            'candidate_serial_key', public._pay_workbench_candidate_serial_key(v_candidate_id),
+            'candidate_serial_candidate_id', v_candidate_id::text,
+            'candidate_serial_blocked_by_job_id', v_candidate_serial_state->>'blocked_job_id',
+            'candidate_serial_blocked_by_chain_job_id', v_candidate_serial_state->>'blocked_chain_job_id',
+            'candidate_serial_blocked_by_projection_run_id', v_candidate_serial_state->>'projection_run_id',
+            'candidate_serial_wait_reason', COALESCE(v_candidate_serial_state->>'reason', 'CANDIDATE_SERIAL_DIRTY_APPLY_DELAYED'),
+            'candidate_serial_delayed_at_utc', v_now::text,
+            'dirty_apply_row_marking_applied', false,
+            'dirty_marking_skipped', true,
+            'session_progress_dirtying_skipped', true,
+            'classifier_work_skipped_by_candidate_serial', true,
+            'source_build_enqueue_skipped_by_candidate_serial', true,
+            'line_work_enqueue_skipped_by_candidate_serial', true,
+            'preview_materialise_enqueue_skipped_by_candidate_serial', true,
+            'rerun_required', true,
+            'has_more', true,
+            'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+          ))
+        )
+    WHERE delayed_job.id = p_job_id;
+
+    PERFORM public._pay_workbench_candidate_serial_audit(
+      'CANDIDATE_SERIAL_DIRTY_APPLY_DELAYED',
+      p_job_id,
+      v_candidate_id,
+      COALESCE(v_candidate_serial_state, '{}'::jsonb) || jsonb_build_object(
+        'job_type', v_job.job_type,
+        'dirty_apply_row_marking_applied', false,
+        'dirty_marking_skipped', true,
+        'delayed_until_utc', (v_now + interval '5 seconds')::text
+      ),
+      'CANDIDATE_SERIAL_DIRTY_APPLY_DELAYED',
+      NULL::uuid
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'job_id', p_job_id::text,
+      'candidate_id', v_candidate_id::text,
+      'candidate_serial_delayed', true,
+      'has_more', true,
+      'rerun_required', true,
+      'next_cursor_json', '{}'::jsonb,
+      'reason', COALESCE(v_candidate_serial_state->>'reason', 'CANDIDATE_SERIAL_DIRTY_APPLY_DELAYED'),
+      'dirty_apply_row_marking_applied', false,
+      'dirty_marking_skipped', true,
+      'session_progress_dirtying_skipped', true,
+      'classifier_work_skipped_by_candidate_serial', true,
+      'source_build_enqueue_skipped_by_candidate_serial', true,
+      'line_work_enqueue_skipped_by_candidate_serial', true,
+      'preview_materialise_enqueue_skipped_by_candidate_serial', true,
+      'elapsed_ms', EXTRACT(MILLISECONDS FROM clock_timestamp() - v_started_at)
+    );
   END IF;
 
   SELECT COALESCE(array_agg(DISTINCT value_text::uuid ORDER BY value_text::uuid), ARRAY[]::uuid[])
@@ -213094,7 +213322,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -217922,5 +218149,305 @@ BEGIN
     'normalised_delta_family_key', v_family_key,
     'latest_source_change_seq', v_latest_seq
   );
+END;
+$function$;
+CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_serial_audit(p_action text, p_job_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_after_json jsonb DEFAULT '{}'::jsonb, p_reason text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_action text := COALESCE(NULLIF(BTRIM(p_action), ''), 'CANDIDATE_SERIAL_EVENT');
+  v_candidate_id uuid := p_candidate_id;
+  v_after jsonb := CASE WHEN jsonb_typeof(COALESCE(p_after_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_after_json, '{}'::jsonb) ELSE '{}'::jsonb END;
+BEGIN
+  IF v_candidate_id IS NULL THEN
+    v_candidate_id := public._pay_workbench_candidate_serial_candidate_id(NULL::uuid, v_after);
+  END IF;
+
+  PERFORM public._audit_insert(
+    'banking_pay_workbench_job',
+    COALESCE(p_job_id::text, CASE WHEN v_candidate_id IS NULL THEN NULL ELSE 'candidate:' || v_candidate_id::text END),
+    v_action,
+    NULL::jsonb,
+    jsonb_strip_nulls(
+      jsonb_build_object(
+        'job_id', CASE WHEN p_job_id IS NULL THEN NULL ELSE p_job_id::text END,
+        'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
+        'candidate_serial_key', public._pay_workbench_candidate_serial_key(v_candidate_id)
+      ) || v_after
+    ),
+    COALESCE(NULLIF(BTRIM(p_reason), ''), v_action),
+    p_actor_user_id
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_serial_active_state(p_job_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_job_type text DEFAULT NULL::text, p_payload_json jsonb DEFAULT '{}'::jsonb, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ VOLATILE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := COALESCE(p_now_utc, clock_timestamp());
+  v_payload jsonb := CASE WHEN jsonb_typeof(COALESCE(p_payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_payload_json, '{}'::jsonb) ELSE '{}'::jsonb END;
+  v_candidate_id uuid := public._pay_workbench_candidate_serial_candidate_id(p_candidate_id, p_payload_json);
+  v_serial_key text := public._pay_workbench_candidate_serial_key(public._pay_workbench_candidate_serial_candidate_id(p_candidate_id, p_payload_json));
+  v_candidate_job boolean := false;
+  v_is_chain_continuation boolean := false;
+  v_projection_run_id_text text := NULL::text;
+  v_projection_run_id uuid := NULL::uuid;
+  v_active_job_id uuid := NULL::uuid;
+  v_active_job_type text := NULL::text;
+  v_active_chain_id text := NULL::text;
+  v_queued_chain_job_id uuid := NULL::uuid;
+  v_queued_chain_job_type text := NULL::text;
+  v_queued_chain_id text := NULL::text;
+  v_projection_blocker_id uuid := NULL::uuid;
+  v_projection_blocker_status text := NULL::text;
+  v_blocked boolean := false;
+  v_reason text := NULL::text;
+BEGIN
+  v_candidate_job := public._pay_workbench_candidate_serial_is_candidate_job(p_job_type, v_candidate_id, v_payload);
+
+  IF v_candidate_id IS NULL OR v_candidate_job IS NOT TRUE THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'blocked', false,
+      'reason', 'NO_CANDIDATE_SERIAL_SCOPE',
+      'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
+      'candidate_serial_key', v_serial_key
+    );
+  END IF;
+
+  v_is_chain_continuation := (
+    lower(BTRIM(COALESCE(v_payload->>'continuation', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR UPPER(BTRIM(COALESCE(v_payload->>'run_mode', ''))) IN ('BOUNDED_CONTINUATION', 'CONTINUATION', 'STAGE_CONTINUATION')
+    OR lower(BTRIM(COALESCE(v_payload->>'fallback_from_delta', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR (
+      lower(BTRIM(COALESCE(v_payload->>'source_build_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND NULLIF(BTRIM(COALESCE(v_payload->>'fallback_reason', '')), '') IS NOT NULL
+    )
+    OR (
+      NULLIF(BTRIM(COALESCE(v_payload->>'source_job_id', v_payload->>'continuation_source_job_id', v_payload->>'bounded_continuation_source_job_id', '')), '') IS NOT NULL
+      AND UPPER(BTRIM(COALESCE(v_payload->>'run_mode', ''))) NOT IN ('LATEST_STATE_HEAD', 'LATEST_RERUN_AFTER_RUNNING')
+    )
+  );
+
+  v_projection_run_id_text := COALESCE(
+    NULLIF(BTRIM(COALESCE(v_payload->>'projection_run_id', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_payload#>>'{cursor,projection_run_id}', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_payload#>>'{cursor,cursor,projection_run_id}', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_payload#>>'{cursor_json,projection_run_id}', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_payload#>>'{cursor_json,cursor,projection_run_id}', '')), '')
+  );
+  IF v_projection_run_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_projection_run_id := v_projection_run_id_text::uuid;
+  END IF;
+
+  SELECT running_job.id,
+         running_job.job_type,
+         COALESCE(NULLIF(BTRIM(COALESCE(running_job.payload_json->>'candidate_serial_active_chain_id', '')), ''), NULLIF(BTRIM(COALESCE(running_job.payload_json->>'source_job_id', '')), ''), running_job.id::text)
+  INTO v_active_job_id, v_active_job_type, v_active_chain_id
+  FROM public.banking_pay_workbench_jobs AS running_job
+  WHERE UPPER(BTRIM(COALESCE(running_job.status, ''))) = 'RUNNING'
+    AND running_job.id IS DISTINCT FROM p_job_id
+    AND public._pay_workbench_candidate_serial_candidate_id(running_job.candidate_id, running_job.payload_json) = v_candidate_id
+    AND public._pay_workbench_candidate_serial_is_candidate_job(running_job.job_type, running_job.candidate_id, running_job.payload_json)
+  ORDER BY running_job.started_at_utc ASC NULLS FIRST, running_job.created_at_utc ASC, running_job.id ASC
+  LIMIT 1;
+
+  IF v_active_job_id IS NOT NULL THEN
+    v_blocked := true;
+    v_reason := 'CANDIDATE_SERIAL_BLOCKED_BY_ACTIVE_JOB';
+  END IF;
+
+  IF v_blocked IS NOT TRUE AND v_is_chain_continuation IS NOT TRUE THEN
+    SELECT queued_job.id,
+           queued_job.job_type,
+           COALESCE(NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'candidate_serial_active_chain_id', '')), ''), NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'source_job_id', '')), ''), queued_job.id::text)
+    INTO v_queued_chain_job_id, v_queued_chain_job_type, v_queued_chain_id
+    FROM public.banking_pay_workbench_jobs AS queued_job
+    WHERE UPPER(BTRIM(COALESCE(queued_job.status, ''))) = 'QUEUED'
+      AND queued_job.id IS DISTINCT FROM p_job_id
+      AND public._pay_workbench_candidate_serial_candidate_id(queued_job.candidate_id, queued_job.payload_json) = v_candidate_id
+      AND public._pay_workbench_candidate_serial_is_candidate_job(queued_job.job_type, queued_job.candidate_id, queued_job.payload_json)
+      AND (
+        lower(BTRIM(COALESCE(queued_job.payload_json->>'continuation', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR UPPER(BTRIM(COALESCE(queued_job.payload_json->>'run_mode', ''))) IN ('BOUNDED_CONTINUATION', 'CONTINUATION', 'STAGE_CONTINUATION')
+        OR lower(BTRIM(COALESCE(queued_job.payload_json->>'fallback_from_delta', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR (
+          lower(BTRIM(COALESCE(queued_job.payload_json->>'source_build_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'fallback_reason', '')), '') IS NOT NULL
+        )
+        OR NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'source_job_id', queued_job.payload_json->>'continuation_source_job_id', queued_job.payload_json->>'bounded_continuation_source_job_id', '')), '') IS NOT NULL
+      )
+    ORDER BY queued_job.run_at_utc ASC, queued_job.priority ASC, queued_job.created_at_utc ASC, queued_job.id ASC
+    LIMIT 1;
+
+    IF v_queued_chain_job_id IS NOT NULL THEN
+      v_blocked := true;
+      v_reason := 'CANDIDATE_SERIAL_BLOCKED_BY_ACTIVE_CONTINUATION';
+    END IF;
+  END IF;
+
+  IF v_blocked IS NOT TRUE THEN
+    SELECT projection_run.id, projection_run.status
+    INTO v_projection_blocker_id, v_projection_blocker_status
+    FROM public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run
+    WHERE projection_run.candidate_id = v_candidate_id
+      AND UPPER(BTRIM(COALESCE(projection_run.status, ''))) IN ('RUNNING', 'PROCESSING', 'IN_PROGRESS')
+      AND (v_projection_run_id IS NULL OR projection_run.id IS DISTINCT FROM v_projection_run_id)
+    ORDER BY projection_run.started_at_utc ASC NULLS FIRST, projection_run.updated_at_utc ASC NULLS FIRST, projection_run.id ASC
+    LIMIT 1;
+
+    IF v_projection_blocker_id IS NOT NULL THEN
+      v_blocked := true;
+      v_reason := 'CANDIDATE_SERIAL_BLOCKED_BY_ACTIVE_PROJECTION_RUN';
+    END IF;
+  END IF;
+
+  IF v_blocked IS TRUE THEN
+    PERFORM public._pay_workbench_candidate_serial_audit(
+      COALESCE(v_reason, 'CANDIDATE_SERIAL_BLOCKED'),
+      p_job_id,
+      v_candidate_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'candidate_serial_key', v_serial_key,
+        'blocked_job_id', CASE WHEN v_active_job_id IS NULL THEN NULL ELSE v_active_job_id::text END,
+        'blocked_job_type', v_active_job_type,
+        'blocked_chain_job_id', CASE WHEN v_queued_chain_job_id IS NULL THEN NULL ELSE v_queued_chain_job_id::text END,
+        'blocked_chain_job_type', v_queued_chain_job_type,
+        'active_chain_id', COALESCE(v_active_chain_id, v_queued_chain_id),
+        'projection_run_id', CASE WHEN v_projection_blocker_id IS NULL THEN NULL ELSE v_projection_blocker_id::text END,
+        'projection_status', v_projection_blocker_status,
+        'candidate_serial_wait_reason', COALESCE(v_reason, 'CANDIDATE_SERIAL_BLOCKED')
+      )),
+      COALESCE(v_reason, 'CANDIDATE_SERIAL_BLOCKED'),
+      NULL::uuid
+    );
+  END IF;
+
+  RETURN jsonb_strip_nulls(jsonb_build_object(
+    'ok', true,
+    'blocked', COALESCE(v_blocked, false),
+    'reason', COALESCE(v_reason, 'CANDIDATE_SERIAL_CLEAR'),
+    'candidate_id', v_candidate_id::text,
+    'candidate_serial_key', v_serial_key,
+    'is_chain_continuation', COALESCE(v_is_chain_continuation, false),
+    'blocked_job_id', CASE WHEN v_active_job_id IS NULL THEN NULL ELSE v_active_job_id::text END,
+    'blocked_job_type', v_active_job_type,
+    'blocked_chain_job_id', CASE WHEN v_queued_chain_job_id IS NULL THEN NULL ELSE v_queued_chain_job_id::text END,
+    'blocked_chain_job_type', v_queued_chain_job_type,
+    'active_chain_id', COALESCE(v_active_chain_id, v_queued_chain_id),
+    'projection_run_id', CASE WHEN v_projection_blocker_id IS NULL THEN NULL ELSE v_projection_blocker_id::text END,
+    'projection_status', v_projection_blocker_status
+  ));
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_serial_is_candidate_job(p_job_type text, p_candidate_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_job_type text := UPPER(BTRIM(COALESCE(p_job_type, '')));
+  v_candidate_id uuid := public._pay_workbench_candidate_serial_candidate_id(p_candidate_id, p_payload_json);
+BEGIN
+  IF v_candidate_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  IF v_job_type IN ('WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SESSION_CLONE_REBASE', 'SESSION_CLONE_REBASE', 'CLONE_REBASE') THEN
+    RETURN false;
+  END IF;
+
+  IF v_job_type IN (
+    'WORKBENCH_CANDIDATE_DIRTY_APPLY',
+    'WORKBENCH_CANDIDATE_DELTA_REFRESH', 'CANDIDATE_DELTA_REFRESH', 'DELTA_REFRESH',
+    'WORKBENCH_CANDIDATE_SOURCE_BUILD', 'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK', 'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE', 'CANDIDATE_SOURCE_BUILD', 'CANDIDATE_SOURCE_BUILD_CHUNK', 'SOURCE_BUILD', 'SOURCE_BUILD_PAGE',
+    'WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH',
+    'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK',
+    'WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK',
+    'WORKBENCH_FINANCE_CASE_DIRTY_APPLY',
+    'CONTRACT_CLIENT_DIRTY_FANOUT'
+  ) THEN
+    RETURN true;
+  END IF;
+
+  IF v_job_type LIKE E'WORKBENCH_CANDIDATE\\_%' ESCAPE E'\\' THEN
+    RETURN true;
+  END IF;
+
+  IF v_job_type LIKE E'WORKBENCH\\_%' ESCAPE E'\\'
+     AND (
+       COALESCE(p_payload_json, '{}'::jsonb) ? 'candidate_id'
+       OR COALESCE(p_payload_json, '{}'::jsonb) ? 'candidateId'
+       OR COALESCE(p_payload_json, '{}'::jsonb) ? 'candidate_uuid'
+       OR COALESCE(p_payload_json, '{}'::jsonb)#>>'{candidate,id}' IS NOT NULL
+     ) THEN
+    RETURN true;
+  END IF;
+
+  RETURN false;
+END;
+$function$;
+CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_serial_key(p_candidate_id uuid)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT CASE
+    WHEN p_candidate_id IS NULL THEN NULL::text
+    ELSE 'WORKBENCH_CANDIDATE_SERIAL:candidate:' || p_candidate_id::text
+  END;
+$function$;
+CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_serial_candidate_id(p_candidate_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_payload jsonb := CASE
+    WHEN jsonb_typeof(COALESCE(p_payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_payload_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_candidate_text text := NULL::text;
+BEGIN
+  IF p_candidate_id IS NOT NULL THEN
+    RETURN p_candidate_id;
+  END IF;
+
+  v_candidate_text := NULLIF(BTRIM(COALESCE(
+    v_payload->>'candidate_id',
+    v_payload->>'candidateId',
+    v_payload->>'candidate_uuid',
+    v_payload#>>'{candidate,id}',
+    v_payload#>>'{candidate,candidate_id}',
+    v_payload#>>'{candidate,candidateId}',
+    v_payload#>>'{source,candidate_id}',
+    v_payload#>>'{source,candidateId}',
+    v_payload#>>'{workbench,candidate_id}',
+    v_payload#>>'{target,candidate_id}',
+    ''
+  )), '');
+
+  IF v_candidate_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    RETURN v_candidate_text::uuid;
+  END IF;
+
+  RETURN NULL::uuid;
 END;
 $function$;
