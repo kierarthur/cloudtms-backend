@@ -24904,6 +24904,8 @@ DECLARE
   v_stale_invalid_source_build_without_run_id boolean := false;
   v_delta_stale_continuation_superseded_count integer := 0;
   v_delta_stale_continuation_sample jsonb := '[]'::jsonb;
+  v_delta_stale_projection_terminalised_count integer := 0;
+  v_delta_stale_projection_terminalisation_sample jsonb := '[]'::jsonb;
 BEGIN
   IF p_allowed_job_types IS NOT NULL THEN
     SELECT ARRAY(
@@ -26300,20 +26302,45 @@ BEGIN
           COALESCE(CASE WHEN COALESCE(stale_job.payload_json#>>'{cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (stale_job.payload_json#>>'{cursor,source_change_seq}')::bigint END, 0),
           COALESCE(CASE WHEN COALESCE(stale_job.payload_json#>>'{cursor,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (stale_job.payload_json#>>'{cursor,cursor,source_change_seq}')::bigint END, 0),
           COALESCE(CASE WHEN COALESCE(stale_job.payload_json#>>'{cursor_json,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (stale_job.payload_json#>>'{cursor_json,source_change_seq}')::bigint END, 0),
-          COALESCE(CASE WHEN COALESCE(stale_job.payload_json#>>'{cursor_json,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (stale_job.payload_json#>>'{cursor_json,cursor,source_change_seq}')::bigint END, 0)
+          COALESCE(CASE WHEN COALESCE(stale_job.payload_json#>>'{cursor_json,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (stale_job.payload_json#>>'{cursor_json,cursor,source_change_seq}')::bigint END, 0),
+          COALESCE(CASE WHEN COALESCE(stale_job.payload_json#>>'{result_json,next_cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (stale_job.payload_json#>>'{result_json,next_cursor,source_change_seq}')::bigint END, 0),
+          COALESCE(CASE WHEN COALESCE(stale_job.payload_json#>>'{result_json,next_cursor,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (stale_job.payload_json#>>'{result_json,next_cursor,cursor,source_change_seq}')::bigint END, 0),
+          COALESCE(CASE WHEN COALESCE(stale_job.payload_json#>>'{result_json,next_cursor_json,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (stale_job.payload_json#>>'{result_json,next_cursor_json,source_change_seq}')::bigint END, 0),
+          COALESCE(CASE WHEN COALESCE(stale_job.payload_json#>>'{result_json,next_cursor_json,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (stale_job.payload_json#>>'{result_json,next_cursor_json,cursor,source_change_seq}')::bigint END, 0)
         ) AS cursor_source_change_seq,
         COALESCE(projection_run.source_change_seq, 0) AS projection_run_source_change_seq,
         COALESCE(stale_job.payload_json->>'normalised_delta_family_key', stale_job.payload_json->>'delta_family_key', stale_job.payload_json->>'delta_coalescing_key', '') AS normalised_delta_family_key,
-        COALESCE(stale_job.payload_json->>'projection_run_id', stale_job.payload_json#>>'{cursor,projection_run_id}', stale_job.payload_json#>>'{cursor,cursor,projection_run_id}', stale_job.payload_json#>>'{cursor_json,projection_run_id}', stale_job.payload_json#>>'{cursor_json,cursor,projection_run_id}', '') AS projection_run_id_text
+        projection_id.projection_run_id_text,
+        projection_id.projection_run_id
       FROM public.banking_pay_workbench_jobs AS stale_job
+      CROSS JOIN LATERAL (
+        SELECT
+          COALESCE(
+            stale_job.payload_json->>'projection_run_id',
+            stale_job.payload_json#>>'{cursor,projection_run_id}',
+            stale_job.payload_json#>>'{cursor,cursor,projection_run_id}',
+            stale_job.payload_json#>>'{cursor_json,projection_run_id}',
+            stale_job.payload_json#>>'{cursor_json,cursor,projection_run_id}',
+            stale_job.payload_json#>>'{result_json,next_cursor,projection_run_id}',
+            stale_job.payload_json#>>'{result_json,next_cursor,cursor,projection_run_id}',
+            stale_job.payload_json#>>'{result_json,next_cursor_json,projection_run_id}',
+            stale_job.payload_json#>>'{result_json,next_cursor_json,cursor,projection_run_id}',
+            ''
+          ) AS projection_run_id_text
+      ) AS projection_id_text
+      CROSS JOIN LATERAL (
+        SELECT
+          projection_id_text.projection_run_id_text,
+          CASE
+            WHEN projection_id_text.projection_run_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN projection_id_text.projection_run_id_text::uuid
+            ELSE NULL::uuid
+          END AS projection_run_id
+      ) AS projection_id
       LEFT JOIN public.app_change_counters AS live_change
         ON live_change.entity_key = 'pay_candidate:' || stale_job.candidate_id::text
       LEFT JOIN public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run
-        ON projection_run.id = CASE
-             WHEN COALESCE(stale_job.payload_json->>'projection_run_id', stale_job.payload_json#>>'{cursor,projection_run_id}', stale_job.payload_json#>>'{cursor,cursor,projection_run_id}', stale_job.payload_json#>>'{cursor_json,projection_run_id}', stale_job.payload_json#>>'{cursor_json,cursor,projection_run_id}', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-               THEN COALESCE(stale_job.payload_json->>'projection_run_id', stale_job.payload_json#>>'{cursor,projection_run_id}', stale_job.payload_json#>>'{cursor,cursor,projection_run_id}', stale_job.payload_json#>>'{cursor_json,projection_run_id}', stale_job.payload_json#>>'{cursor_json,cursor,projection_run_id}', '')::uuid
-             ELSE NULL::uuid
-           END
+        ON projection_run.id = projection_id.projection_run_id
       WHERE stale_job.status = 'QUEUED'
         AND stale_job.run_at_utc <= v_cutoff
         AND (p_session_id IS NULL OR stale_job.session_id = p_session_id)
@@ -26324,6 +26351,8 @@ BEGIN
           OR UPPER(BTRIM(COALESCE(stale_job.payload_json->>'run_mode', ''))) = 'BOUNDED_CONTINUATION'
           OR jsonb_typeof(stale_job.payload_json->'cursor') = 'object'
           OR jsonb_typeof(stale_job.payload_json->'cursor_json') = 'object'
+          OR jsonb_typeof(stale_job.payload_json#>'{result_json,next_cursor}') = 'object'
+          OR jsonb_typeof(stale_job.payload_json#>'{result_json,next_cursor_json}') = 'object'
         )
       ORDER BY stale_job.priority ASC, stale_job.run_at_utc ASC, stale_job.created_at_utc ASC, stale_job.id ASC
       LIMIT GREATEST(v_limit * 10, 50)
@@ -26335,6 +26364,23 @@ BEGIN
         (COALESCE(qdc.cursor_source_change_seq, 0) > 0 AND GREATEST(COALESCE(qdc.live_source_change_seq, 0), COALESCE(qdc.payload_source_change_seq, 0)) > COALESCE(qdc.cursor_source_change_seq, 0))
         OR (COALESCE(qdc.projection_run_source_change_seq, 0) > 0 AND GREATEST(COALESCE(qdc.live_source_change_seq, 0), COALESCE(qdc.payload_source_change_seq, 0)) > COALESCE(qdc.projection_run_source_change_seq, 0))
       )
+    ), terminalised_delta_projection AS MATERIALIZED (
+      SELECT
+        stale_delta_continuation.*,
+        public._pay_workbench_delta_projection_terminalise_if_orphaned(
+          p_projection_run_id => stale_delta_continuation.projection_run_id,
+          p_session_id => stale_delta_continuation.session_id,
+          p_candidate_id => stale_delta_continuation.candidate_id,
+          p_superseded_job_id => stale_delta_continuation.id,
+          p_payload_source_change_seq => stale_delta_continuation.payload_source_change_seq,
+          p_cursor_source_change_seq => stale_delta_continuation.cursor_source_change_seq,
+          p_projection_run_source_change_seq => stale_delta_continuation.projection_run_source_change_seq,
+          p_live_candidate_source_change_seq => stale_delta_continuation.live_source_change_seq,
+          p_reason => 'STALE_CONTINUATION_SUPERSEDED_BEFORE_CLAIM',
+          p_now_utc => v_now,
+          p_actor_user_id => NULL::uuid
+        ) AS terminalise_json
+      FROM stale_delta_continuation
     ), superseded_delta_continuation AS (
       UPDATE public.banking_pay_workbench_jobs AS upd_stale
       SET status = 'SUCCEEDED',
@@ -26347,24 +26393,34 @@ BEGIN
               'superseded_stale_continuation_before_claim', true,
               'superseded_reason', 'STALE_CONTINUATION_SUPERSEDED_BEFORE_CLAIM',
               'superseded_at_utc', v_now::text,
-              'payload_source_change_seq', stale_delta_continuation.payload_source_change_seq,
-              'cursor_source_change_seq', stale_delta_continuation.cursor_source_change_seq,
-              'projection_run_source_change_seq', stale_delta_continuation.projection_run_source_change_seq,
-              'live_candidate_source_change_seq', stale_delta_continuation.live_source_change_seq,
-              'normalised_delta_family_key', stale_delta_continuation.normalised_delta_family_key,
+              'payload_source_change_seq', terminalised_delta_projection.payload_source_change_seq,
+              'cursor_source_change_seq', terminalised_delta_projection.cursor_source_change_seq,
+              'projection_run_source_change_seq', terminalised_delta_projection.projection_run_source_change_seq,
+              'live_candidate_source_change_seq', terminalised_delta_projection.live_source_change_seq,
+              'normalised_delta_family_key', terminalised_delta_projection.normalised_delta_family_key,
+              'projection_run_id', NULLIF(terminalised_delta_projection.projection_run_id_text, ''),
+              'projection_run_terminalised', lower(BTRIM(COALESCE(terminalised_delta_projection.terminalise_json->>'projection_run_terminalised', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+              'projection_run_status_after', terminalised_delta_projection.terminalise_json->>'projection_run_status_after',
+              'projection_run_terminalised_reason', terminalised_delta_projection.terminalise_json->>'projection_run_terminalised_reason',
+              'projection_run_terminalisation_json', terminalised_delta_projection.terminalise_json,
+              'no_active_continuation_job', lower(BTRIM(COALESCE(terminalised_delta_projection.terminalise_json->>'no_active_continuation_job', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+              'candidate_serial_unblocked', lower(BTRIM(COALESCE(terminalised_delta_projection.terminalise_json->>'candidate_serial_unblocked', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
               'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
             )
           )
-      FROM stale_delta_continuation
-      WHERE upd_stale.id = stale_delta_continuation.id
+      FROM terminalised_delta_projection
+      WHERE upd_stale.id = terminalised_delta_projection.id
       RETURNING upd_stale.id,
-                stale_delta_continuation.session_id,
-                stale_delta_continuation.candidate_id,
-                stale_delta_continuation.normalised_delta_family_key,
-                stale_delta_continuation.payload_source_change_seq,
-                stale_delta_continuation.cursor_source_change_seq,
-                stale_delta_continuation.projection_run_source_change_seq,
-                stale_delta_continuation.live_source_change_seq
+                terminalised_delta_projection.session_id,
+                terminalised_delta_projection.candidate_id,
+                terminalised_delta_projection.normalised_delta_family_key,
+                terminalised_delta_projection.payload_source_change_seq,
+                terminalised_delta_projection.cursor_source_change_seq,
+                terminalised_delta_projection.projection_run_source_change_seq,
+                terminalised_delta_projection.live_source_change_seq,
+                terminalised_delta_projection.projection_run_id_text,
+                terminalised_delta_projection.projection_run_id,
+                terminalised_delta_projection.terminalise_json
     )
     SELECT COALESCE(COUNT(*), 0)::integer,
            COALESCE(jsonb_agg(jsonb_build_object(
@@ -26375,9 +26431,29 @@ BEGIN
              'payload_source_change_seq', superseded_delta_continuation.payload_source_change_seq,
              'cursor_source_change_seq', superseded_delta_continuation.cursor_source_change_seq,
              'projection_run_source_change_seq', superseded_delta_continuation.projection_run_source_change_seq,
-             'live_candidate_source_change_seq', superseded_delta_continuation.live_source_change_seq
-           ) ORDER BY superseded_delta_continuation.id), '[]'::jsonb)
-    INTO v_delta_stale_continuation_superseded_count, v_delta_stale_continuation_sample
+             'live_candidate_source_change_seq', superseded_delta_continuation.live_source_change_seq,
+             'projection_run_id', NULLIF(superseded_delta_continuation.projection_run_id_text, ''),
+             'projection_run_terminalised', lower(BTRIM(COALESCE(superseded_delta_continuation.terminalise_json->>'projection_run_terminalised', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+             'projection_run_status_after', superseded_delta_continuation.terminalise_json->>'projection_run_status_after',
+             'projection_run_terminalised_reason', superseded_delta_continuation.terminalise_json->>'projection_run_terminalised_reason',
+             'no_active_continuation_job', lower(BTRIM(COALESCE(superseded_delta_continuation.terminalise_json->>'no_active_continuation_job', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+             'candidate_serial_unblocked', lower(BTRIM(COALESCE(superseded_delta_continuation.terminalise_json->>'candidate_serial_unblocked', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+             'projection_terminalisation_json', superseded_delta_continuation.terminalise_json
+           ) ORDER BY superseded_delta_continuation.id), '[]'::jsonb),
+           COALESCE(COUNT(*) FILTER (WHERE lower(BTRIM(COALESCE(superseded_delta_continuation.terminalise_json->>'projection_run_terminalised', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')), 0)::integer,
+           COALESCE(jsonb_agg(jsonb_build_object(
+             'job_id', superseded_delta_continuation.id::text,
+             'projection_run_id', NULLIF(superseded_delta_continuation.projection_run_id_text, ''),
+             'projection_run_terminalised', lower(BTRIM(COALESCE(superseded_delta_continuation.terminalise_json->>'projection_run_terminalised', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+             'projection_run_status_after', superseded_delta_continuation.terminalise_json->>'projection_run_status_after',
+             'projection_run_terminalised_reason', superseded_delta_continuation.terminalise_json->>'projection_run_terminalised_reason',
+             'no_active_continuation_job', lower(BTRIM(COALESCE(superseded_delta_continuation.terminalise_json->>'no_active_continuation_job', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+             'candidate_serial_unblocked', lower(BTRIM(COALESCE(superseded_delta_continuation.terminalise_json->>'candidate_serial_unblocked', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+           ) ORDER BY superseded_delta_continuation.id) FILTER (WHERE lower(BTRIM(COALESCE(superseded_delta_continuation.terminalise_json->>'projection_run_terminalised', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')), '[]'::jsonb)
+    INTO v_delta_stale_continuation_superseded_count,
+         v_delta_stale_continuation_sample,
+         v_delta_stale_projection_terminalised_count,
+         v_delta_stale_projection_terminalisation_sample
     FROM superseded_delta_continuation;
 
     IF COALESCE(v_delta_stale_continuation_superseded_count, 0) > 0 THEN
@@ -26388,11 +26464,15 @@ BEGIN
         NULL::jsonb,
         jsonb_build_object(
           'superseded_stale_continuation_count', v_delta_stale_continuation_superseded_count,
+          'projection_run_terminalised_count', COALESCE(v_delta_stale_projection_terminalised_count, 0),
+          'projection_run_terminalised', COALESCE(v_delta_stale_projection_terminalised_count, 0) > 0,
+          'projection_terminalisation_sample', COALESCE(v_delta_stale_projection_terminalisation_sample, '[]'::jsonb),
           'sample', v_delta_stale_continuation_sample,
           'claim_session_filter', CASE WHEN p_session_id IS NULL THEN NULL ELSE p_session_id::text END,
           'claim_candidate_filter', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
           'session_progress_lock_skipped', true,
           'claimed_running_skipped', true,
+          'candidate_serial_unblocked', COALESCE(v_delta_stale_projection_terminalised_count, 0) > 0,
           'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
         ),
         'STALE_CONTINUATION_SUPERSEDED_BEFORE_CLAIM',
@@ -26701,7 +26781,11 @@ BEGIN
                   COALESCE(CASE WHEN COALESCE(claim_pool.payload_json#>>'{cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json#>>'{cursor,source_change_seq}')::bigint END, 0),
                   COALESCE(CASE WHEN COALESCE(claim_pool.payload_json#>>'{cursor,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json#>>'{cursor,cursor,source_change_seq}')::bigint END, 0),
                   COALESCE(CASE WHEN COALESCE(claim_pool.payload_json#>>'{cursor_json,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json#>>'{cursor_json,source_change_seq}')::bigint END, 0),
-                  COALESCE(CASE WHEN COALESCE(claim_pool.payload_json#>>'{cursor_json,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json#>>'{cursor_json,cursor,source_change_seq}')::bigint END, 0)
+                  COALESCE(CASE WHEN COALESCE(claim_pool.payload_json#>>'{cursor_json,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json#>>'{cursor_json,cursor,source_change_seq}')::bigint END, 0),
+                  COALESCE(CASE WHEN COALESCE(claim_pool.payload_json#>>'{result_json,next_cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json#>>'{result_json,next_cursor,source_change_seq}')::bigint END, 0),
+                  COALESCE(CASE WHEN COALESCE(claim_pool.payload_json#>>'{result_json,next_cursor,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json#>>'{result_json,next_cursor,cursor,source_change_seq}')::bigint END, 0),
+                  COALESCE(CASE WHEN COALESCE(claim_pool.payload_json#>>'{result_json,next_cursor_json,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json#>>'{result_json,next_cursor_json,source_change_seq}')::bigint END, 0),
+                  COALESCE(CASE WHEN COALESCE(claim_pool.payload_json#>>'{result_json,next_cursor_json,cursor,source_change_seq}', '') ~ '^-?[0-9]{1,18}$' THEN (claim_pool.payload_json#>>'{result_json,next_cursor_json,cursor,source_change_seq}')::bigint END, 0)
                 ) AS cursor_source_change_seq,
                 COALESCE(
                   claim_pool.payload_json->>'projection_run_id',
@@ -26709,6 +26793,10 @@ BEGIN
                   claim_pool.payload_json#>>'{cursor,cursor,projection_run_id}',
                   claim_pool.payload_json#>>'{cursor_json,projection_run_id}',
                   claim_pool.payload_json#>>'{cursor_json,cursor,projection_run_id}',
+                  claim_pool.payload_json#>>'{result_json,next_cursor,projection_run_id}',
+                  claim_pool.payload_json#>>'{result_json,next_cursor,cursor,projection_run_id}',
+                  claim_pool.payload_json#>>'{result_json,next_cursor_json,projection_run_id}',
+                  claim_pool.payload_json#>>'{result_json,next_cursor_json,cursor,projection_run_id}',
                   ''
                 ) AS projection_run_id_text
             ) AS delta_claim_staleness
@@ -27077,6 +27165,8 @@ BEGIN
     'delta_queued_coalesced_hot_key_count', COALESCE(v_delta_queued_coalesced_hot_key_count, 0),
     'delta_stale_continuation_superseded_before_claim_count', COALESCE(v_delta_stale_continuation_superseded_count, 0),
     'delta_stale_continuation_superseded_before_claim_sample', COALESCE(v_delta_stale_continuation_sample, '[]'::jsonb),
+    'delta_stale_projection_terminalised_before_claim_count', COALESCE(v_delta_stale_projection_terminalised_count, 0),
+    'delta_stale_projection_terminalised_before_claim_sample', COALESCE(v_delta_stale_projection_terminalisation_sample, '[]'::jsonb),
     'claim_lock_contention_sample', COALESCE(v_preclaim_due_queued_sample, '[]'::jsonb),
     'filtered_session_id', CASE WHEN p_session_id IS NULL THEN NULL ELSE p_session_id::text END,
     'filtered_candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
@@ -218729,3 +218819,269 @@ END;
 $function$;
 
 
+CREATE OR REPLACE FUNCTION public._pay_workbench_delta_projection_terminalise_if_orphaned(p_projection_run_id uuid, p_session_id uuid, p_candidate_id uuid, p_superseded_job_id uuid, p_payload_source_change_seq bigint DEFAULT 0, p_cursor_source_change_seq bigint DEFAULT 0, p_projection_run_source_change_seq bigint DEFAULT 0, p_live_candidate_source_change_seq bigint DEFAULT 0, p_reason text DEFAULT 'STALE_CONTINUATION_SUPERSEDED_BEFORE_CLAIM'::text, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := COALESCE(p_now_utc, now());
+  v_reason text := COALESCE(NULLIF(BTRIM(p_reason), ''), 'STALE_CONTINUATION_SUPERSEDED_BEFORE_CLAIM');
+  v_run public.banking_pay_workbench_candidate_delta_projection_runs%ROWTYPE;
+  v_status_before text := NULL::text;
+  v_status_after text := NULL::text;
+  v_effective_projection_source_change_seq bigint := 0;
+  v_effective_latest_source_seq bigint := 0;
+  v_active_job_id uuid := NULL::uuid;
+  v_active_job_type text := NULL::text;
+  v_active_job_status text := NULL::text;
+  v_skip_reason text := NULL::text;
+BEGIN
+  IF p_projection_run_id IS NULL
+     OR p_session_id IS NULL
+     OR p_candidate_id IS NULL
+     OR p_superseded_job_id IS NULL THEN
+    v_skip_reason := 'MISSING_REQUIRED_SCOPE';
+    RETURN jsonb_strip_nulls(jsonb_build_object(
+      'ok', true,
+      'projection_run_id', CASE WHEN p_projection_run_id IS NULL THEN NULL ELSE p_projection_run_id::text END,
+      'projection_run_terminalised', false,
+      'projection_run_terminalised_reason', v_reason,
+      'skip_reason', v_skip_reason,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+    ));
+  END IF;
+
+  SELECT projection_run.*
+  INTO v_run
+  FROM public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run
+  WHERE projection_run.id = p_projection_run_id
+  FOR UPDATE SKIP LOCKED;
+
+  IF NOT FOUND THEN
+    v_skip_reason := 'PROJECTION_RUN_LOCKED_OR_NOT_FOUND';
+    RETURN jsonb_strip_nulls(jsonb_build_object(
+      'ok', true,
+      'projection_run_id', p_projection_run_id::text,
+      'projection_run_terminalised', false,
+      'projection_run_terminalised_reason', v_reason,
+      'skip_reason', v_skip_reason,
+      'superseded_continuation_job_id', p_superseded_job_id::text,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+    ));
+  END IF;
+
+  v_status_before := v_run.status;
+  v_effective_projection_source_change_seq := GREATEST(COALESCE(p_projection_run_source_change_seq, 0), COALESCE(v_run.source_change_seq, 0));
+  v_effective_latest_source_seq := GREATEST(COALESCE(p_payload_source_change_seq, 0), COALESCE(p_live_candidate_source_change_seq, 0));
+
+  IF v_run.session_id IS DISTINCT FROM p_session_id
+     OR v_run.candidate_id IS DISTINCT FROM p_candidate_id THEN
+    v_skip_reason := 'PROJECTION_SCOPE_MISMATCH';
+    RETURN jsonb_strip_nulls(jsonb_build_object(
+      'ok', true,
+      'projection_run_id', p_projection_run_id::text,
+      'projection_run_terminalised', false,
+      'projection_run_status_before', v_status_before,
+      'projection_run_status_after', v_status_before,
+      'projection_run_terminalised_reason', v_reason,
+      'skip_reason', v_skip_reason,
+      'projection_run_session_id', v_run.session_id::text,
+      'projection_run_candidate_id', v_run.candidate_id::text,
+      'job_session_id', p_session_id::text,
+      'job_candidate_id', p_candidate_id::text,
+      'superseded_continuation_job_id', p_superseded_job_id::text,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+    ));
+  END IF;
+
+  IF UPPER(BTRIM(COALESCE(v_run.status, ''))) NOT IN ('RUNNING', 'PROCESSING', 'IN_PROGRESS') THEN
+    v_skip_reason := 'PROJECTION_RUN_ALREADY_TERMINAL';
+    RETURN jsonb_strip_nulls(jsonb_build_object(
+      'ok', true,
+      'projection_run_id', p_projection_run_id::text,
+      'projection_run_terminalised', false,
+      'projection_run_status_before', v_status_before,
+      'projection_run_status_after', v_status_before,
+      'projection_run_terminalised_reason', v_reason,
+      'skip_reason', v_skip_reason,
+      'superseded_continuation_job_id', p_superseded_job_id::text,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+    ));
+  END IF;
+
+  IF NOT (
+    (COALESCE(v_effective_projection_source_change_seq, 0) > 0 AND COALESCE(v_effective_latest_source_seq, 0) > COALESCE(v_effective_projection_source_change_seq, 0))
+    OR (COALESCE(p_cursor_source_change_seq, 0) > 0 AND COALESCE(v_effective_latest_source_seq, 0) > COALESCE(p_cursor_source_change_seq, 0))
+  ) THEN
+    v_skip_reason := 'NOT_STALE_AGAINST_LIVE_SOURCE_SEQ';
+    RETURN jsonb_strip_nulls(jsonb_build_object(
+      'ok', true,
+      'projection_run_id', p_projection_run_id::text,
+      'projection_run_terminalised', false,
+      'projection_run_status_before', v_status_before,
+      'projection_run_status_after', v_status_before,
+      'projection_run_terminalised_reason', v_reason,
+      'skip_reason', v_skip_reason,
+      'payload_source_change_seq', p_payload_source_change_seq,
+      'cursor_source_change_seq', p_cursor_source_change_seq,
+      'projection_run_source_change_seq', v_effective_projection_source_change_seq,
+      'live_candidate_source_change_seq', p_live_candidate_source_change_seq,
+      'superseded_continuation_job_id', p_superseded_job_id::text,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+    ));
+  END IF;
+
+  SELECT active_projection_job.id,
+         active_projection_job.job_type,
+         active_projection_job.status
+  INTO v_active_job_id,
+       v_active_job_type,
+       v_active_job_status
+  FROM public.banking_pay_workbench_jobs AS active_projection_job
+  WHERE active_projection_job.id IS DISTINCT FROM p_superseded_job_id
+    AND UPPER(BTRIM(COALESCE(active_projection_job.status, ''))) IN ('QUEUED', 'RUNNING')
+    AND (
+      COALESCE(active_projection_job.payload_json->>'projection_run_id', '') = p_projection_run_id::text
+      OR COALESCE(active_projection_job.payload_json#>>'{cursor,projection_run_id}', '') = p_projection_run_id::text
+      OR COALESCE(active_projection_job.payload_json#>>'{cursor,cursor,projection_run_id}', '') = p_projection_run_id::text
+      OR COALESCE(active_projection_job.payload_json#>>'{cursor_json,projection_run_id}', '') = p_projection_run_id::text
+      OR COALESCE(active_projection_job.payload_json#>>'{cursor_json,cursor,projection_run_id}', '') = p_projection_run_id::text
+      OR COALESCE(active_projection_job.payload_json#>>'{result_json,next_cursor,projection_run_id}', '') = p_projection_run_id::text
+      OR COALESCE(active_projection_job.payload_json#>>'{result_json,next_cursor,cursor,projection_run_id}', '') = p_projection_run_id::text
+      OR COALESCE(active_projection_job.payload_json#>>'{result_json,next_cursor_json,projection_run_id}', '') = p_projection_run_id::text
+      OR COALESCE(active_projection_job.payload_json#>>'{result_json,next_cursor_json,cursor,projection_run_id}', '') = p_projection_run_id::text
+    )
+  ORDER BY CASE WHEN UPPER(BTRIM(COALESCE(active_projection_job.status, ''))) = 'RUNNING' THEN 0 ELSE 1 END,
+           active_projection_job.run_at_utc ASC,
+           active_projection_job.created_at_utc ASC,
+           active_projection_job.id ASC
+  LIMIT 1;
+
+  IF v_active_job_id IS NOT NULL THEN
+    v_skip_reason := 'ACTIVE_JOB_CAN_COMPLETE_PROJECTION';
+    RETURN jsonb_strip_nulls(jsonb_build_object(
+      'ok', true,
+      'projection_run_id', p_projection_run_id::text,
+      'projection_run_terminalised', false,
+      'projection_run_status_before', v_status_before,
+      'projection_run_status_after', v_status_before,
+      'projection_run_terminalised_reason', v_reason,
+      'skip_reason', v_skip_reason,
+      'active_continuation_job_exists', true,
+      'active_continuation_job_id', v_active_job_id::text,
+      'active_continuation_job_type', v_active_job_type,
+      'active_continuation_job_status', v_active_job_status,
+      'no_active_continuation_job', false,
+      'superseded_continuation_job_id', p_superseded_job_id::text,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+    ));
+  END IF;
+
+  UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run
+  SET status = 'FAILED',
+      fallback_required = false,
+      fallback_reason = 'STALE_CONTINUATION_SUPERSEDED_BEFORE_CLAIM',
+      completed_at_utc = v_now,
+      updated_at_utc = v_now,
+      diagnostics_json = jsonb_strip_nulls(
+        COALESCE(projection_run.diagnostics_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'stale_continuation_superseded_before_claim', true,
+          'terminalised_by', 'pay_workbench_claim_due_jobs',
+          'terminalised_reason', v_reason,
+          'terminalised_at_utc', v_now::text,
+          'superseded_continuation_job_id', p_superseded_job_id::text,
+          'payload_source_change_seq', p_payload_source_change_seq,
+          'cursor_source_change_seq', p_cursor_source_change_seq,
+          'projection_run_source_change_seq', v_effective_projection_source_change_seq,
+          'live_candidate_source_change_seq', p_live_candidate_source_change_seq,
+          'newer_source_change_seq', v_effective_latest_source_seq,
+          'superseded_by_newer_source_change_seq', true,
+          'projection_status_before', v_status_before,
+          'projection_status_after', 'FAILED',
+          'no_active_continuation_job', true,
+          'candidate_serial_unblocked', true,
+          'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+        )
+      )
+  WHERE projection_run.id = p_projection_run_id
+    AND projection_run.session_id = p_session_id
+    AND projection_run.candidate_id = p_candidate_id
+    AND UPPER(BTRIM(COALESCE(projection_run.status, ''))) IN ('RUNNING', 'PROCESSING', 'IN_PROGRESS')
+  RETURNING projection_run.status
+  INTO v_status_after;
+
+  IF NOT FOUND THEN
+    v_skip_reason := 'PROJECTION_RUN_STATUS_CHANGED_BEFORE_TERMINALISE';
+    RETURN jsonb_strip_nulls(jsonb_build_object(
+      'ok', true,
+      'projection_run_id', p_projection_run_id::text,
+      'projection_run_terminalised', false,
+      'projection_run_status_before', v_status_before,
+      'projection_run_status_after', v_status_before,
+      'projection_run_terminalised_reason', v_reason,
+      'skip_reason', v_skip_reason,
+      'no_active_continuation_job', true,
+      'superseded_continuation_job_id', p_superseded_job_id::text,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+    ));
+  END IF;
+
+  BEGIN
+    PERFORM public._audit_insert(
+      'banking_pay_workbench_candidate_delta_projection_run',
+      p_projection_run_id::text,
+      'STALE_CONTINUATION_PROJECTION_RUN_TERMINALISED_BEFORE_CLAIM',
+      jsonb_strip_nulls(jsonb_build_object(
+        'projection_run_id', p_projection_run_id::text,
+        'status', v_status_before,
+        'source_change_seq', v_effective_projection_source_change_seq
+      )),
+      jsonb_strip_nulls(jsonb_build_object(
+        'projection_run_id', p_projection_run_id::text,
+        'projection_run_terminalised', true,
+        'projection_run_status_before', v_status_before,
+        'projection_run_status_after', COALESCE(v_status_after, 'FAILED'),
+        'projection_run_terminalised_reason', v_reason,
+        'terminalised_by', 'pay_workbench_claim_due_jobs',
+        'superseded_continuation_job_id', p_superseded_job_id::text,
+        'payload_source_change_seq', p_payload_source_change_seq,
+        'cursor_source_change_seq', p_cursor_source_change_seq,
+        'projection_run_source_change_seq', v_effective_projection_source_change_seq,
+        'live_candidate_source_change_seq', p_live_candidate_source_change_seq,
+        'newer_source_change_seq', v_effective_latest_source_seq,
+        'no_active_continuation_job', true,
+        'candidate_serial_unblocked', true,
+        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+      )),
+      v_reason,
+      p_actor_user_id
+    );
+  EXCEPTION WHEN OTHERS THEN
+    -- Audit must not re-open the ghost projection-run blocker if the state transition succeeded.
+    NULL;
+  END;
+
+  RETURN jsonb_strip_nulls(jsonb_build_object(
+    'ok', true,
+    'projection_run_id', p_projection_run_id::text,
+    'projection_run_terminalised', true,
+    'projection_run_status_before', v_status_before,
+    'projection_run_status_after', COALESCE(v_status_after, 'FAILED'),
+    'projection_run_terminalised_reason', v_reason,
+    'terminalised_by', 'pay_workbench_claim_due_jobs',
+    'superseded_continuation_job_id', p_superseded_job_id::text,
+    'payload_source_change_seq', p_payload_source_change_seq,
+    'cursor_source_change_seq', p_cursor_source_change_seq,
+    'projection_run_source_change_seq', v_effective_projection_source_change_seq,
+    'live_candidate_source_change_seq', p_live_candidate_source_change_seq,
+    'newer_source_change_seq', v_effective_latest_source_seq,
+    'active_continuation_job_exists', false,
+    'no_active_continuation_job', true,
+    'candidate_serial_unblocked', true,
+    'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+  ));
+END;
+$function$;
