@@ -15209,7 +15209,7 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   const rolloverNudgeAfterCreate = readBoolean(firstConfiguredValue(source.rolloverNudgeAfterCreate, source.rollover_nudge_after_create, rolloverSettings.nudge_after_create, rolloverSettings.nudgeAfterCreate), true);
   const rolloverScanLimit = clampInt(firstConfiguredValue(source.rolloverScanLimit, source.rollover_scan_limit, rolloverSettings.scan_limit, rolloverSettings.scanLimit), Math.max(25, rolloverMaxSessionsPerTick * 5), 1, 250);
   const configuredDbWorkerLeaseSeconds = readDrainOption('dbWorkerLeaseSeconds', 'db_worker_lease_seconds', 'DB_WORKER_LEASE_SECONDS', 25, 25, 3600, { nullable: true });
-  const dbWorkerMaxRuntimeMs = readDrainOption('dbWorkerMaxRuntimeMs', 'db_worker_max_runtime_ms', 'DB_WORKER_MAX_RUNTIME_MS', 8000, 1000, 30000);
+  const dbWorkerMaxRuntimeMs = readDrainOption('dbWorkerMaxRuntimeMs', 'db_worker_max_runtime_ms', 'DB_WORKER_MAX_RUNTIME_MS', 8000, 1000, 8000);
   const dbWorkerMinPhaseBudgetMs = Math.min(
     readDrainOption('dbWorkerMinPhaseBudgetMs', 'db_worker_min_phase_budget_ms', 'DB_WORKER_MIN_PHASE_BUDGET_MS', 2500, 250, 15000),
     Math.max(250, dbWorkerMaxRuntimeMs - 250)
@@ -15222,6 +15222,13 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   const dbStatementTimeoutMs = readDrainOption('dbStatementTimeoutMs', 'db_statement_timeout_ms', 'DB_STATEMENT_TIMEOUT_MS', 15000, 1000, 30000);
   const dbLockTimeoutMs = readDrainOption('dbLockTimeoutMs', 'db_lock_timeout_ms', 'DB_LOCK_TIMEOUT_MS', 1500, 100, 5000);
   const dbIdleTxTimeoutMs = readDrainOption('dbIdleTxTimeoutMs', 'db_idle_tx_timeout_ms', 'DB_IDLE_TX_TIMEOUT_MS', 30000, 5000, 60000);
+  const dbRpcHardCapMs = Math.max(
+    1000,
+    Math.min(
+      Math.max(1000, dbStatementTimeoutMs - rpcSafetyBufferMs),
+      dbWorkerMaxRuntimeMs + rpcSafetyBufferMs
+    )
+  );
   const autoContinuationControls = {
     max_auto_continuation_bursts: clampInt(firstConfiguredValue(source.maxAutoContinuationBursts, source.max_auto_continuation_bursts, autoContinuationSettings.max_bursts, autoContinuationSettings.maxBursts), 3, 0, 8),
     max_auto_continuation_runtime_ms: clampInt(firstConfiguredValue(source.maxAutoContinuationRuntimeMs, source.max_auto_continuation_runtime_ms, autoContinuationSettings.max_runtime_ms, autoContinuationSettings.maxRuntimeMs), 28000, 5000, 60000),
@@ -15321,6 +15328,9 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     db_statement_timeout_ms: dbStatementTimeoutMs,
     db_lock_timeout_ms: dbLockTimeoutMs,
     db_idle_tx_timeout_ms: dbIdleTxTimeoutMs,
+    backend_rpc_timeout_ms: dbRpcHardCapMs,
+    computed_rpc_budget_ms: dbRpcHardCapMs,
+    db_rpc_hard_cap_ms: dbRpcHardCapMs,
     settings_source: settingsSource,
     settings_defaults_updated_at: settingsDefaultsUpdatedAt,
     settings_defaults_version: settingsDefaultsVersion,
@@ -15706,6 +15716,8 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     }, 'warn');
   }
 }
+
+
 
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -173261,6 +173273,12 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
 
   return summary;
 }
+
+
+
+
+
+
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -173746,7 +173764,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     firstConfiguredValue(sourceOptions.dbWorkerMaxRuntimeMs, sourceOptions.db_worker_max_runtime_ms, drainSettings.db_worker_max_runtime_ms, drainSettings.dbWorkerMaxRuntimeMs),
     8000,
     1000,
-    30000
+    8000
   );
   const dbWorkerMinPhaseBudgetMs = Math.min(
     numberInRange(firstConfiguredValue(sourceOptions.dbWorkerMinPhaseBudgetMs, sourceOptions.db_worker_min_phase_budget_ms, drainSettings.db_worker_min_phase_budget_ms, drainSettings.dbWorkerMinPhaseBudgetMs), 2500, 250, 15000),
@@ -173780,6 +173798,13 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     5000,
     60000
   );
+  const dbRpcHardCapMs = Math.max(
+    1000,
+    Math.min(
+      Math.max(1000, dbStatementTimeoutMs - rpcSafetyBufferMs),
+      dbWorkerMaxRuntimeMs + rpcSafetyBufferMs
+    )
+  );
   const settingsSource = trimStr(sourceOptions.settingsSource || sourceOptions.settings_source || workbenchSettings.settings_source || workbenchSettings.settingsSource || '') || 'settings_defaults:id=1';
   const settingsDefaultsUpdatedAt = trimStr(sourceOptions.settingsDefaultsUpdatedAt || sourceOptions.settings_defaults_updated_at || workbenchSettings.settings_defaults_updated_at || workbenchSettings.settingsDefaultsUpdatedAt || settingsDefaults.settings_defaults_updated_at || '') || null;
   const settingsDefaultsVersion = trimStr(sourceOptions.settingsDefaultsVersion || sourceOptions.settings_defaults_version || workbenchSettings.settings_defaults_version || workbenchSettings.settingsDefaultsVersion || settingsDefaultsUpdatedAt || '') || null;
@@ -173811,9 +173836,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   );
   const sourceBuildAllowedByFilter = allowedJobTypes === null || allowedJobTypeSet.has('WORKBENCH_CANDIDATE_SOURCE_BUILD');
   const sourceBuildParallelEnabled = sourceBuildAllowedByFilter && sourceBuildParallelism > 0 && sourceBuildParallelBursts > 0;
-  const effectiveMaxRuntimeMs = sourceBuildParallelEnabled
+  const requestedEffectiveMaxRuntimeMs = sourceBuildParallelEnabled
     ? Math.max(maxRuntimeMs, sourceBuildRuntimeFloorMs)
     : maxRuntimeMs;
+  const effectiveMaxRuntimeMs = Math.min(requestedEffectiveMaxRuntimeMs, dbRpcHardCapMs);
   const normalAllowedJobTypes = (() => {
     const base = allowedJobTypes === null ? supportedJobTypes : allowedJobTypes;
     const filtered = sourceBuildParallelEnabled
@@ -174174,6 +174200,9 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     effective_max_runtime_ms: effectiveMaxRuntimeMs,
     minimum_rpc_budget_ms: minimumRpcBudgetMs,
     rpc_safety_buffer_ms: rpcSafetyBufferMs,
+    backend_rpc_timeout_ms: dbRpcHardCapMs,
+    computed_rpc_budget_ms: dbRpcHardCapMs,
+    db_rpc_hard_cap_ms: dbRpcHardCapMs,
     claim_limit: claimLimit,
     claim_limit_effective_max: profileClaimLimitMax,
     db_worker_default_lease_seconds: defaultLeaseSeconds,
@@ -174226,6 +174255,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const passRecoveredStale = countFrom(aggregate, ['recovered_stale_count']);
     const passDeadStale = countFrom(aggregate, ['dead_stale_count']);
     const passStaleRecoveryErrors = countFrom(aggregate, ['supplemental_stale_recovery_error_count']);
+    const passTerminalisationCount = countFrom(aggregate, ['terminalisation_count', 'projection_terminalisation_count']);
+    const passDirtyPriorityMadeProgress = booleanFrom(aggregate.dirty_priority_made_progress);
+    const passNormalClaimMadeProgress = booleanFrom(aggregate.normal_claim_made_progress);
+    const passPostClaimDueRequiresNextPass = upperTrim(aggregate.stop_reason || '') === 'POST_CLAIM_DUE_WORK_REQUIRES_NEXT_PASS'
+      || upperTrim(aggregate.claim_mismatch_reason || aggregate.claim_mismatch_json?.claim_mismatch_reason || '') === 'DUE_CREATED_AFTER_CLAIM_PHASE';
     const passDueQueuedCount = countFrom(aggregate, ['due_queued_count', 'due_queued']);
     const passClaimableCount = countFrom(aggregate, ['claimable_count', 'claimable_due_count']);
     const passRunningCount = countFrom(aggregate, ['running_count', 'running_due_count']);
@@ -174290,14 +174324,25 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       lockContentionDetected = true;
       lockContentionCount += Math.max(0, passLockContentionCount || passDueQueuedCount || 0);
     }
-    madeProgress = madeProgress
-      || passClaimed > 0
-      || passProcessed > 0
-      || passRecoveredStale > 0
-      || passDeadStale > 0
-      || passContinuationsCreated > 0
-      || passContinuationsReused > 0;
-    if (sourceOnly && (passClaimed > 0 || passProcessed > 0 || passContinuationsCreated > 0 || passContinuationsReused > 0)) downstreamWorkMayBeDue = true;
+    const passContinuationProgress = passContinuationsCreated > 0 || passContinuationsReused > 0;
+    const aggregateCurrentPassProgress = Object.prototype.hasOwnProperty.call(aggregate, 'made_progress_current_pass')
+      ? booleanFrom(aggregate.made_progress_current_pass)
+      : null;
+    const passMadeProgressCurrentPass = aggregateCurrentPassProgress !== null
+      ? aggregateCurrentPassProgress
+      : (
+        passClaimed > 0
+        || passProcessed > 0
+        || passWorkUnits > 0
+        || passContinuationProgress
+        || passRecoveredStale > 0
+        || passDeadStale > 0
+        || passTerminalisationCount > 0
+        || passDirtyPriorityMadeProgress
+        || passNormalClaimMadeProgress
+      );
+    madeProgress = madeProgress || passMadeProgressCurrentPass;
+    if (sourceOnly && (passClaimed > 0 || passProcessed > 0 || passContinuationProgress)) downstreamWorkMayBeDue = true;
 
     const sourceBuildTimingSummary = sourceBuildTimingSummaryFromJobs(passJobs);
     const summary = {
@@ -174317,6 +174362,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       obsolete_skipped: passObsoleteSkipped,
       continuations_created: passContinuationsCreated,
       continuations_reused: passContinuationsReused,
+      terminalisation_count: passTerminalisationCount,
+      projection_terminalisation_count: passTerminalisationCount,
       recovered_stale_count: passRecoveredStale,
       dead_stale_count: passDeadStale,
       due_queued_count: passDueQueuedCount,
@@ -174329,6 +174376,13 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       lock_contention_count: passLockContentionCount,
       concurrent_worker_progress_expected: passLockContentionDetected,
       row_units_processed: passWorkUnits,
+      made_progress_current_pass: passMadeProgressCurrentPass,
+      made_progress_cumulative: madeProgress,
+      cumulative_made_progress: madeProgress,
+      dirty_priority_made_progress: passDirtyPriorityMadeProgress,
+      normal_claim_made_progress: passNormalClaimMadeProgress,
+      post_claim_due_work_requires_next_pass: passPostClaimDueRequiresNextPass,
+      claim_mismatch_reason: aggregate.claim_mismatch_reason ?? aggregate.claim_mismatch_json?.claim_mismatch_reason ?? null,
       source_build_only_lane: sourceOnly,
       source_build_only_assertion_passed: !sourceOnly || nonSourceJobsInSourceLane.length === 0,
       source_build_jobs_processed: passJobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD').length,
@@ -174357,8 +174411,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
     if (passFailed > 0 || passDead > 0) await fetchAndLogFailedJobSamples(passJobs, summary);
 
-    const passContinuationProgress = passContinuationsCreated > 0 || passContinuationsReused > 0;
     const dueClaimableNoClaim = sourceOnly !== true
+      && passPostClaimDueRequiresNextPass === false
       && passMoreDue === true
       && passClaimableCount > 0
       && passClaimed === 0
@@ -174381,7 +174435,14 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       running_count: passRunningCount,
       stale_running_count: passStaleRunningCount,
       more_due: passMoreDue,
-      made_progress: passClaimed > 0 || passProcessed > 0 || passRecoveredStale > 0 || passDeadStale > 0 || passContinuationProgress,
+      made_progress: passMadeProgressCurrentPass,
+      made_progress_current_pass: passMadeProgressCurrentPass,
+      made_progress_cumulative: madeProgress,
+      cumulative_made_progress: madeProgress,
+      dirty_priority_made_progress: passDirtyPriorityMadeProgress,
+      normal_claim_made_progress: passNormalClaimMadeProgress,
+      post_claim_due_work_requires_next_pass: passPostClaimDueRequiresNextPass,
+      claim_mismatch_reason: aggregate.claim_mismatch_reason ?? aggregate.claim_mismatch_json?.claim_mismatch_reason ?? null,
       due_claimable_no_claim: dueClaimableNoClaim,
       lock_contention: passLockContentionDetected,
       stop_reason: passStopReason,
@@ -174465,9 +174526,13 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         elapsed_ms: payload.elapsed_ms ?? elapsedTotalMs(),
         remaining_runtime_ms: payload.remaining_runtime_ms ?? remainingRuntimeMs(),
         effective_max_runtime_ms: effectiveMaxRuntimeMs,
+        db_worker_max_runtime_ms: dbWorkerMaxRuntimeMs,
+        db_statement_timeout_ms: dbStatementTimeoutMs,
+        backend_rpc_timeout_ms: payload.backend_rpc_timeout_ms ?? payload.computed_rpc_budget_ms ?? dbRpcHardCapMs,
+        db_rpc_hard_cap_ms: dbRpcHardCapMs,
         minimum_rpc_budget_ms: minimumRpcBudgetMs,
         rpc_safety_buffer_ms: rpcSafetyBufferMs,
-        computed_rpc_budget_ms: payload.computed_rpc_budget_ms ?? Math.max(0, remainingRuntimeMs() - rpcSafetyBufferMs),
+        computed_rpc_budget_ms: payload.computed_rpc_budget_ms ?? dbRpcHardCapMs,
         will_call_rpc: payload.will_call_rpc === true,
         stop_reason: payload.stop_reason || null,
         claim_limit: payload.claim_limit ?? claimLimit,
@@ -174489,7 +174554,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     if (!budget.ok) return { ran: false, reason: budget.reason };
     const rowBoundedJobLimit = Math.max(1, Math.floor(remainingRows() / maxEffectiveStageWorkUnitsPerJob));
     const effectiveLimit = Math.max(1, Math.min(100, claimLimit, remainingJobs(), rowBoundedJobLimit));
-    const passTimeoutMs = Math.max(1000, Math.min(dbStatementTimeoutMs, remainingRuntimeMs() - rpcSafetyBufferMs));
+    const passTimeoutMs = Math.max(1000, Math.min(dbRpcHardCapMs, remainingRuntimeMs() - rpcSafetyBufferMs));
     logRpcBudgetDecision({
       route: 'NORMAL',
       pass_number: passCount + 1,
@@ -174609,7 +174674,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       const maxLaneCountByJobs = Math.max(1, Math.ceil(Math.min(jobsLeft, rowBoundedJobLimit) / laneLimit));
       const laneCount = Math.max(1, Math.min(sourceBuildParallelism, maxLaneCountByJobs));
       const burstNumber = sourceBuildParallelBurstCount + 1;
-      const passTimeoutMs = Math.max(1000, Math.min(dbStatementTimeoutMs, remainingRuntimeMs() - rpcSafetyBufferMs));
+      const passTimeoutMs = Math.max(1000, Math.min(dbRpcHardCapMs, remainingRuntimeMs() - rpcSafetyBufferMs));
 
       logRpcBudgetDecision({
         route: 'SOURCE_BUILD_PARALLEL',
@@ -174799,6 +174864,12 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         break;
       }
       if (normal.ran && normal.made_progress && sourceBuildParallelEnabled) sourceBuildMoreDue = true;
+      if (normal.ran && normal.post_claim_due_work_requires_next_pass === true) {
+        downstreamWorkMayBeDue = true;
+        normalMoreDue = true;
+        stopReason = 'POST_CLAIM_DUE_WORK_REQUIRES_NEXT_PASS';
+        break;
+      }
       if (normal.ran && normal.due_claimable_no_claim === true) {
         if (passCount < maxPasses && canAttemptRpc(maxEffectiveStageWorkUnitsPerJob).ok) {
           normalDueRetryScheduledCount += 1;
@@ -174820,6 +174891,12 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
             break;
           }
           if (retryNormal.ran && retryNormal.made_progress && sourceBuildParallelEnabled) sourceBuildMoreDue = true;
+          if (retryNormal.ran && retryNormal.post_claim_due_work_requires_next_pass === true) {
+            downstreamWorkMayBeDue = true;
+            normalMoreDue = true;
+            stopReason = 'POST_CLAIM_DUE_WORK_REQUIRES_NEXT_PASS';
+            break;
+          }
           if (retryNormal.ran && retryNormal.due_claimable_no_claim === true) {
             normalDueNoClaimTerminalCount += 1;
             stopReason = 'NO_PROGRESS_DUE_BUT_UNCLAIMED';
@@ -174953,6 +175030,12 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const finalSourceBuildTimingSummary = sourceBuildTimingSummaryFromJobs(jobs);
   const finalDeltaMetrics = deltaMetricsFromJobs(jobs);
   const finalCloneMetrics = cloneMetricsFromJobs(jobs);
+  const lastPassSummary = passSummaries.length ? passSummaries[passSummaries.length - 1] : {};
+  const finalMadeProgressCurrentPass = booleanFrom(
+    lastAggregate.made_progress_current_pass
+    ?? lastPassSummary.made_progress_current_pass
+    ?? false
+  );
   const result = {
     ...lastAggregate,
     ok: transportError === null && !sourceBuildOnlyAssertionFailed && failedCount === 0 && staleRecoveryErrorCount === 0,
@@ -175072,7 +175155,13 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     more_due: finalMoreDue,
     stop_reason: stopReason || (finalMoreDue ? 'MORE_DUE' : 'NO_MORE_DUE'),
     budget_exhausted: budgetExhausted,
-    made_progress: madeProgress,
+    made_progress: finalMadeProgressCurrentPass,
+    made_progress_current_pass: finalMadeProgressCurrentPass,
+    made_progress_cumulative: madeProgress,
+    cumulative_made_progress: madeProgress,
+    dirty_priority_made_progress: booleanFrom(lastAggregate.dirty_priority_made_progress ?? lastPassSummary.dirty_priority_made_progress),
+    normal_claim_made_progress: booleanFrom(lastAggregate.normal_claim_made_progress ?? lastPassSummary.normal_claim_made_progress),
+    post_claim_due_work_requires_next_pass: stopReason === 'POST_CLAIM_DUE_WORK_REQUIRES_NEXT_PASS' || booleanFrom(lastPassSummary.post_claim_due_work_requires_next_pass),
     aggregate_db_worker: true,
     per_job_rpc_fanout: false,
     source_build_jobs_processed: jobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD').length,
@@ -175094,6 +175183,14 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     budget_exhausted: budgetExhausted,
     more_due: finalMoreDue,
     elapsed_ms: elapsedMs,
+    effective_max_runtime_ms: effectiveMaxRuntimeMs,
+    db_worker_max_runtime_ms: dbWorkerMaxRuntimeMs,
+    db_statement_timeout_ms: dbStatementTimeoutMs,
+    backend_rpc_timeout_ms: dbRpcHardCapMs,
+    computed_rpc_budget_ms: dbRpcHardCapMs,
+    db_rpc_hard_cap_ms: dbRpcHardCapMs,
+    made_progress_current_pass: finalMadeProgressCurrentPass,
+    made_progress_cumulative: madeProgress,
     pass_count: result.pass_count,
     normal_pass_count: passCount,
     rpc_call_count: result.rpc_call_count,
@@ -175212,7 +175309,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
   return result;
 }
-
 
 
 

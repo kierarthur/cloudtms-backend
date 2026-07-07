@@ -10328,13 +10328,7 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.tsfin_write_current_snapshot_single_bounded(
-  p_timesheet_id uuid,
-  p_timesheet_version integer DEFAULT NULL::integer,
-  p_snapshot_json jsonb DEFAULT '{}'::jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_now_utc timestamp with time zone DEFAULT now()
-)
+CREATE OR REPLACE FUNCTION public.tsfin_write_current_snapshot_single_bounded(p_timesheet_id uuid, p_timesheet_version integer DEFAULT NULL::integer, p_snapshot_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -10405,6 +10399,16 @@ DECLARE
   v_mileage_units numeric := 0;
   v_error_state text := NULL;
   v_error_message text := NULL;
+
+  v_live_contract_week_id uuid := NULL::uuid;
+  v_live_contract_week_status text := NULL::text;
+  v_incoming_processing_status text := NULL::text;
+  v_incoming_authorised_at_utc timestamptz := NULL::timestamptz;
+  v_result_authorised_at_utc timestamptz := NULL::timestamptz;
+  v_result_authorised_by_user_id uuid := NULL::uuid;
+  v_live_authorised boolean := false;
+  v_can_preserve_authorised_at boolean := false;
+  v_lifecycle_decision text := 'WRITTEN';
 BEGIN
   PERFORM set_config('lock_timeout', '2500ms', true);
 
@@ -10475,6 +10479,166 @@ BEGIN
   v_bad := public._tsfin_invalid_segment_count(v_ib);
   IF v_bad > 0 THEN
     RAISE EXCEPTION USING MESSAGE = 'TSFIN_SNAPSHOT_MISMATCH', DETAIL = jsonb_build_object('field', 'invoice_breakdown_json', 'invalid_segment_count', v_bad)::text;
+  END IF;
+
+  SELECT cw.id,
+         cw.status::text
+    INTO v_live_contract_week_id,
+         v_live_contract_week_status
+  FROM public.contract_weeks AS cw
+  WHERE cw.timesheet_id = p_timesheet_id
+  ORDER BY cw.updated_at DESC NULLS LAST,
+           cw.created_at DESC NULLS LAST,
+           cw.id DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  v_incoming_processing_status := CASE
+    WHEN v_processing_status IS NULL THEN NULL::text
+    ELSE v_processing_status::text
+  END;
+  v_incoming_authorised_at_utc := NULLIF(snap ->> 'authorised_at_utc', '')::timestamptz;
+  v_result_authorised_at_utc := COALESCE(v_incoming_authorised_at_utc, prev.authorised_at_utc);
+  v_result_authorised_by_user_id := COALESCE(
+    NULLIF(snap ->> 'authorised_by_user_id', '')::uuid,
+    prev.authorised_by_user_id
+  );
+  v_live_authorised := (
+       v_current_ts.authorised_at_server IS NOT NULL
+    OR UPPER(BTRIM(COALESCE(v_live_contract_week_status, ''))) = 'AUTHORISED'
+    OR prev.authorised_at_utc IS NOT NULL
+    OR prev.processing_status IN (
+         'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum,
+         'READY_FOR_HR'::public.ts_fin_processing_status_enum
+       )
+  );
+
+  IF v_live_authorised
+     AND (
+          v_processing_status = 'PENDING_AUTH'::public.ts_fin_processing_status_enum
+       OR v_processing_status NOT IN (
+            'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum,
+            'READY_FOR_HR'::public.ts_fin_processing_status_enum
+          )
+       OR v_result_authorised_at_utc IS NULL
+     ) THEN
+    v_can_preserve_authorised_at := COALESCE(
+      prev.authorised_at_utc,
+      v_current_ts.authorised_at_server,
+      v_incoming_authorised_at_utc
+    ) IS NOT NULL;
+
+    IF NOT v_can_preserve_authorised_at THEN
+      v_lifecycle_decision := 'REJECTED';
+      PERFORM public._temp_diag_log(
+        'TSFIN_SNAPSHOT_LIFECYCLE_DOWNGRADE_REJECTED',
+        'TEMP_TIMESHEET_LIFECYCLE',
+        p_timesheet_id::text,
+        jsonb_strip_nulls(
+          jsonb_build_object(
+            'function_name', 'tsfin_write_current_snapshot_single_bounded',
+            'timesheet_id', p_timesheet_id::text,
+            'previous_financials_id', CASE WHEN v_prev_id IS NULL THEN NULL::text ELSE v_prev_id::text END,
+            'incoming_processing_status', v_incoming_processing_status,
+            'incoming_authorised_at_utc_present', v_incoming_authorised_at_utc IS NOT NULL,
+            'live_timesheet_authorised_at_server_present', v_current_ts.authorised_at_server IS NOT NULL,
+            'live_contract_week_status', v_live_contract_week_status,
+            'previous_tsfin_processing_status', CASE WHEN prev.processing_status IS NULL THEN NULL::text ELSE prev.processing_status::text END,
+            'previous_tsfin_authorised_at_utc_present', prev.authorised_at_utc IS NOT NULL,
+            'decision', v_lifecycle_decision,
+            'result_processing_status', CASE WHEN v_processing_status IS NULL THEN NULL::text ELSE v_processing_status::text END,
+            'result_authorised_at_utc_present', false,
+            'rejection_reason', 'LIVE_AUTHORISED_STATE_WITHOUT_AUTHORISATION_TIMESTAMP',
+            'policy_x_boundary', 'LIFECYCLE_FIELDS_ONLY_NO_ECONOMICS_CHANGE'
+          )
+        )
+      );
+      RAISE EXCEPTION USING
+        ERRCODE = '40001',
+        MESSAGE = 'TSFIN_SNAPSHOT_LIFECYCLE_DOWNGRADE_REJECTED',
+        DETAIL = jsonb_build_object(
+          'timesheet_id', p_timesheet_id::text,
+          'previous_financials_id', CASE WHEN v_prev_id IS NULL THEN NULL::text ELSE v_prev_id::text END,
+          'incoming_processing_status', v_incoming_processing_status,
+          'live_contract_week_status', v_live_contract_week_status,
+          'reason', 'LIVE_AUTHORISED_STATE_WITHOUT_AUTHORISATION_TIMESTAMP'
+        )::text;
+    END IF;
+
+    v_processing_status := CASE
+      WHEN prev.processing_status IN (
+             'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum,
+             'READY_FOR_HR'::public.ts_fin_processing_status_enum
+           )
+        THEN prev.processing_status
+      WHEN v_processing_status IN (
+             'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum,
+             'READY_FOR_HR'::public.ts_fin_processing_status_enum
+           )
+        THEN v_processing_status
+      ELSE 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+    END;
+    v_result_authorised_at_utc := COALESCE(
+      prev.authorised_at_utc,
+      v_current_ts.authorised_at_server,
+      v_incoming_authorised_at_utc
+    );
+    v_result_authorised_by_user_id := COALESCE(
+      prev.authorised_by_user_id,
+      v_result_authorised_by_user_id,
+      p_actor_user_id
+    );
+    v_lifecycle_decision := 'PRESERVED';
+  END IF;
+
+  PERFORM public._temp_diag_log(
+    'TSFIN_SNAPSHOT_LIVE_LIFECYCLE_GUARD',
+    'TEMP_TIMESHEET_LIFECYCLE',
+    p_timesheet_id::text,
+    jsonb_strip_nulls(
+      jsonb_build_object(
+        'function_name', 'tsfin_write_current_snapshot_single_bounded',
+        'timesheet_id', p_timesheet_id::text,
+        'previous_financials_id', CASE WHEN v_prev_id IS NULL THEN NULL::text ELSE v_prev_id::text END,
+        'incoming_processing_status', v_incoming_processing_status,
+        'incoming_authorised_at_utc_present', v_incoming_authorised_at_utc IS NOT NULL,
+        'live_timesheet_authorised_at_server_present', v_current_ts.authorised_at_server IS NOT NULL,
+        'live_contract_week_id', CASE WHEN v_live_contract_week_id IS NULL THEN NULL::text ELSE v_live_contract_week_id::text END,
+        'live_contract_week_status', v_live_contract_week_status
+      )
+      || jsonb_build_object(
+        'previous_tsfin_processing_status', CASE WHEN prev.processing_status IS NULL THEN NULL::text ELSE prev.processing_status::text END,
+        'previous_tsfin_authorised_at_utc_present', prev.authorised_at_utc IS NOT NULL,
+        'decision', v_lifecycle_decision,
+        'result_processing_status', CASE WHEN v_processing_status IS NULL THEN NULL::text ELSE v_processing_status::text END,
+        'result_authorised_at_utc_present', v_result_authorised_at_utc IS NOT NULL,
+        'policy_x_boundary', 'LIFECYCLE_FIELDS_ONLY_NO_ECONOMICS_CHANGE'
+      )
+    )
+  );
+
+  IF v_lifecycle_decision = 'PRESERVED' THEN
+    PERFORM public._temp_diag_log(
+      'TSFIN_SNAPSHOT_LIFECYCLE_STATUS_PRESERVED',
+      'TEMP_TIMESHEET_LIFECYCLE',
+      p_timesheet_id::text,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'function_name', 'tsfin_write_current_snapshot_single_bounded',
+          'timesheet_id', p_timesheet_id::text,
+          'previous_financials_id', CASE WHEN v_prev_id IS NULL THEN NULL::text ELSE v_prev_id::text END,
+          'incoming_processing_status', v_incoming_processing_status,
+          'incoming_authorised_at_utc_present', v_incoming_authorised_at_utc IS NOT NULL,
+          'live_timesheet_authorised_at_server_present', v_current_ts.authorised_at_server IS NOT NULL,
+          'live_contract_week_status', v_live_contract_week_status,
+          'previous_tsfin_processing_status', CASE WHEN prev.processing_status IS NULL THEN NULL::text ELSE prev.processing_status::text END,
+          'previous_tsfin_authorised_at_utc_present', prev.authorised_at_utc IS NOT NULL,
+          'decision', v_lifecycle_decision,
+          'result_processing_status', CASE WHEN v_processing_status IS NULL THEN NULL::text ELSE v_processing_status::text END,
+          'result_authorised_at_utc_present', v_result_authorised_at_utc IS NOT NULL
+        )
+      )
+    );
   END IF;
 
   PERFORM public.tsfin_prepare_write(p_timesheet_id);
@@ -10795,8 +10959,8 @@ BEGIN
     COALESCE(NULLIF(snap ->> 'remittance_send_count', '')::integer, prev.remittance_send_count, 0),
     COALESCE(NULLIF(snap ->> 'processed_by_user_id', '')::uuid, prev.processed_by_user_id, p_actor_user_id),
     COALESCE(NULLIF(snap ->> 'processed_at_utc', '')::timestamptz, prev.processed_at_utc, v_now),
-    COALESCE(NULLIF(snap ->> 'authorised_by_user_id', '')::uuid, prev.authorised_by_user_id),
-    COALESCE(NULLIF(snap ->> 'authorised_at_utc', '')::timestamptz, prev.authorised_at_utc),
+    v_result_authorised_by_user_id,
+    v_result_authorised_at_utc,
     COALESCE(snap -> 'additional_units_json', prev.additional_units_json, '{}'::jsonb),
     COALESCE(NULLIF(snap ->> 'additional_pay_ex_vat', '')::numeric, prev.additional_pay_ex_vat, 0),
     COALESCE(NULLIF(snap ->> 'additional_charge_ex_vat', '')::numeric, prev.additional_charge_ex_vat, 0),
@@ -10875,7 +11039,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.timesheet_lifecycle_affected_rows_v1(p_items jsonb DEFAULT '[]'::jsonb, p_context text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb

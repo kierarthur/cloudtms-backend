@@ -198090,6 +198090,37 @@ DECLARE
   v_dirty_priority_jobs_processed integer := 0;
   v_dirty_priority_jobs_remaining integer := 0;
   v_dirty_priority_cap_reached boolean := false;
+  v_dirty_priority_made_progress boolean := false;
+  v_dirty_priority_created_job_ids jsonb := '[]'::jsonb;
+  v_dirty_priority_actual_refresh_job_ids jsonb := '[]'::jsonb;
+  v_dirty_priority_claimed_job_id uuid := NULL::uuid;
+
+  v_claim_phase_started_at timestamptz := NULL::timestamptz;
+  v_claim_phase_completed_at timestamptz := NULL::timestamptz;
+  v_pre_claim_due_count integer := 0;
+  v_pre_claim_claimable_count integer := 0;
+  v_pre_claim_job_sample jsonb := '[]'::jsonb;
+  v_post_claim_due_job_ids jsonb := '[]'::jsonb;
+  v_post_claim_due_job_types jsonb := '[]'::jsonb;
+  v_post_claim_due_sample jsonb := '[]'::jsonb;
+  v_created_after_claim_count integer := 0;
+  v_post_claim_due_detected boolean := false;
+  v_post_claim_due_reason text := NULL::text;
+
+  v_made_progress_current_pass boolean := false;
+  v_made_progress_cumulative boolean := false;
+  v_normal_claim_made_progress boolean := false;
+  v_terminalisation_count integer := 0;
+  v_projection_terminalisation_count integer := 0;
+
+  v_obsolete_projection_run_id uuid := NULL::uuid;
+  v_projection_status_before text := NULL::text;
+  v_projection_status_after text := NULL::text;
+  v_active_continuation_count integer := 0;
+  v_active_continuation_job_ids uuid[] := ARRAY[]::uuid[];
+  v_active_continuation_job_ids_json jsonb := '[]'::jsonb;
+  v_delta_projection_diag_json jsonb := '{}'::jsonb;
+  v_obsolete_projection_update_count integer := 0;
 BEGIN
   SELECT
     sd.banking_pay_workbench_db_worker_lease_seconds,
@@ -198164,7 +198195,7 @@ BEGIN
     v_stage_work_units_per_job,
     100
   ), 1), 250);
-  v_max_runtime_ms := LEAST(GREATEST(COALESCE(v_settings_db_worker_max_runtime_ms, 8000), 1000), 30000);
+  v_max_runtime_ms := LEAST(GREATEST(COALESCE(v_settings_db_worker_max_runtime_ms, 8000), 1000), 8000);
   v_min_phase_budget_ms := LEAST(
     GREATEST(COALESCE(v_settings_db_worker_min_phase_budget_ms, 2500), 250),
     GREATEST(250, v_max_runtime_ms - 250)
@@ -198177,6 +198208,24 @@ BEGIN
 
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_WORKER_CHUNK');
 
+  PERFORM public._temp_diag_log(
+    'WORKER_BUDGET_PROFILE_APPLIED',
+    'TEMP_BANKING_PAY_WORKBENCH',
+    COALESCE(p_session_id::text, p_candidate_id::text, v_worker_id),
+    jsonb_build_object(
+      'function_name', 'pay_workbench_worker_drain_chunk',
+      'worker_id', v_worker_id,
+      'origin', 'pay_workbench_worker_drain_chunk',
+      'budget_profile', v_worker_budget_profile,
+      'db_worker_max_runtime_ms', v_max_runtime_ms,
+      'db_statement_timeout_ms', 15000,
+      'backend_rpc_timeout_ms', LEAST(v_max_runtime_ms + 1000, 14000),
+      'computed_rpc_budget_ms', v_max_runtime_ms,
+      'min_phase_budget_ms', v_min_phase_budget_ms,
+      'policy', 'WORKER_BUDGET_BOUND_BELOW_STATEMENT_TIMEOUT'
+    )
+  );
+
   v_dirty_priority_result := public.pay_workbench_dirty_apply_jobs_chunk(
     p_limit => 1,
     p_now_utc => v_cutoff,
@@ -198188,6 +198237,57 @@ BEGIN
   v_dirty_priority_jobs_processed := COALESCE((v_dirty_priority_result->>'dirty_priority_jobs_processed')::integer, 0);
   v_dirty_priority_jobs_remaining := COALESCE((v_dirty_priority_result->>'dirty_priority_jobs_remaining')::integer, 0);
   v_dirty_priority_cap_reached := lower(COALESCE(v_dirty_priority_result->>'cap_reached', 'false')) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_dirty_priority_made_progress := COALESCE(v_dirty_priority_jobs_processed, 0) > 0
+    OR CASE WHEN COALESCE(v_dirty_priority_result->>'recovered_stale_count', '') ~ '^[0-9]+$' THEN (v_dirty_priority_result->>'recovered_stale_count')::integer ELSE 0 END > 0
+    OR CASE WHEN COALESCE(v_dirty_priority_result->>'requeued', '') ~ '^[0-9]+$' THEN (v_dirty_priority_result->>'requeued')::integer ELSE 0 END > 0;
+
+  SELECT COALESCE(jsonb_agg(DISTINCT dirty_job.value->>'job_id') FILTER (
+           WHERE NULLIF(BTRIM(COALESCE(dirty_job.value->>'job_id', '')), '') IS NOT NULL
+         ), '[]'::jsonb)
+  INTO v_dirty_priority_created_job_ids
+  FROM jsonb_array_elements(CASE WHEN jsonb_typeof(v_dirty_priority_result->'job_results') = 'array' THEN v_dirty_priority_result->'job_results' ELSE '[]'::jsonb END) AS dirty_job(value);
+
+  SELECT COALESCE(jsonb_agg(DISTINCT actual_refresh_id.refresh_job_id) FILTER (
+           WHERE actual_refresh_id.refresh_job_id IS NOT NULL
+         ), '[]'::jsonb)
+  INTO v_dirty_priority_actual_refresh_job_ids
+  FROM jsonb_array_elements(CASE WHEN jsonb_typeof(v_dirty_priority_result->'job_results') = 'array' THEN v_dirty_priority_result->'job_results' ELSE '[]'::jsonb END) AS dirty_job(value)
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(
+      NULLIF(BTRIM(COALESCE(dirty_job.value #>> '{stage_result,actual_refresh_job_id}', '')), ''),
+      NULLIF(BTRIM(COALESCE(dirty_job.value #>> '{stage_result,refresh_enqueue_result,job_id}', '')), ''),
+      NULLIF(BTRIM(COALESCE(dirty_job.value #>> '{job_payload_after,actual_refresh_job_id}', '')), ''),
+      NULLIF(BTRIM(COALESCE(dirty_job.value #>> '{job_payload_after,refresh_enqueue_result,job_id}', '')), '')
+    ) AS refresh_job_id
+  ) AS actual_refresh_id;
+
+  v_dirty_priority_claimed_job_id := CASE
+    WHEN jsonb_typeof(v_dirty_priority_created_job_ids) = 'array'
+         AND jsonb_array_length(v_dirty_priority_created_job_ids) > 0
+         AND (v_dirty_priority_created_job_ids->>0) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN (v_dirty_priority_created_job_ids->>0)::uuid
+    ELSE NULL::uuid
+  END;
+
+  IF v_dirty_priority_made_progress
+     AND jsonb_typeof(v_dirty_priority_actual_refresh_job_ids) = 'array'
+     AND jsonb_array_length(v_dirty_priority_actual_refresh_job_ids) > 0 THEN
+    PERFORM public._temp_diag_log(
+      'DIRTY_PRIORITY_ENQUEUED_DELTA_AFTER_NORMAL_CLAIM',
+      'TEMP_BANKING_PAY_WORKBENCH',
+      COALESCE(p_session_id::text, p_candidate_id::text, v_worker_id),
+      jsonb_build_object(
+        'function_name', 'pay_workbench_worker_drain_chunk',
+        'worker_id', v_worker_id,
+        'origin', 'pay_workbench_worker_drain_chunk',
+        'route', 'worker_drain',
+        'dirty_priority_job_id', CASE WHEN v_dirty_priority_claimed_job_id IS NULL THEN NULL::text ELSE v_dirty_priority_claimed_job_id::text END,
+        'dirty_priority_created_job_ids', v_dirty_priority_created_job_ids,
+        'dirty_priority_actual_refresh_job_ids', v_dirty_priority_actual_refresh_job_ids,
+        'dirty_priority_jobs_processed', v_dirty_priority_jobs_processed
+      )
+    );
+  END IF;
 
   PERFORM public._temp_diag_log(
     'TEMP_TRIGGER_DIRTY_STAGE',
@@ -198535,13 +198635,55 @@ BEGIN
     v_dead_stale_count := v_supplemental_stale_terminal_count;
     v_dead_count := v_dead_stale_count;
     v_more_due := true;
-    v_stop_reason := 'WORKER_DRAIN_BUDGET_EXHAUSTED';
+    v_stop_reason := 'WORKER_BUDGET_EARLY_STOP';
   ELSE
     v_phase_started_at_utc := clock_timestamp();
+    v_claim_phase_started_at := v_phase_started_at_utc;
     -- One worker RPC may claim exactly one normal stage job.  Stage functions
     -- still process their own bounded, set-based p_limit units; concurrency is
     -- not used as the fix for queue safety.
     v_budget_claim_limit := 1;
+
+    BEGIN
+      WITH pre_claim_due AS MATERIALIZED (
+        SELECT
+          pre_job.id,
+          pre_job.job_type,
+          pre_job.created_at_utc,
+          pre_job.run_at_utc
+        FROM public.banking_pay_workbench_jobs AS pre_job
+        CROSS JOIN LATERAL (
+          SELECT CASE
+            WHEN UPPER(BTRIM(COALESCE(pre_job.job_type, ''))) IN ('WORKBENCH_SESSION_SCOPE_SEED','SESSION_SCOPE_SEED','WORKBENCH_SCOPE_SEED','WORKBENCH_SCOPE_SEED_PAGE','SCOPE_SEED_PAGE') THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+            WHEN UPPER(BTRIM(COALESCE(pre_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_SOURCE_BUILD','WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK','WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE','CANDIDATE_SOURCE_BUILD','CANDIDATE_SOURCE_BUILD_CHUNK','SOURCE_BUILD','SOURCE_BUILD_PAGE') THEN 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            WHEN UPPER(BTRIM(COALESCE(pre_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH','CANDIDATE_DELTA_REFRESH','DELTA_REFRESH') THEN 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+            WHEN UPPER(BTRIM(COALESCE(pre_job.job_type, ''))) IN ('WORKBENCH_SESSION_CLONE_REBASE','SESSION_CLONE_REBASE','CLONE_REBASE') THEN 'WORKBENCH_SESSION_CLONE_REBASE'
+            WHEN UPPER(BTRIM(COALESCE(pre_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED','WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE','CANDIDATE_LINE_WORK_SEED','CANDIDATE_LINE_WORK_SEED_PAGE','LINE_WORK_SEED_PAGE','SNAPSHOT_CANDIDATE_REFRESH','CANDIDATE_REFRESH') THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+            WHEN UPPER(BTRIM(COALESCE(pre_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS','WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK','CANDIDATE_LINE_WORK_PROCESS','CANDIDATE_LINE_WORK_PROCESS_CHUNK','LINE_WORK_PROCESS','LINE_WORK_PROCESS_CHUNK') THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+            WHEN UPPER(BTRIM(COALESCE(pre_job.job_type, ''))) IN ('WORKBENCH_PREVIEW_ROWS_MATERIALISE','WORKBENCH_PREVIEW_ROWS_MATERIALIZE','WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK','WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK','PREVIEW_ROWS_MATERIALISE','PREVIEW_ROWS_MATERIALIZE','PREVIEW_ROWS_MATERIALISE_CHUNK','PREVIEW_ROWS_MATERIALIZE_CHUNK','PREVIEW_ROW_MATERIALISE_CHUNK','PREVIEW_ROW_MATERIALIZE_CHUNK') THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+            WHEN UPPER(BTRIM(COALESCE(pre_job.job_type, ''))) = 'CONTRACT_CLIENT_DIRTY_FANOUT' THEN 'CONTRACT_CLIENT_DIRTY_FANOUT'
+            ELSE UPPER(BTRIM(COALESCE(pre_job.job_type, '')))
+          END AS canonical_job_type
+        ) AS pre_job_type
+        WHERE pre_job.status = 'QUEUED'
+          AND pre_job.run_at_utc <= GREATEST(v_cutoff, v_now)
+          AND (p_session_id IS NULL OR pre_job.session_id = p_session_id)
+          AND (p_candidate_id IS NULL OR pre_job.candidate_id = p_candidate_id)
+          AND pre_job_type.canonical_job_type = ANY(v_allowed_job_types)
+      )
+      SELECT
+        COUNT(*)::integer,
+        COUNT(*)::integer,
+        COALESCE(jsonb_agg(jsonb_build_object('job_id', pre_claim_due.id::text, 'job_type', pre_claim_due.job_type, 'created_at_utc', pre_claim_due.created_at_utc, 'run_at_utc', pre_claim_due.run_at_utc) ORDER BY pre_claim_due.created_at_utc, pre_claim_due.id) FILTER (WHERE pre_claim_due.id IN (SELECT id FROM pre_claim_due ORDER BY created_at_utc, id LIMIT 5)), '[]'::jsonb)
+      INTO v_pre_claim_due_count,
+           v_pre_claim_claimable_count,
+           v_pre_claim_job_sample
+      FROM pre_claim_due;
+    EXCEPTION WHEN OTHERS THEN
+      v_pre_claim_due_count := 0;
+      v_pre_claim_claimable_count := 0;
+      v_pre_claim_job_sample := '[]'::jsonb;
+    END;
 
     v_claim_result := public.pay_workbench_claim_due_jobs(
       p_limit => v_budget_claim_limit,
@@ -198551,6 +198693,7 @@ BEGIN
       p_allowed_job_types => v_allowed_job_types
     );
     v_claim_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_phase_started_at_utc)) * 1000)::integer);
+    v_claim_phase_completed_at := clock_timestamp();
 
     v_claimed_jobs_json := CASE
       WHEN jsonb_typeof(v_claim_result->'claimed') = 'array'
@@ -198630,7 +198773,7 @@ BEGIN
               'message', 'Claimed Banking Pay workbench job was released without processing because the worker was near its runtime budget.',
               'worker_id', v_worker_id,
               'released_at_utc', v_now::text,
-              'stop_reason', 'WORKER_DRAIN_BUDGET_EXHAUSTED'
+              'stop_reason', 'WORKER_BUDGET_EARLY_STOP'
             ),
             payload_json = jsonb_strip_nulls(
               (COALESCE(unprocessed_job.payload_json, '{}'::jsonb) - ARRAY[
@@ -198644,7 +198787,7 @@ BEGIN
                 'claim_released_due_to_worker_budget', true,
                 'claim_released_at_utc', v_now::text,
                 'claim_released_by_worker_id', v_worker_id,
-                'claim_release_stop_reason', 'WORKER_DRAIN_BUDGET_EXHAUSTED',
+                'claim_release_stop_reason', 'WORKER_BUDGET_EARLY_STOP',
                 'claim_release_cleared_worker_lease_payload', true
               )
             ),
@@ -198661,7 +198804,7 @@ BEGIN
       FROM requeued_unprocessed_jobs;
 
       v_more_due := true;
-      v_stop_reason := 'WORKER_DRAIN_BUDGET_EXHAUSTED';
+      v_stop_reason := 'WORKER_BUDGET_EARLY_STOP';
       EXIT;
     END IF;
 
@@ -199094,6 +199237,154 @@ BEGIN
           'skipped_at_utc', v_now
         );
 
+        v_obsolete_projection_run_id := NULL::uuid;
+        v_projection_status_before := NULL::text;
+        v_projection_status_after := NULL::text;
+        v_active_continuation_count := 0;
+        v_active_continuation_job_ids := ARRAY[]::uuid[];
+        v_active_continuation_job_ids_json := '[]'::jsonb;
+        v_delta_projection_diag_json := '{}'::jsonb;
+        v_obsolete_projection_update_count := 0;
+
+        IF v_canonical_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN
+          IF COALESCE(
+               NULLIF(BTRIM(COALESCE(v_payload_json->>'projection_run_id', '')), ''),
+               NULLIF(BTRIM(COALESCE(v_payload_json #>> '{cursor,projection_run_id}', '')), ''),
+               NULLIF(BTRIM(COALESCE(v_payload_json #>> '{cursor_json,projection_run_id}', '')), ''),
+               NULLIF(BTRIM(COALESCE(v_cursor_json->>'projection_run_id', '')), ''),
+               NULLIF(BTRIM(COALESCE(v_payload_json #>> '{result_json,projection_run_id}', '')), ''),
+               NULLIF(BTRIM(COALESCE(v_payload_json #>> '{result_json,next_cursor,projection_run_id}', '')), ''),
+               ''
+             ) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+            v_obsolete_projection_run_id := COALESCE(
+              NULLIF(BTRIM(COALESCE(v_payload_json->>'projection_run_id', '')), ''),
+              NULLIF(BTRIM(COALESCE(v_payload_json #>> '{cursor,projection_run_id}', '')), ''),
+              NULLIF(BTRIM(COALESCE(v_payload_json #>> '{cursor_json,projection_run_id}', '')), ''),
+              NULLIF(BTRIM(COALESCE(v_cursor_json->>'projection_run_id', '')), ''),
+              NULLIF(BTRIM(COALESCE(v_payload_json #>> '{result_json,projection_run_id}', '')), ''),
+              NULLIF(BTRIM(COALESCE(v_payload_json #>> '{result_json,next_cursor,projection_run_id}', '')), '')
+            )::uuid;
+          END IF;
+
+          IF v_obsolete_projection_run_id IS NOT NULL THEN
+            SELECT projection_run.status
+            INTO v_projection_status_before
+            FROM public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run
+            WHERE projection_run.id = v_obsolete_projection_run_id
+            FOR UPDATE;
+
+            SELECT COALESCE(COUNT(*), 0)::integer,
+                   COALESCE(array_agg(active_job.id ORDER BY active_job.created_at_utc, active_job.id), ARRAY[]::uuid[])
+            INTO v_active_continuation_count,
+                 v_active_continuation_job_ids
+            FROM public.banking_pay_workbench_jobs AS active_job
+            WHERE active_job.id <> v_job_row.id
+              AND UPPER(BTRIM(COALESCE(active_job.status, ''))) IN ('QUEUED', 'RUNNING')
+              AND (v_job_row.session_id IS NULL OR active_job.session_id = v_job_row.session_id)
+              AND (v_job_row.candidate_id IS NULL OR active_job.candidate_id = v_job_row.candidate_id)
+              AND (
+                   active_job.payload_json->>'projection_run_id' = v_obsolete_projection_run_id::text
+                OR active_job.payload_json #>> '{cursor,projection_run_id}' = v_obsolete_projection_run_id::text
+                OR active_job.payload_json #>> '{cursor_json,projection_run_id}' = v_obsolete_projection_run_id::text
+                OR active_job.payload_json #>> '{next_cursor,projection_run_id}' = v_obsolete_projection_run_id::text
+                OR active_job.payload_json #>> '{next_cursor_json,projection_run_id}' = v_obsolete_projection_run_id::text
+                OR active_job.payload_json #>> '{result_json,projection_run_id}' = v_obsolete_projection_run_id::text
+                OR active_job.payload_json #>> '{result_json,next_cursor,projection_run_id}' = v_obsolete_projection_run_id::text
+                OR active_job.payload_json::text ILIKE '%' || v_obsolete_projection_run_id::text || '%'
+              );
+
+            v_active_continuation_job_ids_json := COALESCE(to_jsonb(v_active_continuation_job_ids), '[]'::jsonb);
+            v_delta_projection_diag_json := jsonb_strip_nulls(
+              jsonb_build_object(
+                'projection_run_id', v_obsolete_projection_run_id::text,
+                'source_job_id', NULLIF(BTRIM(COALESCE(v_payload_json->>'source_job_id', '')), ''),
+                'continuation_job_id', v_job_row.id::text,
+                'obsolete_reason', v_obsolete_reason,
+                'projection_status_before', v_projection_status_before,
+                'active_continuation_count', COALESCE(v_active_continuation_count, 0),
+                'active_continuation_job_ids', v_active_continuation_job_ids_json,
+                'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL::text ELSE v_job_row.candidate_id::text END,
+                'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL::text ELSE v_job_row.session_id::text END
+              )
+              || jsonb_build_object(
+                'source_change_seq', v_source_change_seq,
+                'latest_source_change_seq', v_live_change_seq,
+                'terminalisation_reason', CASE WHEN COALESCE(v_active_continuation_count, 0) = 0 THEN 'NO_ACTIVE_CONTINUATION_REMAINING' ELSE 'ACTIVE_CONTINUATION_REMAINING' END,
+                'diagnostic_reason', 'OBSOLETE_CONTINUATION_TERMINALISED_PROJECTION'
+              )
+            );
+
+            PERFORM public._temp_diag_log(
+              'DELTA_PROJECTION_OBSOLETE_SKIP_WITH_ACTIVE_STATE',
+              'TEMP_BANKING_PAY_WORKBENCH',
+              v_obsolete_projection_run_id::text,
+              v_delta_projection_diag_json
+            );
+
+            IF UPPER(BTRIM(COALESCE(v_projection_status_before, ''))) IN ('RUNNING', 'PROCESSING', 'IN_PROGRESS')
+               AND COALESCE(v_active_continuation_count, 0) = 0 THEN
+              UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
+              SET status = 'FAILED',
+                  fallback_required = false,
+                  fallback_reason = 'OBSOLETE_CONTINUATION_TERMINALISED_PROJECTION',
+                  diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
+                    || jsonb_build_object(
+                      'obsolete_continuation_terminalised_projection', true,
+                      'obsolete_reason', v_obsolete_reason,
+                      'continuation_job_id', v_job_row.id::text,
+                      'source_job_id', NULLIF(BTRIM(COALESCE(v_payload_json->>'source_job_id', '')), ''),
+                      'active_continuation_count', COALESCE(v_active_continuation_count, 0),
+                      'terminalisation_reason', 'NO_ACTIVE_CONTINUATION_REMAINING',
+                      'terminalised_by', 'pay_workbench_worker_drain_chunk',
+                      'terminalised_at_utc', v_now::text
+                    ),
+                  updated_at_utc = v_now,
+                  completed_at_utc = v_now
+              WHERE projection_run_update.id = v_obsolete_projection_run_id
+                AND UPPER(BTRIM(COALESCE(projection_run_update.status, ''))) IN ('RUNNING', 'PROCESSING', 'IN_PROGRESS');
+
+              GET DIAGNOSTICS v_obsolete_projection_update_count = ROW_COUNT;
+              IF COALESCE(v_obsolete_projection_update_count, 0) > 0 THEN
+                v_projection_terminalisation_count := v_projection_terminalisation_count + 1;
+                v_terminalisation_count := v_terminalisation_count + 1;
+              END IF;
+              v_projection_status_after := CASE WHEN COALESCE(v_obsolete_projection_update_count, 0) > 0 THEN 'FAILED' ELSE v_projection_status_before END;
+              v_delta_projection_diag_json := v_delta_projection_diag_json || jsonb_build_object(
+                'projection_status_after', v_projection_status_after,
+                'terminalised_count', COALESCE(v_obsolete_projection_update_count, 0)
+              );
+
+              PERFORM public._temp_diag_log(
+                'DELTA_PROJECTION_TERMINALISED_ON_OBSOLETE_CONTINUATION',
+                'TEMP_BANKING_PAY_WORKBENCH',
+                v_obsolete_projection_run_id::text,
+                v_delta_projection_diag_json
+              );
+            ELSE
+              v_projection_status_after := v_projection_status_before;
+              v_delta_projection_diag_json := v_delta_projection_diag_json || jsonb_build_object(
+                'projection_status_after', v_projection_status_after,
+                'terminalised_count', 0
+              );
+              PERFORM public._temp_diag_log(
+                'DELTA_PROJECTION_OBSOLETE_SKIP_LEFT_ACTIVE_CONTINUATION',
+                'TEMP_BANKING_PAY_WORKBENCH',
+                v_obsolete_projection_run_id::text,
+                v_delta_projection_diag_json
+              );
+            END IF;
+
+            v_obsolete_result := v_obsolete_result || jsonb_build_object(
+              'projection_run_id', v_obsolete_projection_run_id::text,
+              'projection_status_before', v_projection_status_before,
+              'projection_status_after', v_projection_status_after,
+              'active_continuation_count', COALESCE(v_active_continuation_count, 0),
+              'active_continuation_job_ids', v_active_continuation_job_ids_json,
+              'projection_terminalisation_count', COALESCE(v_obsolete_projection_update_count, 0)
+            );
+          END IF;
+        END IF;
+
         UPDATE public.banking_pay_workbench_jobs AS obsolete_job
         SET status = 'SUCCEEDED',
             completed_at_utc = v_now,
@@ -199139,7 +199430,11 @@ BEGIN
             'job_type_normalized', v_job_type_normalized,
             'status', 'SUCCEEDED',
             'obsolete_skip', true,
-            'obsolete_reason', v_obsolete_reason
+            'obsolete_reason', v_obsolete_reason,
+            'projection_run_id', CASE WHEN v_obsolete_projection_run_id IS NULL THEN NULL::text ELSE v_obsolete_projection_run_id::text END,
+            'projection_status_before', v_projection_status_before,
+            'projection_status_after', v_projection_status_after,
+            'projection_terminalisation_count', COALESCE(v_obsolete_projection_update_count, 0)
           )
         );
       ELSE
@@ -199168,7 +199463,7 @@ BEGIN
                   'message', 'Claimed Banking Pay workbench job was released before starting a stage because the worker was near its runtime budget.',
                   'worker_id', v_worker_id,
                   'released_at_utc', v_now::text,
-                  'stop_reason', 'WORKER_DRAIN_BUDGET_EXHAUSTED'
+                  'stop_reason', 'WORKER_BUDGET_EARLY_STOP'
                 ),
                 payload_json = jsonb_strip_nulls(
                   (COALESCE(unprocessed_job.payload_json, '{}'::jsonb) - ARRAY[
@@ -199182,7 +199477,7 @@ BEGIN
                     'claim_released_before_stage_due_to_worker_budget', true,
                     'claim_released_at_utc', v_now::text,
                     'claim_released_by_worker_id', v_worker_id,
-                    'claim_release_stop_reason', 'WORKER_DRAIN_BUDGET_EXHAUSTED',
+                    'claim_release_stop_reason', 'WORKER_BUDGET_EARLY_STOP',
                     'claim_release_cleared_worker_lease_payload', true
                   )
                 ),
@@ -199199,7 +199494,7 @@ BEGIN
           FROM requeued_unprocessed_jobs;
 
           v_more_due := true;
-          v_stop_reason := 'WORKER_DRAIN_BUDGET_EXHAUSTED';
+          v_stop_reason := 'WORKER_BUDGET_EARLY_STOP';
           EXIT;
         END IF;
 
@@ -199774,7 +200069,7 @@ BEGIN
     v_elapsed_ms := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer);
     IF v_elapsed_ms >= (v_max_runtime_ms - v_min_phase_budget_ms) THEN
       v_more_due := true;
-      v_stop_reason := 'WORKER_DRAIN_BUDGET_EXHAUSTED';
+      v_stop_reason := 'WORKER_BUDGET_EARLY_STOP';
       v_final_more_due_elapsed_ms := 0;
     ELSE
       v_phase_started_at_utc := clock_timestamp();
@@ -199960,7 +200255,144 @@ BEGIN
     v_stale_running_count := 0;
   END;
 
-  IF (v_claim_lock_contention_detected OR v_claim_mismatch_detected)
+  BEGIN
+    WITH post_claim_due AS MATERIALIZED (
+      SELECT
+        post_job.id,
+        post_job.job_type,
+        post_job.created_at_utc,
+        post_job.run_at_utc
+      FROM public.banking_pay_workbench_jobs AS post_job
+      CROSS JOIN LATERAL (
+        SELECT CASE
+          WHEN UPPER(BTRIM(COALESCE(post_job.job_type, ''))) IN ('WORKBENCH_SESSION_SCOPE_SEED','SESSION_SCOPE_SEED','WORKBENCH_SCOPE_SEED','WORKBENCH_SCOPE_SEED_PAGE','SCOPE_SEED_PAGE') THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+          WHEN UPPER(BTRIM(COALESCE(post_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_SOURCE_BUILD','WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK','WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE','CANDIDATE_SOURCE_BUILD','CANDIDATE_SOURCE_BUILD_CHUNK','SOURCE_BUILD','SOURCE_BUILD_PAGE') THEN 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+          WHEN UPPER(BTRIM(COALESCE(post_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH','CANDIDATE_DELTA_REFRESH','DELTA_REFRESH') THEN 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+          WHEN UPPER(BTRIM(COALESCE(post_job.job_type, ''))) IN ('WORKBENCH_SESSION_CLONE_REBASE','SESSION_CLONE_REBASE','CLONE_REBASE') THEN 'WORKBENCH_SESSION_CLONE_REBASE'
+          WHEN UPPER(BTRIM(COALESCE(post_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED','WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE','CANDIDATE_LINE_WORK_SEED','CANDIDATE_LINE_WORK_SEED_PAGE','LINE_WORK_SEED_PAGE','SNAPSHOT_CANDIDATE_REFRESH','CANDIDATE_REFRESH') THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+          WHEN UPPER(BTRIM(COALESCE(post_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS','WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK','CANDIDATE_LINE_WORK_PROCESS','CANDIDATE_LINE_WORK_PROCESS_CHUNK','LINE_WORK_PROCESS','LINE_WORK_PROCESS_CHUNK') THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+          WHEN UPPER(BTRIM(COALESCE(post_job.job_type, ''))) IN ('WORKBENCH_PREVIEW_ROWS_MATERIALISE','WORKBENCH_PREVIEW_ROWS_MATERIALIZE','WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK','WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK','PREVIEW_ROWS_MATERIALISE','PREVIEW_ROWS_MATERIALIZE','PREVIEW_ROWS_MATERIALISE_CHUNK','PREVIEW_ROWS_MATERIALIZE_CHUNK','PREVIEW_ROW_MATERIALISE_CHUNK','PREVIEW_ROW_MATERIALIZE_CHUNK') THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+          WHEN UPPER(BTRIM(COALESCE(post_job.job_type, ''))) = 'CONTRACT_CLIENT_DIRTY_FANOUT' THEN 'CONTRACT_CLIENT_DIRTY_FANOUT'
+          ELSE UPPER(BTRIM(COALESCE(post_job.job_type, '')))
+        END AS canonical_job_type
+      ) AS post_job_type
+      WHERE post_job.status = 'QUEUED'
+        AND post_job.run_at_utc <= GREATEST(v_cutoff, v_now)
+        AND (p_session_id IS NULL OR post_job.session_id = p_session_id)
+        AND (p_candidate_id IS NULL OR post_job.candidate_id = p_candidate_id)
+        AND post_job_type.canonical_job_type = ANY(v_allowed_job_types)
+        AND (
+             (v_claim_phase_completed_at IS NOT NULL AND post_job.created_at_utc >= v_claim_phase_completed_at)
+          OR EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_dirty_priority_actual_refresh_job_ids) = 'array' THEN v_dirty_priority_actual_refresh_job_ids ELSE '[]'::jsonb END) AS dirty_refresh_id(value)
+               WHERE dirty_refresh_id.value = post_job.id::text
+             )
+        )
+      ORDER BY post_job.created_at_utc,
+               post_job.id
+      LIMIT 20
+    )
+    SELECT COUNT(*)::integer,
+           COALESCE(jsonb_agg(post_claim_due.id::text), '[]'::jsonb),
+           COALESCE(jsonb_agg(DISTINCT post_claim_due.job_type), '[]'::jsonb),
+           COALESCE(jsonb_agg(jsonb_build_object('job_id', post_claim_due.id::text, 'job_type', post_claim_due.job_type, 'created_at_utc', post_claim_due.created_at_utc, 'run_at_utc', post_claim_due.run_at_utc)), '[]'::jsonb)
+    INTO v_created_after_claim_count,
+         v_post_claim_due_job_ids,
+         v_post_claim_due_job_types,
+         v_post_claim_due_sample
+    FROM post_claim_due;
+  EXCEPTION WHEN OTHERS THEN
+    v_created_after_claim_count := 0;
+    v_post_claim_due_job_ids := '[]'::jsonb;
+    v_post_claim_due_job_types := '[]'::jsonb;
+    v_post_claim_due_sample := '[]'::jsonb;
+  END;
+
+  v_post_claim_due_detected := COALESCE(v_created_after_claim_count, 0) > 0;
+  v_post_claim_due_reason := CASE
+    WHEN v_post_claim_due_detected THEN 'DUE_CREATED_AFTER_CLAIM_PHASE'
+    ELSE NULL::text
+  END;
+
+  IF v_post_claim_due_detected
+     AND v_claimed_count = 0
+     AND v_processed_count = 0
+     AND v_failed_count = 0
+     AND v_dead_count = 0
+     AND v_supplemental_stale_recovery_error_count = 0
+     AND COALESCE(v_more_due, false) THEN
+    v_more_due := true;
+    v_stop_reason := 'POST_CLAIM_DUE_WORK_REQUIRES_NEXT_PASS';
+    v_claim_mismatch_detected := true;
+    v_claim_mismatch_reason := 'DUE_CREATED_AFTER_CLAIM_PHASE';
+    v_claim_mismatch_json := COALESCE(v_claim_mismatch_json, '{}'::jsonb)
+      || jsonb_build_object(
+        'claim_mismatch_detected', true,
+        'claim_mismatch_reason', 'DUE_CREATED_AFTER_CLAIM_PHASE',
+        'stop_reason', 'POST_CLAIM_DUE_WORK_REQUIRES_NEXT_PASS',
+        'post_claim_due_job_ids', v_post_claim_due_job_ids,
+        'post_claim_due_job_types', v_post_claim_due_job_types,
+        'post_claim_due_sample', v_post_claim_due_sample,
+        'created_after_claim_count', v_created_after_claim_count,
+        'claim_phase_started_at', v_claim_phase_started_at,
+        'claim_phase_completed_at', v_claim_phase_completed_at,
+        'dirty_priority_created_job_ids', v_dirty_priority_created_job_ids,
+        'dirty_priority_actual_refresh_job_ids', v_dirty_priority_actual_refresh_job_ids
+      );
+
+    PERFORM public._temp_diag_log(
+      'DUE_CREATED_AFTER_CLAIM_PHASE',
+      'TEMP_BANKING_PAY_WORKBENCH',
+      COALESCE(p_session_id::text, p_candidate_id::text, v_worker_id),
+      jsonb_build_object(
+        'function_name', 'pay_workbench_worker_drain_chunk',
+        'worker_id', v_worker_id,
+        'origin', 'pay_workbench_worker_drain_chunk',
+        'route', 'worker_drain',
+        'pass_number', 1,
+        'claim_phase_started_at', v_claim_phase_started_at,
+        'claim_phase_completed_at', v_claim_phase_completed_at,
+        'dirty_priority_job_id', CASE WHEN v_dirty_priority_claimed_job_id IS NULL THEN NULL::text ELSE v_dirty_priority_claimed_job_id::text END,
+        'dirty_priority_created_job_ids', v_dirty_priority_created_job_ids,
+        'actual_refresh_job_id', CASE WHEN jsonb_typeof(v_dirty_priority_actual_refresh_job_ids) = 'array' AND jsonb_array_length(v_dirty_priority_actual_refresh_job_ids) > 0 THEN v_dirty_priority_actual_refresh_job_ids->>0 ELSE NULL::text END,
+        'post_claim_due_job_ids', v_post_claim_due_job_ids,
+        'post_claim_due_job_types', v_post_claim_due_job_types,
+        'due_queued_count', v_due_queued_count,
+        'claimable_count', v_claimable_count,
+        'claimed', v_claimed_count,
+        'processed', v_processed_count,
+        'more_due', v_more_due,
+        'stop_reason', v_stop_reason
+      )
+    );
+
+    PERFORM public._temp_diag_log(
+      'POST_CLAIM_DUE_WORK_REQUIRES_NEXT_PASS',
+      'TEMP_BANKING_PAY_WORKBENCH',
+      COALESCE(p_session_id::text, p_candidate_id::text, v_worker_id),
+      jsonb_build_object(
+        'function_name', 'pay_workbench_worker_drain_chunk',
+        'worker_id', v_worker_id,
+        'origin', 'pay_workbench_worker_drain_chunk',
+        'route', 'worker_drain',
+        'pass_number', 1,
+        'claim_mismatch_reason', 'DUE_CREATED_AFTER_CLAIM_PHASE',
+        'post_claim_due_job_ids', v_post_claim_due_job_ids,
+        'dirty_priority_created_job_ids', v_dirty_priority_created_job_ids,
+        'dirty_priority_actual_refresh_job_ids', v_dirty_priority_actual_refresh_job_ids,
+        'due_queued_count', v_due_queued_count,
+        'claimable_count', v_claimable_count,
+        'claimed', v_claimed_count,
+        'processed', v_processed_count,
+        'made_progress_current_pass', v_dirty_priority_made_progress,
+        'made_progress_cumulative', v_dirty_priority_made_progress,
+        'more_due', v_more_due,
+        'stop_reason', v_stop_reason
+      )
+    );
+
+  ELSIF (v_claim_lock_contention_detected OR v_claim_mismatch_detected)
      AND v_claimed_count = 0
      AND v_processed_count = 0
      AND v_failed_count = 0
@@ -200012,12 +200444,59 @@ BEGIN
     END;
   END IF;
 
+  v_normal_claim_made_progress := COALESCE(v_claimed_count, 0) > 0
+    OR COALESCE(v_processed_count, 0) > 0
+    OR COALESCE(v_recovered_stale_count, 0) > 0
+    OR COALESCE(v_dead_stale_count, 0) > 0
+    OR COALESCE(v_continuations_created, 0) > 0
+    OR COALESCE(v_continuations_reused, 0) > 0
+    OR COALESCE(v_terminalisation_count, 0) > 0
+    OR (
+         COALESCE(v_delta_source_rows_written, 0)
+       + COALESCE(v_delta_line_rows_written, 0)
+       + COALESCE(v_delta_preview_rows_written, 0)
+       + COALESCE(v_delta_rows_superseded, 0)
+       + COALESCE(v_clone_copied_candidate_count, 0)
+       + COALESCE(v_clone_copied_preview_row_count, 0)
+       + COALESCE(v_clone_legacy_refresh_enqueued_count, 0)
+      ) > 0;
+  v_made_progress_current_pass := COALESCE(v_dirty_priority_made_progress, false)
+    OR COALESCE(v_normal_claim_made_progress, false);
+  v_made_progress_cumulative := v_made_progress_current_pass;
+
+  IF COALESCE(v_stop_reason, '') = 'WORKER_BUDGET_EARLY_STOP' THEN
+    PERFORM public._temp_diag_log(
+      'WORKER_BUDGET_EARLY_STOP',
+      'TEMP_BANKING_PAY_WORKBENCH',
+      COALESCE(p_session_id::text, p_candidate_id::text, v_worker_id),
+      jsonb_build_object(
+        'function_name', 'pay_workbench_worker_drain_chunk',
+        'worker_id', v_worker_id,
+        'origin', 'pay_workbench_worker_drain_chunk',
+        'db_worker_max_runtime_ms', v_max_runtime_ms,
+        'db_statement_timeout_ms', 15000,
+        'backend_rpc_timeout_ms', LEAST(v_max_runtime_ms + 1000, 14000),
+        'computed_rpc_budget_ms', v_max_runtime_ms,
+        'effective_max_runtime_ms', v_max_runtime_ms,
+        'budget_remaining_ms', GREATEST(0, v_max_runtime_ms - GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer)),
+        'stop_reason', v_stop_reason,
+        'more_due', v_more_due,
+        'claimed', v_claimed_count,
+        'processed', v_processed_count,
+        'row_units_processed', COALESCE(v_delta_source_rows_written, 0) + COALESCE(v_delta_line_rows_written, 0) + COALESCE(v_delta_preview_rows_written, 0) + COALESCE(v_delta_rows_superseded, 0)
+      )
+    );
+  END IF;
+
   RETURN jsonb_build_object(
       'ok', v_failed_count = 0 AND v_supplemental_stale_recovery_error_count = 0,
       'dirty_priority_jobs_processed', v_dirty_priority_jobs_processed,
       'dirty_priority_jobs_remaining', v_dirty_priority_jobs_remaining,
       'dirty_priority_cap_reached', v_dirty_priority_cap_reached,
       'dirty_priority_result', v_dirty_priority_result,
+      'dirty_priority_made_progress', COALESCE(v_dirty_priority_made_progress, false),
+      'dirty_priority_created_job_ids', COALESCE(v_dirty_priority_created_job_ids, '[]'::jsonb),
+      'dirty_priority_actual_refresh_job_ids', COALESCE(v_dirty_priority_actual_refresh_job_ids, '[]'::jsonb),
       'worker_id', v_worker_id,
       'worker_budget_profile', v_worker_budget_profile,
       'lease_seconds', v_lease_seconds,
@@ -200039,6 +200518,8 @@ BEGIN
       'failed', v_failed_count,
       'dead', v_dead_count,
       'obsolete_skipped', v_obsolete_skipped_count,
+      'projection_terminalisation_count', COALESCE(v_projection_terminalisation_count, 0),
+      'terminalisation_count', COALESCE(v_terminalisation_count, 0),
       'continuations_created', v_continuations_created,
       'continuations_reused', v_continuations_reused,
       'requeued_unprocessed_claimed', COALESCE(v_requeued_unprocessed_claimed_count, 0),
@@ -200049,6 +200530,11 @@ BEGIN
       'concurrent_worker_progress_expected', COALESCE(v_claim_lock_contention_detected, false),
       'more_due', COALESCE(v_more_due, false),
       'stop_reason', COALESCE(v_stop_reason, CASE WHEN COALESCE(v_more_due, false) THEN 'MORE_DUE' ELSE 'NO_MORE_DUE' END),
+      'made_progress_current_pass', COALESCE(v_made_progress_current_pass, false),
+      'made_progress_cumulative', COALESCE(v_made_progress_cumulative, false),
+      'made_progress', COALESCE(v_made_progress_current_pass, false),
+      'dirty_priority_made_progress', COALESCE(v_dirty_priority_made_progress, false),
+      'normal_claim_made_progress', COALESCE(v_normal_claim_made_progress, false),
       'elapsed_ms', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (clock_timestamp() - v_started_at_utc)) * 1000)::integer),
       'max_runtime_ms', v_max_runtime_ms,
       'min_phase_budget_ms', v_min_phase_budget_ms,
@@ -200064,7 +200550,7 @@ BEGIN
       ),
       'job_retry_base_seconds', v_job_retry_base_seconds,
       'job_retry_max_seconds', v_job_retry_max_seconds,
-      'near_deadline', COALESCE(v_stop_reason, '') = 'WORKER_DRAIN_BUDGET_EXHAUSTED'
+      'near_deadline', COALESCE(v_stop_reason, '') = 'WORKER_BUDGET_EARLY_STOP'
     )
     || jsonb_build_object(
       'claimed_count', v_claimed_count,
@@ -200073,6 +200559,8 @@ BEGIN
       'failed_count', v_failed_count,
       'dead_count', v_dead_count,
       'obsolete_skipped_count', v_obsolete_skipped_count,
+      'projection_terminalisation_count', COALESCE(v_projection_terminalisation_count, 0),
+      'terminalisation_count', COALESCE(v_terminalisation_count, 0),
       'continuation_created_count', v_continuations_created,
       'continuation_reused_count', v_continuations_reused,
       'requeued_unprocessed_claimed_count', COALESCE(v_requeued_unprocessed_claimed_count, 0),
@@ -200099,7 +200587,19 @@ BEGIN
       'claim_lock_contention_sample', COALESCE(v_claim_lock_contention_sample, '[]'::jsonb),
       'claim_mismatch_detected', COALESCE(v_claim_mismatch_detected, false),
       'claim_mismatch_reason', v_claim_mismatch_reason,
-      'claim_mismatch_json', COALESCE(v_claim_mismatch_json, '{}'::jsonb),
+      'claim_mismatch_json', COALESCE(v_claim_mismatch_json, '{}'::jsonb)
+    )
+    || jsonb_build_object(
+      'post_claim_due_work_requires_next_pass', COALESCE(v_post_claim_due_detected, false),
+      'created_after_claim_count', COALESCE(v_created_after_claim_count, 0),
+      'claim_phase_started_at', v_claim_phase_started_at,
+      'claim_phase_completed_at', v_claim_phase_completed_at,
+      'pre_claim_due_count', COALESCE(v_pre_claim_due_count, 0),
+      'pre_claim_claimable_count', COALESCE(v_pre_claim_claimable_count, 0),
+      'pre_claim_job_sample', COALESCE(v_pre_claim_job_sample, '[]'::jsonb),
+      'post_claim_due_job_ids', COALESCE(v_post_claim_due_job_ids, '[]'::jsonb),
+      'post_claim_due_job_types', COALESCE(v_post_claim_due_job_types, '[]'::jsonb),
+      'post_claim_due_sample', COALESCE(v_post_claim_due_sample, '[]'::jsonb),
       'lock_contention_detected', (COALESCE(v_claim_lock_contention_detected, false) OR COALESCE(v_claim_mismatch_detected, false)),
       'stale_recovery_elapsed_ms', COALESCE(v_supplemental_stale_elapsed_ms, 0),
       'claim_elapsed_ms', COALESCE(v_claim_elapsed_ms, 0),
@@ -200113,6 +200613,7 @@ BEGIN
     );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_decision_operations(
   p_session_id uuid,
