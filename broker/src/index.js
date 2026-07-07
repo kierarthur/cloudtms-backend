@@ -68519,6 +68519,8 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user, ctx = null) 
   }
 }
 
+
+
 async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -68678,6 +68680,24 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
   const isUnknownLifecycleOutcomeError = (err, parsed = null) => {
     const status = Number(parsed?.status || err?.status || 0) || 0;
     const name = firstString(err?.name, parsed?.payload?.name);
+    const payload = (parsed?.payload && typeof parsed.payload === 'object' && !Array.isArray(parsed.payload)) ? parsed.payload : {};
+    const detailJson = (parsed?.detailJson && typeof parsed.detailJson === 'object' && !Array.isArray(parsed.detailJson)) ? parsed.detailJson : {};
+    const failureClassification = (payload.failure_classification && typeof payload.failure_classification === 'object' && !Array.isArray(payload.failure_classification))
+      ? payload.failure_classification
+      : ((detailJson.failure_classification && typeof detailJson.failure_classification === 'object' && !Array.isArray(detailJson.failure_classification)) ? detailJson.failure_classification : {});
+    const classifierBool = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(String(value == null ? '' : value).trim().toLowerCase());
+    const transientCode = firstString(parsed?.code, payload.error_code, payload.code, detailJson.error_code).toUpperCase();
+    const classificationRetryDecision = firstString(failureClassification.retry_decision_reason).toUpperCase();
+    const classificationHttpStatus = Number(failureClassification.upstream_http_status || 0) || 0;
+    const controlledTransientUnknownOutcome = transientCode === 'TRANSIENT_LIFECYCLE_CONFLICT' && (
+      classifierBool(failureClassification.is_local_timeout) ||
+      classifierBool(failureClassification.is_upstream_408) ||
+      classifierBool(failureClassification.is_postgrest_timeout) ||
+      classifierBool(failureClassification.is_fetch_abort) ||
+      classifierBool(failureClassification.is_network_error) ||
+      [408, 504, 524].includes(classificationHttpStatus) ||
+      (classifierBool(failureClassification.is_retryable) && ['RETRY_BUDGET_EXHAUSTED', 'MAX_ATTEMPTS_REACHED', 'RETRYABLE_TRANSIENT_OR_TIMEOUT'].includes(classificationRetryDecision))
+    );
     const message = [
       parsed?.message,
       parsed?.code,
@@ -68686,7 +68706,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       err?.body,
       err?.name
     ].map((value) => String(value == null ? '' : value)).join(' ').toLowerCase();
-    return [408, 504, 524].includes(status) || String(name || '').toLowerCase() === 'aborterror' || /timeout after|rpc timesheet_unauthorise_atomic failed 408|rpc timesheet_unauthorise_atomic timed out|fetch timeout|network timeout|gateway timeout|worker timeout|aborted|request timed out|request timeout/.test(message);
+    return controlledTransientUnknownOutcome || [408, 504, 524].includes(status) || String(name || '').toLowerCase() === 'aborterror' || /timeout after|rpc timesheet_unauthorise_atomic failed 408|rpc timesheet_unauthorise_atomic timed out|fetch timeout|network timeout|gateway timeout|worker timeout|aborted|request timed out|request timeout/.test(message);
   };
   const lifecycleOutcomeMessage = (code) => {
     const normalized = firstString(code).toUpperCase();
@@ -68694,9 +68714,9 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       return 'This timesheet changed while the update was being processed. The latest timesheet details are now shown.';
     }
     if (normalized === 'UNKNOWN_LIFECYCLE_OUTCOME') {
-      return 'We could not confirm whether this timesheet update completed. Please close this message and try again once the timesheet details have refreshed.';
+      return 'We could not confirm whether this timesheet update completed. The latest timesheet details are now shown. Close this message to continue.';
     }
-    return 'This timesheet could not be unauthorised. The latest timesheet details are now shown. Please use the Unauthorise button again if the action is still needed.';
+    return 'This timesheet could not be unauthorised. The latest timesheet details are now shown. Close this message to continue.';
   };
   const lifecycleOutcomeResponse = (reconciliation, parsed = {}, options = {}) => {
     const rec = (reconciliation && typeof reconciliation === 'object') ? reconciliation : {};
@@ -68707,6 +68727,10 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     const finalTimesheetId = firstString(rec.current_timesheet_id, rec.timesheet_id, currentTimesheetId, expectedTimesheetId, requestedTimesheetId);
     const sig = firstString(rec.backend_row_signature, rec.row_signature, rec.current_row_signature);
     const message = lifecycleOutcomeMessage(code);
+    const patchSource = firstString(rec.patch_source).toUpperCase();
+    const unsafeTargetPatch = rec.target_state_reached !== true && patchSource === 'TARGET_STATE';
+    const safeLifecyclePatch = unsafeTargetPatch ? null : ((rec.lifecycle_patch && typeof rec.lifecycle_patch === 'object') ? rec.lifecycle_patch : null);
+    const safeAffectedRows = unsafeTargetPatch ? affectedRowsFor(rec, finalTimesheetId) : (Array.isArray(rec.affected_rows) && rec.affected_rows.length ? rec.affected_rows : affectedRowsFor(rec, finalTimesheetId));
     return withJson(409, {
       ok: false,
       success: false,
@@ -68737,8 +68761,8 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       mutation_row_signature: sig || null,
       row_signature: sig || null,
       expected_row_signature: sig || expectedRowSignature || null,
-      lifecycle_patch: (rec.lifecycle_patch && typeof rec.lifecycle_patch === 'object') ? rec.lifecycle_patch : null,
-      affected_rows: Array.isArray(rec.affected_rows) && rec.affected_rows.length ? rec.affected_rows : affectedRowsFor(rec, finalTimesheetId),
+      lifecycle_patch: safeLifecyclePatch,
+      affected_rows: safeAffectedRows,
       refresh_hints: (rec.refresh_hints && typeof rec.refresh_hints === 'object') ? rec.refresh_hints : {},
       cache_invalidation_hints: (rec.cache_invalidation_hints && typeof rec.cache_invalidation_hints === 'object') ? rec.cache_invalidation_hints : {},
       permission_state_patch_complete: rec.permission_state_patch_complete === true,
@@ -68746,6 +68770,14 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       immediate_lifecycle_patch_available: rec.immediate_lifecycle_patch_available === true,
       requires_affected_row_refresh: rec.requires_affected_row_refresh !== false,
       requires_full_details_refresh: rec.requires_full_details_refresh !== false,
+      reconciliation_target_state_reached: rec.reconciliation_target_state_reached === true,
+      reconciliation_current_processing_status: firstString(rec.reconciliation_current_processing_status, rec.processing_status) || null,
+      reconciliation_current_authorised_at_server_present: rec.reconciliation_current_authorised_at_server_present === true,
+      reconciliation_current_revoked_at_present: rec.reconciliation_current_revoked_at_present === true,
+      patch_source: firstString(rec.patch_source) || (safeLifecyclePatch ? 'CURRENT_STATE' : 'OMITTED'),
+      target_patch_suppressed: rec.target_patch_suppressed === true || unsafeTargetPatch,
+      suppression_reason: firstString(rec.suppression_reason) || (unsafeTargetPatch ? 'TARGET_STATE_NOT_REACHED' : null),
+      affected_rows_source: firstString(rec.affected_rows_source) || (safeAffectedRows.length ? 'CURRENT_STATE' : 'OMITTED'),
       source: 'lifecycle_timeout_reconciliation'
     });
   };
@@ -68791,7 +68823,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
       return withJson(409, {
         error: 'TRANSIENT_LIFECYCLE_CONFLICT',
         error_code: 'TRANSIENT_LIFECYCLE_CONFLICT',
-        message: 'This timesheet could not be unauthorised because it was being updated at the same time. The latest timesheet details are now shown. Please use the Unauthorise button again if the action is still needed.',
+        message: 'This timesheet could not be unauthorised because it was being updated at the same time. The latest timesheet details are now shown. Close this message to continue.',
         transient: true,
         retry_exhausted: true,
         current_timesheet_id: currentTimesheetId || null,
@@ -68877,7 +68909,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     return withJson(409, {
       error: 'UNKNOWN_LIFECYCLE_OUTCOME',
       error_code: 'UNKNOWN_LIFECYCLE_OUTCOME',
-      message: 'This timesheet could not be unauthorised. The latest timesheet details are now shown. Please use the Unauthorise button again if the action is still needed.',
+      message: 'This timesheet could not be unauthorised. The latest timesheet details are now shown. Close this message to continue.',
       current_timesheet_id: currentTimesheetId || null,
       refresh_required: true,
       affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
@@ -69284,8 +69316,6 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
     cache_invalidation_hints: (rpcPayload.cache_invalidation_hints && typeof rpcPayload.cache_invalidation_hints === 'object') ? rpcPayload.cache_invalidation_hints : {}
   }));
 }
-
-
 async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -83463,6 +83493,7 @@ async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
 }
 
 
+
 async function reconcileTimesheetLifecycleAfterUnknownOutcome(env, input = {}) {
   const isPlainObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
   const src = isPlainObject(input) ? input : {};
@@ -83526,11 +83557,29 @@ async function reconcileTimesheetLifecycleAfterUnknownOutcome(env, input = {}) {
     }
     return isPlainObject(out) ? out : null;
   };
-  const nullPatchBundle = (currentTimesheetId, extra = {}) => {
+  const deriveCurrentAuthorised = (extra = {}) => {
+    let authorised = toBoolOrNull(extra.current_authorised ?? extra.authorised ?? extra.is_authorised);
+    if (authorised == null) {
+      const authorisedAt = firstString(extra.authorised_at_server, extra.authorised_at_utc, extra.authorisedAtServer, extra.authorisedAtUtc);
+      if (authorisedAt) authorised = true;
+    }
+    if (authorised == null) {
+      const processing = upper(firstString(extra.processing_status));
+      const cwStatus = upper(firstString(extra.contract_week_status));
+      if (['READY_FOR_INVOICE', 'READY_FOR_HR', 'AUTHORISED', 'AUTHORIZED'].includes(processing) || ['AUTHORISED', 'AUTHORIZED'].includes(cwStatus)) authorised = true;
+      else if (['PENDING_AUTH', 'UNPROCESSED', 'PENDING'].includes(processing) || (!processing && !firstString(extra.authorised_at_server, extra.authorised_at_utc))) authorised = false;
+    }
+    return authorised;
+  };
+  const currentStatePatchBundle = (currentTimesheetId, extra = {}) => {
+    const currentAuthorised = deriveCurrentAuthorised(extra);
     try {
       if (typeof buildTimesheetLifecyclePatchFromMutation === 'function') {
+        const currentRow = Array.isArray(extra.affected_rows) && extra.affected_rows.length && isPlainObject(extra.affected_rows[0])
+          ? extra.affected_rows[0]
+          : {};
         return buildTimesheetLifecyclePatchFromMutation({
-          action,
+          action: 'CURRENT_STATE',
           requestedTimesheetId,
           currentTimesheetId: currentTimesheetId || expectedTimesheetId || requestedTimesheetId || null,
           currentVersion: extra.current_version ?? null,
@@ -83538,11 +83587,17 @@ async function reconcileTimesheetLifecycleAfterUnknownOutcome(env, input = {}) {
           bookingId: extra.booking_id || null,
           candidateId: extra.candidate_id || null,
           newProcessingStatus: extra.processing_status || null,
-          authorised: action === 'AUTHORISE' ? null : false,
+          authorised: currentAuthorised,
+          is_authorised: currentAuthorised,
+          authorisedAtServer: firstString(extra.authorised_at_server) || null,
+          authorisedAtUtc: firstString(extra.authorised_at_utc) || null,
+          unauthorisedAtUtc: firstString(extra.revoked_at, extra.unauthorised_at_utc) || null,
           readyToPay: extra.ready_to_pay === true ? true : (extra.ready_to_pay === false ? false : null),
           backendRowSignature: extra.backend_row_signature || null,
           rowSignature: extra.row_signature || extra.backend_row_signature || null,
           expectedRowSignature: extra.backend_row_signature || expectedRowSignature || null,
+          existingAffectedRows: Array.isArray(extra.affected_rows) && extra.affected_rows.length ? extra.affected_rows : [currentRow],
+          sourceRow: currentRow,
           staleMarkers: {
             was_stale: !!(requestedTimesheetId && currentTimesheetId && requestedTimesheetId !== currentTimesheetId),
             timesheet_moved: !!(requestedTimesheetId && currentTimesheetId && requestedTimesheetId !== currentTimesheetId)
@@ -83562,22 +83617,74 @@ async function reconcileTimesheetLifecycleAfterUnknownOutcome(env, input = {}) {
       refresh_required: true
     };
   };
+  const nullPatchBundle = (currentTimesheetId, extra = {}) => currentStatePatchBundle(currentTimesheetId, extra);
   const finish = (decision, extra = {}) => {
     const currentId = firstString(extra.current_timesheet_id, extra.timesheet_id, expectedTimesheetId, requestedTimesheetId) || null;
-    const patchBundle = isPlainObject(extra.lifecycle_patch_bundle)
-      ? extra.lifecycle_patch_bundle
-      : nullPatchBundle(currentId, extra);
+    const targetStateReached = extra.target_state_reached === true;
+    const rawPatchBundle = isPlainObject(extra.lifecycle_patch_bundle) ? extra.lifecycle_patch_bundle : null;
+    const rawLifecyclePatch = isPlainObject(rawPatchBundle?.lifecycle_patch) ? rawPatchBundle.lifecycle_patch : null;
+    const currentAuthorised = deriveCurrentAuthorised(extra);
+    const currentStateExtra = {
+      ...extra,
+      current_authorised: currentAuthorised,
+      authorised: currentAuthorised,
+      is_authorised: currentAuthorised
+    };
+    let patchBundle = rawPatchBundle || currentStatePatchBundle(currentId, currentStateExtra);
+    let patchSource = rawPatchBundle ? 'TARGET_STATE' : (isPlainObject(patchBundle?.lifecycle_patch) ? 'CURRENT_STATE' : 'OMITTED');
+    let affectedRowsSource = rawPatchBundle ? 'TARGET_STATE' : (Array.isArray(patchBundle?.affected_rows) && patchBundle.affected_rows.length ? 'CURRENT_STATE' : 'OMITTED');
+    let targetPatchSuppressed = false;
+    let suppressionReason = null;
+
+    if (!targetStateReached) {
+      targetPatchSuppressed = !!rawLifecyclePatch;
+      suppressionReason = targetPatchSuppressed ? 'TARGET_STATE_NOT_REACHED' : null;
+      patchBundle = currentStatePatchBundle(currentId, currentStateExtra);
+      patchSource = isPlainObject(patchBundle?.lifecycle_patch) ? 'CURRENT_STATE' : 'OMITTED';
+      affectedRowsSource = Array.isArray(patchBundle?.affected_rows) && patchBundle.affected_rows.length ? 'CURRENT_STATE' : 'OMITTED';
+      if (targetPatchSuppressed) {
+        const suppressionLog = {
+          tag: 'LIFECYCLE_RECONCILIATION_PATCH_SUPPRESSED',
+          action,
+          requested_timesheet_id: requestedTimesheetId || null,
+          expected_timesheet_id: expectedTimesheetId || null,
+          current_timesheet_id: currentId,
+          target_state_reached: false,
+          target_patch_suppressed: true,
+          suppression_reason: suppressionReason,
+          raw_lifecycle_patch_action: rawLifecyclePatch.action || null,
+          raw_lifecycle_patch_state_after: rawLifecyclePatch.state_after || null,
+          patch_source: patchSource,
+          affected_rows_source: affectedRowsSource,
+          current_processing_status: firstString(extra.processing_status) || null,
+          current_authorised: currentAuthorised,
+          current_authorised_at_server_present: !!firstString(extra.authorised_at_server),
+          current_revoked_at_present: !!firstString(extra.revoked_at),
+          server_utc: new Date().toISOString()
+        };
+        try { console.warn('[LIFECYCLE_RECONCILIATION_PATCH_SUPPRESSED]', JSON.stringify(suppressionLog)); } catch {}
+        log('patch_suppressed', suppressionLog);
+      }
+    }
+
     const sig = firstString(extra.backend_row_signature, extra.row_signature, extra.current_row_signature, extra.signature) || null;
+    const fallbackAffectedRows = Array.isArray(extra.affected_rows) && extra.affected_rows.length ? extra.affected_rows : [{
+      timesheet_id: currentId,
+      current_timesheet_id: currentId,
+      contract_week_id: firstString(extra.contract_week_id) || null,
+      booking_id: firstString(extra.booking_id) || null,
+      row_key: currentId ? `timesheet:${currentId}` : null,
+      context: 'timesheet_modal',
+      processing_status: firstString(extra.processing_status) || null,
+      authorised: currentAuthorised,
+      is_authorised: currentAuthorised,
+      backend_row_signature: sig,
+      row_signature: sig
+    }];
     const affectedRows = Array.isArray(patchBundle.affected_rows) && patchBundle.affected_rows.length
       ? patchBundle.affected_rows
-      : (Array.isArray(extra.affected_rows) && extra.affected_rows.length ? extra.affected_rows : [{
-          timesheet_id: currentId,
-          current_timesheet_id: currentId,
-          contract_week_id: firstString(extra.contract_week_id) || null,
-          booking_id: firstString(extra.booking_id) || null,
-          row_key: currentId ? `timesheet:${currentId}` : null,
-          context: 'timesheet_modal'
-        }]);
+      : fallbackAffectedRows;
+    const safeLifecyclePatch = isPlainObject(patchBundle.lifecycle_patch) ? patchBundle.lifecycle_patch : null;
     const out = {
       ok: decision !== 'READ_FAILED',
       reconciled: decision !== 'READ_FAILED',
@@ -83596,26 +83703,36 @@ async function reconcileTimesheetLifecycleAfterUnknownOutcome(env, input = {}) {
       authorised_at_server: extra.authorised_at_server ?? null,
       authorised_at_utc: extra.authorised_at_utc ?? null,
       revoked_at: extra.revoked_at ?? null,
+      authorised: currentAuthorised,
+      is_authorised: currentAuthorised,
       ready_to_pay: extra.ready_to_pay === true ? true : (extra.ready_to_pay === false ? false : null),
       backend_row_signature: sig,
       row_signature: sig,
       current_row_signature: sig,
-      target_state_reached: extra.target_state_reached === true,
+      target_state_reached: targetStateReached,
+      reconciliation_target_state_reached: targetStateReached,
+      reconciliation_current_processing_status: firstString(extra.processing_status) || null,
+      reconciliation_current_authorised_at_server_present: !!firstString(extra.authorised_at_server),
+      reconciliation_current_revoked_at_present: !!firstString(extra.revoked_at),
+      patch_source: patchSource,
+      target_patch_suppressed: targetPatchSuppressed,
+      suppression_reason: suppressionReason,
+      affected_rows_source: affectedRowsSource,
       safe_retry_allowed: extra.safe_retry_allowed === true,
       stale_lifecycle_state: extra.stale_lifecycle_state === true,
       action_still_valid: extra.action_still_valid === true,
-      refresh_required: extra.target_state_reached === true ? false : true,
+      refresh_required: targetStateReached === true ? false : true,
       refresh_hints: isPlainObject(patchBundle.refresh_hints) ? patchBundle.refresh_hints : {},
       cache_invalidation_hints: isPlainObject(extra.cache_invalidation_hints) ? extra.cache_invalidation_hints : {},
-      lifecycle_patch: isPlainObject(patchBundle.lifecycle_patch) ? patchBundle.lifecycle_patch : null,
+      lifecycle_patch: patchSource === 'OMITTED' ? null : safeLifecyclePatch,
       affected_rows: affectedRows,
       permission_state_patch_complete: patchBundle.permission_state_patch_complete === true,
       priority_badges_patch_complete: patchBundle.priority_badges_patch_complete === true,
       immediate_lifecycle_patch_available: patchBundle.immediate_lifecycle_patch_available === true,
-      requires_affected_row_refresh: patchBundle.requires_affected_row_refresh === true,
-      requires_full_details_refresh: patchBundle.requires_full_details_refresh === true,
+      requires_affected_row_refresh: targetStateReached ? patchBundle.requires_affected_row_refresh === true : true,
+      requires_full_details_refresh: targetStateReached ? patchBundle.requires_full_details_refresh === true : true,
       recommended_response_code: firstString(extra.recommended_response_code) || (
-        extra.target_state_reached === true ? 'LIFECYCLE_TIMEOUT_RECONCILED_SUCCESS' :
+        targetStateReached === true ? 'LIFECYCLE_TIMEOUT_RECONCILED_SUCCESS' :
         extra.safe_retry_allowed === true ? 'LIFECYCLE_TIMEOUT_SAFE_RETRY_ALLOWED' :
         extra.stale_lifecycle_state === true ? 'STALE_LIFECYCLE_STATE' :
         'UNKNOWN_LIFECYCLE_OUTCOME'
@@ -83630,6 +83747,11 @@ async function reconcileTimesheetLifecycleAfterUnknownOutcome(env, input = {}) {
       contract_week_id: out.contract_week_id,
       processing_status: out.processing_status,
       target_state_reached: out.target_state_reached,
+      reconciliation_target_state_reached: out.reconciliation_target_state_reached,
+      patch_source: out.patch_source,
+      target_patch_suppressed: out.target_patch_suppressed,
+      affected_rows_source: out.affected_rows_source,
+      current_authorised: out.authorised,
       safe_retry_allowed: out.safe_retry_allowed,
       stale_lifecycle_state: out.stale_lifecycle_state,
       recommended_response_code: out.recommended_response_code,
@@ -83919,6 +84041,7 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
       return null;
     }
   };
+  const toBool = (value) => value === true || value === 'true' || value === 'TRUE' || value === 1 || value === '1';
   const optionsObj = isPlainObject(options) ? options : {};
   const lifecycleAction = upperTrim(optionsObj.lifecycleAction || optionsObj.lifecycle_action || rpcFunctionName || 'TIMESHEET_LIFECYCLE');
   const requestedTimesheetId = trimStr(optionsObj.requestedTimesheetId || optionsObj.requested_timesheet_id || optionsObj.timesheetId || optionsObj.timesheet_id || '');
@@ -83984,7 +84107,7 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
       for (const item of value.slice(0, 20)) collectErrorStrings(item, out, depth + 1, seen);
       return;
     }
-    for (const key of ['code', 'error_code', 'errorCode', 'sqlstate', 'sql_state', 'status', 'message', 'error', 'details', 'detail', 'hint', 'body', 'responseText']) {
+    for (const key of ['code', 'error_code', 'errorCode', 'sqlstate', 'sql_state', 'status', 'message', 'error', 'details', 'detail', 'hint', 'body', 'responseText', 'upstream_response_body', 'supabase_error_message']) {
       if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
       const raw = value[key];
       const text = trimStr(raw);
@@ -83994,7 +84117,7 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
       }
       collectErrorStrings(raw, out, depth + 1, seen);
     }
-    for (const key of ['json', 'data', 'response', 'error', 'cause']) {
+    for (const key of ['json', 'data', 'response', 'error', 'cause', '_cloudtms_rpc_diagnostic']) {
       if (Object.prototype.hasOwnProperty.call(value, key)) collectErrorStrings(value[key], out, depth + 1, seen);
     }
   };
@@ -84005,9 +84128,10 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
     const joined = collected.strings.join(' | ');
     const joinedUpper = upperTrim(joined);
     const codesUpper = collected.codes.map(upperTrim).filter(Boolean);
-    const directCode = codesUpper.find(Boolean) || upperTrim(err?.code || err?.error_code || err?.json?.code || err?.json?.error_code || '');
+    const diag = isPlainObject(err?._cloudtms_rpc_diagnostic) ? err._cloudtms_rpc_diagnostic : err || {};
+    const directCode = codesUpper.find(Boolean) || upperTrim(err?.code || err?.error_code || err?.json?.code || err?.json?.error_code || diag?.supabase_error_code || '');
     const sqlstate = codesUpper.find((code) => retrySqlstates.has(code))
-      || (joinedUpper.match(/\b(40P01|55P03|40001)\b/) || [])[1]
+      || (joinedUpper.match(/\b(40P01|55P03|40001|57014)\b/) || [])[1]
       || '';
     const businessCode = codesUpper.find((code) => businessFailureCodes.has(code))
       || Array.from(businessFailureCodes).find((code) => joinedUpper.includes(code))
@@ -84015,17 +84139,60 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
     const controlledLockTimeout = codesUpper.includes('LOCK_TIMEOUT') || directCode === 'LOCK_TIMEOUT' || /\bLOCK_TIMEOUT\b/.test(joinedUpper);
     const lockText = /DEADLOCK DETECTED|COULD NOT OBTAIN LOCK|LOCK NOT AVAILABLE|LOCK TIMEOUT|LOCK_TIMEOUT/.test(joinedUpper);
     const serializationText = /SERIALI[ZS]ATION FAILURE|COULD NOT SERIALI[ZS]E ACCESS/.test(joinedUpper);
-    const retryable = !businessCode && (retrySqlstates.has(sqlstate) || controlledLockTimeout || lockText || serializationText);
-    const message = firstString(err?.json?.message, err?.json?.error, err?.message, joined, 'Transient lifecycle conflict');
+    const configuredTimeoutMs = Number(err?.configured_timeout_ms || diag?.configured_timeout_ms || rpcOptions.timeoutMs || 0) || null;
+    const actualAttemptElapsedMs = Number(err?.actual_attempt_elapsed_ms || diag?.actual_attempt_elapsed_ms || 0) || null;
+    const totalElapsedMs = Number(err?.total_elapsed_ms || diag?.total_elapsed_ms || 0) || null;
+    const upstreamHttpStatus = Number(err?.upstream_http_status || diag?.upstream_http_status || err?.status || 0) || null;
+    const abortControllerFired = toBool(err?.abort_controller_fired ?? diag?.abort_controller_fired);
+    const abortSignalReason = firstString(err?.abort_signal_reason, diag?.abort_signal_reason) || null;
+    const didRpcRequestStart = toBool(err?.did_rpc_request_start ?? diag?.did_rpc_request_start);
+    const didRpcResponseArrive = toBool(err?.did_rpc_response_arrive ?? diag?.did_rpc_response_arrive);
+    const upstreamResponseBody = firstString(err?.upstream_response_body, diag?.upstream_response_body, err?.body) || null;
+    const supabaseErrorCode = firstString(err?.supabase_error_code, diag?.supabase_error_code, err?.json?.code, err?.json?.error_code) || null;
+    const supabaseErrorMessage = firstString(err?.supabase_error_message, diag?.supabase_error_message, err?.json?.message, err?.json?.error) || null;
+    const wrapperErrorClass = firstString(err?.wrapper_error_class, diag?.wrapper_error_class) || null;
+    const isLocalTimeout = toBool(err?.is_local_timeout ?? diag?.is_local_timeout) || wrapperErrorClass === 'LOCAL_ABORT_TIMEOUT';
+    const isUpstream408 = toBool(err?.is_upstream_408 ?? diag?.is_upstream_408) || upstreamHttpStatus === 408;
+    const isPostgrestTimeout = toBool(err?.is_postgrest_timeout ?? diag?.is_postgrest_timeout) || /57014|STATEMENT TIMEOUT|CANCELING STATEMENT DUE TO STATEMENT TIMEOUT|POSTGREST|PGRST/.test(joinedUpper);
+    const isFetchAbort = toBool(err?.is_fetch_abort ?? diag?.is_fetch_abort) || String(err?.name || '').toUpperCase() === 'ABORTERROR';
+    const isNetworkError = toBool(err?.is_network_error ?? diag?.is_network_error) || /FETCH FAILED|NETWORK|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|SOCKET|CONNECTION/.test(joinedUpper);
+    const isGatewayTimeout = [408, 504, 524].includes(upstreamHttpStatus) || /GATEWAY TIMEOUT|WORKER TIMEOUT|REQUEST TIMEOUT|REQUEST TIMED OUT/.test(joinedUpper);
+    const transportRetryable = isLocalTimeout || isUpstream408 || isPostgrestTimeout || isFetchAbort || isNetworkError || isGatewayTimeout;
+    const retryable = !businessCode && (retrySqlstates.has(sqlstate) || sqlstate === '57014' || controlledLockTimeout || lockText || serializationText || transportRetryable);
+    const retryDecisionReason = businessCode
+      ? 'BUSINESS_RULE_ERROR'
+      : (retryable ? 'RETRYABLE_TRANSIENT_OR_TIMEOUT' : 'NON_RETRYABLE_UNCLASSIFIED');
+    const message = firstString(err?.json?.message, err?.json?.error, err?.message, supabaseErrorMessage, joined, 'Transient lifecycle conflict');
     return {
-      code: sqlstate || directCode || (controlledLockTimeout ? 'LOCK_TIMEOUT' : ''),
+      code: sqlstate || directCode || supabaseErrorCode || (controlledLockTimeout ? 'LOCK_TIMEOUT' : ''),
       sqlstate: sqlstate || null,
       business_code: businessCode || null,
       controlled_lock_timeout: controlledLockTimeout,
       retryable,
       message,
       raw_code: directCode || null,
-      raw_joined: joined
+      raw_joined: joined,
+      configured_timeout_ms: configuredTimeoutMs,
+      actual_attempt_elapsed_ms: actualAttemptElapsedMs,
+      total_elapsed_ms: totalElapsedMs,
+      abort_controller_fired: abortControllerFired,
+      abort_signal_reason: abortSignalReason,
+      did_rpc_request_start: didRpcRequestStart,
+      did_rpc_response_arrive: didRpcResponseArrive,
+      upstream_http_status: upstreamHttpStatus,
+      upstream_response_body: upstreamResponseBody,
+      supabase_error_code: supabaseErrorCode,
+      supabase_error_message: supabaseErrorMessage,
+      cloudflare_worker_elapsed_ms: Number(err?.cloudflare_worker_elapsed_ms || diag?.cloudflare_worker_elapsed_ms || 0) || null,
+      wrapper_error_class: wrapperErrorClass,
+      is_local_timeout: isLocalTimeout,
+      is_upstream_408: isUpstream408,
+      is_postgrest_timeout: isPostgrestTimeout,
+      is_fetch_abort: isFetchAbort,
+      is_network_error: isNetworkError,
+      is_business_rule_error: !!businessCode,
+      is_retryable: retryable,
+      retry_decision_reason: retryDecisionReason
     };
   };
 
@@ -84056,6 +84223,37 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
     };
   };
 
+  const diagnosticFields = (descriptor, attempt, attemptStartedAtMs, retrying, nextDelayMs, retryBudgetExhausted, reasonOverride = null) => ({
+    classification_event: 'LIFECYCLE_RPC_FAILURE_CLASSIFIED',
+    configured_timeout_ms: descriptor?.configured_timeout_ms || Number(rpcOptions.timeoutMs || 0) || null,
+    actual_attempt_elapsed_ms: descriptor?.actual_attempt_elapsed_ms || Math.max(0, nowMs() - attemptStartedAtMs),
+    total_elapsed_ms: descriptor?.total_elapsed_ms || Math.max(0, nowMs() - startedAtMs),
+    retry_budget_ms: retryBudgetMs,
+    max_attempts: maxAttempts,
+    attempt_number: attempt,
+    abort_controller_fired: descriptor?.abort_controller_fired === true,
+    abort_signal_reason: descriptor?.abort_signal_reason || null,
+    did_rpc_request_start: descriptor?.did_rpc_request_start === true,
+    did_rpc_response_arrive: descriptor?.did_rpc_response_arrive === true,
+    upstream_http_status: descriptor?.upstream_http_status || null,
+    upstream_response_body: descriptor?.upstream_response_body || null,
+    supabase_error_code: descriptor?.supabase_error_code || null,
+    supabase_error_message: descriptor?.supabase_error_message || null,
+    cloudflare_worker_elapsed_ms: descriptor?.cloudflare_worker_elapsed_ms || null,
+    wrapper_error_class: descriptor?.wrapper_error_class || null,
+    is_local_timeout: descriptor?.is_local_timeout === true,
+    is_upstream_408: descriptor?.is_upstream_408 === true,
+    is_postgrest_timeout: descriptor?.is_postgrest_timeout === true,
+    is_fetch_abort: descriptor?.is_fetch_abort === true,
+    is_network_error: descriptor?.is_network_error === true,
+    is_business_rule_error: descriptor?.is_business_rule_error === true,
+    is_retryable: descriptor?.retryable === true,
+    retry_decision_reason: reasonOverride || descriptor?.retry_decision_reason || null,
+    retry_budget_exhausted: retryBudgetExhausted === true,
+    retrying: retrying === true,
+    next_delay_ms: retrying ? nextDelayMs : null
+  });
+
   const logAttempt = (payload = {}, severity = 'info') => {
     try {
       const body = {
@@ -84080,13 +84278,31 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
     } catch {}
   };
 
-  const makeControlledTransientError = (descriptor, attempt) => {
-    const friendlyMessage = 'The timesheet was being updated at the same time. Please try again.';
+  const makeControlledTransientError = (descriptor, attempt, reason = 'RETRY_EXHAUSTED') => {
+    const friendlyMessage = 'The timesheet was being updated at the same time. The latest timesheet details are now shown.';
     const error = new Error(friendlyMessage);
     error.name = 'TimesheetLifecycleTransientConflict';
     error.status = 409;
     error.code = 'TRANSIENT_LIFECYCLE_CONFLICT';
     error.error_code = 'TRANSIENT_LIFECYCLE_CONFLICT';
+    const failureClassification = {
+      configured_timeout_ms: descriptor?.configured_timeout_ms || Number(rpcOptions.timeoutMs || 0) || null,
+      actual_attempt_elapsed_ms: descriptor?.actual_attempt_elapsed_ms || null,
+      total_elapsed_ms: Math.max(0, nowMs() - startedAtMs),
+      retry_budget_ms: retryBudgetMs,
+      max_attempts: maxAttempts,
+      attempt_number: attempt,
+      upstream_http_status: descriptor?.upstream_http_status || null,
+      wrapper_error_class: descriptor?.wrapper_error_class || null,
+      is_local_timeout: descriptor?.is_local_timeout === true,
+      is_upstream_408: descriptor?.is_upstream_408 === true,
+      is_postgrest_timeout: descriptor?.is_postgrest_timeout === true,
+      is_fetch_abort: descriptor?.is_fetch_abort === true,
+      is_network_error: descriptor?.is_network_error === true,
+      is_business_rule_error: descriptor?.is_business_rule_error === true,
+      is_retryable: descriptor?.retryable === true,
+      retry_decision_reason: reason
+    };
     error.details = {
       error_code: 'TRANSIENT_LIFECYCLE_CONFLICT',
       retry_exhausted: true,
@@ -84095,7 +84311,8 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
       last_sqlstate: descriptor?.sqlstate || descriptor?.code || null,
       requested_timesheet_id: requestedTimesheetId || null,
       expected_timesheet_id: expectedTimesheetId || null,
-      current_timesheet_id: currentTimesheetId || null
+      current_timesheet_id: currentTimesheetId || null,
+      failure_classification: failureClassification
     };
     error.json = {
       ok: false,
@@ -84111,7 +84328,8 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
       requested_timesheet_id: requestedTimesheetId || null,
       expected_timesheet_id: expectedTimesheetId || null,
       current_timesheet_id: currentTimesheetId || null,
-      refresh_required: true
+      refresh_required: true,
+      failure_classification: failureClassification
     };
     return error;
   };
@@ -84129,9 +84347,14 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
         const elapsedMs = Math.max(0, nowMs() - startedAtMs);
         const nextDelayBaseMs = retryDelaysMs[Math.min(attempt, retryDelaysMs.length - 1)] || 0;
         const nextDelayMs = Math.max(0, Math.trunc(nextDelayBaseMs + (jitterMs ? Math.floor(Math.random() * jitterMs) : 0)));
+        const budgetExhausted = (elapsedMs + nextDelayMs) > retryBudgetMs;
+        const maxAttemptsReached = attempt >= maxAttempts;
         const retrying = payloadDescriptor.retryable === true
-          && attempt < maxAttempts
-          && (elapsedMs + nextDelayMs) <= retryBudgetMs;
+          && !maxAttemptsReached
+          && !budgetExhausted;
+        const decisionReason = payloadDescriptor.retryable !== true
+          ? payloadDescriptor.retry_decision_reason
+          : (retrying ? 'RETRYING' : (maxAttemptsReached ? 'MAX_ATTEMPTS_REACHED' : 'RETRY_BUDGET_EXHAUSTED'));
 
         logAttempt({
           event: retrying ? 'transient_payload_retrying' : (payloadDescriptor.retryable === true ? 'transient_payload_giving_up' : 'non_retryable_payload_returned'),
@@ -84144,14 +84367,12 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
           message: payloadDescriptor.message || null,
           payload_failure: true,
           retryable: payloadDescriptor.retryable === true,
-          retrying,
-          next_delay_ms: retrying ? nextDelayMs : null,
-          retry_budget_exhausted: payloadDescriptor.retryable === true && !retrying,
-          transient_conflict_controlled: payloadDescriptor.retryable === true && !retrying
+          transient_conflict_controlled: payloadDescriptor.retryable === true && !retrying,
+          ...diagnosticFields(payloadDescriptor, attempt, attemptStartedAtMs, retrying, nextDelayMs, budgetExhausted, decisionReason)
         }, retrying || payloadDescriptor.retryable === true ? 'warn' : 'info');
 
         if (!retrying) {
-          if (payloadDescriptor.retryable === true) throw makeControlledTransientError(payloadDescriptor, attempt);
+          if (payloadDescriptor.retryable === true) throw makeControlledTransientError(payloadDescriptor, attempt, decisionReason);
           return result;
         }
         if (nextDelayMs > 0) await sleepMs(nextDelayMs);
@@ -84174,9 +84395,14 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
       const elapsedMs = Math.max(0, nowMs() - startedAtMs);
       const nextDelayBaseMs = retryDelaysMs[Math.min(attempt, retryDelaysMs.length - 1)] || 0;
       const nextDelayMs = Math.max(0, Math.trunc(nextDelayBaseMs + (jitterMs ? Math.floor(Math.random() * jitterMs) : 0)));
+      const budgetExhausted = (elapsedMs + nextDelayMs) > retryBudgetMs;
+      const maxAttemptsReached = attempt >= maxAttempts;
       const retrying = descriptor.retryable === true
-        && attempt < maxAttempts
-        && (elapsedMs + nextDelayMs) <= retryBudgetMs;
+        && !maxAttemptsReached
+        && !budgetExhausted;
+      const decisionReason = descriptor.retryable !== true
+        ? descriptor.retry_decision_reason
+        : (retrying ? 'RETRYING' : (maxAttemptsReached ? 'MAX_ATTEMPTS_REACHED' : 'RETRY_BUDGET_EXHAUSTED'));
 
       logAttempt({
         event: retrying ? 'transient_failure_retrying' : 'failure_giving_up',
@@ -84188,21 +84414,19 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
         business_code: descriptor.business_code || null,
         message: descriptor.message || null,
         retryable: descriptor.retryable === true,
-        retrying,
-        next_delay_ms: retrying ? nextDelayMs : null,
-        retry_budget_exhausted: descriptor.retryable === true && !retrying,
-        transient_conflict_controlled: descriptor.retryable === true && !retrying
+        transient_conflict_controlled: descriptor.retryable === true && !retrying,
+        ...diagnosticFields(descriptor, attempt, attemptStartedAtMs, retrying, nextDelayMs, budgetExhausted, decisionReason)
       }, retrying ? 'warn' : (descriptor.retryable === true ? 'warn' : 'info'));
 
       if (!retrying) {
-        if (descriptor.retryable === true) throw makeControlledTransientError(descriptor, attempt);
+        if (descriptor.retryable === true) throw makeControlledTransientError(descriptor, attempt, decisionReason);
         throw err;
       }
       if (nextDelayMs > 0) await sleepMs(nextDelayMs);
     }
   }
 
-  throw makeControlledTransientError(lastDescriptor || describeError(lastError), maxAttempts);
+  throw makeControlledTransientError(lastDescriptor || describeError(lastError), maxAttempts, 'MAX_ATTEMPTS_REACHED');
 }
 
 
@@ -154807,6 +155031,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   return { picked: lease.length, ok, fail, write: wr };
 }
 
+
 async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null) {
   const enc = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
@@ -154974,6 +155199,24 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   const isUnknownLifecycleOutcomeError = (err, parsed = null) => {
     const status = Number(parsed?.status || err?.status || 0) || 0;
     const name = firstString(err?.name, parsed?.payload?.name);
+    const payload = (parsed?.payload && typeof parsed.payload === 'object' && !Array.isArray(parsed.payload)) ? parsed.payload : {};
+    const detailJson = (parsed?.detailJson && typeof parsed.detailJson === 'object' && !Array.isArray(parsed.detailJson)) ? parsed.detailJson : {};
+    const failureClassification = (payload.failure_classification && typeof payload.failure_classification === 'object' && !Array.isArray(payload.failure_classification))
+      ? payload.failure_classification
+      : ((detailJson.failure_classification && typeof detailJson.failure_classification === 'object' && !Array.isArray(detailJson.failure_classification)) ? detailJson.failure_classification : {});
+    const classifierBool = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(String(value == null ? '' : value).trim().toLowerCase());
+    const transientCode = firstString(parsed?.code, payload.error_code, payload.code, detailJson.error_code).toUpperCase();
+    const classificationRetryDecision = firstString(failureClassification.retry_decision_reason).toUpperCase();
+    const classificationHttpStatus = Number(failureClassification.upstream_http_status || 0) || 0;
+    const controlledTransientUnknownOutcome = transientCode === 'TRANSIENT_LIFECYCLE_CONFLICT' && (
+      classifierBool(failureClassification.is_local_timeout) ||
+      classifierBool(failureClassification.is_upstream_408) ||
+      classifierBool(failureClassification.is_postgrest_timeout) ||
+      classifierBool(failureClassification.is_fetch_abort) ||
+      classifierBool(failureClassification.is_network_error) ||
+      [408, 504, 524].includes(classificationHttpStatus) ||
+      (classifierBool(failureClassification.is_retryable) && ['RETRY_BUDGET_EXHAUSTED', 'MAX_ATTEMPTS_REACHED', 'RETRYABLE_TRANSIENT_OR_TIMEOUT'].includes(classificationRetryDecision))
+    );
     const message = [
       parsed?.message,
       parsed?.code,
@@ -154982,7 +155225,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       err?.body,
       err?.name
     ].map((value) => String(value == null ? '' : value)).join(' ').toLowerCase();
-    return [408, 504, 524].includes(status) || String(name || '').toLowerCase() === 'aborterror' || /timeout after|rpc timesheet_authorise_generic_atomic failed 408|rpc timesheet_authorise_generic_atomic timed out|fetch timeout|network timeout|gateway timeout|worker timeout|aborted|request timed out|request timeout/.test(message);
+    return controlledTransientUnknownOutcome || [408, 504, 524].includes(status) || String(name || '').toLowerCase() === 'aborterror' || /timeout after|rpc timesheet_authorise_generic_atomic failed 408|rpc timesheet_authorise_generic_atomic timed out|fetch timeout|network timeout|gateway timeout|worker timeout|aborted|request timed out|request timeout/.test(message);
   };
   const lifecycleOutcomeMessage = (code) => {
     const normalized = firstString(code).toUpperCase();
@@ -154990,9 +155233,9 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       return 'This timesheet changed while the update was being processed. The latest timesheet details are now shown.';
     }
     if (normalized === 'UNKNOWN_LIFECYCLE_OUTCOME') {
-      return 'We could not confirm whether this timesheet update completed. Please close this message and try again once the timesheet details have refreshed.';
+      return 'We could not confirm whether this timesheet update completed. The latest timesheet details are now shown. Close this message to continue.';
     }
-    return 'This timesheet could not be authorised. The latest timesheet details are now shown. Please use the Authorise button again if the action is still needed.';
+    return 'This timesheet could not be authorised. The latest timesheet details are now shown. Close this message to continue.';
   };
   const lifecycleOutcomeResponse = (reconciliation, parsed = {}, options = {}) => {
     const rec = (reconciliation && typeof reconciliation === 'object') ? reconciliation : {};
@@ -155003,6 +155246,10 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     const finalTimesheetId = firstString(rec.current_timesheet_id, rec.timesheet_id, currentTimesheetId, expectedTimesheetId, requestedTimesheetId);
     const sig = firstString(rec.backend_row_signature, rec.row_signature, rec.current_row_signature);
     const message = lifecycleOutcomeMessage(code);
+    const patchSource = firstString(rec.patch_source).toUpperCase();
+    const unsafeTargetPatch = rec.target_state_reached !== true && patchSource === 'TARGET_STATE';
+    const safeLifecyclePatch = unsafeTargetPatch ? null : ((rec.lifecycle_patch && typeof rec.lifecycle_patch === 'object') ? rec.lifecycle_patch : null);
+    const safeAffectedRows = unsafeTargetPatch ? affectedRowsFor(rec, finalTimesheetId) : (Array.isArray(rec.affected_rows) && rec.affected_rows.length ? rec.affected_rows : affectedRowsFor(rec, finalTimesheetId));
     return withJson(409, {
       ok: false,
       success: false,
@@ -155033,8 +155280,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       mutation_row_signature: sig || null,
       row_signature: sig || null,
       expected_row_signature: sig || expectedRowSignature || null,
-      lifecycle_patch: (rec.lifecycle_patch && typeof rec.lifecycle_patch === 'object') ? rec.lifecycle_patch : null,
-      affected_rows: Array.isArray(rec.affected_rows) && rec.affected_rows.length ? rec.affected_rows : affectedRowsFor(rec, finalTimesheetId),
+      lifecycle_patch: safeLifecyclePatch,
+      affected_rows: safeAffectedRows,
       refresh_hints: (rec.refresh_hints && typeof rec.refresh_hints === 'object') ? rec.refresh_hints : {},
       cache_invalidation_hints: (rec.cache_invalidation_hints && typeof rec.cache_invalidation_hints === 'object') ? rec.cache_invalidation_hints : {},
       permission_state_patch_complete: rec.permission_state_patch_complete === true,
@@ -155042,6 +155289,14 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       immediate_lifecycle_patch_available: rec.immediate_lifecycle_patch_available === true,
       requires_affected_row_refresh: rec.requires_affected_row_refresh !== false,
       requires_full_details_refresh: rec.requires_full_details_refresh !== false,
+      reconciliation_target_state_reached: rec.reconciliation_target_state_reached === true,
+      reconciliation_current_processing_status: firstString(rec.reconciliation_current_processing_status, rec.processing_status) || null,
+      reconciliation_current_authorised_at_server_present: rec.reconciliation_current_authorised_at_server_present === true,
+      reconciliation_current_revoked_at_present: rec.reconciliation_current_revoked_at_present === true,
+      patch_source: firstString(rec.patch_source) || (safeLifecyclePatch ? 'CURRENT_STATE' : 'OMITTED'),
+      target_patch_suppressed: rec.target_patch_suppressed === true || unsafeTargetPatch,
+      suppression_reason: firstString(rec.suppression_reason) || (unsafeTargetPatch ? 'TARGET_STATE_NOT_REACHED' : null),
+      affected_rows_source: firstString(rec.affected_rows_source) || (safeAffectedRows.length ? 'CURRENT_STATE' : 'OMITTED'),
       source: 'lifecycle_timeout_reconciliation'
     });
   };
@@ -155086,7 +155341,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       return withJson(409, {
         error: 'TRANSIENT_LIFECYCLE_CONFLICT',
         error_code: 'TRANSIENT_LIFECYCLE_CONFLICT',
-        message: 'This timesheet could not be authorised because it was being updated at the same time. The latest timesheet details are now shown. Please use the Authorise button again if the action is still needed.',
+        message: 'This timesheet could not be authorised because it was being updated at the same time. The latest timesheet details are now shown. Close this message to continue.',
         transient: true,
         retry_exhausted: true,
         current_timesheet_id: currentTimesheetId || null,
@@ -155184,7 +155439,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     return withJson(409, {
       error: 'UNKNOWN_LIFECYCLE_OUTCOME',
       error_code: 'UNKNOWN_LIFECYCLE_OUTCOME',
-      message: 'This timesheet could not be authorised. The latest timesheet details are now shown. Please use the Authorise button again if the action is still needed.',
+      message: 'This timesheet could not be authorised. The latest timesheet details are now shown. Close this message to continue.',
       current_timesheet_id: currentTimesheetId || null,
       refresh_required: true,
       affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
