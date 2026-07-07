@@ -15717,8 +15717,6 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   }
 }
 
-
-
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -16161,7 +16159,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       scheduled: safeResult.scheduled === true,
       wait_until_used: safeResult.wait_until_used === true,
       fire_and_forget: safeResult.scheduled === true && safeResult.wait_until_used !== true,
-      immediate: true
+      immediate: safeResult.immediate === false ? false : true
     }, severity);
     return result;
   };
@@ -16201,6 +16199,33 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       wait_until_used: false,
       continuation_scheduled: false
     }, 'WORKBENCH_DRAIN_NUDGE_FAILED', 'warn');
+  }
+
+  if (lifecycleOriginNudge) {
+    return returnNudgeResult({
+      ...commonMetadata,
+      ok: true,
+      scheduled: false,
+      already_running: false,
+      skipped: true,
+      deferred_to_cron: true,
+      lifecycle_origin_deferred_to_cron: true,
+      immediate: false,
+      immediate_worker_rpc_suppressed: true,
+      wait_until_used: false,
+      continuation_scheduled: false,
+      auto_continuation_scheduled: false,
+      coalesced_into_active_drain: false,
+      coalesced_final_check_performed: false,
+      coalesced_final_check_skipped: true,
+      coalesced_final_check_skip_reason: 'LIFECYCLE_ORIGIN_DEFERRED_TO_CRON',
+      lock_contention_retry_performed: false,
+      source_build_lane_suppressed: true,
+      durable_cron_fallback: true,
+      cron_remains_recovery_fallback: true,
+      code: 'BANKING_PAY_WORKBENCH_LIFECYCLE_NUDGE_DEFERRED_TO_CRON',
+      budget_resolved_by: 'scheduled_banking_pay_workbench_cron'
+    }, 'WORKBENCH_DRAIN_NUDGE_DEFERRED_TO_CRON');
   }
 
   const root = globalThis || {};
@@ -17137,6 +17162,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     budget_resolved_by: 'bankingPayWorkbenchCronTick'
   }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
 }
+
 
 
 

@@ -27549,6 +27549,17 @@ DECLARE
   v_live_source_change_seq bigint := 0;
   v_delta_superseded_by_live_source_guard boolean := false;
   v_delta_superseded_projection_runs integer := 0;
+  v_delta_projection_mode text := 'DELTA';
+  v_delta_projection_class text := 'UNKNOWN';
+  v_delta_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
+  v_delta_lifecycle_context text := NULL::text;
+  v_delta_is_normal_targeted_lifecycle boolean := false;
+  v_delta_recovery_enqueue_result jsonb := '{}'::jsonb;
+  v_delta_recovery_job_id_text text := NULL::text;
+  v_delta_recovery_job_id uuid := NULL::uuid;
+  v_delta_recovery_source_change_seq bigint := 0;
+  v_delta_recovery_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_delta_recovery_linked_timesheet_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   IF p_job_id IS NULL THEN
     RAISE EXCEPTION 'job_id is required';
@@ -27786,6 +27797,84 @@ BEGIN
       END;
     END IF;
 
+    SELECT COALESCE(array_agg(DISTINCT parsed_target.timesheet_id ORDER BY parsed_target.timesheet_id), ARRAY[]::uuid[])
+    INTO v_delta_recovery_targeted_timesheet_ids
+    FROM (
+      SELECT NULLIF(BTRIM(target_value.value), '')::uuid AS timesheet_id
+      FROM jsonb_array_elements_text(COALESCE(v_delta_targeted_timesheet_ids_json, '[]'::jsonb)) AS target_value(value)
+      WHERE NULLIF(BTRIM(target_value.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ) AS parsed_target;
+
+    SELECT COALESCE(array_agg(DISTINCT parsed_linked.timesheet_id ORDER BY parsed_linked.timesheet_id), ARRAY[]::uuid[])
+    INTO v_delta_recovery_linked_timesheet_ids
+    FROM (
+      SELECT NULLIF(BTRIM(linked_value.value), '')::uuid AS timesheet_id
+      FROM jsonb_array_elements_text(COALESCE(v_delta_linked_timesheet_ids_json, '[]'::jsonb)) AS linked_value(value)
+      WHERE NULLIF(BTRIM(linked_value.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ) AS parsed_linked;
+
+    v_delta_projection_mode := COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+      v_result_json->>'projection_mode',
+      v_job_row.payload_json->>'projection_mode',
+      v_result_json->>'resolved_mode',
+      v_job_row.payload_json->>'resolved_mode',
+      'DELTA'
+    ))), ''), 'DELTA');
+
+    v_delta_projection_class := COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+      v_result_json->>'projection_class',
+      v_job_row.payload_json->>'projection_class',
+      'UNKNOWN'
+    ))), ''), 'UNKNOWN');
+
+    v_delta_refresh_scope_kind := COALESCE(NULLIF(UPPER(BTRIM(COALESCE(
+      v_result_json->>'refresh_scope_kind',
+      v_job_row.payload_json->>'refresh_scope_kind',
+      ''
+    ))), ''), CASE
+      WHEN COALESCE(array_length(v_delta_recovery_targeted_timesheet_ids, 1), 0) > 0
+        OR COALESCE(array_length(v_delta_recovery_linked_timesheet_ids, 1), 0) > 0
+      THEN 'TARGETED_TIMESHEETS'
+      ELSE 'CANDIDATE_FULL_LIVE'
+    END);
+
+    v_delta_lifecycle_context := LOWER(BTRIM(COALESCE(
+      v_result_json->>'lifecycle_mutation_context',
+      v_job_row.payload_json->>'lifecycle_mutation_context',
+      v_result_json->>'mutation_context',
+      v_job_row.payload_json->>'mutation_context',
+      v_result_json->>'lifecycle_context',
+      v_job_row.payload_json->>'lifecycle_context',
+      v_result_json->>'trigger_source',
+      v_job_row.payload_json->>'trigger_source',
+      v_result_json->>'reason',
+      v_job_row.payload_json->>'reason_latest',
+      v_job_row.payload_json->>'reason',
+      ''
+    )));
+
+    v_delta_is_normal_targeted_lifecycle := v_delta_projection_mode = 'DELTA'
+      AND v_delta_projection_class = 'NORMAL_TIMESHEET'
+      AND v_delta_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+      AND COALESCE(array_length(v_delta_recovery_targeted_timesheet_ids, 1), 0) > 0
+      AND COALESCE(v_delta_shadow_compare_failed, false) IS NOT TRUE
+      AND (
+        COALESCE(v_delta_fallback_required, false) IS NOT TRUE
+        OR UPPER(BTRIM(COALESCE(v_delta_fallback_reason, ''))) = 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED'
+        OR LOWER(BTRIM(COALESCE(v_result_json->>'identical_cursor_self_reuse_suppressed', v_result_json->>'continuation_not_enqueued', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      )
+      AND LOWER(BTRIM(COALESCE(v_result_json->>'force_legacy', v_job_row.payload_json->>'force_legacy', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND LOWER(BTRIM(COALESCE(v_result_json->>'force_broad_legacy', v_job_row.payload_json->>'force_broad_legacy', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND LOWER(BTRIM(COALESCE(v_result_json->>'source_build_required', v_job_row.payload_json->>'source_build_required', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND LOWER(BTRIM(COALESCE(v_result_json->>'ordinary_timesheet_edit_save_no_dirty', v_job_row.payload_json->>'ordinary_timesheet_edit_save_no_dirty', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND (
+        LOWER(BTRIM(COALESCE(v_result_json->>'authorise_boundary_changed', v_job_row.payload_json->>'authorise_boundary_changed', v_result_json->>'timesheet_authorise_boundary_changed', v_job_row.payload_json->>'timesheet_authorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR v_delta_lifecycle_context IN ('timesheet_authorise', 'authorise_timesheet', 'timesheet_unauthorise', 'unauthorise_timesheet')
+        OR LOWER(COALESCE(v_result_json->>'reason', v_job_row.payload_json->>'reason_latest', v_job_row.payload_json->>'reason', '')) LIKE '%authorise%'
+        OR LOWER(COALESCE(v_result_json->>'reason', v_job_row.payload_json->>'reason_latest', v_job_row.payload_json->>'reason', '')) LIKE '%unauthorise%'
+      );
+
     v_delta_next_cursor_json := COALESCE(v_delta_next_cursor_json, '{}'::jsonb)
       || jsonb_strip_nulls(jsonb_build_object(
         'projection_run_id', v_delta_projection_run_id_text,
@@ -27912,7 +28001,247 @@ BEGIN
           v_live_source_change_seq := COALESCE(v_live_source_change_seq, 0);
         END IF;
 
-        IF v_job_row.candidate_id IS NOT NULL
+        IF v_delta_is_normal_targeted_lifecycle IS TRUE THEN
+          v_delta_recovery_source_change_seq := GREATEST(COALESCE(v_live_source_change_seq, 0), COALESCE(v_source_change_seq, 0));
+          v_delta_more_due := false;
+          v_delta_fallback_required := false;
+          v_delta_refresh_complete := true;
+          v_delta_fallback_reason := 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED';
+          v_delta_superseded_by_live_source_guard := COALESCE(v_live_source_change_seq, 0) > COALESCE(v_source_change_seq, 0);
+
+          v_result_json := jsonb_strip_nulls(
+            COALESCE(v_result_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'identical_cursor_self_reuse_suppressed', true,
+              'delta_identical_cursor_self_reuse_no_source_build', true,
+              'fallback_required', false,
+              'fallback_reason', v_delta_fallback_reason,
+              'delta_refresh_complete', true,
+              'more_due', false,
+              'has_more', false,
+              'source_change_seq', COALESCE(v_source_change_seq, 0),
+              'latest_source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+              'live_source_change_seq', COALESCE(v_live_source_change_seq, 0),
+              'stop_reason', 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED_NO_SOURCE_BUILD_SUCCESSOR_REQUIRED',
+              'next_recommended_action', 'DELTA_REFRESH_CHUNK'
+            )
+          );
+
+          IF v_delta_projection_run_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+            UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
+            SET status = 'FAILED',
+                fallback_required = false,
+                fallback_reason = v_delta_fallback_reason,
+                diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
+                  || jsonb_build_object(
+                    'identical_cursor_self_reuse_suppressed', true,
+                    'delta_identical_cursor_self_reuse_no_source_build', true,
+                    'successor_required', true,
+                    'continuation_result', COALESCE(v_continuation_result, '{}'::jsonb),
+                    'source_change_seq', COALESCE(v_source_change_seq, 0),
+                    'latest_source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+                    'live_source_change_seq', COALESCE(v_live_source_change_seq, 0),
+                    'terminalised_by', 'pay_workbench_complete_job',
+                    'terminalised_at_utc', v_now::text
+                  ),
+                updated_at_utc = v_now,
+                completed_at_utc = v_now
+            WHERE projection_run_update.id = v_delta_projection_run_id_text::uuid
+              AND projection_run_update.session_id = v_job_row.session_id
+              AND projection_run_update.candidate_id = v_job_row.candidate_id
+              AND UPPER(BTRIM(COALESCE(projection_run_update.status, ''))) = 'RUNNING';
+          END IF;
+
+          v_delta_recovery_enqueue_result := public.pay_workbench_enqueue_candidate_refresh(
+            p_snapshot_run_id => v_session_row.source_snapshot_run_id,
+            p_candidate_id => v_job_row.candidate_id,
+            p_reason => 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED_DELTA_SUCCESSOR',
+            p_actor_user_id => v_session_row.actor_user_id,
+            p_payload_json => jsonb_strip_nulls(
+              (COALESCE(v_job_row.payload_json, '{}'::jsonb) - ARRAY[
+                'cursor',
+                'cursor_json',
+                'next_cursor',
+                'next_cursor_json',
+                'source_cursor',
+                'write_cursor_json',
+                'candidate_cursor',
+                'cursor_token',
+                'has_cursor',
+                'continuation_reason',
+                'source_job_id',
+                'continuation_source_job_id',
+                'bounded_continuation_source_job_id',
+                'parent_job_id',
+                'next_phase',
+                'write_phase',
+                'source_result_summary',
+                'source_result_has_more',
+                'source_result_next_cursor_present',
+                'projection_run_id'
+              ]::text[])
+              || jsonb_build_object(
+                'session_id', v_job_row.session_id::text,
+                'source_session_id', v_job_row.session_id::text,
+                'workbench_session_id', v_job_row.session_id::text,
+                'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+                'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+                'session_version', COALESCE(v_session_row.version, 0),
+                'session_signature', v_session_row.session_signature,
+                'force_legacy', false,
+                'force_broad_legacy', false,
+                'fallback_from_delta', false,
+                'fallback_reason', v_delta_fallback_reason,
+                'projection_mode', 'DELTA',
+                'projection_class', 'NORMAL_TIMESHEET',
+                'refresh_scope_kind', 'TARGETED_TIMESHEETS',
+                'phase', 'INIT_PREFLIGHT',
+                'cursor_json', '{}'::jsonb,
+                'source_build_required', false,
+                'line_work_required', false,
+                'delta_refresh_required', true,
+                'targeted_timesheet_ids', COALESCE(v_delta_targeted_timesheet_ids_json, '[]'::jsonb),
+                'linked_timesheet_ids', COALESCE(v_delta_linked_timesheet_ids_json, '[]'::jsonb),
+                'source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+                'source_change_sequence', COALESCE(v_delta_recovery_source_change_seq, 0),
+                'latest_source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+                'identical_cursor_self_reuse_suppressed', true,
+                'delta_identical_cursor_self_reuse_no_source_build', true,
+                'successor_for_job_id', p_job_id::text,
+                'previous_projection_run_id', v_delta_projection_run_id_text,
+                'authorise_boundary_changed', LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on'),
+                'unauthorise_boundary_changed', LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+                'lifecycle_mutation_context', CASE
+                  WHEN LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+                    OR v_delta_lifecycle_context IN ('timesheet_unauthorise', 'unauthorise_timesheet')
+                    OR LOWER(COALESCE(v_result_json->>'reason', v_job_row.payload_json->>'reason_latest', v_job_row.payload_json->>'reason', '')) LIKE '%unauthorise%'
+                  THEN 'timesheet_unauthorise'
+                  ELSE 'timesheet_authorise'
+                END,
+                'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+                'policy_x_dirtying_only', true,
+                'economic_truth_mutation_allowed', false
+              )
+            )
+          );
+
+          v_delta_recovery_job_id_text := NULLIF(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'job_id', '')), '');
+
+          IF v_delta_recovery_job_id_text = p_job_id::text THEN
+            v_delta_recovery_job_id_text := NULL;
+          END IF;
+
+          IF v_delta_recovery_job_id_text IS NULL THEN
+            v_delta_recovery_enqueue_result := public.pay_workbench_dirty_event_enqueue(
+              p_job_type => 'WORKBENCH_CANDIDATE_DIRTY_APPLY',
+              p_scope_kind => 'CANDIDATE',
+              p_scope_id => v_job_row.candidate_id::text,
+              p_candidate_id => v_job_row.candidate_id,
+              p_targeted_timesheet_ids => v_delta_recovery_targeted_timesheet_ids,
+              p_linked_timesheet_ids => v_delta_recovery_linked_timesheet_ids,
+              p_payload_json => jsonb_strip_nulls(
+                COALESCE(v_job_row.payload_json, '{}'::jsonb)
+                || jsonb_build_object(
+                  'session_id', v_job_row.session_id::text,
+                  'source_session_id', v_job_row.session_id::text,
+                  'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+                  'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+                  'session_version', COALESCE(v_session_row.version, 0),
+                  'session_signature', v_session_row.session_signature,
+                  'refresh_scope_kind', 'TARGETED_TIMESHEETS',
+                  'projection_mode', 'DELTA',
+                  'projection_class', 'NORMAL_TIMESHEET',
+                  'targeted_timesheet_ids', COALESCE(v_delta_targeted_timesheet_ids_json, '[]'::jsonb),
+                  'linked_timesheet_ids', COALESCE(v_delta_linked_timesheet_ids_json, '[]'::jsonb),
+                  'source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+                  'source_change_sequence', COALESCE(v_delta_recovery_source_change_seq, 0),
+                  'latest_source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+                  'reason', 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED_DIRTY_RECOVERY',
+                  'fallback_reason', v_delta_fallback_reason,
+                  'source_build_required', false,
+                  'line_work_required', false,
+                  'delta_refresh_required', true,
+                  'identical_cursor_self_reuse_suppressed', true,
+                  'delta_identical_cursor_self_reuse_no_source_build', true,
+                  'authorise_boundary_changed', LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on'),
+                  'unauthorise_boundary_changed', LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+                  'lifecycle_mutation_context', CASE
+                    WHEN LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+                      OR v_delta_lifecycle_context IN ('timesheet_unauthorise', 'unauthorise_timesheet')
+                      OR LOWER(COALESCE(v_result_json->>'reason', v_job_row.payload_json->>'reason_latest', v_job_row.payload_json->>'reason', '')) LIKE '%unauthorise%'
+                    THEN 'timesheet_unauthorise'
+                    ELSE 'timesheet_authorise'
+                  END,
+                  'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+                  'policy_x_dirtying_only', true,
+                  'economic_truth_mutation_allowed', false
+                )
+              ),
+              p_reason => 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED_DIRTY_RECOVERY',
+              p_priority => -1000,
+              p_run_at_utc => v_now
+            );
+
+            v_delta_recovery_job_id_text := NULLIF(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'job_id', '')), '');
+
+            IF v_delta_recovery_job_id_text IS NULL
+               AND jsonb_typeof(COALESCE(v_delta_recovery_enqueue_result->'coalesced_scope_results', '[]'::jsonb)) = 'array' THEN
+              SELECT NULLIF(BTRIM(COALESCE(coalesced_scope_result.value->>'job_id', '')), '')
+              INTO v_delta_recovery_job_id_text
+              FROM jsonb_array_elements(COALESCE(v_delta_recovery_enqueue_result->'coalesced_scope_results', '[]'::jsonb)) AS coalesced_scope_result(value)
+              WHERE COALESCE(coalesced_scope_result.value->>'session_id', '') = v_job_row.session_id::text
+                AND COALESCE(coalesced_scope_result.value->>'job_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              LIMIT 1;
+            END IF;
+
+            IF v_delta_recovery_job_id_text = p_job_id::text THEN
+              v_delta_recovery_job_id_text := NULL;
+            END IF;
+          END IF;
+
+          IF v_delta_recovery_job_id_text IS NULL
+             OR v_delta_recovery_job_id_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+            RAISE EXCEPTION 'PAY_WORKBENCH_DELTA_SELF_REUSE_RECOVERY_JOB_ID_MISSING'
+              USING ERRCODE = 'P0001',
+                    DETAIL = jsonb_build_object(
+                      'code', 'PAY_WORKBENCH_DELTA_SELF_REUSE_RECOVERY_JOB_ID_MISSING',
+                      'job_id', p_job_id::text,
+                      'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL ELSE v_job_row.session_id::text END,
+                      'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL ELSE v_job_row.candidate_id::text END,
+                      'projection_run_id', v_delta_projection_run_id_text,
+                      'source_change_seq', v_source_change_seq,
+                      'recovery_enqueue_result', COALESCE(v_delta_recovery_enqueue_result, '{}'::jsonb),
+                      'message', 'Normal targeted lifecycle DELTA self-reuse suppression could not create or reuse a cron-claimable recovery job.'
+                    )::text;
+          END IF;
+
+          v_delta_recovery_job_id := v_delta_recovery_job_id_text::uuid;
+
+          UPDATE public.banking_pay_workbench_session_scope AS delta_recovery_scope
+          SET status = CASE
+                WHEN UPPER(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'job_type', ''))) = 'WORKBENCH_CANDIDATE_DIRTY_APPLY'
+                 AND LOWER(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'dirty_enqueue_coalesced_all_relevant_scopes', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                  THEN 'PENDING'
+                ELSE 'DELTA_REFRESH_PENDING'
+              END,
+              dirty = true,
+              pending_job_id = v_delta_recovery_job_id,
+              error_json = NULL::jsonb,
+              updated_at_utc = v_now
+          WHERE delta_recovery_scope.session_id = v_job_row.session_id
+            AND delta_recovery_scope.candidate_id = v_job_row.candidate_id;
+
+          v_continuation_jobs := jsonb_build_array(v_continuation_result, v_delta_recovery_enqueue_result);
+          v_continuation_count := 1;
+          v_continuation_reused_count := CASE
+            WHEN LOWER(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'reused', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+              OR LOWER(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'dirty_enqueue_coalesced_all_relevant_scopes', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+            THEN 1
+            ELSE 0
+          END;
+          v_continuation_enqueued := true;
+          v_next_recommended_action := 'DELTA_REFRESH_CHUNK';
+        ELSIF v_job_row.candidate_id IS NOT NULL
            AND v_source_change_seq IS NOT NULL
            AND COALESCE(v_live_source_change_seq, 0) > COALESCE(v_source_change_seq, 0) THEN
           v_delta_more_due := false;
@@ -27977,74 +28306,74 @@ BEGIN
           v_continuation_enqueued := false;
           v_next_recommended_action := 'DELTA_REFRESH_CHUNK';
         ELSE
-        v_delta_more_due := false;
-        v_delta_fallback_required := true;
-        v_delta_fallback_reason := 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED';
+          v_delta_more_due := false;
+          v_delta_fallback_required := true;
+          v_delta_fallback_reason := 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED';
 
-        IF v_delta_projection_run_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-          UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
-          SET status = 'FALLBACK_REQUIRED',
-              fallback_required = true,
-              fallback_reason = v_delta_fallback_reason,
-              diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
-                || jsonb_build_object(
-                  'identical_cursor_self_reuse_suppressed', true,
-                  'continuation_result', COALESCE(v_continuation_result, '{}'::jsonb),
-                  'terminalised_by', 'pay_workbench_complete_job',
-                  'terminalised_at_utc', v_now::text
-                ),
-              updated_at_utc = v_now,
-              completed_at_utc = v_now
-          WHERE projection_run_update.id = v_delta_projection_run_id_text::uuid
-            AND projection_run_update.session_id = v_job_row.session_id
-            AND projection_run_update.candidate_id = v_job_row.candidate_id
-            AND UPPER(BTRIM(COALESCE(projection_run_update.status, ''))) = 'RUNNING';
-        END IF;
+          IF v_delta_projection_run_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+            UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
+            SET status = 'FALLBACK_REQUIRED',
+                fallback_required = true,
+                fallback_reason = v_delta_fallback_reason,
+                diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
+                  || jsonb_build_object(
+                    'identical_cursor_self_reuse_suppressed', true,
+                    'continuation_result', COALESCE(v_continuation_result, '{}'::jsonb),
+                    'terminalised_by', 'pay_workbench_complete_job',
+                    'terminalised_at_utc', v_now::text
+                  ),
+                updated_at_utc = v_now,
+                completed_at_utc = v_now
+            WHERE projection_run_update.id = v_delta_projection_run_id_text::uuid
+              AND projection_run_update.session_id = v_job_row.session_id
+              AND projection_run_update.candidate_id = v_job_row.candidate_id
+              AND UPPER(BTRIM(COALESCE(projection_run_update.status, ''))) = 'RUNNING';
+          END IF;
 
-        v_delta_fallback_enqueue_result := public.pay_workbench_enqueue_candidate_refresh(
-          p_snapshot_run_id => v_session_row.source_snapshot_run_id,
-          p_candidate_id => v_job_row.candidate_id,
-          p_reason => v_delta_fallback_reason,
-          p_actor_user_id => v_session_row.actor_user_id,
-          p_payload_json => jsonb_strip_nulls(
-            jsonb_build_object(
-              'session_id', v_job_row.session_id::text,
-              'source_session_id', v_job_row.session_id::text,
-              'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
-              'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
-              'session_version', COALESCE(v_session_row.version, 0),
-              'session_signature', v_session_row.session_signature,
-              'force_legacy', true,
-              'fallback_from_delta', true,
-              'fallback_reason', v_delta_fallback_reason,
-              'projection_run_id', v_delta_projection_run_id_text,
-              'projection_class', COALESCE(NULLIF(BTRIM(COALESCE(v_result_json->>'projection_class', '')), ''), NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'projection_class', '')), '')),
-              'source_build_required', true,
-              'line_work_required', true,
-              'delta_refresh_required', false,
-              'targeted_timesheet_ids', COALESCE(v_delta_targeted_timesheet_ids_json, '[]'::jsonb),
-              'linked_timesheet_ids', COALESCE(v_delta_linked_timesheet_ids_json, '[]'::jsonb),
-              'refresh_scope_kind', CASE WHEN jsonb_array_length(COALESCE(v_delta_targeted_timesheet_ids_json, '[]'::jsonb)) > 0 OR jsonb_array_length(COALESCE(v_delta_linked_timesheet_ids_json, '[]'::jsonb)) > 0 THEN 'TARGETED_TIMESHEETS' ELSE 'CANDIDATE_FULL_LIVE' END
+          v_delta_fallback_enqueue_result := public.pay_workbench_enqueue_candidate_refresh(
+            p_snapshot_run_id => v_session_row.source_snapshot_run_id,
+            p_candidate_id => v_job_row.candidate_id,
+            p_reason => v_delta_fallback_reason,
+            p_actor_user_id => v_session_row.actor_user_id,
+            p_payload_json => jsonb_strip_nulls(
+              jsonb_build_object(
+                'session_id', v_job_row.session_id::text,
+                'source_session_id', v_job_row.session_id::text,
+                'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+                'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+                'session_version', COALESCE(v_session_row.version, 0),
+                'session_signature', v_session_row.session_signature,
+                'force_legacy', true,
+                'fallback_from_delta', true,
+                'fallback_reason', v_delta_fallback_reason,
+                'projection_run_id', v_delta_projection_run_id_text,
+                'projection_class', COALESCE(NULLIF(BTRIM(COALESCE(v_result_json->>'projection_class', '')), ''), NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'projection_class', '')), '')),
+                'source_build_required', true,
+                'line_work_required', true,
+                'delta_refresh_required', false,
+                'targeted_timesheet_ids', COALESCE(v_delta_targeted_timesheet_ids_json, '[]'::jsonb),
+                'linked_timesheet_ids', COALESCE(v_delta_linked_timesheet_ids_json, '[]'::jsonb),
+                'refresh_scope_kind', CASE WHEN jsonb_array_length(COALESCE(v_delta_targeted_timesheet_ids_json, '[]'::jsonb)) > 0 OR jsonb_array_length(COALESCE(v_delta_linked_timesheet_ids_json, '[]'::jsonb)) > 0 THEN 'TARGETED_TIMESHEETS' ELSE 'CANDIDATE_FULL_LIVE' END
+              )
             )
-          )
-        );
+          );
 
-        v_delta_fallback_job_id_text := NULLIF(BTRIM(COALESCE(v_delta_fallback_enqueue_result->>'job_id', '')), '');
+          v_delta_fallback_job_id_text := NULLIF(BTRIM(COALESCE(v_delta_fallback_enqueue_result->>'job_id', '')), '');
 
-        UPDATE public.banking_pay_workbench_session_scope AS delta_fallback_scope
-        SET status = 'SOURCE_BUILD_PENDING',
-            dirty = true,
-            pending_job_id = CASE WHEN v_delta_fallback_job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN v_delta_fallback_job_id_text::uuid ELSE delta_fallback_scope.pending_job_id END,
-            error_json = NULL::jsonb,
-            updated_at_utc = v_now
-        WHERE delta_fallback_scope.session_id = v_job_row.session_id
-          AND delta_fallback_scope.candidate_id = v_job_row.candidate_id;
+          UPDATE public.banking_pay_workbench_session_scope AS delta_fallback_scope
+          SET status = 'SOURCE_BUILD_PENDING',
+              dirty = true,
+              pending_job_id = CASE WHEN v_delta_fallback_job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN v_delta_fallback_job_id_text::uuid ELSE delta_fallback_scope.pending_job_id END,
+              error_json = NULL::jsonb,
+              updated_at_utc = v_now
+          WHERE delta_fallback_scope.session_id = v_job_row.session_id
+            AND delta_fallback_scope.candidate_id = v_job_row.candidate_id;
 
-        v_continuation_jobs := jsonb_build_array(v_continuation_result, v_delta_fallback_enqueue_result);
-        v_continuation_count := CASE WHEN v_delta_fallback_job_id_text IS NULL THEN 0 ELSE 1 END;
-        v_continuation_reused_count := CASE WHEN LOWER(BTRIM(COALESCE(v_delta_fallback_enqueue_result->>'reused', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN 1 ELSE 0 END;
-        v_continuation_enqueued := v_delta_fallback_job_id_text IS NOT NULL;
-        v_next_recommended_action := 'BUILD_SOURCE_CHUNK';
+          v_continuation_jobs := jsonb_build_array(v_continuation_result, v_delta_fallback_enqueue_result);
+          v_continuation_count := CASE WHEN v_delta_fallback_job_id_text IS NULL THEN 0 ELSE 1 END;
+          v_continuation_reused_count := CASE WHEN LOWER(BTRIM(COALESCE(v_delta_fallback_enqueue_result->>'reused', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN 1 ELSE 0 END;
+          v_continuation_enqueued := v_delta_fallback_job_id_text IS NOT NULL;
+          v_next_recommended_action := 'BUILD_SOURCE_CHUNK';
         END IF;
       ELSE
         IF v_continuation_job_id_text IS NULL THEN
@@ -28083,6 +28412,249 @@ BEGIN
         v_continuation_enqueued := true;
         v_next_recommended_action := 'DELTA_REFRESH_CHUNK';
       END IF;
+    ELSIF v_delta_fallback_required IS TRUE
+          AND v_delta_is_normal_targeted_lifecycle IS TRUE
+          AND UPPER(BTRIM(COALESCE(v_delta_fallback_reason, ''))) = 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED' THEN
+      IF v_job_row.candidate_id IS NOT NULL
+         AND v_source_change_seq IS NOT NULL THEN
+        SELECT COALESCE(change_counter.seq, 0)
+        INTO v_live_source_change_seq
+        FROM public.app_change_counters AS change_counter
+        WHERE change_counter.entity_key = 'pay_candidate:' || v_job_row.candidate_id::text;
+
+        v_live_source_change_seq := COALESCE(v_live_source_change_seq, 0);
+      END IF;
+
+      v_delta_recovery_source_change_seq := GREATEST(COALESCE(v_live_source_change_seq, 0), COALESCE(v_source_change_seq, 0));
+      v_delta_more_due := false;
+      v_delta_fallback_required := false;
+      v_delta_refresh_complete := true;
+      v_delta_fallback_reason := 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED';
+      v_delta_superseded_by_live_source_guard := COALESCE(v_live_source_change_seq, 0) > COALESCE(v_source_change_seq, 0);
+
+      v_continuation_result := jsonb_build_object(
+        'ok', true,
+        'action', 'DIRECT_FALLBACK_SELF_REUSE_SUPPRESSED_NO_SOURCE_BUILD',
+        'continuation_not_enqueued', true,
+        'identical_cursor_self_reuse_suppressed', true,
+        'delta_identical_cursor_self_reuse_no_source_build', true,
+        'normal_targeted_lifecycle_delta', true,
+        'successor_required', true,
+        'source_change_seq', COALESCE(v_source_change_seq, 0),
+        'latest_source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+        'live_source_change_seq', COALESCE(v_live_source_change_seq, 0),
+        'projection_run_id', v_delta_projection_run_id_text
+      );
+
+      v_result_json := jsonb_strip_nulls(
+        COALESCE(v_result_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'identical_cursor_self_reuse_suppressed', true,
+          'delta_identical_cursor_self_reuse_no_source_build', true,
+          'direct_fallback_intercepted', true,
+          'fallback_required', false,
+          'fallback_reason', v_delta_fallback_reason,
+          'delta_refresh_complete', true,
+          'more_due', false,
+          'has_more', false,
+          'source_change_seq', COALESCE(v_source_change_seq, 0),
+          'latest_source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+          'live_source_change_seq', COALESCE(v_live_source_change_seq, 0),
+          'stop_reason', 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED_DIRECT_FALLBACK_NO_SOURCE_BUILD_SUCCESSOR_REQUIRED',
+          'next_recommended_action', 'DELTA_REFRESH_CHUNK'
+        )
+      );
+
+      IF v_delta_projection_run_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        UPDATE public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run_update
+        SET status = 'FAILED',
+            fallback_required = false,
+            fallback_reason = v_delta_fallback_reason,
+            diagnostics_json = COALESCE(projection_run_update.diagnostics_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'identical_cursor_self_reuse_suppressed', true,
+                'delta_identical_cursor_self_reuse_no_source_build', true,
+                'direct_fallback_intercepted', true,
+                'successor_required', true,
+                'continuation_result', COALESCE(v_continuation_result, '{}'::jsonb),
+                'source_change_seq', COALESCE(v_source_change_seq, 0),
+                'latest_source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+                'live_source_change_seq', COALESCE(v_live_source_change_seq, 0),
+                'terminalised_by', 'pay_workbench_complete_job',
+                'terminalised_at_utc', v_now::text
+              ),
+            updated_at_utc = v_now,
+            completed_at_utc = v_now
+        WHERE projection_run_update.id = v_delta_projection_run_id_text::uuid
+          AND projection_run_update.session_id = v_job_row.session_id
+          AND projection_run_update.candidate_id = v_job_row.candidate_id
+          AND UPPER(BTRIM(COALESCE(projection_run_update.status, ''))) IN ('RUNNING', 'FALLBACK_REQUIRED');
+      END IF;
+
+      v_delta_recovery_enqueue_result := public.pay_workbench_enqueue_candidate_refresh(
+        p_snapshot_run_id => v_session_row.source_snapshot_run_id,
+        p_candidate_id => v_job_row.candidate_id,
+        p_reason => 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED_DELTA_SUCCESSOR',
+        p_actor_user_id => v_session_row.actor_user_id,
+        p_payload_json => jsonb_strip_nulls(jsonb_build_object(
+          'session_id', v_job_row.session_id::text,
+          'source_session_id', v_job_row.session_id::text,
+          'workbench_session_id', v_job_row.session_id::text,
+          'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+          'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+          'session_version', COALESCE(v_session_row.version, 0),
+          'session_signature', v_session_row.session_signature,
+          'force_legacy', false,
+          'force_broad_legacy', false,
+          'fallback_from_delta', false,
+          'fallback_reason', v_delta_fallback_reason,
+          'projection_mode', 'DELTA',
+          'projection_class', 'NORMAL_TIMESHEET',
+          'refresh_scope_kind', 'TARGETED_TIMESHEETS',
+          'phase', 'INIT_PREFLIGHT',
+          'cursor_json', '{}'::jsonb,
+          'source_build_required', false,
+          'line_work_required', false,
+          'delta_refresh_required', true,
+          'targeted_timesheet_ids', COALESCE(v_delta_targeted_timesheet_ids_json, '[]'::jsonb),
+          'linked_timesheet_ids', COALESCE(v_delta_linked_timesheet_ids_json, '[]'::jsonb),
+          'source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+          'source_change_sequence', COALESCE(v_delta_recovery_source_change_seq, 0),
+          'latest_source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+          'identical_cursor_self_reuse_suppressed', true,
+          'delta_identical_cursor_self_reuse_no_source_build', true,
+          'direct_fallback_intercepted', true,
+          'successor_for_job_id', p_job_id::text,
+          'previous_projection_run_id', v_delta_projection_run_id_text,
+          'authorise_boundary_changed', LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on'),
+          'unauthorise_boundary_changed', LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+          'lifecycle_mutation_context', CASE
+            WHEN LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+              OR v_delta_lifecycle_context IN ('timesheet_unauthorise', 'unauthorise_timesheet')
+              OR LOWER(COALESCE(v_result_json->>'reason', v_job_row.payload_json->>'reason_latest', v_job_row.payload_json->>'reason', '')) LIKE '%unauthorise%'
+            THEN 'timesheet_unauthorise'
+            ELSE 'timesheet_authorise'
+          END,
+          'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+          'policy_x_dirtying_only', true,
+          'economic_truth_mutation_allowed', false
+        ))
+      );
+
+      v_delta_recovery_job_id_text := NULLIF(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'job_id', '')), '');
+
+      IF v_delta_recovery_job_id_text = p_job_id::text THEN
+        v_delta_recovery_job_id_text := NULL;
+      END IF;
+
+      IF v_delta_recovery_job_id_text IS NULL THEN
+        v_delta_recovery_enqueue_result := public.pay_workbench_dirty_event_enqueue(
+          p_job_type => 'WORKBENCH_CANDIDATE_DIRTY_APPLY',
+          p_scope_kind => 'CANDIDATE',
+          p_scope_id => v_job_row.candidate_id::text,
+          p_candidate_id => v_job_row.candidate_id,
+          p_targeted_timesheet_ids => v_delta_recovery_targeted_timesheet_ids,
+          p_linked_timesheet_ids => v_delta_recovery_linked_timesheet_ids,
+          p_payload_json => jsonb_strip_nulls(jsonb_build_object(
+            'session_id', v_job_row.session_id::text,
+            'source_session_id', v_job_row.session_id::text,
+            'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+            'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+            'session_version', COALESCE(v_session_row.version, 0),
+            'session_signature', v_session_row.session_signature,
+            'refresh_scope_kind', 'TARGETED_TIMESHEETS',
+            'projection_mode', 'DELTA',
+            'projection_class', 'NORMAL_TIMESHEET',
+            'targeted_timesheet_ids', COALESCE(v_delta_targeted_timesheet_ids_json, '[]'::jsonb),
+            'linked_timesheet_ids', COALESCE(v_delta_linked_timesheet_ids_json, '[]'::jsonb),
+            'source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+            'source_change_sequence', COALESCE(v_delta_recovery_source_change_seq, 0),
+            'latest_source_change_seq', COALESCE(v_delta_recovery_source_change_seq, 0),
+            'reason', 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED_DIRTY_RECOVERY',
+            'fallback_reason', v_delta_fallback_reason,
+            'source_build_required', false,
+            'line_work_required', false,
+            'delta_refresh_required', true,
+            'identical_cursor_self_reuse_suppressed', true,
+            'delta_identical_cursor_self_reuse_no_source_build', true,
+            'direct_fallback_intercepted', true,
+            'authorise_boundary_changed', LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on'),
+            'unauthorise_boundary_changed', LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+            'lifecycle_mutation_context', CASE
+              WHEN LOWER(BTRIM(COALESCE(v_result_json->>'unauthorise_boundary_changed', v_job_row.payload_json->>'unauthorise_boundary_changed', v_result_json->>'timesheet_unauthorise_boundary_changed', v_job_row.payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+                OR v_delta_lifecycle_context IN ('timesheet_unauthorise', 'unauthorise_timesheet')
+                OR LOWER(COALESCE(v_result_json->>'reason', v_job_row.payload_json->>'reason_latest', v_job_row.payload_json->>'reason', '')) LIKE '%unauthorise%'
+              THEN 'timesheet_unauthorise'
+              ELSE 'timesheet_authorise'
+            END,
+            'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+            'policy_x_dirtying_only', true,
+            'economic_truth_mutation_allowed', false
+          )),
+          p_reason => 'DELTA_IDENTICAL_CURSOR_SELF_REUSE_SUPPRESSED_DIRTY_RECOVERY',
+          p_priority => -1000,
+          p_run_at_utc => v_now
+        );
+
+        v_delta_recovery_job_id_text := NULLIF(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'job_id', '')), '');
+
+        IF v_delta_recovery_job_id_text IS NULL
+           AND jsonb_typeof(COALESCE(v_delta_recovery_enqueue_result->'coalesced_scope_results', '[]'::jsonb)) = 'array' THEN
+          SELECT NULLIF(BTRIM(COALESCE(coalesced_scope_result.value->>'job_id', '')), '')
+          INTO v_delta_recovery_job_id_text
+          FROM jsonb_array_elements(COALESCE(v_delta_recovery_enqueue_result->'coalesced_scope_results', '[]'::jsonb)) AS coalesced_scope_result(value)
+          WHERE COALESCE(coalesced_scope_result.value->>'session_id', '') = v_job_row.session_id::text
+            AND COALESCE(coalesced_scope_result.value->>'job_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          LIMIT 1;
+        END IF;
+
+        IF v_delta_recovery_job_id_text = p_job_id::text THEN
+          v_delta_recovery_job_id_text := NULL;
+        END IF;
+      END IF;
+
+      IF v_delta_recovery_job_id_text IS NULL
+         OR v_delta_recovery_job_id_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_DELTA_SELF_REUSE_RECOVERY_JOB_ID_MISSING'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'PAY_WORKBENCH_DELTA_SELF_REUSE_RECOVERY_JOB_ID_MISSING',
+                  'job_id', p_job_id::text,
+                  'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL ELSE v_job_row.session_id::text END,
+                  'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL ELSE v_job_row.candidate_id::text END,
+                  'projection_run_id', v_delta_projection_run_id_text,
+                  'source_change_seq', v_source_change_seq,
+                  'recovery_enqueue_result', COALESCE(v_delta_recovery_enqueue_result, '{}'::jsonb),
+                  'message', 'Normal targeted lifecycle DELTA self-reuse fallback could not create or reuse a cron-claimable recovery job.'
+                )::text;
+      END IF;
+
+      v_delta_recovery_job_id := v_delta_recovery_job_id_text::uuid;
+
+      UPDATE public.banking_pay_workbench_session_scope AS delta_recovery_scope
+      SET status = CASE
+            WHEN UPPER(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'job_type', ''))) = 'WORKBENCH_CANDIDATE_DIRTY_APPLY'
+             AND LOWER(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'dirty_enqueue_coalesced_all_relevant_scopes', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              THEN 'PENDING'
+            ELSE 'DELTA_REFRESH_PENDING'
+          END,
+          dirty = true,
+          pending_job_id = v_delta_recovery_job_id,
+          error_json = NULL::jsonb,
+          updated_at_utc = v_now
+      WHERE delta_recovery_scope.session_id = v_job_row.session_id
+        AND delta_recovery_scope.candidate_id = v_job_row.candidate_id;
+
+      v_continuation_jobs := jsonb_build_array(v_continuation_result, v_delta_recovery_enqueue_result);
+      v_continuation_count := 1;
+      v_continuation_reused_count := CASE
+        WHEN LOWER(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'reused', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR LOWER(BTRIM(COALESCE(v_delta_recovery_enqueue_result->>'dirty_enqueue_coalesced_all_relevant_scopes', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        THEN 1
+        ELSE 0
+      END;
+      v_continuation_enqueued := true;
+      v_next_recommended_action := 'DELTA_REFRESH_CHUNK';
     ELSIF v_delta_fallback_required IS TRUE THEN
       v_delta_fallback_enqueue_result := public.pay_workbench_enqueue_candidate_refresh(
         p_snapshot_run_id => v_session_row.source_snapshot_run_id,
@@ -212917,23 +213489,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_dirty_event_enqueue(
-  p_job_type text,
-  p_scope_kind text,
-  p_scope_id text,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_targeted_timesheet_ids uuid[] DEFAULT ARRAY[]::uuid[],
-  p_linked_timesheet_ids uuid[] DEFAULT ARRAY[]::uuid[],
-  p_payload_json jsonb DEFAULT '{}'::jsonb,
-  p_reason text DEFAULT NULL::text,
-  p_priority integer DEFAULT -1000,
-  p_run_at_utc timestamptz DEFAULT NULL::timestamptz
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-VOLATILE
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_dirty_event_enqueue(p_job_type text, p_scope_kind text, p_scope_id text, p_candidate_id uuid DEFAULT NULL::uuid, p_targeted_timesheet_ids uuid[] DEFAULT ARRAY[]::uuid[], p_linked_timesheet_ids uuid[] DEFAULT ARRAY[]::uuid[], p_payload_json jsonb DEFAULT '{}'::jsonb, p_reason text DEFAULT NULL::text, p_priority integer DEFAULT '-1000'::integer, p_run_at_utc timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := clock_timestamp();
@@ -212954,6 +213514,19 @@ DECLARE
   v_priority integer := COALESCE(p_priority, -1000);
   v_run_at_utc timestamptz := COALESCE(p_run_at_utc, v_now);
   v_scope_uuid uuid := NULL::uuid;
+  v_lifecycle_context text := NULL::text;
+  v_is_lifecycle_targeted_candidate_dirty boolean := false;
+  v_actor_user_id uuid := NULL::uuid;
+  v_relevant_scope_total integer := 0;
+  v_relevant_scope_processed integer := 0;
+  v_relevant_scope_coalesced integer := 0;
+  v_relevant_scope_failed integer := 0;
+  v_scope_preflight_result jsonb := '{}'::jsonb;
+  v_scope_preflight_action text := NULL::text;
+  v_scope_preflight_job_id_text text := NULL::text;
+  v_scope_preflight_results jsonb := '[]'::jsonb;
+  v_scope_preflight_failed_results jsonb := '[]'::jsonb;
+  v_session_record record;
 BEGIN
   IF v_job_type NOT IN (
     'WORKBENCH_CANDIDATE_DIRTY_APPLY',
@@ -213060,6 +213633,192 @@ BEGIN
 
   v_payload_json := public._pay_workbench_dirty_payload_merge('{}'::jsonb, v_incoming_payload);
 
+  v_lifecycle_context := LOWER(BTRIM(COALESCE(
+    v_payload_json->>'lifecycle_mutation_context',
+    v_payload_json->>'mutation_context',
+    v_payload_json->>'lifecycle_context',
+    ''
+  )));
+
+  v_is_lifecycle_targeted_candidate_dirty := v_job_type = 'WORKBENCH_CANDIDATE_DIRTY_APPLY'
+    AND p_candidate_id IS NOT NULL
+    AND COALESCE(array_length(v_targeted_timesheet_ids, 1), 0) > 0
+    AND LOWER(BTRIM(COALESCE(v_payload_json->>'ordinary_timesheet_edit_save_no_dirty', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND (
+      LOWER(BTRIM(COALESCE(v_payload_json->>'authorise_boundary_changed', v_payload_json->>'timesheet_authorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR LOWER(BTRIM(COALESCE(v_payload_json->>'unauthorise_boundary_changed', v_payload_json->>'timesheet_unauthorise_boundary_changed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR v_lifecycle_context IN ('timesheet_authorise', 'authorise_timesheet', 'timesheet_unauthorise', 'unauthorise_timesheet')
+      OR LOWER(COALESCE(v_reason, '')) LIKE '%authorise%'
+      OR LOWER(COALESCE(v_reason, '')) LIKE '%unauthorise%'
+    );
+
+  IF COALESCE(v_payload_json->>'actor_user_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_actor_user_id := (v_payload_json->>'actor_user_id')::uuid;
+  ELSIF COALESCE(v_payload_json->>'actorUserId', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_actor_user_id := (v_payload_json->>'actorUserId')::uuid;
+  END IF;
+
+  IF v_is_lifecycle_targeted_candidate_dirty IS TRUE THEN
+    SELECT COUNT(*)::integer
+    INTO v_relevant_scope_total
+    FROM public.banking_pay_workbench_session_scope AS scope_count
+    JOIN public.banking_pay_workbench_sessions AS session_count
+      ON session_count.id = scope_count.session_id
+    WHERE scope_count.candidate_id = p_candidate_id
+      AND UPPER(BTRIM(COALESCE(session_count.status, ''))) = 'OPEN'
+      AND session_count.discarded_at_utc IS NULL
+      AND session_count.replacement_session_id IS NULL;
+
+    IF COALESCE(v_relevant_scope_total, 0) > 0 THEN
+      FOR v_session_record IN
+        SELECT
+          session_row.id AS session_id,
+          session_row.actor_user_id,
+          session_row.source_snapshot_run_id,
+          session_row.version,
+          session_row.session_signature
+        FROM public.banking_pay_workbench_session_scope AS scope_row
+        JOIN public.banking_pay_workbench_sessions AS session_row
+          ON session_row.id = scope_row.session_id
+        WHERE scope_row.candidate_id = p_candidate_id
+          AND UPPER(BTRIM(COALESCE(session_row.status, ''))) = 'OPEN'
+          AND session_row.discarded_at_utc IS NULL
+          AND session_row.replacement_session_id IS NULL
+        ORDER BY session_row.updated_at_utc DESC, session_row.id
+      LOOP
+        v_relevant_scope_processed := v_relevant_scope_processed + 1;
+        v_scope_preflight_result := public.pay_workbench_authorise_delta_hotkey_preflight(
+          p_session_id => v_session_record.session_id,
+          p_candidate_id => p_candidate_id,
+          p_targeted_timesheet_ids => v_targeted_timesheet_ids,
+          p_linked_timesheet_ids => v_linked_timesheet_ids,
+          p_payload_json => public._pay_workbench_merge_targeted_scope_payload(
+            v_payload_json,
+            jsonb_strip_nulls(jsonb_build_object(
+              'session_id', v_session_record.session_id::text,
+              'source_session_id', v_session_record.session_id::text,
+              'workbench_session_id', v_session_record.session_id::text,
+              'source_snapshot_run_id', CASE WHEN v_session_record.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_record.source_snapshot_run_id::text END,
+              'snapshot_run_id', CASE WHEN v_session_record.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_record.source_snapshot_run_id::text END,
+              'session_version', COALESCE(v_session_record.version, 0),
+              'session_signature', v_session_record.session_signature,
+              'refresh_scope_kind', 'TARGETED_TIMESHEETS',
+              'projection_mode', 'DELTA',
+              'projection_class', 'NORMAL_TIMESHEET',
+              'source_change_seq', v_latest_source_change_seq,
+              'source_change_sequence', v_latest_source_change_seq,
+              'latest_source_change_seq', v_latest_source_change_seq,
+              'targeted_timesheet_ids', COALESCE(to_jsonb(v_targeted_timesheet_ids), '[]'::jsonb),
+              'linked_timesheet_ids', COALESCE(to_jsonb(v_linked_timesheet_ids), '[]'::jsonb),
+              'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+              'policy_x_dirtying_only', true
+            ))
+          ),
+          p_reason => v_reason,
+          p_actor_user_id => COALESCE(v_actor_user_id, v_session_record.actor_user_id),
+          p_source_change_seq => v_latest_source_change_seq
+        );
+
+        v_scope_preflight_action := COALESCE(v_scope_preflight_result->>'action', 'PROCEED');
+        v_scope_preflight_job_id_text := NULLIF(BTRIM(COALESCE(v_scope_preflight_result->>'job_id', '')), '');
+        v_scope_preflight_results := v_scope_preflight_results || jsonb_build_array(
+          jsonb_strip_nulls(jsonb_build_object(
+            'session_id', v_session_record.session_id::text,
+            'session_version', COALESCE(v_session_record.version, 0),
+            'action', v_scope_preflight_action,
+            'job_id', v_scope_preflight_job_id_text,
+            'normalised_delta_family_key', NULLIF(BTRIM(COALESCE(v_scope_preflight_result->>'normalised_delta_family_key', '')), ''),
+            'latest_source_change_seq', CASE WHEN COALESCE(v_scope_preflight_result->>'latest_source_change_seq', '') ~ '^[0-9]{1,18}$' THEN (v_scope_preflight_result->>'latest_source_change_seq')::bigint ELSE v_latest_source_change_seq END
+          ))
+        );
+
+        IF COALESCE(v_scope_preflight_result->>'ok', 'false') = 'true'
+           AND v_scope_preflight_action IN ('REUSED_QUEUED_SAME_FAMILY_JOB', 'UPDATED_WAITING_AFTER_RUNNING_JOB')
+           AND v_scope_preflight_job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+          v_relevant_scope_coalesced := v_relevant_scope_coalesced + 1;
+        ELSE
+          v_relevant_scope_failed := v_relevant_scope_failed + 1;
+          v_scope_preflight_failed_results := v_scope_preflight_failed_results || jsonb_build_array(
+            jsonb_strip_nulls(jsonb_build_object(
+              'session_id', v_session_record.session_id::text,
+              'session_version', COALESCE(v_session_record.version, 0),
+              'action', v_scope_preflight_action,
+              'job_id', v_scope_preflight_job_id_text,
+              'reason', COALESCE(v_scope_preflight_result->>'reason', 'SAME_FAMILY_DELTA_PREFLIGHT_DID_NOT_COALESCE')
+            ))
+          );
+        END IF;
+      END LOOP;
+
+      IF v_relevant_scope_processed = v_relevant_scope_total
+         AND v_relevant_scope_coalesced = v_relevant_scope_total
+         AND v_relevant_scope_failed = 0 THEN
+        PERFORM public._temp_diag_log(
+          'TEMP_TRIGGER_DIRTY_STAGE',
+          'TEMP_BANKING_PAY_DIRTY',
+          v_scope_id,
+          jsonb_build_object(
+            'function_name', 'pay_workbench_dirty_event_enqueue',
+            'stage', 'dirty_enqueue_skipped_all_relevant_scopes_coalesced',
+            'job_type', v_job_type,
+            'dedupe_key', v_dedupe_key,
+            'candidate_id', p_candidate_id::text,
+            'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_ids, 1), 0),
+            'latest_source_change_seq', v_latest_source_change_seq,
+            'relevant_scope_total', v_relevant_scope_total,
+            'relevant_scope_processed', v_relevant_scope_processed,
+            'relevant_scope_coalesced', v_relevant_scope_coalesced,
+            'dirty_job_inserted', false
+          )
+        );
+
+        RETURN jsonb_build_object(
+          'ok', true,
+          'job_id', NULL::text,
+          'job_type', v_job_type,
+          'status', 'COALESCED_WITH_ACTIVE_DELTA',
+          'dedupe_key', v_dedupe_key,
+          'queue_class', 'DIRTY_TRIGGER_PRIORITY',
+          'priority', v_priority,
+          'scope_kind', v_scope_kind,
+          'scope_id', v_scope_id,
+          'candidate_id', p_candidate_id::text,
+          'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_ids, 1), 0),
+          'latest_source_change_seq', v_latest_source_change_seq,
+          'dirty_job_inserted', false,
+          'dirty_enqueue_coalesced_all_relevant_scopes', true,
+          'relevant_scope_total', v_relevant_scope_total,
+          'relevant_scope_processed', v_relevant_scope_processed,
+          'relevant_scope_coalesced', v_relevant_scope_coalesced,
+          'coalesced_scope_results', COALESCE(v_scope_preflight_results, '[]'::jsonb),
+          'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+          'policy_x_dirtying_only', true
+        );
+      END IF;
+
+      PERFORM public._temp_diag_log(
+        'TEMP_TRIGGER_DIRTY_STAGE',
+        'TEMP_BANKING_PAY_DIRTY',
+        v_scope_id,
+        jsonb_build_object(
+          'function_name', 'pay_workbench_dirty_event_enqueue',
+          'stage', 'dirty_enqueue_preflight_fell_back_to_dirty_job',
+          'job_type', v_job_type,
+          'dedupe_key', v_dedupe_key,
+          'candidate_id', p_candidate_id::text,
+          'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_ids, 1), 0),
+          'latest_source_change_seq', v_latest_source_change_seq,
+          'relevant_scope_total', v_relevant_scope_total,
+          'relevant_scope_processed', v_relevant_scope_processed,
+          'relevant_scope_coalesced', v_relevant_scope_coalesced,
+          'relevant_scope_failed', v_relevant_scope_failed,
+          'dirty_job_inserted', true,
+          'failed_scope_results', COALESCE(v_scope_preflight_failed_results, '[]'::jsonb)
+        )
+      );
+    END IF;
+  END IF;
+
   INSERT INTO public.banking_pay_workbench_jobs AS queued_job (
     job_type,
     status,
@@ -213154,7 +213913,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_finance_case_dirty_apply_job_process(p_job_id uuid, p_limit integer DEFAULT 100)
  RETURNS jsonb
