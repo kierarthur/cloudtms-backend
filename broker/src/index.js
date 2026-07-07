@@ -173631,7 +173631,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     1000,
     maxRuntimeMsMax
   );
-  const minimumRpcBudgetMs = numberInRange(
+  const configuredMinimumRpcBudgetMs = numberInRange(
     firstConfiguredValue(sourceOptions.minimumRpcBudgetMs, sourceOptions.minimum_rpc_budget_ms, drainSettings.minimum_rpc_budget_ms, drainSettings.minimumRpcBudgetMs),
     10000,
     1000,
@@ -173804,6 +173804,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       Math.max(1000, dbStatementTimeoutMs - rpcSafetyBufferMs),
       dbWorkerMaxRuntimeMs + rpcSafetyBufferMs
     )
+  );
+  const safeRpcBudgetCeilingMs = Math.max(1000, Math.min(dbRpcHardCapMs, dbWorkerMaxRuntimeMs));
+  const minimumRpcBudgetMs = Math.max(
+    dbWorkerMinPhaseBudgetMs,
+    Math.min(configuredMinimumRpcBudgetMs, safeRpcBudgetCeilingMs)
   );
   const settingsSource = trimStr(sourceOptions.settingsSource || sourceOptions.settings_source || workbenchSettings.settings_source || workbenchSettings.settingsSource || '') || 'settings_defaults:id=1';
   const settingsDefaultsUpdatedAt = trimStr(sourceOptions.settingsDefaultsUpdatedAt || sourceOptions.settings_defaults_updated_at || workbenchSettings.settings_defaults_updated_at || workbenchSettings.settingsDefaultsUpdatedAt || settingsDefaults.settings_defaults_updated_at || '') || null;
@@ -174159,7 +174164,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const canAttemptRpc = (stageLimit = maxEffectiveStageWorkUnitsPerJob) => {
     if (remainingJobs() <= 0) return { ok: false, reason: 'MAX_JOBS' };
     if (remainingRows() < Math.max(1, stageLimit)) return { ok: false, reason: 'MAX_ROWS' };
-    if (remainingRuntimeMs() < minimumRpcBudgetMs) return { ok: false, reason: 'MAX_RUNTIME_NEAR_EXHAUSTED' };
+    const availableRpcBudgetMs = Math.max(0, Math.min(dbRpcHardCapMs, remainingRuntimeMs() - rpcSafetyBufferMs));
+    if (availableRpcBudgetMs < dbWorkerMinPhaseBudgetMs) return { ok: false, reason: 'MAX_RUNTIME_NEAR_EXHAUSTED' };
     return { ok: true, reason: null };
   };
   const fetchDueQueuedJobCount = async (jobTypes, route = 'UNKNOWN') => {
@@ -174198,6 +174204,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     max_jobs: maxJobs,
     max_runtime_ms: maxRuntimeMs,
     effective_max_runtime_ms: effectiveMaxRuntimeMs,
+    configured_minimum_rpc_budget_ms: configuredMinimumRpcBudgetMs,
+    configured_minimum_rpc_budget_ms: configuredMinimumRpcBudgetMs,
     minimum_rpc_budget_ms: minimumRpcBudgetMs,
     rpc_safety_buffer_ms: rpcSafetyBufferMs,
     backend_rpc_timeout_ms: dbRpcHardCapMs,
@@ -174530,6 +174538,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         db_statement_timeout_ms: dbStatementTimeoutMs,
         backend_rpc_timeout_ms: payload.backend_rpc_timeout_ms ?? payload.computed_rpc_budget_ms ?? dbRpcHardCapMs,
         db_rpc_hard_cap_ms: dbRpcHardCapMs,
+        configured_minimum_rpc_budget_ms: configuredMinimumRpcBudgetMs,
         minimum_rpc_budget_ms: minimumRpcBudgetMs,
         rpc_safety_buffer_ms: rpcSafetyBufferMs,
         computed_rpc_budget_ms: payload.computed_rpc_budget_ms ?? dbRpcHardCapMs,
@@ -174837,13 +174846,14 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       budgetExhausted = true;
       break;
     }
-    if (runtimeBudgetBefore < minimumRpcBudgetMs) {
+    const rpcBudgetBefore = Math.max(0, Math.min(dbRpcHardCapMs, runtimeBudgetBefore - rpcSafetyBufferMs));
+    if (rpcBudgetBefore < dbWorkerMinPhaseBudgetMs) {
       stopReason = 'MAX_RUNTIME_NEAR_EXHAUSTED';
       budgetExhausted = true;
       logRpcBudgetDecision({
         elapsed_ms: elapsedTotalMs(),
         remaining_runtime_ms: runtimeBudgetBefore,
-        computed_rpc_budget_ms: Math.max(0, runtimeBudgetBefore - rpcSafetyBufferMs),
+        computed_rpc_budget_ms: rpcBudgetBefore,
         will_call_rpc: false,
         stop_reason: stopReason,
         max_jobs_remaining: jobsBudgetBefore,
@@ -175024,7 +175034,17 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const lastClaimResult = isPlainObject(lastAggregate.claim_result) ? lastAggregate.claim_result : {};
   const finalMoreDue = (() => {
     if (stopReason === 'NO_MORE_DUE') return false;
-    if (transportError || sourceBuildOnlyAssertionFailed || budgetExhausted) return true;
+    if (transportError || sourceBuildOnlyAssertionFailed) return true;
+    if (budgetExhausted) {
+      const knownDueOrRunningWork = Math.max(
+        countFrom(lastAggregate, ['due_queued_count', 'due_queued']),
+        countFrom(lastAggregate, ['claimable_count', 'claimable_due_count']),
+        countFrom(lastAggregate, ['running_count', 'running_due_count']),
+        countFrom(lastAggregate, ['stale_running_count'])
+      ) > 0;
+      if (rpcCallCount === 0 && !knownDueOrRunningWork) return false;
+      return knownDueOrRunningWork || normalMoreDue || sourceBuildMoreDue || downstreamWorkMayBeDue;
+    }
     return normalMoreDue || sourceBuildMoreDue || downstreamWorkMayBeDue;
   })();
   const finalSourceBuildTimingSummary = sourceBuildTimingSummaryFromJobs(jobs);
@@ -175184,6 +175204,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     more_due: finalMoreDue,
     elapsed_ms: elapsedMs,
     effective_max_runtime_ms: effectiveMaxRuntimeMs,
+    configured_minimum_rpc_budget_ms: configuredMinimumRpcBudgetMs,
+    minimum_rpc_budget_ms: minimumRpcBudgetMs,
     db_worker_max_runtime_ms: dbWorkerMaxRuntimeMs,
     db_statement_timeout_ms: dbStatementTimeoutMs,
     backend_rpc_timeout_ms: dbRpcHardCapMs,
@@ -175309,7 +175331,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
   return result;
 }
-
 
 
 async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
