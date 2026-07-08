@@ -51115,17 +51115,22 @@ END;
 $function$;
 
 
+-- identity_args: p_session_id uuid, p_candidate_id uuid, p_timesheet_id uuid, p_is_excluded boolean, p_actor_user_id uuid, p_expected_session_version bigint, p_expected_progress_counter_version bigint
+DROP FUNCTION IF EXISTS public.pay_workbench_session_set_timesheet_exclusion(uuid, uuid, uuid, boolean, uuid);
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_timesheet_exclusion(
   p_session_id uuid,
   p_candidate_id uuid,
   p_timesheet_id uuid,
   p_is_excluded boolean,
-  p_actor_user_id uuid
+  p_actor_user_id uuid,
+  p_expected_session_version bigint,
+  p_expected_progress_counter_version bigint
 )
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -51135,6 +51140,7 @@ DECLARE
   v_existing_row public.banking_pay_workbench_session_overrides%ROWTYPE;
   v_upserted_row public.banking_pay_workbench_session_overrides%ROWTYPE;
   v_new_session_version bigint := 0;
+  v_new_progress_counter_version bigint := 0;
   v_job_json jsonb := '{}'::jsonb;
   v_job_id uuid := NULL::uuid;
   v_preview_rows_marked integer := 0;
@@ -51179,8 +51185,63 @@ BEGIN
   END IF;
 
   IF UPPER(BTRIM(COALESCE(v_session_row.status, ''))) <> 'OPEN'
-     OR v_session_row.discarded_at_utc IS NOT NULL THEN
-    RAISE EXCEPTION 'banking_pay_workbench_session % is not OPEN', p_session_id;
+     OR v_session_row.discarded_at_utc IS NOT NULL
+     OR v_session_row.replacement_session_id IS NOT NULL THEN
+    RAISE EXCEPTION 'OBSOLETE_SESSION'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'OBSOLETE_SESSION',
+              'session_id', p_session_id::text,
+              'status', COALESCE(v_session_row.status, ''),
+              'replacement_session_id', CASE WHEN v_session_row.replacement_session_id IS NULL THEN NULL ELSE v_session_row.replacement_session_id::text END,
+              'message', 'The Banking Pay workbench session is no longer current. Refresh the preview before changing timesheet exclusion.'
+            )::text;
+  END IF;
+
+  IF p_expected_session_version IS NULL OR p_expected_session_version < 1 THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED',
+              'session_id', p_session_id::text,
+              'current_session_version', COALESCE(v_session_row.version, 0),
+              'message', 'The Banking Pay timesheet exclusion request was missing the current session version. Refresh the preview before changing exclusion.'
+            )::text;
+  END IF;
+
+  IF p_expected_progress_counter_version IS NULL OR p_expected_progress_counter_version < 0 THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED',
+              'session_id', p_session_id::text,
+              'current_progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+              'message', 'The Banking Pay timesheet exclusion request was missing the current progress version. Refresh the preview before changing exclusion.'
+            )::text;
+  END IF;
+
+  IF COALESCE(v_session_row.version, 0) IS DISTINCT FROM p_expected_session_version THEN
+    RAISE EXCEPTION 'STALE_SESSION'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'STALE_SESSION',
+              'session_id', p_session_id::text,
+              'expected_session_version', p_expected_session_version,
+              'current_session_version', COALESCE(v_session_row.version, 0),
+              'message', 'The Banking Pay workbench session changed in another window. Refresh the preview before changing timesheet exclusion.'
+            )::text;
+  END IF;
+
+  IF COALESCE(v_session_row.progress_counter_version, 0) IS DISTINCT FROM p_expected_progress_counter_version THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CHANGED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CHANGED',
+              'session_id', p_session_id::text,
+              'expected_progress_counter_version', p_expected_progress_counter_version,
+              'current_progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+              'message', 'The Banking Pay workbench changed in another window. Refresh the preview before changing timesheet exclusion.'
+            )::text;
   END IF;
 
   SELECT scope_row.*
@@ -51308,8 +51369,9 @@ BEGIN
   )
   SELECT COUNT(*)::integer,
          COUNT(*) FILTER (WHERE updated_line_work.old_status = 'READY')::integer,
-         COUNT(*) FILTER (WHERE updated_line_work.old_status = 'ERROR')::integer
-  INTO v_line_work_marked, v_ready_to_pending_delta, v_failed_to_pending_delta
+         COUNT(*) FILTER (WHERE updated_line_work.old_status = 'ERROR')::integer,
+         COUNT(*) FILTER (WHERE updated_line_work.old_status <> 'PENDING')::integer
+  INTO v_line_work_marked, v_ready_to_pending_delta, v_failed_to_pending_delta, v_non_pending_to_pending_delta
   FROM updated_line_work;
 
   UPDATE public.banking_pay_workbench_sessions AS session_row
@@ -51333,8 +51395,8 @@ BEGIN
       progress_updated_at_utc = v_now,
       updated_at_utc = v_now
   WHERE session_row.id = p_session_id
-  RETURNING session_row.version
-  INTO v_new_session_version;
+  RETURNING session_row.version, session_row.progress_counter_version
+  INTO v_new_session_version, v_new_progress_counter_version;
 
   UPDATE public.banking_pay_workbench_session_scope AS scope_row
   SET status = 'PENDING',
@@ -51442,6 +51504,9 @@ BEGIN
     'timesheet_id', p_timesheet_id::text,
     'is_excluded', COALESCE(p_is_excluded, false),
     'session_version', v_new_session_version,
+    'progress_counter_version', v_new_progress_counter_version,
+    'expected_session_version', p_expected_session_version,
+    'expected_progress_counter_version', p_expected_progress_counter_version,
     'job_id', CASE WHEN v_job_id IS NULL THEN NULL ELSE v_job_id::text END,
     'override_id', CASE WHEN v_upserted_row.id IS NULL THEN NULL ELSE v_upserted_row.id::text END,
     'preview_rows_marked_dirty', COALESCE(v_preview_rows_marked, 0),
@@ -51450,12 +51515,16 @@ BEGIN
     'progress', jsonb_build_object(
       'requires_paging', true,
       'still_running', true,
-      'next_recommended_action', 'PROCESS_LINE_WORK_CHUNK'
+      'next_recommended_action', 'PROCESS_LINE_WORK_CHUNK',
+      'session_version', v_new_session_version,
+      'progress_counter_version', v_new_progress_counter_version
     )
   );
 END;
 $function$;
 
+
+-- identity_args: p_session_id uuid, p_selected_preview_row_ids jsonb, p_actor_user_id uuid
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows(p_session_id uuid, p_selected_preview_row_ids jsonb, p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -51529,6 +51598,16 @@ BEGIN
     RAISE EXCEPTION 'banking_pay_workbench_session % is not OPEN', p_session_id;
   END IF;
 
+  IF v_input_type <> 'object' THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_CONTEXT_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_CONTEXT_REQUIRED',
+              'session_id', p_session_id::text,
+              'message', 'The Banking Pay selection update must include the current workbench session and progress context.'
+            )::text;
+  END IF;
+
   IF v_input_type = 'object' THEN
     v_expected_session_version_text := NULLIF(BTRIM(COALESCE(
       v_input->>'expected_session_version',
@@ -51572,8 +51651,29 @@ BEGIN
     END IF;
   END IF;
 
-  IF v_expected_session_version IS NOT NULL
-     AND COALESCE(v_session_row.version, 0) IS DISTINCT FROM v_expected_session_version THEN
+  IF v_expected_session_version IS NULL THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED',
+              'session_id', p_session_id::text,
+              'current_session_version', COALESCE(v_session_row.version, 0),
+              'message', 'The Banking Pay selection update was missing the current session version. Refresh the preview before changing the selection.'
+            )::text;
+  END IF;
+
+  IF v_expected_progress_counter_version IS NULL THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED',
+              'session_id', p_session_id::text,
+              'current_progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+              'message', 'The Banking Pay selection update was missing the current progress version. Refresh the preview before changing the selection.'
+            )::text;
+  END IF;
+
+  IF COALESCE(v_session_row.version, 0) IS DISTINCT FROM v_expected_session_version THEN
     RAISE EXCEPTION 'STALE_SESSION'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
@@ -51584,8 +51684,7 @@ BEGIN
             )::text;
   END IF;
 
-  IF v_expected_progress_counter_version IS NOT NULL
-     AND COALESCE(v_session_row.progress_counter_version, 0) IS DISTINCT FROM v_expected_progress_counter_version THEN
+  IF COALESCE(v_session_row.progress_counter_version, 0) IS DISTINCT FROM v_expected_progress_counter_version THEN
     RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CHANGED'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
@@ -52750,6 +52849,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid);
@@ -63284,7 +63384,7 @@ BEGIN
 END;
 $function$;
 
-
+-- identity_args: p_session_id uuid, p_actor_user_id uuid, p_resolution_payload_json jsonb
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_case_resolution(p_session_id uuid, p_actor_user_id uuid, p_resolution_payload_json jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -63294,6 +63394,10 @@ AS $function$
 DECLARE
   v_now timestamptz := now();
   v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
+  v_expected_session_version bigint := NULL::bigint;
+  v_expected_progress_counter_version bigint := NULL::bigint;
+  v_expected_session_version_text text := '';
+  v_expected_progress_counter_version_text text := '';
   v_resolution_payload_json jsonb := CASE
     WHEN jsonb_typeof(COALESCE(p_resolution_payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_resolution_payload_json, '{}'::jsonb)
     ELSE '{}'::jsonb
@@ -63318,6 +63422,7 @@ DECLARE
   v_bucket_count integer := 0;
   v_existing_deleted_count integer := 0;
   v_new_session_version bigint := 0;
+  v_new_progress_counter_version bigint := 0;
   v_job_json jsonb := '{}'::jsonb;
   v_job_id uuid := NULL::uuid;
   v_case_resolution_ids jsonb := '[]'::jsonb;
@@ -63404,8 +63509,109 @@ BEGIN
     RAISE EXCEPTION 'banking_pay_workbench_sessions row % not found', p_session_id;
   END IF;
 
-  IF v_session_row.status <> 'OPEN' THEN
-    RAISE EXCEPTION 'banking_pay_workbench_session % is not OPEN', p_session_id;
+  IF v_session_row.status <> 'OPEN'
+     OR v_session_row.discarded_at_utc IS NOT NULL
+     OR v_session_row.replacement_session_id IS NOT NULL THEN
+    RAISE EXCEPTION 'OBSOLETE_SESSION'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'OBSOLETE_SESSION',
+              'session_id', p_session_id::text,
+              'status', COALESCE(v_session_row.status, ''),
+              'replacement_session_id', CASE WHEN v_session_row.replacement_session_id IS NULL THEN NULL ELSE v_session_row.replacement_session_id::text END,
+              'message', 'The Banking Pay workbench session is no longer current. Refresh the preview before saving the case resolution.'
+            )::text;
+  END IF;
+
+  v_expected_session_version_text := NULLIF(BTRIM(COALESCE(
+    v_resolution_payload_json->>'expected_session_version',
+    v_resolution_payload_json->>'expectedSessionVersion',
+    v_resolution_payload_json->>'session_version',
+    v_resolution_payload_json->>'sessionVersion',
+    ''
+  )), '');
+
+  v_expected_progress_counter_version_text := NULLIF(BTRIM(COALESCE(
+    v_resolution_payload_json->>'expected_progress_counter_version',
+    v_resolution_payload_json->>'expectedProgressCounterVersion',
+    v_resolution_payload_json->>'progress_counter_version',
+    v_resolution_payload_json->>'progressCounterVersion',
+    ''
+  )), '');
+
+  IF v_expected_session_version_text IS NULL THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED',
+              'session_id', p_session_id::text,
+              'current_session_version', COALESCE(v_session_row.version, 0),
+              'message', 'The Banking Pay case resolution request was missing the current session version. Refresh the preview before saving.'
+            )::text;
+  END IF;
+
+  IF v_expected_session_version_text !~ '^[0-9]{1,18}$' THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID',
+              'session_id', p_session_id::text,
+              'provided_session_version', v_expected_session_version_text
+            )::text;
+  END IF;
+
+  v_expected_session_version := v_expected_session_version_text::bigint;
+  IF v_expected_session_version < 1 THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code', 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID', 'session_id', p_session_id::text)::text;
+  END IF;
+
+  IF v_expected_progress_counter_version_text IS NULL THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED',
+              'session_id', p_session_id::text,
+              'current_progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+              'message', 'The Banking Pay case resolution request was missing the current progress version. Refresh the preview before saving.'
+            )::text;
+  END IF;
+
+  IF v_expected_progress_counter_version_text !~ '^[0-9]{1,18}$' THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID',
+              'session_id', p_session_id::text,
+              'provided_progress_counter_version', v_expected_progress_counter_version_text
+            )::text;
+  END IF;
+
+  v_expected_progress_counter_version := v_expected_progress_counter_version_text::bigint;
+
+  IF COALESCE(v_session_row.version, 0) IS DISTINCT FROM v_expected_session_version THEN
+    RAISE EXCEPTION 'STALE_SESSION'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'STALE_SESSION',
+              'session_id', p_session_id::text,
+              'expected_session_version', v_expected_session_version,
+              'current_session_version', COALESCE(v_session_row.version, 0),
+              'message', 'The Banking Pay workbench session changed in another window. Refresh the preview before saving the case resolution.'
+            )::text;
+  END IF;
+
+  IF COALESCE(v_session_row.progress_counter_version, 0) IS DISTINCT FROM v_expected_progress_counter_version THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CHANGED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CHANGED',
+              'session_id', p_session_id::text,
+              'expected_progress_counter_version', v_expected_progress_counter_version,
+              'current_progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+              'message', 'The Banking Pay workbench changed in another window. Refresh the preview before saving the case resolution.'
+            )::text;
   END IF;
 
   v_candidate_id_text := BTRIM(COALESCE(
@@ -66101,10 +66307,12 @@ BEGIN
 
   UPDATE public.banking_pay_workbench_sessions
   SET version = public.banking_pay_workbench_sessions.version + 1,
+      progress_counter_version = COALESCE(public.banking_pay_workbench_sessions.progress_counter_version, 0) + 1,
+      progress_updated_at_utc = v_now,
       updated_at_utc = v_now
   WHERE public.banking_pay_workbench_sessions.id = p_session_id
-  RETURNING public.banking_pay_workbench_sessions.version
-  INTO v_new_session_version;
+  RETURNING public.banking_pay_workbench_sessions.version, public.banking_pay_workbench_sessions.progress_counter_version
+  INTO v_new_session_version, v_new_progress_counter_version;
 
   SELECT COALESCE(array_agg(DISTINCT case_timesheet_ids.timesheet_id ORDER BY case_timesheet_ids.timesheet_id), ARRAY[]::uuid[])
   INTO v_case_targeted_timesheet_ids
@@ -66162,6 +66370,7 @@ BEGIN
     'session_id', p_session_id::text,
     'candidate_id', COALESCE(v_resolved_candidate_id, v_candidate_id)::text,
     'session_version', v_new_session_version,
+    'progress_counter_version', v_new_progress_counter_version,
     'job_id', CASE WHEN v_job_id IS NULL THEN NULL ELSE v_job_id::text END,
     'case_resolution_id', v_case_resolution_id_text,
     'case_resolution_ids', v_case_resolution_ids,
@@ -66182,7 +66391,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_refresh(p_timesheet_ids uuid[], p_actor_user_id uuid DEFAULT NULL::uuid)
@@ -203561,16 +203769,12 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_decision_operations(
-  p_session_id uuid,
-  p_actor_user_id uuid,
-  p_operation_plan_json jsonb,
-  p_expected_session_version bigint DEFAULT NULL::bigint
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+-- identity_args: p_session_id uuid, p_actor_user_id uuid, p_operation_plan_json jsonb, p_expected_session_version bigint
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_decision_operations(p_session_id uuid, p_actor_user_id uuid, p_operation_plan_json jsonb, p_expected_session_version bigint DEFAULT NULL::bigint)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -203585,11 +203789,15 @@ DECLARE
   v_selected_preview_row_ids_json jsonb := '[]'::jsonb;
   v_selected_rows_provided boolean := false;
   v_expected_session_version bigint := p_expected_session_version;
+  v_expected_progress_counter_version bigint := NULL::bigint;
   v_plan_expected_session_version_text text := NULL::text;
+  v_plan_expected_progress_counter_version_text text := NULL::text;
   v_unchanged_case_resolution_count integer := 0;
   v_unchanged_case_resolution_count_text text := NULL::text;
   v_initial_session_row public.banking_pay_workbench_sessions%ROWTYPE;
   v_final_session_row public.banking_pay_workbench_sessions%ROWTYPE;
+  v_current_session_version bigint := 0;
+  v_current_progress_counter_version bigint := 0;
   v_operation_row record;
   v_operation_result jsonb := '{}'::jsonb;
   v_cleared_results_json jsonb := '[]'::jsonb;
@@ -203746,6 +203954,36 @@ BEGIN
             DETAIL = jsonb_build_object('code', 'PAY_WORKBENCH_DECISION_OPERATIONS_EXPECTED_VERSION_REQUIRED', 'session_id', p_session_id::text)::text;
   END IF;
 
+  v_plan_expected_progress_counter_version_text := NULLIF(BTRIM(COALESCE(
+    v_operation_plan_json->>'expected_progress_counter_version',
+    v_operation_plan_json->>'expectedProgressCounterVersion',
+    v_operation_plan_json->>'progress_counter_version',
+    v_operation_plan_json->>'progressCounterVersion',
+    ''
+  )), '');
+
+  IF v_plan_expected_progress_counter_version_text IS NULL THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED',
+              'session_id', p_session_id::text,
+              'message', 'The Banking Pay decision update was missing the current progress version. Refresh the preview before changing the workbench.'
+            )::text;
+  END IF;
+
+  IF v_plan_expected_progress_counter_version_text !~ '^[0-9]{1,18}$' THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID',
+              'session_id', p_session_id::text,
+              'provided_progress_counter_version', v_plan_expected_progress_counter_version_text
+            )::text;
+  END IF;
+
+  v_expected_progress_counter_version := v_plan_expected_progress_counter_version_text::bigint;
+
   v_unchanged_case_resolution_count_text := NULLIF(BTRIM(COALESCE(v_operation_plan_json->>'unchanged_case_resolution_count', '')), '');
   IF v_unchanged_case_resolution_count_text IS NOT NULL THEN
     IF v_unchanged_case_resolution_count_text !~ '^[0-9]{1,9}$' THEN
@@ -203780,6 +204018,21 @@ BEGIN
             DETAIL = jsonb_build_object('code', 'PAY_WORKBENCH_DECISION_OPERATIONS_VERSION_CONFLICT', 'session_id', p_session_id::text, 'expected_session_version', v_expected_session_version, 'actual_session_version', v_initial_session_row.version)::text;
   END IF;
 
+  IF COALESCE(v_initial_session_row.progress_counter_version, 0) IS DISTINCT FROM v_expected_progress_counter_version THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CHANGED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CHANGED',
+              'session_id', p_session_id::text,
+              'expected_progress_counter_version', v_expected_progress_counter_version,
+              'current_progress_counter_version', COALESCE(v_initial_session_row.progress_counter_version, 0),
+              'message', 'The Banking Pay workbench changed in another window. Refresh the preview before applying these decisions.'
+            )::text;
+  END IF;
+
+  v_current_session_version := COALESCE(v_initial_session_row.version, 0);
+  v_current_progress_counter_version := COALESCE(v_initial_session_row.progress_counter_version, 0);
+
   v_clear_operation_count := jsonb_array_length(v_clear_operations_json);
   v_apply_operation_count := jsonb_array_length(v_apply_operations_json);
   v_decision_operation_count := jsonb_array_length(v_decision_operations_json);
@@ -203792,7 +204045,13 @@ BEGIN
     v_operation_result := public.pay_workbench_session_clear_case_resolution(
       p_session_id => p_session_id,
       p_actor_user_id => p_actor_user_id,
-      p_resolution_payload_json => v_operation_row.operation_json
+      p_resolution_payload_json => (
+        CASE WHEN jsonb_typeof(COALESCE(v_operation_row.operation_json, '{}'::jsonb)) = 'object' THEN COALESCE(v_operation_row.operation_json, '{}'::jsonb) ELSE '{}'::jsonb END
+        || jsonb_build_object(
+          'expected_session_version', v_current_session_version,
+          'expected_progress_counter_version', v_current_progress_counter_version
+        )
+      )
     );
     IF jsonb_typeof(COALESCE(v_operation_result, '{}'::jsonb)) <> 'object' OR LOWER(BTRIM(COALESCE(v_operation_result->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on') THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_DECISION_OPERATIONS_CLEAR_FAILED'
@@ -203809,6 +204068,11 @@ BEGIN
     IF v_job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND NOT (v_job_id_text = ANY(v_job_ids)) THEN
       v_job_ids := array_append(v_job_ids, v_job_id_text);
     END IF;
+
+    SELECT COALESCE(session_row.version, 0), COALESCE(session_row.progress_counter_version, 0)
+    INTO v_current_session_version, v_current_progress_counter_version
+    FROM public.banking_pay_workbench_sessions AS session_row
+    WHERE session_row.id = p_session_id;
   END LOOP;
 
   FOR v_operation_row IN
@@ -203819,7 +204083,13 @@ BEGIN
     v_operation_result := public.pay_workbench_session_apply_case_resolution(
       p_session_id => p_session_id,
       p_actor_user_id => p_actor_user_id,
-      p_resolution_payload_json => v_operation_row.operation_json
+      p_resolution_payload_json => (
+        CASE WHEN jsonb_typeof(COALESCE(v_operation_row.operation_json, '{}'::jsonb)) = 'object' THEN COALESCE(v_operation_row.operation_json, '{}'::jsonb) ELSE '{}'::jsonb END
+        || jsonb_build_object(
+          'expected_session_version', v_current_session_version,
+          'expected_progress_counter_version', v_current_progress_counter_version
+        )
+      )
     );
     IF jsonb_typeof(COALESCE(v_operation_result, '{}'::jsonb)) <> 'object' OR LOWER(BTRIM(COALESCE(v_operation_result->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on') THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_DECISION_OPERATIONS_APPLY_FAILED'
@@ -203836,6 +204106,11 @@ BEGIN
     IF v_job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND NOT (v_job_id_text = ANY(v_job_ids)) THEN
       v_job_ids := array_append(v_job_ids, v_job_id_text);
     END IF;
+
+    SELECT COALESCE(session_row.version, 0), COALESCE(session_row.progress_counter_version, 0)
+    INTO v_current_session_version, v_current_progress_counter_version
+    FROM public.banking_pay_workbench_sessions AS session_row
+    WHERE session_row.id = p_session_id;
   END LOOP;
 
   FOR v_operation_row IN
@@ -203930,7 +204205,7 @@ BEGIN
         AND preview_row.timesheet_id IN (
           SELECT targeted_value.value::uuid
           FROM jsonb_array_elements_text(v_decision_targeted_timesheet_ids_json) AS targeted_value(value)
-          WHERE targeted_value.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          WHERE targeted_value.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         )
       ORDER BY preview_row.updated_at_utc DESC, preview_row.id DESC
       LIMIT 1;
@@ -204077,15 +204352,24 @@ BEGIN
       v_touched_candidate_ids := array_append(v_touched_candidate_ids, v_candidate_id_text);
     END IF;
     v_job_id_text := NULLIF(BTRIM(COALESCE(v_decision_enqueue_result->>'job_id', '')), '');
-    IF v_job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND NOT (v_job_id_text = ANY(v_job_ids)) THEN
+    IF v_job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND NOT (v_job_id_text = ANY(v_job_ids)) THEN
       v_job_ids := array_append(v_job_ids, v_job_id_text);
     END IF;
   END LOOP;
 
   IF v_selected_rows_provided THEN
+    SELECT COALESCE(session_row.version, 0), COALESCE(session_row.progress_counter_version, 0)
+    INTO v_current_session_version, v_current_progress_counter_version
+    FROM public.banking_pay_workbench_sessions AS session_row
+    WHERE session_row.id = p_session_id;
+
     v_selected_rows_result_json := public.pay_workbench_session_set_selected_rows(
       p_session_id => p_session_id,
-      p_selected_preview_row_ids => v_selected_preview_row_ids_json,
+      p_selected_preview_row_ids => jsonb_build_object(
+        'selected_preview_row_ids', COALESCE(v_selected_preview_row_ids_json, '[]'::jsonb),
+        'expected_session_version', v_current_session_version,
+        'expected_progress_counter_version', v_current_progress_counter_version
+      ),
       p_actor_user_id => p_actor_user_id
     );
     IF jsonb_typeof(COALESCE(v_selected_rows_result_json, '{}'::jsonb)) <> 'object' OR LOWER(BTRIM(COALESCE(v_selected_rows_result_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on') THEN
@@ -204113,6 +204397,7 @@ BEGIN
       'snapshot_run_id', CASE WHEN v_final_session_row.source_snapshot_run_id IS NULL THEN NULL::text ELSE v_final_session_row.source_snapshot_run_id::text END,
       'source_snapshot_run_id', CASE WHEN v_final_session_row.source_snapshot_run_id IS NULL THEN NULL::text ELSE v_final_session_row.source_snapshot_run_id::text END,
       'expected_session_version', v_expected_session_version,
+      'expected_progress_counter_version', v_expected_progress_counter_version,
       'initial_session_version', v_initial_session_row.version,
       'session_version', v_final_session_row.version,
       'progress_state', v_final_session_row.progress_state,
@@ -204137,6 +204422,7 @@ BEGIN
     );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger()
  RETURNS trigger
