@@ -27505,6 +27505,10 @@ DECLARE
   v_source_reconciliation_deferred_reason text := NULL::text;
   v_source_empty_session_progress_deferred boolean := false;
   v_source_empty_session_progress_deferred_reason text := NULL::text;
+  v_source_empty_cleanup_source_row_count integer := 0;
+  v_source_empty_cleanup_line_work_count integer := 0;
+  v_source_empty_cleanup_preview_row_count integer := 0;
+  v_source_empty_targeted_timesheet_count integer := 0;
   v_continuation_scope_counter_deferred boolean := false;
   v_continuation_scope_counter_deferred_reason text := NULL::text;
   v_finalisation_deferred boolean := false;
@@ -27532,6 +27536,9 @@ DECLARE
   v_clone_copied_preview_row_count integer := 0;
   v_clone_legacy_refresh_enqueued_count integer := 0;
   v_clone_continuation_job_id uuid := NULL::uuid;
+  v_clone_source_session_id_text text := NULL::text;
+  v_clone_source_session_id uuid := NULL::uuid;
+  v_clone_source_session_retired_count integer := 0;
   v_delta_fallback_enqueue_result jsonb := '{}'::jsonb;
   v_delta_fallback_job_id_text text := NULL::text;
   v_delta_scope_total_count integer := 0;
@@ -28854,6 +28861,18 @@ BEGIN
     v_clone_copied_candidate_count := CASE WHEN COALESCE(v_result_json->>'copied_candidate_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'copied_candidate_count')::integer ELSE 0 END;
     v_clone_copied_preview_row_count := CASE WHEN COALESCE(v_result_json->>'copied_preview_row_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'copied_preview_row_count')::integer ELSE 0 END;
     v_clone_legacy_refresh_enqueued_count := CASE WHEN COALESCE(v_result_json->>'legacy_refresh_enqueued_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'legacy_refresh_enqueued_count')::integer ELSE 0 END;
+    v_clone_source_session_id_text := COALESCE(
+      NULLIF(BTRIM(COALESCE(v_result_json->>'source_session_id', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_result_json->>'clone_from_session_id', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'source_session_id', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'source_session_id_text', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'clone_from_session_id', '')), '')
+    );
+    IF v_clone_source_session_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_clone_source_session_id := v_clone_source_session_id_text::uuid;
+    ELSE
+      v_clone_source_session_id := NULL::uuid;
+    END IF;
 
     IF v_clone_more_due IS TRUE THEN
       INSERT INTO public.banking_pay_workbench_jobs AS clone_continuation (
@@ -28919,6 +28938,50 @@ BEGIN
       v_next_recommended_action := CASE WHEN COALESCE(v_clone_legacy_refresh_enqueued_count, 0) > 0 THEN 'WAIT_FOR_WORKER' ELSE 'READ_PREVIEW_PAGE' END;
     END IF;
 
+    IF COALESCE(v_clone_more_due, false) IS NOT TRUE
+       AND v_clone_source_session_id IS NOT NULL
+       AND v_job_row.session_id IS NOT NULL
+       AND v_clone_source_session_id IS DISTINCT FROM v_job_row.session_id THEN
+      UPDATE public.banking_pay_workbench_sessions AS clone_source_session
+      SET status = 'DISCARDED',
+          discarded_at_utc = COALESCE(clone_source_session.discarded_at_utc, v_now),
+          replacement_session_id = v_job_row.session_id,
+          replacement_idempotency_key = COALESCE(
+            clone_source_session.replacement_idempotency_key,
+            'clone-rebase-complete:' || clone_source_session.id::text || ':replacement:' || v_job_row.session_id::text
+          ),
+          progress_state = 'DISCARDED',
+          progress_json = jsonb_strip_nulls(
+            COALESCE(clone_source_session.progress_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'discard_reason', 'SUPERSEDED_BY_COMPLETED_CLONE_REBASE',
+              'discarded_by_function', 'pay_workbench_complete_job',
+              'replacement_session_id', v_job_row.session_id::text,
+              'replacement_linked_at_utc', v_now::text,
+              'clone_rebase_completed_by_job_id', p_job_id::text,
+              'superseded_by_pay_date', CASE WHEN v_session_row.id IS NULL THEN NULL ELSE v_session_row.pay_date::text END,
+              'superseded_by_week_ending_cutoff', CASE WHEN v_session_row.id IS NULL THEN NULL ELSE v_session_row.week_ending_cutoff::text END
+            )
+          ),
+          progress_counter_version = COALESCE(clone_source_session.progress_counter_version, 0) + 1,
+          progress_updated_at_utc = v_now,
+          updated_at_utc = v_now
+      WHERE clone_source_session.id = v_clone_source_session_id
+        AND clone_source_session.status = 'OPEN'
+        AND clone_source_session.discarded_at_utc IS NULL
+        AND (
+          v_session_row.id IS NULL
+          OR clone_source_session.actor_user_id = v_session_row.actor_user_id
+        )
+        AND (
+          v_session_row.id IS NULL
+          OR clone_source_session.pay_date IS DISTINCT FROM v_session_row.pay_date
+          OR clone_source_session.week_ending_cutoff IS DISTINCT FROM v_session_row.week_ending_cutoff
+        );
+
+      GET DIAGNOSTICS v_clone_source_session_retired_count = ROW_COUNT;
+    END IF;
+
     UPDATE public.banking_pay_workbench_sessions AS clone_session_update
     SET progress_state = CASE
           WHEN v_clone_more_due IS TRUE THEN 'CLONE_REBASING'
@@ -28939,6 +29002,8 @@ BEGIN
             'last_clone_rebase_copied_candidate_count', COALESCE(v_clone_copied_candidate_count, 0),
             'last_clone_rebase_copied_preview_row_count', COALESCE(v_clone_copied_preview_row_count, 0),
             'last_clone_rebase_legacy_refresh_enqueued_count', COALESCE(v_clone_legacy_refresh_enqueued_count, 0),
+            'last_clone_rebase_source_session_id', CASE WHEN v_clone_source_session_id IS NULL THEN NULL ELSE v_clone_source_session_id::text END,
+            'last_clone_rebase_source_session_retired_count', COALESCE(v_clone_source_session_retired_count, 0),
             'next_recommended_action', v_next_recommended_action
           )
         ),
@@ -28962,6 +29027,9 @@ BEGIN
               'more_due', COALESCE(v_clone_more_due, false),
               'continuation_enqueued', COALESCE(v_continuation_enqueued, false),
               'continuation_jobs', COALESCE(v_continuation_jobs, '[]'::jsonb),
+              'source_session_id', CASE WHEN v_clone_source_session_id IS NULL THEN NULL ELSE v_clone_source_session_id::text END,
+              'source_session_retired_count', COALESCE(v_clone_source_session_retired_count, 0),
+              'source_session_retired', COALESCE(v_clone_source_session_retired_count, 0) > 0,
               'next_recommended_action', v_next_recommended_action,
               'completed_at_utc', v_now::text
             )
@@ -28984,6 +29052,9 @@ BEGIN
       'copied_candidate_count', COALESCE(v_clone_copied_candidate_count, 0),
       'copied_preview_row_count', COALESCE(v_clone_copied_preview_row_count, 0),
       'legacy_refresh_enqueued_count', COALESCE(v_clone_legacy_refresh_enqueued_count, 0),
+      'source_session_id', CASE WHEN v_clone_source_session_id IS NULL THEN NULL ELSE v_clone_source_session_id::text END,
+      'source_session_retired_count', COALESCE(v_clone_source_session_retired_count, 0),
+      'source_session_retired', COALESCE(v_clone_source_session_retired_count, 0) > 0,
       'next_recommended_action', v_next_recommended_action,
       'completed_at_utc', v_now::text
     );
@@ -29115,6 +29186,110 @@ BEGIN
         WHERE source_empty_scope.session_id = v_job_row.session_id
           AND source_empty_scope.candidate_id = v_job_row.candidate_id;
 
+        DROP TABLE IF EXISTS pg_temp._bpay_complete_job_source_empty_timesheets;
+        CREATE TEMP TABLE _bpay_complete_job_source_empty_timesheets ON COMMIT DROP AS
+        WITH raw_timesheet_ids(timesheet_id_text) AS (
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result_json->'targeted_timesheet_ids') = 'array' THEN v_result_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END)
+          UNION ALL
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result_json->'linked_timesheet_ids') = 'array' THEN v_result_json->'linked_timesheet_ids' ELSE '[]'::jsonb END)
+          UNION ALL
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result_json #> '{source_build,targeted_timesheet_ids}') = 'array' THEN v_result_json #> '{source_build,targeted_timesheet_ids}' ELSE '[]'::jsonb END)
+          UNION ALL
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result_json #> '{source_build,linked_timesheet_ids}') = 'array' THEN v_result_json #> '{source_build,linked_timesheet_ids}' ELSE '[]'::jsonb END)
+          UNION ALL
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_job_row.payload_json->'targeted_timesheet_ids') = 'array' THEN v_job_row.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END)
+          UNION ALL
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_job_row.payload_json->'linked_timesheet_ids') = 'array' THEN v_job_row.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END)
+          UNION ALL
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_job_row.payload_json #> '{source_build,targeted_timesheet_ids}') = 'array' THEN v_job_row.payload_json #> '{source_build,targeted_timesheet_ids}' ELSE '[]'::jsonb END)
+          UNION ALL
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_job_row.payload_json #> '{source_build,linked_timesheet_ids}') = 'array' THEN v_job_row.payload_json #> '{source_build,linked_timesheet_ids}' ELSE '[]'::jsonb END)
+        )
+        SELECT DISTINCT LOWER(BTRIM(timesheet_id_text))::uuid AS timesheet_id
+        FROM raw_timesheet_ids
+        WHERE NULLIF(BTRIM(timesheet_id_text), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+        SELECT COUNT(*)::integer
+        INTO v_source_empty_targeted_timesheet_count
+        FROM pg_temp._bpay_complete_job_source_empty_timesheets;
+
+        UPDATE public.banking_pay_workbench_candidate_source_lines AS source_empty_source_line
+        SET status = 'SUPERSEDED',
+            source_row_json = jsonb_strip_nulls(
+              COALESCE(source_empty_source_line.source_row_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'source_empty_cleanup', true,
+                'source_empty_cleanup_job_id', p_job_id::text,
+                'source_empty_cleanup_at_utc', v_now::text,
+                'source_empty_cleanup_reason', 'TARGETED_SOURCE_BUILD_RETURNED_ZERO_CURRENT_SOURCE_ROWS'
+              )
+            ),
+            updated_at_utc = v_now
+        WHERE source_empty_source_line.session_id = v_job_row.session_id
+          AND source_empty_source_line.candidate_id = v_job_row.candidate_id
+          AND UPPER(BTRIM(COALESCE(source_empty_source_line.status, ''))) IN ('CURRENT', 'READY', 'PENDING', 'DIRTY')
+          AND (
+            COALESCE(v_source_empty_targeted_timesheet_count, 0) = 0
+            OR source_empty_source_line.timesheet_id IN (
+              SELECT empty_timesheets.timesheet_id
+              FROM pg_temp._bpay_complete_job_source_empty_timesheets AS empty_timesheets
+            )
+          );
+        GET DIAGNOSTICS v_source_empty_cleanup_source_row_count = ROW_COUNT;
+
+        UPDATE public.banking_pay_workbench_candidate_line_work AS source_empty_line_work
+        SET status = 'SKIPPED',
+            work_payload_json = jsonb_strip_nulls(
+              COALESCE(source_empty_line_work.work_payload_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'source_empty_cleanup', true,
+                'source_empty_cleanup_job_id', p_job_id::text,
+                'source_empty_cleanup_at_utc', v_now::text,
+                'source_empty_cleanup_reason', 'TARGETED_SOURCE_BUILD_RETURNED_ZERO_CURRENT_SOURCE_ROWS',
+                'source_empty_cleanup_targeted_timesheet_count', COALESCE(v_source_empty_targeted_timesheet_count, 0)
+              )
+            ),
+            error_json = NULL::jsonb,
+            updated_at_utc = v_now
+        WHERE source_empty_line_work.session_id = v_job_row.session_id
+          AND source_empty_line_work.candidate_id = v_job_row.candidate_id
+          AND UPPER(BTRIM(COALESCE(source_empty_line_work.status, ''))) IN ('PENDING', 'DIRTY', 'READY')
+          AND (
+            COALESCE(v_source_empty_targeted_timesheet_count, 0) = 0
+            OR source_empty_line_work.timesheet_id IN (
+              SELECT empty_timesheets.timesheet_id
+              FROM pg_temp._bpay_complete_job_source_empty_timesheets AS empty_timesheets
+            )
+          );
+        GET DIAGNOSTICS v_source_empty_cleanup_line_work_count = ROW_COUNT;
+
+        UPDATE public.banking_pay_workbench_preview_rows AS source_empty_preview_row
+        SET status = 'SUPERSEDED',
+            selected = false,
+            selection_state = 'SUPERSEDED',
+            row_json = jsonb_strip_nulls(
+              COALESCE(source_empty_preview_row.row_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'source_empty_cleanup', true,
+                'source_empty_cleanup_job_id', p_job_id::text,
+                'source_empty_cleanup_at_utc', v_now::text,
+                'source_empty_cleanup_reason', 'TARGETED_SOURCE_BUILD_RETURNED_ZERO_CURRENT_SOURCE_ROWS',
+                'not_payable_reason', 'SOURCE_EMPTY_AFTER_UNAUTHORISE_OR_SOURCE_CHANGE'
+              )
+            ),
+            updated_at_utc = v_now
+        WHERE source_empty_preview_row.session_id = v_job_row.session_id
+          AND source_empty_preview_row.candidate_id = v_job_row.candidate_id
+          AND UPPER(BTRIM(COALESCE(source_empty_preview_row.status, ''))) IN ('READY', 'DIRTY', 'PENDING')
+          AND (
+            COALESCE(v_source_empty_targeted_timesheet_count, 0) = 0
+            OR source_empty_preview_row.timesheet_id IN (
+              SELECT empty_timesheets.timesheet_id
+              FROM pg_temp._bpay_complete_job_source_empty_timesheets AS empty_timesheets
+            )
+          );
+        GET DIAGNOSTICS v_source_empty_cleanup_preview_row_count = ROW_COUNT;
+
         BEGIN
           PERFORM 1
           FROM public.banking_pay_workbench_sessions AS source_empty_session_lock
@@ -29145,7 +29320,11 @@ BEGIN
                     'terminal_readiness_deferred', true,
                     'terminal_readiness_deferred_to', 'pay_workbench_complete_job',
                     'source_empty_session_progress_locking', 'NOWAIT',
-                    'source_empty_session_progress_update_applied', true
+                    'source_empty_session_progress_update_applied', true,
+                    'source_empty_cleanup_source_row_count', COALESCE(v_source_empty_cleanup_source_row_count, 0),
+                    'source_empty_cleanup_line_work_count', COALESCE(v_source_empty_cleanup_line_work_count, 0),
+                    'source_empty_cleanup_preview_row_count', COALESCE(v_source_empty_cleanup_preview_row_count, 0),
+                    'source_empty_cleanup_targeted_timesheet_count', COALESCE(v_source_empty_targeted_timesheet_count, 0)
                   ),
                 progress_counter_version = COALESCE(source_empty_session.progress_counter_version, 0) + 1,
                 progress_updated_at_utc = v_now,
@@ -29890,6 +30069,10 @@ BEGIN
     'source_build_reconciliation_deferred_reason', v_source_reconciliation_deferred_reason,
     'source_empty_session_progress_deferred', COALESCE(v_source_empty_session_progress_deferred, false),
     'source_empty_session_progress_deferred_reason', v_source_empty_session_progress_deferred_reason,
+    'source_empty_cleanup_source_row_count', COALESCE(v_source_empty_cleanup_source_row_count, 0),
+    'source_empty_cleanup_line_work_count', COALESCE(v_source_empty_cleanup_line_work_count, 0),
+    'source_empty_cleanup_preview_row_count', COALESCE(v_source_empty_cleanup_preview_row_count, 0),
+    'source_empty_cleanup_targeted_timesheet_count', COALESCE(v_source_empty_targeted_timesheet_count, 0),
     'continuation_scope_counter_deferred', COALESCE(v_continuation_scope_counter_deferred, false),
     'continuation_scope_counter_deferred_reason', v_continuation_scope_counter_deferred_reason,
     'finalisation_deferred', COALESCE(v_finalisation_deferred, false),
@@ -29998,6 +30181,10 @@ BEGIN
     'continuation_scope_failed_delta', COALESCE(v_scope_continuation_failed_delta, 0),
     'source_empty_session_progress_deferred', COALESCE(v_source_empty_session_progress_deferred, false),
     'source_empty_session_progress_deferred_reason', v_source_empty_session_progress_deferred_reason,
+    'source_empty_cleanup_source_row_count', COALESCE(v_source_empty_cleanup_source_row_count, 0),
+    'source_empty_cleanup_line_work_count', COALESCE(v_source_empty_cleanup_line_work_count, 0),
+    'source_empty_cleanup_preview_row_count', COALESCE(v_source_empty_cleanup_preview_row_count, 0),
+    'source_empty_cleanup_targeted_timesheet_count', COALESCE(v_source_empty_targeted_timesheet_count, 0),
     'continuation_scope_counter_deferred', COALESCE(v_continuation_scope_counter_deferred, false),
     'continuation_scope_counter_deferred_reason', v_continuation_scope_counter_deferred_reason,
     'finalisation_deferred', COALESCE(v_finalisation_deferred, false),
@@ -30005,6 +30192,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_fail_job(p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer DEFAULT NULL::integer)
@@ -48697,38 +48885,92 @@ begin
 end;
 $function$;
 
-
-
-DROP FUNCTION IF EXISTS public.pay_workbench_session_open(uuid, date, date, jsonb, text);
-
-DROP FUNCTION IF EXISTS public.pay_workbench_session_open(uuid, date, date, jsonb, text);
-
-
-
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(
-  p_actor_user_id uuid,
-  p_pay_date date,
-  p_week_ending_cutoff date,
-  p_filters_json jsonb,
-  p_session_signature text,
-  p_force_new_session boolean DEFAULT false,
-  p_discard_source_session boolean DEFAULT false,
-  p_source_session_id uuid DEFAULT NULL::uuid,
-  p_obsolete_session_ids jsonb DEFAULT '[]'::jsonb,
-  p_mutation_context text DEFAULT NULL::text,
-  p_created_pay_batch_ids jsonb DEFAULT '[]'::jsonb,
-  p_dirty_candidate_ids jsonb DEFAULT '[]'::jsonb,
-  p_refresh_job_ids jsonb DEFAULT '[]'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text, p_force_new_session boolean DEFAULT false, p_discard_source_session boolean DEFAULT false, p_source_session_id uuid DEFAULT NULL::uuid, p_obsolete_session_ids jsonb DEFAULT '[]'::jsonb, p_mutation_context text DEFAULT NULL::text, p_created_pay_batch_ids jsonb DEFAULT '[]'::jsonb, p_dirty_candidate_ids jsonb DEFAULT '[]'::jsonb, p_refresh_job_ids jsonb DEFAULT '[]'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
   v_filters_json jsonb := CASE WHEN jsonb_typeof(COALESCE(p_filters_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_filters_json, '{}'::jsonb) ELSE '{}'::jsonb END;
-  v_session_signature text := NULLIF(BTRIM(COALESCE(p_session_signature, '')), '');
+  v_input_session_signature text := NULLIF(BTRIM(COALESCE(p_session_signature, '')), '');
+  v_session_signature text := NULL::text;
+  v_canonical_session_signature text := NULL::text;
+  v_sanitised_filters_json jsonb := '{}'::jsonb;
+  v_filter_strip_keys text[] := ARRAY[
+    'preview_context_summary',
+    'paye_guardrails',
+    'preview_decisions_json',
+    'preview_decisions',
+    'open_options',
+    'options',
+    'progress_json',
+    'candidate_sample_rows_json',
+    'scope_next_cursor_json',
+    'pay_date',
+    'payDate',
+    'pay_date_text',
+    'payDateText',
+    'source_pay_date',
+    'sourcePayDate',
+    'target_pay_date',
+    'targetPayDate',
+    'pay_week',
+    'payWeek',
+    'pay_week_label',
+    'payWeekLabel',
+    'pay_week_start',
+    'payWeekStart',
+    'pay_week_end',
+    'payWeekEnd',
+    'pay_period_start',
+    'payPeriodStart',
+    'pay_period_end',
+    'payPeriodEnd',
+    'week_start',
+    'weekStart',
+    'week_end',
+    'weekEnd',
+    'week_ending_cutoff',
+    'weekEndingCutoff',
+    'source_snapshot_run_id',
+    'snapshot_run_id',
+    'source_session_id',
+    'sourceSessionId',
+    'target_session_id',
+    'targetSessionId',
+    'session_id',
+    'sessionId',
+    'session_version',
+    'sessionVersion',
+    'session_signature',
+    'sessionSignature',
+    'clone_from_session_id',
+    'cloneFromSessionId',
+    'existing_paye_draft',
+    'eligibility',
+    'today_uk',
+    'worker_metadata',
+    'job_metadata',
+    'source_build',
+    'clone_rebase',
+    'clone_rebase_result',
+    'cursor',
+    'cursor_json',
+    'page_cursor',
+    'candidate_cursor',
+    'last_cursor',
+    'active_jobs',
+    'pending_job_ids_json',
+    'replacement_session_id',
+    'replacement_idempotency_key'
+  ]::text[];
+  v_signature_nested_filters jsonb := '{}'::jsonb;
+  v_signature_nested_filter jsonb := '{}'::jsonb;
+  v_signature_candidate_filter_id text := NULL::text;
+  v_signature_client_filter_id text := NULL::text;
+  v_signature_candidate_ids jsonb := '[]'::jsonb;
   v_effective_week_ending_cutoff date := COALESCE(p_week_ending_cutoff, DATE '9999-12-31');
   v_filter_candidate_id uuid := NULL::uuid;
   v_filter_client_id uuid := NULL::uuid;
@@ -48756,6 +48998,9 @@ DECLARE
   v_actor_is_active boolean := false;
   v_open_options_json jsonb := '{}'::jsonb;
   v_allow_session_rebase boolean := false;
+  v_force_discarded_session_count integer := 0;
+  v_force_discarded_session_ids jsonb := '[]'::jsonb;
+  v_force_discarded_session_link_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('BOOTSTRAP');
 
@@ -48771,10 +49016,117 @@ BEGIN
             DETAIL = jsonb_build_object('code', 'PAY_WORKBENCH_SESSION_OPEN_PAY_DATE_REQUIRED')::text;
   END IF;
 
+  v_sanitised_filters_json := v_filters_json - v_filter_strip_keys;
+
+  IF jsonb_typeof(v_sanitised_filters_json->'filters') = 'object' THEN
+    v_sanitised_filters_json := jsonb_set(
+      v_sanitised_filters_json,
+      '{filters}',
+      COALESCE(v_sanitised_filters_json->'filters', '{}'::jsonb) - v_filter_strip_keys,
+      true
+    );
+  END IF;
+
+  IF jsonb_typeof(v_sanitised_filters_json->'filter') = 'object' THEN
+    v_sanitised_filters_json := jsonb_set(
+      v_sanitised_filters_json,
+      '{filter}',
+      COALESCE(v_sanitised_filters_json->'filter', '{}'::jsonb) - v_filter_strip_keys,
+      true
+    );
+  END IF;
+
+  v_sanitised_filters_json := jsonb_strip_nulls(v_sanitised_filters_json);
+  v_signature_nested_filters := CASE
+    WHEN jsonb_typeof(v_sanitised_filters_json->'filters') = 'object'
+      THEN COALESCE(v_sanitised_filters_json->'filters', '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_signature_nested_filter := CASE
+    WHEN jsonb_typeof(v_sanitised_filters_json->'filter') = 'object'
+      THEN COALESCE(v_sanitised_filters_json->'filter', '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+
+  v_signature_candidate_filter_id := NULLIF(BTRIM(COALESCE(
+    v_sanitised_filters_json->>'candidate_filter_id',
+    v_sanitised_filters_json->>'candidateFilterId',
+    v_sanitised_filters_json->>'filter_candidate_id',
+    v_signature_nested_filters->>'candidate_filter_id',
+    v_signature_nested_filters->>'candidateFilterId',
+    v_signature_nested_filters->>'filter_candidate_id',
+    v_signature_nested_filter->>'candidate_filter_id',
+    v_signature_nested_filter->>'candidateFilterId',
+    v_signature_nested_filter->>'filter_candidate_id',
+    ''
+  )), '');
+
+  v_signature_client_filter_id := NULLIF(BTRIM(COALESCE(
+    v_sanitised_filters_json->>'client_filter_id',
+    v_sanitised_filters_json->>'clientFilterId',
+    v_sanitised_filters_json->>'filter_client_id',
+    v_sanitised_filters_json->>'client_id',
+    v_sanitised_filters_json->>'clientId',
+    v_signature_nested_filters->>'client_filter_id',
+    v_signature_nested_filters->>'clientFilterId',
+    v_signature_nested_filters->>'filter_client_id',
+    v_signature_nested_filters->>'client_id',
+    v_signature_nested_filters->>'clientId',
+    v_signature_nested_filter->>'client_filter_id',
+    v_signature_nested_filter->>'clientFilterId',
+    v_signature_nested_filter->>'filter_client_id',
+    v_signature_nested_filter->>'client_id',
+    v_signature_nested_filter->>'clientId',
+    ''
+  )), '');
+
+  WITH raw_candidate_ids(candidate_id_text) AS (
+    SELECT NULLIF(BTRIM(v_sanitised_filters_json->>'candidate_id'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_sanitised_filters_json->>'candidateId'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_signature_nested_filters->>'candidate_id'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_signature_nested_filters->>'candidateId'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_signature_nested_filter->>'candidate_id'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_signature_nested_filter->>'candidateId'), '')
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_sanitised_filters_json->'candidate_ids') = 'array' THEN v_sanitised_filters_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_sanitised_filters_json->'candidateIds') = 'array' THEN v_sanitised_filters_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_signature_nested_filters->'candidate_ids') = 'array' THEN v_signature_nested_filters->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_signature_nested_filters->'candidateIds') = 'array' THEN v_signature_nested_filters->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_signature_nested_filter->'candidate_ids') = 'array' THEN v_signature_nested_filter->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_signature_nested_filter->'candidateIds') = 'array' THEN v_signature_nested_filter->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+  ), valid_candidate_ids AS (
+    SELECT DISTINCT LOWER(raw_candidate_ids.candidate_id_text) AS candidate_id_text
+    FROM raw_candidate_ids
+    WHERE raw_candidate_ids.candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  )
+  SELECT COALESCE(jsonb_agg(valid_candidate_ids.candidate_id_text ORDER BY valid_candidate_ids.candidate_id_text), '[]'::jsonb)
+  INTO v_signature_candidate_ids
+  FROM valid_candidate_ids;
+
+  v_canonical_session_signature := jsonb_build_object(
+    'actor_user_id', p_actor_user_id::text,
+    'candidate_filter_id', COALESCE(v_signature_candidate_filter_id, ''),
+    'candidate_ids', COALESCE(v_signature_candidate_ids, '[]'::jsonb),
+    'client_filter_id', COALESCE(v_signature_client_filter_id, ''),
+    'kind', 'BANKING_PAY_WORKBENCH',
+    'pay_date', p_pay_date::text,
+    'signature_version', 4,
+    'week_ending_cutoff', v_effective_week_ending_cutoff::text
+  )::text;
+  v_session_signature := NULLIF(BTRIM(COALESCE(v_canonical_session_signature, '')), '');
+
   IF v_session_signature IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_SESSION_OPEN_SIGNATURE_REQUIRED'
       USING ERRCODE = 'P0001',
-            DETAIL = jsonb_build_object('code', 'PAY_WORKBENCH_SESSION_OPEN_SIGNATURE_REQUIRED')::text;
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_SESSION_OPEN_SIGNATURE_REQUIRED',
+              'input_session_signature_present', v_input_session_signature IS NOT NULL
+            )::text;
   END IF;
 
   SELECT EXISTS (
@@ -48803,18 +49155,18 @@ BEGIN
     'false'
   ))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
-  IF COALESCE(v_allow_session_rebase, false) IS TRUE
-     AND COALESCE(p_force_new_session, false) IS NOT TRUE
+  IF COALESCE(p_force_new_session, false) IS NOT TRUE
      AND COALESCE(p_discard_source_session, false) IS NOT TRUE
+     AND v_mutation_context IS NULL
      AND to_regprocedure('public.pay_workbench_session_open_shared_v2(uuid,date,date,jsonb,text)') IS NOT NULL THEN
     RETURN public.pay_workbench_session_open_shared_v2(
       p_actor_user_id => p_actor_user_id,
       p_pay_date => p_pay_date,
       p_week_ending_cutoff => p_week_ending_cutoff,
       p_filters_json => v_filters_json,
-      p_session_signature => p_session_signature
+      p_session_signature => v_session_signature
     ) || jsonb_build_object(
-      'open_wrapper_passed_clone_rebase_options', true,
+      'open_wrapper_passed_clone_rebase_options', COALESCE(v_allow_session_rebase, false),
       'open_wrapper_function', 'pay_workbench_session_open'
     );
   END IF;
@@ -48858,25 +49210,120 @@ BEGIN
     p_actor_user_id => p_actor_user_id,
     p_candidate_id => v_filter_candidate_id,
     p_client_id => v_filter_client_id,
-    p_preview_decisions_json => v_filters_json || jsonb_build_object('preview_context_mode', 'SUMMARY', 'scope_limit', 100)
+    p_preview_decisions_json => v_sanitised_filters_json || jsonb_build_object('preview_context_mode', 'SUMMARY', 'scope_limit', 100)
   );
 
   IF v_force_new_session IS TRUE THEN
-    UPDATE public.banking_pay_workbench_sessions AS existing_session
-    SET status = 'DISCARDED',
-        discarded_at_utc = COALESCE(existing_session.discarded_at_utc, v_now),
-        progress_state = 'DISCARDED',
-        progress_json = COALESCE(existing_session.progress_json, '{}'::jsonb) || jsonb_build_object(
-          'discarded_reason', COALESCE(v_mutation_context, 'FORCE_NEW_SESSION'),
-          'discarded_at_utc', v_now::text
-        ),
-        progress_counter_version = COALESCE(existing_session.progress_counter_version, 0) + 1,
-        progress_updated_at_utc = v_now,
-        updated_at_utc = v_now
-    WHERE existing_session.actor_user_id = p_actor_user_id
-      AND existing_session.session_signature = v_session_signature
-      AND existing_session.status = 'OPEN'
-      AND existing_session.discarded_at_utc IS NULL;
+    WITH force_discarded_sessions AS (
+      UPDATE public.banking_pay_workbench_sessions AS existing_session
+      SET status = 'DISCARDED',
+          discarded_at_utc = COALESCE(existing_session.discarded_at_utc, v_now),
+          progress_state = 'DISCARDED',
+          progress_json = jsonb_strip_nulls(
+            COALESCE(existing_session.progress_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'discarded_reason', COALESCE(v_mutation_context, 'FORCE_NEW_SESSION'),
+              'discarded_by_function', 'pay_workbench_session_open',
+              'discarded_at_utc', v_now::text,
+              'canonical_scope_signature', v_session_signature
+            )
+          ),
+          progress_counter_version = COALESCE(existing_session.progress_counter_version, 0) + 1,
+          progress_updated_at_utc = v_now,
+          updated_at_utc = v_now
+      WHERE existing_session.actor_user_id = p_actor_user_id
+        AND existing_session.status = 'OPEN'
+        AND existing_session.discarded_at_utc IS NULL
+        AND (
+          (
+            existing_session.pay_date = p_pay_date
+            AND existing_session.week_ending_cutoff = v_effective_week_ending_cutoff
+            AND EXISTS (
+          SELECT 1
+          FROM LATERAL (
+            SELECT COALESCE(existing_session.filters_json, '{}'::jsonb) AS filtered_json
+          ) AS session_filter
+          CROSS JOIN LATERAL (
+            SELECT
+              CASE WHEN jsonb_typeof(session_filter.filtered_json->'filters') = 'object' THEN COALESCE(session_filter.filtered_json->'filters', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filters_json,
+              CASE WHEN jsonb_typeof(session_filter.filtered_json->'filter') = 'object' THEN COALESCE(session_filter.filtered_json->'filter', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filter_json
+          ) AS session_nested
+          CROSS JOIN LATERAL (
+            WITH raw_candidate_ids(candidate_id_text) AS (
+              SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidate_id'), '')
+              UNION ALL SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidateId'), '')
+              UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidate_id'), '')
+              UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidateId'), '')
+              UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidate_id'), '')
+              UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidateId'), '')
+              UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+              FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidate_ids') = 'array' THEN session_filter.filtered_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+              UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+              FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidateIds') = 'array' THEN session_filter.filtered_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+              UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+              FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidate_ids') = 'array' THEN session_nested.nested_filters_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+              UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+              FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidateIds') = 'array' THEN session_nested.nested_filters_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+              UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+              FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidate_ids') = 'array' THEN session_nested.nested_filter_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+              UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+              FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidateIds') = 'array' THEN session_nested.nested_filter_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            ), valid_candidate_ids AS (
+              SELECT DISTINCT LOWER(raw_candidate_ids.candidate_id_text) AS candidate_id_text
+              FROM raw_candidate_ids
+              WHERE raw_candidate_ids.candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            )
+            SELECT COALESCE(jsonb_agg(valid_candidate_ids.candidate_id_text ORDER BY valid_candidate_ids.candidate_id_text), '[]'::jsonb) AS candidate_ids_json
+            FROM valid_candidate_ids
+          ) AS session_candidate_ids
+          WHERE COALESCE(NULLIF(BTRIM(COALESCE(
+                  session_filter.filtered_json->>'candidate_filter_id',
+                  session_filter.filtered_json->>'candidateFilterId',
+                  session_filter.filtered_json->>'filter_candidate_id',
+                  session_nested.nested_filters_json->>'candidate_filter_id',
+                  session_nested.nested_filters_json->>'candidateFilterId',
+                  session_nested.nested_filters_json->>'filter_candidate_id',
+                  session_nested.nested_filter_json->>'candidate_filter_id',
+                  session_nested.nested_filter_json->>'candidateFilterId',
+                  session_nested.nested_filter_json->>'filter_candidate_id',
+                  ''
+                )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_candidate_filter_id, '')
+            AND COALESCE(NULLIF(BTRIM(COALESCE(
+                  session_filter.filtered_json->>'client_filter_id',
+                  session_filter.filtered_json->>'clientFilterId',
+                  session_filter.filtered_json->>'filter_client_id',
+                  session_filter.filtered_json->>'client_id',
+                  session_filter.filtered_json->>'clientId',
+                  session_nested.nested_filters_json->>'client_filter_id',
+                  session_nested.nested_filters_json->>'clientFilterId',
+                  session_nested.nested_filters_json->>'filter_client_id',
+                  session_nested.nested_filters_json->>'client_id',
+                  session_nested.nested_filters_json->>'clientId',
+                  session_nested.nested_filter_json->>'client_filter_id',
+                  session_nested.nested_filter_json->>'clientFilterId',
+                  session_nested.nested_filter_json->>'filter_client_id',
+                  session_nested.nested_filter_json->>'client_id',
+                  session_nested.nested_filter_json->>'clientId',
+                  ''
+                )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_client_filter_id, '')
+            AND COALESCE(session_candidate_ids.candidate_ids_json, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(v_signature_candidate_ids, '[]'::jsonb)
+            )
+          )
+          OR existing_session.id IS NOT DISTINCT FROM p_source_session_id
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(COALESCE(p_obsolete_session_ids, '[]'::jsonb)) = 'array' THEN COALESCE(p_obsolete_session_ids, '[]'::jsonb) ELSE '[]'::jsonb END) AS obsolete_session_id(value)
+            WHERE NULLIF(BTRIM(obsolete_session_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              AND NULLIF(BTRIM(obsolete_session_id.value), '')::uuid = existing_session.id
+          )
+        )
+      RETURNING existing_session.id
+    )
+    SELECT COUNT(*)::integer,
+           COALESCE(jsonb_agg(force_discarded_sessions.id::text ORDER BY force_discarded_sessions.id::text), '[]'::jsonb)
+    INTO v_force_discarded_session_count,
+         v_force_discarded_session_ids
+    FROM force_discarded_sessions;
   ELSE
     SELECT existing_session.id
     INTO v_existing_session_id
@@ -48884,9 +49331,78 @@ BEGIN
     WHERE existing_session.actor_user_id = p_actor_user_id
       AND existing_session.status = 'OPEN'
       AND existing_session.discarded_at_utc IS NULL
-      AND existing_session.session_signature = v_session_signature
       AND existing_session.pay_date IS NOT DISTINCT FROM p_pay_date
       AND existing_session.week_ending_cutoff IS NOT DISTINCT FROM v_effective_week_ending_cutoff
+      AND EXISTS (
+        SELECT 1
+        FROM LATERAL (
+          SELECT COALESCE(existing_session.filters_json, '{}'::jsonb) AS filtered_json
+        ) AS session_filter
+        CROSS JOIN LATERAL (
+          SELECT
+            CASE WHEN jsonb_typeof(session_filter.filtered_json->'filters') = 'object' THEN COALESCE(session_filter.filtered_json->'filters', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filters_json,
+            CASE WHEN jsonb_typeof(session_filter.filtered_json->'filter') = 'object' THEN COALESCE(session_filter.filtered_json->'filter', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filter_json
+        ) AS session_nested
+        CROSS JOIN LATERAL (
+          WITH raw_candidate_ids(candidate_id_text) AS (
+            SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidate_id'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidateId'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidate_id'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidateId'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidate_id'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidateId'), '')
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidate_ids') = 'array' THEN session_filter.filtered_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidateIds') = 'array' THEN session_filter.filtered_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidate_ids') = 'array' THEN session_nested.nested_filters_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidateIds') = 'array' THEN session_nested.nested_filters_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidate_ids') = 'array' THEN session_nested.nested_filter_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidateIds') = 'array' THEN session_nested.nested_filter_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+          ), valid_candidate_ids AS (
+            SELECT DISTINCT LOWER(raw_candidate_ids.candidate_id_text) AS candidate_id_text
+            FROM raw_candidate_ids
+            WHERE raw_candidate_ids.candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          )
+          SELECT COALESCE(jsonb_agg(valid_candidate_ids.candidate_id_text ORDER BY valid_candidate_ids.candidate_id_text), '[]'::jsonb) AS candidate_ids_json
+          FROM valid_candidate_ids
+        ) AS session_candidate_ids
+        WHERE COALESCE(NULLIF(BTRIM(COALESCE(
+                session_filter.filtered_json->>'candidate_filter_id',
+                session_filter.filtered_json->>'candidateFilterId',
+                session_filter.filtered_json->>'filter_candidate_id',
+                session_nested.nested_filters_json->>'candidate_filter_id',
+                session_nested.nested_filters_json->>'candidateFilterId',
+                session_nested.nested_filters_json->>'filter_candidate_id',
+                session_nested.nested_filter_json->>'candidate_filter_id',
+                session_nested.nested_filter_json->>'candidateFilterId',
+                session_nested.nested_filter_json->>'filter_candidate_id',
+                ''
+              )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_candidate_filter_id, '')
+          AND COALESCE(NULLIF(BTRIM(COALESCE(
+                session_filter.filtered_json->>'client_filter_id',
+                session_filter.filtered_json->>'clientFilterId',
+                session_filter.filtered_json->>'filter_client_id',
+                session_filter.filtered_json->>'client_id',
+                session_filter.filtered_json->>'clientId',
+                session_nested.nested_filters_json->>'client_filter_id',
+                session_nested.nested_filters_json->>'clientFilterId',
+                session_nested.nested_filters_json->>'filter_client_id',
+                session_nested.nested_filters_json->>'client_id',
+                session_nested.nested_filters_json->>'clientId',
+                session_nested.nested_filter_json->>'client_filter_id',
+                session_nested.nested_filter_json->>'clientFilterId',
+                session_nested.nested_filter_json->>'filter_client_id',
+                session_nested.nested_filter_json->>'client_id',
+                session_nested.nested_filter_json->>'clientId',
+                ''
+              )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_client_filter_id, '')
+          AND COALESCE(session_candidate_ids.candidate_ids_json, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(v_signature_candidate_ids, '[]'::jsonb)
+      )
     ORDER BY existing_session.updated_at_utc DESC NULLS LAST,
              existing_session.created_at_utc DESC NULLS LAST,
              existing_session.id DESC
@@ -48932,11 +49448,11 @@ BEGIN
       p_actor_user_id,
       p_pay_date,
       v_effective_week_ending_cutoff,
-      v_filters_json || jsonb_build_object(
+      v_sanitised_filters_json || jsonb_build_object(
         'scope_is_row_backed', true,
         'scope_seed_source', 'pay_preview_build_context.PAGE',
         'scope_count_unknown', true,
-        'preview_context_summary', v_summary_context_json
+        'canonical_scope_signature_version', 4
       ),
       v_session_signature,
       v_snapshot_run_id,
@@ -48977,11 +49493,11 @@ BEGIN
     SET actor_user_id = p_actor_user_id,
         pay_date = p_pay_date,
         week_ending_cutoff = v_effective_week_ending_cutoff,
-        filters_json = v_filters_json || jsonb_build_object(
+        filters_json = v_sanitised_filters_json || jsonb_build_object(
           'scope_is_row_backed', true,
           'scope_seed_source', 'pay_preview_build_context.PAGE',
           'scope_count_unknown', true,
-          'preview_context_summary', v_summary_context_json
+          'canonical_scope_signature_version', 4
         ),
         source_snapshot_run_id = v_snapshot_run_id,
         version = workbench_session.version + 1,
@@ -49024,6 +49540,42 @@ BEGIN
     v_action := 'WORKBENCH_SESSION_RESUMED';
   END IF;
 
+  IF COALESCE(v_force_discarded_session_count, 0) > 0 AND v_session_id IS NOT NULL THEN
+    WITH force_discarded_session_ids AS (
+      SELECT NULLIF(BTRIM(discarded_session_id.value), '')::uuid AS session_id
+      FROM jsonb_array_elements_text(COALESCE(v_force_discarded_session_ids, '[]'::jsonb)) AS discarded_session_id(value)
+      WHERE NULLIF(BTRIM(discarded_session_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), linked_force_discarded_sessions AS (
+      UPDATE public.banking_pay_workbench_sessions AS discarded_session
+      SET replacement_session_id = v_session_id,
+          replacement_idempotency_key = COALESCE(
+            discarded_session.replacement_idempotency_key,
+            'force-new:' || discarded_session.id::text || ':replacement:' || v_session_id::text
+          ),
+          progress_json = jsonb_strip_nulls(
+            COALESCE(discarded_session.progress_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'replacement_session_id', v_session_id::text,
+              'replacement_linked_by_function', 'pay_workbench_session_open',
+              'replacement_linked_at_utc', v_now::text,
+              'replacement_reason', COALESCE(v_mutation_context, 'FORCE_NEW_SESSION')
+            )
+          ),
+          progress_counter_version = COALESCE(discarded_session.progress_counter_version, 0) + 1,
+          progress_updated_at_utc = v_now,
+          updated_at_utc = v_now
+      FROM force_discarded_session_ids AS force_discarded_session_id
+      WHERE discarded_session.id = force_discarded_session_id.session_id
+        AND discarded_session.id IS DISTINCT FROM v_session_id
+        AND discarded_session.status = 'DISCARDED'
+        AND discarded_session.replacement_session_id IS NULL
+      RETURNING discarded_session.id
+    )
+    SELECT COUNT(*)::integer
+    INTO v_force_discarded_session_link_count
+    FROM linked_force_discarded_sessions;
+  END IF;
+
   v_seed_result := public.pay_workbench_session_seed_scope_chunk(
     p_session_id => v_session_id,
     p_cursor_json => NULL::jsonb,
@@ -49054,6 +49606,9 @@ BEGIN
       'session_signature', v_session_signature,
       'source_snapshot_run_id', v_snapshot_run_id::text,
       'row_backed_scope', true,
+      'force_discarded_session_count', COALESCE(v_force_discarded_session_count, 0),
+      'force_discarded_session_ids', COALESCE(v_force_discarded_session_ids, '[]'::jsonb),
+      'force_discarded_session_link_count', COALESCE(v_force_discarded_session_link_count, 0),
       'scope_first_page_count', v_scope_first_page_count,
       'scope_has_more', v_scope_has_more,
       'scope_seed_result', v_seed_result
@@ -49073,7 +49628,10 @@ BEGIN
     'session_version', v_session_version,
     'row_backed_scope', true,
     'candidate_ids_returned', false,
-    'requires_paging', true
+    'requires_paging', true,
+    'force_discarded_session_count', COALESCE(v_force_discarded_session_count, 0),
+    'force_discarded_session_ids', COALESCE(v_force_discarded_session_ids, '[]'::jsonb),
+    'force_discarded_session_link_count', COALESCE(v_force_discarded_session_link_count, 0)
   )
   || jsonb_build_object(
     'scope_first_page_count', COALESCE(v_scope_first_page_count, 0),
@@ -49112,6 +49670,12 @@ BEGIN
   );
 END;
 $function$;
+
+
+DROP FUNCTION IF EXISTS public.pay_workbench_session_open(uuid, date, date, jsonb, text);
+
+DROP FUNCTION IF EXISTS public.pay_workbench_session_open(uuid, date, date, jsonb, text);
+
 
 
 
@@ -197007,7 +197571,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -197022,7 +197585,85 @@ DECLARE
     ELSE '{}'::jsonb
   END;
   v_session_filters_json jsonb := '{}'::jsonb;
-  v_session_signature text := NULLIF(BTRIM(COALESCE(p_session_signature, '')), '');
+  v_sanitised_filters_json jsonb := '{}'::jsonb;
+  v_filter_strip_keys text[] := ARRAY[
+    'preview_context_summary',
+    'paye_guardrails',
+    'preview_decisions_json',
+    'preview_decisions',
+    'open_options',
+    'options',
+    'progress_json',
+    'candidate_sample_rows_json',
+    'scope_next_cursor_json',
+    'pay_date',
+    'payDate',
+    'pay_date_text',
+    'payDateText',
+    'source_pay_date',
+    'sourcePayDate',
+    'target_pay_date',
+    'targetPayDate',
+    'pay_week',
+    'payWeek',
+    'pay_week_label',
+    'payWeekLabel',
+    'pay_week_start',
+    'payWeekStart',
+    'pay_week_end',
+    'payWeekEnd',
+    'pay_period_start',
+    'payPeriodStart',
+    'pay_period_end',
+    'payPeriodEnd',
+    'week_start',
+    'weekStart',
+    'week_end',
+    'weekEnd',
+    'week_ending_cutoff',
+    'weekEndingCutoff',
+    'source_snapshot_run_id',
+    'snapshot_run_id',
+    'source_session_id',
+    'sourceSessionId',
+    'target_session_id',
+    'targetSessionId',
+    'session_id',
+    'sessionId',
+    'session_version',
+    'sessionVersion',
+    'session_signature',
+    'sessionSignature',
+    'clone_from_session_id',
+    'cloneFromSessionId',
+    'existing_paye_draft',
+    'eligibility',
+    'today_uk',
+    'worker_metadata',
+    'job_metadata',
+    'source_build',
+    'clone_rebase',
+    'clone_rebase_result',
+    'cursor',
+    'cursor_json',
+    'page_cursor',
+    'candidate_cursor',
+    'last_cursor',
+    'active_jobs',
+    'pending_job_ids_json',
+    'replacement_session_id',
+    'replacement_idempotency_key'
+  ]::text[];
+  v_sanitised_open_options_json jsonb := '{}'::jsonb;
+  v_sanitised_session_filters_json jsonb := '{}'::jsonb;
+  v_input_session_signature text := NULLIF(BTRIM(COALESCE(p_session_signature, '')), '');
+  v_session_signature text := NULL::text;
+  v_canonical_session_signature text := NULL::text;
+  v_signature_nested_filters jsonb := '{}'::jsonb;
+  v_signature_nested_filter jsonb := '{}'::jsonb;
+  v_signature_candidate_filter_id text := NULL::text;
+  v_signature_client_filter_id text := NULL::text;
+  v_signature_candidate_ids jsonb := '[]'::jsonb;
   v_effective_week_ending_cutoff date := COALESCE(p_week_ending_cutoff, DATE '9999-12-31');
   v_actor_is_active boolean := false;
   v_snapshot_info_json jsonb := '{}'::jsonb;
@@ -197071,6 +197712,20 @@ DECLARE
   v_clone_copied_preview_row_count integer := 0;
   v_clone_legacy_refresh_enqueued_count integer := 0;
   v_clone_more_due boolean := false;
+  v_duplicate_retired_session_count integer := 0;
+  v_duplicate_retired_session_ids jsonb := '[]'::jsonb;
+  v_clone_source_retired_count integer := 0;
+  v_clone_source_retirement_deferred boolean := false;
+  v_retired_old_session_link_count integer := 0;
+  v_case_carry_forward_source_count integer := 0;
+  v_case_carry_forward_total_count integer := 0;
+  v_case_carry_forward_valid_count integer := 0;
+  v_case_carry_forward_stale_count integer := 0;
+  v_case_carry_forward_saved_count integer := 0;
+  v_case_carry_forward_preview_count integer := 0;
+  v_case_carry_forward_applied boolean := false;
+  v_post_carry_forward_recompute_json jsonb := '{}'::jsonb;
+  v_resolved_session_id uuid := NULL::uuid;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('BOOTSTRAP');
 
@@ -197090,11 +197745,117 @@ BEGIN
             )::text;
   END IF;
 
+  v_sanitised_filters_json := v_filters_json - v_filter_strip_keys;
+
+  IF jsonb_typeof(v_sanitised_filters_json->'filters') = 'object' THEN
+    v_sanitised_filters_json := jsonb_set(
+      v_sanitised_filters_json,
+      '{filters}',
+      COALESCE(v_sanitised_filters_json->'filters', '{}'::jsonb) - v_filter_strip_keys,
+      true
+    );
+  END IF;
+
+  IF jsonb_typeof(v_sanitised_filters_json->'filter') = 'object' THEN
+    v_sanitised_filters_json := jsonb_set(
+      v_sanitised_filters_json,
+      '{filter}',
+      COALESCE(v_sanitised_filters_json->'filter', '{}'::jsonb) - v_filter_strip_keys,
+      true
+    );
+  END IF;
+
+  v_sanitised_filters_json := jsonb_strip_nulls(v_sanitised_filters_json);
+  v_signature_nested_filters := CASE
+    WHEN jsonb_typeof(v_sanitised_filters_json->'filters') = 'object'
+      THEN COALESCE(v_sanitised_filters_json->'filters', '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_signature_nested_filter := CASE
+    WHEN jsonb_typeof(v_sanitised_filters_json->'filter') = 'object'
+      THEN COALESCE(v_sanitised_filters_json->'filter', '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+
+  v_signature_candidate_filter_id := NULLIF(BTRIM(COALESCE(
+    v_sanitised_filters_json->>'candidate_filter_id',
+    v_sanitised_filters_json->>'candidateFilterId',
+    v_sanitised_filters_json->>'filter_candidate_id',
+    v_signature_nested_filters->>'candidate_filter_id',
+    v_signature_nested_filters->>'candidateFilterId',
+    v_signature_nested_filters->>'filter_candidate_id',
+    v_signature_nested_filter->>'candidate_filter_id',
+    v_signature_nested_filter->>'candidateFilterId',
+    v_signature_nested_filter->>'filter_candidate_id',
+    ''
+  )), '');
+
+  v_signature_client_filter_id := NULLIF(BTRIM(COALESCE(
+    v_sanitised_filters_json->>'client_filter_id',
+    v_sanitised_filters_json->>'clientFilterId',
+    v_sanitised_filters_json->>'filter_client_id',
+    v_sanitised_filters_json->>'client_id',
+    v_sanitised_filters_json->>'clientId',
+    v_signature_nested_filters->>'client_filter_id',
+    v_signature_nested_filters->>'clientFilterId',
+    v_signature_nested_filters->>'filter_client_id',
+    v_signature_nested_filters->>'client_id',
+    v_signature_nested_filters->>'clientId',
+    v_signature_nested_filter->>'client_filter_id',
+    v_signature_nested_filter->>'clientFilterId',
+    v_signature_nested_filter->>'filter_client_id',
+    v_signature_nested_filter->>'client_id',
+    v_signature_nested_filter->>'clientId',
+    ''
+  )), '');
+
+  WITH raw_candidate_ids(candidate_id_text) AS (
+    SELECT NULLIF(BTRIM(v_sanitised_filters_json->>'candidate_id'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_sanitised_filters_json->>'candidateId'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_signature_nested_filters->>'candidate_id'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_signature_nested_filters->>'candidateId'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_signature_nested_filter->>'candidate_id'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_signature_nested_filter->>'candidateId'), '')
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_sanitised_filters_json->'candidate_ids') = 'array' THEN v_sanitised_filters_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_sanitised_filters_json->'candidateIds') = 'array' THEN v_sanitised_filters_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_signature_nested_filters->'candidate_ids') = 'array' THEN v_signature_nested_filters->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_signature_nested_filters->'candidateIds') = 'array' THEN v_signature_nested_filters->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_signature_nested_filter->'candidate_ids') = 'array' THEN v_signature_nested_filter->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+    UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_signature_nested_filter->'candidateIds') = 'array' THEN v_signature_nested_filter->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+  ), valid_candidate_ids AS (
+    SELECT DISTINCT LOWER(raw_candidate_ids.candidate_id_text) AS candidate_id_text
+    FROM raw_candidate_ids
+    WHERE raw_candidate_ids.candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  )
+  SELECT COALESCE(jsonb_agg(valid_candidate_ids.candidate_id_text ORDER BY valid_candidate_ids.candidate_id_text), '[]'::jsonb)
+  INTO v_signature_candidate_ids
+  FROM valid_candidate_ids;
+
+  v_canonical_session_signature := jsonb_build_object(
+    'actor_user_id', p_actor_user_id::text,
+    'candidate_filter_id', COALESCE(v_signature_candidate_filter_id, ''),
+    'candidate_ids', COALESCE(v_signature_candidate_ids, '[]'::jsonb),
+    'client_filter_id', COALESCE(v_signature_client_filter_id, ''),
+    'kind', 'BANKING_PAY_WORKBENCH',
+    'pay_date', p_pay_date::text,
+    'signature_version', 4,
+    'week_ending_cutoff', v_effective_week_ending_cutoff::text
+  )::text;
+  v_session_signature := NULLIF(BTRIM(COALESCE(v_canonical_session_signature, '')), '');
+
   IF v_session_signature IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_SESSION_OPEN_SIGNATURE_REQUIRED'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
-              'code', 'PAY_WORKBENCH_SESSION_OPEN_SIGNATURE_REQUIRED'
+              'code', 'PAY_WORKBENCH_SESSION_OPEN_SIGNATURE_REQUIRED',
+              'input_session_signature_present', v_input_session_signature IS NOT NULL,
+              'canonical_signature_present', v_canonical_session_signature IS NOT NULL
             )::text;
   END IF;
 
@@ -197132,6 +197893,27 @@ BEGIN
     v_open_options_json->>'rebaseSimpleRowsOnly',
     'true'
   ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_sanitised_open_options_json := v_open_options_json - v_filter_strip_keys;
+
+  IF jsonb_typeof(v_sanitised_open_options_json->'filters') = 'object' THEN
+    v_sanitised_open_options_json := jsonb_set(
+      v_sanitised_open_options_json,
+      '{filters}',
+      COALESCE(v_sanitised_open_options_json->'filters', '{}'::jsonb) - v_filter_strip_keys,
+      true
+    );
+  END IF;
+
+  IF jsonb_typeof(v_sanitised_open_options_json->'filter') = 'object' THEN
+    v_sanitised_open_options_json := jsonb_set(
+      v_sanitised_open_options_json,
+      '{filter}',
+      COALESCE(v_sanitised_open_options_json->'filter', '{}'::jsonb) - v_filter_strip_keys,
+      true
+    );
+  END IF;
+
+  v_sanitised_open_options_json := jsonb_strip_nulls(v_sanitised_open_options_json);
   v_clone_from_session_id_text := NULLIF(BTRIM(COALESCE(
     v_open_options_json->>'clone_from_session_id',
     v_open_options_json->>'cloneFromSessionId',
@@ -197226,11 +198008,81 @@ BEGIN
   SELECT existing_session.*
   INTO v_session_row
   FROM public.banking_pay_workbench_sessions AS existing_session
-  WHERE existing_session.session_signature = v_session_signature
+  WHERE existing_session.actor_user_id = p_actor_user_id
     AND existing_session.pay_date = p_pay_date
     AND existing_session.week_ending_cutoff = v_effective_week_ending_cutoff
     AND existing_session.status = 'OPEN'
     AND existing_session.discarded_at_utc IS NULL
+    AND EXISTS (
+        SELECT 1
+        FROM LATERAL (
+          SELECT COALESCE(existing_session.filters_json, '{}'::jsonb) AS filtered_json
+        ) AS session_filter
+        CROSS JOIN LATERAL (
+          SELECT
+            CASE WHEN jsonb_typeof(session_filter.filtered_json->'filters') = 'object' THEN COALESCE(session_filter.filtered_json->'filters', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filters_json,
+            CASE WHEN jsonb_typeof(session_filter.filtered_json->'filter') = 'object' THEN COALESCE(session_filter.filtered_json->'filter', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filter_json
+        ) AS session_nested
+        CROSS JOIN LATERAL (
+          WITH raw_candidate_ids(candidate_id_text) AS (
+            SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidate_id'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidateId'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidate_id'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidateId'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidate_id'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidateId'), '')
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidate_ids') = 'array' THEN session_filter.filtered_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidateIds') = 'array' THEN session_filter.filtered_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidate_ids') = 'array' THEN session_nested.nested_filters_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidateIds') = 'array' THEN session_nested.nested_filters_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidate_ids') = 'array' THEN session_nested.nested_filter_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidateIds') = 'array' THEN session_nested.nested_filter_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+          ), valid_candidate_ids AS (
+            SELECT DISTINCT LOWER(raw_candidate_ids.candidate_id_text) AS candidate_id_text
+            FROM raw_candidate_ids
+            WHERE raw_candidate_ids.candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          )
+          SELECT COALESCE(jsonb_agg(valid_candidate_ids.candidate_id_text ORDER BY valid_candidate_ids.candidate_id_text), '[]'::jsonb) AS candidate_ids_json
+          FROM valid_candidate_ids
+        ) AS session_candidate_ids
+        WHERE COALESCE(NULLIF(BTRIM(COALESCE(
+                session_filter.filtered_json->>'candidate_filter_id',
+                session_filter.filtered_json->>'candidateFilterId',
+                session_filter.filtered_json->>'filter_candidate_id',
+                session_nested.nested_filters_json->>'candidate_filter_id',
+                session_nested.nested_filters_json->>'candidateFilterId',
+                session_nested.nested_filters_json->>'filter_candidate_id',
+                session_nested.nested_filter_json->>'candidate_filter_id',
+                session_nested.nested_filter_json->>'candidateFilterId',
+                session_nested.nested_filter_json->>'filter_candidate_id',
+                ''
+              )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_candidate_filter_id, '')
+          AND COALESCE(NULLIF(BTRIM(COALESCE(
+                session_filter.filtered_json->>'client_filter_id',
+                session_filter.filtered_json->>'clientFilterId',
+                session_filter.filtered_json->>'filter_client_id',
+                session_filter.filtered_json->>'client_id',
+                session_filter.filtered_json->>'clientId',
+                session_nested.nested_filters_json->>'client_filter_id',
+                session_nested.nested_filters_json->>'clientFilterId',
+                session_nested.nested_filters_json->>'filter_client_id',
+                session_nested.nested_filters_json->>'client_id',
+                session_nested.nested_filters_json->>'clientId',
+                session_nested.nested_filter_json->>'client_filter_id',
+                session_nested.nested_filter_json->>'clientFilterId',
+                session_nested.nested_filter_json->>'filter_client_id',
+                session_nested.nested_filter_json->>'client_id',
+                session_nested.nested_filter_json->>'clientId',
+                ''
+              )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_client_filter_id, '')
+          AND COALESCE(session_candidate_ids.candidate_ids_json, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(v_signature_candidate_ids, '[]'::jsonb)
+      )
   ORDER BY
     CASE
       WHEN UPPER(BTRIM(COALESCE(existing_session.progress_state, ''))) IN ('READY', 'READY_EMPTY') THEN 0
@@ -197257,10 +198109,11 @@ BEGIN
     END IF;
 
     v_snapshot_run_id := (v_snapshot_info_json->>'snapshot_run_id')::uuid;
-    v_session_filters_json := v_filters_json || jsonb_build_object(
+    v_session_filters_json := v_sanitised_filters_json || jsonb_build_object(
       'scope_is_row_backed', true,
       'scope_seed_source', 'pay_preview_build_context.PAGE',
-      'scope_count_unknown', true
+      'scope_count_unknown', true,
+      'canonical_scope_signature_version', 4
     );
     v_root_job_id := gen_random_uuid();
     v_session_signature_token := md5(v_session_signature);
@@ -197352,11 +198205,81 @@ BEGIN
         SELECT existing_session.*
         INTO v_session_row
         FROM public.banking_pay_workbench_sessions AS existing_session
-        WHERE existing_session.session_signature = v_session_signature
+        WHERE existing_session.actor_user_id = p_actor_user_id
           AND existing_session.pay_date = p_pay_date
           AND existing_session.week_ending_cutoff = v_effective_week_ending_cutoff
           AND existing_session.status = 'OPEN'
           AND existing_session.discarded_at_utc IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM LATERAL (
+              SELECT COALESCE(existing_session.filters_json, '{}'::jsonb) AS filtered_json
+            ) AS session_filter
+            CROSS JOIN LATERAL (
+              SELECT
+                CASE WHEN jsonb_typeof(session_filter.filtered_json->'filters') = 'object' THEN COALESCE(session_filter.filtered_json->'filters', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filters_json,
+                CASE WHEN jsonb_typeof(session_filter.filtered_json->'filter') = 'object' THEN COALESCE(session_filter.filtered_json->'filter', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filter_json
+            ) AS session_nested
+            CROSS JOIN LATERAL (
+              WITH raw_candidate_ids(candidate_id_text) AS (
+                SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidate_id'), '')
+                UNION ALL SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidateId'), '')
+                UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidate_id'), '')
+                UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidateId'), '')
+                UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidate_id'), '')
+                UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidateId'), '')
+                UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+                FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidate_ids') = 'array' THEN session_filter.filtered_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+                UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+                FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidateIds') = 'array' THEN session_filter.filtered_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+                UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+                FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidate_ids') = 'array' THEN session_nested.nested_filters_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+                UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+                FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidateIds') = 'array' THEN session_nested.nested_filters_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+                UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+                FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidate_ids') = 'array' THEN session_nested.nested_filter_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+                UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+                FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidateIds') = 'array' THEN session_nested.nested_filter_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+              ), valid_candidate_ids AS (
+                SELECT DISTINCT LOWER(raw_candidate_ids.candidate_id_text) AS candidate_id_text
+                FROM raw_candidate_ids
+                WHERE raw_candidate_ids.candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              )
+              SELECT COALESCE(jsonb_agg(valid_candidate_ids.candidate_id_text ORDER BY valid_candidate_ids.candidate_id_text), '[]'::jsonb) AS candidate_ids_json
+              FROM valid_candidate_ids
+            ) AS session_candidate_ids
+            WHERE COALESCE(NULLIF(BTRIM(COALESCE(
+                    session_filter.filtered_json->>'candidate_filter_id',
+                    session_filter.filtered_json->>'candidateFilterId',
+                    session_filter.filtered_json->>'filter_candidate_id',
+                    session_nested.nested_filters_json->>'candidate_filter_id',
+                    session_nested.nested_filters_json->>'candidateFilterId',
+                    session_nested.nested_filters_json->>'filter_candidate_id',
+                    session_nested.nested_filter_json->>'candidate_filter_id',
+                    session_nested.nested_filter_json->>'candidateFilterId',
+                    session_nested.nested_filter_json->>'filter_candidate_id',
+                    ''
+                  )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_candidate_filter_id, '')
+              AND COALESCE(NULLIF(BTRIM(COALESCE(
+                    session_filter.filtered_json->>'client_filter_id',
+                    session_filter.filtered_json->>'clientFilterId',
+                    session_filter.filtered_json->>'filter_client_id',
+                    session_filter.filtered_json->>'client_id',
+                    session_filter.filtered_json->>'clientId',
+                    session_nested.nested_filters_json->>'client_filter_id',
+                    session_nested.nested_filters_json->>'clientFilterId',
+                    session_nested.nested_filters_json->>'filter_client_id',
+                    session_nested.nested_filters_json->>'client_id',
+                    session_nested.nested_filters_json->>'clientId',
+                    session_nested.nested_filter_json->>'client_filter_id',
+                    session_nested.nested_filter_json->>'clientFilterId',
+                    session_nested.nested_filter_json->>'filter_client_id',
+                    session_nested.nested_filter_json->>'client_id',
+                    session_nested.nested_filter_json->>'clientId',
+                    ''
+                  )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_client_filter_id, '')
+              AND COALESCE(session_candidate_ids.candidate_ids_json, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(v_signature_candidate_ids, '[]'::jsonb)
+          )
         ORDER BY
           CASE
             WHEN UPPER(BTRIM(COALESCE(existing_session.progress_state, ''))) IN ('READY', 'READY_EMPTY') THEN 0
@@ -197425,8 +198348,7 @@ BEGIN
           || ':version:' || COALESCE(v_session_row.version, 0)::text
           || ':cursor:none';
         v_root_job_payload_json := jsonb_strip_nulls(
-          v_open_options_json
-          || jsonb_build_object(
+          jsonb_build_object(
             'session_id', v_session_row.id::text,
             'target_session_id', v_session_row.id::text,
             'source_session_id', v_clone_from_session_id::text,
@@ -197447,6 +198369,8 @@ BEGIN
             'rebase_simple_rows_only', COALESCE(v_rebase_simple_rows_only, true),
             'clone_rebase_queued', true,
             'created_by_helper', 'pay_workbench_session_open_shared_v2',
+            'clone_payload_sanitised', true,
+            'source_open_options_audit', v_sanitised_open_options_json,
             'created_at_utc', v_now::text
           )
         );
@@ -197683,6 +198607,765 @@ BEGIN
     v_work_queued := true;
   END IF;
 
+  v_resolved_session_id := v_session_row.id;
+
+  IF COALESCE(v_retired_old_session_count, 0) > 0 THEN
+    WITH retired_old_session_ids AS (
+      SELECT NULLIF(BTRIM(old_session_id.value), '')::uuid AS session_id
+      FROM jsonb_array_elements_text(COALESCE(v_retired_old_session_ids, '[]'::jsonb)) AS old_session_id(value)
+      WHERE NULLIF(BTRIM(old_session_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), linked_retired_old_sessions AS (
+      UPDATE public.banking_pay_workbench_sessions AS old_session_link
+      SET replacement_session_id = v_session_row.id,
+          replacement_idempotency_key = COALESCE(
+            old_session_link.replacement_idempotency_key,
+            'older-pay-date:' || old_session_link.id::text || ':replacement:' || v_session_row.id::text
+          ),
+          progress_json = jsonb_strip_nulls(
+            COALESCE(old_session_link.progress_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'replacement_session_id', v_session_row.id::text,
+              'replacement_linked_by_function', 'pay_workbench_session_open_shared_v2',
+              'replacement_linked_at_utc', v_now::text,
+              'replacement_reason', 'SUPERSEDED_BY_NEWER_PAY_DATE_WORKBENCH'
+            )
+          ),
+          progress_counter_version = COALESCE(old_session_link.progress_counter_version, 0) + 1,
+          progress_updated_at_utc = v_now,
+          updated_at_utc = v_now
+      FROM retired_old_session_ids AS retired_old_session_id
+      WHERE old_session_link.id = retired_old_session_id.session_id
+        AND old_session_link.id IS DISTINCT FROM v_session_row.id
+        AND old_session_link.status = 'DISCARDED'
+        AND old_session_link.replacement_session_id IS NULL
+      RETURNING old_session_link.id
+    )
+    SELECT COUNT(*)::integer
+    INTO v_retired_old_session_link_count
+    FROM linked_retired_old_sessions;
+  END IF;
+
+  WITH duplicate_sessions AS (
+    UPDATE public.banking_pay_workbench_sessions AS duplicate_session
+    SET status = 'DISCARDED',
+        discarded_at_utc = COALESCE(duplicate_session.discarded_at_utc, v_now),
+        replacement_session_id = v_session_row.id,
+        replacement_idempotency_key = COALESCE(
+          duplicate_session.replacement_idempotency_key,
+          'canonical-scope:' || md5(v_session_signature) || ':duplicate:' || duplicate_session.id::text
+        ),
+        updated_at_utc = v_now,
+        progress_state = 'DISCARDED',
+        progress_json = jsonb_strip_nulls(
+          COALESCE(duplicate_session.progress_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'discard_reason', 'SUPERSEDED_BY_CANONICAL_CURRENT_SESSION',
+            'discarded_by_function', 'pay_workbench_session_open_shared_v2',
+            'replacement_session_id', v_session_row.id::text,
+            'replacement_session_signature', v_session_signature,
+            'canonical_scope_signature', v_session_signature,
+            'superseded_at_utc', v_now::text,
+            'pay_date', p_pay_date::text,
+            'week_ending_cutoff', v_effective_week_ending_cutoff::text
+          )
+        ),
+        progress_counter_version = COALESCE(duplicate_session.progress_counter_version, 0) + 1,
+        progress_updated_at_utc = v_now
+    WHERE duplicate_session.id IS DISTINCT FROM v_session_row.id
+      AND duplicate_session.actor_user_id = p_actor_user_id
+      AND duplicate_session.pay_date = p_pay_date
+      AND duplicate_session.week_ending_cutoff = v_effective_week_ending_cutoff
+      AND duplicate_session.status = 'OPEN'
+      AND duplicate_session.discarded_at_utc IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM LATERAL (
+          SELECT COALESCE(duplicate_session.filters_json, '{}'::jsonb) AS filtered_json
+        ) AS session_filter
+        CROSS JOIN LATERAL (
+          SELECT
+            CASE WHEN jsonb_typeof(session_filter.filtered_json->'filters') = 'object' THEN COALESCE(session_filter.filtered_json->'filters', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filters_json,
+            CASE WHEN jsonb_typeof(session_filter.filtered_json->'filter') = 'object' THEN COALESCE(session_filter.filtered_json->'filter', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filter_json
+        ) AS session_nested
+        CROSS JOIN LATERAL (
+          WITH raw_candidate_ids(candidate_id_text) AS (
+            SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidate_id'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidateId'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidate_id'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidateId'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidate_id'), '')
+            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidateId'), '')
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidate_ids') = 'array' THEN session_filter.filtered_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidateIds') = 'array' THEN session_filter.filtered_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidate_ids') = 'array' THEN session_nested.nested_filters_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidateIds') = 'array' THEN session_nested.nested_filters_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidate_ids') = 'array' THEN session_nested.nested_filter_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidateIds') = 'array' THEN session_nested.nested_filter_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
+          ), valid_candidate_ids AS (
+            SELECT DISTINCT LOWER(raw_candidate_ids.candidate_id_text) AS candidate_id_text
+            FROM raw_candidate_ids
+            WHERE raw_candidate_ids.candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          )
+          SELECT COALESCE(jsonb_agg(valid_candidate_ids.candidate_id_text ORDER BY valid_candidate_ids.candidate_id_text), '[]'::jsonb) AS candidate_ids_json
+          FROM valid_candidate_ids
+        ) AS session_candidate_ids
+        WHERE COALESCE(NULLIF(BTRIM(COALESCE(
+                session_filter.filtered_json->>'candidate_filter_id',
+                session_filter.filtered_json->>'candidateFilterId',
+                session_filter.filtered_json->>'filter_candidate_id',
+                session_nested.nested_filters_json->>'candidate_filter_id',
+                session_nested.nested_filters_json->>'candidateFilterId',
+                session_nested.nested_filters_json->>'filter_candidate_id',
+                session_nested.nested_filter_json->>'candidate_filter_id',
+                session_nested.nested_filter_json->>'candidateFilterId',
+                session_nested.nested_filter_json->>'filter_candidate_id',
+                ''
+              )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_candidate_filter_id, '')
+          AND COALESCE(NULLIF(BTRIM(COALESCE(
+                session_filter.filtered_json->>'client_filter_id',
+                session_filter.filtered_json->>'clientFilterId',
+                session_filter.filtered_json->>'filter_client_id',
+                session_filter.filtered_json->>'client_id',
+                session_filter.filtered_json->>'clientId',
+                session_nested.nested_filters_json->>'client_filter_id',
+                session_nested.nested_filters_json->>'clientFilterId',
+                session_nested.nested_filters_json->>'filter_client_id',
+                session_nested.nested_filters_json->>'client_id',
+                session_nested.nested_filters_json->>'clientId',
+                session_nested.nested_filter_json->>'client_filter_id',
+                session_nested.nested_filter_json->>'clientFilterId',
+                session_nested.nested_filter_json->>'filter_client_id',
+                session_nested.nested_filter_json->>'client_id',
+                session_nested.nested_filter_json->>'clientId',
+                ''
+              )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_client_filter_id, '')
+          AND COALESCE(session_candidate_ids.candidate_ids_json, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(v_signature_candidate_ids, '[]'::jsonb)
+      )
+    RETURNING duplicate_session.id
+  )
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(duplicate_sessions.id::text ORDER BY duplicate_sessions.id::text), '[]'::jsonb)
+  INTO v_duplicate_retired_session_count,
+       v_duplicate_retired_session_ids
+  FROM duplicate_sessions;
+
+  IF COALESCE(v_duplicate_retired_session_count, 0) > 0 THEN
+    PERFORM public._audit_insert(
+      'banking_pay_workbench_session',
+      v_session_row.id::text,
+      'WORKBENCH_DUPLICATE_CANONICAL_SCOPE_SESSIONS_DISCARDED',
+      NULL::jsonb,
+      jsonb_build_object(
+        'authoritative_session_id', v_session_row.id::text,
+        'canonical_scope_signature', v_session_signature,
+        'duplicate_session_count', v_duplicate_retired_session_count,
+        'duplicate_session_ids', v_duplicate_retired_session_ids,
+        'actor_user_id', p_actor_user_id::text,
+        'pay_date', p_pay_date::text,
+        'week_ending_cutoff', v_effective_week_ending_cutoff::text
+      ),
+      'SESSION_OPEN_SHARED_V2_CANONICAL_SCOPE_DEDUP',
+      p_actor_user_id
+    );
+
+  END IF;
+
+  IF v_clone_from_session_id IS NOT NULL
+     AND v_clone_from_session_id IS DISTINCT FROM v_session_row.id
+     AND COALESCE(v_clone_rebase_applied, false) IS NOT TRUE THEN
+    UPDATE public.banking_pay_workbench_sessions AS clone_source_session
+    SET status = 'DISCARDED',
+        discarded_at_utc = COALESCE(clone_source_session.discarded_at_utc, v_now),
+        replacement_session_id = v_session_row.id,
+        replacement_idempotency_key = COALESCE(
+          clone_source_session.replacement_idempotency_key,
+          'clone-rebase:' || v_clone_from_session_id::text || ':' || v_session_row.id::text
+        ),
+        updated_at_utc = v_now,
+        progress_state = 'DISCARDED',
+        progress_json = jsonb_strip_nulls(
+          COALESCE(clone_source_session.progress_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'discard_reason', 'SUPERSEDED_BY_NEWER_PAY_DATE_WORKBENCH',
+            'discarded_by_function', 'pay_workbench_session_open_shared_v2',
+            'replacement_session_id', v_session_row.id::text,
+            'superseded_by_pay_date', p_pay_date::text,
+            'superseded_by_week_ending_cutoff', v_effective_week_ending_cutoff::text,
+            'superseded_at_utc', v_now::text
+          )
+        ),
+        progress_counter_version = COALESCE(clone_source_session.progress_counter_version, 0) + 1,
+        progress_updated_at_utc = v_now
+    WHERE clone_source_session.id = v_clone_from_session_id
+      AND clone_source_session.status = 'OPEN'
+      AND clone_source_session.discarded_at_utc IS NULL
+      AND (
+        clone_source_session.pay_date IS DISTINCT FROM p_pay_date
+        OR clone_source_session.week_ending_cutoff IS DISTINCT FROM v_effective_week_ending_cutoff
+      );
+
+    GET DIAGNOSTICS v_clone_source_retired_count = ROW_COUNT;
+  ELSIF v_clone_from_session_id IS NOT NULL
+        AND v_clone_from_session_id IS DISTINCT FROM v_session_row.id
+        AND COALESCE(v_clone_rebase_applied, false) IS TRUE THEN
+    v_clone_source_retirement_deferred := true;
+  END IF;
+
+
+  IF COALESCE(v_duplicate_retired_session_count, 0) > 0
+     OR COALESCE(v_retired_old_session_count, 0) > 0
+     OR (
+       v_clone_from_session_id IS NOT NULL
+       AND v_clone_from_session_id IS DISTINCT FROM v_session_row.id
+     ) THEN
+    DROP TABLE IF EXISTS pg_temp._bpay_open_shared_case_resolution_sources;
+    CREATE TEMP TABLE _bpay_open_shared_case_resolution_sources ON COMMIT DROP AS
+  WITH duplicate_source_ids AS (
+    SELECT NULLIF(BTRIM(duplicate_session_id.value), '')::uuid AS source_session_id,
+           'CANONICAL_DUPLICATE_SESSION_RETIREMENT'::text AS carry_forward_reason
+    FROM jsonb_array_elements_text(COALESCE(v_duplicate_retired_session_ids, '[]'::jsonb)) AS duplicate_session_id(value)
+    WHERE NULLIF(BTRIM(duplicate_session_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ), retired_old_source_ids AS (
+    SELECT NULLIF(BTRIM(old_session_id.value), '')::uuid AS source_session_id,
+           'OLDER_PAY_DATE_SESSION_RETIREMENT'::text AS carry_forward_reason
+    FROM jsonb_array_elements_text(COALESCE(v_retired_old_session_ids, '[]'::jsonb)) AS old_session_id(value)
+    WHERE NULLIF(BTRIM(old_session_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ), clone_source_ids AS (
+    SELECT v_clone_from_session_id AS source_session_id,
+           'CLONE_REBASE_SOURCE_SESSION'::text AS carry_forward_reason
+    WHERE v_clone_from_session_id IS NOT NULL
+      AND v_clone_from_session_id IS DISTINCT FROM v_session_row.id
+  ), combined_source_ids AS (
+    SELECT duplicate_source_ids.source_session_id,
+           duplicate_source_ids.carry_forward_reason
+    FROM duplicate_source_ids
+    UNION ALL
+    SELECT retired_old_source_ids.source_session_id,
+           retired_old_source_ids.carry_forward_reason
+    FROM retired_old_source_ids
+    UNION ALL
+    SELECT clone_source_ids.source_session_id,
+           clone_source_ids.carry_forward_reason
+    FROM clone_source_ids
+  )
+  SELECT DISTINCT combined_source_ids.source_session_id,
+         combined_source_ids.carry_forward_reason
+  FROM combined_source_ids
+  WHERE combined_source_ids.source_session_id IS NOT NULL
+    AND combined_source_ids.source_session_id IS DISTINCT FROM v_session_row.id;
+
+  SELECT COUNT(*)::integer
+  INTO v_case_carry_forward_source_count
+  FROM pg_temp._bpay_open_shared_case_resolution_sources AS carry_source;
+
+  IF COALESCE(v_case_carry_forward_source_count, 0) > 0 THEN
+    DROP TABLE IF EXISTS pg_temp._bpay_open_shared_case_resolution_carry_forward;
+    CREATE TEMP TABLE _bpay_open_shared_case_resolution_carry_forward ON COMMIT DROP AS
+    SELECT
+      source_resolution.*,
+      carry_source.carry_forward_reason,
+      EXISTS (
+        SELECT 1
+        FROM public.banking_pay_snapshot_case_component_state AS target_component_state
+        WHERE target_component_state.snapshot_run_id = v_session_row.source_snapshot_run_id
+          AND target_component_state.candidate_id = source_resolution.candidate_id
+          AND target_component_state.case_key IS NOT DISTINCT FROM source_resolution.case_key
+          AND (
+            source_resolution.timesheet_id IS NULL
+            OR target_component_state.timesheet_id IS NOT DISTINCT FROM source_resolution.timesheet_id
+          )
+          AND target_component_state.source_basis_fingerprint IS NOT DISTINCT FROM source_resolution.source_basis_fingerprint
+        LIMIT 1
+      ) AS source_basis_still_current,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(source_resolution.source_basis_fingerprint, '')), '') IS NULL THEN 'SOURCE_BASIS_FINGERPRINT_MISSING'
+        WHEN EXISTS (
+          SELECT 1
+          FROM public.banking_pay_snapshot_case_component_state AS target_component_state
+          WHERE target_component_state.snapshot_run_id = v_session_row.source_snapshot_run_id
+            AND target_component_state.candidate_id = source_resolution.candidate_id
+            AND target_component_state.case_key IS NOT DISTINCT FROM source_resolution.case_key
+            AND (
+              source_resolution.timesheet_id IS NULL
+              OR target_component_state.timesheet_id IS NOT DISTINCT FROM source_resolution.timesheet_id
+            )
+            AND target_component_state.source_basis_fingerprint IS NOT DISTINCT FROM source_resolution.source_basis_fingerprint
+          LIMIT 1
+        ) THEN NULL::text
+        ELSE 'SOURCE_BASIS_FINGERPRINT_NOT_CURRENT'
+      END AS stale_reason,
+      ROW_NUMBER() OVER (
+        ORDER BY source_resolution.candidate_id,
+                 source_resolution.case_key,
+                 source_resolution.resolution_identity_key,
+                 source_resolution.session_id,
+                 source_resolution.id
+      ) AS carry_ordinal
+    FROM public.banking_pay_workbench_session_case_resolutions AS source_resolution
+    JOIN pg_temp._bpay_open_shared_case_resolution_sources AS carry_source
+      ON carry_source.source_session_id = source_resolution.session_id;
+
+    SELECT COUNT(*)::integer,
+           COUNT(*) FILTER (WHERE source_basis_still_current IS TRUE AND stale_reason IS NULL)::integer,
+           COUNT(*) FILTER (WHERE source_basis_still_current IS NOT TRUE OR stale_reason IS NOT NULL)::integer
+    INTO v_case_carry_forward_total_count,
+         v_case_carry_forward_valid_count,
+         v_case_carry_forward_stale_count
+    FROM pg_temp._bpay_open_shared_case_resolution_carry_forward;
+
+    WITH valid_saved_rows AS (
+      INSERT INTO public.banking_pay_workbench_session_case_resolutions (
+        id,
+        session_id,
+        candidate_id,
+        case_key,
+        resolution_family,
+        resolution_identity_key,
+        timesheet_id,
+        source_basis_fingerprint,
+        source_family_key,
+        bucket_code,
+        component_key_type,
+        component_key_value,
+        payload_json,
+        created_at_utc,
+        updated_at_utc
+      )
+      SELECT
+        gen_random_uuid(),
+        v_session_row.id,
+        carried_resolution.candidate_id,
+        carried_resolution.case_key,
+        carried_resolution.resolution_family,
+        carried_resolution.resolution_identity_key,
+        carried_resolution.timesheet_id,
+        carried_resolution.source_basis_fingerprint,
+        carried_resolution.source_family_key,
+        carried_resolution.bucket_code,
+        carried_resolution.component_key_type,
+        carried_resolution.component_key_value,
+        jsonb_strip_nulls(
+          COALESCE(carried_resolution.payload_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'clone_carried_forward', true,
+            'clone_validation_status', 'VALID',
+            'requires_review', false,
+            'source_session_id', carried_resolution.session_id::text,
+            'target_session_id', v_session_row.id::text,
+            'carry_forward_reason', carried_resolution.carry_forward_reason,
+            'carried_forward_at_utc', v_now::text,
+            'policy_x_authority_scope', 'PRE_DRAFT_CASE_RESOLUTION_STATE_ONLY'
+          )
+        ),
+        v_now,
+        v_now
+      FROM pg_temp._bpay_open_shared_case_resolution_carry_forward AS carried_resolution
+      WHERE carried_resolution.source_basis_still_current IS TRUE
+        AND carried_resolution.stale_reason IS NULL
+      ON CONFLICT (session_id, resolution_identity_key)
+      DO UPDATE
+      SET candidate_id = EXCLUDED.candidate_id,
+          case_key = EXCLUDED.case_key,
+          resolution_family = EXCLUDED.resolution_family,
+          timesheet_id = EXCLUDED.timesheet_id,
+          source_basis_fingerprint = EXCLUDED.source_basis_fingerprint,
+          source_family_key = EXCLUDED.source_family_key,
+          bucket_code = EXCLUDED.bucket_code,
+          component_key_type = EXCLUDED.component_key_type,
+          component_key_value = EXCLUDED.component_key_value,
+          payload_json = EXCLUDED.payload_json,
+          updated_at_utc = v_now
+      RETURNING id
+    )
+    SELECT COUNT(*)::integer
+    INTO v_case_carry_forward_saved_count
+    FROM valid_saved_rows;
+
+    WITH carried_preview_rows AS (
+      INSERT INTO public.banking_pay_workbench_preview_rows (
+        id,
+        session_id,
+        candidate_id,
+        section,
+        row_key,
+        row_ordinal,
+        row_json,
+        timesheet_id,
+        key_type,
+        key_value,
+        selected,
+        selection_state,
+        status,
+        session_version,
+        created_at_utc,
+        updated_at_utc
+      )
+      SELECT
+        gen_random_uuid(),
+        v_session_row.id,
+        carried_resolution.candidate_id,
+        'cases_resolutions',
+        carried_resolution.case_key,
+        900000000000 + carried_resolution.carry_ordinal,
+        jsonb_strip_nulls(
+          jsonb_build_object(
+            'row_type', 'case_resolution_carry_forward',
+            'section', 'cases_resolutions',
+            'candidate_id', carried_resolution.candidate_id::text,
+            'case_key', carried_resolution.case_key,
+            'timesheet_id', CASE WHEN carried_resolution.timesheet_id IS NULL THEN NULL ELSE carried_resolution.timesheet_id::text END,
+            'resolution_identity_key', carried_resolution.resolution_identity_key,
+            'resolution_family', carried_resolution.resolution_family,
+            'saved_resolution', true,
+            'clone_carried_forward', true,
+            'clone_validation_status', CASE WHEN carried_resolution.source_basis_still_current IS TRUE AND carried_resolution.stale_reason IS NULL THEN 'VALID' ELSE 'STALE_REVIEW_REQUIRED' END,
+            'stale', NOT (carried_resolution.source_basis_still_current IS TRUE AND carried_resolution.stale_reason IS NULL),
+            'requires_review', NOT (carried_resolution.source_basis_still_current IS TRUE AND carried_resolution.stale_reason IS NULL),
+            'stale_reason', carried_resolution.stale_reason,
+            'source_basis_fingerprint', carried_resolution.source_basis_fingerprint,
+            'source_session_id', carried_resolution.session_id::text,
+            'target_session_id', v_session_row.id::text,
+            'carry_forward_reason', carried_resolution.carry_forward_reason,
+            'carried_forward_at_utc', v_now::text,
+            'policy_x_authority_scope', 'PRE_DRAFT_CASE_RESOLUTION_STATE_ONLY'
+          )
+          || jsonb_build_object(
+            'payload_json', COALESCE(carried_resolution.payload_json, '{}'::jsonb)
+          )
+        ),
+        carried_resolution.timesheet_id,
+        carried_resolution.component_key_type,
+        carried_resolution.component_key_value,
+        false,
+        CASE WHEN carried_resolution.source_basis_still_current IS TRUE AND carried_resolution.stale_reason IS NULL THEN 'NOT_SELECTABLE' ELSE 'REVIEW_REQUIRED' END,
+        'READY',
+        v_session_row.version,
+        v_now,
+        v_now
+      FROM pg_temp._bpay_open_shared_case_resolution_carry_forward AS carried_resolution
+      ON CONFLICT (session_id, section, candidate_id, row_key)
+      DO UPDATE
+      SET row_ordinal = EXCLUDED.row_ordinal,
+          row_json = EXCLUDED.row_json,
+          timesheet_id = EXCLUDED.timesheet_id,
+          key_type = EXCLUDED.key_type,
+          key_value = EXCLUDED.key_value,
+          selected = false,
+          selection_state = EXCLUDED.selection_state,
+          status = 'READY',
+          session_version = EXCLUDED.session_version,
+          updated_at_utc = v_now
+      RETURNING id
+    )
+    SELECT COUNT(*)::integer
+    INTO v_case_carry_forward_preview_count
+    FROM carried_preview_rows;
+
+    v_case_carry_forward_applied := COALESCE(v_case_carry_forward_saved_count, 0) > 0
+      OR COALESCE(v_case_carry_forward_preview_count, 0) > 0;
+
+    IF COALESCE(v_case_carry_forward_applied, false) IS TRUE THEN
+      v_post_carry_forward_recompute_json := public.pay_workbench_session_recompute_progress_counters(
+        p_session_id => v_session_row.id,
+        p_apply => true,
+        p_reason => 'OPEN_SHARED_CASE_RESOLUTION_CARRY_FORWARD',
+        p_write_progress_json => true
+      );
+
+      SELECT refreshed_session.*
+      INTO v_session_row
+      FROM public.banking_pay_workbench_sessions AS refreshed_session
+      WHERE refreshed_session.id = v_resolved_session_id;
+    END IF;
+  END IF;
+
+  END IF;
+
+  v_sanitised_session_filters_json := CASE
+    WHEN jsonb_typeof(COALESCE(v_session_row.filters_json, '{}'::jsonb)) = 'object'
+      THEN COALESCE(v_session_row.filters_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END - v_filter_strip_keys;
+
+  IF jsonb_typeof(v_sanitised_session_filters_json->'filters') = 'object' THEN
+    v_sanitised_session_filters_json := jsonb_set(
+      v_sanitised_session_filters_json,
+      '{filters}',
+      COALESCE(v_sanitised_session_filters_json->'filters', '{}'::jsonb) - v_filter_strip_keys,
+      true
+    );
+  END IF;
+
+  IF jsonb_typeof(v_sanitised_session_filters_json->'filter') = 'object' THEN
+    v_sanitised_session_filters_json := jsonb_set(
+      v_sanitised_session_filters_json,
+      '{filter}',
+      COALESCE(v_sanitised_session_filters_json->'filter', '{}'::jsonb) - v_filter_strip_keys,
+      true
+    );
+  END IF;
+
+  v_sanitised_session_filters_json := jsonb_strip_nulls(v_sanitised_session_filters_json);
+
+
+  UPDATE public.banking_pay_workbench_sessions AS canonical_session
+  SET session_signature = v_session_signature,
+      filters_json = v_sanitised_session_filters_json
+        || jsonb_build_object(
+          'scope_is_row_backed', true,
+          'scope_seed_source', COALESCE(NULLIF(canonical_session.filters_json->>'scope_seed_source', ''), 'pay_preview_build_context.PAGE'),
+          'scope_count_unknown', COALESCE(canonical_session.scope_seed_complete, false) IS NOT TRUE,
+          'canonical_scope_signature_version', 4
+        ),
+      updated_at_utc = v_now,
+      progress_json = jsonb_strip_nulls(
+        COALESCE(canonical_session.progress_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'canonical_scope_signature', v_session_signature,
+          'canonical_scope_signature_version', 4,
+          'filters_sanitised_at_utc', v_now::text,
+          'duplicate_canonical_scope_sessions_retired', COALESCE(v_duplicate_retired_session_count, 0),
+          'retired_old_session_link_count', COALESCE(v_retired_old_session_link_count, 0),
+          'case_resolution_carry_forward_applied', COALESCE(v_case_carry_forward_applied, false),
+          'case_resolution_carry_forward_source_count', COALESCE(v_case_carry_forward_source_count, 0),
+          'case_resolution_carry_forward_total_count', COALESCE(v_case_carry_forward_total_count, 0),
+          'case_resolution_carry_forward_saved_count', COALESCE(v_case_carry_forward_saved_count, 0),
+          'case_resolution_carry_forward_stale_count', COALESCE(v_case_carry_forward_stale_count, 0),
+          'case_resolution_carry_forward_preview_count', COALESCE(v_case_carry_forward_preview_count, 0),
+          'clone_source_retired', COALESCE(v_clone_source_retired_count, 0) > 0,
+          'clone_source_retirement_deferred', COALESCE(v_clone_source_retirement_deferred, false)
+        )
+      )
+  WHERE canonical_session.id = v_resolved_session_id
+    AND (
+      canonical_session.session_signature IS DISTINCT FROM v_session_signature
+      OR canonical_session.filters_json ?| ARRAY[
+        'preview_context_summary',
+        'paye_guardrails',
+        'preview_decisions_json',
+        'preview_decisions',
+        'open_options',
+        'options',
+        'progress_json',
+        'candidate_sample_rows_json',
+        'scope_next_cursor_json',
+        'pay_date',
+        'payDate',
+        'pay_date_text',
+        'payDateText',
+        'source_pay_date',
+        'sourcePayDate',
+        'target_pay_date',
+        'targetPayDate',
+        'pay_week',
+        'payWeek',
+        'pay_week_label',
+        'payWeekLabel',
+        'pay_week_start',
+        'payWeekStart',
+        'pay_week_end',
+        'payWeekEnd',
+        'pay_period_start',
+        'payPeriodStart',
+        'pay_period_end',
+        'payPeriodEnd',
+        'week_start',
+        'weekStart',
+        'week_end',
+        'weekEnd',
+        'week_ending_cutoff',
+        'weekEndingCutoff',
+        'source_snapshot_run_id',
+        'snapshot_run_id',
+        'source_session_id',
+        'sourceSessionId',
+        'target_session_id',
+        'targetSessionId',
+        'session_id',
+        'sessionId',
+        'session_version',
+        'sessionVersion',
+        'session_signature',
+        'sessionSignature',
+        'clone_from_session_id',
+        'cloneFromSessionId',
+        'existing_paye_draft',
+        'eligibility',
+        'today_uk',
+        'worker_metadata',
+        'job_metadata',
+        'source_build',
+        'clone_rebase',
+        'clone_rebase_result',
+        'cursor',
+        'cursor_json',
+        'page_cursor',
+        'candidate_cursor',
+        'last_cursor',
+        'active_jobs',
+        'pending_job_ids_json',
+        'replacement_session_id',
+        'replacement_idempotency_key'
+      ]::text[]
+      OR (
+        jsonb_typeof(canonical_session.filters_json->'filters') = 'object'
+        AND COALESCE(canonical_session.filters_json->'filters', '{}'::jsonb) ?| ARRAY[
+        'preview_context_summary',
+        'paye_guardrails',
+        'preview_decisions_json',
+        'preview_decisions',
+        'open_options',
+        'options',
+        'progress_json',
+        'candidate_sample_rows_json',
+        'scope_next_cursor_json',
+        'pay_date',
+        'payDate',
+        'pay_date_text',
+        'payDateText',
+        'source_pay_date',
+        'sourcePayDate',
+        'target_pay_date',
+        'targetPayDate',
+        'pay_week',
+        'payWeek',
+        'pay_week_label',
+        'payWeekLabel',
+        'pay_week_start',
+        'payWeekStart',
+        'pay_week_end',
+        'payWeekEnd',
+        'pay_period_start',
+        'payPeriodStart',
+        'pay_period_end',
+        'payPeriodEnd',
+        'week_start',
+        'weekStart',
+        'week_end',
+        'weekEnd',
+        'week_ending_cutoff',
+        'weekEndingCutoff',
+        'source_snapshot_run_id',
+        'snapshot_run_id',
+        'source_session_id',
+        'sourceSessionId',
+        'target_session_id',
+        'targetSessionId',
+        'session_id',
+        'sessionId',
+        'session_version',
+        'sessionVersion',
+        'session_signature',
+        'sessionSignature',
+        'clone_from_session_id',
+        'cloneFromSessionId',
+        'existing_paye_draft',
+        'eligibility',
+        'today_uk',
+        'worker_metadata',
+        'job_metadata',
+        'source_build',
+        'clone_rebase',
+        'clone_rebase_result',
+        'cursor',
+        'cursor_json',
+        'page_cursor',
+        'candidate_cursor',
+        'last_cursor',
+        'active_jobs',
+        'pending_job_ids_json',
+        'replacement_session_id',
+        'replacement_idempotency_key'
+      ]::text[]
+      )
+      OR (
+        jsonb_typeof(canonical_session.filters_json->'filter') = 'object'
+        AND COALESCE(canonical_session.filters_json->'filter', '{}'::jsonb) ?| ARRAY[
+        'preview_context_summary',
+        'paye_guardrails',
+        'preview_decisions_json',
+        'preview_decisions',
+        'open_options',
+        'options',
+        'progress_json',
+        'candidate_sample_rows_json',
+        'scope_next_cursor_json',
+        'pay_date',
+        'payDate',
+        'pay_date_text',
+        'payDateText',
+        'source_pay_date',
+        'sourcePayDate',
+        'target_pay_date',
+        'targetPayDate',
+        'pay_week',
+        'payWeek',
+        'pay_week_label',
+        'payWeekLabel',
+        'pay_week_start',
+        'payWeekStart',
+        'pay_week_end',
+        'payWeekEnd',
+        'pay_period_start',
+        'payPeriodStart',
+        'pay_period_end',
+        'payPeriodEnd',
+        'week_start',
+        'weekStart',
+        'week_end',
+        'weekEnd',
+        'week_ending_cutoff',
+        'weekEndingCutoff',
+        'source_snapshot_run_id',
+        'snapshot_run_id',
+        'source_session_id',
+        'sourceSessionId',
+        'target_session_id',
+        'targetSessionId',
+        'session_id',
+        'sessionId',
+        'session_version',
+        'sessionVersion',
+        'session_signature',
+        'sessionSignature',
+        'clone_from_session_id',
+        'cloneFromSessionId',
+        'existing_paye_draft',
+        'eligibility',
+        'today_uk',
+        'worker_metadata',
+        'job_metadata',
+        'source_build',
+        'clone_rebase',
+        'clone_rebase_result',
+        'cursor',
+        'cursor_json',
+        'page_cursor',
+        'candidate_cursor',
+        'last_cursor',
+        'active_jobs',
+        'pending_job_ids_json',
+        'replacement_session_id',
+        'replacement_idempotency_key'
+      ]::text[]
+      )
+    )
+  RETURNING canonical_session.*
+  INTO v_session_row;
+
+  IF v_session_row.id IS NULL THEN
+    SELECT refreshed_session.*
+    INTO v_session_row
+    FROM public.banking_pay_workbench_sessions AS refreshed_session
+    WHERE refreshed_session.id = v_resolved_session_id;
+  END IF;
+
   v_progress_state_upper := UPPER(BTRIM(COALESCE(v_session_row.progress_state, '')));
   v_failure_flag := COALESCE(v_session_row.scope_failed_count, 0) > 0
     OR COALESCE(v_session_row.line_units_failed, 0) > 0
@@ -197846,7 +199529,20 @@ BEGIN
       'candidate_ids_returned', false,
       'requires_paging', true,
       'retired_old_session_count', COALESCE(v_retired_old_session_count, 0),
-      'retired_old_session_ids', COALESCE(v_retired_old_session_ids, '[]'::jsonb)
+      'retired_old_session_ids', COALESCE(v_retired_old_session_ids, '[]'::jsonb),
+      'retired_old_session_link_count', COALESCE(v_retired_old_session_link_count, 0),
+      'duplicate_retired_session_count', COALESCE(v_duplicate_retired_session_count, 0),
+      'duplicate_retired_session_ids', COALESCE(v_duplicate_retired_session_ids, '[]'::jsonb),
+      'case_resolution_carry_forward_applied', COALESCE(v_case_carry_forward_applied, false),
+      'case_resolution_carry_forward_source_count', COALESCE(v_case_carry_forward_source_count, 0),
+      'case_resolution_carry_forward_total_count', COALESCE(v_case_carry_forward_total_count, 0),
+      'case_resolution_carry_forward_valid_count', COALESCE(v_case_carry_forward_valid_count, 0),
+      'case_resolution_carry_forward_stale_count', COALESCE(v_case_carry_forward_stale_count, 0),
+      'case_resolution_carry_forward_saved_count', COALESCE(v_case_carry_forward_saved_count, 0),
+      'case_resolution_carry_forward_preview_count', COALESCE(v_case_carry_forward_preview_count, 0),
+      'canonical_scope_signature', v_session_signature,
+      'clone_source_retired', COALESCE(v_clone_source_retired_count, 0) > 0,
+      'clone_source_retirement_deferred', COALESCE(v_clone_source_retirement_deferred, false)
     )
     || jsonb_build_object(
       'progress_state', v_session_row.progress_state,
@@ -197955,7 +199651,6 @@ BEGIN
   RETURN v_response_json;
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_replace_after_mutation(
@@ -202513,6 +204208,10 @@ DECLARE
   v_active_conflict_job_id uuid := NULL::uuid;
   v_active_conflict_status text := NULL::text;
   v_active_conflict_run_id_text text := NULL::text;
+  v_case_resolution_carry_forward_result jsonb := '{}'::jsonb;
+  v_case_resolution_carried_forward_count integer := 0;
+  v_case_resolution_stale_review_count integer := 0;
+  v_case_resolution_preview_row_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -202592,6 +204291,24 @@ BEGIN
       'more_due', false,
       'next_cursor_json', NULL::jsonb
     );
+  END IF;
+
+  IF to_regprocedure('public.pay_workbench_session_carry_forward_case_resolutions_v1(uuid,uuid,jsonb)') IS NOT NULL THEN
+    v_case_resolution_carry_forward_result := public.pay_workbench_session_carry_forward_case_resolutions_v1(
+      p_source_session_id => v_source_session_id,
+      p_target_session_id => p_target_session_id,
+      p_options_json => jsonb_strip_nulls(
+        COALESCE(v_options_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'called_by', 'pay_workbench_session_clone_eligible_rows_v1',
+          'target_session_version', COALESCE(v_target_session.version, 1),
+          'source_session_version', COALESCE(v_source_session.version, 1)
+        )
+      )
+    );
+    v_case_resolution_carried_forward_count := CASE WHEN COALESCE(v_case_resolution_carry_forward_result->>'carried_forward_count', '') ~ '^[0-9]+$' THEN (v_case_resolution_carry_forward_result->>'carried_forward_count')::integer ELSE 0 END;
+    v_case_resolution_stale_review_count := CASE WHEN COALESCE(v_case_resolution_carry_forward_result->>'stale_review_required_count', '') ~ '^[0-9]+$' THEN (v_case_resolution_carry_forward_result->>'stale_review_required_count')::integer ELSE 0 END;
+    v_case_resolution_preview_row_count := CASE WHEN COALESCE(v_case_resolution_carry_forward_result->>'preview_row_count', '') ~ '^[0-9]+$' THEN (v_case_resolution_carry_forward_result->>'preview_row_count')::integer ELSE 0 END;
   END IF;
 
   IF COALESCE(v_cursor_json->>'after_scope_ordinal', v_cursor_json->>'last_scope_ordinal', '') ~ '^[0-9]{1,18}$' THEN
@@ -202851,7 +204568,7 @@ BEGIN
           FROM public.banking_pay_workbench_candidate_line_work AS line_work
           WHERE line_work.session_id = v_source_session_id
             AND line_work.candidate_id = v_candidate_id
-            AND UPPER(BTRIM(COALESCE(line_work.status, ''))) IN ('MATERIALISED', 'MATERIALIZED', 'SKIPPED')
+            AND UPPER(BTRIM(COALESCE(line_work.status, ''))) IN ('MATERIALISED', 'MATERIALIZED', 'SKIPPED', 'SUPERSEDED', 'SOURCE_EMPTY', 'NOT_APPLICABLE', 'OBSOLETE')
           ON CONFLICT (session_id, candidate_id, (COALESCE(timesheet_id, '00000000-0000-0000-0000-000000000000'::uuid)), line_key)
           DO UPDATE
           SET line_ordinal = EXCLUDED.line_ordinal,
@@ -203650,7 +205367,7 @@ BEGIN
           SELECT COUNT(*)::integer
           FROM public.banking_pay_workbench_candidate_line_work AS line_work
           WHERE line_work.session_id = p_target_session_id
-            AND UPPER(BTRIM(COALESCE(line_work.status, ''))) IN ('MATERIALISED', 'MATERIALIZED', 'SKIPPED')
+            AND UPPER(BTRIM(COALESCE(line_work.status, ''))) IN ('MATERIALISED', 'MATERIALIZED', 'SKIPPED', 'SUPERSEDED', 'SOURCE_EMPTY', 'NOT_APPLICABLE', 'OBSOLETE')
         ),
         line_units_pending = (
           SELECT COUNT(*)::integer
@@ -203710,6 +205427,10 @@ BEGIN
             'clone_rebase_last_at_utc', v_now::text,
             'clone_rebase_copied_candidate_count', COALESCE(v_copied_candidate_count, 0),
             'clone_rebase_legacy_refresh_enqueued_count', COALESCE(v_legacy_refresh_enqueued_count, 0),
+            'clone_rebase_case_resolution_carried_forward_count', COALESCE(v_case_resolution_carried_forward_count, 0),
+            'clone_rebase_case_resolution_stale_review_count', COALESCE(v_case_resolution_stale_review_count, 0),
+            'clone_rebase_case_resolution_preview_row_count', COALESCE(v_case_resolution_preview_row_count, 0),
+            'clone_rebase_case_resolution_carry_forward_result', COALESCE(v_case_resolution_carry_forward_result, '{}'::jsonb),
             'clone_rebase_more_due', COALESCE(v_more_due, false),
             'clone_rebase_next_cursor_json', v_next_cursor_json
           )
@@ -203728,6 +205449,10 @@ BEGIN
     'copied_source_row_count', COALESCE(v_copied_source_row_count, 0),
     'copied_line_work_count', COALESCE(v_copied_line_work_count, 0),
     'copied_preview_row_count', COALESCE(v_copied_preview_row_count, 0),
+    'case_resolution_carried_forward_count', COALESCE(v_case_resolution_carried_forward_count, 0),
+    'case_resolution_stale_review_count', COALESCE(v_case_resolution_stale_review_count, 0),
+    'case_resolution_preview_row_count', COALESCE(v_case_resolution_preview_row_count, 0),
+    'case_resolution_carry_forward_result', COALESCE(v_case_resolution_carry_forward_result, '{}'::jsonb),
     'legacy_refresh_enqueued_count', COALESCE(v_legacy_refresh_enqueued_count, 0),
     'more_due', COALESCE(v_more_due, false),
     'next_cursor_json', v_next_cursor_json
@@ -203736,6 +205461,388 @@ END;
 $function$;
 
 
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_carry_forward_case_resolutions_v1(p_source_session_id uuid, p_target_session_id uuid, p_options_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := now();
+  v_source_session public.banking_pay_workbench_sessions%ROWTYPE;
+  v_target_session public.banking_pay_workbench_sessions%ROWTYPE;
+  v_total_count integer := 0;
+  v_valid_count integer := 0;
+  v_stale_count integer := 0;
+  v_saved_count integer := 0;
+  v_preview_count integer := 0;
+BEGIN
+  IF p_source_session_id IS NULL OR p_target_session_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'reason', 'SOURCE_AND_TARGET_SESSION_REQUIRED',
+      'carried_forward_count', 0,
+      'stale_review_required_count', 0,
+      'preview_row_count', 0
+    );
+  END IF;
+
+  SELECT source_session.*
+  INTO v_source_session
+  FROM public.banking_pay_workbench_sessions AS source_session
+  WHERE source_session.id = p_source_session_id;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'reason', 'SOURCE_SESSION_NOT_FOUND',
+      'carried_forward_count', 0,
+      'stale_review_required_count', 0,
+      'preview_row_count', 0
+    );
+  END IF;
+
+  SELECT target_session.*
+  INTO v_target_session
+  FROM public.banking_pay_workbench_sessions AS target_session
+  WHERE target_session.id = p_target_session_id
+    AND UPPER(BTRIM(COALESCE(target_session.status, ''))) = 'OPEN'
+    AND target_session.discarded_at_utc IS NULL;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'reason', 'TARGET_SESSION_NOT_OPEN',
+      'carried_forward_count', 0,
+      'stale_review_required_count', 0,
+      'preview_row_count', 0
+    );
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp._bpay_case_resolution_carry_forward;
+  CREATE TEMP TABLE _bpay_case_resolution_carry_forward ON COMMIT DROP AS
+  SELECT
+    source_resolution.*,
+    EXISTS (
+      SELECT 1
+      FROM public.banking_pay_snapshot_case_component_state AS target_component_state
+      WHERE target_component_state.snapshot_run_id = v_target_session.source_snapshot_run_id
+        AND target_component_state.candidate_id = source_resolution.candidate_id
+        AND target_component_state.case_key IS NOT DISTINCT FROM source_resolution.case_key
+        AND (
+          source_resolution.timesheet_id IS NULL
+          OR target_component_state.timesheet_id IS NOT DISTINCT FROM source_resolution.timesheet_id
+        )
+        AND target_component_state.source_basis_fingerprint IS NOT DISTINCT FROM source_resolution.source_basis_fingerprint
+      LIMIT 1
+    ) AS source_basis_still_current,
+    CASE
+      WHEN NULLIF(BTRIM(COALESCE(source_resolution.source_basis_fingerprint, '')), '') IS NULL THEN 'SOURCE_BASIS_FINGERPRINT_MISSING'
+      WHEN EXISTS (
+        SELECT 1
+        FROM public.banking_pay_snapshot_case_component_state AS target_component_state
+        WHERE target_component_state.snapshot_run_id = v_target_session.source_snapshot_run_id
+          AND target_component_state.candidate_id = source_resolution.candidate_id
+          AND target_component_state.case_key IS NOT DISTINCT FROM source_resolution.case_key
+          AND (
+            source_resolution.timesheet_id IS NULL
+            OR target_component_state.timesheet_id IS NOT DISTINCT FROM source_resolution.timesheet_id
+          )
+          AND target_component_state.source_basis_fingerprint IS NOT DISTINCT FROM source_resolution.source_basis_fingerprint
+        LIMIT 1
+      ) THEN NULL::text
+      ELSE 'SOURCE_BASIS_FINGERPRINT_NOT_CURRENT'
+    END AS stale_reason,
+    ROW_NUMBER() OVER (ORDER BY source_resolution.candidate_id, source_resolution.case_key, source_resolution.resolution_identity_key, source_resolution.id) AS carry_ordinal
+  FROM public.banking_pay_workbench_session_case_resolutions AS source_resolution
+  WHERE source_resolution.session_id = p_source_session_id;
+
+  SELECT COUNT(*)::integer,
+         COUNT(*) FILTER (WHERE source_basis_still_current IS TRUE AND stale_reason IS NULL)::integer,
+         COUNT(*) FILTER (WHERE source_basis_still_current IS NOT TRUE OR stale_reason IS NOT NULL)::integer
+  INTO v_total_count,
+       v_valid_count,
+       v_stale_count
+  FROM pg_temp._bpay_case_resolution_carry_forward;
+
+  WITH valid_saved_rows AS (
+    INSERT INTO public.banking_pay_workbench_session_case_resolutions (
+      id,
+      session_id,
+      candidate_id,
+      case_key,
+      resolution_family,
+      resolution_identity_key,
+      timesheet_id,
+      source_basis_fingerprint,
+      source_family_key,
+      bucket_code,
+      component_key_type,
+      component_key_value,
+      payload_json,
+      created_at_utc,
+      updated_at_utc
+    )
+    SELECT
+      gen_random_uuid(),
+      p_target_session_id,
+      carried_resolution.candidate_id,
+      carried_resolution.case_key,
+      carried_resolution.resolution_family,
+      carried_resolution.resolution_identity_key,
+      carried_resolution.timesheet_id,
+      carried_resolution.source_basis_fingerprint,
+      carried_resolution.source_family_key,
+      carried_resolution.bucket_code,
+      carried_resolution.component_key_type,
+      carried_resolution.component_key_value,
+      jsonb_strip_nulls(
+        COALESCE(carried_resolution.payload_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'clone_carried_forward', true,
+          'clone_validation_status', 'VALID',
+          'requires_review', false,
+          'source_session_id', p_source_session_id::text,
+          'target_session_id', p_target_session_id::text,
+          'carried_forward_at_utc', v_now::text,
+          'policy_x_authority_scope', 'PRE_DRAFT_CASE_RESOLUTION_STATE_ONLY'
+        )
+      ),
+      v_now,
+      v_now
+    FROM pg_temp._bpay_case_resolution_carry_forward AS carried_resolution
+    WHERE carried_resolution.source_basis_still_current IS TRUE
+      AND carried_resolution.stale_reason IS NULL
+    ON CONFLICT (session_id, resolution_identity_key)
+    DO UPDATE
+    SET candidate_id = EXCLUDED.candidate_id,
+        case_key = EXCLUDED.case_key,
+        resolution_family = EXCLUDED.resolution_family,
+        timesheet_id = EXCLUDED.timesheet_id,
+        source_basis_fingerprint = EXCLUDED.source_basis_fingerprint,
+        source_family_key = EXCLUDED.source_family_key,
+        bucket_code = EXCLUDED.bucket_code,
+        component_key_type = EXCLUDED.component_key_type,
+        component_key_value = EXCLUDED.component_key_value,
+        payload_json = EXCLUDED.payload_json,
+        updated_at_utc = v_now
+    RETURNING id
+  )
+  SELECT COUNT(*)::integer
+  INTO v_saved_count
+  FROM valid_saved_rows;
+
+  WITH carried_preview_rows AS (
+    INSERT INTO public.banking_pay_workbench_preview_rows (
+      id,
+      session_id,
+      candidate_id,
+      section,
+      row_key,
+      row_ordinal,
+      row_json,
+      timesheet_id,
+      key_type,
+      key_value,
+      selected,
+      selection_state,
+      status,
+      session_version,
+      created_at_utc,
+      updated_at_utc
+    )
+    SELECT
+      gen_random_uuid(),
+      p_target_session_id,
+      carried_resolution.candidate_id,
+      'cases_resolutions',
+      carried_resolution.case_key,
+      900000000000 + carried_resolution.carry_ordinal,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'row_type', 'case_resolution_carry_forward',
+          'section', 'cases_resolutions',
+          'candidate_id', carried_resolution.candidate_id::text,
+          'case_key', carried_resolution.case_key,
+          'timesheet_id', CASE WHEN carried_resolution.timesheet_id IS NULL THEN NULL ELSE carried_resolution.timesheet_id::text END,
+          'resolution_identity_key', carried_resolution.resolution_identity_key,
+          'resolution_family', carried_resolution.resolution_family,
+          'saved_resolution', true,
+          'clone_carried_forward', true,
+          'clone_validation_status', CASE WHEN carried_resolution.source_basis_still_current IS TRUE AND carried_resolution.stale_reason IS NULL THEN 'VALID' ELSE 'STALE_REVIEW_REQUIRED' END,
+          'stale', NOT (carried_resolution.source_basis_still_current IS TRUE AND carried_resolution.stale_reason IS NULL),
+          'requires_review', NOT (carried_resolution.source_basis_still_current IS TRUE AND carried_resolution.stale_reason IS NULL),
+          'stale_reason', carried_resolution.stale_reason,
+          'source_basis_fingerprint', carried_resolution.source_basis_fingerprint,
+          'source_session_id', p_source_session_id::text,
+          'target_session_id', p_target_session_id::text,
+          'carried_forward_at_utc', v_now::text,
+          'policy_x_authority_scope', 'PRE_DRAFT_CASE_RESOLUTION_STATE_ONLY'
+        )
+        || jsonb_build_object(
+          'payload_json', COALESCE(carried_resolution.payload_json, '{}'::jsonb)
+        )
+      ),
+      carried_resolution.timesheet_id,
+      carried_resolution.component_key_type,
+      carried_resolution.component_key_value,
+      false,
+      CASE WHEN carried_resolution.source_basis_still_current IS TRUE AND carried_resolution.stale_reason IS NULL THEN 'NOT_SELECTABLE' ELSE 'REVIEW_REQUIRED' END,
+      'READY',
+      v_target_session.version,
+      v_now,
+      v_now
+    FROM pg_temp._bpay_case_resolution_carry_forward AS carried_resolution
+    ON CONFLICT (session_id, section, candidate_id, row_key)
+    DO UPDATE
+    SET row_ordinal = EXCLUDED.row_ordinal,
+        row_json = EXCLUDED.row_json,
+        timesheet_id = EXCLUDED.timesheet_id,
+        key_type = EXCLUDED.key_type,
+        key_value = EXCLUDED.key_value,
+        selected = false,
+        selection_state = EXCLUDED.selection_state,
+        status = 'READY',
+        session_version = EXCLUDED.session_version,
+        updated_at_utc = v_now
+    RETURNING id
+  )
+  SELECT COUNT(*)::integer
+  INTO v_preview_count
+  FROM carried_preview_rows;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'source_session_id', p_source_session_id::text,
+    'target_session_id', p_target_session_id::text,
+    'total_source_case_resolution_count', COALESCE(v_total_count, 0),
+    'carried_forward_count', COALESCE(v_saved_count, 0),
+    'valid_case_resolution_count', COALESCE(v_valid_count, 0),
+    'stale_review_required_count', COALESCE(v_stale_count, 0),
+    'preview_row_count', COALESCE(v_preview_count, 0),
+    'never_silently_dropped', true,
+    'stale_resolutions_not_applied_as_valid', true
+  );
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_canonical_signature_v1(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_fallback_session_signature text DEFAULT NULL::text)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_filters jsonb := public.pay_workbench_filters_sanitise_v1(COALESCE(p_filters_json, '{}'::jsonb), p_pay_date, p_week_ending_cutoff);
+  v_nested_filters jsonb := CASE WHEN jsonb_typeof(v_filters->'filters') = 'object' THEN COALESCE(v_filters->'filters', '{}'::jsonb) ELSE '{}'::jsonb END;
+  v_nested_filter jsonb := CASE WHEN jsonb_typeof(v_filters->'filter') = 'object' THEN COALESCE(v_filters->'filter', '{}'::jsonb) ELSE '{}'::jsonb END;
+  v_fallback_json jsonb := '{}'::jsonb;
+  v_candidate_filter_id text := NULLIF(BTRIM(COALESCE(
+    v_filters->>'candidate_filter_id',
+    v_filters->>'candidateFilterId',
+    v_filters->>'filter_candidate_id',
+    v_nested_filters->>'candidate_filter_id',
+    v_nested_filters->>'candidateFilterId',
+    v_nested_filters->>'filter_candidate_id',
+    v_nested_filter->>'candidate_filter_id',
+    v_nested_filter->>'candidateFilterId',
+    v_nested_filter->>'filter_candidate_id',
+    v_fallback_json->>'candidate_filter_id',
+    v_fallback_json->>'candidateFilterId',
+    v_fallback_json->>'filter_candidate_id',
+    ''
+  )), '');
+  v_client_filter_id text := NULLIF(BTRIM(COALESCE(
+    v_filters->>'client_filter_id',
+    v_filters->>'clientFilterId',
+    v_filters->>'filter_client_id',
+    v_filters->>'client_id',
+    v_filters->>'clientId',
+    v_nested_filters->>'client_filter_id',
+    v_nested_filters->>'clientFilterId',
+    v_nested_filters->>'filter_client_id',
+    v_nested_filters->>'client_id',
+    v_nested_filters->>'clientId',
+    v_nested_filter->>'client_filter_id',
+    v_nested_filter->>'clientFilterId',
+    v_nested_filter->>'filter_client_id',
+    v_nested_filter->>'client_id',
+    v_nested_filter->>'clientId',
+    v_fallback_json->>'client_filter_id',
+    v_fallback_json->>'clientFilterId',
+    v_fallback_json->>'filter_client_id',
+    v_fallback_json->>'client_id',
+    v_fallback_json->>'clientId',
+    ''
+  )), '');
+  v_candidate_ids jsonb := '[]'::jsonb;
+  v_effective_week_ending_cutoff date := COALESCE(p_week_ending_cutoff, DATE '9999-12-31');
+BEGIN
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_SIGNATURE_ACTOR_REQUIRED'
+      USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'PAY_WORKBENCH_CANONICAL_SIGNATURE_ACTOR_REQUIRED')::text;
+  END IF;
+
+  IF p_pay_date IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_SIGNATURE_PAY_DATE_REQUIRED'
+      USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'PAY_WORKBENCH_CANONICAL_SIGNATURE_PAY_DATE_REQUIRED')::text;
+  END IF;
+
+  WITH raw_candidate_ids(candidate_id_text) AS (
+    SELECT NULLIF(BTRIM(v_filters->>'candidate_id'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_filters->>'candidateId'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_nested_filters->>'candidate_id'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_nested_filters->>'candidateId'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_nested_filter->>'candidate_id'), '')
+    UNION ALL SELECT NULLIF(BTRIM(v_nested_filter->>'candidateId'), '')
+    UNION ALL SELECT NULLIF(BTRIM(value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_filters->'candidate_ids') = 'array' THEN v_filters->'candidate_ids' ELSE '[]'::jsonb END) AS arr(value)
+    UNION ALL SELECT NULLIF(BTRIM(value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_filters->'candidateIds') = 'array' THEN v_filters->'candidateIds' ELSE '[]'::jsonb END) AS arr(value)
+    UNION ALL SELECT NULLIF(BTRIM(value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_nested_filters->'candidate_ids') = 'array' THEN v_nested_filters->'candidate_ids' ELSE '[]'::jsonb END) AS arr(value)
+    UNION ALL SELECT NULLIF(BTRIM(value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_nested_filters->'candidateIds') = 'array' THEN v_nested_filters->'candidateIds' ELSE '[]'::jsonb END) AS arr(value)
+    UNION ALL SELECT NULLIF(BTRIM(value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_nested_filter->'candidate_ids') = 'array' THEN v_nested_filter->'candidate_ids' ELSE '[]'::jsonb END) AS arr(value)
+    UNION ALL SELECT NULLIF(BTRIM(value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_nested_filter->'candidateIds') = 'array' THEN v_nested_filter->'candidateIds' ELSE '[]'::jsonb END) AS arr(value)
+    UNION ALL SELECT NULLIF(BTRIM(value), '')
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_fallback_json->'candidate_ids') = 'array' THEN v_fallback_json->'candidate_ids' ELSE '[]'::jsonb END) AS arr(value)
+  ), valid_candidate_ids AS (
+    SELECT DISTINCT LOWER(candidate_id_text) AS candidate_id_text
+    FROM raw_candidate_ids
+    WHERE candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  )
+  SELECT COALESCE(jsonb_agg(candidate_id_text ORDER BY candidate_id_text), '[]'::jsonb)
+  INTO v_candidate_ids
+  FROM valid_candidate_ids;
+
+  RETURN jsonb_build_object(
+    'actor_user_id', p_actor_user_id::text,
+    'candidate_filter_id', COALESCE(v_candidate_filter_id, ''),
+    'candidate_ids', COALESCE(v_candidate_ids, '[]'::jsonb),
+    'client_filter_id', COALESCE(v_client_filter_id, ''),
+    'kind', 'BANKING_PAY_WORKBENCH',
+    'pay_date', p_pay_date::text,
+    'signature_version', 4,
+    'week_ending_cutoff', v_effective_week_ending_cutoff::text
+  )::text;
+EXCEPTION
+  WHEN invalid_text_representation THEN
+    RETURN jsonb_build_object(
+      'actor_user_id', p_actor_user_id::text,
+      'candidate_filter_id', COALESCE(v_candidate_filter_id, ''),
+      'candidate_ids', COALESCE(v_candidate_ids, '[]'::jsonb),
+      'client_filter_id', COALESCE(v_client_filter_id, ''),
+      'kind', 'BANKING_PAY_WORKBENCH',
+      'pay_date', p_pay_date::text,
+      'signature_version', 4,
+      'week_ending_cutoff', COALESCE(p_week_ending_cutoff, DATE '9999-12-31')::text
+    )::text;
+END;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_delta_update_candidate_state_v1(p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -212643,16 +214750,13 @@ BEGIN
   );
 END;
 $function$;
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_progress_counters(
-  p_session_id uuid,
-  p_apply boolean DEFAULT true,
-  p_reason text DEFAULT 'AUTHORITATIVE_COUNTER_RECOMPUTE',
-  p_write_progress_json boolean DEFAULT true
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_progress_counters(p_session_id uuid, p_apply boolean DEFAULT true, p_reason text DEFAULT 'AUTHORITATIVE_COUNTER_RECOMPUTE'::text, p_write_progress_json boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -212812,7 +214916,7 @@ BEGIN
       COUNT(*)::integer AS total_count,
       COUNT(*) FILTER (
         WHERE has_error IS NOT TRUE
-          AND status_key IN ('READY', 'MATERIALISED', 'MATERIALIZED', 'SKIPPED')
+          AND status_key IN ('READY', 'MATERIALISED', 'MATERIALIZED', 'SKIPPED', 'SUPERSEDED', 'SOURCE_EMPTY', 'NOT_APPLICABLE', 'OBSOLETE')
       )::integer AS ready_count,
       COUNT(*) FILTER (
         WHERE has_error IS TRUE
@@ -213196,6 +215300,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public._pay_workbench_dirty_payload_merge(p_existing jsonb, p_incoming jsonb)
