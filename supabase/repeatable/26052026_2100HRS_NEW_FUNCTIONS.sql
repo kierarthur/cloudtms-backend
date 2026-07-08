@@ -197571,7 +197571,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -197733,6 +197732,15 @@ DECLARE
   v_queue_source_running_count integer := 0;
   v_queue_candidate_scope_missing_count integer := 0;
   v_resolved_session_id uuid := NULL::uuid;
+  v_open_orphan_repair_active_job_count integer := 0;
+  v_open_orphan_repair_pending_line_work_count integer := 0;
+  v_open_orphan_repair_source_empty_line_work_count integer := 0;
+  v_open_orphan_repair_line_work_count integer := 0;
+  v_open_orphan_repair_source_row_count integer := 0;
+  v_open_orphan_repair_preview_row_count integer := 0;
+  v_open_orphan_repair_remaining_pending_line_work_count integer := 0;
+  v_open_orphan_repair_applied boolean := false;
+  v_open_orphan_repair_progress_json jsonb := '{}'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('BOOTSTRAP');
 
@@ -199496,6 +199504,195 @@ BEGIN
     WHERE refreshed_session.id = v_resolved_session_id;
   END IF;
 
+  IF v_session_row.id IS NOT NULL
+     AND UPPER(BTRIM(COALESCE(v_session_row.status, ''))) = 'OPEN'
+     AND v_session_row.discarded_at_utc IS NULL
+     AND v_session_row.replacement_session_id IS NULL THEN
+    SELECT COUNT(*)::integer
+    INTO v_open_orphan_repair_active_job_count
+    FROM public.banking_pay_workbench_jobs AS open_orphan_active_job
+    WHERE open_orphan_active_job.session_id = v_session_row.id
+      AND UPPER(BTRIM(COALESCE(open_orphan_active_job.status, ''))) IN ('QUEUED', 'RUNNING');
+
+    SELECT COUNT(*)::integer
+    INTO v_open_orphan_repair_pending_line_work_count
+    FROM public.banking_pay_workbench_candidate_line_work AS open_orphan_line_work
+    WHERE open_orphan_line_work.session_id = v_session_row.id
+      AND UPPER(BTRIM(COALESCE(open_orphan_line_work.status, ''))) IN ('PENDING', 'READY', 'DIRTY');
+
+    SELECT COUNT(*)::integer
+    INTO v_open_orphan_repair_source_empty_line_work_count
+    FROM public.banking_pay_workbench_candidate_line_work AS open_orphan_line_work
+    JOIN public.banking_pay_workbench_session_scope AS open_orphan_scope
+      ON open_orphan_scope.session_id = open_orphan_line_work.session_id
+     AND open_orphan_scope.candidate_id = open_orphan_line_work.candidate_id
+    WHERE open_orphan_line_work.session_id = v_session_row.id
+      AND UPPER(BTRIM(COALESCE(open_orphan_line_work.status, ''))) IN ('PENDING', 'READY', 'DIRTY')
+      AND UPPER(BTRIM(COALESCE(open_orphan_scope.status, ''))) = 'SOURCE_EMPTY'
+      AND COALESCE(open_orphan_scope.dirty, false) IS NOT TRUE
+      AND open_orphan_scope.pending_job_id IS NULL
+      AND (
+        open_orphan_scope.error_json IS NULL
+        OR open_orphan_scope.error_json = '{}'::jsonb
+        OR open_orphan_scope.error_json = 'null'::jsonb
+      );
+
+    IF COALESCE(v_open_orphan_repair_active_job_count, 0) = 0
+       AND COALESCE(v_open_orphan_repair_pending_line_work_count, 0) > 0
+       AND COALESCE(v_open_orphan_repair_source_empty_line_work_count, 0) > 0 THEN
+      DROP TABLE IF EXISTS pg_temp._bpay_open_shared_orphan_source_empty_line_work;
+      CREATE TEMP TABLE _bpay_open_shared_orphan_source_empty_line_work ON COMMIT DROP AS
+      SELECT
+        open_orphan_line_work.id AS line_work_id,
+        open_orphan_line_work.candidate_id,
+        open_orphan_line_work.timesheet_id,
+        open_orphan_line_work.line_key
+      FROM public.banking_pay_workbench_candidate_line_work AS open_orphan_line_work
+      JOIN public.banking_pay_workbench_session_scope AS open_orphan_scope
+        ON open_orphan_scope.session_id = open_orphan_line_work.session_id
+       AND open_orphan_scope.candidate_id = open_orphan_line_work.candidate_id
+      WHERE open_orphan_line_work.session_id = v_session_row.id
+        AND UPPER(BTRIM(COALESCE(open_orphan_line_work.status, ''))) IN ('PENDING', 'READY', 'DIRTY')
+        AND UPPER(BTRIM(COALESCE(open_orphan_scope.status, ''))) = 'SOURCE_EMPTY'
+        AND COALESCE(open_orphan_scope.dirty, false) IS NOT TRUE
+        AND open_orphan_scope.pending_job_id IS NULL
+        AND (
+          open_orphan_scope.error_json IS NULL
+          OR open_orphan_scope.error_json = '{}'::jsonb
+          OR open_orphan_scope.error_json = 'null'::jsonb
+        );
+
+      UPDATE public.banking_pay_workbench_candidate_line_work AS open_orphan_line_work_update
+      SET status = 'SKIPPED',
+          work_payload_json = jsonb_strip_nulls(
+            COALESCE(open_orphan_line_work_update.work_payload_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'open_shared_orphan_repair', true,
+              'open_shared_orphan_repair_reason', 'SOURCE_EMPTY_SCOPE_WITH_NO_ACTIVE_JOBS',
+              'open_shared_orphan_repair_at_utc', v_now::text,
+              'open_shared_orphan_repair_session_id', v_session_row.id::text,
+              'policy_x_authority_scope', 'PRE_DRAFT_WORKBENCH_REPAIR_ONLY'
+            )
+          ),
+          error_json = NULL::jsonb,
+          updated_at_utc = v_now
+      FROM pg_temp._bpay_open_shared_orphan_source_empty_line_work AS repair_line_work
+      WHERE open_orphan_line_work_update.id = repair_line_work.line_work_id
+        AND open_orphan_line_work_update.session_id = v_session_row.id
+        AND UPPER(BTRIM(COALESCE(open_orphan_line_work_update.status, ''))) IN ('PENDING', 'READY', 'DIRTY');
+      GET DIAGNOSTICS v_open_orphan_repair_line_work_count = ROW_COUNT;
+
+      UPDATE public.banking_pay_workbench_candidate_source_lines AS open_orphan_source_line_update
+      SET status = 'SUPERSEDED',
+          source_row_json = jsonb_strip_nulls(
+            COALESCE(open_orphan_source_line_update.source_row_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'open_shared_orphan_repair', true,
+              'open_shared_orphan_repair_reason', 'SOURCE_EMPTY_SCOPE_WITH_NO_ACTIVE_JOBS',
+              'open_shared_orphan_repair_at_utc', v_now::text,
+              'open_shared_orphan_repair_session_id', v_session_row.id::text,
+              'policy_x_authority_scope', 'PRE_DRAFT_WORKBENCH_REPAIR_ONLY'
+            )
+          ),
+          updated_at_utc = v_now
+      FROM pg_temp._bpay_open_shared_orphan_source_empty_line_work AS repair_line_work
+      WHERE open_orphan_source_line_update.session_id = v_session_row.id
+        AND open_orphan_source_line_update.candidate_id = repair_line_work.candidate_id
+        AND repair_line_work.timesheet_id IS NOT NULL
+        AND open_orphan_source_line_update.timesheet_id IS NOT DISTINCT FROM repair_line_work.timesheet_id
+        AND UPPER(BTRIM(COALESCE(open_orphan_source_line_update.status, ''))) IN ('CURRENT', 'READY', 'PENDING', 'DIRTY');
+      GET DIAGNOSTICS v_open_orphan_repair_source_row_count = ROW_COUNT;
+
+      UPDATE public.banking_pay_workbench_preview_rows AS open_orphan_preview_row_update
+      SET status = 'SUPERSEDED',
+          selected = false,
+          selection_state = 'SUPERSEDED',
+          row_json = jsonb_strip_nulls(
+            COALESCE(open_orphan_preview_row_update.row_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'open_shared_orphan_repair', true,
+              'open_shared_orphan_repair_reason', 'SOURCE_EMPTY_SCOPE_WITH_NO_ACTIVE_JOBS',
+              'open_shared_orphan_repair_at_utc', v_now::text,
+              'open_shared_orphan_repair_session_id', v_session_row.id::text,
+              'not_payable_reason', 'SOURCE_EMPTY_AFTER_UNAUTHORISE_OR_SOURCE_CHANGE',
+              'policy_x_authority_scope', 'PRE_DRAFT_WORKBENCH_REPAIR_ONLY'
+            )
+          ),
+          updated_at_utc = v_now
+      FROM pg_temp._bpay_open_shared_orphan_source_empty_line_work AS repair_line_work
+      WHERE open_orphan_preview_row_update.session_id = v_session_row.id
+        AND open_orphan_preview_row_update.candidate_id = repair_line_work.candidate_id
+        AND repair_line_work.timesheet_id IS NOT NULL
+        AND open_orphan_preview_row_update.timesheet_id IS NOT DISTINCT FROM repair_line_work.timesheet_id
+        AND UPPER(BTRIM(COALESCE(open_orphan_preview_row_update.status, ''))) IN ('READY', 'DIRTY', 'PENDING');
+      GET DIAGNOSTICS v_open_orphan_repair_preview_row_count = ROW_COUNT;
+
+      SELECT COUNT(*)::integer
+      INTO v_open_orphan_repair_remaining_pending_line_work_count
+      FROM public.banking_pay_workbench_candidate_line_work AS remaining_orphan_line_work
+      WHERE remaining_orphan_line_work.session_id = v_session_row.id
+        AND UPPER(BTRIM(COALESCE(remaining_orphan_line_work.status, ''))) IN ('PENDING', 'READY', 'DIRTY');
+
+      v_open_orphan_repair_applied := COALESCE(v_open_orphan_repair_line_work_count, 0) > 0
+        OR COALESCE(v_open_orphan_repair_source_row_count, 0) > 0
+        OR COALESCE(v_open_orphan_repair_preview_row_count, 0) > 0;
+
+      IF COALESCE(v_open_orphan_repair_applied, false) IS TRUE THEN
+        v_open_orphan_repair_progress_json := public.pay_workbench_session_recompute_progress_counters(
+          p_session_id => v_session_row.id,
+          p_apply => true,
+          p_reason => 'OPEN_SHARED_SOURCE_EMPTY_ORPHAN_REPAIR',
+          p_write_progress_json => true
+        );
+
+        UPDATE public.banking_pay_workbench_sessions AS open_orphan_repair_session
+        SET progress_json = jsonb_strip_nulls(
+              COALESCE(open_orphan_repair_session.progress_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'open_shared_orphan_repair_applied', true,
+                'open_shared_orphan_repair_reason', 'SOURCE_EMPTY_SCOPE_WITH_NO_ACTIVE_JOBS',
+                'open_shared_orphan_repair_at_utc', v_now::text,
+                'open_shared_orphan_repair_line_work_count', COALESCE(v_open_orphan_repair_line_work_count, 0),
+                'open_shared_orphan_repair_source_row_count', COALESCE(v_open_orphan_repair_source_row_count, 0),
+                'open_shared_orphan_repair_preview_row_count', COALESCE(v_open_orphan_repair_preview_row_count, 0),
+                'open_shared_orphan_repair_pending_line_work_before_count', COALESCE(v_open_orphan_repair_pending_line_work_count, 0),
+                'open_shared_orphan_repair_source_empty_line_work_count', COALESCE(v_open_orphan_repair_source_empty_line_work_count, 0),
+                'open_shared_orphan_repair_remaining_pending_line_work_count', COALESCE(v_open_orphan_repair_remaining_pending_line_work_count, 0),
+                'open_shared_orphan_repair_recomputed_session_ready', LOWER(BTRIM(COALESCE(v_open_orphan_repair_progress_json->>'session_ready', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+                'open_shared_orphan_repair_recomputed_ready_for_draft', LOWER(BTRIM(COALESCE(v_open_orphan_repair_progress_json->>'ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+                'policy_x_authority_scope', 'PRE_DRAFT_WORKBENCH_REPAIR_ONLY'
+              )
+            ),
+            progress_counter_version = COALESCE(open_orphan_repair_session.progress_counter_version, 0) + 1,
+            progress_updated_at_utc = v_now,
+            updated_at_utc = v_now
+        WHERE open_orphan_repair_session.id = v_session_row.id
+        RETURNING open_orphan_repair_session.*
+        INTO v_session_row;
+
+        PERFORM public._audit_insert(
+          'banking_pay_workbench_session',
+          v_session_row.id::text,
+          'WORKBENCH_OPEN_SHARED_SOURCE_EMPTY_ORPHAN_REPAIRED',
+          NULL::jsonb,
+          jsonb_build_object(
+            'session_id', v_session_row.id::text,
+            'line_work_count', COALESCE(v_open_orphan_repair_line_work_count, 0),
+            'source_row_count', COALESCE(v_open_orphan_repair_source_row_count, 0),
+            'preview_row_count', COALESCE(v_open_orphan_repair_preview_row_count, 0),
+            'pending_line_work_before_count', COALESCE(v_open_orphan_repair_pending_line_work_count, 0),
+            'source_empty_line_work_count', COALESCE(v_open_orphan_repair_source_empty_line_work_count, 0),
+            'remaining_pending_line_work_count', COALESCE(v_open_orphan_repair_remaining_pending_line_work_count, 0),
+            'reason', 'SOURCE_EMPTY_SCOPE_WITH_NO_ACTIVE_JOBS',
+            'policy_x_authority_scope', 'PRE_DRAFT_WORKBENCH_REPAIR_ONLY'
+          ),
+          'OPEN_SHARED_SOURCE_EMPTY_ORPHAN_REPAIR',
+          p_actor_user_id
+        );
+      END IF;
+    END IF;
+  END IF;
+
   v_progress_state_upper := UPPER(BTRIM(COALESCE(v_session_row.progress_state, '')));
   v_failure_flag := COALESCE(v_session_row.scope_failed_count, 0) > 0
     OR COALESCE(v_session_row.line_units_failed, 0) > 0
@@ -199780,6 +199977,17 @@ BEGIN
         'copied_preview_row_count', 0,
         'legacy_refresh_enqueued_count', 0
       ))
+    );
+
+  v_response_json := v_response_json
+    || jsonb_build_object(
+      'open_shared_orphan_repair_applied', COALESCE(v_open_orphan_repair_applied, false),
+      'open_shared_orphan_repair_line_work_count', COALESCE(v_open_orphan_repair_line_work_count, 0),
+      'open_shared_orphan_repair_source_row_count', COALESCE(v_open_orphan_repair_source_row_count, 0),
+      'open_shared_orphan_repair_preview_row_count', COALESCE(v_open_orphan_repair_preview_row_count, 0),
+      'open_shared_orphan_repair_pending_line_work_before_count', COALESCE(v_open_orphan_repair_pending_line_work_count, 0),
+      'open_shared_orphan_repair_source_empty_line_work_count', COALESCE(v_open_orphan_repair_source_empty_line_work_count, 0),
+      'open_shared_orphan_repair_remaining_pending_line_work_count', COALESCE(v_open_orphan_repair_remaining_pending_line_work_count, 0)
     );
 
   RETURN v_response_json;
