@@ -12057,6 +12057,7 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 
 
 
+
 async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId, ctx = null) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
@@ -12121,12 +12122,6 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
       'WORKBENCH_SESSION_INVALID',
       'WORKBENCH_SESSION_NOT_FOUND',
       'STALE_SESSION',
-      'WORKBENCH_SESSION_CONTEXT_REQUIRED',
-      'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED',
-      'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED',
-      'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID',
-      'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID',
-      'WORKBENCH_SESSION_PROGRESS_CHANGED',
       'OBSOLETE_SESSION',
       'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
     ]);
@@ -12157,15 +12152,7 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     };
     const resolveStatus = (code, fallbackStatus) => {
       const c = String(code || '').trim().toUpperCase();
-      if (c === 'BATCH_STALE'
-          || c === 'STALE_SESSION'
-          || c === 'OBSOLETE_SESSION'
-          || c === 'WORKBENCH_SESSION_CONTEXT_REQUIRED'
-          || c === 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED'
-          || c === 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED'
-          || c === 'WORKBENCH_SESSION_PROGRESS_CHANGED') return 409;
-      if (c === 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID'
-          || c === 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID') return 400;
+      if (c === 'BATCH_STALE') return 409;
       if (validationStatusCodes.has(c)) return 400;
       return fallbackStatus;
     };
@@ -12397,10 +12384,16 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     if (!Number.isFinite(n) || Math.trunc(n) !== n) return NaN;
     return n;
   };
-  const readNonNegativeInteger = (value) => {
+  const readStrictPositiveInteger = (value) => {
     if (value === undefined || value === null || String(value).trim() === '') return null;
     const n = Number(value);
-    if (!Number.isFinite(n) || Math.trunc(n) !== n || n < 0) return NaN;
+    if (!Number.isSafeInteger(n) || n < 1) return NaN;
+    return n;
+  };
+  const readStrictNonNegativeInteger = (value) => {
+    if (value === undefined || value === null || String(value).trim() === '') return null;
+    const n = Number(value);
+    if (!Number.isSafeInteger(n) || n < 0) return NaN;
     return n;
   };
   const readIsoDate = (value) => {
@@ -12528,6 +12521,23 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     body.effectivePayDate !== undefined
   );
   const resolutionFamily = resolutionFamilyRaw || (hasBucketResolutions ? 'BUCKETED' : (hasTaxableChannelRestructureShape ? 'TAXABLE_CHANNEL_RESTRUCTURE' : 'NON_BUCKET'));
+  const expectedSessionVersionRaw = body.expected_session_version ?? body.expectedSessionVersion ?? body.session_version ?? body.sessionVersion;
+  const expectedProgressCounterVersionRaw = body.expected_progress_counter_version ?? body.expectedProgressCounterVersion ?? body.progress_counter_version ?? body.progressCounterVersion;
+  const expectedSessionVersion = readStrictPositiveInteger(expectedSessionVersionRaw);
+  const expectedProgressCounterVersion = readStrictNonNegativeInteger(expectedProgressCounterVersionRaw);
+
+  if (expectedSessionVersion == null) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED' });
+  }
+  if (Number.isNaN(expectedSessionVersion)) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SESSION_VERSION' });
+  }
+  if (expectedProgressCounterVersion == null) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED' });
+  }
+  if (Number.isNaN(expectedProgressCounterVersion)) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_PROGRESS_COUNTER_VERSION' });
+  }
 
   if (!caseKey) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
@@ -12689,35 +12699,8 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     };
   }
 
-
-  const expectedSessionVersion = readPositiveInteger(
-    body.expected_session_version ??
-    body.expectedSessionVersion ??
-    body.session_version ??
-    body.sessionVersion
-  );
-  const expectedProgressCounterVersion = readNonNegativeInteger(
-    body.expected_progress_counter_version ??
-    body.expectedProgressCounterVersion ??
-    body.progress_counter_version ??
-    body.progressCounterVersion
-  );
-
-  if (expectedSessionVersion === null) {
-    return buildFriendlyFailure(409, { code: 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED' });
-  }
-  if (!Number.isFinite(expectedSessionVersion) || expectedSessionVersion < 1) {
-    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID' });
-  }
-  if (expectedProgressCounterVersion === null) {
-    return buildFriendlyFailure(409, { code: 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED' });
-  }
-  if (!Number.isFinite(expectedProgressCounterVersion) || expectedProgressCounterVersion < 0) {
-    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID' });
-  }
-
   resolutionPayloadJson = {
-    ...resolutionPayloadJson,
+    ...(resolutionPayloadJson || {}),
     expected_session_version: expectedSessionVersion,
     expected_progress_counter_version: expectedProgressCounterVersion
   };
@@ -12736,34 +12719,23 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     if (!sessionRow) {
       return buildFriendlyFailure(404, { code: 'WORKBENCH_SESSION_NOT_FOUND' });
     }
-    if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
+    if (
+      String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN' ||
+      !!sessionRow.discarded_at_utc ||
+      !!sessionRow.replacement_session_id
+    ) {
       return buildFriendlyFailure(409, { code: 'OBSOLETE_SESSION' });
     }
-    if (sessionRow.discarded_at_utc || sessionRow.replacement_session_id) {
-      return buildFriendlyFailure(409, { code: 'OBSOLETE_SESSION' });
-    }
-
-    const currentSessionVersion = readPositiveInteger(sessionRow.version);
-    if (!Number.isFinite(currentSessionVersion) || currentSessionVersion !== expectedSessionVersion) {
-      return buildFriendlyFailure(409, {
-        code: 'STALE_SESSION',
+    if (Number(sessionRow.version) !== expectedSessionVersion) {
+      return buildFriendlyFailure(409, { code: 'STALE_SESSION' }, {}, {
         expected_session_version: expectedSessionVersion,
-        current_session_version: Number.isFinite(currentSessionVersion) ? currentSessionVersion : null
-      }, {}, {
-        expected_session_version: expectedSessionVersion,
-        current_session_version: Number.isFinite(currentSessionVersion) ? currentSessionVersion : null
+        current_session_version: Number(sessionRow.version) || null
       });
     }
-
-    const currentProgressCounterVersion = readNonNegativeInteger(sessionRow.progress_counter_version);
-    if (!Number.isFinite(currentProgressCounterVersion) || currentProgressCounterVersion !== expectedProgressCounterVersion) {
-      return buildFriendlyFailure(409, {
-        code: 'WORKBENCH_SESSION_PROGRESS_CHANGED',
+    if (Number(sessionRow.progress_counter_version ?? 0) !== expectedProgressCounterVersion) {
+      return buildFriendlyFailure(409, { code: 'WORKBENCH_SESSION_PROGRESS_CHANGED' }, {}, {
         expected_progress_counter_version: expectedProgressCounterVersion,
-        current_progress_counter_version: Number.isFinite(currentProgressCounterVersion) ? currentProgressCounterVersion : null
-      }, {}, {
-        expected_progress_counter_version: expectedProgressCounterVersion,
-        current_progress_counter_version: Number.isFinite(currentProgressCounterVersion) ? currentProgressCounterVersion : null
+        current_progress_counter_version: Number(sessionRow.progress_counter_version ?? 0)
       });
     }
 
@@ -12849,6 +12821,7 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
   }
 }
 
+// SHA-256 suffix: 10ec5276ea36
 
 
 
@@ -12949,6 +12922,8 @@ async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
     reauth_purpose: 'PAYE_SAME_WEEK_OVERRIDE'
   };
 }
+
+
 
 
 async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId, ctx = null) {
@@ -13121,6 +13096,12 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     const number = Number(text);
     return Number.isSafeInteger(number) && number >= 1 ? number : null;
   };
+  const readNonNegativeInteger = (value) => {
+    const text = trimStr(value);
+    if (!/^[0-9]{1,18}$/.test(text)) return null;
+    const number = Number(text);
+    return Number.isSafeInteger(number) && number >= 0 ? number : null;
+  };
   const hasOwn = (key) => Object.prototype.hasOwnProperty.call(body, key);
   const getArrayAlias = (...keys) => {
     for (const key of keys) {
@@ -13150,9 +13131,13 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
   const linkedTimesheetId = readUuid(linkedTimesheetRaw);
   const resolutionFamily = trimStr(body.resolution_family ?? body.resolutionFamily).toUpperCase();
   const expectedVersionRaw = body.expected_session_version ?? body.expectedSessionVersion ?? body.session_version ?? body.sessionVersion;
+  const expectedProgressRaw = body.expected_progress_counter_version ?? body.expectedProgressCounterVersion ?? body.progress_counter_version ?? body.progressCounterVersion;
   const expectedSessionVersion = expectedVersionRaw == null || trimStr(expectedVersionRaw) === ''
     ? null
     : readPositiveInteger(expectedVersionRaw);
+  const expectedProgressCounterVersion = expectedProgressRaw == null || trimStr(expectedProgressRaw) === ''
+    ? null
+    : readNonNegativeInteger(expectedProgressRaw);
 
   if ((body.candidate_id !== undefined || body.candidateId !== undefined) && !candidateId) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
@@ -13165,6 +13150,15 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
   }
   if (expectedVersionRaw !== undefined && expectedVersionRaw !== null && trimStr(expectedVersionRaw) !== '' && expectedSessionVersion == null) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SESSION_VERSION' });
+  }
+  if (expectedProgressRaw !== undefined && expectedProgressRaw !== null && trimStr(expectedProgressRaw) !== '' && expectedProgressCounterVersion == null) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_PROGRESS_COUNTER_VERSION' });
+  }
+  if (operation === 'CLEAR' && expectedSessionVersion == null) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED' });
+  }
+  if (operation === 'CLEAR' && expectedProgressCounterVersion == null) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED' });
   }
 
   const selectedTimesheetAlias = getArrayAlias('selected_timesheet_ids', 'selectedTimesheetIds', 'timesheet_ids', 'timesheetIds');
@@ -13242,6 +13236,7 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     ...(linkedTimesheetId ? { linked_timesheet_id: linkedTimesheetId, timesheet_id: linkedTimesheetId } : {}),
     ...(resolutionFamily ? { resolution_family: resolutionFamily } : {}),
     ...(expectedSessionVersion != null ? { expected_session_version: expectedSessionVersion } : {}),
+    ...(expectedProgressCounterVersion != null ? { expected_progress_counter_version: expectedProgressCounterVersion } : {}),
     ...(selectedTimesheetResult.values.length ? { selected_timesheet_ids: selectedTimesheetResult.values } : {}),
     ...(selectedCaseKeys.length ? { selected_case_keys: selectedCaseKeys } : {}),
     ...(selectedCaseIdentities.length ? { selected_case_identities: selectedCaseIdentities } : {})
@@ -13305,7 +13300,7 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
       env,
       `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
       `?id=eq.${enc(id)}` +
-      `&select=id,actor_user_id,status,version,discarded_at_utc,replacement_session_id,source_snapshot_run_id` +
+      `&select=id,actor_user_id,status,version,progress_counter_version,discarded_at_utc,replacement_session_id,source_snapshot_run_id` +
       `&limit=1`,
       false
     );
@@ -13325,6 +13320,12 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
       return buildFriendlyFailure(409, { code: 'STALE_SESSION' }, {}, {
         expected_session_version: expectedSessionVersion,
         current_session_version: Number(sessionRow.version) || null
+      });
+    }
+    if (expectedProgressCounterVersion != null && Number(sessionRow.progress_counter_version ?? 0) !== expectedProgressCounterVersion) {
+      return buildFriendlyFailure(409, { code: 'WORKBENCH_SESSION_PROGRESS_CHANGED' }, {}, {
+        expected_progress_counter_version: expectedProgressCounterVersion,
+        current_progress_counter_version: Number(sessionRow.progress_counter_version ?? 0)
       });
     }
 
@@ -13394,6 +13395,9 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
   }
 }
 
+// SHA-256 suffix: caf0416c39c6
+
+
 
 async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, sessionId, ctx = null) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
@@ -13459,12 +13463,6 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
       'WORKBENCH_SESSION_INVALID',
       'WORKBENCH_SESSION_NOT_FOUND',
       'STALE_SESSION',
-      'WORKBENCH_SESSION_CONTEXT_REQUIRED',
-      'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED',
-      'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED',
-      'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID',
-      'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID',
-      'WORKBENCH_SESSION_PROGRESS_CHANGED',
       'OBSOLETE_SESSION',
       'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
     ]);
@@ -13495,15 +13493,7 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
     };
     const resolveStatus = (code, fallbackStatus) => {
       const c = String(code || '').trim().toUpperCase();
-      if (c === 'BATCH_STALE'
-          || c === 'STALE_SESSION'
-          || c === 'OBSOLETE_SESSION'
-          || c === 'WORKBENCH_SESSION_CONTEXT_REQUIRED'
-          || c === 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED'
-          || c === 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED'
-          || c === 'WORKBENCH_SESSION_PROGRESS_CHANGED') return 409;
-      if (c === 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID'
-          || c === 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID') return 400;
+      if (c === 'BATCH_STALE') return 409;
       if (validationStatusCodes.has(c)) return 400;
       return fallbackStatus;
     };
@@ -13561,20 +13551,26 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
     const text = trimStr(value);
     return uuidRe.test(text) ? text : '';
   };
-  const readNonNegativeInteger = (value) => {
-    if (value === null || value === undefined || value === '') return null;
-    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value;
+  const readPositiveInteger = (value) => {
     const text = trimStr(value);
-    if (!/^\d+$/.test(text)) return null;
-    const parsed = Number(text);
-    return Number.isSafeInteger(parsed) ? parsed : null;
+    if (!/^[0-9]{1,18}$/.test(text)) return null;
+    const number = Number(text);
+    return Number.isSafeInteger(number) && number >= 1 ? number : null;
+  };
+  const readNonNegativeInteger = (value) => {
+    const text = trimStr(value);
+    if (!/^[0-9]{1,18}$/.test(text)) return null;
+    const number = Number(text);
+    return Number.isSafeInteger(number) && number >= 0 ? number : null;
   };
 
   const candidateId = trimStr(body.candidate_id ?? body.candidateId);
   const timesheetId = trimStr(body.timesheet_id ?? body.timesheetId);
   const isExcludedRaw = body.is_excluded ?? body.isExcluded ?? body.exclude ?? body.excluded;
-  const expectedSessionVersion = readNonNegativeInteger(body.expected_session_version ?? body.expectedSessionVersion ?? body.session_version ?? body.sessionVersion);
-  const expectedProgressCounterVersion = readNonNegativeInteger(body.expected_progress_counter_version ?? body.expectedProgressCounterVersion ?? body.progress_counter_version ?? body.progressCounterVersion);
+  const expectedVersionRaw = body.expected_session_version ?? body.expectedSessionVersion ?? body.session_version ?? body.sessionVersion;
+  const expectedProgressRaw = body.expected_progress_counter_version ?? body.expectedProgressCounterVersion ?? body.progress_counter_version ?? body.progressCounterVersion;
+  const expectedSessionVersion = expectedVersionRaw == null || trimStr(expectedVersionRaw) === '' ? null : readPositiveInteger(expectedVersionRaw);
+  const expectedProgressCounterVersion = expectedProgressRaw == null || trimStr(expectedProgressRaw) === '' ? null : readNonNegativeInteger(expectedProgressRaw);
 
   if (!uuidRe.test(candidateId)) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
@@ -13585,11 +13581,11 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
   if (typeof isExcludedRaw !== 'boolean') {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION' });
   }
-  if (expectedSessionVersion === null) {
-    return buildFriendlyFailure(409, { code: 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED' });
+  if (expectedSessionVersion == null) {
+    return buildFriendlyFailure(400, { code: expectedVersionRaw == null || trimStr(expectedVersionRaw) === '' ? 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED' : 'WORKBENCH_MODAL_ACTION_INVALID_SESSION_VERSION' });
   }
-  if (expectedProgressCounterVersion === null) {
-    return buildFriendlyFailure(409, { code: 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED' });
+  if (expectedProgressCounterVersion == null) {
+    return buildFriendlyFailure(400, { code: expectedProgressRaw == null || trimStr(expectedProgressRaw) === '' ? 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED' : 'WORKBENCH_MODAL_ACTION_INVALID_PROGRESS_COUNTER_VERSION' });
   }
 
   try {
@@ -13597,7 +13593,7 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
       env,
       `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
       `?id=eq.${enc(id)}` +
-      `&select=id,actor_user_id,status,version,progress_counter_version,discarded_at_utc,replacement_session_id,source_snapshot_run_id` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id,version,progress_counter_version,discarded_at_utc,replacement_session_id` +
       `&limit=1`,
       false
     );
@@ -13606,23 +13602,23 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
     if (!sessionRow) {
       return buildFriendlyFailure(404, { code: 'WORKBENCH_SESSION_NOT_FOUND' });
     }
-    if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN' || sessionRow.discarded_at_utc || sessionRow.replacement_session_id) {
+    if (
+      String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN' ||
+      !!sessionRow.discarded_at_utc ||
+      !!sessionRow.replacement_session_id
+    ) {
       return buildFriendlyFailure(409, { code: 'OBSOLETE_SESSION' });
     }
-    const currentSessionVersion = readNonNegativeInteger(sessionRow.version);
-    const currentProgressCounterVersion = readNonNegativeInteger(sessionRow.progress_counter_version);
-    if (currentSessionVersion !== null && currentSessionVersion !== expectedSessionVersion) {
-      return buildFriendlyFailure(409, {
-        code: 'STALE_SESSION',
+    if (Number(sessionRow.version) !== expectedSessionVersion) {
+      return buildFriendlyFailure(409, { code: 'STALE_SESSION' }, {}, {
         expected_session_version: expectedSessionVersion,
-        current_session_version: currentSessionVersion
+        current_session_version: Number(sessionRow.version) || null
       });
     }
-    if (currentProgressCounterVersion !== null && currentProgressCounterVersion !== expectedProgressCounterVersion) {
-      return buildFriendlyFailure(409, {
-        code: 'WORKBENCH_SESSION_PROGRESS_CHANGED',
+    if (Number(sessionRow.progress_counter_version ?? 0) !== expectedProgressCounterVersion) {
+      return buildFriendlyFailure(409, { code: 'WORKBENCH_SESSION_PROGRESS_CHANGED' }, {}, {
         expected_progress_counter_version: expectedProgressCounterVersion,
-        current_progress_counter_version: currentProgressCounterVersion
+        current_progress_counter_version: Number(sessionRow.progress_counter_version ?? 0)
       });
     }
 
@@ -13682,6 +13678,11 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
     return buildFriendlyFailure(500, e);
   }
 }
+
+// SHA-256 suffix: 79f97062098e
+
+
+
 async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
@@ -30115,23 +30116,24 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
 
   const selectedHashInput = selectedEconomicKeys.length > 0 ? selectedEconomicKeys : (selectedPreviewRowIds.length > 0 ? selectedPreviewRowIds : { row_backed_selection: true, session_id: sessionId, selected_count: selectedCount, session_version: sessionVersion });
   const selectedPreviewRowHash = await sha256Hex(stableStringify(selectedHashInput));
-  const idempotencyHash = await sha256Hex(stableStringify({
-    idempotency_scope: 'SHARED_WORKBENCH_SESSION_DRAFT_CREATE_V2',
-    workbench_session_id: sessionId,
-    pay_date: payDate,
-    pay_channel_scope: payChannelScope,
-    selected_preview_row_hash: selectedPreviewRowHash,
-    session_version: sessionVersion,
-    session_signature: sessionSignature,
-    same_week_paye_override: verifiedSameWeekPayeOverride ? {
-      used: true,
-      reason: verifiedSameWeekPayeOverride.reason,
-      verified_by_user_id: verifiedSameWeekPayeOverride.verified_by_user_id,
-      verified_at_utc: verifiedSameWeekPayeOverride.verified_at_utc,
-      reauth_purpose: verifiedSameWeekPayeOverride.reauth_purpose,
-      guardrail_code: verifiedSameWeekPayeOverride.guardrail_code
-    } : { used: false }
-  }));
+
+const idempotencyHash = await sha256Hex(stableStringify({
+  workbench_session_id: sessionId,
+  pay_date: payDate,
+  pay_channel_scope: payChannelScope,
+  selected_preview_row_hash: selectedPreviewRowHash,
+  session_version: sessionVersion,
+  session_signature: sessionSignature,
+  same_week_paye_override: verifiedSameWeekPayeOverride ? {
+    used: true,
+    reason: verifiedSameWeekPayeOverride.reason,
+    verified_by_user_id: verifiedSameWeekPayeOverride.verified_by_user_id,
+    verified_at_utc: verifiedSameWeekPayeOverride.verified_at_utc,
+    reauth_purpose: verifiedSameWeekPayeOverride.reauth_purpose,
+    guardrail_code: verifiedSameWeekPayeOverride.guardrail_code
+  } : { used: false }
+}));
+
 
   const buildDraftCreateOperationInputFromSessionSelection = () => ({
     source: 'handleBankingPayCreateDraft',
@@ -177583,8 +177585,6 @@ function normalizeBankingPayPreviewDecisions(input, options = {}) {
 }
 
 
-
-
 async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, sessionId, normalizedInput, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const cloneJson = (value) => {
@@ -177778,7 +177778,7 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
     env,
     `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
       `?id=eq.${enc(sessionIdText)}` +
-      `&select=id,actor_user_id,status,source_snapshot_run_id,server_selected_preview_row_ids,server_selected_preview_row_ids_provided,version` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id,server_selected_preview_row_ids,server_selected_preview_row_ids_provided,version,progress_counter_version,discarded_at_utc,replacement_session_id` +
       `&limit=1`,
     false
   );
@@ -177787,8 +177787,26 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
   if (!sessionRow) {
     throw new Error('Workbench session not found');
   }
-  if (upperTrim(sessionRow.status) !== 'OPEN') {
-    throw new Error('Workbench session is not open');
+  if (upperTrim(sessionRow.status) !== 'OPEN' || trimStr(sessionRow.discarded_at_utc) || trimStr(sessionRow.replacement_session_id)) {
+    const err = new Error('Workbench session is no longer current and open');
+    err.code = 'OBSOLETE_SESSION';
+    err.error_code = 'OBSOLETE_SESSION';
+    err.replacement_session_id = trimStr(sessionRow.replacement_session_id) || null;
+    throw err;
+  }
+  const currentSessionVersion = Number(sessionRow.version);
+  const currentProgressCounterVersion = Number(sessionRow.progress_counter_version ?? 0);
+  if (!Number.isSafeInteger(currentSessionVersion) || currentSessionVersion < 1) {
+    const err = new Error('Workbench session version is invalid');
+    err.code = 'WORKBENCH_MODAL_ACTION_INVALID_SESSION_VERSION';
+    err.error_code = 'WORKBENCH_MODAL_ACTION_INVALID_SESSION_VERSION';
+    throw err;
+  }
+  if (!Number.isSafeInteger(currentProgressCounterVersion) || currentProgressCounterVersion < 0) {
+    const err = new Error('Workbench session progress counter is invalid');
+    err.code = 'WORKBENCH_MODAL_ACTION_INVALID_PROGRESS_COUNTER_VERSION';
+    err.error_code = 'WORKBENCH_MODAL_ACTION_INVALID_PROGRESS_COUNTER_VERSION';
+    throw err;
   }
 
   const clearCaseResolutionOperations = [];
@@ -177875,7 +177893,7 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
       selectedRowsUnchangedResult = {
         ok: true,
         session_id: sessionIdText,
-        session_version: sessionRow.version ?? null,
+        session_version: currentSessionVersion,
         selected_preview_row_ids: desiredSelectedRows,
         server_selected_preview_row_ids_provided: true,
         unchanged: true
@@ -177899,7 +177917,8 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
     selected_preview_row_ids: selectedRowsProvided ? desiredSelectedRows : [],
     selected_rows_provided: selectedRowsProvided,
     unchanged_case_resolution_count: unchangedCaseResolutionCount,
-    expected_session_version: sessionRow.version
+    expected_session_version: currentSessionVersion,
+    expected_progress_counter_version: currentProgressCounterVersion
   };
 
   if (clearCaseResolutionOperations.length <= 0 && applyCaseResolutionOperations.length <= 0 && selectedRowsProvided !== true) {
@@ -177908,9 +177927,9 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
       session_id: sessionIdText,
       snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id || '') || null,
       source_snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id || '') || null,
-      session_version: sessionRow.version ?? null,
+      session_version: currentSessionVersion,
       progress_state: null,
-      progress_counter_version: null,
+      progress_counter_version: currentProgressCounterVersion,
       applied_case_resolution_results: [],
       cleared_case_resolution_results: [],
       unchanged_case_resolution_count: unchangedCaseResolutionCount,
@@ -177935,11 +177954,11 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
   let aggregateRpc;
   try {
     aggregateRpc = await sbRpc(env, 'pay_workbench_session_apply_decision_operations', {
-    p_session_id: sessionIdText,
-    p_actor_user_id: actorIdText,
-    p_operation_plan_json: operationPlan,
-    p_expected_session_version: sessionRow.version
-  }, {
+      p_session_id: sessionIdText,
+      p_actor_user_id: actorIdText,
+      p_operation_plan_json: operationPlan,
+      p_expected_session_version: currentSessionVersion
+    }, {
     routeClass: 'PREVIEW_DECISION_SYNC',
     purpose: 'WORKBENCH_SESSION_APPLY_DECISION_OPERATIONS',
     timeoutMs: 15000,
@@ -177974,9 +177993,9 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
     session_id: trimStr(aggregateResult.session_id || sessionIdText) || sessionIdText,
     snapshot_run_id: trimStr(aggregateResult.snapshot_run_id || aggregateResult.source_snapshot_run_id || sessionRow.source_snapshot_run_id || '') || null,
     source_snapshot_run_id: trimStr(aggregateResult.source_snapshot_run_id || aggregateResult.snapshot_run_id || sessionRow.source_snapshot_run_id || '') || null,
-    session_version: aggregateResult.session_version ?? sessionRow.version ?? null,
+    session_version: aggregateResult.session_version ?? currentSessionVersion,
     progress_state: aggregateResult.progress_state ?? null,
-    progress_counter_version: aggregateResult.progress_counter_version ?? null,
+    progress_counter_version: aggregateResult.progress_counter_version ?? currentProgressCounterVersion,
     applied_case_resolution_results: Array.isArray(aggregateResult.applied_case_resolution_results)
       ? aggregateResult.applied_case_resolution_results
       : [],
@@ -177989,7 +178008,7 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
     selected_rows_result: selectedRowsUnchangedResult
       ? {
           ...selectedRowsUnchangedResult,
-          session_version: aggregateResult.session_version ?? sessionRow.version ?? null
+          session_version: aggregateResult.session_version ?? currentSessionVersion
         }
       : (isPlainObject(aggregateResult.selected_rows_result) ? aggregateResult.selected_rows_result : null),
     state_changed: aggregateResult.state_changed === true,
@@ -178014,6 +178033,7 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
 
   return result;
 }
+
 
 
 

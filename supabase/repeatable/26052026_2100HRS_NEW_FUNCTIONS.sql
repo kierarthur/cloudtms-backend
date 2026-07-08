@@ -50037,6 +50037,8 @@ DECLARE
   v_finance_case_id_text text := '';
   v_expected_session_version bigint := NULL::bigint;
   v_expected_session_version_text text := '';
+  v_expected_progress_counter_version bigint := NULL::bigint;
+  v_expected_progress_counter_version_text text := '';
   v_candidate_in_scope boolean := false;
   v_candidate_has_scope_row boolean := false;
   v_scope_row_inserted integer := 0;
@@ -50057,6 +50059,7 @@ DECLARE
   v_max_clearable_timesheets constant integer := 1000;
   v_max_evidence_components_per_row constant integer := 500;
   v_new_session_version bigint := 0;
+  v_new_progress_counter_version bigint := 0;
   v_job_json jsonb := '{}'::jsonb;
   v_job_id_text text := '';
   v_job_id uuid := NULL::uuid;
@@ -50124,19 +50127,59 @@ BEGIN
 
   v_expected_session_version_text := BTRIM(COALESCE(
     v_resolution_payload_json->>'expected_session_version',
+    v_resolution_payload_json->>'expectedSessionVersion',
     v_resolution_payload_json->>'session_version',
+    v_resolution_payload_json->>'sessionVersion',
     ''
   ));
+  v_expected_progress_counter_version_text := BTRIM(COALESCE(
+    v_resolution_payload_json->>'expected_progress_counter_version',
+    v_resolution_payload_json->>'expectedProgressCounterVersion',
+    v_resolution_payload_json->>'progress_counter_version',
+    v_resolution_payload_json->>'progressCounterVersion',
+    ''
+  ));
+
+  IF v_operation <> 'LIST_CLEARABLE' THEN
+    IF v_expected_session_version_text = '' THEN
+      RAISE EXCEPTION 'expected_session_version is required to clear a shared Banking Pay case resolution'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED', 'session_id', p_session_id::text)::text;
+    END IF;
+    IF v_expected_progress_counter_version_text = '' THEN
+      RAISE EXCEPTION 'expected_progress_counter_version is required to clear a shared Banking Pay case resolution'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED', 'session_id', p_session_id::text)::text;
+    END IF;
+  END IF;
+
   IF v_expected_session_version_text <> '' THEN
     IF v_expected_session_version_text !~ '^[0-9]{1,18}$' THEN
-      RAISE EXCEPTION 'expected_session_version must be a positive integer';
+      RAISE EXCEPTION 'expected_session_version must be a positive integer'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'WORKBENCH_MODAL_ACTION_INVALID_SESSION_VERSION', 'session_id', p_session_id::text)::text;
     END IF;
     v_expected_session_version := v_expected_session_version_text::bigint;
     IF v_expected_session_version < 1 THEN
-      RAISE EXCEPTION 'expected_session_version must be a positive integer';
+      RAISE EXCEPTION 'expected_session_version must be a positive integer'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'WORKBENCH_MODAL_ACTION_INVALID_SESSION_VERSION', 'session_id', p_session_id::text)::text;
     END IF;
     IF COALESCE(v_session_row.version, 0) <> v_expected_session_version THEN
-      RAISE EXCEPTION 'workbench session % version changed from % to %', p_session_id, v_expected_session_version, v_session_row.version;
+      RAISE EXCEPTION 'workbench session % version changed from % to %', p_session_id, v_expected_session_version, v_session_row.version
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'STALE_SESSION', 'session_id', p_session_id::text, 'expected_session_version', v_expected_session_version, 'current_session_version', v_session_row.version)::text;
+    END IF;
+  END IF;
+
+  IF v_expected_progress_counter_version_text <> '' THEN
+    IF v_expected_progress_counter_version_text !~ '^[0-9]{1,18}$' THEN
+      RAISE EXCEPTION 'expected_progress_counter_version must be a non-negative integer'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'WORKBENCH_MODAL_ACTION_INVALID_PROGRESS_COUNTER_VERSION', 'session_id', p_session_id::text)::text;
+    END IF;
+    v_expected_progress_counter_version := v_expected_progress_counter_version_text::bigint;
+    IF v_expected_progress_counter_version < 0 THEN
+      RAISE EXCEPTION 'expected_progress_counter_version must be a non-negative integer'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'WORKBENCH_MODAL_ACTION_INVALID_PROGRESS_COUNTER_VERSION', 'session_id', p_session_id::text)::text;
+    END IF;
+    IF COALESCE(v_session_row.progress_counter_version, 0) <> v_expected_progress_counter_version THEN
+      RAISE EXCEPTION 'workbench session % progress counter changed from % to %', p_session_id, v_expected_progress_counter_version, v_session_row.progress_counter_version
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'WORKBENCH_SESSION_PROGRESS_CHANGED', 'session_id', p_session_id::text, 'expected_progress_counter_version', v_expected_progress_counter_version, 'current_progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0))::text;
     END IF;
   END IF;
 
@@ -50519,6 +50562,7 @@ BEGIN
       'operation', 'LIST_CLEARABLE',
       'session_id', p_session_id::text,
       'session_version', v_session_row.version,
+      'progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
       'candidate_id', v_candidate_id::text,
       'clearable_timesheets', COALESCE(v_clearable_timesheets_json, '[]'::jsonb),
       'eligible_timesheet_count', COALESCE(v_eligible_timesheet_count, 0),
@@ -50966,10 +51010,12 @@ BEGIN
 
   UPDATE public.banking_pay_workbench_sessions AS session_update
   SET version = session_update.version + 1,
+      progress_counter_version = COALESCE(session_update.progress_counter_version, 0) + 1,
+      progress_updated_at_utc = v_now,
       updated_at_utc = v_now
   WHERE session_update.id = p_session_id
-  RETURNING session_update.version
-  INTO v_new_session_version;
+  RETURNING session_update.version, session_update.progress_counter_version
+  INTO v_new_session_version, v_new_progress_counter_version;
 
   v_job_json := public.pay_workbench_enqueue_session_candidate_refresh(
     p_session_id => p_session_id,
@@ -51073,6 +51119,7 @@ BEGIN
       'timesheet_id', CASE WHEN existing_resolution.timesheet_id IS NULL THEN NULL ELSE existing_resolution.timesheet_id::text END,
       'payload_json', existing_resolution.payload_json,
       'session_version', v_new_session_version,
+      'progress_counter_version', v_new_progress_counter_version,
       'pending_job_id', v_job_id::text,
       'cleared_at_utc', v_now,
       'bulk_clear', v_whole_timesheet_mode,
@@ -51090,6 +51137,7 @@ BEGIN
     'session_id', p_session_id::text,
     'candidate_id', v_candidate_id::text,
     'session_version', v_new_session_version,
+    'progress_counter_version', v_new_progress_counter_version,
     'job_id', v_job_id::text,
     'case_resolution_id', v_case_resolution_id_text,
     'case_resolution_ids', v_case_resolution_ids,
@@ -51113,6 +51161,8 @@ BEGIN
   );
 END;
 $function$;
+
+-- SHA-256 suffix: e048d1c90624
 
 
 -- identity_args: p_session_id uuid, p_candidate_id uuid, p_timesheet_id uuid, p_is_excluded boolean, p_actor_user_id uuid, p_expected_session_version bigint, p_expected_progress_counter_version bigint
@@ -78574,7 +78624,8 @@ BEGIN
               USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'BANKING_PAY_OPERATION_START_IDEMPOTENCY_TYPE_MISMATCH', 'operation_id', v_operation.id::text)::text;
         END IF;
 
-        IF p_actor_user_id IS NOT NULL
+        IF v_operation_type <> 'DRAFT_CREATE'
+           AND p_actor_user_id IS NOT NULL
            AND v_operation.actor_user_id IS NOT NULL
            AND v_operation.actor_user_id <> p_actor_user_id THEN
             RAISE EXCEPTION 'BANKING_PAY_OPERATION_START_IDEMPOTENCY_ACTOR_MISMATCH'
@@ -78584,9 +78635,9 @@ BEGIN
         IF v_operation_type = 'DRAFT_CREATE' THEN
             v_existing_status := upper(BTRIM(COALESCE(v_operation.status, '')));
             v_existing_draft_is_terminal := v_existing_status IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR', 'REVIEW_REQUIRED');
-            v_existing_draft_is_exhausted := v_existing_status IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY')
+            v_existing_draft_is_exhausted := v_existing_status IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'CONTINUING', 'WAITING_RETRY')
               AND COALESCE(v_operation.attempt_count, 0) >= COALESCE(v_operation.max_attempts, 10);
-            v_existing_draft_is_stale := v_existing_status IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY')
+            v_existing_draft_is_stale := v_existing_status IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'CONTINUING', 'WAITING_RETRY')
               AND (v_operation.lease_owner IS NULL OR v_operation.lease_expires_at_utc IS NULL OR v_operation.lease_expires_at_utc <= v_now)
               AND COALESCE(v_operation.last_advanced_at_utc, v_operation.updated_at_utc, v_operation.created_at_utc, v_now) <= v_now - make_interval(mins => v_draft_stale_minutes);
 
@@ -79552,7 +79603,6 @@ BEGIN
             )),
             updated_at_utc = v_now
         WHERE upper(BTRIM(COALESCE(stale_draft_update.operation_type, ''))) = 'DRAFT_CREATE'
-          AND stale_draft_update.actor_user_id = p_actor_user_id
           AND (
             stale_draft_update.workbench_session_id = p_workbench_session_id
             OR COALESCE(stale_draft_update.input_json->>'workbench_session_id', '') = p_workbench_session_id::text
@@ -79561,7 +79611,7 @@ BEGIN
             OR COALESCE(stale_draft_update.progress_json->>'workbench_session_id', '') = p_workbench_session_id::text
             OR COALESCE(stale_draft_update.progress_json->>'session_id', '') = p_workbench_session_id::text
           )
-          AND upper(BTRIM(COALESCE(stale_draft_update.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY')
+          AND upper(BTRIM(COALESCE(stale_draft_update.status, ''))) IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'CONTINUING', 'WAITING_RETRY')
           AND (
             v_allow_restart IS TRUE
             OR COALESCE(stale_draft_update.attempt_count, 0) >= COALESCE(stale_draft_update.max_attempts, 10)
@@ -79575,7 +79625,6 @@ BEGIN
         INTO v_operation
         FROM public.banking_pay_operations AS active_draft_operation
         WHERE upper(BTRIM(COALESCE(active_draft_operation.operation_type, ''))) = 'DRAFT_CREATE'
-          AND active_draft_operation.actor_user_id = p_actor_user_id
           AND (
             active_draft_operation.workbench_session_id = p_workbench_session_id
             OR COALESCE(active_draft_operation.input_json->>'workbench_session_id', '') = p_workbench_session_id::text
@@ -79584,7 +79633,7 @@ BEGIN
             OR COALESCE(active_draft_operation.progress_json->>'workbench_session_id', '') = p_workbench_session_id::text
             OR COALESCE(active_draft_operation.progress_json->>'session_id', '') = p_workbench_session_id::text
           )
-          AND upper(BTRIM(COALESCE(active_draft_operation.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY')
+          AND upper(BTRIM(COALESCE(active_draft_operation.status, ''))) IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'CONTINUING', 'WAITING_RETRY')
           AND COALESCE(active_draft_operation.attempt_count, 0) < COALESCE(active_draft_operation.max_attempts, 10)
         ORDER BY active_draft_operation.updated_at_utc DESC NULLS LAST, active_draft_operation.created_at_utc DESC NULLS LAST, active_draft_operation.id DESC
         LIMIT 1
@@ -190951,13 +191000,7 @@ BEGIN
 END;
 $function$;
 
-
-CREATE OR REPLACE FUNCTION public.banking_pay_operation_find_active_draft_create(
-    p_actor_user_id uuid,
-    p_workbench_session_id uuid,
-    p_include_recent_terminal boolean DEFAULT false,
-    p_recent_terminal_minutes integer DEFAULT 60
-)
+CREATE OR REPLACE FUNCTION public.banking_pay_operation_find_active_draft_create(p_actor_user_id uuid, p_workbench_session_id uuid, p_include_recent_terminal boolean DEFAULT false, p_recent_terminal_minutes integer DEFAULT 60)
  RETURNS jsonb
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
@@ -191009,7 +191052,6 @@ BEGIN
     INTO v_operation
     FROM public.banking_pay_operations AS operation_row
     WHERE upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = 'DRAFT_CREATE'
-      AND operation_row.actor_user_id = p_actor_user_id
       AND (
           operation_row.workbench_session_id = p_workbench_session_id
           OR COALESCE(operation_row.input_json->>'workbench_session_id', '') = v_session_id_text
@@ -191029,7 +191071,7 @@ BEGIN
           OR COALESCE(operation_row.result_json->>'source_workbench_session_id', '') = v_session_id_text
       )
       AND (
-          upper(BTRIM(COALESCE(operation_row.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY')
+          upper(BTRIM(COALESCE(operation_row.status, ''))) IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'CONTINUING', 'WAITING_RETRY')
           OR (
               v_recent_terminal_after IS NOT NULL
               AND upper(BTRIM(COALESCE(operation_row.status, ''))) IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR', 'REVIEW_REQUIRED')
@@ -191038,13 +191080,18 @@ BEGIN
       )
     ORDER BY
       CASE
-        WHEN upper(BTRIM(COALESCE(operation_row.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN 0
+        WHEN upper(BTRIM(COALESCE(operation_row.status, ''))) IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'CONTINUING', 'WAITING_RETRY') THEN 0
         ELSE 1
       END ASC,
       CASE upper(BTRIM(COALESCE(operation_row.status, '')))
         WHEN 'RUNNING' THEN 0
-        WHEN 'CONTINUING' THEN 1
-        WHEN 'WAITING_RETRY' THEN 2
+        WHEN 'WAITING' THEN 1
+        WHEN 'QUEUED' THEN 2
+        WHEN 'WAITING_AUTHORISATION' THEN 3
+        WHEN 'WAITING_AUTHORIZATION' THEN 3
+        WHEN 'WAITING_PROVIDER' THEN 4
+        WHEN 'CONTINUING' THEN 5
+        WHEN 'WAITING_RETRY' THEN 6
         ELSE 8
       END ASC,
       operation_row.updated_at_utc DESC NULLS LAST,
@@ -191067,7 +191114,7 @@ BEGIN
     v_result := COALESCE(v_operation.result_json, '{}'::jsonb);
     v_error := COALESCE(v_operation.error_json, '{}'::jsonb);
     v_terminal := upper(BTRIM(COALESCE(v_operation.status, ''))) IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR', 'REVIEW_REQUIRED');
-    v_active := upper(BTRIM(COALESCE(v_operation.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY') AND v_terminal IS NOT TRUE;
+    v_active := upper(BTRIM(COALESCE(v_operation.status, ''))) IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'CONTINUING', 'WAITING_RETRY') AND v_terminal IS NOT TRUE;
     v_heartbeat_age_seconds := CASE
         WHEN v_operation.heartbeat_at_utc IS NULL THEN NULL::integer
         ELSE GREATEST(0, EXTRACT(EPOCH FROM (v_now - v_operation.heartbeat_at_utc))::integer)
@@ -191131,7 +191178,7 @@ BEGIN
         NULLIF(BTRIM(v_result->>'payBatchId'), '')
     );
 
-    v_public_payload := COALESCE(public.banking_pay_operation_get(v_operation.id, p_actor_user_id, 'PROGRESS_LIGHT'), '{}'::jsonb);
+    v_public_payload := COALESCE(public.banking_pay_operation_get(v_operation.id, NULL::uuid, 'PROGRESS_LIGHT'), '{}'::jsonb);
 
     RETURN jsonb_strip_nulls(
         v_public_payload
@@ -191183,6 +191230,7 @@ BEGIN
     );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_batch_abort_failed_draft_create_partial(p_operation_id uuid, p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT NULL::text, p_failure_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -205176,6 +205224,10 @@ DECLARE
   v_case_resolution_carried_forward_count integer := 0;
   v_case_resolution_stale_review_count integer := 0;
   v_case_resolution_preview_row_count integer := 0;
+  v_ineligible_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
+  v_fallback_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_fallback_linked_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_fallback_targeted_timesheet_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -205587,16 +205639,16 @@ BEGIN
                 'clone_from_session_id', v_source_session_id::text,
                 'clone_to_session_id', p_target_session_id::text,
                 'clone_applied_at_utc', v_now::text,
-                'selected', false,
-                'selection_state', 'NOT_SELECTABLE',
+                'selected', COALESCE(preview_row.selected, false),
+                'selection_state', COALESCE(NULLIF(BTRIM(preview_row.selection_state), ''), CASE WHEN COALESCE(preview_row.selected, false) THEN 'SELECTED' ELSE 'NOT_SELECTABLE' END),
                 'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
               )
             ),
             preview_row.timesheet_id,
             preview_row.key_type,
             preview_row.key_value,
-            false,
-            'NOT_SELECTABLE',
+            COALESCE(preview_row.selected, false),
+            COALESCE(NULLIF(BTRIM(preview_row.selection_state), ''), CASE WHEN COALESCE(preview_row.selected, false) THEN 'SELECTED' ELSE 'NOT_SELECTABLE' END),
             'READY',
             v_target_session.version,
             v_now,
@@ -205613,8 +205665,8 @@ BEGIN
               timesheet_id = EXCLUDED.timesheet_id,
               key_type = EXCLUDED.key_type,
               key_value = EXCLUDED.key_value,
-              selected = false,
-              selection_state = 'NOT_SELECTABLE',
+              selected = EXCLUDED.selected,
+              selection_state = EXCLUDED.selection_state,
               status = 'READY',
               session_version = EXCLUDED.session_version,
               updated_at_utc = v_now
@@ -205660,7 +205712,10 @@ BEGIN
             'clone_certified', true,
             'clone_from_session_id', v_source_session_id::text,
             'total_preview_rows', COUNT(*)::integer,
-            'selected_rows', 0
+            'selected_rows', COUNT(*) FILTER (
+              WHERE preview_row.selected IS TRUE
+                AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) = 'SELECTED'
+            )::integer
           ),
           NULL::jsonb,
           NULL::jsonb,
@@ -205735,6 +205790,38 @@ BEGIN
              )::bigint
       INTO v_ineligible_source_change_seq;
 
+      SELECT COALESCE(jsonb_agg(visible_source_timesheets.timesheet_id::text ORDER BY visible_source_timesheets.timesheet_id), '[]'::jsonb)
+      INTO v_fallback_targeted_timesheet_ids_json
+      FROM (
+        SELECT DISTINCT visible_rows.visible_timesheet_id AS timesheet_id
+        FROM (
+          SELECT COALESCE(
+                   source_preview.timesheet_id,
+                   CASE
+                     WHEN NULLIF(BTRIM(COALESCE(source_preview.row_json->>'timesheet_id', source_preview.row_json->>'timesheetId', '')), '')
+                          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                       THEN NULLIF(BTRIM(COALESCE(source_preview.row_json->>'timesheet_id', source_preview.row_json->>'timesheetId', '')), '')::uuid
+                     ELSE NULL::uuid
+                   END
+                 ) AS visible_timesheet_id
+          FROM public.banking_pay_workbench_preview_rows AS source_preview
+          WHERE source_preview.session_id = v_source_session_id
+            AND source_preview.candidate_id = v_candidate_id
+            AND source_preview.session_version = v_source_session.version
+            AND UPPER(BTRIM(COALESCE(source_preview.status, ''))) = 'READY'
+            AND source_preview.section IN ('canonical_preview_lines', 'cases_resolutions')
+        ) AS visible_rows
+        WHERE visible_rows.visible_timesheet_id IS NOT NULL
+      ) AS visible_source_timesheets;
+
+      v_fallback_targeted_timesheet_ids_json := COALESCE(v_fallback_targeted_timesheet_ids_json, '[]'::jsonb);
+      v_fallback_linked_timesheet_ids_json := '[]'::jsonb;
+      v_fallback_targeted_timesheet_count := jsonb_array_length(v_fallback_targeted_timesheet_ids_json);
+      v_ineligible_refresh_scope_kind := CASE
+        WHEN COALESCE(v_fallback_targeted_timesheet_count, 0) > 0 THEN 'TARGETED_TIMESHEETS'
+        ELSE 'CANDIDATE_FULL_LIVE'
+      END;
+
       v_ineligible_source_build_dedupe_key := 'WORKBENCH_CANDIDATE_SOURCE_BUILD:session:' || p_target_session_id::text || ':candidate:' || v_candidate_id::text || ':clone_ineligible';
 
       v_ineligible_source_build_seed_text := concat_ws(
@@ -205751,9 +205838,9 @@ BEGIN
         'source_snapshot_run_id', COALESCE(v_source_session.source_snapshot_run_id::text, ''),
         'candidate_id', v_candidate_id::text,
         'source_change_seq', COALESCE(v_ineligible_source_change_seq, 0)::text,
-        'refresh_scope_kind', 'CANDIDATE_FULL_LIVE',
-        'targeted_timesheet_ids', '[]',
-        'linked_timesheet_ids', '[]',
+        'refresh_scope_kind', v_ineligible_refresh_scope_kind,
+        'targeted_timesheet_ids', COALESCE(v_fallback_targeted_timesheet_ids_json, '[]'::jsonb)::text,
+        'linked_timesheet_ids', COALESCE(v_fallback_linked_timesheet_ids_json, '[]'::jsonb)::text,
         'pay_channel_scope', 'ALL',
         'clone_from_session_id', v_source_session_id::text,
         'clone_to_session_id', p_target_session_id::text,
@@ -205781,7 +205868,7 @@ BEGIN
           'fallback_reason', COALESCE(v_clone_eligibility->>'reason', 'CLONE_REBASE_INELIGIBLE'),
           'refresh_reason', COALESCE(v_clone_eligibility->>'reason', 'CLONE_REBASE_INELIGIBLE'),
           'reason', COALESCE(v_clone_eligibility->>'reason', 'CLONE_INELIGIBLE'),
-          'refresh_scope_kind', 'CANDIDATE_FULL_LIVE',
+          'refresh_scope_kind', v_ineligible_refresh_scope_kind,
           'pay_channel_scope', 'ALL',
           'source_snapshot_run_id', v_target_session.source_snapshot_run_id::text,
           'snapshot_run_id', v_target_session.source_snapshot_run_id::text,
@@ -205796,8 +205883,10 @@ BEGIN
           'delta_refresh_required', false
         )
         || jsonb_build_object(
-          'targeted_timesheet_ids', '[]'::jsonb,
-          'linked_timesheet_ids', '[]'::jsonb,
+          'targeted_timesheet_ids', COALESCE(v_fallback_targeted_timesheet_ids_json, '[]'::jsonb),
+          'linked_timesheet_ids', COALESCE(v_fallback_linked_timesheet_ids_json, '[]'::jsonb),
+          'targeted_payload_received', COALESCE(v_fallback_targeted_timesheet_count, 0) > 0,
+          'source_visible_timesheet_count', COALESCE(v_fallback_targeted_timesheet_count, 0),
           'source_build_run_id_source', jsonb_build_object(
             'method', 'DETERMINISTIC_MD5_UUID_FROM_AUTHORITY_INPUTS',
             'seed_text', v_ineligible_source_build_seed_text,
@@ -205811,9 +205900,9 @@ BEGIN
             'source_snapshot_run_id', v_source_session.source_snapshot_run_id::text,
             'candidate_id', v_candidate_id::text,
             'source_change_seq', COALESCE(v_ineligible_source_change_seq, 0),
-            'refresh_scope_kind', 'CANDIDATE_FULL_LIVE',
-            'targeted_timesheet_ids', '[]'::jsonb,
-            'linked_timesheet_ids', '[]'::jsonb,
+            'refresh_scope_kind', v_ineligible_refresh_scope_kind,
+            'targeted_timesheet_ids', COALESCE(v_fallback_targeted_timesheet_ids_json, '[]'::jsonb),
+            'linked_timesheet_ids', COALESCE(v_fallback_linked_timesheet_ids_json, '[]'::jsonb),
             'pay_channel_scope', 'ALL',
             'clone_from_session_id', v_source_session_id::text,
             'clone_to_session_id', p_target_session_id::text
@@ -205827,10 +205916,11 @@ BEGIN
             'source_change_seq', COALESCE(v_ineligible_source_change_seq, 0),
             'source_change_sequence', COALESCE(v_ineligible_source_change_seq, 0),
             'session_version', v_target_session.version,
-            'refresh_scope_kind', 'CANDIDATE_FULL_LIVE',
+            'refresh_scope_kind', v_ineligible_refresh_scope_kind,
             'pay_channel_scope', 'ALL',
-            'targeted_timesheet_ids', '[]'::jsonb,
-            'linked_timesheet_ids', '[]'::jsonb,
+            'targeted_timesheet_ids', COALESCE(v_fallback_targeted_timesheet_ids_json, '[]'::jsonb),
+            'linked_timesheet_ids', COALESCE(v_fallback_linked_timesheet_ids_json, '[]'::jsonb),
+            'targeted_payload_received', COALESCE(v_fallback_targeted_timesheet_count, 0) > 0,
             'reason', COALESCE(v_clone_eligibility->>'reason', 'CLONE_INELIGIBLE')
           )
         )
@@ -206217,6 +206307,10 @@ BEGIN
           'corrected_source_build_dedupe_key', v_ineligible_source_build_corrected_dedupe_key,
           'deterministic_source_build_run_id_seed_text', v_ineligible_source_build_seed_text,
           'reason', COALESCE(v_clone_eligibility->>'reason', 'CLONE_REBASE_INELIGIBLE'),
+          'refresh_scope_kind', v_ineligible_refresh_scope_kind,
+          'targeted_timesheet_ids', COALESCE(v_fallback_targeted_timesheet_ids_json, '[]'::jsonb),
+          'linked_timesheet_ids', COALESCE(v_fallback_linked_timesheet_ids_json, '[]'::jsonb),
+          'targeted_payload_received', COALESCE(v_fallback_targeted_timesheet_count, 0) > 0,
           'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
         ),
         CASE
@@ -206238,6 +206332,10 @@ BEGIN
             'source_change_seq', COALESCE(v_ineligible_source_change_seq, 0),
             'source_build_dedupe_key', v_ineligible_source_build_dedupe_key,
             'source_build_job_status', v_ineligible_source_build_job_status,
+            'refresh_scope_kind', v_ineligible_refresh_scope_kind,
+            'targeted_timesheet_ids', COALESCE(v_fallback_targeted_timesheet_ids_json, '[]'::jsonb),
+            'linked_timesheet_ids', COALESCE(v_fallback_linked_timesheet_ids_json, '[]'::jsonb),
+            'targeted_payload_received', COALESCE(v_fallback_targeted_timesheet_count, 0) > 0,
             'running_job_payload_mutated', false,
             'running_malformed_job_failed_closed', COALESCE(v_running_fail_close_result, '{}'::jsonb) <> '{}'::jsonb,
             'active_conflict_replacement_enqueued', COALESCE(v_active_conflict_replacement_enqueued, false),
@@ -211087,7 +211185,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clone_eligibility_v1(p_source_session_id uuid, p_target_session_id uuid, p_candidate_id uuid, p_options_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -211128,6 +211225,14 @@ DECLARE
   v_has_contract_mismatch boolean := false;
   v_has_snooze_target_date_risk boolean := false;
   v_reason text := NULL::text;
+  v_controlled_clone_rebase boolean := false;
+  v_option_source_session_id_text text := NULL::text;
+  v_option_target_session_id_text text := NULL::text;
+  v_option_source_session_id uuid := NULL::uuid;
+  v_option_target_session_id uuid := NULL::uuid;
+  v_target_snapshot_key_count integer := 0;
+  v_target_scope_missing_allowed boolean := false;
+  v_target_snapshot_empty_allowed boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_PROGRESS');
 
@@ -211181,6 +211286,61 @@ BEGIN
     );
   END IF;
 
+  v_option_source_session_id_text := NULLIF(BTRIM(COALESCE(
+    v_options_json->>'source_session_id',
+    v_options_json->>'source_session_id_text',
+    v_options_json->>'clone_from_session_id',
+    v_options_json->>'replacement_source_session_id',
+    ''
+  )), '');
+
+  IF v_option_source_session_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_option_source_session_id := v_option_source_session_id_text::uuid;
+  END IF;
+
+  v_option_target_session_id_text := NULLIF(BTRIM(COALESCE(
+    v_options_json->>'target_session_id',
+    v_options_json->>'session_id',
+    v_options_json->>'clone_to_session_id',
+    ''
+  )), '');
+
+  IF v_option_target_session_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_option_target_session_id := v_option_target_session_id_text::uuid;
+  END IF;
+
+  v_controlled_clone_rebase := (
+    (
+      UPPER(BTRIM(COALESCE(
+        v_options_json->>'job_type',
+        v_options_json->>'operation_type',
+        v_options_json->>'created_by_helper',
+        ''
+      ))) IN ('WORKBENCH_SESSION_CLONE_REBASE', 'SESSION_CLONE_REBASE', 'CLONE_REBASE', 'PAY_WORKBENCH_SESSION_OPEN_SHARED_V2')
+      OR LOWER(BTRIM(COALESCE(
+        v_options_json->>'allow_session_rebase',
+        v_options_json->>'allowSessionRebase',
+        'false'
+      ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(v_options_json->>'clone_mode', v_options_json->>'cloneMode', ''))) IN ('CERTIFIED_SIMPLE_ONLY', 'CERTIFIED_ONLY')
+    )
+    AND LOWER(BTRIM(COALESCE(
+      v_options_json->>'rebase_simple_rows_only',
+      v_options_json->>'rebaseSimpleRowsOnly',
+      'true'
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND (v_option_source_session_id IS NULL OR v_option_source_session_id = p_source_session_id)
+    AND (v_option_target_session_id IS NULL OR v_option_target_session_id = p_target_session_id)
+    AND (
+      v_source_session.replacement_session_id = p_target_session_id
+      OR UPPER(BTRIM(COALESCE(v_target_session.progress_state, ''))) = 'CLONE_REBASING'
+      OR NULLIF(BTRIM(COALESCE(v_target_session.progress_json->>'clone_from_session_id', '')), '') = p_source_session_id::text
+    )
+    AND v_source_session.pay_date IS NOT NULL
+    AND v_target_session.pay_date IS NOT NULL
+    AND v_source_session.pay_date IS DISTINCT FROM v_target_session.pay_date
+  );
+
   SELECT source_scope.*
   INTO v_source_scope
   FROM public.banking_pay_workbench_session_scope AS source_scope
@@ -211193,14 +211353,20 @@ BEGIN
   WHERE target_scope.session_id = p_target_session_id
     AND target_scope.candidate_id = p_candidate_id;
 
-  IF v_source_scope.id IS NULL OR v_target_scope.id IS NULL THEN
+  IF v_source_scope.id IS NULL
+     OR (v_target_scope.id IS NULL AND COALESCE(v_controlled_clone_rebase, false) IS NOT TRUE) THEN
     RETURN jsonb_build_object(
       'ok', true,
       'clone_eligible', false,
       'reason', 'CANDIDATE_NOT_IN_BOTH_SCOPES',
-      'required_refresh_job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+      'required_refresh_job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+      'controlled_clone_rebase', COALESCE(v_controlled_clone_rebase, false),
+      'target_scope_missing_allowed', false
     );
   END IF;
+
+  v_target_scope_missing_allowed := v_target_scope.id IS NULL
+    AND COALESCE(v_controlled_clone_rebase, false) IS TRUE;
 
   IF UPPER(BTRIM(COALESCE(v_source_scope.status, ''))) NOT IN ('READY', 'MATERIALISED', 'MATERIALIZED', 'SOURCE_EMPTY')
      OR COALESCE(v_source_scope.dirty, false) IS TRUE THEN
@@ -211262,7 +211428,9 @@ BEGIN
         'ok', true,
         'clone_eligible', true,
         'reason', NULL::text,
-        'ready_empty', true
+        'ready_empty', true,
+        'controlled_clone_rebase', COALESCE(v_controlled_clone_rebase, false),
+        'target_scope_missing_allowed', COALESCE(v_target_scope_missing_allowed, false)
       );
     END IF;
 
@@ -211284,6 +211452,7 @@ BEGIN
            WHERE source_preview.timesheet_id IS NULL
               OR source_preview.key_type IS NULL
               OR source_preview.key_value IS NULL
+              OR UPPER(BTRIM(COALESCE(source_preview.section, ''))) <> 'CANONICAL_PREVIEW_LINES'
               OR lower(BTRIM(COALESCE(source_preview.row_json->>'policy_x_authority_scope', ''))) <> lower('PRE_DRAFT_LIVE_TRUTH')
               OR lower(BTRIM(COALESCE(source_preview.row_json->>'projection_certified', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
          )::integer
@@ -211352,51 +211521,65 @@ BEGIN
     AND NULLIF(BTRIM(COALESCE(snapshot_line.component_key_type, '')), '') IS NOT NULL
     AND NULLIF(BTRIM(COALESCE(snapshot_line.component_key_value, '')), '') IS NOT NULL;
 
-  SELECT EXISTS (
-    SELECT 1
-    FROM (
-      SELECT
-        source_preview.timesheet_id,
-        UPPER(BTRIM(COALESCE(source_preview.key_type, ''))) AS key_type,
-        NULLIF(BTRIM(COALESCE(source_preview.key_value, '')), '') AS key_value
-      FROM pg_temp._bpay_clone_source_preview AS source_preview
-      WHERE source_preview.timesheet_id IS NOT NULL
-        AND source_preview.key_type IS NOT NULL
-        AND source_preview.key_value IS NOT NULL
-      EXCEPT
-      SELECT
-        target_snapshot.timesheet_id,
-        target_snapshot.key_type,
-        target_snapshot.key_value
-      FROM pg_temp._bpay_clone_target_snapshot_keys AS target_snapshot
-    ) AS source_minus_target
-  ) OR EXISTS (
-    SELECT 1
-    FROM (
-      SELECT
-        target_snapshot.timesheet_id,
-        target_snapshot.key_type,
-        target_snapshot.key_value
-      FROM pg_temp._bpay_clone_target_snapshot_keys AS target_snapshot
-      EXCEPT
-      SELECT
-        source_preview.timesheet_id,
-        UPPER(BTRIM(COALESCE(source_preview.key_type, ''))) AS key_type,
-        NULLIF(BTRIM(COALESCE(source_preview.key_value, '')), '') AS key_value
-      FROM pg_temp._bpay_clone_source_preview AS source_preview
-      WHERE source_preview.timesheet_id IS NOT NULL
-        AND source_preview.key_type IS NOT NULL
-        AND source_preview.key_value IS NOT NULL
-    ) AS target_minus_source
-  )
-  INTO v_has_snapshot_scope_mismatch;
+  SELECT COUNT(*)::integer
+  INTO v_target_snapshot_key_count
+  FROM pg_temp._bpay_clone_target_snapshot_keys AS target_snapshot_count;
+
+  v_target_snapshot_empty_allowed := COALESCE(v_controlled_clone_rebase, false) IS TRUE
+    AND COALESCE(v_target_snapshot_key_count, 0) = 0;
+
+  IF COALESCE(v_target_snapshot_empty_allowed, false) IS TRUE THEN
+    v_has_snapshot_scope_mismatch := false;
+  ELSE
+    SELECT EXISTS (
+      SELECT 1
+      FROM (
+        SELECT
+          source_preview.timesheet_id,
+          UPPER(BTRIM(COALESCE(source_preview.key_type, ''))) AS key_type,
+          NULLIF(BTRIM(COALESCE(source_preview.key_value, '')), '') AS key_value
+        FROM pg_temp._bpay_clone_source_preview AS source_preview
+        WHERE source_preview.timesheet_id IS NOT NULL
+          AND source_preview.key_type IS NOT NULL
+          AND source_preview.key_value IS NOT NULL
+        EXCEPT
+        SELECT
+          target_snapshot.timesheet_id,
+          target_snapshot.key_type,
+          target_snapshot.key_value
+        FROM pg_temp._bpay_clone_target_snapshot_keys AS target_snapshot
+      ) AS source_minus_target
+    ) OR EXISTS (
+      SELECT 1
+      FROM (
+        SELECT
+          target_snapshot.timesheet_id,
+          target_snapshot.key_type,
+          target_snapshot.key_value
+        FROM pg_temp._bpay_clone_target_snapshot_keys AS target_snapshot
+        EXCEPT
+        SELECT
+          source_preview.timesheet_id,
+          UPPER(BTRIM(COALESCE(source_preview.key_type, ''))) AS key_type,
+          NULLIF(BTRIM(COALESCE(source_preview.key_value, '')), '') AS key_value
+        FROM pg_temp._bpay_clone_source_preview AS source_preview
+        WHERE source_preview.timesheet_id IS NOT NULL
+          AND source_preview.key_type IS NOT NULL
+          AND source_preview.key_value IS NOT NULL
+      ) AS target_minus_source
+    )
+    INTO v_has_snapshot_scope_mismatch;
+  END IF;
 
   IF v_has_snapshot_scope_mismatch IS TRUE THEN
     RETURN jsonb_build_object(
       'ok', true,
       'clone_eligible', false,
       'reason', 'TARGET_SNAPSHOT_SCOPE_DIFFERS',
-      'required_refresh_job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+      'required_refresh_job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+      'controlled_clone_rebase', COALESCE(v_controlled_clone_rebase, false),
+      'target_snapshot_key_count', COALESCE(v_target_snapshot_key_count, 0),
+      'target_snapshot_empty_allowed', COALESCE(v_target_snapshot_empty_allowed, false)
     );
   END IF;
 
@@ -211683,11 +211866,14 @@ BEGIN
     'reason', NULL::text,
     'source_preview_row_count', COALESCE(v_preview_count, 0),
     'source_row_count', COALESCE(v_source_row_count, 0),
-    'line_work_count', COALESCE(v_line_work_count, 0)
+    'line_work_count', COALESCE(v_line_work_count, 0),
+    'controlled_clone_rebase', COALESCE(v_controlled_clone_rebase, false),
+    'target_scope_missing_allowed', COALESCE(v_target_scope_missing_allowed, false),
+    'target_snapshot_key_count', COALESCE(v_target_snapshot_key_count, 0),
+    'target_snapshot_empty_allowed', COALESCE(v_target_snapshot_empty_allowed, false)
   );
 END;
 $function$;
-
 
 
 
