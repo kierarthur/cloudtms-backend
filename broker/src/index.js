@@ -13559,6 +13559,7 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
   }
 }
 
+
 async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
@@ -13624,6 +13625,10 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
       'WORKBENCH_SESSION_NOT_FOUND',
       'STALE_SESSION',
       'OBSOLETE_SESSION',
+      'WORKBENCH_SESSION_PROGRESS_CHANGED',
+      'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED',
+      'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID',
+      'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID',
       'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
     ]);
     const validationStatusCodes = new Set([
@@ -13707,6 +13712,13 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
   const cloneJson = (value) => {
     try { return JSON.parse(JSON.stringify(value)); } catch { return null; }
   };
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const readNonNegativeInteger = (value) => {
+    const text = trimStr(value);
+    if (!/^[0-9]{1,18}$/.test(text)) return null;
+    const number = Number(text);
+    return Number.isSafeInteger(number) && number >= 0 ? number : null;
+  };
   const normaliseSelectionPayload = (inputBody) => {
     const source = isPlainObject(inputBody) ? inputBody : {};
     const selectedPreviewRowIds = source.selected_preview_row_ids ?? source.selectedPreviewRowIds;
@@ -13725,7 +13737,40 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
     return payload;
   };
 
-  const selectedRowsPayload = normaliseSelectionPayload(body);
+  const expectedProgressCounterRaw = body.expected_progress_counter_version ?? body.expectedProgressCounterVersion ?? body.progress_counter_version ?? body.progressCounterVersion;
+  const expectedProgressCounterVersion = expectedProgressCounterRaw == null || trimStr(expectedProgressCounterRaw) === ''
+    ? null
+    : readNonNegativeInteger(expectedProgressCounterRaw);
+  const expectedSessionVersionRaw = body.expected_session_version ?? body.expectedSessionVersion ?? body.session_version ?? body.sessionVersion;
+  const expectedSessionVersion = expectedSessionVersionRaw == null || trimStr(expectedSessionVersionRaw) === ''
+    ? null
+    : readNonNegativeInteger(expectedSessionVersionRaw);
+
+  if (expectedProgressCounterRaw !== undefined && expectedProgressCounterRaw !== null && trimStr(expectedProgressCounterRaw) !== '' && expectedProgressCounterVersion == null) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID' });
+  }
+  if (expectedSessionVersionRaw !== undefined && expectedSessionVersionRaw !== null && trimStr(expectedSessionVersionRaw) !== '' && expectedSessionVersion == null) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID' });
+  }
+  if (expectedProgressCounterVersion == null) {
+    return buildFriendlyFailure(409, { code: 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED' }, {}, {
+      message: 'Refresh Banking Pay before changing the selection. The shared workbench changed or has not loaded an authoritative progress version yet.'
+    });
+  }
+
+  const selectedRowsPayloadRaw = normaliseSelectionPayload(body);
+  const selectedRowsPayload = Array.isArray(selectedRowsPayloadRaw)
+    ? {
+        selected_preview_row_ids: selectedRowsPayloadRaw,
+        replace_selected_preview_row_ids: true,
+        expected_progress_counter_version: expectedProgressCounterVersion,
+        ...(expectedSessionVersion != null ? { expected_session_version: expectedSessionVersion } : {})
+      }
+    : {
+        ...selectedRowsPayloadRaw,
+        expected_progress_counter_version: expectedProgressCounterVersion,
+        ...(expectedSessionVersion != null ? { expected_session_version: expectedSessionVersion } : {})
+      };
   const validatePayloadArrays = (payload) => {
     if (Array.isArray(payload)) return payload.every((rowId) => typeof rowId === 'string' && !!rowId.trim());
     if (!isPlainObject(payload)) return false;
@@ -13778,7 +13823,6 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
     return buildFriendlyFailure(500, e);
   }
 }
-
 
 
 async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId) {

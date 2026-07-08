@@ -51456,7 +51456,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows(p_session_id uuid, p_selected_preview_row_ids jsonb, p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -51493,6 +51492,11 @@ DECLARE
   v_existing_selection_intent_mode text := '';
   v_next_selection_intent_mode text := '';
   v_next_server_selected_ids_provided boolean := false;
+  v_expected_session_version bigint := NULL::bigint;
+  v_expected_progress_counter_version bigint := NULL::bigint;
+  v_expected_session_version_text text := '';
+  v_expected_progress_counter_version_text text := '';
+  v_next_progress_counter_version bigint := NULL::bigint;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -51523,6 +51527,74 @@ BEGIN
   IF UPPER(BTRIM(COALESCE(v_session_row.status, ''))) <> 'OPEN'
      OR v_session_row.discarded_at_utc IS NOT NULL THEN
     RAISE EXCEPTION 'banking_pay_workbench_session % is not OPEN', p_session_id;
+  END IF;
+
+  IF v_input_type = 'object' THEN
+    v_expected_session_version_text := NULLIF(BTRIM(COALESCE(
+      v_input->>'expected_session_version',
+      v_input->>'expectedSessionVersion',
+      v_input->>'session_version',
+      v_input->>'sessionVersion',
+      ''
+    )), '');
+    v_expected_progress_counter_version_text := NULLIF(BTRIM(COALESCE(
+      v_input->>'expected_progress_counter_version',
+      v_input->>'expectedProgressCounterVersion',
+      v_input->>'progress_counter_version',
+      v_input->>'progressCounterVersion',
+      ''
+    )), '');
+
+    IF v_expected_session_version_text IS NOT NULL THEN
+      IF v_expected_session_version_text !~ '^[0-9]{1,18}$' THEN
+        RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID',
+                  'session_id', p_session_id::text,
+                  'provided_session_version', v_expected_session_version_text
+                )::text;
+      END IF;
+      v_expected_session_version := v_expected_session_version_text::bigint;
+    END IF;
+
+    IF v_expected_progress_counter_version_text IS NOT NULL THEN
+      IF v_expected_progress_counter_version_text !~ '^[0-9]{1,18}$' THEN
+        RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID',
+                  'session_id', p_session_id::text,
+                  'provided_progress_counter_version', v_expected_progress_counter_version_text
+                )::text;
+      END IF;
+      v_expected_progress_counter_version := v_expected_progress_counter_version_text::bigint;
+    END IF;
+  END IF;
+
+  IF v_expected_session_version IS NOT NULL
+     AND COALESCE(v_session_row.version, 0) IS DISTINCT FROM v_expected_session_version THEN
+    RAISE EXCEPTION 'STALE_SESSION'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'STALE_SESSION',
+              'session_id', p_session_id::text,
+              'expected_session_version', v_expected_session_version,
+              'current_session_version', COALESCE(v_session_row.version, 0)
+            )::text;
+  END IF;
+
+  IF v_expected_progress_counter_version IS NOT NULL
+     AND COALESCE(v_session_row.progress_counter_version, 0) IS DISTINCT FROM v_expected_progress_counter_version THEN
+    RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CHANGED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_SESSION_PROGRESS_CHANGED',
+              'session_id', p_session_id::text,
+              'expected_progress_counter_version', v_expected_progress_counter_version,
+              'current_progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+              'message', 'The Banking Pay workbench changed in another window. Refresh the preview before changing the selection.'
+            )::text;
   END IF;
 
   v_existing_selection_intent_mode := UPPER(BTRIM(COALESCE(
@@ -52620,7 +52692,9 @@ BEGIN
       progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
       progress_updated_at_utc = v_now,
       updated_at_utc = v_now
-  WHERE session_row.id = p_session_id;
+  WHERE session_row.id = p_session_id
+  RETURNING session_row.progress_counter_version
+  INTO v_next_progress_counter_version;
 
   v_audit_after_json := jsonb_build_object(
     'id', p_session_id::text,
@@ -52654,6 +52728,9 @@ BEGIN
     'session_id', p_session_id::text,
     'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
     'session_version', v_session_row.version,
+    'progress_counter_version', COALESCE(v_next_progress_counter_version, COALESCE(v_session_row.progress_counter_version, 0) + 1),
+    'expected_session_version', v_expected_session_version,
+    'expected_progress_counter_version', v_expected_progress_counter_version,
     'selected_preview_row_ids', COALESCE(v_selected_ids, '[]'::jsonb),
     'deselected_preview_row_ids', COALESCE(v_deselected_ids, '[]'::jsonb),
     'selected_preview_row_ids_provided', COALESCE(v_next_server_selected_ids_provided, false),
@@ -197742,6 +197819,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -198033,7 +198111,6 @@ BEGIN
   FROM valid_candidate_ids;
 
   v_canonical_session_signature := jsonb_build_object(
-    'actor_user_id', p_actor_user_id::text,
     'candidate_filter_id', COALESCE(v_signature_candidate_filter_id, ''),
     'candidate_ids', COALESCE(v_signature_candidate_ids, '[]'::jsonb),
     'client_filter_id', COALESCE(v_signature_client_filter_id, ''),
@@ -198198,8 +198275,7 @@ BEGIN
       'WORKBENCH_OLDER_PAY_DATE_SESSIONS_DISCARDED',
       NULL::jsonb,
       jsonb_build_object(
-        'actor_user_id', p_actor_user_id::text,
-        'new_pay_date', p_pay_date::text,
+            'new_pay_date', p_pay_date::text,
         'new_week_ending_cutoff', v_effective_week_ending_cutoff::text,
         'new_session_signature', v_session_signature,
         'retired_session_count', v_retired_old_session_count,
@@ -198214,8 +198290,7 @@ BEGIN
   SELECT existing_session.*
   INTO v_session_row
   FROM public.banking_pay_workbench_sessions AS existing_session
-  WHERE existing_session.actor_user_id = p_actor_user_id
-    AND existing_session.pay_date = p_pay_date
+  WHERE existing_session.pay_date = p_pay_date
     AND existing_session.week_ending_cutoff = v_effective_week_ending_cutoff
     AND existing_session.status = 'OPEN'
     AND existing_session.discarded_at_utc IS NULL
@@ -198411,8 +198486,7 @@ BEGIN
         SELECT existing_session.*
         INTO v_session_row
         FROM public.banking_pay_workbench_sessions AS existing_session
-        WHERE existing_session.actor_user_id = p_actor_user_id
-          AND existing_session.pay_date = p_pay_date
+        WHERE existing_session.pay_date = p_pay_date
           AND existing_session.week_ending_cutoff = v_effective_week_ending_cutoff
           AND existing_session.status = 'OPEN'
           AND existing_session.discarded_at_utc IS NULL
@@ -198670,8 +198744,7 @@ BEGIN
         'snapshot_run_id', v_session_row.source_snapshot_run_id::text,
         'session_signature', v_session_row.session_signature,
         'session_signature_token', v_session_signature_token,
-        'actor_user_id', p_actor_user_id::text,
-        'candidate_id', NULL::text,
+            'candidate_id', NULL::text,
         'job_type', 'WORKBENCH_SESSION_SCOPE_SEED',
         'dedupe_key', v_root_job_dedupe_key,
         'continuation', false,
@@ -198749,8 +198822,7 @@ BEGIN
         NULL::jsonb,
         jsonb_build_object(
           'id', v_session_row.id::text,
-          'actor_user_id', p_actor_user_id::text,
-          'pay_date', v_session_row.pay_date::text,
+                'pay_date', v_session_row.pay_date::text,
           'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
           'session_signature', v_session_row.session_signature,
           'source_snapshot_run_id', v_session_row.source_snapshot_run_id::text,
@@ -198878,7 +198950,6 @@ BEGIN
         progress_counter_version = COALESCE(duplicate_session.progress_counter_version, 0) + 1,
         progress_updated_at_utc = v_now
     WHERE duplicate_session.id IS DISTINCT FROM v_session_row.id
-      AND duplicate_session.actor_user_id = p_actor_user_id
       AND duplicate_session.pay_date = p_pay_date
       AND duplicate_session.week_ending_cutoff = v_effective_week_ending_cutoff
       AND duplicate_session.status = 'OPEN'
@@ -198972,8 +199043,7 @@ BEGIN
         'canonical_scope_signature', v_session_signature,
         'duplicate_session_count', v_duplicate_retired_session_count,
         'duplicate_session_ids', v_duplicate_retired_session_ids,
-        'actor_user_id', p_actor_user_id::text,
-        'pay_date', p_pay_date::text,
+            'pay_date', p_pay_date::text,
         'week_ending_cutoff', v_effective_week_ending_cutoff::text
       ),
       'SESSION_OPEN_SHARED_V2_CANONICAL_SCOPE_DEDUP',
@@ -206343,11 +206413,11 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_canonical_signature_v1(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_fallback_session_signature text DEFAULT NULL::text)
  RETURNS text
  LANGUAGE plpgsql
- STABLE
- SECURITY DEFINER
+ STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -206437,7 +206507,6 @@ BEGIN
   FROM valid_candidate_ids;
 
   RETURN jsonb_build_object(
-    'actor_user_id', p_actor_user_id::text,
     'candidate_filter_id', COALESCE(v_candidate_filter_id, ''),
     'candidate_ids', COALESCE(v_candidate_ids, '[]'::jsonb),
     'client_filter_id', COALESCE(v_client_filter_id, ''),
@@ -206449,8 +206518,7 @@ BEGIN
 EXCEPTION
   WHEN invalid_text_representation THEN
     RETURN jsonb_build_object(
-      'actor_user_id', p_actor_user_id::text,
-      'candidate_filter_id', COALESCE(v_candidate_filter_id, ''),
+        'candidate_filter_id', COALESCE(v_candidate_filter_id, ''),
       'candidate_ids', COALESCE(v_candidate_ids, '[]'::jsonb),
       'client_filter_id', COALESCE(v_client_filter_id, ''),
       'kind', 'BANKING_PAY_WORKBENCH',
@@ -206460,6 +206528,8 @@ EXCEPTION
     )::text;
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_delta_update_candidate_state_v1(p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -210732,16 +210802,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_clone_eligibility_v1(
-  p_source_session_id uuid,
-  p_target_session_id uuid,
-  p_candidate_id uuid,
-  p_options_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_clone_eligibility_v1(p_source_session_id uuid, p_target_session_id uuid, p_candidate_id uuid, p_options_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_options_json jsonb := CASE
@@ -210793,8 +210858,17 @@ BEGIN
   INTO v_source_session
   FROM public.banking_pay_workbench_sessions AS source_session
   WHERE source_session.id = p_source_session_id
-    AND UPPER(BTRIM(COALESCE(source_session.status, ''))) = 'OPEN'
-    AND source_session.discarded_at_utc IS NULL;
+    AND (
+      (
+        UPPER(BTRIM(COALESCE(source_session.status, ''))) = 'OPEN'
+        AND source_session.discarded_at_utc IS NULL
+      )
+      OR (
+        UPPER(BTRIM(COALESCE(source_session.status, ''))) = 'DISCARDED'
+        AND source_session.discarded_at_utc IS NOT NULL
+        AND source_session.replacement_session_id = p_target_session_id
+      )
+    );
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object(
@@ -211327,6 +211401,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
