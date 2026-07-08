@@ -82742,16 +82742,11 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_workbench_session_get_preview_page(uuid, text, jsonb, integer);
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview_page(
-  p_session_id uuid,
-  p_section text,
-  p_cursor_json jsonb DEFAULT '{}'::jsonb,
-  p_limit integer DEFAULT 100
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview_page(p_session_id uuid, p_section text, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 100)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
@@ -82810,12 +82805,17 @@ BEGIN
   END IF;
 
   IF UPPER(BTRIM(COALESCE(v_session_row.status, ''))) <> 'OPEN'
-     OR v_session_row.discarded_at_utc IS NOT NULL THEN
+     OR v_session_row.discarded_at_utc IS NOT NULL
+     OR v_session_row.replacement_session_id IS NOT NULL THEN
     RETURN jsonb_build_object(
       'ok', false,
       'error_code', 'OBSOLETE_SESSION',
       'code', 'OBSOLETE_SESSION',
       'session_id', p_session_id::text,
+      'session_obsolete', true,
+      'replacement_required', true,
+      'replacement_session_id', CASE WHEN v_session_row.replacement_session_id IS NULL THEN NULL ELSE v_session_row.replacement_session_id::text END,
+      'replacement_available', v_session_row.replacement_session_id IS NOT NULL,
       'requested_section', v_requested_section,
       'resolved_section', v_resolved_section,
       'section_alias_applied', v_section_alias_applied,
@@ -197571,6 +197571,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -197725,6 +197726,12 @@ DECLARE
   v_case_carry_forward_preview_count integer := 0;
   v_case_carry_forward_applied boolean := false;
   v_post_carry_forward_recompute_json jsonb := '{}'::jsonb;
+  v_queue_replay_source_session_id uuid := NULL::uuid;
+  v_queue_replay_result jsonb := '{}'::jsonb;
+  v_queue_replayed_job_count integer := 0;
+  v_queue_source_queued_terminalised_count integer := 0;
+  v_queue_source_running_count integer := 0;
+  v_queue_candidate_scope_missing_count integer := 0;
   v_resolved_session_id uuid := NULL::uuid;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('BOOTSTRAP');
@@ -197766,6 +197773,15 @@ BEGIN
   END IF;
 
   v_sanitised_filters_json := jsonb_strip_nulls(v_sanitised_filters_json);
+
+  IF to_regprocedure('public.pay_workbench_filters_sanitise_v1(jsonb,date,date)') IS NOT NULL THEN
+    v_sanitised_filters_json := public.pay_workbench_filters_sanitise_v1(
+      v_sanitised_filters_json,
+      p_pay_date,
+      v_effective_week_ending_cutoff
+    );
+  END IF;
+
   v_signature_nested_filters := CASE
     WHEN jsonb_typeof(v_sanitised_filters_json->'filters') = 'object'
       THEN COALESCE(v_sanitised_filters_json->'filters', '{}'::jsonb)
@@ -197847,6 +197863,17 @@ BEGIN
     'signature_version', 4,
     'week_ending_cutoff', v_effective_week_ending_cutoff::text
   )::text;
+
+  IF to_regprocedure('public.pay_workbench_session_canonical_signature_v1(uuid,date,date,jsonb,text)') IS NOT NULL THEN
+    v_canonical_session_signature := public.pay_workbench_session_canonical_signature_v1(
+      p_actor_user_id,
+      p_pay_date,
+      v_effective_week_ending_cutoff,
+      v_sanitised_filters_json,
+      v_input_session_signature
+    );
+  END IF;
+
   v_session_signature := NULLIF(BTRIM(COALESCE(v_canonical_session_signature, '')), '');
 
   IF v_session_signature IS NULL THEN
@@ -198814,9 +198841,101 @@ BEGIN
   ELSIF v_clone_from_session_id IS NOT NULL
         AND v_clone_from_session_id IS DISTINCT FROM v_session_row.id
         AND COALESCE(v_clone_rebase_applied, false) IS TRUE THEN
-    v_clone_source_retirement_deferred := true;
+    UPDATE public.banking_pay_workbench_sessions AS clone_source_session
+    SET status = 'DISCARDED',
+        discarded_at_utc = COALESCE(clone_source_session.discarded_at_utc, v_now),
+        replacement_session_id = v_session_row.id,
+        replacement_idempotency_key = COALESCE(
+          clone_source_session.replacement_idempotency_key,
+          'clone-rebase:' || v_clone_from_session_id::text || ':' || v_session_row.id::text
+        ),
+        updated_at_utc = v_now,
+        progress_state = 'DISCARDED',
+        progress_json = jsonb_strip_nulls(
+          COALESCE(clone_source_session.progress_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'discard_reason', 'SUPERSEDED_BY_CLONE_REBASE_REPLACEMENT_PENDING',
+            'discarded_by_function', 'pay_workbench_session_open_shared_v2',
+            'replacement_session_id', v_session_row.id::text,
+            'clone_rebase_job_queued', true,
+            'superseded_by_pay_date', p_pay_date::text,
+            'superseded_by_week_ending_cutoff', v_effective_week_ending_cutoff::text,
+            'superseded_at_utc', v_now::text,
+            'next_recommended_action', 'ADOPT_REPLACEMENT_SESSION'
+          )
+        ),
+        progress_counter_version = COALESCE(clone_source_session.progress_counter_version, 0) + 1,
+        progress_updated_at_utc = v_now
+    WHERE clone_source_session.id = v_clone_from_session_id
+      AND clone_source_session.status = 'OPEN'
+      AND clone_source_session.discarded_at_utc IS NULL
+      AND (
+        clone_source_session.pay_date IS DISTINCT FROM p_pay_date
+        OR clone_source_session.week_ending_cutoff IS DISTINCT FROM v_effective_week_ending_cutoff
+      );
+
+    GET DIAGNOSTICS v_clone_source_retired_count = ROW_COUNT;
+    v_clone_source_retirement_deferred := COALESCE(v_clone_source_retired_count, 0) = 0;
   END IF;
 
+
+  IF to_regprocedure('public.pay_workbench_session_replay_replaced_queue_v1(uuid,uuid,text,jsonb)') IS NOT NULL
+     AND (
+       COALESCE(v_duplicate_retired_session_count, 0) > 0
+       OR COALESCE(v_retired_old_session_count, 0) > 0
+       OR COALESCE(v_clone_source_retired_count, 0) > 0
+     ) THEN
+    DROP TABLE IF EXISTS pg_temp._bpay_open_shared_queue_replay_sources;
+    CREATE TEMP TABLE _bpay_open_shared_queue_replay_sources ON COMMIT DROP AS
+    SELECT DISTINCT source_session_id
+    FROM (
+      SELECT NULLIF(BTRIM(duplicate_session_id.value), '')::uuid AS source_session_id
+      FROM jsonb_array_elements_text(COALESCE(v_duplicate_retired_session_ids, '[]'::jsonb)) AS duplicate_session_id(value)
+      WHERE NULLIF(BTRIM(duplicate_session_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      UNION ALL
+      SELECT NULLIF(BTRIM(old_session_id.value), '')::uuid AS source_session_id
+      FROM jsonb_array_elements_text(COALESCE(v_retired_old_session_ids, '[]'::jsonb)) AS old_session_id(value)
+      WHERE NULLIF(BTRIM(old_session_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      UNION ALL
+      SELECT v_clone_from_session_id AS source_session_id
+      WHERE COALESCE(v_clone_source_retired_count, 0) > 0
+        AND v_clone_from_session_id IS NOT NULL
+        AND v_clone_from_session_id IS DISTINCT FROM v_session_row.id
+    ) AS queue_sources
+    WHERE source_session_id IS NOT NULL
+      AND source_session_id IS DISTINCT FROM v_session_row.id;
+
+    FOR v_queue_replay_source_session_id IN
+      SELECT queue_source.source_session_id
+      FROM pg_temp._bpay_open_shared_queue_replay_sources AS queue_source
+      ORDER BY queue_source.source_session_id
+    LOOP
+      v_queue_replay_result := public.pay_workbench_session_replay_replaced_queue_v1(
+        v_queue_replay_source_session_id,
+        v_session_row.id,
+        'SESSION_OPEN_SHARED_V2_REPLACEMENT_QUEUE_REPLAY',
+        jsonb_build_object(
+          'terminalise_source_queued', true,
+          'opened_by_actor_user_id', p_actor_user_id::text,
+          'pay_date', p_pay_date::text,
+          'week_ending_cutoff', v_effective_week_ending_cutoff::text
+        )
+      );
+
+      v_queue_replayed_job_count := v_queue_replayed_job_count
+        + CASE WHEN COALESCE(v_queue_replay_result->>'replayed_job_count', '') ~ '^[0-9]+$'
+          THEN (v_queue_replay_result->>'replayed_job_count')::integer ELSE 0 END;
+      v_queue_source_queued_terminalised_count := v_queue_source_queued_terminalised_count
+        + CASE WHEN COALESCE(v_queue_replay_result->>'source_queued_terminalised_count', '') ~ '^[0-9]+$'
+          THEN (v_queue_replay_result->>'source_queued_terminalised_count')::integer ELSE 0 END;
+      v_queue_source_running_count := v_queue_source_running_count
+        + CASE WHEN COALESCE(v_queue_replay_result->>'source_running_job_count', '') ~ '^[0-9]+$'
+          THEN (v_queue_replay_result->>'source_running_job_count')::integer ELSE 0 END;
+      v_queue_candidate_scope_missing_count := v_queue_candidate_scope_missing_count
+        + CASE WHEN COALESCE(v_queue_replay_result->>'candidate_scope_missing_count', '') ~ '^[0-9]+$'
+          THEN (v_queue_replay_result->>'candidate_scope_missing_count')::integer ELSE 0 END;
+    END LOOP;
+  END IF;
 
   IF COALESCE(v_duplicate_retired_session_count, 0) > 0
      OR COALESCE(v_retired_old_session_count, 0) > 0
@@ -199113,6 +199232,13 @@ BEGIN
 
   v_sanitised_session_filters_json := jsonb_strip_nulls(v_sanitised_session_filters_json);
 
+  IF to_regprocedure('public.pay_workbench_filters_sanitise_v1(jsonb,date,date)') IS NOT NULL THEN
+    v_sanitised_session_filters_json := public.pay_workbench_filters_sanitise_v1(
+      v_sanitised_session_filters_json,
+      p_pay_date,
+      v_effective_week_ending_cutoff
+    );
+  END IF;
 
   UPDATE public.banking_pay_workbench_sessions AS canonical_session
   SET session_signature = v_session_signature,
@@ -199139,7 +199265,11 @@ BEGIN
           'case_resolution_carry_forward_stale_count', COALESCE(v_case_carry_forward_stale_count, 0),
           'case_resolution_carry_forward_preview_count', COALESCE(v_case_carry_forward_preview_count, 0),
           'clone_source_retired', COALESCE(v_clone_source_retired_count, 0) > 0,
-          'clone_source_retirement_deferred', COALESCE(v_clone_source_retirement_deferred, false)
+          'clone_source_retirement_deferred', COALESCE(v_clone_source_retirement_deferred, false),
+          'replaced_session_queue_replayed_job_count', COALESCE(v_queue_replayed_job_count, 0),
+          'replaced_session_queue_source_queued_terminalised_count', COALESCE(v_queue_source_queued_terminalised_count, 0),
+          'replaced_session_queue_source_running_count', COALESCE(v_queue_source_running_count, 0),
+          'replaced_session_queue_candidate_scope_missing_count', COALESCE(v_queue_candidate_scope_missing_count, 0)
         )
       )
   WHERE canonical_session.id = v_resolved_session_id
@@ -199542,7 +199672,11 @@ BEGIN
       'case_resolution_carry_forward_preview_count', COALESCE(v_case_carry_forward_preview_count, 0),
       'canonical_scope_signature', v_session_signature,
       'clone_source_retired', COALESCE(v_clone_source_retired_count, 0) > 0,
-      'clone_source_retirement_deferred', COALESCE(v_clone_source_retirement_deferred, false)
+      'clone_source_retirement_deferred', COALESCE(v_clone_source_retirement_deferred, false),
+      'replaced_session_queue_replayed_job_count', COALESCE(v_queue_replayed_job_count, 0),
+      'replaced_session_queue_source_queued_terminalised_count', COALESCE(v_queue_source_queued_terminalised_count, 0),
+      'replaced_session_queue_source_running_count', COALESCE(v_queue_source_running_count, 0),
+      'replaced_session_queue_candidate_scope_missing_count', COALESCE(v_queue_candidate_scope_missing_count, 0)
     )
     || jsonb_build_object(
       'progress_state', v_session_row.progress_state,
@@ -199653,17 +199787,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_replace_after_mutation(
-  p_actor_user_id uuid,
-  p_source_session_id uuid,
-  p_replacement_idempotency_key text,
-  p_expected_source_version bigint DEFAULT NULL::bigint,
-  p_reason text DEFAULT NULL::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_replace_after_mutation(p_actor_user_id uuid, p_source_session_id uuid, p_replacement_idempotency_key text, p_expected_source_version bigint DEFAULT NULL::bigint, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -199692,6 +199820,11 @@ DECLARE
   v_patch_pay_batch_id uuid := NULL::uuid;
   v_patch_uuid_match text[] := NULL::text[];
   v_patch_result jsonb := '{}'::jsonb;
+  v_queue_replay_result jsonb := '{}'::jsonb;
+  v_queue_replayed_job_count integer := 0;
+  v_queue_source_queued_terminalised_count integer := 0;
+  v_queue_source_running_count integer := 0;
+  v_queue_candidate_scope_missing_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('BOOTSTRAP');
 
@@ -199786,6 +199919,32 @@ BEGIN
     END IF;
 
     v_replacement_session_id := v_replacement_row.id;
+
+    IF to_regprocedure('public.pay_workbench_session_replay_replaced_queue_v1(uuid,uuid,text,jsonb)') IS NOT NULL
+       AND UPPER(BTRIM(COALESCE(v_replacement_row.status, ''))) = 'OPEN'
+       AND v_replacement_row.discarded_at_utc IS NULL THEN
+      v_queue_replay_result := public.pay_workbench_session_replay_replaced_queue_v1(
+        v_idempotent_source_row.id,
+        v_replacement_row.id,
+        'SESSION_REPLACE_AFTER_MUTATION_IDEMPOTENT_QUEUE_REPLAY',
+        jsonb_build_object(
+          'terminalise_source_queued', true,
+          'replacement_idempotency_key', v_idempotency_key,
+          'idempotency_reused', true,
+          'actor_user_id', p_actor_user_id::text
+        )
+      );
+
+      v_queue_replayed_job_count := CASE WHEN COALESCE(v_queue_replay_result->>'replayed_job_count', '') ~ '^[0-9]+$'
+        THEN (v_queue_replay_result->>'replayed_job_count')::integer ELSE 0 END;
+      v_queue_source_queued_terminalised_count := CASE WHEN COALESCE(v_queue_replay_result->>'source_queued_terminalised_count', '') ~ '^[0-9]+$'
+        THEN (v_queue_replay_result->>'source_queued_terminalised_count')::integer ELSE 0 END;
+      v_queue_source_running_count := CASE WHEN COALESCE(v_queue_replay_result->>'source_running_job_count', '') ~ '^[0-9]+$'
+        THEN (v_queue_replay_result->>'source_running_job_count')::integer ELSE 0 END;
+      v_queue_candidate_scope_missing_count := CASE WHEN COALESCE(v_queue_replay_result->>'candidate_scope_missing_count', '') ~ '^[0-9]+$'
+        THEN (v_queue_replay_result->>'candidate_scope_missing_count')::integer ELSE 0 END;
+    END IF;
+
     v_replacement_contract := public.pay_workbench_session_get_progress_light(
       p_session_id => v_replacement_session_id
     );
@@ -199817,6 +199976,11 @@ BEGIN
         ),
         'old_rows_retained', true,
         'atomic_replacement', true,
+        'replaced_session_queue_replay', COALESCE(v_queue_replay_result, '{}'::jsonb),
+        'replaced_session_queue_replayed_job_count', COALESCE(v_queue_replayed_job_count, 0),
+        'replaced_session_queue_source_queued_terminalised_count', COALESCE(v_queue_source_queued_terminalised_count, 0),
+        'replaced_session_queue_source_running_count', COALESCE(v_queue_source_running_count, 0),
+        'replaced_session_queue_candidate_scope_missing_count', COALESCE(v_queue_candidate_scope_missing_count, 0),
         'replacement_session', COALESCE(v_replacement_contract, '{}'::jsonb)
       );
   END IF;
@@ -199966,6 +200130,32 @@ BEGIN
     END IF;
 
     v_replacement_session_id := v_replacement_row.id;
+
+    IF to_regprocedure('public.pay_workbench_session_replay_replaced_queue_v1(uuid,uuid,text,jsonb)') IS NOT NULL
+       AND UPPER(BTRIM(COALESCE(v_replacement_row.status, ''))) = 'OPEN'
+       AND v_replacement_row.discarded_at_utc IS NULL THEN
+      v_queue_replay_result := public.pay_workbench_session_replay_replaced_queue_v1(
+        v_source_row.id,
+        v_replacement_row.id,
+        'SESSION_REPLACE_AFTER_MUTATION_ALREADY_REPLACED_QUEUE_REPLAY',
+        jsonb_build_object(
+          'terminalise_source_queued', true,
+          'replacement_idempotency_key', COALESCE(v_source_row.replacement_idempotency_key, v_idempotency_key),
+          'source_already_replaced', true,
+          'actor_user_id', p_actor_user_id::text
+        )
+      );
+
+      v_queue_replayed_job_count := CASE WHEN COALESCE(v_queue_replay_result->>'replayed_job_count', '') ~ '^[0-9]+$'
+        THEN (v_queue_replay_result->>'replayed_job_count')::integer ELSE 0 END;
+      v_queue_source_queued_terminalised_count := CASE WHEN COALESCE(v_queue_replay_result->>'source_queued_terminalised_count', '') ~ '^[0-9]+$'
+        THEN (v_queue_replay_result->>'source_queued_terminalised_count')::integer ELSE 0 END;
+      v_queue_source_running_count := CASE WHEN COALESCE(v_queue_replay_result->>'source_running_job_count', '') ~ '^[0-9]+$'
+        THEN (v_queue_replay_result->>'source_running_job_count')::integer ELSE 0 END;
+      v_queue_candidate_scope_missing_count := CASE WHEN COALESCE(v_queue_replay_result->>'candidate_scope_missing_count', '') ~ '^[0-9]+$'
+        THEN (v_queue_replay_result->>'candidate_scope_missing_count')::integer ELSE 0 END;
+    END IF;
+
     v_replacement_contract := public.pay_workbench_session_get_progress_light(
       p_session_id => v_replacement_session_id
     );
@@ -199999,6 +200189,11 @@ BEGIN
         ),
         'old_rows_retained', true,
         'atomic_replacement', true,
+        'replaced_session_queue_replay', COALESCE(v_queue_replay_result, '{}'::jsonb),
+        'replaced_session_queue_replayed_job_count', COALESCE(v_queue_replayed_job_count, 0),
+        'replaced_session_queue_source_queued_terminalised_count', COALESCE(v_queue_source_queued_terminalised_count, 0),
+        'replaced_session_queue_source_running_count', COALESCE(v_queue_source_running_count, 0),
+        'replaced_session_queue_candidate_scope_missing_count', COALESCE(v_queue_candidate_scope_missing_count, 0),
         'replacement_session', COALESCE(v_replacement_contract, '{}'::jsonb)
       );
   END IF;
@@ -200153,6 +200348,30 @@ BEGIN
   RETURNING source_link.*
   INTO v_source_row;
 
+  IF to_regprocedure('public.pay_workbench_session_replay_replaced_queue_v1(uuid,uuid,text,jsonb)') IS NOT NULL THEN
+    v_queue_replay_result := public.pay_workbench_session_replay_replaced_queue_v1(
+      v_source_row.id,
+      v_replacement_row.id,
+      'SESSION_REPLACE_AFTER_MUTATION_QUEUE_REPLAY',
+      jsonb_build_object(
+        'terminalise_source_queued', true,
+        'replacement_idempotency_key', v_idempotency_key,
+        'operation_type', v_operation_type,
+        'pay_batch_id', CASE WHEN v_patch_pay_batch_id IS NULL THEN NULL ELSE v_patch_pay_batch_id::text END,
+        'actor_user_id', p_actor_user_id::text
+      )
+    );
+
+    v_queue_replayed_job_count := CASE WHEN COALESCE(v_queue_replay_result->>'replayed_job_count', '') ~ '^[0-9]+$'
+      THEN (v_queue_replay_result->>'replayed_job_count')::integer ELSE 0 END;
+    v_queue_source_queued_terminalised_count := CASE WHEN COALESCE(v_queue_replay_result->>'source_queued_terminalised_count', '') ~ '^[0-9]+$'
+      THEN (v_queue_replay_result->>'source_queued_terminalised_count')::integer ELSE 0 END;
+    v_queue_source_running_count := CASE WHEN COALESCE(v_queue_replay_result->>'source_running_job_count', '') ~ '^[0-9]+$'
+      THEN (v_queue_replay_result->>'source_running_job_count')::integer ELSE 0 END;
+    v_queue_candidate_scope_missing_count := CASE WHEN COALESCE(v_queue_replay_result->>'candidate_scope_missing_count', '') ~ '^[0-9]+$'
+      THEN (v_queue_replay_result->>'candidate_scope_missing_count')::integer ELSE 0 END;
+  END IF;
+
   PERFORM public._audit_insert(
     'banking_pay_workbench_session',
     v_source_row.id::text,
@@ -200171,7 +200390,12 @@ BEGIN
       'replacement_created', v_replacement_created,
       'replacement_work_queued', v_work_queued,
       'old_rows_retained', true,
-      'atomic_replacement', true
+      'atomic_replacement', true,
+      'replaced_session_queue_replay', COALESCE(v_queue_replay_result, '{}'::jsonb),
+      'replaced_session_queue_replayed_job_count', COALESCE(v_queue_replayed_job_count, 0),
+      'replaced_session_queue_source_queued_terminalised_count', COALESCE(v_queue_source_queued_terminalised_count, 0),
+      'replaced_session_queue_source_running_count', COALESCE(v_queue_source_running_count, 0),
+      'replaced_session_queue_candidate_scope_missing_count', COALESCE(v_queue_candidate_scope_missing_count, 0)
     ),
     v_reason,
     p_actor_user_id
@@ -200201,10 +200425,16 @@ BEGIN
       'replacement_reason', v_reason,
       'old_rows_retained', true,
       'atomic_replacement', true,
+      'replaced_session_queue_replay', COALESCE(v_queue_replay_result, '{}'::jsonb),
+      'replaced_session_queue_replayed_job_count', COALESCE(v_queue_replayed_job_count, 0),
+      'replaced_session_queue_source_queued_terminalised_count', COALESCE(v_queue_source_queued_terminalised_count, 0),
+      'replaced_session_queue_source_running_count', COALESCE(v_queue_source_running_count, 0),
+      'replaced_session_queue_candidate_scope_missing_count', COALESCE(v_queue_candidate_scope_missing_count, 0),
       'replacement_session', v_replacement_contract
     );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_worker_drain_chunk(p_limit integer DEFAULT 5, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, p_session_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_allowed_job_types text[] DEFAULT NULL::text[], p_worker_id text DEFAULT NULL::text, p_lease_seconds integer DEFAULT 180)
  RETURNS jsonb
@@ -204145,7 +204375,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(p_target_session_id uuid, p_source_session_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 100, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_options_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -204276,8 +204505,17 @@ BEGIN
   INTO v_source_session
   FROM public.banking_pay_workbench_sessions AS source_session
   WHERE source_session.id = v_source_session_id
-    AND UPPER(BTRIM(COALESCE(source_session.status, ''))) = 'OPEN'
-    AND source_session.discarded_at_utc IS NULL;
+    AND (
+      (
+        UPPER(BTRIM(COALESCE(source_session.status, ''))) = 'OPEN'
+        AND source_session.discarded_at_utc IS NULL
+      )
+      OR (
+        UPPER(BTRIM(COALESCE(source_session.status, ''))) = 'DISCARDED'
+        AND source_session.discarded_at_utc IS NOT NULL
+        AND source_session.replacement_session_id = p_target_session_id
+      )
+    );
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object(
@@ -206333,6 +206571,322 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_replay_replaced_queue_v1(
+  p_source_session_id uuid,
+  p_target_session_id uuid,
+  p_reason text DEFAULT 'REPLACED_SESSION_QUEUE_REPLAY'::text,
+  p_options_json jsonb DEFAULT '{}'::jsonb
+)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := now();
+  v_reason text := COALESCE(NULLIF(BTRIM(p_reason), ''), 'REPLACED_SESSION_QUEUE_REPLAY');
+  v_options_json jsonb := CASE
+    WHEN jsonb_typeof(COALESCE(p_options_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_options_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_source_session public.banking_pay_workbench_sessions%ROWTYPE;
+  v_target_session public.banking_pay_workbench_sessions%ROWTYPE;
+  v_candidate_scope_missing_count integer := 0;
+  v_source_active_job_count integer := 0;
+  v_source_queued_job_count integer := 0;
+  v_source_running_job_count integer := 0;
+  v_replayed_job_count integer := 0;
+  v_source_queued_terminalised_count integer := 0;
+  v_replay_job_ids jsonb := '[]'::jsonb;
+  v_source_job_ids jsonb := '[]'::jsonb;
+  v_terminalise_source_queued boolean := true;
+BEGIN
+  IF p_source_session_id IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_QUEUE_REPLAY_SOURCE_SESSION_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code','PAY_WORKBENCH_QUEUE_REPLAY_SOURCE_SESSION_REQUIRED')::text;
+  END IF;
+
+  IF p_target_session_id IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_QUEUE_REPLAY_TARGET_SESSION_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code','PAY_WORKBENCH_QUEUE_REPLAY_TARGET_SESSION_REQUIRED')::text;
+  END IF;
+
+  SELECT source_session.*
+  INTO v_source_session
+  FROM public.banking_pay_workbench_sessions AS source_session
+  WHERE source_session.id = p_source_session_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_QUEUE_REPLAY_SOURCE_SESSION_NOT_FOUND'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code','PAY_WORKBENCH_QUEUE_REPLAY_SOURCE_SESSION_NOT_FOUND',
+              'source_session_id', p_source_session_id::text
+            )::text;
+  END IF;
+
+  SELECT target_session.*
+  INTO v_target_session
+  FROM public.banking_pay_workbench_sessions AS target_session
+  WHERE target_session.id = p_target_session_id
+    AND UPPER(BTRIM(COALESCE(target_session.status, ''))) = 'OPEN'
+    AND target_session.discarded_at_utc IS NULL;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_QUEUE_REPLAY_TARGET_SESSION_NOT_OPEN'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code','PAY_WORKBENCH_QUEUE_REPLAY_TARGET_SESSION_NOT_OPEN',
+              'target_session_id', p_target_session_id::text
+            )::text;
+  END IF;
+
+  IF p_source_session_id = p_target_session_id THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'source_session_id', p_source_session_id::text,
+      'target_session_id', p_target_session_id::text,
+      'skipped', true,
+      'skip_reason', 'SOURCE_AND_TARGET_IDENTICAL',
+      'replayed_job_count', 0,
+      'source_queued_terminalised_count', 0,
+      'source_running_job_count', 0
+    );
+  END IF;
+
+  v_terminalise_source_queued := LOWER(BTRIM(COALESCE(v_options_json->>'terminalise_source_queued', 'true'))) NOT IN ('false','f','0','no','n','off');
+
+  DROP TABLE IF EXISTS pg_temp._bpay_replaced_session_queue_replay_jobs;
+  CREATE TEMP TABLE _bpay_replaced_session_queue_replay_jobs ON COMMIT DROP AS
+  SELECT
+    source_job.id AS source_job_id,
+    source_job.job_type,
+    UPPER(BTRIM(COALESCE(source_job.status, ''))) AS source_status,
+    source_job.priority,
+    source_job.run_at_utc,
+    source_job.attempt_count,
+    source_job.max_attempts,
+    source_job.snapshot_run_id,
+    source_job.session_id,
+    source_job.candidate_id,
+    COALESCE(source_job.payload_json, '{}'::jsonb) AS payload_json,
+    (
+      'REPLAY_REPLACED_SESSION:'
+      || p_target_session_id::text
+      || ':source_job:'
+      || source_job.id::text
+    ) AS replay_dedupe_key
+  FROM public.banking_pay_workbench_jobs AS source_job
+  WHERE source_job.session_id = p_source_session_id
+    AND UPPER(BTRIM(COALESCE(source_job.status, ''))) IN ('QUEUED','RUNNING')
+    AND UPPER(BTRIM(COALESCE(source_job.job_type, ''))) IN (
+      'WORKBENCH_SESSION_SCOPE_SEED',
+      'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+      'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
+      'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
+      'WORKBENCH_CANDIDATE_DELTA_REFRESH',
+      'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+      'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+      'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
+      'CANDIDATE_SOURCE_BUILD',
+      'CANDIDATE_SOURCE_BUILD_CHUNK',
+      'SOURCE_BUILD',
+      'SOURCE_BUILD_PAGE'
+    );
+
+  SELECT COUNT(*)::integer,
+         COUNT(*) FILTER (WHERE source_status = 'QUEUED')::integer,
+         COUNT(*) FILTER (WHERE source_status = 'RUNNING')::integer,
+         COALESCE(jsonb_agg(source_job_id::text ORDER BY source_job_id::text), '[]'::jsonb)
+  INTO v_source_active_job_count,
+       v_source_queued_job_count,
+       v_source_running_job_count,
+       v_source_job_ids
+  FROM pg_temp._bpay_replaced_session_queue_replay_jobs;
+
+  IF COALESCE(v_source_active_job_count, 0) = 0 THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'source_session_id', p_source_session_id::text,
+      'target_session_id', p_target_session_id::text,
+      'reason', v_reason,
+      'source_active_job_count', 0,
+      'source_queued_job_count', 0,
+      'source_running_job_count', 0,
+      'replayed_job_count', 0,
+      'source_queued_terminalised_count', 0,
+      'replay_job_ids', '[]'::jsonb,
+      'source_job_ids', '[]'::jsonb
+    );
+  END IF;
+
+  SELECT COUNT(*)::integer
+  INTO v_candidate_scope_missing_count
+  FROM pg_temp._bpay_replaced_session_queue_replay_jobs AS replay_job
+  WHERE replay_job.candidate_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_workbench_session_scope AS target_scope
+      WHERE target_scope.session_id = p_target_session_id
+        AND target_scope.candidate_id = replay_job.candidate_id
+    );
+
+  WITH replayed_jobs AS (
+    INSERT INTO public.banking_pay_workbench_jobs (
+      job_type,
+      status,
+      priority,
+      run_at_utc,
+      attempt_count,
+      max_attempts,
+      dedupe_key,
+      snapshot_run_id,
+      session_id,
+      candidate_id,
+      payload_json,
+      created_at_utc,
+      updated_at_utc
+    )
+    SELECT
+      CASE
+        WHEN UPPER(BTRIM(replay_job.job_type)) IN ('CANDIDATE_SOURCE_BUILD','CANDIDATE_SOURCE_BUILD_CHUNK','SOURCE_BUILD','SOURCE_BUILD_PAGE')
+          THEN 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+        ELSE replay_job.job_type
+      END,
+      'QUEUED',
+      replay_job.priority,
+      LEAST(COALESCE(replay_job.run_at_utc, v_now), v_now),
+      0,
+      GREATEST(COALESCE(replay_job.max_attempts, 8), 1),
+      replay_job.replay_dedupe_key,
+      v_target_session.source_snapshot_run_id,
+      p_target_session_id,
+      replay_job.candidate_id,
+      jsonb_strip_nulls(
+        (replay_job.payload_json - ARRAY[
+          'worker_id',
+          'worker_claimed_at_utc',
+          'worker_lease_seconds',
+          'worker_lease_expires_at_utc',
+          'worker_function',
+          'result_json',
+          'completion_json',
+          'session_id',
+          'sessionId',
+          'source_session_id',
+          'sourceSessionId',
+          'target_session_id',
+          'targetSessionId',
+          'snapshot_run_id',
+          'source_snapshot_run_id',
+          'session_version',
+          'sessionVersion'
+        ]::text[])
+        || jsonb_build_object(
+          'session_id', p_target_session_id::text,
+          'target_session_id', p_target_session_id::text,
+          'snapshot_run_id', CASE WHEN v_target_session.source_snapshot_run_id IS NULL THEN NULL ELSE v_target_session.source_snapshot_run_id::text END,
+          'source_snapshot_run_id', CASE WHEN v_target_session.source_snapshot_run_id IS NULL THEN NULL ELSE v_target_session.source_snapshot_run_id::text END,
+          'session_version', v_target_session.version,
+          'replayed_from_replaced_session', true,
+          'replayed_from_session_id', p_source_session_id::text,
+          'replayed_from_job_id', replay_job.source_job_id::text,
+          'replayed_from_job_status', replay_job.source_status,
+          'replay_reason', v_reason,
+          'replayed_at_utc', v_now::text
+        )
+      ),
+      v_now,
+      v_now
+    FROM pg_temp._bpay_replaced_session_queue_replay_jobs AS replay_job
+    ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED','RUNNING')
+    DO UPDATE SET
+      priority = LEAST(public.banking_pay_workbench_jobs.priority, EXCLUDED.priority),
+      run_at_utc = LEAST(public.banking_pay_workbench_jobs.run_at_utc, EXCLUDED.run_at_utc),
+      payload_json = COALESCE(public.banking_pay_workbench_jobs.payload_json, '{}'::jsonb)
+        || EXCLUDED.payload_json
+        || jsonb_build_object(
+          'queue_replay_reused', true,
+          'queue_replay_reused_at_utc', v_now::text
+        ),
+      updated_at_utc = v_now
+    RETURNING id
+  )
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(replayed_jobs.id::text ORDER BY replayed_jobs.id::text), '[]'::jsonb)
+  INTO v_replayed_job_count,
+       v_replay_job_ids
+  FROM replayed_jobs;
+
+  IF COALESCE(v_terminalise_source_queued, true) THEN
+    UPDATE public.banking_pay_workbench_jobs AS old_job
+    SET status = 'DEAD',
+        failed_at_utc = COALESCE(old_job.failed_at_utc, v_now),
+        updated_at_utc = v_now,
+        last_error_json = jsonb_strip_nulls(
+          jsonb_build_object(
+            'code', 'REPLACED_SESSION_QUEUE_REPLAYED',
+            'message', 'Queued work was replayed against the replacement Banking Pay workbench session.',
+            'source_session_id', p_source_session_id::text,
+            'replacement_session_id', p_target_session_id::text,
+            'replay_reason', v_reason,
+            'replayed_at_utc', v_now::text
+          )
+        ),
+        payload_json = COALESCE(old_job.payload_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'terminalised_as_replaced_session_queue_replayed', true,
+            'replacement_session_id', p_target_session_id::text,
+            'terminalised_at_utc', v_now::text
+          )
+    FROM pg_temp._bpay_replaced_session_queue_replay_jobs AS replay_job
+    WHERE old_job.id = replay_job.source_job_id
+      AND old_job.status = 'QUEUED';
+
+    GET DIAGNOSTICS v_source_queued_terminalised_count = ROW_COUNT;
+  END IF;
+
+  PERFORM public._audit_insert(
+    'banking_pay_workbench_session',
+    p_source_session_id::text,
+    'WORKBENCH_REPLACED_SESSION_QUEUE_REPLAYED',
+    jsonb_build_object(
+      'source_session_id', p_source_session_id::text,
+      'target_session_id', p_target_session_id::text,
+      'source_active_job_count', COALESCE(v_source_active_job_count, 0),
+      'source_queued_job_count', COALESCE(v_source_queued_job_count, 0),
+      'source_running_job_count', COALESCE(v_source_running_job_count, 0),
+      'source_job_ids', COALESCE(v_source_job_ids, '[]'::jsonb)
+    ),
+    jsonb_build_object(
+      'replayed_job_count', COALESCE(v_replayed_job_count, 0),
+      'source_queued_terminalised_count', COALESCE(v_source_queued_terminalised_count, 0),
+      'candidate_scope_missing_count', COALESCE(v_candidate_scope_missing_count, 0),
+      'replay_job_ids', COALESCE(v_replay_job_ids, '[]'::jsonb)
+    ),
+    v_reason,
+    NULL::uuid
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'source_session_id', p_source_session_id::text,
+    'target_session_id', p_target_session_id::text,
+    'reason', v_reason,
+    'source_active_job_count', COALESCE(v_source_active_job_count, 0),
+    'source_queued_job_count', COALESCE(v_source_queued_job_count, 0),
+    'source_running_job_count', COALESCE(v_source_running_job_count, 0),
+    'replayed_job_count', COALESCE(v_replayed_job_count, 0),
+    'source_queued_terminalised_count', COALESCE(v_source_queued_terminalised_count, 0),
+    'candidate_scope_missing_count', COALESCE(v_candidate_scope_missing_count, 0),
+    'source_job_ids', COALESCE(v_source_job_ids, '[]'::jsonb),
+    'replay_job_ids', COALESCE(v_replay_job_ids, '[]'::jsonb),
+    'running_source_jobs_left_to_complete_stale', COALESCE(v_source_running_job_count, 0)
+  );
+END;
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_delta_shadow_compare_v1(
