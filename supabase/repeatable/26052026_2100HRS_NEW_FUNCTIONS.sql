@@ -206235,6 +206235,103 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.pay_workbench_filters_sanitise_v1(p_filters_json jsonb, p_pay_date date DEFAULT NULL::date, p_week_ending_cutoff date DEFAULT NULL::date)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_filters jsonb := CASE
+    WHEN jsonb_typeof(COALESCE(p_filters_json, '{}'::jsonb)) = 'object'
+      THEN COALESCE(p_filters_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_nested_filters jsonb := '{}'::jsonb;
+  v_strip_keys text[] := ARRAY[
+    'preview_context_summary',
+    'paye_guardrails',
+    'preview_decisions_json',
+    'preview_decisions',
+    'open_options',
+    'options',
+    'progress_json',
+    'candidate_sample_rows_json',
+    'scope_next_cursor_json',
+    'pay_date',
+    'payDate',
+    'pay_date_text',
+    'payDateText',
+    'source_pay_date',
+    'sourcePayDate',
+    'target_pay_date',
+    'targetPayDate',
+    'pay_week',
+    'payWeek',
+    'pay_week_label',
+    'payWeekLabel',
+    'pay_week_start',
+    'payWeekStart',
+    'pay_week_end',
+    'payWeekEnd',
+    'pay_period_start',
+    'payPeriodStart',
+    'pay_period_end',
+    'payPeriodEnd',
+    'week_start',
+    'weekStart',
+    'week_end',
+    'weekEnd',
+    'week_ending_cutoff',
+    'weekEndingCutoff',
+    'source_snapshot_run_id',
+    'snapshot_run_id',
+    'source_session_id',
+    'sourceSessionId',
+    'target_session_id',
+    'targetSessionId',
+    'session_id',
+    'sessionId',
+    'session_version',
+    'sessionVersion',
+    'session_signature',
+    'sessionSignature',
+    'clone_from_session_id',
+    'cloneFromSessionId',
+    'existing_paye_draft',
+    'eligibility',
+    'today_uk',
+    'worker_metadata',
+    'job_metadata',
+    'source_build',
+    'clone_rebase',
+    'clone_rebase_result',
+    'cursor',
+    'cursor_json',
+    'page_cursor',
+    'candidate_cursor',
+    'last_cursor',
+    'active_jobs',
+    'pending_job_ids_json',
+    'replacement_session_id',
+    'replacement_idempotency_key'
+  ];
+BEGIN
+  v_filters := v_filters - v_strip_keys;
+
+  IF jsonb_typeof(v_filters->'filters') = 'object' THEN
+    v_nested_filters := COALESCE(v_filters->'filters', '{}'::jsonb) - v_strip_keys;
+    v_filters := jsonb_set(v_filters, '{filters}', v_nested_filters, true);
+  END IF;
+
+  IF jsonb_typeof(v_filters->'filter') = 'object' THEN
+    v_nested_filters := COALESCE(v_filters->'filter', '{}'::jsonb) - v_strip_keys;
+    v_filters := jsonb_set(v_filters, '{filter}', v_nested_filters, true);
+  END IF;
+
+  RETURN jsonb_strip_nulls(v_filters);
+END;
+$function$;
 
 
 
