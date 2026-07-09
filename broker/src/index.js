@@ -82682,293 +82682,580 @@ function buildTimesheetLifecyclePatchFromMutation(input = {}) {
   };
 }
 
+// index.js — INSERT this helper block before handleBulkTimesheetAuthoriseSelected / handleBulkTimesheetUnauthoriseSelected.
+// Purpose: durable, bounded Bulk Authorise/Unauthorise orchestration around the existing Simple Modal gold handlers.
 
-async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+function lifecycleBulkNowIso() {
+  try { return typeof nowIso === 'function' ? nowIso() : new Date().toISOString(); }
+  catch (_) { return new Date().toISOString(); }
+}
 
-  const jsonHeaders = (typeof JSON_HEADERS !== 'undefined') ? JSON_HEADERS : { 'Content-Type': 'application/json' };
-  const trimStr = (value) => String(value == null ? '' : value).trim();
-  const firstString = function firstString() {
-    for (let index = 0; index < arguments.length; index += 1) {
-      const value = trimStr(arguments[index]);
-      if (value) return value;
-    }
-    return '';
-  };
-  const unwrapRpcPayload = (payload, fnName) => {
-    let out = payload;
-    if (Array.isArray(out) && out.length === 1) out = out[0];
-    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) out = out[fnName];
-    if (typeof out === 'string') {
-      try {
-        const parsed = JSON.parse(out);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) out = parsed;
-      } catch {
-      }
-    }
-    return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
-  };
-  const parseRpcErrorPayload = (err) => {
-    if (err && err.json && typeof err.json === 'object') return err.json;
-    if (typeof err?.body === 'string' && err.body) {
-      try {
-        return JSON.parse(err.body);
-      } catch {
-      }
-    }
-    return { ok: false, error_code: 'RPC_FAILED', message: String(err?.message || err || 'Failed to authorise selected timesheets') };
-  };
-  const normalizeSelections = (input) => {
-    const src = (input && typeof input === 'object' && !Array.isArray(input)) ? input : {};
-    const out = [];
-    const seen = new Set();
-
-    const add = (obj) => {
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return;
-      const rawRowKey = firstString(obj.row_key, obj.rowKey);
-      const timesheetId = firstString(obj.timesheet_id, obj.timesheetId, obj.current_timesheet_id, obj.currentTimesheetId, obj.requested_timesheet_id, obj.requestedTimesheetId);
-      const contractWeekId = firstString(obj.contract_week_id, obj.contractWeekId, obj.week_id, obj.weekId);
-      const expectedTimesheetId = firstString(obj.expected_timesheet_id, obj.expectedTimesheetId, obj.expected_current_timesheet_id, obj.expectedCurrentTimesheetId, timesheetId);
-      const expectedRowSignature = firstString(obj.expected_row_signature, obj.expectedRowSignature, obj.backend_row_signature, obj.backendRowSignature, obj.mutation_row_signature, obj.mutationRowSignature, obj.row_signature, obj.rowSignature);
-      const rowKey = rawRowKey || (timesheetId ? `timesheet:${timesheetId}` : (contractWeekId ? `contract_week:${contractWeekId}` : ''));
-      const key = rowKey || `${timesheetId}|${contractWeekId}|${expectedTimesheetId}`;
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      out.push({
-        row_key: rowKey || null,
-        timesheet_id: timesheetId || null,
-        current_timesheet_id: firstString(obj.current_timesheet_id, obj.currentTimesheetId, timesheetId) || null,
-        requested_timesheet_id: firstString(obj.requested_timesheet_id, obj.requestedTimesheetId, timesheetId) || null,
-        contract_week_id: contractWeekId || null,
-        expected_timesheet_id: expectedTimesheetId || null,
-        expected_row_signature: expectedRowSignature || null,
-        backend_row_signature: expectedRowSignature || null,
-        row_signature: expectedRowSignature || null
-      });
-    };
-
-    const arrays = [src.items, src.rows, src.selected, src.selections];
-    for (const arr of arrays) {
-      if (Array.isArray(arr)) {
-        for (const item of arr) add(item);
-      }
-    }
-
-    if (Array.isArray(src.selected_ids)) {
-      for (const raw of src.selected_ids) {
-        const value = trimStr(raw);
-        if (!value) continue;
-        if (value.startsWith('timesheet:')) add({ row_key: value, timesheet_id: value.slice('timesheet:'.length), expected_timesheet_id: value.slice('timesheet:'.length) });
-        else if (value.startsWith('contract_week:')) add({ row_key: value, contract_week_id: value.slice('contract_week:'.length) });
-        else add({ row_key: `timesheet:${value}`, timesheet_id: value, expected_timesheet_id: value });
-      }
-    }
-
-    if (Array.isArray(src.timesheet_ids)) {
-      for (const raw of src.timesheet_ids) {
-        const value = trimStr(raw);
-        if (value) add({ row_key: `timesheet:${value}`, timesheet_id: value, expected_timesheet_id: value });
-      }
-    }
-
-    if (Array.isArray(src.contract_week_ids)) {
-      for (const raw of src.contract_week_ids) {
-        const value = trimStr(raw);
-        if (value) add({ row_key: `contract_week:${value}`, contract_week_id: value });
-      }
-    }
-
-    return out;
-  };
-  const dedupeAffectedRows = (results, payload) => {
-    const rows = [];
-    const seen = new Set();
-    const add = (row) => {
-      if (!row || typeof row !== 'object' || Array.isArray(row)) return;
-      const key = firstString(row.row_key, row.timesheet_id ? `timesheet:${row.timesheet_id}` : '', row.contract_week_id ? `contract_week:${row.contract_week_id}` : '');
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      rows.push(row);
-    };
-    if (Array.isArray(payload?.affected_rows)) {
-      for (const row of payload.affected_rows) add(row);
-    }
-    if (Array.isArray(results)) {
-      for (const result of results) {
-        if (!result || result.success !== true) continue;
-        if (Array.isArray(result.affected_rows)) {
-          for (const row of result.affected_rows) add(row);
-        } else {
-          add({
-            timesheet_id: result.current_timesheet_id || result.timesheet_id || null,
-            contract_week_id: result.contract_week_id || null,
-            booking_id: result.booking_id || null,
-            row_key: result.current_timesheet_id || result.timesheet_id ? `timesheet:${result.current_timesheet_id || result.timesheet_id}` : null,
-            context: 'bulk_authorise'
-          });
-        }
-      }
-    }
-    return rows;
-  };
-
-  let body = {};
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
-
-  const items = normalizeSelections(body);
-  if (!items.length) return withCORS(env, req, badRequest('A non-empty selected set is required'));
-
-  const maxItemsPerRequest = 100;
-  if (items.length > maxItemsPerRequest) {
-    return withCORS(env, req, new Response(JSON.stringify({
-      error: 'Bulk timesheet action request is too large. Please send this action in smaller chunks.',
-      error_code: 'BULK_ACTION_CHUNK_TOO_LARGE',
-      code: 'BULK_ACTION_CHUNK_TOO_LARGE',
-      max_items_per_request: maxItemsPerRequest,
-      received_count: items.length,
-      action: 'AUTHORISE'
-    }), { status: 400, headers: jsonHeaders }));
-  }
-
-  let payload = null;
-  try {
-    const requestedTimesheetScope = items.map((item) => firstString(item.timesheet_id, item.current_timesheet_id, item.requested_timesheet_id)).filter(Boolean).slice(0, 20).join(',');
-    const rpcRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_authorise_bulk_atomic', {
-      p_items: items,
-      p_actor_user_id: user?.id || null,
-      p_now_utc: nowIso()
-    }, {
-      timeoutMs: 45000,
-      lifecycleAction: 'BULK_AUTHORISE',
-      routeFamily: 'TIMESHEET_BULK_AUTHORISE',
-      requestedTimesheetId: requestedTimesheetScope,
-      actorUserId: user?.id || null,
-      maxAttempts: 4,
-      retryBudgetMs: 1800,
-      retryDelaysMs: [0, 125, 375, 850],
-      jitterMs: 75
-    });
-    payload = unwrapRpcPayload(rpcRes, 'timesheet_authorise_bulk_atomic');
-  } catch (err) {
-    const errPayload = parseRpcErrorPayload(err);
-    const code = firstString(errPayload.error_code, errPayload.error, errPayload.message, 'BULK_AUTHORISE_FAILED').toUpperCase();
-    const status = (code === 'LOCK_TIMEOUT' || code === 'TRANSIENT_LIFECYCLE_CONFLICT') ? 409 : (code === 'TOO_MANY_ITEMS' || code === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || code === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
-    return withCORS(env, req, new Response(JSON.stringify({
-      error: code,
-      error_code: code,
-      message: code === 'TRANSIENT_LIFECYCLE_CONFLICT' ? 'The timesheets were being updated at the same time. Please try again.' : (errPayload.message || 'Failed to authorise selected timesheets'),
-      action: 'AUTHORISE',
-      requested_count: items.length,
-      success_count: 0,
-      failure_count: items.length,
-      results: []
-    }), { status, headers: jsonHeaders }));
-  }
-
-  const topLevelCode = firstString(payload.error_code, payload.error, payload.message).toUpperCase();
-  if (payload.ok === false || (payload.batch_completed === false && topLevelCode)) {
-    const status = (topLevelCode === 'LOCK_TIMEOUT' || topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT')
-      ? 409
-      : (topLevelCode === 'TOO_MANY_ITEMS' || topLevelCode === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || topLevelCode === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
-    return withCORS(env, req, new Response(JSON.stringify({
-      ok: false,
-      batch_completed: false,
-      all_success: false,
-      has_failures: true,
-      error: topLevelCode || 'BULK_AUTHORISE_FAILED',
-      error_code: topLevelCode || 'BULK_AUTHORISE_FAILED',
-      message: topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT' ? 'The timesheets were being updated at the same time. Please try again.' : (payload.message || 'Failed to authorise selected timesheets'),
-      action: payload.action || 'AUTHORISE',
-      requested_count: Number(payload.requested_count || items.length || 0),
-      success_count: 0,
-      failure_count: Number(payload.failure_count || items.length || 0),
-      results: Array.isArray(payload.results) ? payload.results : [],
-      affected_rows: [],
-      affected_timesheet_ids: [],
-      affected_contract_week_ids: [],
-      requires_affected_row_refresh: false,
-      refresh_required: topLevelCode === 'LOCK_TIMEOUT' || topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT',
-      count_deltas: (payload.count_deltas && typeof payload.count_deltas === 'object') ? payload.count_deltas : {},
-      cache_invalidation_hints: (payload.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object') ? payload.cache_invalidation_hints : {},
-      failed_items: Array.isArray(payload.results) ? payload.results.filter((result) => result && result.success !== true) : [],
-      stale_items: []
-    }), { status, headers: jsonHeaders }));
-  }
-
-  const results = Array.isArray(payload.results) ? payload.results : [];
-  const failedItems = results.filter((result) => result && result.success !== true);
-  const staleItems = failedItems.filter((result) => {
-    const code = firstString(result?.error_code, result?.error).toUpperCase();
-    return code === 'TIMESHEET_MOVED' || code === 'EXPECTED_TIMESHEET_MISMATCH' || code === 'ROW_SIGNATURE_MISMATCH' || result?.was_stale === true;
+function lifecycleBulkJson(status, payload) {
+  return new Response(JSON.stringify(payload || {}), {
+    status: status || 200,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
   });
-  const successCount = Number(payload.success_count || results.filter((result) => result && result.success === true).length || 0);
-  const failureCount = Number(payload.failure_count || failedItems.length || 0);
-  const batchCompleted = payload.batch_completed !== false;
-  const allSuccess = payload.all_success === true || (payload.all_success == null && failureCount === 0);
-  const affectedRows = dedupeAffectedRows(results, payload);
-  const affectedTimesheetIds = [];
-  const affectedContractWeekIds = [];
-  for (const row of affectedRows) {
-    const tsId = firstString(row.timesheet_id);
-    const cwId = firstString(row.contract_week_id);
-    if (tsId && affectedTimesheetIds.indexOf(tsId) === -1) affectedTimesheetIds.push(tsId);
-    if (cwId && affectedContractWeekIds.indexOf(cwId) === -1) affectedContractWeekIds.push(cwId);
+}
+
+function lifecycleBulkReadFirst(obj, names) {
+  if (!obj || typeof obj !== 'object') return '';
+  for (const name of names || []) {
+    const value = obj[name];
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  return '';
+}
+
+function normalizeTimesheetLifecycleBulkSelections(rawItems) {
+  const source = Array.isArray(rawItems) ? rawItems : [];
+  const seen = new Set();
+  const out = [];
+  for (let i = 0; i < source.length; i += 1) {
+    const item = source[i] && typeof source[i] === 'object' ? source[i] : {};
+    const timesheetId = lifecycleBulkReadFirst(item, ['timesheet_id', 'current_timesheet_id', 'requested_timesheet_id', 'id']);
+    if (!timesheetId) continue;
+    const dedupeKey = `${timesheetId}|${lifecycleBulkReadFirst(item, ['expected_row_signature', 'row_signature', 'backend_row_signature', 'mutation_row_signature'])}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    out.push({
+      ordinal: out.length,
+      row_key: lifecycleBulkReadFirst(item, ['row_key']) || `timesheet:${timesheetId}`,
+      timesheet_id: timesheetId,
+      current_timesheet_id: lifecycleBulkReadFirst(item, ['current_timesheet_id']) || timesheetId,
+      requested_timesheet_id: lifecycleBulkReadFirst(item, ['requested_timesheet_id']) || timesheetId,
+      expected_timesheet_id: lifecycleBulkReadFirst(item, ['expected_timesheet_id', 'current_timesheet_id', 'timesheet_id', 'id']) || timesheetId,
+      contract_week_id: lifecycleBulkReadFirst(item, ['contract_week_id', 'week_id']),
+      expected_row_signature: lifecycleBulkReadFirst(item, ['expected_row_signature', 'backend_row_signature', 'mutation_row_signature', 'row_signature']),
+      backend_row_signature: lifecycleBulkReadFirst(item, ['backend_row_signature', 'expected_row_signature', 'mutation_row_signature', 'row_signature']),
+      mutation_row_signature: lifecycleBulkReadFirst(item, ['mutation_row_signature', 'expected_row_signature', 'backend_row_signature', 'row_signature']),
+      row_signature: lifecycleBulkReadFirst(item, ['row_signature', 'expected_row_signature', 'backend_row_signature', 'mutation_row_signature']),
+      source_row: item,
+    });
+  }
+  return out;
+}
+
+async function lifecycleBulkReadResponseJson(response) {
+  if (!response) return {};
+  try { return await response.clone().json(); }
+  catch (_) { return {}; }
+}
+
+function lifecycleBulkCollectAffectedRows(payload, fallbackItem) {
+  const rows = [];
+  const push = (row) => {
+    if (row && typeof row === 'object') rows.push(row);
+  };
+  if (Array.isArray(payload?.affected_rows)) payload.affected_rows.forEach(push);
+  if (Array.isArray(payload?.rows)) payload.rows.forEach(push);
+  if (Array.isArray(payload?.items)) payload.items.forEach(push);
+  push(payload?.row);
+  push(payload?.current_row);
+  push(payload?.timesheet);
+  if (payload?.lifecycle_patch && typeof payload.lifecycle_patch === 'object') push(payload.lifecycle_patch);
+  if (!rows.length && fallbackItem) {
+    rows.push({
+      timesheet_id: fallbackItem.timesheet_id,
+      current_timesheet_id: fallbackItem.current_timesheet_id || fallbackItem.timesheet_id,
+      expected_timesheet_id: fallbackItem.expected_timesheet_id || fallbackItem.timesheet_id,
+      row_key: fallbackItem.row_key || `timesheet:${fallbackItem.timesheet_id}`,
+      row_signature: fallbackItem.row_signature || fallbackItem.expected_row_signature || null,
+      backend_row_signature: fallbackItem.backend_row_signature || fallbackItem.expected_row_signature || null,
+    });
+  }
+  const seen = new Set();
+  return rows.filter((row) => {
+    const id = lifecycleBulkReadFirst(row, ['timesheet_id', 'current_timesheet_id', 'id', 'contract_week_id']) || lifecycleBulkReadFirst(fallbackItem || {}, ['timesheet_id']);
+    const sig = lifecycleBulkReadFirst(row, ['backend_row_signature', 'row_signature', 'expected_row_signature']);
+    const key = `${id}|${sig}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function lifecycleBulkErrorCode(payload, fallback) {
+  return lifecycleBulkReadFirst(payload, ['error_code', 'code', 'rpc_code', 'reason']) || fallback || 'LIFECYCLE_ACTION_FAILED';
+}
+
+function lifecycleBulkIsStaleError(payload) {
+  const txt = JSON.stringify(payload || {}).toUpperCase();
+  return /ROW_SIGNATURE_MISMATCH|TIMESHEET_MOVED|STALE|EXPECTED_ROW_SIGNATURE|CONFLICT|VERSION/.test(txt);
+}
+
+async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, item, actorUser) {
+  const timesheetId = lifecycleBulkReadFirst(item, ['timesheet_id', 'current_timesheet_id', 'requested_timesheet_id']);
+  const expectedTimesheetId = lifecycleBulkReadFirst(item, ['expected_timesheet_id', 'current_timesheet_id', 'timesheet_id']) || timesheetId;
+  const expectedSignature = lifecycleBulkReadFirst(item, ['expected_row_signature', 'backend_row_signature', 'mutation_row_signature', 'row_signature']);
+  if (!timesheetId) {
+    return {
+      ok: false,
+      success: false,
+      status: 400,
+      action,
+      timesheet_id: timesheetId || null,
+      error_code: 'TIMESHEET_ID_REQUIRED',
+      message: 'Timesheet id is required.',
+      stale: false,
+      affected_rows: [],
+    };
+  }
+  if (!expectedSignature) {
+    return {
+      ok: false,
+      success: false,
+      status: 409,
+      action,
+      timesheet_id: timesheetId,
+      error_code: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      message: 'Bulk lifecycle action requires the selected row signature captured from the user view.',
+      stale: true,
+      affected_rows: [],
+    };
   }
 
-  try {
-    if (successCount > 0) {
-      if (typeof logBankingPayWorkbenchDiag === 'function') {
-        logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
-          origin: 'TIMESHEET_AUTHORISE',
-          reason: 'PAYMENT_ELIGIBILITY_RESTORED',
-          mutation_type: 'TIMESHEET_AUTHORISED',
-          actor_user_id: user?.id || null,
-          bulk_action: true,
-          success_count: successCount,
-          failure_count: failureCount,
-          timesheet_ids: affectedTimesheetIds,
-          contract_week_ids: affectedContractWeekIds
-        });
-      }
-      if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
-        nudgeBankingPayWorkbenchDrain(env, ctx, {
-          origin: 'TIMESHEET_AUTHORISE',
-          reason: 'PAYMENT_ELIGIBILITY_RESTORED',
-          mutation_type: 'TIMESHEET_AUTHORISED',
-          actorUserId: user?.id || null,
-          budgetProfile: 'NUDGE'
-        });
-      }
-    }
-  } catch {}
+  const body = {
+    expected_timesheet_id: expectedTimesheetId,
+    current_timesheet_id: item.current_timesheet_id || timesheetId,
+    requested_timesheet_id: item.requested_timesheet_id || timesheetId,
+    expected_row_signature: expectedSignature,
+    backend_row_signature: item.backend_row_signature || expectedSignature,
+    mutation_row_signature: item.mutation_row_signature || expectedSignature,
+    row_signature: item.row_signature || expectedSignature,
+    context: 'bulk_authorise',
+    response_context: 'minimal_lifecycle_mutation',
+    operation_source: 'bulk_lifecycle_orchestrator',
+  };
+  const headers = new Headers(req.headers || {});
+  headers.set('content-type', 'application/json');
+  const subReq = new Request(req.url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
 
-  return withCORS(env, req, ok({
-    ok: batchCompleted,
-    batch_completed: batchCompleted,
-    all_success: allSuccess,
-    has_failures: failureCount > 0,
-    action: payload.action || 'AUTHORISE',
-    requested_count: Number(payload.requested_count || items.length || 0),
+  let response;
+  try {
+    if (action === 'AUTHORISE') {
+      response = await handleTimesheetAuthoriseGeneric(env, subReq, timesheetId);
+    } else if (action === 'UNAUTHORISE') {
+      response = await handleTimesheetUnauthorise(env, subReq, timesheetId);
+    } else {
+      return {
+        ok: false,
+        success: false,
+        status: 400,
+        action,
+        timesheet_id: timesheetId,
+        error_code: 'UNSUPPORTED_BULK_LIFECYCLE_ACTION',
+        message: `Unsupported lifecycle action: ${action}`,
+        stale: false,
+        affected_rows: [],
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      success: false,
+      status: 500,
+      action,
+      timesheet_id: timesheetId,
+      expected_timesheet_id: expectedTimesheetId,
+      error_code: 'GOLD_HANDLER_EXCEPTION',
+      message: err?.message || 'Gold lifecycle handler threw an exception.',
+      stale: false,
+      affected_rows: [],
+    };
+  }
+
+  const payload = await lifecycleBulkReadResponseJson(response);
+  const status = response?.status || 500;
+  const success = !!response?.ok && payload?.ok !== false && payload?.success !== false;
+  const affectedRows = lifecycleBulkCollectAffectedRows(payload, item);
+  return {
+    ok: success,
+    success,
+    status,
+    action,
+    timesheet_id: timesheetId,
+    current_timesheet_id: item.current_timesheet_id || timesheetId,
+    requested_timesheet_id: item.requested_timesheet_id || timesheetId,
+    expected_timesheet_id: expectedTimesheetId,
+    row_key: item.row_key || `timesheet:${timesheetId}`,
+    stale: success ? false : lifecycleBulkIsStaleError(payload),
+    error_code: success ? null : lifecycleBulkErrorCode(payload),
+    message: success ? null : (payload?.message || payload?.error || 'Lifecycle action failed for this row.'),
+    affected_rows: affectedRows,
+    lifecycle_patch: payload?.lifecycle_patch || null,
+    row_signature: lifecycleBulkReadFirst(payload?.lifecycle_patch || {}, ['row_signature', 'backend_row_signature']) ||
+      lifecycleBulkReadFirst(affectedRows[0] || {}, ['row_signature', 'backend_row_signature']) ||
+      null,
+    raw_status: status,
+  };
+}
+
+async function createTimesheetLifecycleBulkOperation(env, action, items, body, user) {
+  const now = lifecycleBulkNowIso();
+  const opBody = {
+    action,
+    status: 'QUEUED',
+    requested_count: items.length,
+    success_count: 0,
+    failure_count: 0,
+    created_by_user_id: user?.id || null,
+    context: body?.context || 'bulk_authorise',
+    request_json: {
+      source: 'bulk_authorise_modal',
+      selection_count: items.length,
+      response_context: body?.response_context || null,
+    },
+    progress_json: { created_at_utc: now, next_status: 'QUEUED' },
+    result_json: {},
+    error_json: {},
+    run_after_utc: now,
+    updated_at_utc: now,
+  };
+  const opRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operations?select=*`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(opBody),
+  });
+  if (!opRes.ok) {
+    const text = await opRes.text().catch(() => '');
+    throw new Error(`Failed to create bulk lifecycle operation: ${text || opRes.status}`);
+  }
+  const opJson = await opRes.json().catch(() => []);
+  const op = Array.isArray(opJson) ? opJson[0] : opJson;
+  if (!op?.id) throw new Error('Bulk lifecycle operation insert returned no id.');
+
+  const itemRows = items.map((item, idx) => ({
+    operation_id: op.id,
+    ordinal: idx,
+    action,
+    row_key: item.row_key || `timesheet:${item.timesheet_id}`,
+    timesheet_id: item.timesheet_id,
+    current_timesheet_id: item.current_timesheet_id || item.timesheet_id,
+    requested_timesheet_id: item.requested_timesheet_id || item.timesheet_id,
+    expected_timesheet_id: item.expected_timesheet_id || item.current_timesheet_id || item.timesheet_id,
+    contract_week_id: item.contract_week_id || null,
+    expected_row_signature: item.expected_row_signature || null,
+    status: item.expected_row_signature ? 'QUEUED' : 'FAILED',
+    attempt_count: 0,
+    result_json: item.expected_row_signature ? {} : {
+      success: false,
+      error_code: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      message: 'Bulk lifecycle item was not queued because the selected-row signature was missing.',
+      stale: true,
+    },
+    error_json: item.expected_row_signature ? {} : {
+      error_code: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      stale: true,
+    },
+    affected_rows_json: [],
+    updated_at_utc: now,
+  }));
+  const itemsRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify(itemRows),
+  });
+  if (!itemsRes.ok) {
+    const text = await itemsRes.text().catch(() => '');
+    throw new Error(`Failed to create bulk lifecycle operation items: ${text || itemsRes.status}`);
+  }
+  return op;
+}
+
+async function fetchTimesheetLifecycleBulkOperation(env, operationId) {
+  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operations?id=eq.${encodeURIComponent(operationId)}&select=*`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) return null;
+  const rows = await res.json().catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function fetchTimesheetLifecycleBulkOperationItems(env, operationId) {
+  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?operation_id=eq.${encodeURIComponent(operationId)}&order=ordinal.asc&select=*`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) return [];
+  const rows = await res.json().catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function patchTimesheetLifecycleBulkOperation(env, operationId, patch) {
+  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operations?id=eq.${encodeURIComponent(operationId)}&select=*`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ ...(patch || {}), updated_at_utc: lifecycleBulkNowIso() }),
+  });
+  if (!res.ok) return null;
+  const rows = await res.json().catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function claimTimesheetLifecycleBulkItem(env, item) {
+  const now = lifecycleBulkNowIso();
+  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?id=eq.${encodeURIComponent(item.id)}&status=in.(QUEUED,RETRY)&select=*`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({
+      status: 'PROCESSING',
+      attempt_count: Number(item.attempt_count || 0) + 1,
+      locked_at_utc: now,
+      started_at_utc: item.started_at_utc || now,
+      updated_at_utc: now,
+    }),
+  });
+  if (!res.ok) return null;
+  const rows = await res.json().catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function completeTimesheetLifecycleBulkItem(env, item, result) {
+  const success = !!result?.success;
+  const now = lifecycleBulkNowIso();
+  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?id=eq.${encodeURIComponent(item.id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      status: success ? 'COMPLETED' : 'FAILED',
+      completed_at_utc: now,
+      updated_at_utc: now,
+      result_json: result || {},
+      error_json: success ? {} : {
+        error_code: result?.error_code || 'LIFECYCLE_ACTION_FAILED',
+        message: result?.message || null,
+        stale: result?.stale === true,
+      },
+      affected_rows_json: Array.isArray(result?.affected_rows) ? result.affected_rows : [],
+      locked_at_utc: null,
+    }),
+  });
+  return res.ok;
+}
+
+function summarizeTimesheetLifecycleBulkOperation(operation, items) {
+  const results = [];
+  const affectedRows = [];
+  let successCount = 0;
+  let failureCount = 0;
+  let pendingCount = 0;
+  let staleCount = 0;
+
+  for (const item of items || []) {
+    const result = item.result_json && typeof item.result_json === 'object' ? item.result_json : {};
+    const status = item.status || 'QUEUED';
+    if (status === 'COMPLETED') successCount += 1;
+    else if (status === 'FAILED') failureCount += 1;
+    else pendingCount += 1;
+    if (result?.stale === true || item.error_json?.stale === true) staleCount += 1;
+    const itemAffected = Array.isArray(item.affected_rows_json) ? item.affected_rows_json : [];
+    itemAffected.forEach((row) => affectedRows.push(row));
+    results.push({
+      operation_item_id: item.id,
+      ordinal: item.ordinal,
+      row_key: item.row_key,
+      timesheet_id: item.timesheet_id,
+      current_timesheet_id: item.current_timesheet_id,
+      expected_timesheet_id: item.expected_timesheet_id,
+      status,
+      success: status === 'COMPLETED',
+      stale: result?.stale === true || item.error_json?.stale === true,
+      error_code: result?.error_code || item.error_json?.error_code || null,
+      message: result?.message || item.error_json?.message || null,
+      affected_rows: itemAffected,
+      row_signature: result?.row_signature || null,
+    });
+  }
+
+  const completed = pendingCount === 0;
+  const opStatus = completed
+    ? (successCount > 0 || failureCount > 0 ? 'COMPLETED' : (operation?.status || 'QUEUED'))
+    : (operation?.status === 'QUEUED' ? 'RUNNING' : operation?.status || 'RUNNING');
+
+  return {
+    ok: true,
+    operation_id: operation?.id || null,
+    action: operation?.action || null,
+    status: opStatus,
+    batch_completed: completed,
+    requested_count: Number(operation?.requested_count || items.length || 0),
     success_count: successCount,
     failure_count: failureCount,
+    pending_count: pendingCount,
+    stale_count: staleCount,
+    has_failures: failureCount > 0,
+    all_success: completed && failureCount === 0,
     results,
     affected_rows: affectedRows,
-    affected_timesheet_ids: affectedTimesheetIds,
-    affected_contract_week_ids: affectedContractWeekIds,
-    requires_affected_row_refresh: affectedRows.length > 0,
-    refresh_required: affectedRows.length > 0,
-    count_deltas: (payload.count_deltas && typeof payload.count_deltas === 'object') ? payload.count_deltas : {},
-    cache_invalidation_hints: (payload.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object') ? payload.cache_invalidation_hints : {},
-    failed_items: failedItems,
-    stale_items: staleItems
+    failed_items: results.filter((r) => r.status === 'FAILED'),
+    stale_items: results.filter((r) => r.stale === true),
+    more_due: pendingCount > 0,
+  };
+}
+
+async function drainTimesheetLifecycleBulkOperationChunk(env, req, operationId, options = {}) {
+  const operation = await fetchTimesheetLifecycleBulkOperation(env, operationId);
+  if (!operation?.id) return { ok: false, status: 404, error_code: 'BULK_LIFECYCLE_OPERATION_NOT_FOUND' };
+  const maxItems = Math.max(1, Math.min(Number(options.maxItems || options.max_items || 5), 10));
+  const maxRuntimeMs = Math.max(500, Math.min(Number(options.maxRuntimeMs || options.max_runtime_ms || 7000), 10000));
+  const started = Date.now();
+  await patchTimesheetLifecycleBulkOperation(env, operationId, {
+    status: 'RUNNING',
+    started_at_utc: operation.started_at_utc || lifecycleBulkNowIso(),
+  });
+
+  const queuedRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?operation_id=eq.${encodeURIComponent(operationId)}&status=in.(QUEUED,RETRY)&order=ordinal.asc&limit=${maxItems}&select=*`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  const queuedItems = queuedRes.ok ? await queuedRes.json().catch(() => []) : [];
+  let processed = 0;
+  for (const queued of (Array.isArray(queuedItems) ? queuedItems : [])) {
+    if (processed >= maxItems || Date.now() - started >= maxRuntimeMs) break;
+    const claimed = await claimTimesheetLifecycleBulkItem(env, queued);
+    if (!claimed) continue;
+    const itemForGold = {
+      timesheet_id: claimed.timesheet_id,
+      current_timesheet_id: claimed.current_timesheet_id,
+      requested_timesheet_id: claimed.requested_timesheet_id,
+      expected_timesheet_id: claimed.expected_timesheet_id,
+      contract_week_id: claimed.contract_week_id,
+      expected_row_signature: claimed.expected_row_signature,
+      backend_row_signature: claimed.expected_row_signature,
+      mutation_row_signature: claimed.expected_row_signature,
+      row_signature: claimed.expected_row_signature,
+      row_key: claimed.row_key,
+    };
+    const result = await callGoldTimesheetLifecycleActionForBulkItem(env, req, claimed.action || operation.action, itemForGold, null);
+    await completeTimesheetLifecycleBulkItem(env, claimed, result);
+    processed += 1;
+  }
+
+  const allItems = await fetchTimesheetLifecycleBulkOperationItems(env, operationId);
+  const summary = summarizeTimesheetLifecycleBulkOperation(operation, allItems);
+  await patchTimesheetLifecycleBulkOperation(env, operationId, {
+    status: summary.batch_completed ? 'COMPLETED' : 'RUNNING',
+    success_count: summary.success_count,
+    failure_count: summary.failure_count,
+    completed_at_utc: summary.batch_completed ? lifecycleBulkNowIso() : null,
+    progress_json: {
+      requested_count: summary.requested_count,
+      success_count: summary.success_count,
+      failure_count: summary.failure_count,
+      pending_count: summary.pending_count,
+      stale_count: summary.stale_count,
+      last_drain_processed: processed,
+      more_due: summary.more_due,
+      elapsed_ms: Date.now() - started,
+    },
+    result_json: summary.batch_completed ? {
+      all_success: summary.all_success,
+      has_failures: summary.has_failures,
+      stale_count: summary.stale_count,
+    } : {},
+  });
+  return {
+    ...summary,
+    drain_processed: processed,
+    elapsed_ms: Date.now() - started,
+    stop_reason: summary.batch_completed ? 'COMPLETE' : (processed >= maxItems ? 'CHUNK_LIMIT' : 'RUNTIME_LIMIT_OR_NO_DUE'),
+  };
+}
+
+async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, action, items, body) {
+  const maxItems = 500;
+  const selected = items.slice(0, maxItems);
+  if (!selected.length) return withCORS(env, req, lifecycleBulkJson(400, { ok: false, error: 'NO_TIMESHEET_ITEMS_SELECTED' }));
+  if (items.length > maxItems) {
+    return withCORS(env, req, lifecycleBulkJson(413, { ok: false, error: 'TOO_MANY_TIMESHEET_ITEMS_SELECTED', max_items: maxItems }));
+  }
+
+  if (selected.length === 1) {
+    const result = await callGoldTimesheetLifecycleActionForBulkItem(env, req, action, selected[0], user);
+    const payload = {
+      ok: true,
+      action,
+      single_row_gold_path: true,
+      batch_completed: true,
+      requested_count: 1,
+      success_count: result.success ? 1 : 0,
+      failure_count: result.success ? 0 : 1,
+      stale_count: result.stale ? 1 : 0,
+      all_success: !!result.success,
+      has_failures: !result.success,
+      results: [result],
+      affected_rows: Array.isArray(result.affected_rows) ? result.affected_rows : [],
+      failed_items: result.success ? [] : [result],
+      stale_items: result.stale ? [result] : [],
+    };
+    return withCORS(env, req, lifecycleBulkJson(result.success ? 200 : 207, payload));
+  }
+
+  let operation;
+  try {
+    operation = await createTimesheetLifecycleBulkOperation(env, action, selected, body || {}, user || {});
+  } catch (err) {
+    return withCORS(env, req, lifecycleBulkJson(500, {
+      ok: false,
+      error: 'BULK_LIFECYCLE_OPERATION_CREATE_FAILED',
+      message: err?.message || 'Could not create bulk lifecycle operation.',
+    }));
+  }
+
+  return withCORS(env, req, lifecycleBulkJson(202, {
+    ok: true,
+    action,
+    operation_id: operation.id,
+    status: operation.status || 'QUEUED',
+    batch_completed: false,
+    requested_count: selected.length,
+    success_count: 0,
+    failure_count: 0,
+    pending_count: selected.length,
+    has_failures: false,
+    all_success: false,
+    more_due: true,
+    results: [],
+    affected_rows: [],
   }));
 }
 
+async function handleTimesheetLifecycleBulkOperationDrain(env, req, operationId, ctx = null) {
+  const user = ctx?.user || await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body = {};
+  try { body = await req.json(); } catch (_) { body = {}; }
+  const summary = await drainTimesheetLifecycleBulkOperationChunk(env, req, operationId, {
+    maxItems: body.max_items || body.maxItems || 5,
+    maxRuntimeMs: body.max_runtime_ms || body.maxRuntimeMs || 7000,
+  });
+  return withCORS(env, req, lifecycleBulkJson(summary.ok === false ? (summary.status || 500) : 200, summary));
+}
+
+async function handleTimesheetLifecycleBulkOperationGet(env, req, operationId, ctx = null) {
+  const user = ctx?.user || await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const operation = await fetchTimesheetLifecycleBulkOperation(env, operationId);
+  if (!operation?.id) return withCORS(env, req, lifecycleBulkJson(404, { ok: false, error: 'BULK_LIFECYCLE_OPERATION_NOT_FOUND' }));
+  const items = await fetchTimesheetLifecycleBulkOperationItems(env, operationId);
+  return withCORS(env, req, lifecycleBulkJson(200, summarizeTimesheetLifecycleBulkOperation(operation, items)));
+}
+
+
+
+async function handleBulkTimesheetAuthoriseSelected(env, req, ctx = null) {
+  const user = ctx?.user || await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body = {};
+  try { body = await req.json(); } catch (_) { body = {}; }
+  const items = normalizeTimesheetLifecycleBulkSelections(body.items || body.timesheets || body.selected || []);
+  return handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, 'AUTHORISE', items, body);
+}
 
 
 async function reconcileTimesheetLifecycleAfterUnknownOutcome(env, input = {}) {
@@ -83906,291 +84193,13 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
   throw makeControlledTransientError(lastDescriptor || describeError(lastError), maxAttempts, 'MAX_ATTEMPTS_REACHED');
 }
 
-
 async function handleBulkTimesheetUnauthoriseSelected(env, req, ctx = null) {
-  const user = await requireUser(env, req, ['admin']);
+  const user = ctx?.user || await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-
-  const jsonHeaders = (typeof JSON_HEADERS !== 'undefined') ? JSON_HEADERS : { 'Content-Type': 'application/json' };
-  const trimStr = (value) => String(value == null ? '' : value).trim();
-  const firstString = function firstString() {
-    for (let index = 0; index < arguments.length; index += 1) {
-      const value = trimStr(arguments[index]);
-      if (value) return value;
-    }
-    return '';
-  };
-  const unwrapRpcPayload = (payload, fnName) => {
-    let out = payload;
-    if (Array.isArray(out) && out.length === 1) out = out[0];
-    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) out = out[fnName];
-    if (typeof out === 'string') {
-      try {
-        const parsed = JSON.parse(out);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) out = parsed;
-      } catch {
-      }
-    }
-    return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
-  };
-  const parseRpcErrorPayload = (err) => {
-    if (err && err.json && typeof err.json === 'object') return err.json;
-    if (typeof err?.body === 'string' && err.body) {
-      try {
-        return JSON.parse(err.body);
-      } catch {
-      }
-    }
-    return { ok: false, error_code: 'RPC_FAILED', message: String(err?.message || err || 'Failed to unauthorise selected timesheets') };
-  };
-  const normalizeSelections = (input) => {
-    const src = (input && typeof input === 'object' && !Array.isArray(input)) ? input : {};
-    const out = [];
-    const seen = new Set();
-
-    const add = (obj) => {
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return;
-      const rawRowKey = firstString(obj.row_key, obj.rowKey);
-      const timesheetId = firstString(obj.timesheet_id, obj.timesheetId, obj.current_timesheet_id, obj.currentTimesheetId, obj.requested_timesheet_id, obj.requestedTimesheetId);
-      const contractWeekId = firstString(obj.contract_week_id, obj.contractWeekId, obj.week_id, obj.weekId);
-      const expectedTimesheetId = firstString(obj.expected_timesheet_id, obj.expectedTimesheetId, obj.expected_current_timesheet_id, obj.expectedCurrentTimesheetId, timesheetId);
-      const expectedRowSignature = firstString(obj.expected_row_signature, obj.expectedRowSignature, obj.backend_row_signature, obj.backendRowSignature, obj.mutation_row_signature, obj.mutationRowSignature, obj.row_signature, obj.rowSignature);
-      const rowKey = rawRowKey || (timesheetId ? `timesheet:${timesheetId}` : (contractWeekId ? `contract_week:${contractWeekId}` : ''));
-      const key = rowKey || `${timesheetId}|${contractWeekId}|${expectedTimesheetId}`;
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      out.push({
-        row_key: rowKey || null,
-        timesheet_id: timesheetId || null,
-        current_timesheet_id: firstString(obj.current_timesheet_id, obj.currentTimesheetId, timesheetId) || null,
-        requested_timesheet_id: firstString(obj.requested_timesheet_id, obj.requestedTimesheetId, timesheetId) || null,
-        contract_week_id: contractWeekId || null,
-        expected_timesheet_id: expectedTimesheetId || null,
-        expected_row_signature: expectedRowSignature || null,
-        backend_row_signature: expectedRowSignature || null,
-        row_signature: expectedRowSignature || null
-      });
-    };
-
-    const arrays = [src.items, src.rows, src.selected, src.selections];
-    for (const arr of arrays) {
-      if (Array.isArray(arr)) {
-        for (const item of arr) add(item);
-      }
-    }
-
-    if (Array.isArray(src.selected_ids)) {
-      for (const raw of src.selected_ids) {
-        const value = trimStr(raw);
-        if (!value) continue;
-        if (value.startsWith('timesheet:')) add({ row_key: value, timesheet_id: value.slice('timesheet:'.length), expected_timesheet_id: value.slice('timesheet:'.length) });
-        else if (value.startsWith('contract_week:')) add({ row_key: value, contract_week_id: value.slice('contract_week:'.length) });
-        else add({ row_key: `timesheet:${value}`, timesheet_id: value, expected_timesheet_id: value });
-      }
-    }
-
-    if (Array.isArray(src.timesheet_ids)) {
-      for (const raw of src.timesheet_ids) {
-        const value = trimStr(raw);
-        if (value) add({ row_key: `timesheet:${value}`, timesheet_id: value, expected_timesheet_id: value });
-      }
-    }
-
-    if (Array.isArray(src.contract_week_ids)) {
-      for (const raw of src.contract_week_ids) {
-        const value = trimStr(raw);
-        if (value) add({ row_key: `contract_week:${value}`, contract_week_id: value });
-      }
-    }
-
-    return out;
-  };
-  const dedupeAffectedRows = (results, payload) => {
-    const rows = [];
-    const seen = new Set();
-    const add = (row) => {
-      if (!row || typeof row !== 'object' || Array.isArray(row)) return;
-      const key = firstString(row.row_key, row.timesheet_id ? `timesheet:${row.timesheet_id}` : '', row.contract_week_id ? `contract_week:${row.contract_week_id}` : '');
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      rows.push(row);
-    };
-    if (Array.isArray(payload?.affected_rows)) {
-      for (const row of payload.affected_rows) add(row);
-    }
-    if (Array.isArray(results)) {
-      for (const result of results) {
-        if (!result || result.success !== true) continue;
-        if (Array.isArray(result.affected_rows)) {
-          for (const row of result.affected_rows) add(row);
-        } else {
-          add({
-            timesheet_id: result.current_timesheet_id || result.timesheet_id || null,
-            contract_week_id: result.contract_week_id || null,
-            booking_id: result.booking_id || null,
-            row_key: result.current_timesheet_id || result.timesheet_id ? `timesheet:${result.current_timesheet_id || result.timesheet_id}` : null,
-            context: 'bulk_unauthorise'
-          });
-        }
-      }
-    }
-    return rows;
-  };
-
   let body = {};
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
-
-  const items = normalizeSelections(body);
-  if (!items.length) return withCORS(env, req, badRequest('A non-empty selected set is required'));
-
-  const maxItemsPerRequest = 100;
-  if (items.length > maxItemsPerRequest) {
-    return withCORS(env, req, new Response(JSON.stringify({
-      error: 'Bulk timesheet action request is too large. Please send this action in smaller chunks.',
-      error_code: 'BULK_ACTION_CHUNK_TOO_LARGE',
-      code: 'BULK_ACTION_CHUNK_TOO_LARGE',
-      max_items_per_request: maxItemsPerRequest,
-      received_count: items.length,
-      action: 'UNAUTHORISE'
-    }), { status: 400, headers: jsonHeaders }));
-  }
-
-  let payload = null;
-  try {
-    const requestedTimesheetScope = items.map((item) => firstString(item.timesheet_id, item.current_timesheet_id, item.requested_timesheet_id)).filter(Boolean).slice(0, 20).join(',');
-    const rpcRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_unauthorise_bulk_atomic', {
-      p_items: items,
-      p_actor_user_id: user?.id || null,
-      p_now_utc: nowIso()
-    }, {
-      timeoutMs: 45000,
-      lifecycleAction: 'BULK_UNAUTHORISE',
-      routeFamily: 'TIMESHEET_BULK_UNAUTHORISE',
-      requestedTimesheetId: requestedTimesheetScope,
-      actorUserId: user?.id || null,
-      maxAttempts: 4,
-      retryBudgetMs: 1800,
-      retryDelaysMs: [0, 125, 375, 850],
-      jitterMs: 75
-    });
-    payload = unwrapRpcPayload(rpcRes, 'timesheet_unauthorise_bulk_atomic');
-  } catch (err) {
-    const errPayload = parseRpcErrorPayload(err);
-    const code = firstString(errPayload.error_code, errPayload.error, errPayload.message, 'BULK_UNAUTHORISE_FAILED').toUpperCase();
-    const status = (code === 'LOCK_TIMEOUT' || code === 'TRANSIENT_LIFECYCLE_CONFLICT') ? 409 : (code === 'TOO_MANY_ITEMS' || code === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || code === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
-    return withCORS(env, req, new Response(JSON.stringify({
-      error: code,
-      error_code: code,
-      message: code === 'TRANSIENT_LIFECYCLE_CONFLICT' ? 'The timesheets were being updated at the same time. Please try again.' : (errPayload.message || 'Failed to unauthorise selected timesheets'),
-      action: 'UNAUTHORISE',
-      requested_count: items.length,
-      success_count: 0,
-      failure_count: items.length,
-      results: []
-    }), { status, headers: jsonHeaders }));
-  }
-
-  const topLevelCode = firstString(payload.error_code, payload.error, payload.message).toUpperCase();
-  if (payload.ok === false || (payload.batch_completed === false && topLevelCode)) {
-    const status = (topLevelCode === 'LOCK_TIMEOUT' || topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT')
-      ? 409
-      : (topLevelCode === 'TOO_MANY_ITEMS' || topLevelCode === 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT' || topLevelCode === 'ACTOR_USER_ID_REQUIRED' ? 400 : 500);
-    return withCORS(env, req, new Response(JSON.stringify({
-      ok: false,
-      batch_completed: false,
-      all_success: false,
-      has_failures: true,
-      error: topLevelCode || 'BULK_UNAUTHORISE_FAILED',
-      error_code: topLevelCode || 'BULK_UNAUTHORISE_FAILED',
-      message: topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT' ? 'The timesheets were being updated at the same time. Please try again.' : (payload.message || 'Failed to unauthorise selected timesheets'),
-      action: payload.action || 'UNAUTHORISE',
-      requested_count: Number(payload.requested_count || items.length || 0),
-      success_count: 0,
-      failure_count: Number(payload.failure_count || items.length || 0),
-      results: Array.isArray(payload.results) ? payload.results : [],
-      affected_rows: [],
-      affected_timesheet_ids: [],
-      affected_contract_week_ids: [],
-      requires_affected_row_refresh: false,
-      refresh_required: topLevelCode === 'LOCK_TIMEOUT' || topLevelCode === 'TRANSIENT_LIFECYCLE_CONFLICT',
-      count_deltas: (payload.count_deltas && typeof payload.count_deltas === 'object') ? payload.count_deltas : {},
-      cache_invalidation_hints: (payload.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object') ? payload.cache_invalidation_hints : {},
-      failed_items: Array.isArray(payload.results) ? payload.results.filter((result) => result && result.success !== true) : [],
-      stale_items: []
-    }), { status, headers: jsonHeaders }));
-  }
-
-  const results = Array.isArray(payload.results) ? payload.results : [];
-  const failedItems = results.filter((result) => result && result.success !== true);
-  const staleItems = failedItems.filter((result) => {
-    const code = firstString(result?.error_code, result?.error).toUpperCase();
-    return code === 'TIMESHEET_MOVED' || code === 'EXPECTED_TIMESHEET_MISMATCH' || code === 'ROW_SIGNATURE_MISMATCH' || result?.was_stale === true;
-  });
-  const successCount = Number(payload.success_count || results.filter((result) => result && result.success === true).length || 0);
-  const failureCount = Number(payload.failure_count || failedItems.length || 0);
-  const batchCompleted = payload.batch_completed !== false;
-  const allSuccess = payload.all_success === true || (payload.all_success == null && failureCount === 0);
-  const affectedRows = dedupeAffectedRows(results, payload);
-  const affectedTimesheetIds = [];
-  const affectedContractWeekIds = [];
-  for (const row of affectedRows) {
-    const tsId = firstString(row.timesheet_id);
-    const cwId = firstString(row.contract_week_id);
-    if (tsId && affectedTimesheetIds.indexOf(tsId) === -1) affectedTimesheetIds.push(tsId);
-    if (cwId && affectedContractWeekIds.indexOf(cwId) === -1) affectedContractWeekIds.push(cwId);
-  }
-
-  try {
-    if (successCount > 0) {
-      if (typeof logBankingPayWorkbenchDiag === 'function') {
-        logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
-          origin: 'TIMESHEET_UNAUTHORISE',
-          reason: 'PAYMENT_ELIGIBILITY_REMOVED',
-          mutation_type: 'TIMESHEET_UNAUTHORISED',
-          actor_user_id: user?.id || null,
-          bulk_action: true,
-          success_count: successCount,
-          failure_count: failureCount,
-          timesheet_ids: affectedTimesheetIds,
-          contract_week_ids: affectedContractWeekIds
-        });
-      }
-      if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
-        nudgeBankingPayWorkbenchDrain(env, ctx, {
-          origin: 'TIMESHEET_UNAUTHORISE',
-          reason: 'PAYMENT_ELIGIBILITY_REMOVED',
-          mutation_type: 'TIMESHEET_UNAUTHORISED',
-          actorUserId: user?.id || null,
-          budgetProfile: 'NUDGE'
-        });
-      }
-    }
-  } catch {}
-
-  return withCORS(env, req, ok({
-    ok: batchCompleted,
-    batch_completed: batchCompleted,
-    all_success: allSuccess,
-    has_failures: failureCount > 0,
-    action: payload.action || 'UNAUTHORISE',
-    requested_count: Number(payload.requested_count || items.length || 0),
-    success_count: successCount,
-    failure_count: failureCount,
-    results,
-    affected_rows: affectedRows,
-    affected_timesheet_ids: affectedTimesheetIds,
-    affected_contract_week_ids: affectedContractWeekIds,
-    requires_affected_row_refresh: affectedRows.length > 0,
-    refresh_required: affectedRows.length > 0,
-    count_deltas: (payload.count_deltas && typeof payload.count_deltas === 'object') ? payload.count_deltas : {},
-    cache_invalidation_hints: (payload.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object') ? payload.cache_invalidation_hints : {},
-    failed_items: failedItems,
-    stale_items: staleItems
-  }));
+  try { body = await req.json(); } catch (_) { body = {}; }
+  const items = normalizeTimesheetLifecycleBulkSelections(body.items || body.timesheets || body.selected || []);
+  return handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, 'UNAUTHORISE', items, body);
 }
 
 
@@ -183391,6 +183400,22 @@ if (req.method === 'GET' && p === '/api/timesheets/bulk-authorise-dataset') {
     return handleTimesheetBulkAuthoriseContext(env, req, m.id);
   }
 }
+
+
+{
+  const bulkLifecycleDrainMatch = matchPath(p, '/api/timesheets/bulk-lifecycle-operations/:id/drain');
+  if (bulkLifecycleDrainMatch && req.method === 'POST') {
+    return handleTimesheetLifecycleBulkOperationDrain(env, req, bulkLifecycleDrainMatch.id, ctx);
+  }
+}
+
+{
+  const bulkLifecycleGetMatch = matchPath(p, '/api/timesheets/bulk-lifecycle-operations/:id');
+  if (bulkLifecycleGetMatch && req.method === 'GET') {
+    return handleTimesheetLifecycleBulkOperationGet(env, req, bulkLifecycleGetMatch.id, ctx);
+  }
+}
+
 
 if (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-selected') {
   return handleBulkTimesheetAuthoriseSelected(env, req);
