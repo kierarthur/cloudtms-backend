@@ -82894,6 +82894,7 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
   };
 }
 
+
 async function createTimesheetLifecycleBulkOperation(env, action, items, body, user) {
   const now = lifecycleBulkNowIso();
   const opBody = {
@@ -82915,17 +82916,18 @@ async function createTimesheetLifecycleBulkOperation(env, action, items, body, u
     run_after_utc: now,
     updated_at_utc: now,
   };
-  const opRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operations?select=*`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify(opBody),
-  });
-  if (!opRes.ok) {
-    const text = await opRes.text().catch(() => '');
-    throw new Error(`Failed to create bulk lifecycle operation: ${text || opRes.status}`);
+  let op;
+  try {
+    const opRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operations?select=*`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify(opBody),
+    });
+    const opRows = Array.isArray(opRes?.rows) ? opRes.rows : [];
+    op = opRows[0] || null;
+  } catch (err) {
+    throw new Error(`Failed to create bulk lifecycle operation: ${err?.message || err || 'Supabase insert failed'}`);
   }
-  const opJson = await opRes.json().catch(() => []);
-  const op = Array.isArray(opJson) ? opJson[0] : opJson;
   if (!op?.id) throw new Error('Bulk lifecycle operation insert returned no id.');
 
   const itemRows = items.map((item, idx) => ({
@@ -82954,88 +82956,117 @@ async function createTimesheetLifecycleBulkOperation(env, action, items, body, u
     affected_rows_json: [],
     updated_at_utc: now,
   }));
-  const itemsRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify(itemRows),
-  });
-  if (!itemsRes.ok) {
-    const text = await itemsRes.text().catch(() => '');
-    throw new Error(`Failed to create bulk lifecycle operation items: ${text || itemsRes.status}`);
+  try {
+    await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(itemRows),
+    });
+  } catch (err) {
+    throw new Error(`Failed to create bulk lifecycle operation items: ${err?.message || err || 'Supabase insert failed'}`);
   }
   return op;
 }
 
+
+
 async function fetchTimesheetLifecycleBulkOperation(env, operationId) {
-  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operations?id=eq.${encodeURIComponent(operationId)}&select=*`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-  if (!res.ok) return null;
-  const rows = await res.json().catch(() => []);
-  return Array.isArray(rows) ? rows[0] || null : rows;
+  try {
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operations?id=eq.${encodeURIComponent(operationId)}&select=*`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const rows = Array.isArray(res?.rows) ? res.rows : [];
+    return rows[0] || null;
+  } catch (_) {
+    return null;
+  }
 }
+
+
 
 async function fetchTimesheetLifecycleBulkOperationItems(env, operationId) {
-  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?operation_id=eq.${encodeURIComponent(operationId)}&order=ordinal.asc&select=*`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-  if (!res.ok) return [];
-  const rows = await res.json().catch(() => []);
-  return Array.isArray(rows) ? rows : [];
+  try {
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?operation_id=eq.${encodeURIComponent(operationId)}&order=ordinal.asc&select=*`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const rows = Array.isArray(res?.rows) ? res.rows : [];
+    return rows;
+  } catch (_) {
+    return [];
+  }
 }
 
+
+
 async function patchTimesheetLifecycleBulkOperation(env, operationId, patch) {
-  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operations?id=eq.${encodeURIComponent(operationId)}&select=*`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({ ...(patch || {}), updated_at_utc: lifecycleBulkNowIso() }),
-  });
-  if (!res.ok) return null;
-  const rows = await res.json().catch(() => []);
-  return Array.isArray(rows) ? rows[0] || null : rows;
+  try {
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operations?id=eq.${encodeURIComponent(operationId)}&select=*`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ ...(patch || {}), updated_at_utc: lifecycleBulkNowIso() }),
+    });
+    const rows = Array.isArray(res?.rows) ? res.rows : [];
+    return rows[0] || null;
+  } catch (_) {
+    return null;
+  }
 }
+
+
+
+
+
+
 
 async function claimTimesheetLifecycleBulkItem(env, item) {
   const now = lifecycleBulkNowIso();
-  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?id=eq.${encodeURIComponent(item.id)}&status=in.(QUEUED,RETRY)&select=*`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({
-      status: 'PROCESSING',
-      attempt_count: Number(item.attempt_count || 0) + 1,
-      locked_at_utc: now,
-      started_at_utc: item.started_at_utc || now,
-      updated_at_utc: now,
-    }),
-  });
-  if (!res.ok) return null;
-  const rows = await res.json().catch(() => []);
-  return Array.isArray(rows) ? rows[0] || null : rows;
+  try {
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?id=eq.${encodeURIComponent(item.id)}&status=in.(QUEUED,RETRY)&select=*`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({
+        status: 'PROCESSING',
+        attempt_count: Number(item.attempt_count || 0) + 1,
+        locked_at_utc: now,
+        started_at_utc: item.started_at_utc || now,
+        updated_at_utc: now,
+      }),
+    });
+    const rows = Array.isArray(res?.rows) ? res.rows : [];
+    return rows[0] || null;
+  } catch (_) {
+    return null;
+  }
 }
+
 
 async function completeTimesheetLifecycleBulkItem(env, item, result) {
   const success = !!result?.success;
   const now = lifecycleBulkNowIso();
-  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?id=eq.${encodeURIComponent(item.id)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({
-      status: success ? 'COMPLETED' : 'FAILED',
-      completed_at_utc: now,
-      updated_at_utc: now,
-      result_json: result || {},
-      error_json: success ? {} : {
-        error_code: result?.error_code || 'LIFECYCLE_ACTION_FAILED',
-        message: result?.message || null,
-        stale: result?.stale === true,
-      },
-      affected_rows_json: Array.isArray(result?.affected_rows) ? result.affected_rows : [],
-      locked_at_utc: null,
-    }),
-  });
-  return res.ok;
+  try {
+    await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?id=eq.${encodeURIComponent(item.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        status: success ? 'COMPLETED' : 'FAILED',
+        completed_at_utc: now,
+        updated_at_utc: now,
+        result_json: result || {},
+        error_json: success ? {} : {
+          error_code: result?.error_code || 'LIFECYCLE_ACTION_FAILED',
+          message: result?.message || null,
+          stale: result?.stale === true,
+        },
+        affected_rows_json: Array.isArray(result?.affected_rows) ? result.affected_rows : [],
+        locked_at_utc: null,
+      }),
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function summarizeTimesheetLifecycleBulkOperation(operation, items) {
@@ -83109,11 +83140,16 @@ async function drainTimesheetLifecycleBulkOperationChunk(env, req, operationId, 
     started_at_utc: operation.started_at_utc || lifecycleBulkNowIso(),
   });
 
-  const queuedRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?operation_id=eq.${encodeURIComponent(operationId)}&status=in.(QUEUED,RETRY)&order=ordinal.asc&limit=${maxItems}&select=*`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-  const queuedItems = queuedRes.ok ? await queuedRes.json().catch(() => []) : [];
+  let queuedItems = [];
+  try {
+    const queuedRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_lifecycle_bulk_operation_items?operation_id=eq.${encodeURIComponent(operationId)}&status=in.(QUEUED,RETRY)&order=ordinal.asc&limit=${maxItems}&select=*`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    queuedItems = Array.isArray(queuedRes?.rows) ? queuedRes.rows : [];
+  } catch (_) {
+    queuedItems = [];
+  }
   let processed = 0;
   for (const queued of (Array.isArray(queuedItems) ? queuedItems : [])) {
     if (processed >= maxItems || Date.now() - started >= maxRuntimeMs) break;
@@ -83166,6 +83202,7 @@ async function drainTimesheetLifecycleBulkOperationChunk(env, req, operationId, 
     stop_reason: summary.batch_completed ? 'COMPLETE' : (processed >= maxItems ? 'CHUNK_LIMIT' : 'RUNTIME_LIMIT_OR_NO_DUE'),
   };
 }
+
 
 async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, action, items, body) {
   const maxItems = 500;
