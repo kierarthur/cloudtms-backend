@@ -52916,7 +52916,6 @@ $function$;
 
 
 
-
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid, uuid);
 
