@@ -31128,18 +31128,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_preview_build_context(
-  p_pay_date date,
-  p_week_ending_cutoff date,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_client_id uuid DEFAULT NULL::uuid,
-  p_preview_decisions_json jsonb DEFAULT NULL::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_preview_build_context(p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid, p_preview_decisions_json jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_today_uk date := (now() AT TIME ZONE 'Europe/London')::date;
@@ -31180,6 +31173,7 @@ DECLARE
   v_timesheet_rotation_scope_json jsonb := '[]'::jsonb;
   v_targeted_timesheet_input_count integer := 0;
   v_linked_timesheet_input_count integer := 0;
+  v_distinct_timesheet_scope_input_count integer := 0;
   v_context_mode text := 'SUMMARY';
   v_effective_candidate_id uuid := p_candidate_id;
   v_effective_client_id uuid := p_client_id;
@@ -31339,9 +31333,20 @@ BEGIN
   v_targeted_timesheet_input_count := jsonb_array_length(COALESCE(v_targeted_timesheet_ids_raw, '[]'::jsonb));
   v_linked_timesheet_input_count := jsonb_array_length(COALESCE(v_linked_timesheet_ids_raw, '[]'::jsonb));
 
+  SELECT COUNT(DISTINCT NULLIF(BTRIM(scope_input.timesheet_id_text), ''))::integer
+  INTO v_distinct_timesheet_scope_input_count
+  FROM (
+    SELECT targeted_scope_input.value AS timesheet_id_text
+    FROM jsonb_array_elements_text(COALESCE(v_targeted_timesheet_ids_raw, '[]'::jsonb)) AS targeted_scope_input(value)
+    UNION ALL
+    SELECT linked_scope_input.value AS timesheet_id_text
+    FROM jsonb_array_elements_text(COALESCE(v_linked_timesheet_ids_raw, '[]'::jsonb)) AS linked_scope_input(value)
+  ) AS scope_input
+  WHERE NULLIF(BTRIM(scope_input.timesheet_id_text), '') IS NOT NULL;
+
   IF COALESCE(v_targeted_timesheet_input_count, 0) > 100
      OR COALESCE(v_linked_timesheet_input_count, 0) > 100
-     OR (COALESCE(v_targeted_timesheet_input_count, 0) + COALESCE(v_linked_timesheet_input_count, 0)) > 100 THEN
+     OR COALESCE(v_distinct_timesheet_scope_input_count, 0) > 100 THEN
     RAISE EXCEPTION 'PAY_PREVIEW_BUILD_CONTEXT_TIMESHEET_SCOPE_TOO_LARGE'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
@@ -31349,7 +31354,8 @@ BEGIN
               'context_mode', v_context_mode,
               'targeted_timesheet_count', COALESCE(v_targeted_timesheet_input_count, 0),
               'linked_timesheet_count', COALESCE(v_linked_timesheet_input_count, 0),
-              'combined_timesheet_count', COALESCE(v_targeted_timesheet_input_count, 0) + COALESCE(v_linked_timesheet_input_count, 0),
+              'combined_timesheet_count', COALESCE(v_distinct_timesheet_scope_input_count, 0),
+              'raw_combined_timesheet_count', COALESCE(v_targeted_timesheet_input_count, 0) + COALESCE(v_linked_timesheet_input_count, 0),
               'max_timesheet_scope_ids', 100,
               'row_backed_scope_required', true,
               'message', 'Caller-supplied timesheet scope arrays are capped at 100 for preview context. Use the row-backed workbench session scope instead.'
@@ -31730,6 +31736,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 
@@ -52238,7 +52246,9 @@ BEGIN
         progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
         progress_updated_at_utc = v_now,
         updated_at_utc = v_now
-    WHERE session_row.id = p_session_id;
+    WHERE session_row.id = p_session_id
+    RETURNING session_row.progress_counter_version
+    INTO v_next_progress_counter_version;
 
     v_audit_after_json := jsonb_build_object(
       'id', p_session_id::text,
@@ -52271,6 +52281,9 @@ BEGIN
       'session_id', p_session_id::text,
       'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
       'session_version', v_session_row.version,
+      'progress_counter_version', COALESCE(v_next_progress_counter_version, COALESCE(v_session_row.progress_counter_version, 0) + 1),
+      'expected_session_version', v_expected_session_version,
+      'expected_progress_counter_version', v_expected_progress_counter_version,
       'selection_action', v_global_selection_action,
       'selection_section', v_resolved_selection_section,
       'selection_intent_mode', COALESCE(v_next_selection_intent_mode, 'IMPLICIT_ALL'),
@@ -52288,7 +52301,8 @@ BEGIN
       'forced_synthetic_cleanup_count', COALESCE(v_forced_synthetic_cleanup_count, 0),
       'replace_omitted_count', COALESCE(v_replace_omitted_count, 0),
       'selected_row_count', COALESCE(v_current_selected_count, 0),
-      'selection_mode', v_selection_mode
+      'selection_mode', v_selection_mode,
+      'state_changed', true
     );
   END IF;
 
@@ -205158,6 +205172,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(p_target_session_id uuid, p_source_session_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 100, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_options_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -205815,7 +205830,13 @@ BEGIN
       ) AS visible_source_timesheets;
 
       v_fallback_targeted_timesheet_ids_json := COALESCE(v_fallback_targeted_timesheet_ids_json, '[]'::jsonb);
-      v_fallback_linked_timesheet_ids_json := '[]'::jsonb;
+      /*
+        Controlled clone/rebase source-build fallback must preserve the source-visible
+        timesheet scope in both payload channels.  The TARGETED list is the authority
+        for the refresh page; the LINKED list mirrors it so downstream diagnostics and
+        source-build contracts cannot regress to an empty linked-timesheet payload.
+      */
+      v_fallback_linked_timesheet_ids_json := COALESCE(v_fallback_targeted_timesheet_ids_json, '[]'::jsonb);
       v_fallback_targeted_timesheet_count := jsonb_array_length(v_fallback_targeted_timesheet_ids_json);
       v_ineligible_refresh_scope_kind := CASE
         WHEN COALESCE(v_fallback_targeted_timesheet_count, 0) > 0 THEN 'TARGETED_TIMESHEETS'
@@ -206530,6 +206551,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_carry_forward_case_resolutions_v1(p_source_session_id uuid, p_target_session_id uuid, p_options_json jsonb DEFAULT '{}'::jsonb)
