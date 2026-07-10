@@ -50167,6 +50167,15 @@ DECLARE
   v_clearable_timesheets_json jsonb := '[]'::jsonb;
   v_actor_display text := NULL::text;
   v_actor_role text := NULL::text;
+  v_anchor_timesheet_id uuid := NULL::uuid;
+  v_anchor_case_key text := '';
+  v_clearable_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_clearable_linked_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_excluded_linked_timesheets jsonb := '[]'::jsonb;
+  v_excluded_linked_timesheet_count integer := 0;
+  v_eligible_linked_timesheet_count integer := 0;
+  v_total_affected_timesheet_count integer := 0;
+  v_anchor_component_count integer := 0;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -50279,14 +50288,6 @@ BEGIN
     END IF;
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM public.pay_batches AS batch_row
-    WHERE batch_row.source_workbench_session_id = p_session_id
-  ) THEN
-    RAISE EXCEPTION 'workbench session % already has a draft batch and is not clearable', p_session_id;
-  END IF;
-
   v_resolution_family := UPPER(BTRIM(COALESCE(
     v_resolution_payload_json->>'resolution_family',
     v_resolution_payload_json #>> '{case,resolution_family}',
@@ -50328,6 +50329,347 @@ BEGIN
     v_resolution_payload_json #>> '{case,finance_case_id}',
     ''
   ));
+
+  IF v_resolution_family = 'BUCKETED' THEN
+    v_anchor_timesheet_id := v_linked_timesheet_id;
+    IF v_anchor_timesheet_id IS NULL AND v_case_key ~* '^timesheet:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_anchor_timesheet_id := SUBSTRING(v_case_key FROM 11)::uuid;
+    END IF;
+    v_anchor_case_key := COALESCE(NULLIF(v_case_key, ''), CASE WHEN v_anchor_timesheet_id IS NULL THEN '' ELSE 'timesheet:' || v_anchor_timesheet_id::text END);
+
+    IF v_candidate_id IS NULL THEN
+      RAISE EXCEPTION 'WORKBENCH_RESOLUTION_CANDIDATE_REQUIRED'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+          'code', 'WORKBENCH_RESOLUTION_CANDIDATE_REQUIRED',
+          'message', 'Candidate details are required to cancel the resolved rate.'
+        )::text;
+    END IF;
+    IF v_anchor_timesheet_id IS NULL OR v_anchor_case_key = '' THEN
+      RAISE EXCEPTION 'WORKBENCH_RESOLUTION_ANCHOR_REQUIRED'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+          'code', 'WORKBENCH_RESOLUTION_ANCHOR_REQUIRED',
+          'message', 'The selected timesheet could not be identified. Refresh Banking Pay and try again.'
+        )::text;
+    END IF;
+
+    IF v_operation = 'CLEAR' THEN
+      -- Use the same lock as draft creation, then revalidate the exact anchor family.
+      PERFORM pg_advisory_xact_lock(94201, 1);
+    END IF;
+
+    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_clear_anchor_family_existing
+    AS
+    SELECT resolution_row.*
+    FROM public.banking_pay_workbench_session_case_resolutions AS resolution_row
+    WITH NO DATA;
+    TRUNCATE TABLE _tmp_bpay_clear_anchor_family_existing;
+
+    INSERT INTO _tmp_bpay_clear_anchor_family_existing
+    SELECT resolution_row.*
+    FROM public.banking_pay_workbench_session_case_resolutions AS resolution_row
+    WHERE resolution_row.session_id = p_session_id
+      AND resolution_row.candidate_id = v_candidate_id
+      AND UPPER(BTRIM(COALESCE(resolution_row.resolution_family, ''))) = 'BUCKETED'
+      AND (
+        (
+          resolution_row.timesheet_id = v_anchor_timesheet_id
+          AND (
+            resolution_row.case_key = v_anchor_case_key
+            OR BTRIM(COALESCE(resolution_row.payload_json->>'source_anchor_timesheet_id', '')) = v_anchor_timesheet_id::text
+          )
+        )
+        OR (
+          resolution_row.timesheet_id IS NOT NULL
+          AND resolution_row.timesheet_id <> v_anchor_timesheet_id
+          AND BTRIM(COALESCE(resolution_row.payload_json->>'source_anchor_timesheet_id', '')) = v_anchor_timesheet_id::text
+          AND BTRIM(COALESCE(resolution_row.payload_json->>'source_anchor_case_key', '')) = v_anchor_case_key
+          AND LOWER(BTRIM(COALESCE(resolution_row.payload_json->>'applied_via_linked_scope', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        )
+      );
+
+    SELECT COUNT(*)::integer
+    INTO v_anchor_component_count
+    FROM _tmp_bpay_clear_anchor_family_existing AS family_row
+    WHERE family_row.timesheet_id = v_anchor_timesheet_id;
+
+    IF COALESCE(v_anchor_component_count, 0) = 0 THEN
+      RAISE EXCEPTION 'WORKBENCH_RESOLUTION_ANCHOR_NOT_CLEARABLE'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+          'code', 'WORKBENCH_RESOLUTION_ANCHOR_NOT_CLEARABLE',
+          'session_id', p_session_id::text,
+          'candidate_id', v_candidate_id::text,
+          'anchor_timesheet_id', v_anchor_timesheet_id::text,
+          'message', 'The resolved rate is no longer available to cancel. Refresh Banking Pay and review the latest details.'
+        )::text;
+    END IF;
+
+    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_clear_batch_boundary (
+      timesheet_id uuid NOT NULL,
+      pay_batch_id uuid NOT NULL,
+      batch_status text NOT NULL,
+      PRIMARY KEY (timesheet_id, pay_batch_id)
+    ) ON COMMIT DROP;
+    TRUNCATE TABLE _tmp_bpay_clear_batch_boundary;
+
+    INSERT INTO _tmp_bpay_clear_batch_boundary(timesheet_id, pay_batch_id, batch_status)
+    SELECT DISTINCT boundary_rows.timesheet_id, boundary_rows.pay_batch_id, boundary_rows.batch_status
+    FROM (
+      SELECT
+        batch_item.timesheet_id,
+        batch_row.id AS pay_batch_id,
+        UPPER(BTRIM(COALESCE(batch_row.status, ''))) AS batch_status
+      FROM public.pay_batch_items AS batch_item
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.id = batch_item.pay_batch_candidate_id
+      JOIN public.pay_batches AS batch_row
+        ON batch_row.id = batch_candidate.pay_batch_id
+      WHERE batch_item.timesheet_id IS NOT NULL
+        AND COALESCE(batch_item.is_voided, false) = false
+        AND EXISTS (
+          SELECT 1 FROM _tmp_bpay_clear_anchor_family_existing AS family_row
+          WHERE family_row.timesheet_id = batch_item.timesheet_id
+        )
+        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+
+      UNION ALL
+
+      SELECT
+        batch_snapshot.timesheet_id,
+        batch_row.id AS pay_batch_id,
+        UPPER(BTRIM(COALESCE(batch_row.status, ''))) AS batch_status
+      FROM public.pay_batch_timesheet_snapshots AS batch_snapshot
+      JOIN public.pay_batches AS batch_row
+        ON batch_row.id = batch_snapshot.pay_batch_id
+      WHERE EXISTS (
+          SELECT 1 FROM _tmp_bpay_clear_anchor_family_existing AS family_row
+          WHERE family_row.timesheet_id = batch_snapshot.timesheet_id
+        )
+        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+    ) AS boundary_rows
+    ON CONFLICT (timesheet_id, pay_batch_id) DO UPDATE
+      SET batch_status = EXCLUDED.batch_status;
+
+    IF EXISTS (
+      SELECT 1 FROM _tmp_bpay_clear_batch_boundary AS boundary_row
+      WHERE boundary_row.timesheet_id = v_anchor_timesheet_id
+    ) THEN
+      RAISE EXCEPTION 'WORKBENCH_RESOLUTION_ANCHOR_FINANCIAL_BOUNDARY'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+          'code', 'WORKBENCH_RESOLUTION_ANCHOR_FINANCIAL_BOUNDARY',
+          'session_id', p_session_id::text,
+          'candidate_id', v_candidate_id::text,
+          'anchor_timesheet_id', v_anchor_timesheet_id::text,
+          'message', 'The payment details changed because this timesheet is now included in a payment batch. Refresh Banking Pay and review the latest details.'
+        )::text;
+    END IF;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+             'timesheet_id', excluded_scope.timesheet_id::text,
+             'reason', 'ALREADY_IN_LIVE_BATCH',
+             'batch_status', excluded_scope.batch_status
+           ) ORDER BY excluded_scope.timesheet_id::text), '[]'::jsonb)
+    INTO v_excluded_linked_timesheets
+    FROM (
+      SELECT boundary_row.timesheet_id, MIN(boundary_row.batch_status) AS batch_status
+      FROM _tmp_bpay_clear_batch_boundary AS boundary_row
+      WHERE boundary_row.timesheet_id <> v_anchor_timesheet_id
+      GROUP BY boundary_row.timesheet_id
+    ) AS excluded_scope;
+    v_excluded_linked_timesheet_count := jsonb_array_length(COALESCE(v_excluded_linked_timesheets, '[]'::jsonb));
+
+    DELETE FROM _tmp_bpay_clear_anchor_family_existing AS family_row
+    WHERE family_row.timesheet_id <> v_anchor_timesheet_id
+      AND EXISTS (
+        SELECT 1 FROM _tmp_bpay_clear_batch_boundary AS boundary_row
+        WHERE boundary_row.timesheet_id = family_row.timesheet_id
+      );
+
+    SELECT COALESCE(array_agg(DISTINCT family_row.timesheet_id ORDER BY family_row.timesheet_id), ARRAY[]::uuid[])
+    INTO v_clearable_timesheet_ids
+    FROM _tmp_bpay_clear_anchor_family_existing AS family_row
+    WHERE family_row.timesheet_id IS NOT NULL;
+
+    SELECT COALESCE(array_agg(DISTINCT family_row.timesheet_id ORDER BY family_row.timesheet_id), ARRAY[]::uuid[])
+    INTO v_clearable_linked_timesheet_ids
+    FROM _tmp_bpay_clear_anchor_family_existing AS family_row
+    WHERE family_row.timesheet_id IS NOT NULL
+      AND family_row.timesheet_id <> v_anchor_timesheet_id;
+
+    v_eligible_linked_timesheet_count := COALESCE(array_length(v_clearable_linked_timesheet_ids, 1), 0);
+    v_total_affected_timesheet_count := COALESCE(array_length(v_clearable_timesheet_ids, 1), 0);
+
+    SELECT COUNT(*)::integer
+    INTO v_deleted_count
+    FROM _tmp_bpay_clear_anchor_family_existing;
+
+    IF v_operation = 'LIST_CLEARABLE' THEN
+      RETURN jsonb_build_object(
+        'ok', true,
+        'operation', 'LIST_CLEARABLE',
+        'session_id', p_session_id::text,
+        'session_version', v_session_row.version,
+        'progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+        'candidate_id', v_candidate_id::text,
+        'anchor_timesheet_id', v_anchor_timesheet_id::text,
+        'anchor_case_key', v_anchor_case_key,
+        'clearable_timesheet_ids', COALESCE(to_jsonb(v_clearable_timesheet_ids), '[]'::jsonb),
+        'clearable_linked_timesheet_ids', COALESCE(to_jsonb(v_clearable_linked_timesheet_ids), '[]'::jsonb),
+        'eligible_linked_timesheet_ids', COALESCE(to_jsonb(v_clearable_linked_timesheet_ids), '[]'::jsonb),
+        'eligible_linked_timesheet_count', v_eligible_linked_timesheet_count,
+        'total_affected_timesheet_count', v_total_affected_timesheet_count,
+        'excluded_linked_timesheets', COALESCE(v_excluded_linked_timesheets, '[]'::jsonb),
+        'excluded_linked_timesheet_count', v_excluded_linked_timesheet_count,
+        'resolution_component_count', v_deleted_count,
+        'state_changed', false,
+        'job_id', NULL::text
+      );
+    END IF;
+
+    IF v_deleted_count <= 0 THEN
+      RAISE EXCEPTION 'WORKBENCH_RESOLUTION_ANCHOR_NOT_CLEARABLE'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+          'code', 'WORKBENCH_RESOLUTION_ANCHOR_NOT_CLEARABLE',
+          'message', 'The resolved rate is no longer available to cancel. Refresh Banking Pay and review the latest details.'
+        )::text;
+    END IF;
+
+    SELECT
+      COALESCE(JSONB_AGG(family_row.id::text ORDER BY family_row.id::text), '[]'::jsonb),
+      COALESCE(JSONB_AGG(family_row.resolution_identity_key ORDER BY family_row.resolution_identity_key), '[]'::jsonb),
+      (ARRAY_AGG(family_row.id::text ORDER BY family_row.id))[1]
+    INTO v_case_resolution_ids, v_resolution_identity_keys, v_case_resolution_id_text
+    FROM _tmp_bpay_clear_anchor_family_existing AS family_row;
+
+    DELETE FROM public.banking_pay_workbench_session_case_resolutions AS delete_resolution
+    USING _tmp_bpay_clear_anchor_family_existing AS family_row
+    WHERE delete_resolution.id = family_row.id;
+
+    UPDATE public.banking_pay_workbench_sessions AS session_update
+    SET version = session_update.version + 1,
+        progress_counter_version = COALESCE(session_update.progress_counter_version, 0) + 1,
+        progress_updated_at_utc = v_now,
+        updated_at_utc = v_now
+    WHERE session_update.id = p_session_id
+    RETURNING session_update.version, session_update.progress_counter_version
+    INTO v_new_session_version, v_new_progress_counter_version;
+
+    v_job_json := public.pay_workbench_enqueue_session_candidate_refresh(
+      p_session_id => p_session_id,
+      p_candidate_id => v_candidate_id,
+      p_reason => 'SESSION_RESOLVED_RATE_ANCHOR_FAMILY_CLEARED',
+      p_actor_user_id => p_actor_user_id,
+      p_payload_json => jsonb_build_object(
+        'case_key', v_anchor_case_key,
+        'anchor_timesheet_id', v_anchor_timesheet_id::text,
+        'selected_timesheet_ids', COALESCE(to_jsonb(v_clearable_timesheet_ids), '[]'::jsonb),
+        'resolution_family', 'BUCKETED',
+        'resolution_identity_keys', v_resolution_identity_keys,
+        'deleted_count', v_deleted_count,
+        'force_legacy', true,
+        'projection_mode', 'LEGACY',
+        'projection_class', 'CASE_RESOLUTION',
+        'fallback_reason', 'CASE_RESOLUTION_CHANGED',
+        'refresh_scope_kind', 'TARGETED_TIMESHEETS',
+        'targeted_timesheet_ids', COALESCE(to_jsonb(v_clearable_timesheet_ids), '[]'::jsonb),
+        'linked_timesheet_ids', COALESCE(to_jsonb(v_clearable_linked_timesheet_ids), '[]'::jsonb),
+        'source_build_required', true,
+        'line_work_required', true,
+        'delta_refresh_required', false,
+        'complex_refresh_required', true,
+        'resolved_job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+      )
+    );
+
+    v_job_id_text := BTRIM(COALESCE(
+      v_job_json->>'job_id',
+      v_job_json #>> '{enqueue_result,job_id}',
+      v_job_json #>> '{enqueue_result,job_ids,0}',
+      v_job_json #>> '{job_ids,0}',
+      ''
+    ));
+    IF v_job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_job_id := v_job_id_text::uuid;
+    END IF;
+    IF v_job_id IS NULL THEN
+      RAISE EXCEPTION 'WORKBENCH_REFRESH_JOB_NOT_PROVEN'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+          'code', 'WORKBENCH_REFRESH_JOB_NOT_PROVEN',
+          'session_id', p_session_id::text,
+          'candidate_id', v_candidate_id::text,
+          'message', 'The resolved rate was not cancelled because the required refresh could not be started.'
+        )::text;
+    END IF;
+
+    SELECT
+      NULLIF(BTRIM(COALESCE(actor_user.display_name, actor_user.email, '')), ''),
+      NULLIF(BTRIM(COALESCE(actor_user.role, '')), '')
+    INTO v_actor_display, v_actor_role
+    FROM public.tms_users AS actor_user
+    WHERE actor_user.id = p_actor_user_id
+    LIMIT 1;
+
+    INSERT INTO public.audit_events(
+      object_type, object_id_text, action, before_json, after_json, reason,
+      actor_user_id, actor_display, actor_role_at_time
+    )
+    SELECT
+      'banking_pay_workbench_session_case_resolution',
+      family_row.id::text,
+      'SESSION_CASE_RESOLUTION_CLEARED',
+      jsonb_build_object(
+        'id', family_row.id::text,
+        'session_id', family_row.session_id::text,
+        'candidate_id', family_row.candidate_id::text,
+        'case_key', family_row.case_key,
+        'resolution_family', family_row.resolution_family,
+        'resolution_identity_key', family_row.resolution_identity_key,
+        'timesheet_id', family_row.timesheet_id::text,
+        'payload_json', family_row.payload_json
+      ),
+      jsonb_build_object(
+        'session_version', v_new_session_version,
+        'progress_counter_version', v_new_progress_counter_version,
+        'pending_job_id', v_job_id::text,
+        'cleared_at_utc', v_now,
+        'anchor_timesheet_id', v_anchor_timesheet_id::text,
+        'anchor_case_key', v_anchor_case_key,
+        'targeted_timesheet_ids', COALESCE(to_jsonb(v_clearable_timesheet_ids), '[]'::jsonb),
+        'linked_timesheet_ids', COALESCE(to_jsonb(v_clearable_linked_timesheet_ids), '[]'::jsonb)
+      ),
+      'SESSION_RESOLVED_RATE_ANCHOR_FAMILY_CLEARED',
+      p_actor_user_id,
+      v_actor_display,
+      v_actor_role
+    FROM _tmp_bpay_clear_anchor_family_existing AS family_row;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation', 'CLEAR',
+      'session_id', p_session_id::text,
+      'candidate_id', v_candidate_id::text,
+      'session_version', v_new_session_version,
+      'progress_counter_version', v_new_progress_counter_version,
+      'job_id', v_job_id::text,
+      'anchor_timesheet_id', v_anchor_timesheet_id::text,
+      'anchor_case_key', v_anchor_case_key,
+      'eligible_linked_timesheet_ids', COALESCE(to_jsonb(v_clearable_linked_timesheet_ids), '[]'::jsonb),
+      'eligible_linked_timesheet_count', v_eligible_linked_timesheet_count,
+      'total_affected_timesheet_count', v_total_affected_timesheet_count,
+      'excluded_linked_timesheets', COALESCE(v_excluded_linked_timesheets, '[]'::jsonb),
+      'excluded_linked_timesheet_count', v_excluded_linked_timesheet_count,
+      'case_resolution_ids', v_case_resolution_ids,
+      'resolution_identity_keys', v_resolution_identity_keys,
+      'deleted_count', v_deleted_count,
+      'cleared', true,
+      'targeted_refresh_enqueued', true,
+      'refresh_scope_kind', 'TARGETED_TIMESHEETS',
+      'targeted_timesheet_ids', COALESCE(to_jsonb(v_clearable_timesheet_ids), '[]'::jsonb),
+      'linked_timesheet_ids', COALESCE(to_jsonb(v_clearable_linked_timesheet_ids), '[]'::jsonb),
+      'enqueue_result', COALESCE(v_job_json, '{}'::jsonb),
+      'state_changed', true,
+      'no_op', false
+    );
+  END IF;
 
   IF v_operation = 'LIST_CLEARABLE' THEN
     IF v_candidate_id IS NULL THEN
@@ -51257,6 +51599,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 -- SHA-256 suffix: e048d1c90624
 
@@ -63637,7 +63980,32 @@ DECLARE
   v_target_resolution_result_json jsonb := '{}'::jsonb;
   v_target_bucket_payload_json jsonb := '{}'::jsonb;
   v_linked_scope_json jsonb := '{}'::jsonb;
+  v_operation text := 'APPLY';
+  v_eligible_linked_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_excluded_linked_timesheets jsonb := '[]'::jsonb;
+  v_excluded_linked_timesheet_count integer := 0;
+  v_total_affected_timesheet_count integer := 1;
+  v_anchor_blocking_batches jsonb := '[]'::jsonb;
 BEGIN
+  v_operation := UPPER(BTRIM(COALESCE(
+    v_resolution_payload_json->>'operation',
+    v_resolution_payload_json->>'action',
+    'APPLY'
+  )));
+  IF v_operation IN ('DISCOVER', 'DISCOVER_LINKED_SCOPE', 'PREVIEW_SCOPE', 'LIST_ELIGIBLE_LINKED') THEN
+    v_operation := 'DISCOVER';
+  ELSIF v_operation IN ('', 'APPLY', 'SAVE', 'APPLY_RESOLUTION') THEN
+    v_operation := 'APPLY';
+  ELSE
+    RAISE EXCEPTION 'WORKBENCH_RESOLUTION_OPERATION_INVALID'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_RESOLUTION_OPERATION_INVALID',
+              'operation', v_operation,
+              'message', 'The requested resolved-rate action is not valid.'
+            )::text;
+  END IF;
+
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
   END IF;
@@ -63652,11 +64020,18 @@ BEGIN
     END IF;
   END IF;
 
-  SELECT public.banking_pay_workbench_sessions.*
-  INTO v_session_row
-  FROM public.banking_pay_workbench_sessions
-  WHERE public.banking_pay_workbench_sessions.id = p_session_id
-  FOR UPDATE;
+  IF v_operation = 'DISCOVER' THEN
+    SELECT public.banking_pay_workbench_sessions.*
+    INTO v_session_row
+    FROM public.banking_pay_workbench_sessions
+    WHERE public.banking_pay_workbench_sessions.id = p_session_id;
+  ELSE
+    SELECT public.banking_pay_workbench_sessions.*
+    INTO v_session_row
+    FROM public.banking_pay_workbench_sessions
+    WHERE public.banking_pay_workbench_sessions.id = p_session_id
+    FOR UPDATE;
+  END IF;
 
   IF v_session_row.id IS NULL THEN
     RAISE EXCEPTION 'banking_pay_workbench_sessions row % not found', p_session_id;
@@ -65824,6 +66199,105 @@ BEGIN
       ON CONFLICT (resolution_identity_key) DO NOTHING;
     END IF;
 
+    IF v_operation = 'APPLY' THEN
+      -- Serialize the financial-boundary revalidation with draft creation.
+      PERFORM pg_advisory_xact_lock(94201, 1);
+    END IF;
+
+    CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_resolution_batch_boundary (
+      timesheet_id uuid NOT NULL,
+      pay_batch_id uuid NOT NULL,
+      batch_status text NOT NULL,
+      PRIMARY KEY (timesheet_id, pay_batch_id)
+    ) ON COMMIT DROP;
+    TRUNCATE TABLE _tmp_bpay_resolution_batch_boundary;
+
+    INSERT INTO _tmp_bpay_resolution_batch_boundary(timesheet_id, pay_batch_id, batch_status)
+    SELECT DISTINCT boundary_rows.timesheet_id, boundary_rows.pay_batch_id, boundary_rows.batch_status
+    FROM (
+      SELECT
+        batch_item.timesheet_id,
+        batch_row.id AS pay_batch_id,
+        UPPER(BTRIM(COALESCE(batch_row.status, ''))) AS batch_status
+      FROM public.pay_batch_items AS batch_item
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.id = batch_item.pay_batch_candidate_id
+      JOIN public.pay_batches AS batch_row
+        ON batch_row.id = batch_candidate.pay_batch_id
+      WHERE batch_item.timesheet_id IS NOT NULL
+        AND COALESCE(batch_item.is_voided, false) = false
+        AND EXISTS (
+          SELECT 1
+          FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
+          WHERE target_resolution.timesheet_id = batch_item.timesheet_id
+        )
+        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+
+      UNION ALL
+
+      SELECT
+        batch_snapshot.timesheet_id,
+        batch_row.id AS pay_batch_id,
+        UPPER(BTRIM(COALESCE(batch_row.status, ''))) AS batch_status
+      FROM public.pay_batch_timesheet_snapshots AS batch_snapshot
+      JOIN public.pay_batches AS batch_row
+        ON batch_row.id = batch_snapshot.pay_batch_id
+      WHERE batch_snapshot.timesheet_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
+          WHERE target_resolution.timesheet_id = batch_snapshot.timesheet_id
+        )
+        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+    ) AS boundary_rows
+    ON CONFLICT (timesheet_id, pay_batch_id) DO UPDATE
+      SET batch_status = EXCLUDED.batch_status;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+             'pay_batch_id', boundary_row.pay_batch_id::text,
+             'batch_status', boundary_row.batch_status
+           ) ORDER BY boundary_row.pay_batch_id::text), '[]'::jsonb)
+    INTO v_anchor_blocking_batches
+    FROM _tmp_bpay_resolution_batch_boundary AS boundary_row
+    WHERE boundary_row.timesheet_id = v_anchor_timesheet_id;
+
+    IF jsonb_array_length(COALESCE(v_anchor_blocking_batches, '[]'::jsonb)) > 0 THEN
+      RAISE EXCEPTION 'WORKBENCH_RESOLUTION_ANCHOR_FINANCIAL_BOUNDARY'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_RESOLUTION_ANCHOR_FINANCIAL_BOUNDARY',
+                'session_id', p_session_id::text,
+                'candidate_id', v_resolved_candidate_id::text,
+                'anchor_timesheet_id', v_anchor_timesheet_id::text,
+                'message', 'The payment details changed because this timesheet is now included in a payment batch. Refresh Banking Pay and review the latest details.'
+              )::text;
+    END IF;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+             'timesheet_id', excluded_scope.timesheet_id::text,
+             'reason', 'ALREADY_IN_LIVE_BATCH',
+             'batch_status', excluded_scope.batch_status
+           ) ORDER BY excluded_scope.timesheet_id::text), '[]'::jsonb)
+    INTO v_excluded_linked_timesheets
+    FROM (
+      SELECT
+        boundary_row.timesheet_id,
+        MIN(boundary_row.batch_status) AS batch_status
+      FROM _tmp_bpay_resolution_batch_boundary AS boundary_row
+      WHERE boundary_row.timesheet_id <> v_anchor_timesheet_id
+      GROUP BY boundary_row.timesheet_id
+    ) AS excluded_scope;
+
+    v_excluded_linked_timesheet_count := jsonb_array_length(COALESCE(v_excluded_linked_timesheets, '[]'::jsonb));
+
+    DELETE FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
+    WHERE target_resolution.applied_via_linked_scope = true
+      AND EXISTS (
+        SELECT 1
+        FROM _tmp_bpay_resolution_batch_boundary AS boundary_row
+        WHERE boundary_row.timesheet_id = target_resolution.timesheet_id
+      );
+
     SELECT COUNT(*)::integer
     INTO v_anchor_component_count
     FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
@@ -65872,11 +66346,47 @@ BEGIN
       v_skipped_mismatch_count := 0;
     END IF;
 
+    SELECT COALESCE(array_agg(DISTINCT target_resolution.timesheet_id ORDER BY target_resolution.timesheet_id), ARRAY[]::uuid[])
+    INTO v_eligible_linked_timesheet_ids
+    FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
+    WHERE target_resolution.applied_via_linked_scope = true
+      AND target_resolution.timesheet_id <> v_anchor_timesheet_id;
+
+    v_linked_target_timesheet_count := COALESCE(array_length(v_eligible_linked_timesheet_ids, 1), 0);
+    v_total_affected_timesheet_count := 1 + v_linked_target_timesheet_count;
+
+    SELECT COALESCE(array_agg(DISTINCT target_resolution.timesheet_id ORDER BY target_resolution.timesheet_id), ARRAY[]::uuid[])
+    INTO v_case_targeted_timesheet_ids
+    FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution;
+    v_case_linked_timesheet_ids := v_eligible_linked_timesheet_ids;
+
     v_linked_scope_type := CASE
       WHEN NOT v_resolve_all_linked_timesheets THEN 'SELF_ONLY'
       WHEN v_anchor_contract_id IS NOT NULL THEN 'CONTRACT'
       ELSE 'DAILY_SAME_BASIS'
     END;
+
+    IF v_operation = 'DISCOVER' THEN
+      RETURN jsonb_build_object(
+        'ok', true,
+        'operation', 'DISCOVER',
+        'session_id', p_session_id::text,
+        'session_version', v_session_row.version,
+        'progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+        'candidate_id', v_resolved_candidate_id::text,
+        'anchor_timesheet_id', v_anchor_timesheet_id::text,
+        'anchor_case_key', v_case_key,
+        'eligible_linked_timesheet_ids', COALESCE(to_jsonb(v_eligible_linked_timesheet_ids), '[]'::jsonb),
+        'eligible_linked_timesheet_count', v_linked_target_timesheet_count,
+        'total_affected_timesheet_count', v_total_affected_timesheet_count,
+        'excluded_linked_timesheets', COALESCE(v_excluded_linked_timesheets, '[]'::jsonb),
+        'excluded_linked_timesheet_count', v_excluded_linked_timesheet_count,
+        'targeted_timesheet_ids', COALESCE(to_jsonb(v_case_targeted_timesheet_ids), '[]'::jsonb),
+        'linked_timesheet_ids', COALESCE(to_jsonb(v_case_linked_timesheet_ids), '[]'::jsonb),
+        'state_changed', false,
+        'job_id', NULL::text
+      );
+    END IF;
 
     INSERT INTO _tmp_bpay_session_case_resolution_existing
     SELECT existing_resolution.*
@@ -65885,11 +66395,13 @@ BEGIN
       AND existing_resolution.candidate_id = v_resolved_candidate_id
       AND existing_resolution.resolution_family = 'BUCKETED'
       AND (
-        existing_resolution.case_key = v_case_key
-        OR EXISTS (
-          SELECT 1
-          FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
-          WHERE target_resolution.resolution_identity_key = existing_resolution.resolution_identity_key
+        existing_resolution.timesheet_id = v_anchor_timesheet_id
+        OR (
+          existing_resolution.timesheet_id IS NOT NULL
+          AND existing_resolution.timesheet_id = ANY(COALESCE(v_eligible_linked_timesheet_ids, ARRAY[]::uuid[]))
+          AND BTRIM(COALESCE(existing_resolution.payload_json->>'source_anchor_timesheet_id', '')) = v_anchor_timesheet_id::text
+          AND BTRIM(COALESCE(existing_resolution.payload_json->>'source_anchor_case_key', '')) = v_case_key
+          AND LOWER(BTRIM(COALESCE(existing_resolution.payload_json->>'applied_via_linked_scope', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
         )
       );
 
@@ -65987,7 +66499,7 @@ BEGIN
           'applied_via_linked_scope', v_target_resolution_row.applied_via_linked_scope,
           'source_anchor_case_key', v_case_key,
           'source_anchor_timesheet_id', v_anchor_timesheet_id::text,
-          'resolved_rate_cancel_scope', 'TIMESHEET_ONLY'
+          'resolved_rate_cancel_scope', 'ANCHOR_FAMILY_PRE_DRAFT'
         )
       );
 
@@ -66002,7 +66514,7 @@ BEGIN
           'target_timesheet_id', v_target_resolution_row.timesheet_id::text,
           'requested_resolve_all_linked_timesheets', v_resolve_all_linked_timesheets,
           'applied_via_linked_scope', v_target_resolution_row.applied_via_linked_scope,
-          'resolved_rate_cancel_scope', 'TIMESHEET_ONLY'
+          'resolved_rate_cancel_scope', 'ANCHOR_FAMILY_PRE_DRAFT'
         )
       );
 
@@ -66039,7 +66551,7 @@ BEGIN
         || jsonb_build_object(
           'source_anchor_timesheet_id', v_anchor_timesheet_id::text,
           'linked_resolution_scope_json', v_linked_scope_json,
-          'resolved_rate_cancel_scope', 'TIMESHEET_ONLY',
+          'resolved_rate_cancel_scope', 'ANCHOR_FAMILY_PRE_DRAFT',
           'decision_context_key', v_target_resolution_row.decision_context_key,
           'category_identity', v_target_resolution_row.category_identity,
           'bucket_resolutions', jsonb_build_array(v_target_bucket_payload_json)
@@ -66581,6 +67093,12 @@ BEGIN
     'resolution_identity_keys', v_resolution_identity_keys,
     'case_resolution_count', jsonb_array_length(v_case_resolution_ids),
     'anchor_component_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_anchor_component_count ELSE NULL END,
+    'anchor_timesheet_id', CASE WHEN v_resolution_family = 'BUCKETED' AND v_anchor_timesheet_id IS NOT NULL THEN v_anchor_timesheet_id::text ELSE NULL END,
+    'eligible_linked_timesheet_ids', CASE WHEN v_resolution_family = 'BUCKETED' THEN COALESCE(to_jsonb(v_eligible_linked_timesheet_ids), '[]'::jsonb) ELSE NULL END,
+    'eligible_linked_timesheet_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_linked_target_timesheet_count ELSE NULL END,
+    'total_affected_timesheet_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_total_affected_timesheet_count ELSE NULL END,
+    'excluded_linked_timesheets', CASE WHEN v_resolution_family = 'BUCKETED' THEN COALESCE(v_excluded_linked_timesheets, '[]'::jsonb) ELSE NULL END,
+    'excluded_linked_timesheet_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_excluded_linked_timesheet_count ELSE NULL END,
     'linked_target_timesheet_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_linked_target_timesheet_count ELSE NULL END,
     'linked_target_component_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_linked_target_component_count ELSE NULL END,
     'materialized_target_timesheet_count', CASE WHEN v_resolution_family = 'BUCKETED' THEN v_materialized_target_timesheet_count ELSE NULL END,
@@ -178750,7 +179268,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -179173,6 +179690,9 @@ BEGIN
       outstanding_components.timesheet_id,
       outstanding_components.key_type,
       outstanding_components.key_value,
+      outstanding_components.truth_ex_vat,
+      outstanding_components.baseline_ex_vat,
+      outstanding_components.reserved_ex_vat,
       outstanding_components.outstanding_ex_vat
     FROM outstanding_timesheet_ids
     JOIN public._pay_outstanding_components(outstanding_timesheet_ids.timesheet_ids, NULL::uuid) AS outstanding_components
@@ -179224,7 +179744,7 @@ BEGIN
         AND NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_value}', component_probe_rows.result_row_json->>'key_value', '')), '') = component_probe_rows.single_fixed_reimbursement_key_value
       ) AS clamp_fixed_reimbursement_to_outstanding,
       ROUND(COALESCE(fixed_outstanding_component_rows.outstanding_ex_vat, 0), 2) AS fixed_reimbursement_outstanding_ex_vat,
-      ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) AS economic_outstanding_ex_vat,
+      ROUND(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0), 2) AS economic_outstanding_ex_vat,
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NULL
         AND component_probe_rows.target_section = 'canonical_preview_lines'
@@ -179232,8 +179752,8 @@ BEGIN
         AND component_probe_rows.economic_key_value IS NOT NULL
         AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
         AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
-        AND economic_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
-        AND ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) = 0
+        AND effective_economic_outstanding.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0), 2) = 0
       ) AS suppress_zero_outstanding_economic_key,
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NULL
@@ -179242,8 +179762,8 @@ BEGIN
         AND component_probe_rows.economic_key_value IS NOT NULL
         AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
         AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
-        AND economic_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
-        AND ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) < 0
+        AND effective_economic_outstanding.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0), 2) < 0
       ) AS suppress_negative_outstanding_economic_key,
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NULL
@@ -179252,9 +179772,9 @@ BEGIN
         AND component_probe_rows.economic_key_value IS NOT NULL
         AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
         AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
-        AND economic_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
-        AND ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) > 0
-        AND ROUND(ABS(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0)), 2)
+        AND effective_economic_outstanding.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0), 2) > 0
+        AND ROUND(ABS(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0)), 2)
       ) AS clamp_economic_key_to_outstanding,
       CASE
         WHEN component_probe_rows.rotation_validation_failed IS NOT TRUE
@@ -179288,8 +179808,8 @@ BEGIN
            AND component_probe_rows.economic_key_value IS NOT NULL
            AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
            AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
-           AND economic_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
-           AND ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) <= 0
+           AND effective_economic_outstanding.outstanding_ex_vat IS NOT NULL
+           AND ROUND(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0), 2) <= 0
          )
         THEN true
         ELSE false
@@ -179303,6 +179823,27 @@ BEGIN
       ON economic_outstanding_component_rows.timesheet_id = component_probe_rows.timesheet_id
      AND economic_outstanding_component_rows.key_type = component_probe_rows.economic_key_type
      AND economic_outstanding_component_rows.key_value = component_probe_rows.economic_key_value
+    LEFT JOIN LATERAL (
+      SELECT CASE
+        WHEN component_probe_rows.target_section = 'canonical_preview_lines'
+         AND LOWER(BTRIM(COALESCE(component_probe_rows.result_row_json->>'has_resolved_rate', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         AND LOWER(BTRIM(COALESCE(component_probe_rows.result_row_json->>'case_resolution_satisfied_now', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         AND UPPER(BTRIM(COALESCE(
+               component_probe_rows.result_row_json->>'resolved_rate_family',
+               component_probe_rows.result_row_json#>>'{case_resolution_summary,resolved_rate_family}',
+               ''
+             ))) = 'BUCKETED'
+         AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
+         AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
+        THEN ROUND(GREATEST(
+          COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0)
+          - COALESCE(economic_outstanding_component_rows.baseline_ex_vat, 0)
+          - COALESCE(economic_outstanding_component_rows.reserved_ex_vat, 0),
+          0
+        ), 2)
+        ELSE economic_outstanding_component_rows.outstanding_ex_vat
+      END AS outstanding_ex_vat
+    ) AS effective_economic_outstanding ON true
   ), selected_rows AS (
     SELECT
       selected_rows_base.*,
@@ -179329,6 +179870,12 @@ BEGIN
             'pay_outstanding_original_amount_ex_vat', selected_rows_base.economic_original_amount_ex_vat,
             'pay_outstanding_clamped_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
             'pay_outstanding_available_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'pay_outstanding_basis', CASE
+              WHEN LOWER(BTRIM(COALESCE(selected_rows_base.result_row_json->>'has_resolved_rate', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+               AND UPPER(BTRIM(COALESCE(selected_rows_base.result_row_json->>'resolved_rate_family', selected_rows_base.result_row_json#>>'{case_resolution_summary,resolved_rate_family}', ''))) = 'BUCKETED'
+              THEN 'CURRENT_RESOLVED_RATE_LESS_PROTECTED_AMOUNTS'
+              ELSE 'CURRENT_ENTITLEMENT_LESS_PROTECTED_AMOUNTS'
+            END,
             'pay_outstanding_blocked', false,
             'outstanding_block_reason', NULL
           )

@@ -12057,7 +12057,6 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 
 
 
-
 async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId, ctx = null) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
@@ -12185,6 +12184,17 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_JSON' });
   }
 
+  const operationRaw = String(body.operation ?? body.action ?? body.mode ?? 'APPLY').trim().toUpperCase();
+  const operation = ['DISCOVER', 'DISCOVER_LINKED_SCOPE', 'PREVIEW_SCOPE', 'LIST_ELIGIBLE_LINKED'].includes(operationRaw)
+    ? 'DISCOVER'
+    : 'APPLY';
+  if (operationRaw && ![
+    'DISCOVER', 'DISCOVER_LINKED_SCOPE', 'PREVIEW_SCOPE', 'LIST_ELIGIBLE_LINKED',
+    'APPLY', 'SAVE', 'APPLY_RESOLUTION'
+  ].includes(operationRaw)) {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_RESOLUTION_OPERATION_INVALID' });
+  }
+
   const enc = encodeURIComponent;
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -12227,6 +12237,10 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     WORKBENCH_ROW_BACKED_BUCKETED_COMPONENT_AMBIGUOUS: {
       title: 'Suggested-rate details need refreshing',
       message: 'The current preview contains more than one matching suggested-rate component. Refresh the preview and try again.'
+    },
+    WORKBENCH_RESOLUTION_ANCHOR_FINANCIAL_BOUNDARY: {
+      title: 'Payment details changed',
+      message: 'This timesheet is now included in a payment batch, so its resolved rate cannot be changed. Refresh Banking Pay to review the latest payment details.'
     }
   });
   const extractKnownCaseResolutionConflictCode = (errorInput) => {
@@ -12557,6 +12571,9 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
   if (!['BUCKETED', 'NON_BUCKET', 'TAXABLE_CHANNEL_RESTRUCTURE'].includes(resolutionFamily)) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
   }
+  if (operation === 'DISCOVER' && resolutionFamily !== 'BUCKETED') {
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_RESOLUTION_OPERATION_INVALID' });
+  }
 
   let resolutionPayloadJson = null;
 
@@ -12701,6 +12718,7 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
 
   resolutionPayloadJson = {
     ...(resolutionPayloadJson || {}),
+    operation,
     expected_session_version: expectedSessionVersion,
     expected_progress_counter_version: expectedProgressCounterVersion
   };
@@ -12747,6 +12765,21 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
 
     const payload = unwrapRpc(rpcRes, 'pay_workbench_session_apply_case_resolution');
     const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    if (operation === 'DISCOVER') {
+      return withCORS(env, req, ok({
+        ...payloadObj,
+        operation: 'DISCOVER',
+        state_changed: false,
+        job_id: null,
+        targeted_refresh_enqueued: false,
+        targeted_refresh_enqueued_count: 0,
+        delta_refresh_enqueued: false,
+        refresh_mode: null,
+        refresh_signal: null
+      }));
+    }
+
     const fastLaneCandidateId = readUuid(payloadObj.candidate_id ?? payloadObj.candidateId ?? candidateId);
     const fastLaneJobId = resolveCaseRefreshJobId(payloadObj);
     const fastLaneShouldRun = payloadObj.no_op !== true && !!fastLaneCandidateId && !!fastLaneJobId;
@@ -12923,9 +12956,6 @@ async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
   };
 }
 
-
-
-
 async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId, ctx = null) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
@@ -13021,12 +13051,46 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     const resolveStatus = (code, fallbackStatus) => {
       const c = String(code || '').trim().toUpperCase();
       if (c === 'BATCH_STALE') return 409;
+      if ([
+        'WORKBENCH_RESOLUTION_ANCHOR_FINANCIAL_BOUNDARY',
+        'WORKBENCH_RESOLUTION_ANCHOR_NOT_CLEARABLE',
+        'WORKBENCH_RESOLUTION_NOT_CLEARABLE',
+        'WORKBENCH_RESOLUTION_SCOPE_CHANGED'
+      ].includes(c)) return 409;
       if (validationStatusCodes.has(c)) return 400;
       return fallbackStatus;
     };
+    const boundaryCopy = normalisedCode === 'WORKBENCH_RESOLUTION_ANCHOR_FINANCIAL_BOUNDARY'
+      ? {
+          title: 'Payment details changed',
+          message: 'This timesheet is now included in a payment batch, so its resolved rate cannot be cancelled. Refresh Banking Pay to review the latest payment details.'
+        }
+      : null;
+    const noLongerClearableCopy = ['WORKBENCH_RESOLUTION_ANCHOR_NOT_CLEARABLE', 'WORKBENCH_RESOLUTION_NOT_CLEARABLE', 'WORKBENCH_RESOLUTION_SCOPE_CHANGED'].includes(normalisedCode)
+      ? {
+          title: 'Resolved rate changed',
+          message: 'The resolved-rate details changed after this window opened. Refresh Banking Pay and review the latest details.'
+        }
+      : null;
     const localTitle = 'Payment decision could not be cleared';
     const localMessage = 'Refresh the payment preview, review the latest details, then try again.';
-    if (isGenericNormalisedCode(normalisedCode)) {
+    if (boundaryCopy || noLongerClearableCopy) {
+      const copy = boundaryCopy || noLongerClearableCopy;
+      payload.title = copy.title;
+      payload.message = copy.message;
+      payload.user_message = copy.message;
+      payload.error = copy.message;
+      payload.user_action = 'REFRESH_AND_RETRY';
+      payload.confirm_label = 'OK';
+      payload.friendly_error = {
+        ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}),
+        title: copy.title,
+        message: copy.message,
+        error_code: normalisedCode,
+        user_action: 'REFRESH_AND_RETRY',
+        confirm_label: 'OK'
+      };
+    } else if (isGenericNormalisedCode(normalisedCode)) {
       payload.title = localTitle;
       payload.message = localMessage;
       payload.user_message = localMessage;
@@ -13224,7 +13288,17 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
   if (operation === 'LIST_CLEARABLE' && !candidateId) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
   }
-  if (operation === 'CLEAR' && !caseKey && selectedTimesheetResult.values.length === 0) {
+  if (resolutionFamily === 'BUCKETED') {
+    if (!candidateId) {
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
+    }
+    if (!linkedTimesheetId) {
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET' });
+    }
+    if (!caseKey || caseKey.toLowerCase() !== `timesheet:${linkedTimesheetId}`.toLowerCase()) {
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY' });
+    }
+  } else if (operation === 'CLEAR' && !caseKey && selectedTimesheetResult.values.length === 0) {
     return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY' });
   }
 
@@ -13337,6 +13411,20 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
 
     const payload = unwrapRpc(rpcRes, 'pay_workbench_session_clear_case_resolution');
     const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    if (operation === 'LIST_CLEARABLE') {
+      return withCORS(env, req, ok({
+        ...payloadObj,
+        operation: 'LIST_CLEARABLE',
+        state_changed: false,
+        job_id: null,
+        targeted_refresh_enqueued: false,
+        targeted_refresh_enqueued_count: 0,
+        delta_refresh_enqueued: false,
+        refresh_mode: null
+      }));
+    }
+
     const fastLaneCandidateId = readUuid(payloadObj.candidate_id ?? payloadObj.candidateId ?? candidateId);
     const fastLaneJobId = resolveJobId(payloadObj);
     const fastLaneShouldRun = operation === 'CLEAR' && payloadObj.no_op !== true && !!fastLaneCandidateId && !!fastLaneJobId;
@@ -13394,6 +13482,8 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     return buildFriendlyFailure(500, e);
   }
 }
+
+
 
 // SHA-256 suffix: caf0416c39c6
 
