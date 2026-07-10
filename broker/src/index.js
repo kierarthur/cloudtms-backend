@@ -18708,9 +18708,9 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
     const lineUnitsReady = countFirst(src.line_units_ready, src.ready_line_units);
     const lineUnitsError = countFirst(src.line_units_error, src.line_units_failed, src.error_line_units, lineCounts.failed);
     const explicitReadyNotMaterialised = hasOwn(lineCounts, 'ready_not_materialised') || hasOwn(lineCounts, 'readyNotMaterialised') || hasOwn(src, 'line_units_ready_not_materialised');
-    let lineUnitsReadyNotMaterialised = explicitReadyNotMaterialised
+    const lineUnitsReadyNotMaterialised = explicitReadyNotMaterialised
       ? countFirst(lineCounts.ready_not_materialised, lineCounts.readyNotMaterialised, src.line_units_ready_not_materialised)
-      : Math.max(0, lineUnitsReady - lineUnitsComplete);
+      : 0;
 
     const queuedJobs = countFirst(jobCounts.queued, jobCounts.queued_count, src.queued_jobs, src.queued_job_count);
     const runningJobs = countFirst(jobCounts.running, jobCounts.running_count, src.running_jobs, src.running_job_count);
@@ -18740,7 +18740,7 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
       phase === 'READY_EMPTY'
     );
     const unresolvedFailures = failed > 0 || candidateUnknown > 0 || lineUnitsError > 0 || unresolvedFailedJobs > 0 || unresolvedDeadJobs > 0;
-    const noCurrentWork = !obsolete
+    const noCurrentWorkExceptMaterialisation = !obsolete
       && !replacementRequired
       && scopeSeedComplete
       && !scopeCursorRemaining
@@ -18754,9 +18754,12 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
       && runningJobs <= 0
       && !unresolvedFailures;
 
-    if (backendReadySignal && noCurrentWork && (previewRowCount > 0 || selectedRowCount > 0 || boolish(src.ready_empty))) {
-      lineUnitsReadyNotMaterialised = 0;
-    }
+    // Only the explicit ready-not-materialised contract represents outstanding
+    // materialisation work. Total READY line units are completed diagnostics and
+    // must never be converted into pending work.
+
+    const noCurrentWork = noCurrentWorkExceptMaterialisation
+      && lineUnitsReadyNotMaterialised <= 0;
 
     const activeBackendWork = !noCurrentWork && (
       lineUnitsPending > 0 ||
@@ -18949,27 +18952,40 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
   const evaluateProgressNudge = (progress) => {
     const src = isPlainObject(progress) ? progress : {};
     const jobCounts = readJobCounts(src);
+    const candidateCounts = isPlainObject(src.candidate_counts) ? src.candidate_counts : {};
+    const lineCounts = isPlainObject(src.line_counts) ? src.line_counts : {};
     const phase = upperTrim(src.phase || src.current_phase || src.progress_phase || '');
     const status = upperTrim(src.session_status || src.workbench_session_status || src.status || 'OPEN');
     const obsolete = src.session_obsolete === true || src.obsolete === true || src.active_session_obsolete === true;
     const replacementRequired = src.replacement_available === true || !!trimStr(src.replacement_session_id || '') || src.rebase_required === true || src.requires_new_session === true;
     const unresolvedFailures = jobCounts.unresolved_failed > 0 || jobCounts.unresolved_dead > 0 || toCount(src.failed_count ?? src.failed_candidates) > 0 || toCount(src.line_units_error ?? src.line_units_failed ?? src.error_line_units) > 0;
-    const pendingCandidates = toCount(src.pending_candidates ?? src.pending_count ?? src.scope_pending);
-    const pendingLineUnits = toCount(src.line_units_pending ?? src.pending_line_units);
-    const readyLineUnits = toCount(src.line_units_ready ?? src.ready_line_units);
-    const cursorRemaining = src.scope_cursor_remaining === true || !!src.scope_next_cursor_json || !!src.scope_next_cursor;
-    const scopeSeedIncomplete = src.scope_seed_complete === false;
-    const ready = src.ready === true || src.ready_flag === true || upperTrim(src.phase || src.status || '') === 'READY';
-    const workDue = ready !== true && (
+    const pendingCandidates = toCount(src.pending_candidates ?? src.pending_count ?? src.scope_pending ?? candidateCounts.pending);
+    const processingCandidates = toCount(candidateCounts.processing);
+    const materialisationPendingCandidates = toCount(candidateCounts.materialisation_pending);
+    const dirtyCandidates = toCount(candidateCounts.dirty);
+    const unseededCandidates = toCount(candidateCounts.unseeded);
+    const pendingLineUnits = toCount(src.line_units_pending ?? src.pending_line_units ?? lineCounts.pending);
+    const readyNotMaterialisedLineUnits = toCount(src.line_units_ready_not_materialised ?? lineCounts.ready_not_materialised ?? lineCounts.readyNotMaterialised);
+    const completedReadyLineUnits = toCount(src.line_units_ready ?? src.ready_line_units);
+    const cursorRemaining = src.scope_cursor_remaining === true;
+    const scopeSeedIncomplete = src.scope_seed_complete !== true;
+    const activePendingPhase = progressPendingPhases.has(phase);
+    const outstandingWork = (
       jobCounts.queued > 0 ||
       jobCounts.running > 0 ||
       pendingCandidates > 0 ||
+      processingCandidates > 0 ||
+      materialisationPendingCandidates > 0 ||
+      dirtyCandidates > 0 ||
+      unseededCandidates > 0 ||
       pendingLineUnits > 0 ||
-      readyLineUnits > 0 ||
+      readyNotMaterialisedLineUnits > 0 ||
       cursorRemaining ||
       scopeSeedIncomplete ||
-      progressPendingPhases.has(phase)
+      activePendingPhase
     );
+    const ready = src.ready === true && !outstandingWork && !unresolvedFailures;
+    const workDue = outstandingWork || unresolvedFailures;
     const base = {
       phase,
       status,
@@ -18978,9 +18994,17 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
       replacement_required: replacementRequired,
       job_counts: jobCounts,
       pending_candidates: pendingCandidates,
+      processing_candidates: processingCandidates,
+      materialisation_pending_candidates: materialisationPendingCandidates,
+      dirty_candidates: dirtyCandidates,
+      unseeded_candidates: unseededCandidates,
       line_units_pending: pendingLineUnits,
-      line_units_ready: readyLineUnits,
-      scope_seed_complete: src.scope_seed_complete === true
+      line_units_ready_not_materialised: readyNotMaterialisedLineUnits,
+      line_units_ready_completed: completedReadyLineUnits,
+      scope_cursor_remaining: cursorRemaining,
+      scope_seed_complete: src.scope_seed_complete === true,
+      active_pending_phase: activePendingPhase,
+      work_due: workDue
     };
     if (!workDue) return { ...base, should_nudge: false, reason: 'NO_WORK_DUE' };
     if (obsolete || replacementRequired) return { ...base, should_nudge: false, reason: 'SESSION_OBSOLETE_OR_REPLACED' };
@@ -19144,7 +19168,6 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
   }
   return execute();
 }
-
 
 
 async function handleContractsCloneAndExtend(env, req, contractId) {
