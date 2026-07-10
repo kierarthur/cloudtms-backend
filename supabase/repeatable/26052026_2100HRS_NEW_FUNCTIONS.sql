@@ -89497,8 +89497,6 @@ DROP FUNCTION IF EXISTS public.pay_batch_get_section_page(uuid, text, jsonb, int
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_batch_get_section_page(p_pay_batch_id uuid, p_section text, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100, p_actor_user_id uuid DEFAULT NULL::uuid, p_filters_json jsonb DEFAULT '{}'::jsonb, p_sort_json jsonb DEFAULT '{}'::jsonb, p_purpose text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -89530,6 +89528,14 @@ DECLARE
   v_changed_since_version boolean := false;
   v_section_page_signature text := NULL::text;
   v_freshness_summary jsonb := '{}'::jsonb;
+  v_candidate_scope_type text := NULL::text;
+  v_candidate_scope_pay_batch_candidate_id_text text := NULL::text;
+  v_candidate_scope_candidate_id_text text := NULL::text;
+  v_candidate_scope_pay_batch_candidate_id uuid := NULL::uuid;
+  v_candidate_scope_candidate_id uuid := NULL::uuid;
+  v_candidate_scope_actual_pay_batch_id uuid := NULL::uuid;
+  v_candidate_scope_actual_candidate_id uuid := NULL::uuid;
+  v_candidate_scope_enabled boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply(
     CASE
@@ -89673,6 +89679,108 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN
       v_known_live_signal_version := NULL::bigint;
     END;
+
+    v_candidate_scope_type := NULLIF(
+      UPPER(REGEXP_REPLACE(BTRIM(COALESCE(
+        p_filters_json ->> 'scope_type',
+        p_filters_json ->> 'scopeType',
+        ''
+      )), '[[:space:]-]+', '_', 'g')),
+      ''
+    );
+    v_candidate_scope_pay_batch_candidate_id_text := NULLIF(BTRIM(COALESCE(
+      p_filters_json ->> 'pay_batch_candidate_id',
+      p_filters_json ->> 'payBatchCandidateId',
+      ''
+    )), '');
+    v_candidate_scope_candidate_id_text := NULLIF(BTRIM(COALESCE(
+      p_filters_json ->> 'candidate_id',
+      p_filters_json ->> 'candidateId',
+      ''
+    )), '');
+  END IF;
+
+  IF v_candidate_scope_type = 'PAY_BATCH_CANDIDATE' THEN
+    IF v_section <> 'items' THEN
+      RAISE EXCEPTION 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_SECTION_NOT_ALLOWED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_SECTION_NOT_ALLOWED',
+                'section', v_section,
+                'scope_type', v_candidate_scope_type
+              )::text;
+    END IF;
+
+    IF v_candidate_scope_pay_batch_candidate_id_text IS NULL
+       OR v_candidate_scope_candidate_id_text IS NULL THEN
+      RAISE EXCEPTION 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_IDENTITY_REQUIRED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_IDENTITY_REQUIRED',
+                'scope_type', v_candidate_scope_type,
+                'requires', jsonb_build_array('pay_batch_candidate_id', 'candidate_id')
+              )::text;
+    END IF;
+
+    IF v_candidate_scope_pay_batch_candidate_id_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       OR v_candidate_scope_candidate_id_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_IDENTITY_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_IDENTITY_INVALID',
+                'scope_type', v_candidate_scope_type
+              )::text;
+    END IF;
+
+    v_candidate_scope_pay_batch_candidate_id := v_candidate_scope_pay_batch_candidate_id_text::uuid;
+    v_candidate_scope_candidate_id := v_candidate_scope_candidate_id_text::uuid;
+
+    SELECT
+      candidate_scope.pay_batch_id,
+      candidate_scope.candidate_id
+    INTO
+      v_candidate_scope_actual_pay_batch_id,
+      v_candidate_scope_actual_candidate_id
+    FROM public.pay_batch_candidates AS candidate_scope
+    WHERE candidate_scope.id = v_candidate_scope_pay_batch_candidate_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_NOT_FOUND',
+                'scope_type', v_candidate_scope_type
+              )::text;
+    END IF;
+
+    IF v_candidate_scope_actual_pay_batch_id IS DISTINCT FROM p_pay_batch_id THEN
+      RAISE EXCEPTION 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_OUT_OF_BATCH'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_OUT_OF_BATCH',
+                'scope_type', v_candidate_scope_type,
+                'pay_batch_id', p_pay_batch_id::text
+              )::text;
+    END IF;
+
+    IF v_candidate_scope_actual_candidate_id IS DISTINCT FROM v_candidate_scope_candidate_id THEN
+      RAISE EXCEPTION 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_MISMATCH'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_MISMATCH',
+                'scope_type', v_candidate_scope_type
+              )::text;
+    END IF;
+
+    v_candidate_scope_enabled := true;
+  ELSIF v_section = 'items'
+        AND (v_candidate_scope_pay_batch_candidate_id_text IS NOT NULL OR v_candidate_scope_candidate_id_text IS NOT NULL) THEN
+    RAISE EXCEPTION 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_TYPE_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_BATCH_GET_SECTION_PAGE_CANDIDATE_SCOPE_TYPE_REQUIRED',
+              'required_scope_type', 'PAY_BATCH_CANDIDATE'
+            )::text;
   END IF;
 
   SELECT
@@ -90107,13 +90215,34 @@ ELSIF v_section = 'candidates' THEN
     FROM page_rows;
 
   ELSIF v_section = 'items' THEN
-    WITH page_rows AS (
+    WITH candidate_scoped_item_ids AS MATERIALIZED (
+      SELECT pay_batch_item_scope.id
+      FROM public.pay_batch_items AS pay_batch_item_scope
+      JOIN public.pay_batch_candidates AS pay_batch_candidate_scope
+        ON pay_batch_candidate_scope.id = pay_batch_item_scope.pay_batch_candidate_id
+      WHERE pay_batch_candidate_scope.pay_batch_id = p_pay_batch_id
+        AND (
+          v_candidate_scope_enabled IS NOT TRUE
+          OR (
+            pay_batch_candidate_scope.id = v_candidate_scope_pay_batch_candidate_id
+            AND pay_batch_candidate_scope.candidate_id = v_candidate_scope_candidate_id
+          )
+        )
+        AND (v_cursor_id IS NULL OR pay_batch_item_scope.id > v_cursor_id)
+      ORDER BY pay_batch_item_scope.id ASC
+      LIMIT (v_limit + 1)
+    ), page_rows AS (
       SELECT
         pay_batch_item_page.id,
         pay_batch_item_page.pay_batch_candidate_id,
         pay_batch_candidate_page.candidate_id,
         pay_batch_candidate_page.candidate_tms_ref,
         pay_batch_candidate_page.candidate_display_name,
+        pay_batch_candidate_page.paye_state AS candidate_paye_state,
+        pay_batch_candidate_page.gross_preview AS candidate_gross_preview,
+        pay_batch_candidate_page.net_bank_amount AS candidate_net_bank_amount,
+        pay_batch_candidate_page.awaiting_net_amount AS candidate_awaiting_net_amount,
+        pay_batch_candidate_page.settlement_status AS candidate_settlement_status,
         pay_batch_item_page.item_type,
         pay_batch_item_page.timesheet_id,
         pay_batch_item_page.segment_key,
@@ -90171,7 +90300,9 @@ ELSIF v_section = 'candidates' THEN
         END AS unit_label,
         breakdown_display.breakdown_units AS units,
         breakdown_display.breakdown_rate AS rate
-      FROM public.pay_batch_items AS pay_batch_item_page
+      FROM candidate_scoped_item_ids AS candidate_scoped_item
+      JOIN public.pay_batch_items AS pay_batch_item_page
+        ON pay_batch_item_page.id = candidate_scoped_item.id
       JOIN public.pay_batch_candidates AS pay_batch_candidate_page
         ON pay_batch_candidate_page.id = pay_batch_item_page.pay_batch_candidate_id
       LEFT JOIN LATERAL (
@@ -90342,10 +90473,16 @@ ELSIF v_section = 'candidates' THEN
         jsonb_strip_nulls(
           jsonb_build_object(
             'id', page_rows.id::text,
+            'pay_batch_item_id', page_rows.id::text,
             'pay_batch_candidate_id', page_rows.pay_batch_candidate_id::text,
             'candidate_id', page_rows.candidate_id::text,
             'candidate_tms_ref', page_rows.candidate_tms_ref,
             'candidate_display_name', page_rows.candidate_display_name,
+            'candidate_paye_state', page_rows.candidate_paye_state,
+            'candidate_gross_preview', page_rows.candidate_gross_preview,
+            'candidate_net_bank_amount', page_rows.candidate_net_bank_amount,
+            'candidate_awaiting_net_amount', page_rows.candidate_awaiting_net_amount,
+            'candidate_settlement_status', page_rows.candidate_settlement_status,
             'item_type', page_rows.item_type,
             'timesheet_id', CASE WHEN page_rows.timesheet_id IS NULL THEN NULL::text ELSE page_rows.timesheet_id::text END,
             'segment_key', page_rows.segment_key,
@@ -90973,7 +91110,15 @@ ELSIF v_section = 'candidates' THEN
       'live_signal_version', COALESCE(v_live_signal_version, 0),
       'payment_status_version', COALESCE(v_payment_status_version, 0),
       'correction_progress_version', COALESCE(v_correction_progress_version, 0),
-      'overview_version', COALESCE(v_overview_version, 0)
+      'overview_version', COALESCE(v_overview_version, 0),
+      'candidate_scope', CASE
+        WHEN v_candidate_scope_enabled THEN jsonb_build_object(
+          'scope_type', 'PAY_BATCH_CANDIDATE',
+          'pay_batch_candidate_id', v_candidate_scope_pay_batch_candidate_id::text,
+          'candidate_id', v_candidate_scope_candidate_id::text
+        )
+        ELSE NULL::jsonb
+      END
     )::text
   );
 
@@ -91000,7 +91145,10 @@ ELSIF v_section = 'candidates' THEN
     'batch_status', v_batch.status,
     'execution_commit_state', v_batch.execution_commit_state,
     'freshness', v_freshness_summary,
-    'limit', v_limit
+    'limit', v_limit,
+    'scope_type', CASE WHEN v_candidate_scope_enabled THEN 'PAY_BATCH_CANDIDATE' ELSE NULL::text END,
+    'pay_batch_candidate_id', CASE WHEN v_candidate_scope_enabled THEN v_candidate_scope_pay_batch_candidate_id::text ELSE NULL::text END,
+    'candidate_id', CASE WHEN v_candidate_scope_enabled THEN v_candidate_scope_candidate_id::text ELSE NULL::text END
   );
 END;
 $function$;
