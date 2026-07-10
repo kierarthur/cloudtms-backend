@@ -210127,6 +210127,8 @@ BEGIN
 END;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_patch_preview_after_batch_mutation(p_session_id uuid, p_pay_batch_id uuid, p_operation_type text, p_actor_user_id uuid DEFAULT NULL::uuid, p_options_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -210812,7 +210814,12 @@ BEGIN
           OR resolution_row.timesheet_id IS NULL
           OR resolution_row.timesheet_id = ANY(candidate_update.timesheet_ids)
         )
-    );
+    )
+  WHERE EXISTS (
+    SELECT 1
+    FROM pg_temp._bpay_batch_mutation_keys AS affected_key
+    WHERE affected_key.candidate_id = candidate_update.candidate_id
+  );
 
   SELECT COUNT(*)::integer,
          COALESCE(jsonb_agg(candidate_row.candidate_id::text ORDER BY candidate_row.candidate_id), '[]'::jsonb)
@@ -211206,6 +211213,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clone_eligibility_v1(p_source_session_id uuid, p_target_session_id uuid, p_candidate_id uuid, p_options_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb

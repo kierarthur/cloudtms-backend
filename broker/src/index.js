@@ -38264,6 +38264,7 @@ async function bankingPayOperationsCronTick(env, opts = {}) {
 }
 
 
+
 async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const upperText = (value) => trimText(value).toUpperCase();
@@ -38933,7 +38934,36 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       if (code.includes('PROVIDER') && (code.includes('UNKNOWN') || code.includes('AMBIG') || code.includes('SENT_LOCAL'))) return 'REVIEW_REQUIRED';
       return 'REVIEW_REQUIRED';
     }
-    const sourceProgress = asPlainObject(source.progress || source.progress_json || source.progressJson);
+
+    const progressSummary = asPlainObject(source.progress);
+    const durableProgress = asPlainObject(source.progress_json || source.progressJson);
+    const sourceProgress = Object.keys(progressSummary).length ? progressSummary : durableProgress;
+    const status = upperText(source.status || source.operation_status);
+    const phase = upperText(source.phase || source.operation_phase);
+    const operationTypeForRelease = upperText(source.operation_type || source.operationType);
+    const runnerState = upperText(source.runner_state || source.runnerState);
+    const resumeReason = upperText(
+      source.resume_reason ||
+      source.resumeReason ||
+      sourceProgress.resume_reason ||
+      sourceProgress.resumeReason ||
+      durableProgress.resume_reason ||
+      durableProgress.resumeReason
+    );
+    const retryStatus = upperText(
+      source.retry_status ||
+      source.retryStatus ||
+      source.retry_state ||
+      source.retryState ||
+      sourceProgress.retry_status ||
+      sourceProgress.retryStatus ||
+      sourceProgress.retry_state ||
+      sourceProgress.retryState ||
+      durableProgress.retry_status ||
+      durableProgress.retryStatus ||
+      durableProgress.retry_state ||
+      durableProgress.retryState
+    );
     const explicitReleaseState = upperText(
       source.release_state ||
       source.releaseState ||
@@ -38942,13 +38972,26 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       sourceProgress.release_state ||
       sourceProgress.releaseState
     );
-    if (['WAITING_RETRY', 'RETRYABLE_ERROR', 'RETRYABLE_FAILURE', 'RETRY', 'TRANSIENT_ERROR'].includes(explicitReleaseState)) return 'WAITING_RETRY';
-    const status = upperText(source.status || source.operation_status);
-    const phase = upperText(source.phase || source.operation_phase);
-    const operationTypeForRelease = upperText(source.operation_type || source.operationType);
-    const runnerState = upperText(source.runner_state || source.runnerState);
-    const resumeReason = upperText(source.resume_reason || source.resumeReason || sourceProgress.resume_reason || sourceProgress.resumeReason);
-    const retryStatus = upperText(source.retry_status || source.retryStatus || source.retry_state || source.retryState || sourceProgress.retry_status || sourceProgress.retryStatus || sourceProgress.retry_state || sourceProgress.retryState);
+    const durableReleaseState = upperText(
+      durableProgress.release_state ||
+      durableProgress.releaseState ||
+      durableProgress.operation_release_state ||
+      durableProgress.operationReleaseState
+    );
+    const retryReleaseStates = ['WAITING_RETRY', 'RETRYABLE_ERROR', 'RETRYABLE_FAILURE', 'RETRY', 'TRANSIENT_ERROR'];
+    const draftCreatePostCreateRetry = operationTypeForRelease === 'DRAFT_CREATE'
+      && phase === 'POST_CREATE_REFRESH'
+      && (
+        retryReleaseStates.includes(explicitReleaseState)
+        || retryReleaseStates.includes(durableReleaseState)
+        || retryReleaseStates.includes(retryStatus)
+        || /^POST_CREATE_[A-Z0-9_]*RETRY$/.test(resumeReason)
+      );
+
+    if (['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE'].includes(status)) return 'COMPLETE';
+    if (['FAILED', 'ERROR', 'CANCELLED', 'CANCELED'].includes(status)) return 'FAILED';
+    if (draftCreatePostCreateRetry || retryReleaseStates.includes(explicitReleaseState)) return 'WAITING_RETRY';
+
     const retryRunAfterMs = parseTimeMs(source.run_after_utc || source.runAfterUtc || sourceProgress.run_after_utc || sourceProgress.runAfterUtc);
     if (operationTypeForRelease === 'REMITTANCE_QUEUE' && (
       retryStatus === 'WAITING_RETRY' ||
@@ -38959,9 +39002,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       sourceProgress.remittance_retry === true ||
       (status === 'RUNNING' && runnerState === 'RUNNABLE' && retryRunAfterMs !== null && retryRunAfterMs > Date.now())
     )) return 'WAITING_RETRY';
-    if (['WAITING_RETRY', 'RETRYABLE_ERROR', 'RETRYABLE_FAILURE', 'RETRY', 'TRANSIENT_ERROR'].includes(status) || source.retryable_remittance_error === true || source.remittance_retry === true) return 'WAITING_RETRY';
-    if (['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE'].includes(status)) return 'COMPLETE';
-    if (['FAILED', 'ERROR', 'CANCELLED', 'CANCELED'].includes(status)) return 'FAILED';
+    if (retryReleaseStates.includes(status) || source.retryable_remittance_error === true || source.remittance_retry === true) return 'WAITING_RETRY';
     if (phase === 'COMPLETE') {
       return operationTypeForRelease === 'DRAFT_CREATE' ? 'MORE_WORK' : 'COMPLETE';
     }
