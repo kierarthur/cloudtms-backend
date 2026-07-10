@@ -179827,7 +179827,11 @@ BEGIN
       SELECT CASE
         WHEN component_probe_rows.target_section = 'canonical_preview_lines'
          AND LOWER(BTRIM(COALESCE(component_probe_rows.result_row_json->>'has_resolved_rate', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-         AND LOWER(BTRIM(COALESCE(component_probe_rows.result_row_json->>'case_resolution_satisfied_now', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         AND LOWER(BTRIM(COALESCE(
+               component_probe_rows.result_row_json->>'case_resolution_satisfied_now',
+               component_probe_rows.result_row_json#>>'{case_resolution_summary,case_resolution_satisfied_now}',
+               'false'
+             ))) IN ('true', 't', '1', 'yes', 'y', 'on')
          AND UPPER(BTRIM(COALESCE(
                component_probe_rows.result_row_json->>'resolved_rate_family',
                component_probe_rows.result_row_json#>>'{case_resolution_summary,resolved_rate_family}',
