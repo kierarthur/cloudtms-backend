@@ -54552,7 +54552,6 @@ $function$;
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_insert_items_from_preview(uuid, uuid);
-
 CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_operation_id uuid DEFAULT NULL::uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -55489,9 +55488,263 @@ BEGIN
       NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_value}', allocation_row.allocation_basis_json->>'key_value', '')), '') AS key_value
     FROM pg_temp.tmp_pay_batch_item_allocation_page AS allocation_row
     WHERE UPPER(BTRIM(COALESCE(allocation_row.allocation_type, ''))) <> 'OVERPAYMENT_RECOVERY'
+  ), prepared_rows_with_component_metrics AS (
+    SELECT
+      prepared_rows.*,
+      UPPER(NULLIF(BTRIM(COALESCE(
+        prepared_rows.line_json->>'resolution_mode',
+        prepared_rows.line_json->>'saved_resolution_mode',
+        ''
+      )), '')) AS line_resolution_mode_text,
+      component_metrics.matching_component_count,
+      component_metrics.resolved_component_count,
+      component_metrics.source_amount_count,
+      component_metrics.target_amount_count,
+      component_metrics.component_source_total_ex_vat,
+      component_metrics.component_target_total_ex_vat,
+      component_metrics.resolution_mode_count,
+      component_metrics.invalid_resolution_mode_count,
+      component_metrics.component_resolution_mode_text,
+      component_metrics.source_pay_method_count,
+      component_metrics.invalid_source_pay_method_count,
+      component_metrics.component_source_pay_method_text,
+      component_metrics.target_pay_method_count,
+      component_metrics.invalid_target_pay_method_count,
+      component_metrics.component_target_pay_method_text,
+      (
+        prepared_rows.key_type = 'TS_DAY'
+        AND (
+          LOWER(BTRIM(COALESCE(prepared_rows.line_json->>'has_resolved_rate', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR LOWER(BTRIM(COALESCE(prepared_rows.line_json->>'resolved_segment_rows_replace_source_total', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR LOWER(BTRIM(COALESCE(prepared_rows.line_json#>>'{case_resolution_summary,has_resolved_rate}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR LOWER(BTRIM(COALESCE(prepared_rows.line_json#>>'{case_resolution_summary,resolved_rate_applied}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR LOWER(BTRIM(COALESCE(prepared_rows.line_json#>>'{case_resolution_summary,resolved_rate_active}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR (
+            COALESCE(prepared_rows.line_json#>>'{case_resolution_summary,resolved_rate_component_count}', '') ~ '^[0-9]+$'
+            AND (prepared_rows.line_json#>>'{case_resolution_summary,resolved_rate_component_count}')::integer > 0
+          )
+          OR component_metrics.resolved_component_count > 0
+        )
+      ) AS resolved_rate_expected
+    FROM prepared_rows
+    CROSS JOIN LATERAL (
+      SELECT
+        COUNT(*)::integer AS matching_component_count,
+        COUNT(*) FILTER (
+          WHERE component_values.is_resolved_component
+        )::integer AS resolved_component_count,
+        COUNT(*) FILTER (
+          WHERE component_values.source_amount_text IS NOT NULL
+        )::integer AS source_amount_count,
+        COUNT(*) FILTER (
+          WHERE component_values.target_amount_text IS NOT NULL
+        )::integer AS target_amount_count,
+        ROUND(COALESCE(SUM(ABS(component_values.source_amount_text::numeric)) FILTER (
+          WHERE component_values.source_amount_text IS NOT NULL
+        ), 0), 2)::numeric(12,2) AS component_source_total_ex_vat,
+        ROUND(COALESCE(SUM(ABS(component_values.target_amount_text::numeric)) FILTER (
+          WHERE component_values.target_amount_text IS NOT NULL
+        ), 0), 2)::numeric(12,2) AS component_target_total_ex_vat,
+        COUNT(DISTINCT component_values.resolution_mode_text) FILTER (
+          WHERE component_values.resolution_mode_text IN (
+            'SUGGESTED_EQUIVALENT_BASIS',
+            'MANUAL_REPLACEMENT_RATE',
+            'MANUAL_AMOUNT'
+          )
+        )::integer AS resolution_mode_count,
+        COUNT(*) FILTER (
+          WHERE component_values.resolution_mode_text IS NOT NULL
+            AND component_values.resolution_mode_text NOT IN (
+              'SUGGESTED_EQUIVALENT_BASIS',
+              'MANUAL_REPLACEMENT_RATE',
+              'MANUAL_AMOUNT'
+            )
+        )::integer AS invalid_resolution_mode_count,
+        MAX(component_values.resolution_mode_text) FILTER (
+          WHERE component_values.resolution_mode_text IN (
+            'SUGGESTED_EQUIVALENT_BASIS',
+            'MANUAL_REPLACEMENT_RATE',
+            'MANUAL_AMOUNT'
+          )
+        ) AS component_resolution_mode_text,
+        COUNT(DISTINCT component_values.source_pay_method_text) FILTER (
+          WHERE component_values.source_pay_method_text IN ('PAYE', 'UMBRELLA')
+        )::integer AS source_pay_method_count,
+        COUNT(*) FILTER (
+          WHERE component_values.source_pay_method_text IS NOT NULL
+            AND component_values.source_pay_method_text NOT IN ('PAYE', 'UMBRELLA')
+        )::integer AS invalid_source_pay_method_count,
+        MAX(component_values.source_pay_method_text) FILTER (
+          WHERE component_values.source_pay_method_text IN ('PAYE', 'UMBRELLA')
+        ) AS component_source_pay_method_text,
+        COUNT(DISTINCT component_values.target_pay_method_text) FILTER (
+          WHERE component_values.target_pay_method_text IN ('PAYE', 'UMBRELLA')
+        )::integer AS target_pay_method_count,
+        COUNT(*) FILTER (
+          WHERE component_values.target_pay_method_text IS NOT NULL
+            AND component_values.target_pay_method_text NOT IN ('PAYE', 'UMBRELLA')
+        )::integer AS invalid_target_pay_method_count,
+        MAX(component_values.target_pay_method_text) FILTER (
+          WHERE component_values.target_pay_method_text IN ('PAYE', 'UMBRELLA')
+        ) AS component_target_pay_method_text
+      FROM (
+        SELECT
+          COALESCE(
+            CASE WHEN COALESCE(component_element.value->>'source_reservation_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'source_reservation_amount_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'allocated_source_due_amount_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'applied_basis_source_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'applied_basis_source_amount_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{suggested_resolution_result_json,applied_basis_source_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{suggested_resolution_result_json,applied_basis_source_amount_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'remaining_source_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'remaining_source_amount_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'remaining_source_amount' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'source_entitlement_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'source_entitlement_amount_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'source_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'source_amount_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'source_pay_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{saved_resolution_result_json,source_reservation_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{saved_resolution_result_json,source_reservation_amount_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{saved_resolution_result_json,source_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{saved_resolution_result_json,source_amount_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{saved_resolution_result_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{saved_resolution_result_json,source_pay_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{suggested_resolution_result_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{suggested_resolution_result_json,source_pay_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{source_basis_json,source_reservation_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{source_basis_json,source_reservation_amount_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{source_basis_json,source_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{source_basis_json,source_amount_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{source_basis_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{source_basis_json,source_pay_ex_vat}' ELSE NULL::text END
+          ) AS source_amount_text,
+          COALESCE(
+            CASE WHEN COALESCE(component_element.value->>'target_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'target_amount_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'target_pay_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'ready_preview_amount_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value->>'preview_component_amount_ex_vat' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{saved_resolution_result_json,target_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{saved_resolution_result_json,target_amount_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{saved_resolution_result_json,target_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{saved_resolution_result_json,target_pay_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{suggested_resolution_result_json,target_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{suggested_resolution_result_json,target_amount_ex_vat}' ELSE NULL::text END,
+            CASE WHEN COALESCE(component_element.value#>>'{suggested_resolution_result_json,target_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN component_element.value#>>'{suggested_resolution_result_json,target_pay_ex_vat}' ELSE NULL::text END
+          ) AS target_amount_text,
+          UPPER(NULLIF(BTRIM(COALESCE(
+            component_element.value->>'saved_resolution_mode',
+            component_element.value->>'resolution_mode',
+            component_element.value#>>'{saved_resolution_payload_json,resolution_mode}',
+            component_element.value#>>'{saved_resolution_result_json,resolution_mode}',
+            component_element.value#>>'{suggested_resolution_payload_json,resolution_mode}',
+            component_element.value#>>'{suggested_resolution_result_json,resolution_mode}',
+            ''
+          )), '')) AS resolution_mode_text,
+          UPPER(NULLIF(BTRIM(COALESCE(
+            component_element.value->>'source_pay_method',
+            component_element.value#>>'{source_basis_json,source_pay_method}',
+            component_element.value#>>'{saved_resolution_result_json,source_pay_method}',
+            component_element.value#>>'{suggested_resolution_result_json,source_pay_method}',
+            ''
+          )), '')) AS source_pay_method_text,
+          UPPER(NULLIF(BTRIM(COALESCE(
+            component_element.value->>'saved_target_pay_method',
+            component_element.value->>'current_target_pay_method',
+            component_element.value->>'target_pay_method',
+            component_element.value#>>'{saved_resolution_payload_json,target_pay_method}',
+            component_element.value#>>'{saved_resolution_result_json,target_pay_method}',
+            component_element.value#>>'{suggested_resolution_payload_json,target_pay_method}',
+            component_element.value#>>'{suggested_resolution_result_json,target_pay_method}',
+            ''
+          )), '')) AS target_pay_method_text,
+          (
+            UPPER(BTRIM(COALESCE(component_element.value->>'resolution_state', ''))) = 'RESOLVED'
+            OR LOWER(BTRIM(COALESCE(component_element.value->>'has_suggested_resolution', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+            OR LOWER(BTRIM(COALESCE(component_element.value->>'is_reusable_saved_resolution', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+            OR NULLIF(BTRIM(COALESCE(component_element.value->>'saved_resolution_mode', component_element.value->>'resolution_mode', '')), '') IS NOT NULL
+            OR jsonb_typeof(component_element.value->'saved_resolution_payload_json') = 'object'
+            OR jsonb_typeof(component_element.value->'saved_resolution_result_json') = 'object'
+            OR jsonb_typeof(component_element.value->'suggested_resolution_payload_json') = 'object'
+            OR jsonb_typeof(component_element.value->'suggested_resolution_result_json') = 'object'
+          ) AS is_resolved_component
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(prepared_rows.line_json->'case_components') = 'array' THEN prepared_rows.line_json->'case_components'
+            ELSE '[]'::jsonb
+          END
+        ) AS component_element(value)
+        WHERE jsonb_typeof(component_element.value) = 'object'
+          AND UPPER(NULLIF(BTRIM(COALESCE(
+            component_element.value->>'component_key_type',
+            component_element.value#>>'{economic_key,key_type}',
+            ''
+          )), '')) IS NOT DISTINCT FROM prepared_rows.key_type
+          AND NULLIF(BTRIM(COALESCE(
+            component_element.value->>'component_key_value',
+            component_element.value#>>'{economic_key,key_value}',
+            component_element.value#>>'{source_basis_json,work_date}',
+            ''
+          )), '') IS NOT DISTINCT FROM prepared_rows.key_value
+      ) AS component_values
+    ) AS component_metrics
+  ), prepared_rows_with_component_authority AS (
+    SELECT
+      prepared_rows_with_component_metrics.*,
+      CASE
+        WHEN prepared_rows_with_component_metrics.resolved_rate_expected IS NOT TRUE THEN true
+        WHEN prepared_rows_with_component_metrics.matching_component_count <= 0 THEN false
+        WHEN prepared_rows_with_component_metrics.resolved_component_count IS DISTINCT FROM prepared_rows_with_component_metrics.matching_component_count THEN false
+        WHEN prepared_rows_with_component_metrics.source_amount_count IS DISTINCT FROM prepared_rows_with_component_metrics.matching_component_count THEN false
+        WHEN prepared_rows_with_component_metrics.target_amount_count IS DISTINCT FROM prepared_rows_with_component_metrics.matching_component_count THEN false
+        WHEN prepared_rows_with_component_metrics.resolution_mode_count <> 1 THEN false
+        WHEN prepared_rows_with_component_metrics.invalid_resolution_mode_count <> 0 THEN false
+        WHEN prepared_rows_with_component_metrics.source_pay_method_count <> 1 THEN false
+        WHEN prepared_rows_with_component_metrics.invalid_source_pay_method_count <> 0 THEN false
+        WHEN prepared_rows_with_component_metrics.target_pay_method_count <> 1 THEN false
+        WHEN prepared_rows_with_component_metrics.invalid_target_pay_method_count <> 0 THEN false
+        WHEN prepared_rows_with_component_metrics.component_target_pay_method_text IS DISTINCT FROM UPPER(BTRIM(COALESCE(prepared_rows_with_component_metrics.pay_channel, ''))) THEN false
+        WHEN ROUND(COALESCE(prepared_rows_with_component_metrics.component_source_total_ex_vat, 0), 2) <= 0 THEN false
+        WHEN ROUND(COALESCE(prepared_rows_with_component_metrics.component_target_total_ex_vat, 0), 2) <= 0 THEN false
+        WHEN ABS(
+          ROUND(COALESCE(prepared_rows_with_component_metrics.component_target_total_ex_vat, 0), 2)
+          - ROUND(ABS(COALESCE(prepared_rows_with_component_metrics.allocated_amount, 0)), 2)
+        ) > 0.01 THEN false
+        WHEN prepared_rows_with_component_metrics.line_resolution_mode_text IS NOT NULL
+         AND prepared_rows_with_component_metrics.line_resolution_mode_text NOT IN (
+           'SUGGESTED_EQUIVALENT_BASIS',
+           'MANUAL_REPLACEMENT_RATE',
+           'MANUAL_AMOUNT'
+         ) THEN false
+        WHEN prepared_rows_with_component_metrics.line_resolution_mode_text IS NOT NULL
+         AND prepared_rows_with_component_metrics.line_resolution_mode_text IS DISTINCT FROM prepared_rows_with_component_metrics.component_resolution_mode_text THEN false
+        ELSE true
+      END AS resolved_component_authority_ok,
+      (
+        prepared_rows_with_component_metrics.resolved_rate_expected IS TRUE
+        AND prepared_rows_with_component_metrics.line_resolution_mode_text IS NOT NULL
+        AND (
+          prepared_rows_with_component_metrics.line_resolution_mode_text NOT IN (
+            'SUGGESTED_EQUIVALENT_BASIS',
+            'MANUAL_REPLACEMENT_RATE',
+            'MANUAL_AMOUNT'
+          )
+          OR prepared_rows_with_component_metrics.resolution_mode_count <> 1
+          OR prepared_rows_with_component_metrics.line_resolution_mode_text IS DISTINCT FROM prepared_rows_with_component_metrics.component_resolution_mode_text
+        )
+      ) AS resolution_mode_conflict
+    FROM prepared_rows_with_component_metrics
   ), normalised_source_rows AS (
     SELECT
       prepared_rows.*,
+      CASE
+        WHEN UPPER(COALESCE(prepared_rows.line_resolution_mode_text, '')) = 'SUGGESTED_EQUIVALENT_BASIS' THEN 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum
+        WHEN UPPER(COALESCE(prepared_rows.line_resolution_mode_text, '')) = 'MANUAL_REPLACEMENT_RATE' THEN 'MANUAL_REPLACEMENT_RATE'::public.pay_finance_component_resolution_mode_enum
+        WHEN UPPER(COALESCE(prepared_rows.line_resolution_mode_text, '')) = 'MANUAL_AMOUNT' THEN 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
+        WHEN prepared_rows.resolved_rate_expected IS TRUE
+         AND prepared_rows.resolved_component_authority_ok IS TRUE
+         AND prepared_rows.component_resolution_mode_text = 'SUGGESTED_EQUIVALENT_BASIS' THEN 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum
+        WHEN prepared_rows.resolved_rate_expected IS TRUE
+         AND prepared_rows.resolved_component_authority_ok IS TRUE
+         AND prepared_rows.component_resolution_mode_text = 'MANUAL_REPLACEMENT_RATE' THEN 'MANUAL_REPLACEMENT_RATE'::public.pay_finance_component_resolution_mode_enum
+        WHEN prepared_rows.resolved_rate_expected IS TRUE
+         AND prepared_rows.resolved_component_authority_ok IS TRUE
+         AND prepared_rows.component_resolution_mode_text = 'MANUAL_AMOUNT' THEN 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
+        ELSE NULL::public.pay_finance_component_resolution_mode_enum
+      END AS resolution_mode,
+      CASE
+        WHEN prepared_rows.resolved_rate_expected IS TRUE
+         AND prepared_rows.resolved_component_authority_ok IS TRUE THEN prepared_rows.component_source_pay_method_text
+        ELSE UPPER(NULLIF(BTRIM(COALESCE(
+          prepared_rows.line_json->>'source_pay_method',
+          ''
+        )), ''))
+      END AS resolved_source_pay_method,
       CASE
         WHEN UPPER(COALESCE(prepared_rows.line_json->>'line_type', prepared_rows.allocation_type, '')) IN ('MANUAL_ADJUSTMENT_CARRY_FORWARD', 'MANUAL_CREDIT_PAYOUT') THEN 'MANUAL_CREDIT_PAYOUT'
         WHEN UPPER(COALESCE(prepared_rows.line_json->>'line_type', prepared_rows.allocation_type, '')) = 'MANUAL_DEBT_RECOVERY' THEN 'MANUAL_DEBT_RECOVERY'
@@ -55508,12 +55761,12 @@ BEGIN
         ELSE 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
       END AS component_classification,
       CASE
-        WHEN UPPER(COALESCE(prepared_rows.line_json->>'resolution_mode', prepared_rows.line_json->>'saved_resolution_mode', '')) = 'SUGGESTED_EQUIVALENT_BASIS' THEN 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum
-        WHEN UPPER(COALESCE(prepared_rows.line_json->>'resolution_mode', prepared_rows.line_json->>'saved_resolution_mode', '')) = 'MANUAL_REPLACEMENT_RATE' THEN 'MANUAL_REPLACEMENT_RATE'::public.pay_finance_component_resolution_mode_enum
-        WHEN UPPER(COALESCE(prepared_rows.line_json->>'resolution_mode', prepared_rows.line_json->>'saved_resolution_mode', '')) = 'MANUAL_AMOUNT' THEN 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
-        ELSE NULL::public.pay_finance_component_resolution_mode_enum
-      END AS resolution_mode,
-      CASE
+        WHEN prepared_rows.resolved_rate_expected IS TRUE THEN
+          CASE
+            WHEN prepared_rows.resolved_component_authority_ok IS TRUE
+              THEN ROUND(prepared_rows.component_source_total_ex_vat, 2)::numeric(12,2)
+            ELSE NULL::numeric(12,2)
+          END
         WHEN ROUND(COALESCE(prepared_rows.allocated_amount, 0), 2) > 0
          AND UPPER(BTRIM(COALESCE(prepared_rows.allocation_type, ''))) <> 'OVERPAYMENT_RECOVERY'
          AND UPPER(COALESCE(prepared_rows.line_json->>'line_type', prepared_rows.line_json->>'item_type', prepared_rows.allocation_type, '')) NOT IN ('DEBT_CREATED', 'LOAN_REPAYMENT', 'OVERPAYMENT_RECOVERY', 'LOAN_PAYOUT')
@@ -55544,7 +55797,7 @@ BEGIN
           ABS(COALESCE(prepared_rows.allocated_amount, 0))
         ), 2)::numeric(12,2)
       END AS frozen_source_amount
-    FROM prepared_rows
+    FROM prepared_rows_with_component_authority AS prepared_rows
   ), normalised_rows AS (
     SELECT
       normalised_source_rows.*,
@@ -55677,6 +55930,90 @@ BEGIN
   )
   SELECT normalised_rows.*
   FROM normalised_rows;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_temp.tmp_pay_batch_item_normalised_rows AS validation_rows
+    WHERE validation_rows.resolved_rate_expected IS TRUE
+      AND (
+        validation_rows.resolved_component_authority_ok IS NOT TRUE
+        OR validation_rows.resolution_mode_conflict IS TRUE
+        OR validation_rows.frozen_source_amount IS NULL
+        OR ROUND(ABS(COALESCE(validation_rows.frozen_source_amount, 0)), 2) <= 0
+        OR validation_rows.resolution_mode IS NULL
+        OR validation_rows.resolved_source_pay_method IS NULL
+      )
+  ) THEN
+    RAISE EXCEPTION 'RESOLVED_PREVIEW_SOURCE_AUTHORITY_INVALID'
+      USING ERRCODE = 'P0001',
+            DETAIL = (
+              SELECT jsonb_build_object(
+                'code', 'RESOLVED_PREVIEW_SOURCE_AUTHORITY_INVALID',
+                'message', 'A resolved TS_DAY preview row did not contain a complete, internally consistent source-to-target authority for draft item freezing.',
+                'pay_batch_id', p_pay_batch_id::text,
+                'operation_id', p_operation_id::text,
+                'failures', COALESCE(jsonb_agg(jsonb_build_object(
+                  'allocation_row_id', failure_rows.allocation_row_id::text,
+                  'candidate_id', failure_rows.candidate_id::text,
+                  'timesheet_id', CASE WHEN failure_rows.timesheet_id IS NULL THEN NULL ELSE failure_rows.timesheet_id::text END,
+                  'key_type', failure_rows.key_type,
+                  'key_value', failure_rows.key_value,
+                  'allocated_target_amount_ex_vat', failure_rows.amount_ex_vat,
+                  'matching_component_count', failure_rows.matching_component_count,
+                  'resolved_component_count', failure_rows.resolved_component_count,
+                  'source_amount_count', failure_rows.source_amount_count,
+                  'target_amount_count', failure_rows.target_amount_count,
+                  'component_source_total_ex_vat', failure_rows.component_source_total_ex_vat,
+                  'component_target_total_ex_vat', failure_rows.component_target_total_ex_vat,
+                  'resolution_mode_count', failure_rows.resolution_mode_count,
+                  'invalid_resolution_mode_count', failure_rows.invalid_resolution_mode_count,
+                  'component_resolution_mode', failure_rows.component_resolution_mode_text,
+                  'line_resolution_mode', failure_rows.line_resolution_mode_text,
+                  'source_pay_method_count', failure_rows.source_pay_method_count,
+                  'component_source_pay_method', failure_rows.component_source_pay_method_text,
+                  'target_pay_method_count', failure_rows.target_pay_method_count,
+                  'component_target_pay_method', failure_rows.component_target_pay_method_text,
+                  'resolution_mode_conflict', failure_rows.resolution_mode_conflict
+                ) ORDER BY failure_rows.allocation_row_id), '[]'::jsonb)
+              )::text
+              FROM (
+                SELECT
+                  validation_rows.allocation_row_id,
+                  validation_rows.candidate_id,
+                  validation_rows.timesheet_id,
+                  validation_rows.key_type,
+                  validation_rows.key_value,
+                  validation_rows.amount_ex_vat,
+                  validation_rows.matching_component_count,
+                  validation_rows.resolved_component_count,
+                  validation_rows.source_amount_count,
+                  validation_rows.target_amount_count,
+                  validation_rows.component_source_total_ex_vat,
+                  validation_rows.component_target_total_ex_vat,
+                  validation_rows.resolution_mode_count,
+                  validation_rows.invalid_resolution_mode_count,
+                  validation_rows.component_resolution_mode_text,
+                  validation_rows.line_resolution_mode_text,
+                  validation_rows.source_pay_method_count,
+                  validation_rows.component_source_pay_method_text,
+                  validation_rows.target_pay_method_count,
+                  validation_rows.component_target_pay_method_text,
+                  validation_rows.resolution_mode_conflict
+                FROM pg_temp.tmp_pay_batch_item_normalised_rows AS validation_rows
+                WHERE validation_rows.resolved_rate_expected IS TRUE
+                  AND (
+                    validation_rows.resolved_component_authority_ok IS NOT TRUE
+                    OR validation_rows.resolution_mode_conflict IS TRUE
+                    OR validation_rows.frozen_source_amount IS NULL
+                    OR ROUND(ABS(COALESCE(validation_rows.frozen_source_amount, 0)), 2) <= 0
+                    OR validation_rows.resolution_mode IS NULL
+                    OR validation_rows.resolved_source_pay_method IS NULL
+                  )
+                ORDER BY validation_rows.allocation_row_id
+                LIMIT 25
+              ) AS failure_rows
+            );
+  END IF;
 
   IF EXISTS (
     SELECT 1
@@ -55843,7 +56180,7 @@ BEGIN
           ELSE '{}'::jsonb
         END
       ),
-      COALESCE(NULLIF(UPPER(BTRIM(normalised_rows.line_json->>'source_pay_method')), ''), normalised_rows.pay_channel),
+      COALESCE(normalised_rows.resolved_source_pay_method, NULLIF(UPPER(BTRIM(normalised_rows.line_json->>'source_pay_method')), ''), normalised_rows.pay_channel),
       normalised_rows.pay_channel,
       normalised_rows.resolution_mode,
       CASE WHEN jsonb_typeof(normalised_rows.line_json->'resolution_payload_json') = 'object' THEN normalised_rows.line_json->'resolution_payload_json' ELSE normalised_rows.line_json END,
@@ -55989,7 +56326,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_apply_finance_adjustments(uuid, text, uuid, numeric, date);
@@ -108314,7 +108650,6 @@ $$;
 
 DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid);
 DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid, uuid, jsonb);
-
 CREATE OR REPLACE FUNCTION public.pay_settle_rail(p_pay_batch_id uuid, p_settlement_json jsonb, p_actor_user_id uuid, p_operation_id uuid DEFAULT NULL::uuid, p_settlement_scope_ids jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -108492,6 +108827,7 @@ declare
   v_operation_auth_request_id uuid := NULL::uuid;
   v_operation_auth_state text := NULL::text;
   v_execution_operation_id uuid := NULL::uuid;
+  v_execution_operation_resolved_from_batch_intent boolean := false;
   v_auth_intent_operation_id uuid := NULL::uuid;
   v_no_bank_payment_marker boolean := false;
   v_allow_explicit_zero_no_bank_scopes_marker boolean := false;
@@ -108593,11 +108929,14 @@ begin
       RAISE EXCEPTION 'pay_settle_rail operation mode requires non-empty p_settlement_scope_ids';
     END IF;
 
+    -- Resolve the execution binding without holding a row lock, then acquire
+    -- canonical locks in root-execution -> requested-operation -> batch order.
+    -- The requested operation and batch binding are re-read and revalidated after
+    -- the canonical locks are held so an initial read can never become authority.
     SELECT operation_row.*
     INTO v_operation_row
     FROM public.banking_pay_operations AS operation_row
-    WHERE operation_row.id = p_operation_id
-    FOR UPDATE;
+    WHERE operation_row.id = p_operation_id;
 
     IF NOT FOUND THEN
       RAISE EXCEPTION 'banking_pay_operations row % not found', p_operation_id;
@@ -108613,6 +108952,115 @@ begin
 
     IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
       RAISE EXCEPTION 'operation % belongs to a different actor', p_operation_id;
+    END IF;
+
+    IF UPPER(BTRIM(COALESCE(v_operation_row.operation_type, ''))) = 'PAYMENT_EXECUTE' THEN
+      v_execution_operation_id := v_operation_row.id;
+    ELSIF v_operation_row.root_operation_id IS NOT NULL THEN
+      v_execution_operation_id := v_operation_row.root_operation_id;
+    ELSE
+      SELECT CASE
+        WHEN JSONB_TYPEOF(pb.execution_intent_json) = 'object'
+          THEN COALESCE(pb.execution_intent_json, '{}'::jsonb)
+        ELSE '{}'::jsonb
+      END
+      INTO v_batch_intent_json
+      FROM public.pay_batches AS pb
+      WHERE pb.id = p_pay_batch_id;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'pay_settle_rail: pay_batch not found';
+      END IF;
+
+      IF NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
+           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        v_execution_operation_id := (v_batch_intent_json->>'operation_id')::uuid;
+        v_execution_operation_resolved_from_batch_intent := true;
+      END IF;
+    END IF;
+
+    IF v_execution_operation_id IS NULL THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_SETTLE_RAIL',
+        'code', 'EXECUTION_OPERATION_REQUIRED',
+        'message', 'The settlement operation is not bound to a payment execution operation.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT execution_operation.*
+    INTO v_execution_operation_row
+    FROM public.banking_pay_operations AS execution_operation
+    WHERE execution_operation.id = v_execution_operation_id
+    FOR UPDATE;
+
+    IF NOT FOUND
+       OR v_execution_operation_row.pay_batch_id IS DISTINCT FROM p_pay_batch_id
+       OR v_execution_operation_row.operation_type NOT IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_SETTLE_RAIL',
+        'code', 'EXECUTION_OPERATION_INVALID',
+        'message', 'The resolved payment execution operation is missing or incompatible with this settlement operation.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'execution_operation_id', v_execution_operation_id::text
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+
+    IF p_operation_id = v_execution_operation_id THEN
+      v_operation_row := v_execution_operation_row;
+    ELSE
+      SELECT operation_row.*
+      INTO v_operation_row
+      FROM public.banking_pay_operations AS operation_row
+      WHERE operation_row.id = p_operation_id
+      FOR UPDATE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'banking_pay_operations row % not found', p_operation_id;
+      END IF;
+    END IF;
+
+    IF v_operation_row.operation_type NOT IN ('PAYMENT_SETTLEMENT', 'PAYMENT_EXECUTE') THEN
+      RAISE EXCEPTION 'operation % is not a settlement-capable operation', p_operation_id;
+    END IF;
+
+    IF v_operation_row.pay_batch_id IS NOT NULL AND v_operation_row.pay_batch_id <> p_pay_batch_id THEN
+      RAISE EXCEPTION 'operation % is for pay batch %, not %', p_operation_id, v_operation_row.pay_batch_id, p_pay_batch_id;
+    END IF;
+
+    IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
+      RAISE EXCEPTION 'operation % belongs to a different actor', p_operation_id;
+    END IF;
+
+    IF UPPER(BTRIM(COALESCE(v_operation_row.operation_type, ''))) = 'PAYMENT_EXECUTE' THEN
+      IF v_operation_row.id IS DISTINCT FROM v_execution_operation_id THEN
+        RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+          'error', 'PAY_SETTLE_RAIL',
+          'code', 'EXECUTION_OPERATION_BINDING_CHANGED',
+          'message', 'The requested operation changed its execution-operation binding while rail settlement was acquiring its canonical locks.',
+          'pay_batch_id', p_pay_batch_id::text,
+          'operation_id', p_operation_id::text,
+          'locked_execution_operation_id', v_execution_operation_id::text,
+          'current_operation_type', v_operation_row.operation_type,
+          'current_root_operation_id', CASE WHEN v_operation_row.root_operation_id IS NULL THEN NULL::text ELSE v_operation_row.root_operation_id::text END
+        )::text USING ERRCODE = 'P0001';
+      END IF;
+    ELSIF v_operation_row.root_operation_id IS NOT NULL THEN
+      IF v_operation_row.root_operation_id IS DISTINCT FROM v_execution_operation_id THEN
+        RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+          'error', 'PAY_SETTLE_RAIL',
+          'code', 'EXECUTION_OPERATION_BINDING_CHANGED',
+          'message', 'The settlement operation changed its execution-operation binding while rail settlement was acquiring its canonical locks.',
+          'pay_batch_id', p_pay_batch_id::text,
+          'operation_id', p_operation_id::text,
+          'locked_execution_operation_id', v_execution_operation_id::text,
+          'current_root_operation_id', v_operation_row.root_operation_id::text
+        )::text USING ERRCODE = 'P0001';
+      END IF;
+    ELSE
+      v_execution_operation_resolved_from_batch_intent := true;
     END IF;
 
     SELECT pb.*
@@ -108643,43 +109091,23 @@ begin
       ELSE '{}'::jsonb
     END;
 
-    v_execution_operation_id := CASE
-      WHEN UPPER(BTRIM(COALESCE(v_operation_row.operation_type, ''))) = 'PAYMENT_EXECUTE'
-        THEN v_operation_row.id
-      WHEN v_operation_row.root_operation_id IS NOT NULL
-        THEN v_operation_row.root_operation_id
-      WHEN NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
-           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-        THEN (v_batch_intent_json->>'operation_id')::uuid
-      ELSE NULL::uuid
-    END;
-
-    IF v_execution_operation_id IS NULL THEN
+    IF v_execution_operation_resolved_from_batch_intent
+       AND (
+         CASE
+           WHEN NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
+                ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             THEN (v_batch_intent_json->>'operation_id')::uuid
+           ELSE NULL::uuid
+         END
+       ) IS DISTINCT FROM v_execution_operation_id THEN
       RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
         'error', 'PAY_SETTLE_RAIL',
-        'code', 'EXECUTION_OPERATION_REQUIRED',
-        'message', 'The settlement operation is not bound to a payment execution operation.',
-        'pay_batch_id', p_pay_batch_id::text,
-        'operation_id', p_operation_id::text
-      )::text USING ERRCODE = 'P0001';
-    END IF;
-
-    SELECT execution_operation.*
-    INTO v_execution_operation_row
-    FROM public.banking_pay_operations AS execution_operation
-    WHERE execution_operation.id = v_execution_operation_id
-    FOR UPDATE;
-
-    IF NOT FOUND
-       OR v_execution_operation_row.pay_batch_id IS DISTINCT FROM p_pay_batch_id
-       OR v_execution_operation_row.operation_type NOT IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN
-      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
-        'error', 'PAY_SETTLE_RAIL',
-        'code', 'EXECUTION_OPERATION_INVALID',
-        'message', 'The resolved payment execution operation is missing or incompatible with this settlement operation.',
+        'code', 'EXECUTION_OPERATION_BINDING_CHANGED',
+        'message', 'The batch execution-operation binding changed while rail settlement was acquiring its canonical locks.',
         'pay_batch_id', p_pay_batch_id::text,
         'operation_id', p_operation_id::text,
-        'execution_operation_id', v_execution_operation_id::text
+        'locked_execution_operation_id', v_execution_operation_id::text,
+        'current_batch_execution_operation_id', NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
       )::text USING ERRCODE = 'P0001';
     END IF;
 
@@ -109784,6 +110212,122 @@ begin
               )::text;
     END IF;
 
+    WITH settled_scope_for_event_repair AS (
+      SELECT
+        scope_row.id AS settlement_scope_id,
+        scope_row.pay_batch_candidate_id,
+        scope_row.payload_json
+      FROM public.banking_pay_operation_settlement_scope AS scope_row
+      JOIN pg_temp.tmp_pay_settle_rail_requested_scope_ids AS requested_scope_id
+        ON requested_scope_id.settlement_scope_id = scope_row.id
+      WHERE scope_row.operation_id = p_operation_id
+        AND scope_row.pay_batch_id = p_pay_batch_id
+        AND UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SETTLED'
+        AND scope_row.settlement_event_id IS NULL
+        AND NOT (
+          UPPER(BTRIM(COALESCE(scope_row.payload_json->>'scope_kind', ''))) = 'NO_BANK_PAYMENT'
+          AND UPPER(BTRIM(COALESCE(scope_row.payload_json->>'no_bank_payment_reason', ''))) = 'EXPLICIT_ZERO_PAYE'
+        )
+      FOR UPDATE OF scope_row
+    ), direct_scope_transfer AS (
+      SELECT
+        settled_scope.settlement_scope_id,
+        CASE
+          WHEN COALESCE(
+            NULLIF(BTRIM(COALESCE(settled_scope.payload_json->>'pay_bank_transfer_id', '')), ''),
+            NULLIF(BTRIM(COALESCE(settled_scope.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}', '')), '')
+          ) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN COALESCE(
+              NULLIF(BTRIM(COALESCE(settled_scope.payload_json->>'pay_bank_transfer_id', '')), ''),
+              NULLIF(BTRIM(COALESCE(settled_scope.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}', '')), '')
+            )::uuid
+          ELSE NULL::uuid
+        END AS pay_bank_transfer_id
+      FROM settled_scope_for_event_repair AS settled_scope
+    ), item_scope_transfer AS (
+      SELECT DISTINCT
+        settled_scope.settlement_scope_id,
+        batch_item.pay_bank_transfer_id
+      FROM settled_scope_for_event_repair AS settled_scope
+      CROSS JOIN LATERAL JSONB_ARRAY_ELEMENTS(
+        CASE
+          WHEN JSONB_TYPEOF(settled_scope.payload_json->'pay_batch_item_ids') = 'array'
+            THEN settled_scope.payload_json->'pay_batch_item_ids'
+          ELSE '[]'::jsonb
+        END
+      ) AS item_element(value)
+      JOIN public.pay_batch_items AS batch_item
+        ON batch_item.id = CASE
+             WHEN (item_element.value #>> '{}')
+                  ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+               THEN (item_element.value #>> '{}')::uuid
+             ELSE NULL::uuid
+           END
+       AND batch_item.pay_batch_candidate_id = settled_scope.pay_batch_candidate_id
+       AND COALESCE(batch_item.is_voided, false) = false
+      WHERE batch_item.pay_bank_transfer_id IS NOT NULL
+    ), scope_transfer_candidate AS (
+      SELECT
+        direct_scope_transfer.settlement_scope_id,
+        direct_scope_transfer.pay_bank_transfer_id
+      FROM direct_scope_transfer
+      WHERE direct_scope_transfer.pay_bank_transfer_id IS NOT NULL
+
+      UNION
+
+      SELECT
+        item_scope_transfer.settlement_scope_id,
+        item_scope_transfer.pay_bank_transfer_id
+      FROM item_scope_transfer
+      WHERE item_scope_transfer.pay_bank_transfer_id IS NOT NULL
+    ), resolved_scope_transfer AS (
+      SELECT
+        scope_transfer_candidate.settlement_scope_id,
+        (ARRAY_AGG(scope_transfer_candidate.pay_bank_transfer_id ORDER BY scope_transfer_candidate.pay_bank_transfer_id))[1] AS pay_bank_transfer_id
+      FROM scope_transfer_candidate
+      GROUP BY scope_transfer_candidate.settlement_scope_id
+      HAVING COUNT(*) = 1
+    ), ranked_matching_event AS (
+      SELECT
+        resolved_scope_transfer.settlement_scope_id,
+        matching_event.id AS event_id,
+        ROW_NUMBER() OVER (
+          PARTITION BY resolved_scope_transfer.settlement_scope_id
+          ORDER BY
+            matching_event.event_time_utc DESC NULLS LAST,
+            matching_event.received_at_utc DESC NULLS LAST,
+            matching_event.created_at_utc DESC NULLS LAST,
+            matching_event.id DESC
+        ) AS event_rank
+      FROM resolved_scope_transfer
+      JOIN public.pay_bank_transfer_events AS matching_event
+        ON matching_event.pay_batch_id = p_pay_batch_id
+       AND matching_event.pay_bank_transfer_id = resolved_scope_transfer.pay_bank_transfer_id
+      WHERE (
+          UPPER(BTRIM(COALESCE(matching_event.normalised_state, ''))) IN ('COMPLETED', 'SETTLED', 'PAID', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED')
+          OR UPPER(BTRIM(COALESCE(matching_event.provider_state, ''))) IN ('COMPLETED', 'SETTLED', 'PAID', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED')
+        )
+        AND (
+          matching_event.idempotency_key LIKE
+            'rail-settle:' || p_operation_id::text || ':' || resolved_scope_transfer.settlement_scope_id::text || ':' || resolved_scope_transfer.pay_bank_transfer_id::text || ':%'
+          OR (
+            NULLIF(BTRIM(COALESCE(matching_event.raw_payload->>'source_rpc', '')), '') = 'pay_settle_rail'
+            AND NULLIF(BTRIM(COALESCE(matching_event.raw_payload->>'operation_id', '')), '') = p_operation_id::text
+            AND NULLIF(BTRIM(COALESCE(matching_event.raw_payload->>'settlement_scope_id', '')), '') = resolved_scope_transfer.settlement_scope_id::text
+          )
+        )
+    )
+    UPDATE public.banking_pay_operation_settlement_scope AS scope_repair
+    SET settlement_event_id = ranked_matching_event.event_id,
+        updated_at_utc = v_now
+    FROM ranked_matching_event
+    WHERE scope_repair.id = ranked_matching_event.settlement_scope_id
+      AND ranked_matching_event.event_rank = 1
+      AND scope_repair.operation_id = p_operation_id
+      AND scope_repair.pay_batch_id = p_pay_batch_id
+      AND scope_repair.status = 'SETTLED'
+      AND scope_repair.settlement_event_id IS NULL;
+
     WITH requested_scope AS (
       SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS settlement_scope_id
       FROM jsonb_array_elements(p_settlement_scope_ids) AS scope_element(value)
@@ -110162,9 +110706,29 @@ begin
         END AS new_scope_status
       FROM scope_current_transfer_status
       GROUP BY scope_current_transfer_status.settlement_scope_id
-    ), event_by_scope AS (
-      SELECT matched_updates.settlement_scope_id,
-             (array_agg(existing_event.id ORDER BY existing_event.id))[1] AS event_id
+    ), event_candidate AS (
+      SELECT
+        matched_updates.settlement_scope_id,
+        inserted_event.id AS event_id,
+        0::integer AS source_priority
+      FROM matched_updates
+      JOIN inserted_events AS inserted_event
+        ON inserted_event.pay_bank_transfer_id = matched_updates.pay_bank_transfer_id
+       AND inserted_event.idempotency_key = 'rail-settle:' || p_operation_id::text || ':' || matched_updates.settlement_scope_id::text || ':' || matched_updates.pay_bank_transfer_id::text || ':' || md5(jsonb_strip_nulls(jsonb_build_object(
+          'status', matched_updates.status,
+          'rail_tx_id', matched_updates.rail_tx_id,
+          'rail_state', matched_updates.rail_state,
+          'provider_reference', matched_updates.provider_reference,
+          'provider_state', matched_updates.provider_state,
+          'rail_meta_json', COALESCE(matched_updates.rail_meta_json, '{}'::jsonb)
+        ))::text)
+
+      UNION ALL
+
+      SELECT
+        matched_updates.settlement_scope_id,
+        existing_event.id AS event_id,
+        1::integer AS source_priority
       FROM matched_updates
       JOIN public.pay_bank_transfer_events AS existing_event
         ON existing_event.pay_batch_id = p_pay_batch_id
@@ -110176,11 +110740,16 @@ begin
           'provider_state', matched_updates.provider_state,
           'rail_meta_json', COALESCE(matched_updates.rail_meta_json, '{}'::jsonb)
         ))::text)
-      GROUP BY matched_updates.settlement_scope_id
+    ), event_by_scope AS (
+      SELECT
+        event_candidate.settlement_scope_id,
+        (ARRAY_AGG(event_candidate.event_id ORDER BY event_candidate.source_priority, event_candidate.event_id))[1] AS event_id
+      FROM event_candidate
+      GROUP BY event_candidate.settlement_scope_id
     ), scope_updates AS (
       UPDATE public.banking_pay_operation_settlement_scope AS scope_update
       SET status = scope_status.new_scope_status,
-          settlement_event_id = COALESCE(scope_update.settlement_event_id, event_by_scope.event_id),
+          settlement_event_id = COALESCE(event_by_scope.event_id, scope_update.settlement_event_id),
           updated_at_utc = v_now
       FROM scope_status
       LEFT JOIN event_by_scope
@@ -110722,6 +111291,62 @@ begin
     );
   END IF;
 
+  SELECT CASE
+    WHEN JSONB_TYPEOF(pb.execution_intent_json) = 'object'
+      THEN COALESCE(pb.execution_intent_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END
+  INTO v_batch_intent_json
+  FROM public.pay_batches AS pb
+  WHERE pb.id = p_pay_batch_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'pay_settle_rail: pay_batch not found';
+  END IF;
+
+  IF v_batch_intent_json = '{}'::jsonb THEN
+    RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+      'error', 'PAY_SETTLE_RAIL',
+      'code', 'BATCH_EXECUTION_INTENT_REQUIRED',
+      'message', 'Full-batch settlement requires the server-frozen batch execution intent.',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
+  IF NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
+       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_execution_operation_id := (v_batch_intent_json->>'operation_id')::uuid;
+    v_batch_intent_operation_id := v_execution_operation_id;
+    v_execution_operation_resolved_from_batch_intent := true;
+  END IF;
+
+  IF v_execution_operation_id IS NULL THEN
+    RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+      'error', 'PAY_SETTLE_RAIL',
+      'code', 'EXECUTION_OPERATION_REQUIRED',
+      'message', 'Full-batch settlement cannot determine the authorised payment execution operation.',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT execution_operation.*
+  INTO v_execution_operation_row
+  FROM public.banking_pay_operations AS execution_operation
+  WHERE execution_operation.id = v_execution_operation_id
+  FOR UPDATE;
+
+  IF NOT FOUND
+     OR v_execution_operation_row.pay_batch_id IS DISTINCT FROM p_pay_batch_id
+     OR v_execution_operation_row.operation_type NOT IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN
+    RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+      'error', 'PAY_SETTLE_RAIL',
+      'code', 'EXECUTION_OPERATION_INVALID',
+      'message', 'The batch execution intent points to a missing or incompatible payment execution operation.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_operation_id', v_execution_operation_id::text
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
   select
     pb.id,
     pb.status,
@@ -110764,45 +111389,22 @@ begin
   END;
   v_execution_intent_json := v_batch_intent_json;
 
-  IF v_batch_intent_json = '{}'::jsonb THEN
+  IF v_execution_operation_resolved_from_batch_intent
+     AND (
+       CASE
+         WHEN NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           THEN (v_batch_intent_json->>'operation_id')::uuid
+         ELSE NULL::uuid
+       END
+     ) IS DISTINCT FROM v_execution_operation_id THEN
     RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
       'error', 'PAY_SETTLE_RAIL',
-      'code', 'BATCH_EXECUTION_INTENT_REQUIRED',
-      'message', 'Full-batch settlement requires the server-frozen batch execution intent.',
-      'pay_batch_id', p_pay_batch_id::text
-    )::text USING ERRCODE = 'P0001';
-  END IF;
-
-  IF NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
-       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    v_execution_operation_id := (v_batch_intent_json->>'operation_id')::uuid;
-    v_batch_intent_operation_id := v_execution_operation_id;
-  END IF;
-
-  IF v_execution_operation_id IS NULL THEN
-    RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
-      'error', 'PAY_SETTLE_RAIL',
-      'code', 'EXECUTION_OPERATION_REQUIRED',
-      'message', 'Full-batch settlement cannot determine the authorised payment execution operation.',
-      'pay_batch_id', p_pay_batch_id::text
-    )::text USING ERRCODE = 'P0001';
-  END IF;
-
-  SELECT execution_operation.*
-  INTO v_execution_operation_row
-  FROM public.banking_pay_operations AS execution_operation
-  WHERE execution_operation.id = v_execution_operation_id
-  FOR UPDATE;
-
-  IF NOT FOUND
-     OR v_execution_operation_row.pay_batch_id IS DISTINCT FROM p_pay_batch_id
-     OR v_execution_operation_row.operation_type NOT IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN
-    RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
-      'error', 'PAY_SETTLE_RAIL',
-      'code', 'EXECUTION_OPERATION_INVALID',
-      'message', 'The batch execution intent points to a missing or incompatible payment execution operation.',
+      'code', 'EXECUTION_OPERATION_BINDING_CHANGED',
+      'message', 'The batch execution-operation binding changed while full-batch settlement was acquiring its canonical locks.',
       'pay_batch_id', p_pay_batch_id::text,
-      'execution_operation_id', v_execution_operation_id::text
+      'locked_execution_operation_id', v_execution_operation_id::text,
+      'current_batch_execution_operation_id', NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
     )::text USING ERRCODE = 'P0001';
   END IF;
 
@@ -112442,6 +113044,123 @@ begin
         'auth_request_id', v_operation_auth_request_id::text
       )::text USING ERRCODE = 'P0001';
     END IF;
+  END IF;
+
+  IF v_settlement_operation_id IS NOT NULL
+     AND v_settlement_operation_id <> v_execution_operation_id THEN
+    WITH settled_scope_for_event_repair AS (
+      SELECT
+        scope_row.id AS settlement_scope_id,
+        scope_row.pay_batch_candidate_id,
+        scope_row.payload_json
+      FROM public.banking_pay_operation_settlement_scope AS scope_row
+      WHERE scope_row.operation_id = v_settlement_operation_id
+        AND scope_row.pay_batch_id = p_pay_batch_id
+        AND UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SETTLED'
+        AND scope_row.settlement_event_id IS NULL
+        AND NOT (
+          UPPER(BTRIM(COALESCE(scope_row.payload_json->>'scope_kind', ''))) = 'NO_BANK_PAYMENT'
+          AND UPPER(BTRIM(COALESCE(scope_row.payload_json->>'no_bank_payment_reason', ''))) = 'EXPLICIT_ZERO_PAYE'
+        )
+      FOR UPDATE OF scope_row
+    ), direct_scope_transfer AS (
+      SELECT
+        settled_scope.settlement_scope_id,
+        CASE
+          WHEN COALESCE(
+            NULLIF(BTRIM(COALESCE(settled_scope.payload_json->>'pay_bank_transfer_id', '')), ''),
+            NULLIF(BTRIM(COALESCE(settled_scope.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}', '')), '')
+          ) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN COALESCE(
+              NULLIF(BTRIM(COALESCE(settled_scope.payload_json->>'pay_bank_transfer_id', '')), ''),
+              NULLIF(BTRIM(COALESCE(settled_scope.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}', '')), '')
+            )::uuid
+          ELSE NULL::uuid
+        END AS pay_bank_transfer_id
+      FROM settled_scope_for_event_repair AS settled_scope
+    ), item_scope_transfer AS (
+      SELECT DISTINCT
+        settled_scope.settlement_scope_id,
+        batch_item.pay_bank_transfer_id
+      FROM settled_scope_for_event_repair AS settled_scope
+      CROSS JOIN LATERAL JSONB_ARRAY_ELEMENTS(
+        CASE
+          WHEN JSONB_TYPEOF(settled_scope.payload_json->'pay_batch_item_ids') = 'array'
+            THEN settled_scope.payload_json->'pay_batch_item_ids'
+          ELSE '[]'::jsonb
+        END
+      ) AS item_element(value)
+      JOIN public.pay_batch_items AS batch_item
+        ON batch_item.id = CASE
+             WHEN (item_element.value #>> '{}')
+                  ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+               THEN (item_element.value #>> '{}')::uuid
+             ELSE NULL::uuid
+           END
+       AND batch_item.pay_batch_candidate_id = settled_scope.pay_batch_candidate_id
+       AND COALESCE(batch_item.is_voided, false) = false
+      WHERE batch_item.pay_bank_transfer_id IS NOT NULL
+    ), scope_transfer_candidate AS (
+      SELECT
+        direct_scope_transfer.settlement_scope_id,
+        direct_scope_transfer.pay_bank_transfer_id
+      FROM direct_scope_transfer
+      WHERE direct_scope_transfer.pay_bank_transfer_id IS NOT NULL
+
+      UNION
+
+      SELECT
+        item_scope_transfer.settlement_scope_id,
+        item_scope_transfer.pay_bank_transfer_id
+      FROM item_scope_transfer
+      WHERE item_scope_transfer.pay_bank_transfer_id IS NOT NULL
+    ), resolved_scope_transfer AS (
+      SELECT
+        scope_transfer_candidate.settlement_scope_id,
+        (ARRAY_AGG(scope_transfer_candidate.pay_bank_transfer_id ORDER BY scope_transfer_candidate.pay_bank_transfer_id))[1] AS pay_bank_transfer_id
+      FROM scope_transfer_candidate
+      GROUP BY scope_transfer_candidate.settlement_scope_id
+      HAVING COUNT(*) = 1
+    ), ranked_matching_event AS (
+      SELECT
+        resolved_scope_transfer.settlement_scope_id,
+        matching_event.id AS event_id,
+        ROW_NUMBER() OVER (
+          PARTITION BY resolved_scope_transfer.settlement_scope_id
+          ORDER BY
+            matching_event.event_time_utc DESC NULLS LAST,
+            matching_event.received_at_utc DESC NULLS LAST,
+            matching_event.created_at_utc DESC NULLS LAST,
+            matching_event.id DESC
+        ) AS event_rank
+      FROM resolved_scope_transfer
+      JOIN public.pay_bank_transfer_events AS matching_event
+        ON matching_event.pay_batch_id = p_pay_batch_id
+       AND matching_event.pay_bank_transfer_id = resolved_scope_transfer.pay_bank_transfer_id
+      WHERE (
+          UPPER(BTRIM(COALESCE(matching_event.normalised_state, ''))) IN ('COMPLETED', 'SETTLED', 'PAID', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED')
+          OR UPPER(BTRIM(COALESCE(matching_event.provider_state, ''))) IN ('COMPLETED', 'SETTLED', 'PAID', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED')
+        )
+        AND (
+          matching_event.idempotency_key LIKE
+            'rail-settle:' || v_settlement_operation_id::text || ':' || resolved_scope_transfer.settlement_scope_id::text || ':' || resolved_scope_transfer.pay_bank_transfer_id::text || ':%'
+          OR (
+            NULLIF(BTRIM(COALESCE(matching_event.raw_payload->>'source_rpc', '')), '') = 'pay_settle_rail'
+            AND NULLIF(BTRIM(COALESCE(matching_event.raw_payload->>'operation_id', '')), '') = v_settlement_operation_id::text
+            AND NULLIF(BTRIM(COALESCE(matching_event.raw_payload->>'settlement_scope_id', '')), '') = resolved_scope_transfer.settlement_scope_id::text
+          )
+        )
+    )
+    UPDATE public.banking_pay_operation_settlement_scope AS scope_repair
+    SET settlement_event_id = ranked_matching_event.event_id,
+        updated_at_utc = v_now
+    FROM ranked_matching_event
+    WHERE scope_repair.id = ranked_matching_event.settlement_scope_id
+      AND ranked_matching_event.event_rank = 1
+      AND scope_repair.operation_id = v_settlement_operation_id
+      AND scope_repair.pay_batch_id = p_pay_batch_id
+      AND scope_repair.status = 'SETTLED'
+      AND scope_repair.settlement_event_id IS NULL;
   END IF;
 
   IF v_settlement_operation_id IS NOT NULL THEN
@@ -115056,7 +115775,6 @@ begin
   );
 end;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public._pay_batch_bank_payment_projection_rows(
   p_pay_batch_id uuid,
@@ -192891,6 +193609,8 @@ END;
 $function$;
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_operation_settlement_scope_seed(p_operation_id uuid, p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text, p_actor_user_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -192908,6 +193628,7 @@ DECLARE
   v_settlement_unit_count integer := 0;
   v_stale_scope_skipped_count integer := 0;
   v_transfer_scope_operation_id uuid := NULL::uuid;
+  v_execution_operation_resolved_from_batch_intent boolean := false;
   v_item_transfer_linked_count integer := 0;
   v_item_transfer_reused_count integer := 0;
   v_item_transfer_conflict_count integer := 0;
@@ -193121,11 +193842,14 @@ BEGIN
     RAISE EXCEPTION 'tms_users row % not found', p_actor_user_id;
   END IF;
 
+  -- Resolve the execution binding without holding a row lock, then acquire
+  -- canonical locks in root-execution -> requested-operation -> batch order.
+  -- The requested operation and batch binding are re-read and revalidated after
+  -- the canonical locks are held so an initial read can never become authority.
   SELECT operation_row.*
   INTO v_operation_row
   FROM public.banking_pay_operations AS operation_row
-  WHERE operation_row.id = p_operation_id
-  FOR UPDATE;
+  WHERE operation_row.id = p_operation_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'banking_pay_operations row % not found', p_operation_id;
@@ -193150,37 +193874,37 @@ BEGIN
     RAISE EXCEPTION 'operation % belongs to a different actor', p_operation_id;
   END IF;
 
-  SELECT batch_row.*
-  INTO v_batch_row
-  FROM public.pay_batches AS batch_row
-  WHERE batch_row.id = p_pay_batch_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'pay_batches row % not found', p_pay_batch_id;
-  END IF;
-
-  v_batch_intent_json := CASE
-    WHEN JSONB_TYPEOF(v_batch_row.execution_intent_json) = 'object'
-      THEN COALESCE(v_batch_row.execution_intent_json, '{}'::jsonb)
-    ELSE '{}'::jsonb
-  END;
-
   IF v_operation_row.operation_type = 'PAYMENT_EXECUTE' THEN
     v_transfer_scope_operation_id := v_operation_row.id;
   ELSIF v_operation_row.root_operation_id IS NOT NULL THEN
     v_transfer_scope_operation_id := v_operation_row.root_operation_id;
-  ELSIF NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
-        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    v_transfer_scope_operation_id := (v_batch_intent_json->>'operation_id')::uuid;
   ELSE
-    RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
-      'error', 'PAY_OPERATION_SETTLEMENT_SCOPE_SEED',
-      'code', 'EXECUTION_OPERATION_REQUIRED',
-      'message', 'The settlement operation is not bound to a payment execution operation.',
-      'operation_id', p_operation_id::text,
-      'pay_batch_id', p_pay_batch_id::text
-    )::text USING ERRCODE = 'P0001';
+    SELECT CASE
+      WHEN JSONB_TYPEOF(batch_row.execution_intent_json) = 'object'
+        THEN COALESCE(batch_row.execution_intent_json, '{}'::jsonb)
+      ELSE '{}'::jsonb
+    END
+    INTO v_batch_intent_json
+    FROM public.pay_batches AS batch_row
+    WHERE batch_row.id = p_pay_batch_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'pay_batches row % not found', p_pay_batch_id;
+    END IF;
+
+    IF NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
+         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_transfer_scope_operation_id := (v_batch_intent_json->>'operation_id')::uuid;
+      v_execution_operation_resolved_from_batch_intent := true;
+    ELSE
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_OPERATION_SETTLEMENT_SCOPE_SEED',
+        'code', 'EXECUTION_OPERATION_REQUIRED',
+        'message', 'The settlement operation is not bound to a payment execution operation.',
+        'operation_id', p_operation_id::text,
+        'pay_batch_id', p_pay_batch_id::text
+      )::text USING ERRCODE = 'P0001';
+    END IF;
   END IF;
 
   SELECT execution_operation.*
@@ -193202,6 +193926,104 @@ BEGIN
         WHEN v_transfer_scope_operation_id IS NULL THEN NULL::text
         ELSE v_transfer_scope_operation_id::text
       END
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_operation_id = v_transfer_scope_operation_id THEN
+    v_operation_row := v_execution_operation_row;
+  ELSE
+    SELECT operation_row.*
+    INTO v_operation_row
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id = p_operation_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'banking_pay_operations row % not found', p_operation_id;
+    END IF;
+  END IF;
+
+  IF v_operation_row.operation_type NOT IN ('PAYMENT_SETTLEMENT', 'PAYMENT_EXECUTE') THEN
+    RAISE EXCEPTION 'operation % is not a settlement-capable operation', p_operation_id;
+  END IF;
+
+  IF v_operation_row.pay_batch_id IS DISTINCT FROM p_pay_batch_id THEN
+    RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+      'error', 'PAY_OPERATION_SETTLEMENT_SCOPE_SEED',
+      'code', 'SETTLEMENT_OPERATION_BATCH_MISMATCH',
+      'message', 'The settlement operation is not durably bound to the requested pay batch.',
+      'operation_id', p_operation_id::text,
+      'operation_pay_batch_id', CASE WHEN v_operation_row.pay_batch_id IS NULL THEN NULL::text ELSE v_operation_row.pay_batch_id::text END,
+      'pay_batch_id', p_pay_batch_id::text
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
+  IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
+    RAISE EXCEPTION 'operation % belongs to a different actor', p_operation_id;
+  END IF;
+
+  IF v_operation_row.operation_type = 'PAYMENT_EXECUTE' THEN
+    IF v_operation_row.id IS DISTINCT FROM v_transfer_scope_operation_id THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_OPERATION_SETTLEMENT_SCOPE_SEED',
+        'code', 'EXECUTION_OPERATION_BINDING_CHANGED',
+        'message', 'The requested operation changed its execution-operation binding while settlement scope seeding was acquiring its canonical locks.',
+        'operation_id', p_operation_id::text,
+        'pay_batch_id', p_pay_batch_id::text,
+        'locked_execution_operation_id', v_transfer_scope_operation_id::text,
+        'current_operation_type', v_operation_row.operation_type,
+        'current_root_operation_id', CASE WHEN v_operation_row.root_operation_id IS NULL THEN NULL::text ELSE v_operation_row.root_operation_id::text END
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+  ELSIF v_operation_row.root_operation_id IS NOT NULL THEN
+    IF v_operation_row.root_operation_id IS DISTINCT FROM v_transfer_scope_operation_id THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_OPERATION_SETTLEMENT_SCOPE_SEED',
+        'code', 'EXECUTION_OPERATION_BINDING_CHANGED',
+        'message', 'The settlement operation changed its execution-operation binding while settlement scope seeding was acquiring its canonical locks.',
+        'operation_id', p_operation_id::text,
+        'pay_batch_id', p_pay_batch_id::text,
+        'locked_execution_operation_id', v_transfer_scope_operation_id::text,
+        'current_root_operation_id', v_operation_row.root_operation_id::text
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+  ELSE
+    v_execution_operation_resolved_from_batch_intent := true;
+  END IF;
+
+  SELECT batch_row.*
+  INTO v_batch_row
+  FROM public.pay_batches AS batch_row
+  WHERE batch_row.id = p_pay_batch_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'pay_batches row % not found', p_pay_batch_id;
+  END IF;
+
+  v_batch_intent_json := CASE
+    WHEN JSONB_TYPEOF(v_batch_row.execution_intent_json) = 'object'
+      THEN COALESCE(v_batch_row.execution_intent_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+
+  IF v_execution_operation_resolved_from_batch_intent
+     AND (
+       CASE
+         WHEN NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           THEN (v_batch_intent_json->>'operation_id')::uuid
+         ELSE NULL::uuid
+       END
+     ) IS DISTINCT FROM v_transfer_scope_operation_id THEN
+    RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+      'error', 'PAY_OPERATION_SETTLEMENT_SCOPE_SEED',
+      'code', 'EXECUTION_OPERATION_BINDING_CHANGED',
+      'message', 'The batch execution-operation binding changed while settlement scope seeding was acquiring its canonical locks.',
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', p_pay_batch_id::text,
+      'locked_execution_operation_id', v_transfer_scope_operation_id::text,
+      'current_batch_execution_operation_id', NULLIF(BTRIM(COALESCE(v_batch_intent_json->>'operation_id', '')), '')
     )::text USING ERRCODE = 'P0001';
   END IF;
 
@@ -195505,9 +196327,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
 
 
 
