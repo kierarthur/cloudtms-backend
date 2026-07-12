@@ -203743,7 +203743,7 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.timesheet_weekly_chain_delete_apply(uuid, uuid);
 
-CREATE FUNCTION public.timesheet_weekly_chain_delete_apply(
+CREATE OR REPLACE FUNCTION public.timesheet_weekly_chain_delete_apply(
   p_timesheet_id uuid,
   p_actor_user_id uuid,
   p_expected_timesheet_ids uuid[] DEFAULT NULL::uuid[],
@@ -204573,7 +204573,7 @@ $do$;
 
 DROP FUNCTION IF EXISTS public.timesheet_weekly_manual_adjustment_delete_apply(uuid, uuid);
 
-CREATE FUNCTION public.timesheet_weekly_manual_adjustment_delete_apply(
+CREATE OR REPLACE FUNCTION public.timesheet_weekly_manual_adjustment_delete_apply(
   p_timesheet_id uuid,
   p_actor_user_id uuid,
   p_expected_timesheet_ids uuid[] DEFAULT NULL::uuid[],
