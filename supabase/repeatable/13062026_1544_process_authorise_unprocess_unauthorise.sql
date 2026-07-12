@@ -428,6 +428,9 @@ BEGIN
   END IF;
 
   IF v_current_ts.timesheet_id IS NOT NULL THEN
+    IF v_current_ts.archived_at_utc IS NOT NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ARCHIVED', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', v_week.id)::text;
+    END IF;
     IF v_current_ts.authorised_at_server IS NOT NULL THEN
       RAISE EXCEPTION USING MESSAGE = 'ALREADY_AUTHORISED', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'contract_week_id', v_week.id)::text;
     END IF;
@@ -443,9 +446,6 @@ BEGIN
 
     IF v_current_tsfin.id IS NOT NULL THEN
       v_previous_processing_status := v_current_tsfin.processing_status::text;
-      IF v_current_tsfin.paid_at_utc IS NOT NULL THEN
-        RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_PAID', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'timesheet_financials_id', v_current_tsfin.id)::text;
-      END IF;
       IF v_current_tsfin.locked_by_invoice_id IS NOT NULL THEN
         RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_LOCKED_BY_INVOICE', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'invoice_id', v_current_tsfin.locked_by_invoice_id)::text;
       END IF;
@@ -1958,7 +1958,7 @@ EXCEPTION
       );
       v_diag_stage_started_at := clock_timestamp();
     END IF;
-    IF v_error_state IN ('55P03', '57014') THEN
+    IF v_error_state = '55P03' THEN
       RAISE EXCEPTION USING MESSAGE = 'LOCK_TIMEOUT', DETAIL = jsonb_build_object('contract_week_id', p_week_id, 'error_state', v_error_state)::text;
     END IF;
     RAISE;
@@ -1967,21 +1967,15 @@ $function$;
 
 
 
+
+
 DROP FUNCTION IF EXISTS public.timesheet_daily_manual_process_atomic(uuid, uuid, uuid, jsonb, jsonb, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.timesheet_daily_manual_process_atomic(uuid, uuid, uuid, jsonb, jsonb, timestamp with time zone, text);
 
-CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_process_atomic(
-  p_timesheet_id uuid,
-  p_expected_timesheet_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb,
-  p_tsfin_patch_json jsonb DEFAULT '{}'::jsonb,
-  p_now_utc timestamp with time zone DEFAULT now(),
-  p_expected_row_signature text DEFAULT NULL::text
-)
+CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_process_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_patch_json jsonb DEFAULT '{}'::jsonb, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
- VOLATILE SECURITY DEFINER
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -2077,6 +2071,10 @@ BEGIN
   IF v_current_ts.submission_mode <> 'MANUAL'::public.submission_mode_enum THEN
     RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_process', 'error_code', 'NOT_MANUAL', 'message', 'Timesheet must be MANUAL before processing.', 'current_timesheet_id', v_current_ts.timesheet_id);
   END IF;
+  IF v_current_ts.archived_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ARCHIVED', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
+  END IF;
+
   IF v_current_ts.authorised_at_server IS NOT NULL THEN
     RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_ALREADY_AUTHORISED', 'message', 'This timesheet is already authorised.', 'current_timesheet_id', v_current_ts.timesheet_id);
   END IF;
@@ -2109,8 +2107,8 @@ BEGIN
     WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
   ) INTO v_has_segment_invoice_lock;
 
-  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR v_current_tsfin.paid_at_utc IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
-    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_LOCKED_OR_PAID', 'message', 'Timesheet already invoiced or paid; cannot process.', 'current_timesheet_id', v_current_ts.timesheet_id);
+  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_LOCKED_BY_INVOICE', 'message', 'Timesheet is invoice-locked; cannot process.', 'current_timesheet_id', v_current_ts.timesheet_id);
   END IF;
   IF v_previous_status <> 'UNPROCESSED'::public.ts_fin_processing_status_enum THEN
     RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_process', 'error_code', 'NOT_UNPROCESSED', 'message', 'Timesheet is not in UNPROCESSED state.', 'current_timesheet_id', v_current_ts.timesheet_id, 'previous_status', v_previous_status::text);
@@ -2205,12 +2203,16 @@ BEGIN
   );
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE, v_error_message = MESSAGE_TEXT;
-  IF v_error_state IN ('55P03', '57014') THEN
+  IF v_error_state = '55P03' THEN
     RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_process', 'error_code', 'LOCK_TIMEOUT', 'message', 'The timesheet is currently locked by another operation.', 'timesheet_id', p_timesheet_id);
   END IF;
   RAISE;
 END;
 $function$;
+
+
+
+
 
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text);
@@ -2392,9 +2394,6 @@ $function$;
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -2471,6 +2470,10 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'NOT_MANUAL', 'message', 'Timesheet must be MANUAL before unprocessing.', 'current_timesheet_id', v_current_ts.timesheet_id);
   END IF;
 
+  IF v_current_ts.archived_at_utc IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_ARCHIVED', 'message', 'Archived timesheets must be Unarchived before lifecycle actions.', 'current_timesheet_id', v_current_ts.timesheet_id);
+  END IF;
+
   IF v_current_ts.authorised_at_server IS NOT NULL THEN
     RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_AUTHORISED_EDIT_BLOCKED', 'message', 'This timesheet is authorised. Unauthorise it before unprocessing.', 'current_timesheet_id', v_current_ts.timesheet_id);
   END IF;
@@ -2530,16 +2533,13 @@ BEGIN
     WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
   ) INTO v_has_segment_invoice_lock;
 
-  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR v_current_tsfin.paid_at_utc IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
+  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
     RETURN jsonb_build_object(
       'ok', false,
       'operation', 'daily_manual_unprocess',
-      'error_code', 'TIMESHEET_LOCKED_OR_PAID',
-      'specific_error_code', CASE
-        WHEN v_current_tsfin.paid_at_utc IS NOT NULL THEN 'TIMESHEET_PAID'
-        ELSE 'TIMESHEET_LOCKED_BY_INVOICE'
-      END,
-      'message', 'Cannot unprocess: timesheet is locked or paid.',
+      'error_code', 'TIMESHEET_LOCKED_BY_INVOICE',
+      'specific_error_code', 'TIMESHEET_LOCKED_BY_INVOICE',
+      'message', 'Cannot unprocess: timesheet is locked by an invoice.',
       'current_timesheet_id', v_current_ts.timesheet_id,
       'current_row_signature', v_current_row_signature
     );
@@ -2558,6 +2558,49 @@ BEGIN
       'current_timesheet_id', v_current_ts.timesheet_id,
       'previous_status', v_previous_status::text,
       'current_row_signature', v_current_row_signature
+    );
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.timesheet_financial_retention AS retention
+    WHERE retention.timesheet_id = v_current_ts.timesheet_id
+  ) THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'success', false,
+      'operation', 'daily_manual_unprocess',
+      'error_code', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+      'specific_error_code', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+      'message', 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.',
+      'requested_timesheet_id', p_timesheet_id,
+      'expected_timesheet_id', p_expected_timesheet_id,
+      'current_timesheet_id', v_current_ts.timesheet_id,
+      'timesheet_id', v_current_ts.timesheet_id,
+      'current_row_signature', v_current_row_signature,
+      'backend_row_signature', v_current_row_signature,
+      'row_signature', v_current_row_signature,
+      'has_retained_financial_history', true,
+      'can_unprocess', false,
+      'unprocess_block_reason', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+      'unprocess_action_visible', true,
+      'row_patch', jsonb_build_object(
+        'timesheet_id', v_current_ts.timesheet_id,
+        'current_timesheet_id', v_current_ts.timesheet_id,
+        'row_key', 'timesheet:' || v_current_ts.timesheet_id::text,
+        'row_signature', v_current_row_signature,
+        'backend_row_signature', v_current_row_signature,
+        'has_retained_financial_history', true,
+        'can_unprocess', false,
+        'unprocess_block_reason', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        'unprocess_action_visible', true
+      ),
+      'action_flags', jsonb_build_object(
+        'has_retained_financial_history', true,
+        'can_unprocess', false,
+        'unprocess_block_reason', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        'unprocess_action_visible', true
+      )
     );
   END IF;
 
@@ -2628,12 +2671,15 @@ BEGIN
   );
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE, v_error_message = MESSAGE_TEXT;
-  IF v_error_state IN ('55P03', '57014') THEN
+  IF v_error_state = '55P03' THEN
     RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'LOCK_TIMEOUT', 'message', 'The timesheet is currently locked by another operation.', 'timesheet_id', p_timesheet_id);
   END IF;
   RAISE;
 END;
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
  RETURNS jsonb
@@ -2657,6 +2703,8 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.timesheet_authorise_generic_atomic(uuid, uuid, uuid, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.timesheet_authorise_generic_atomic(uuid, uuid, uuid, timestamp with time zone, text);
+
+
 
 CREATE OR REPLACE FUNCTION public.timesheet_authorise_generic_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2894,8 +2942,12 @@ BEGIN
     WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
   ) INTO v_has_segment_invoice_lock;
 
-  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR v_current_tsfin.paid_at_utc IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
-    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_LOCKED_OR_PAID', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
+  IF v_current_ts.archived_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ARCHIVED', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
+  END IF;
+
+  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_LOCKED_BY_INVOICE', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'invoice_id', v_current_tsfin.locked_by_invoice_id)::text;
   END IF;
 
   IF v_current_ts.authorised_at_server IS NOT NULL OR v_current_tsfin.authorised_at_utc IS NOT NULL OR v_contract_week.status = 'AUTHORISED'::public.contract_week_status_enum THEN
@@ -3190,7 +3242,7 @@ EXCEPTION WHEN OTHERS THEN
       'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
     )
   );
-  IF v_error_state IN ('55P03', '57014') THEN
+  IF v_error_state = '55P03' THEN
     RAISE EXCEPTION USING MESSAGE = 'LOCK_TIMEOUT', DETAIL = jsonb_build_object('timesheet_id', p_timesheet_id)::text;
   END IF;
   RAISE;
@@ -3374,8 +3426,12 @@ BEGIN
     WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
   ) INTO v_has_segment_invoice_lock;
 
-  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR v_current_tsfin.paid_at_utc IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
-    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_LOCKED_OR_PAID', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
+  IF v_current_ts.archived_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ARCHIVED', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
+  END IF;
+
+  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_LOCKED_BY_INVOICE', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
   END IF;
 
   IF v_current_ts.authorised_at_server IS NULL AND v_current_tsfin.authorised_at_utc IS NULL AND COALESCE(v_contract_week.status = 'AUTHORISED'::public.contract_week_status_enum, false) = false THEN
@@ -3639,12 +3695,15 @@ EXCEPTION WHEN OTHERS THEN
       'elapsed_ms', ROUND((EXTRACT(EPOCH FROM (clock_timestamp() - v_diag_started_at)) * 1000)::numeric, 2)
     )
   );
-  IF v_error_state IN ('55P03', '57014') THEN
+  IF v_error_state = '55P03' THEN
     RAISE EXCEPTION USING MESSAGE = 'LOCK_TIMEOUT', DETAIL = jsonb_build_object('timesheet_id', p_timesheet_id)::text;
   END IF;
   RAISE;
 END;
 $function$;
+
+
+
 
 DROP FUNCTION IF EXISTS public.timesheet_authorise_bulk_atomic(jsonb, uuid, timestamp with time zone);
 
@@ -3717,6 +3776,7 @@ BEGIN
     req_ts.timesheet_id AS db_requested_timesheet_id,
     req_ts.booking_id AS requested_booking_id,
     cur_ts.timesheet_id AS current_timesheet_id,
+    cur_ts.archived_at_utc AS current_archived_at_utc,
     cur_ts.booking_id AS current_booking_id,
     cur_ts.version AS current_version,
     cur_ts.is_current AS current_is_current,
@@ -3848,7 +3908,8 @@ BEGIN
       WHEN state_rows.current_sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND state_rows.contract_week_status = 'INVOICED'::public.contract_week_status_enum THEN 'TIMESHEET_LOCKED_BY_INVOICE'
       WHEN state_rows.current_sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND state_rows.contract_week_status = 'CANCELLED'::public.contract_week_status_enum THEN 'CONTRACT_WEEK_NOT_AUTHORISABLE'
       WHEN state_rows.current_sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND state_rows.contract_week_status = 'AUTHORISED'::public.contract_week_status_enum THEN 'ALREADY_AUTHORISED'
-      WHEN state_rows.tsfin_locked_by_invoice_id IS NOT NULL OR state_rows.tsfin_paid_at_utc IS NOT NULL OR state_rows.has_segment_invoice_lock THEN 'TIMESHEET_LOCKED_OR_PAID'
+      WHEN state_rows.current_archived_at_utc IS NOT NULL THEN 'TIMESHEET_ARCHIVED'
+      WHEN state_rows.tsfin_locked_by_invoice_id IS NOT NULL OR state_rows.has_segment_invoice_lock THEN 'TIMESHEET_LOCKED_BY_INVOICE'
       WHEN state_rows.current_authorised_at_server IS NOT NULL OR state_rows.tsfin_authorised_at_utc IS NOT NULL THEN 'ALREADY_AUTHORISED'
       WHEN state_rows.tsfin_processing_status = 'AWAITING_MANUAL_SIGNATURE'::public.ts_fin_processing_status_enum OR (state_rows.current_qr_status = 'PENDING'::public.timesheet_qr_status_enum AND NULLIF(BTRIM(COALESCE(state_rows.current_qr_token, '')), '') IS NOT NULL AND state_rows.current_qr_generated_at IS NOT NULL AND state_rows.current_qr_scanned_at IS NULL) THEN 'AWAITING_SIGNED_QR'
       WHEN state_rows.tsfin_processing_status NOT IN ('PENDING_AUTH'::public.ts_fin_processing_status_enum, 'READY_FOR_HR'::public.ts_fin_processing_status_enum) THEN 'AUTHORISE_NOT_ALLOWED'
@@ -3967,12 +4028,14 @@ BEGIN
   RETURN v_out;
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE;
-  IF v_error_state IN ('55P03', '57014') THEN
+  IF v_error_state = '55P03' THEN
     RETURN jsonb_build_object('ok', false, 'batch_completed', false, 'all_success', false, 'action', 'AUTHORISE', 'error_code', 'LOCK_TIMEOUT', 'requested_count', COALESCE(v_requested_count, 0), 'success_count', 0, 'failure_count', COALESCE(v_requested_count, 0), 'results', '[]'::jsonb);
   END IF;
   RAISE;
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public.timesheet_unauthorise_bulk_atomic(jsonb, uuid, timestamp with time zone);
@@ -4046,6 +4109,7 @@ BEGIN
     req_ts.timesheet_id AS db_requested_timesheet_id,
     req_ts.booking_id AS requested_booking_id,
     cur_ts.timesheet_id AS current_timesheet_id,
+    cur_ts.archived_at_utc AS current_archived_at_utc,
     cur_ts.booking_id AS current_booking_id,
     cur_ts.version AS current_version,
     cur_ts.is_current AS current_is_current,
@@ -4131,7 +4195,8 @@ BEGIN
       WHEN state_rows.tsfin_id IS NULL THEN 'NO_TSFIN'
       WHEN state_rows.expected_row_signature IS NOT NULL AND COALESCE(state_rows.current_row_signature, '') IS DISTINCT FROM state_rows.expected_row_signature THEN 'ROW_SIGNATURE_MISMATCH'
       WHEN state_rows.current_sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND state_rows.contract_week_id IS NULL THEN 'CONTRACT_WEEK_NOT_FOUND_FOR_WEEKLY_TIMESHEET'
-      WHEN state_rows.tsfin_locked_by_invoice_id IS NOT NULL OR state_rows.tsfin_paid_at_utc IS NOT NULL OR state_rows.has_segment_invoice_lock THEN 'TIMESHEET_LOCKED_OR_PAID'
+      WHEN state_rows.current_archived_at_utc IS NOT NULL THEN 'TIMESHEET_ARCHIVED'
+      WHEN state_rows.tsfin_locked_by_invoice_id IS NOT NULL OR state_rows.has_segment_invoice_lock THEN 'TIMESHEET_LOCKED_BY_INVOICE'
       WHEN state_rows.current_authorised_at_server IS NULL AND state_rows.tsfin_authorised_at_utc IS NULL THEN 'ALREADY_UNAUTHORISED'
       ELSE NULL::text
     END AS failure_code,
@@ -4243,12 +4308,14 @@ BEGIN
   RETURN v_out;
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE;
-  IF v_error_state IN ('55P03', '57014') THEN
+  IF v_error_state = '55P03' THEN
     RETURN jsonb_build_object('ok', false, 'batch_completed', false, 'all_success', false, 'action', 'UNAUTHORISE', 'error_code', 'LOCK_TIMEOUT', 'requested_count', COALESCE(v_requested_count, 0), 'success_count', 0, 'failure_count', COALESCE(v_requested_count, 0), 'results', '[]'::jsonb);
   END IF;
   RAISE;
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.bulk_process_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
@@ -4331,8 +4398,38 @@ BEGIN
         'include_import_source_rows', FALSE
       )
     ) AS summary_row
-    WHERE summary_row.timesheet_id IS NOT NULL
-       OR summary_row.contract_week_id IS NOT NULL
+    WHERE (summary_row.timesheet_id IS NOT NULL
+       OR summary_row.contract_week_id IS NOT NULL)
+      AND UPPER(COALESCE(summary_row.tools_stage, '')) <> 'ARCHIVED'
+  ),
+  retention_unit_members AS MATERIALIZED (
+    SELECT
+      lightweight_rows.timesheet_id AS row_timesheet_id,
+      lightweight_rows.timesheet_id AS member_timesheet_id
+    FROM lightweight_rows
+    WHERE lightweight_rows.timesheet_id IS NOT NULL
+
+    UNION
+
+    SELECT
+      lightweight_rows.timesheet_id AS row_timesheet_id,
+      unit_timesheet.timesheet_id AS member_timesheet_id
+    FROM lightweight_rows
+    JOIN public.timesheets AS current_timesheet
+      ON current_timesheet.timesheet_id = lightweight_rows.timesheet_id
+     AND current_timesheet.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+    JOIN public.timesheets AS unit_timesheet
+      ON unit_timesheet.booking_id = current_timesheet.booking_id
+    WHERE lightweight_rows.timesheet_id IS NOT NULL
+  ),
+  retention_by_row AS MATERIALIZED (
+    SELECT
+      retention_unit_members.row_timesheet_id,
+      BOOL_OR(retention.timesheet_id IS NOT NULL) AS has_retained_financial_history
+    FROM retention_unit_members
+    LEFT JOIN public.timesheet_financial_retention AS retention
+      ON retention.timesheet_id = retention_unit_members.member_timesheet_id
+    GROUP BY retention_unit_members.row_timesheet_id
   ),
   source_rows AS MATERIALIZED (
     SELECT
@@ -4370,10 +4467,13 @@ BEGIN
             OR NULLIF(BTRIM(COALESCE(current_timesheet.correction_kind::text, '')), '') IS NOT NULL
           )
         )
-      ) AS is_user_created_manual_qr_adjustment_calc
+      ) AS is_user_created_manual_qr_adjustment_calc,
+      COALESCE(retention_by_row.has_retained_financial_history, FALSE) AS has_retained_financial_history_calc
     FROM lightweight_rows
     LEFT JOIN public.timesheets AS current_timesheet
       ON current_timesheet.timesheet_id = lightweight_rows.timesheet_id
+    LEFT JOIN retention_by_row
+      ON retention_by_row.row_timesheet_id = lightweight_rows.timesheet_id
   ),
   classified_rows AS MATERIALIZED (
     SELECT
@@ -4436,8 +4536,7 @@ BEGIN
         ELSE 'PROCESSED'
       END AS bulk_process_bucket_calc,
       (
-        COALESCE(source_rows.paid_at_utc, source_rows.pay_paid_at_utc) IS NOT NULL
-        OR COALESCE(source_rows.invoice_is_paid, FALSE) = TRUE
+        COALESCE(source_rows.invoice_is_paid, FALSE) = TRUE
         OR COALESCE(source_rows.invoice_segments_locked, 0) > 0
       ) AS locked_calc,
       COALESCE(source_rows.is_authorised, FALSE) AS authorised_calc,
@@ -4485,7 +4584,8 @@ BEGIN
         COALESCE(source_rows.is_user_created_manual_qr_adjustment_calc::text, ''),
         COALESCE(source_rows.current_timesheet_adjustment_origin::text, ''),
         COALESCE(source_rows.current_timesheet_correction_id::text, ''),
-        COALESCE(source_rows.current_timesheet_correction_kind::text, '')
+        COALESCE(source_rows.current_timesheet_correction_kind::text, ''),
+        COALESCE(source_rows.has_retained_financial_history_calc::text, 'false')
       )) AS row_signature_calc
     FROM source_rows
     WHERE (v_week_ending_from IS NULL OR source_rows.week_ending_date >= v_week_ending_from)
@@ -4534,7 +4634,29 @@ BEGIN
         AND eligibility_rows.authorised_calc = FALSE
         AND eligibility_rows.bulk_process_user_adjustment_eligible_calc = TRUE
         AND eligibility_rows.bulk_process_bucket_calc = 'PROCESSED'
+      ) AS unprocess_action_visible_calc,
+      (
+        (
+        eligibility_rows.timesheet_id IS NOT NULL
+        AND eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.authorised_calc = FALSE
+        AND eligibility_rows.bulk_process_user_adjustment_eligible_calc = TRUE
+        AND eligibility_rows.bulk_process_bucket_calc = 'PROCESSED'
+      )
+        AND COALESCE(eligibility_rows.has_retained_financial_history_calc, FALSE) = FALSE
       ) AS can_unprocess_calc,
+      CASE
+        WHEN (
+        eligibility_rows.timesheet_id IS NOT NULL
+        AND eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.authorised_calc = FALSE
+        AND eligibility_rows.bulk_process_user_adjustment_eligible_calc = TRUE
+        AND eligibility_rows.bulk_process_bucket_calc = 'PROCESSED'
+      )
+         AND COALESCE(eligibility_rows.has_retained_financial_history_calc, FALSE) = TRUE
+        THEN 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'::text
+        ELSE NULL::text
+      END AS unprocess_block_reason_calc,
       (
         eligibility_rows.timesheet_id IS NOT NULL
         AND eligibility_rows.locked_calc = FALSE
@@ -4587,7 +4709,7 @@ BEGIN
           decision_rows.bulk_process_bucket_calc = 'PROCESSED'
           AND (v_bucket IS NULL OR v_bucket = 'PROCESSED')
           AND decision_rows.timesheet_id IS NOT NULL
-          AND decision_rows.can_unprocess_calc = TRUE
+          AND decision_rows.unprocess_action_visible_calc = TRUE
         )
       )
   ),
@@ -4978,7 +5100,7 @@ BEGIN
         'evidence_document_locked',
         decision_rows.locked_calc,
         'evidence_lock_reason',
-        CASE WHEN decision_rows.locked_calc THEN 'locked_or_paid' ELSE NULL::text END,
+        CASE WHEN decision_rows.locked_calc THEN 'invoice_locked' ELSE NULL::text END,
         'has_timesheet',
         decision_rows.timesheet_id IS NOT NULL,
         'is_contract_week_only',
@@ -5009,6 +5131,12 @@ BEGIN
         decision_rows.can_process_calc,
         'can_unprocess',
         decision_rows.can_unprocess_calc,
+        'has_retained_financial_history',
+        COALESCE(decision_rows.has_retained_financial_history_calc, FALSE),
+        'unprocess_block_reason',
+        decision_rows.unprocess_block_reason_calc,
+        'unprocess_action_visible',
+        decision_rows.unprocess_action_visible_calc,
         'can_bulk_authorise',
         decision_rows.can_bulk_authorise_calc,
         'can_bulk_unauthorise',
@@ -5097,6 +5225,9 @@ BEGIN
           'can_save', decision_rows.can_save_calc,
           'can_process', decision_rows.can_process_calc,
           'can_unprocess', decision_rows.can_unprocess_calc,
+          'has_retained_financial_history', COALESCE(decision_rows.has_retained_financial_history_calc, FALSE),
+          'unprocess_block_reason', decision_rows.unprocess_block_reason_calc,
+          'unprocess_action_visible', decision_rows.unprocess_action_visible_calc,
           'can_bulk_authorise', decision_rows.can_bulk_authorise_calc,
           'can_bulk_unauthorise', decision_rows.can_bulk_unauthorise_calc,
           'can_edit_timesheet_data', decision_rows.can_edit_timesheet_data_calc,
@@ -5105,7 +5236,14 @@ BEGIN
           'review_only', decision_rows.review_only_calc
         ),
         'row_patch',
-        JSONB_BUILD_OBJECT(),
+        JSONB_BUILD_OBJECT(
+          'timesheet_id', decision_rows.timesheet_id,
+          'row_key', decision_rows.row_key_calc,
+          'has_retained_financial_history', COALESCE(decision_rows.has_retained_financial_history_calc, FALSE),
+          'can_unprocess', decision_rows.can_unprocess_calc,
+          'unprocess_block_reason', decision_rows.unprocess_block_reason_calc,
+          'unprocess_action_visible', decision_rows.unprocess_action_visible_calc
+        ),
         'cache_invalidation_hints',
         JSONB_BUILD_OBJECT(),
         'count_deltas',
@@ -5173,7 +5311,7 @@ BEGIN
     WHERE UPPER(COALESCE(manual_rows.row_json->>'bulk_process_bucket', '')) = 'PROCESSED'
       AND (v_bucket IS NULL OR v_bucket = 'PROCESSED')
       AND NULLIF(BTRIM(COALESCE(manual_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL
-      AND COALESCE((manual_rows.row_json->>'can_unprocess')::boolean, FALSE) = TRUE
+      AND COALESCE((manual_rows.row_json->>'unprocess_action_visible')::boolean, FALSE) = TRUE
   ),
   paged_unprocessed_rows AS MATERIALIZED (
     SELECT unprocessed_rows.row_json
@@ -5251,6 +5389,7 @@ BEGIN
   ));
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.bulk_authorise_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -5339,8 +5478,9 @@ BEGIN
         'include_import_source_rows', FALSE
       )
     ) AS summary_row
-    WHERE summary_row.timesheet_id IS NOT NULL
-       OR summary_row.contract_week_id IS NOT NULL
+    WHERE (summary_row.timesheet_id IS NOT NULL
+       OR summary_row.contract_week_id IS NOT NULL)
+      AND UPPER(COALESCE(summary_row.tools_stage, '')) <> 'ARCHIVED'
   ),
   classified_rows AS MATERIALIZED (
     SELECT
@@ -5389,8 +5529,7 @@ BEGIN
         ELSE 'PROCESSED'
       END AS bulk_process_bucket_calc,
       (
-        COALESCE(lightweight_rows.paid_at_utc, lightweight_rows.pay_paid_at_utc) IS NOT NULL
-        OR COALESCE(lightweight_rows.invoice_is_paid, FALSE) = TRUE
+        COALESCE(lightweight_rows.invoice_is_paid, FALSE) = TRUE
         OR COALESCE(lightweight_rows.invoice_segments_locked, 0) > 0
       ) AS locked_calc,
       COALESCE(lightweight_rows.is_authorised, FALSE) AS authorised_calc,
@@ -5722,7 +5861,7 @@ BEGIN
         'evidence_document_locked',
         decision_rows.locked_calc,
         'evidence_lock_reason',
-        CASE WHEN decision_rows.locked_calc THEN 'locked_or_paid' ELSE NULL::text END,
+        CASE WHEN decision_rows.locked_calc THEN 'invoice_locked' ELSE NULL::text END,
         'has_timesheet',
         decision_rows.timesheet_id IS NOT NULL,
         'is_contract_week_only',
@@ -6032,14 +6171,18 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_patch_v1(
-  p_filters jsonb DEFAULT '{}'::jsonb
-)
-RETURNS TABLE(row_json jsonb)
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path TO public
+
+-- CloudTMS Retention Marker / Unprocess handover
+-- Disposition: latest candidate amended and returned in full.
+-- Authoritative baseline: candidate 23, bulk_timesheet_row_patch_v1.
+-- Amendment: set-based sticky-marker projection, marker-aware Unprocess contract,
+-- and retention fields in top-level, action_flags and row_patch payloads.
+
+CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_patch_v1(p_filters jsonb DEFAULT '{}'::jsonb)
+ RETURNS TABLE(row_json jsonb)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
@@ -6260,6 +6403,35 @@ BEGIN
       source_row.*
     FROM public.bulk_timesheet_workbench_row_source_v1(v_source_filters) AS source_row
   ),
+  retention_unit_members AS MATERIALIZED (
+    SELECT
+      source_rows.timesheet_id AS row_timesheet_id,
+      source_rows.timesheet_id AS member_timesheet_id
+    FROM source_rows
+    WHERE source_rows.timesheet_id IS NOT NULL
+
+    UNION
+
+    SELECT
+      source_rows.timesheet_id AS row_timesheet_id,
+      unit_timesheet.timesheet_id AS member_timesheet_id
+    FROM source_rows
+    JOIN public.timesheets AS anchor_timesheet
+      ON anchor_timesheet.timesheet_id = source_rows.timesheet_id
+     AND anchor_timesheet.is_current = TRUE
+     AND anchor_timesheet.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+    JOIN public.timesheets AS unit_timesheet
+      ON unit_timesheet.booking_id = anchor_timesheet.booking_id
+  ),
+  retention_by_row AS MATERIALIZED (
+    SELECT
+      retention_unit_members.row_timesheet_id,
+      COALESCE(BOOL_OR(marker.timesheet_id IS NOT NULL), FALSE) AS has_retained_financial_history
+    FROM retention_unit_members
+    LEFT JOIN public.timesheet_financial_retention AS marker
+      ON marker.timesheet_id = retention_unit_members.member_timesheet_id
+    GROUP BY retention_unit_members.row_timesheet_id
+  ),
   enriched_rows AS MATERIALIZED (
     SELECT
       source_rows.*,
@@ -6273,6 +6445,7 @@ BEGIN
       timesheet_row.qr_token AS timesheet_qr_token,
       timesheet_row.qr_generated_at AS timesheet_qr_generated_at,
       timesheet_row.qr_scanned_at AS timesheet_qr_scanned_at,
+      COALESCE(retention_unit.has_retained_financial_history, FALSE) AS has_retained_financial_history,
       contract_week_row.updated_at AS contract_week_updated_at,
       contract_week_row.uploaded_pdf_r2_key,
       contract_week_row.planned_schedule_json AS contract_week_planned_schedule_json,
@@ -6357,6 +6530,8 @@ BEGIN
     LEFT JOIN public.timesheets AS timesheet_row
       ON timesheet_row.timesheet_id = source_rows.timesheet_id
      AND timesheet_row.is_current = TRUE
+    LEFT JOIN retention_by_row AS retention_unit
+      ON retention_unit.row_timesheet_id = source_rows.timesheet_id
     LEFT JOIN public.contract_weeks AS contract_week_row
       ON contract_week_row.id = source_rows.contract_week_id
     LEFT JOIN public.timesheets_financials AS financial_row
@@ -6536,6 +6711,7 @@ BEGIN
       ) AS is_planned_week_unprocessed_calc,
       (
         enriched_rows.timesheet_id IS NOT NULL
+        AND UPPER(COALESCE(enriched_rows.tools_stage, '')) <> 'ARCHIVED'
         AND (
           UPPER(COALESCE(enriched_rows.processing_status::text, '')) IN ('UNPROCESSED', 'UNASSIGNED')
           OR UPPER(COALESCE(enriched_rows.summary_stage, '')) = 'UNPROCESSED'
@@ -6544,8 +6720,8 @@ BEGIN
         )
       ) AS is_real_row_unprocessed_calc,
       (
-        COALESCE(enriched_rows.locked_by_invoice_id, NULL) IS NOT NULL
-        OR COALESCE(enriched_rows.paid_at_utc, NULL) IS NOT NULL
+        UPPER(COALESCE(enriched_rows.tools_stage, '')) = 'ARCHIVED'
+        OR COALESCE(enriched_rows.locked_by_invoice_id, NULL) IS NOT NULL
         OR COALESCE(enriched_rows.invoice_segments_locked, 0) > 0
         OR COALESCE(enriched_rows.invoice_is_paid, FALSE) = TRUE
       ) AS locked_calc,
@@ -6663,7 +6839,25 @@ BEGIN
         AND decision_rows.is_authorised_calc = FALSE
         AND decision_rows.route_family_calc = 'MANUAL_NON_QR'
         AND decision_rows.is_unprocessed_calc = FALSE
+      ) AS unprocess_action_visible_calc,
+      (
+        decision_rows.timesheet_id IS NOT NULL
+        AND decision_rows.locked_calc = FALSE
+        AND decision_rows.is_authorised_calc = FALSE
+        AND decision_rows.route_family_calc = 'MANUAL_NON_QR'
+        AND decision_rows.is_unprocessed_calc = FALSE
+        AND COALESCE(decision_rows.has_retained_financial_history, FALSE) = FALSE
       ) AS can_unprocess_calc,
+      CASE
+        WHEN decision_rows.timesheet_id IS NOT NULL
+         AND decision_rows.locked_calc = FALSE
+         AND decision_rows.is_authorised_calc = FALSE
+         AND decision_rows.route_family_calc = 'MANUAL_NON_QR'
+         AND decision_rows.is_unprocessed_calc = FALSE
+         AND COALESCE(decision_rows.has_retained_financial_history, FALSE) = TRUE
+        THEN 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'::text
+        ELSE NULL::text
+      END AS unprocess_block_reason,
       (
         (decision_rows.timesheet_id IS NOT NULL OR decision_rows.contract_week_id IS NOT NULL)
         AND decision_rows.locked_calc = FALSE
@@ -6673,6 +6867,7 @@ BEGIN
       ) AS can_process_calc,
       (
         (decision_rows.timesheet_id IS NOT NULL OR (decision_rows.contract_week_id IS NOT NULL AND decision_rows.route_family_calc = 'MANUAL_NON_QR'))
+        AND UPPER(COALESCE(decision_rows.tools_stage, '')) <> 'ARCHIVED'
         AND (decision_rows.locked_by_invoice_id IS NOT NULL OR COALESCE(decision_rows.invoice_segments_locked, 0) > 0) = FALSE
         AND decision_rows.route_family_calc <> 'IMPORT_AUTHORITATIVE'
       ) AS can_manage_evidence_calc,
@@ -6720,6 +6915,10 @@ BEGIN
         COALESCE(final_rows.tsfin_authorised_at_utc::text, ''),
         COALESCE(final_rows.is_authorised_calc::text, ''),
         COALESCE(final_rows.locked_calc::text, ''),
+        COALESCE(final_rows.has_retained_financial_history::text, ''),
+        COALESCE(final_rows.unprocess_action_visible_calc::text, ''),
+        COALESCE(final_rows.can_unprocess_calc::text, ''),
+        COALESCE(final_rows.unprocess_block_reason, ''),
         COALESCE(final_rows.route_family_calc, ''),
         COALESCE(final_rows.route_subfamily_calc, ''),
         COALESCE(final_rows.bulk_process_bucket_calc, ''),
@@ -7076,8 +7275,16 @@ BEGIN
       || jsonb_build_object(
         'processing_status', payload_rows.processing_status::text,
         'processing_status_display', payload_rows.processing_status_display,
-        'summary_stage', CASE WHEN payload_rows.is_unprocessed_calc THEN 'UNPROCESSED' ELSE payload_rows.summary_stage END,
-        'tools_stage', CASE WHEN payload_rows.is_unprocessed_calc THEN 'UNPROCESSED' ELSE payload_rows.tools_stage END,
+        'summary_stage', CASE
+          WHEN UPPER(COALESCE(payload_rows.tools_stage, '')) = 'ARCHIVED' THEN 'ARCHIVED'
+          WHEN payload_rows.is_unprocessed_calc THEN 'UNPROCESSED'
+          ELSE payload_rows.summary_stage
+        END,
+        'tools_stage', CASE
+          WHEN UPPER(COALESCE(payload_rows.tools_stage, '')) = 'ARCHIVED' THEN 'ARCHIVED'
+          WHEN payload_rows.is_unprocessed_calc THEN 'UNPROCESSED'
+          ELSE payload_rows.tools_stage
+        END,
         'bulk_process_bucket', payload_rows.bulk_process_bucket_calc,
         'bulk_authorise_classification', payload_rows.bulk_authorise_classification_calc,
         'bulk_authorise_section', payload_rows.bulk_authorise_section_calc,
@@ -7092,7 +7299,11 @@ BEGIN
         'review_only', payload_rows.review_only_calc,
         'can_save', payload_rows.can_save_calc,
         'can_process', payload_rows.can_process_calc,
+        'has_retained_financial_history', COALESCE(payload_rows.has_retained_financial_history, FALSE),
         'can_unprocess', payload_rows.can_unprocess_calc,
+        'unprocess_block_reason', payload_rows.unprocess_block_reason,
+        'unprocess_action_visible', payload_rows.unprocess_action_visible_calc,
+        'unprocess_block_message', CASE WHEN payload_rows.unprocess_block_reason = 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' THEN 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.' ELSE NULL::text END,
         'can_bulk_authorise', payload_rows.can_bulk_authorise_calc,
         'can_bulk_unauthorise', payload_rows.can_bulk_unauthorise_calc,
         'can_edit_timesheet_data', payload_rows.can_edit_timesheet_data_calc,
@@ -7170,7 +7381,11 @@ BEGIN
         'action_flags', jsonb_build_object(
           'can_save', payload_rows.can_save_calc,
           'can_process', payload_rows.can_process_calc,
+          'has_retained_financial_history', COALESCE(payload_rows.has_retained_financial_history, FALSE),
           'can_unprocess', payload_rows.can_unprocess_calc,
+          'unprocess_block_reason', payload_rows.unprocess_block_reason,
+          'unprocess_action_visible', payload_rows.unprocess_action_visible_calc,
+          'unprocess_block_message', CASE WHEN payload_rows.unprocess_block_reason = 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' THEN 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.' ELSE NULL::text END,
           'can_bulk_authorise', payload_rows.can_bulk_authorise_calc,
           'can_bulk_unauthorise', payload_rows.can_bulk_unauthorise_calc,
           'can_edit_timesheet_data', payload_rows.can_edit_timesheet_data_calc,
@@ -7297,8 +7512,16 @@ BEGIN
             '__keepAdditionalManualAdjustmentScheduleEmpty', payload_rows.keep_additional_manual_adjustment_schedule_empty_calc,
             'processing_status', payload_rows.processing_status::text,
             'processing_status_display', payload_rows.processing_status_display,
-            'summary_stage', CASE WHEN payload_rows.is_unprocessed_calc THEN 'UNPROCESSED' ELSE payload_rows.summary_stage END,
-            'tools_stage', CASE WHEN payload_rows.is_unprocessed_calc THEN 'UNPROCESSED' ELSE payload_rows.tools_stage END,
+            'summary_stage', CASE
+          WHEN UPPER(COALESCE(payload_rows.tools_stage, '')) = 'ARCHIVED' THEN 'ARCHIVED'
+          WHEN payload_rows.is_unprocessed_calc THEN 'UNPROCESSED'
+          ELSE payload_rows.summary_stage
+        END,
+            'tools_stage', CASE
+          WHEN UPPER(COALESCE(payload_rows.tools_stage, '')) = 'ARCHIVED' THEN 'ARCHIVED'
+          WHEN payload_rows.is_unprocessed_calc THEN 'UNPROCESSED'
+          ELSE payload_rows.tools_stage
+        END,
             'bulk_process_bucket', payload_rows.bulk_process_bucket_calc,
             'previous_bulk_process_bucket', NULL::text,
             'bulk_authorise_classification', payload_rows.bulk_authorise_classification_calc,
@@ -7315,7 +7538,11 @@ BEGIN
             'review_only', payload_rows.review_only_calc,
             'can_save', payload_rows.can_save_calc,
             'can_process', payload_rows.can_process_calc,
+            'has_retained_financial_history', COALESCE(payload_rows.has_retained_financial_history, FALSE),
             'can_unprocess', payload_rows.can_unprocess_calc,
+            'unprocess_block_reason', payload_rows.unprocess_block_reason,
+            'unprocess_action_visible', payload_rows.unprocess_action_visible_calc,
+            'unprocess_block_message', CASE WHEN payload_rows.unprocess_block_reason = 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' THEN 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.' ELSE NULL::text END,
             'can_bulk_authorise', payload_rows.can_bulk_authorise_calc,
             'can_bulk_unauthorise', payload_rows.can_bulk_unauthorise_calc,
             'can_edit_timesheet_data', payload_rows.can_edit_timesheet_data_calc,
@@ -7391,10 +7618,12 @@ BEGIN
 END;
 $function$;
 
+
+
+
 REVOKE ALL ON FUNCTION public.bulk_timesheet_row_patch_v1(jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.bulk_timesheet_row_patch_v1(jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.bulk_timesheet_row_patch_v1(jsonb) TO service_role;
-
 
 
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_decision_v1(p_filters jsonb DEFAULT '{}'::jsonb)
@@ -7531,6 +7760,35 @@ BEGIN
       base_scope.timesheet_id,
       base_scope.contract_week_id
     FROM base_scope
+  ),
+  retention_unit_members AS MATERIALIZED (
+    SELECT
+      base_ids.timesheet_id AS row_timesheet_id,
+      base_ids.timesheet_id AS member_timesheet_id
+    FROM base_ids
+    WHERE base_ids.timesheet_id IS NOT NULL
+
+    UNION
+
+    SELECT
+      base_ids.timesheet_id AS row_timesheet_id,
+      unit_timesheet.timesheet_id AS member_timesheet_id
+    FROM base_ids
+    JOIN public.timesheets AS anchor_timesheet
+      ON anchor_timesheet.timesheet_id = base_ids.timesheet_id
+     AND anchor_timesheet.is_current = TRUE
+     AND anchor_timesheet.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+    JOIN public.timesheets AS unit_timesheet
+      ON unit_timesheet.booking_id = anchor_timesheet.booking_id
+  ),
+  retention_by_row AS MATERIALIZED (
+    SELECT
+      retention_unit_members.row_timesheet_id,
+      COALESCE(BOOL_OR(marker.timesheet_id IS NOT NULL), FALSE) AS has_retained_financial_history
+    FROM retention_unit_members
+    LEFT JOIN public.timesheet_financial_retention AS marker
+      ON marker.timesheet_id = retention_unit_members.member_timesheet_id
+    GROUP BY retention_unit_members.row_timesheet_id
   ),
   tf_ranked AS (
     SELECT
@@ -7830,6 +8088,14 @@ BEGIN
       COALESCE(tf.total_charge_ex_vat, vb.total_charge_ex_vat) AS total_charge_ex_vat,
       COALESCE(tf.margin_ex_vat, vb.margin_ex_vat) AS margin_ex_vat,
       COALESCE(tf.paid_at_utc, vb.paid_at_utc) AS paid_at_utc,
+      (COALESCE(tf.paid_at_utc, vb.paid_at_utc) IS NOT NULL OR vb.pay_paid_at_utc IS NOT NULL) AS is_paid,
+      (UPPER(COALESCE(vb.tools_stage, '')) = 'ARCHIVED') AS is_archived,
+      (
+        COALESCE(tf.locked_by_invoice_id, vb.locked_by_invoice_id) IS NOT NULL
+        OR COALESCE(vb.invoice_segments_locked, 0) > 0
+        OR COALESCE(vb.invoice_is_paid, FALSE) = TRUE
+      ) AS is_invoice_locked,
+      COALESCE(retention_unit.has_retained_financial_history, FALSE) AS has_retained_financial_history,
       COALESCE(tf.pay_on_hold, vb.pay_on_hold, FALSE) AS pay_on_hold,
       vb.ready_to_pay AS ready_to_pay,
       COALESCE(tf.locked_by_invoice_id, vb.locked_by_invoice_id) AS locked_by_invoice_id,
@@ -8091,6 +8357,8 @@ BEGIN
     LEFT JOIN public.timesheets AS ts
       ON ts.timesheet_id = vb.timesheet_id
      AND ts.is_current = TRUE
+    LEFT JOIN retention_by_row AS retention_unit
+      ON retention_unit.row_timesheet_id = vb.timesheet_id
     LEFT JOIN public.contract_weeks AS cw
       ON cw.id = vb.contract_week_id
     LEFT JOIN public.contracts AS ct
@@ -8261,6 +8529,7 @@ BEGIN
       ) AS is_planned_week_unprocessed,
       (
         rt.timesheet_id IS NOT NULL
+        AND UPPER(COALESCE(rt.tools_stage, '')) <> 'ARCHIVED'
         AND (
           UPPER(COALESCE(rt.processing_status, '')) IN ('UNPROCESSED', 'UNASSIGNED')
           OR UPPER(COALESCE(rt.summary_stage, '')) = 'UNPROCESSED'
@@ -8269,11 +8538,9 @@ BEGIN
         )
       ) AS is_real_row_unprocessed,
       (
-        COALESCE(rt.locked_by_invoice_id, NULL) IS NOT NULL
-        OR COALESCE(rt.paid_at_utc, NULL) IS NOT NULL
+        COALESCE(rt.is_archived, FALSE) = TRUE
+        OR COALESCE(rt.is_invoice_locked, FALSE) = TRUE
         OR COALESCE(rt.has_segment_invoice_lock, FALSE) = TRUE
-        OR COALESCE(rt.invoice_segments_locked, 0) > 0
-        OR COALESCE(rt.invoice_is_paid, FALSE) = TRUE
       ) AS locked,
       (
         rt.authorised_at_server IS NOT NULL
@@ -8414,7 +8681,29 @@ BEGIN
         AND dc.is_authorised = FALSE
         AND dc.route_family = 'MANUAL_NON_QR'
         AND NOT (dc.is_planned_week_unprocessed OR dc.is_real_row_unprocessed)
+      ) AS unprocess_action_visible,
+      (
+        (
+        dc.timesheet_id IS NOT NULL
+        AND dc.locked = FALSE
+        AND dc.is_authorised = FALSE
+        AND dc.route_family = 'MANUAL_NON_QR'
+        AND NOT (dc.is_planned_week_unprocessed OR dc.is_real_row_unprocessed)
+      )
+        AND COALESCE(dc.has_retained_financial_history, FALSE) = FALSE
       ) AS can_unprocess,
+      CASE
+        WHEN (
+        dc.timesheet_id IS NOT NULL
+        AND dc.locked = FALSE
+        AND dc.is_authorised = FALSE
+        AND dc.route_family = 'MANUAL_NON_QR'
+        AND NOT (dc.is_planned_week_unprocessed OR dc.is_real_row_unprocessed)
+      )
+         AND COALESCE(dc.has_retained_financial_history, FALSE) = TRUE
+        THEN 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'::text
+        ELSE NULL::text
+      END AS unprocess_block_reason,
       (
         (dc.timesheet_id IS NOT NULL OR dc.contract_week_id IS NOT NULL)
         AND dc.locked = FALSE
@@ -8430,15 +8719,22 @@ BEGIN
       ) AS can_save,
       (
         (dc.timesheet_id IS NOT NULL OR (dc.contract_week_id IS NOT NULL AND dc.route_family = 'MANUAL_NON_QR'))
+        AND UPPER(COALESCE(dc.tools_stage, '')) <> 'ARCHIVED'
         AND (dc.locked_by_invoice_id IS NOT NULL OR dc.has_segment_invoice_lock = TRUE OR COALESCE(dc.invoice_segments_locked, 0) > 0) = FALSE
         AND dc.route_family <> 'IMPORT_AUTHORITATIVE'
       ) AS can_manage_evidence,
       (
         (dc.timesheet_id IS NOT NULL OR (dc.contract_week_id IS NOT NULL AND dc.route_family = 'MANUAL_NON_QR'))
-        AND (dc.locked_by_invoice_id IS NOT NULL OR dc.has_segment_invoice_lock = TRUE OR COALESCE(dc.invoice_segments_locked, 0) > 0) = TRUE
+        AND (
+          UPPER(COALESCE(dc.tools_stage, '')) = 'ARCHIVED'
+          OR dc.locked_by_invoice_id IS NOT NULL
+          OR dc.has_segment_invoice_lock = TRUE
+          OR COALESCE(dc.invoice_segments_locked, 0) > 0
+        )
       ) AS evidence_document_locked,
       CASE
         WHEN NOT (dc.timesheet_id IS NOT NULL OR (dc.contract_week_id IS NOT NULL AND dc.route_family = 'MANUAL_NON_QR')) THEN 'INVALID_TIMESHEET_CONTEXT'
+        WHEN UPPER(COALESCE(dc.tools_stage, '')) = 'ARCHIVED' THEN 'TIMESHEET_ARCHIVED'
         WHEN dc.locked_by_invoice_id IS NOT NULL THEN 'INVOICE_LOCKED'
         WHEN dc.has_segment_invoice_lock = TRUE OR COALESCE(dc.invoice_segments_locked, 0) > 0 THEN 'INVOICE_SEGMENT_LOCKED'
         WHEN dc.route_family = 'IMPORT_AUTHORITATIVE' THEN 'IMPORT_AUTHORITATIVE_ROUTE'
@@ -8605,6 +8901,10 @@ BEGIN
         COALESCE(dc.invoice_segments_locked::text, ''),
         COALESCE(dc.invoice_is_paid::text, ''),
         COALESCE(dc.paid_at_utc::text, ''),
+        COALESCE(dc.is_paid::text, 'false'),
+        COALESCE(dc.is_invoice_locked::text, 'false'),
+        COALESCE(dc.is_archived::text, 'false'),
+        COALESCE(dc.has_retained_financial_history::text, 'false'),
         COALESCE(dc.route_family, ''),
         COALESCE(dc.route_subfamily, ''),
         COALESCE(dc.submission_mode, ''),
@@ -8778,8 +9078,16 @@ BEGIN
         'shift_date', CASE WHEN ar.period_type = 'DAILY' THEN (COALESCE(ar.timesheet_worked_start_iso, ar.timesheet_scheduled_start_iso, ar.worked_start_iso) AT TIME ZONE 'Europe/London')::date ELSE NULL::date END,
         'period_type', ar.period_type,
         'timesheet_type_sort_key', ar.timesheet_type_sort_key,
-        'summary_stage', CASE WHEN ar.is_unprocessed THEN 'UNPROCESSED' ELSE ar.summary_stage END,
-        'tools_stage', CASE WHEN ar.is_unprocessed THEN 'UNPROCESSED' ELSE ar.tools_stage END,
+        'summary_stage', CASE
+          WHEN UPPER(COALESCE(ar.tools_stage, '')) = 'ARCHIVED' THEN 'ARCHIVED'
+          WHEN ar.is_unprocessed THEN 'UNPROCESSED'
+          ELSE ar.summary_stage
+        END,
+        'tools_stage', CASE
+          WHEN UPPER(COALESCE(ar.tools_stage, '')) = 'ARCHIVED' THEN 'ARCHIVED'
+          WHEN ar.is_unprocessed THEN 'UNPROCESSED'
+          ELSE ar.tools_stage
+        END,
         'processing_status', ar.processing_status,
         'processing_status_display', CASE WHEN ar.is_unprocessed THEN 'Unprocessed' ELSE ar.processing_status_display END,
         'processed_at_utc', ar.processed_at_utc,
@@ -8836,11 +9144,19 @@ BEGIN
         'is_real_timesheet_row', ar.timesheet_id IS NOT NULL,
         'requires_authorisation', ar.requires_authorisation,
         'is_authorised', ar.is_authorised,
+        'is_paid', ar.is_paid,
+        'is_invoice_locked', ar.is_invoice_locked,
+        'is_archived', ar.is_archived
+      )
+      || JSONB_BUILD_OBJECT(
+        'has_retained_financial_history', ar.has_retained_financial_history,
         'locked', ar.locked,
         'review_only', ar.review_only,
         'can_save', ar.can_save,
         'can_process', ar.can_process,
         'can_unprocess', ar.can_unprocess,
+        'unprocess_block_reason', ar.unprocess_block_reason,
+        'unprocess_action_visible', ar.unprocess_action_visible,
         'can_edit_timesheet_data', ar.can_edit_timesheet_data,
         'can_manage_evidence', ar.can_manage_evidence,
         'can_bulk_authorise', ar.can_bulk_authorise,
@@ -8875,7 +9191,7 @@ BEGIN
         'can_convert_qr_to_manual_only', ar.can_convert_qr_to_manual_only,
         'can_restore_qr_pending', ar.can_restore_qr_pending,
         'can_restore_qr_signed', ar.can_restore_qr_signed,
-        'qr_email_can_send_now', (ar.can_allow_qr_again OR NULLIF(ar.qr_status_upper, '') = 'PENDING') AND NULLIF(BTRIM(COALESCE(ar.candidate_email, '')), '') IS NOT NULL AND COALESCE(ar.candidate_opt_in_email, TRUE) = TRUE,
+        'qr_email_can_send_now', (NOT COALESCE(ar.is_archived, FALSE)) AND (ar.can_allow_qr_again OR NULLIF(ar.qr_status_upper, '') = 'PENDING') AND NULLIF(BTRIM(COALESCE(ar.candidate_email, '')), '') IS NOT NULL AND COALESCE(ar.candidate_opt_in_email, TRUE) = TRUE,
         'qr_email_recipient_available', NULLIF(BTRIM(COALESCE(ar.candidate_email, '')), '') IS NOT NULL,
         'client_requires_hr', ar.client_requires_hr,
         'client_autoprocess_hr', ar.client_autoprocess_hr,
@@ -8978,8 +9294,15 @@ BEGIN
           'supports_electronic_submission', ar.supports_electronic_submission,
           'is_manual_only', ar.is_manual_only,
           'is_adjustment', ar.is_adjustment_or_additional,
-          'locked_by_invoice', ar.locked_by_invoice_id IS NOT NULL,
-          'paid', ar.paid_at_utc IS NOT NULL,
+          'locked_by_invoice', ar.is_invoice_locked,
+          'is_invoice_locked', ar.is_invoice_locked,
+          'paid', ar.is_paid,
+          'is_paid', ar.is_paid,
+          'is_archived', ar.is_archived,
+          'has_retained_financial_history', ar.has_retained_financial_history,
+          'can_unprocess', ar.can_unprocess,
+          'unprocess_block_reason', ar.unprocess_block_reason,
+          'unprocess_action_visible', ar.unprocess_action_visible,
           'is_unprocessed', ar.is_unprocessed,
           'route_family', ar.route_family,
           'underlying_channel_family', ar.underlying_channel_family,
@@ -9060,12 +9383,28 @@ BEGIN
           'bulk_authorise_section', CASE WHEN ar.can_bulk_authorise THEN 'processed_eligible' WHEN ar.can_bulk_unauthorise THEN 'authorised_eligible' ELSE NULL::text END,
           'previous_bulk_authorise_section', NULL::text,
           'processing_status', ar.processing_status,
-          'summary_stage', CASE WHEN ar.is_unprocessed THEN 'UNPROCESSED' ELSE ar.summary_stage END,
-          'tools_stage', CASE WHEN ar.is_unprocessed THEN 'UNPROCESSED' ELSE ar.tools_stage END,
+          'summary_stage', CASE
+          WHEN UPPER(COALESCE(ar.tools_stage, '')) = 'ARCHIVED' THEN 'ARCHIVED'
+          WHEN ar.is_unprocessed THEN 'UNPROCESSED'
+          ELSE ar.summary_stage
+        END,
+          'tools_stage', CASE
+          WHEN UPPER(COALESCE(ar.tools_stage, '')) = 'ARCHIVED' THEN 'ARCHIVED'
+          WHEN ar.is_unprocessed THEN 'UNPROCESSED'
+          ELSE ar.tools_stage
+        END,
           'is_authorised', ar.is_authorised,
+          'is_paid', ar.is_paid,
+          'is_invoice_locked', ar.is_invoice_locked,
+          'is_archived', ar.is_archived
+        )
+        || JSONB_BUILD_OBJECT(
+          'has_retained_financial_history', ar.has_retained_financial_history,
           'locked', ar.locked,
           'can_process', ar.can_process,
           'can_unprocess', ar.can_unprocess,
+          'unprocess_block_reason', ar.unprocess_block_reason,
+          'unprocess_action_visible', ar.unprocess_action_visible,
           'can_bulk_authorise', ar.can_bulk_authorise,
           'can_bulk_unauthorise', ar.can_bulk_unauthorise,
           'primary_artifact_storage_key', ar.primary_artifact_storage_key,
@@ -9094,7 +9433,6 @@ BEGIN
     ar.row_key ASC;
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.timesheet_lifecycle_signature_v1(p_timesheet_id uuid DEFAULT NULL::uuid, p_contract_week_id uuid DEFAULT NULL::uuid, p_include_payload boolean DEFAULT false)
  RETURNS jsonb
@@ -9371,6 +9709,9 @@ BEGIN
       'booking_id', NULLIF(v_current_ts.booking_id, ''),
       'version', v_current_ts.version,
       'is_current', v_current_ts.is_current,
+    'archived_at_utc', v_current_ts.archived_at_utc,
+    'archived_by_user_id', v_current_ts.archived_by_user_id,
+    'archived_reason_code', v_current_ts.archived_reason_code,
       'status', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.status::text END,
       'sheet_scope', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.sheet_scope::text END,
       'submission_mode', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.submission_mode::text END,
@@ -9493,14 +9834,7 @@ END;
 $function$;
 
 
-
-CREATE OR REPLACE FUNCTION public.contract_week_manual_unprocess_atomic(
-  p_week_id uuid,
-  p_expected_timesheet_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_now_utc timestamp with time zone DEFAULT now(),
-  p_expected_row_signature text DEFAULT NULL::text
-)
+CREATE OR REPLACE FUNCTION public.contract_week_manual_unprocess_atomic(p_week_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -9662,6 +9996,14 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'TARGET_NOT_FOUND', DETAIL = jsonb_build_object('booking_id', v_booking_id, 'reason', 'timesheet_series_not_found')::text;
   END IF;
 
+  IF EXISTS (
+    SELECT 1 FROM public.timesheets AS archived_guard
+    WHERE archived_guard.timesheet_id = ANY(v_all_timesheet_ids)
+      AND archived_guard.archived_at_utc IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ARCHIVED', DETAIL = jsonb_build_object('timesheet_ids', to_jsonb(v_all_timesheet_ids), 'contract_week_id', v_week.id)::text;
+  END IF;
+
   SELECT tf.*
     INTO v_current_tsfin
   FROM public.timesheets_financials AS tf
@@ -9676,19 +10018,6 @@ BEGIN
   END IF;
 
   v_previous_processing_status := v_current_tsfin.processing_status::text;
-
-  SELECT paid_guard.timesheet_id
-    INTO v_paid_timesheet_id
-  FROM public.timesheets_financials AS paid_guard
-  WHERE paid_guard.timesheet_id = ANY(v_all_timesheet_ids)
-    AND paid_guard.is_current = true
-    AND paid_guard.paid_at_utc IS NOT NULL
-  LIMIT 1
-  FOR UPDATE;
-
-  IF v_paid_timesheet_id IS NOT NULL THEN
-    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_PAID', DETAIL = jsonb_build_object('timesheet_id', v_paid_timesheet_id, 'contract_week_id', v_week.id)::text;
-  END IF;
 
   SELECT invoice_guard.timesheet_id
     INTO v_invoice_locked_timesheet_id
@@ -9941,6 +10270,67 @@ BEGIN
       END IF;
     END IF;
   END LOOP;
+
+  -- Complete the pre-mutation validation before the retention decision so an
+  -- invoice, authorisation, Archived, stale, evidence-conflict, or invalid-actor
+  -- blocker is never replaced by the financial-history explanation.
+  IF p_actor_user_id IS NULL AND EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_stage_items) AS staged_item(value)
+    WHERE NULLIF(BTRIM(COALESCE(staged_item.value ->> 'storage_key', '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(staged_item.value ->> 'created_by', '')), '') IS NULL
+  ) THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'INVALID_PAYLOAD',
+      DETAIL = jsonb_build_object(
+        'field', 'p_actor_user_id',
+        'reason', 'actor required to recreate staged evidence provenance'
+      )::text;
+  END IF;
+
+  -- The sticky retention marker is authoritative for historical financial linkage.
+  -- This check is deliberately after all identity locks and stale-row validation, and
+  -- before evidence staging or any destructive mutation.
+  IF EXISTS (
+    SELECT 1
+    FROM public.timesheet_financial_retention AS retention
+    WHERE retention.timesheet_id = ANY(v_all_timesheet_ids)
+  ) THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+      DETAIL = jsonb_build_object(
+        'message', 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.',
+        'contract_week_id', v_week.id,
+        'requested_timesheet_id', p_expected_timesheet_id,
+        'current_timesheet_id', v_current_ts.timesheet_id,
+        'timesheet_ids', to_jsonb(v_all_timesheet_ids),
+        'current_row_signature', v_current_row_signature,
+        'backend_row_signature', v_current_row_signature,
+        'row_signature', v_current_row_signature,
+        'has_retained_financial_history', true,
+        'can_unprocess', false,
+        'unprocess_block_reason', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        'unprocess_action_visible', true,
+        'row_patch', jsonb_build_object(
+          'timesheet_id', v_current_ts.timesheet_id,
+          'current_timesheet_id', v_current_ts.timesheet_id,
+          'row_key', 'timesheet:' || v_current_ts.timesheet_id::text,
+          'row_signature', v_current_row_signature,
+          'backend_row_signature', v_current_row_signature,
+          'has_retained_financial_history', true,
+          'can_unprocess', false,
+          'unprocess_block_reason', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+          'unprocess_action_visible', true
+        ),
+        'action_flags', jsonb_build_object(
+          'has_retained_financial_history', true,
+          'can_unprocess', false,
+          'unprocess_block_reason', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+          'unprocess_action_visible', true
+        )
+      )::text;
+  END IF;
+
 
   IF COALESCE(array_length(v_duplicate_queue_ids, 1), 0) > 0 THEN
     UPDATE public.manual_timesheet_queue AS mq
@@ -10322,10 +10712,11 @@ EXCEPTION
         )::text;
     END IF;
     RAISE;
-  WHEN lock_not_available OR query_canceled THEN
+  WHEN lock_not_available THEN
     RAISE EXCEPTION USING MESSAGE = 'LOCK_TIMEOUT', DETAIL = jsonb_build_object('contract_week_id', p_week_id, 'expected_timesheet_id', p_expected_timesheet_id)::text;
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.tsfin_write_current_snapshot_single_bounded(p_timesheet_id uuid, p_timesheet_version integer DEFAULT NULL::integer, p_snapshot_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
@@ -11040,10 +11431,11 @@ EXCEPTION
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.timesheet_lifecycle_affected_rows_v1(p_items jsonb DEFAULT '[]'::jsonb, p_context text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
- VOLATILE SECURITY DEFINER
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -11078,12 +11470,16 @@ DECLARE
   v_staged_summary jsonb := '{}'::jsonb;
   v_invoice_segments_locked integer := 0;
   v_is_paid boolean := false;
+  v_is_archived boolean := false;
   v_is_invoice_locked boolean := false;
   v_is_locked boolean := false;
   v_is_authorised boolean := false;
   v_is_unprocessed boolean := false;
+  v_has_retained_financial_history boolean := false;
   v_can_process boolean := false;
   v_can_unprocess boolean := false;
+  v_unprocess_action_visible boolean := false;
+  v_unprocess_block_reason text := NULL;
   v_can_authorise boolean := false;
   v_can_unauthorise boolean := false;
   v_qr_unsigned_blocked boolean := false;
@@ -11189,12 +11585,16 @@ BEGIN
     v_staged_summary := '{}'::jsonb;
     v_invoice_segments_locked := 0;
     v_is_paid := false;
+    v_is_archived := false;
     v_is_invoice_locked := false;
     v_is_locked := false;
     v_is_authorised := false;
     v_is_unprocessed := false;
+    v_has_retained_financial_history := false;
     v_can_process := false;
     v_can_unprocess := false;
+    v_unprocess_action_visible := false;
+    v_unprocess_block_reason := NULL;
     v_can_authorise := false;
     v_can_unauthorise := false;
     v_qr_unsigned_blocked := false;
@@ -11409,8 +11809,9 @@ BEGIN
     v_signature_json := public.timesheet_lifecycle_guard_signature_v1(v_current_ts.timesheet_id, v_week.id, COALESCE(v_temp_log_enabled, false));
 
     v_is_paid := COALESCE(v_tsfin.paid_at_utc IS NOT NULL, false);
+    v_is_archived := COALESCE(v_current_ts.archived_at_utc IS NOT NULL, false);
     v_is_invoice_locked := COALESCE(v_tsfin.locked_by_invoice_id IS NOT NULL, false) OR COALESCE(v_invoice_segments_locked, 0) > 0;
-    v_is_locked := COALESCE(v_is_paid, false) OR COALESCE(v_is_invoice_locked, false);
+    v_is_locked := COALESCE(v_is_invoice_locked, false);
     v_is_authorised := COALESCE(v_current_ts.authorised_at_server IS NOT NULL, false)
       OR COALESCE(v_tsfin.authorised_at_utc IS NOT NULL, false)
       OR COALESCE(v_week.status = 'AUTHORISED'::public.contract_week_status_enum, false);
@@ -11421,6 +11822,28 @@ BEGIN
       OR v_week.status = 'OPEN'::public.contract_week_status_enum,
       false
     );
+
+    IF v_current_ts.timesheet_id IS NOT NULL THEN
+      IF v_current_ts.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum THEN
+        SELECT EXISTS (
+          SELECT 1
+          FROM public.timesheets AS unit_timesheet
+          JOIN public.timesheet_financial_retention AS retention
+            ON retention.timesheet_id = unit_timesheet.timesheet_id
+          WHERE unit_timesheet.booking_id = v_current_ts.booking_id
+        )
+          INTO v_has_retained_financial_history;
+      ELSE
+        SELECT EXISTS (
+          SELECT 1
+          FROM public.timesheet_financial_retention AS retention
+          WHERE retention.timesheet_id = v_current_ts.timesheet_id
+        )
+          INTO v_has_retained_financial_history;
+      END IF;
+    ELSE
+      v_has_retained_financial_history := false;
+    END IF;
 
     v_qr_unsigned_blocked := COALESCE(
       v_current_ts.timesheet_id IS NOT NULL
@@ -11436,8 +11859,8 @@ BEGIN
       false
     );
 
-    IF v_is_paid THEN
-      v_disabled_reasons := array_append(v_disabled_reasons, 'TIMESHEET_PAID');
+    IF v_is_archived THEN
+      v_disabled_reasons := array_append(v_disabled_reasons, 'TIMESHEET_ARCHIVED');
     END IF;
     IF v_is_invoice_locked THEN
       v_disabled_reasons := array_append(v_disabled_reasons, 'TIMESHEET_LOCKED_BY_INVOICE');
@@ -11449,10 +11872,27 @@ BEGIN
       v_disabled_reasons := array_append(v_disabled_reasons, 'AWAITING_SIGNED_QR');
     END IF;
 
-    v_can_process := COALESCE((NOT v_is_locked) AND (NOT v_is_authorised) AND v_is_unprocessed, false);
-    v_can_unprocess := COALESCE((NOT v_is_locked) AND (NOT v_is_authorised) AND (NOT v_is_unprocessed) AND v_current_ts.timesheet_id IS NOT NULL, false);
+    v_can_process := COALESCE((NOT v_is_archived) AND (NOT v_is_locked) AND (NOT v_is_authorised) AND v_is_unprocessed, false);
+    v_unprocess_action_visible := COALESCE(
+      (NOT v_is_archived)
+      AND (NOT v_is_locked)
+      AND (NOT v_is_authorised)
+      AND (NOT v_is_unprocessed)
+      AND v_current_ts.timesheet_id IS NOT NULL,
+      false
+    );
+    v_can_unprocess := COALESCE(v_unprocess_action_visible AND (NOT v_has_retained_financial_history), false);
+    v_unprocess_block_reason := CASE
+      WHEN v_unprocess_action_visible AND v_has_retained_financial_history
+      THEN 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'
+      ELSE NULL
+    END;
+    IF v_unprocess_block_reason IS NOT NULL THEN
+      v_disabled_reasons := array_append(v_disabled_reasons, v_unprocess_block_reason);
+    END IF;
     v_can_authorise := COALESCE(
-      (NOT v_is_locked)
+      (NOT v_is_archived)
+      AND (NOT v_is_locked)
       AND (NOT v_is_authorised)
       AND (NOT v_qr_unsigned_blocked)
       AND v_current_ts.timesheet_id IS NOT NULL
@@ -11462,9 +11902,10 @@ BEGIN
       ),
       false
     );
-    v_can_unauthorise := COALESCE((NOT v_is_locked) AND v_is_authorised AND v_current_ts.timesheet_id IS NOT NULL, false);
+    v_can_unauthorise := COALESCE((NOT v_is_archived) AND (NOT v_is_locked) AND v_is_authorised AND v_current_ts.timesheet_id IS NOT NULL, false);
 
     v_bucket := CASE
+      WHEN v_is_archived THEN 'ARCHIVED'
       WHEN v_is_authorised THEN 'AUTHORISED'
       WHEN v_current_ts.timesheet_id IS NULL THEN 'UNPROCESSED'
       WHEN v_is_unprocessed THEN 'UNPROCESSED'
@@ -11508,19 +11949,51 @@ BEGIN
             'processing_status', CASE WHEN v_tsfin.id IS NULL THEN NULL ELSE v_tsfin.processing_status::text END,
             'contract_week_status', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.status::text END,
             'is_paid', v_is_paid,
+            'is_archived', v_is_archived,
+            'archived_at_utc', CASE WHEN v_is_archived THEN v_current_ts.archived_at_utc ELSE NULL END,
+            'archived_by_user_id', CASE WHEN v_is_archived THEN v_current_ts.archived_by_user_id ELSE NULL END,
+            'archived_reason_code', CASE WHEN v_is_archived THEN v_current_ts.archived_reason_code ELSE NULL END,
             'is_invoice_locked', v_is_invoice_locked,
             'is_locked', v_is_locked,
             'is_authorised', v_is_authorised,
             'is_unprocessed', v_is_unprocessed,
+            'has_retained_financial_history', v_has_retained_financial_history,
+            'can_unprocess', v_can_unprocess,
+            'unprocess_block_reason', v_unprocess_block_reason,
+            'unprocess_action_visible', v_unprocess_action_visible,
             'qr_unsigned_blocked', v_qr_unsigned_blocked
           )),
           'actions', jsonb_build_object(
             'can_process', v_can_process,
             'can_unprocess', v_can_unprocess,
+            'has_retained_financial_history', v_has_retained_financial_history,
+            'unprocess_block_reason', v_unprocess_block_reason,
+            'unprocess_action_visible', v_unprocess_action_visible,
             'can_authorise', v_can_authorise,
             'can_unauthorise', v_can_unauthorise,
             'disabled_reasons', to_jsonb(v_disabled_reasons)
-          )
+          ),
+          'action_flags', jsonb_build_object(
+            'can_process', v_can_process,
+            'can_unprocess', v_can_unprocess,
+            'has_retained_financial_history', v_has_retained_financial_history,
+            'unprocess_block_reason', v_unprocess_block_reason,
+            'unprocess_action_visible', v_unprocess_action_visible,
+            'can_authorise', v_can_authorise,
+            'can_unauthorise', v_can_unauthorise
+          ),
+          'row_patch', jsonb_strip_nulls(jsonb_build_object(
+            'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+            'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+            'contract_week_id', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.id END,
+            'row_key', v_row_key,
+            'backend_row_signature', v_signature_json ->> 'backend_row_signature',
+            'row_signature', v_signature_json ->> 'row_signature',
+            'has_retained_financial_history', v_has_retained_financial_history,
+            'can_unprocess', v_can_unprocess,
+            'unprocess_block_reason', v_unprocess_block_reason,
+            'unprocess_action_visible', v_unprocess_action_visible
+          ))
         )
         || jsonb_build_object(
           'display', jsonb_strip_nulls(jsonb_build_object(
@@ -11565,6 +12038,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 

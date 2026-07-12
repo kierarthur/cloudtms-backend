@@ -403,16 +403,11 @@ $function$;
 
 
 
-
-
-CREATE OR REPLACE FUNCTION public.timesheet_weekly_chain_delete_preview(
-  p_timesheet_id uuid,
-  p_actor_user_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.timesheet_weekly_chain_delete_preview(p_timesheet_id uuid, p_actor_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 declare
   v_in_ts public.timesheets%rowtype;
@@ -431,10 +426,8 @@ declare
 
   v_blocked jsonb := '[]'::jsonb;
 
-  v_has_tsfin_lock boolean := false;
-  v_has_seg_locks boolean := false;
-  v_has_invoice_lines boolean := false;
-  v_has_pay_state boolean := false;
+  v_history jsonb := '{}'::jsonb;
+  v_decision text := 'BLOCKED';
   v_current_effective_adjustment boolean := false;
   v_manual_contract_week_targeted boolean := false;
 
@@ -444,6 +437,19 @@ declare
 begin
   if p_timesheet_id is null then
     raise exception 'timesheet_weekly_chain_delete_preview: timesheet_id is required';
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception using message = 'ACTOR_USER_ID_REQUIRED';
+  end if;
+
+  if not exists (
+    select 1
+    from public.tms_users as actor
+    where actor.id = p_actor_user_id
+      and actor.is_active = true
+  ) then
+    raise exception using message = 'ACTOR_NOT_FOUND_OR_INACTIVE';
   end if;
 
   select t.*
@@ -462,7 +468,11 @@ begin
   into v_current_ts
   from public.timesheets as tcur
   where tcur.booking_id = v_base_booking_id
-  order by tcur.is_current desc, tcur.version desc
+  order by tcur.is_current desc,
+           tcur.version desc nulls last,
+           tcur.updated_at desc nulls last,
+           tcur.created_at desc nulls last,
+           tcur.timesheet_id desc
   limit 1;
 
   if not found then
@@ -470,7 +480,7 @@ begin
   end if;
 
   select
-    coalesce(array_agg(distinct cw_current.id), array[]::uuid[]),
+    coalesce(array_agg(distinct cw_current.id order by cw_current.id), array[]::uuid[]),
     coalesce(bool_or(coalesce(cw_current.is_adjustment, false) = true OR coalesce(cw_current.additional_seq, 0) > 0), false)
   into v_current_contract_week_ids,
        v_current_effective_adjustment
@@ -510,7 +520,7 @@ begin
   -- - the parent booking_id
   -- - import-derived weekly adjustments in the same contract/week (NHSP/HR corrections/cancellations)
   if v_contract_id is not null and v_week_ending_date is not null then
-    select coalesce(array_agg(distinct scoped_booking.booking_id), array[]::text[])
+    select coalesce(array_agg(distinct scoped_booking.booking_id order by scoped_booking.booking_id), array[]::text[])
     into v_booking_ids
     from (
       select v_current_ts.booking_id as booking_id
@@ -532,7 +542,7 @@ begin
   end if;
 
   -- All timesheet IDs (all versions) for those booking IDs
-  select coalesce(array_agg(all_versions.timesheet_id), array[]::uuid[])
+  select coalesce(array_agg(all_versions.timesheet_id order by all_versions.timesheet_id), array[]::uuid[])
   into v_timesheet_ids
   from public.timesheets as all_versions
   where all_versions.booking_id = any(v_booking_ids);
@@ -542,7 +552,7 @@ begin
   -- (b) contract_week rows linked to timesheets in scope, but only when they are base rows or import-derived children
   -- Manual additional contract_weeks are deliberately excluded and guarded against.
   if v_contract_id is not null and v_week_ending_date is not null then
-    select coalesce(array_agg(distinct scoped_contract_week.cw_id), array[]::uuid[])
+    select coalesce(array_agg(distinct scoped_contract_week.cw_id order by scoped_contract_week.cw_id), array[]::uuid[])
     into v_contract_week_ids
     from (
       select base_contract_week.id as cw_id
@@ -601,7 +611,7 @@ begin
 
   -- NHSP/HR truth rows in this contract/week (for informational preview)
   if v_contract_id is not null and v_week_ending_date is not null then
-    select coalesce(array_agg(nhsp_shift.id), array[]::uuid[])
+    select coalesce(array_agg(nhsp_shift.id order by nhsp_shift.id), array[]::uuid[])
     into v_nhsp_shift_ids
     from public.nhsp_shifts as nhsp_shift
     where nhsp_shift.contract_id = v_contract_id
@@ -611,100 +621,21 @@ begin
     v_nhsp_shift_ids := array[]::uuid[];
   end if;
 
-  -- TSFIN lock/paid markers (current snapshots only)
-  select exists(
-    select 1
-    from public.timesheets_financials as timesheet_financials_lock
-    where timesheet_financials_lock.timesheet_id = any(v_timesheet_ids)
-      and timesheet_financials_lock.is_current is true
-      and (timesheet_financials_lock.locked_by_invoice_id is not null or timesheet_financials_lock.paid_at_utc is not null)
-  )
-  into v_has_tsfin_lock;
+  v_history := public.timesheet_removal_financial_history_v1(
+    v_timesheet_ids,
+    v_booking_ids,
+    v_contract_week_ids
+  );
 
-  if v_has_tsfin_lock then
-    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
-      'code','TSFIN_LOCK_OR_PAID',
-      'message','One or more timesheets in the chain have TSFIN locked_by_invoice_id and/or paid_at_utc set.'
-    ));
-  end if;
+  v_blocked := v_blocked || COALESCE(v_history -> 'blockers', '[]'::jsonb);
 
-  -- Segment-level invoice locks (SEGMENTS mode)
-  select exists(
-    select 1
-    from public.timesheets_financials as timesheet_financials_segment_lock
-    cross join lateral jsonb_array_elements(
-      case
-        when upper(coalesce(timesheet_financials_segment_lock.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-             and jsonb_typeof(timesheet_financials_segment_lock.invoice_breakdown_json->'segments') = 'array'
-          then timesheet_financials_segment_lock.invoice_breakdown_json->'segments'
-        else '[]'::jsonb
-      end
-    ) as segment_lock(segment_json)
-    where timesheet_financials_segment_lock.timesheet_id = any(v_timesheet_ids)
-      and timesheet_financials_segment_lock.is_current is true
-      and nullif(btrim(coalesce(segment_lock.segment_json->>'invoice_locked_invoice_id','')),'') is not null
-  )
-  into v_has_seg_locks;
-
-  if v_has_seg_locks then
-    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
-      'code','SEGMENT_LOCKED',
-      'message','One or more timesheets in the chain have segment-level invoice locks (invoice_locked_invoice_id) in TSFIN invoice_breakdown_json.'
-    ));
-  end if;
-
-  -- Any invoice_lines referencing any timesheet/booking in scope blocks delete
-  select exists(
-    select 1
-    from public.invoice_lines as invoice_line_check
-    where (invoice_line_check.timesheet_id is not null and invoice_line_check.timesheet_id = any(v_timesheet_ids))
-       or (invoice_line_check.booking_id is not null and invoice_line_check.booking_id = any(v_booking_ids))
-  )
-  into v_has_invoice_lines;
-
-  if v_has_invoice_lines then
-    select coalesce(
-      jsonb_agg(distinct jsonb_build_object(
-        'invoice_id', invoice_header.id::text,
-        'status', invoice_header.status::text
-      )),
-      '[]'::jsonb
-    )
-    into v_invoice_info
-    from public.invoice_lines as invoice_line_info
-    join public.invoices as invoice_header
-      on invoice_header.id = invoice_line_info.invoice_id
-    where (invoice_line_info.timesheet_id is not null and invoice_line_info.timesheet_id = any(v_timesheet_ids))
-       or (invoice_line_info.booking_id is not null and invoice_line_info.booking_id = any(v_booking_ids));
-
-    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
-      'code','INVOICE_LINES_PRESENT',
-      'message','One or more invoice_lines reference a timesheet/booking in this chain; parent-chain delete requires the chain to be not invoiced.',
-      'invoices', v_invoice_info
-    ));
-  end if;
-
-  -- Pay state present blocks delete
-  select (
-    exists(
-      select 1
-      from public.timesheet_pay_state as timesheet_pay_state_check
-      where timesheet_pay_state_check.timesheet_id = any(v_timesheet_ids)
-    )
-    or exists(
-      select 1
-      from public.timesheet_pay_state_history as timesheet_pay_state_history_check
-      where timesheet_pay_state_history_check.timesheet_id = any(v_timesheet_ids)
-    )
-  )
-  into v_has_pay_state;
-
-  if v_has_pay_state then
-    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
-      'code','PAY_STATE_PRESENT',
-      'message','One or more timesheets in the chain have pay settlement state/history; parent-chain delete requires chain to be unpaid.'
-    ));
-  end if;
+  IF jsonb_array_length(v_blocked) > 0 THEN
+    v_decision := 'BLOCKED';
+  ELSIF COALESCE((v_history ->> 'archive_required')::boolean, false) THEN
+    v_decision := 'ARCHIVE_REQUIRED';
+  ELSE
+    v_decision := 'PERMANENT_DELETE';
+  END IF;
 
   -- delete_items[] for warning modal (one display row per booking_id)
   select coalesce(
@@ -729,7 +660,9 @@ begin
       )
       ORDER BY
         (case when selected_timesheet.booking_id = v_current_ts.booking_id then 0 else 1 end),
-        selected_timesheet.booking_id
+        selected_timesheet.booking_id,
+        selected_timesheet.timesheet_id,
+        selected_tsfin.id
     ),
     '[]'::jsonb
   )
@@ -746,7 +679,12 @@ begin
       timesheet_pick.correction_kind
     from public.timesheets as timesheet_pick
     where timesheet_pick.booking_id = any(v_booking_ids)
-    order by timesheet_pick.booking_id, timesheet_pick.is_current desc, timesheet_pick.version desc
+    order by timesheet_pick.booking_id,
+             timesheet_pick.is_current desc,
+             timesheet_pick.version desc nulls last,
+             timesheet_pick.updated_at desc nulls last,
+             timesheet_pick.created_at desc nulls last,
+             timesheet_pick.timesheet_id desc
   ) as selected_timesheet
   left join public.timesheets_financials as selected_tsfin
     on selected_tsfin.timesheet_id = selected_timesheet.timesheet_id
@@ -763,21 +701,22 @@ begin
     'contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[])),
     'nhsp_shift_ids', to_jsonb(coalesce(v_nhsp_shift_ids, array[]::uuid[])),
     'delete_items', v_delete_items,
-    'eligible', (jsonb_array_length(v_blocked) = 0),
-    'blocked_reasons', v_blocked
+    'decision', v_decision,
+    'eligible', (v_decision = 'PERMANENT_DELETE'),
+    'blocked_reasons', v_blocked,
+    'blockers', v_blocked,
+    'retention_reasons', COALESCE(v_history -> 'retention_reasons', '[]'::jsonb),
+    'advance', COALESCE(v_history -> 'advance', '{}'::jsonb)
   );
 end;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.timesheet_weekly_manual_adjustment_delete_preview(
-  p_timesheet_id uuid,
-  p_actor_user_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.timesheet_weekly_manual_adjustment_delete_preview(p_timesheet_id uuid, p_actor_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 declare
   v_in_ts public.timesheets%rowtype;
@@ -796,19 +735,26 @@ declare
 
   v_blocked jsonb := '[]'::jsonb;
 
-  v_has_tsfin_lock boolean := false;
-  v_has_seg_locks boolean := false;
-  v_has_invoice_lines boolean := false;
-  v_has_pay_state boolean := false;
-  v_has_pay_batch_items boolean := false;
-
-  v_invoice_info jsonb := '[]'::jsonb;
-  v_pay_batch_info jsonb := '[]'::jsonb;
+  v_history jsonb := '{}'::jsonb;
+  v_decision text := 'BLOCKED';
 
   v_delete_items jsonb := '[]'::jsonb;
 begin
   if p_timesheet_id is null then
     raise exception 'timesheet_weekly_manual_adjustment_delete_preview: timesheet_id is required';
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception using message = 'ACTOR_USER_ID_REQUIRED';
+  end if;
+
+  if not exists (
+    select 1
+    from public.tms_users as actor
+    where actor.id = p_actor_user_id
+      and actor.is_active = true
+  ) then
+    raise exception using message = 'ACTOR_NOT_FOUND_OR_INACTIVE';
   end if;
 
   select input_timesheet.*
@@ -937,131 +883,21 @@ begin
     ));
   end if;
 
-  select exists(
-    select 1
-    from public.timesheets_financials as timesheet_financials_lock
-    where timesheet_financials_lock.timesheet_id = any(v_timesheet_ids)
-      and timesheet_financials_lock.is_current is true
-      and (timesheet_financials_lock.locked_by_invoice_id is not null or timesheet_financials_lock.paid_at_utc is not null)
-  )
-  into v_has_tsfin_lock;
+  v_history := public.timesheet_removal_financial_history_v1(
+    v_timesheet_ids,
+    ARRAY[v_current_ts.booking_id],
+    v_contract_week_ids
+  );
 
-  if v_has_tsfin_lock then
-    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
-      'code','TSFIN_LOCK_OR_PAID',
-      'message','Timesheet has TSFIN locked_by_invoice_id and/or paid_at_utc set; cannot delete.'
-    ));
-  end if;
+  v_blocked := v_blocked || COALESCE(v_history -> 'blockers', '[]'::jsonb);
 
-  select exists(
-    select 1
-    from public.timesheets_financials as timesheet_financials_segment_lock
-    cross join lateral jsonb_array_elements(
-      case
-        when upper(coalesce(timesheet_financials_segment_lock.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-             and jsonb_typeof(timesheet_financials_segment_lock.invoice_breakdown_json->'segments') = 'array'
-          then timesheet_financials_segment_lock.invoice_breakdown_json->'segments'
-        else '[]'::jsonb
-      end
-    ) as segment_lock(segment_json)
-    where timesheet_financials_segment_lock.timesheet_id = any(v_timesheet_ids)
-      and timesheet_financials_segment_lock.is_current is true
-      and nullif(btrim(coalesce(segment_lock.segment_json->>'invoice_locked_invoice_id','')),'') is not null
-  )
-  into v_has_seg_locks;
-
-  if v_has_seg_locks then
-    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
-      'code','SEGMENT_LOCKED',
-      'message','Timesheet has segment-level invoice locks (invoice_locked_invoice_id) in TSFIN.'
-    ));
-  end if;
-
-  select exists(
-    select 1
-    from public.invoice_lines as invoice_line_check
-    where (invoice_line_check.timesheet_id is not null and invoice_line_check.timesheet_id = any(v_timesheet_ids))
-       or (invoice_line_check.booking_id is not null and invoice_line_check.booking_id = v_current_ts.booking_id)
-  )
-  into v_has_invoice_lines;
-
-  if v_has_invoice_lines then
-    select coalesce(
-      jsonb_agg(distinct jsonb_build_object(
-        'invoice_id', invoice_header.id::text,
-        'status', invoice_header.status::text
-      )),
-      '[]'::jsonb
-    )
-    into v_invoice_info
-    from public.invoice_lines as invoice_line_info
-    join public.invoices as invoice_header
-      on invoice_header.id = invoice_line_info.invoice_id
-    where (invoice_line_info.timesheet_id is not null and invoice_line_info.timesheet_id = any(v_timesheet_ids))
-       or (invoice_line_info.booking_id is not null and invoice_line_info.booking_id = v_current_ts.booking_id);
-
-    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
-      'code','INVOICE_LINES_PRESENT',
-      'message','One or more invoice_lines reference this adjustment timesheet; cannot delete.',
-      'invoices', v_invoice_info
-    ));
-  end if;
-
-  select (
-    exists(
-      select 1
-      from public.timesheet_pay_state as timesheet_pay_state_check
-      where timesheet_pay_state_check.timesheet_id = any(v_timesheet_ids)
-    )
-    or exists(
-      select 1
-      from public.timesheet_pay_state_history as timesheet_pay_state_history_check
-      where timesheet_pay_state_history_check.timesheet_id = any(v_timesheet_ids)
-    )
-  )
-  into v_has_pay_state;
-
-  if v_has_pay_state then
-    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
-      'code','PAY_STATE_PRESENT',
-      'message','Timesheet has pay settlement state/history; cannot delete.'
-    ));
-  end if;
-
-  select exists(
-    select 1
-    from public.pay_batch_items as pay_batch_item_check
-    where pay_batch_item_check.timesheet_id = any(v_timesheet_ids)
-  )
-  into v_has_pay_batch_items;
-
-  if v_has_pay_batch_items then
-    select coalesce(
-      jsonb_agg(distinct jsonb_build_object(
-        'pay_batch_id', pay_batch_header.id::text,
-        'pay_batch_status', pay_batch_header.status,
-        'pay_batch_cancelled_at_utc', pay_batch_header.cancelled_at_utc,
-        'pay_batch_item_id', pay_batch_item_info.id::text,
-        'pay_batch_candidate_id', pay_batch_item_info.pay_batch_candidate_id::text,
-        'item_type', pay_batch_item_info.item_type,
-        'is_voided', coalesce(pay_batch_item_info.is_voided, false)
-      )),
-      '[]'::jsonb
-    )
-    into v_pay_batch_info
-    from public.pay_batch_items as pay_batch_item_info
-    left join public.pay_batch_candidates as pay_batch_candidate_info
-      on pay_batch_candidate_info.id = pay_batch_item_info.pay_batch_candidate_id
-    left join public.pay_batches as pay_batch_header
-      on pay_batch_header.id = pay_batch_candidate_info.pay_batch_id
-    where pay_batch_item_info.timesheet_id = any(v_timesheet_ids);
-
-    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
-      'code','PAY_BATCH_ITEMS_PRESENT',
-      'message','Timesheet is represented in one or more pay batch artifacts; delete is blocked to preserve frozen payment batch history.',
-      'pay_batches', v_pay_batch_info
-    ));
-  end if;
+  IF jsonb_array_length(v_blocked) > 0 THEN
+    v_decision := 'BLOCKED';
+  ELSIF COALESCE((v_history ->> 'archive_required')::boolean, false) THEN
+    v_decision := 'ARCHIVE_REQUIRED';
+  ELSE
+    v_decision := 'PERMANENT_DELETE';
+  END IF;
 
   select coalesce(
     jsonb_agg(
@@ -1079,6 +915,7 @@ begin
         'total_pay_ex_vat', coalesce(selected_tsfin.total_pay_ex_vat, 0),
         'total_charge_ex_vat', coalesce(selected_tsfin.total_charge_ex_vat, 0)
       )
+      order by selected_tsfin.id
     ),
     '[]'::jsonb
   )
@@ -1115,10 +952,13 @@ begin
     'preserved_source_timesheet_ids', to_jsonb(coalesce(v_preserved_source_timesheet_ids, array[]::uuid[])),
     'preserved_source_contract_week_ids', to_jsonb(coalesce(v_preserved_source_contract_week_ids, array[]::uuid[])),
     'delete_items', v_delete_items,
-    'eligible', (jsonb_array_length(v_blocked) = 0),
-    'blocked_reasons', v_blocked
+    'decision', v_decision,
+    'eligible', (v_decision = 'PERMANENT_DELETE'),
+    'blocked_reasons', v_blocked,
+    'blockers', v_blocked,
+    'retention_reasons', COALESCE(v_history -> 'retention_reasons', '[]'::jsonb),
+    'advance', COALESCE(v_history -> 'advance', '{}'::jsonb)
   );
 end;
 $function$;
-
 

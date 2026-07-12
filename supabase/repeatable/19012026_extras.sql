@@ -6606,6 +6606,7 @@ $function$;
 
 BEGIN;
 
+
 CREATE OR REPLACE FUNCTION public.timesheet_summary_lightweight_rows_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(timesheet_id uuid, contract_week_id uuid, contract_id uuid, candidate_id uuid, candidate_name text, candidate_display_name text, client_id uuid, client_name text, booking_id text, occupant_key_norm text, hospital_norm text, candidate_hint_text jsonb, week_ending_date date, work_date date, sheet_scope text, submission_mode text, submission_mode_snapshot text, basis text, route_type text, route_display text, route_family text, route_subfamily text, underlying_channel_family text, summary_stage text, tools_stage text, processing_status text, processing_status_display text, authorised_at_utc timestamp with time zone, authorised_at_server timestamp with time zone, processed_at_utc timestamp with time zone, is_authorised boolean, total_hours numeric, total_pay_ex_vat numeric, total_charge_ex_vat numeric, margin_ex_vat numeric, net_delta_ex_vat numeric, paid_at_utc timestamp with time zone, pay_icon_code text, pay_status_code text, pay_paid_at_utc timestamp with time zone, invoice_is_paid boolean, invoice_issue_stage text, invoice_segment_stage text, invoice_segments_total integer, invoice_segments_locked integer, invoice_segments_unlocked integer, issue_codes text[], validation_status text, validation_summary text, hr_crosscheck_status text, hr_crosscheck_issues text[], qr_status text, is_qr boolean, is_adjusted boolean, needs_attention boolean, has_rate_issue boolean, has_pay_channel_issue boolean, client_no_timesheet_required boolean, client_autoprocess_hr boolean, client_is_nhsp boolean, has_any_evidence boolean, attached_evidence_count integer, primary_artifact_storage_key text, primary_artifact_display_name text, primary_artifact_preview_mode text)
  LANGUAGE plpgsql
@@ -6846,6 +6847,7 @@ BEGIN
 
   v_q := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'q', v_filters->>'query', v_filters->>'name', '')), ''));
   v_tools_stage := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'tools_stage', v_filters->>'toolsStage', '')), ''));
+  IF v_tools_stage = 'all' THEN v_tools_stage := NULL; END IF;
   v_route_type := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'route_type', v_filters->>'routeType', '')), ''));
   v_sheet_scope := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'sheet_scope', v_filters->>'sheetScope', '')), ''));
   v_qr_status := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'qr_status', v_filters->>'qrStatus', '')), ''));
@@ -7263,8 +7265,14 @@ BEGIN
         OR LOWER(COALESCE(enriched_row.processing_status_display, '')) LIKE '%' || v_q || '%'
       )
       AND (
-        v_tools_stage IS NULL
-        OR LOWER(COALESCE(enriched_row.tools_stage, '')) = v_tools_stage
+        (v_tools_stage IS NULL AND LOWER(COALESCE(enriched_row.tools_stage, '')) <> 'archived')
+        OR (v_tools_stage = 'archived' AND LOWER(COALESCE(enriched_row.tools_stage, '')) = 'archived')
+        OR (
+          v_tools_stage IS NOT NULL
+          AND v_tools_stage <> 'archived'
+          AND LOWER(COALESCE(enriched_row.tools_stage, '')) = v_tools_stage
+          AND LOWER(COALESCE(enriched_row.tools_stage, '')) <> 'archived'
+        )
       )
       AND (
         v_route_type IS NULL

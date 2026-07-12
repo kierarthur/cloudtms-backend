@@ -1,3 +1,9 @@
+-- CloudTMS Retention Marker / Unprocess handover
+-- Disposition: latest candidate amended and returned in full.
+-- Authoritative baseline: candidate 21, bulk_process_row_context_v1.
+-- Amendment: every successful context profile is passed through the exact
+-- marker-backed retention contract normaliser; failure objects are unchanged.
+
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -667,7 +673,7 @@ BEGIN
       END IF;
     END IF;
 
-    RETURN v_out;
+    RETURN public.bulk_process_retention_contract_patch_v1(v_out);
   END IF;
 
 
@@ -840,7 +846,14 @@ BEGIN
         summary_row.route_subfamily AS route_subfamily,
         summary_row.underlying_channel_family AS underlying_channel_family,
         COALESCE(summary_row.summary_stage, CASE WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED' ELSE 'PROCESSED' END) AS summary_stage,
-        COALESCE(summary_row.tools_stage, CASE WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED' ELSE COALESCE(tsfin_row.processing_status::text, timesheet_row.status::text) END) AS tools_stage,
+        COALESCE(
+          summary_row.tools_stage,
+          CASE
+            WHEN timesheet_row.archived_at_utc IS NOT NULL THEN 'ARCHIVED'
+            WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED'
+            ELSE COALESCE(tsfin_row.processing_status::text, timesheet_row.status::text)
+          END
+        ) AS tools_stage,
         COALESCE(summary_row.processing_status, tsfin_row.processing_status::text) AS processing_status,
         summary_row.processing_status_display AS processing_status_display,
         COALESCE(summary_row.authorised_at_utc, tsfin_row.authorised_at_utc) AS authorised_at_utc,
@@ -1003,9 +1016,8 @@ BEGIN
         core_row.*,
         (core_row.resolved_timesheet_id IS NOT NULL OR core_row.resolved_contract_week_id IS NOT NULL) AS row_found,
         (
-          core_row.tsfin_locked_by_invoice_id IS NOT NULL
-          OR core_row.tsfin_paid_at_utc IS NOT NULL
-          OR core_row.paid_at_utc IS NOT NULL
+          UPPER(COALESCE(core_row.tools_stage, '')) = 'ARCHIVED'
+          OR core_row.tsfin_locked_by_invoice_id IS NOT NULL
           OR COALESCE(core_row.invoice_segments_locked, 0) > 0
           OR COALESCE(core_row.invoice_is_paid, FALSE) = TRUE
         ) AS locked_bool,
@@ -1547,7 +1559,7 @@ BEGIN
       END IF;
     END IF;
 
-    RETURN v_out;
+    RETURN public.bulk_process_retention_contract_patch_v1(v_out);
   END IF;
 
   IF v_profile = 'evidence' THEN
@@ -2101,7 +2113,7 @@ BEGIN
       END IF;
     END IF;
 
-    RETURN v_out;
+    RETURN public.bulk_process_retention_contract_patch_v1(v_out);
   END IF;
 
   IF v_profile = 'compare_import' THEN
@@ -2321,7 +2333,7 @@ BEGIN
       END IF;
     END IF;
 
-    RETURN v_out;
+    RETURN public.bulk_process_retention_contract_patch_v1(v_out);
   END IF;
 
   WITH decision_row AS (
@@ -4100,7 +4112,11 @@ BEGIN
     END IF;
   END IF;
 
-  RETURN COALESCE(v_out, JSONB_BUILD_OBJECT(
+  IF v_out IS NOT NULL THEN
+    RETURN public.bulk_process_retention_contract_patch_v1(v_out);
+  END IF;
+
+  RETURN JSONB_BUILD_OBJECT(
     'ok', FALSE,
     'context_kind', 'bulk_process_row_context',
     'context_profile', v_profile,
@@ -4120,9 +4136,10 @@ BEGIN
     'error', 'ROW_NOT_FOUND',
     'message', 'No bulk process row context was found for the supplied identity',
     'filters', v_filters
-  ));
+  );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.bulk_authorise_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
@@ -4769,7 +4786,14 @@ BEGIN
         summary_row.route_subfamily AS route_subfamily,
         summary_row.underlying_channel_family AS underlying_channel_family,
         COALESCE(summary_row.summary_stage, CASE WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED' ELSE 'PROCESSED' END) AS summary_stage,
-        COALESCE(summary_row.tools_stage, CASE WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED' ELSE COALESCE(tsfin_row.processing_status::text, timesheet_row.status::text) END) AS tools_stage,
+        COALESCE(
+          summary_row.tools_stage,
+          CASE
+            WHEN timesheet_row.archived_at_utc IS NOT NULL THEN 'ARCHIVED'
+            WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED'
+            ELSE COALESCE(tsfin_row.processing_status::text, timesheet_row.status::text)
+          END
+        ) AS tools_stage,
         COALESCE(summary_row.processing_status, tsfin_row.processing_status::text) AS processing_status,
         summary_row.processing_status_display AS processing_status_display,
         COALESCE(summary_row.authorised_at_utc, tsfin_row.authorised_at_utc) AS authorised_at_utc,
@@ -4912,9 +4936,8 @@ BEGIN
         core_row.*,
         (core_row.resolved_timesheet_id IS NOT NULL OR core_row.resolved_contract_week_id IS NOT NULL) AS row_found,
         (
-          core_row.tsfin_locked_by_invoice_id IS NOT NULL
-          OR core_row.tsfin_paid_at_utc IS NOT NULL
-          OR core_row.paid_at_utc IS NOT NULL
+          UPPER(COALESCE(core_row.tools_stage, '')) = 'ARCHIVED'
+          OR core_row.tsfin_locked_by_invoice_id IS NOT NULL
           OR COALESCE(core_row.invoice_segments_locked, 0) > 0
           OR COALESCE(core_row.invoice_is_paid, FALSE) = TRUE
         ) AS locked_bool,
@@ -7706,8 +7729,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.timesheet_qr_send_enqueue_v1(
   p_timesheet_id uuid,
   p_expected_timesheet_id uuid DEFAULT NULL,
@@ -9073,8 +9094,6 @@ BEGIN
 END;
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_workbench_row_source_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(timesheet_id uuid, timesheet_status timesheet_status_enum, week_ending_date date, booking_id text, occupant_key_norm text, hospital_norm text, sheet_scope timesheet_scope_enum, submission_mode submission_mode_enum, authorised_at_server timestamp with time zone, candidate_id uuid, client_id uuid, pay_method text, processing_status ts_fin_processing_status_enum, basis timesheet_fin_basis_enum, total_hours numeric, total_pay_ex_vat numeric, total_charge_ex_vat numeric, margin_ex_vat numeric, paid_at_utc timestamp with time zone, pay_on_hold boolean, ready_to_pay boolean, locked_by_invoice_id uuid, candidate_name text, client_name text, nhsp_shift_count integer, nhsp_shift_included_count integer, nhsp_shift_deferred_count integer, validation_status validation_status_enum, summary_stage text, route_type text, contract_week_id uuid, contract_week_ending_date date, contract_week_status contract_week_status_enum, additional_seq integer, is_adjustment boolean, qr_status timesheet_qr_status_enum, pay_adjustment_count integer, has_pay_adjustments boolean, is_adjusted boolean, is_qr boolean, needs_attention boolean, client_autoprocess_hr boolean, has_rate_issue boolean, has_pay_channel_issue boolean, hr_crosscheck_status text, hr_crosscheck_issues text[], external_source_rows_json jsonb, issue_codes text[], client_requires_hr boolean, client_no_timesheet_required boolean, client_is_nhsp boolean, client_pay_reference_required boolean, client_invoice_reference_required boolean, client_hr_validation_required boolean, client_ts_reference_required boolean, require_reference_to_pay boolean, require_reference_to_invoice boolean, qr_token text, qr_generated_at timestamp with time zone, qr_scanned_at timestamp with time zone, candidate_hint_text jsonb, expenses_pay_ex_vat numeric, expenses_description text, mileage_units numeric, mileage_pay_rate numeric, mileage_charge_rate numeric, mileage_pay_ex_vat numeric, travel_pay_ex_vat numeric, travel_charge_ex_vat numeric, accommodation_pay_ex_vat numeric, accommodation_charge_ex_vat numeric, other_pay_ex_vat numeric, other_charge_ex_vat numeric, hr_validation_required_for_invoice boolean, invoice_segments_total integer, invoice_segments_locked integer, invoice_segments_unlocked integer, invoice_segment_stage text, tools_stage text, processing_status_display text, invoice_is_paid boolean, refs_block_invoicing boolean, refs_block_issuing_invoices boolean, refs_block_invoice_and_issuing boolean, pay_icon_code text, pay_status_code text, pay_paid_at_utc timestamp with time zone, net_delta_ex_vat numeric)
  LANGUAGE plpgsql
@@ -10234,6 +10253,13 @@ BEGIN
       sr0.nhsp_shift_deferred_count,
       sr0.validation_status,
       CASE
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM public.timesheets AS archived_timesheet
+           WHERE archived_timesheet.timesheet_id = sr0.timesheet_id
+             AND archived_timesheet.archived_at_utc IS NOT NULL
+         ) THEN 'ARCHIVED'
         WHEN sr0.timesheet_id IS NULL THEN CASE sr0.contract_week_status
           WHEN 'PLANNED'::public.contract_week_status_enum THEN 'PLANNED'
           WHEN 'OPEN'::public.contract_week_status_enum THEN 'PLANNED'
@@ -10393,6 +10419,13 @@ BEGIN
         ELSE 'PARTIALLY_INVOICED'
       END AS invoice_segment_stage,
       CASE
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM public.timesheets AS archived_timesheet
+           WHERE archived_timesheet.timesheet_id = sr0.timesheet_id
+             AND archived_timesheet.archived_at_utc IS NOT NULL
+         ) THEN 'ARCHIVED'
         WHEN sr0.timesheet_id IS NULL THEN 'UNPROCESSED'
         WHEN sr0.processing_status = 'UNPROCESSED'::public.ts_fin_processing_status_enum THEN 'UNPROCESSED'
         WHEN sr0.locked_by_invoice_id IS NOT NULL OR COALESCE(sr0.invoice_segments_locked_calc, 0) > 0 THEN 'INVOICED'
@@ -10412,6 +10445,13 @@ BEGIN
         ELSE 'PROCESSING_DELAYED'
       END AS tools_stage,
       CASE
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM public.timesheets AS archived_timesheet
+           WHERE archived_timesheet.timesheet_id = sr0.timesheet_id
+             AND archived_timesheet.archived_at_utc IS NOT NULL
+         ) THEN 'Archived'
         WHEN sr0.timesheet_id IS NULL THEN 'Unprocessed'
         WHEN sr0.processing_status = 'UNPROCESSED'::public.ts_fin_processing_status_enum THEN 'Unprocessed'
         WHEN sr0.locked_by_invoice_id IS NOT NULL OR COALESCE(sr0.invoice_segments_locked_calc, 0) > 0 THEN
@@ -10580,7 +10620,6 @@ BEGIN
     AND (v_client_id IS NULL OR rr0.client_id = v_client_id);
 END;
 $function$;
-
 
 
 

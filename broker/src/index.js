@@ -722,7 +722,6 @@ function _asPosInt(v, def) {
   return Number.isFinite(n) && n > 0 ? n : def;
 }
 
-
 async function loadSettingsDefaults(env) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -995,6 +994,8 @@ async function loadSettingsDefaults(env) {
         preview_mat: resolve('preview_mat', 'previewMat', generic),
         delta_refresh: deltaRefresh,
         deltaRefresh,
+        clone_rebase: resolve('clone_rebase', 'cloneRebase'),
+        cloneRebase: resolve('clone_rebase', 'cloneRebase'),
         generic
       };
     };
@@ -1005,7 +1006,8 @@ async function loadSettingsDefaults(env) {
       line_seed: _firstConfiguredValue(row.banking_pay_workbench_line_seed_units_per_job),
       line_process: _firstConfiguredValue(row.banking_pay_workbench_line_process_units_per_job),
       preview_materialise: _firstConfiguredValue(row.banking_pay_workbench_preview_mat_units_per_job),
-      delta_refresh: row.banking_pay_workbench_delta_units_per_job
+      delta_refresh: row.banking_pay_workbench_delta_units_per_job,
+      clone_rebase: row.banking_pay_workbench_clone_rebase_units_per_job
     };
     const bpwCronStageLimitsFromColumns = {
       scope_seed: _firstConfiguredValue(row.banking_pay_workbench_cron_scope_seed_units_per_job),
@@ -1013,7 +1015,8 @@ async function loadSettingsDefaults(env) {
       line_seed: _firstConfiguredValue(row.banking_pay_workbench_cron_line_seed_units_per_job),
       line_process: _firstConfiguredValue(row.banking_pay_workbench_cron_line_process_units_per_job),
       preview_materialise: _firstConfiguredValue(row.banking_pay_workbench_cron_preview_mat_units_per_job),
-      delta_refresh: row.banking_pay_workbench_cron_delta_units_per_job
+      delta_refresh: row.banking_pay_workbench_cron_delta_units_per_job,
+      clone_rebase: row.banking_pay_workbench_cron_clone_rebase_units_per_job
     };
     const bpwNudgeStageLimitsFromColumns = {
       scope_seed: _firstConfiguredValue(row.banking_pay_workbench_nudge_scope_seed_units_per_job),
@@ -1021,7 +1024,8 @@ async function loadSettingsDefaults(env) {
       line_seed: _firstConfiguredValue(row.banking_pay_workbench_nudge_line_seed_units_per_job),
       line_process: _firstConfiguredValue(row.banking_pay_workbench_nudge_line_process_units_per_job),
       preview_materialise: _firstConfiguredValue(row.banking_pay_workbench_nudge_preview_mat_units_per_job),
-      delta_refresh: row.banking_pay_workbench_nudge_delta_units_per_job
+      delta_refresh: row.banking_pay_workbench_nudge_delta_units_per_job,
+      clone_rebase: row.banking_pay_workbench_nudge_clone_rebase_units_per_job
     };
     const bpwStageLimits = _buildStageLimits(
       Object.assign({}, bpwStageLimitsCfg, bpwStageLimitsFromColumns),
@@ -1058,12 +1062,51 @@ async function loadSettingsDefaults(env) {
     const bpwNudgeDeltaUnitsPerJob = _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_delta_units_per_job, bpwNudgeCfg.delta_units_per_job, bpwNudgeCfg.deltaUnitsPerJob, bpwNudgeStageLimits.delta_refresh, bpwDeltaUnitsPerJob), bpwDeltaUnitsPerJob, 1, 100);
     const bpwCronDeltaUnitsPerJob = _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_cron_delta_units_per_job, bpwCronCfg.delta_units_per_job, bpwCronCfg.deltaUnitsPerJob, bpwCronStageLimits.delta_refresh, Math.max(50, bpwDeltaUnitsPerJob)), Math.max(50, bpwDeltaUnitsPerJob), 1, 100);
     const bpwDeltaBudgetMs = _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_delta_budget_ms, bpwDrainCfg.delta_refresh_budget_ms, bpwDrainCfg.deltaRefreshBudgetMs, bpwCfg0.delta_refresh_budget_ms, bpwCfg0.deltaRefreshBudgetMs), 3000, 250, 30000);
+    const bpwCloneRebaseEnabled = _asBool(_firstConfiguredValue(
+      row.banking_pay_workbench_clone_rebase_enabled,
+      bpwCfg0.clone_rebase_enabled,
+      bpwCfg0.cloneRebaseEnabled
+    ), true);
+    const bpwCloneRebaseUnitsPerJob = _asBoundedInt(_firstConfiguredValue(
+      row.banking_pay_workbench_clone_rebase_units_per_job,
+      bpwDrainCfg.clone_rebase_units_per_job,
+      bpwDrainCfg.cloneRebaseUnitsPerJob,
+      bpwStageLimits.clone_rebase,
+      bpwStageLimits.generic
+    ), 100, 1, 100);
+    const bpwNudgeCloneRebaseUnitsPerJob = _asBoundedInt(_firstConfiguredValue(
+      row.banking_pay_workbench_nudge_clone_rebase_units_per_job,
+      bpwNudgeCfg.clone_rebase_units_per_job,
+      bpwNudgeCfg.cloneRebaseUnitsPerJob,
+      bpwNudgeStageLimits.clone_rebase,
+      bpwCloneRebaseUnitsPerJob
+    ), bpwCloneRebaseUnitsPerJob, 1, 100);
+    const bpwCronCloneRebaseUnitsPerJob = _asBoundedInt(_firstConfiguredValue(
+      row.banking_pay_workbench_cron_clone_rebase_units_per_job,
+      bpwCronCfg.clone_rebase_units_per_job,
+      bpwCronCfg.cloneRebaseUnitsPerJob,
+      bpwCronStageLimits.clone_rebase,
+      bpwCloneRebaseUnitsPerJob
+    ), bpwCloneRebaseUnitsPerJob, 1, 100);
+    const bpwCloneRebaseBudgetMs = _asBoundedInt(_firstConfiguredValue(
+      row.banking_pay_workbench_clone_rebase_budget_ms,
+      bpwDrainCfg.clone_rebase_budget_ms,
+      bpwDrainCfg.cloneRebaseBudgetMs,
+      bpwCfg0.clone_rebase_budget_ms,
+      bpwCfg0.cloneRebaseBudgetMs
+    ), 3000, 250, 30000);
     bpwStageLimits.delta_refresh = bpwDeltaUnitsPerJob;
     bpwStageLimits.deltaRefresh = bpwDeltaUnitsPerJob;
     bpwCronStageLimits.delta_refresh = bpwCronDeltaUnitsPerJob;
     bpwCronStageLimits.deltaRefresh = bpwCronDeltaUnitsPerJob;
     bpwNudgeStageLimits.delta_refresh = bpwNudgeDeltaUnitsPerJob;
     bpwNudgeStageLimits.deltaRefresh = bpwNudgeDeltaUnitsPerJob;
+    bpwStageLimits.clone_rebase = bpwCloneRebaseUnitsPerJob;
+    bpwStageLimits.cloneRebase = bpwCloneRebaseUnitsPerJob;
+    bpwCronStageLimits.clone_rebase = bpwCronCloneRebaseUnitsPerJob;
+    bpwCronStageLimits.cloneRebase = bpwCronCloneRebaseUnitsPerJob;
+    bpwNudgeStageLimits.clone_rebase = bpwNudgeCloneRebaseUnitsPerJob;
+    bpwNudgeStageLimits.cloneRebase = bpwNudgeCloneRebaseUnitsPerJob;
     const settingsDefaultsUpdatedAt = row.updated_at || null;
     const bankingPayWorkbenchEffective = {
       cron: {
@@ -1084,7 +1127,10 @@ async function loadSettingsDefaults(env) {
         line_process_units_per_job: bpwCronStageLimits.line_process,
         preview_materialise_units_per_job: bpwCronStageLimits.preview_materialise,
         delta_units_per_job: bpwCronDeltaUnitsPerJob,
-        delta_refresh_units_per_job: bpwCronDeltaUnitsPerJob
+        delta_refresh_units_per_job: bpwCronDeltaUnitsPerJob,
+        clone_rebase_enabled: bpwCloneRebaseEnabled,
+        clone_rebase_units_per_job: bpwCronCloneRebaseUnitsPerJob,
+        clone_rebase_budget_ms: bpwCloneRebaseBudgetMs
       },
       nudge: {
         enabled: _asBool(_firstConfiguredValue(row.banking_pay_workbench_nudge_enabled, bpwNudgeCfg.enabled), true),
@@ -1104,7 +1150,10 @@ async function loadSettingsDefaults(env) {
         line_process_units_per_job: bpwNudgeStageLimits.line_process,
         preview_materialise_units_per_job: bpwNudgeStageLimits.preview_materialise,
         delta_units_per_job: bpwNudgeDeltaUnitsPerJob,
-        delta_refresh_units_per_job: bpwNudgeDeltaUnitsPerJob
+        delta_refresh_units_per_job: bpwNudgeDeltaUnitsPerJob,
+        clone_rebase_enabled: bpwCloneRebaseEnabled,
+        clone_rebase_units_per_job: bpwNudgeCloneRebaseUnitsPerJob,
+        clone_rebase_budget_ms: bpwCloneRebaseBudgetMs
       },
       drain: {
         claim_limit_max: _asBoundedInt(_firstConfiguredValue(bpwDrainCfg.claim_limit_max, bpwDrainCfg.claimLimitMax), 100, 1, 100),
@@ -1124,6 +1173,11 @@ async function loadSettingsDefaults(env) {
         deltaRefreshUnitsPerJob: bpwDeltaUnitsPerJob,
         delta_refresh_budget_ms: bpwDeltaBudgetMs,
         deltaRefreshBudgetMs: bpwDeltaBudgetMs,
+        clone_rebase_enabled: bpwCloneRebaseEnabled,
+        clone_rebase_units_per_job: bpwCloneRebaseUnitsPerJob,
+        cloneRebaseUnitsPerJob: bpwCloneRebaseUnitsPerJob,
+        clone_rebase_budget_ms: bpwCloneRebaseBudgetMs,
+        cloneRebaseBudgetMs: bpwCloneRebaseBudgetMs,
         db_worker_lease_seconds: _asNullableBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_db_worker_lease_seconds, bpwDrainCfg.db_worker_lease_seconds, bpwDrainCfg.dbWorkerLeaseSeconds), 25, 3600),
         db_worker_max_runtime_ms: bpwDbWorkerMaxRuntimeMs,
         db_worker_min_phase_budget_ms: bpwDbWorkerMinPhaseBudgetMs,
@@ -1173,6 +1227,21 @@ async function loadSettingsDefaults(env) {
       delta_refresh_budget_ms: bpwDeltaBudgetMs,
       deltaRefreshBudgetMs: bpwDeltaBudgetMs,
       banking_pay_workbench_delta_budget_ms: bpwDeltaBudgetMs,
+      clone_rebase_enabled: bpwCloneRebaseEnabled,
+      cloneRebaseEnabled: bpwCloneRebaseEnabled,
+      banking_pay_workbench_clone_rebase_enabled: bpwCloneRebaseEnabled,
+      clone_rebase_units_per_job: bpwCloneRebaseUnitsPerJob,
+      cloneRebaseUnitsPerJob: bpwCloneRebaseUnitsPerJob,
+      banking_pay_workbench_clone_rebase_units_per_job: bpwCloneRebaseUnitsPerJob,
+      nudge_clone_rebase_units_per_job: bpwNudgeCloneRebaseUnitsPerJob,
+      nudgeCloneRebaseUnitsPerJob: bpwNudgeCloneRebaseUnitsPerJob,
+      banking_pay_workbench_nudge_clone_rebase_units_per_job: bpwNudgeCloneRebaseUnitsPerJob,
+      cron_clone_rebase_units_per_job: bpwCronCloneRebaseUnitsPerJob,
+      cronCloneRebaseUnitsPerJob: bpwCronCloneRebaseUnitsPerJob,
+      banking_pay_workbench_cron_clone_rebase_units_per_job: bpwCronCloneRebaseUnitsPerJob,
+      clone_rebase_budget_ms: bpwCloneRebaseBudgetMs,
+      cloneRebaseBudgetMs: bpwCloneRebaseBudgetMs,
+      banking_pay_workbench_clone_rebase_budget_ms: bpwCloneRebaseBudgetMs,
       stage_limits: bpwStageLimits,
       cron_stage_limits: bpwCronStageLimits,
       nudge_stage_limits: bpwNudgeStageLimits,
@@ -1204,6 +1273,11 @@ async function loadSettingsDefaults(env) {
       nudge_delta_units_per_job: bankingPayWorkbenchEffective.nudge_delta_units_per_job,
       cron_delta_units_per_job: bankingPayWorkbenchEffective.cron_delta_units_per_job,
       delta_refresh_budget_ms: bankingPayWorkbenchEffective.delta_refresh_budget_ms,
+      clone_rebase_enabled: bankingPayWorkbenchEffective.clone_rebase_enabled,
+      clone_rebase_units_per_job: bankingPayWorkbenchEffective.clone_rebase_units_per_job,
+      nudge_clone_rebase_units_per_job: bankingPayWorkbenchEffective.nudge_clone_rebase_units_per_job,
+      cron_clone_rebase_units_per_job: bankingPayWorkbenchEffective.cron_clone_rebase_units_per_job,
+      clone_rebase_budget_ms: bankingPayWorkbenchEffective.clone_rebase_budget_ms,
       rollover: bankingPayWorkbenchEffective.rollover,
       settings_defaults_updated_at: settingsDefaultsUpdatedAt
     }));
@@ -1282,6 +1356,11 @@ async function loadSettingsDefaults(env) {
       banking_pay_workbench_nudge_delta_units_per_job: bpwNudgeDeltaUnitsPerJob,
       banking_pay_workbench_cron_delta_units_per_job: bpwCronDeltaUnitsPerJob,
       banking_pay_workbench_delta_budget_ms: bpwDeltaBudgetMs,
+      banking_pay_workbench_clone_rebase_enabled: bpwCloneRebaseEnabled,
+      banking_pay_workbench_clone_rebase_units_per_job: bpwCloneRebaseUnitsPerJob,
+      banking_pay_workbench_nudge_clone_rebase_units_per_job: bpwNudgeCloneRebaseUnitsPerJob,
+      banking_pay_workbench_cron_clone_rebase_units_per_job: bpwCronCloneRebaseUnitsPerJob,
+      banking_pay_workbench_clone_rebase_budget_ms: bpwCloneRebaseBudgetMs,
 
       // ✅ NEW (cached)
       finance_email: financeEmail,
@@ -1402,14 +1481,17 @@ async function loadSettingsDefaults(env) {
             source_build_parallel_bursts: 4,
             source_build_runtime_floor_ms: 15000,
             source_build_lane_claim_limit: 1,
-            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, clone_rebase: 100, cloneRebase: 100, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 25,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
             preview_materialise_units_per_job: 25,
             delta_units_per_job: 50,
-            delta_refresh_units_per_job: 50
+            delta_refresh_units_per_job: 50,
+            clone_rebase_enabled: true,
+            clone_rebase_units_per_job: 100,
+            clone_rebase_budget_ms: 3000
           },
           nudge: {
             enabled: true,
@@ -1422,14 +1504,17 @@ async function loadSettingsDefaults(env) {
             source_build_parallel_bursts: 12,
             source_build_runtime_floor_ms: 60000,
             source_build_lane_claim_limit: 1,
-            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, clone_rebase: 100, cloneRebase: 100, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 25,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
             preview_materialise_units_per_job: 25,
             delta_units_per_job: 25,
-            delta_refresh_units_per_job: 25
+            delta_refresh_units_per_job: 25,
+            clone_rebase_enabled: true,
+            clone_rebase_units_per_job: 100,
+            clone_rebase_budget_ms: 3000
           },
           drain: {
             claim_limit_max: 100,
@@ -1439,7 +1524,7 @@ async function loadSettingsDefaults(env) {
             minimum_rpc_budget_ms: 10000,
             rpc_safety_buffer_ms: 1000,
             stage_work_units_per_job: 25,
-            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, clone_rebase: 100, cloneRebase: 100, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 25,
             line_seed_units_per_job: 50,
@@ -1449,6 +1534,11 @@ async function loadSettingsDefaults(env) {
             deltaRefreshUnitsPerJob: 25,
             delta_refresh_budget_ms: 3000,
             deltaRefreshBudgetMs: 3000,
+            clone_rebase_enabled: true,
+            clone_rebase_units_per_job: 100,
+            cloneRebaseUnitsPerJob: 100,
+            clone_rebase_budget_ms: 3000,
+            cloneRebaseBudgetMs: 3000,
             db_worker_lease_seconds: null,
             db_worker_max_runtime_ms: 8000,
             db_worker_min_phase_budget_ms: 2500,
@@ -1468,9 +1558,9 @@ async function loadSettingsDefaults(env) {
             max_jobs: 50,
             max_rows: 500
           },
-          stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
-          cron_stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, generic: 25 },
-          nudge_stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+          stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, clone_rebase: 100, cloneRebase: 100, generic: 25 },
+          cron_stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, clone_rebase: 100, cloneRebase: 100, generic: 25 },
+          nudge_stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, clone_rebase: 100, cloneRebase: 100, generic: 25 },
           delta_refresh_enabled: false,
           deltaRefreshEnabled: false,
           banking_pay_workbench_delta_refresh_enabled: false,
@@ -1501,6 +1591,21 @@ async function loadSettingsDefaults(env) {
           delta_refresh_budget_ms: 3000,
           deltaRefreshBudgetMs: 3000,
           banking_pay_workbench_delta_budget_ms: 3000,
+          clone_rebase_enabled: true,
+          cloneRebaseEnabled: true,
+          banking_pay_workbench_clone_rebase_enabled: true,
+          clone_rebase_units_per_job: 100,
+          cloneRebaseUnitsPerJob: 100,
+          banking_pay_workbench_clone_rebase_units_per_job: 100,
+          nudge_clone_rebase_units_per_job: 100,
+          nudgeCloneRebaseUnitsPerJob: 100,
+          banking_pay_workbench_nudge_clone_rebase_units_per_job: 100,
+          cron_clone_rebase_units_per_job: 100,
+          cronCloneRebaseUnitsPerJob: 100,
+          banking_pay_workbench_cron_clone_rebase_units_per_job: 100,
+          clone_rebase_budget_ms: 3000,
+          cloneRebaseBudgetMs: 3000,
+          banking_pay_workbench_clone_rebase_budget_ms: 3000,
           rollover: { enabled: true, max_sessions_per_tick: 5, nudge_after_create: true, scan_limit: 25 },
           settings_source: 'fallback',
           settings_defaults_updated_at: null,
@@ -1519,14 +1624,17 @@ async function loadSettingsDefaults(env) {
             source_build_parallel_bursts: 4,
             source_build_runtime_floor_ms: 15000,
             source_build_lane_claim_limit: 1,
-            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, clone_rebase: 100, cloneRebase: 100, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 25,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
             preview_materialise_units_per_job: 25,
             delta_units_per_job: 50,
-            delta_refresh_units_per_job: 50
+            delta_refresh_units_per_job: 50,
+            clone_rebase_enabled: true,
+            clone_rebase_units_per_job: 100,
+            clone_rebase_budget_ms: 3000
           },
           nudge: {
             enabled: true,
@@ -1539,14 +1647,17 @@ async function loadSettingsDefaults(env) {
             source_build_parallel_bursts: 12,
             source_build_runtime_floor_ms: 60000,
             source_build_lane_claim_limit: 1,
-            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, clone_rebase: 100, cloneRebase: 100, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 25,
             line_seed_units_per_job: 50,
             line_process_units_per_job: 25,
             preview_materialise_units_per_job: 25,
             delta_units_per_job: 25,
-            delta_refresh_units_per_job: 25
+            delta_refresh_units_per_job: 25,
+            clone_rebase_enabled: true,
+            clone_rebase_units_per_job: 100,
+            clone_rebase_budget_ms: 3000
           },
           drain: {
             claim_limit_max: 100,
@@ -1556,7 +1667,7 @@ async function loadSettingsDefaults(env) {
             minimum_rpc_budget_ms: 10000,
             rpc_safety_buffer_ms: 1000,
             stage_work_units_per_job: 25,
-            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+            stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, clone_rebase: 100, cloneRebase: 100, generic: 25 },
             scope_seed_units_per_job: 25,
             source_build_units_per_job: 25,
             line_seed_units_per_job: 50,
@@ -1566,6 +1677,11 @@ async function loadSettingsDefaults(env) {
             deltaRefreshUnitsPerJob: 25,
             delta_refresh_budget_ms: 3000,
             deltaRefreshBudgetMs: 3000,
+            clone_rebase_enabled: true,
+            clone_rebase_units_per_job: 100,
+            cloneRebaseUnitsPerJob: 100,
+            clone_rebase_budget_ms: 3000,
+            cloneRebaseBudgetMs: 3000,
             db_worker_lease_seconds: null,
             db_worker_max_runtime_ms: 8000,
             db_worker_min_phase_budget_ms: 2500,
@@ -1585,9 +1701,9 @@ async function loadSettingsDefaults(env) {
             max_jobs: 50,
             max_rows: 500
           },
-          stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
-          cron_stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, generic: 25 },
-          nudge_stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, generic: 25 },
+          stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, clone_rebase: 100, cloneRebase: 100, generic: 25 },
+          cron_stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 50, deltaRefresh: 50, clone_rebase: 100, cloneRebase: 100, generic: 25 },
+          nudge_stage_limits: { scope_seed: 25, source_build: 25, line_seed: 50, line_process: 25, preview_materialise: 25, preview_mat: 25, delta_refresh: 25, deltaRefresh: 25, clone_rebase: 100, cloneRebase: 100, generic: 25 },
           delta_refresh_enabled: false,
           deltaRefreshEnabled: false,
           banking_pay_workbench_delta_refresh_enabled: false,
@@ -1618,6 +1734,21 @@ async function loadSettingsDefaults(env) {
           delta_refresh_budget_ms: 3000,
           deltaRefreshBudgetMs: 3000,
           banking_pay_workbench_delta_budget_ms: 3000,
+          clone_rebase_enabled: true,
+          cloneRebaseEnabled: true,
+          banking_pay_workbench_clone_rebase_enabled: true,
+          clone_rebase_units_per_job: 100,
+          cloneRebaseUnitsPerJob: 100,
+          banking_pay_workbench_clone_rebase_units_per_job: 100,
+          nudge_clone_rebase_units_per_job: 100,
+          nudgeCloneRebaseUnitsPerJob: 100,
+          banking_pay_workbench_nudge_clone_rebase_units_per_job: 100,
+          cron_clone_rebase_units_per_job: 100,
+          cronCloneRebaseUnitsPerJob: 100,
+          banking_pay_workbench_cron_clone_rebase_units_per_job: 100,
+          clone_rebase_budget_ms: 3000,
+          cloneRebaseBudgetMs: 3000,
+          banking_pay_workbench_clone_rebase_budget_ms: 3000,
           rollover: { enabled: true, max_sessions_per_tick: 5, nudge_after_create: true, scan_limit: 25 },
           settings_source: 'fallback',
           settings_defaults_updated_at: null,
@@ -1677,6 +1808,12 @@ async function loadSettingsDefaults(env) {
           max_jobs: 50,
           max_rows: 500
         },
+        clone_rebase_enabled: true,
+        clone_rebase_units_per_job: 100,
+        nudge_clone_rebase_units_per_job: 100,
+        cron_clone_rebase_units_per_job: 100,
+        clone_rebase_budget_ms: 3000,
+        rollover: { enabled: true, max_sessions_per_tick: 5, nudge_after_create: true, scan_limit: 25 },
         settings_source: 'fallback',
         settings_defaults_updated_at: null,
         settings_defaults_version: null,
@@ -1693,6 +1830,11 @@ async function loadSettingsDefaults(env) {
       banking_pay_workbench_nudge_delta_units_per_job: 25,
       banking_pay_workbench_cron_delta_units_per_job: 50,
       banking_pay_workbench_delta_budget_ms: 3000,
+      banking_pay_workbench_clone_rebase_enabled: true,
+      banking_pay_workbench_clone_rebase_units_per_job: 100,
+      banking_pay_workbench_nudge_clone_rebase_units_per_job: 100,
+      banking_pay_workbench_cron_clone_rebase_units_per_job: 100,
+      banking_pay_workbench_clone_rebase_budget_ms: 3000,
 
       // ✅ NEW fallbacks
       finance_email: null,
@@ -1723,6 +1865,78 @@ async function loadSettingsDefaults(env) {
   }
 }
 
+function resolveBankingPayOfficialDateContext(input = {}) {
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const source = isPlainObject(input) ? input : {};
+  const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const trim = (value) => String(value ?? '').trim();
+  const toLondonDate = (value = null) => {
+    const instant = value instanceof Date
+      ? value
+      : (value ? new Date(value) : new Date());
+    const safeInstant = Number.isFinite(instant.getTime()) ? instant : new Date();
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(safeInstant);
+      const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+      const iso = `${values.year}-${values.month}-${values.day}`;
+      if (isoDateRe.test(iso)) return iso;
+    } catch {}
+    return safeInstant.toISOString().slice(0, 10);
+  };
+  const addDays = (isoDate, days) => {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day + Number(days || 0)));
+    return date.toISOString().slice(0, 10);
+  };
+  const weekdayUtc = (isoDate) => {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  };
+
+  const londonCurrentDate = toLondonDate(source.now || source.nowUtc || source.now_utc || null);
+  const explicitPayDate = trim(
+    source.payDate || source.pay_date || source.currentPayDate || source.current_pay_date || source.nextOfficialPayDate || source.next_official_pay_date
+  );
+  const daysToFriday = (5 - weekdayUtc(londonCurrentDate) + 7) % 7;
+  const nextOfficialPayDate = isoDateRe.test(explicitPayDate)
+    ? explicitPayDate
+    : addDays(londonCurrentDate, daysToFriday);
+  const snoozeUntilDate = trim(source.snoozeUntilDate || source.snooze_until_date || '');
+  let dateRelationToNextPayRun = null;
+  let warningCode = null;
+  let warningRequired = false;
+  if (isoDateRe.test(snoozeUntilDate)) {
+    if (snoozeUntilDate < nextOfficialPayDate) {
+      dateRelationToNextPayRun = 'BEFORE_NEXT_OFFICIAL_PAY_RUN';
+      warningCode = 'SNOOZE_DATE_BEFORE_NEXT_PAY_RUN';
+      warningRequired = true;
+    } else {
+      dateRelationToNextPayRun = snoozeUntilDate === nextOfficialPayDate
+        ? 'INCLUDES_NEXT_OFFICIAL_PAY_RUN'
+        : 'AFTER_NEXT_OFFICIAL_PAY_RUN';
+      warningCode = 'SNOOZE_INCLUDES_NEXT_PAY_RUN';
+      warningRequired = true;
+    }
+  }
+  return {
+    timezone_id: 'Europe/London',
+    london_current_date: londonCurrentDate,
+    current_pay_date: nextOfficialPayDate,
+    next_official_pay_date: nextOfficialPayDate,
+    snooze_until_date: isoDateRe.test(snoozeUntilDate) ? snoozeUntilDate : null,
+    date_relation_to_next_pay_run: dateRelationToNextPayRun,
+    warning_required: warningRequired,
+    warning_code: warningCode,
+    requires_before_next_run_warning: warningCode === 'SNOOZE_DATE_BEFORE_NEXT_PAY_RUN',
+    requires_includes_next_run_warning: warningCode === 'SNOOZE_INCLUDES_NEXT_PAY_RUN',
+    inclusive_snooze_end_date: true
+  };
+}
 
 
 async function postToPowerAutomate(env, payload, channel = 'finance') {
@@ -14433,6 +14647,8 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
   return execute();
 }
 
+
+
 async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -14639,10 +14855,14 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
     || Object.prototype.hasOwnProperty.call(body, 'allow_session_rebase')
     || Object.prototype.hasOwnProperty.call(filtersJson, 'allowSessionRebase')
     || Object.prototype.hasOwnProperty.call(filtersJson, 'allow_session_rebase');
-  const allowSessionRebase = body.allowSessionRebase === true
-    || body.allow_session_rebase === true
-    || filtersJson.allowSessionRebase === true
-    || filtersJson.allow_session_rebase === true;
+  const allowSessionRebase = allowSessionRebaseSupplied
+    ? !(
+        body.allowSessionRebase === false
+        || body.allow_session_rebase === false
+        || filtersJson.allowSessionRebase === false
+        || filtersJson.allow_session_rebase === false
+      )
+    : true;
   const cloneFromSessionIdRaw = trimStr(body.cloneFromSessionId || body.clone_from_session_id || filtersJson.cloneFromSessionId || filtersJson.clone_from_session_id || '');
   const explicitCloneFromSessionId = uuidRe.test(cloneFromSessionIdRaw) ? cloneFromSessionIdRaw : '';
   const sourceSessionCanMapToClone = !!(
@@ -14659,16 +14879,18 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
     || Object.prototype.hasOwnProperty.call(filtersJson, 'rebase_simple_rows_only');
   const rebaseSimpleRowsOnly = rebaseSimpleRowsOnlySupplied
     ? !(body.rebaseSimpleRowsOnly === false || body.rebase_simple_rows_only === false || filtersJson.rebaseSimpleRowsOnly === false || filtersJson.rebase_simple_rows_only === false)
-    : undefined;
+    : true;
   const sqlFiltersJson = cloneJson(filtersJson) || {};
-  const sqlOpenOptions = isPlainObject(sqlFiltersJson.open_options)
-    ? { ...sqlFiltersJson.open_options }
-    : (isPlainObject(sqlFiltersJson.options) ? { ...sqlFiltersJson.options } : {});
-  if (allowSessionRebaseSupplied) sqlOpenOptions.allow_session_rebase = allowSessionRebase;
+  const sqlOpenOptions = Object.assign(
+    {},
+    isPlainObject(sqlFiltersJson.options) ? sqlFiltersJson.options : {},
+    isPlainObject(sqlFiltersJson.open_options) ? sqlFiltersJson.open_options : {}
+  );
+  sqlOpenOptions.allow_session_rebase = allowSessionRebase;
   if (sourceSessionIdValid) sqlOpenOptions.source_session_id = sourceSessionIdValid;
   if (sourcePayDate) sqlOpenOptions.source_pay_date = sourcePayDate;
   if (cloneFromSessionId) sqlOpenOptions.clone_from_session_id = cloneFromSessionId;
-  if (rebaseSimpleRowsOnlySupplied) sqlOpenOptions.rebase_simple_rows_only = rebaseSimpleRowsOnly;
+  sqlOpenOptions.rebase_simple_rows_only = rebaseSimpleRowsOnly;
   if (Object.keys(sqlOpenOptions).length > 0) {
     sqlFiltersJson.open_options = sqlOpenOptions;
   }
@@ -14751,6 +14973,39 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
         );
       }
 
+      let snoozeExpiryRefreshResult = {
+        ok: true,
+        skipped: true,
+        code: 'SNOOZE_EXPIRY_REFRESH_NOT_DUE',
+        enqueued_count: 0
+      };
+      try {
+        snoozeExpiryRefreshResult = unwrapRpc(await sbRpc(env, 'pay_workbench_enqueue_expired_snooze_refreshes_v1', {
+          p_session_id: sessionId,
+          p_session_limit: 1,
+          p_candidate_limit: 100
+        }, {
+          routeClass: 'PREVIEW_PROGRESS',
+          purpose: 'WORKBENCH_SESSION_OPEN_SNOOZE_EXPIRY_REFRESH',
+          timeoutMs: 10000,
+          bankingPay: true
+        }), 'pay_workbench_enqueue_expired_snooze_refreshes_v1');
+      } catch (expiryError) {
+        snoozeExpiryRefreshResult = {
+          ok: false,
+          skipped: false,
+          code: 'BANKING_PAY_WORKBENCH_SNOOZE_EXPIRY_REFRESH_FAILED',
+          message: String(expiryError?.message || expiryError || 'Snooze expiry refresh failed'),
+          enqueued_count: 0
+        };
+        logWorkbenchSessionOpenDiagnostic(
+          'warn',
+          'WORKBENCH_SESSION_OPEN_SNOOZE_EXPIRY_REFRESH',
+          'The session opened, but dated-snooze expiry refresh could not be checked.',
+          { session_id: sessionId, error: expiryError }
+        );
+      }
+
       const progressSource = isPlainObject(openPayload.progress)
         ? { ...openPayload, ...openPayload.progress }
         : openPayload;
@@ -14759,7 +15014,8 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
         phase: trimStr(openPayload.phase || openPayload.progress_state || '') || undefined,
         status_text: trimStr(openPayload.status_text || '') || undefined
       });
-      const workQueued = openPayload.work_queued === true;
+      const workQueued = openPayload.work_queued === true
+        || Number(snoozeExpiryRefreshResult?.enqueued_count || 0) > 0;
       const destructiveFlagsIgnored = forceNewSession === true
         || discardSourceSession === true
         || !!sourceSessionId
@@ -14826,6 +15082,16 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
         || ''
       ) || sessionId;
       const cloneRebaseState = Object.assign({}, cloneRebaseResult, {
+        clone_rebase_attempted: openPayload.clone_rebase_attempted === true || cloneRebaseResult.clone_rebase_attempted === true,
+        clone_source_selection_attempted: openPayload.clone_source_selection_attempted === true,
+        clone_source_selection_result: trimStr(openPayload.clone_source_selection_result || cloneRebaseResult.clone_source_selection_result || '') || null,
+        clone_source_explicit: openPayload.clone_source_explicit === true,
+        clone_source_discovered: openPayload.clone_source_discovered === true,
+        clone_source_scope_count: nonNegativeCount(openPayload.clone_source_scope_count, cloneRebaseResult.clone_source_scope_count),
+        clone_rebase_enabled: openPayload.clone_rebase_enabled === true || cloneRebaseResult.clone_rebase_enabled === true,
+        clone_rebase_job_id: trimStr(openPayload.clone_rebase_job_id || cloneRebaseResult.job_id || '') || null,
+        clone_rebase_mode: trimStr(openPayload.clone_rebase_mode || cloneRebaseResult.clone_rebase_mode || '') || null,
+        clone_rebase_fallback_reason: trimStr(openPayload.clone_rebase_fallback_reason || cloneRebaseResult.clone_rebase_fallback_reason || '') || null,
         clone_rebase_queued: cloneRebaseQueued,
         clone_rebase_pending: cloneRebasePending,
         target_session_id: cloneRebaseTargetSessionId,
@@ -14835,6 +15101,7 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
       const cloneLegacyRefreshEnqueuedCount = nonNegativeCount(cloneRebaseState.legacy_refresh_enqueued_count, cloneRebaseState.legacyRefreshEnqueuedCount);
       const nudgeReasons = [];
       if (openAction === 'WORKBENCH_SESSION_CREATED') nudgeReasons.push('SESSION_CREATED');
+      if (Number(snoozeExpiryRefreshResult?.enqueued_count || 0) > 0) nudgeReasons.push('SNOOZE_EXPIRY_REFRESH_ENQUEUED');
       if (cloneRebaseQueued || cloneRebasePending) nudgeReasons.push('CLONE_REBASE_PENDING');
       if (cloneLegacyRefreshEnqueuedCount > 0) nudgeReasons.push('CLONE_REBASE_LEGACY_REFRESH_ENQUEUED');
       if (!readyState && progressState && !['READY', 'READY_EMPTY'].includes(progressState)) nudgeReasons.push(`PROGRESS_${progressState}`);
@@ -14909,9 +15176,23 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
           week_ending_cutoff: openPayload.week_ending_cutoff || weekEndingCutoff
         },
         open: openPayload,
+        snooze_expiry_refresh: snoozeExpiryRefreshResult,
+        snooze_expiry_refresh_enqueued_count: nonNegativeCount(snoozeExpiryRefreshResult?.enqueued_count),
         clone_rebase: cloneRebaseState,
         clone_rebase_queued: cloneRebaseQueued,
         clone_rebase_pending: cloneRebasePending,
+        clone_rebase_attempted: cloneRebaseState.clone_rebase_attempted === true,
+        clone_source_selection_attempted: cloneRebaseState.clone_source_selection_attempted === true,
+        clone_source_selection_result: cloneRebaseState.clone_source_selection_result,
+        clone_source_explicit: cloneRebaseState.clone_source_explicit === true,
+        clone_source_discovered: cloneRebaseState.clone_source_discovered === true,
+        clone_source_scope_count: cloneRebaseState.clone_source_scope_count || 0,
+        clone_rebase_enabled: cloneRebaseState.clone_rebase_enabled === true,
+        clone_rebase_job_id: cloneRebaseState.clone_rebase_job_id,
+        clone_rebase_mode: cloneRebaseState.clone_rebase_mode,
+        clone_rebase_fallback_reason: cloneRebaseState.clone_rebase_fallback_reason,
+        root_job_type: trimStr(openPayload.root_job_type || '') || null,
+        root_job_id: trimStr(openPayload.root_job_id || openPayload.root_scope_job_id || '') || null,
         clone_rebase_progress_state: cloneRebasePending ? 'CLONE_REBASING' : (trimStr(openPayload.progress_state || progressPayload.progress_state || '') || null),
         target_session_id: cloneRebaseTargetSessionId,
         source_session_id: cloneRebaseSourceSessionId,
@@ -14939,9 +15220,9 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
         background_drain_should_nudge: shouldNudge,
         background_drain_reason: nudgeReason,
         background_drain_wait_until_available: !!(ctx && typeof ctx.waitUntil === 'function'),
-        allow_session_rebase: allowSessionRebaseSupplied ? allowSessionRebase : undefined,
-        clone_from_session_id: cloneFromSessionId || null,
-        rebase_simple_rows_only: rebaseSimpleRowsOnlySupplied ? rebaseSimpleRowsOnly : undefined,
+        allow_session_rebase: allowSessionRebase,
+        clone_from_session_id: cloneRebaseSourceSessionId || cloneFromSessionId || null,
+        rebase_simple_rows_only: rebaseSimpleRowsOnly,
         destructive_flags_ignored: destructiveFlagsIgnored,
         shared_session: true,
         attach_only_open: true,
@@ -14989,8 +15270,6 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
   }
   return execute();
 }
-
-
 
 
 
@@ -15749,6 +16028,40 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     }
   }
 
+  let snoozeExpiryRefreshResult = {
+    ok: true,
+    skipped: true,
+    code: 'SNOOZE_EXPIRY_REFRESH_NOT_DUE'
+  };
+
+  if (budgetProfile === 'CRON' && !sessionId && !candidateId) {
+    try {
+      snoozeExpiryRefreshResult = unwrapRpc(await sbRpc(env, 'pay_workbench_enqueue_expired_snooze_refreshes_v1', {
+        p_session_id: null,
+        p_session_limit: Math.min(50, Math.max(1, rolloverScanLimit)),
+        p_candidate_limit: 100
+      }, {
+        routeClass: 'PREVIEW_PROGRESS',
+        purpose: 'BANKING_PAY_WORKBENCH_SNOOZE_EXPIRY_REFRESH',
+        timeoutMs: Math.min(15000, maxRuntimeMs),
+        bankingPay: true
+      }), 'pay_workbench_enqueue_expired_snooze_refreshes_v1');
+      logCronDiag('WORKBENCH_CRON_SNOOZE_EXPIRY_REFRESH', {
+        snooze_expiry_refresh_result: snoozeExpiryRefreshResult
+      }, snoozeExpiryRefreshResult?.ok === false ? 'warn' : 'info');
+    } catch (expiryError) {
+      snoozeExpiryRefreshResult = {
+        ok: false,
+        skipped: false,
+        code: 'BANKING_PAY_WORKBENCH_SNOOZE_EXPIRY_REFRESH_FAILED',
+        message: String(expiryError?.message || expiryError || 'Snooze expiry refresh failed')
+      };
+      logCronDiag('WORKBENCH_CRON_SNOOZE_EXPIRY_REFRESH_FAILED', {
+        snooze_expiry_refresh_result: snoozeExpiryRefreshResult
+      }, 'warn');
+    }
+  }
+
   try {
     const drainOptions = {
       origin,
@@ -15894,17 +16207,23 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     return finishCronTick({
       ...baseResult,
       ...metrics,
-      ok: normalizedDrainResult.ok !== false && rolloverResult.ok !== false,
+      ok: normalizedDrainResult.ok !== false && rolloverResult.ok !== false && snoozeExpiryRefreshResult.ok !== false,
       skipped: normalizedDrainResult.skipped === true,
       code: rolloverResult.ok === false
         ? (rolloverResult.code || rolloverResult.error_code || 'BANKING_PAY_WORKBENCH_ROLLOVER_FAILED')
-        : (normalizedDrainResult.code || normalizedDrainResult.error_code || null),
+        : (snoozeExpiryRefreshResult.ok === false
+          ? (snoozeExpiryRefreshResult.code || 'BANKING_PAY_WORKBENCH_SNOOZE_EXPIRY_REFRESH_FAILED')
+          : (normalizedDrainResult.code || normalizedDrainResult.error_code || null)),
       error_code: rolloverResult.ok === false
         ? (rolloverResult.error_code || rolloverResult.code || 'BANKING_PAY_WORKBENCH_ROLLOVER_FAILED')
-        : (normalizedDrainResult.error_code || normalizedDrainResult.code || null),
+        : (snoozeExpiryRefreshResult.ok === false
+          ? (snoozeExpiryRefreshResult.code || 'BANKING_PAY_WORKBENCH_SNOOZE_EXPIRY_REFRESH_FAILED')
+          : (normalizedDrainResult.error_code || normalizedDrainResult.code || null)),
       message: rolloverResult.ok === false
         ? (rolloverResult.message || normalizedDrainResult.message || null)
-        : (normalizedDrainResult.message || null),
+        : (snoozeExpiryRefreshResult.ok === false
+          ? (snoozeExpiryRefreshResult.message || normalizedDrainResult.message || null)
+          : (normalizedDrainResult.message || null)),
       completed_at_utc: new Date().toISOString(),
       tick_elapsed_ms: Math.max(0, Date.now() - tickStartedAtMs),
       rollover_result: rolloverResult,
@@ -15912,8 +16231,10 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
       rollover_reused_count: metricInt(rolloverResult, ['reused_count']),
       rollover_skipped_count: metricInt(rolloverResult, ['skipped_count']),
       rollover_failed_count: metricInt(rolloverResult, ['failed_count']),
+      snooze_expiry_refresh_result: snoozeExpiryRefreshResult,
+      snooze_expiry_refresh_enqueued_count: metricInt(snoozeExpiryRefreshResult, ['enqueued_count']),
       drain_result: normalizedDrainResult
-    }, normalizedDrainResult.ok === false || rolloverResult.ok === false ? 'warn' : 'info');
+    }, normalizedDrainResult.ok === false || rolloverResult.ok === false || snoozeExpiryRefreshResult.ok === false ? 'warn' : 'info');
   } catch (error) {
     const metrics = coreMetrics({}, { more_due: true, stop_reason: 'RPC_ERROR' });
     const errorCode = error && (error.code || error.error_code || error.name)
@@ -15943,6 +16264,7 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
     }, 'warn');
   }
 }
+
 
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -17392,8 +17714,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
 
 
 
-
-
 async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -17460,6 +17780,11 @@ async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options 
     return isoDateRe.test(ymd) ? ymd : '';
   };
   const resolveCurrentPayDate = () => {
+    if (typeof resolveBankingPayOfficialDateContext === 'function') {
+      const context = resolveBankingPayOfficialDateContext(Object.assign({}, source, safeOptions));
+      const authoritative = trimStr(context?.current_pay_date || context?.next_official_pay_date || '');
+      if (isoDateRe.test(authoritative)) return authoritative;
+    }
     const explicit = trimStr(
       source.payDate || source.pay_date ||
       safeOptions.payDate || safeOptions.pay_date ||
@@ -17659,11 +17984,44 @@ async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options 
   const oldPayDate = trimStr(source.oldPayDate || source.old_pay_date || source.previousPayDate || source.previous_pay_date || '');
   const currentPayDate = resolveCurrentPayDate();
   const weekEndingCutoff = normalizeCutoff(source.weekEndingCutoff || source.week_ending_cutoff || source.week_ending_cutoff_date || source.weekEndingCutoffDate || '9999-12-31');
-  const filtersJson = sanitizeFiltersForSharedOpen(source.filtersJson || source.filters_json || source.filters || {});
+  const stableFiltersJson = sanitizeFiltersForSharedOpen(source.filtersJson || source.filters_json || source.filters || {});
+  const rawFilterSource = parseFilters(source.filtersJson || source.filters_json || source.filters || {});
+  const genericOpenOptions = Object.assign(
+    {},
+    isPlainObject(rawFilterSource.options) ? rawFilterSource.options : {},
+    isPlainObject(source.options) ? source.options : {}
+  );
+  const operationOpenOptions = Object.assign(
+    {},
+    isPlainObject(rawFilterSource.open_options) ? rawFilterSource.open_options : {},
+    isPlainObject(source.open_options) ? source.open_options : {}
+  );
+  const allowSessionRebase = source.allow_session_rebase !== undefined || source.allowSessionRebase !== undefined
+    ? boolish(source.allow_session_rebase ?? source.allowSessionRebase)
+    : true;
+  const rebaseSimpleRowsOnly = source.rebase_simple_rows_only !== undefined || source.rebaseSimpleRowsOnly !== undefined
+    ? boolish(source.rebase_simple_rows_only ?? source.rebaseSimpleRowsOnly)
+    : true;
+  const cloneFromSessionId = trimStr(
+    source.clone_from_session_id
+    || source.cloneFromSessionId
+    || operationOpenOptions.clone_from_session_id
+    || operationOpenOptions.cloneFromSessionId
+    || oldSessionId
+    || ''
+  );
+  const effectiveOpenOptions = Object.assign({}, genericOpenOptions, operationOpenOptions, {
+    allow_session_rebase: allowSessionRebase,
+    rebase_simple_rows_only: rebaseSimpleRowsOnly
+  });
+  if (uuidRe.test(cloneFromSessionId)) {
+    effectiveOpenOptions.clone_from_session_id = cloneFromSessionId;
+  }
+  const filtersJson = Object.assign({}, stableFiltersJson, { open_options: effectiveOpenOptions });
   const maxDrainNudge = safeOptions.nudge !== false;
   const openTimeoutMs = clampInteger(source.openTimeoutMs || source.open_timeout_ms, 10000, 1000, 30000);
   const progressTimeoutMs = clampInteger(source.progressTimeoutMs || source.progress_timeout_ms, 8000, 1000, 30000);
-  const currentSessionSignature = trimStr(source.sessionSignature || source.session_signature || '') || computeSessionSignature({ payDate: currentPayDate, weekEndingCutoff, filtersJson });
+  const currentSessionSignature = trimStr(source.sessionSignature || source.session_signature || '') || computeSessionSignature({ payDate: currentPayDate, weekEndingCutoff, filtersJson: stableFiltersJson });
   const reason = trimStr(source.reason || 'PAY_DATE_ROLLOVER') || 'PAY_DATE_ROLLOVER';
 
   if (!env || !env.SUPABASE_URL) {
@@ -17896,6 +18254,21 @@ async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options 
     next_recommended_action: trimStr(progressPayload.next_recommended_action || openPayload.next_recommended_action || '') || null,
     retired_old_session_count: numberFrom(openPayload, ['retired_old_session_count'], 0),
     retired_old_session_ids: Array.isArray(openPayload.retired_old_session_ids) ? openPayload.retired_old_session_ids : [],
+    root_job_type: trimStr(openPayload.root_job_type || '') || null,
+    root_job_id: trimStr(openPayload.root_job_id || openPayload.root_scope_job_id || '') || null,
+    clone_rebase: isPlainObject(openPayload.clone_rebase) ? openPayload.clone_rebase : {},
+    clone_rebase_attempted: openPayload.clone_rebase_attempted === true,
+    clone_rebase_queued: openPayload.clone_rebase_queued === true || openPayload.clone_rebase?.clone_rebase_queued === true,
+    clone_from_session_id: trimStr(openPayload.clone_from_session_id || openPayload.clone_rebase?.source_session_id || '') || null,
+    clone_source_selection_attempted: openPayload.clone_source_selection_attempted === true,
+    clone_source_selection_result: trimStr(openPayload.clone_source_selection_result || '') || null,
+    clone_source_explicit: openPayload.clone_source_explicit === true,
+    clone_source_discovered: openPayload.clone_source_discovered === true,
+    clone_source_scope_count: numberFrom(openPayload, ['clone_source_scope_count'], 0),
+    clone_rebase_enabled: openPayload.clone_rebase_enabled === true,
+    clone_rebase_job_id: trimStr(openPayload.clone_rebase_job_id || '') || null,
+    clone_rebase_mode: trimStr(openPayload.clone_rebase_mode || '') || null,
+    clone_rebase_fallback_reason: trimStr(openPayload.clone_rebase_fallback_reason || openPayload.clone_rebase?.clone_rebase_fallback_reason || '') || null,
     open_elapsed_ms: Math.max(0, Date.now() - openStartedAt),
     source_build_queued_count: numberFrom(progressPayload, ['source_build_queued_count'], 0),
     source_build_running_count: numberFrom(progressPayload, ['source_build_running_count'], 0),
@@ -17908,6 +18281,9 @@ async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options 
   log('WORKBENCH_PAY_DATE_ROLLOVER_SESSION_ENSURED', result, result.ok ? 'info' : 'warn');
   return result;
 }
+
+
+
 
 async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -17933,45 +18309,6 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
       return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
     }
     return JSON.stringify(value == null ? null : value);
-  };
-  const londonTodayIso = (dateLike = null) => {
-    const date = dateLike instanceof Date ? dateLike : (dateLike ? new Date(dateLike) : new Date());
-    if (Number.isNaN(date.getTime())) return '';
-    try {
-      const parts = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(date);
-      const year = trimStr(parts.find((part) => part.type === 'year')?.value || '');
-      const month = trimStr(parts.find((part) => part.type === 'month')?.value || '');
-      const day = trimStr(parts.find((part) => part.type === 'day')?.value || '');
-      const ymd = `${year}-${month}-${day}`;
-      if (isoDateRe.test(ymd)) return ymd;
-    } catch {}
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    const ymd = `${year}-${month}-${day}`;
-    return isoDateRe.test(ymd) ? ymd : '';
-  };
-  const nextFridayIsoFrom = (baseIso) => {
-    const text = trimStr(baseIso);
-    if (!isoDateRe.test(text)) return '';
-    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return '';
-    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-    if (Number.isNaN(date.getTime())) return '';
-    const fridayDow = 5;
-    const currentDow = date.getUTCDay();
-    const delta = (fridayDow - currentDow + 7) % 7;
-    date.setUTCDate(date.getUTCDate() + delta);
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    const ymd = `${year}-${month}-${day}`;
-    return isoDateRe.test(ymd) ? ymd : '';
   };
   const parseFilters = (value) => {
     if (isPlainObject(value)) return cloneJson(value, {}) || {};
@@ -18067,12 +18404,66 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
     }
     return sanitized;
   };
-  const resolveCurrentPayDate = (source) => {
-    const explicit = trimStr(source.payDate || source.pay_date || source.currentPayDate || source.current_pay_date || '');
-    if (isoDateRe.test(explicit)) return explicit;
-    const today = londonTodayIso(source.now || source.nowUtc || source.now_utc || null);
-    const friday = nextFridayIsoFrom(today);
-    return isoDateRe.test(friday) ? friday : today;
+  const resolveOfficialDateContext = (source) => {
+    if (typeof resolveBankingPayOfficialDateContext !== 'function') {
+      return {
+        ok: false,
+        code: 'BANKING_PAY_WORKBENCH_OFFICIAL_DATE_RESOLVER_UNAVAILABLE',
+        message: 'The authoritative Banking Pay official-date resolver is unavailable.'
+      };
+    }
+    const safeSource = isPlainObject(source) ? source : {};
+    const explicitCurrentPayDate = trimStr(
+      safeSource.currentPayDate
+      || safeSource.current_pay_date
+      || safeSource.payDate
+      || safeSource.pay_date
+      || ''
+    );
+    const resolverInput = {
+      now: safeSource.now || safeSource.nowUtc || safeSource.now_utc || null
+    };
+    if (isoDateRe.test(explicitCurrentPayDate)) resolverInput.currentPayDate = explicitCurrentPayDate;
+    try {
+      const context = resolveBankingPayOfficialDateContext(resolverInput);
+      const currentPayDate = trimStr(context?.current_pay_date || context?.next_official_pay_date || '');
+      const londonCurrentDate = trimStr(context?.london_current_date || '');
+      if (!isPlainObject(context) || !isoDateRe.test(currentPayDate) || !isoDateRe.test(londonCurrentDate)) {
+        return {
+          ok: false,
+          code: 'BANKING_PAY_WORKBENCH_OFFICIAL_DATE_RESOLVER_INVALID',
+          message: 'The authoritative Banking Pay official-date resolver returned an invalid date contract.',
+          date_context: isPlainObject(context) ? cloneJson(context, {}) : {}
+        };
+      }
+      return {
+        ok: true,
+        current_pay_date: currentPayDate,
+        date_context: cloneJson(context, {}) || {}
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        code: 'BANKING_PAY_WORKBENCH_OFFICIAL_DATE_RESOLVER_FAILED',
+        message: String(error?.message || error || 'Official-date resolution failed')
+      };
+    }
+  };
+  const pickPreferredRolloverSource = (rows) => {
+    const candidates = Array.isArray(rows) ? rows.filter((row) => isPlainObject(row) && uuidRe.test(trimStr(row.id))) : [];
+    candidates.sort((left, right) => {
+      const leftPayDate = trimStr(left.pay_date || '');
+      const rightPayDate = trimStr(right.pay_date || '');
+      if (leftPayDate !== rightPayDate) return rightPayDate.localeCompare(leftPayDate);
+      const leftReadyRank = ['READY', 'READY_EMPTY'].includes(trimStr(left.progress_state || '').toUpperCase()) ? 0 : 1;
+      const rightReadyRank = ['READY', 'READY_EMPTY'].includes(trimStr(right.progress_state || '').toUpperCase()) ? 0 : 1;
+      if (leftReadyRank !== rightReadyRank) return leftReadyRank - rightReadyRank;
+      const leftUpdated = trimStr(left.updated_at_utc || '');
+      const rightUpdated = trimStr(right.updated_at_utc || '');
+      if (leftUpdated !== rightUpdated) return rightUpdated.localeCompare(leftUpdated);
+      return trimStr(left.id).localeCompare(trimStr(right.id));
+    });
+    return candidates[0] || null;
   };
   const normalizeCutoff = (value) => {
     const text = trimStr(value);
@@ -18089,7 +18480,9 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
   const safeOptions = isPlainObject(options) ? options : {};
   const startedAtMs = Date.now();
   const startedAtUtc = new Date().toISOString();
-  const currentPayDate = resolveCurrentPayDate(safeOptions);
+  const officialDateResolution = resolveOfficialDateContext(safeOptions);
+  const officialDateContext = isPlainObject(officialDateResolution?.date_context) ? officialDateResolution.date_context : {};
+  const currentPayDate = trimStr(officialDateResolution?.current_pay_date || '');
   const maxSessions = clampInteger(safeOptions.maxSessions || safeOptions.max_sessions, 5, 1, 50);
   const scanLimit = clampInteger(safeOptions.scanLimit || safeOptions.scan_limit, Math.max(maxSessions * 5, 25), 1, 250);
   const oldSessionIdsFilter = Array.isArray(safeOptions.oldSessionIds || safeOptions.old_session_ids)
@@ -18103,10 +18496,26 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
     worker: 'bankingPayWorkbenchPayDateRolloverTick',
     started_at_utc: startedAtUtc,
     current_pay_date: currentPayDate || null,
+    london_current_date: trimStr(officialDateContext.london_current_date || '') || null,
+    timezone_id: trimStr(officialDateContext.timezone_id || '') || 'Europe/London',
+    official_date_context: officialDateContext,
     max_sessions: maxSessions,
     scan_limit: scanLimit,
     actor_user_id: uuidRe.test(actorFilter) ? actorFilter : null
   };
+
+  if (officialDateResolution?.ok !== true) {
+    const failure = Object.assign({}, baseResult, {
+      ok: false,
+      skipped: true,
+      code: trimStr(officialDateResolution?.code) || 'BANKING_PAY_WORKBENCH_OFFICIAL_DATE_RESOLVER_INVALID',
+      message: trimStr(officialDateResolution?.message) || 'The authoritative Banking Pay official-date contract could not be resolved.',
+      completed_at_utc: new Date().toISOString(),
+      elapsed_ms: Math.max(0, Date.now() - startedAtMs)
+    });
+    log('WORKBENCH_PAY_DATE_ROLLOVER_DATE_RESOLUTION_FAILED', failure, 'warn');
+    return failure;
+  }
 
   if (!env || !env.SUPABASE_URL) {
     return {
@@ -18150,7 +18559,7 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
     'status=eq.OPEN',
     'discarded_at_utc=is.null',
     `pay_date=lt.${encodeURIComponent(currentPayDate)}`,
-    'order=updated_at_utc.desc,id.desc',
+    'order=pay_date.desc,updated_at_utc.desc,id.asc',
     `limit=${scanLimit}`
   ];
   if (uuidRe.test(actorFilter)) queryParts.push(`actor_user_id=eq.${encodeURIComponent(actorFilter)}`);
@@ -18202,6 +18611,7 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
       id: rowId || null,
       pay_date: oldPayDate,
       progress_state: trimStr(row.progress_state || '') || null,
+      updated_at_utc: trimStr(row.updated_at_utc || '') || null,
       version: Number.isFinite(Number(row.version)) ? Number(row.version) : null
     });
     groupedScopes.set(groupKey, existing);
@@ -18215,10 +18625,13 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
   let failedCount = 0;
   let nudgeAttemptedCount = 0;
   let nudgeScheduledCount = 0;
+  let cloneJobsQueuedCount = 0;
   let cloneRebaseAppliedCount = 0;
   let cloneCopiedCandidateCount = 0;
   let cloneCopiedPreviewRowCount = 0;
   let cloneLegacyRefreshEnqueuedCount = 0;
+  let scopeSeedFallbackCount = 0;
+  const fallbackReasonCounts = {};
 
   log('WORKBENCH_PAY_DATE_ROLLOVER_TICK_START', Object.assign({}, baseResult, {
     old_session_rows_found: oldSessionRows.length,
@@ -18229,24 +18642,39 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
   for (const scope of scopes) {
     let result = null;
     try {
-      const cloneFromSessionId = (Array.isArray(scope.old_session_ids) ? scope.old_session_ids : []).find((value) => uuidRe.test(trimStr(value))) || '';
+      const preferredSource = pickPreferredRolloverSource(scope.source_old_sessions);
+      const cloneFromSessionId = trimStr(preferredSource?.id || '');
+      const preferredSourcePayDate = trimStr(preferredSource?.pay_date || '');
       const rolloverOpenOptions = {
         allow_session_rebase: true,
         allowSessionRebase: true,
         rebase_simple_rows_only: true,
-        rebaseSimpleRowsOnly: true,
-        ...(cloneFromSessionId ? { clone_from_session_id: cloneFromSessionId, cloneFromSessionId } : {})
+        rebaseSimpleRowsOnly: true
       };
+      if (cloneFromSessionId) {
+        rolloverOpenOptions.clone_from_session_id = cloneFromSessionId;
+        rolloverOpenOptions.cloneFromSessionId = cloneFromSessionId;
+      }
       const rolloverFiltersJson = Object.assign({}, cloneJson(scope.filters_json, {}) || {});
+      const genericOpenOptions = isPlainObject(rolloverFiltersJson.options)
+        ? rolloverFiltersJson.options
+        : {};
       const existingOpenOptions = isPlainObject(rolloverFiltersJson.open_options)
         ? rolloverFiltersJson.open_options
-        : (isPlainObject(rolloverFiltersJson.options) ? rolloverFiltersJson.options : {});
-      rolloverFiltersJson.open_options = Object.assign({}, existingOpenOptions, rolloverOpenOptions);
+        : {};
+      // Keep generic options, then operation-specific open_options, then the
+      // authoritative rollover contract. Later objects win deterministically.
+      rolloverFiltersJson.open_options = Object.assign(
+        {},
+        genericOpenOptions,
+        existingOpenOptions,
+        rolloverOpenOptions
+      );
       result = await ensureCurrentBankingPayWorkbenchSession(env, Object.assign({}, scope, {
         filters_json: rolloverFiltersJson,
         filtersJson: rolloverFiltersJson,
         old_session_id: cloneFromSessionId || scope.old_session_ids[0] || null,
-        old_pay_date: scope.old_pay_dates.slice().sort()[0] || null,
+        old_pay_date: preferredSourcePayDate || null,
         allow_session_rebase: true,
         allowSessionRebase: true,
         rebase_simple_rows_only: true,
@@ -18257,6 +18685,9 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
         ctx,
         payDate: currentPayDate,
         currentPayDate,
+        officialDateContext,
+        official_date_context: officialDateContext,
+        now: safeOptions.now || safeOptions.nowUtc || safeOptions.now_utc || null,
         weekEndingCutoff: scope.week_ending_cutoff,
         allow_session_rebase: true,
         allowSessionRebase: true,
@@ -18279,15 +18710,45 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
     }
 
     const safeResult = isPlainObject(result) ? result : { ok: false, code: 'INVALID_ROLLOVER_ENSURE_RESULT', result };
+    const safeRootJobType = trimStr(safeResult.root_job_type || safeResult.rootJobType || '').toUpperCase();
+    const safeFallbackReason = trimStr(
+      safeResult.clone_rebase_fallback_reason
+      || safeResult.cloneRebaseFallbackReason
+      || safeResult.clone_rebase?.clone_rebase_fallback_reason
+      || ''
+    );
+    const createdWithOlderSource = safeResult.created === true
+      && Array.isArray(scope.old_session_ids)
+      && scope.old_session_ids.length > 0;
+    if (
+      safeResult.ok !== false
+      && createdWithOlderSource
+      && safeRootJobType === 'WORKBENCH_SESSION_SCOPE_SEED'
+      && !safeFallbackReason
+    ) {
+      safeResult.ok = false;
+      safeResult.code = 'BANKING_PAY_WORKBENCH_ROLLOVER_CLONE_DECISION_MISSING';
+      safeResult.message = 'The rollover created a new session without an authoritative clone/rebase decision.';
+      safeResult.contract_failure = true;
+    }
     const cloneRebase = isPlainObject(safeResult.clone_rebase) ? safeResult.clone_rebase : {};
+    const cloneQueued = safeResult.clone_rebase_queued === true
+      || cloneRebase.clone_rebase_queued === true
+      || cloneRebase.queued === true;
     const cloneApplied = cloneRebase.applied === true || safeResult.clone_rebase_applied === true;
     const cloneLegacyCount = Number.isFinite(Number(cloneRebase.legacy_refresh_enqueued_count ?? safeResult.clone_legacy_refresh_enqueued_count))
       ? Math.max(0, Math.trunc(Number(cloneRebase.legacy_refresh_enqueued_count ?? safeResult.clone_legacy_refresh_enqueued_count)))
       : 0;
+    if (cloneQueued) cloneJobsQueuedCount += 1;
     if (cloneApplied) cloneRebaseAppliedCount += 1;
     cloneCopiedCandidateCount += Number.isFinite(Number(cloneRebase.copied_candidate_count ?? safeResult.clone_copied_candidate_count)) ? Math.max(0, Math.trunc(Number(cloneRebase.copied_candidate_count ?? safeResult.clone_copied_candidate_count))) : 0;
     cloneCopiedPreviewRowCount += Number.isFinite(Number(cloneRebase.copied_preview_row_count ?? safeResult.clone_copied_preview_row_count)) ? Math.max(0, Math.trunc(Number(cloneRebase.copied_preview_row_count ?? safeResult.clone_copied_preview_row_count))) : 0;
     cloneLegacyRefreshEnqueuedCount += cloneLegacyCount;
+    if (safeRootJobType === 'WORKBENCH_SESSION_SCOPE_SEED') {
+      scopeSeedFallbackCount += 1;
+      const reasonKey = safeFallbackReason || 'MISSING_FALLBACK_REASON';
+      fallbackReasonCounts[reasonKey] = (fallbackReasonCounts[reasonKey] || 0) + 1;
+    }
     if (cloneLegacyCount > 0 && !(safeResult.nudge_result && (safeResult.nudge_result.scheduled === true || safeResult.nudge_result.already_running === true)) && typeof nudgeBankingPayWorkbenchDrain === 'function') {
       try {
         const cloneNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
@@ -18338,15 +18799,20 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
     nudge_attempted_count: nudgeAttemptedCount,
     nudge_scheduled_count: nudgeScheduledCount,
     clone_rebase: {
+      queued_count: cloneJobsQueuedCount,
       applied_count: cloneRebaseAppliedCount,
       copied_candidate_count: cloneCopiedCandidateCount,
       copied_preview_row_count: cloneCopiedPreviewRowCount,
       legacy_refresh_enqueued_count: cloneLegacyRefreshEnqueuedCount
     },
+    clone_jobs_queued: cloneJobsQueuedCount,
+    clone_rebase_queued_count: cloneJobsQueuedCount,
     clone_rebase_applied_count: cloneRebaseAppliedCount,
     clone_rebase_copied_candidate_count: cloneCopiedCandidateCount,
     clone_rebase_copied_preview_row_count: cloneCopiedPreviewRowCount,
     clone_rebase_legacy_refresh_enqueued_count: cloneLegacyRefreshEnqueuedCount,
+    scope_seed_fallback_count: scopeSeedFallbackCount,
+    fallback_reason_counts: fallbackReasonCounts,
     max_sessions_reached: groupedScopes.size > scopes.length,
     more_due: moreDue,
     stop_reason: moreDue ? 'MAX_SESSIONS' : 'NO_MORE_DUE',
@@ -18359,9 +18825,6 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
   log('WORKBENCH_PAY_DATE_ROLLOVER_TICK_END', finalResult, finalResult.ok ? 'info' : 'warn');
   return finalResult;
 }
-
-
-
 
 
 
@@ -42094,8 +42557,6 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
 }
 
 
-
-
 async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -42331,6 +42792,56 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
     return withCORS(env, req, badRequest('snooze_until_date must be YYYY-MM-DD, DD/MM/YYYY, or null'));
   }
 
+  const dateContext = typeof resolveBankingPayOfficialDateContext === 'function'
+    ? resolveBankingPayOfficialDateContext({
+        // Server time and the canonical Banking Pay Friday resolver are
+        // authoritative.  Request-provided dates are never accepted as the
+        // pay-run authority.
+        now: new Date(),
+        snooze_until_date: untilIso
+      })
+    : {
+        timezone_id: 'Europe/London',
+        london_current_date: null,
+        next_official_pay_date: null,
+        snooze_until_date: untilIso,
+        date_relation_to_next_pay_run: null,
+        warning_required: false,
+        warning_code: null,
+        inclusive_snooze_end_date: true
+      };
+  const warningMessage = dateContext.warning_code === 'SNOOZE_DATE_BEFORE_NEXT_PAY_RUN'
+    ? 'This snooze date is before the next official pay run. Your payment will be snoozed but it will be eligible to pay in the next pay run once that date has passed.'
+    : (dateContext.warning_code === 'SNOOZE_INCLUDES_NEXT_PAY_RUN'
+      ? 'This snooze includes the next official pay run date, so this payment will not be eligible for that pay run. It may become eligible after the snooze date has passed, subject to the usual payment checks.'
+      : null);
+  const warningAckCode = trimStr(body.warning_ack_code || body.warningAckCode || '');
+  const validateOnly = body.validate_only === true || body.validateOnly === true;
+  if (validateOnly) {
+    return withCORS(env, req, ok({
+      ok: true,
+      validate_only: true,
+      save_allowed: dateContext.warning_required !== true || warningAckCode === dateContext.warning_code,
+      warning_required: dateContext.warning_required === true,
+      warning_code: dateContext.warning_code || null,
+      warning_message: warningMessage,
+      ...dateContext
+    }));
+  }
+  if (untilIso && dateContext.warning_required === true && warningAckCode !== dateContext.warning_code) {
+    return withCORS(env, req, jsonResponse(409, {
+      ok: false,
+      error: dateContext.warning_code,
+      code: dateContext.warning_code,
+      message: warningMessage,
+      warning_required: true,
+      warning_code: dateContext.warning_code,
+      warning_message: warningMessage,
+      refresh_required: false,
+      ...dateContext
+    }));
+  }
+
   const fetchStoredSnoozeById = async (snoozeId) => {
     const id = trimStr(snoozeId);
     if (!id || !uuidRe.test(id)) return null;
@@ -42441,7 +42952,13 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
       note: (() => {
         const v = trimStr((storedRow && storedRow.note) || payloadObj.note || note || '');
         return v || null;
-      })()
+      })(),
+      timezone_id: dateContext.timezone_id || 'Europe/London',
+      london_current_date: dateContext.london_current_date || payloadObj.london_current_date || null,
+      next_official_pay_date: dateContext.next_official_pay_date || null,
+      date_relation_to_next_pay_run: dateContext.date_relation_to_next_pay_run || null,
+      inclusive_snooze_end_date: true,
+      warning_acknowledged: !dateContext.warning_required || warningAckCode === dateContext.warning_code
     };
 
     let responsePayload = canonical;
@@ -42489,6 +43006,7 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
@@ -42800,6 +43318,25 @@ async function handleBankingPaySnoozeClear(env, req, user, ctx = null) {
     };
 
     let responsePayload = canonical;
+    const rateResolutionClearResult = (canonical.rate_resolution_clear_result && typeof canonical.rate_resolution_clear_result === 'object')
+      ? canonical.rate_resolution_clear_result
+      : {};
+    if (rateResolutionClearResult.state_changed === true && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+      try {
+        const rateResolutionNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+          origin: 'CROSS_PAY_WEEK_UNSNOOZE_RATE_RESOLUTION_CLEARED',
+          reason: 'RATE_RESOLUTION_REQUIRES_REVIEW_AFTER_UNSNOOZE',
+          sessionId: optionalWorkbenchSessionId || undefined,
+          actorUserId: String(authUser?.id || '').trim(),
+          budgetProfile: 'NUDGE',
+          profile: 'NUDGE'
+        });
+        responsePayload = {
+          ...responsePayload,
+          rate_resolution_worker_wake: cloneJson(rateResolutionNudge)
+        };
+      } catch {}
+    }
     const fastLaneCandidateId = readUuid(canonical.candidate_id);
     if (optionalWorkbenchSessionId && fastLaneCandidateId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
       try {
@@ -62138,6 +62675,73 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 
     return finishFailedWithCleanup( null, { code: 'UNKNOWN_DRAFT_PHASE', message: `Unknown draft operation phase: ${phase}`, phase });
   } catch (e) {
+    const draftErrorText = [
+      e?.message,
+      e?.body,
+      e?.json?.message,
+      e?.json?.detail,
+      e?.detail
+    ].filter(Boolean).map((value) => {
+      try { return typeof value === 'string' ? value : JSON.stringify(value); } catch { return String(value); }
+    }).join(' ');
+    if (draftErrorText.includes('ACTIVE_SNOOZE_PREVENTS_DRAFT')) {
+      let liveSnoozeState = {};
+      const refreshedCandidateIds = [];
+      try {
+        liveSnoozeState = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_operation_active_snoozes_v1', {
+          p_operation_id: operationId,
+          p_workbench_session_id: workbenchSessionId,
+          p_candidate_scope_ids: null
+        }), 'pay_workbench_operation_active_snoozes_v1');
+        const activeRows = Array.isArray(liveSnoozeState?.active_snoozes)
+          ? liveSnoozeState.active_snoozes
+          : [];
+        const candidateIds = Array.from(new Set(activeRows
+          .map((row) => String(row?.candidate_id || '').trim())
+          .filter((value) => isUuid(value))));
+        for (const candidateId of candidateIds.slice(0, 100)) {
+          try {
+            await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
+              p_session_id: workbenchSessionId,
+              p_candidate_id: candidateId,
+              p_reason: 'ACTIVE_SNOOZE_PREVENTS_DRAFT',
+              p_actor_user_id: actorUserId,
+              p_payload_json: {
+                refresh_scope_kind: 'FULL_CANDIDATE',
+                source_operation_id: operationId,
+                refresh_required: true
+              }
+            });
+            refreshedCandidateIds.push(candidateId);
+          } catch {}
+        }
+        if (refreshedCandidateIds.length > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+          try {
+            nudgeBankingPayWorkbenchDrain(env, options?.ctx || options?.executionContext || null, {
+              origin: 'ACTIVE_SNOOZE_PREVENTS_DRAFT',
+              reason: 'SNOOZE_STATE_CHANGED_REFRESH_REQUIRED',
+              sessionId: workbenchSessionId,
+              actorUserId,
+              budgetProfile: 'NUDGE',
+              profile: 'NUDGE'
+            });
+          } catch {}
+        }
+      } catch {}
+      return finishFailedWithCleanup(null, {
+        code: 'ACTIVE_SNOOZE_PREVENTS_DRAFT',
+        message: 'One or more selected payments are currently snoozed. Banking Pay has been refreshed so you can review the updated selection.',
+        phase,
+        workbench_session_id: workbenchSessionId,
+        operation_id: operationId,
+        refresh_required: true,
+        next_action: 'REFRESH_WORKBENCH',
+        affected_preview_row_ids: liveSnoozeState?.affected_preview_row_ids || [],
+        affected_timesheet_ids: liveSnoozeState?.affected_timesheet_ids || [],
+        affected_segment_stable_keys: liveSnoozeState?.affected_segment_stable_keys || [],
+        refreshed_candidate_ids: refreshedCandidateIds
+      });
+    }
     if (phase === 'POST_CREATE_REFRESH' || phase === 'COMPLETE') {
       const retryDelaySeconds = 10;
       const retryPatch = {
@@ -62178,7 +62782,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
-
 
 
 
@@ -69270,12 +69873,15 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
   }
 }
 
+
 async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const jsonHeaders = (typeof JSON_HEADERS !== 'undefined') ? JSON_HEADERS : { 'Content-Type': 'application/json' };
   const trimStr = (value) => String(value == null ? '' : value).trim();
+  const isPlainObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
+  const retentionMessage = 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.';
   const firstString = function firstString() {
     for (let index = 0; index < arguments.length; index += 1) {
       const value = trimStr(arguments[index]);
@@ -69298,7 +69904,7 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
   };
   const statusForUnprocessError = (payload) => {
     const code = firstString(payload?.error_code, payload?.error).toUpperCase();
-    if (code === 'TIMESHEET_MOVED' || code === 'ROW_SIGNATURE_MISMATCH' || code === 'LOCK_TIMEOUT') return 409;
+    if (code === 'TIMESHEET_MOVED' || code === 'ROW_SIGNATURE_MISMATCH' || code === 'LOCK_TIMEOUT' || code === 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS') return 409;
     if (code === 'TIMESHEET_LOCKED_OR_PAID' || code === 'TIMESHEET_AUTHORISED_EDIT_BLOCKED' || code === 'ALREADY_UNPROCESSED' || code === 'PROCESSING_STATUS_NOT_UNPROCESSABLE' || code === 'UNPROCESS_NOT_ALLOWED') return 409;
     if (code === 'TIMESHEET_ID_REQUIRED' || code === 'EXPECTED_TIMESHEET_ID_REQUIRED' || code === 'TIMESHEET_NOT_FOUND' || code === 'CURRENT_TIMESHEET_NOT_FOUND' || code === 'NOT_DAILY' || code === 'NOT_MANUAL' || code === 'NO_TSFIN') return 400;
     return 500;
@@ -69355,17 +69961,44 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
       return withCORS(env, req, ok(minimalSuccessPayload(payload, requestedTimesheetId, expectedTimesheetId)));
     }
     const status = statusForUnprocessError(payload);
+    const errorCode = firstString(payload.error_code, payload.error, 'UNPROCESS_FAILED').toUpperCase();
+    const isRetentionBlock = errorCode === 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS';
+    const currentTimesheetId = firstString(payload.current_timesheet_id, payload.timesheet_id, requestedTimesheetId) || null;
+    const rowPatch = isPlainObject(payload.row_patch) ? payload.row_patch : (isRetentionBlock ? {
+      timesheet_id: currentTimesheetId,
+      current_timesheet_id: currentTimesheetId,
+      row_key: currentTimesheetId ? `timesheet:${currentTimesheetId}` : null,
+      row_signature: payload.current_row_signature || payload.backend_row_signature || payload.row_signature || null,
+      backend_row_signature: payload.current_row_signature || payload.backend_row_signature || payload.row_signature || null,
+      has_retained_financial_history: true,
+      can_unprocess: false,
+      unprocess_block_reason: 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+      unprocess_action_visible: true
+    } : null);
     const body = {
-      error: payload.error_code || payload.error || 'UNPROCESS_FAILED',
-      error_code: payload.error_code || payload.error || 'UNPROCESS_FAILED',
-      message: payload.message || fallbackMessage,
-      timesheet_id: payload.timesheet_id || payload.current_timesheet_id || requestedTimesheetId || null,
-      current_timesheet_id: payload.current_timesheet_id || payload.timesheet_id || requestedTimesheetId || null,
+      error: errorCode,
+      error_code: errorCode,
+      message: isRetentionBlock ? retentionMessage : (payload.message || fallbackMessage),
+      timesheet_id: currentTimesheetId,
+      current_timesheet_id: currentTimesheetId,
       expected_timesheet_id: expectedTimesheetId || null,
       expected_row_signature: payload.expected_row_signature || null,
-      current_row_signature: payload.current_row_signature || null,
+      current_row_signature: payload.current_row_signature || payload.backend_row_signature || payload.row_signature || null,
+      backend_row_signature: payload.backend_row_signature || payload.current_row_signature || payload.row_signature || null,
+      row_signature: payload.row_signature || payload.backend_row_signature || payload.current_row_signature || null,
+      has_retained_financial_history: isRetentionBlock ? true : payload.has_retained_financial_history === true,
+      can_unprocess: isRetentionBlock ? false : payload.can_unprocess,
+      unprocess_block_reason: isRetentionBlock ? 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' : (payload.unprocess_block_reason || null),
+      unprocess_action_visible: isRetentionBlock ? true : payload.unprocess_action_visible,
+      row_patch: rowPatch,
+      action_flags: isPlainObject(payload.action_flags) ? payload.action_flags : (isRetentionBlock ? {
+        has_retained_financial_history: true,
+        can_unprocess: false,
+        unprocess_block_reason: 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        unprocess_action_visible: true
+      } : null),
       refresh_required: true,
-      affected_rows: affectedRowsFor(payload, payload.current_timesheet_id || requestedTimesheetId)
+      affected_rows: affectedRowsFor(payload, currentTimesheetId)
     };
     return withCORS(env, req, new Response(JSON.stringify(body), { status, headers: jsonHeaders }));
   };
@@ -69420,6 +70053,8 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
     return responseForRpcPayload(payload, 'Failed to unprocess daily manual timesheet', requestedTimesheetId, expectedTimesheetId || requestedTimesheetId);
   }
 }
+
+
 
 
 
@@ -71222,8 +71857,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     qr_token: qrToken || null
   }));
 }
-
-
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -71232,6 +71865,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const enc = encodeURIComponent;
   const jsonHeaders = (typeof JSON_HEADERS !== 'undefined') ? JSON_HEADERS : { 'Content-Type': 'application/json' };
   const trimStr = (value) => String(value == null ? '' : value).trim();
+  const retentionMessage = 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.';
   const isPlainObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
   const parseMaybeJsonObj = (src) => {
     if (src == null) return null;
@@ -71417,6 +72051,55 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         }]
       });
     }
+    if (message === 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' || rpcErr.code === 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS') {
+      const currentTimesheetId = detailJson.current_timesheet_id || detailJson.timesheet_id || expectedTimesheetId || null;
+      const rowPatch = isPlainObject(detailJson.row_patch) ? detailJson.row_patch : {
+        timesheet_id: currentTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        row_key: currentTimesheetId ? `timesheet:${currentTimesheetId}` : null,
+        row_signature: detailJson.current_row_signature || detailJson.backend_row_signature || detailJson.row_signature || null,
+        backend_row_signature: detailJson.backend_row_signature || detailJson.current_row_signature || detailJson.row_signature || null,
+        has_retained_financial_history: true,
+        can_unprocess: false,
+        unprocess_block_reason: 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        unprocess_action_visible: true
+      };
+      return withJson(409, {
+        ok: false,
+        success: false,
+        error: 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        error_code: 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        message: retentionMessage,
+        contract_week_id: detailJson.contract_week_id || weekId,
+        timesheet_id: currentTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        expected_timesheet_id: expectedTimesheetId || null,
+        current_row_signature: detailJson.current_row_signature || detailJson.backend_row_signature || detailJson.row_signature || null,
+        backend_row_signature: detailJson.backend_row_signature || detailJson.current_row_signature || detailJson.row_signature || null,
+        row_signature: detailJson.row_signature || detailJson.backend_row_signature || detailJson.current_row_signature || null,
+        has_retained_financial_history: true,
+        can_unprocess: false,
+        unprocess_block_reason: 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        unprocess_action_visible: true,
+        row_patch: rowPatch,
+        action_flags: isPlainObject(detailJson.action_flags) ? detailJson.action_flags : {
+          has_retained_financial_history: true,
+          can_unprocess: false,
+          unprocess_block_reason: 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+          unprocess_action_visible: true
+        },
+        detail: detailJson,
+        bulk_mode: bulkMode,
+        response_context: responseContext,
+        refresh_required: true,
+        affected_rows: [{
+          contract_week_id: detailJson.contract_week_id || weekId,
+          timesheet_id: currentTimesheetId,
+          row_key: currentTimesheetId ? `timesheet:${currentTimesheetId}` : `contract_week:${weekId}`,
+          context: responseContext
+        }]
+      });
+    }
     if (message === 'ALREADY_UNPROCESSED' || message === 'ALREADY_AUTHORISED' || message === 'TIMESHEET_PAID' || message === 'TIMESHEET_LOCKED_BY_INVOICE' || message === 'STAGED_TIMESHEET_CONFLICT' || message === 'DUPLICATE_STAGED_TIMESHEET_CONFLICT' || message === 'EVIDENCE_CONFLICT' || message === 'LOCK_TIMEOUT') {
       return withJson(409, {
         error: message,
@@ -71445,14 +72128,43 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   }
 
   if (rpcPayload.ok === false || rpcPayload.success === false) {
-    const errorCode = firstString(rpcPayload.error_code, rpcPayload.error, rpcPayload.message, 'CONTRACT_WEEK_MANUAL_UNPROCESS_FAILED');
+    const errorCode = firstString(rpcPayload.error_code, rpcPayload.error, rpcPayload.message, 'CONTRACT_WEEK_MANUAL_UNPROCESS_FAILED').toUpperCase();
+    const isRetentionBlock = errorCode === 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS';
+    const currentTimesheetId = rpcPayload.current_timesheet_id || rpcPayload.timesheet_id || expectedTimesheetId || null;
     const status = errorCode === 'INVALID_PAYLOAD' ? 400 : 409;
     return withJson(status, {
       ...rpcPayload,
+      ok: false,
+      success: false,
       error: errorCode,
       error_code: errorCode,
+      message: isRetentionBlock ? retentionMessage : rpcPayload.message,
       contract_week_id: rpcPayload.contract_week_id || weekId,
-      current_timesheet_id: rpcPayload.current_timesheet_id || expectedTimesheetId || null,
+      timesheet_id: currentTimesheetId,
+      current_timesheet_id: currentTimesheetId,
+      has_retained_financial_history: isRetentionBlock ? true : rpcPayload.has_retained_financial_history,
+      can_unprocess: isRetentionBlock ? false : rpcPayload.can_unprocess,
+      unprocess_block_reason: isRetentionBlock ? 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' : rpcPayload.unprocess_block_reason,
+      unprocess_action_visible: isRetentionBlock ? true : rpcPayload.unprocess_action_visible,
+      row_patch: isPlainObject(rpcPayload.row_patch) ? rpcPayload.row_patch : (isRetentionBlock ? {
+        timesheet_id: currentTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        row_key: currentTimesheetId ? `timesheet:${currentTimesheetId}` : null,
+        row_signature: rpcPayload.current_row_signature || rpcPayload.backend_row_signature || rpcPayload.row_signature || null,
+        backend_row_signature: rpcPayload.backend_row_signature || rpcPayload.current_row_signature || rpcPayload.row_signature || null,
+        has_retained_financial_history: true,
+        can_unprocess: false,
+        unprocess_block_reason: 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        unprocess_action_visible: true
+      } : rpcPayload.row_patch),
+      action_flags: isPlainObject(rpcPayload.action_flags) ? rpcPayload.action_flags : (isRetentionBlock ? {
+        has_retained_financial_history: true,
+        can_unprocess: false,
+        unprocess_block_reason: 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
+        unprocess_action_visible: true
+      } : rpcPayload.action_flags),
+      bulk_mode: bulkMode,
+      response_context: responseContext,
       refresh_required: true
     });
   }
@@ -71508,6 +72220,138 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
 
   return withCORS(env, req, ok(responsePayload));
 }
+
+/**
+ * GENUINELY NEW IMPLEMENTATION UNIT.
+ * Claims a bounded retry lease and idempotently deletes already-committed R2 keys.
+ * It never performs or retries a database timesheet delete.
+ */
+async function processTimesheetR2CleanupRetryBatch(env, req, user, options = {}) {
+  const limit = Math.max(1, Math.min(100, Number(options.limit || 50) || 50));
+  const leaseSeconds = Math.max(30, Math.min(3600, Number(options.leaseSeconds || options.lease_seconds || 300) || 300));
+  const claim = await sbRpc(env, 'timesheet_r2_cleanup_claim_v1', {
+    p_limit: limit,
+    p_lease_seconds: leaseSeconds
+  });
+  const root = (claim && typeof claim === 'object' && !Array.isArray(claim)) ? claim : {};
+  const claimToken = String(root.claim_token || '').trim();
+  const rawItems = Array.isArray(root.items) ? root.items : [];
+
+  if (!rawItems.length) {
+    return {
+      ok: true,
+      claimed: 0,
+      completed: 0,
+      pending: 0,
+      more_due: root.more_due === true,
+      items: []
+    };
+  }
+  if (!claimToken) throw new Error('R2_CLEANUP_CLAIM_TOKEN_MISSING');
+
+  const items = rawItems.map((item) => ({
+    ...item,
+    delete_operation_id: String(item?.delete_operation_id || '').trim(),
+    r2_key: String(item?.r2_key || '').trim().replace(/^\/+/, ''),
+    claim_token: String(item?.claim_token || '').trim()
+  }));
+
+  if (items.some((item) => !item.delete_operation_id || !item.r2_key || item.claim_token !== claimToken)) {
+    throw new Error('R2_CLEANUP_CLAIM_CONTRACT_INVALID');
+  }
+
+  const bucket = env.R2_BUCKET || env.R2;
+  if (!bucket || typeof bucket.delete !== 'function') {
+    const grouped = new Map();
+    for (const item of items) {
+      if (!grouped.has(item.delete_operation_id)) grouped.set(item.delete_operation_id, []);
+      grouped.get(item.delete_operation_id).push({
+        r2_key: item.r2_key,
+        error: 'R2_DELETE_BINDING_UNAVAILABLE',
+        attempt_count: Number(item?.attempt_count || 1)
+      });
+    }
+    for (const [operationId, failures] of grouped) {
+      const first = items.find((item) => item.delete_operation_id === operationId) || {};
+      await sbRpc(env, 'timesheet_r2_cleanup_record_v1', {
+        p_delete_operation_id: operationId,
+        p_requested_timesheet_id: first.requested_timesheet_id || null,
+        p_deleted_timesheet_ids: Array.isArray(first.deleted_timesheet_ids) ? first.deleted_timesheet_ids : [],
+        p_failures: failures,
+        p_claim_token: claimToken
+      });
+    }
+    return {
+      ok: false,
+      claimed: items.length,
+      completed: 0,
+      pending: items.length,
+      more_due: root.more_due === true,
+      error_code: 'R2_DELETE_BINDING_UNAVAILABLE'
+    };
+  }
+
+  const successesByOperation = new Map();
+  const failuresByOperation = new Map();
+  const concurrency = Math.max(1, Math.min(8, Number(options.concurrency || 4) || 4));
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      const item = items[index];
+      try {
+        // R2 delete is idempotent: an already-missing object completes the retry.
+        await bucket.delete(item.r2_key);
+        if (!successesByOperation.has(item.delete_operation_id)) {
+          successesByOperation.set(item.delete_operation_id, []);
+        }
+        successesByOperation.get(item.delete_operation_id).push(item.r2_key);
+      } catch (error) {
+        if (!failuresByOperation.has(item.delete_operation_id)) {
+          failuresByOperation.set(item.delete_operation_id, []);
+        }
+        failuresByOperation.get(item.delete_operation_id).push({
+          r2_key: item.r2_key,
+          error: String(error?.message || error || 'R2_DELETE_FAILED').slice(0, 2000),
+          attempt_count: Number(item?.attempt_count || 1)
+        });
+      }
+    }
+  });
+  await Promise.all(workers);
+
+  for (const [operationId, keys] of successesByOperation) {
+    await sbRpc(env, 'timesheet_r2_cleanup_complete_v1', {
+      p_delete_operation_id: operationId,
+      p_claim_token: claimToken,
+      p_r2_keys: Array.from(new Set(keys)).sort()
+    });
+  }
+  for (const [operationId, failures] of failuresByOperation) {
+    const first = items.find((item) => item.delete_operation_id === operationId) || {};
+    await sbRpc(env, 'timesheet_r2_cleanup_record_v1', {
+      p_delete_operation_id: operationId,
+      p_requested_timesheet_id: first.requested_timesheet_id || null,
+      p_deleted_timesheet_ids: Array.isArray(first.deleted_timesheet_ids) ? first.deleted_timesheet_ids : [],
+      p_failures: failures,
+      p_claim_token: claimToken
+    });
+  }
+
+  const completed = Array.from(successesByOperation.values()).reduce((sum, keys) => sum + keys.length, 0);
+  const pending = Array.from(failuresByOperation.values()).reduce((sum, rows) => sum + rows.length, 0);
+  return {
+    ok: pending === 0,
+    claimed: items.length,
+    completed,
+    pending,
+    more_due: root.more_due === true
+  };
+}
+
+
+
+
 async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -75922,6 +76766,8 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
 
 
 
+
+
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -76045,8 +76891,20 @@ async function handleTimesheetsSummary(env, req) {
   };
 
   const normalizeSummaryRows = (rows) => {
+    const boolish = (value) => {
+      if (value === true) return true;
+      if (value === false || value == null) return false;
+      return ['1', 'true', 'yes', 'y', 'on'].includes(String(value).trim().toLowerCase());
+    };
+
+    const own = (obj, key) => (obj && Object.prototype.hasOwnProperty.call(obj, key))
+      ? obj[key]
+      : undefined;
+
     return (rows || []).map((r) => {
       const o = { ...(r || {}) };
+      const actionFlags = (o.action_flags && typeof o.action_flags === 'object') ? o.action_flags : {};
+      const rowPatch = (o.row_patch && typeof o.row_patch === 'object') ? o.row_patch : {};
 
       if (!Object.prototype.hasOwnProperty.call(o, 'route_type')) o.route_type = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'route_display')) o.route_display = null;
@@ -76061,6 +76919,42 @@ async function handleTimesheetsSummary(env, req) {
       if (!Object.prototype.hasOwnProperty.call(o, 'pay_paid_at_utc')) o.pay_paid_at_utc = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'net_delta_ex_vat')) o.net_delta_ex_vat = 0;
       if (!Object.prototype.hasOwnProperty.call(o, 'summary_stage')) o.summary_stage = null;
+
+      const archivedAtUtc = own(o, 'archived_at_utc') ?? own(rowPatch, 'archived_at_utc') ?? null;
+      const archivedByUserId = own(o, 'archived_by_user_id') ?? own(rowPatch, 'archived_by_user_id') ?? null;
+      const archivedReasonCode = own(o, 'archived_reason_code') ?? own(rowPatch, 'archived_reason_code') ?? null;
+      const sourceStage = String(
+        own(o, 'summary_stage') ?? own(o, 'tools_stage') ?? own(o, 'processing_status') ?? own(rowPatch, 'stage') ?? ''
+      ).trim().toUpperCase();
+      const isArchived = boolish(own(o, 'is_archived') ?? own(rowPatch, 'is_archived')) || !!archivedAtUtc || sourceStage === 'ARCHIVED';
+
+      o.is_archived = isArchived;
+      o.archived_at_utc = archivedAtUtc;
+      o.archived_by_user_id = archivedByUserId;
+      o.archived_reason_code = archivedReasonCode;
+
+      const hasRetainedHistory = boolish(
+        own(o, 'has_retained_financial_history') ??
+        own(actionFlags, 'has_retained_financial_history') ??
+        own(rowPatch, 'has_retained_financial_history')
+      );
+      const explicitCanUnprocess = own(o, 'can_unprocess') ?? own(actionFlags, 'can_unprocess') ?? own(rowPatch, 'can_unprocess');
+      const unprocessReason = String(
+        own(o, 'unprocess_block_reason') ??
+        own(actionFlags, 'unprocess_block_reason') ??
+        own(rowPatch, 'unprocess_block_reason') ??
+        ''
+      ).trim().toUpperCase() || null;
+      const explicitVisible = own(o, 'unprocess_action_visible') ?? own(actionFlags, 'unprocess_action_visible') ?? own(rowPatch, 'unprocess_action_visible');
+
+      o.has_retained_financial_history = hasRetainedHistory;
+      o.can_unprocess = isArchived ? false : (explicitCanUnprocess === undefined ? !hasRetainedHistory : boolish(explicitCanUnprocess));
+      o.unprocess_block_reason = isArchived
+        ? (unprocessReason || 'TIMESHEET_ARCHIVED')
+        : (hasRetainedHistory ? 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' : unprocessReason);
+      o.unprocess_action_visible = isArchived
+        ? false
+        : (explicitVisible === undefined ? hasRetainedHistory : boolish(explicitVisible));
 
       const payStatus = String(o.pay_status_code || '').trim().toUpperCase();
       o.pay_status_code = ['PAID', 'PARTIALLY_PAID', 'PROCESSING', 'ADVANCED', 'OVERPAID', 'UNPAID'].includes(payStatus)
@@ -76080,36 +76974,40 @@ async function handleTimesheetsSummary(env, req) {
       const summaryStage = String(o.summary_stage || '').trim().toUpperCase();
       const processingStatusDisplay = String(o.processing_status_display || '').trim();
 
-      const isRealRowUnprocessed =
-        !!timesheetId &&
-        (
-          processingStatus === 'UNPROCESSED' ||
-          processingStatus === 'UNASSIGNED' ||
-          summaryStage === 'UNPROCESSED'
-        );
-
-      const isPlannedWeeklyUnprocessed =
-        !timesheetId &&
-        !!contractWeekId &&
-        (
-          summaryStage === 'UNPROCESSED' ||
-          String(o.contract_week_status || '').trim().toUpperCase() === 'OPEN' ||
-          String(o.contract_week_status || '').trim().toUpperCase() === 'PLANNED'
-        );
-
-      if (isRealRowUnprocessed || isPlannedWeeklyUnprocessed) {
-        o.summary_stage = 'UNPROCESSED';
-        o.tools_stage = 'UNPROCESSED';
-        o.processing_status_display = 'Unprocessed';
+      if (isArchived) {
+        // Archive is the canonical operational Stage. Payment remains a separate display fact.
+        o.summary_stage = 'ARCHIVED';
+        o.tools_stage = 'ARCHIVED';
+        o.processing_status = 'ARCHIVED';
+        o.processing_status_display = 'Archived';
       } else {
-        if (!o.tools_stage && summaryStage === 'UNPROCESSED') {
-          o.tools_stage = 'UNPROCESSED';
-        }
-        if (!processingStatusDisplay && summaryStage === 'UNPROCESSED') {
-          o.processing_status_display = 'Unprocessed';
-        }
-        if (!o.summary_stage && (processingStatus === 'UNPROCESSED' || processingStatus === 'UNASSIGNED')) {
+        const isRealRowUnprocessed =
+          !!timesheetId &&
+          (
+            processingStatus === 'UNPROCESSED' ||
+            processingStatus === 'UNASSIGNED' ||
+            summaryStage === 'UNPROCESSED'
+          );
+
+        const isPlannedWeeklyUnprocessed =
+          !timesheetId &&
+          !!contractWeekId &&
+          (
+            summaryStage === 'UNPROCESSED' ||
+            String(o.contract_week_status || '').trim().toUpperCase() === 'OPEN' ||
+            String(o.contract_week_status || '').trim().toUpperCase() === 'PLANNED'
+          );
+
+        if (isRealRowUnprocessed || isPlannedWeeklyUnprocessed) {
           o.summary_stage = 'UNPROCESSED';
+          o.tools_stage = 'UNPROCESSED';
+          o.processing_status_display = 'Unprocessed';
+        } else {
+          if (!o.tools_stage && summaryStage === 'UNPROCESSED') o.tools_stage = 'UNPROCESSED';
+          if (!processingStatusDisplay && summaryStage === 'UNPROCESSED') o.processing_status_display = 'Unprocessed';
+          if (!o.summary_stage && (processingStatus === 'UNPROCESSED' || processingStatus === 'UNASSIGNED')) {
+            o.summary_stage = 'UNPROCESSED';
+          }
         }
       }
 
@@ -77942,6 +78840,7 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
 
 
 
+
 async function handleBulkProcessDataset(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -78072,6 +78971,77 @@ async function handleBulkProcessDataset(env, req) {
     return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
   };
 
+  const normalizeBulkProcessRetentionRow = (rowInput) => {
+    const row = (rowInput && typeof rowInput === 'object' && !Array.isArray(rowInput)) ? { ...rowInput } : {};
+    const actionFlags = (row.action_flags && typeof row.action_flags === 'object' && !Array.isArray(row.action_flags))
+      ? { ...row.action_flags }
+      : {};
+    const rowPatch = (row.row_patch && typeof row.row_patch === 'object' && !Array.isArray(row.row_patch))
+      ? { ...row.row_patch }
+      : {};
+    const boolish = (value) => {
+      if (value === true) return true;
+      if (value === false || value == null) return false;
+      return ['1', 'true', 'yes', 'y', 'on'].includes(String(value).trim().toLowerCase());
+    };
+    const own = (obj, key) => (obj && Object.prototype.hasOwnProperty.call(obj, key)) ? obj[key] : undefined;
+    const firstDefined = (...values) => values.find((value) => value !== undefined);
+    const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+
+    const archivedAtUtc = firstDefined(own(row, 'archived_at_utc'), own(rowPatch, 'archived_at_utc')) ?? null;
+    const isArchived = boolish(firstDefined(own(row, 'is_archived'), own(rowPatch, 'is_archived'))) ||
+      !!archivedAtUtc ||
+      upper(firstDefined(own(row, 'stage'), own(row, 'summary_stage'), own(row, 'tools_stage'), own(rowPatch, 'stage'))) === 'ARCHIVED';
+    const retained = boolish(firstDefined(
+      own(row, 'has_retained_financial_history'),
+      own(actionFlags, 'has_retained_financial_history'),
+      own(rowPatch, 'has_retained_financial_history')
+    ));
+    const suppliedCan = firstDefined(own(row, 'can_unprocess'), own(actionFlags, 'can_unprocess'), own(rowPatch, 'can_unprocess'));
+    const suppliedVisible = firstDefined(own(row, 'unprocess_action_visible'), own(actionFlags, 'unprocess_action_visible'), own(rowPatch, 'unprocess_action_visible'));
+    const suppliedReason = upper(firstDefined(
+      own(row, 'unprocess_block_reason'),
+      own(actionFlags, 'unprocess_block_reason'),
+      own(rowPatch, 'unprocess_block_reason')
+    ));
+
+    const canUnprocess = isArchived ? false : (retained ? false : (suppliedCan === undefined ? false : boolish(suppliedCan)));
+    const unprocessReason = isArchived
+      ? (suppliedReason || 'TIMESHEET_ARCHIVED')
+      : (retained ? 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' : (suppliedReason || null));
+    const unprocessVisible = isArchived
+      ? false
+      : (retained ? true : (suppliedVisible === undefined ? canUnprocess : boolish(suppliedVisible)));
+    const unprocessMessage = retained
+      ? 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
+      : (row.unprocess_block_message || actionFlags.unprocess_block_message || rowPatch.unprocess_block_message || null);
+
+    const contract = {
+      is_archived: isArchived,
+      archived_at_utc: archivedAtUtc,
+      has_retained_financial_history: retained,
+      can_unprocess: canUnprocess,
+      unprocess_block_reason: unprocessReason,
+      unprocess_action_visible: unprocessVisible,
+      unprocess_block_message: unprocessMessage
+    };
+
+    if (isArchived) {
+      contract.stage = 'ARCHIVED';
+      contract.summary_stage = 'ARCHIVED';
+      contract.tools_stage = 'ARCHIVED';
+      contract.processing_status = 'ARCHIVED';
+      contract.processing_status_display = 'Archived';
+    }
+
+    return {
+      ...row,
+      ...contract,
+      action_flags: { ...actionFlags, ...contract },
+      row_patch: { ...rowPatch, ...contract }
+    };
+  };
+
   const numberParam = (value, defaultValue = null, minValue = null, maxValue = null) => {
     if (value == null || String(value).trim() === '') return defaultValue;
     const n = Number(value);
@@ -78137,8 +79107,12 @@ async function handleBulkProcessDataset(env, req) {
     const rpcRes = await sbRpc(env, 'bulk_process_dataset_v1', { p_filters: filters }, { timeoutMs: 45000 });
     const payload = unwrapRpcPayload(rpcRes, 'bulk_process_dataset_v1');
 
-    const unprocessedRows = Array.isArray(payload.unprocessed_rows) ? payload.unprocessed_rows : [];
-    const processedRows = Array.isArray(payload.processed_rows) ? payload.processed_rows : [];
+    const unprocessedRows = Array.isArray(payload.unprocessed_rows)
+      ? payload.unprocessed_rows.map(normalizeBulkProcessRetentionRow)
+      : [];
+    const processedRows = Array.isArray(payload.processed_rows)
+      ? payload.processed_rows.map(normalizeBulkProcessRetentionRow)
+      : [];
 
     const counts = (payload.counts && typeof payload.counts === 'object' && !Array.isArray(payload.counts))
       ? payload.counts
@@ -78187,6 +79161,7 @@ async function handleBulkProcessDataset(env, req) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load bulk process dataset')));
   }
 }
+
 
 function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family) {
   const upper = (v) => String(v == null ? '' : v).trim().toUpperCase();
@@ -78259,13 +79234,51 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     readOwn(tsfin, 'invoice_breakdown_json') ?? readOwn(source, 'invoice_breakdown_json') ?? null
   );
 
-  const locked = !!(
-    lockedByInvoiceId ||
-    paidAtUtc ||
-    hasSegmentInvoiceLock
+  const lockedAtUtc =
+    readOwn(tsfin, 'locked_at_utc') ??
+    readOwn(source, 'locked_at_utc') ??
+    null;
+
+  const explicitInvoiceLocked = readBool(
+    [source, 'is_invoice_locked'],
+    [source, 'invoice_locked'],
+    [tsfin, 'is_invoice_locked'],
+    [tsfin, 'invoice_locked']
+  );
+  const invoiceIsPaid = readBool([source, 'invoice_is_paid'], [tsfin, 'invoice_is_paid']);
+  const invoiceLocked = explicitInvoiceLocked == null
+    ? !!(lockedByInvoiceId || lockedAtUtc || hasSegmentInvoiceLock || invoiceIsPaid === true)
+    : explicitInvoiceLocked;
+
+  const paymentPaid = !!paidAtUtc || boolish(
+    readOwn(source, 'is_paid') ??
+    readOwn(source, 'payment_is_paid') ??
+    readOwn(tsfin, 'is_paid') ??
+    false
   );
 
-  const evidenceDocumentLocked = !!(lockedByInvoiceId || hasSegmentInvoiceLock);
+  const archivedAtUtc =
+    readOwn(source, 'archived_at_utc') ??
+    readOwn(timesheet, 'archived_at_utc') ??
+    readOwn(summary, 'archived_at_utc') ??
+    null;
+  const sourceStage = upper(
+    readOwn(source, 'summary_stage') ??
+    readOwn(source, 'tools_stage') ??
+    readOwn(source, 'processing_status') ??
+    ''
+  );
+  const isArchived = boolish(
+    readOwn(source, 'is_archived') ??
+    readOwn(timesheet, 'is_archived') ??
+    readOwn(summary, 'is_archived') ??
+    false
+  ) || !!archivedAtUtc || sourceStage === 'ARCHIVED';
+
+  // Compatibility `locked` now means a lifecycle lock only. Payment is display-only.
+  const lifecycleLocked = invoiceLocked || isArchived;
+  const locked = lifecycleLocked;
+  const evidenceDocumentLocked = invoiceLocked || isArchived;
 
   const isAuthorised = !!(
     readOwn(timesheet, 'authorised_at_server') ??
@@ -78416,14 +79429,14 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
 
   const qrBulkAuthoriseVisible = (!isQrFamily || qrSignedReturned === true);
 
-  const canBulkAuthorise = hasTimesheet && !locked && requiresAuthorisation && !isAuthorised && !qrUnsignedBlocked && qrBulkAuthoriseVisible;
-  const canBulkUnauthorise = hasTimesheet && !locked && isAuthorised && qrBulkAuthoriseVisible;
+  const canBulkAuthorise = hasTimesheet && !lifecycleLocked && requiresAuthorisation && !isAuthorised && !qrUnsignedBlocked && qrBulkAuthoriseVisible;
+  const canBulkUnauthorise = hasTimesheet && !lifecycleLocked && isAuthorised && qrBulkAuthoriseVisible;
 
   const bulkAuthoriseSection = canBulkAuthorise
     ? 'processed_eligible'
     : (canBulkUnauthorise ? 'authorised_eligible' : null);
 
-  const canEditTimesheetData = !locked && !isAuthorised && routeFamily === 'MANUAL_NON_QR';
+  const canEditTimesheetData = !lifecycleLocked && !isAuthorised && routeFamily === 'MANUAL_NON_QR';
   const hasValidEvidenceContext = hasTimesheet;
   const canManageEvidence = hasValidEvidenceContext && !evidenceDocumentLocked && !isImportAuthoritative;
 
@@ -78433,9 +79446,24 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     upper(readOwn(source, 'tools_stage') || '') === 'UNPROCESSED'
   );
 
-  const canUnprocess = (
+  const hasRetainedFinancialHistory = boolish(
+    readOwn(source, 'has_retained_financial_history') ??
+    readOwn(actionFlags, 'has_retained_financial_history') ??
+    readOwn(bulkAuthorise, 'has_retained_financial_history') ??
+    false
+  );
+  const explicitCanUnprocess = readOwn(source, 'can_unprocess') ?? readOwn(actionFlags, 'can_unprocess');
+  const explicitUnprocessVisible = readOwn(source, 'unprocess_action_visible') ?? readOwn(actionFlags, 'unprocess_action_visible');
+  const suppliedUnprocessReason = upper(
+    readOwn(source, 'unprocess_block_reason') ??
+    readOwn(actionFlags, 'unprocess_block_reason') ??
+    ''
+  );
+
+  const structurallyCanUnprocess = (
     hasTimesheet &&
-    !locked &&
+    !invoiceLocked &&
+    !isArchived &&
     !isAuthorised &&
     routeFamily === 'MANUAL_NON_QR' &&
     (
@@ -78443,6 +79471,19 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
       (periodType === 'DAILY' && !backendUnprocessed)
     )
   );
+  const canUnprocess = explicitCanUnprocess === undefined
+    ? (structurallyCanUnprocess && !hasRetainedFinancialHistory)
+    : (structurallyCanUnprocess && boolish(explicitCanUnprocess) && !hasRetainedFinancialHistory);
+  const unprocessBlockReason = isArchived
+    ? 'TIMESHEET_ARCHIVED'
+    : (hasRetainedFinancialHistory
+        ? 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'
+        : (suppliedUnprocessReason || (!structurallyCanUnprocess ? 'UNPROCESS_NOT_ELIGIBLE' : null)));
+  const unprocessActionVisible = isArchived
+    ? false
+    : (hasRetainedFinancialHistory
+        ? true
+        : (explicitUnprocessVisible === undefined ? structurallyCanUnprocess : boolish(explicitUnprocessVisible)));
 
   const statusValue = upper(
     readOwn(source, 'status') ??
@@ -78534,7 +79575,7 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
 
   const canAddAdditionalManual = additionalManualStructuralAllowed;
 
-  const reviewOnly = !!(locked || isAuthorised || routeFamily !== 'MANUAL_NON_QR');
+  const reviewOnly = !!(lifecycleLocked || isAuthorised || routeFamily !== 'MANUAL_NON_QR');
 
   const existingHighlightRedValue = readOwn(source, 'nhsp_highlight_red');
   const existingHighlightReason = readOwn(source, 'nhsp_highlight_reason');
@@ -78553,6 +79594,13 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
   return {
     has_timesheet: hasTimesheet,
     locked,
+    lifecycle_locked: lifecycleLocked,
+    invoice_locked: invoiceLocked,
+    payment_paid: paymentPaid,
+    paid_at_utc: paidAtUtc || null,
+    is_archived: isArchived,
+    archived_at_utc: archivedAtUtc || null,
+    has_retained_financial_history: hasRetainedFinancialHistory,
     is_authorised: isAuthorised,
     requires_authorisation: requiresAuthorisation,
     qr_unsigned_blocked: qrUnsignedBlocked,
@@ -78571,15 +79619,20 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     evidence_lock_reason: !hasValidEvidenceContext
       ? 'INVALID_TIMESHEET_CONTEXT'
       : (evidenceDocumentLocked
-          ? (lockedByInvoiceId ? 'INVOICE_LOCKED' : 'INVOICE_SEGMENT_LOCKED')
+          ? (isArchived ? 'TIMESHEET_ARCHIVED' : (lockedByInvoiceId ? 'INVOICE_LOCKED' : 'INVOICE_SEGMENT_LOCKED'))
           : (isImportAuthoritative ? 'IMPORT_AUTHORITATIVE_ROUTE' : null)),
     can_unprocess: canUnprocess,
+    unprocess_block_reason: unprocessBlockReason,
+    unprocess_action_visible: unprocessActionVisible,
     can_add_additional_manual: canAddAdditionalManual,
     review_only: reviewOnly,
     has_deviation_marker: hasDeviationMarker,
     deviation_marker_reason: deviationMarkerReason
   };
 }
+
+
+
 
 async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
@@ -79442,6 +80495,8 @@ async function handleBulkAuthoriseDataset(env, req) {
   }
 }
 
+
+
 async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -79992,6 +81047,97 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       primary_artifact: effectivePrimaryArtifact
     };
 
+    const own = (obj, key) => (obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key))
+      ? obj[key]
+      : undefined;
+    const firstDefined = (...values) => values.find((value) => value !== undefined);
+    const sourceActionFlags = (payload.action_flags && typeof payload.action_flags === 'object' && !Array.isArray(payload.action_flags))
+      ? payload.action_flags
+      : ((dataRow.action_flags && typeof dataRow.action_flags === 'object' && !Array.isArray(dataRow.action_flags)) ? dataRow.action_flags : {});
+    const sourceRowPatch = (payload.row_patch && typeof payload.row_patch === 'object' && !Array.isArray(payload.row_patch))
+      ? payload.row_patch
+      : {};
+    const archivedAtUtc = firstDefined(
+      own(payload, 'archived_at_utc'), own(row, 'archived_at_utc'), own(dataRow, 'archived_at_utc'),
+      own(details, 'archived_at_utc'), own(timesheet, 'archived_at_utc'), own(sourceRowPatch, 'archived_at_utc')
+    ) ?? null;
+    const archivedByUserId = firstDefined(
+      own(payload, 'archived_by_user_id'), own(row, 'archived_by_user_id'), own(dataRow, 'archived_by_user_id'),
+      own(details, 'archived_by_user_id'), own(timesheet, 'archived_by_user_id'), own(sourceRowPatch, 'archived_by_user_id')
+    ) ?? null;
+    const archivedReasonCode = firstDefined(
+      own(payload, 'archived_reason_code'), own(row, 'archived_reason_code'), own(dataRow, 'archived_reason_code'),
+      own(details, 'archived_reason_code'), own(timesheet, 'archived_reason_code'), own(sourceRowPatch, 'archived_reason_code')
+    ) ?? null;
+    const sourceStageUpper = trimStr(firstDefined(
+      own(payload, 'stage'), own(row, 'stage'), own(dataRow, 'stage'), own(row, 'summary_stage'),
+      own(dataRow, 'summary_stage'), own(row, 'tools_stage'), own(dataRow, 'tools_stage'), own(sourceRowPatch, 'stage')
+    )).toUpperCase();
+    const isArchived = toBool(firstDefined(
+      own(payload, 'is_archived'), own(row, 'is_archived'), own(dataRow, 'is_archived'),
+      own(details, 'is_archived'), own(timesheet, 'is_archived'), own(sourceRowPatch, 'is_archived')
+    )) || !!archivedAtUtc || sourceStageUpper === 'ARCHIVED';
+
+    const hasRetainedFinancialHistory = toBool(firstDefined(
+      own(payload, 'has_retained_financial_history'), own(row, 'has_retained_financial_history'),
+      own(dataRow, 'has_retained_financial_history'), own(details, 'has_retained_financial_history'),
+      own(sourceActionFlags, 'has_retained_financial_history'), own(sourceRowPatch, 'has_retained_financial_history')
+    ));
+    const suppliedCanUnprocess = firstDefined(
+      own(payload, 'can_unprocess'), own(row, 'can_unprocess'), own(dataRow, 'can_unprocess'),
+      own(details, 'can_unprocess'), own(sourceActionFlags, 'can_unprocess'), own(sourceRowPatch, 'can_unprocess')
+    );
+    const suppliedUnprocessVisible = firstDefined(
+      own(payload, 'unprocess_action_visible'), own(row, 'unprocess_action_visible'), own(dataRow, 'unprocess_action_visible'),
+      own(details, 'unprocess_action_visible'), own(sourceActionFlags, 'unprocess_action_visible'), own(sourceRowPatch, 'unprocess_action_visible')
+    );
+    const suppliedUnprocessReason = trimStr(firstDefined(
+      own(payload, 'unprocess_block_reason'), own(row, 'unprocess_block_reason'), own(dataRow, 'unprocess_block_reason'),
+      own(details, 'unprocess_block_reason'), own(sourceActionFlags, 'unprocess_block_reason'), own(sourceRowPatch, 'unprocess_block_reason')
+    )).toUpperCase();
+    const canUnprocess = isArchived
+      ? false
+      : (hasRetainedFinancialHistory ? false : (suppliedCanUnprocess === undefined ? false : toBool(suppliedCanUnprocess)));
+    const unprocessBlockReason = isArchived
+      ? (suppliedUnprocessReason || 'TIMESHEET_ARCHIVED')
+      : (hasRetainedFinancialHistory ? 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' : (suppliedUnprocessReason || null));
+    const unprocessActionVisible = isArchived
+      ? false
+      : (hasRetainedFinancialHistory
+          ? true
+          : (suppliedUnprocessVisible === undefined ? canUnprocess : toBool(suppliedUnprocessVisible)));
+    const unprocessBlockMessage = hasRetainedFinancialHistory
+      ? 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
+      : (firstDefined(
+          own(payload, 'unprocess_block_message'), own(row, 'unprocess_block_message'), own(dataRow, 'unprocess_block_message'),
+          own(details, 'unprocess_block_message'), own(sourceActionFlags, 'unprocess_block_message'), own(sourceRowPatch, 'unprocess_block_message')
+        ) ?? null);
+
+    const retentionContractPatch = {
+      is_archived: isArchived,
+      archived_at_utc: archivedAtUtc,
+      archived_by_user_id: archivedByUserId,
+      archived_reason_code: archivedReasonCode,
+      has_retained_financial_history: hasRetainedFinancialHistory,
+      can_unprocess: canUnprocess,
+      unprocess_block_reason: unprocessBlockReason,
+      unprocess_action_visible: unprocessActionVisible,
+      unprocess_block_message: unprocessBlockMessage
+    };
+    const archivedStagePatch = isArchived ? {
+      stage: 'ARCHIVED',
+      summary_stage: 'ARCHIVED',
+      tools_stage: 'ARCHIVED',
+      processing_status: 'ARCHIVED',
+      processing_status_display: 'Archived',
+      can_process: false,
+      can_unprocess: false,
+      can_save: false,
+      can_edit_timesheet_data: false,
+      can_manage_evidence: false,
+      review_only: true
+    } : {};
+
     const manualAdditionalNoTimesheetPatch = bulkProcessUserAdjustmentRoute && !timesheetId && contractWeekId ? {
       supportsUnprocessedExpenseDraft: true,
       supports_unprocessed_expense_draft: true,
@@ -80028,7 +81174,9 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       timesheet_id: timesheetId,
       ...manualAdditionalNoTimesheetPatch,
       ...scheduleFieldPatch,
-      ...importDerivedExclusionPatch
+      ...retentionContractPatch,
+      ...importDerivedExclusionPatch,
+      ...archivedStagePatch
     };
 
     const nextDataRow = {
@@ -80045,7 +81193,9 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       current_timesheet_id: timesheetId,
       ...manualAdditionalNoTimesheetPatch,
       ...scheduleFieldPatch,
+      ...retentionContractPatch,
       ...importDerivedExclusionPatch,
+      ...archivedStagePatch,
       is_import_derived_adjustment: importDerivedChild,
       is_user_created_manual_qr_adjustment: userCreatedManualQrAdjustment,
       bulk_process_user_adjustment_route: bulkProcessUserAdjustmentRoute,
@@ -80067,6 +81217,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     const actionFlags = (payload.action_flags && typeof payload.action_flags === 'object' && !Array.isArray(payload.action_flags))
       ? { ...payload.action_flags }
       : ((nextDataRow.action_flags && typeof nextDataRow.action_flags === 'object' && !Array.isArray(nextDataRow.action_flags)) ? { ...nextDataRow.action_flags } : {});
+    Object.assign(actionFlags, retentionContractPatch, archivedStagePatch);
     if (bulkProcessUserAdjustmentRoute) {
       actionFlags.is_adjustment = true;
       actionFlags.additional_seq = additionalSeq;
@@ -80134,6 +81285,8 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       actionFlags.can_manage_evidence = false;
       actionFlags.review_only = true;
     }
+    Object.assign(actionFlags, retentionContractPatch, archivedStagePatch);
+    Object.assign(nextDataRow, retentionContractPatch, archivedStagePatch);
     nextDataRow.action_flags = { ...(nextDataRow.action_flags || {}), ...actionFlags };
 
     const nextDetails = {
@@ -80146,6 +81299,8 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
         ...(shouldMergeScheduleFields ? { planned_schedule_json: normalisedPlannedSchedule } : {})
       } : details.contract_week,
       action_flags: { ...(((details.action_flags && typeof details.action_flags === 'object') ? details.action_flags : {})), ...actionFlags },
+      ...retentionContractPatch,
+      ...archivedStagePatch,
       ...canonicalEvidenceAliasPatch,
       evidence_meta: effectiveEvidenceMeta,
       artifact_hints: { ...(((details.artifact_hints && typeof details.artifact_hints === 'object') ? details.artifact_hints : {})), ...effectiveArtifactHints },
@@ -80156,6 +81311,8 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       ? {
         ...payload.row_patch,
         ...nextDataRow,
+        ...retentionContractPatch,
+        ...archivedStagePatch,
         has_any_evidence: effectiveHasAnyEvidence,
         has_attached_evidence: effectiveAttachedEvidenceCount > 0,
         attached_evidence_count: effectiveAttachedEvidenceCount,
@@ -80194,6 +81351,8 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       row_patch: nextRowPatch,
       details: nextDetails,
       action_flags: actionFlags,
+      ...retentionContractPatch,
+      ...archivedStagePatch,
       effective: nextEffective,
       has_any_evidence: effectiveHasAnyEvidence,
       has_attached_evidence: effectiveAttachedEvidenceCount > 0,
@@ -80221,7 +81380,9 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       current_timesheet_id: timesheetId,
       ...manualAdditionalNoTimesheetPatch,
       ...scheduleFieldPatch,
-      ...importDerivedExclusionPatch
+      ...retentionContractPatch,
+      ...importDerivedExclusionPatch,
+      ...archivedStagePatch
     };
   };
 
@@ -80499,8 +81660,6 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     }));
   }
 }
-
-
 
 function classifyBulkAuthoriseRow(row, fin, summaryBase) {
   const upper = (v) => String(v == null ? '' : v).trim().toUpperCase();
@@ -95023,930 +96182,278 @@ async function handleContractsTruncateTailSafely(env, req, contractId) {
 
 
 
+/**
+ * Complete replacement for handleTimesheetDelete.
+ * Permanent deletion is database-authoritative and atomic. R2 cleanup begins only
+ * after the RPC response proves a committed PERMANENT_DELETE outcome.
+ */
 async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const upper = (value) => trimText(value).toUpperCase();
+  const asIdArray = (value) => {
+    const source = Array.isArray(value) ? value : [];
+    return [...new Set(source.map(trimText).filter(Boolean))].sort();
+  };
   const enc = encodeURIComponent;
-  const trimStr = (v) => String(v || '').trim();
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
-  const expectedContractWeekId = trimStr(
-    body?.expected_contract_week_id ||
-    body?.expectedContractWeekId ||
-    body?.contract_week_id ||
-    body?.contractWeekId ||
-    ''
-  );
-  const expectedDeleteKind = trimStr(
-    body?.expected_delete_kind ||
-    body?.expectedDeleteKind ||
-    body?.delete_kind ||
-    body?.deleteKind ||
-    ''
-  ).toUpperCase();
-  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
-
-  const deleteConflict = (message, details = null) => withCORS(
+  const normalizeRpc = (value, functionName = null) => {
+    let out = value;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, 'data')) {
+      out = out.data;
+    }
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (functionName && out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, functionName)) {
+      out = out[functionName];
+    }
+    return out;
+  };
+  const jsonResponse = (status, payload) => withCORS(
     env,
     req,
-    new Response(
-      JSON.stringify({
-        error_code: 'DELETE_SAFETY_CHECK_FAILED',
-        message: String(message || 'Delete safety check failed'),
-        details
-      }),
-      { status: 409, headers: { 'Content-Type': 'application/json' } }
-    )
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { 'Content-Type': 'application/json' }
+    })
   );
+  const makeOperationId = () => {
+    try {
+      if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') return globalThis.crypto.randomUUID();
+    } catch {}
+    return `ts_delete_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  };
+
+  let body = {};
+  try {
+    const parsed = await parseJSONBody(req);
+    body = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  } catch {
+    body = {};
+  }
+
+  const expectedTimesheetId = trimText(
+    body.expected_timesheet_id ?? body.expectedTimesheetId ?? body.current_timesheet_id ?? body.currentTimesheetId
+  );
+  const expectedRowSignature = trimText(body.expected_row_signature ?? body.expectedRowSignature) || null;
+  const requestedKind = upper(
+    body.expected_delete_kind ?? body.expectedDeleteKind ?? body.delete_kind ?? body.deleteKind
+  );
+  const confirmedDecision = upper(
+    body.confirmed_decision ?? body.confirmedDecision ?? body.preview_decision ?? body.previewDecision ?? body.decision
+  );
+  const explicitConfirmation = body.confirm_permanent_delete === true || body.confirmPermanentDelete === true || body.confirmed === true;
+  const expectedTargetTimesheetIds = asIdArray(body.expected_timesheet_ids ?? body.expectedTimesheetIds);
+  const expectedTargetContractWeekIds = asIdArray(body.expected_contract_week_ids ?? body.expectedContractWeekIds);
+  const expectedNhspShiftIds = asIdArray(body.expected_nhsp_shift_ids ?? body.expectedNhspShiftIds);
+  const expectedPreservedSourceTimesheetIds = asIdArray(
+    body.expected_preserved_source_timesheet_ids ?? body.expectedPreservedSourceTimesheetIds
+  );
+  const expectedPreservedSourceContractWeekIds = asIdArray(
+    body.expected_preserved_source_contract_week_ids ?? body.expectedPreservedSourceContractWeekIds
+  );
+
+  if (!expectedTimesheetId) {
+    return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+  }
+  if (confirmedDecision !== 'PERMANENT_DELETE' || !explicitConfirmation) {
+    return jsonResponse(409, {
+      ok: false,
+      error_code: 'PERMANENT_DELETE_CONFIRMATION_REQUIRED',
+      decision: confirmedDecision || null,
+      message: 'A current PERMANENT_DELETE preview and explicit confirmation are required.'
+    });
+  }
 
   const resolved = await resolveTimesheetToCurrent(env, timesheetId);
-  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
-  const currentTimesheetId = String(resolved.current_timesheet_id);
-
-  if (String(expected) !== String(currentTimesheetId)) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
+  if (!resolved || !resolved.current_timesheet_id) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = trimText(resolved.current_timesheet_id);
+  if (expectedTimesheetId !== currentTimesheetId) {
+    return jsonResponse(409, {
+      ok: false,
+      error_code: 'TIMESHEET_MOVED',
+      decision: 'BLOCKED',
+      requested_timesheet_id: trimText(timesheetId),
+      expected_timesheet_id: expectedTimesheetId,
+      current_timesheet_id: currentTimesheetId,
+      message: 'The timesheet changed after preview. Refresh and review the current delete decision.'
+    });
   }
 
-  const tsfin = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=timesheet_id,paid_at_utc,locked_by_invoice_id,locked_at_utc` +
-      `&limit=1`
-  );
-
-  if (tsfin) {
-    const hardLocked =
-      !!tsfin.paid_at_utc ||
-      !!tsfin.locked_by_invoice_id ||
-      !!tsfin.locked_at_utc;
-
-    if (hardLocked) return withCORS(env, req, badRequest('Cannot delete: invoiced or paid'));
-  }
-
-  const ts = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&select=timesheet_id,booking_id,sheet_scope,is_adjustment,parent_timesheet_id,adjustment_origin,correction_id,correction_kind,is_current,authorised_at_server,revoked_at,contract_id,week_ending_date` +
-      `&limit=1`
-  );
-  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
-
-  const isCurrentAuthorised =
-    ts.is_current === true &&
-    ts.authorised_at_server != null &&
-    String(ts.authorised_at_server).trim() !== '' &&
-    (ts.revoked_at == null || String(ts.revoked_at).trim() === '');
-
-  if (isCurrentAuthorised) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({
-          error_code: 'TIMESHEET_AUTHORISED_DELETE_BLOCKED',
-          message: 'This timesheet is authorised. Unauthorise it before deleting.'
-        }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
-
-  const linkedContractWeek = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&select=id,contract_id,week_ending_date,timesheet_id,is_adjustment,additional_seq,status,planned_schedule_json,totals_json` +
-      `&limit=1`
-  ).catch(() => null);
-
-  const scopeUpper = String(ts.sheet_scope || '').trim().toUpperCase();
-  const isWeekly = scopeUpper === 'WEEKLY';
-  const linkedAdditionalSeq = Number(linkedContractWeek?.additional_seq || 0);
-  const bookingId = trimStr(ts.booking_id) || trimStr(resolved.booking_id) || '';
-
-  const sourceBaseContractWeek = isWeekly && (linkedContractWeek?.contract_id || ts.contract_id) && (linkedContractWeek?.week_ending_date || ts.week_ending_date)
-    ? await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?contract_id=eq.${enc(linkedContractWeek?.contract_id || ts.contract_id)}` +
-          `&week_ending_date=eq.${enc(linkedContractWeek?.week_ending_date || ts.week_ending_date)}` +
-          `&additional_seq=eq.0` +
-          `&is_adjustment=eq.false` +
-          `&select=id,timesheet_id,contract_id,week_ending_date,additional_seq,is_adjustment` +
-          `&limit=1`
-      ).catch(() => null)
-    : null;
-
-  const originUpper = String(ts.adjustment_origin || '').trim().toUpperCase();
-  const hasCorrectionId = ts.correction_id != null && String(ts.correction_id).trim() !== '';
-  const hasCorrectionKind = ts.correction_kind != null && String(ts.correction_kind).trim() !== '';
-
-  const isImportDerivedChild =
-    isWeekly &&
-    (
-      originUpper === 'IMPORT_CORRECTION' ||
-      originUpper === 'IMPORT_CANCELLATION' ||
-      hasCorrectionId ||
-      hasCorrectionKind
-    );
-
-  const isAdjustment = !!(
-    ts.is_adjustment === true ||
-    linkedContractWeek?.is_adjustment === true ||
-    linkedAdditionalSeq > 0 ||
-    !!trimStr(ts.parent_timesheet_id)
-  );
-
-  const effectiveManualAdjustment = !!(isWeekly && isAdjustment && !isImportDerivedChild);
-
-  if (effectiveManualAdjustment) {
-    const linkedContractWeekId = trimStr(linkedContractWeek?.id);
-    if (expectedDeleteKind !== 'WEEKLY_MANUAL_ADJUSTMENT_DELETE') {
-      return deleteConflict(
-        'Manual additional delete requires expected_delete_kind = WEEKLY_MANUAL_ADJUSTMENT_DELETE.',
-        { expected_delete_kind: expectedDeleteKind || null, required_delete_kind: 'WEEKLY_MANUAL_ADJUSTMENT_DELETE', current_timesheet_id: currentTimesheetId }
-      );
-    }
-
-    if (!linkedContractWeekId || !expectedContractWeekId || expectedContractWeekId !== linkedContractWeekId) {
-      return deleteConflict(
-        'Manual additional delete requires expected_contract_week_id to match the linked additional contract week.',
-        { expected_contract_week_id: expectedContractWeekId || null, linked_contract_week_id: linkedContractWeekId || null, current_timesheet_id: currentTimesheetId }
-      );
-    }
-
-    if (linkedContractWeek?.is_adjustment !== true || Number(linkedContractWeek?.additional_seq || 0) <= 0) {
-      return deleteConflict(
-        'Manual additional delete refused because the linked contract week is not an additional/manual adjustment row.',
-        { linked_contract_week: linkedContractWeek || null, current_timesheet_id: currentTimesheetId }
-      );
-    }
-  }
-
-  if (isImportDerivedChild) {
-    return withCORS(
-      env,
-      req,
-      badRequest(
-        'Cannot delete: this is an NHSP/HR import adjustment child timesheet. Delete must be performed via the parent timesheet (if eligible).'
-      )
-    );
-  }
-
-  const cleanKey = (k) => trimStr(k).replace(/^\/+/, '');
-
-  const collectTimesheetPermanentDeleteStorageKeys = async (timesheetIdsArg) => {
-    const ids = Array.isArray(timesheetIdsArg)
-      ? timesheetIdsArg.map(x => trimStr(x)).filter(Boolean)
-      : [];
-    if (!ids.length) return [];
-
-    const inList = ids.map(enc).join(',');
-    const keys = new Set();
-
-    const extractManifestKeys = (manifest) => {
-      const out = [];
-      const walk = (node) => {
-        if (!node) return;
-        if (Array.isArray(node)) {
-          for (const item of node) walk(item);
-          return;
-        }
-        if (typeof node !== 'object') return;
-
-        for (const [k, v] of Object.entries(node)) {
-          const keyName = String(k || '').trim().toLowerCase();
-          if (typeof v === 'string') {
-            const clean = cleanKey(v);
-            if (!clean) continue;
-            if (keyName === 'r2_key' || keyName === 'storage_key' || keyName === 'key' || keyName === 'file_key') {
-              out.push(clean);
-            }
-          } else if (v && typeof v === 'object') {
-            walk(v);
-          }
-        }
-      };
-      let parsed = manifest;
-      if (typeof parsed === 'string') {
-        try { parsed = JSON.parse(parsed); } catch { parsed = null; }
-      }
-      walk(parsed);
-      return out;
-    };
-
-    const { rows: tsRows } = await sbFetch(
+  const inferDeleteKind = async () => {
+    const row = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=in.(${inList})` +
-        `&select=timesheet_id,manual_pdf_r2_key,r2_nurse_key,r2_auth_key,qr_r2_key`
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=timesheet_id,sheet_scope,is_adjustment,parent_timesheet_id,adjustment_origin,correction_id,correction_kind` +
+        `&limit=1`
     );
-    for (const row of (Array.isArray(tsRows) ? tsRows : [])) {
-      for (const keyVal of [
-        row?.manual_pdf_r2_key,
-        row?.r2_nurse_key,
-        row?.r2_auth_key,
-        row?.qr_r2_key
-      ]) {
-        const clean = cleanKey(keyVal);
-        if (clean) keys.add(clean);
-      }
-    }
+    if (!row) throw new Error('TIMESHEET_NOT_FOUND');
+    if (upper(row.sheet_scope) !== 'WEEKLY') return 'STANDARD_DELETE';
 
-    const { rows: evRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-        `?timesheet_id=in.(${inList})` +
-        `&select=storage_key`
-    );
-    for (const row of (Array.isArray(evRows) ? evRows : [])) {
-      const clean = cleanKey(row?.storage_key);
-      if (clean) keys.add(clean);
-    }
-
-    const { rows: mqRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
-        `?timesheet_id=in.(${inList})` +
-        `&select=r2_key`
-    );
-    for (const row of (Array.isArray(mqRows) ? mqRows : [])) {
-      const clean = cleanKey(row?.r2_key);
-      if (clean) keys.add(clean);
-    }
-
-    const { rows: finRowsAll } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=in.(${inList})` +
-        `&select=expenses_evidence_r2_key,expenses_evidence_manifest,mileage_evidence_r2_key,mileage_evidence_manifest`
-    );
-    for (const row of (Array.isArray(finRowsAll) ? finRowsAll : [])) {
-      for (const keyVal of [
-        row?.expenses_evidence_r2_key,
-        row?.mileage_evidence_r2_key
-      ]) {
-        const clean = cleanKey(keyVal);
-        if (clean) keys.add(clean);
-      }
-      for (const manifestKey of extractManifestKeys(row?.expenses_evidence_manifest)) keys.add(manifestKey);
-      for (const manifestKey of extractManifestKeys(row?.mileage_evidence_manifest)) keys.add(manifestKey);
-    }
-
-    return Array.from(keys.values());
-  };
-
-  const deleteTimesheetPermanentStorageArtifacts = async (storageKeysArg) => {
-    const bucket = env.R2_BUCKET || env.R2;
-    const canDeleteR2 = !!(bucket && typeof bucket.delete === 'function');
-    const deletedKeys = [];
-    const failedKeys = [];
-
-    for (const rawKey of (Array.isArray(storageKeysArg) ? storageKeysArg : [])) {
-      const key = cleanKey(rawKey);
-      if (!key) continue;
-
-      if (!canDeleteR2) {
-        failedKeys.push(key);
-        continue;
-      }
-
-      try {
-        await bucket.delete(key);
-        deletedKeys.push(key);
-      } catch {
-        failedKeys.push(key);
-      }
-    }
-
-    return { deletedKeys, failedKeys };
-  };
-
-  const deleteStandardTimesheetDependentRows = async (targetTimesheetId) => {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(targetTimesheetId)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          timesheet_id: null,
-          status: 'OPEN',
-          updated_at: nowIso()
-        })
-      }
-    ).catch(() => {});
-
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?timesheet_id=eq.${enc(targetTimesheetId)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          timesheet_id: null,
-          updated_at: nowIso()
-        })
-      }
-    ).catch(() => {});
-
-    const delQueue = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?timesheet_id=eq.${enc(targetTimesheetId)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
-    );
-    if (!delQueue.ok) {
-      const txt = await delQueue.text().catch(() => '');
-      throw new Error(`Failed to delete queue provenance rows: ${txt}`);
-    }
-
-    const delEvidence = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=eq.${enc(targetTimesheetId)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
-    );
-    if (!delEvidence.ok) {
-      const txt = await delEvidence.text().catch(() => '');
-      throw new Error(`Failed to delete canonical evidence rows: ${txt}`);
-    }
-
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/ts_pdfs_outbox?timesheet_id=eq.${enc(targetTimesheetId)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
-    ).catch(() => {});
-
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?timesheet_id=eq.${enc(targetTimesheetId)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
-    ).catch(() => {});
-
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_validations?timesheet_id=eq.${enc(targetTimesheetId)}`,
-      {
-        method: 'DELETE',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
-      }
-    ).catch(() => {});
-
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(targetTimesheetId)}`,
-      {
-        method: 'DELETE',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
-      }
-    ).catch(() => {});
-
-    const del = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(targetTimesheetId)}`,
-      {
-        method: 'DELETE',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
-      }
-    );
-    if (!del.ok) {
-      const txt = await del.text().catch(() => '');
-      throw new Error(txt || 'Failed to delete timesheet');
-    }
-  };
-
-  const collectActiveTimesheetSnoozes = async (bookingIdArg, timesheetIdsArg) => {
-    const merged = new Map();
-    const baseSelect = 'id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,snooze_kind';
-    const seriesIds = Array.isArray(timesheetIdsArg)
-      ? timesheetIdsArg.map(x => trimStr(x)).filter(Boolean)
-      : [];
-
-    const collect = async (url) => {
-      try {
-        const { rows: fetchedRows } = await sbFetch(env, url);
-        for (const row of (Array.isArray(fetchedRows) ? fetchedRows : [])) {
-          const id = trimStr(row?.id);
-          if (!id) continue;
-          merged.set(id, row);
-        }
-      } catch {}
-    };
-
-    if (bookingIdArg) {
-      await collect(
-        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
-          `?booking_id=eq.${enc(String(bookingIdArg))}` +
-          `&source_ref=is.null` +
-          `&cleared_at_utc=is.null` +
-          `&select=${baseSelect}` +
-          `&limit=2000`
-      );
-    }
-
-    if (seriesIds.length) {
-      await collect(
-        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
-          `?timesheet_id=in.(${seriesIds.map(enc).join(',')})` +
-          `&source_ref=is.null` +
-          `&cleared_at_utc=is.null` +
-          `&select=${baseSelect}` +
-          `&limit=2000`
-      );
-    }
-
-    return Array.from(merged.values());
-  };
-
-  const clearCollectedSnoozes = async (snoozeRows, clearReason) => {
-    const clearedIds = [];
-    const failedIds = [];
-
-    for (const snoozeRow of (Array.isArray(snoozeRows) ? snoozeRows : [])) {
-      const snoozeId = trimStr(snoozeRow?.id);
-      if (!snoozeId) continue;
-
-      let cleared = false;
-
-      try {
-        await sbRpc(env, 'pay_snooze_clear', {
-          p_snooze_id: snoozeId,
-          p_actor_user_id: user.id
-        });
-        cleared = true;
-      } catch {}
-
-      if (!cleared) {
-        const now2 = nowIso();
-        try {
-          const patchRes = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({
-                cleared_at_utc: now2,
-                cleared_by_user_id: user.id,
-                updated_at_utc: now2,
-                updated_by_user_id: user.id
-              })
-            }
-          );
-
-          if (!patchRes.ok) {
-            const txt = await patchRes.text().catch(() => '');
-            throw new Error(txt || `Failed to clear snooze ${snoozeId}`);
-          }
-
-          try {
-            await writeAudit(
-              env,
-              user,
-              'SNOOZE_CLEARED',
-              {
-                snooze_id: snoozeId,
-                booking_id: bookingId || null,
-                timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
-                segment_id: trimStr(snoozeRow?.segment_id) || null,
-                segment_stable_key: trimStr(snoozeRow?.segment_stable_key) || null,
-                snooze_kind: trimStr(snoozeRow?.snooze_kind) || null,
-                clear_reason: clearReason || null
-              },
-              {
-                entity: 'pay_item_snoozes',
-                subject_id: snoozeId,
-                req,
-                reason: clearReason || null
-              }
-            );
-          } catch {}
-
-          cleared = true;
-        } catch {}
-      }
-
-      if (cleared) clearedIds.push(snoozeId);
-      else failedIds.push(snoozeId);
-    }
-
-    return { clearedIds, failedIds };
-  };
-
-  const normaliseDeleteRpcOutput = (value) => {
-    if (value == null) return null;
-    if (Array.isArray(value)) return value[0] ?? null;
-    if (typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'data')) return value.data;
-    return value;
-  };
-
-  const asIdArray = (value) => {
-    if (!Array.isArray(value)) return [];
-    return value.map((item) => trimStr(item)).filter(Boolean);
-  };
-
-  const sameIdSet = (left, right) => {
-    const normalise = (items) => [...new Set(asIdArray(items))].sort();
-    const a = normalise(left);
-    const b = normalise(right);
-    if (a.length !== b.length) return false;
-    return a.every((id, index) => id === b[index]);
-  };
-
-  const loadTimesheetRowsByIds = async (timesheetIdsArg) => {
-    const ids = Array.isArray(timesheetIdsArg)
-      ? [...new Set(timesheetIdsArg.map((id) => trimStr(id)).filter(Boolean))]
-      : [];
-    if (!ids.length) return [];
-
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=in.(${ids.map(enc).join(',')})` +
-        `&select=timesheet_id,booking_id,is_current,contract_id,week_ending_date,is_adjustment,parent_timesheet_id,adjustment_origin,correction_id,correction_kind`
-    );
-
-    return Array.isArray(rows) ? rows : [];
-  };
-
-  const loadContractWeekRowsByIds = async (contractWeekIdsArg) => {
-    const ids = Array.isArray(contractWeekIdsArg)
-      ? [...new Set(contractWeekIdsArg.map((id) => trimStr(id)).filter(Boolean))]
-      : [];
-    if (!ids.length) return [];
-
-    const { rows } = await sbFetch(
+    const contractWeek = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?id=in.(${ids.map(enc).join(',')})` +
-        `&select=id,timesheet_id,contract_id,week_ending_date,additional_seq,is_adjustment,status`
-    );
-
-    return Array.isArray(rows) ? rows : [];
-  };
-
-  const verifySourceBaseContractWeekPreserved = async (rpcOut) => {
-    if (!sourceBaseContractWeek?.id) return null;
-
-    const preservedSourceContractWeek = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?id=eq.${enc(sourceBaseContractWeek.id)}` +
-        `&select=id,timesheet_id,contract_id,week_ending_date,additional_seq,is_adjustment` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=id,is_adjustment,additional_seq` +
         `&limit=1`
     ).catch(() => null);
-
-    if (!preservedSourceContractWeek || String(preservedSourceContractWeek.id || '') !== String(sourceBaseContractWeek.id)) {
-      return badRequest('Manual adjustment delete could not verify preserved source contract_week after apply.', rpcOut || null);
-    }
-
-    if (preservedSourceContractWeek.is_adjustment === true || Number(preservedSourceContractWeek.additional_seq || 0) > 0) {
-      return badRequest('Manual adjustment delete preserve-check resolved an unexpected additional contract_week.', rpcOut || null);
-    }
-
-    if (sourceBaseContractWeek.timesheet_id && String(sourceBaseContractWeek.timesheet_id || '').trim()) {
-      if (String(preservedSourceContractWeek.timesheet_id || '').trim() !== String(sourceBaseContractWeek.timesheet_id || '').trim()) {
-        return badRequest('Manual adjustment delete changed the source contract_week timesheet anchor.', rpcOut || null);
-      }
-
-      const preservedSourceTimesheet = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(sourceBaseContractWeek.timesheet_id)}` +
-          `&select=timesheet_id,contract_id,week_ending_date` +
-          `&limit=1`
-      ).catch(() => null);
-
-      if (!preservedSourceTimesheet || String(preservedSourceTimesheet.timesheet_id || '').trim() !== String(sourceBaseContractWeek.timesheet_id || '').trim()) {
-        return badRequest('Manual adjustment delete could not verify preserved source timesheet after apply.', rpcOut || null);
-      }
-    }
-
-    return null;
+    const importDerived = ['IMPORT_CORRECTION', 'IMPORT_CANCELLATION'].includes(upper(row.adjustment_origin)) ||
+      !!trimText(row.correction_id) || !!trimText(row.correction_kind);
+    if (importDerived) return 'IMPORT_DERIVED_CHILD';
+    const manualAdjustment = row.is_adjustment === true || contractWeek?.is_adjustment === true ||
+      Number(contractWeek?.additional_seq || 0) > 0 || !!trimText(row.parent_timesheet_id);
+    return manualAdjustment ? 'WEEKLY_MANUAL_ADJUSTMENT_DELETE' : 'WEEKLY_CHAIN_DELETE';
   };
 
-  const weeklySeriesIds = bookingId
-    ? (await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?booking_id=eq.${enc(bookingId)}` +
-          `&select=timesheet_id`
-      )).rows?.map(r => r?.timesheet_id).filter(Boolean) || []
-    : [currentTimesheetId];
-
-  if (isWeekly && !effectiveManualAdjustment) {
+  let deleteKind = requestedKind;
+  if (!['STANDARD_DELETE', 'WEEKLY_CHAIN_DELETE', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE'].includes(deleteKind)) {
     try {
-      const previewRes = await sbRpc(env, 'timesheet_weekly_chain_delete_preview', {
-        p_timesheet_id: String(currentTimesheetId),
-        p_actor_user_id: user?.id || null
+      deleteKind = await inferDeleteKind();
+    } catch (error) {
+      return jsonResponse(409, {
+        ok: false,
+        decision: 'BLOCKED',
+        error_code: 'DELETE_KIND_UNRESOLVED',
+        message: String(error?.message || error || 'Unable to resolve the delete unit.')
       });
-      const previewOut = normaliseDeleteRpcOutput(previewRes);
-      if (!previewOut || previewOut.kind !== 'WEEKLY_CHAIN_DELETE_PARENT' || previewOut.eligible !== true) {
-        return withCORS(env, req, badRequest('Delete preview is not eligible for parent-chain delete.', previewOut || null));
-      }
+    }
+  }
+  if (deleteKind === 'IMPORT_DERIVED_CHILD') {
+    return jsonResponse(409, {
+      ok: false,
+      decision: 'BLOCKED',
+      error_code: 'IMPORT_DERIVED_CHILD',
+      message: 'This import-derived adjustment must be handled through its parent weekly chain.'
+    });
+  }
 
-      const targetTimesheetIds = asIdArray(previewOut.timesheet_ids);
-      const targetContractWeekIds = asIdArray(previewOut.contract_week_ids);
-      if (targetContractWeekIds.some((id) => linkedContractWeek?.id && id === String(linkedContractWeek.id) && (linkedContractWeek.is_adjustment === true || linkedAdditionalSeq > 0))) {
-        return withCORS(env, req, badRequest('Refusing parent-chain delete because the preview targets a manual additional contract week.'));
-      }
-
-      const storageKeys = await collectTimesheetPermanentDeleteStorageKeys(
-        targetTimesheetIds.length ? targetTimesheetIds : (weeklySeriesIds.length ? weeklySeriesIds : [currentTimesheetId])
-      );
-
-      const rpcRes = await sbRpc(env, 'timesheet_weekly_chain_delete_apply', {
-        p_timesheet_id: String(currentTimesheetId),
-        p_actor_user_id: user?.id || null
+  if (deleteKind !== 'STANDARD_DELETE') {
+    const expectedSetsPresent = expectedTargetTimesheetIds.length > 0 &&
+      Array.isArray(body.expected_contract_week_ids ?? body.expectedContractWeekIds) &&
+      !!expectedRowSignature;
+    const manualSetsPresent = deleteKind !== 'WEEKLY_MANUAL_ADJUSTMENT_DELETE' || (
+      Array.isArray(body.expected_preserved_source_timesheet_ids ?? body.expectedPreservedSourceTimesheetIds) &&
+      Array.isArray(body.expected_preserved_source_contract_week_ids ?? body.expectedPreservedSourceContractWeekIds)
+    );
+    if (!expectedSetsPresent || !manualSetsPresent) {
+      return jsonResponse(409, {
+        ok: false,
+        decision: 'BLOCKED',
+        error_code: 'EXPECTED_DELETE_PREVIEW_REQUIRED',
+        message: 'A fresh signed delete preview and its complete target set are required.'
       });
-
-      const rpcOut = normaliseDeleteRpcOutput(rpcRes);
-      const storageDeleteResult = await deleteTimesheetPermanentStorageArtifacts(storageKeys);
-
-      const snoozesToClear = await collectActiveTimesheetSnoozes(
-        bookingId || null,
-        targetTimesheetIds.length ? targetTimesheetIds : (weeklySeriesIds.length ? weeklySeriesIds : [currentTimesheetId])
-      );
-
-      const snoozeClearResult = await clearCollectedSnoozes(
-        snoozesToClear,
-        'TIMESHEET_DELETED_NOT_REQUIRED'
-      );
-
-      try {
-        await writeAudit(
-          env,
-          user,
-          'TIMESHEET_DELETED',
-          {
-            kind: 'WEEKLY_CHAIN_DELETE_PARENT',
-            timesheet_id: currentTimesheetId,
-            result: rpcOut,
-            deleted_storage_keys: storageDeleteResult.deletedKeys,
-            failed_storage_keys: storageDeleteResult.failedKeys,
-            cleared_snooze_ids: snoozeClearResult.clearedIds,
-            snooze_clear_failed_ids: snoozeClearResult.failedIds
-          },
-          { entity: 'timesheets', subject_id: currentTimesheetId, req }
-        );
-      } catch (e) {
-        console.warn('[TS][DELETE] audit failed', e?.message || e);
-      }
-
-      return withCORS(env, req, ok({
-        deleted: true,
-        kind: 'WEEKLY_CHAIN_DELETE_PARENT',
-        result: rpcOut || null,
-        timesheet_id: currentTimesheetId,
-        current_timesheet_id: currentTimesheetId,
-        requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-        was_stale: !!resolved.was_stale,
-        deleted_storage_keys: storageDeleteResult.deletedKeys,
-        failed_storage_keys: storageDeleteResult.failedKeys,
-        cleared_snooze_ids: snoozeClearResult.clearedIds,
-        snooze_clear_failed_ids: snoozeClearResult.failedIds
-      }));
-    } catch (e) {
-      const msg = e?.message ? String(e.message) : String(e || 'Delete failed');
-      const detail = e?.json || e?.body || null;
-      return withCORS(env, req, badRequest(`Delete failed: ${msg}`, detail));
     }
   }
 
-  if (isWeekly && effectiveManualAdjustment) {
-    try {
-      const previewRes = await sbRpc(env, 'timesheet_weekly_manual_adjustment_delete_preview', {
-        p_timesheet_id: String(currentTimesheetId),
-        p_actor_user_id: user?.id || null
-      });
-      const previewOut = normaliseDeleteRpcOutput(previewRes);
-      if (!previewOut || previewOut.kind !== 'WEEKLY_MANUAL_ADJUSTMENT_DELETE' || previewOut.eligible !== true) {
-        return deleteConflict('Delete preview is not eligible for manual adjustment delete.', previewOut || null);
-      }
-
-      if (expectedDeleteKind !== 'WEEKLY_MANUAL_ADJUSTMENT_DELETE') {
-        return deleteConflict('Delete kind changed before apply. Refresh delete preview and try again.', { expected_delete_kind: expectedDeleteKind || null, preview_kind: previewOut.kind || null });
-      }
-
-      const targetTimesheetIds = asIdArray(previewOut.timesheet_ids);
-      const targetContractWeekIds = asIdArray(previewOut.contract_week_ids);
-      const preservedSourceTimesheetIdsFromPreview = asIdArray(previewOut.preserved_source_timesheet_ids);
-      const preservedSourceContractWeekIdsFromPreview = asIdArray(previewOut.preserved_source_contract_week_ids);
-      const linkedContractWeekId = trimStr(linkedContractWeek?.id);
-
-      if (targetTimesheetIds.length === 0 || !targetTimesheetIds.includes(currentTimesheetId)) {
-        return deleteConflict('Refusing manual adjustment delete because preview did not target the current additional timesheet.', { ...previewOut, current_timesheet_id: currentTimesheetId });
-      }
-      if (preservedSourceTimesheetIdsFromPreview.some((id) => targetTimesheetIds.includes(id))) {
-        return deleteConflict('Refusing manual adjustment delete because preview targets a preserved source timesheet.', previewOut || null);
-      }
-      if (sourceBaseContractWeek?.timesheet_id && targetTimesheetIds.includes(String(sourceBaseContractWeek.timesheet_id))) {
-        return deleteConflict('Refusing manual adjustment delete because preview targets the source/base timesheet.', previewOut || null);
-      }
-
-      const targetTimesheetRows = await loadTimesheetRowsByIds(targetTimesheetIds);
-      const loadedTargetTimesheetIds = new Set(targetTimesheetRows.map((row) => String(row?.timesheet_id || '').trim()).filter(Boolean));
-      const missingTargetTimesheetIds = targetTimesheetIds.filter((id) => !loadedTargetTimesheetIds.has(String(id)));
-      if (missingTargetTimesheetIds.length) {
-        return deleteConflict('Refusing manual adjustment delete because preview includes missing timesheet_ids.', { ...previewOut, missing_timesheet_ids: missingTargetTimesheetIds });
-      }
-
-      const outsideAdditionalBookingTimesheets = targetTimesheetRows.filter((row) => trimStr(row?.booking_id) !== bookingId);
-      if (outsideAdditionalBookingTimesheets.length) {
-        return deleteConflict(
-          'Refusing manual adjustment delete because preview targets a timesheet outside the additional booking/version set.',
-          {
-            ...previewOut,
-            expected_booking_id: bookingId || null,
-            outside_timesheet_ids: outsideAdditionalBookingTimesheets.map((row) => String(row?.timesheet_id || '')).filter(Boolean)
-          }
-        );
-      }
-
-      if (targetContractWeekIds.length === 0) {
-        return deleteConflict('Refusing manual adjustment delete because preview returned no contract_week target.', previewOut || null);
-      }
-      if (!linkedContractWeekId || !targetContractWeekIds.includes(linkedContractWeekId) || expectedContractWeekId !== linkedContractWeekId) {
-        return deleteConflict('Refusing manual adjustment delete because preview does not target the expected linked additional contract week.', { ...previewOut, expected_contract_week_id: expectedContractWeekId || null, linked_contract_week_id: linkedContractWeekId || null });
-      }
-      if (targetContractWeekIds.some((id) => id && id !== linkedContractWeekId)) {
-        return deleteConflict('Refusing manual adjustment delete because preview targets a non-additional/source contract week.', previewOut || null);
-      }
-      if (sourceBaseContractWeek?.id && targetContractWeekIds.includes(String(sourceBaseContractWeek.id))) {
-        return deleteConflict('Refusing manual adjustment delete because preview targets the source/base contract_week.', previewOut || null);
-      }
-      if (preservedSourceContractWeekIdsFromPreview.some((id) => targetContractWeekIds.includes(id))) {
-        return deleteConflict('Refusing manual adjustment delete because preview targets a preserved source contract_week.', previewOut || null);
-      }
-
-      const targetContractWeekRows = await loadContractWeekRowsByIds(targetContractWeekIds);
-      const loadedTargetContractWeekIds = new Set(targetContractWeekRows.map((row) => String(row?.id || '').trim()).filter(Boolean));
-      const missingTargetContractWeekIds = targetContractWeekIds.filter((id) => !loadedTargetContractWeekIds.has(String(id)));
-      if (missingTargetContractWeekIds.length) {
-        return deleteConflict('Refusing manual adjustment delete because preview includes missing contract_week_ids.', { ...previewOut, missing_contract_week_ids: missingTargetContractWeekIds });
-      }
-
-      const unsafeTargetContractWeeks = targetContractWeekRows.filter((row) => !(row?.is_adjustment === true && Number(row?.additional_seq || 0) > 0));
-      if (unsafeTargetContractWeeks.length) {
-        return deleteConflict(
-          'Refusing manual adjustment delete because preview targets a source/base or non-additional contract_week.',
-          {
-            ...previewOut,
-            unsafe_contract_week_ids: unsafeTargetContractWeeks.map((row) => String(row?.id || '')).filter(Boolean)
-          }
-        );
-      }
-
-      const storageKeys = await collectTimesheetPermanentDeleteStorageKeys(targetTimesheetIds);
-
-      const rpcRes = await sbRpc(env, 'timesheet_weekly_manual_adjustment_delete_apply', {
-        p_timesheet_id: String(currentTimesheetId),
-        p_actor_user_id: user?.id || null
-      });
-
-      const rpcOut = normaliseDeleteRpcOutput(rpcRes);
-      if (!rpcOut || rpcOut.kind !== 'WEEKLY_MANUAL_ADJUSTMENT_DELETE') {
-        return deleteConflict('Manual adjustment delete apply returned an unexpected result kind.', rpcOut || null);
-      }
-
-      const deletedTimesheetIds = asIdArray(rpcOut?.deleted_timesheet_ids);
-      const deletedContractWeekIds = asIdArray(rpcOut?.deleted_contract_week_ids);
-      const preservedSourceTimesheetIds = asIdArray(rpcOut?.preserved_source_timesheet_ids);
-      const preservedSourceContractWeekIds = asIdArray(rpcOut?.preserved_source_contract_week_ids);
-
-      if (!sameIdSet(deletedTimesheetIds, targetTimesheetIds)) {
-        return deleteConflict(
-          'Manual adjustment delete returned timesheet_ids that do not exactly match the verified preview target set.',
-          { result: rpcOut || null, expected_deleted_timesheet_ids: targetTimesheetIds, actual_deleted_timesheet_ids: deletedTimesheetIds }
-        );
-      }
-      if (deletedTimesheetIds.some((id) => preservedSourceTimesheetIds.includes(id))) {
-        return deleteConflict('Manual adjustment delete returned a preserved source timesheet as deleted.', rpcOut || null);
-      }
-      if (sourceBaseContractWeek?.timesheet_id && deletedTimesheetIds.includes(String(sourceBaseContractWeek.timesheet_id))) {
-        return deleteConflict('Manual adjustment delete deleted the source/base timesheet.', rpcOut || null);
-      }
-      if (!sameIdSet(deletedContractWeekIds, targetContractWeekIds)) {
-        return deleteConflict(
-          'Manual adjustment delete returned contract_week_ids that do not exactly match the verified preview target set.',
-          { result: rpcOut || null, expected_deleted_contract_week_ids: targetContractWeekIds, actual_deleted_contract_week_ids: deletedContractWeekIds }
-        );
-      }
-      if (deletedContractWeekIds.some((id) => preservedSourceContractWeekIds.includes(id))) {
-        return deleteConflict('Manual adjustment delete returned a preserved source contract_week as deleted.', rpcOut || null);
-      }
-      if (sourceBaseContractWeek?.id && deletedContractWeekIds.includes(String(sourceBaseContractWeek.id))) {
-        return deleteConflict('Manual adjustment delete deleted the source/base contract_week.', rpcOut || null);
-      }
-
-      const preservedSourceContractWeekIdsForCheck = preservedSourceContractWeekIds.length ? preservedSourceContractWeekIds : preservedSourceContractWeekIdsFromPreview;
-      for (const sourceContractWeekId of preservedSourceContractWeekIdsForCheck) {
-        const preservedSourceContractWeek = await sbGetOne(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-            `?id=eq.${enc(sourceContractWeekId)}` +
-            `&select=id,timesheet_id,contract_id,week_ending_date,additional_seq,is_adjustment` +
-            `&limit=1`
-        ).catch(() => null);
-        if (!preservedSourceContractWeek || String(preservedSourceContractWeek.id || '') !== String(sourceContractWeekId)) {
-          return deleteConflict('Manual adjustment delete could not verify preserved source contract_week after apply.', rpcOut || null);
-        }
-        if (preservedSourceContractWeek.is_adjustment === true || Number(preservedSourceContractWeek.additional_seq || 0) > 0) {
-          return deleteConflict('Manual adjustment delete preserve-check resolved an unexpected additional contract_week.', rpcOut || null);
-        }
-      }
-
-      const sourcePreservationError = await verifySourceBaseContractWeekPreserved(rpcOut);
-      if (sourcePreservationError) return withCORS(env, req, sourcePreservationError);
-
-      const storageDeleteResult = await deleteTimesheetPermanentStorageArtifacts(storageKeys);
-
-      const manualSnoozesToClear = await collectActiveTimesheetSnoozes(
-        null,
-        targetTimesheetIds
-      );
-
-      const snoozeClearResult = await clearCollectedSnoozes(
-        manualSnoozesToClear,
-        'TIMESHEET_DELETED_NOT_REQUIRED'
-      );
-
-      try {
-        await writeAudit(
-          env,
-          user,
-          'TIMESHEET_DELETED',
-          {
-            kind: 'WEEKLY_MANUAL_ADJUSTMENT_DELETE',
-            timesheet_id: currentTimesheetId,
-            result: rpcOut,
-            deleted_storage_keys: storageDeleteResult.deletedKeys,
-            failed_storage_keys: storageDeleteResult.failedKeys,
-            cleared_snooze_ids: snoozeClearResult.clearedIds,
-            snooze_clear_failed_ids: snoozeClearResult.failedIds
-          },
-          { entity: 'timesheets', subject_id: currentTimesheetId, req }
-        );
-      } catch (e) {
-        console.warn('[TS][DELETE] audit failed', e?.message || e);
-      }
-
-      return withCORS(env, req, ok({
-        deleted: true,
-        kind: 'WEEKLY_MANUAL_ADJUSTMENT_DELETE',
-        expected_delete_kind: 'WEEKLY_MANUAL_ADJUSTMENT_DELETE',
-        expected_contract_week_id: expectedContractWeekId,
-        result: rpcOut || null,
-        timesheet_id: currentTimesheetId,
-        current_timesheet_id: currentTimesheetId,
-        requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-        was_stale: !!resolved.was_stale,
-        deleted_timesheet_ids: deletedTimesheetIds,
-        deleted_contract_week_ids: deletedContractWeekIds,
-        preserved_source_timesheet_ids: preservedSourceTimesheetIds,
-        preserved_source_contract_week_ids: preservedSourceContractWeekIds,
-        deleted_storage_keys: storageDeleteResult.deletedKeys,
-        failed_storage_keys: storageDeleteResult.failedKeys,
-        cleared_snooze_ids: snoozeClearResult.clearedIds,
-        snooze_clear_failed_ids: snoozeClearResult.failedIds
-      }));
-    } catch (e) {
-      const msg = e?.message ? String(e.message) : String(e || 'Delete failed');
-      const detail = e?.json || e?.body || null;
-      return withCORS(env, req, badRequest(`Delete failed: ${msg}`, detail));
-    }
+  const operationId = makeOperationId();
+  let functionName;
+  let rpcArgs;
+  if (deleteKind === 'WEEKLY_CHAIN_DELETE') {
+    functionName = 'timesheet_weekly_chain_delete_apply';
+    rpcArgs = {
+      p_timesheet_id: currentTimesheetId,
+      p_actor_user_id: String(user.id),
+      p_expected_timesheet_ids: expectedTargetTimesheetIds,
+      p_expected_contract_week_ids: expectedTargetContractWeekIds,
+      p_expected_nhsp_shift_ids: expectedNhspShiftIds,
+      p_expected_row_signature: expectedRowSignature
+    };
+  } else if (deleteKind === 'WEEKLY_MANUAL_ADJUSTMENT_DELETE') {
+    functionName = 'timesheet_weekly_manual_adjustment_delete_apply';
+    rpcArgs = {
+      p_timesheet_id: currentTimesheetId,
+      p_actor_user_id: String(user.id),
+      p_expected_timesheet_ids: expectedTargetTimesheetIds,
+      p_expected_contract_week_ids: expectedTargetContractWeekIds,
+      p_expected_preserved_source_timesheet_ids: expectedPreservedSourceTimesheetIds,
+      p_expected_preserved_source_contract_week_ids: expectedPreservedSourceContractWeekIds,
+      p_expected_row_signature: expectedRowSignature
+    };
+  } else {
+    functionName = 'timesheet_standard_delete_apply_v1';
+    rpcArgs = {
+      p_timesheet_id: currentTimesheetId,
+      p_actor_user_id: String(user.id),
+      p_expected_timesheet_id: expectedTimesheetId,
+      p_expected_row_signature: expectedRowSignature
+    };
   }
 
-  const { rows: tsRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&select=timesheet_id&limit=1`
-  );
-  const versions = tsRows || [];
-  if (!versions.length) return withCORS(env, req, notFound('Timesheet not found'));
-
-  const storageKeys = await collectTimesheetPermanentDeleteStorageKeys([currentTimesheetId]);
-  const storageDeleteResult = await deleteTimesheetPermanentStorageArtifacts(storageKeys);
-
+  let applyResult;
   try {
-    await deleteStandardTimesheetDependentRows(currentTimesheetId);
-  } catch (e) {
-    return withCORS(env, req, serverError(e?.message || String(e)));
+    const raw = await sbRpc(env, functionName, rpcArgs, { timeoutMs: 45000 });
+    applyResult = normalizeRpc(raw, functionName);
+  } catch (error) {
+    const message = String(error?.message || error || 'Delete RPC transport failed');
+    const timeoutLike = /timeout|timed out|abort|deadline/i.test(message);
+    try {
+      console.error('[TS][DELETE][OUTCOME_UNKNOWN]', {
+        delete_operation_id: operationId,
+        rpc: functionName,
+        delete_kind: deleteKind,
+        requested_timesheet_id: trimText(timesheetId),
+        current_timesheet_id: currentTimesheetId,
+        timeout_like: timeoutLike,
+        error: message
+      });
+    } catch {}
+    return jsonResponse(timeoutLike ? 504 : 502, {
+      ok: false,
+      error_code: 'DELETE_OUTCOME_UNKNOWN',
+      outcome_unknown: true,
+      delete_operation_id: operationId,
+      delete_kind: deleteKind,
+      current_timesheet_id: currentTimesheetId,
+      message: 'The database outcome could not be confirmed. No storage cleanup was attempted. Refresh the authoritative timesheet state before retrying.'
+    });
   }
 
-  const snoozesToClear = await collectActiveTimesheetSnoozes(
-    bookingId || null,
-    weeklySeriesIds.length ? weeklySeriesIds : [currentTimesheetId]
-  );
+  if (!applyResult || typeof applyResult !== 'object' || Array.isArray(applyResult)) {
+    return jsonResponse(502, {
+      ok: false,
+      error_code: 'DELETE_RPC_INVALID_RESPONSE',
+      outcome_unknown: true,
+      delete_operation_id: operationId,
+      delete_kind: deleteKind,
+      message: 'The delete RPC returned an invalid response. No storage cleanup was attempted.'
+    });
+  }
 
-  const snoozeClearResult = await clearCollectedSnoozes(
-    snoozesToClear,
-    'TIMESHEET_DELETED_NOT_REQUIRED'
-  );
+  const decision = upper(applyResult.decision || (applyResult.deleted === true ? 'PERMANENT_DELETE' : 'BLOCKED'));
+  const databaseDeleted = decision === 'PERMANENT_DELETE' &&
+    (applyResult.deleted === true || applyResult.apply_performed === true || Number(applyResult.deleted_timesheets || 0) > 0);
+
+  if (!databaseDeleted) {
+    const status = decision === 'ARCHIVE_REQUIRED' ? 409 : 409;
+    return jsonResponse(status, {
+      ...applyResult,
+      ok: false,
+      database_deleted: false,
+      database_status: 'NOT_DELETED',
+      storage_cleanup_attempted: false,
+      storage_cleanup_status: 'NOT_APPLICABLE',
+      delete_operation_id: operationId,
+      delete_kind: deleteKind,
+      decision,
+      error_code: decision === 'ARCHIVE_REQUIRED'
+        ? 'ARCHIVE_REQUIRED'
+        : (applyResult.error_code || 'DELETE_BLOCKED')
+    });
+  }
+
+  // The awaited RPC response is the commit boundary. Only its server-returned keys are accepted.
+  const cleanup = await deleteCommittedTimesheetR2Keys(env, req, user, {
+    ...applyResult,
+    decision: 'PERMANENT_DELETE',
+    deleted: true,
+    delete_operation_id: operationId
+  }, {
+    deleteOperationId: operationId,
+    requestedTimesheetId: currentTimesheetId
+  });
 
   try {
     await writeAudit(
@@ -95954,33 +96461,218 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       user,
       'TIMESHEET_DELETED',
       {
-        kind: 'STANDARD_DELETE',
-        timesheet_id: currentTimesheetId,
-        deleted_storage_keys: storageDeleteResult.deletedKeys,
-        failed_storage_keys: storageDeleteResult.failedKeys,
-        cleared_snooze_ids: snoozeClearResult.clearedIds,
-        snooze_clear_failed_ids: snoozeClearResult.failedIds
+        delete_operation_id: operationId,
+        delete_kind: deleteKind,
+        database_result: applyResult,
+        storage_cleanup: cleanup
       },
       { entity: 'timesheets', subject_id: currentTimesheetId, req }
     );
-  } catch (e) {
-    console.warn('[TS][DELETE] audit failed', e?.message || e);
+  } catch (auditError) {
+    try { console.warn('[TS][DELETE][AUDIT_FAILED]', auditError?.message || auditError); } catch {}
   }
 
   return withCORS(env, req, ok({
+    ...applyResult,
+    ok: true,
     deleted: true,
-    kind: 'STANDARD_DELETE',
-    timesheet_id: currentTimesheetId,
+    decision: 'PERMANENT_DELETE',
+    delete_operation_id: operationId,
+    delete_kind: deleteKind,
+    requested_timesheet_id: trimText(timesheetId),
     current_timesheet_id: currentTimesheetId,
-    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
     was_stale: !!resolved.was_stale,
-    deleted_storage_keys: storageDeleteResult.deletedKeys,
-    failed_storage_keys: storageDeleteResult.failedKeys,
-    cleared_snooze_ids: snoozeClearResult.clearedIds,
-    snooze_clear_failed_ids: snoozeClearResult.failedIds
+    database_deleted: true,
+    database_status: 'COMMITTED',
+    storage_cleanup_attempted: cleanup.attempted === true,
+    storage_cleanup_status: cleanup.cleanup_status,
+    storage_cleanup_pending: cleanup.cleanup_pending === true,
+    deleted_storage_keys: cleanup.deleted_keys || [],
+    failed_storage_keys: cleanup.failed_keys || [],
+    r2_cleanup_retry_recorded: cleanup.retry_recorded === true
   }));
 }
+/**
+ * GENUINELY NEW IMPLEMENTATION UNIT.
+ * Deletes only R2 keys returned by a successful, committed permanent-delete RPC.
+ * It never discovers keys from request JSON, browser state, manifests or pre-delete reads.
+ */
+async function deleteCommittedTimesheetR2Keys(env, req, user, applyResult, options = {}) {
+  const source = (applyResult && typeof applyResult === 'object' && !Array.isArray(applyResult)) ? applyResult : {};
+  const decision = String(source.decision || '').trim().toUpperCase();
+  const databaseDeleted = source.deleted === true || source.apply_performed === true || Number(source.deleted_timesheets || 0) > 0;
+  const operationId = String(
+    options.deleteOperationId ||
+    options.delete_operation_id ||
+    source.delete_operation_id ||
+    source.operation_id ||
+    ''
+  ).trim();
+  const requestedTimesheetId = String(
+    options.requestedTimesheetId ||
+    options.requested_timesheet_id ||
+    source.requested_timesheet_id ||
+    source.current_timesheet_id ||
+    ''
+  ).trim() || null;
+  const deletedTimesheetIds = Array.from(new Set(
+    (Array.isArray(source.deleted_timesheet_ids) ? source.deleted_timesheet_ids : [])
+      .map((value) => String(value == null ? '' : value).trim())
+      .filter(Boolean)
+  )).sort();
 
+  if (decision !== 'PERMANENT_DELETE' || !databaseDeleted) {
+    return {
+      ok: true,
+      attempted: false,
+      cleanup_status: 'NOT_APPLICABLE',
+      cleanup_pending: false,
+      deleted_keys: [],
+      failed_keys: [],
+      reason: 'DATABASE_OUTCOME_IS_NOT_COMMITTED_PERMANENT_DELETE'
+    };
+  }
+
+  const rawKeys = Array.isArray(source.r2_cleanup_keys) ? source.r2_cleanup_keys : [];
+  const keys = Array.from(new Set(rawKeys
+    .map((value) => String(value == null ? '' : value).trim().replace(/^\/+/, ''))
+    .filter((value) => value && value.length <= 1024 && !value.includes('\0'))
+  )).sort();
+
+  if (!keys.length) {
+    return {
+      ok: true,
+      attempted: false,
+      cleanup_status: 'NOT_REQUIRED',
+      cleanup_pending: false,
+      deleted_keys: [],
+      failed_keys: []
+    };
+  }
+
+  const bucket = env.R2_BUCKET || env.R2;
+  const deletedKeys = [];
+  const failures = [];
+  const immediateKeys = keys.slice(0, 256);
+
+  if (!bucket || typeof bucket.delete !== 'function') {
+    for (const r2Key of keys) {
+      failures.push({
+        r2_key: r2Key,
+        error: 'R2_DELETE_BINDING_UNAVAILABLE',
+        attempt_count: 1
+      });
+    }
+  } else {
+    // Excess keys are not discarded: they enter the durable queue without making
+    // the synchronous post-commit pass unbounded.
+    for (const r2Key of keys.slice(256)) {
+      failures.push({
+        r2_key: r2Key,
+        error: 'R2_CLEANUP_DEFERRED_BY_BOUNDED_KEY_LIMIT',
+        attempt_count: 1
+      });
+    }
+
+    // Cloudflare R2 delete is idempotent for an already-missing key.
+    const concurrency = Math.max(1, Math.min(8, Number(options.concurrency || 4) || 4));
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(concurrency, immediateKeys.length) }, async () => {
+      while (cursor < immediateKeys.length) {
+        const index = cursor++;
+        const r2Key = immediateKeys[index];
+        try {
+          await bucket.delete(r2Key);
+          deletedKeys.push(r2Key);
+        } catch (error) {
+          failures.push({
+            r2_key: r2Key,
+            error: String(error?.message || error || 'R2_DELETE_FAILED').slice(0, 2000),
+            attempt_count: 1
+          });
+        }
+      }
+    });
+    await Promise.all(workers);
+  }
+
+  deletedKeys.sort();
+  const failureByKey = new Map();
+  for (const failure of failures) {
+    const key = String(failure?.r2_key || '').trim();
+    if (key) failureByKey.set(key, { ...failure, r2_key: key });
+  }
+  const distinctFailures = Array.from(failureByKey.values())
+    .sort((a, b) => String(a.r2_key).localeCompare(String(b.r2_key)));
+
+  let retryRecorded = false;
+  let retryRecordError = null;
+  let retryOperationId = operationId;
+  if (distinctFailures.length) {
+    try {
+      retryOperationId = operationId || `timesheet-delete:${requestedTimesheetId || 'unknown'}:${crypto.randomUUID()}`;
+      let recordedChunks = 0;
+      for (let offset = 0; offset < distinctFailures.length; offset += 256) {
+        const recordResult = await sbRpc(env, 'timesheet_r2_cleanup_record_v1', {
+          p_delete_operation_id: retryOperationId,
+          p_requested_timesheet_id: requestedTimesheetId,
+          p_deleted_timesheet_ids: deletedTimesheetIds,
+          p_failures: distinctFailures.slice(offset, offset + 256),
+          p_claim_token: null
+        });
+        if (!recordResult || recordResult.ok === false) {
+          throw new Error('R2_CLEANUP_RETRY_RECORD_INVALID_RESPONSE');
+        }
+        recordedChunks += 1;
+      }
+      retryRecorded = recordedChunks > 0;
+    } catch (error) {
+      retryRecordError = String(error?.message || error || 'R2_CLEANUP_RETRY_RECORD_FAILED');
+      try {
+        console.error('[TS][R2_CLEANUP][RETRY_RECORD_FAILED]', {
+          delete_operation_id: retryOperationId || null,
+          requested_timesheet_id: requestedTimesheetId,
+          failed_keys: distinctFailures.map((item) => item.r2_key),
+          error: retryRecordError
+        });
+      } catch {}
+    }
+
+    try {
+      if (typeof writeAudit === 'function' && user) {
+        await writeAudit(
+          env,
+          user,
+          'TIMESHEET_R2_CLEANUP_PENDING',
+          {
+            delete_operation_id: retryOperationId || null,
+            requested_timesheet_id: requestedTimesheetId,
+            deleted_timesheet_ids: deletedTimesheetIds,
+            failed_r2_cleanup: distinctFailures,
+            retry_recorded: retryRecorded,
+            retry_record_error: retryRecordError
+          },
+          { entity: 'timesheets', subject_id: requestedTimesheetId, req }
+        );
+      }
+    } catch (auditError) {
+      try { console.warn('[TS][R2_CLEANUP][AUDIT_FAILED]', auditError?.message || auditError); } catch {}
+    }
+  }
+
+  return {
+    ok: distinctFailures.length === 0,
+    attempted: true,
+    cleanup_status: distinctFailures.length ? 'PENDING' : 'COMPLETE',
+    cleanup_pending: distinctFailures.length > 0,
+    deleted_keys: deletedKeys,
+    failed_keys: distinctFailures,
+    retry_keys: distinctFailures.map((item) => item.r2_key),
+    retry_recorded: retryRecorded,
+    retry_record_error: retryRecordError,
+    retry_operation_id: retryOperationId || null
+  };
+}
 
 
 // ----------------------------------------------------------------------------
@@ -176107,6 +176799,165 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
   throw makeJobError('UNSUPPORTED_WORKBENCH_JOB_TYPE', `Unsupported Banking Pay workbench job type: ${rawJobType}${jobType && jobType !== rawJobType ? ` (${jobType})` : ''}`, Object.assign({}, baseResult, { retry_after_seconds: 300 }));
 }
 
+/** GENUINELY NEW IMPLEMENTATION UNIT. */
+async function handleTimesheetArchiveState(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  const normalizeRpc = (value, functionName) => {
+    let out = value;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, 'data')) out = out.data;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, functionName)) out = out[functionName];
+    return out;
+  };
+
+  try {
+    const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+    if (!resolved || !resolved.current_timesheet_id) return withCORS(env, req, notFound('Timesheet not found'));
+    const currentTimesheetId = String(resolved.current_timesheet_id);
+    const raw = await sbRpc(env, 'timesheet_archive_state_v1', { p_timesheet_id: currentTimesheetId }, { timeoutMs: 15000 });
+    const state = normalizeRpc(raw, 'timesheet_archive_state_v1');
+    if (!state || typeof state !== 'object' || Array.isArray(state)) {
+      return withCORS(env, req, serverError('Archive state RPC returned an invalid response.'));
+    }
+    return withCORS(env, req, ok({
+      ...state,
+      requested_timesheet_id: String(timesheetId),
+      current_timesheet_id: String(state.current_timesheet_id || currentTimesheetId),
+      was_stale: !!(state.was_stale || resolved.was_stale)
+    }));
+  } catch (error) {
+    return withCORS(env, req, serverError(String(error?.message || error || 'Failed to load Archive state.')));
+  }
+}
+
+/** GENUINELY NEW IMPLEMENTATION UNIT. */
+async function handleTimesheetArchiveTransition(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const upper = (value) => trimText(value).toUpperCase();
+  const normalizeRpc = (value, functionName) => {
+    let out = value;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, 'data')) out = out.data;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, functionName)) out = out[functionName];
+    return out;
+  };
+  const respond = (status, payload) => withCORS(env, req, new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  }));
+
+  let body = {};
+  try {
+    const parsed = await parseJSONBody(req);
+    body = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  } catch {
+    body = {};
+  }
+
+  const action = upper(body.action);
+  if (!['ARCHIVE', 'UNARCHIVE'].includes(action)) {
+    return withCORS(env, req, badRequest('action must be ARCHIVE or UNARCHIVE'));
+  }
+  const removalKindRaw = upper(body.removal_kind ?? body.removalKind ?? body.delete_kind ?? body.deleteKind ?? 'STANDARD_DELETE');
+  const removalKind = removalKindRaw === 'WEEKLY_CHAIN_DELETE'
+    ? 'WEEKLY_CHAIN_DELETE_PARENT'
+    : removalKindRaw;
+  if (!['STANDARD_DELETE', 'WEEKLY_CHAIN_DELETE_PARENT', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE'].includes(removalKind)) {
+    return withCORS(env, req, badRequest('Invalid removal_kind'));
+  }
+
+  const expectedTimesheetId = trimText(body.expected_timesheet_id ?? body.expectedTimesheetId ?? body.current_timesheet_id ?? body.currentTimesheetId) || null;
+  const expectedRowSignature = trimText(body.expected_row_signature ?? body.expectedRowSignature) || null;
+
+  let currentTimesheetId;
+  try {
+    const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+    if (!resolved || !resolved.current_timesheet_id) return withCORS(env, req, notFound('Timesheet not found'));
+    currentTimesheetId = String(resolved.current_timesheet_id);
+    if (expectedTimesheetId && expectedTimesheetId !== currentTimesheetId) {
+      return respond(409, {
+        ok: false,
+        decision: 'BLOCKED',
+        error_code: 'TIMESHEET_MOVED',
+        requested_timesheet_id: String(timesheetId),
+        expected_timesheet_id: expectedTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        message: 'The timesheet changed. Refresh its current state before applying Archive or Unarchive.'
+      });
+    }
+
+    const raw = await sbRpc(env, 'timesheet_archive_transition_v1', {
+      p_timesheet_id: currentTimesheetId,
+      p_action: action,
+      p_removal_kind: removalKind,
+      // Actor is derived only from the authenticated Worker session.
+      p_actor_user_id: String(user.id),
+      p_expected_timesheet_id: expectedTimesheetId || currentTimesheetId,
+      p_expected_row_signature: expectedRowSignature,
+      p_now_utc: new Date().toISOString()
+    }, { timeoutMs: 45000 });
+    const result = normalizeRpc(raw, 'timesheet_archive_transition_v1');
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+      return respond(502, {
+        ok: false,
+        outcome_unknown: true,
+        error_code: 'ARCHIVE_TRANSITION_INVALID_RESPONSE',
+        message: 'The Archive transition returned an invalid response. Refresh the authoritative state before retrying.'
+      });
+    }
+
+    const resultDecision = upper(result.decision);
+    const resultOk = result.ok !== false && !['BLOCKED', 'ARCHIVE_REQUIRED'].includes(resultDecision);
+    if (!resultOk) {
+      return respond(409, {
+        ...result,
+        ok: false,
+        action,
+        removal_kind: removalKind,
+        requested_timesheet_id: String(timesheetId),
+        current_timesheet_id: String(result.current_timesheet_id || currentTimesheetId),
+        error_code: result.error_code || (resultDecision === 'ARCHIVE_REQUIRED' ? 'ARCHIVE_REQUIRED' : 'ARCHIVE_TRANSITION_BLOCKED')
+      });
+    }
+
+    // Archive/Unarchive is metadata-only (except canonical active-Advance clear) and never enters R2 cleanup.
+    return withCORS(env, req, ok({
+      ...result,
+      ok: true,
+      action,
+      removal_kind: removalKind,
+      requested_timesheet_id: String(timesheetId),
+      current_timesheet_id: String(result.current_timesheet_id || currentTimesheetId),
+      storage_cleanup_attempted: false
+    }));
+  } catch (error) {
+    const message = String(error?.message || error || 'Archive transition failed');
+    const timeoutLike = /timeout|timed out|abort|deadline|lock timeout|55P03|40P01/i.test(message);
+    return respond(timeoutLike ? 409 : 500, {
+      ok: false,
+      outcome_unknown: timeoutLike,
+      error_code: timeoutLike ? 'ARCHIVE_TRANSITION_RECONCILIATION_REQUIRED' : 'ARCHIVE_TRANSITION_FAILED',
+      requested_timesheet_id: String(timesheetId),
+      current_timesheet_id: currentTimesheetId || null,
+      message: timeoutLike
+        ? 'The transition outcome could not be confirmed. Refresh the authoritative Archive state before retrying.'
+        : message
+    });
+  }
+}
+
+
+
+
 
 
 async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {}, options = {}) {
@@ -180371,12 +181222,18 @@ async function handleDocumentTemplatesDelete(env, req, templateId) {
 }
 
 
+
 async function handleTimesheetDeletePreview(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
   const enc = encodeURIComponent;
+  const urlObj = new URL(req.url);
+  const expectedTimesheetId = cleanIdLater(urlObj.searchParams.get('expected_timesheet_id') || urlObj.searchParams.get('expectedTimesheetId') || '');
+  const expectedRowSignature = String(urlObj.searchParams.get('expected_row_signature') || urlObj.searchParams.get('expectedRowSignature') || '').trim() || null;
+
+  function cleanIdLater(value) { return String(value == null ? '' : value).trim(); }
 
   const traceId = (() => {
     try {
@@ -180432,6 +181289,18 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
   const cleanId = (v) => String(v == null ? '' : v).trim();
   const asIdArray = (v) => Array.isArray(v) ? v.map(cleanId).filter(Boolean) : [];
   const hasId = (arr, id) => asIdArray(arr).includes(cleanId(id));
+
+  const loadLifecycleSignature = async (currentTimesheetId, contractWeekId = null) => {
+    const raw = await sbRpc(env, 'timesheet_lifecycle_guard_signature_v1', {
+      p_timesheet_id: cleanId(currentTimesheetId) || null,
+      p_contract_week_id: cleanId(contractWeekId) || null,
+      p_include_payload: false
+    }, { timeoutMs: 15000 });
+    const value = normalizeRpc(raw);
+    const signature = cleanId(value?.backend_row_signature || value?.row_signature || value?.signature);
+    if (!signature) throw new Error('DELETE_PREVIEW_SIGNATURE_UNAVAILABLE');
+    return signature;
+  };
 
   const loadContractWeeksByIds = async (idsArg) => {
     const ids = [...new Set(asIdArray(idsArg))];
@@ -180576,7 +181445,6 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
         `&limit=1`
     );
 
-    const hardLocked = !!(tsfin && (tsfin.paid_at_utc || tsfin.locked_by_invoice_id));
 
     const baseDeleteItem = {
       timesheet_id: String(cur.timesheet_id),
@@ -180630,6 +181498,7 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
         const targetContractWeekIds = asIdArray(out.contract_week_ids);
         const targetTimesheetIds = asIdArray(out.timesheet_ids);
         const expectedContractWeekId = cleanId(linkedContractWeek?.id);
+        const currentRowSignature = await loadLifecycleSignature(currentTimesheetId, expectedContractWeekId);
 
         return withCORS(env, req, ok({
           ...out,
@@ -180640,6 +181509,9 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
           additional_only: true,
           safe_target_timesheet_ids: targetTimesheetIds,
           safe_target_contract_week_ids: targetContractWeekIds,
+          current_row_signature: currentRowSignature,
+          backend_row_signature: currentRowSignature,
+          row_signature: currentRowSignature,
           requested_timesheet_id: String(timesheetId),
           current_timesheet_id: String(currentTimesheetId),
           was_stale: !!resolved.was_stale
@@ -180668,12 +181540,16 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
             { requested_timesheet_id: String(timesheetId), current_timesheet_id: String(currentTimesheetId) }
           );
         }
+        const currentRowSignature = await loadLifecycleSignature(currentTimesheetId, linkedContractWeek?.id || null);
 
         return withCORS(env, req, ok({
           requested_timesheet_id: String(timesheetId),
           current_timesheet_id: String(currentTimesheetId),
           was_stale: !!resolved.was_stale,
-          ...out
+          ...out,
+          current_row_signature: currentRowSignature,
+          backend_row_signature: currentRowSignature,
+          row_signature: currentRowSignature
         }));
       } catch (e) {
         const msg = e?.message ? String(e.message) : String(e || 'RPC failed');
@@ -180682,26 +181558,33 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       }
     }
 
-    const eligible = !hardLocked;
-    const blocked = eligible
-      ? []
-      : [{ code: 'TSFIN_LOCK_OR_PAID', message: 'Cannot delete: invoiced or paid.' }];
+    stage = 'rpc_standard_delete_preview';
+    const outRaw = await sbRpc(env, 'timesheet_standard_delete_preview_v1', {
+      p_timesheet_id: String(currentTimesheetId),
+      // Actor authority is derived from the authenticated Worker session, never from request JSON.
+      p_actor_user_id: String(user.id),
+      p_expected_timesheet_id: expectedTimesheetId || null,
+      p_expected_row_signature: expectedRowSignature
+    });
+    const out = normalizeRpc(outRaw);
+    if (!out || typeof out !== 'object' || Array.isArray(out)) {
+      return fail(500, stage, 'Standard delete preview RPC returned an unexpected response.', out || null);
+    }
 
     return withCORS(env, req, ok({
+      ...out,
       kind: 'STANDARD_DELETE',
+      delete_kind: 'STANDARD_DELETE',
       requested_timesheet_id: String(timesheetId),
-      current_timesheet_id: String(currentTimesheetId),
-      was_stale: !!resolved.was_stale,
-      eligible,
-      blocked_reasons: blocked,
-      delete_items: [baseDeleteItem]
+      current_timesheet_id: String(out.current_timesheet_id || currentTimesheetId),
+      was_stale: !!(out.was_stale || resolved.was_stale),
+      delete_items: Array.isArray(out.delete_items) ? out.delete_items : [baseDeleteItem]
     }));
   } catch (e) {
     const msg = e?.message ? String(e.message) : String(e || 'Unhandled error');
     return fail(500, stage || 'unknown', msg, null);
   }
 }
-
 
 
 // NEW helper: copy an existing R2 object to another key (overwrite destination).
@@ -184684,6 +185567,15 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
   const m = matchPath(p, '/api/timesheets/:id/delete-preview');
   if (m && req.method === 'GET') return handleTimesheetDeletePreview(env, req, m.id);
 }
+{
+  const m = matchPath(p, '/api/timesheets/:id/archive-state');
+  if (m && req.method === 'GET') return handleTimesheetArchiveState(env, req, m.id);
+}
+{
+  const m = matchPath(p, '/api/timesheets/:id/archive-transition');
+  if (m && req.method === 'POST') return handleTimesheetArchiveTransition(env, req, m.id);
+}
+
 
       {
         const m = matchPath(p, '/api/contract-weeks/:id/switch-mode');
@@ -185328,27 +186220,72 @@ async scheduled(event, env, ctx) {
   };
 
   ctx.waitUntil((async () => {
+    const scheduledStartedAt = Date.now();
+    console.log('[scheduled] Banking Pay workbench scheduled handler started', {
+      event: 'BANKING_PAY_WORKBENCH_SCHEDULED_START',
+      cron: cronExpr || null,
+      server_utc: new Date().toISOString(),
+      ctx_present: !!ctx,
+      deployment_version: String(env?.CF_VERSION_METADATA?.id || env?.WORKER_VERSION || env?.DEPLOYMENT_VERSION || '')
+    });
+
+    // Rollover and targeted expiry evaluation are deliberately first. A slow
+    // or failing broad banking cron must never prevent this authority boundary.
+    try {
+      if (typeof bankingPayWorkbenchCronTick === 'function') {
+        const workbenchCronRes = await bankingPayWorkbenchCronTick(env, {
+          origin: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON',
+          cron: cronExpr || null,
+          ctx
+        });
+        if (workbenchCronRes && typeof workbenchCronRes === 'object' && workbenchCronRes.ok === false) {
+          console.warn('[scheduled] Banking Pay workbench cron tick reported failure:', workbenchCronRes);
+        } else {
+          console.log('[scheduled] Banking Pay workbench cron tick completed', {
+            event: 'BANKING_PAY_WORKBENCH_SCHEDULED_COMPLETE',
+            cron: cronExpr || null,
+            elapsed_ms: Date.now() - scheduledStartedAt,
+            result: workbenchCronRes || null
+          });
+        }
+      } else {
+        console.warn('[scheduled] bankingPayWorkbenchCronTick is not available; Banking Pay workbench rollover was not evaluated.');
+      }
+    } catch (e) {
+      console.warn('[scheduled] Banking Pay workbench cron tick failed:', {
+        event: 'BANKING_PAY_WORKBENCH_SCHEDULED_FAILED',
+        cron: cronExpr || null,
+        elapsed_ms: Date.now() - scheduledStartedAt,
+        error: e?.message || String(e)
+      });
+    }
+
     try {
       await bankingCronTick(env);
     } catch (e) {
       console.warn('[scheduled] Banking cron tick failed:', e?.message || e);
     }
 
-
     try {
-      if (typeof bankingPayWorkbenchCronTick === 'function') {
-        const workbenchCronRes = await bankingPayWorkbenchCronTick(env, {
-          origin: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON',
-          cron: cronExpr || null
-        });
-        if (workbenchCronRes && typeof workbenchCronRes === 'object' && workbenchCronRes.ok === false) {
-          console.warn('[scheduled] Banking Pay workbench cron tick reported failure:', workbenchCronRes);
-        }
-      } else {
-        console.warn('[scheduled] bankingPayWorkbenchCronTick is not available; Banking Pay workbench preview queue was not drained.');
+      const cleanupLimit = Math.max(
+        1,
+        Math.min(100, Number.parseInt(env.TIMESHEET_R2_CLEANUP_LIMIT || '50', 10) || 50)
+      );
+      const cleanupLeaseSeconds = Math.max(
+        30,
+        Math.min(3600, Number.parseInt(env.TIMESHEET_R2_CLEANUP_LEASE_SECONDS || '300', 10) || 300)
+      );
+      const cleanupResult = await processTimesheetR2CleanupRetryBatch(
+        env,
+        null,
+        null,
+        { limit: cleanupLimit, leaseSeconds: cleanupLeaseSeconds }
+      );
+      if (cleanupResult && cleanupResult.ok === false) {
+        console.warn('[scheduled] Timesheet R2 cleanup remains pending:', cleanupResult);
       }
-    } catch (e) {
-      console.warn('[scheduled] Banking Pay workbench cron tick failed:', e?.message || e);
+    } catch (error) {
+      console.warn('[scheduled] Timesheet R2 cleanup retry failed:', error?.message || error);
     }
 
     if (isInvpdfMinuteCron) {
@@ -185539,6 +186476,7 @@ async scheduled(event, env, ctx) {
     }
   })());
 }
+
 
 
 };
