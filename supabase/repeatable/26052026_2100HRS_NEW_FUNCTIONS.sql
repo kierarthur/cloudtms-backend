@@ -64420,7 +64420,7 @@ BEGIN
     )
   );
 END;
-$function$
+$function$;
 
 
 
