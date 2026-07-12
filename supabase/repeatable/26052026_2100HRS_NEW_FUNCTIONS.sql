@@ -231870,7 +231870,6 @@ BEGIN
 END
 $do$;
 
-
 CREATE OR REPLACE FUNCTION public.timesheet_financial_retention_backfill_v1(
   p_after_timesheet_id uuid DEFAULT NULL::uuid,
   p_limit integer DEFAULT 500
@@ -231956,6 +231955,11 @@ BEGIN
     SELECT retained.timesheet_id
     FROM retained_candidates AS retained
     WHERE (p_after_timesheet_id IS NULL OR retained.timesheet_id > p_after_timesheet_id)
+      AND EXISTS (
+        SELECT 1
+        FROM public.timesheets AS existing_timesheet
+        WHERE existing_timesheet.timesheet_id = retained.timesheet_id
+      )
       AND NOT EXISTS (
         SELECT 1
         FROM public.timesheet_financial_retention AS marker
@@ -231994,6 +231998,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 REVOKE ALL ON FUNCTION public.timesheet_financial_retention_backfill_v1(uuid, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.timesheet_financial_retention_backfill_v1(uuid, integer) FROM anon;
