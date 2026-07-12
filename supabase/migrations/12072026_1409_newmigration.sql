@@ -27,6 +27,7 @@ COMMIT;
 BEGIN;
 
 -- INSERT and UPDATE are deliberately separate because PostgreSQL transition
+
 -- relations are event-specific.  The trigger function performs only transition
 -- filtering, one distinct-array aggregation, and at most one helper call.
 
