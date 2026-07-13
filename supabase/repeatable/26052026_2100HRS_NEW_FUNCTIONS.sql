@@ -223944,8 +223944,15 @@ REVOKE ALL ON FUNCTION public.timesheet_archive_row_guard_v1() FROM PUBLIC;
 
 -- CANDIDATE AMENDED AND RETURNED
 -- Archive authority is an exact transaction-scoped, one-use capability consumed by the row guard.
-CREATE OR REPLACE FUNCTION public.timesheet_archive_transition_v1(p_timesheet_id uuid, p_action text, p_removal_kind text, p_actor_user_id uuid, p_expected_timesheet_id uuid, p_expected_row_signature text, p_now_utc timestamp with time zone DEFAULT now())
- RETURNS jsonb
+CREATE OR REPLACE FUNCTION public.timesheet_archive_transition_v1(
+  p_timesheet_id uuid,
+  p_action text,
+  p_removal_kind text DEFAULT 'STANDARD_DELETE'::text,
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_expected_timesheet_id uuid DEFAULT NULL::uuid,
+  p_expected_row_signature text DEFAULT NULL::text,
+  p_now_utc timestamp with time zone DEFAULT now()
+) RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
