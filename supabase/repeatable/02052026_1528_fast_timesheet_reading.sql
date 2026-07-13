@@ -4171,6 +4171,15 @@ DECLARE
   v_layer_names jsonb := '[]'::jsonb;
   v_canonical_authorise_row_json jsonb := NULL;
   v_canonical_authorise_row_signature text := NULL;
+  v_canonical_lifecycle_overlay jsonb := '{}'::jsonb;
+  v_canonical_action_flags jsonb := '{}'::jsonb;
+  v_canonical_row_patch jsonb := '{}'::jsonb;
+  v_canonical_is_archived boolean := FALSE;
+  v_canonical_retained boolean := FALSE;
+  v_canonical_can_unprocess boolean := FALSE;
+  v_canonical_unprocess_visible boolean := FALSE;
+  v_canonical_unprocess_block_reason text := NULL;
+  v_canonical_unprocess_block_message text := NULL;
 BEGIN
   v_has_identity := (
     NULLIF(BTRIM(COALESCE(v_filters->>'row_key', v_filters->>'rowKey', '')), '') IS NOT NULL
@@ -4593,22 +4602,118 @@ BEGIN
       LIMIT 1;
 
       IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
-        v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        v_canonical_is_archived := UPPER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', ''))) = 'ARCHIVED';
+        v_canonical_retained := LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'has_retained_financial_history', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_can_unprocess := NOT v_canonical_is_archived
+          AND NOT v_canonical_retained
+          AND LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'can_unprocess', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_unprocess_visible := NOT v_canonical_is_archived
+          AND LOWER(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_action_visible',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_action_visible}',
+            CASE WHEN v_canonical_retained THEN 'true' ELSE v_canonical_authorise_row_json->>'can_unprocess' END,
+            'false'
+          ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_unprocess_block_reason := CASE
+          WHEN v_canonical_is_archived THEN 'TIMESHEET_ARCHIVED'
+          WHEN v_canonical_retained THEN 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'
+          ELSE NULLIF(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_block_reason',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_reason}',
+            ''
+          )), '')
+        END;
+        v_canonical_unprocess_block_message := CASE
+          WHEN v_canonical_is_archived THEN 'Archived timesheets must be Unarchived before lifecycle actions.'
+          WHEN v_canonical_retained THEN 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
+          ELSE NULLIF(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_block_message',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_message}',
+            ''
+          )), '')
+        END;
+
+        v_canonical_lifecycle_overlay := jsonb_strip_nulls(
+          jsonb_build_object(
+            'row_signature', v_canonical_authorise_row_signature,
+            'backend_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'backend_row_signature'), ''), v_canonical_authorise_row_signature),
+            'mutation_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'mutation_row_signature'), ''), v_canonical_authorise_row_signature),
+            'summary_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'summary_stage', '')), ''),
+            'tools_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', '')), ''),
+            'processing_status', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'processing_status', '')), ''),
+            'has_retained_financial_history', v_canonical_retained,
+            'can_unprocess', v_canonical_can_unprocess,
+            'unprocess_action_visible', v_canonical_unprocess_visible,
+            'unprocess_block_reason', v_canonical_unprocess_block_reason,
+            'unprocess_block_message', v_canonical_unprocess_block_message
+          )
+          || jsonb_build_object(
+            'is_archived', v_canonical_is_archived,
+            'read_only', v_canonical_is_archived,
+            'can_archive', FALSE,
+            'can_unarchive', v_canonical_is_archived
+          )
+        );
+
+        v_canonical_action_flags := COALESCE(v_canonical_authorise_row_json->'action_flags', '{}'::jsonb)
+          || jsonb_build_object(
+            'has_retained_financial_history', v_canonical_retained,
+            'can_unprocess', v_canonical_can_unprocess,
+            'unprocess_action_visible', v_canonical_unprocess_visible,
+            'unprocess_block_reason', v_canonical_unprocess_block_reason,
+            'unprocess_block_message', v_canonical_unprocess_block_message,
+            'is_archived', v_canonical_is_archived,
+            'read_only', v_canonical_is_archived,
+            'can_archive', FALSE,
+            'can_unarchive', v_canonical_is_archived
+          );
+        v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
+          || v_canonical_lifecycle_overlay;
+
+        v_out := v_out || v_canonical_lifecycle_overlay;
+        v_out := JSONB_SET(v_out, '{action_flags}', COALESCE(v_out->'action_flags', '{}'::jsonb) || v_canonical_action_flags, TRUE);
+        v_out := JSONB_SET(v_out, '{row_patch}', COALESCE(v_out->'row_patch', '{}'::jsonb) || v_canonical_row_patch, TRUE);
 
         IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{row}',
+            COALESCE(v_out->'row', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
 
         IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
-        END IF;
-
-        IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{data_row}',
+            COALESCE(v_out->'data_row', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{data_row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{data_row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
 
         IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{details}',
+            COALESCE(v_out->'details', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{details,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{details,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
       END IF;
     END IF;
@@ -5443,22 +5548,118 @@ BEGIN
       LIMIT 1;
 
       IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
-        v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        v_canonical_is_archived := UPPER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', ''))) = 'ARCHIVED';
+        v_canonical_retained := LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'has_retained_financial_history', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_can_unprocess := NOT v_canonical_is_archived
+          AND NOT v_canonical_retained
+          AND LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'can_unprocess', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_unprocess_visible := NOT v_canonical_is_archived
+          AND LOWER(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_action_visible',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_action_visible}',
+            CASE WHEN v_canonical_retained THEN 'true' ELSE v_canonical_authorise_row_json->>'can_unprocess' END,
+            'false'
+          ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_unprocess_block_reason := CASE
+          WHEN v_canonical_is_archived THEN 'TIMESHEET_ARCHIVED'
+          WHEN v_canonical_retained THEN 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'
+          ELSE NULLIF(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_block_reason',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_reason}',
+            ''
+          )), '')
+        END;
+        v_canonical_unprocess_block_message := CASE
+          WHEN v_canonical_is_archived THEN 'Archived timesheets must be Unarchived before lifecycle actions.'
+          WHEN v_canonical_retained THEN 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
+          ELSE NULLIF(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_block_message',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_message}',
+            ''
+          )), '')
+        END;
+
+        v_canonical_lifecycle_overlay := jsonb_strip_nulls(
+          jsonb_build_object(
+            'row_signature', v_canonical_authorise_row_signature,
+            'backend_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'backend_row_signature'), ''), v_canonical_authorise_row_signature),
+            'mutation_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'mutation_row_signature'), ''), v_canonical_authorise_row_signature),
+            'summary_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'summary_stage', '')), ''),
+            'tools_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', '')), ''),
+            'processing_status', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'processing_status', '')), ''),
+            'has_retained_financial_history', v_canonical_retained,
+            'can_unprocess', v_canonical_can_unprocess,
+            'unprocess_action_visible', v_canonical_unprocess_visible,
+            'unprocess_block_reason', v_canonical_unprocess_block_reason,
+            'unprocess_block_message', v_canonical_unprocess_block_message
+          )
+          || jsonb_build_object(
+            'is_archived', v_canonical_is_archived,
+            'read_only', v_canonical_is_archived,
+            'can_archive', FALSE,
+            'can_unarchive', v_canonical_is_archived
+          )
+        );
+
+        v_canonical_action_flags := COALESCE(v_canonical_authorise_row_json->'action_flags', '{}'::jsonb)
+          || jsonb_build_object(
+            'has_retained_financial_history', v_canonical_retained,
+            'can_unprocess', v_canonical_can_unprocess,
+            'unprocess_action_visible', v_canonical_unprocess_visible,
+            'unprocess_block_reason', v_canonical_unprocess_block_reason,
+            'unprocess_block_message', v_canonical_unprocess_block_message,
+            'is_archived', v_canonical_is_archived,
+            'read_only', v_canonical_is_archived,
+            'can_archive', FALSE,
+            'can_unarchive', v_canonical_is_archived
+          );
+        v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
+          || v_canonical_lifecycle_overlay;
+
+        v_out := v_out || v_canonical_lifecycle_overlay;
+        v_out := JSONB_SET(v_out, '{action_flags}', COALESCE(v_out->'action_flags', '{}'::jsonb) || v_canonical_action_flags, TRUE);
+        v_out := JSONB_SET(v_out, '{row_patch}', COALESCE(v_out->'row_patch', '{}'::jsonb) || v_canonical_row_patch, TRUE);
 
         IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{row}',
+            COALESCE(v_out->'row', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
 
         IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
-        END IF;
-
-        IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{data_row}',
+            COALESCE(v_out->'data_row', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{data_row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{data_row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
 
         IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{details}',
+            COALESCE(v_out->'details', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{details,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{details,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
       END IF;
     END IF;
@@ -5978,22 +6179,118 @@ BEGIN
       LIMIT 1;
 
       IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
-        v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        v_canonical_is_archived := UPPER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', ''))) = 'ARCHIVED';
+        v_canonical_retained := LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'has_retained_financial_history', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_can_unprocess := NOT v_canonical_is_archived
+          AND NOT v_canonical_retained
+          AND LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'can_unprocess', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_unprocess_visible := NOT v_canonical_is_archived
+          AND LOWER(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_action_visible',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_action_visible}',
+            CASE WHEN v_canonical_retained THEN 'true' ELSE v_canonical_authorise_row_json->>'can_unprocess' END,
+            'false'
+          ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_unprocess_block_reason := CASE
+          WHEN v_canonical_is_archived THEN 'TIMESHEET_ARCHIVED'
+          WHEN v_canonical_retained THEN 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'
+          ELSE NULLIF(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_block_reason',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_reason}',
+            ''
+          )), '')
+        END;
+        v_canonical_unprocess_block_message := CASE
+          WHEN v_canonical_is_archived THEN 'Archived timesheets must be Unarchived before lifecycle actions.'
+          WHEN v_canonical_retained THEN 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
+          ELSE NULLIF(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_block_message',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_message}',
+            ''
+          )), '')
+        END;
+
+        v_canonical_lifecycle_overlay := jsonb_strip_nulls(
+          jsonb_build_object(
+            'row_signature', v_canonical_authorise_row_signature,
+            'backend_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'backend_row_signature'), ''), v_canonical_authorise_row_signature),
+            'mutation_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'mutation_row_signature'), ''), v_canonical_authorise_row_signature),
+            'summary_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'summary_stage', '')), ''),
+            'tools_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', '')), ''),
+            'processing_status', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'processing_status', '')), ''),
+            'has_retained_financial_history', v_canonical_retained,
+            'can_unprocess', v_canonical_can_unprocess,
+            'unprocess_action_visible', v_canonical_unprocess_visible,
+            'unprocess_block_reason', v_canonical_unprocess_block_reason,
+            'unprocess_block_message', v_canonical_unprocess_block_message
+          )
+          || jsonb_build_object(
+            'is_archived', v_canonical_is_archived,
+            'read_only', v_canonical_is_archived,
+            'can_archive', FALSE,
+            'can_unarchive', v_canonical_is_archived
+          )
+        );
+
+        v_canonical_action_flags := COALESCE(v_canonical_authorise_row_json->'action_flags', '{}'::jsonb)
+          || jsonb_build_object(
+            'has_retained_financial_history', v_canonical_retained,
+            'can_unprocess', v_canonical_can_unprocess,
+            'unprocess_action_visible', v_canonical_unprocess_visible,
+            'unprocess_block_reason', v_canonical_unprocess_block_reason,
+            'unprocess_block_message', v_canonical_unprocess_block_message,
+            'is_archived', v_canonical_is_archived,
+            'read_only', v_canonical_is_archived,
+            'can_archive', FALSE,
+            'can_unarchive', v_canonical_is_archived
+          );
+        v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
+          || v_canonical_lifecycle_overlay;
+
+        v_out := v_out || v_canonical_lifecycle_overlay;
+        v_out := JSONB_SET(v_out, '{action_flags}', COALESCE(v_out->'action_flags', '{}'::jsonb) || v_canonical_action_flags, TRUE);
+        v_out := JSONB_SET(v_out, '{row_patch}', COALESCE(v_out->'row_patch', '{}'::jsonb) || v_canonical_row_patch, TRUE);
 
         IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{row}',
+            COALESCE(v_out->'row', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
 
         IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
-        END IF;
-
-        IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{data_row}',
+            COALESCE(v_out->'data_row', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{data_row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{data_row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
 
         IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{details}',
+            COALESCE(v_out->'details', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{details,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{details,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
       END IF;
     END IF;
@@ -6216,22 +6513,118 @@ BEGIN
       LIMIT 1;
 
       IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
-        v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        v_canonical_is_archived := UPPER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', ''))) = 'ARCHIVED';
+        v_canonical_retained := LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'has_retained_financial_history', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_can_unprocess := NOT v_canonical_is_archived
+          AND NOT v_canonical_retained
+          AND LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'can_unprocess', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_unprocess_visible := NOT v_canonical_is_archived
+          AND LOWER(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_action_visible',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_action_visible}',
+            CASE WHEN v_canonical_retained THEN 'true' ELSE v_canonical_authorise_row_json->>'can_unprocess' END,
+            'false'
+          ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_canonical_unprocess_block_reason := CASE
+          WHEN v_canonical_is_archived THEN 'TIMESHEET_ARCHIVED'
+          WHEN v_canonical_retained THEN 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'
+          ELSE NULLIF(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_block_reason',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_reason}',
+            ''
+          )), '')
+        END;
+        v_canonical_unprocess_block_message := CASE
+          WHEN v_canonical_is_archived THEN 'Archived timesheets must be Unarchived before lifecycle actions.'
+          WHEN v_canonical_retained THEN 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
+          ELSE NULLIF(BTRIM(COALESCE(
+            v_canonical_authorise_row_json->>'unprocess_block_message',
+            v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_message}',
+            ''
+          )), '')
+        END;
+
+        v_canonical_lifecycle_overlay := jsonb_strip_nulls(
+          jsonb_build_object(
+            'row_signature', v_canonical_authorise_row_signature,
+            'backend_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'backend_row_signature'), ''), v_canonical_authorise_row_signature),
+            'mutation_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'mutation_row_signature'), ''), v_canonical_authorise_row_signature),
+            'summary_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'summary_stage', '')), ''),
+            'tools_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', '')), ''),
+            'processing_status', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'processing_status', '')), ''),
+            'has_retained_financial_history', v_canonical_retained,
+            'can_unprocess', v_canonical_can_unprocess,
+            'unprocess_action_visible', v_canonical_unprocess_visible,
+            'unprocess_block_reason', v_canonical_unprocess_block_reason,
+            'unprocess_block_message', v_canonical_unprocess_block_message
+          )
+          || jsonb_build_object(
+            'is_archived', v_canonical_is_archived,
+            'read_only', v_canonical_is_archived,
+            'can_archive', FALSE,
+            'can_unarchive', v_canonical_is_archived
+          )
+        );
+
+        v_canonical_action_flags := COALESCE(v_canonical_authorise_row_json->'action_flags', '{}'::jsonb)
+          || jsonb_build_object(
+            'has_retained_financial_history', v_canonical_retained,
+            'can_unprocess', v_canonical_can_unprocess,
+            'unprocess_action_visible', v_canonical_unprocess_visible,
+            'unprocess_block_reason', v_canonical_unprocess_block_reason,
+            'unprocess_block_message', v_canonical_unprocess_block_message,
+            'is_archived', v_canonical_is_archived,
+            'read_only', v_canonical_is_archived,
+            'can_archive', FALSE,
+            'can_unarchive', v_canonical_is_archived
+          );
+        v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
+          || v_canonical_lifecycle_overlay;
+
+        v_out := v_out || v_canonical_lifecycle_overlay;
+        v_out := JSONB_SET(v_out, '{action_flags}', COALESCE(v_out->'action_flags', '{}'::jsonb) || v_canonical_action_flags, TRUE);
+        v_out := JSONB_SET(v_out, '{row_patch}', COALESCE(v_out->'row_patch', '{}'::jsonb) || v_canonical_row_patch, TRUE);
 
         IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{row}',
+            COALESCE(v_out->'row', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
 
         IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
-        END IF;
-
-        IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{data_row}',
+            COALESCE(v_out->'data_row', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{data_row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{data_row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
 
         IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
-          v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+          v_out := JSONB_SET(
+            v_out,
+            '{details}',
+            COALESCE(v_out->'details', '{}'::jsonb)
+              || v_canonical_lifecycle_overlay
+              || jsonb_build_object(
+                'action_flags', COALESCE(v_out#>'{details,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+                'row_patch', COALESCE(v_out#>'{details,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+              ),
+            TRUE
+          );
         END IF;
       END IF;
     END IF;
@@ -7682,22 +8075,118 @@ BEGIN
     LIMIT 1;
 
     IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
-      v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+      v_canonical_is_archived := UPPER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', ''))) = 'ARCHIVED';
+      v_canonical_retained := LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'has_retained_financial_history', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+      v_canonical_can_unprocess := NOT v_canonical_is_archived
+        AND NOT v_canonical_retained
+        AND LOWER(BTRIM(COALESCE(v_canonical_authorise_row_json->>'can_unprocess', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+      v_canonical_unprocess_visible := NOT v_canonical_is_archived
+        AND LOWER(BTRIM(COALESCE(
+          v_canonical_authorise_row_json->>'unprocess_action_visible',
+          v_canonical_authorise_row_json#>>'{action_flags,unprocess_action_visible}',
+          CASE WHEN v_canonical_retained THEN 'true' ELSE v_canonical_authorise_row_json->>'can_unprocess' END,
+          'false'
+        ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+      v_canonical_unprocess_block_reason := CASE
+        WHEN v_canonical_is_archived THEN 'TIMESHEET_ARCHIVED'
+        WHEN v_canonical_retained THEN 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS'
+        ELSE NULLIF(BTRIM(COALESCE(
+          v_canonical_authorise_row_json->>'unprocess_block_reason',
+          v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_reason}',
+          ''
+        )), '')
+      END;
+      v_canonical_unprocess_block_message := CASE
+        WHEN v_canonical_is_archived THEN 'Archived timesheets must be Unarchived before lifecycle actions.'
+        WHEN v_canonical_retained THEN 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
+        ELSE NULLIF(BTRIM(COALESCE(
+          v_canonical_authorise_row_json->>'unprocess_block_message',
+          v_canonical_authorise_row_json#>>'{action_flags,unprocess_block_message}',
+          ''
+        )), '')
+      END;
+
+      v_canonical_lifecycle_overlay := jsonb_strip_nulls(
+        jsonb_build_object(
+          'row_signature', v_canonical_authorise_row_signature,
+          'backend_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'backend_row_signature'), ''), v_canonical_authorise_row_signature),
+          'mutation_row_signature', COALESCE(NULLIF(BTRIM(v_canonical_authorise_row_json->>'mutation_row_signature'), ''), v_canonical_authorise_row_signature),
+          'summary_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'summary_stage', '')), ''),
+          'tools_stage', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'tools_stage', '')), ''),
+          'processing_status', NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_json->>'processing_status', '')), ''),
+          'has_retained_financial_history', v_canonical_retained,
+          'can_unprocess', v_canonical_can_unprocess,
+          'unprocess_action_visible', v_canonical_unprocess_visible,
+          'unprocess_block_reason', v_canonical_unprocess_block_reason,
+          'unprocess_block_message', v_canonical_unprocess_block_message
+        )
+        || jsonb_build_object(
+          'is_archived', v_canonical_is_archived,
+          'read_only', v_canonical_is_archived,
+          'can_archive', FALSE,
+          'can_unarchive', v_canonical_is_archived
+        )
+      );
+
+      v_canonical_action_flags := COALESCE(v_canonical_authorise_row_json->'action_flags', '{}'::jsonb)
+        || jsonb_build_object(
+          'has_retained_financial_history', v_canonical_retained,
+          'can_unprocess', v_canonical_can_unprocess,
+          'unprocess_action_visible', v_canonical_unprocess_visible,
+          'unprocess_block_reason', v_canonical_unprocess_block_reason,
+          'unprocess_block_message', v_canonical_unprocess_block_message,
+          'is_archived', v_canonical_is_archived,
+          'read_only', v_canonical_is_archived,
+          'can_archive', FALSE,
+          'can_unarchive', v_canonical_is_archived
+        );
+      v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
+        || v_canonical_lifecycle_overlay;
+
+      v_out := v_out || v_canonical_lifecycle_overlay;
+      v_out := JSONB_SET(v_out, '{action_flags}', COALESCE(v_out->'action_flags', '{}'::jsonb) || v_canonical_action_flags, TRUE);
+      v_out := JSONB_SET(v_out, '{row_patch}', COALESCE(v_out->'row_patch', '{}'::jsonb) || v_canonical_row_patch, TRUE);
 
       IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
-        v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        v_out := JSONB_SET(
+          v_out,
+          '{row}',
+          COALESCE(v_out->'row', '{}'::jsonb)
+            || v_canonical_lifecycle_overlay
+            || jsonb_build_object(
+              'action_flags', COALESCE(v_out#>'{row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+              'row_patch', COALESCE(v_out#>'{row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+            ),
+          TRUE
+        );
       END IF;
 
       IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
-        v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
-      END IF;
-
-      IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
-        v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        v_out := JSONB_SET(
+          v_out,
+          '{data_row}',
+          COALESCE(v_out->'data_row', '{}'::jsonb)
+            || v_canonical_lifecycle_overlay
+            || jsonb_build_object(
+              'action_flags', COALESCE(v_out#>'{data_row,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+              'row_patch', COALESCE(v_out#>'{data_row,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+            ),
+          TRUE
+        );
       END IF;
 
       IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
-        v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        v_out := JSONB_SET(
+          v_out,
+          '{details}',
+          COALESCE(v_out->'details', '{}'::jsonb)
+            || v_canonical_lifecycle_overlay
+            || jsonb_build_object(
+              'action_flags', COALESCE(v_out#>'{details,action_flags}', '{}'::jsonb) || v_canonical_action_flags,
+              'row_patch', COALESCE(v_out#>'{details,row_patch}', '{}'::jsonb) || v_canonical_row_patch
+            ),
+          TRUE
+        );
       END IF;
     END IF;
   END IF;
@@ -7725,8 +8214,6 @@ BEGIN
   ));
 END;
 $function$;
-
-
 
 
 CREATE OR REPLACE FUNCTION public.timesheet_qr_send_enqueue_v1(

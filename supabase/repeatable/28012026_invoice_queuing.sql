@@ -1366,3 +1366,396 @@ WHEN (
   AND COALESCE(OLD.is_current,false) = true
 )
 EXECUTE FUNCTION public.timesheets_invalidate_prevalidation_on_change();
+
+
+CREATE OR REPLACE FUNCTION public.candidate_pay_method_change_refresh_scope_v1(
+  p_candidate_id uuid,
+  p_source_method text,
+  p_target_method text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_source_method text := UPPER(BTRIM(COALESCE(p_source_method, '')));
+  v_target_method text := UPPER(BTRIM(COALESCE(p_target_method, '')));
+  v_candidate_current_method text;
+  v_latest_source_change_seq bigint := 0;
+  v_authoritative_sessions_json jsonb := '[]'::jsonb;
+  v_replaced_source_session_ids_json jsonb := '[]'::jsonb;
+  v_represented_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_authorised_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_active_advance_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_target_details_json jsonb := '[]'::jsonb;
+  v_preview_row_count integer := 0;
+  v_source_target_mismatch_count integer := 0;
+BEGIN
+  IF p_candidate_id IS NULL THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_CANDIDATE_REQUIRED'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF v_source_method NOT IN ('PAYE', 'UMBRELLA') THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_SOURCE_METHOD_INVALID'
+      USING ERRCODE = '22023', DETAIL = COALESCE(p_source_method, '');
+  END IF;
+
+  IF v_target_method NOT IN ('PAYE', 'UMBRELLA') THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_TARGET_METHOD_INVALID'
+      USING ERRCODE = '22023', DETAIL = COALESCE(p_target_method, '');
+  END IF;
+
+  IF v_source_method = v_target_method THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_METHODS_MUST_DIFFER'
+      USING ERRCODE = '22023';
+  END IF;
+
+  SELECT UPPER(BTRIM(COALESCE(candidate_row.pay_method, '')))
+  INTO v_candidate_current_method
+  FROM public.candidates AS candidate_row
+  WHERE candidate_row.id = p_candidate_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_CANDIDATE_NOT_FOUND'
+      USING ERRCODE = 'P0002', DETAIL = p_candidate_id::text;
+  END IF;
+
+  SELECT COALESCE(change_counter.seq, 0)
+  INTO v_latest_source_change_seq
+  FROM public.app_change_counters AS change_counter
+  WHERE change_counter.entity_key = 'pay_candidate:' || p_candidate_id::text;
+
+  v_latest_source_change_seq := COALESCE(v_latest_source_change_seq, 0);
+
+  WITH candidate_open_scope AS (
+    SELECT
+      workbench_session.id AS session_id,
+      workbench_session.actor_user_id,
+      workbench_session.pay_date,
+      workbench_session.week_ending_cutoff,
+      workbench_session.version AS session_version,
+      workbench_session.progress_state,
+      workbench_session.progress_counter_version,
+      workbench_session.updated_at_utc,
+      MAX(workbench_session.pay_date) OVER (
+        PARTITION BY workbench_session.actor_user_id
+      ) AS latest_actor_open_pay_date
+    FROM public.banking_pay_workbench_session_scope AS session_scope
+    JOIN public.banking_pay_workbench_sessions AS workbench_session
+      ON workbench_session.id = session_scope.session_id
+    WHERE UPPER(BTRIM(COALESCE(workbench_session.status, ''))) = 'OPEN'
+      AND workbench_session.discarded_at_utc IS NULL
+      AND workbench_session.replacement_session_id IS NULL
+      AND session_scope.candidate_id = p_candidate_id
+  ),
+  authoritative_sessions AS (
+    SELECT DISTINCT
+      candidate_scope.session_id,
+      candidate_scope.actor_user_id,
+      candidate_scope.pay_date,
+      candidate_scope.week_ending_cutoff,
+      candidate_scope.session_version,
+      candidate_scope.progress_state,
+      candidate_scope.progress_counter_version,
+      candidate_scope.updated_at_utc
+    FROM candidate_open_scope AS candidate_scope
+    WHERE candidate_scope.pay_date = candidate_scope.latest_actor_open_pay_date
+  ),
+  current_preview_rows AS (
+    SELECT DISTINCT
+      authoritative_session.session_id,
+      authoritative_session.session_version,
+      preview_row.id AS preview_row_id,
+      preview_row.timesheet_id AS requested_timesheet_id,
+      preview_row.row_json
+    FROM authoritative_sessions AS authoritative_session
+    JOIN public.banking_pay_workbench_preview_rows AS preview_row
+      ON preview_row.session_id = authoritative_session.session_id
+     AND preview_row.candidate_id = p_candidate_id
+     AND preview_row.session_version = authoritative_session.session_version
+    WHERE preview_row.timesheet_id IS NOT NULL
+  ),
+  requested_ids AS (
+    SELECT COALESCE(
+      array_agg(DISTINCT current_preview.requested_timesheet_id ORDER BY current_preview.requested_timesheet_id),
+      ARRAY[]::uuid[]
+    ) AS timesheet_ids
+    FROM current_preview_rows AS current_preview
+  ),
+  rotation_scope AS (
+    SELECT
+      rotation_row.requested_timesheet_id,
+      rotation_row.booking_id,
+      rotation_row.canonical_timesheet_id,
+      rotation_row.family_timesheet_id,
+      rotation_row.family_is_current,
+      rotation_row.family_version,
+      rotation_row.requested_is_canonical
+    FROM public._pay_timesheet_rotation_scope(
+      COALESCE((SELECT requested_ids.timesheet_ids FROM requested_ids), ARRAY[]::uuid[])
+    ) AS rotation_row
+  ),
+  canonical_preview_rows AS (
+    SELECT DISTINCT
+      current_preview.session_id,
+      current_preview.session_version,
+      current_preview.preview_row_id,
+      current_preview.requested_timesheet_id,
+      current_preview.row_json,
+      COALESCE(rotation_row.canonical_timesheet_id, current_preview.requested_timesheet_id) AS canonical_timesheet_id
+    FROM current_preview_rows AS current_preview
+    LEFT JOIN rotation_scope AS rotation_row
+      ON rotation_row.requested_timesheet_id = current_preview.requested_timesheet_id
+  ),
+  canonical_ids AS (
+    SELECT DISTINCT canonical_preview.canonical_timesheet_id AS timesheet_id
+    FROM canonical_preview_rows AS canonical_preview
+    WHERE canonical_preview.canonical_timesheet_id IS NOT NULL
+  ),
+  canonical_qualification AS (
+    SELECT
+      canonical_id.timesheet_id,
+      (
+        current_timesheet.authorised_at_server IS NOT NULL
+        AND current_timesheet.revoked_at IS NULL
+        AND current_timesheet.is_current IS TRUE
+      ) AS is_authorised,
+      EXISTS (
+        SELECT 1
+        FROM rotation_scope AS advance_family
+        JOIN public.timesheet_payment_overrides AS payment_override
+          ON payment_override.timesheet_id = advance_family.family_timesheet_id
+        WHERE advance_family.canonical_timesheet_id = canonical_id.timesheet_id
+          AND payment_override.candidate_id = p_candidate_id
+          AND UPPER(BTRIM(COALESCE(payment_override.override_type, ''))) = 'ADVANCE_THIS_PAYMENT'
+          AND payment_override.cleared_at_utc IS NULL
+          AND payment_override.consumed_at_utc IS NULL
+          AND payment_override.consumed_by_pay_batch_id IS NULL
+      ) AS has_active_advance,
+      UPPER(BTRIM(COALESCE(
+        current_financial.pay_method,
+        current_contract.pay_method_snapshot,
+        preview_source.source_pay_method,
+        ''
+      ))) AS source_pay_method
+    FROM canonical_ids AS canonical_id
+    JOIN public.timesheets AS current_timesheet
+      ON current_timesheet.timesheet_id = canonical_id.timesheet_id
+     AND current_timesheet.is_current IS TRUE
+    LEFT JOIN LATERAL (
+      SELECT financial_row.pay_method
+      FROM public.timesheets_financials AS financial_row
+      WHERE financial_row.timesheet_id = canonical_id.timesheet_id
+        AND financial_row.is_current IS TRUE
+        AND financial_row.candidate_id = p_candidate_id
+      ORDER BY financial_row.timesheet_version DESC, financial_row.id DESC
+      LIMIT 1
+    ) AS current_financial ON TRUE
+    LEFT JOIN public.contracts AS current_contract
+      ON current_contract.id = current_timesheet.contract_id
+     AND current_contract.candidate_id = p_candidate_id
+    LEFT JOIN LATERAL (
+      SELECT NULLIF(UPPER(BTRIM(COALESCE(
+        canonical_preview.row_json->>'source_pay_method',
+        canonical_preview.row_json->>'timesheet_pay_method',
+        canonical_preview.row_json#>>'{source_basis_json,source_pay_method}',
+        ''
+      ))), '') AS source_pay_method
+      FROM canonical_preview_rows AS canonical_preview
+      WHERE canonical_preview.canonical_timesheet_id = canonical_id.timesheet_id
+      ORDER BY canonical_preview.preview_row_id
+      LIMIT 1
+    ) AS preview_source ON TRUE
+  ),
+  qualifying_timesheets AS (
+    SELECT
+      qualification.timesheet_id,
+      qualification.is_authorised,
+      qualification.has_active_advance,
+      qualification.source_pay_method
+    FROM canonical_qualification AS qualification
+    WHERE qualification.is_authorised IS TRUE
+       OR qualification.has_active_advance IS TRUE
+  ),
+  session_rollup AS (
+    SELECT
+      authoritative_session.session_id,
+      authoritative_session.actor_user_id,
+      authoritative_session.pay_date,
+      authoritative_session.week_ending_cutoff,
+      authoritative_session.session_version,
+      authoritative_session.progress_state,
+      authoritative_session.progress_counter_version,
+      authoritative_session.updated_at_utc,
+      COUNT(DISTINCT canonical_preview.preview_row_id)::integer AS preview_row_count,
+      COALESCE(
+        array_agg(DISTINCT canonical_preview.canonical_timesheet_id ORDER BY canonical_preview.canonical_timesheet_id)
+          FILTER (WHERE canonical_preview.canonical_timesheet_id IS NOT NULL),
+        ARRAY[]::uuid[]
+      ) AS represented_timesheet_ids,
+      COALESCE(
+        array_agg(DISTINCT qualifying.timesheet_id ORDER BY qualifying.timesheet_id)
+          FILTER (WHERE qualifying.timesheet_id IS NOT NULL),
+        ARRAY[]::uuid[]
+      ) AS qualifying_timesheet_ids
+    FROM authoritative_sessions AS authoritative_session
+    LEFT JOIN canonical_preview_rows AS canonical_preview
+      ON canonical_preview.session_id = authoritative_session.session_id
+     AND canonical_preview.session_version = authoritative_session.session_version
+    LEFT JOIN qualifying_timesheets AS qualifying
+      ON qualifying.timesheet_id = canonical_preview.canonical_timesheet_id
+    GROUP BY
+      authoritative_session.session_id,
+      authoritative_session.actor_user_id,
+      authoritative_session.pay_date,
+      authoritative_session.week_ending_cutoff,
+      authoritative_session.session_version,
+      authoritative_session.progress_state,
+      authoritative_session.progress_counter_version,
+      authoritative_session.updated_at_utc
+  )
+  SELECT
+    COALESCE((
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'session_id', session_rollup.session_id::text,
+          'actor_user_id', session_rollup.actor_user_id::text,
+          'pay_date', session_rollup.pay_date::text,
+          'week_ending_cutoff', session_rollup.week_ending_cutoff::text,
+          'session_version', session_rollup.session_version,
+          'progress_state', session_rollup.progress_state,
+          'progress_counter_version', session_rollup.progress_counter_version,
+          'preview_row_count', session_rollup.preview_row_count,
+          'represented_timesheet_ids', to_jsonb(session_rollup.represented_timesheet_ids),
+          'qualifying_timesheet_ids', to_jsonb(session_rollup.qualifying_timesheet_ids),
+          'updated_at_utc', session_rollup.updated_at_utc::text
+        )
+        ORDER BY session_rollup.updated_at_utc DESC, session_rollup.session_id
+      )
+      FROM session_rollup
+    ), '[]'::jsonb),
+    COALESCE((SELECT COUNT(*)::integer FROM current_preview_rows), 0),
+    COALESCE((
+      SELECT array_agg(qualification.timesheet_id ORDER BY qualification.timesheet_id)
+      FROM canonical_qualification AS qualification
+    ), ARRAY[]::uuid[]),
+    COALESCE((
+      SELECT array_agg(qualification.timesheet_id ORDER BY qualification.timesheet_id)
+      FROM canonical_qualification AS qualification
+      WHERE qualification.is_authorised IS TRUE
+    ), ARRAY[]::uuid[]),
+    COALESCE((
+      SELECT array_agg(qualification.timesheet_id ORDER BY qualification.timesheet_id)
+      FROM canonical_qualification AS qualification
+      WHERE qualification.has_active_advance IS TRUE
+    ), ARRAY[]::uuid[]),
+    COALESCE((
+      SELECT array_agg(qualifying.timesheet_id ORDER BY qualifying.timesheet_id)
+      FROM qualifying_timesheets AS qualifying
+    ), ARRAY[]::uuid[]),
+    COALESCE((
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'timesheet_id', qualifying.timesheet_id::text,
+          'is_authorised', qualifying.is_authorised,
+          'has_active_advance', qualifying.has_active_advance,
+          'source_pay_method', NULLIF(qualifying.source_pay_method, ''),
+          'target_pay_method', v_target_method,
+          'source_target_mismatch', (
+            qualifying.source_pay_method IN ('PAYE', 'UMBRELLA')
+            AND qualifying.source_pay_method <> v_target_method
+          )
+        )
+        ORDER BY qualifying.timesheet_id
+      )
+      FROM qualifying_timesheets AS qualifying
+    ), '[]'::jsonb),
+    COALESCE((
+      SELECT COUNT(*)::integer
+      FROM qualifying_timesheets AS qualifying
+      WHERE qualifying.source_pay_method IN ('PAYE', 'UMBRELLA')
+        AND qualifying.source_pay_method <> v_target_method
+    ), 0)
+  INTO
+    v_authoritative_sessions_json,
+    v_preview_row_count,
+    v_represented_timesheet_ids,
+    v_authorised_timesheet_ids,
+    v_active_advance_timesheet_ids,
+    v_targeted_timesheet_ids,
+    v_target_details_json,
+    v_source_target_mismatch_count;
+
+  WITH authoritative_session_ids AS (
+    SELECT (session_value->>'session_id')::uuid AS session_id
+    FROM jsonb_array_elements(v_authoritative_sessions_json) AS session_values(session_value)
+    WHERE COALESCE(session_value->>'session_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  )
+  SELECT COALESCE(
+    jsonb_agg(source_session.id::text ORDER BY source_session.updated_at_utc DESC, source_session.id),
+    '[]'::jsonb
+  )
+  INTO v_replaced_source_session_ids_json
+  FROM public.banking_pay_workbench_sessions AS source_session
+  WHERE source_session.replacement_session_id IN (
+    SELECT authoritative_session_ids.session_id
+    FROM authoritative_session_ids
+  )
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_session_scope AS source_scope
+        WHERE source_scope.session_id = source_session.id
+          AND source_scope.candidate_id = p_candidate_id
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_preview_rows AS source_preview
+        WHERE source_preview.session_id = source_session.id
+          AND source_preview.candidate_id = p_candidate_id
+      )
+    );
+
+  RETURN (
+    jsonb_build_object(
+      'ok', true,
+      'candidate_id', p_candidate_id::text,
+      'candidate_current_method', v_candidate_current_method,
+      'source_method', v_source_method,
+      'target_method', v_target_method,
+      'latest_source_change_seq', v_latest_source_change_seq,
+      'authoritative_sessions', v_authoritative_sessions_json,
+      'replaced_source_session_ids', v_replaced_source_session_ids_json,
+      'represented_timesheet_ids', to_jsonb(v_represented_timesheet_ids),
+      'authorised_timesheet_ids', to_jsonb(v_authorised_timesheet_ids),
+      'active_advance_timesheet_ids', to_jsonb(v_active_advance_timesheet_ids)
+    )
+    || jsonb_build_object(
+      'targeted_timesheet_ids', to_jsonb(v_targeted_timesheet_ids),
+      'authoritative_session_count', jsonb_array_length(v_authoritative_sessions_json),
+      'preview_row_count', v_preview_row_count,
+      'represented_timesheet_count', COALESCE(array_length(v_represented_timesheet_ids, 1), 0),
+      'authorised_timesheet_count', COALESCE(array_length(v_authorised_timesheet_ids, 1), 0),
+      'active_advance_timesheet_count', COALESCE(array_length(v_active_advance_timesheet_ids, 1), 0),
+      'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_ids, 1), 0),
+      'source_target_mismatch_count', COALESCE(v_source_target_mismatch_count, 0),
+      'target_details', v_target_details_json,
+      'contracts_changed', 0,
+      'contract_weeks_changed', 0,
+      'timesheets_changed', 0,
+      'rates_changed', 0,
+      'tsfin_repricing_rows', 0,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+      'policy_x_dirtying_only', true
+    )
+  );
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.candidate_pay_method_change_refresh_scope_v1(uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.candidate_pay_method_change_refresh_scope_v1(uuid, text, text) TO service_role;
+
