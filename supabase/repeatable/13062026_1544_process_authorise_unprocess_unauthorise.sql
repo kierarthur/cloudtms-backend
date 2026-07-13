@@ -2393,8 +2393,14 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid, p_now_utc timestamp with time zone, p_expected_row_signature text)
- RETURNS jsonb
+CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(
+  p_timesheet_id uuid,
+  p_expected_timesheet_id uuid,
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_now_utc timestamp with time zone DEFAULT now(),
+  p_expected_row_signature text DEFAULT NULL::text
+)
+RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
@@ -9896,8 +9902,14 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.contract_week_manual_unprocess_atomic(p_week_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid, p_now_utc timestamp with time zone, p_expected_row_signature text)
- RETURNS jsonb
+CREATE OR REPLACE FUNCTION public.contract_week_manual_unprocess_atomic(
+  p_week_id uuid,
+  p_expected_timesheet_id uuid,
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_now_utc timestamp with time zone DEFAULT now(),
+  p_expected_row_signature text DEFAULT NULL::text
+)
+RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
