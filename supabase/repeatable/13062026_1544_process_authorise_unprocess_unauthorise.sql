@@ -2393,8 +2393,7 @@ END;
 $function$;
 
 
-
-CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
+CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid, p_now_utc timestamp with time zone, p_expected_row_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -2415,6 +2414,7 @@ DECLARE
   v_after_row_signature text := NULL;
   v_error_state text := NULL;
   v_error_message text := NULL;
+  v_history jsonb := '{}'::jsonb;
 BEGIN
   PERFORM set_config('lock_timeout', '2500ms', true);
 
@@ -2424,6 +2424,20 @@ BEGIN
 
   IF p_expected_timesheet_id IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'EXPECTED_TIMESHEET_ID_REQUIRED', 'message', 'p_expected_timesheet_id is required.');
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'ACTOR_USER_ID_REQUIRED', 'message', 'p_actor_user_id is required.');
+  END IF;
+
+  IF NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '') IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'operation', 'daily_manual_unprocess',
+      'error_code', 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      'message', 'The current lifecycle signature is required. Refresh the timesheet and try again.',
+      'expected_timesheet_id', p_expected_timesheet_id
+    );
   END IF;
 
   SELECT ts.*
@@ -2505,7 +2519,7 @@ BEGIN
     );
   END IF;
 
-  IF v_expected_row_signature IS NOT NULL AND COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
+  IF COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
     RETURN jsonb_build_object(
       'ok', false,
       'operation', 'daily_manual_unprocess',
@@ -2561,11 +2575,13 @@ BEGIN
     );
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM public.timesheet_financial_retention AS retention
-    WHERE retention.timesheet_id = v_current_ts.timesheet_id
-  ) THEN
+  v_history := public.timesheet_removal_financial_history_v1(
+    ARRAY[v_current_ts.timesheet_id]::uuid[],
+    ARRAY[v_current_ts.booking_id]::text[],
+    ARRAY[]::uuid[]
+  );
+
+  IF COALESCE((v_history ->> 'archive_required')::boolean, false) THEN
     RETURN jsonb_build_object(
       'ok', false,
       'success', false,
@@ -2581,6 +2597,7 @@ BEGIN
       'backend_row_signature', v_current_row_signature,
       'row_signature', v_current_row_signature,
       'has_retained_financial_history', true,
+      'retention_reasons', COALESCE(v_history -> 'retention_reasons', '[]'::jsonb),
       'can_unprocess', false,
       'unprocess_block_reason', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
       'unprocess_action_visible', true,
@@ -2677,27 +2694,6 @@ EXCEPTION WHEN OTHERS THEN
   RAISE;
 END;
 $function$;
-
-
-
-
-CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
- RETURNS jsonb
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-BEGIN
-  RETURN public.timesheet_daily_manual_unprocess_atomic(
-    p_timesheet_id => p_timesheet_id,
-    p_expected_timesheet_id => p_expected_timesheet_id,
-    p_actor_user_id => p_actor_user_id,
-    p_now_utc => p_now_utc,
-    p_expected_row_signature => NULL::text
-  );
-END;
-$function$;
-
 
 
 
@@ -9900,8 +9896,7 @@ BEGIN
 END;
 $function$;
 
-
-CREATE OR REPLACE FUNCTION public.contract_week_manual_unprocess_atomic(p_week_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
+CREATE OR REPLACE FUNCTION public.contract_week_manual_unprocess_atomic(p_week_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid, p_now_utc timestamp with time zone, p_expected_row_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -9975,6 +9970,7 @@ DECLARE
   v_previous_contract_week_status text := NULL;
   v_previous_processing_status text := NULL;
   v_error_constraint text := NULL;
+  v_history jsonb := '{}'::jsonb;
 BEGIN
   PERFORM set_config('lock_timeout', '2500ms', true);
 
@@ -9984,6 +9980,20 @@ BEGIN
 
   IF p_expected_timesheet_id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_PAYLOAD', DETAIL = jsonb_build_object('field', 'p_expected_timesheet_id')::text;
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'INVALID_PAYLOAD', DETAIL = jsonb_build_object('field', 'p_actor_user_id')::text;
+  END IF;
+
+  IF NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '') IS NULL THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      DETAIL = jsonb_build_object(
+        'contract_week_id', p_week_id,
+        'expected_timesheet_id', p_expected_timesheet_id,
+        'message', 'The current lifecycle signature is required. Refresh the timesheet and try again.'
+      )::text;
   END IF;
 
   SELECT cw.*
@@ -10134,7 +10144,7 @@ BEGIN
   v_current_row_signature := NULLIF(BTRIM(COALESCE(v_before_signature_json ->> 'backend_row_signature', v_before_signature_json ->> 'row_signature', '')), '');
   v_expected_row_signature := NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '');
 
-  IF v_expected_row_signature IS NOT NULL AND COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
+  IF COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
     RAISE EXCEPTION USING
       MESSAGE = 'ROW_SIGNATURE_MISMATCH',
       DETAIL = jsonb_build_object(
@@ -10355,14 +10365,17 @@ BEGIN
       )::text;
   END IF;
 
-  -- The sticky retention marker is authoritative for historical financial linkage.
-  -- This check is deliberately after all identity locks and stale-row validation, and
-  -- before evidence staging or any destructive mutation.
-  IF EXISTS (
-    SELECT 1
-    FROM public.timesheet_financial_retention AS retention
-    WHERE retention.timesheet_id = ANY(v_all_timesheet_ids)
-  ) THEN
+  -- Use the same sticky retained-financial-history classifier as permanent Delete.
+  -- Only its marker-backed archive_required result blocks Unprocess here; the
+  -- earlier weekly validation continues to own invoice, authorisation, Archive,
+  -- identity, evidence and stale-row errors.
+  v_history := public.timesheet_removal_financial_history_v1(
+    v_all_timesheet_ids,
+    ARRAY[v_booking_id]::text[],
+    ARRAY[v_week.id]::uuid[]
+  );
+
+  IF COALESCE((v_history ->> 'archive_required')::boolean, false) THEN
     RAISE EXCEPTION USING
       MESSAGE = 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
       DETAIL = jsonb_build_object(
@@ -10375,6 +10388,7 @@ BEGIN
         'backend_row_signature', v_current_row_signature,
         'row_signature', v_current_row_signature,
         'has_retained_financial_history', true,
+        'retention_reasons', COALESCE(v_history -> 'retention_reasons', '[]'::jsonb),
         'can_unprocess', false,
         'unprocess_block_reason', 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS',
         'unprocess_action_visible', true,
@@ -10783,7 +10797,6 @@ EXCEPTION
     RAISE EXCEPTION USING MESSAGE = 'LOCK_TIMEOUT', DETAIL = jsonb_build_object('contract_week_id', p_week_id, 'expected_timesheet_id', p_expected_timesheet_id)::text;
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.tsfin_write_current_snapshot_single_bounded(p_timesheet_id uuid, p_timesheet_version integer DEFAULT NULL::integer, p_snapshot_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
