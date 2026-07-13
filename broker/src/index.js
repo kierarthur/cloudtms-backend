@@ -1842,81 +1842,6 @@ async function loadSettingsDefaults(env) {
 }
 
 
-
-function resolveBankingPayOfficialDateContext(input = {}) {
-  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-  const source = isPlainObject(input) ? input : {};
-  const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
-  const trim = (value) => String(value ?? '').trim();
-  const toLondonDate = (value = null) => {
-    const instant = value instanceof Date
-      ? value
-      : (value ? new Date(value) : new Date());
-    const safeInstant = Number.isFinite(instant.getTime()) ? instant : new Date();
-    try {
-      const parts = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(safeInstant);
-      const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-      const iso = `${values.year}-${values.month}-${values.day}`;
-      if (isoDateRe.test(iso)) return iso;
-    } catch {}
-    return safeInstant.toISOString().slice(0, 10);
-  };
-  const addDays = (isoDate, days) => {
-    const [year, month, day] = isoDate.split('-').map(Number);
-    const date = new Date(Date.UTC(year, month - 1, day + Number(days || 0)));
-    return date.toISOString().slice(0, 10);
-  };
-  const weekdayUtc = (isoDate) => {
-    const [year, month, day] = isoDate.split('-').map(Number);
-    return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  };
-
-  const londonCurrentDate = toLondonDate(source.now || source.nowUtc || source.now_utc || null);
-  const explicitPayDate = trim(
-    source.payDate || source.pay_date || source.currentPayDate || source.current_pay_date || source.nextOfficialPayDate || source.next_official_pay_date
-  );
-  const daysToFriday = (5 - weekdayUtc(londonCurrentDate) + 7) % 7;
-  const nextOfficialPayDate = isoDateRe.test(explicitPayDate)
-    ? explicitPayDate
-    : addDays(londonCurrentDate, daysToFriday);
-  const snoozeUntilDate = trim(source.snoozeUntilDate || source.snooze_until_date || '');
-  let dateRelationToNextPayRun = null;
-  let warningCode = null;
-  let warningRequired = false;
-  if (isoDateRe.test(snoozeUntilDate)) {
-    if (snoozeUntilDate < nextOfficialPayDate) {
-      dateRelationToNextPayRun = 'BEFORE_NEXT_OFFICIAL_PAY_RUN';
-      warningCode = 'SNOOZE_DATE_BEFORE_NEXT_PAY_RUN';
-      warningRequired = true;
-    } else {
-      dateRelationToNextPayRun = snoozeUntilDate === nextOfficialPayDate
-        ? 'INCLUDES_NEXT_OFFICIAL_PAY_RUN'
-        : 'AFTER_NEXT_OFFICIAL_PAY_RUN';
-      warningCode = 'SNOOZE_INCLUDES_NEXT_PAY_RUN';
-      warningRequired = true;
-    }
-  }
-  return {
-    timezone_id: 'Europe/London',
-    london_current_date: londonCurrentDate,
-    current_pay_date: nextOfficialPayDate,
-    next_official_pay_date: nextOfficialPayDate,
-    snooze_until_date: isoDateRe.test(snoozeUntilDate) ? snoozeUntilDate : null,
-    date_relation_to_next_pay_run: dateRelationToNextPayRun,
-    warning_required: warningRequired,
-    warning_code: warningCode,
-    requires_before_next_run_warning: warningCode === 'SNOOZE_DATE_BEFORE_NEXT_PAY_RUN',
-    requires_includes_next_run_warning: warningCode === 'SNOOZE_INCLUDES_NEXT_PAY_RUN',
-    inclusive_snooze_end_date: true
-  };
-}
-
-
 async function postToPowerAutomate(env, payload, channel = 'finance') {
   const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
   const parseSettingsObject = (raw) => {
@@ -128470,6 +128395,7 @@ async function handleUpdateSettings(env, req) {
   }
 }
 
+
 async function resolveBankingPayOfficialDateContext(env, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
@@ -128587,7 +128513,6 @@ async function resolveBankingPayOfficialDateContext(env, options = {}) {
     configurationFingerprint
   };
 }
-
 
 async function handleAuthReauthVerify(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
