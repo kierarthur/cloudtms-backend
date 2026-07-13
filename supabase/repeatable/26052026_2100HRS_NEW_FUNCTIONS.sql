@@ -48747,7 +48747,12 @@ $function$;
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_insert_items_from_preview(uuid, uuid);
-CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(p_pay_batch_id uuid, p_actor_user_id uuid, p_operation_id uuid, p_candidate_scope_ids jsonb)
+CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
+)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
