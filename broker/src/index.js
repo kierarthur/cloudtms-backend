@@ -172329,7 +172329,6 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
 
 
 
-
 async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = null) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -173097,7 +173096,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
             started_at_utc: new Date().toISOString(),
             session_id: workbenchContext.session_id,
             source_session_id: workbenchContext.session_id,
-            post_action_refresh: postActionRefresh,
             background_nudge: backgroundNudge,
             background_nudge_error: null,
             durable_cron_fallback_retained: true
@@ -173112,7 +173110,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
             started_at_utc: new Date().toISOString(),
             session_id: workbenchContext.session_id,
             source_session_id: workbenchContext.session_id,
-            post_action_refresh: postActionRefresh,
             background_nudge: null,
             background_nudge_error: {
               code: trimText(nudgeError?.code || nudgeError?.error_code || 'BANKING_PAY_WORKBENCH_NUDGE_FAILED') || 'BANKING_PAY_WORKBENCH_NUDGE_FAILED',
