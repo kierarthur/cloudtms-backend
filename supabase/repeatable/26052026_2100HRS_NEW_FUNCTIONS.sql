@@ -198099,17 +198099,11 @@ BEGIN
 END
 $do$;
 
-
-CREATE OR REPLACE FUNCTION public.timesheet_standard_delete_apply_v1(
-  p_timesheet_id uuid,
-  p_actor_user_id uuid,
-  p_expected_timesheet_id uuid DEFAULT NULL::uuid,
-  p_expected_row_signature text DEFAULT NULL::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.timesheet_standard_delete_apply_v1(p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_expected_row_signature text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_preview jsonb;
@@ -198117,12 +198111,26 @@ DECLARE
   v_decision text;
   v_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_contract_week_ids uuid[] := ARRAY[]::uuid[];
+  v_recheck_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_recheck_contract_week_ids uuid[] := ARRAY[]::uuid[];
   v_r2_keys text[] := ARRAY[]::text[];
   v_current_timesheet_id uuid;
   v_deleted_count integer := 0;
 BEGIN
   PERFORM set_config('lock_timeout', '750ms', true);
-  IF p_actor_user_id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'ACTOR_USER_ID_REQUIRED'; END IF;
+
+  IF p_timesheet_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ID_REQUIRED';
+  END IF;
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'ACTOR_USER_ID_REQUIRED';
+  END IF;
+  IF p_expected_timesheet_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'EXPECTED_TIMESHEET_ID_REQUIRED';
+  END IF;
+  IF NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '') IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'EXPECTED_ROW_SIGNATURE_REQUIRED';
+  END IF;
 
   v_preview := public.timesheet_standard_delete_preview_v1(
     p_timesheet_id, p_actor_user_id, p_expected_timesheet_id, p_expected_row_signature
@@ -198150,10 +198158,33 @@ BEGIN
   WHERE cw.id = ANY(v_contract_week_ids)
   ORDER BY cw.id FOR UPDATE;
 
+  -- Freeze mutable evidence and queue rows before the final target recheck.
+  -- This keeps the permanent-delete target and every returned R2 key stable
+  -- until the relational transaction commits or rolls back.
+  PERFORM 1
+  FROM public.manual_timesheet_queue AS queue_row
+  WHERE queue_row.timesheet_id = ANY(v_timesheet_ids)
+  ORDER BY queue_row.id
+  FOR UPDATE;
+
+  PERFORM 1
+  FROM public.timesheet_evidence AS evidence_row
+  WHERE evidence_row.timesheet_id = ANY(v_timesheet_ids)
+  ORDER BY evidence_row.id
+  FOR UPDATE;
+
   v_recheck := public.timesheet_standard_delete_preview_v1(
     p_timesheet_id, p_actor_user_id, p_expected_timesheet_id, p_expected_row_signature
   );
   v_decision := COALESCE(v_recheck ->> 'decision', 'BLOCKED');
+
+  SELECT COALESCE(array_agg(value::uuid ORDER BY value::uuid), ARRAY[]::uuid[])
+    INTO v_recheck_timesheet_ids
+  FROM jsonb_array_elements_text(COALESCE(v_recheck -> 'timesheet_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(value::uuid ORDER BY value::uuid), ARRAY[]::uuid[])
+    INTO v_recheck_contract_week_ids
+  FROM jsonb_array_elements_text(COALESCE(v_recheck -> 'contract_week_ids', '[]'::jsonb)) AS ids(value);
 
   IF v_decision <> 'PERMANENT_DELETE' THEN
     RETURN v_recheck || jsonb_build_object(
@@ -198163,23 +198194,19 @@ BEGIN
     );
   END IF;
 
-  IF COALESCE(v_recheck -> 'timesheet_ids', '[]'::jsonb) IS DISTINCT FROM COALESCE(v_preview -> 'timesheet_ids', '[]'::jsonb) THEN
+  IF v_recheck_timesheet_ids IS DISTINCT FROM v_timesheet_ids
+     OR v_recheck_contract_week_ids IS DISTINCT FROM v_contract_week_ids THEN
     RETURN jsonb_build_object(
       'ok', false,
       'decision', 'BLOCKED',
       'apply_performed', false,
-      'error_code', 'REMOVAL_UNIT_CHANGED'
+      'error_code', 'REMOVAL_UNIT_CHANGED',
+      'expected_timesheet_ids', to_jsonb(v_timesheet_ids),
+      'current_timesheet_ids', to_jsonb(v_recheck_timesheet_ids),
+      'expected_contract_week_ids', to_jsonb(v_contract_week_ids),
+      'current_contract_week_ids', to_jsonb(v_recheck_contract_week_ids)
     );
   END IF;
-
-  -- Freeze existing mutable manual-queue R2 keys before key collection.
-  -- The exact queue rows are locked in deterministic order so an r2_key cannot
-  -- change between server-side key collection and the relational delete.
-  PERFORM 1
-  FROM public.manual_timesheet_queue AS queue_row
-  WHERE queue_row.timesheet_id = ANY(v_timesheet_ids)
-  ORDER BY queue_row.id
-  FOR UPDATE;
 
   SELECT COALESCE(array_agg(DISTINCT storage_key ORDER BY storage_key), ARRAY[]::text[])
     INTO v_r2_keys
@@ -222208,6 +222235,10 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
 CREATE OR REPLACE FUNCTION public._pay_workbench_normalise_timesheet_rotation_scope_payload(
   p_targeted_timesheet_ids uuid[] DEFAULT ARRAY[]::uuid[],
   p_linked_timesheet_ids uuid[] DEFAULT ARRAY[]::uuid[]
@@ -223508,17 +223539,11 @@ $function$;
 -- an exact retry claim. Duplicate input keys are reduced before the upsert.
 DROP FUNCTION IF EXISTS public.timesheet_r2_cleanup_record_v1(text, uuid, uuid[], jsonb);
 
-CREATE OR REPLACE FUNCTION public.timesheet_r2_cleanup_record_v1(
-  p_delete_operation_id text,
-  p_requested_timesheet_id uuid,
-  p_deleted_timesheet_ids uuid[],
-  p_failures jsonb,
-  p_claim_token uuid DEFAULT NULL::uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.timesheet_r2_cleanup_record_v1(p_delete_operation_id text, p_requested_timesheet_id uuid, p_deleted_timesheet_ids uuid[], p_failures jsonb, p_claim_token uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_operation_id text := NULLIF(BTRIM(COALESCE(p_delete_operation_id, '')), '');
@@ -223543,7 +223568,12 @@ BEGIN
   IF p_claim_token IS NULL THEN
     WITH parsed AS (
       SELECT
-        NULLIF(BTRIM(item.value ->> 'r2_key'), '') AS r2_key,
+        CASE
+          WHEN jsonb_typeof(item.value -> 'r2_key') = 'string'
+           AND NULLIF(BTRIM(item.value ->> 'r2_key'), '') IS NOT NULL
+            THEN item.value ->> 'r2_key'
+          ELSE NULL
+        END AS r2_key,
         GREATEST(COALESCE(NULLIF(item.value ->> 'attempt_count', '')::integer, 1), 1) AS attempt_count,
         LEFT(
           COALESCE(NULLIF(BTRIM(item.value ->> 'error'), ''), 'R2_DELETE_FAILED'),
@@ -223552,13 +223582,13 @@ BEGIN
         item.ordinality
       FROM jsonb_array_elements(v_failures) WITH ORDINALITY AS item(value, ordinality)
     ), deduplicated AS (
-      SELECT DISTINCT ON (parsed.r2_key)
+      SELECT DISTINCT ON (parsed.r2_key COLLATE "C")
         parsed.r2_key,
         parsed.attempt_count,
         parsed.error_text
       FROM parsed
       WHERE parsed.r2_key IS NOT NULL
-      ORDER BY parsed.r2_key, parsed.ordinality DESC
+      ORDER BY parsed.r2_key COLLATE "C", parsed.ordinality DESC
     ), inserted AS (
       INSERT INTO public.timesheet_r2_cleanup_queue AS q (
         delete_operation_id,
@@ -223620,7 +223650,12 @@ BEGIN
   ELSE
     WITH parsed AS (
       SELECT
-        NULLIF(BTRIM(item.value ->> 'r2_key'), '') AS r2_key,
+        CASE
+          WHEN jsonb_typeof(item.value -> 'r2_key') = 'string'
+           AND NULLIF(BTRIM(item.value ->> 'r2_key'), '') IS NOT NULL
+            THEN item.value ->> 'r2_key'
+          ELSE NULL
+        END AS r2_key,
         LEFT(
           COALESCE(NULLIF(BTRIM(item.value ->> 'error'), ''), 'R2_DELETE_FAILED'),
           2000
@@ -223628,12 +223663,12 @@ BEGIN
         item.ordinality
       FROM jsonb_array_elements(v_failures) WITH ORDINALITY AS item(value, ordinality)
     ), deduplicated AS (
-      SELECT DISTINCT ON (parsed.r2_key)
+      SELECT DISTINCT ON (parsed.r2_key COLLATE "C")
         parsed.r2_key,
         parsed.error_text
       FROM parsed
       WHERE parsed.r2_key IS NOT NULL
-      ORDER BY parsed.r2_key, parsed.ordinality DESC
+      ORDER BY parsed.r2_key COLLATE "C", parsed.ordinality DESC
     ), released AS (
       UPDATE public.timesheet_r2_cleanup_queue AS q
          SET status = 'PENDING',
@@ -223673,6 +223708,8 @@ BEGIN
 END;
 $function$;
 
+
+
 REVOKE ALL ON FUNCTION public.timesheet_r2_cleanup_record_v1(text, uuid, uuid[], jsonb, uuid) FROM PUBLIC;
 DO $do$
 BEGIN
@@ -223694,15 +223731,12 @@ $do$;
 -- complete a row that has already been reclaimed with a newer token.
 DROP FUNCTION IF EXISTS public.timesheet_r2_cleanup_complete_v1(text, text[]);
 
-CREATE OR REPLACE FUNCTION public.timesheet_r2_cleanup_complete_v1(
-  p_delete_operation_id text,
-  p_claim_token uuid,
-  p_r2_keys text[]
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+
+CREATE OR REPLACE FUNCTION public.timesheet_r2_cleanup_complete_v1(p_delete_operation_id text, p_claim_token uuid, p_r2_keys text[])
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_operation_id text := NULLIF(BTRIM(COALESCE(p_delete_operation_id, '')), '');
@@ -223717,10 +223751,17 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'R2_CLEANUP_CLAIM_TOKEN_REQUIRED';
   END IF;
 
-  SELECT COALESCE(array_agg(DISTINCT BTRIM(value) ORDER BY BTRIM(value)), ARRAY[]::text[])
+  SELECT COALESCE(
+           array_agg(exact_key.r2_key ORDER BY exact_key.r2_key COLLATE "C"),
+           ARRAY[]::text[]
+         )
     INTO v_keys
-  FROM unnest(COALESCE(p_r2_keys, ARRAY[]::text[])) AS u(value)
-  WHERE NULLIF(BTRIM(value), '') IS NOT NULL;
+  FROM (
+    SELECT DISTINCT key_value.value COLLATE "C" AS r2_key
+    FROM unnest(COALESCE(p_r2_keys, ARRAY[]::text[])) AS key_value(value)
+    WHERE key_value.value IS NOT NULL
+      AND NULLIF(BTRIM(key_value.value), '') IS NOT NULL
+  ) AS exact_key;
 
   IF COALESCE(array_length(v_keys, 1), 0) > 256 THEN
     RAISE EXCEPTION USING MESSAGE = 'R2_CLEANUP_KEY_LIMIT_EXCEEDED';
@@ -223750,6 +223791,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 REVOKE ALL ON FUNCTION public.timesheet_r2_cleanup_complete_v1(text, uuid, text[]) FROM PUBLIC;
 DO $do$

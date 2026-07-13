@@ -66797,6 +66797,8 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
   }
 }
 
+
+
 async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
   const WLOG = true;
@@ -67786,6 +67788,16 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const payStateIsPaid = !!(payStateAvailable && (payStatePaidStatus === 'PAID' || payStatePaidStatus === 'PARTIALLY_PAID'));
     const isPaid = payStateIsPaid;
     const isHardLocked = isLockedByInvoice || (payStateAvailable ? payStateIsPaid : !!(tsfinRaw?.paid_at_utc));
+    const contractWeekStatusUpper = String(contractWeek?.status || '').trim().toUpperCase();
+    const isAuthorisedForActionAvailability = !!(
+      !ts?.revoked_at &&
+      (
+        !!ts?.authorised_at_server ||
+        !!tsfinRaw?.authorised_at_utc ||
+        contractWeekStatusUpper === 'AUTHORISED' ||
+        contractWeekStatusUpper === 'AUTHORIZED'
+      )
+    );
     const payStateOutstandingPresent = !!(
       payStateAdjusted &&
       Object.prototype.hasOwnProperty.call(payStateAdjusted, 'outstanding_ex_vat') &&
@@ -67846,6 +67858,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     }
 
     const canAdvancePayment =
+      (!isAuthorisedForActionAvailability) &&
       (!isLockedByInvoice) &&
       (!payStateIsAdvanced) &&
       (!payStateProcessingAny) &&
@@ -67854,6 +67867,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       payStateHasPositiveOutstanding;
 
     const canUnadvancePayment =
+      (!isAuthorisedForActionAvailability) &&
       (!isHardLocked) &&
       payStateIsAdvanced &&
       payStateCanUnadvance &&
@@ -67862,6 +67876,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       (!payStateProcessingAny);
 
     const advancePaymentDisabledReason = (() => {
+      if (isAuthorisedForActionAvailability) return 'TIMESHEET_AUTHORISED';
       if (isLockedByInvoice) return 'INVOICE_LOCKED';
       if (payStateIsAdvanced) return 'ALREADY_ADVANCED';
       if (payStateProcessingAny || payStateHasActiveReservation || payStatePaidStatus === 'PROCESSING') return 'PROCESSING';
@@ -67874,6 +67889,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     })();
 
     const canSnoozePayment =
+      (!isAuthorisedForActionAvailability) &&
       payStateAvailable &&
       (!isHardLocked) &&
       (!payStateIsSnoozed) &&
@@ -67882,6 +67898,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       (payStatePaidStatus !== 'PARTIALLY_PAID');
 
     const canClearPaymentSnooze =
+      (!isAuthorisedForActionAvailability) &&
       payStateAvailable &&
       (!isHardLocked) &&
       payStateIsSnoozed;
@@ -67940,15 +67957,24 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       } catch {}
     }
 
-    // ✅ adjustment sheets cannot be converted/restored to QR/Electronic
-    if (isAdjustment) {
+    // ✅ adjustment or authorised sheets cannot be converted/restored to QR/Electronic
+    if (isAdjustment || isAuthorisedForActionAvailability) {
       canRestoreQrPending = false;
       canRestoreQrSigned = false;
       canRevertToElectronic = false;
     }
 
-    const canAllowQrAgain = (!isHardLocked) && isManualOnly && !isAdjustment;
-    const canAllowElectronicAgain = (!isHardLocked) && isManualOnly && supportsElectronicSubmission && !isAdjustment;
+    const canAllowQrAgain =
+      (!isAuthorisedForActionAvailability) &&
+      (!isHardLocked) &&
+      isManualOnly &&
+      !isAdjustment;
+    const canAllowElectronicAgain =
+      (!isAuthorisedForActionAvailability) &&
+      (!isHardLocked) &&
+      isManualOnly &&
+      supportsElectronicSubmission &&
+      !isAdjustment;
 
     // Shape TS + TSFIN for FE
     const timesheetOut = {
@@ -68050,6 +68076,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       qr_scenario: qrScenario,
 
       is_adjustment: isAdjustment,
+      is_authorised: isAuthorisedForActionAvailability,
+      authorised: isAuthorisedForActionAvailability,
+      source_actions_blocked_by_authorisation: isAuthorisedForActionAvailability,
 
       locked_by_invoice: isLockedByInvoice,
       paid: isPaid,
@@ -68223,7 +68252,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
-
 
 
 
@@ -70300,6 +70328,7 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
 
 
 
+
 async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -70331,7 +70360,7 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
     if (code === 'TIMESHEET_MOVED' || code === 'ROW_SIGNATURE_MISMATCH' || code === 'LOCK_TIMEOUT') return 409;
     if (code === 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' || code === 'TIMESHEET_ARCHIVED') return 409;
     if (code === 'TIMESHEET_LOCKED_OR_PAID' || code === 'TIMESHEET_LOCKED_BY_INVOICE' || code === 'TIMESHEET_AUTHORISED_EDIT_BLOCKED' || code === 'ALREADY_UNPROCESSED' || code === 'PROCESSING_STATUS_NOT_UNPROCESSABLE' || code === 'UNPROCESS_NOT_ALLOWED') return 409;
-    if (code === 'TIMESHEET_ID_REQUIRED' || code === 'EXPECTED_TIMESHEET_ID_REQUIRED' || code === 'TIMESHEET_NOT_FOUND' || code === 'CURRENT_TIMESHEET_NOT_FOUND' || code === 'NOT_DAILY' || code === 'NOT_MANUAL' || code === 'NO_TSFIN') return 400;
+    if (code === 'TIMESHEET_ID_REQUIRED' || code === 'EXPECTED_TIMESHEET_ID_REQUIRED' || code === 'EXPECTED_ROW_SIGNATURE_REQUIRED' || code === 'TIMESHEET_NOT_FOUND' || code === 'CURRENT_TIMESHEET_NOT_FOUND' || code === 'NOT_DAILY' || code === 'NOT_MANUAL' || code === 'NO_TSFIN') return 400;
     return 500;
   };
   const parseRpcErrorPayload = (err) => {
@@ -70351,7 +70380,7 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
       'ROW_SIGNATURE_MISMATCH', 'LOCK_TIMEOUT', 'TIMESHEET_LOCKED_OR_PAID',
       'TIMESHEET_LOCKED_BY_INVOICE', 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
       'ALREADY_UNPROCESSED', 'PROCESSING_STATUS_NOT_UNPROCESSABLE', 'UNPROCESS_NOT_ALLOWED',
-      'TIMESHEET_ID_REQUIRED', 'EXPECTED_TIMESHEET_ID_REQUIRED', 'TIMESHEET_NOT_FOUND',
+      'TIMESHEET_ID_REQUIRED', 'EXPECTED_TIMESHEET_ID_REQUIRED', 'EXPECTED_ROW_SIGNATURE_REQUIRED', 'TIMESHEET_NOT_FOUND',
       'CURRENT_TIMESHEET_NOT_FOUND', 'NOT_DAILY', 'NOT_MANUAL', 'NO_TSFIN'
     ].find((code) => message.includes(code));
     return {
@@ -70510,13 +70539,36 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
     body.dataRow?.rowSignature
   );
 
+  if (!expectedRowSignature) {
+    const currentId = expectedTimesheetId || requestedTimesheetId;
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      success: false,
+      error: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      error_code: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      message: 'The current Timesheet lifecycle signature is required. Refresh before continuing.',
+      mutation_performed: false,
+      timesheet_id: currentId,
+      current_timesheet_id: currentId,
+      expected_timesheet_id: currentId,
+      expected_row_signature: null,
+      refresh_required: true,
+      affected_rows: [{
+        timesheet_id: currentId,
+        current_timesheet_id: currentId,
+        row_key: currentId ? `timesheet:${currentId}` : null,
+        context: 'bulk_process'
+      }]
+    }), { status: 400, headers: jsonHeaders }));
+  }
+
   try {
     const rpcRes = await sbRpc(env, 'timesheet_daily_manual_unprocess_atomic', {
       p_timesheet_id: requestedTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId || requestedTimesheetId,
       p_actor_user_id: user?.id || null,
       p_now_utc: nowIso(),
-      p_expected_row_signature: expectedRowSignature || null
+      p_expected_row_signature: expectedRowSignature
     }, { timeoutMs: 45000 });
     const payload = unwrapRpcPayload(rpcRes, 'timesheet_daily_manual_unprocess_atomic');
     return responseForRpcPayload(payload, 'Failed to unprocess daily manual timesheet', requestedTimesheetId, expectedTimesheetId || requestedTimesheetId);
@@ -70525,9 +70577,6 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
     return responseForRpcPayload(payload, 'Failed to unprocess daily manual timesheet', requestedTimesheetId, expectedTimesheetId || requestedTimesheetId);
   }
 }
-
-
-
 
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -72331,7 +72380,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
 
 
-
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -72463,6 +72511,28 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     });
   }
 
+  if (!expectedRowSignature) {
+    return withJson(400, {
+      ok: false,
+      success: false,
+      error: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      error_code: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      message: 'The current Timesheet lifecycle signature is required. Refresh before continuing.',
+      mutation_performed: false,
+      contract_week_id: weekId,
+      current_timesheet_id: cw.timesheet_id || expectedTimesheetId,
+      expected_timesheet_id: expectedTimesheetId,
+      expected_row_signature: null,
+      refresh_required: true,
+      affected_rows: [{
+        contract_week_id: weekId,
+        timesheet_id: cw.timesheet_id || expectedTimesheetId,
+        row_key: (cw.timesheet_id || expectedTimesheetId) ? `timesheet:${cw.timesheet_id || expectedTimesheetId}` : `contract_week:${weekId}`,
+        context: responseContext
+      }]
+    });
+  }
+
   let rpcPayload = null;
   try {
     const rpcRes = await sbRpc(env, 'contract_week_manual_unprocess_atomic', {
@@ -72470,7 +72540,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       p_expected_timesheet_id: expectedTimesheetId,
       p_actor_user_id: user?.id || null,
       p_now_utc: nowIso(),
-      p_expected_row_signature: expectedRowSignature || null
+      p_expected_row_signature: expectedRowSignature
     }, { timeoutMs: 12000 });
     rpcPayload = unwrapJsonbRpcPayload(rpcRes, 'contract_week_manual_unprocess_atomic');
   } catch (err) {
@@ -72480,6 +72550,21 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
 
     if (message === 'TARGET_NOT_FOUND' || message === 'CONTRACT_WEEK_NOT_FOUND' || message === 'TIMESHEET_NOT_FOUND') {
       return withCORS(env, req, notFound('Timesheet or week not found'));
+    }
+    if (message === 'EXPECTED_ROW_SIGNATURE_REQUIRED') {
+      return withJson(400, {
+        ok: false,
+        success: false,
+        error: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+        error_code: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+        message: 'The current Timesheet lifecycle signature is required. Refresh before continuing.',
+        mutation_performed: false,
+        contract_week_id: detailJson.contract_week_id || weekId,
+        current_timesheet_id: detailJson.current_timesheet_id || expectedTimesheetId || cw.timesheet_id || null,
+        expected_timesheet_id: expectedTimesheetId || null,
+        expected_row_signature: null,
+        refresh_required: true
+      });
     }
     if (message === 'INVALID_PAYLOAD') {
       return withJson(400, {
@@ -72631,7 +72716,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     const exactMessage = retained
       ? 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
       : (archived ? 'Archived timesheets must be Unarchived before lifecycle actions.' : (rpcPayload.message || 'Weekly unprocess could not be completed.'));
-    const status = errorCode === 'INVALID_PAYLOAD' ? 400 : 409;
+    const status = (errorCode === 'INVALID_PAYLOAD' || errorCode === 'EXPECTED_ROW_SIGNATURE_REQUIRED') ? 400 : 409;
     const currentId = rpcPayload.current_timesheet_id || rpcPayload.timesheet_id || expectedTimesheetId || null;
     const sourcePatch = (rpcPayload.row_patch && typeof rpcPayload.row_patch === 'object' && !Array.isArray(rpcPayload.row_patch)) ? rpcPayload.row_patch : {};
     const signature = rpcPayload.current_row_signature || rpcPayload.backend_row_signature || rpcPayload.row_signature || null;
@@ -72744,22 +72829,26 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
 
   return withCORS(env, req, ok(responsePayload));
 }
-
-
 /**
  * GENUINELY NEW IMPLEMENTATION UNIT.
  * Claims a bounded retry lease and idempotently deletes already-committed R2 keys.
  * It never performs or retries a database timesheet delete.
  */
 
+
+
 async function processTimesheetR2CleanupRetryBatch(env, options = {}) {
   const opts = (options && typeof options === 'object' && !Array.isArray(options)) ? options : {};
   const limit = Math.min(Math.max(Number.parseInt(opts.limit ?? opts.claimLimit ?? 50, 10) || 50, 1), 100);
   const leaseSeconds = Math.min(Math.max(Number.parseInt(opts.leaseSeconds ?? opts.lease_seconds ?? 300, 10) || 300, 30), 3600);
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const cleanKey = (value) => String(value == null ? '' : value).trim().replace(/^\/+/, '');
+  const storageKeyFor = (value) => String(value == null ? '' : value).trim().replace(/^\/+/, '');
   const normaliseRpc = (value) => Array.isArray(value) ? (value[0] || {}) : (value || {});
-  const uniqueText = (values) => Array.from(new Set((Array.isArray(values) ? values : []).map(cleanKey).filter(Boolean))).sort();
+  const exactQueueKeys = (values) => Array.from(new Set(
+    (Array.isArray(values) ? values : [])
+      .map((value) => String(value == null ? '' : value))
+      .filter((value) => value.trim().length > 0)
+  )).sort();
 
   const claim = normaliseRpc(await sbRpc(
     env,
@@ -72793,8 +72882,8 @@ async function processTimesheetR2CleanupRetryBatch(env, options = {}) {
   const validatedItems = items.map((rawItem) => {
     const item = (rawItem && typeof rawItem === 'object' && !Array.isArray(rawItem)) ? rawItem : {};
     const operationId = String(item.delete_operation_id || '').trim();
-    const queueKey = String(item.r2_key == null ? '' : item.r2_key).trim();
-    const storageKey = cleanKey(queueKey);
+    const queueKey = String(item.r2_key == null ? '' : item.r2_key);
+    const storageKey = storageKeyFor(queueKey);
     const itemClaimToken = String(item.claim_token || '').trim();
     const requestedTimesheetId = String(item.requested_timesheet_id || '').trim() || null;
     const deletedTimesheetIds = Array.from(new Set(
@@ -72805,7 +72894,7 @@ async function processTimesheetR2CleanupRetryBatch(env, options = {}) {
     const attemptCount = Number.parseInt(item.attempt_count, 10);
     const compositeKey = `${operationId}\u0000${queueKey}`;
 
-    if (!operationId || !queueKey || !storageKey || itemClaimToken !== claimToken || !Number.isInteger(attemptCount) || attemptCount < 1 || seenClaimKeys.has(compositeKey)) {
+    if (!operationId || queueKey.trim().length === 0 || itemClaimToken !== claimToken || !Number.isInteger(attemptCount) || attemptCount < 1 || seenClaimKeys.has(compositeKey)) {
       throw new Error('R2_CLEANUP_CLAIM_ITEM_INVALID');
     }
     seenClaimKeys.add(compositeKey);
@@ -72847,7 +72936,9 @@ async function processTimesheetR2CleanupRetryBatch(env, options = {}) {
 
   for (const item of validatedItems) {
     let failure = null;
-    if (!canDelete) {
+    if (!item.storage_key) {
+      failure = 'R2_STORAGE_KEY_INVALID';
+    } else if (!canDelete) {
       failure = 'R2_STORAGE_NOT_CONFIGURED';
     } else {
       try {
@@ -72898,7 +72989,7 @@ async function processTimesheetR2CleanupRetryBatch(env, options = {}) {
   let queueCompleted = 0;
   let queueCompletionFailed = 0;
   for (const [operationId, rawKeys] of completedByOperation.entries()) {
-    const keys = uniqueText(rawKeys);
+    const keys = exactQueueKeys(rawKeys);
     if (!keys.length) continue;
     try {
       const complete = normaliseRpc(await sbRpc(
@@ -73029,10 +73120,6 @@ async function processTimesheetR2CleanupRetryBatch(env, options = {}) {
     failure_results: failureResults
   };
 }
-
-
-
-
 
 async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -79844,6 +79931,7 @@ async function handleBulkProcessDataset(env, req) {
   }
 }
 
+
 function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family) {
   const upper = (v) => String(v == null ? '' : v).trim().toUpperCase();
   const boolish = (v) => {
@@ -80118,7 +80206,6 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
   const computedCanUnprocess = (
     hasTimesheet &&
     !documentLocked &&
-    !paidFinancialHistoryPresent &&
     !isAuthorised &&
     routeFamily === 'MANUAL_NON_QR' &&
     (
@@ -80221,10 +80308,8 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
   const hasRetainedFinancialHistory = lifecycleAnyTrue(
     'has_retained_financial_history',
     'retained_financial_history',
-    'has_financial_history',
-    'financial_history_retained',
-    'archive_required'
-  ) || paidFinancialHistoryPresent || upper(readLifecycleText('delete_decision', 'decision')) === 'ARCHIVE_REQUIRED' || upper(readLifecycleText('unprocess_block_reason')) === 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS';
+    'financial_history_retained'
+  );
   const canonicalCanUnprocess = readLifecycleBool('can_unprocess');
   const canonicalShowUnprocess = readLifecycleBool('show_unprocess', 'unprocess_action_visible');
   const unprocessBlockReason = readLifecycleText('unprocess_block_reason', 'unprocess_reason', 'unprocess_blocker_code') || (
@@ -80235,14 +80320,13 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
       ? 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
       : (isArchived ? 'This timesheet is archived and is read-only. Unarchive it before changing its lifecycle.' : '')
   );
-  const canUnprocess = !isArchived && !hasRetainedFinancialHistory && (
+  const unprocessActionApplicable = canonicalShowUnprocess === null
+    ? !!computedCanUnprocess
+    : canonicalShowUnprocess;
+  const canUnprocess = !isArchived && !hasRetainedFinancialHistory && unprocessActionApplicable && (
     canonicalCanUnprocess === null ? computedCanUnprocess : canonicalCanUnprocess
   );
-  const showUnprocess = isArchived
-    ? false
-    : (hasRetainedFinancialHistory
-      ? true
-      : (canonicalShowUnprocess === null ? !!computedCanUnprocess : canonicalShowUnprocess));
+  const showUnprocess = !isArchived && unprocessActionApplicable;
   const readOnly = isArchived || readLifecycleBool('read_only', 'review_only') === true;
 
   const reviewOnly = !!(dataMutationLocked || isAuthorised || routeFamily !== 'MANUAL_NON_QR');
@@ -80301,6 +80385,7 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     deviation_marker_reason: deviationMarkerReason
   };
 }
+
 
 
 
@@ -97441,16 +97526,19 @@ async function handleTimesheetDelete(env, req, timesheetId) {
  * Deletes only R2 keys returned by a successful, committed permanent-delete RPC.
  * It never discovers keys from request JSON, browser state, manifests or pre-delete reads.
  */
+
 async function deleteCommittedTimesheetR2Keys(env, applyResult, options = {}) {
   const result = (applyResult && typeof applyResult === 'object' && !Array.isArray(applyResult)) ? applyResult : {};
   const opts = (options && typeof options === 'object' && !Array.isArray(options)) ? options : {};
   const operationId = String(opts.deleteOperationId || opts.delete_operation_id || '').trim();
   const requestedTimesheetId = String(opts.requestedTimesheetId || opts.requested_timesheet_id || result.current_timesheet_id || '').trim() || null;
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const cleanKey = (value) => String(value == null ? '' : value).trim().replace(/^\/+/, '');
-  const uniqueText = (value) => Array.from(new Set(
-    (Array.isArray(value) ? value : []).map(cleanKey).filter(Boolean)
+  const exactQueueKeys = (value) => Array.from(new Set(
+    (Array.isArray(value) ? value : [])
+      .map((item) => String(item == null ? '' : item))
+      .filter((item) => item.trim().length > 0)
   )).sort();
+  const storageKeyFor = (value) => String(value == null ? '' : value).trim().replace(/^\/+/, '');
   const uniqueUuid = (value) => Array.from(new Set(
     (Array.isArray(value) ? value : []).map((item) => String(item || '').trim()).filter((item) => uuidRe.test(item))
   )).sort();
@@ -97464,7 +97552,7 @@ async function deleteCommittedTimesheetR2Keys(env, applyResult, options = {}) {
   }
 
   const deletedTimesheetIds = uniqueUuid(result.deleted_timesheet_ids);
-  const keys = uniqueText(result.r2_cleanup_keys);
+  const keys = exactQueueKeys(result.r2_cleanup_keys);
   if (keys.length > 256) {
     throw new Error('deleteCommittedTimesheetR2Keys: R2 cleanup key limit exceeded');
   }
@@ -97483,8 +97571,10 @@ async function deleteCommittedTimesheetR2Keys(env, applyResult, options = {}) {
     durable_retry_recorded_count: 0,
     r2_cleanup_complete: keys.length === 0,
     deleted_keys: [],
+    deleted_storage_keys: [],
     already_missing_keys: [],
     deferred_keys: [],
+    deferred_storage_keys: [],
     failures: []
   };
 
@@ -97494,20 +97584,39 @@ async function deleteCommittedTimesheetR2Keys(env, applyResult, options = {}) {
   const canDelete = !!(bucket && typeof bucket.delete === 'function');
   const failures = [];
 
-  for (const key of keys) {
+  for (const queueKey of keys) {
     summary.attempted_key_count += 1;
+    const storageKey = storageKeyFor(queueKey);
+
+    if (!storageKey) {
+      failures.push({
+        r2_key: queueKey,
+        storage_key: storageKey,
+        attempt_count: 1,
+        error: 'R2_STORAGE_KEY_INVALID'
+      });
+      continue;
+    }
+
     if (!canDelete) {
-      failures.push({ r2_key: key, attempt_count: 1, error: 'R2_STORAGE_NOT_CONFIGURED' });
+      failures.push({
+        r2_key: queueKey,
+        storage_key: storageKey,
+        attempt_count: 1,
+        error: 'R2_STORAGE_NOT_CONFIGURED'
+      });
       continue;
     }
 
     try {
-      await bucket.delete(key);
-      summary.deleted_keys.push(key);
+      await bucket.delete(storageKey);
+      summary.deleted_keys.push(queueKey);
+      summary.deleted_storage_keys.push(storageKey);
       summary.deleted_key_count += 1;
     } catch (error) {
       failures.push({
-        r2_key: key,
+        r2_key: queueKey,
+        storage_key: storageKey,
         attempt_count: 1,
         error: String(error?.message || error || 'R2_DELETE_FAILED').slice(0, 2000)
       });
@@ -97521,6 +97630,7 @@ async function deleteCommittedTimesheetR2Keys(env, applyResult, options = {}) {
 
   summary.failures = failures;
   summary.deferred_keys = failures.map((item) => item.r2_key);
+  summary.deferred_storage_keys = failures.map((item) => item.storage_key);
   summary.deferred_key_count = summary.deferred_keys.length;
   summary.r2_cleanup_complete = false;
   summary.durable_retry_recorded = false;
@@ -128394,8 +128504,6 @@ async function handleUpdateSettings(env, req) {
     return withCORS(env, req, serverError("Failed to update settings_defaults"));
   }
 }
-
-
 async function resolveBankingPayOfficialDateContext(env, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
@@ -128430,7 +128538,9 @@ async function resolveBankingPayOfficialDateContext(env, options = {}) {
 
   const context = safeObject(payload);
   const timezoneId = trimStr(context.timezone_id);
-  const businessDate = trimStr(context.business_date || context.london_current_date);
+  const businessDateField = trimStr(context.business_date);
+  const londonCurrentDateField = trimStr(context.london_current_date);
+  const businessDate = businessDateField || londonCurrentDateField;
   const currentOfficialPayDate = trimStr(context.current_official_pay_date);
   const nextOfficialPayDate = trimStr(context.next_official_pay_date);
   const followingOfficialPayDate = trimStr(context.following_official_pay_date);
@@ -128442,8 +128552,11 @@ async function resolveBankingPayOfficialDateContext(env, options = {}) {
 
   if (
     context.ok !== true ||
-    !timezoneId ||
+    timezoneId !== 'Europe/London' ||
     !isoDateRe.test(businessDate) ||
+    (businessDateField && !isoDateRe.test(businessDateField)) ||
+    (londonCurrentDateField && !isoDateRe.test(londonCurrentDateField)) ||
+    (businessDateField && londonCurrentDateField && businessDateField !== londonCurrentDateField) ||
     !isoDateRe.test(currentOfficialPayDate) ||
     !isoDateRe.test(nextOfficialPayDate) ||
     !isoDateRe.test(followingOfficialPayDate) ||
@@ -128479,7 +128592,9 @@ async function resolveBankingPayOfficialDateContext(env, options = {}) {
     nextPayTime !== currentPayTime ||
     followingPayTime !== currentPayTime + (7 * 24 * 60 * 60 * 1000) ||
     weekEndTime !== currentPayTime ||
-    weekStartTime !== weekEndTime - (6 * 24 * 60 * 60 * 1000)
+    weekStartTime !== weekEndTime - (6 * 24 * 60 * 60 * 1000) ||
+    currentPayWeekKey !== currentOfficialPayDate ||
+    new Date(currentPayTime).getUTCDay() !== officialWeekday
   ) {
     const error = new Error('The authoritative Banking Pay date context is internally inconsistent.');
     error.code = 'BANKING_PAY_DATE_CONTEXT_INCONSISTENT';
@@ -148426,6 +148541,35 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const invalidScope = (message, context = null) => {
+    const error = new Error(message);
+    error.code = 'CANDIDATE_PAY_METHOD_CHANGE_SCOPE_INVALID';
+    if (context) error.context = context;
+    throw error;
+  };
+  const canonicalUuidArray = (value, fieldName, requireCanonicalOrder = true) => {
+    if (!Array.isArray(value)) invalidScope(`Pay-method preview did not return ${fieldName} as an array.`);
+    const raw = value.map((entry) => String(entry == null ? '' : entry).trim());
+    if (raw.some((entry) => !uuidRe.test(entry))) {
+      invalidScope(`Pay-method preview returned an invalid UUID in ${fieldName}.`, { field: fieldName, value });
+    }
+    const canonical = Array.from(new Set(raw)).sort();
+    const hasDuplicates = canonical.length !== raw.length;
+    const orderMismatch = raw.some((entry, index) => entry !== canonical[index]);
+    if (hasDuplicates || (requireCanonicalOrder && orderMismatch)) {
+      invalidScope(`Pay-method preview returned non-canonical ${fieldName}.`, { field: fieldName, value });
+    }
+    return canonical;
+  };
+  const arraysEqual = (left, right) => left.length === right.length && left.every((entry, index) => entry === right[index]);
+  const nonNegativeInteger = (value, fieldName) => {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      invalidScope(`Pay-method preview returned an invalid ${fieldName}.`, { field: fieldName, value });
+    }
+    return parsed;
+  };
   if (!uuidRe.test(String(candidateId))) return withCORS(env, req, badRequest('candidate_id must be a valid UUID'));
   const urlObj = new URL(req.url);
   const rawNewMethod = String(urlObj.searchParams.get('new_method') || '').trim().toUpperCase();
@@ -148502,22 +148646,126 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
     );
     const scope = Array.isArray(rpcResultRaw) ? (rpcResultRaw[0] || {}) : (rpcResultRaw || {});
 
-    const targetedTimesheetIds = Array.isArray(scope.targeted_timesheet_ids)
-      ? scope.targeted_timesheet_ids.map(String).filter(Boolean)
-      : [];
-    const authorisedTimesheetIds = Array.isArray(scope.authorised_timesheet_ids)
-      ? scope.authorised_timesheet_ids.map(String).filter(Boolean)
-      : [];
-    const activeAdvanceTimesheetIds = Array.isArray(scope.active_advance_timesheet_ids)
-      ? scope.active_advance_timesheet_ids.map(String).filter(Boolean)
-      : [];
-    const authoritativeSessions = Array.isArray(scope.authoritative_sessions)
-      ? scope.authoritative_sessions
-      : [];
-    const sourceChangeSeq = Number(scope.latest_source_change_seq || 0);
+    if (
+      !scope ||
+      typeof scope !== 'object' ||
+      Array.isArray(scope) ||
+      scope.ok !== true ||
+      String(scope.candidate_id || '').trim() !== String(candidate.id) ||
+      String(scope.candidate_current_method || '').trim().toUpperCase() !== originalMethod ||
+      String(scope.source_method || '').trim().toUpperCase() !== originalMethod ||
+      String(scope.target_method || '').trim().toUpperCase() !== newMethod ||
+      String(scope.coverage_basis || '').trim().toUpperCase() !== 'CANONICAL_CURRENT_TIMESHEETS' ||
+      scope.coverage_complete !== true ||
+      scope.exact_scope !== true
+    ) {
+      invalidScope('Pay-method preview did not return complete canonical coverage.', scope);
+    }
 
-    if (!Number.isInteger(sourceChangeSeq) || sourceChangeSeq < 0) {
-      return withCORS(env, req, serverError('Pay-method preview returned an invalid source-change sequence'));
+    const targetedTimesheetIds = canonicalUuidArray(scope.targeted_timesheet_ids, 'targeted_timesheet_ids');
+    const authorisedTimesheetIds = canonicalUuidArray(scope.authorised_timesheet_ids, 'authorised_timesheet_ids');
+    const activeAdvanceTimesheetIds = canonicalUuidArray(scope.active_advance_timesheet_ids, 'active_advance_timesheet_ids');
+    const representedTimesheetIds = canonicalUuidArray(scope.represented_timesheet_ids, 'represented_timesheet_ids');
+    const replacedSourceSessionIds = canonicalUuidArray(
+      scope.replaced_source_session_ids,
+      'replaced_source_session_ids',
+      false
+    );
+    const expectedTargetIds = Array.from(new Set([
+      ...authorisedTimesheetIds,
+      ...activeAdvanceTimesheetIds
+    ])).sort();
+
+    if (!arraysEqual(targetedTimesheetIds, expectedTargetIds)) {
+      invalidScope('Pay-method preview target set does not equal the canonical authorised-or-active-Advance set.', {
+        targeted_timesheet_ids: targetedTimesheetIds,
+        expected_timesheet_ids: expectedTargetIds
+      });
+    }
+
+    const sourceChangeSeq = nonNegativeInteger(
+      scope.latest_source_change_seq ?? scope.source_change_seq ?? 0,
+      'source_change_seq'
+    );
+    const authoritativeSessionCount = nonNegativeInteger(
+      scope.authoritative_session_count ?? 0,
+      'authoritative_session_count'
+    );
+    const previewRowCount = nonNegativeInteger(scope.preview_row_count ?? 0, 'preview_row_count');
+    const representedTimesheetCount = nonNegativeInteger(scope.represented_timesheet_count ?? 0, 'represented_timesheet_count');
+    const authorisedTimesheetCount = nonNegativeInteger(scope.authorised_timesheet_count ?? 0, 'authorised_timesheet_count');
+    const activeAdvanceTimesheetCount = nonNegativeInteger(scope.active_advance_timesheet_count ?? 0, 'active_advance_timesheet_count');
+    const targetedTimesheetCount = nonNegativeInteger(scope.targeted_timesheet_count ?? 0, 'targeted_timesheet_count');
+    const sourceTargetMismatchCount = nonNegativeInteger(scope.source_target_mismatch_count ?? 0, 'source_target_mismatch_count');
+
+    if (
+      representedTimesheetCount !== representedTimesheetIds.length ||
+      authorisedTimesheetCount !== authorisedTimesheetIds.length ||
+      activeAdvanceTimesheetCount !== activeAdvanceTimesheetIds.length ||
+      targetedTimesheetCount !== targetedTimesheetIds.length ||
+      sourceTargetMismatchCount > targetedTimesheetIds.length ||
+      Boolean(scope.targeted_scope_is_empty) !== (targetedTimesheetIds.length === 0)
+    ) {
+      invalidScope('Pay-method preview counts do not match the canonical UUID sets.', scope);
+    }
+
+    if (!Array.isArray(scope.authoritative_sessions)) {
+      invalidScope('Pay-method preview did not return authoritative_sessions as an array.', scope);
+    }
+    const authoritativeSessions = scope.authoritative_sessions.map((session, index) => {
+      if (!session || typeof session !== 'object' || Array.isArray(session)) {
+        invalidScope('Pay-method preview returned an invalid authoritative session.', { index, session });
+      }
+      const sessionId = String(session.session_id || '').trim();
+      const actorUserId = String(session.actor_user_id || '').trim();
+      const payDate = String(session.pay_date || '').trim();
+      const weekEndingCutoff = String(session.week_ending_cutoff || '').trim();
+      const sessionVersion = Number(session.session_version);
+      const sessionRepresentedIds = canonicalUuidArray(session.represented_timesheet_ids, `authoritative_sessions[${index}].represented_timesheet_ids`);
+      const sessionQualifyingIds = canonicalUuidArray(session.qualifying_timesheet_ids, `authoritative_sessions[${index}].qualifying_timesheet_ids`);
+      if (
+        !uuidRe.test(sessionId) ||
+        !uuidRe.test(actorUserId) ||
+        !isoDateRe.test(payDate) ||
+        !isoDateRe.test(weekEndingCutoff) ||
+        !Number.isInteger(sessionVersion) ||
+        sessionVersion < 1 ||
+        !arraysEqual(sessionQualifyingIds, targetedTimesheetIds)
+      ) {
+        invalidScope('Pay-method preview returned inconsistent authoritative-session evidence.', { index, session });
+      }
+      return {
+        ...session,
+        session_id: sessionId,
+        actor_user_id: actorUserId,
+        pay_date: payDate,
+        week_ending_cutoff: weekEndingCutoff,
+        session_version: sessionVersion,
+        represented_timesheet_ids: sessionRepresentedIds,
+        qualifying_timesheet_ids: sessionQualifyingIds
+      };
+    });
+
+    if (authoritativeSessionCount !== authoritativeSessions.length) {
+      invalidScope('Pay-method preview authoritative-session count does not match its session evidence.', scope);
+    }
+
+    if (!Array.isArray(scope.target_details)) {
+      invalidScope('Pay-method preview did not return target_details as an array.', scope);
+    }
+    const targetDetails = scope.target_details.map((detail, index) => {
+      if (!detail || typeof detail !== 'object' || Array.isArray(detail)) {
+        invalidScope('Pay-method preview returned an invalid target detail.', { index, detail });
+      }
+      const timesheetId = String(detail.timesheet_id || '').trim();
+      if (!uuidRe.test(timesheetId)) {
+        invalidScope('Pay-method preview returned an invalid target-detail Timesheet ID.', { index, detail });
+      }
+      return { ...detail, timesheet_id: timesheetId };
+    });
+    const targetDetailIds = Array.from(new Set(targetDetails.map((detail) => detail.timesheet_id))).sort();
+    if (targetDetails.length !== targetedTimesheetIds.length || !arraysEqual(targetDetailIds, targetedTimesheetIds)) {
+      invalidScope('Pay-method preview target details do not match its exact target set.', scope);
     }
 
     return withCORS(env, req, ok({
@@ -148532,20 +148780,25 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
         : {},
       can_apply: blockers.length === 0,
       blockers,
+      coverage_basis: 'CANONICAL_CURRENT_TIMESHEETS',
+      coverage_complete: true,
+      exact_scope: true,
       authoritative_sessions: authoritativeSessions,
-      authoritative_session_count: Number(scope.authoritative_session_count || authoritativeSessions.length || 0),
-      replaced_source_session_ids: Array.isArray(scope.replaced_source_session_ids) ? scope.replaced_source_session_ids : [],
-      represented_timesheet_ids: Array.isArray(scope.represented_timesheet_ids) ? scope.represented_timesheet_ids : [],
-      represented_timesheet_count: Number(scope.represented_timesheet_count || 0),
+      authoritative_session_count: authoritativeSessionCount,
+      replaced_source_session_ids: replacedSourceSessionIds,
+      represented_timesheet_ids: representedTimesheetIds,
+      represented_timesheet_count: representedTimesheetCount,
       authorised_timesheet_ids: authorisedTimesheetIds,
-      authorised_timesheet_count: Number(scope.authorised_timesheet_count || authorisedTimesheetIds.length || 0),
+      authorised_timesheet_count: authorisedTimesheetCount,
       active_advance_timesheet_ids: activeAdvanceTimesheetIds,
-      active_advance_timesheet_count: Number(scope.active_advance_timesheet_count || activeAdvanceTimesheetIds.length || 0),
+      active_advance_timesheet_count: activeAdvanceTimesheetCount,
       targeted_timesheet_ids: targetedTimesheetIds,
-      targeted_timesheet_count: Number(scope.targeted_timesheet_count || targetedTimesheetIds.length || 0),
-      potential_case_resolution_timesheet_count: Number(scope.source_target_mismatch_count || 0),
-      target_details: Array.isArray(scope.target_details) ? scope.target_details : [],
-      preview_row_count: Number(scope.preview_row_count || 0),
+      canonical_qualifying_timesheet_ids: targetedTimesheetIds,
+      targeted_timesheet_count: targetedTimesheetCount,
+      targeted_scope_is_empty: targetedTimesheetIds.length === 0,
+      potential_case_resolution_timesheet_count: sourceTargetMismatchCount,
+      target_details: targetDetails,
+      preview_row_count: previewRowCount,
       contracts_changed: 0,
       contract_weeks_changed: 0,
       timesheets_changed: 0,
@@ -148570,6 +148823,7 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
 // - Call DB RPC: candidate_pay_method_change_apply(...)
 // - No direct PATCH/INSERT/DELETE to contracts/contract_weeks/timesheets/candidates here
 // ─────────────────────────────────────────────────────────────────────────────
+
 async function handleCandidatePayMethodChange(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -148614,6 +148868,36 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
     ];
     const text = candidates.filter(Boolean).map(String).join(' ');
     return known.find((code) => text.includes(code)) || null;
+  };
+  const canonicalUuidArray = (value, fieldName) => {
+    if (!Array.isArray(value)) {
+      const error = new Error(`${fieldName} must be an array.`);
+      error.code = 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH';
+      throw error;
+    }
+    const raw = value.map((entry) => String(entry == null ? '' : entry).trim());
+    if (raw.some((entry) => !uuidRe.test(entry))) {
+      const error = new Error(`${fieldName} contains an invalid UUID.`);
+      error.code = 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH';
+      throw error;
+    }
+    const canonical = Array.from(new Set(raw)).sort();
+    if (canonical.length !== raw.length || raw.some((entry, index) => entry !== canonical[index])) {
+      const error = new Error(`${fieldName} is not an exact sorted UUID set.`);
+      error.code = 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH';
+      throw error;
+    }
+    return canonical;
+  };
+  const arraysEqual = (left, right) => left.length === right.length && left.every((entry, index) => entry === right[index]);
+  const nonNegativeInteger = (value, fieldName) => {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      const error = new Error(`${fieldName} must be a non-negative integer.`);
+      error.code = 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH';
+      throw error;
+    }
+    return parsed;
   };
   const isUncertainRpcFailure = (error, code) => {
     if (code) return false;
@@ -148894,16 +149178,88 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
       });
     }
 
-    if (!uuidRe.test(String(result.job_id || ''))) {
-      return jsonResponse(500, {
-        error: 'Durable Banking Pay refresh work was not confirmed.',
-        code: 'CANDIDATE_PAY_METHOD_CHANGE_DURABLE_QUEUE_MISSING',
-        operation_id: operationId
+    let exactProof;
+    try {
+      const resultOperationId = String(result.operation_id || '').trim();
+      const resultCandidateId = String(result.candidate_id || '').trim();
+      const resultOriginalMethod = String(result.original_method || '').trim().toUpperCase();
+      const resultNewMethod = String(result.new_method || '').trim().toUpperCase();
+      const jobId = String(result.job_id || '').trim();
+      const jobStatus = String(result.job_status || '').trim().toUpperCase();
+      const expectedIds = canonicalUuidArray(result.expected_targeted_timesheet_ids, 'expected_targeted_timesheet_ids');
+      const persistedIds = canonicalUuidArray(result.persisted_targeted_timesheet_ids, 'persisted_targeted_timesheet_ids');
+      const targetedIds = canonicalUuidArray(result.targeted_timesheet_ids, 'targeted_timesheet_ids');
+      const missingIds = canonicalUuidArray(result.missing_targeted_timesheet_ids, 'missing_targeted_timesheet_ids');
+      const extraIds = canonicalUuidArray(result.extra_targeted_timesheet_ids, 'extra_targeted_timesheet_ids');
+      const authorisedIds = canonicalUuidArray(result.authorised_timesheet_ids, 'authorised_timesheet_ids');
+      const activeAdvanceIds = canonicalUuidArray(result.active_advance_timesheet_ids, 'active_advance_timesheet_ids');
+      const canonicalQualifyingIds = Array.from(new Set([...authorisedIds, ...activeAdvanceIds])).sort();
+      const targetedCount = nonNegativeInteger(result.targeted_timesheet_count, 'targeted_timesheet_count');
+      const effectiveDuplicateCount = nonNegativeInteger(result.effective_duplicate_count, 'effective_duplicate_count');
+      const invalidTargetCount = nonNegativeInteger(result.invalid_target_count, 'invalid_target_count');
+      const sourceChangeSeq = nonNegativeInteger(result.source_change_seq, 'source_change_seq');
+      const validJobStatuses = new Set(['QUEUED', 'RUNNING', 'SUCCEEDED']);
+      const refreshCompleted = result.refresh_completed === true;
+
+      if (
+        result.operation_committed !== true ||
+        resultOperationId !== operationId ||
+        resultCandidateId !== String(currentCandidate.id) ||
+        resultOriginalMethod !== expectedOldMethod ||
+        resultNewMethod !== newMethod ||
+        !uuidRe.test(jobId) ||
+        !validJobStatuses.has(jobStatus) ||
+        String(result.coverage_basis || '').trim().toUpperCase() !== 'CANONICAL_CURRENT_TIMESHEETS' ||
+        result.coverage_complete !== true ||
+        result.exact_target_scope !== true ||
+        result.exact_set_equality !== true ||
+        result.refresh_accepted !== true ||
+        effectiveDuplicateCount !== 0 ||
+        invalidTargetCount !== 0 ||
+        missingIds.length !== 0 ||
+        extraIds.length !== 0 ||
+        targetedCount !== targetedIds.length ||
+        !arraysEqual(expectedIds, persistedIds) ||
+        !arraysEqual(expectedIds, targetedIds) ||
+        !arraysEqual(targetedIds, canonicalQualifyingIds) ||
+        (jobStatus === 'SUCCEEDED') !== refreshCompleted ||
+        sourceChangeSeq < previewSourceChangeSeq ||
+        !Array.isArray(result.authoritative_sessions)
+      ) {
+        const error = new Error('The committed candidate pay-method change did not return complete exact durable queue proof.');
+        error.code = 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH';
+        throw error;
+      }
+
+      exactProof = {
+        job_id: jobId,
+        job_status: jobStatus,
+        targeted_timesheet_ids: targetedIds,
+        expected_targeted_timesheet_ids: expectedIds,
+        persisted_targeted_timesheet_ids: persistedIds,
+        authorised_timesheet_ids: authorisedIds,
+        active_advance_timesheet_ids: activeAdvanceIds,
+        source_change_seq: sourceChangeSeq,
+        refresh_completed: refreshCompleted
+      };
+    } catch (proofError) {
+      console.error('[CAND][PAY-METHOD] exact durable queue proof failed', {
+        candidateId,
+        operationId,
+        error: proofError?.message || proofError,
+        result
+      });
+      return jsonResponse(503, {
+        error: 'The candidate pay-method change committed, but its exact durable Banking Pay refresh scope could not be verified. Do not submit a new operation; refresh using this operation ID.',
+        code: proofError?.code || 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH',
+        operation_id: operationId,
+        operation_committed: result.operation_committed === true,
+        refresh_required: true
       });
     }
 
     let nudgeResult = null;
-    if (result.refresh_completed === true) {
+    if (exactProof.refresh_completed === true) {
       nudgeResult = {
         ok: true,
         scheduled: false,
@@ -148933,10 +149289,11 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
 
     return withCORS(env, req, ok({
       ...result,
+      ...exactProof,
       refresh_accepted: true,
-      refresh_completed: result.refresh_completed === true,
-      refresh_pending: result.refresh_completed !== true,
-      refreshing: result.refresh_completed !== true,
+      refresh_completed: exactProof.refresh_completed === true,
+      refresh_pending: exactProof.refresh_completed !== true,
+      refreshing: exactProof.refresh_completed !== true,
       nudge_result: nudgeResult,
       nudge_failed_non_fatal: nudgeResult?.ok === false,
       durable_queue_retained: true
@@ -178484,6 +178841,10 @@ async function handleTimesheetArchiveState(env, req, timesheetId) {
 /** GENUINELY NEW IMPLEMENTATION UNIT. */
 
 
+
+
+
+
 async function handleTimesheetArchiveTransition(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -178525,6 +178886,52 @@ async function handleTimesheetArchiveTransition(env, req, timesheetId) {
   };
   const riskBoolean = (...values) => values.some((value) => booleanSignal(value) === true);
   const hasOwn = (object, key) => !!(object && typeof object === 'object' && Object.prototype.hasOwnProperty.call(object, key));
+  const positiveNumberSignal = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0;
+  };
+  const metadataOnlyTransitionIsValid = (transition, expectedAction) => {
+    if (!transition || typeof transition !== 'object' || Array.isArray(transition)) return false;
+    const actionValue = String(transition.action || '').trim().toUpperCase();
+    const decisionValue = String(transition.decision || '').trim().toUpperCase();
+    const expectedDecision = expectedAction === 'ARCHIVE' ? 'ARCHIVED' : 'ACTIVE';
+    if (actionValue !== expectedAction || decisionValue !== expectedDecision) return false;
+
+    const prohibitedTrueFields = [
+      'advance_cleared',
+      'advance_removed',
+      'advance_restored',
+      'payment_override_mutated',
+      'source_records_mutated',
+      'economic_mutation',
+      'policy_x_economic_mutation'
+    ];
+    if (prohibitedTrueFields.some((key) => booleanSignal(transition[key]) === true)) return false;
+
+    const prohibitedPositiveFields = [
+      'advance_cleared_count',
+      'cleared_advance_count',
+      'payment_override_mutation_count',
+      'source_mutation_count',
+      'economic_mutation_count'
+    ];
+    if (prohibitedPositiveFields.some((key) => positiveNumberSignal(transition[key]))) return false;
+
+    if (
+      hasOwn(transition, 'cleared_advance_override_id') &&
+      String(transition.cleared_advance_override_id == null ? '' : transition.cleared_advance_override_id).trim()
+    ) return false;
+
+    if (hasOwn(transition, 'advance_unchanged') && booleanSignal(transition.advance_unchanged) !== true) return false;
+    if (hasOwn(transition, 'advance_restored') && booleanSignal(transition.advance_restored) !== false) return false;
+
+    const advance = (transition.advance && typeof transition.advance === 'object' && !Array.isArray(transition.advance))
+      ? transition.advance
+      : null;
+    if (advance && hasOwn(advance, 'unchanged') && booleanSignal(advance.unchanged) !== true) return false;
+
+    return true;
+  };
   const arrayOfStrings = (value) => Array.isArray(value)
     ? Array.from(new Set(value.map((entry) => String(entry || '').trim()).filter(Boolean))).sort()
     : [];
@@ -178664,7 +179071,7 @@ async function handleTimesheetArchiveTransition(env, req, timesheetId) {
       'ARCHIVE_CAPABILITY_NOT_CONSUMED', 'ARCHIVE_COUNT_MISMATCH', 'UNARCHIVE_COUNT_MISMATCH',
       'TIMESHEET_MUST_BE_UNAUTHORISED_BEFORE_ARCHIVE', 'TIMESHEET_ARCHIVED',
       'ARCHIVE_TRANSITION_RPC_REQUIRED', 'ARCHIVE_TRANSITION_METADATA_ONLY',
-      'ARCHIVE_TRANSITION_INVALID', 'ARCHIVE_METADATA_INVALID', 'ADVANCE_CLEAR_FAILED',
+      'ARCHIVE_TRANSITION_INVALID', 'ARCHIVE_METADATA_INVALID',
       'EXPECTED_ROW_SIGNATURE_REQUIRED'
     ];
     return known.find((code) => text.includes(code)) || String(payload?.error_code || payload?.code || '').trim().toUpperCase() || null;
@@ -178690,7 +179097,6 @@ async function handleTimesheetArchiveTransition(env, req, timesheetId) {
       ARCHIVE_TRANSITION_METADATA_ONLY: 'Archive and Unarchive can change Archive metadata only.',
       ARCHIVE_TRANSITION_INVALID: 'The Archive state changed unexpectedly. Refresh before continuing.',
       ARCHIVE_METADATA_INVALID: 'The Archive metadata is invalid. Refresh before continuing.',
-      ADVANCE_CLEAR_FAILED: 'The Timesheet was not archived because its active Advance could not be cleared safely.',
       EXPECTED_ROW_SIGNATURE_REQUIRED: 'The current Timesheet lifecycle signature is required. Refresh before continuing.'
     };
     return String(payload?.message || map[code] || 'The Archive transition failed.');
@@ -178804,6 +179210,24 @@ async function handleTimesheetArchiveTransition(env, req, timesheetId) {
       requested_timesheet_id: requestedTimesheetId,
       expected_timesheet_id: expectedTimesheetId,
       refresh_required: statusFor(code) === 409
+    });
+  }
+
+  if (!metadataOnlyTransitionIsValid(transition, action)) {
+    console.error('[TIMESHEET][ARCHIVE] metadata-only transition contract failed', {
+      requestedTimesheetId,
+      expectedTimesheetId,
+      action,
+      transition
+    });
+    return jsonReply(500, {
+      ok: false,
+      error_code: 'ARCHIVE_TRANSITION_METADATA_ONLY',
+      code: 'ARCHIVE_TRANSITION_METADATA_ONLY',
+      message: 'Archive and Unarchive must change Archive metadata only. Refresh before continuing.',
+      requested_timesheet_id: requestedTimesheetId,
+      expected_timesheet_id: expectedTimesheetId,
+      refresh_required: true
     });
   }
 
@@ -179095,10 +179519,6 @@ async function handleTimesheetArchiveTransition(env, req, timesheetId) {
     policy_x_economic_mutation: false
   });
 }
-
-
-
-
 
 
 
