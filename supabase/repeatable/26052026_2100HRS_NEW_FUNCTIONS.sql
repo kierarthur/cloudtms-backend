@@ -224849,7 +224849,12 @@ BEGIN
 END
 $do$;
 
-CREATE OR REPLACE FUNCTION public.timesheet_standard_delete_preview_v1(p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_id uuid, p_expected_row_signature text)
+CREATE OR REPLACE FUNCTION public.timesheet_standard_delete_preview_v1(
+  p_timesheet_id uuid,
+  p_actor_user_id uuid,
+  p_expected_timesheet_id uuid DEFAULT NULL::uuid,
+  p_expected_row_signature text DEFAULT NULL::text
+)
  RETURNS jsonb
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
