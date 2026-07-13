@@ -172329,6 +172329,7 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
 
 
 
+
 async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = null) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -172764,6 +172765,35 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
   };
 
   const boolish = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(String(value == null ? '' : value).trim().toLowerCase());
+  const isSafeSameRequestPreBankCancelContinuationDiagnostic = (diagnosticValue) => {
+    const diagnostic = safeObject(diagnosticValue);
+    const lifecycle = upperText(diagnostic.payment_lifecycle_state || diagnostic.lifecycle || diagnostic.lifecycle_state || '');
+    if (!['PARTIALLY_CANCELLED_BEFORE_BANK_SUBMISSION', 'CANCELLED_BEFORE_BANK_SUBMISSION'].includes(lifecycle)) return false;
+
+    const blockers = toArray(diagnostic.blockers);
+    const raceBlockers = toArray(diagnostic.race_or_submission_blockers || diagnostic.raceOrSubmissionBlockers);
+    if (blockers.length > 0 || raceBlockers.length > 0) return false;
+
+    const support = safeObject(diagnostic.support_details_json || diagnostic.supportDetailsJson);
+    const paidEvidence = safeObject(diagnostic.blocking_paid_evidence_json || diagnostic.blockingPaidEvidenceJson);
+    const pendingEvidence = safeObject(diagnostic.pending_provider_evidence_json || diagnostic.pendingProviderEvidenceJson);
+    const unknownEvidence = safeObject(diagnostic.provider_outcome_unknown_evidence_json || diagnostic.providerOutcomeUnknownEvidenceJson);
+    const providerEvidence = safeObject(diagnostic.provider_evidence_summary_json || diagnostic.providerEvidenceSummaryJson);
+    const evidenceClass = upperText(providerEvidence.evidence_class || providerEvidence.evidenceClass || '');
+    const preBankAppliedCount = Number(support.pre_bank_applied_count ?? support.preBankAppliedCount ?? 0);
+
+    return Number.isFinite(preBankAppliedCount)
+      && preBankAppliedCount > 0
+      && evidenceClass === 'NO_PROVIDER_EVIDENCE'
+      && !boolish(paidEvidence.has_paid_or_settled ?? paidEvidence.hasPaidOrSettled)
+      && !boolish(pendingEvidence.has_provider_pending ?? pendingEvidence.hasProviderPending)
+      && !boolish(unknownEvidence.has_provider_unknown ?? unknownEvidence.hasProviderUnknown)
+      && !boolish(providerEvidence.provider_submitted ?? providerEvidence.providerSubmitted)
+      && !boolish(providerEvidence.provider_request_sent ?? providerEvidence.providerRequestSent)
+      && !boolish(providerEvidence.provider_response_present ?? providerEvidence.providerResponsePresent)
+      && !boolish(providerEvidence.provider_event_present ?? providerEvidence.providerEventPresent)
+      && !boolish(providerEvidence.provider_external_id_present ?? providerEvidence.providerExternalIdPresent);
+  };
   const readWorkbenchRefreshEnvelope = (payload) => {
     const source = safeObject(payload);
     const processResult = safeObject(source.process_result || source.processResult);
@@ -172908,7 +172938,17 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
       }), 'pay_payment_cancelability_diagnostic');
     }
     const recommendedAction = upperText(diagnostic.recommended_action || diagnostic.action || '');
-    if (!replayWorkbenchContext && recommendedAction && recommendedAction !== 'PRE_PROVIDER_CANCEL_AND_RECALCULATE') {
+    const safeSameRequestContinuation = isSafeSameRequestPreBankCancelContinuationDiagnostic(diagnostic);
+    if (safeSameRequestContinuation) {
+      confirmationJson.resume_existing_pre_bank_cancel = true;
+      confirmationJson.resumeExistingPreBankCancel = true;
+    }
+    if (
+      !replayWorkbenchContext
+      && !safeSameRequestContinuation
+      && recommendedAction
+      && recommendedAction !== 'PRE_PROVIDER_CANCEL_AND_RECALCULATE'
+    ) {
       const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
       return withCORS(env, req, jsonResponse(409, {
         ok: false,
@@ -173161,6 +173201,8 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
       freshness_result: result.freshness_result || result.freshness || result.freshness_result_json || null,
       payment_lifecycle_state: result.payment_lifecycle_state || diagnostic.payment_lifecycle_state || diagnostic.lifecycle || null,
       recommended_action: result.recommended_action || diagnostic.recommended_action || diagnostic.action || null,
+      resumed_existing_correction_request: result.resumed_existing_correction_request === true || safeSameRequestContinuation,
+      resume_blocked_work_item_count: Number(result.resume_blocked_work_item_count || 0) || 0,
       grouped_alert_summary: result.grouped_alert_summary || alertSummary || null,
       live_signal: result.live_signal || signal || null,
       live_signal_version: result.live_signal_version ?? signal?.version ?? null,
@@ -173172,8 +173214,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
     return rpcErrorResponse(e, 'PAYMENT_CANCEL_NOT_SENT_RECALCULATE_FAILED', 'Unable to cancel selected payments.');
   }
 }
-
-
 
 
 
