@@ -137657,7 +137657,6 @@ AS $function$
   );
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_finance_components_sync_from_preview(p_finance_case_id uuid, p_preview_lines_json jsonb, p_actor_user_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -137756,7 +137755,9 @@ DECLARE
   v_identity_reserved_source_amount numeric(12,2);
   v_case_active_consumed_amount numeric(12,2) := 0;
   v_case_active_reserved_source_amount numeric(12,2) := 0;
+  v_raw_input_component_count integer := 0;
   v_input_component_count integer := 0;
+  v_aggregated_duplicate_identity_count integer := 0;
   v_open_component_remaining_total numeric(12,2) := 0;
   v_component_case_mismatch_amount numeric(12,2) := 0;
   v_effective_source_amount numeric(12,2) := 0;
@@ -138419,6 +138420,331 @@ BEGIN
     );
   END LOOP;
 
+  /* Policy X economic identity is source_family_key + component_key_type +
+     component_key_value.  Preview production may legitimately emit several
+     physical rows for one economic identity (for example DAY and NIGHT work
+     buckets on the same TS_DAY date).  Normalise those physical rows into one
+     component before settlement/reservation reconciliation.  Keeping only the
+     last row would understate the component and make the case/component parity
+     guard reject an otherwise valid case. */
+  SELECT COUNT(*)::integer
+  INTO v_raw_input_component_count
+  FROM pg_temp.tmp_pay_finance_component_sync_input AS raw_input_count_rows;
+
+  SELECT COUNT(*)::integer
+  INTO v_aggregated_duplicate_identity_count
+  FROM (
+    SELECT
+      duplicate_identity.source_family_key,
+      duplicate_identity.component_key_type,
+      duplicate_identity.component_key_value
+    FROM pg_temp.tmp_pay_finance_component_sync_input AS duplicate_identity
+    GROUP BY
+      duplicate_identity.source_family_key,
+      duplicate_identity.component_key_type,
+      duplicate_identity.component_key_value
+    HAVING COUNT(*) > 1
+  ) AS duplicate_identity_count_rows;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_temp.tmp_pay_finance_component_sync_input AS conflicting_identity
+    GROUP BY
+      conflicting_identity.source_family_key,
+      conflicting_identity.component_key_type,
+      conflicting_identity.component_key_value
+    HAVING COUNT(*) > 1
+       AND (
+         COUNT(DISTINCT conflicting_identity.candidate_id) > 1
+         OR COUNT(DISTINCT (conflicting_identity.client_id IS NULL, conflicting_identity.client_id)) > 1
+         OR COUNT(DISTINCT (conflicting_identity.linked_timesheet_id IS NULL, conflicting_identity.linked_timesheet_id)) > 1
+         OR COUNT(DISTINCT conflicting_identity.classification::text) > 1
+         OR COUNT(DISTINCT upper(btrim(conflicting_identity.source_pay_method))) > 1
+         OR COUNT(DISTINCT (conflicting_identity.current_target_pay_method IS NULL, upper(btrim(conflicting_identity.current_target_pay_method)))) > 1
+         OR COUNT(DISTINCT (conflicting_identity.relevant_erni_pct IS NULL, conflicting_identity.relevant_erni_pct)) > 1
+         OR BOOL_OR(conflicting_identity.incoming_remaining_is_explicit)
+              IS DISTINCT FROM BOOL_AND(conflicting_identity.incoming_remaining_is_explicit)
+         OR (
+           COUNT(*) FILTER (WHERE conflicting_identity.accepted_resolution_json IS NOT NULL) > 0
+           AND COUNT(*) FILTER (WHERE conflicting_identity.accepted_resolution_json IS NOT NULL) < COUNT(*)
+         )
+         OR COUNT(DISTINCT conflicting_identity.accepted_resolution_json)
+              FILTER (WHERE conflicting_identity.accepted_resolution_json IS NOT NULL) > 1
+       )
+  ) THEN
+    RAISE EXCEPTION 'PAY_FINANCE_COMPONENTS_DUPLICATE_IDENTITY_CONFLICT'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_FINANCE_COMPONENTS_DUPLICATE_IDENTITY_CONFLICT',
+              'finance_case_id', p_finance_case_id::text,
+              'raw_input_component_count', COALESCE(v_raw_input_component_count, 0),
+              'duplicate_identity_count', COALESCE(v_aggregated_duplicate_identity_count, 0),
+              'message', 'Rows sharing one Policy X economic identity must agree on candidate, client, linked Timesheet, classification, route, ERNI basis, remaining-amount mode, and accepted resolution.'
+            )::text;
+  END IF;
+
+  CREATE TEMP TABLE IF NOT EXISTS pg_temp.tmp_pay_finance_component_sync_normalized
+    (LIKE pg_temp.tmp_pay_finance_component_sync_input INCLUDING ALL)
+    ON COMMIT DROP;
+
+  TRUNCATE TABLE pg_temp.tmp_pay_finance_component_sync_normalized;
+
+  INSERT INTO pg_temp.tmp_pay_finance_component_sync_normalized (
+    row_seq,
+    source_family_key,
+    component_key_type,
+    component_key_value,
+    classification,
+    candidate_id,
+    client_id,
+    linked_timesheet_id,
+    source_pay_method,
+    current_target_pay_method,
+    source_basis_json,
+    target_basis_json,
+    accepted_resolution_json,
+    source_amount,
+    incoming_remaining_source_amount,
+    incoming_remaining_is_explicit,
+    relevant_erni_pct,
+    allocation_priority_group,
+    allocation_priority_order,
+    current_basis_fingerprint
+  )
+  WITH grouped_input AS (
+    SELECT
+      MIN(input_row.row_seq)::integer AS row_seq,
+      input_row.source_family_key,
+      input_row.component_key_type,
+      input_row.component_key_value,
+      (ARRAY_AGG(input_row.classification ORDER BY input_row.row_seq))[1] AS classification,
+      (ARRAY_AGG(input_row.candidate_id ORDER BY input_row.row_seq))[1] AS candidate_id,
+      (ARRAY_AGG(input_row.client_id ORDER BY input_row.row_seq))[1] AS client_id,
+      (ARRAY_AGG(input_row.linked_timesheet_id ORDER BY input_row.row_seq))[1] AS linked_timesheet_id,
+      (ARRAY_AGG(input_row.source_pay_method ORDER BY input_row.row_seq))[1] AS source_pay_method,
+      (ARRAY_AGG(input_row.current_target_pay_method ORDER BY input_row.row_seq))[1] AS current_target_pay_method,
+      (ARRAY_AGG(input_row.source_basis_json ORDER BY input_row.row_seq))[1] AS first_source_basis_json,
+      (ARRAY_AGG(input_row.target_basis_json ORDER BY input_row.row_seq))[1] AS first_target_basis_json,
+      (ARRAY_AGG(input_row.accepted_resolution_json ORDER BY input_row.row_seq))[1] AS accepted_resolution_json,
+      ROUND(SUM(input_row.source_amount), 2)::numeric(12,2) AS source_amount,
+      CASE
+        WHEN BOOL_AND(input_row.incoming_remaining_is_explicit)
+          THEN ROUND(SUM(COALESCE(input_row.incoming_remaining_source_amount, 0)), 2)::numeric(12,2)
+        ELSE NULL::numeric(12,2)
+      END AS incoming_remaining_source_amount,
+      BOOL_AND(input_row.incoming_remaining_is_explicit) AS incoming_remaining_is_explicit,
+      (ARRAY_AGG(input_row.relevant_erni_pct ORDER BY input_row.row_seq))[1] AS relevant_erni_pct,
+      MIN(input_row.allocation_priority_group)::integer AS allocation_priority_group,
+      MIN(input_row.allocation_priority_order)::integer AS allocation_priority_order,
+      COUNT(*)::integer AS physical_row_count,
+      COUNT(DISTINCT COALESCE(input_row.target_basis_json, 'null'::jsonb))::integer AS target_basis_distinct_count,
+      JSONB_AGG(
+        jsonb_build_object(
+          'source_amount', input_row.source_amount,
+          'source_basis_json', input_row.source_basis_json,
+          'target_basis_json', input_row.target_basis_json
+        )
+        ORDER BY input_row.source_basis_json::text, input_row.target_basis_json::text, input_row.source_amount, input_row.row_seq
+      ) AS physical_basis_rows,
+      COUNT(*) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND COALESCE(input_row.source_basis_json->>'source_units', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+      )::integer AS source_units_count,
+      ROUND(SUM(
+        CASE
+          WHEN jsonb_typeof(input_row.source_basis_json) = 'object'
+           AND COALESCE(input_row.source_basis_json->>'source_units', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (input_row.source_basis_json->>'source_units')::numeric
+          ELSE 0::numeric
+        END
+      ), 6) AS source_units_sum,
+      COUNT(*) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND COALESCE(input_row.source_basis_json->>'source_rate', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+      )::integer AS source_rate_count,
+      COUNT(DISTINCT ROUND((input_row.source_basis_json->>'source_rate')::numeric, 6)) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND COALESCE(input_row.source_basis_json->>'source_rate', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+      )::integer AS source_rate_distinct_count,
+      MAX(ROUND((input_row.source_basis_json->>'source_rate')::numeric, 6)) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND COALESCE(input_row.source_basis_json->>'source_rate', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+      ) AS common_source_rate,
+      COUNT(*) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND COALESCE(input_row.source_basis_json->>'source_charge_rate', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+      )::integer AS source_charge_rate_count,
+      COUNT(DISTINCT ROUND((input_row.source_basis_json->>'source_charge_rate')::numeric, 6)) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND COALESCE(input_row.source_basis_json->>'source_charge_rate', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+      )::integer AS source_charge_rate_distinct_count,
+      MAX(ROUND((input_row.source_basis_json->>'source_charge_rate')::numeric, 6)) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND COALESCE(input_row.source_basis_json->>'source_charge_rate', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+      ) AS common_source_charge_rate,
+      COUNT(*) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND NULLIF(btrim(COALESCE(input_row.source_basis_json->>'bucket_code', '')), '') IS NOT NULL
+      )::integer AS bucket_code_count,
+      COUNT(DISTINCT NULLIF(upper(btrim(input_row.source_basis_json->>'bucket_code')), '')) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND NULLIF(btrim(COALESCE(input_row.source_basis_json->>'bucket_code', '')), '') IS NOT NULL
+      )::integer AS bucket_code_distinct_count,
+      MAX(NULLIF(upper(btrim(input_row.source_basis_json->>'bucket_code')), '')) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND NULLIF(btrim(COALESCE(input_row.source_basis_json->>'bucket_code', '')), '') IS NOT NULL
+      ) AS common_bucket_code,
+      COUNT(*) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND lower(COALESCE(input_row.source_basis_json->>'umbrella_vat_chargeable', '')) IN ('true', 'false')
+      )::integer AS umbrella_vat_count,
+      COUNT(DISTINCT lower(input_row.source_basis_json->>'umbrella_vat_chargeable')) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND lower(COALESCE(input_row.source_basis_json->>'umbrella_vat_chargeable', '')) IN ('true', 'false')
+      )::integer AS umbrella_vat_distinct_count,
+      MAX(lower(input_row.source_basis_json->>'umbrella_vat_chargeable')) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND lower(COALESCE(input_row.source_basis_json->>'umbrella_vat_chargeable', '')) IN ('true', 'false')
+      ) AS common_umbrella_vat_chargeable,
+      COUNT(*) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND lower(COALESCE(input_row.source_basis_json->>'vat_chargeable', '')) IN ('true', 'false')
+      )::integer AS vat_chargeable_count,
+      COUNT(DISTINCT lower(input_row.source_basis_json->>'vat_chargeable')) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND lower(COALESCE(input_row.source_basis_json->>'vat_chargeable', '')) IN ('true', 'false')
+      )::integer AS vat_chargeable_distinct_count,
+      MAX(lower(input_row.source_basis_json->>'vat_chargeable')) FILTER (
+        WHERE jsonb_typeof(input_row.source_basis_json) = 'object'
+          AND lower(COALESCE(input_row.source_basis_json->>'vat_chargeable', '')) IN ('true', 'false')
+      ) AS common_vat_chargeable
+    FROM pg_temp.tmp_pay_finance_component_sync_input AS input_row
+    GROUP BY
+      input_row.source_family_key,
+      input_row.component_key_type,
+      input_row.component_key_value
+  ), normalized_basis AS (
+    SELECT
+      grouped_input.*,
+      CASE
+        WHEN grouped_input.physical_row_count = 1
+          THEN grouped_input.first_source_basis_json
+        ELSE jsonb_strip_nulls(
+          jsonb_build_object(
+            'aggregation_mode', 'POLICY_X_ECONOMIC_IDENTITY',
+            'source_family_key', grouped_input.source_family_key,
+            'component_key_type', grouped_input.component_key_type,
+            'component_key_value', grouped_input.component_key_value,
+            'candidate_id', grouped_input.candidate_id::text,
+            'client_id', CASE WHEN grouped_input.client_id IS NULL THEN NULL ELSE grouped_input.client_id::text END,
+            'linked_timesheet_id', CASE WHEN grouped_input.linked_timesheet_id IS NULL THEN NULL ELSE grouped_input.linked_timesheet_id::text END
+          )
+          || jsonb_build_object(
+            'source_pay_method', grouped_input.source_pay_method,
+            'current_target_pay_method', grouped_input.current_target_pay_method,
+            'source_amount', grouped_input.source_amount,
+            'work_date', CASE WHEN grouped_input.component_key_type = 'TS_DAY' THEN grouped_input.component_key_value ELSE NULL END,
+            'physical_row_count', grouped_input.physical_row_count,
+            'source_basis_rows', grouped_input.physical_basis_rows
+          )
+          || jsonb_build_object(
+            'source_units', CASE
+              WHEN grouped_input.source_units_count = grouped_input.physical_row_count
+               AND grouped_input.source_rate_count = grouped_input.physical_row_count
+               AND grouped_input.source_rate_distinct_count = 1
+                THEN grouped_input.source_units_sum
+              ELSE NULL
+            END,
+            'source_rate', CASE
+              WHEN grouped_input.source_rate_count = grouped_input.physical_row_count
+               AND grouped_input.source_rate_distinct_count = 1 THEN grouped_input.common_source_rate
+              ELSE NULL
+            END,
+            'source_charge_rate', CASE
+              WHEN grouped_input.source_charge_rate_count = grouped_input.physical_row_count
+               AND grouped_input.source_charge_rate_distinct_count = 1 THEN grouped_input.common_source_charge_rate
+              ELSE NULL
+            END,
+            'bucket_code', CASE
+              WHEN grouped_input.bucket_code_count = grouped_input.physical_row_count
+               AND grouped_input.bucket_code_distinct_count = 1 THEN grouped_input.common_bucket_code
+              ELSE NULL
+            END,
+            'umbrella_vat_chargeable', CASE
+              WHEN grouped_input.umbrella_vat_count = grouped_input.physical_row_count
+               AND grouped_input.umbrella_vat_distinct_count = 1 THEN grouped_input.common_umbrella_vat_chargeable::boolean
+              ELSE NULL
+            END,
+            'vat_chargeable', CASE
+              WHEN grouped_input.vat_chargeable_count = grouped_input.physical_row_count
+               AND grouped_input.vat_chargeable_distinct_count = 1 THEN grouped_input.common_vat_chargeable::boolean
+              ELSE NULL
+            END
+          )
+        )
+      END AS normalized_source_basis_json,
+      CASE
+        WHEN grouped_input.physical_row_count = 1
+          THEN grouped_input.first_target_basis_json
+        WHEN grouped_input.target_basis_distinct_count = 1
+          THEN grouped_input.first_target_basis_json
+        ELSE jsonb_strip_nulls(
+          jsonb_build_object(
+            'aggregation_mode', 'POLICY_X_ECONOMIC_IDENTITY',
+            'current_target_pay_method', grouped_input.current_target_pay_method,
+            'relevant_erni_pct', grouped_input.relevant_erni_pct,
+            'physical_row_count', grouped_input.physical_row_count,
+            'target_basis_rows', grouped_input.physical_basis_rows
+          )
+        )
+      END AS normalized_target_basis_json
+    FROM grouped_input
+  )
+  SELECT
+    normalized_basis.row_seq,
+    normalized_basis.source_family_key,
+    normalized_basis.component_key_type,
+    normalized_basis.component_key_value,
+    normalized_basis.classification,
+    normalized_basis.candidate_id,
+    normalized_basis.client_id,
+    normalized_basis.linked_timesheet_id,
+    normalized_basis.source_pay_method,
+    normalized_basis.current_target_pay_method,
+    normalized_basis.normalized_source_basis_json,
+    normalized_basis.normalized_target_basis_json,
+    normalized_basis.accepted_resolution_json,
+    normalized_basis.source_amount,
+    normalized_basis.incoming_remaining_source_amount,
+    normalized_basis.incoming_remaining_is_explicit,
+    normalized_basis.relevant_erni_pct,
+    normalized_basis.allocation_priority_group,
+    normalized_basis.allocation_priority_order,
+    public.pay_finance_component_fingerprint(
+      p_source_family_key => normalized_basis.source_family_key,
+      p_component_key_type => normalized_basis.component_key_type,
+      p_component_key_value => normalized_basis.component_key_value,
+      p_classification => normalized_basis.classification,
+      p_source_pay_method => normalized_basis.source_pay_method,
+      p_current_target_pay_method => normalized_basis.current_target_pay_method,
+      p_source_basis_json => normalized_basis.normalized_source_basis_json,
+      p_source_amount => normalized_basis.source_amount,
+      p_relevant_erni_pct => normalized_basis.relevant_erni_pct,
+      p_target_basis_json => normalized_basis.normalized_target_basis_json
+    ) AS current_basis_fingerprint
+  FROM normalized_basis;
+
+  TRUNCATE TABLE pg_temp.tmp_pay_finance_component_sync_input;
+
+  INSERT INTO pg_temp.tmp_pay_finance_component_sync_input
+  SELECT normalized_input.*
+  FROM pg_temp.tmp_pay_finance_component_sync_normalized AS normalized_input
+  ORDER BY normalized_input.row_seq;
+
+  SELECT COUNT(*)::integer
+  INTO v_input_component_count
+  FROM pg_temp.tmp_pay_finance_component_sync_input AS normalized_input_count_rows;
+
   /* Build the case-scoped frozen item/reservation set once using the existing
      finance_case_id, source_ref and pay_batch_item_id indexes.  All settlement
      and reservation reconciliation below joins this bounded set rather than
@@ -138612,9 +138938,7 @@ BEGIN
     AND round(coalesce(active_component_amounts.component_source_amount, 0), 2) > 0
   GROUP BY active_component_amounts.finance_component_id;
 
-  SELECT COUNT(*)::integer
-  INTO v_input_component_count
-  FROM pg_temp.tmp_pay_finance_component_sync_input AS input_component_count_rows;
+  /* v_input_component_count was established after Policy X identity normalisation. */
 
   CREATE TEMP TABLE IF NOT EXISTS pg_temp.tmp_pay_finance_component_identity_recovered (
     source_family_key text NOT NULL,
@@ -139991,7 +140315,9 @@ BEGIN
               'case_outstanding_amount', coalesce(v_case_outstanding_amount, 0),
               'open_component_remaining_total', coalesce(v_open_component_remaining_total, 0),
               'mismatch_amount', coalesce(v_component_case_mismatch_amount, 0),
+              'raw_input_component_count', coalesce(v_raw_input_component_count, 0),
               'input_component_count', coalesce(v_input_component_count, 0),
+              'aggregated_duplicate_identity_count', coalesce(v_aggregated_duplicate_identity_count, 0),
               'case_active_consumed_amount', coalesce(v_case_active_consumed_amount, 0),
               'case_active_reserved_source_amount', coalesce(v_case_active_reserved_source_amount, 0),
               'message', 'Finance-case outstanding does not reconcile to the open component remaining-source total after component synchronisation.'
@@ -140049,7 +140375,10 @@ BEGIN
       'closed_count', v_closed_count,
       'stale_marked_count', v_stale_marked_count,
       'protected_skip_count', v_protected_skip_count,
-      'active_reservation_deferred_count', v_active_reservation_deferred_count
+      'active_reservation_deferred_count', v_active_reservation_deferred_count,
+      'raw_input_component_count', COALESCE(v_raw_input_component_count, 0),
+      'normalized_input_component_count', COALESCE(v_input_component_count, 0),
+      'aggregated_duplicate_identity_count', COALESCE(v_aggregated_duplicate_identity_count, 0)
     ),
     'pay_finance_components',
     p_finance_case_id::text,
@@ -140069,6 +140398,9 @@ BEGIN
     'stale_marked_count', v_stale_marked_count,
     'protected_skip_count', v_protected_skip_count,
     'active_reservation_deferred_count', v_active_reservation_deferred_count,
+    'raw_input_component_count', COALESCE(v_raw_input_component_count, 0),
+    'normalized_input_component_count', COALESCE(v_input_component_count, 0),
+    'aggregated_duplicate_identity_count', COALESCE(v_aggregated_duplicate_identity_count, 0),
     'case_outstanding_amount', coalesce(v_case_outstanding_amount, 0),
     'open_component_remaining_total', coalesce(v_open_component_remaining_total, 0),
     'component_case_mismatch_amount', coalesce(v_component_case_mismatch_amount, 0),
