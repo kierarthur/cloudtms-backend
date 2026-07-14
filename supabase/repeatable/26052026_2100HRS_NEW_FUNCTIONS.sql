@@ -137744,6 +137744,7 @@ DECLARE
   v_case_written_off_at_utc timestamptz;
   v_case_cleared_at_utc timestamptz;
   v_case_has_protected_event boolean := false;
+  v_case_is_preview_auto_clear boolean := false;
   v_case_is_protected boolean := false;
   v_protected_skip_count integer := 0;
 
@@ -137833,9 +137834,28 @@ BEGIN
   )
   INTO v_case_has_protected_event;
 
+  SELECT COALESCE((
+    SELECT
+      upper(btrim(coalesce(latest_case_event.event_type, ''))) = 'CLEARED'
+      AND upper(btrim(coalesce(latest_case_event.reason, ''))) = 'PREVIEW_FINANCE_SYNC'
+    FROM public.pay_finance_case_events AS latest_case_event
+    WHERE latest_case_event.finance_case_id = p_finance_case_id
+    ORDER BY latest_case_event.event_at_utc DESC, latest_case_event.id DESC
+    LIMIT 1
+  ), false)
+  INTO v_case_is_preview_auto_clear;
+
   v_case_is_protected := (
     v_case_written_off_at_utc IS NOT NULL
-    OR v_case_cleared_at_utc IS NOT NULL
+    OR (
+      v_case_cleared_at_utc IS NOT NULL
+      AND NOT (
+        coalesce(v_case_is_preview_auto_clear, false)
+        AND jsonb_array_length(v_input_json) = 0
+        AND coalesce(v_case_status, '') = 'PAID_OFF'
+        AND round(coalesce(v_case_outstanding_amount, 0), 2) = 0
+      )
+    )
     OR coalesce(v_case_status, '') NOT IN ('ACTIVE', 'PAID_OFF')
     OR coalesce(v_case_has_protected_event, false)
   );
@@ -137866,7 +137886,8 @@ BEGIN
         'status', v_case_status,
         'written_off_at_utc', v_case_written_off_at_utc,
         'cleared_at_utc', v_case_cleared_at_utc,
-        'has_protected_event', v_case_has_protected_event
+        'has_protected_event', v_case_has_protected_event,
+        'is_preview_auto_clear', v_case_is_preview_auto_clear
       ),
       jsonb_build_object(
         'sync_skipped', true,
@@ -137884,7 +137905,8 @@ BEGIN
         'status', v_case_status,
         'written_off_at_utc', v_case_written_off_at_utc,
         'cleared_at_utc', v_case_cleared_at_utc,
-        'has_protected_event', v_case_has_protected_event
+        'has_protected_event', v_case_has_protected_event,
+        'is_preview_auto_clear', v_case_is_preview_auto_clear
       ),
       'pay_finance_components',
       p_finance_case_id::text,
@@ -139360,19 +139382,7 @@ BEGIN
     )
     INTO v_component_has_protected_event;
 
-    v_component_is_protected := (
-      coalesce(v_component_has_protected_event, false)
-      OR (
-        coalesce(v_existing_component.is_resolution_stale, false) = true
-        AND upper(coalesce(v_existing_component.saved_resolution_mode::text, '')) IN (
-          'MANUAL_REPLACEMENT_RATE',
-          'MANUAL_AMOUNT',
-          'MANUAL_TOTAL',
-          'MANUAL_GROSS_TOTAL',
-          'MANUAL_OVERRIDE'
-        )
-      )
-    );
+    v_component_is_protected := coalesce(v_component_has_protected_event, false);
 
     IF v_component_is_protected THEN
       INSERT INTO public.pay_finance_case_events (
@@ -139405,7 +139415,7 @@ BEGIN
           'is_resolution_stale', v_existing_component.is_resolution_stale
         ),
         'COMPONENT_SYNC_SKIPPED_PROTECTED_COMPONENT',
-        'Skipped closing finance component because it is manually resolved, stale, or already restructured.'
+        'Skipped closing finance component because an explicit manual, write-off, or restructure event protects it.'
       );
       v_protected_skip_count := v_protected_skip_count + 1;
       CONTINUE;
@@ -139752,19 +139762,7 @@ BEGIN
       )
       INTO v_component_has_protected_event;
 
-      v_component_is_protected := (
-        coalesce(v_component_has_protected_event, false)
-        OR (
-          coalesce(v_existing_component.is_resolution_stale, false) = true
-          AND upper(coalesce(v_existing_component.saved_resolution_mode::text, '')) IN (
-            'MANUAL_REPLACEMENT_RATE',
-            'MANUAL_AMOUNT',
-            'MANUAL_TOTAL',
-            'MANUAL_GROSS_TOTAL',
-            'MANUAL_OVERRIDE'
-          )
-        )
-      );
+      v_component_is_protected := coalesce(v_component_has_protected_event, false);
 
       v_accepted_resolution_json := NULL;
       IF jsonb_typeof(v_line_json->'accepted_resolution_json') = 'object' THEN
@@ -139834,7 +139832,7 @@ BEGIN
             'is_resolution_stale', v_existing_component.is_resolution_stale
           ),
           'COMPONENT_SYNC_SKIPPED_PROTECTED_COMPONENT',
-          'Skipped updating finance component because it is manually resolved, stale, or already restructured.'
+          'Skipped updating finance component because an explicit manual, write-off, or restructure event protects it.'
         );
         v_protected_skip_count := v_protected_skip_count + 1;
         CONTINUE;
@@ -140427,6 +140425,7 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
 
 
 
