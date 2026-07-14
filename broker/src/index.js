@@ -79974,14 +79974,56 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
   const artifactHints = (source.artifact_hints && typeof source.artifact_hints === 'object') ? source.artifact_hints : {};
   const rowPatch = (source.row_patch && typeof source.row_patch === 'object') ? source.row_patch : {};
   const lifecycleSources = [source, rowPatch, actionFlags, bulkAuthorise, summary, effective, timesheet, contractWeek];
-  const readLifecycleBool = (...keys) => {
-    for (const container of lifecycleSources) {
-      if (!container || typeof container !== 'object') continue;
+  const lifecycleCompletenessSources = [
+    ...lifecycleSources,
+    ...lifecycleSources.map((container) => (
+      container && typeof container.patch_completeness === 'object' && !Array.isArray(container.patch_completeness)
+        ? container.patch_completeness
+        : null
+    ))
+  ];
+  const booleanSignal = (value) => {
+    if (value === true || value === false) return value;
+    if (value == null) return null;
+    if (typeof value === 'number') {
+      if (value === 1) return true;
+      if (value === 0) return false;
+      return null;
+    }
+    if (typeof value !== 'string') return null;
+    const text = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return null;
+  };
+  const lifecycleBooleanValues = (containers, keys) => {
+    const values = [];
+    for (const container of containers) {
+      if (!container || typeof container !== 'object' || Array.isArray(container)) continue;
       for (const key of keys) {
         if (!Object.prototype.hasOwnProperty.call(container, key)) continue;
-        return boolish(container[key]);
+        const signal = booleanSignal(container[key]);
+        if (signal !== null) values.push(signal);
       }
     }
+    return values;
+  };
+  const readLifecycleTrueWins = (...keys) => {
+    const values = lifecycleBooleanValues(lifecycleSources, keys);
+    if (values.some((value) => value === true)) return true;
+    if (values.some((value) => value === false)) return false;
+    return null;
+  };
+  const readLifecycleFalseWins = (...keys) => {
+    const values = lifecycleBooleanValues(lifecycleSources, keys);
+    if (values.some((value) => value === false)) return false;
+    if (values.some((value) => value === true)) return true;
+    return null;
+  };
+  const readCompletenessFalseWins = (...keys) => {
+    const values = lifecycleBooleanValues(lifecycleCompletenessSources, keys);
+    if (values.some((value) => value === false)) return false;
+    if (values.some((value) => value === true)) return true;
     return null;
   };
   const readLifecycleText = (...keys) => {
@@ -79995,10 +80037,6 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     }
     return '';
   };
-  const lifecycleAnyTrue = (...keys) => lifecycleSources.some((container) => {
-    if (!container || typeof container !== 'object') return false;
-    return keys.some((key) => Object.prototype.hasOwnProperty.call(container, key) && boolish(container[key]));
-  });
 
   const timesheetId = String(
     readOwn(source, 'timesheet_id') ??
@@ -80189,10 +80227,6 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
   const canBulkAuthorise = hasTimesheet && !documentLocked && requiresAuthorisation && !isAuthorised && !qrUnsignedBlocked && qrBulkAuthoriseVisible;
   const canBulkUnauthorise = hasTimesheet && !documentLocked && isAuthorised && qrBulkAuthoriseVisible;
 
-  const bulkAuthoriseSection = canBulkAuthorise
-    ? 'processed_eligible'
-    : (canBulkUnauthorise ? 'authorised_eligible' : null);
-
   const canEditTimesheetData = !dataMutationLocked && !isAuthorised && routeFamily === 'MANUAL_NON_QR';
   const hasValidEvidenceContext = hasTimesheet;
   const canManageEvidence = hasValidEvidenceContext && !evidenceDocumentLocked && !isImportAuthoritative;
@@ -80201,17 +80235,6 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     processingStatus === 'UNPROCESSED' ||
     upper(readOwn(source, 'summary_stage') || '') === 'UNPROCESSED' ||
     upper(readOwn(source, 'tools_stage') || '') === 'UNPROCESSED'
-  );
-
-  const computedCanUnprocess = (
-    hasTimesheet &&
-    !documentLocked &&
-    !isAuthorised &&
-    routeFamily === 'MANUAL_NON_QR' &&
-    (
-      (periodType === 'WEEKLY' && !!contractWeekId) ||
-      (periodType === 'DAILY' && !backendUnprocessed)
-    )
   );
 
   const statusValue = upper(
@@ -80304,32 +80327,96 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
 
   const canAddAdditionalManual = additionalManualStructuralAllowed;
 
-  const isArchived = lifecycleAnyTrue('is_archived', 'archived') || processingStatus === 'ARCHIVED';
-  const hasRetainedFinancialHistory = lifecycleAnyTrue(
+  const archivedSignals = lifecycleBooleanValues(lifecycleSources, ['is_archived', 'archived']);
+  const canonicalArchived = archivedSignals.some((value) => value === true)
+    ? true
+    : (archivedSignals.some((value) => value === false) ? false : null);
+  const archivedSignalConflict = (
+    archivedSignals.some((value) => value === true)
+    && archivedSignals.some((value) => value === false)
+  );
+  const canonicalRetainedHistory = readLifecycleTrueWins(
     'has_retained_financial_history',
     'retained_financial_history',
     'financial_history_retained'
   );
-  const canonicalCanUnprocess = readLifecycleBool('can_unprocess');
-  const canonicalShowUnprocess = readLifecycleBool('show_unprocess', 'unprocess_action_visible');
-  const unprocessBlockReason = readLifecycleText('unprocess_block_reason', 'unprocess_reason', 'unprocess_blocker_code') || (
-    isArchived ? 'TIMESHEET_ARCHIVED' : (hasRetainedFinancialHistory ? 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' : '')
+  const canonicalCanUnprocess = readLifecycleFalseWins('can_unprocess');
+  const canonicalShowUnprocess = readLifecycleFalseWins('show_unprocess', 'unprocess_action_visible');
+  const canonicalReadOnly = readLifecycleTrueWins('read_only', 'review_only');
+  const permissionStateComplete = readCompletenessFalseWins(
+    'permission_state_patch_complete',
+    'permissionStateComplete',
+    'permission_state_complete'
   );
-  const unprocessBlockMessage = readLifecycleText('unprocess_block_message', 'unprocess_message') || (
-    hasRetainedFinancialHistory
-      ? 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
-      : (isArchived ? 'This timesheet is archived and is read-only. Unarchive it before changing its lifecycle.' : '')
+  const priorityBadgesComplete = readCompletenessFalseWins(
+    'priority_badges_patch_complete',
+    'priorityBadgesComplete',
+    'priority_badges_complete'
   );
-  const unprocessActionApplicable = canonicalShowUnprocess === null
-    ? !!computedCanUnprocess
-    : canonicalShowUnprocess;
-  const canUnprocess = !isArchived && !hasRetainedFinancialHistory && unprocessActionApplicable && (
-    canonicalCanUnprocess === null ? computedCanUnprocess : canonicalCanUnprocess
+  const lifecyclePatchComplete = readCompletenessFalseWins(
+    'lifecycle_authority_complete',
+    'canonical_lifecycle_complete',
+    'lifecycle_patch_complete',
+    'affected_rows_complete'
   );
-  const showUnprocess = !isArchived && unprocessActionApplicable;
-  const readOnly = isArchived || readLifecycleBool('read_only', 'review_only') === true;
+  const refreshRequiredSignal = readLifecycleTrueWins('refresh_required', 'requires_affected_row_refresh');
+  const canonicalCoreComplete = (
+    canonicalArchived !== null
+    && canonicalRetainedHistory !== null
+    && canonicalCanUnprocess !== null
+    && canonicalShowUnprocess !== null
+  );
+  const explicitCompletenessDenied = [permissionStateComplete, priorityBadgesComplete, lifecyclePatchComplete]
+    .some((value) => value === false);
+  const archivedStatusConflict = canonicalArchived === false && processingStatus === 'ARCHIVED';
+  const lifecycleAuthorityComplete = (
+    canonicalCoreComplete
+    && refreshRequiredSignal !== true
+    && !explicitCompletenessDenied
+    && !archivedSignalConflict
+    && !archivedStatusConflict
+  );
+
+  const isArchived = canonicalArchived === true || processingStatus === 'ARCHIVED';
+  const hasRetainedFinancialHistory = canonicalRetainedHistory === true;
+  const suppliedUnprocessBlockReason = readLifecycleText('unprocess_block_reason', 'unprocess_reason', 'unprocess_blocker_code');
+  const suppliedUnprocessBlockMessage = readLifecycleText('unprocess_block_message', 'unprocess_message');
+  const unprocessBlockReason = !lifecycleAuthorityComplete
+    ? 'LIFECYCLE_AUTHORITY_INCOMPLETE'
+    : (suppliedUnprocessBlockReason || (
+        isArchived ? 'TIMESHEET_ARCHIVED' : (hasRetainedFinancialHistory ? 'FINANCIAL_HISTORY_PREVENTS_UNPROCESS' : '')
+      ));
+  const unprocessBlockMessage = !lifecycleAuthorityComplete
+    ? 'The canonical lifecycle state is incomplete. Refresh this row before using lifecycle actions.'
+    : (suppliedUnprocessBlockMessage || (
+        hasRetainedFinancialHistory
+          ? 'This timesheet has already been financially linked and cannot be unprocessed. You can archive the timesheet instead.'
+          : (isArchived ? 'This timesheet is archived and is read-only. Unarchive it before changing its lifecycle.' : '')
+      ));
+  const showUnprocess = lifecycleAuthorityComplete && !isArchived && canonicalShowUnprocess === true;
+  const canUnprocess = (
+    lifecycleAuthorityComplete
+    && !isArchived
+    && !hasRetainedFinancialHistory
+    && showUnprocess
+    && canonicalCanUnprocess === true
+  );
+  const readOnly = isArchived || canonicalReadOnly === true || !lifecycleAuthorityComplete;
 
   const reviewOnly = !!(dataMutationLocked || isAuthorised || routeFamily !== 'MANUAL_NON_QR');
+  const explicitCanBulkAuthorise = readLifecycleFalseWins('can_bulk_authorise', 'can_authorise');
+  const explicitCanBulkUnauthorise = readLifecycleFalseWins('can_bulk_unauthorise', 'can_unauthorise');
+  const explicitCanEditTimesheetData = readLifecycleFalseWins('can_edit_timesheet_data', 'can_edit');
+  const explicitCanManageEvidence = readLifecycleFalseWins('can_manage_evidence', 'can_manage_expense_evidence');
+  const explicitCanAddAdditionalManual = readLifecycleFalseWins('can_add_additional_manual');
+  const finalCanBulkAuthorise = lifecycleAuthorityComplete && !isArchived && explicitCanBulkAuthorise === true && canBulkAuthorise;
+  const finalCanBulkUnauthorise = lifecycleAuthorityComplete && !isArchived && explicitCanBulkUnauthorise === true && canBulkUnauthorise;
+  const finalCanEditTimesheetData = lifecycleAuthorityComplete && !isArchived && explicitCanEditTimesheetData === true && canEditTimesheetData;
+  const finalCanManageEvidence = lifecycleAuthorityComplete && !isArchived && explicitCanManageEvidence === true && canManageEvidence;
+  const finalCanAddAdditionalManual = lifecycleAuthorityComplete && !isArchived && explicitCanAddAdditionalManual === true && canAddAdditionalManual;
+  const finalBulkAuthoriseSection = finalCanBulkAuthorise
+    ? 'processed_eligible'
+    : (finalCanBulkUnauthorise ? 'authorised_eligible' : null);
 
   const existingHighlightRedValue = readOwn(source, 'nhsp_highlight_red');
   const existingHighlightReason = readOwn(source, 'nhsp_highlight_reason');
@@ -80359,11 +80446,11 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     validation_pre_validated: validationPreValidated,
     hr_validation_satisfied: hrValidationSatisfied,
     hr_validation_awaiting: hrValidationAwaiting,
-    can_bulk_authorise: isArchived ? false : canBulkAuthorise,
-    can_bulk_unauthorise: isArchived ? false : canBulkUnauthorise,
-    bulk_authorise_section: isArchived ? null : bulkAuthoriseSection,
-    can_edit_timesheet_data: isArchived ? false : canEditTimesheetData,
-    can_manage_evidence: isArchived ? false : canManageEvidence,
+    can_bulk_authorise: finalCanBulkAuthorise,
+    can_bulk_unauthorise: finalCanBulkUnauthorise,
+    bulk_authorise_section: finalBulkAuthoriseSection,
+    can_edit_timesheet_data: finalCanEditTimesheetData,
+    can_manage_evidence: finalCanManageEvidence,
     evidence_document_locked: evidenceDocumentLocked,
     evidence_lock_reason: !hasValidEvidenceContext
       ? 'INVALID_TIMESHEET_CONTEXT'
@@ -80378,8 +80465,13 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     has_retained_financial_history: hasRetainedFinancialHistory,
     retained_financial_history: hasRetainedFinancialHistory,
     is_archived: isArchived,
+    lifecycle_authority_complete: lifecycleAuthorityComplete,
+    permission_state_patch_complete: lifecycleAuthorityComplete,
+    priority_badges_patch_complete: lifecycleAuthorityComplete,
+    refresh_required: !lifecycleAuthorityComplete,
+    requires_affected_row_refresh: !lifecycleAuthorityComplete,
     read_only: readOnly,
-    can_add_additional_manual: isArchived ? false : canAddAdditionalManual,
+    can_add_additional_manual: finalCanAddAdditionalManual,
     review_only: reviewOnly || readOnly,
     has_deviation_marker: hasDeviationMarker,
     deviation_marker_reason: deviationMarkerReason
@@ -96944,6 +97036,7 @@ async function handleContractsTruncateTailSafely(env, req, contractId) {
  * after the RPC response proves a committed PERMANENT_DELETE outcome.
  */
 
+
 async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -96969,16 +97062,34 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
     return value;
   };
-  const idArray = (value) => Array.from(new Set(
-    (Array.isArray(value) ? value : [])
-      .map((item) => String(item || '').trim())
-      .filter((item) => uuidRe.test(item))
-  )).sort();
-  const sameIdSet = (left, right) => {
-    const a = idArray(left);
-    const b = idArray(right);
-    return a.length === b.length && a.every((value, index) => value === b[index]);
+  const parseCanonicalIdArray = (value, fieldName, options = {}) => {
+    const allowMissing = options.allowMissing === true;
+    const maxCount = Number.isInteger(options.maxCount) ? options.maxCount : 512;
+    if (value == null && allowMissing) return [];
+    if (!Array.isArray(value)) {
+      throw new Error(`DELETE_${String(fieldName || 'ID_ARRAY').toUpperCase()}_INVALID`);
+    }
+    const ids = value.map((item) => String(item == null ? '' : item).trim());
+    if (ids.some((item) => !uuidRe.test(item))) {
+      throw new Error(`DELETE_${String(fieldName || 'ID_ARRAY').toUpperCase()}_INVALID`);
+    }
+    if (ids.length > maxCount) {
+      throw new Error(`DELETE_${String(fieldName || 'ID_ARRAY').toUpperCase()}_TOO_LARGE`);
+    }
+    if (new Set(ids).size !== ids.length) {
+      throw new Error(`DELETE_${String(fieldName || 'ID_ARRAY').toUpperCase()}_DUPLICATE`);
+    }
+    const canonical = [...ids].sort();
+    if (canonical.some((item, index) => item !== ids[index])) {
+      throw new Error(`DELETE_${String(fieldName || 'ID_ARRAY').toUpperCase()}_NOT_CANONICAL`);
+    }
+    return canonical;
   };
+  const sameIdSet = (left, right) => (
+    Array.isArray(left) && Array.isArray(right) &&
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
   const blockerCodes = (preview) => {
     const values = [
       ...(Array.isArray(preview?.blockers) ? preview.blockers : []),
@@ -96992,6 +97103,56 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       if (text) return text;
     }
     return '';
+  };
+  const loadPrimaryContractWeekId = async (currentTimesheetId, allowedContractWeekIds = null) => {
+    const allowed = Array.isArray(allowedContractWeekIds) ? allowedContractWeekIds : null;
+    let url = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?timesheet_id=eq.${encodeURIComponent(currentTimesheetId)}` +
+      '&select=id&order=id.asc&limit=1';
+    if (allowed && allowed.length > 0) {
+      url += `&id=in.(${allowed.map((item) => encodeURIComponent(item)).join(',')})`;
+    }
+    const row = await sbGetOne(env, url);
+    const contractWeekId = String(row?.id || '').trim();
+    if (!contractWeekId) return null;
+    if (!uuidRe.test(contractWeekId)) throw new Error('DELETE_CONTRACT_WEEK_ID_INVALID');
+    if (allowed && allowed.length > 0 && !allowed.includes(contractWeekId)) {
+      throw new Error('DELETE_CONTRACT_WEEK_ID_MISMATCH');
+    }
+    return contractWeekId;
+  };
+  const loadCanonicalSignature = async (currentTimesheetId, allowedContractWeekIds = null, purpose = 'TIMESHEET_DELETE_APPLY_SIGNATURE') => {
+    const primaryContractWeekId = await loadPrimaryContractWeekId(currentTimesheetId, allowedContractWeekIds);
+    if (Array.isArray(allowedContractWeekIds) && allowedContractWeekIds.length > 0 && !primaryContractWeekId) {
+      throw new Error('DELETE_PRIMARY_CONTRACT_WEEK_REQUIRED');
+    }
+    const signatureResult = normaliseRpc(await sbRpc(env, 'timesheet_lifecycle_guard_signature_v1', {
+      p_timesheet_id: currentTimesheetId,
+      p_contract_week_id: primaryContractWeekId,
+      p_include_payload: false
+    }, {
+      routeClass: 'OPERATION_NUDGE',
+      purpose,
+      timeoutMs: 8000
+    }));
+    if (!signatureResult || typeof signatureResult !== 'object' || Array.isArray(signatureResult) || signatureResult.ok === false) {
+      throw new Error('DELETE_SIGNATURE_INVALID_RESULT');
+    }
+    const signatureTimesheetId = firstText(signatureResult.current_timesheet_id, signatureResult.timesheet_id);
+    if (signatureTimesheetId && signatureTimesheetId !== currentTimesheetId) {
+      throw new Error('DELETE_SIGNATURE_TIMESHEET_MISMATCH');
+    }
+    const signatureContractWeekId = firstText(signatureResult.contract_week_id);
+    if (primaryContractWeekId && signatureContractWeekId !== primaryContractWeekId) {
+      throw new Error('DELETE_SIGNATURE_CONTRACT_WEEK_MISMATCH');
+    }
+    const signature = firstText(
+      signatureResult.backend_row_signature,
+      signatureResult.row_signature,
+      signatureResult.signature
+    );
+    if (!signature) throw new Error('DELETE_ROW_SIGNATURE_REQUIRED');
+    return { signature, primaryContractWeekId };
   };
   const deterministicRpcCodes = [
     'ACTOR_USER_ID_REQUIRED',
@@ -97107,11 +97268,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   const expectedKind = firstText(body.expected_delete_kind).toUpperCase();
   const expectedTimesheetId = firstText(body.expected_timesheet_id);
   const expectedRowSignature = firstText(body.expected_row_signature);
-  const expectedTimesheetIds = idArray(body.expected_timesheet_ids);
-  const expectedContractWeekIds = idArray(body.expected_contract_week_ids);
-  const expectedNhspShiftIds = idArray(body.expected_nhsp_shift_ids);
-  const expectedPreservedSourceTimesheetIds = idArray(body.expected_preserved_source_timesheet_ids);
-  const expectedPreservedSourceContractWeekIds = idArray(body.expected_preserved_source_contract_week_ids);
   const reason = firstText(body.reason, 'USER_CONFIRMED_PERMANENT_DELETE');
 
   if (!uuidRe.test(operationId)) {
@@ -97127,21 +97283,83 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     return withCORS(env, req, badRequest('expected_row_signature is required'));
   }
 
+  let expectedTimesheetIds;
+  let expectedContractWeekIds;
+  let expectedNhspShiftIds;
+  let expectedPreservedSourceTimesheetIds;
+  let expectedPreservedSourceContractWeekIds;
+  try {
+    expectedTimesheetIds = parseCanonicalIdArray(body.expected_timesheet_ids, 'expected_timesheet_ids', { maxCount: 64 });
+    expectedContractWeekIds = parseCanonicalIdArray(body.expected_contract_week_ids, 'expected_contract_week_ids', { maxCount: 64 });
+    expectedNhspShiftIds = parseCanonicalIdArray(body.expected_nhsp_shift_ids, 'expected_nhsp_shift_ids', { maxCount: 512 });
+    expectedPreservedSourceTimesheetIds = parseCanonicalIdArray(
+      body.expected_preserved_source_timesheet_ids,
+      'expected_preserved_source_timesheet_ids',
+      { maxCount: 64 }
+    );
+    expectedPreservedSourceContractWeekIds = parseCanonicalIdArray(
+      body.expected_preserved_source_contract_week_ids,
+      'expected_preserved_source_contract_week_ids',
+      { maxCount: 64 }
+    );
+  } catch {
+    return jsonResponse(400, {
+      error: 'Delete request target arrays must contain exact, sorted, duplicate-free UUID values.',
+      error_code: 'DELETE_REQUEST_TARGET_SET_INVALID'
+    });
+  }
+
+  if (expectedTimesheetIds.length === 0 || !expectedTimesheetIds.includes(expectedTimesheetId)) {
+    return jsonResponse(400, {
+      error: 'The confirmed Timesheet target set is incomplete.',
+      error_code: 'DELETE_REQUEST_TARGET_SET_INVALID'
+    });
+  }
+  if (expectedTimesheetIds.some((id) => expectedPreservedSourceTimesheetIds.includes(id)) ||
+      expectedContractWeekIds.some((id) => expectedPreservedSourceContractWeekIds.includes(id))) {
+    return jsonResponse(400, {
+      error: 'Delete targets cannot overlap preserved source records.',
+      error_code: 'PRESERVED_SOURCE_OVERLAPS_DELETE_TARGET'
+    });
+  }
+
   const loadFreshPreview = async () => {
     const resolved = await resolveTimesheetToCurrent(env, requestedTimesheetId);
     const currentTimesheetId = String(resolved?.current_timesheet_id || '').trim();
     if (!uuidRe.test(currentTimesheetId)) return { not_found: true };
 
+    const initialSignature = await loadCanonicalSignature(
+      currentTimesheetId,
+      null,
+      'TIMESHEET_DELETE_APPLY_SIGNATURE_STANDARD'
+    );
+
     let preview = normaliseRpc(await sbRpc(env, 'timesheet_standard_delete_preview_v1', {
       p_timesheet_id: requestedTimesheetId,
       p_actor_user_id: user.id,
       p_expected_timesheet_id: currentTimesheetId,
-      p_expected_row_signature: null
+      p_expected_row_signature: initialSignature.signature
     }, {
       routeClass: 'OPERATION_NUDGE',
       purpose: 'TIMESHEET_DELETE_APPLY_REPREVIEW_STANDARD',
       timeoutMs: 10000
     }));
+
+    if (!preview || typeof preview !== 'object' || Array.isArray(preview)) {
+      throw new Error('DELETE_PREVIEW_INVALID_RESULT');
+    }
+
+    const standardCurrentTimesheetId = firstText(preview.current_timesheet_id);
+    const standardRowSignature = firstText(preview.current_row_signature);
+    if (standardCurrentTimesheetId !== currentTimesheetId || standardRowSignature !== initialSignature.signature) {
+      throw new Error('DELETE_PREVIEW_STALE');
+    }
+
+    parseCanonicalIdArray(preview.timesheet_ids, 'timesheet_ids', { maxCount: 64 });
+    parseCanonicalIdArray(preview.contract_week_ids, 'contract_week_ids', { maxCount: 64 });
+    parseCanonicalIdArray(preview.nhsp_shift_ids, 'nhsp_shift_ids', { maxCount: 512 });
+    parseCanonicalIdArray(preview.preserved_source_timesheet_ids, 'preserved_source_timesheet_ids', { maxCount: 64 });
+    parseCanonicalIdArray(preview.preserved_source_contract_week_ids, 'preserved_source_contract_week_ids', { maxCount: 64 });
 
     const codes = blockerCodes(preview);
     if (codes.has('WEEKLY_MANUAL_ADJUSTMENT_PREVIEW_REQUIRED')) {
@@ -97169,32 +97387,55 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
 
     const kind = String(preview.kind || 'STANDARD_DELETE').trim().toUpperCase();
-    const contractWeekIds = idArray(preview.contract_week_ids);
-    let signature = String(preview.current_row_signature || '').trim();
-    if (!signature) {
-      const signatureResult = normaliseRpc(await sbRpc(env, 'timesheet_lifecycle_guard_signature_v1', {
-        p_timesheet_id: currentTimesheetId,
-        p_contract_week_id: contractWeekIds[0] || null,
-        p_include_payload: false
-      }, {
-        routeClass: 'OPERATION_NUDGE',
-        purpose: 'TIMESHEET_DELETE_APPLY_SIGNATURE',
-        timeoutMs: 8000
-      })) || {};
-      signature = firstText(signatureResult.backend_row_signature, signatureResult.row_signature, signatureResult.signature);
+    if (!['STANDARD_DELETE', 'WEEKLY_CHAIN_DELETE_PARENT', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE'].includes(kind)) {
+      throw new Error('DELETE_PREVIEW_KIND_UNSUPPORTED');
+    }
+
+    const previewCurrentTimesheetId = firstText(preview.current_timesheet_id);
+    if (previewCurrentTimesheetId !== currentTimesheetId) {
+      throw new Error('DELETE_PREVIEW_STALE');
+    }
+
+    const timesheetIds = parseCanonicalIdArray(preview.timesheet_ids, 'timesheet_ids', { maxCount: 64 });
+    const contractWeekIds = parseCanonicalIdArray(preview.contract_week_ids, 'contract_week_ids', { maxCount: 64 });
+    const nhspShiftIds = parseCanonicalIdArray(preview.nhsp_shift_ids, 'nhsp_shift_ids', {
+      allowMissing: kind === 'WEEKLY_MANUAL_ADJUSTMENT_DELETE',
+      maxCount: 512
+    });
+    const preservedSourceTimesheetIds = parseCanonicalIdArray(preview.preserved_source_timesheet_ids, 'preserved_source_timesheet_ids', {
+      allowMissing: kind === 'WEEKLY_CHAIN_DELETE_PARENT',
+      maxCount: 64
+    });
+    const preservedSourceContractWeekIds = parseCanonicalIdArray(preview.preserved_source_contract_week_ids, 'preserved_source_contract_week_ids', {
+      allowMissing: kind === 'WEEKLY_CHAIN_DELETE_PARENT',
+      maxCount: 64
+    });
+
+    let signature = initialSignature.signature;
+    if (kind !== 'STANDARD_DELETE') {
+      const specialisedSignature = await loadCanonicalSignature(
+        currentTimesheetId,
+        contractWeekIds,
+        kind === 'WEEKLY_CHAIN_DELETE_PARENT'
+          ? 'TIMESHEET_DELETE_APPLY_SIGNATURE_WEEKLY_CHAIN'
+          : 'TIMESHEET_DELETE_APPLY_SIGNATURE_WEEKLY_MANUAL_ADJUSTMENT'
+      );
+      signature = specialisedSignature.signature;
+    } else if (firstText(preview.current_row_signature) !== signature) {
+      throw new Error('DELETE_PREVIEW_STALE');
     }
 
     return {
       ...preview,
       kind,
-      current_timesheet_id: firstText(preview.current_timesheet_id, currentTimesheetId),
+      current_timesheet_id: currentTimesheetId,
       current_row_signature: signature,
-      timesheet_ids: idArray(preview.timesheet_ids),
+      timesheet_ids: timesheetIds,
       contract_week_ids: contractWeekIds,
-      nhsp_shift_ids: idArray(preview.nhsp_shift_ids),
-      preserved_source_timesheet_ids: idArray(preview.preserved_source_timesheet_ids),
-      preserved_source_contract_week_ids: idArray(preview.preserved_source_contract_week_ids),
-      was_stale: resolved?.was_stale === true
+      nhsp_shift_ids: nhspShiftIds,
+      preserved_source_timesheet_ids: preservedSourceTimesheetIds,
+      preserved_source_contract_week_ids: preservedSourceContractWeekIds,
+      was_stale: resolved?.was_stale === true || currentTimesheetId !== requestedTimesheetId
     };
   };
 
@@ -97202,10 +97443,17 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   try {
     freshPreview = await loadFreshPreview();
   } catch (error) {
-    return jsonResponse(500, {
-      error: 'The authoritative delete preview could not be refreshed.',
-      error_code: 'DELETE_PREVIEW_FAILED',
-      delete_operation_id: operationId
+    const previewErrorCode = firstText(error?.message).toUpperCase();
+    const stalePreview = previewErrorCode.includes('DELETE_PREVIEW_STALE') ||
+      previewErrorCode.includes('DELETE_ROW_SIGNATURE') ||
+      previewErrorCode.includes('DELETE_SIGNATURE_');
+    return jsonResponse(stalePreview ? 409 : 500, {
+      error: stalePreview
+        ? 'The Timesheet changed while its delete preview was being refreshed. Refresh and review it again.'
+        : 'The authoritative delete preview could not be refreshed.',
+      error_code: stalePreview ? 'DELETE_PREVIEW_STALE' : 'DELETE_PREVIEW_FAILED',
+      delete_operation_id: operationId,
+      refresh_required: true
     });
   }
 
@@ -97231,7 +97479,8 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       error_code: 'DELETE_TARGET_SET_CHANGED',
       delete_operation_id: operationId,
       mismatch_fields: mismatchFields,
-      current_preview: freshPreview,
+      current_timesheet_id: freshPreview.current_timesheet_id,
+      current_delete_kind: previewKind,
       refresh_required: true
     });
   }
@@ -97243,7 +97492,9 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       delete_operation_id: operationId,
       archive_required: true,
       mutation_performed: false,
-      preview: freshPreview,
+      current_timesheet_id: freshPreview.current_timesheet_id,
+      current_delete_kind: previewKind,
+      retention_reasons: Array.isArray(freshPreview.retention_reasons) ? freshPreview.retention_reasons : [],
       refresh_required: true
     });
   }
@@ -97253,7 +97504,11 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       error_code: 'DELETE_BLOCKED',
       delete_operation_id: operationId,
       mutation_performed: false,
-      preview: freshPreview,
+      current_timesheet_id: freshPreview.current_timesheet_id,
+      current_delete_kind: previewKind,
+      blockers: Array.isArray(freshPreview.blockers)
+        ? freshPreview.blockers
+        : (Array.isArray(freshPreview.blocked_reasons) ? freshPreview.blocked_reasons : []),
       refresh_required: true
     });
   }
@@ -97426,16 +97681,205 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     const resultCode = resultDecision === 'ARCHIVE_REQUIRED' || rawResultCode === 'ARCHIVE_REQUIRED'
       ? 'ARCHIVE_REQUIRED'
       : rawResultCode;
+    const blockers = Array.isArray(applyResult.blockers)
+      ? applyResult.blockers
+      : (Array.isArray(applyResult.blocked_reasons) ? applyResult.blocked_reasons : []);
     return jsonResponse(409, {
-      ...applyResult,
-      error: applyResult.message || (resultCode === 'ARCHIVE_REQUIRED'
+      error: firstText(applyResult.message) || (resultCode === 'ARCHIVE_REQUIRED'
         ? 'This Timesheet must be archived instead of permanently deleted.'
         : 'The permanent delete was blocked after the final safety check.'),
       error_code: resultCode,
       delete_operation_id: operationId,
       archive_required: resultCode === 'ARCHIVE_REQUIRED',
       mutation_performed: false,
+      blockers,
       automatic_retry_allowed: resultCode !== 'ARCHIVE_REQUIRED',
+      refresh_required: true
+    });
+  }
+
+  const resultKind = firstText(applyResult.kind, previewKind).toUpperCase();
+  const standardCommitConfirmed = previewKind === 'STANDARD_DELETE' &&
+    applyResult.ok !== false &&
+    applyResult.deleted === true &&
+    applyResult.committed === true &&
+    applyResult.database_commit_confirmed === true;
+  const weeklyCommitConfirmed = previewKind !== 'STANDARD_DELETE' &&
+    applyResult.ok !== false &&
+    applyResult.apply_performed === true &&
+    firstText(applyResult.decision).toUpperCase() === 'PERMANENT_DELETE';
+
+  if (resultKind !== previewKind || (!standardCommitConfirmed && !weeklyCommitConfirmed)) {
+    const reconciliation = await reconcileUnknownOutcome();
+    await writeOutcomeAudit('TIMESHEET_DELETE_OUTCOME_UNKNOWN', operationId, expectedTimesheetId, {
+      ...requestEvidence,
+      reconciliation,
+      error: 'DELETE_COMMIT_EVIDENCE_INCOMPLETE'
+    }, reason);
+    return jsonResponse(503, {
+      error: 'The permanent-delete commit could not be confirmed from the returned operation evidence. Do not retry automatically.',
+      error_code: 'DELETE_OUTCOME_UNKNOWN',
+      delete_operation_id: operationId,
+      r2_cleanup_attempted: false,
+      automatic_retry_allowed: false,
+      refresh_required: true,
+      reconciliation
+    });
+  }
+
+  let deletedTimesheetIds;
+  let deletedContractWeekIds;
+  let returnedTimesheetIds = [];
+  let returnedContractWeekIds = [];
+  let returnedNhspShiftIds = [];
+  let returnedPreservedSourceTimesheetIds = [];
+  let returnedPreservedSourceContractWeekIds = [];
+  let detachedContractWeekIds = [];
+  let detachedNhspShiftIds = [];
+  let resultEvidenceValid = true;
+  const resultMismatchFields = [];
+
+  try {
+    deletedTimesheetIds = parseCanonicalIdArray(applyResult.deleted_timesheet_ids, 'deleted_timesheet_ids', { maxCount: 64 });
+    deletedContractWeekIds = parseCanonicalIdArray(applyResult.deleted_contract_week_ids, 'deleted_contract_week_ids', { maxCount: 64 });
+
+    if (previewKind === 'STANDARD_DELETE') {
+      returnedTimesheetIds = parseCanonicalIdArray(applyResult.timesheet_ids, 'timesheet_ids', { maxCount: 64 });
+      returnedContractWeekIds = parseCanonicalIdArray(applyResult.contract_week_ids, 'contract_week_ids', { maxCount: 64 });
+      returnedNhspShiftIds = parseCanonicalIdArray(applyResult.nhsp_shift_ids, 'nhsp_shift_ids', { maxCount: 512 });
+      returnedPreservedSourceTimesheetIds = parseCanonicalIdArray(
+        applyResult.preserved_source_timesheet_ids,
+        'preserved_source_timesheet_ids',
+        { maxCount: 64 }
+      );
+      returnedPreservedSourceContractWeekIds = parseCanonicalIdArray(
+        applyResult.preserved_source_contract_week_ids,
+        'preserved_source_contract_week_ids',
+        { maxCount: 64 }
+      );
+      detachedContractWeekIds = parseCanonicalIdArray(applyResult.detached_contract_week_ids, 'detached_contract_week_ids', { maxCount: 64 });
+      detachedNhspShiftIds = parseCanonicalIdArray(applyResult.detached_nhsp_shift_ids, 'detached_nhsp_shift_ids', { maxCount: 512 });
+    } else if (previewKind === 'WEEKLY_MANUAL_ADJUSTMENT_DELETE') {
+      returnedPreservedSourceTimesheetIds = parseCanonicalIdArray(
+        applyResult.preserved_source_timesheet_ids,
+        'preserved_source_timesheet_ids',
+        { maxCount: 64 }
+      );
+      returnedPreservedSourceContractWeekIds = parseCanonicalIdArray(
+        applyResult.preserved_source_contract_week_ids,
+        'preserved_source_contract_week_ids',
+        { maxCount: 64 }
+      );
+    }
+  } catch {
+    resultEvidenceValid = false;
+    resultMismatchFields.push('returned_target_arrays');
+    deletedTimesheetIds = [];
+    deletedContractWeekIds = [];
+  }
+
+  if (!sameIdSet(deletedTimesheetIds, expectedTimesheetIds)) {
+    resultEvidenceValid = false;
+    resultMismatchFields.push('deleted_timesheet_ids');
+  }
+
+  if (previewKind === 'STANDARD_DELETE') {
+    if (deletedContractWeekIds.length !== 0) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('deleted_contract_week_ids');
+    }
+    if (firstText(applyResult.current_timesheet_id) !== expectedTimesheetId) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('current_timesheet_id');
+    }
+    if (firstText(applyResult.current_row_signature) !== expectedRowSignature) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('current_row_signature');
+    }
+    if (!sameIdSet(returnedTimesheetIds, expectedTimesheetIds)) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('timesheet_ids');
+    }
+    if (!sameIdSet(returnedContractWeekIds, expectedContractWeekIds)) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('contract_week_ids');
+    }
+    if (!sameIdSet(returnedNhspShiftIds, expectedNhspShiftIds)) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('nhsp_shift_ids');
+    }
+    if (!sameIdSet(returnedPreservedSourceTimesheetIds, expectedPreservedSourceTimesheetIds)) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('preserved_source_timesheet_ids');
+    }
+    if (!sameIdSet(returnedPreservedSourceContractWeekIds, expectedPreservedSourceContractWeekIds)) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('preserved_source_contract_week_ids');
+    }
+    if (!sameIdSet(detachedContractWeekIds, expectedContractWeekIds)) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('detached_contract_week_ids');
+    }
+    if (!sameIdSet(detachedNhspShiftIds, expectedNhspShiftIds)) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('detached_nhsp_shift_ids');
+    }
+    if (!Number.isInteger(applyResult.detached_contract_weeks) || applyResult.detached_contract_weeks !== expectedContractWeekIds.length) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('detached_contract_weeks');
+    }
+    if (!Number.isInteger(applyResult.detached_nhsp_shifts) || applyResult.detached_nhsp_shifts !== expectedNhspShiftIds.length) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('detached_nhsp_shifts');
+    }
+  } else {
+    if (!sameIdSet(deletedContractWeekIds, expectedContractWeekIds)) {
+      resultEvidenceValid = false;
+      resultMismatchFields.push('deleted_contract_week_ids');
+    }
+    if (previewKind === 'WEEKLY_CHAIN_DELETE_PARENT') {
+      if (!Number.isInteger(applyResult.deleted_nhsp_shifts) || applyResult.deleted_nhsp_shifts !== expectedNhspShiftIds.length) {
+        resultEvidenceValid = false;
+        resultMismatchFields.push('deleted_nhsp_shifts');
+      }
+    } else {
+      if (!sameIdSet(returnedPreservedSourceTimesheetIds, expectedPreservedSourceTimesheetIds)) {
+        resultEvidenceValid = false;
+        resultMismatchFields.push('preserved_source_timesheet_ids');
+      }
+      if (!sameIdSet(returnedPreservedSourceContractWeekIds, expectedPreservedSourceContractWeekIds)) {
+        resultEvidenceValid = false;
+        resultMismatchFields.push('preserved_source_contract_week_ids');
+      }
+    }
+  }
+
+  const r2CleanupKeys = applyResult.r2_cleanup_keys;
+  if (!Array.isArray(r2CleanupKeys) || r2CleanupKeys.length > 256 ||
+      r2CleanupKeys.some((value) => typeof value !== 'string' || value.trim().length === 0) ||
+      new Set(r2CleanupKeys).size !== r2CleanupKeys.length) {
+    resultEvidenceValid = false;
+    resultMismatchFields.push('r2_cleanup_keys');
+  }
+
+  if (!resultEvidenceValid) {
+    await writeOutcomeAudit('TIMESHEET_DELETE_COMMITTED_RESULT_MISMATCH', operationId, expectedTimesheetId, {
+      ...requestEvidence,
+      relational_delete_committed: true,
+      mismatch_fields: Array.from(new Set(resultMismatchFields)).sort(),
+      actual_deleted_timesheet_ids: deletedTimesheetIds,
+      actual_deleted_contract_week_ids: deletedContractWeekIds,
+      r2_cleanup_attempted: false
+    }, reason);
+    return jsonResponse(500, {
+      error: 'The database committed the delete, but its returned target evidence did not match the confirmed preview. Administrative review is required.',
+      error_code: 'DELETE_COMMITTED_RESULT_MISMATCH',
+      delete_operation_id: operationId,
+      relational_delete_committed: true,
+      mismatch_fields: Array.from(new Set(resultMismatchFields)).sort(),
+      r2_cleanup_attempted: false,
+      r2_cleanup_attention_required: true,
+      automatic_retry_allowed: false,
       refresh_required: true
     });
   }
@@ -97456,42 +97900,14 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     };
   }
 
-  const deletedTimesheetIds = idArray(applyResult.deleted_timesheet_ids);
-  const deletedContractWeekIds = idArray(applyResult.deleted_contract_week_ids);
-  const timesheetSetMatches = sameIdSet(deletedTimesheetIds, expectedTimesheetIds);
-  const contractWeekSetMatches = previewKind === 'STANDARD_DELETE' || sameIdSet(deletedContractWeekIds, expectedContractWeekIds);
-  if (!timesheetSetMatches || !contractWeekSetMatches) {
-    await writeOutcomeAudit('TIMESHEET_DELETE_COMMITTED_RESULT_MISMATCH', operationId, expectedTimesheetId, {
-      ...requestEvidence,
-      relational_delete_committed: true,
-      actual_deleted_timesheet_ids: deletedTimesheetIds,
-      actual_deleted_contract_week_ids: deletedContractWeekIds,
-      r2_cleanup: r2Cleanup
-    }, reason);
-    return jsonResponse(500, {
-      error: 'The database committed the delete, but the returned target evidence did not match the confirmed preview. Administrative review is required.',
-      error_code: 'DELETE_COMMITTED_RESULT_MISMATCH',
-      delete_operation_id: operationId,
-      relational_delete_committed: true,
-      expected_deleted_timesheet_ids: expectedTimesheetIds,
-      actual_deleted_timesheet_ids: deletedTimesheetIds,
-      expected_deleted_contract_week_ids: expectedContractWeekIds,
-      actual_deleted_contract_week_ids: deletedContractWeekIds,
-      r2_cleanup: r2Cleanup,
-      r2_cleanup_attempted: true,
-      r2_cleanup_complete: r2Cleanup?.r2_cleanup_complete === true,
-      r2_cleanup_deferred: Number(r2Cleanup?.deferred_key_count || 0) > 0,
-      r2_cleanup_attention_required: r2Cleanup?.r2_cleanup_complete !== true && r2Cleanup?.durable_retry_recorded !== true,
-      refresh_required: true
-    });
-  }
-
   await writeOutcomeAudit('TIMESHEET_DELETE_WORKER_COMPLETED', operationId, expectedTimesheetId, {
     delete_operation_id: operationId,
     delete_kind: previewKind,
     requested_timesheet_id: requestedTimesheetId,
     deleted_timesheet_ids: deletedTimesheetIds,
     deleted_contract_week_ids: deletedContractWeekIds,
+    detached_contract_week_ids: detachedContractWeekIds,
+    detached_nhsp_shift_ids: detachedNhspShiftIds,
     r2_cleanup: r2Cleanup,
     reason
   }, reason);
@@ -97502,6 +97918,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     decision: 'PERMANENT_DELETE',
     apply_performed: true,
     relational_delete_committed: true,
+    database_commit_confirmed: true,
     delete_operation_id: operationId,
     kind: previewKind,
     requested_timesheet_id: requestedTimesheetId,
@@ -97509,15 +97926,25 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     was_stale: freshPreview.was_stale === true,
     deleted_timesheet_ids: deletedTimesheetIds,
     deleted_contract_week_ids: deletedContractWeekIds,
-    preserved_source_timesheet_ids: idArray(applyResult.preserved_source_timesheet_ids),
-    preserved_source_contract_week_ids: idArray(applyResult.preserved_source_contract_week_ids),
-    deleted_nhsp_shift_count: Number(applyResult.deleted_nhsp_shifts || 0),
+    detached_contract_week_ids: detachedContractWeekIds,
+    detached_nhsp_shift_ids: detachedNhspShiftIds,
+    preserved_source_timesheet_ids: previewKind === 'WEEKLY_CHAIN_DELETE_PARENT'
+      ? expectedPreservedSourceTimesheetIds
+      : returnedPreservedSourceTimesheetIds,
+    preserved_source_contract_week_ids: previewKind === 'WEEKLY_CHAIN_DELETE_PARENT'
+      ? expectedPreservedSourceContractWeekIds
+      : returnedPreservedSourceContractWeekIds,
+    deleted_nhsp_shift_count: previewKind === 'STANDARD_DELETE'
+      ? detachedNhspShiftIds.length
+      : Number(applyResult.deleted_nhsp_shifts || 0),
     r2_cleanup: r2Cleanup,
     r2_cleanup_complete: r2Cleanup?.r2_cleanup_complete === true,
     r2_cleanup_deferred: Number(r2Cleanup?.deferred_key_count || 0) > 0,
     r2_cleanup_attention_required: r2Cleanup?.r2_cleanup_complete !== true && r2Cleanup?.durable_retry_recorded !== true
   }));
 }
+
+
 
 
 
@@ -148864,11 +149291,26 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
       'CANDIDATE_PAY_METHOD_CHANGE_UMBRELLA_ID_NOT_ALLOWED_FOR_PAYE',
       'CANDIDATE_PAY_METHOD_CHANGE_UMBRELLA_ID_INVALID',
       'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT',
-      'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_AUDIT_INVALID'
+      'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_AUDIT_INVALID',
+      'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_EXACT_SCOPE_PROOF_MISSING',
+      'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_QUEUE_AUTHORITY_MISMATCH',
+      'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_EXPECTED_SCOPE_INVALID',
+      'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_QUEUE_SET_MISMATCH',
+      'CANDIDATE_PAY_METHOD_CHANGE_DURABLE_QUEUE_AUTHORITY_MISMATCH',
+      'CANDIDATE_PAY_METHOD_CHANGE_EXACT_SCOPE_UNAVAILABLE',
+      'CANDIDATE_PAY_METHOD_CHANGE_TARGET_SCOPE_INVALID',
+      'CANDIDATE_PAY_METHOD_CHANGE_POST_COMMIT_SCOPE_UNAVAILABLE',
+      'CANDIDATE_PAY_METHOD_CHANGE_CANONICAL_SCOPE_CHANGED'
     ];
     const text = candidates.filter(Boolean).map(String).join(' ');
     return known.find((code) => text.includes(code)) || null;
   };
+  const committedReplayProofCodes = new Set([
+    'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_EXACT_SCOPE_PROOF_MISSING',
+    'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_QUEUE_AUTHORITY_MISMATCH',
+    'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_EXPECTED_SCOPE_INVALID',
+    'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_QUEUE_SET_MISMATCH'
+  ]);
   const canonicalUuidArray = (value, fieldName) => {
     if (!Array.isArray(value)) {
       const error = new Error(`${fieldName} must be an array.`);
@@ -148891,13 +149333,82 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
   };
   const arraysEqual = (left, right) => left.length === right.length && left.every((entry, index) => entry === right[index]);
   const nonNegativeInteger = (value, fieldName) => {
-    const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed < 0) {
+    if (
+      typeof value !== 'number'
+      || !Number.isFinite(value)
+      || !Number.isInteger(value)
+      || value < 0
+    ) {
       const error = new Error(`${fieldName} must be a non-negative integer.`);
       error.code = 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH';
       throw error;
     }
-    return parsed;
+    return value;
+  };
+  const readExactDurableProof = (result, options = {}) => {
+    const superseded = options.superseded === true;
+    const jobId = String(result.job_id || '').trim().toLowerCase();
+    const jobStatus = String(result.job_status || '').trim().toUpperCase();
+    const expectedIds = canonicalUuidArray(result.expected_targeted_timesheet_ids, 'expected_targeted_timesheet_ids');
+    const persistedIds = canonicalUuidArray(result.persisted_targeted_timesheet_ids, 'persisted_targeted_timesheet_ids');
+    const targetedIds = canonicalUuidArray(result.targeted_timesheet_ids, 'targeted_timesheet_ids');
+    const missingIds = canonicalUuidArray(result.missing_targeted_timesheet_ids, 'missing_targeted_timesheet_ids');
+    const extraIds = canonicalUuidArray(result.extra_targeted_timesheet_ids, 'extra_targeted_timesheet_ids');
+    const authorisedIds = canonicalUuidArray(result.authorised_timesheet_ids, 'authorised_timesheet_ids');
+    const activeAdvanceIds = canonicalUuidArray(result.active_advance_timesheet_ids, 'active_advance_timesheet_ids');
+    const canonicalQualifyingIds = Array.from(new Set([...authorisedIds, ...activeAdvanceIds])).sort();
+    const targetedCount = nonNegativeInteger(result.targeted_timesheet_count, 'targeted_timesheet_count');
+    const effectiveDuplicateCount = nonNegativeInteger(result.effective_duplicate_count, 'effective_duplicate_count');
+    const invalidTargetCount = nonNegativeInteger(result.invalid_target_count, 'invalid_target_count');
+    const sourceChangeSeq = nonNegativeInteger(result.source_change_seq, 'source_change_seq');
+    const resultPreviewSourceChangeSeq = nonNegativeInteger(
+      result.preview_source_change_seq,
+      'preview_source_change_seq'
+    );
+    const currentJobStatuses = new Set(['QUEUED', 'RUNNING', 'SUCCEEDED']);
+    const supersededJobStatuses = new Set(['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'DEAD']);
+    const refreshCompleted = result.refresh_completed === true;
+
+    if (
+      !uuidRe.test(jobId) ||
+      !(superseded ? supersededJobStatuses : currentJobStatuses).has(jobStatus) ||
+      String(result.coverage_basis || '').trim().toUpperCase() !== 'CANONICAL_CURRENT_TIMESHEETS' ||
+      result.coverage_complete !== true ||
+      result.exact_target_scope !== true ||
+      result.exact_set_equality !== true ||
+      result.refresh_accepted !== true ||
+      effectiveDuplicateCount !== 0 ||
+      invalidTargetCount !== 0 ||
+      missingIds.length !== 0 ||
+      extraIds.length !== 0 ||
+      targetedCount !== targetedIds.length ||
+      !arraysEqual(expectedIds, persistedIds) ||
+      !arraysEqual(expectedIds, targetedIds) ||
+      !arraysEqual(targetedIds, canonicalQualifyingIds) ||
+      resultPreviewSourceChangeSeq !== previewSourceChangeSeq ||
+      sourceChangeSeq <= previewSourceChangeSeq ||
+      !Array.isArray(result.authoritative_sessions) ||
+      (superseded ? refreshCompleted !== false : (jobStatus === 'SUCCEEDED') !== refreshCompleted)
+    ) {
+      const error = new Error('The committed candidate pay-method change did not return complete exact durable queue proof.');
+      error.code = 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH';
+      throw error;
+    }
+
+    return {
+      operation_committed: true,
+      operation_superseded_by_later_change: superseded,
+      job_id: jobId,
+      job_status: jobStatus,
+      targeted_timesheet_ids: targetedIds,
+      expected_targeted_timesheet_ids: expectedIds,
+      persisted_targeted_timesheet_ids: persistedIds,
+      authorised_timesheet_ids: authorisedIds,
+      active_advance_timesheet_ids: activeAdvanceIds,
+      source_change_seq: sourceChangeSeq,
+      preview_source_change_seq: resultPreviewSourceChangeSeq,
+      refresh_completed: refreshCompleted
+    };
   };
   const isUncertainRpcFailure = (error, code) => {
     if (code) return false;
@@ -148981,7 +149492,7 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
   const newMethod = String(body.new_method || '').trim().toUpperCase();
   const expectedOldMethod = String(body.expected_old_method || '').trim().toUpperCase();
   const operationId = String(body.operation_id || '').trim();
-  const previewSourceChangeSeq = Number(body.preview_source_change_seq);
+  const previewSourceChangeSeq = body.preview_source_change_seq;
   if (
     Object.prototype.hasOwnProperty.call(body, 'destination_patch')
     && (
@@ -149010,7 +149521,12 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
   if (!uuidRe.test(operationId)) {
     return withCORS(env, req, badRequest('operation_id must be a valid UUID'));
   }
-  if (!Number.isInteger(previewSourceChangeSeq) || previewSourceChangeSeq < 0) {
+  if (
+    typeof previewSourceChangeSeq !== 'number'
+    || !Number.isFinite(previewSourceChangeSeq)
+    || !Number.isInteger(previewSourceChangeSeq)
+    || previewSourceChangeSeq < 0
+  ) {
     return withCORS(env, req, badRequest('preview_source_change_seq must be a non-negative integer'));
   }
 
@@ -149087,7 +149603,31 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
         return jsonResponse(503, {
           error: 'The pay-method change outcome could not be confirmed. Do not submit a new operation; refresh using this operation ID.',
           code: 'CANDIDATE_PAY_METHOD_CHANGE_OUTCOME_UNKNOWN',
+          candidate_id: currentCandidate.id,
           operation_id: operationId,
+          refresh_required: true
+        });
+      }
+
+      if (code === 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_AUDIT_INVALID') {
+        return jsonResponse(503, {
+          error: 'A previous operation audit exists, but its committed outcome cannot be reconciled safely. Do not submit a new operation; refresh using this operation ID.',
+          code: 'CANDIDATE_PAY_METHOD_CHANGE_OUTCOME_UNKNOWN',
+          candidate_id: currentCandidate.id,
+          operation_id: operationId,
+          refresh_required: true
+        });
+      }
+
+      if (committedReplayProofCodes.has(code)) {
+        return jsonResponse(503, {
+          error: 'The operation committed previously, but its exact durable Banking Pay refresh proof cannot be reconciled safely. Do not submit a new operation; refresh using this operation ID.',
+          code,
+          candidate_id: currentCandidate.id,
+          operation_id: operationId,
+          operation_committed: true,
+          original_method: expectedOldMethod,
+          committed_method: newMethod,
           refresh_required: true
         });
       }
@@ -149096,12 +149636,16 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
         'CANDIDATE_PAY_METHOD_CHANGE_ALREADY_APPLIED_OR_STALE',
         'CANDIDATE_PAY_METHOD_CHANGE_STALE_EXPECTED_METHOD',
         'CANDIDATE_PAY_METHOD_CHANGE_PREVIEW_STALE',
+        'CANDIDATE_PAY_METHOD_CHANGE_CANONICAL_SCOPE_CHANGED',
         'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT'
       ]);
       const infrastructureCodes = new Set([
         'CANDIDATE_PAY_METHOD_CHANGE_DURABLE_QUEUE_MISSING',
+        'CANDIDATE_PAY_METHOD_CHANGE_DURABLE_QUEUE_AUTHORITY_MISMATCH',
         'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH',
-        'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_AUDIT_INVALID'
+        'CANDIDATE_PAY_METHOD_CHANGE_EXACT_SCOPE_UNAVAILABLE',
+        'CANDIDATE_PAY_METHOD_CHANGE_TARGET_SCOPE_INVALID',
+        'CANDIDATE_PAY_METHOD_CHANGE_POST_COMMIT_SCOPE_UNAVAILABLE'
       ]);
       const status = conflictCodes.has(code)
         ? 409
@@ -149125,7 +149669,11 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
         CANDIDATE_PAY_METHOD_CHANGE_UMBRELLA_ID_NOT_ALLOWED_FOR_PAYE: 'An umbrella company cannot be supplied when changing the candidate to PAYE.',
         CANDIDATE_PAY_METHOD_CHANGE_UMBRELLA_ID_INVALID: 'The selected umbrella company identifier is invalid.',
         CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT: 'This operation ID is already bound to a different pay-method change. Refresh and start a new confirmed operation.',
-        CANDIDATE_PAY_METHOD_CHANGE_OPERATION_AUDIT_INVALID: 'The committed pay-method change could not be reconciled safely from its audit record.'
+        CANDIDATE_PAY_METHOD_CHANGE_DURABLE_QUEUE_AUTHORITY_MISMATCH: 'The candidate was not changed because the durable Banking Pay job did not retain the required route-change authority.',
+        CANDIDATE_PAY_METHOD_CHANGE_EXACT_SCOPE_UNAVAILABLE: 'The candidate was not changed because the canonical Banking Pay refresh scope could not be established.',
+        CANDIDATE_PAY_METHOD_CHANGE_TARGET_SCOPE_INVALID: 'The candidate was not changed because the canonical Banking Pay target scope was invalid.',
+        CANDIDATE_PAY_METHOD_CHANGE_POST_COMMIT_SCOPE_UNAVAILABLE: 'The candidate was not changed because the canonical Banking Pay scope could not be revalidated.',
+        CANDIDATE_PAY_METHOD_CHANGE_CANONICAL_SCOPE_CHANGED: 'The canonical Banking Pay scope changed after confirmation. Refresh the preview and confirm again.'
       };
       return jsonResponse(status, {
         error: friendly[code] || 'The pay-method change was rejected.',
@@ -149140,120 +149688,147 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
       return jsonResponse(503, {
         error: 'The pay-method change outcome could not be confirmed from the RPC response. Do not submit a new operation; refresh using this operation ID.',
         code: 'CANDIDATE_PAY_METHOD_CHANGE_OUTCOME_UNKNOWN',
+        candidate_id: currentCandidate.id,
         operation_id: operationId,
+        refresh_required: true
+      });
+    }
+
+    const resultOperationId = String(result.operation_id || '').trim().toLowerCase();
+    const resultCandidateId = String(result.candidate_id || '').trim().toLowerCase();
+    const resultOriginalMethod = String(result.original_method || '').trim().toUpperCase();
+    const resultNewMethod = String(result.new_method || '').trim().toUpperCase();
+    const resultCurrentMethod = String(result.current_method || '').trim().toUpperCase();
+    const committedOperationIdentityVerified = !!(
+      result.operation_committed === true
+      && resultOperationId === operationId.toLowerCase()
+      && resultCandidateId === String(currentCandidate.id).trim().toLowerCase()
+      && resultOriginalMethod === expectedOldMethod
+      && resultNewMethod === newMethod
+    );
+    const committedCurrentOperationVerified = !!(
+      committedOperationIdentityVerified
+      && result.operation_superseded_by_later_change === false
+      && resultCurrentMethod === newMethod
+    );
+    const committedSupersededOperationVerified = !!(
+      committedOperationIdentityVerified
+      && result.operation_superseded_by_later_change === true
+      && (resultCurrentMethod === 'PAYE' || resultCurrentMethod === 'UMBRELLA')
+    );
+
+    const zeroMutationFields = ['contracts_changed', 'contract_weeks_changed', 'timesheets_changed', 'rates_changed', 'tsfin_repricing_rows'];
+    const invalidMutationFields = zeroMutationFields.filter((key) => (
+      !Object.prototype.hasOwnProperty.call(result, key)
+      || typeof result[key] !== 'number'
+      || !Number.isFinite(result[key])
+      || result[key] !== 0
+    ));
+    if (invalidMutationFields.length) {
+      console.error('[CAND][PAY-METHOD] prospective-only invariant failed', {
+        candidateId,
+        operationId,
+        fields: invalidMutationFields,
+        committedOperationIdentityVerified: committedCurrentOperationVerified
+      });
+      if (!committedCurrentOperationVerified) {
+        return jsonResponse(503, {
+          error: 'The pay-method change outcome could not be confirmed safely. Do not submit a new operation; refresh using this operation ID.',
+          code: 'CANDIDATE_PAY_METHOD_CHANGE_OUTCOME_UNKNOWN',
+          candidate_id: currentCandidate.id,
+          operation_id: operationId,
+          refresh_required: true
+        });
+      }
+      return jsonResponse(500, {
+        error: 'The committed operation returned an unsafe source-mutation result. The deployment must be reviewed; do not submit a new operation.',
+        code: 'CANDIDATE_PAY_METHOD_CHANGE_SOURCE_MUTATION_ASSERTION_FAILED',
+        candidate_id: currentCandidate.id,
+        operation_id: operationId,
+        operation_committed: true,
+        operation_superseded_by_later_change: false,
+        original_method: expectedOldMethod,
+        committed_method: newMethod,
+        fields: invalidMutationFields,
         refresh_required: true
       });
     }
 
     if (result.operation_superseded_by_later_change === true) {
+      if (!committedSupersededOperationVerified) {
+        return jsonResponse(503, {
+          error: 'The pay-method change outcome could not be confirmed safely. Do not submit a new operation; refresh using this operation ID.',
+          code: 'CANDIDATE_PAY_METHOD_CHANGE_OUTCOME_UNKNOWN',
+          candidate_id: currentCandidate.id,
+          operation_id: operationId,
+          refresh_required: true
+        });
+      }
+      try {
+        readExactDurableProof(result, { superseded: true });
+      } catch (proofError) {
+        console.error('[CAND][PAY-METHOD] superseded operation proof failed', {
+          candidateId,
+          operationId,
+          error: proofError?.message || proofError
+        });
+        return jsonResponse(503, {
+          error: 'The superseded operation committed, but its exact durable Banking Pay proof could not be verified. Do not submit a new operation; refresh using this operation ID.',
+          code: proofError?.code || 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH',
+          candidate_id: currentCandidate.id,
+          operation_id: operationId,
+          operation_committed: true,
+          original_method: expectedOldMethod,
+          committed_method: newMethod,
+          refresh_required: true
+        });
+      }
       return jsonResponse(409, {
         error: 'This operation committed previously, but a later pay-method change has superseded it. The earlier operation was not applied again.',
         code: 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_COMMITTED_SUPERSEDED',
-        operation_id: result.operation_id || operationId,
+        candidate_id: currentCandidate.id,
+        operation_id: operationId,
         operation_committed: true,
         operation_superseded_by_later_change: true,
-        original_method: result.original_method || expectedOldMethod,
-        committed_method: result.new_method || newMethod,
-        current_method: result.current_method || currentMethod,
-        candidate: result.candidate || currentCandidate,
-        refresh_required: true
-      });
-    }
-
-    const zeroMutationFields = ['contracts_changed', 'contract_weeks_changed', 'timesheets_changed', 'rates_changed', 'tsfin_repricing_rows'];
-    const nonZeroMutationFields = zeroMutationFields.filter((key) => Number(result[key] || 0) !== 0);
-    if (nonZeroMutationFields.length) {
-      console.error('[CAND][PAY-METHOD] prospective-only invariant failed', {
-        candidateId,
-        operationId,
-        fields: nonZeroMutationFields,
-        result
-      });
-      return jsonResponse(500, {
-        error: 'The server returned an unsafe source-mutation result. The deployment must be reviewed.',
-        code: 'CANDIDATE_PAY_METHOD_CHANGE_SOURCE_MUTATION_ASSERTION_FAILED',
-        operation_id: operationId,
-        fields: nonZeroMutationFields,
+        original_method: expectedOldMethod,
+        committed_method: newMethod,
+        current_method: resultCurrentMethod,
         refresh_required: true
       });
     }
 
     let exactProof;
     try {
-      const resultOperationId = String(result.operation_id || '').trim();
-      const resultCandidateId = String(result.candidate_id || '').trim();
-      const resultOriginalMethod = String(result.original_method || '').trim().toUpperCase();
-      const resultNewMethod = String(result.new_method || '').trim().toUpperCase();
-      const jobId = String(result.job_id || '').trim();
-      const jobStatus = String(result.job_status || '').trim().toUpperCase();
-      const expectedIds = canonicalUuidArray(result.expected_targeted_timesheet_ids, 'expected_targeted_timesheet_ids');
-      const persistedIds = canonicalUuidArray(result.persisted_targeted_timesheet_ids, 'persisted_targeted_timesheet_ids');
-      const targetedIds = canonicalUuidArray(result.targeted_timesheet_ids, 'targeted_timesheet_ids');
-      const missingIds = canonicalUuidArray(result.missing_targeted_timesheet_ids, 'missing_targeted_timesheet_ids');
-      const extraIds = canonicalUuidArray(result.extra_targeted_timesheet_ids, 'extra_targeted_timesheet_ids');
-      const authorisedIds = canonicalUuidArray(result.authorised_timesheet_ids, 'authorised_timesheet_ids');
-      const activeAdvanceIds = canonicalUuidArray(result.active_advance_timesheet_ids, 'active_advance_timesheet_ids');
-      const canonicalQualifyingIds = Array.from(new Set([...authorisedIds, ...activeAdvanceIds])).sort();
-      const targetedCount = nonNegativeInteger(result.targeted_timesheet_count, 'targeted_timesheet_count');
-      const effectiveDuplicateCount = nonNegativeInteger(result.effective_duplicate_count, 'effective_duplicate_count');
-      const invalidTargetCount = nonNegativeInteger(result.invalid_target_count, 'invalid_target_count');
-      const sourceChangeSeq = nonNegativeInteger(result.source_change_seq, 'source_change_seq');
-      const validJobStatuses = new Set(['QUEUED', 'RUNNING', 'SUCCEEDED']);
-      const refreshCompleted = result.refresh_completed === true;
-
-      if (
-        result.operation_committed !== true ||
-        resultOperationId !== operationId ||
-        resultCandidateId !== String(currentCandidate.id) ||
-        resultOriginalMethod !== expectedOldMethod ||
-        resultNewMethod !== newMethod ||
-        !uuidRe.test(jobId) ||
-        !validJobStatuses.has(jobStatus) ||
-        String(result.coverage_basis || '').trim().toUpperCase() !== 'CANONICAL_CURRENT_TIMESHEETS' ||
-        result.coverage_complete !== true ||
-        result.exact_target_scope !== true ||
-        result.exact_set_equality !== true ||
-        result.refresh_accepted !== true ||
-        effectiveDuplicateCount !== 0 ||
-        invalidTargetCount !== 0 ||
-        missingIds.length !== 0 ||
-        extraIds.length !== 0 ||
-        targetedCount !== targetedIds.length ||
-        !arraysEqual(expectedIds, persistedIds) ||
-        !arraysEqual(expectedIds, targetedIds) ||
-        !arraysEqual(targetedIds, canonicalQualifyingIds) ||
-        (jobStatus === 'SUCCEEDED') !== refreshCompleted ||
-        sourceChangeSeq < previewSourceChangeSeq ||
-        !Array.isArray(result.authoritative_sessions)
-      ) {
-        const error = new Error('The committed candidate pay-method change did not return complete exact durable queue proof.');
-        error.code = 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH';
-        throw error;
+      if (!committedCurrentOperationVerified) {
+        const identityError = new Error('The committed candidate pay-method change did not match the requested operation identity.');
+        identityError.code = 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_PROOF_INVALID';
+        throw identityError;
       }
-
-      exactProof = {
-        job_id: jobId,
-        job_status: jobStatus,
-        targeted_timesheet_ids: targetedIds,
-        expected_targeted_timesheet_ids: expectedIds,
-        persisted_targeted_timesheet_ids: persistedIds,
-        authorised_timesheet_ids: authorisedIds,
-        active_advance_timesheet_ids: activeAdvanceIds,
-        source_change_seq: sourceChangeSeq,
-        refresh_completed: refreshCompleted
-      };
+      exactProof = readExactDurableProof(result, { superseded: false });
     } catch (proofError) {
       console.error('[CAND][PAY-METHOD] exact durable queue proof failed', {
         candidateId,
         operationId,
         error: proofError?.message || proofError,
-        result
+        committedOperationIdentityVerified: committedCurrentOperationVerified
       });
+      if (!committedCurrentOperationVerified) {
+        return jsonResponse(503, {
+          error: 'The pay-method change outcome could not be confirmed safely. Do not submit a new operation; refresh using this operation ID.',
+          code: 'CANDIDATE_PAY_METHOD_CHANGE_OUTCOME_UNKNOWN',
+          operation_id: operationId,
+          refresh_required: true
+        });
+      }
       return jsonResponse(503, {
         error: 'The candidate pay-method change committed, but its exact durable Banking Pay refresh scope could not be verified. Do not submit a new operation; refresh using this operation ID.',
         code: proofError?.code || 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH',
+        candidate_id: currentCandidate.id,
         operation_id: operationId,
-        operation_committed: result.operation_committed === true,
+        operation_committed: true,
+        operation_superseded_by_later_change: false,
+        original_method: expectedOldMethod,
+        committed_method: newMethod,
         refresh_required: true
       });
     }
@@ -149290,6 +149865,7 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
     return withCORS(env, req, ok({
       ...result,
       ...exactProof,
+      current_method: newMethod,
       refresh_accepted: true,
       refresh_completed: exactProof.refresh_completed === true,
       refresh_pending: exactProof.refresh_completed !== true,
@@ -149311,6 +149887,8 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
     return withCORS(env, req, serverError('Failed to change the candidate payment method'));
   }
 }
+
+
 
 async function computeBucketRatesPreservingMargin(env, oldMethod, newMethod, oldRates) {
   const srcMethod = String(oldMethod || '').toUpperCase();
@@ -183783,6 +184361,7 @@ async function handleDocumentTemplatesDelete(env, req, templateId) {
   }
 }
 
+
 async function handleTimesheetDeletePreview(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -183800,17 +184379,42 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
     }
     return value;
   };
-  const idArray = (value) => Array.from(new Set(
-    (Array.isArray(value) ? value : [])
-      .map((item) => String(item || '').trim())
-      .filter((item) => uuidRe.test(item))
-  )).sort();
+  const parseCanonicalIdArray = (value, fieldName, options = {}) => {
+    const allowMissing = options.allowMissing === true;
+    const maxCount = Number.isInteger(options.maxCount) ? options.maxCount : 512;
+    if (value == null && allowMissing) return [];
+    if (!Array.isArray(value)) {
+      throw new Error(`DELETE_PREVIEW_${String(fieldName || 'ID_ARRAY').toUpperCase()}_INVALID`);
+    }
+    const ids = value.map((item) => String(item == null ? '' : item).trim());
+    if (ids.some((item) => !uuidRe.test(item))) {
+      throw new Error(`DELETE_PREVIEW_${String(fieldName || 'ID_ARRAY').toUpperCase()}_INVALID`);
+    }
+    if (ids.length > maxCount) {
+      throw new Error(`DELETE_PREVIEW_${String(fieldName || 'ID_ARRAY').toUpperCase()}_TOO_LARGE`);
+    }
+    if (new Set(ids).size !== ids.length) {
+      throw new Error(`DELETE_PREVIEW_${String(fieldName || 'ID_ARRAY').toUpperCase()}_DUPLICATE`);
+    }
+    const canonical = [...ids].sort();
+    if (canonical.some((item, index) => item !== ids[index])) {
+      throw new Error(`DELETE_PREVIEW_${String(fieldName || 'ID_ARRAY').toUpperCase()}_NOT_CANONICAL`);
+    }
+    return canonical;
+  };
   const blockerCodes = (preview) => {
     const items = [
       ...(Array.isArray(preview?.blockers) ? preview.blockers : []),
       ...(Array.isArray(preview?.blocked_reasons) ? preview.blocked_reasons : [])
     ];
     return new Set(items.map((item) => String(item?.code || item || '').trim().toUpperCase()).filter(Boolean));
+  };
+  const firstText = (...values) => {
+    for (const value of values) {
+      const text = String(value == null ? '' : value).trim();
+      if (text) return text;
+    }
+    return '';
   };
   const rpcErrorText = (error) => String(
     error?.json?.message || error?.json?.details || error?.body || error?.message || error || 'Delete preview failed'
@@ -183823,6 +184427,61 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       headers: { 'content-type': 'application/json' }
     })
   );
+  const loadPrimaryContractWeekId = async (currentTimesheetId, allowedContractWeekIds = null) => {
+    const allowed = Array.isArray(allowedContractWeekIds) ? allowedContractWeekIds : null;
+    let url = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?timesheet_id=eq.${encodeURIComponent(currentTimesheetId)}` +
+      '&select=id&order=id.asc&limit=1';
+    if (allowed && allowed.length > 0) {
+      url += `&id=in.(${allowed.map((item) => encodeURIComponent(item)).join(',')})`;
+    }
+    const row = await sbGetOne(env, url);
+    const contractWeekId = String(row?.id || '').trim();
+    if (!contractWeekId) return null;
+    if (!uuidRe.test(contractWeekId)) throw new Error('DELETE_PREVIEW_CONTRACT_WEEK_ID_INVALID');
+    if (allowed && allowed.length > 0 && !allowed.includes(contractWeekId)) {
+      throw new Error('DELETE_PREVIEW_CONTRACT_WEEK_ID_MISMATCH');
+    }
+    return contractWeekId;
+  };
+  const loadCanonicalSignature = async (currentTimesheetId, allowedContractWeekIds = null, purpose = 'TIMESHEET_DELETE_PREVIEW_SIGNATURE') => {
+    const primaryContractWeekId = await loadPrimaryContractWeekId(currentTimesheetId, allowedContractWeekIds);
+    if (Array.isArray(allowedContractWeekIds) && allowedContractWeekIds.length > 0 && !primaryContractWeekId) {
+      throw new Error('DELETE_PREVIEW_PRIMARY_CONTRACT_WEEK_REQUIRED');
+    }
+    const signatureResult = normaliseRpc(await sbRpc(
+      env,
+      'timesheet_lifecycle_guard_signature_v1',
+      {
+        p_timesheet_id: currentTimesheetId,
+        p_contract_week_id: primaryContractWeekId,
+        p_include_payload: false
+      },
+      {
+        routeClass: 'PREVIEW_PROGRESS',
+        purpose,
+        timeoutMs: 8000
+      }
+    ));
+    if (!signatureResult || typeof signatureResult !== 'object' || Array.isArray(signatureResult) || signatureResult.ok === false) {
+      throw new Error('DELETE_PREVIEW_SIGNATURE_INVALID_RESULT');
+    }
+    const signatureTimesheetId = firstText(signatureResult.current_timesheet_id, signatureResult.timesheet_id);
+    if (signatureTimesheetId && signatureTimesheetId !== currentTimesheetId) {
+      throw new Error('DELETE_PREVIEW_SIGNATURE_TIMESHEET_MISMATCH');
+    }
+    const signatureContractWeekId = firstText(signatureResult.contract_week_id);
+    if (primaryContractWeekId && signatureContractWeekId !== primaryContractWeekId) {
+      throw new Error('DELETE_PREVIEW_SIGNATURE_CONTRACT_WEEK_MISMATCH');
+    }
+    const signature = firstText(
+      signatureResult.backend_row_signature,
+      signatureResult.row_signature,
+      signatureResult.signature
+    );
+    if (!signature) throw new Error('DELETE_PREVIEW_ROW_SIGNATURE_REQUIRED');
+    return { signature, primaryContractWeekId };
+  };
 
   try {
     const resolved = await resolveTimesheetToCurrent(env, requestedTimesheetId);
@@ -183831,6 +184490,12 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       return withCORS(env, req, notFound('Timesheet not found'));
     }
 
+    const initialSignature = await loadCanonicalSignature(
+      currentTimesheetId,
+      null,
+      'TIMESHEET_DELETE_PREVIEW_SIGNATURE_STANDARD'
+    );
+
     let preview = normaliseRpc(await sbRpc(
       env,
       'timesheet_standard_delete_preview_v1',
@@ -183838,7 +184503,7 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
         p_timesheet_id: requestedTimesheetId,
         p_actor_user_id: user.id,
         p_expected_timesheet_id: currentTimesheetId,
-        p_expected_row_signature: null
+        p_expected_row_signature: initialSignature.signature
       },
       {
         routeClass: 'PREVIEW_PROGRESS',
@@ -183855,6 +184520,24 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
         current_timesheet_id: currentTimesheetId
       });
     }
+
+    const standardCurrentTimesheetId = firstText(preview.current_timesheet_id);
+    const standardRowSignature = firstText(preview.current_row_signature);
+    if (standardCurrentTimesheetId !== currentTimesheetId || standardRowSignature !== initialSignature.signature) {
+      return jsonResponse(409, {
+        error: 'The Timesheet changed while its delete preview was being loaded. Refresh and try again.',
+        error_code: 'DELETE_PREVIEW_STALE',
+        requested_timesheet_id: requestedTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        refresh_required: true
+      });
+    }
+
+    parseCanonicalIdArray(preview.timesheet_ids, 'timesheet_ids', { maxCount: 64 });
+    parseCanonicalIdArray(preview.contract_week_ids, 'contract_week_ids', { maxCount: 64 });
+    parseCanonicalIdArray(preview.nhsp_shift_ids, 'nhsp_shift_ids', { maxCount: 512 });
+    parseCanonicalIdArray(preview.preserved_source_timesheet_ids, 'preserved_source_timesheet_ids', { maxCount: 64 });
+    parseCanonicalIdArray(preview.preserved_source_contract_week_ids, 'preserved_source_contract_week_ids', { maxCount: 64 });
 
     const standardCodes = blockerCodes(preview);
     if (standardCodes.has('WEEKLY_MANUAL_ADJUSTMENT_PREVIEW_REQUIRED')) {
@@ -183907,41 +184590,50 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       });
     }
 
-    const timesheetIds = idArray(preview.timesheet_ids);
-    const contractWeekIds = idArray(preview.contract_week_ids);
-    const nhspShiftIds = idArray(preview.nhsp_shift_ids);
-    const preservedSourceTimesheetIds = idArray(preview.preserved_source_timesheet_ids);
-    const preservedSourceContractWeekIds = idArray(preview.preserved_source_contract_week_ids);
-
-    let currentRowSignature = String(preview.current_row_signature || '').trim();
-    if (!currentRowSignature) {
-      const signatureRaw = await sbRpc(
-        env,
-        'timesheet_lifecycle_guard_signature_v1',
-        {
-          p_timesheet_id: currentTimesheetId,
-          p_contract_week_id: contractWeekIds[0] || null,
-          p_include_payload: false
-        },
-        {
-          routeClass: 'PREVIEW_PROGRESS',
-          purpose: 'TIMESHEET_DELETE_PREVIEW_SIGNATURE',
-          timeoutMs: 8000
-        }
-      );
-      const signature = normaliseRpc(signatureRaw) || {};
-      currentRowSignature = String(
-        signature.backend_row_signature || signature.row_signature || signature.signature || ''
-      ).trim();
-    }
-
-    if (!currentRowSignature && String(preview.decision || '').toUpperCase() !== 'BLOCKED') {
+    const previewCurrentTimesheetId = firstText(preview.current_timesheet_id);
+    if (previewCurrentTimesheetId !== currentTimesheetId) {
       return jsonResponse(409, {
-        error: 'Delete preview could not establish the current lifecycle signature. Refresh and try again.',
-        error_code: 'DELETE_ROW_SIGNATURE_REQUIRED',
+        error: 'The current Timesheet identity changed while the delete preview was loading. Refresh and try again.',
+        error_code: 'DELETE_PREVIEW_STALE',
         requested_timesheet_id: requestedTimesheetId,
         current_timesheet_id: currentTimesheetId,
-        kind
+        refresh_required: true
+      });
+    }
+
+    const timesheetIds = parseCanonicalIdArray(preview.timesheet_ids, 'timesheet_ids', { maxCount: 64 });
+    const contractWeekIds = parseCanonicalIdArray(preview.contract_week_ids, 'contract_week_ids', { maxCount: 64 });
+    const nhspShiftIds = parseCanonicalIdArray(preview.nhsp_shift_ids, 'nhsp_shift_ids', {
+      allowMissing: kind === 'WEEKLY_MANUAL_ADJUSTMENT_DELETE',
+      maxCount: 512
+    });
+    const preservedSourceTimesheetIds = parseCanonicalIdArray(preview.preserved_source_timesheet_ids, 'preserved_source_timesheet_ids', {
+      allowMissing: kind === 'WEEKLY_CHAIN_DELETE_PARENT',
+      maxCount: 64
+    });
+    const preservedSourceContractWeekIds = parseCanonicalIdArray(preview.preserved_source_contract_week_ids, 'preserved_source_contract_week_ids', {
+      allowMissing: kind === 'WEEKLY_CHAIN_DELETE_PARENT',
+      maxCount: 64
+    });
+
+    let currentRowSignature = initialSignature.signature;
+    if (kind !== 'STANDARD_DELETE') {
+      const specialisedSignature = await loadCanonicalSignature(
+        currentTimesheetId,
+        contractWeekIds,
+        kind === 'WEEKLY_CHAIN_DELETE_PARENT'
+          ? 'TIMESHEET_DELETE_PREVIEW_SIGNATURE_WEEKLY_CHAIN'
+          : 'TIMESHEET_DELETE_PREVIEW_SIGNATURE_WEEKLY_MANUAL_ADJUSTMENT'
+      );
+      currentRowSignature = specialisedSignature.signature;
+    } else if (firstText(preview.current_row_signature) !== currentRowSignature) {
+      return jsonResponse(409, {
+        error: 'The Timesheet lifecycle signature changed while the delete preview was loading. Refresh and try again.',
+        error_code: 'DELETE_ROW_SIGNATURE_CHANGED',
+        requested_timesheet_id: requestedTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        kind,
+        refresh_required: true
       });
     }
 
@@ -183951,16 +184643,16 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
           `?timesheet_id=eq.${encodeURIComponent(currentTimesheetId)}` +
-          `&select=timesheet_id,booking_id,week_ending_date,status,is_adjustment,adjustment_origin,correction_id,correction_kind` +
-          `&limit=1`
+          '&select=timesheet_id,booking_id,week_ending_date,status,is_adjustment,adjustment_origin,correction_id,correction_kind' +
+          '&limit=1'
       ).catch(() => null);
       const financialRow = await sbGetOne(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?timesheet_id=eq.${encodeURIComponent(currentTimesheetId)}` +
-          `&is_current=eq.true` +
-          `&select=total_hours,total_pay_ex_vat,total_charge_ex_vat` +
-          `&limit=1`
+          '&is_current=eq.true' +
+          '&select=total_hours,total_pay_ex_vat,total_charge_ex_vat' +
+          '&limit=1'
       ).catch(() => null);
       if (currentRow) {
         deleteItems = [{
@@ -183995,11 +184687,11 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       eligible: decision === 'PERMANENT_DELETE',
       archive_required: decision === 'ARCHIVE_REQUIRED',
       requested_timesheet_id: requestedTimesheetId,
-      current_timesheet_id: String(preview.current_timesheet_id || currentTimesheetId),
-      expected_timesheet_id: String(preview.current_timesheet_id || currentTimesheetId),
-      was_stale: String(preview.current_timesheet_id || currentTimesheetId) !== requestedTimesheetId || resolved?.was_stale === true,
-      current_row_signature: currentRowSignature || null,
-      expected_row_signature: currentRowSignature || null,
+      current_timesheet_id: currentTimesheetId,
+      expected_timesheet_id: currentTimesheetId,
+      was_stale: currentTimesheetId !== requestedTimesheetId || resolved?.was_stale === true,
+      current_row_signature: currentRowSignature,
+      expected_row_signature: currentRowSignature,
       timesheet_ids: timesheetIds,
       contract_week_ids: contractWeekIds,
       nhsp_shift_ids: nhspShiftIds,
