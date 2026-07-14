@@ -14409,7 +14409,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb DEFAULT '{}'::jsonb, p_client_filter_single uuid DEFAULT NULL::uuid, p_force_include_timesheet_ids uuid[] DEFAULT NULL::uuid[], p_exclude_timesheet_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -14754,37 +14753,105 @@ begin
     END IF;
 
     IF EXISTS (
+      WITH candidate_authority_seed_timesheets AS (
+        SELECT authoritative_tsfin.timesheet_id
+        FROM public.timesheets_financials AS authoritative_tsfin
+        WHERE authoritative_tsfin.candidate_id = v_authoritative_candidate_id
+          AND authoritative_tsfin.timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT authoritative_case.linked_timesheet_id
+        FROM public.pay_advances AS authoritative_case
+        WHERE authoritative_case.candidate_id = v_authoritative_candidate_id
+          AND authoritative_case.linked_timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT authoritative_component.linked_timesheet_id
+        FROM public.pay_finance_case_components AS authoritative_component
+        WHERE authoritative_component.candidate_id = v_authoritative_candidate_id
+          AND authoritative_component.linked_timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT authoritative_override.timesheet_id
+        FROM public.timesheet_payment_overrides AS authoritative_override
+        WHERE authoritative_override.candidate_id = v_authoritative_candidate_id
+          AND authoritative_override.timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT authoritative_adjustment.timesheet_id
+        FROM public.ts_pay_adjustments AS authoritative_adjustment
+        WHERE authoritative_adjustment.candidate_id = v_authoritative_candidate_id
+          AND authoritative_adjustment.timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT authoritative_snooze.timesheet_id
+        FROM public.pay_item_snoozes AS authoritative_snooze
+        WHERE authoritative_snooze.candidate_id = v_authoritative_candidate_id
+          AND authoritative_snooze.timesheet_id IS NOT NULL
+          AND authoritative_snooze.cleared_at_utc IS NULL
+          AND authoritative_snooze.cancelled_at_utc IS NULL
+
+        UNION
+
+        SELECT authoritative_batch_item.timesheet_id
+        FROM public.pay_batch_candidates AS authoritative_batch_candidate
+        JOIN public.pay_batch_items AS authoritative_batch_item
+          ON authoritative_batch_item.pay_batch_candidate_id = authoritative_batch_candidate.id
+        WHERE authoritative_batch_candidate.candidate_id = v_authoritative_candidate_id
+          AND authoritative_batch_item.timesheet_id IS NOT NULL
+          AND COALESCE(authoritative_batch_item.is_voided, false) IS NOT TRUE
+
+        UNION
+
+        SELECT authoritative_correction.timesheet_id
+        FROM public.pay_payment_correction_items AS authoritative_correction
+        WHERE authoritative_correction.candidate_id = v_authoritative_candidate_id
+          AND authoritative_correction.timesheet_id IS NOT NULL
+          AND UPPER(BTRIM(COALESCE(authoritative_correction.status, ''))) = 'APPLIED'
+      ), candidate_authority_seed_array AS (
+        SELECT COALESCE(
+          ARRAY_AGG(
+            DISTINCT candidate_authority_seed_timesheets.timesheet_id
+            ORDER BY candidate_authority_seed_timesheets.timesheet_id
+          ),
+          ARRAY[]::uuid[]
+        ) AS timesheet_ids
+        FROM candidate_authority_seed_timesheets
+      ), candidate_authority_timesheets AS (
+        SELECT candidate_authority_seed_timesheets.timesheet_id
+        FROM candidate_authority_seed_timesheets
+
+        UNION
+
+        SELECT authority_rotation.canonical_timesheet_id
+        FROM candidate_authority_seed_array
+        JOIN public._pay_timesheet_rotation_scope(
+          candidate_authority_seed_array.timesheet_ids
+        ) AS authority_rotation
+          ON true
+        WHERE authority_rotation.canonical_timesheet_id IS NOT NULL
+
+        UNION
+
+        SELECT authority_rotation.family_timesheet_id
+        FROM candidate_authority_seed_array
+        JOIN public._pay_timesheet_rotation_scope(
+          candidate_authority_seed_array.timesheet_ids
+        ) AS authority_rotation
+          ON true
+        WHERE authority_rotation.family_timesheet_id IS NOT NULL
+      )
       SELECT 1
       FROM unnest(COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[])) AS authoritative_timesheet(timesheet_id)
       WHERE NOT EXISTS (
         SELECT 1
-        FROM public.timesheets_financials AS authoritative_tsfin
-        WHERE authoritative_tsfin.timesheet_id = authoritative_timesheet.timesheet_id
-          AND authoritative_tsfin.candidate_id = v_authoritative_candidate_id
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.pay_advances AS authoritative_case
-        WHERE authoritative_case.linked_timesheet_id = authoritative_timesheet.timesheet_id
-          AND authoritative_case.candidate_id = v_authoritative_candidate_id
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.pay_finance_case_components AS authoritative_component
-        WHERE authoritative_component.linked_timesheet_id = authoritative_timesheet.timesheet_id
-          AND authoritative_component.candidate_id = v_authoritative_candidate_id
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.timesheet_payment_overrides AS authoritative_override
-        WHERE authoritative_override.timesheet_id = authoritative_timesheet.timesheet_id
-          AND authoritative_override.candidate_id = v_authoritative_candidate_id
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.ts_pay_adjustments AS authoritative_adjustment
-        WHERE authoritative_adjustment.timesheet_id = authoritative_timesheet.timesheet_id
-          AND authoritative_adjustment.candidate_id = v_authoritative_candidate_id
+        FROM candidate_authority_timesheets AS candidate_authority
+        WHERE candidate_authority.timesheet_id = authoritative_timesheet.timesheet_id
       )
     ) THEN
       RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_SCOPE_CANDIDATE_MISMATCH'
@@ -16724,7 +16791,6 @@ exception
     RAISE;
 end;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_ensure_run(
