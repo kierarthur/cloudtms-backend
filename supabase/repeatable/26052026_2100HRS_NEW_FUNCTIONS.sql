@@ -14482,6 +14482,11 @@ declare
   v_synced_open_component_count integer := 0;
   v_taxability_event_before_json jsonb;
   v_taxability_event_after_json jsonb;
+  v_authoritative_negative_component_count integer := 0;
+  v_authoritative_negative_component_digest text := NULL::text;
+  v_expected_negative_component_digest text := NULL::text;
+  v_authoritative_settled_baseline_digest text := NULL::text;
+  v_expected_settled_baseline_digest text := NULL::text;
 begin
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -14965,10 +14970,201 @@ begin
     candidate_json jsonb not null
   ) on commit drop;
 
+  create temporary table if not exists pg_temp.tmp_sync_authoritative_negative_components (
+    timesheet_id uuid not null,
+    key_type text not null,
+    key_value text not null,
+    truth_ex_vat numeric(12,2) not null,
+    baseline_ex_vat numeric(12,2) not null,
+    reserved_ex_vat numeric(12,2) not null,
+    outstanding_ex_vat numeric(12,2) not null,
+    baseline_signature text null,
+    primary key (timesheet_id, key_type, key_value)
+  ) on commit drop;
+
+  create temporary table if not exists pg_temp.tmp_sync_raw_negative_timesheet_rows (
+    candidate_id uuid not null,
+    timesheet_id uuid not null,
+    client_id uuid null,
+    candidate_pay_method text not null,
+    case_is_blocked boolean not null,
+    case_components_json jsonb not null default '[]'::jsonb,
+    primary key (candidate_id, timesheet_id)
+  ) on commit drop;
+
   truncate table pg_temp.tmp_sync_timesheet_case_candidates;
   truncate table pg_temp.tmp_sync_case_links;
   truncate table pg_temp.tmp_sync_case_clears;
   truncate table pg_temp.tmp_sync_preview_candidates;
+  truncate table pg_temp.tmp_sync_authoritative_negative_components;
+  truncate table pg_temp.tmp_sync_raw_negative_timesheet_rows;
+
+  IF COALESCE(v_authoritative_timesheet_scope, false) THEN
+    INSERT INTO pg_temp.tmp_sync_authoritative_negative_components (
+      timesheet_id,
+      key_type,
+      key_value,
+      truth_ex_vat,
+      baseline_ex_vat,
+      reserved_ex_vat,
+      outstanding_ex_vat,
+      baseline_signature
+    )
+    WITH live_entitlement_components AS (
+      SELECT
+        entitlement_component.timesheet_id,
+        UPPER(BTRIM(entitlement_component.key_type)) AS key_type,
+        BTRIM(entitlement_component.key_value) AS key_value,
+        ROUND(COALESCE(entitlement_component.truth_ex_vat, 0), 2)::numeric(12,2) AS truth_ex_vat,
+        ROUND(COALESCE(entitlement_component.baseline_ex_vat, 0), 2)::numeric(12,2) AS baseline_ex_vat
+      FROM public._pay_current_timesheet_entitlement_components(
+        COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[])
+      ) AS entitlement_component
+      WHERE NULLIF(BTRIM(COALESCE(entitlement_component.key_type, '')), '') IS NOT NULL
+        AND NULLIF(BTRIM(COALESCE(entitlement_component.key_value, '')), '') IS NOT NULL
+    ), active_entitlement_reservations AS (
+      SELECT
+        reserved_component.timesheet_id,
+        UPPER(BTRIM(reserved_component.key_type)) AS key_type,
+        BTRIM(reserved_component.key_value) AS key_value,
+        ROUND(COALESCE(reserved_component.amount_ex_vat, 0), 2)::numeric(12,2) AS reserved_ex_vat
+      FROM public._pay_reserved_components(
+        COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[]),
+        NULL::uuid
+      ) AS reserved_component
+      WHERE NULLIF(BTRIM(COALESCE(reserved_component.key_type, '')), '') IS NOT NULL
+        AND NULLIF(BTRIM(COALESCE(reserved_component.key_value, '')), '') IS NOT NULL
+    ), live_economic_keys AS (
+      SELECT
+        live_component.timesheet_id,
+        live_component.key_type,
+        live_component.key_value
+      FROM live_entitlement_components AS live_component
+
+      UNION
+
+      SELECT
+        reserved_component.timesheet_id,
+        reserved_component.key_type,
+        reserved_component.key_value
+      FROM active_entitlement_reservations AS reserved_component
+    ), raw_outstanding_components AS (
+      SELECT
+        live_key.timesheet_id,
+        live_key.key_type,
+        live_key.key_value,
+        ROUND(COALESCE(live_component.truth_ex_vat, 0), 2)::numeric(12,2) AS truth_ex_vat,
+        ROUND(COALESCE(live_component.baseline_ex_vat, 0), 2)::numeric(12,2) AS baseline_ex_vat,
+        ROUND(COALESCE(reserved_component.reserved_ex_vat, 0), 2)::numeric(12,2) AS reserved_ex_vat,
+        ROUND(
+          COALESCE(live_component.truth_ex_vat, 0)
+          - COALESCE(live_component.baseline_ex_vat, 0)
+          - COALESCE(reserved_component.reserved_ex_vat, 0),
+          2
+        )::numeric(12,2) AS outstanding_ex_vat
+      FROM live_economic_keys AS live_key
+      LEFT JOIN live_entitlement_components AS live_component
+        ON live_component.timesheet_id = live_key.timesheet_id
+       AND live_component.key_type = live_key.key_type
+       AND live_component.key_value = live_key.key_value
+      LEFT JOIN active_entitlement_reservations AS reserved_component
+        ON reserved_component.timesheet_id = live_key.timesheet_id
+       AND reserved_component.key_type = live_key.key_type
+       AND reserved_component.key_value = live_key.key_value
+    )
+    SELECT
+      raw_component.timesheet_id,
+      raw_component.key_type,
+      raw_component.key_value,
+      raw_component.truth_ex_vat,
+      raw_component.baseline_ex_vat,
+      raw_component.reserved_ex_vat,
+      raw_component.outstanding_ex_vat,
+      CASE
+        WHEN COALESCE(active_settled_basis.active_settled_component_count, 0) > 0
+          THEN active_settled_basis.active_settled_signature
+        ELSE COALESCE(
+          timesheet_pay_state.last_settled_signature,
+          md5(COALESCE(timesheet_pay_state.last_settled_snapshot_json::text, '{}'))
+        )
+      END AS baseline_signature
+    FROM raw_outstanding_components AS raw_component
+    LEFT JOIN public.timesheet_pay_state AS timesheet_pay_state
+      ON timesheet_pay_state.timesheet_id = raw_component.timesheet_id
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*)::integer AS active_settled_component_count,
+        md5(COALESCE(jsonb_agg(
+          jsonb_build_object(
+            'key_type', active_settled_component.key_type,
+            'key_value', active_settled_component.key_value,
+            'amount_ex_vat', ROUND(COALESCE(active_settled_component.amount_ex_vat, 0), 2),
+            'amount_inc_vat', ROUND(COALESCE(active_settled_component.amount_inc_vat, 0), 2)
+          ) ORDER BY active_settled_component.key_type, active_settled_component.key_value
+        )::text, '[]')) AS active_settled_signature
+      FROM public._pay_active_settled_components(
+        ARRAY[raw_component.timesheet_id]::uuid[]
+      ) AS active_settled_component
+    ) AS active_settled_basis ON true
+    WHERE raw_component.outstanding_ex_vat < 0;
+
+    SELECT
+      COUNT(*)::integer,
+      md5(COALESCE(jsonb_agg(
+        jsonb_build_object(
+          'timesheet_id', negative_component.timesheet_id::text,
+          'key_type', negative_component.key_type,
+          'key_value', negative_component.key_value,
+          'truth_ex_vat', negative_component.truth_ex_vat,
+          'baseline_ex_vat', negative_component.baseline_ex_vat,
+          'reserved_ex_vat', negative_component.reserved_ex_vat,
+          'outstanding_ex_vat', negative_component.outstanding_ex_vat
+        ) ORDER BY negative_component.timesheet_id, negative_component.key_type, negative_component.key_value
+      )::text, '[]'))
+    INTO
+      v_authoritative_negative_component_count,
+      v_authoritative_negative_component_digest
+    FROM pg_temp.tmp_sync_authoritative_negative_components AS negative_component;
+
+    SELECT md5(COALESCE(jsonb_agg(
+      jsonb_build_object(
+        'timesheet_id', settled_component.timesheet_id::text,
+        'key_type', settled_component.key_type,
+        'key_value', settled_component.key_value,
+        'amount_ex_vat', ROUND(COALESCE(settled_component.amount_ex_vat, 0), 2),
+        'amount_inc_vat', ROUND(COALESCE(settled_component.amount_inc_vat, 0), 2)
+      ) ORDER BY settled_component.timesheet_id, settled_component.key_type, settled_component.key_value
+    )::text, '[]'))
+    INTO v_authoritative_settled_baseline_digest
+    FROM public._pay_active_settled_components(
+      COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[])
+    ) AS settled_component;
+
+    v_expected_negative_component_digest := NULLIF(BTRIM(COALESCE(
+      p_mismatch_choices->>'overpayment_sync_negative_component_digest',
+      ''
+    )), '');
+    v_expected_settled_baseline_digest := NULLIF(BTRIM(COALESCE(
+      p_mismatch_choices->>'overpayment_sync_settled_baseline_digest',
+      ''
+    )), '');
+
+    IF v_authoritative_negative_component_digest IS DISTINCT FROM v_expected_negative_component_digest
+       OR v_authoritative_settled_baseline_digest IS DISTINCT FROM v_expected_settled_baseline_digest THEN
+      RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_COMPONENT_DIGEST_MISMATCH'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_COMPONENT_DIGEST_MISMATCH',
+                'candidate_id', v_authoritative_candidate_id::text,
+                'negative_component_count', COALESCE(v_authoritative_negative_component_count, 0),
+                'expected_negative_component_digest', v_expected_negative_component_digest,
+                'actual_negative_component_digest', v_authoritative_negative_component_digest,
+                'expected_settled_baseline_digest', v_expected_settled_baseline_digest,
+                'actual_settled_baseline_digest', v_authoritative_settled_baseline_digest,
+                'message', 'The Workbench negative-component or settled-baseline authority changed before finance-case synchronisation.'
+              )::text;
+    END IF;
+  END IF;
   IF v_requested_candidate_count > 0 THEN
     FOR v_preview_candidate_loop_id IN
       SELECT DISTINCT requested_candidate.candidate_id
@@ -15006,6 +15202,115 @@ begin
                   'candidate_id', v_preview_candidate_loop_id::text,
                   'pay_channel_scope', v_scope
                 )::text;
+      END IF;
+
+      IF COALESCE(v_authoritative_timesheet_scope, false)
+         AND COALESCE(v_authoritative_negative_component_count, 0) > 0
+         AND to_regclass('pg_temp.timesheet_case_rollup') IS NULL THEN
+        PERFORM public.pay_preview_candidate_build_case_component_rows(
+          p_context_json => v_preview_context_json,
+          p_candidate_id => v_preview_candidate_loop_id
+        );
+      END IF;
+
+      IF COALESCE(v_authoritative_timesheet_scope, false)
+         AND to_regclass('pg_temp.timesheet_case_rollup') IS NOT NULL THEN
+        INSERT INTO pg_temp.tmp_sync_raw_negative_timesheet_rows (
+          candidate_id,
+          timesheet_id,
+          client_id,
+          candidate_pay_method,
+          case_is_blocked,
+          case_components_json
+        )
+        SELECT
+          raw_case.candidate_id,
+          raw_case.timesheet_id,
+          raw_case.client_id,
+          COALESCE(NULLIF(UPPER(BTRIM(raw_case.cand_pay_method)), ''), v_scope),
+          COALESCE(raw_case.is_blocked, false),
+          COALESCE((
+            SELECT jsonb_agg(
+              raw_component.value
+              ORDER BY
+                UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))),
+                BTRIM(COALESCE(raw_component.value->>'component_key_value', '')),
+                COALESCE(raw_component.value->'source_basis_json', '{}'::jsonb)::text,
+                raw_component.ordinality
+            )
+            FROM jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(raw_case.case_components_json) = 'array'
+                  THEN COALESCE(raw_case.case_components_json, '[]'::jsonb)
+                ELSE '[]'::jsonb
+              END
+            ) WITH ORDINALITY AS raw_component(value, ordinality)
+            WHERE COALESCE(raw_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              AND ROUND((raw_component.value->>'component_amount_ex_vat')::numeric, 2) < 0
+              AND EXISTS (
+                SELECT 1
+                FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
+                WHERE authoritative_component.timesheet_id = raw_case.timesheet_id
+                  AND authoritative_component.key_type = UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', '')))
+                  AND authoritative_component.key_value = BTRIM(COALESCE(raw_component.value->>'component_key_value', ''))
+              )
+          ), '[]'::jsonb)
+        FROM pg_temp.timesheet_case_rollup AS raw_case
+        WHERE raw_case.candidate_id = v_preview_candidate_loop_id
+          AND raw_case.timesheet_id = ANY(COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[]))
+          AND NOT (raw_case.timesheet_id = ANY(COALESCE(p_exclude_timesheet_ids, ARRAY[]::uuid[])))
+          AND EXISTS (
+            SELECT 1
+            FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
+            WHERE authoritative_component.timesheet_id = raw_case.timesheet_id
+          )
+        ON CONFLICT (candidate_id, timesheet_id) DO UPDATE
+        SET
+          client_id = EXCLUDED.client_id,
+          candidate_pay_method = EXCLUDED.candidate_pay_method,
+          case_is_blocked = EXCLUDED.case_is_blocked,
+          case_components_json = EXCLUDED.case_components_json;
+
+        IF EXISTS (
+          WITH preview_component_totals AS (
+            SELECT
+              raw_timesheet.timesheet_id,
+              UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))) AS key_type,
+              BTRIM(COALESCE(raw_component.value->>'component_key_value', '')) AS key_value,
+              COUNT(*)::integer AS preview_component_count,
+              ROUND(SUM((raw_component.value->>'component_amount_ex_vat')::numeric), 2)::numeric(12,2) AS preview_outstanding_ex_vat
+            FROM pg_temp.tmp_sync_raw_negative_timesheet_rows AS raw_timesheet
+            CROSS JOIN LATERAL jsonb_array_elements(raw_timesheet.case_components_json) AS raw_component(value)
+            WHERE raw_timesheet.candidate_id = v_preview_candidate_loop_id
+              AND COALESCE(raw_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            GROUP BY
+              raw_timesheet.timesheet_id,
+              UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))),
+              BTRIM(COALESCE(raw_component.value->>'component_key_value', ''))
+          )
+          SELECT 1
+          FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
+          LEFT JOIN preview_component_totals AS preview_total
+            ON preview_total.timesheet_id = authoritative_component.timesheet_id
+           AND preview_total.key_type = authoritative_component.key_type
+           AND preview_total.key_value = authoritative_component.key_value
+          WHERE preview_total.preview_component_count IS NULL
+             OR ABS(ROUND(
+                  COALESCE(preview_total.preview_outstanding_ex_vat, 0)
+                  - authoritative_component.outstanding_ex_vat,
+                  2
+                )) > 0.01
+        ) THEN
+          RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_NEGATIVE_COMPONENT_METADATA_MISMATCH'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_NEGATIVE_COMPONENT_METADATA_MISMATCH',
+                    'candidate_id', v_preview_candidate_loop_id::text,
+                    'negative_component_count', COALESCE(v_authoritative_negative_component_count, 0),
+                    'negative_component_digest', v_authoritative_negative_component_digest,
+                    'message', 'Canonical negative components were not represented exactly by the preview component metadata required for finance-case routing.'
+                  )::text;
+        END IF;
       END IF;
 
       v_preview_candidate_row_json := CASE
@@ -15244,7 +15549,7 @@ begin
         or preview_candidate.candidate_id = any(p_candidate_ids)
       )
   ),
-  timesheet_item_rows as (
+  itemisation_timesheet_rows as (
     select
       cr.candidate_id,
       cr.candidate_pay_method,
@@ -15267,6 +15572,79 @@ begin
         coalesce(array_length(p_exclude_timesheet_ids, 1), 0) > 0
         and nullif(btrim(coalesce(itm.value->>'timesheet_id', '')), '')::uuid = any(p_exclude_timesheet_ids)
       )
+  ),
+  authoritative_live_truth_totals AS (
+    SELECT
+      entitlement_component.timesheet_id,
+      ROUND(COALESCE(SUM(COALESCE(entitlement_component.truth_ex_vat, 0)), 0), 2)::numeric(12,2) AS corrected_amount_ex
+    FROM public._pay_current_timesheet_entitlement_components(
+      CASE
+        WHEN COALESCE(v_authoritative_timesheet_scope, false)
+          THEN COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[])
+        ELSE ARRAY[]::uuid[]
+      END
+    ) AS entitlement_component
+    GROUP BY entitlement_component.timesheet_id
+  ),
+  authoritative_negative_timesheet_rows AS (
+    SELECT
+      raw_timesheet.candidate_id,
+      raw_timesheet.candidate_pay_method,
+      jsonb_build_object(
+        'line_type', 'TIMESHEET_PAYMENT',
+        'timesheet_id', raw_timesheet.timesheet_id::text,
+        'client_id', CASE WHEN raw_timesheet.client_id IS NULL THEN NULL ELSE raw_timesheet.client_id::text END,
+        'amount_ex_vat', ROUND(COALESCE(live_truth.corrected_amount_ex, 0), 2),
+        'case_is_blocked', raw_timesheet.case_is_blocked,
+        'case_components', raw_timesheet.case_components_json,
+        'source_authority', 'AUTHORITATIVE_NEGATIVE_COMPONENT_FALLBACK'
+      ) AS item_json,
+      raw_timesheet.timesheet_id,
+      raw_timesheet.client_id,
+      ROUND(COALESCE(live_truth.corrected_amount_ex, 0), 2)::numeric(12,2) AS corrected_amount_ex,
+      raw_timesheet.case_is_blocked,
+      raw_timesheet.case_components_json
+    FROM pg_temp.tmp_sync_raw_negative_timesheet_rows AS raw_timesheet
+    LEFT JOIN authoritative_live_truth_totals AS live_truth
+      ON live_truth.timesheet_id = raw_timesheet.timesheet_id
+    WHERE COALESCE(v_authoritative_timesheet_scope, false)
+      AND raw_timesheet.candidate_id = v_authoritative_candidate_id
+      AND EXISTS (
+        SELECT 1
+        FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
+        WHERE authoritative_component.timesheet_id = raw_timesheet.timesheet_id
+      )
+  ),
+  timesheet_item_rows AS (
+    SELECT
+      itemisation_row.candidate_id,
+      itemisation_row.candidate_pay_method,
+      itemisation_row.item_json,
+      itemisation_row.timesheet_id,
+      itemisation_row.client_id,
+      itemisation_row.corrected_amount_ex,
+      itemisation_row.case_is_blocked,
+      itemisation_row.case_components_json
+    FROM itemisation_timesheet_rows AS itemisation_row
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM authoritative_negative_timesheet_rows AS authoritative_row
+      WHERE authoritative_row.candidate_id = itemisation_row.candidate_id
+        AND authoritative_row.timesheet_id = itemisation_row.timesheet_id
+    )
+
+    UNION ALL
+
+    SELECT
+      authoritative_row.candidate_id,
+      authoritative_row.candidate_pay_method,
+      authoritative_row.item_json,
+      authoritative_row.timesheet_id,
+      authoritative_row.client_id,
+      authoritative_row.corrected_amount_ex,
+      authoritative_row.case_is_blocked,
+      authoritative_row.case_components_json
+    FROM authoritative_negative_timesheet_rows AS authoritative_row
   ),
   active_settled_basis AS (
     SELECT
