@@ -127870,16 +127870,12 @@ begin
 end;
 $$;
 
-create or replace function public.pay_loans_snoozes_list(
-  p_candidate_id uuid default null::uuid,
-  p_client_id uuid default null::uuid,
-  p_hide_completed_non_current_items boolean default true
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $function$
+CREATE OR REPLACE FUNCTION public.pay_loans_snoozes_list(p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid, p_hide_completed_non_current_items boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_today_uk date := (now() at time zone 'Europe/London')::date;
   v_finance_cases jsonb := '[]'::jsonb;
@@ -128270,25 +128266,195 @@ begin
     left join public.clients cl_current
       on cl_current.id = tf_current.client_id
   ),
+  current_expense_timesheet_scope as (
+    select distinct
+      pss.candidate_id,
+      ctc.current_timesheet_id
+    from pay_item_snooze_source pss
+    join current_timesheet_context ctc
+      on ctc.booking_id = pss.booking_id
+    join public.timesheets_financials tf_owner
+      on tf_owner.timesheet_id = ctc.current_timesheet_id
+     and tf_owner.is_current = true
+     and tf_owner.candidate_id = pss.candidate_id
+    where pss.is_timesheet_expense
+      and ctc.current_timesheet_id is not null
+  ),
+  current_expense_timesheet_ids as (
+    select coalesce(
+      array_agg(distinct cets.current_timesheet_id order by cets.current_timesheet_id),
+      array[]::uuid[]
+    ) as timesheet_ids
+    from current_expense_timesheet_scope cets
+  ),
+  current_expense_entitlement_rows as (
+    select
+      cets.candidate_id,
+      entitlement_row.timesheet_id,
+      upper(btrim(entitlement_row.key_value)) as expense_code,
+      round(coalesce(outstanding_row.outstanding_ex_vat, entitlement_row.truth_ex_vat, 0), 2) as source_pay_ex_vat
+    from current_expense_timesheet_ids expense_ids
+    cross join lateral public._pay_current_timesheet_entitlement_components(expense_ids.timesheet_ids) entitlement_row
+    join current_expense_timesheet_scope cets
+      on cets.current_timesheet_id = entitlement_row.timesheet_id
+    left join lateral public._pay_outstanding_components(expense_ids.timesheet_ids) outstanding_row
+      on outstanding_row.timesheet_id = entitlement_row.timesheet_id
+     and outstanding_row.key_type = entitlement_row.key_type
+     and outstanding_row.key_value = entitlement_row.key_value
+    where upper(btrim(coalesce(entitlement_row.key_type, ''))) = 'EXPENSE_CODE'
+      and upper(btrim(coalesce(entitlement_row.key_value, ''))) in ('EXPENSES', 'TRAVEL', 'ACCOMMODATION', 'OTHER', 'MILEAGE')
+      and round(coalesce(outstanding_row.outstanding_ex_vat, entitlement_row.truth_ex_vat, 0), 2) > 0
+  ),
+  current_expense_active_settled_counts as (
+    select
+      settled_row.timesheet_id,
+      count(*)::integer as active_settled_component_count
+    from current_expense_timesheet_ids expense_ids
+    cross join lateral public._pay_active_settled_components(expense_ids.timesheet_ids) settled_row
+    group by settled_row.timesheet_id
+  ),
+  current_expense_financial_context as (
+    select
+      cets.candidate_id,
+      cets.current_timesheet_id,
+      round(coalesce(tf_current.expenses_charge_ex_vat, 0), 2) as expenses_charge_ex_vat,
+      round(coalesce(tf_current.travel_charge_ex_vat, 0), 2) as travel_charge_ex_vat,
+      round(coalesce(tf_current.accommodation_charge_ex_vat, 0), 2) as accommodation_charge_ex_vat,
+      round(coalesce(tf_current.other_charge_ex_vat, 0), 2) as other_charge_ex_vat,
+      round(coalesce(tf_current.mileage_charge_ex_vat, 0), 2) as mileage_charge_ex_vat,
+      case
+        when coalesce(settled_counts.active_settled_component_count, 0) > 0 then '{}'::jsonb
+        else coalesce(timesheet_pay_state.last_settled_snapshot_json, '{}'::jsonb)
+      end as expense_baseline_json
+    from current_expense_timesheet_scope cets
+    join public.timesheets ts_current
+      on ts_current.timesheet_id = cets.current_timesheet_id
+     and ts_current.is_current = true
+    join public.timesheets_financials tf_current
+      on tf_current.timesheet_id = ts_current.timesheet_id
+     and tf_current.is_current = true
+     and tf_current.candidate_id = cets.candidate_id
+    left join public.timesheet_pay_state timesheet_pay_state
+      on timesheet_pay_state.timesheet_id = ts_current.timesheet_id
+    left join current_expense_active_settled_counts settled_counts
+      on settled_counts.timesheet_id = ts_current.timesheet_id
+    where ts_current.authorised_at_server is not null
+      and ts_current.revoked_at is null
+      and tf_current.authorised_at_utc is not null
+      and upper(btrim(coalesce(tf_current.processing_status::text, ''))) = 'READY_FOR_INVOICE'
+      and coalesce(tf_current.pay_on_hold, false) is not true
+      and coalesce(tf_current.has_rate_issue, false) is not true
+      and coalesce(tf_current.has_pay_channel_issue, false) is not true
+  ),
+  current_expense_live_basis_values as (
+    select
+      entitlement_row.candidate_id,
+      entitlement_row.timesheet_id,
+      entitlement_row.expense_code,
+      entitlement_row.source_pay_ex_vat,
+      case entitlement_row.expense_code
+        when 'EXPENSES' then round(
+          coalesce(financial_context.expenses_charge_ex_vat, 0)
+          - coalesce(nullif(financial_context.expense_baseline_json #>> '{expenses,expenses_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        when 'TRAVEL' then round(
+          coalesce(financial_context.travel_charge_ex_vat, 0)
+          - coalesce(nullif(financial_context.expense_baseline_json #>> '{expenses,travel_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        when 'ACCOMMODATION' then round(
+          coalesce(financial_context.accommodation_charge_ex_vat, 0)
+          - coalesce(nullif(financial_context.expense_baseline_json #>> '{expenses,accommodation_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        when 'OTHER' then round(
+          coalesce(financial_context.other_charge_ex_vat, 0)
+          - coalesce(nullif(financial_context.expense_baseline_json #>> '{expenses,other_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        when 'MILEAGE' then round(
+          coalesce(financial_context.mileage_charge_ex_vat, 0)
+          - coalesce(nullif(financial_context.expense_baseline_json #>> '{expenses,mileage_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        else null::numeric
+      end as source_charge_ex_vat
+    from current_expense_entitlement_rows entitlement_row
+    join current_expense_financial_context financial_context
+      on financial_context.candidate_id = entitlement_row.candidate_id
+     and financial_context.current_timesheet_id = entitlement_row.timesheet_id
+  ),
+  current_expense_live_basis as (
+    select
+      live_values.candidate_id,
+      live_values.timesheet_id,
+      live_values.expense_code,
+      live_values.source_pay_ex_vat,
+      live_values.source_charge_ex_vat,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'timesheet_id', live_values.timesheet_id::text,
+          'expense_code', live_values.expense_code,
+          'source_charge_ex_vat', live_values.source_charge_ex_vat,
+          'source_pay_ex_vat', round(coalesce(live_values.source_pay_ex_vat, 0), 2)
+        )
+      ) as source_basis_json
+    from current_expense_live_basis_values live_values
+  ),
+  current_expense_live_rows as (
+    select
+      live_basis.candidate_id,
+      live_basis.timesheet_id,
+      live_basis.expense_code,
+      live_basis.source_pay_ex_vat,
+      live_basis.source_charge_ex_vat,
+      live_basis.source_basis_json,
+      md5(live_basis.source_basis_json::text) as source_basis_fingerprint,
+      lower(
+        'timesheet-expense:' || live_basis.timesheet_id::text || ':' ||
+        live_basis.expense_code || ':' || md5(live_basis.source_basis_json::text)
+      ) as source_ref,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'source_ref', lower(
+            'timesheet-expense:' || live_basis.timesheet_id::text || ':' ||
+            live_basis.expense_code || ':' || md5(live_basis.source_basis_json::text)
+          ),
+          'amount_ex_vat', round(coalesce(live_basis.source_pay_ex_vat, 0), 2),
+          'expense_code', live_basis.expense_code,
+          'expense_label', case live_basis.expense_code
+            when 'EXPENSES' then 'Expenses'
+            when 'TRAVEL' then 'Travel'
+            when 'ACCOMMODATION' then 'Accommodation'
+            when 'OTHER' then 'Other'
+            when 'MILEAGE' then 'Mileage'
+            else null::text
+          end,
+          'source_basis_json', live_basis.source_basis_json,
+          'snooze_identity', jsonb_build_object(
+            'identity_type', 'TIMESHEET_EXPENSE',
+            'candidate_id', live_basis.candidate_id::text,
+            'timesheet_id', live_basis.timesheet_id::text,
+            'expense_code', live_basis.expense_code,
+            'source_basis_fingerprint', md5(live_basis.source_basis_json::text)
+          )
+        )
+      ) as source_row_json
+    from current_expense_live_basis live_basis
+  ),
   current_expense_source_rows as (
     select
       pss.snooze_id,
       exact_source.source_row_json as exact_source_row_json,
       changed_source.source_row_json as changed_source_row_json,
-      lower(nullif(btrim(coalesce(exact_source.source_row_json->>'source_ref', '')), '')) as exact_current_source_ref,
-      lower(nullif(btrim(coalesce(changed_source.source_row_json->>'source_ref', '')), '')) as changed_current_source_ref,
-      case
-        when coalesce(exact_source.source_row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
-          then round((exact_source.source_row_json->>'amount_ex_vat')::numeric, 2)
-        else null::numeric
-      end as exact_current_amount_ex_vat,
-      case
-        when coalesce(changed_source.source_row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
-          then round((changed_source.source_row_json->>'amount_ex_vat')::numeric, 2)
-        else null::numeric
-      end as changed_current_amount_ex_vat,
+      exact_source.source_ref as exact_current_source_ref,
+      changed_source.source_ref as changed_current_source_ref,
+      exact_source.source_pay_ex_vat as exact_current_amount_ex_vat,
+      changed_source.source_pay_ex_vat as changed_current_amount_ex_vat,
       coalesce(
         nullif(btrim(coalesce(exact_source.source_row_json->>'expense_label', '')), ''),
+        nullif(btrim(coalesce(changed_source.source_row_json->>'expense_label', '')), ''),
         case pss.expense_code
           when 'EXPENSES' then 'Expenses'
           when 'TRAVEL' then 'Travel'
@@ -128302,61 +128468,29 @@ begin
     left join current_timesheet_context ctc
       on ctc.booking_id = pss.booking_id
     left join lateral (
-      select source_line.source_row_json
-      from public.banking_pay_workbench_candidate_source_lines source_line
-      join public.banking_pay_workbench_sessions source_session
-        on source_session.id = source_line.session_id
-      left join public.app_change_counters candidate_counter
-        on candidate_counter.entity_key = 'pay_candidate:' || pss.candidate_id::text
+      select
+        live_source.source_row_json,
+        live_source.source_ref,
+        live_source.source_pay_ex_vat
+      from current_expense_live_rows live_source
       where pss.is_timesheet_expense
-        and source_line.candidate_id = pss.candidate_id
-        and source_line.status = 'CURRENT'
-        and source_line.session_version = coalesce(source_session.version, 1)
-        and source_line.source_change_seq = coalesce(candidate_counter.seq, 0)
-        and upper(btrim(coalesce(source_session.status, ''))) = 'OPEN'
-        and source_session.discarded_at_utc is null
-        and source_session.replacement_session_id is null
-        and upper(btrim(coalesce(source_line.source_row_json#>>'{snooze_identity,identity_type}', ''))) = 'TIMESHEET_EXPENSE'
-        and lower(nullif(btrim(coalesce(source_line.source_row_json->>'source_ref', '')), '')) = pss.source_ref
-      order by source_session.updated_at_utc desc nulls last, source_line.updated_at_utc desc, source_line.id desc
+        and live_source.candidate_id = pss.candidate_id
+        and live_source.source_ref = pss.source_ref
+      order by live_source.timesheet_id, live_source.expense_code, live_source.source_ref
       limit 1
     ) exact_source on true
     left join lateral (
-      select source_line.source_row_json
-      from public.banking_pay_workbench_candidate_source_lines source_line
-      join public.banking_pay_workbench_sessions source_session
-        on source_session.id = source_line.session_id
-      left join public.app_change_counters candidate_counter
-        on candidate_counter.entity_key = 'pay_candidate:' || pss.candidate_id::text
+      select
+        live_source.source_row_json,
+        live_source.source_ref,
+        live_source.source_pay_ex_vat
+      from current_expense_live_rows live_source
       where pss.is_timesheet_expense
-        and (
-          exact_source.source_row_json is null
-          or ctc.current_timesheet_id is distinct from pss.stored_timesheet_id
-        )
-        and source_line.candidate_id = pss.candidate_id
-        and source_line.status = 'CURRENT'
-        and source_line.session_version = coalesce(source_session.version, 1)
-        and source_line.source_change_seq = coalesce(candidate_counter.seq, 0)
-        and upper(btrim(coalesce(source_session.status, ''))) = 'OPEN'
-        and source_session.discarded_at_utc is null
-        and source_session.replacement_session_id is null
-        and upper(btrim(coalesce(source_line.source_row_json#>>'{snooze_identity,identity_type}', ''))) = 'TIMESHEET_EXPENSE'
-        and (
-          (
-            ctc.current_timesheet_id is not null
-            and ctc.current_timesheet_id is distinct from pss.stored_timesheet_id
-            and lower(nullif(btrim(coalesce(source_line.source_row_json->>'source_ref', '')), '')) ~ (
-              '^timesheet-expense:' || ctc.current_timesheet_id::text || ':' || lower(pss.expense_code) || ':[0-9a-f]{32}$'
-            )
-          )
-          or (
-            ctc.current_timesheet_id is not distinct from pss.stored_timesheet_id
-            and lower(nullif(btrim(coalesce(source_line.source_row_json->>'source_ref', '')), '')) like
-              left(pss.source_ref, length(pss.source_ref) - 32) || '%'
-          )
-        )
-        and lower(nullif(btrim(coalesce(source_line.source_row_json->>'source_ref', '')), '')) is distinct from pss.source_ref
-      order by source_session.updated_at_utc desc nulls last, source_line.updated_at_utc desc, source_line.id desc
+        and live_source.candidate_id = pss.candidate_id
+        and live_source.timesheet_id = ctc.current_timesheet_id
+        and live_source.expense_code = pss.expense_code
+        and live_source.source_ref is distinct from pss.source_ref
+      order by live_source.timesheet_id, live_source.expense_code, live_source.source_ref
       limit 1
     ) changed_source on true
     where pss.is_timesheet_expense
@@ -128793,7 +128927,6 @@ begin
   );
 end;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_build(
@@ -138291,21 +138424,11 @@ $function$;
 
 
 
-CREATE OR REPLACE FUNCTION public.pay_snoozes_export_rows(
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_created_from date DEFAULT NULL::date,
-  p_created_to date DEFAULT NULL::date,
-  p_status text DEFAULT 'ALL'::text,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_client_id uuid DEFAULT NULL::uuid,
-  p_case_type text DEFAULT NULL::text,
-  p_sort_key text DEFAULT 'created_at'::text,
-  p_sort_dir text DEFAULT 'desc'::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_snoozes_export_rows(p_actor_user_id uuid DEFAULT NULL::uuid, p_created_from date DEFAULT NULL::date, p_created_to date DEFAULT NULL::date, p_status text DEFAULT 'ALL'::text, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid, p_case_type text DEFAULT NULL::text, p_sort_key text DEFAULT 'created_at'::text, p_sort_dir text DEFAULT 'desc'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_status text := upper(btrim(coalesce(p_status, 'ALL')));
@@ -138315,6 +138438,8 @@ DECLARE
   v_rows jsonb := '[]'::jsonb;
   v_summary jsonb := '{}'::jsonb;
   v_meta jsonb := '{}'::jsonb;
+  v_date_context jsonb := '{}'::jsonb;
+  v_today_uk date := NULL::date;
 BEGIN
   IF v_status NOT IN ('ALL', 'OUTSTANDING', 'FULLY_PAID') THEN
     v_status := 'ALL';
@@ -138332,6 +138457,22 @@ BEGIN
 
   IF v_sort_dir NOT IN ('asc', 'desc') THEN
     v_sort_dir := 'desc';
+  END IF;
+
+  v_date_context := public.pay_banking_official_date_context_v1(NULL::timestamptz);
+  v_today_uk := CASE
+    WHEN coalesce(v_date_context->>'london_current_date', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      THEN (v_date_context->>'london_current_date')::date
+    ELSE NULL::date
+  END;
+
+  IF v_today_uk IS NULL THEN
+    RAISE EXCEPTION 'PAY_SNOOZES_EXPORT_LONDON_DATE_UNAVAILABLE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_SNOOZES_EXPORT_LONDON_DATE_UNAVAILABLE',
+              'message', 'The current Europe/London business date could not be resolved for the Snoozes report.'
+            )::text;
   END IF;
 
   WITH parsed_snoozes AS (
@@ -138430,7 +138571,6 @@ BEGIN
       ts_current.week_ending_date AS linked_timesheet_week_ending_date,
       ts_current.shift_label_norm AS linked_timesheet_shift_label_norm,
       ts_current.reference_number AS linked_timesheet_reference_number,
-      ps.snooze_id,
       ps.source_ref,
       ps.segment_id,
       ps.segment_stable_key,
@@ -138455,12 +138595,14 @@ BEGIN
       CASE
         WHEN ps.cancelled_at_utc IS NOT NULL THEN 'HISTORY'
         WHEN ps.cleared_at_utc IS NOT NULL THEN 'HISTORY'
+        WHEN ps.snooze_until_date IS NOT NULL AND ps.snooze_until_date < v_today_uk THEN 'HISTORY'
         WHEN ps.snooze_until_date IS NULL THEN 'INDEFINITE_DEFERRED'
         ELSE 'ACTIVE'
       END AS current_visibility_status,
       CASE
         WHEN ps.cancelled_at_utc IS NOT NULL THEN 'CANCELLED'
         WHEN ps.cleared_at_utc IS NOT NULL THEN 'CLEARED'
+        WHEN ps.snooze_until_date IS NOT NULL AND ps.snooze_until_date < v_today_uk THEN 'EXPIRED'
         ELSE 'ACTIVE'
       END AS snooze_lifecycle_status,
       ps.cancelled_at_utc,
@@ -138483,7 +138625,10 @@ BEGIN
           END
         ELSE
           CASE
-            WHEN ps.cancelled_at_utc IS NOT NULL OR ps.cleared_at_utc IS NOT NULL THEN 'FULLY_PAID'
+            WHEN ps.cancelled_at_utc IS NOT NULL
+              OR ps.cleared_at_utc IS NOT NULL
+              OR (ps.snooze_until_date IS NOT NULL AND ps.snooze_until_date < v_today_uk)
+            THEN 'FULLY_PAID'
             ELSE 'OUTSTANDING'
           END
       END AS linked_case_status,
@@ -138548,8 +138693,32 @@ BEGIN
     FROM base_rows AS br
     WHERE
       v_status = 'ALL'
-      OR (v_status = 'OUTSTANDING' AND br.linked_case_status = 'OUTSTANDING')
-      OR (v_status = 'FULLY_PAID' AND br.linked_case_status = 'FULLY_PAID')
+      OR (
+        v_status = 'OUTSTANDING'
+        AND (
+          (
+            br.snooze_scope = 'FINANCE_CASE'
+            AND br.linked_case_status = 'OUTSTANDING'
+          )
+          OR (
+            br.snooze_scope <> 'FINANCE_CASE'
+            AND br.snooze_lifecycle_status = 'ACTIVE'
+          )
+        )
+      )
+      OR (
+        v_status = 'FULLY_PAID'
+        AND (
+          (
+            br.snooze_scope = 'FINANCE_CASE'
+            AND br.linked_case_status = 'FULLY_PAID'
+          )
+          OR (
+            br.snooze_scope <> 'FINANCE_CASE'
+            AND br.snooze_lifecycle_status IN ('CLEARED', 'EXPIRED', 'CANCELLED')
+          )
+        )
+      )
   ),
   ordered_rows AS (
     SELECT
@@ -138646,6 +138815,9 @@ BEGIN
       'timesheet_payment_snooze_count', count(*) FILTER (WHERE orw.snooze_scope = 'TIMESHEET_PAYMENT')::int,
       'active_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'ACTIVE')::int,
       'cleared_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'CLEARED')::int,
+      'expired_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'EXPIRED')::int,
+      'cancelled_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'CANCELLED')::int,
+      'history_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status IN ('CLEARED', 'EXPIRED', 'CANCELLED'))::int,
       'indefinite_count', count(*) FILTER (WHERE orw.snooze_mode = 'INDEFINITE')::int,
       'dated_count', count(*) FILTER (WHERE orw.snooze_mode = 'DATED')::int,
       'taxable_recovery_count', count(*) FILTER (WHERE orw.snooze_component_scope = 'TAXABLE_RECOVERY')::int,
@@ -138661,6 +138833,7 @@ BEGIN
     'title', 'Snoozes Report',
     'orientation', 'LANDSCAPE',
     'generated_at_utc', now()::text,
+    'london_current_date', v_today_uk::text,
     'applied_filters', jsonb_build_object(
       'created_from', CASE WHEN p_created_from IS NULL THEN NULL ELSE p_created_from::text END,
       'created_to', CASE WHEN p_created_to IS NULL THEN NULL ELSE p_created_to::text END,
@@ -138685,21 +138858,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_snoozes_pdf_payload(
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_created_from date DEFAULT NULL::date,
-  p_created_to date DEFAULT NULL::date,
-  p_status text DEFAULT 'ALL'::text,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_client_id uuid DEFAULT NULL::uuid,
-  p_case_type text DEFAULT NULL::text,
-  p_sort_key text DEFAULT 'created_at'::text,
-  p_sort_dir text DEFAULT 'desc'::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_snoozes_pdf_payload(p_actor_user_id uuid DEFAULT NULL::uuid, p_created_from date DEFAULT NULL::date, p_created_to date DEFAULT NULL::date, p_status text DEFAULT 'ALL'::text, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid, p_case_type text DEFAULT NULL::text, p_sort_key text DEFAULT 'created_at'::text, p_sort_dir text DEFAULT 'desc'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_base jsonb := '{}'::jsonb;
@@ -138729,6 +138892,18 @@ BEGIN
           SELECT jsonb_agg(e.elem)
           FROM jsonb_array_elements(v_rows) AS e(elem)
           WHERE e.elem->>'snooze_scope' = 'FINANCE_CASE'
+        ),
+        '[]'::jsonb
+      )
+    ),
+    jsonb_build_object(
+      'row_group', 'TIMESHEET_EXPENSE',
+      'title', 'Timesheet-expense Snoozes',
+      'rows', coalesce(
+        (
+          SELECT jsonb_agg(e.elem)
+          FROM jsonb_array_elements(v_rows) AS e(elem)
+          WHERE e.elem->>'snooze_scope' = 'TIMESHEET_EXPENSE'
         ),
         '[]'::jsonb
       )
@@ -181842,18 +182017,16 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(
-  p_pay_batch_id uuid,
-  p_actor_user_id uuid,
-  p_allow_large_full_scan boolean DEFAULT false
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path to 'public'
-as $function$
+CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid, p_allow_large_full_scan boolean DEFAULT false)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_now_utc timestamptz := now();
+  v_date_context jsonb := '{}'::jsonb;
+  v_today_uk date := NULL::date;
 
   v_pay_date date;
   v_week_start date;
@@ -181936,6 +182109,23 @@ begin
 
   if v_pay_date is null then
     raise exception 'pay_batch_validate_freshness: pay_batch_id not found (%).', p_pay_batch_id::text;
+  end if;
+
+  v_date_context := public.pay_banking_official_date_context_v1(NULL::timestamptz);
+  v_today_uk := case
+    when coalesce(v_date_context->>'london_current_date', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      then (v_date_context->>'london_current_date')::date
+    else NULL::date
+  end;
+
+  if v_today_uk is null then
+    raise exception 'PAY_BATCH_FRESHNESS_LONDON_DATE_UNAVAILABLE'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_LONDON_DATE_UNAVAILABLE',
+              'pay_batch_id', p_pay_batch_id::text,
+              'message', 'The current Europe/London business date could not be resolved for full batch freshness.'
+            )::text;
   end if;
 
   select count(*)::integer
@@ -182515,13 +182705,67 @@ begin
       pbi.item_type,
       pbi.source_ref,
       pbi.finance_case_id,
+      coalesce(
+        case
+          when pbi.finance_case_id is not null then 'advance:' || pbi.finance_case_id::text
+          else null::text
+        end,
+        lower(nullif(btrim(coalesce(pbi.source_ref, '')), ''))
+      ) as exact_source_ref,
       case
-        when nullif(btrim(coalesce(pbi.segment_key, '')), '') is not null then pbi.segment_key
-        when pbi.source_ref is not null and btrim(pbi.source_ref) like 'seg:%' then substring(btrim(pbi.source_ref) from 5)
-        else null
-      end as seg_identity
-    from public.pay_batch_items pbi
-    join public.pay_batch_candidates pbc
+        when coalesce(
+          case
+            when pbi.finance_case_id is not null then 'advance:' || pbi.finance_case_id::text
+            else null::text
+          end,
+          lower(nullif(btrim(coalesce(pbi.source_ref, '')), ''))
+        ) ~* '^timesheet-expense:' then 'TIMESHEET_EXPENSE'
+        when pbi.finance_case_id is not null
+          or lower(nullif(btrim(coalesce(pbi.source_ref, '')), '')) ~* '^advance:' then 'FINANCE_CASE'
+        when nullif(btrim(coalesce(pbi.source_ref, '')), '') is not null then 'EXACT_SOURCE'
+        else 'TIMESHEET_OR_SEGMENT'
+      end as source_identity_kind,
+      nullif(btrim(coalesce(pbi.segment_key, '')), '') as segment_key,
+      coalesce(
+        nullif(btrim(pbi.frozen_source_basis_json #>> '{segment_stable_key}'), ''),
+        nullif(btrim(pbi.frozen_source_basis_json #>> '{segment,stable_key}'), ''),
+        nullif(btrim(pbi.frozen_component_snapshot_json #>> '{segment_stable_key}'), ''),
+        nullif(btrim(pbi.frozen_component_snapshot_json #>> '{segment,stable_key}'), ''),
+        nullif(btrim(pbi.payout_instruction_snapshot_json #>> '{segment_stable_key}'), ''),
+        nullif(btrim(pbi.payout_instruction_snapshot_json #>> '{segment,stable_key}'), ''),
+        nullif(btrim(coalesce(pbi.segment_key, '')), '')
+      ) as segment_stable_key,
+      coalesce(
+        nullif(btrim(pbi.frozen_source_basis_json #>> '{segment_id}'), ''),
+        nullif(btrim(pbi.frozen_source_basis_json #>> '{segment,id}'), ''),
+        nullif(btrim(pbi.frozen_component_snapshot_json #>> '{segment_id}'), ''),
+        nullif(btrim(pbi.frozen_component_snapshot_json #>> '{segment,id}'), ''),
+        nullif(btrim(pbi.payout_instruction_snapshot_json #>> '{segment_id}'), ''),
+        nullif(btrim(pbi.payout_instruction_snapshot_json #>> '{segment,id}'), '')
+      ) as segment_id,
+      coalesce(
+        nullif(btrim(pbi.frozen_source_basis_json #>> '{booking_id}'), ''),
+        nullif(btrim(pbi.frozen_source_basis_json #>> '{booking,booking_id}'), ''),
+        nullif(btrim(pbi.frozen_component_snapshot_json #>> '{booking_id}'), ''),
+        nullif(btrim(pbi.frozen_component_snapshot_json #>> '{booking,booking_id}'), ''),
+        nullif(btrim(pbi.payout_instruction_snapshot_json #>> '{booking_id}'), ''),
+        nullif(btrim(pbi.payout_instruction_snapshot_json #>> '{booking,booking_id}'), ''),
+        (
+          select coalesce(
+            nullif(btrim(snapshot_row.target_snapshot_json #>> '{booking_id}'), ''),
+            nullif(btrim(snapshot_row.target_snapshot_json #>> '{booking,booking_id}'), ''),
+            nullif(btrim(snapshot_row.target_snapshot_json #>> '{timesheet,booking_id}'), ''),
+            nullif(btrim(snapshot_row.target_snapshot_json #>> '{target,booking_id}'), '')
+          )
+          from public.pay_batch_timesheet_snapshots as snapshot_row
+          where snapshot_row.pay_batch_id = p_pay_batch_id
+            and snapshot_row.timesheet_id = pbi.timesheet_id
+          order by snapshot_row.id
+          limit 1
+        )
+      ) as booking_id
+    from public.pay_batch_items as pbi
+    join public.pay_batch_candidates as pbc
       on pbc.id = pbi.pay_batch_candidate_id
     where pbc.pay_batch_id = p_pay_batch_id
       and coalesce(pbi.is_voided, false) = false
@@ -182532,43 +182776,93 @@ begin
           and ppc_pbi_fresh_exclusion.status = 'APPLIED'
           and ppc_pbi_fresh_exclusion.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
       )
-  ),
-  active_snoozes as (
+  ), matched_snoozes as (
     select
-      pis.id as snooze_id,
-      pis.candidate_id,
-      pis.timesheet_id,
-      pis.segment_id,
-      pis.source_ref,
-      pis.snooze_until_date,
-      pis.note,
-      pis.updated_at_utc,
-      pis.created_at_utc,
-      upper(coalesce(pis.snooze_kind, '')) as snooze_kind
-    from public.pay_item_snoozes pis
-    where pis.cleared_at_utc is null
-      and (pis.snooze_until_date is null or pis.snooze_until_date >= v_pay_date)
-  ),
-  matched_snoozes as (
-    select distinct
       bi.timesheet_id,
       bi.candidate_id,
       bi.pay_batch_item_id,
-      asn.snooze_id,
-      asn.snooze_kind,
-      asn.snooze_until_date,
-      asn.note
-    from batch_items bi
-    join active_snoozes asn
-      on (
-           bi.finance_case_id is not null
-           and asn.source_ref = coalesce(bi.source_ref, ('advance:' || bi.finance_case_id::text))
-         )
-        or (
-           bi.timesheet_id is not null
-           and asn.timesheet_id = bi.timesheet_id
-           and asn.segment_id is not distinct from bi.seg_identity
-         )
+      bi.item_type,
+      bi.exact_source_ref,
+      bi.source_identity_kind,
+      bi.segment_stable_key,
+      bi.segment_id,
+      bi.booking_id,
+      active_snooze.snooze_id,
+      active_snooze.snooze_kind,
+      active_snooze.snooze_until_date,
+      active_snooze.note,
+      active_snooze.source_ref,
+      active_snooze.segment_stable_key as snooze_segment_stable_key,
+      active_snooze.segment_id as snooze_segment_id,
+      active_snooze.booking_id as snooze_booking_id,
+      active_snooze.match_scope
+    from batch_items as bi
+    join lateral (
+      select
+        pis.id as snooze_id,
+        upper(coalesce(pis.snooze_kind, '')) as snooze_kind,
+        pis.snooze_until_date,
+        pis.note,
+        lower(nullif(btrim(coalesce(pis.source_ref, '')), '')) as source_ref,
+        pis.segment_stable_key,
+        pis.segment_id,
+        pis.booking_id,
+        case
+          when pis.source_ref is not null then 'EXACT_SOURCE_REF'
+          else 'LEGACY_TIMESHEET_SEGMENT'
+        end as match_scope
+      from public.pay_item_snoozes as pis
+      where pis.candidate_id = bi.candidate_id
+        and pis.cleared_at_utc is null
+        and pis.cancelled_at_utc is null
+        and (
+          pis.snooze_until_date is null
+          or pis.snooze_until_date >= v_today_uk
+        )
+        and (
+          (
+            bi.exact_source_ref is not null
+            and lower(nullif(btrim(coalesce(pis.source_ref, '')), '')) = bi.exact_source_ref
+          )
+          or (
+            bi.exact_source_ref is null
+            and pis.source_ref is null
+            and (
+              (
+                bi.timesheet_id is not null
+                and pis.timesheet_id = bi.timesheet_id
+              )
+              or (
+                nullif(btrim(coalesce(pis.booking_id, '')), '') is not null
+                and nullif(btrim(coalesce(pis.booking_id, '')), '') = bi.booking_id
+              )
+            )
+            and (
+              (
+                nullif(btrim(coalesce(pis.segment_stable_key, '')), '') is null
+                and nullif(btrim(coalesce(pis.segment_id, '')), '') is null
+              )
+              or (
+                bi.segment_stable_key is not null
+                and nullif(btrim(coalesce(pis.segment_stable_key, '')), '') = bi.segment_stable_key
+              )
+              or (
+                bi.segment_id is not null
+                and nullif(btrim(coalesce(pis.segment_id, '')), '') = bi.segment_id
+              )
+              or (
+                bi.segment_key is not null
+                and bi.segment_key in (
+                  nullif(btrim(coalesce(pis.segment_stable_key, '')), ''),
+                  nullif(btrim(coalesce(pis.segment_id, '')), '')
+                )
+              )
+            )
+          )
+        )
+      order by pis.updated_at_utc desc, pis.created_at_utc desc, pis.id
+      limit 1
+    ) as active_snooze on true
   )
   select
     ms.timesheet_id,
@@ -182580,10 +182874,18 @@ begin
       'snooze_id', ms.snooze_id::text,
       'snooze_kind', ms.snooze_kind,
       'snooze_until_date', case when ms.snooze_until_date is null then null else ms.snooze_until_date::text end,
-      'note', ms.note
+      'note', ms.note,
+      'source_ref', ms.source_ref,
+      'match_scope', ms.match_scope,
+      'frozen_item_source_ref', ms.exact_source_ref,
+      'frozen_source_identity_kind', ms.source_identity_kind,
+      'frozen_segment_stable_key', ms.segment_stable_key,
+      'frozen_segment_id', ms.segment_id,
+      'frozen_booking_id', ms.booking_id,
+      'active_as_of_london_date', v_today_uk::text
     )::text as actual_text,
     34 as ord
-  from matched_snoozes ms;
+  from matched_snoozes as ms;
 
   insert into pg_temp.tmp_fresh_state_diffs (
     timesheet_id,
@@ -184054,7 +184356,6 @@ begin
   );
 end;
 $function$;
-
 
 
 

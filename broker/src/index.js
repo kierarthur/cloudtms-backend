@@ -20586,6 +20586,7 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'FINANCE_LEDGER_EXPORT_PDF_FAILED')));
   }
 }
+
 async function handleBankingSnoozesExportCsv(env, req, user) {
   const actorUser = (() => {
     if (user && typeof user === 'object' && user.id) return user;
@@ -20766,7 +20767,18 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
       'open_reimbursement_count',
       'unresolved_taxable_count',
       'stale_count',
-      'component_resolution_summary_json'
+      'component_resolution_summary_json',
+      'snooze_id',
+      'source_ref',
+      'expense_code',
+      'expense_source_basis_fingerprint',
+      'original_timesheet_id',
+      'current_timesheet_id',
+      'segment_id',
+      'segment_stable_key',
+      'cancelled_at',
+      'cancelled_by',
+      'cancel_reason'
     ];
 
     const lines = [];
@@ -20816,7 +20828,18 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
         isFinanceCase && r?.stale_count != null ? r.stale_count : '',
         isFinanceCase
           ? (r?.component_resolution_summary_json == null ? '' : JSON.stringify(r.component_resolution_summary_json))
-          : ''
+          : '',
+        r?.snooze_id ?? '',
+        r?.source_ref ?? '',
+        r?.expense_code ?? '',
+        r?.expense_source_basis_fingerprint ?? '',
+        r?.original_timesheet_id ?? '',
+        r?.current_timesheet_id ?? '',
+        r?.segment_id ?? '',
+        r?.segment_stable_key ?? '',
+        r?.cancelled_at_utc ?? '',
+        r?.cancelled_by_display ?? '',
+        r?.cancel_reason ?? ''
       ].map(csvEscape).join(','));
     }
 
@@ -20828,6 +20851,10 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
     headers.set('X-Report-Status', String(normalizedStatus.uiStatus));
     headers.set('X-Report-Active-Count', String(summary?.active_count ?? 0));
     headers.set('X-Report-Cleared-Count', String(summary?.cleared_count ?? 0));
+    headers.set('X-Report-Expense-Count', String(summary?.timesheet_expense_snooze_count ?? 0));
+    headers.set('X-Report-Expired-Count', String(summary?.expired_count ?? 0));
+    headers.set('X-Report-Cancelled-Count', String(summary?.cancelled_count ?? 0));
+    headers.set('X-Report-History-Count', String(summary?.history_count ?? 0));
 
     const bom = '\ufeff';
     return withCORS(env, req, new Response(bom + lines.join('\r\n'), { status: 200, headers }));
@@ -20835,6 +20862,8 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SNOOZES_EXPORT_CSV_FAILED')));
   }
 }
+
+
 
 async function handleBankingSnoozesExportPdf(env, req, user) {
   const actorUser = (() => {
@@ -21073,17 +21102,40 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
 
     const wrapText = (text, width, size, bold = false) => {
       const f = bold ? fontBold : font;
-      const words = safeStr(text).split(/\s+/).filter(Boolean);
-      if (!words.length) return [''];
+      const rawWords = safeStr(text).split(/\s+/).filter(Boolean);
+      if (!rawWords.length) return [''];
+
+      const words = [];
+      for (const rawWord of rawWords) {
+        let remaining = rawWord;
+        while (remaining && f.widthOfTextAtSize(remaining, size) > width) {
+          let low = 1;
+          let high = remaining.length;
+          let fittedLength = 1;
+          while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            if (f.widthOfTextAtSize(remaining.slice(0, mid), size) <= width) {
+              fittedLength = mid;
+              low = mid + 1;
+            } else {
+              high = mid - 1;
+            }
+          }
+          words.push(remaining.slice(0, fittedLength));
+          remaining = remaining.slice(fittedLength);
+        }
+        if (remaining) words.push(remaining);
+      }
+
       const lines = [];
       let cur = '';
-      for (const w of words) {
-        const test = cur ? `${cur} ${w}` : w;
+      for (const word of words) {
+        const test = cur ? `${cur} ${word}` : word;
         if (f.widthOfTextAtSize(test, size) <= width) {
           cur = test;
         } else {
           if (cur) lines.push(cur);
-          cur = w;
+          cur = word;
         }
       }
       if (cur) lines.push(cur);
@@ -21116,9 +21168,13 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
     const summaryLines = [
       `Total rows: ${safeStr(summary?.total_count ?? 0)}`,
       `Finance-case snoozes: ${safeStr(summary?.finance_case_snooze_count ?? 0)}`,
+      `Timesheet-expense snoozes: ${safeStr(summary?.timesheet_expense_snooze_count ?? 0)}`,
       `Timesheet-payment snoozes: ${safeStr(summary?.timesheet_payment_snooze_count ?? 0)}`,
       `Active: ${safeStr(summary?.active_count ?? 0)}`,
-      `Cleared/history: ${safeStr(summary?.cleared_count ?? 0)}`,
+      `Cleared: ${safeStr(summary?.cleared_count ?? 0)}`,
+      `Expired: ${safeStr(summary?.expired_count ?? 0)}`,
+      `Cancelled: ${safeStr(summary?.cancelled_count ?? 0)}`,
+      `History total: ${safeStr(summary?.history_count ?? 0)}`,
       `Indefinite: ${safeStr(summary?.indefinite_count ?? 0)}`,
       `Dated: ${safeStr(summary?.dated_count ?? 0)}`
     ];
@@ -21157,12 +21213,14 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
       drawText('Mode', cols.mode.x, y, small, true);
       drawText('Until', cols.until.x, y, small, true);
       drawText('Created', cols.created.x, y, small, true);
-      drawText('Visibility', cols.visibility.x, y, small, true);
+      drawText('Lifecycle', cols.visibility.x, y, small, true);
       drawText('Linked item', cols.linked.x, y, small, true);
       y -= 12;
 
       for (const r of list) {
-        const isFinanceCase = String(r?.snooze_scope || '').trim().toUpperCase() === 'FINANCE_CASE';
+        const snoozeScope = String(r?.snooze_scope || '').trim().toUpperCase();
+        const isFinanceCase = snoozeScope === 'FINANCE_CASE';
+        const isTimesheetExpense = snoozeScope === 'TIMESHEET_EXPENSE';
         const rowLabel = normalizeRowLabel(r);
         const candidateTxt =
           safeStr(r?.candidate_display_name || '').trim() ||
@@ -21174,10 +21232,12 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
         const modeTxt = safeStr(r?.snooze_mode || '').trim() || '—';
         const untilTxt = fmtDateOnly(r?.snooze_until_date || '') || (r?.snooze_mode === 'INDEFINITE' ? 'Indefinite' : '—');
         const createdTxt = fmtDateOnly(r?.created_at_utc || '') || '—';
-        const visibilityTxt = safeStr(r?.current_visibility_status || '').trim() || '—';
-        const linkedTxt = r?.snooze_scope === 'TIMESHEET_PAYMENT'
+        const visibilityTxt = safeStr(r?.snooze_lifecycle_status || r?.current_visibility_status || '').trim() || '—';
+        const linkedTxt = snoozeScope === 'TIMESHEET_PAYMENT'
           ? (safeStr(r?.linked_timesheet_booking_id || '').trim() || safeStr(r?.linked_timesheet_reference_number || '').trim() || 'Timesheet payment')
-          : rowLabel;
+          : isTimesheetExpense
+            ? `${rowLabel}${safeStr(r?.expense_code || '').trim() ? ` (${safeStr(r.expense_code).trim()})` : ''}`
+            : rowLabel;
 
         const candidateLines = wrapText(candidateTxt, cols.candidate.w, small, false);
         const clientLines = wrapText(clientTxt, cols.client.w, small, false);
@@ -21219,10 +21279,25 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
         if (r?.note) subBits.push(`Note: ${safeStr(r.note)}`);
         if (r?.created_by_display) subBits.push(`Created by: ${safeStr(r.created_by_display)}`);
         if (r?.updated_by_display) subBits.push(`Updated by: ${safeStr(r.updated_by_display)}`);
+        if (r?.cleared_at_utc) subBits.push(`Cleared: ${fmtDateTime(r.cleared_at_utc)}`);
         if (r?.cleared_by_display) subBits.push(`Cleared by: ${safeStr(r.cleared_by_display)}`);
+        if (r?.cancelled_at_utc) subBits.push(`Cancelled: ${fmtDateTime(r.cancelled_at_utc)}`);
+        if (r?.cancelled_by_display) subBits.push(`Cancelled by: ${safeStr(r.cancelled_by_display)}`);
+        if (r?.cancel_reason) subBits.push(`Cancellation reason: ${safeStr(r.cancel_reason)}`);
         if (r?.linked_case_status) subBits.push(`Case status: ${safeStr(r.linked_case_status)}`);
         if (Number.isFinite(Number(r?.outstanding_amount))) subBits.push(`Outstanding: ${asMoney(r.outstanding_amount)}`);
         if (Number.isFinite(Number(r?.weekly_due)) && Number(r.weekly_due) > 0) subBits.push(`Weekly due: ${asMoney(r.weekly_due)}`);
+
+        if (isTimesheetExpense) {
+          if (r?.snooze_id) subBits.push(`Snooze ID: ${safeStr(r.snooze_id)}`);
+          if (r?.expense_code) subBits.push(`Expense code: ${safeStr(r.expense_code)}`);
+          if (r?.original_timesheet_id) subBits.push(`Original Timesheet: ${safeStr(r.original_timesheet_id)}`);
+          if (r?.current_timesheet_id) subBits.push(`Current Timesheet: ${safeStr(r.current_timesheet_id)}`);
+          if (r?.segment_id) subBits.push(`Segment ID: ${safeStr(r.segment_id)}`);
+          if (r?.segment_stable_key) subBits.push(`Segment stable key: ${safeStr(r.segment_stable_key)}`);
+          if (r?.expense_source_basis_fingerprint) subBits.push(`Source-basis fingerprint: ${safeStr(r.expense_source_basis_fingerprint)}`);
+          if (r?.source_ref) subBits.push(`Exact source reference: ${safeStr(r.source_ref)}`);
+        }
 
         if (isFinanceCase) {
           const componentStateBits = [];
@@ -21238,9 +21313,14 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
         }
 
         if (subBits.length) {
-          ensureSpace(lineH);
-          drawText(subBits.join('   •   '), margin + 10, y, 7.5, false, rgb(0.35, 0.35, 0.35));
-          y -= lineH;
+          drawWrapped(
+            subBits.join('   •   '),
+            margin + 10,
+            pageW - (margin * 2) - 20,
+            7.5,
+            false,
+            rgb(0.35, 0.35, 0.35)
+          );
         }
 
         y -= 4;
@@ -21273,6 +21353,8 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SNOOZES_EXPORT_PDF_FAILED')));
   }
 }
+
+
 
 
 async function handleBankingRailAccountsList(env, req, user) {
