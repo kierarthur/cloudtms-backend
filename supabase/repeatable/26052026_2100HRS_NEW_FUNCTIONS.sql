@@ -3763,7 +3763,6 @@ REVOKE ALL ON FUNCTION public.pay_snooze_upsert(uuid, uuid, text, text, text, da
 REVOKE ALL ON FUNCTION public.pay_snooze_upsert(uuid, uuid, text, text, text, date, uuid, text) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.pay_snooze_upsert(uuid, uuid, text, text, text, date, uuid, text) TO service_role;
 
-
 CREATE OR REPLACE FUNCTION public.pay_snooze_clear(p_snooze_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3772,6 +3771,7 @@ CREATE OR REPLACE FUNCTION public.pay_snooze_clear(p_snooze_id uuid, p_actor_use
 AS $function$
 DECLARE
   v_row record;
+  v_candidate_id_hint uuid := NULL::uuid;
   v_before jsonb := NULL;
   v_after jsonb := NULL;
   v_finance_case_id uuid := NULL;
@@ -3798,6 +3798,24 @@ BEGIN
     RAISE EXCEPTION 'snooze_id is required';
   END IF;
 
+  SELECT s.candidate_id
+  INTO v_candidate_id_hint
+  FROM public.pay_item_snoozes AS s
+  WHERE s.id = p_snooze_id;
+
+  IF v_candidate_id_hint IS NULL THEN
+    RAISE EXCEPTION 'SNOOZE_NOT_FOUND';
+  END IF;
+
+  -- Use the same candidate-then-row lock order as Snooze upsert, natural
+  -- expiry and the final Create Draft guard.  Reading the immutable candidate
+  -- identity first avoids a row-lock/advisory-lock inversion with a concurrent
+  -- exact expense upsert or clear.
+  PERFORM pg_advisory_xact_lock(
+    pg_catalog.hashtext('public.banking_pay_candidate_snooze_guard'),
+    pg_catalog.hashtext(v_candidate_id_hint::text)
+  );
+
   SELECT
     s.id,
     s.candidate_id,
@@ -3810,19 +3828,19 @@ BEGIN
     s.created_at_utc,
     s.cleared_at_utc
   INTO v_row
-  FROM public.pay_item_snoozes s
+  FROM public.pay_item_snoozes AS s
   WHERE s.id = p_snooze_id
   LIMIT 1
   FOR UPDATE;
 
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'SNOOZE_NOT_FOUND';
+  IF NOT FOUND OR v_row.candidate_id IS DISTINCT FROM v_candidate_id_hint THEN
+    RAISE EXCEPTION 'SNOOZE_AUTHORITY_CHANGED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'SNOOZE_AUTHORITY_CHANGED',
+              'snooze_id', p_snooze_id::text
+            )::text;
   END IF;
-
-  PERFORM pg_advisory_xact_lock(
-    pg_catalog.hashtext('public.banking_pay_candidate_snooze_guard'),
-    pg_catalog.hashtext(v_row.candidate_id::text)
-  );
 
   v_before := jsonb_build_object(
     'id', v_row.id::text,
@@ -4110,6 +4128,7 @@ BEGIN
     );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_expired_snooze_refreshes_v1(
   p_session_id uuid DEFAULT NULL::uuid,
@@ -14409,6 +14428,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb DEFAULT '{}'::jsonb, p_client_filter_single uuid DEFAULT NULL::uuid, p_force_include_timesheet_ids uuid[] DEFAULT NULL::uuid[], p_exclude_timesheet_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -15215,6 +15235,58 @@ begin
 
       IF COALESCE(v_authoritative_timesheet_scope, false)
          AND to_regclass('pg_temp.timesheet_case_rollup') IS NOT NULL THEN
+        IF EXISTS (
+          WITH preview_component_totals AS (
+            SELECT
+              raw_case.timesheet_id,
+              UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))) AS key_type,
+              BTRIM(COALESCE(raw_component.value->>'component_key_value', '')) AS key_value,
+              COUNT(*)::integer AS preview_component_count,
+              ROUND(
+                SUM((raw_component.value->>'component_amount_ex_vat')::numeric),
+                2
+              )::numeric(12,2) AS preview_truth_ex_vat
+            FROM pg_temp.timesheet_case_rollup AS raw_case
+            CROSS JOIN LATERAL jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(raw_case.case_components_json) = 'array'
+                  THEN COALESCE(raw_case.case_components_json, '[]'::jsonb)
+                ELSE '[]'::jsonb
+              END
+            ) AS raw_component(value)
+            WHERE raw_case.candidate_id = v_preview_candidate_loop_id
+              AND raw_case.timesheet_id = ANY(COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[]))
+              AND NOT (raw_case.timesheet_id = ANY(COALESCE(p_exclude_timesheet_ids, ARRAY[]::uuid[])))
+              AND COALESCE(raw_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            GROUP BY
+              raw_case.timesheet_id,
+              UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))),
+              BTRIM(COALESCE(raw_component.value->>'component_key_value', ''))
+          )
+          SELECT 1
+          FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
+          LEFT JOIN preview_component_totals AS preview_total
+            ON preview_total.timesheet_id = authoritative_component.timesheet_id
+           AND preview_total.key_type = authoritative_component.key_type
+           AND preview_total.key_value = authoritative_component.key_value
+          WHERE preview_total.preview_component_count IS NULL
+             OR ABS(ROUND(
+                  COALESCE(preview_total.preview_truth_ex_vat, 0)
+                  - authoritative_component.truth_ex_vat,
+                  2
+                )) > 0.01
+        ) THEN
+          RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_NEGATIVE_COMPONENT_METADATA_MISMATCH'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_NEGATIVE_COMPONENT_METADATA_MISMATCH',
+                    'candidate_id', v_preview_candidate_loop_id::text,
+                    'negative_component_count', COALESCE(v_authoritative_negative_component_count, 0),
+                    'negative_component_digest', v_authoritative_negative_component_digest,
+                    'message', 'Canonical negative component keys were not represented by preview metadata whose current component totals match authoritative live truth.'
+                  )::text;
+        END IF;
+
         INSERT INTO pg_temp.tmp_sync_raw_negative_timesheet_rows (
           candidate_id,
           timesheet_id,
@@ -15230,30 +15302,118 @@ begin
           COALESCE(NULLIF(UPPER(BTRIM(raw_case.cand_pay_method)), ''), v_scope),
           COALESCE(raw_case.is_blocked, false),
           COALESCE((
-            SELECT jsonb_agg(
-              raw_component.value
-              ORDER BY
-                UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))),
-                BTRIM(COALESCE(raw_component.value->>'component_key_value', '')),
-                COALESCE(raw_component.value->'source_basis_json', '{}'::jsonb)::text,
-                raw_component.ordinality
+            WITH matching_preview_components AS (
+              SELECT
+                authoritative_component.timesheet_id,
+                authoritative_component.key_type,
+                authoritative_component.key_value,
+                authoritative_component.truth_ex_vat,
+                authoritative_component.baseline_ex_vat,
+                authoritative_component.reserved_ex_vat,
+                authoritative_component.outstanding_ex_vat,
+                raw_component.value AS component_json,
+                raw_component.ordinality::integer AS component_ordinality,
+                ROUND(
+                  (raw_component.value->>'component_amount_ex_vat')::numeric,
+                  2
+                )::numeric(12,2) AS preview_truth_component_ex_vat,
+                COUNT(*) OVER (
+                  PARTITION BY
+                    authoritative_component.timesheet_id,
+                    authoritative_component.key_type,
+                    authoritative_component.key_value
+                )::integer AS physical_component_count,
+                ROUND(
+                  SUM(ABS((raw_component.value->>'component_amount_ex_vat')::numeric)) OVER (
+                    PARTITION BY
+                      authoritative_component.timesheet_id,
+                      authoritative_component.key_type,
+                      authoritative_component.key_value
+                  ),
+                  2
+                )::numeric(12,2) AS preview_truth_weight_total_ex_vat,
+                ROW_NUMBER() OVER (
+                  PARTITION BY
+                    authoritative_component.timesheet_id,
+                    authoritative_component.key_type,
+                    authoritative_component.key_value
+                  ORDER BY
+                    COALESCE(raw_component.value->'source_basis_json', '{}'::jsonb)::text,
+                    raw_component.ordinality
+                )::integer AS allocation_rank
+              FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
+              CROSS JOIN LATERAL jsonb_array_elements(
+                CASE
+                  WHEN jsonb_typeof(raw_case.case_components_json) = 'array'
+                    THEN COALESCE(raw_case.case_components_json, '[]'::jsonb)
+                  ELSE '[]'::jsonb
+                END
+              ) WITH ORDINALITY AS raw_component(value, ordinality)
+              WHERE authoritative_component.timesheet_id = raw_case.timesheet_id
+                AND authoritative_component.key_type = UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', '')))
+                AND authoritative_component.key_value = BTRIM(COALESCE(raw_component.value->>'component_key_value', ''))
+                AND COALESCE(raw_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            ), preliminary_allocations AS (
+              SELECT
+                matching_component.*,
+                CASE
+                  WHEN matching_component.physical_component_count = 1
+                    THEN matching_component.outstanding_ex_vat
+                  WHEN COALESCE(matching_component.preview_truth_weight_total_ex_vat, 0) <= 0.01
+                    THEN CASE
+                      WHEN matching_component.allocation_rank = 1
+                        THEN matching_component.outstanding_ex_vat
+                      ELSE 0::numeric
+                    END
+                  ELSE ROUND(
+                    matching_component.outstanding_ex_vat
+                    * ABS(matching_component.preview_truth_component_ex_vat)
+                    / matching_component.preview_truth_weight_total_ex_vat,
+                    2
+                  )
+                END::numeric(12,2) AS preliminary_outstanding_allocation
+              FROM matching_preview_components AS matching_component
+            ), final_allocations AS (
+              SELECT
+                preliminary_allocation.*,
+                CASE
+                  WHEN preliminary_allocation.allocation_rank = preliminary_allocation.physical_component_count
+                    THEN ROUND(
+                      preliminary_allocation.outstanding_ex_vat
+                      - COALESCE(
+                          SUM(preliminary_allocation.preliminary_outstanding_allocation) OVER (
+                            PARTITION BY
+                              preliminary_allocation.timesheet_id,
+                              preliminary_allocation.key_type,
+                              preliminary_allocation.key_value
+                            ORDER BY preliminary_allocation.allocation_rank
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                          ),
+                          0
+                        ),
+                      2
+                    )
+                  ELSE preliminary_allocation.preliminary_outstanding_allocation
+                END::numeric(12,2) AS authoritative_outstanding_allocation
+              FROM preliminary_allocations AS preliminary_allocation
             )
-            FROM jsonb_array_elements(
-              CASE
-                WHEN jsonb_typeof(raw_case.case_components_json) = 'array'
-                  THEN COALESCE(raw_case.case_components_json, '[]'::jsonb)
-                ELSE '[]'::jsonb
-              END
-            ) WITH ORDINALITY AS raw_component(value, ordinality)
-            WHERE COALESCE(raw_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-              AND ROUND((raw_component.value->>'component_amount_ex_vat')::numeric, 2) < 0
-              AND EXISTS (
-                SELECT 1
-                FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
-                WHERE authoritative_component.timesheet_id = raw_case.timesheet_id
-                  AND authoritative_component.key_type = UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', '')))
-                  AND authoritative_component.key_value = BTRIM(COALESCE(raw_component.value->>'component_key_value', ''))
+            SELECT jsonb_agg(
+              allocated_component.component_json
+              || jsonb_build_object(
+                'component_amount_ex_vat', allocated_component.authoritative_outstanding_allocation,
+                'authoritative_truth_ex_vat', allocated_component.truth_ex_vat,
+                'authoritative_baseline_ex_vat', allocated_component.baseline_ex_vat,
+                'authoritative_reserved_ex_vat', allocated_component.reserved_ex_vat,
+                'authoritative_outstanding_ex_vat', allocated_component.outstanding_ex_vat,
+                'overpayment_component_authority', 'PRE_DRAFT_LIVE_TRUTH'
               )
+              ORDER BY
+                allocated_component.key_type,
+                allocated_component.key_value,
+                COALESCE(allocated_component.component_json->'source_basis_json', '{}'::jsonb)::text,
+                allocated_component.component_ordinality
+            )
+            FROM final_allocations AS allocated_component
           ), '[]'::jsonb)
         FROM pg_temp.timesheet_case_rollup AS raw_case
         WHERE raw_case.candidate_id = v_preview_candidate_loop_id
@@ -15270,47 +15430,6 @@ begin
           candidate_pay_method = EXCLUDED.candidate_pay_method,
           case_is_blocked = EXCLUDED.case_is_blocked,
           case_components_json = EXCLUDED.case_components_json;
-
-        IF EXISTS (
-          WITH preview_component_totals AS (
-            SELECT
-              raw_timesheet.timesheet_id,
-              UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))) AS key_type,
-              BTRIM(COALESCE(raw_component.value->>'component_key_value', '')) AS key_value,
-              COUNT(*)::integer AS preview_component_count,
-              ROUND(SUM((raw_component.value->>'component_amount_ex_vat')::numeric), 2)::numeric(12,2) AS preview_outstanding_ex_vat
-            FROM pg_temp.tmp_sync_raw_negative_timesheet_rows AS raw_timesheet
-            CROSS JOIN LATERAL jsonb_array_elements(raw_timesheet.case_components_json) AS raw_component(value)
-            WHERE raw_timesheet.candidate_id = v_preview_candidate_loop_id
-              AND COALESCE(raw_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-            GROUP BY
-              raw_timesheet.timesheet_id,
-              UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))),
-              BTRIM(COALESCE(raw_component.value->>'component_key_value', ''))
-          )
-          SELECT 1
-          FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
-          LEFT JOIN preview_component_totals AS preview_total
-            ON preview_total.timesheet_id = authoritative_component.timesheet_id
-           AND preview_total.key_type = authoritative_component.key_type
-           AND preview_total.key_value = authoritative_component.key_value
-          WHERE preview_total.preview_component_count IS NULL
-             OR ABS(ROUND(
-                  COALESCE(preview_total.preview_outstanding_ex_vat, 0)
-                  - authoritative_component.outstanding_ex_vat,
-                  2
-                )) > 0.01
-        ) THEN
-          RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_NEGATIVE_COMPONENT_METADATA_MISMATCH'
-            USING ERRCODE = 'P0001',
-                  DETAIL = jsonb_build_object(
-                    'code', 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_NEGATIVE_COMPONENT_METADATA_MISMATCH',
-                    'candidate_id', v_preview_candidate_loop_id::text,
-                    'negative_component_count', COALESCE(v_authoritative_negative_component_count, 0),
-                    'negative_component_digest', v_authoritative_negative_component_digest,
-                    'message', 'Canonical negative components were not represented exactly by the preview component metadata required for finance-case routing.'
-                  )::text;
-        END IF;
       END IF;
 
       v_preview_candidate_row_json := CASE
@@ -17169,6 +17288,8 @@ exception
     RAISE;
 end;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_ensure_run(
@@ -29661,7 +29782,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(p_context_json jsonb, p_candidate_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -29924,7 +30044,15 @@ begin
           round(coalesce(tcr.payment_amount_inc_vat, tcr.payment_amount, tcr.payment_amount_ex_vat, 0),2) as amount_display,
           coalesce(tcr.is_blocked, false) as case_is_blocked,
           coalesce(tcr.case_resolution_summary_json, '{}'::jsonb) as case_resolution_summary_json,
-          coalesce(tcr.case_components_json, '[]'::jsonb) as case_components_json,
+          coalesce(expense_components.expense_aware_case_components_json, tcr.case_components_json, '[]'::jsonb) as case_components_json,
+          coalesce(expense_components.ready_expense_amount_ex_vat, 0) as ready_expense_amount_ex_vat,
+          coalesce(expense_components.blocked_expense_amount_ex_vat, 0) as blocked_expense_amount_ex_vat,
+          coalesce(expense_components.hidden_expense_amount_ex_vat, 0) as hidden_expense_amount_ex_vat,
+          coalesce(expense_components.ready_expense_count, 0) as ready_expense_count,
+          coalesce(expense_components.blocked_expense_count, 0) as blocked_expense_count,
+          coalesce(expense_components.hidden_expense_count, 0) as hidden_expense_count,
+          coalesce(expense_components.active_expense_snooze_count, 0) as active_expense_snooze_count,
+          coalesce(expense_components.stale_expense_identity_count, 0) as stale_expense_identity_count,
           coalesce((
             select jsonb_agg(
               jsonb_build_object(
@@ -30072,6 +30200,222 @@ begin
            (ats.booking_id is not null and ats.booking_id = tb.ts_booking_id)
            or (ats.booking_id is null and ats.timesheet_id = tcr.timesheet_id)
          )
+        left join lateral (
+          with component_rows as (
+            select
+              component_element.value as component_json,
+              component_element.ordinality::integer as component_ordinal,
+              upper(nullif(btrim(coalesce(component_element.value->>'component_key_type', '')), '')) as component_key_type,
+              upper(nullif(btrim(coalesce(component_element.value->>'component_key_value', component_element.value#>>'{source_basis_json,expense_code}', '')), '')) as expense_code,
+              case
+                when jsonb_typeof(component_element.value->'source_basis_json') = 'object'
+                  then coalesce(component_element.value->'source_basis_json', '{}'::jsonb)
+                else '{}'::jsonb
+              end as source_basis_json,
+              lower(coalesce(
+                nullif(btrim(coalesce(component_element.value->>'source_basis_fingerprint', '')), ''),
+                md5(coalesce(component_element.value->'source_basis_json', '{}'::jsonb)::text)
+              )) as source_basis_fingerprint,
+              round(coalesce(
+                case when coalesce(component_element.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (component_element.value->>'ready_preview_amount_ex_vat')::numeric else null::numeric end,
+                case when coalesce(component_element.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (component_element.value->>'preview_component_amount_ex_vat')::numeric else null::numeric end,
+                case when coalesce(component_element.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (component_element.value->>'component_amount_ex_vat')::numeric else null::numeric end,
+                case when coalesce(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (component_element.value->>'target_pay_ex_vat')::numeric else null::numeric end,
+                0::numeric
+              ), 2) as component_amount_ex_vat
+            from jsonb_array_elements(
+              case
+                when jsonb_typeof(tcr.case_components_json) = 'array' then coalesce(tcr.case_components_json, '[]'::jsonb)
+                else '[]'::jsonb
+              end
+            ) with ordinality as component_element(value, ordinality)
+          ), expense_identity_rows as (
+            select
+              component_rows.*,
+              (
+                component_rows.component_key_type = 'EXPENSE_CODE'
+                and component_rows.expense_code in ('EXPENSES', 'TRAVEL', 'ACCOMMODATION', 'OTHER', 'MILEAGE')
+                and component_rows.source_basis_fingerprint ~ '^[0-9a-f]{32}$'
+              ) as is_expense_component,
+              case
+                when component_rows.component_key_type = 'EXPENSE_CODE'
+                 and component_rows.expense_code in ('EXPENSES', 'TRAVEL', 'ACCOMMODATION', 'OTHER', 'MILEAGE')
+                 and component_rows.source_basis_fingerprint ~ '^[0-9a-f]{32}$'
+                then lower(
+                  'timesheet-expense:' || tcr.timesheet_id::text || ':' ||
+                  component_rows.expense_code || ':' || component_rows.source_basis_fingerprint
+                )
+                else null::text
+              end as expense_source_ref,
+              case component_rows.expense_code
+                when 'EXPENSES' then 'Expenses'
+                when 'TRAVEL' then 'Travel'
+                when 'ACCOMMODATION' then 'Accommodation'
+                when 'OTHER' then 'Other'
+                when 'MILEAGE' then 'Mileage'
+                else null::text
+              end as expense_label
+            from component_rows
+          ), enriched_rows as (
+            select
+              expense_identity_rows.*,
+              exact_snooze.snooze_id as exact_snooze_id,
+              exact_snooze.snooze_until_date as exact_snooze_until_date,
+              exact_snooze.note as exact_snooze_note,
+              exact_snooze.snooze_kind as exact_snooze_kind,
+              stale_snooze.snooze_id as stale_snooze_id,
+              stale_snooze.source_ref as stale_source_ref,
+              stale_snooze.snooze_until_date as stale_snooze_until_date,
+              stale_snooze.note as stale_snooze_note
+            from expense_identity_rows
+            left join lateral (
+              select
+                active_snooze.snooze_id,
+                active_snooze.snooze_until_date,
+                active_snooze.note,
+                active_snooze.snooze_kind
+              from active_snoozes as active_snooze
+              where expense_identity_rows.is_expense_component
+                and active_snooze.candidate_id = tcr.candidate_id
+                and active_snooze.source_ref is not null
+                and lower(active_snooze.source_ref) = expense_identity_rows.expense_source_ref
+                and active_snooze.snooze_kind = 'DO_NOT_PAY'
+              order by active_snooze.snooze_id
+              limit 1
+            ) as exact_snooze on true
+            left join lateral (
+              select
+                active_snooze.snooze_id,
+                active_snooze.source_ref,
+                active_snooze.snooze_until_date,
+                active_snooze.note
+              from active_snoozes as active_snooze
+              where expense_identity_rows.is_expense_component
+                and exact_snooze.snooze_id is null
+                and active_snooze.candidate_id = tcr.candidate_id
+                and active_snooze.timesheet_id = tcr.timesheet_id
+                and active_snooze.source_ref is not null
+                and lower(active_snooze.source_ref) like lower(
+                  'timesheet-expense:' || tcr.timesheet_id::text || ':' ||
+                  expense_identity_rows.expense_code || ':%'
+                )
+                and lower(active_snooze.source_ref) is distinct from expense_identity_rows.expense_source_ref
+                and active_snooze.snooze_kind = 'DO_NOT_PAY'
+              order by active_snooze.snooze_id
+              limit 1
+            ) as stale_snooze on true
+          ), state_rows as (
+            select
+              enriched_rows.*,
+              case
+                when not enriched_rows.is_expense_component then 'NOT_EXPENSE'
+                when enriched_rows.exact_snooze_id is not null and enriched_rows.exact_snooze_until_date is null then 'HIDDEN_INDEFINITE'
+                when enriched_rows.exact_snooze_id is not null then 'BLOCKED_DATED'
+                when enriched_rows.stale_snooze_id is not null then 'BLOCKED_STALE_IDENTITY'
+                else 'READY'
+              end as expense_presentation_state
+            from enriched_rows
+          )
+          select
+            coalesce(
+              jsonb_agg(
+                case
+                  when state_rows.is_expense_component then
+                    state_rows.component_json
+                    || jsonb_build_object(
+                      'expense_code', state_rows.expense_code,
+                      'expense_label', state_rows.expense_label,
+                      'expense_item_type', case when state_rows.expense_code = 'MILEAGE' then 'MILEAGE_DELTA' else 'EXPENSE_DELTA' end,
+                      'source_ref', state_rows.expense_source_ref,
+                      'source_basis_fingerprint', state_rows.source_basis_fingerprint,
+                      'expense_source_basis_fingerprint', state_rows.source_basis_fingerprint,
+                      'expense_source_basis_json', state_rows.source_basis_json
+                    )
+                    || jsonb_build_object(
+                      'presentation_section', case
+                        when state_rows.expense_presentation_state = 'READY' then 'READY_TO_PAY'
+                        when state_rows.expense_presentation_state in ('BLOCKED_DATED', 'BLOCKED_STALE_IDENTITY') then 'BLOCKED_FOR_PAY'
+                        else 'INTERNAL_ONLY'
+                      end,
+                      'expense_presentation_state', state_rows.expense_presentation_state,
+                      'draftable', (state_rows.expense_presentation_state = 'READY'),
+                      'is_ready_for_draft', (state_rows.expense_presentation_state = 'READY'),
+                      'is_excluded_from_allocation', (state_rows.expense_presentation_state <> 'READY'),
+                      'selection_allowed', (state_rows.expense_presentation_state = 'READY'),
+                      'expense_identity_stale', (state_rows.expense_presentation_state = 'BLOCKED_STALE_IDENTITY')
+                    )
+                    || jsonb_build_object(
+                      'snooze_identity', jsonb_build_object(
+                        'identity_type', 'TIMESHEET_EXPENSE',
+                        'timesheet_id', tcr.timesheet_id::text,
+                        'booking_id', tb.ts_booking_id,
+                        'segment_id', null,
+                        'segment_stable_key', null,
+                        'source_ref', state_rows.expense_source_ref,
+                        'expense_code', state_rows.expense_code,
+                        'source_basis_fingerprint', state_rows.source_basis_fingerprint
+                      ),
+                      'snooze_state', case
+                        when state_rows.exact_snooze_id is null and state_rows.stale_snooze_id is null
+                          then jsonb_build_object('state', 'NONE')
+                        when state_rows.exact_snooze_id is not null and state_rows.exact_snooze_until_date is null
+                          then jsonb_build_object(
+                            'state', 'INDEFINITE_SNOOZED',
+                            'snooze_id', state_rows.exact_snooze_id::text,
+                            'snooze_until_date', null,
+                            'note', state_rows.exact_snooze_note,
+                            'snooze_kind', state_rows.exact_snooze_kind
+                          )
+                        when state_rows.exact_snooze_id is not null
+                          then jsonb_build_object(
+                            'state', 'DATED_SNOOZED',
+                            'snooze_id', state_rows.exact_snooze_id::text,
+                            'snooze_until_date', state_rows.exact_snooze_until_date::text,
+                            'note', state_rows.exact_snooze_note,
+                            'snooze_kind', state_rows.exact_snooze_kind
+                          )
+                        else jsonb_build_object(
+                          'state', 'STALE_SOURCE_IDENTITY',
+                          'snooze_id', state_rows.stale_snooze_id::text,
+                          'snooze_until_date', case when state_rows.stale_snooze_until_date is null then null else state_rows.stale_snooze_until_date::text end,
+                          'note', state_rows.stale_snooze_note,
+                          'stale_source_ref', state_rows.stale_source_ref,
+                          'refresh_required', true
+                        )
+                      end
+                    )
+                  else state_rows.component_json
+                end
+                order by state_rows.component_ordinal
+              ),
+              '[]'::jsonb
+            ) as expense_aware_case_components_json,
+            round(coalesce(sum(state_rows.component_amount_ex_vat) filter (
+              where state_rows.is_expense_component and state_rows.expense_presentation_state = 'READY'
+            ), 0), 2) as ready_expense_amount_ex_vat,
+            round(coalesce(sum(state_rows.component_amount_ex_vat) filter (
+              where state_rows.is_expense_component and state_rows.expense_presentation_state in ('BLOCKED_DATED', 'BLOCKED_STALE_IDENTITY')
+            ), 0), 2) as blocked_expense_amount_ex_vat,
+            round(coalesce(sum(state_rows.component_amount_ex_vat) filter (
+              where state_rows.is_expense_component and state_rows.expense_presentation_state = 'HIDDEN_INDEFINITE'
+            ), 0), 2) as hidden_expense_amount_ex_vat,
+            count(*) filter (
+              where state_rows.is_expense_component and state_rows.expense_presentation_state = 'READY'
+            )::integer as ready_expense_count,
+            count(*) filter (
+              where state_rows.is_expense_component and state_rows.expense_presentation_state in ('BLOCKED_DATED', 'BLOCKED_STALE_IDENTITY')
+            )::integer as blocked_expense_count,
+            count(*) filter (
+              where state_rows.is_expense_component and state_rows.expense_presentation_state = 'HIDDEN_INDEFINITE'
+            )::integer as hidden_expense_count,
+            count(*) filter (
+              where state_rows.is_expense_component and state_rows.exact_snooze_id is not null
+            )::integer as active_expense_snooze_count,
+            count(*) filter (
+              where state_rows.is_expense_component and state_rows.stale_snooze_id is not null
+            )::integer as stale_expense_identity_count
+          from state_rows
+        ) as expense_components on true
         where round(coalesce(tcr.payment_amount_ex_vat,0),2) <> 0
           and not (ats.snooze_id is not null and ats.snooze_until_date is null)
   
@@ -30526,6 +30870,14 @@ begin
           ctl.case_is_blocked,
           ctl.case_resolution_summary_json,
           ctl.case_components_json,
+          coalesce(ctl.ready_expense_amount_ex_vat, 0) as ready_expense_amount_ex_vat,
+          coalesce(ctl.blocked_expense_amount_ex_vat, 0) as blocked_expense_amount_ex_vat,
+          coalesce(ctl.hidden_expense_amount_ex_vat, 0) as hidden_expense_amount_ex_vat,
+          coalesce(ctl.ready_expense_count, 0) as ready_expense_count,
+          coalesce(ctl.blocked_expense_count, 0) as blocked_expense_count,
+          coalesce(ctl.hidden_expense_count, 0) as hidden_expense_count,
+          coalesce(ctl.active_expense_snooze_count, 0) as active_expense_snooze_count,
+          coalesce(ctl.stale_expense_identity_count, 0) as stale_expense_identity_count,
           coalesce(ctsr.total_segment_count, 0) as total_segment_count,
           coalesce(ctsr.ready_segment_count, 0) as ready_segment_count,
           coalesce(ctsr.blocked_visible_segment_count, 0) as blocked_visible_segment_count,
@@ -30561,12 +30913,14 @@ begin
                  coalesce(ctl.case_resolution_summary_json->>'resolved_rate_component_count', '') ~ '^[0-9]+$'
                  and (ctl.case_resolution_summary_json->>'resolved_rate_component_count')::integer > 0
                )
-             ) then 0::numeric
+             ) then round(coalesce(ctl.ready_expense_amount_ex_vat, 0), 2)
             else round(
               coalesce(ctl.amount_ex_vat, 0)
               - coalesce(ctsr.ready_segment_amount_ex_vat, 0)
               - coalesce(ctsr.blocked_visible_segment_amount_ex_vat, 0)
-              - coalesce(ctsr.hidden_indefinite_segment_amount_ex_vat, 0),
+              - coalesce(ctsr.hidden_indefinite_segment_amount_ex_vat, 0)
+              - coalesce(ctl.blocked_expense_amount_ex_vat, 0)
+              - coalesce(ctl.hidden_expense_amount_ex_vat, 0),
               2
             )
           end as non_segment_amount_ex_vat,
@@ -30591,7 +30945,7 @@ begin
               and coalesce(nullif(case_component.value->>'is_actionable_resolution_row','')::boolean, false) = true
           ) as has_actionable_resolution_component,
           round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) as ready_section_amount_ex_vat,
-          round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0), 2) as blocked_section_amount_ex_vat,
+          round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0) + coalesce(ctps.blocked_expense_amount_ex_vat, 0), 2) as blocked_section_amount_ex_vat,
           round(
             coalesce(
               nullif(ctps.case_resolution_summary_json->>'blocked_case_amount_ex_vat', '')::numeric,
@@ -30615,8 +30969,8 @@ begin
           ) as ready_section_amount_display,
           round(
             case
-              when ctps.source_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0), 2), v_vat_rate_pct, ctps.umb_vat_chargeable)->>'inc')::numeric
-              else round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0), 2)
+              when ctps.source_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0) + coalesce(ctps.blocked_expense_amount_ex_vat, 0), 2), v_vat_rate_pct, ctps.umb_vat_chargeable)->>'inc')::numeric
+              else round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0) + coalesce(ctps.blocked_expense_amount_ex_vat, 0), 2)
             end,
             2
           ) as blocked_section_amount_display,
@@ -30667,6 +31021,7 @@ begin
           (
             ctps.has_active_timesheet_snooze = true
             or coalesce(ctps.blocked_visible_segment_count, 0) > 0
+            or coalesce(ctps.blocked_expense_count, 0) > 0
             or (
               ctps.has_active_timesheet_snooze = false
               and ctps.is_ready_for_draft = false
@@ -30724,7 +31079,7 @@ begin
               round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
               or coalesce(ctps.ready_segment_count, 0) > 0
             )
-            and coalesce(ctps.blocked_visible_segment_count, 0) > 0
+            and (coalesce(ctps.blocked_visible_segment_count, 0) > 0 or coalesce(ctps.blocked_expense_count, 0) > 0)
           ) as is_partially_ready,
           (
             ctps.has_active_timesheet_snooze = false
@@ -30733,7 +31088,7 @@ begin
               round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
               or coalesce(ctps.ready_segment_count, 0) > 0
             )
-            and coalesce(ctps.blocked_visible_segment_count, 0) > 0
+            and (coalesce(ctps.blocked_visible_segment_count, 0) > 0 or coalesce(ctps.blocked_expense_count, 0) > 0)
           ) as is_partially_blocked
         from canonical_timesheet_presentation_seed ctps
 
@@ -30820,7 +31175,11 @@ begin
                 else 'READY_TO_PAY'
               end,
               'presentation_advisory_text', case
+                when ctpp.is_partially_ready and ctpp.blocked_visible_segment_count > 0 and ctpp.blocked_expense_count > 0 then 'Some segments and expenses are blocked'
+                when ctpp.is_partially_ready and ctpp.blocked_expense_count > 0 then 'Some expenses are blocked'
                 when ctpp.is_partially_ready then 'Some segments are blocked'
+                when ctpp.hidden_indefinite_segment_count > 0 and ctpp.hidden_expense_count > 0 then 'Some segments and expenses are snoozed indefinitely'
+                when ctpp.hidden_expense_count > 0 then 'Some expenses are snoozed indefinitely'
                 when ctpp.hidden_indefinite_segment_count > 0 then 'Some segments are snoozed indefinitely'
                 else null
               end
@@ -31078,7 +31437,7 @@ begin
               end,
               'section_non_segment_amount_ex_vat', case
                 when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.non_segment_amount_ex_vat
-                else 0
+                else coalesce(ctpp.blocked_expense_amount_ex_vat, 0)
               end
             )
             || jsonb_build_object(
@@ -31097,6 +31456,8 @@ begin
                 else 'BLOCKED_FOR_PAY'
               end,
               'presentation_advisory_text', case
+                when ctpp.is_partially_blocked and ctpp.ready_segment_count > 0 and ctpp.ready_expense_count > 0 then 'Some segments and expenses are ready to pay'
+                when ctpp.is_partially_blocked and ctpp.ready_expense_count > 0 then 'Some expenses are ready to pay'
                 when ctpp.is_partially_blocked then 'Some segments are ready to pay'
                 else null
               end
@@ -31134,8 +31495,10 @@ begin
             ctpp.has_active_timesheet_snooze = true
             or ctpp.has_non_resolution_readiness_block = true
             or ctpp.blocked_visible_segment_count > 0
+            or ctpp.blocked_expense_count > 0
           )
-  
+
+
   ;
 
   create temporary table finance_case_lines on commit drop as
@@ -31840,11 +32203,66 @@ begin
                 'delta_additional_pay_ex_vat', coalesce(tcr.delta_additional_pay_ex_vat, 0),
                 'additional_unit_deltas', coalesce(tcr.additional_unit_deltas_json, '[]'::jsonb),
                 'reservation_overrun_detected', coalesce(tcr.reservation_overrun_detected, false),
-                'delta_expenses_pay_ex_vat', coalesce(tcr.delta_expenses_pay_ex_vat, 0),
-                'delta_travel_pay_ex_vat', coalesce(tcr.delta_travel_pay_ex_vat, 0),
-                'delta_accommodation_pay_ex_vat', coalesce(tcr.delta_accommodation_pay_ex_vat, 0),
-                'delta_other_pay_ex_vat', coalesce(tcr.delta_other_pay_ex_vat, 0),
-                'delta_mileage_pay_ex_vat', coalesce(tcr.delta_mileage_pay_ex_vat, 0),
+                'delta_expenses_pay_ex_vat', coalesce((
+                  select round(sum(coalesce(
+                    case when coalesce(expense_component.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'ready_preview_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'preview_component_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'component_amount_ex_vat')::numeric else null::numeric end,
+                    0::numeric
+                  )), 2)
+                  from jsonb_array_elements(coalesce(ctpp.case_components_json, '[]'::jsonb)) as expense_component(value)
+                  where upper(btrim(coalesce(expense_component.value->>'component_key_type', ''))) = 'EXPENSE_CODE'
+                    and upper(btrim(coalesce(expense_component.value->>'component_key_value', expense_component.value->>'expense_code', ''))) = 'EXPENSES'
+                    and upper(btrim(coalesce(expense_component.value->>'presentation_section', 'READY_TO_PAY'))) = 'READY_TO_PAY'
+                ), 0),
+                'delta_travel_pay_ex_vat', coalesce((
+                  select round(sum(coalesce(
+                    case when coalesce(expense_component.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'ready_preview_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'preview_component_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'component_amount_ex_vat')::numeric else null::numeric end,
+                    0::numeric
+                  )), 2)
+                  from jsonb_array_elements(coalesce(ctpp.case_components_json, '[]'::jsonb)) as expense_component(value)
+                  where upper(btrim(coalesce(expense_component.value->>'component_key_type', ''))) = 'EXPENSE_CODE'
+                    and upper(btrim(coalesce(expense_component.value->>'component_key_value', expense_component.value->>'expense_code', ''))) = 'TRAVEL'
+                    and upper(btrim(coalesce(expense_component.value->>'presentation_section', 'READY_TO_PAY'))) = 'READY_TO_PAY'
+                ), 0),
+                'delta_accommodation_pay_ex_vat', coalesce((
+                  select round(sum(coalesce(
+                    case when coalesce(expense_component.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'ready_preview_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'preview_component_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'component_amount_ex_vat')::numeric else null::numeric end,
+                    0::numeric
+                  )), 2)
+                  from jsonb_array_elements(coalesce(ctpp.case_components_json, '[]'::jsonb)) as expense_component(value)
+                  where upper(btrim(coalesce(expense_component.value->>'component_key_type', ''))) = 'EXPENSE_CODE'
+                    and upper(btrim(coalesce(expense_component.value->>'component_key_value', expense_component.value->>'expense_code', ''))) = 'ACCOMMODATION'
+                    and upper(btrim(coalesce(expense_component.value->>'presentation_section', 'READY_TO_PAY'))) = 'READY_TO_PAY'
+                ), 0),
+                'delta_other_pay_ex_vat', coalesce((
+                  select round(sum(coalesce(
+                    case when coalesce(expense_component.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'ready_preview_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'preview_component_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'component_amount_ex_vat')::numeric else null::numeric end,
+                    0::numeric
+                  )), 2)
+                  from jsonb_array_elements(coalesce(ctpp.case_components_json, '[]'::jsonb)) as expense_component(value)
+                  where upper(btrim(coalesce(expense_component.value->>'component_key_type', ''))) = 'EXPENSE_CODE'
+                    and upper(btrim(coalesce(expense_component.value->>'component_key_value', expense_component.value->>'expense_code', ''))) = 'OTHER'
+                    and upper(btrim(coalesce(expense_component.value->>'presentation_section', 'READY_TO_PAY'))) = 'READY_TO_PAY'
+                ), 0),
+                'delta_mileage_pay_ex_vat', coalesce((
+                  select round(sum(coalesce(
+                    case when coalesce(expense_component.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'ready_preview_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'preview_component_amount_ex_vat')::numeric else null::numeric end,
+                    case when coalesce(expense_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'component_amount_ex_vat')::numeric else null::numeric end,
+                    0::numeric
+                  )), 2)
+                  from jsonb_array_elements(coalesce(ctpp.case_components_json, '[]'::jsonb)) as expense_component(value)
+                  where upper(btrim(coalesce(expense_component.value->>'component_key_type', ''))) = 'EXPENSE_CODE'
+                    and upper(btrim(coalesce(expense_component.value->>'component_key_value', expense_component.value->>'expense_code', ''))) = 'MILEAGE'
+                    and upper(btrim(coalesce(expense_component.value->>'presentation_section', 'READY_TO_PAY'))) = 'READY_TO_PAY'
+                ), 0),
                 'case_key', ('timesheet:' || ctpp.timesheet_id::text),
                 'case_resolution_summary', coalesce(ctpp.case_resolution_summary_json, '{}'::jsonb),
                 'components', coalesce(ctpp.case_components_json, '[]'::jsonb),
@@ -83437,6 +83855,20 @@ BEGIN
       batch_item.frozen_source_basis_json,
       batch_item.payout_instruction_snapshot_json,
       NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), '') AS live_source_ref,
+      COALESCE(
+        CASE WHEN batch_item.finance_case_id IS NOT NULL THEN 'advance:' || batch_item.finance_case_id::text ELSE NULL::text END,
+        LOWER(NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), ''))
+      ) AS live_exact_source_ref,
+      CASE
+        WHEN COALESCE(
+          CASE WHEN batch_item.finance_case_id IS NOT NULL THEN 'advance:' || batch_item.finance_case_id::text ELSE NULL::text END,
+          LOWER(NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), ''))
+        ) ~* '^timesheet-expense:' THEN 'TIMESHEET_EXPENSE'
+        WHEN batch_item.finance_case_id IS NOT NULL
+          OR LOWER(NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), '')) ~* '^advance:' THEN 'FINANCE_CASE'
+        WHEN NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), '') IS NOT NULL THEN 'EXACT_SOURCE'
+        ELSE 'TIMESHEET_OR_SEGMENT'
+      END AS live_source_identity_kind,
       NULLIF(BTRIM(COALESCE(batch_item.segment_key, '')), '') AS live_segment_key,
       COALESCE(
         NULLIF(BTRIM(batch_item.frozen_source_basis_json #>> '{segment_stable_key}'), ''),
@@ -83500,7 +83932,8 @@ BEGIN
       active_snooze.source_ref AS active_snooze_source_ref,
       active_snooze.segment_stable_key AS active_snooze_segment_stable_key,
       active_snooze.segment_id AS active_snooze_segment_id,
-      active_snooze.booking_id AS active_snooze_booking_id
+      active_snooze.booking_id AS active_snooze_booking_id,
+      active_snooze.match_scope AS active_snooze_match_scope
     FROM page_rows
     LEFT JOIN public.pay_batch_items AS batch_item
       ON batch_item.id = page_rows.pay_batch_item_id
@@ -83515,7 +83948,11 @@ BEGIN
         snooze_row.source_ref,
         snooze_row.segment_stable_key,
         snooze_row.segment_id,
-        snooze_row.booking_id
+        snooze_row.booking_id,
+        CASE
+          WHEN snooze_row.source_ref IS NOT NULL THEN 'EXACT_SOURCE_REF'
+          ELSE 'LEGACY_TIMESHEET_SEGMENT'
+        END AS match_scope
       FROM public.pay_item_snoozes AS snooze_row
       WHERE snooze_row.candidate_id = batch_candidate.candidate_id
         AND snooze_row.cleared_at_utc IS NULL
@@ -83526,30 +83963,20 @@ BEGIN
         )
         AND (
           (
-            (
-              batch_item.finance_case_id IS NOT NULL
-              OR COALESCE(
-                NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), '') ~* '^advance:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-                false
-              )
-            )
+            COALESCE(
+              CASE WHEN batch_item.finance_case_id IS NOT NULL THEN 'advance:' || batch_item.finance_case_id::text ELSE NULL::text END,
+              LOWER(NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), ''))
+            ) IS NOT NULL
             AND LOWER(NULLIF(BTRIM(COALESCE(snooze_row.source_ref, '')), '')) = COALESCE(
-              CASE WHEN batch_item.finance_case_id IS NOT NULL THEN 'advance:' || batch_item.finance_case_id::text ELSE NULL END,
-              CASE
-                WHEN NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), '') ~* '^advance:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-                  THEN LOWER(NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), ''))
-                ELSE NULL
-              END
+              CASE WHEN batch_item.finance_case_id IS NOT NULL THEN 'advance:' || batch_item.finance_case_id::text ELSE NULL::text END,
+              LOWER(NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), ''))
             )
           )
           OR (
-            NOT (
-              batch_item.finance_case_id IS NOT NULL
-              OR COALESCE(
-                NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), '') ~* '^advance:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-                false
-              )
-            )
+            COALESCE(
+              CASE WHEN batch_item.finance_case_id IS NOT NULL THEN 'advance:' || batch_item.finance_case_id::text ELSE NULL::text END,
+              LOWER(NULLIF(BTRIM(COALESCE(batch_item.source_ref, '')), ''))
+            ) IS NULL
             AND snooze_row.source_ref IS NULL
             AND (
               (
@@ -83671,7 +84098,11 @@ BEGIN
         || CASE WHEN resolved.stored_amount_ex_vat IS NOT NULL AND resolved.live_amount_ex_vat IS NOT NULL AND ROUND(resolved.stored_amount_ex_vat, 2) IS DISTINCT FROM ROUND(resolved.live_amount_ex_vat, 2) THEN jsonb_build_array('AMOUNT_EX_VAT_CHANGED') ELSE '[]'::jsonb END
         || CASE WHEN resolved.stored_amount_vat IS NOT NULL AND resolved.live_amount_vat IS NOT NULL AND ROUND(resolved.stored_amount_vat, 2) IS DISTINCT FROM ROUND(resolved.live_amount_vat, 2) THEN jsonb_build_array('AMOUNT_VAT_CHANGED') ELSE '[]'::jsonb END
         || CASE WHEN resolved.stored_amount_inc_vat IS NOT NULL AND resolved.live_amount_inc_vat IS NOT NULL AND ROUND(resolved.stored_amount_inc_vat, 2) IS DISTINCT FROM ROUND(resolved.live_amount_inc_vat, 2) THEN jsonb_build_array('AMOUNT_INC_VAT_CHANGED') ELSE '[]'::jsonb END
-        || CASE WHEN resolved.active_snooze_id IS NOT NULL THEN jsonb_build_array('ACTIVE_SNOOZE_CHANGED') ELSE '[]'::jsonb END
+        || CASE
+          WHEN resolved.active_snooze_id IS NOT NULL
+            THEN jsonb_build_array('ACTIVE_SNOOZE_CHANGED')
+          ELSE '[]'::jsonb
+        END
       ) AS stale_reasons_json
     FROM resolved
   )
@@ -83686,6 +84117,8 @@ BEGIN
       'stale_reasons', evaluated.stale_reasons_json,
       'stored_amount_ex_vat', evaluated.stored_amount_ex_vat,
       'current_amount_ex_vat', evaluated.live_amount_ex_vat,
+      'frozen_source_ref', evaluated.live_exact_source_ref,
+      'source_identity_kind', evaluated.live_source_identity_kind,
       'active_snooze', CASE WHEN evaluated.active_snooze_id IS NULL THEN NULL ELSE jsonb_strip_nulls(jsonb_build_object(
         'snooze_id', evaluated.active_snooze_id::text,
         'snooze_kind', evaluated.active_snooze_kind,
@@ -83694,7 +84127,8 @@ BEGIN
         'source_ref', evaluated.active_snooze_source_ref,
         'segment_stable_key', evaluated.active_snooze_segment_stable_key,
         'segment_id', evaluated.active_snooze_segment_id,
-        'booking_id', evaluated.active_snooze_booking_id
+        'booking_id', evaluated.active_snooze_booking_id,
+        'source_match_scope', evaluated.active_snooze_match_scope
       )) END
     )) AS diff_json,
     md5(jsonb_strip_nulls(jsonb_build_object(
@@ -83706,6 +84140,9 @@ BEGIN
       'is_stale', (jsonb_array_length(COALESCE(evaluated.stale_reasons_json, '[]'::jsonb)) > 0),
       'stale_reasons', evaluated.stale_reasons_json,
       'active_snooze_id', CASE WHEN evaluated.active_snooze_id IS NULL THEN NULL ELSE evaluated.active_snooze_id::text END,
+      'frozen_source_ref', evaluated.live_exact_source_ref,
+      'source_identity_kind', evaluated.live_source_identity_kind,
+      'active_snooze_match_scope', evaluated.active_snooze_match_scope,
       'london_current_date', v_today_uk::text
     ))::text) AS proof_hash
   FROM evaluated;
@@ -83954,6 +84391,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid, p_allow_large_full_scan boolean DEFAULT false)
  RETURNS jsonb
@@ -84643,6 +85081,20 @@ begin
       pbi.id as pay_batch_item_id,
       pbi.item_type,
       pbi.source_ref,
+      coalesce(
+        case when pbi.finance_case_id is not null then 'advance:' || pbi.finance_case_id::text else null::text end,
+        lower(nullif(btrim(coalesce(pbi.source_ref, '')), ''))
+      ) as exact_source_ref,
+      case
+        when coalesce(
+          case when pbi.finance_case_id is not null then 'advance:' || pbi.finance_case_id::text else null::text end,
+          lower(nullif(btrim(coalesce(pbi.source_ref, '')), ''))
+        ) ~* '^timesheet-expense:' then 'TIMESHEET_EXPENSE'
+        when pbi.finance_case_id is not null
+          or lower(nullif(btrim(coalesce(pbi.source_ref, '')), '')) ~* '^advance:' then 'FINANCE_CASE'
+        when nullif(btrim(coalesce(pbi.source_ref, '')), '') is not null then 'EXACT_SOURCE'
+        else 'TIMESHEET_OR_SEGMENT'
+      end as source_identity_kind,
       pbi.finance_case_id,
       pbi.segment_key,
       pbi.frozen_source_basis_json,
@@ -84669,14 +85121,23 @@ begin
       active_snooze.id as snooze_id,
       upper(coalesce(active_snooze.snooze_kind, '')) as snooze_kind,
       active_snooze.snooze_until_date,
-      active_snooze.note
+      active_snooze.note,
+      active_snooze.source_ref as snooze_source_ref,
+      active_snooze.match_scope,
+      bi.exact_source_ref,
+      bi.source_identity_kind
     from batch_items as bi
     join lateral (
       select
         snooze_row.id,
         snooze_row.snooze_kind,
         snooze_row.snooze_until_date,
-        snooze_row.note
+        snooze_row.note,
+        snooze_row.source_ref,
+        case
+          when snooze_row.source_ref is not null then 'EXACT_SOURCE_REF'
+          else 'LEGACY_TIMESHEET_SEGMENT'
+        end as match_scope
       from public.pay_item_snoozes as snooze_row
       where snooze_row.candidate_id = bi.candidate_id
         and snooze_row.cleared_at_utc is null
@@ -84687,30 +85148,11 @@ begin
         )
         and (
           (
-            (
-              bi.finance_case_id is not null
-              or coalesce(
-                nullif(btrim(coalesce(bi.source_ref, '')), '') ~* '^advance:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-                false
-              )
-            )
-            and lower(nullif(btrim(coalesce(snooze_row.source_ref, '')), '')) = coalesce(
-              case when bi.finance_case_id is not null then 'advance:' || bi.finance_case_id::text else null end,
-              case
-                when nullif(btrim(coalesce(bi.source_ref, '')), '') ~* '^advance:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-                  then lower(nullif(btrim(coalesce(bi.source_ref, '')), ''))
-                else null
-              end
-            )
+            bi.exact_source_ref is not null
+            and lower(nullif(btrim(coalesce(snooze_row.source_ref, '')), '')) = bi.exact_source_ref
           )
           or (
-            not (
-              bi.finance_case_id is not null
-              or coalesce(
-                nullif(btrim(coalesce(bi.source_ref, '')), '') ~* '^advance:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-                false
-              )
-            )
+            bi.exact_source_ref is null
             and snooze_row.source_ref is null
             and (
               (
@@ -84809,7 +85251,11 @@ begin
       'snooze_id', ms.snooze_id::text,
       'snooze_kind', ms.snooze_kind,
       'snooze_until_date', case when ms.snooze_until_date is null then null else ms.snooze_until_date::text end,
-      'note', ms.note
+      'note', ms.note,
+      'frozen_source_ref', ms.exact_source_ref,
+      'snooze_source_ref', ms.snooze_source_ref,
+      'source_identity_kind', ms.source_identity_kind,
+      'source_match_scope', ms.match_scope
     )::text as actual_text,
     34 as ord
   from matched_snoozes as ms;
@@ -86283,6 +86729,7 @@ begin
   );
 end;
 $function$;
+
 
 DROP FUNCTION IF EXISTS public.pay_batch_get_section_page(uuid, text, jsonb, integer, uuid, jsonb, jsonb);
 
@@ -127423,9 +127870,6 @@ begin
 end;
 $$;
 
-
-
-
 create or replace function public.pay_loans_snoozes_list(
   p_candidate_id uuid default null::uuid,
   p_client_id uuid default null::uuid,
@@ -127762,6 +128206,21 @@ begin
       pis.timesheet_id as stored_timesheet_id,
       coalesce(pis.booking_id, ts_stored.booking_id) as booking_id,
       pis.segment_id as stored_segment_id,
+      lower(nullif(btrim(coalesce(pis.source_ref, '')), '')) as source_ref,
+      (
+        lower(nullif(btrim(coalesce(pis.source_ref, '')), '')) ~
+        '^timesheet-expense:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:(expenses|travel|accommodation|other|mileage):[0-9a-f]{32}$'
+      ) as is_timesheet_expense,
+      case
+        when lower(nullif(btrim(coalesce(pis.source_ref, '')), '')) ~ '^timesheet-expense:'
+          then upper(split_part(lower(pis.source_ref), ':', 3))
+        else null::text
+      end as expense_code,
+      case
+        when lower(nullif(btrim(coalesce(pis.source_ref, '')), '')) ~ '^timesheet-expense:'
+          then lower(split_part(lower(pis.source_ref), ':', 4))
+        else null::text
+      end as expense_source_basis_fingerprint,
       coalesce(nullif(btrim(coalesce(pis.segment_stable_key, '')), ''), nullif(btrim(coalesce(pis.segment_id, '')), '')) as segment_stable_key,
       upper(coalesce(pis.snooze_kind, '')) as snooze_kind,
       pis.snooze_until_date,
@@ -127769,6 +128228,8 @@ begin
       pis.created_at_utc,
       pis.updated_at_utc,
       pis.cleared_at_utc,
+      pis.cancelled_at_utc,
+      pis.cancel_reason,
       pis.created_by_user_id,
       pis.updated_by_user_id
     from public.pay_item_snoozes pis
@@ -127776,7 +128237,11 @@ begin
       on c.id = pis.candidate_id
     left join public.timesheets ts_stored
       on ts_stored.timesheet_id = pis.timesheet_id
-    where pis.source_ref is null
+    where (
+        pis.source_ref is null
+        or lower(nullif(btrim(coalesce(pis.source_ref, '')), '')) ~
+           '^timesheet-expense:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:(expenses|travel|accommodation|other|mileage):[0-9a-f]{32}$'
+      )
       and (p_candidate_id is null or pis.candidate_id = p_candidate_id)
       and (
         coalesce(pis.booking_id, ts_stored.booking_id) is not null
@@ -127804,6 +128269,97 @@ begin
      and tf_current.is_current = true
     left join public.clients cl_current
       on cl_current.id = tf_current.client_id
+  ),
+  current_expense_source_rows as (
+    select
+      pss.snooze_id,
+      exact_source.source_row_json as exact_source_row_json,
+      changed_source.source_row_json as changed_source_row_json,
+      lower(nullif(btrim(coalesce(exact_source.source_row_json->>'source_ref', '')), '')) as exact_current_source_ref,
+      lower(nullif(btrim(coalesce(changed_source.source_row_json->>'source_ref', '')), '')) as changed_current_source_ref,
+      case
+        when coalesce(exact_source.source_row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+          then round((exact_source.source_row_json->>'amount_ex_vat')::numeric, 2)
+        else null::numeric
+      end as exact_current_amount_ex_vat,
+      case
+        when coalesce(changed_source.source_row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+          then round((changed_source.source_row_json->>'amount_ex_vat')::numeric, 2)
+        else null::numeric
+      end as changed_current_amount_ex_vat,
+      coalesce(
+        nullif(btrim(coalesce(exact_source.source_row_json->>'expense_label', '')), ''),
+        case pss.expense_code
+          when 'EXPENSES' then 'Expenses'
+          when 'TRAVEL' then 'Travel'
+          when 'ACCOMMODATION' then 'Accommodation'
+          when 'OTHER' then 'Other'
+          when 'MILEAGE' then 'Mileage'
+          else null::text
+        end
+      ) as expense_label
+    from pay_item_snooze_source pss
+    left join current_timesheet_context ctc
+      on ctc.booking_id = pss.booking_id
+    left join lateral (
+      select source_line.source_row_json
+      from public.banking_pay_workbench_candidate_source_lines source_line
+      join public.banking_pay_workbench_sessions source_session
+        on source_session.id = source_line.session_id
+      left join public.app_change_counters candidate_counter
+        on candidate_counter.entity_key = 'pay_candidate:' || pss.candidate_id::text
+      where pss.is_timesheet_expense
+        and source_line.candidate_id = pss.candidate_id
+        and source_line.status = 'CURRENT'
+        and source_line.session_version = coalesce(source_session.version, 1)
+        and source_line.source_change_seq = coalesce(candidate_counter.seq, 0)
+        and upper(btrim(coalesce(source_session.status, ''))) = 'OPEN'
+        and source_session.discarded_at_utc is null
+        and source_session.replacement_session_id is null
+        and upper(btrim(coalesce(source_line.source_row_json#>>'{snooze_identity,identity_type}', ''))) = 'TIMESHEET_EXPENSE'
+        and lower(nullif(btrim(coalesce(source_line.source_row_json->>'source_ref', '')), '')) = pss.source_ref
+      order by source_session.updated_at_utc desc nulls last, source_line.updated_at_utc desc, source_line.id desc
+      limit 1
+    ) exact_source on true
+    left join lateral (
+      select source_line.source_row_json
+      from public.banking_pay_workbench_candidate_source_lines source_line
+      join public.banking_pay_workbench_sessions source_session
+        on source_session.id = source_line.session_id
+      left join public.app_change_counters candidate_counter
+        on candidate_counter.entity_key = 'pay_candidate:' || pss.candidate_id::text
+      where pss.is_timesheet_expense
+        and (
+          exact_source.source_row_json is null
+          or ctc.current_timesheet_id is distinct from pss.stored_timesheet_id
+        )
+        and source_line.candidate_id = pss.candidate_id
+        and source_line.status = 'CURRENT'
+        and source_line.session_version = coalesce(source_session.version, 1)
+        and source_line.source_change_seq = coalesce(candidate_counter.seq, 0)
+        and upper(btrim(coalesce(source_session.status, ''))) = 'OPEN'
+        and source_session.discarded_at_utc is null
+        and source_session.replacement_session_id is null
+        and upper(btrim(coalesce(source_line.source_row_json#>>'{snooze_identity,identity_type}', ''))) = 'TIMESHEET_EXPENSE'
+        and (
+          (
+            ctc.current_timesheet_id is not null
+            and ctc.current_timesheet_id is distinct from pss.stored_timesheet_id
+            and lower(nullif(btrim(coalesce(source_line.source_row_json->>'source_ref', '')), '')) ~ (
+              '^timesheet-expense:' || ctc.current_timesheet_id::text || ':' || lower(pss.expense_code) || ':[0-9a-f]{32}$'
+            )
+          )
+          or (
+            ctc.current_timesheet_id is not distinct from pss.stored_timesheet_id
+            and lower(nullif(btrim(coalesce(source_line.source_row_json->>'source_ref', '')), '')) like
+              left(pss.source_ref, length(pss.source_ref) - 32) || '%'
+          )
+        )
+        and lower(nullif(btrim(coalesce(source_line.source_row_json->>'source_ref', '')), '')) is distinct from pss.source_ref
+      order by source_session.updated_at_utc desc nulls last, source_line.updated_at_utc desc, source_line.id desc
+      limit 1
+    ) changed_source on true
+    where pss.is_timesheet_expense
   ),
   current_timesheet_segments_actual as (
     select
@@ -127934,15 +128490,25 @@ begin
       pss.booking_id,
       pss.stored_segment_id,
       pss.segment_stable_key,
+      pss.source_ref,
+      pss.is_timesheet_expense,
+      pss.expense_code,
+      pss.expense_source_basis_fingerprint,
       pss.snooze_kind,
       pss.snooze_until_date,
       pss.note,
       pss.created_at_utc,
       pss.updated_at_utc,
       pss.cleared_at_utc,
+      pss.cancelled_at_utc,
+      pss.cancel_reason,
       pss.created_by_user_id,
       pss.updated_by_user_id,
-      case when pss.segment_stable_key is null then 'WHOLE_TIMESHEET' else 'SEGMENT' end as row_kind,
+      case
+        when pss.is_timesheet_expense then 'TIMESHEET_EXPENSE'
+        when pss.segment_stable_key is null then 'WHOLE_TIMESHEET'
+        else 'SEGMENT'
+      end as row_kind,
       ctc.current_timesheet_id,
       ctc.client_id as current_client_id,
       ctc.client_name as current_client_name,
@@ -127965,7 +128531,14 @@ begin
       cts.ref_num as current_segment_ref_num,
       ctsg.segment_count,
       ctsg.total_segment_pay_ex_vat,
-      ctsg.segment_rows_json
+      ctsg.segment_rows_json,
+      cesr.exact_source_row_json,
+      cesr.changed_source_row_json,
+      cesr.exact_current_source_ref,
+      cesr.changed_current_source_ref,
+      cesr.exact_current_amount_ex_vat,
+      cesr.changed_current_amount_ex_vat,
+      cesr.expense_label
     from pay_item_snooze_source pss
     left join current_timesheet_context ctc
       on ctc.booking_id = pss.booking_id
@@ -127981,29 +128554,58 @@ begin
      )
     left join current_timesheet_segment_groups ctsg
       on ctsg.current_timesheet_id = ctc.current_timesheet_id
+    left join current_expense_source_rows cesr
+      on cesr.snooze_id = pss.snooze_id
   ),
   timesheet_snooze_rows_lifecycle as (
     select
       tsrr.*,
       case
+        when tsrr.cancelled_at_utc is not null then 'CANCELLED'
         when tsrr.cleared_at_utc is not null then 'CLEARED'
+        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then 'EXPIRED'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.current_timesheet_id is null then 'SOURCE_UNAVAILABLE'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.current_timesheet_id is distinct from tsrr.stored_timesheet_id
+         and tsrr.changed_source_row_json is not null then 'SOURCE_REPLACED'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.current_timesheet_id is distinct from tsrr.stored_timesheet_id then 'SOURCE_UNAVAILABLE'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.exact_source_row_json is null
+         and tsrr.changed_source_row_json is not null then 'SOURCE_CHANGED'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.exact_source_row_json is null then 'SOURCE_UNAVAILABLE'
         when tsrr.current_timesheet_id is null then 'CLEARED_DELETED_TIMESHEET'
         when tsrr.row_kind = 'SEGMENT' and tsrr.current_segment_stable_key is null then 'CLEARED_DELETED_SEGMENT'
-        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then 'EXPIRED'
         else 'ACTIVE'
       end as lifecycle_state,
       case
+        when tsrr.cancelled_at_utc is not null then tsrr.cancelled_at_utc
         when tsrr.cleared_at_utc is not null then tsrr.cleared_at_utc
-        when tsrr.current_timesheet_id is null then tsrr.updated_at_utc
+        when tsrr.current_timesheet_id is null and tsrr.row_kind <> 'TIMESHEET_EXPENSE' then tsrr.updated_at_utc
         when tsrr.row_kind = 'SEGMENT' and tsrr.current_segment_stable_key is null then tsrr.updated_at_utc
         when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then tsrr.updated_at_utc
         else null::timestamptz
       end as effective_cleared_at_utc,
       case
+        when tsrr.cancelled_at_utc is not null then coalesce(tsrr.cancel_reason, 'CANCELLED')
         when tsrr.cleared_at_utc is not null then 'USER_CLEARED'
+        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then 'EXPIRED'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.current_timesheet_id is null then 'EXPENSE_SOURCE_UNAVAILABLE'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.current_timesheet_id is distinct from tsrr.stored_timesheet_id
+         and tsrr.changed_source_row_json is not null then 'TIMESHEET_REPLACED'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.current_timesheet_id is distinct from tsrr.stored_timesheet_id then 'EXPENSE_SOURCE_UNAVAILABLE'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.exact_source_row_json is null
+         and tsrr.changed_source_row_json is not null then 'EXPENSE_SOURCE_CHANGED'
+        when tsrr.row_kind = 'TIMESHEET_EXPENSE'
+         and tsrr.exact_source_row_json is null then 'EXPENSE_SOURCE_UNAVAILABLE'
         when tsrr.current_timesheet_id is null then 'DELETED_TIMESHEET'
         when tsrr.row_kind = 'SEGMENT' and tsrr.current_segment_stable_key is null then 'DELETED_SEGMENT'
-        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then 'EXPIRED'
         else null::text
       end as clear_reason
     from timesheet_snooze_rows_raw tsrr
@@ -128023,6 +128625,13 @@ begin
       case when tsrl.row_kind = 'SEGMENT' then coalesce(tsrl.current_segment_id, tsrl.stored_segment_id) else null end as display_segment_id,
       tsrl.stored_segment_id,
       tsrl.segment_stable_key,
+      tsrl.source_ref,
+      tsrl.expense_code,
+      tsrl.expense_source_basis_fingerprint,
+      tsrl.expense_label,
+      tsrl.exact_current_source_ref,
+      tsrl.changed_current_source_ref,
+      tsrl.changed_current_amount_ex_vat,
       tsrl.row_kind,
       tsrl.snooze_kind,
       tsrl.snooze_until_date,
@@ -128035,23 +128644,27 @@ begin
       case
         when tsrl.lifecycle_state = 'ACTIVE' and tsrl.snooze_until_date is null then 'INDEFINITE_SNOOZE'
         when tsrl.lifecycle_state = 'ACTIVE' and tsrl.snooze_until_date is not null then 'DATED_SNOOZE'
+        when tsrl.lifecycle_state in ('SOURCE_REPLACED', 'SOURCE_CHANGED', 'SOURCE_UNAVAILABLE') then tsrl.lifecycle_state
         when tsrl.lifecycle_state = 'EXPIRED' then 'EXPIRED'
+        when tsrl.lifecycle_state = 'CANCELLED' then 'CANCELLED'
         else 'CLEARED'
       end as snooze_state,
       case
-        when tsrl.row_kind = 'WHOLE_TIMESHEET' then tsrl.current_week_ending_date
+        when tsrl.row_kind in ('WHOLE_TIMESHEET', 'TIMESHEET_EXPENSE') then tsrl.current_week_ending_date
         else null::date
       end as week_ending_date,
       case
-        when tsrl.row_kind = 'WHOLE_TIMESHEET' then tsrl.current_reference_number
+        when tsrl.row_kind in ('WHOLE_TIMESHEET', 'TIMESHEET_EXPENSE') then tsrl.current_reference_number
         else tsrl.current_segment_ref_num
       end as reference_number,
       case
         when tsrl.row_kind = 'WHOLE_TIMESHEET' then round(coalesce(tsrl.total_segment_pay_ex_vat, 0), 2)
+        when tsrl.row_kind = 'TIMESHEET_EXPENSE' then round(coalesce(tsrl.exact_current_amount_ex_vat, tsrl.changed_current_amount_ex_vat, 0), 2)
         else round(coalesce(tsrl.current_segment_pay_amount_ex_vat, 0), 2)
       end as pay_amount_ex_vat,
       case
         when tsrl.row_kind = 'WHOLE_TIMESHEET' then coalesce(tsrl.segment_count, 0)
+        when tsrl.row_kind = 'TIMESHEET_EXPENSE' then 0
         when tsrl.current_segment_stable_key is not null then 1
         else 0
       end as segment_count,
@@ -128079,8 +128692,11 @@ begin
     from timesheet_snooze_rows_lifecycle tsrl
     where (p_client_id is null or tsrl.current_client_id = p_client_id)
       and (
-        tsrl.lifecycle_state = 'ACTIVE'
-        or (v_hide_completed_non_current_items = false and tsrl.lifecycle_state <> 'ACTIVE')
+        tsrl.lifecycle_state in ('ACTIVE', 'SOURCE_REPLACED', 'SOURCE_CHANGED', 'SOURCE_UNAVAILABLE')
+        or (
+          v_hide_completed_non_current_items = false
+          and tsrl.lifecycle_state not in ('ACTIVE', 'SOURCE_REPLACED', 'SOURCE_CHANGED', 'SOURCE_UNAVAILABLE')
+        )
       )
   ),
   timesheet_snoozes_json as (
@@ -128105,6 +128721,13 @@ begin
               'segment_id', tsf.display_segment_id,
               'original_segment_id', tsf.stored_segment_id,
               'segment_stable_key', tsf.segment_stable_key,
+              'source_ref', tsf.source_ref,
+              'expense_code', tsf.expense_code,
+              'expense_label', tsf.expense_label,
+              'expense_source_basis_fingerprint', tsf.expense_source_basis_fingerprint,
+              'current_expense_source_ref', tsf.exact_current_source_ref,
+              'replacement_expense_source_ref', tsf.changed_current_source_ref,
+              'replacement_expense_amount_ex_vat', tsf.changed_current_amount_ex_vat,
               'week_ending_date', case when tsf.week_ending_date is null then null else tsf.week_ending_date::text end,
               'reference_number', tsf.reference_number,
               'snooze_kind', tsf.snooze_kind,
@@ -128118,7 +128741,8 @@ begin
               'segment_count', tsf.segment_count,
               'segment_rows', tsf.segment_rows_json,
               'action_flags', jsonb_build_object(
-                'can_unsnooze', (tsf.lifecycle_state = 'ACTIVE'),
+                'can_unsnooze', (tsf.lifecycle_state in ('ACTIVE', 'SOURCE_REPLACED', 'SOURCE_CHANGED', 'SOURCE_UNAVAILABLE')),
+                'can_clear_snooze', (tsf.lifecycle_state in ('ACTIVE', 'SOURCE_REPLACED', 'SOURCE_CHANGED', 'SOURCE_UNAVAILABLE')),
                 'can_change_to_indefinite', (tsf.lifecycle_state = 'ACTIVE' and tsf.snooze_until_date is not null),
                 'can_change_to_dated', (tsf.lifecycle_state = 'ACTIVE' and tsf.snooze_until_date is null),
                 'can_amend_date', (tsf.lifecycle_state = 'ACTIVE' and tsf.snooze_until_date is not null)
@@ -128143,7 +128767,10 @@ begin
         'unresolved_finance_cases_count', count(*) filter (where fr.unresolved_taxable_count > 0),
         'stale_finance_cases_count', count(*) filter (where fr.stale_count > 0),
         'finance_cases_with_active_snooze_count', count(*) filter (where fr.active_snooze_id is not null),
-        'timesheet_snoozes_count', (select count(*) from timesheet_snooze_rows_filtered)
+        'timesheet_snoozes_count', (select count(*) from timesheet_snooze_rows_filtered),
+        'timesheet_expense_snoozes_count', (
+          select count(*) from timesheet_snooze_rows_filtered where row_kind = 'TIMESHEET_EXPENSE'
+        )
       ) as payload
     from finance_rows fr
   )
@@ -128166,6 +128793,7 @@ begin
   );
 end;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_build(
@@ -137661,6 +138289,8 @@ BEGIN
 END;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_snoozes_export_rows(
   p_actor_user_id uuid DEFAULT NULL::uuid,
   p_created_from date DEFAULT NULL::date,
@@ -137709,7 +138339,9 @@ BEGIN
       s.id AS snooze_id,
       s.candidate_id AS snooze_candidate_id,
       s.timesheet_id,
+      s.booking_id,
       s.segment_id,
+      s.segment_stable_key,
       s.source_ref,
       s.snooze_kind,
       s.snooze_until_date,
@@ -137720,19 +138352,41 @@ BEGIN
       s.updated_by_user_id,
       s.cleared_at_utc,
       s.cleared_by_user_id,
+      s.cancelled_at_utc,
+      s.cancelled_by_user_id,
+      s.cancel_reason,
       CASE
         WHEN s.source_ref IS NOT NULL
          AND s.source_ref LIKE 'advance:%'
          AND split_part(s.source_ref, ':', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
         THEN split_part(s.source_ref, ':', 2)::uuid
         ELSE NULL::uuid
-      END AS finance_case_id
+      END AS finance_case_id,
+      CASE
+        WHEN LOWER(NULLIF(BTRIM(COALESCE(s.source_ref, '')), '')) ~
+             '^timesheet-expense:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:(expenses|travel|accommodation|other|mileage):[0-9a-f]{32}$'
+          THEN true
+        ELSE false
+      END AS is_timesheet_expense,
+      CASE
+        WHEN LOWER(NULLIF(BTRIM(COALESCE(s.source_ref, '')), '')) ~
+             '^timesheet-expense:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:(expenses|travel|accommodation|other|mileage):[0-9a-f]{32}$'
+          THEN UPPER(split_part(LOWER(s.source_ref), ':', 3))
+        ELSE NULL::text
+      END AS expense_code,
+      CASE
+        WHEN LOWER(NULLIF(BTRIM(COALESCE(s.source_ref, '')), '')) ~
+             '^timesheet-expense:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:(expenses|travel|accommodation|other|mileage):[0-9a-f]{32}$'
+          THEN LOWER(split_part(LOWER(s.source_ref), ':', 4))
+        ELSE NULL::text
+      END AS expense_source_basis_fingerprint
     FROM public.pay_item_snoozes AS s
     WHERE
       (p_created_from IS NULL OR s.created_at_utc::date >= p_created_from)
       AND (p_created_to IS NULL OR s.created_at_utc::date <= p_created_to)
       AND (
-        (s.source_ref IS NOT NULL AND s.source_ref LIKE 'advance:%')
+        (s.source_ref IS NOT NULL AND LOWER(s.source_ref) LIKE 'advance:%')
+        OR (s.source_ref IS NOT NULL AND LOWER(s.source_ref) LIKE 'timesheet-expense:%')
         OR s.timesheet_id IS NOT NULL
       )
   ),
@@ -137741,6 +138395,7 @@ BEGIN
       ps.snooze_id,
       CASE
         WHEN ps.finance_case_id IS NOT NULL THEN 'FINANCE_CASE'
+        WHEN ps.is_timesheet_expense THEN 'TIMESHEET_EXPENSE'
         ELSE 'TIMESHEET_PAYMENT'
       END AS snooze_scope,
       CASE
@@ -137753,6 +138408,15 @@ BEGIN
             WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'Manual Credit Adjustment'
             ELSE coalesce(vfcr.case_type::text, 'Finance Case')
           END
+        WHEN ps.is_timesheet_expense THEN
+          CASE ps.expense_code
+            WHEN 'EXPENSES' THEN 'Expenses'
+            WHEN 'TRAVEL' THEN 'Travel'
+            WHEN 'ACCOMMODATION' THEN 'Accommodation'
+            WHEN 'OTHER' THEN 'Other'
+            WHEN 'MILEAGE' THEN 'Mileage'
+            ELSE 'Timesheet Expense'
+          END
         ELSE 'Timesheet Payment'
       END AS row_label,
       vfcr.case_type,
@@ -137762,10 +138426,18 @@ BEGIN
       cs.last_name AS candidate_last_name,
       coalesce(cs.display_name, vfcr.candidate_display_name, vts.candidate_name) AS candidate_display_name,
       coalesce(vfcr.client_name, vts.client_name) AS client_name,
-      ts.booking_id AS linked_timesheet_booking_id,
-      ts.week_ending_date AS linked_timesheet_week_ending_date,
-      ts.shift_label_norm AS linked_timesheet_shift_label_norm,
-      ts.reference_number AS linked_timesheet_reference_number,
+      coalesce(ts_current.booking_id, ts_stored.booking_id, ps.booking_id) AS linked_timesheet_booking_id,
+      ts_current.week_ending_date AS linked_timesheet_week_ending_date,
+      ts_current.shift_label_norm AS linked_timesheet_shift_label_norm,
+      ts_current.reference_number AS linked_timesheet_reference_number,
+      ps.snooze_id,
+      ps.source_ref,
+      ps.segment_id,
+      ps.segment_stable_key,
+      ps.expense_code,
+      ps.expense_source_basis_fingerprint,
+      ps.timesheet_id AS original_timesheet_id,
+      ts_current.timesheet_id AS current_timesheet_id,
       ps.snooze_kind,
       CASE
         WHEN ps.snooze_until_date IS NULL THEN 'INDEFINITE'
@@ -137779,15 +138451,20 @@ BEGIN
       coalesce(nullif(btrim(coalesce(u_updated.display_name, u_updated.email, '')), ''), NULL) AS updated_by_display,
       ps.cleared_at_utc,
       coalesce(nullif(btrim(coalesce(u_cleared.display_name, u_cleared.email, '')), ''), NULL) AS cleared_by_display,
+      coalesce(nullif(btrim(coalesce(u_cancelled.display_name, u_cancelled.email, '')), ''), NULL) AS cancelled_by_display,
       CASE
+        WHEN ps.cancelled_at_utc IS NOT NULL THEN 'HISTORY'
         WHEN ps.cleared_at_utc IS NOT NULL THEN 'HISTORY'
         WHEN ps.snooze_until_date IS NULL THEN 'INDEFINITE_DEFERRED'
         ELSE 'ACTIVE'
       END AS current_visibility_status,
       CASE
+        WHEN ps.cancelled_at_utc IS NOT NULL THEN 'CANCELLED'
         WHEN ps.cleared_at_utc IS NOT NULL THEN 'CLEARED'
         ELSE 'ACTIVE'
       END AS snooze_lifecycle_status,
+      ps.cancelled_at_utc,
+      ps.cancel_reason,
       CASE
         WHEN ps.finance_case_id IS NOT NULL THEN
           CASE
@@ -137806,7 +138483,7 @@ BEGIN
           END
         ELSE
           CASE
-            WHEN ps.cleared_at_utc IS NOT NULL THEN 'FULLY_PAID'
+            WHEN ps.cancelled_at_utc IS NOT NULL OR ps.cleared_at_utc IS NOT NULL THEN 'FULLY_PAID'
             ELSE 'OUTSTANDING'
           END
       END AS linked_case_status,
@@ -137843,11 +138520,13 @@ BEGIN
     FROM parsed_snoozes AS ps
     LEFT JOIN public.v_finance_cases_register AS vfcr
       ON vfcr.finance_case_id = ps.finance_case_id
+    LEFT JOIN public.timesheets AS ts_stored
+      ON ts_stored.timesheet_id = ps.timesheet_id
+    LEFT JOIN public.timesheets AS ts_current
+      ON ts_current.booking_id = coalesce(ps.booking_id, ts_stored.booking_id)
+     AND ts_current.is_current IS TRUE
     LEFT JOIN public.v_timesheets_summary AS vts
-      ON vts.timesheet_id = ps.timesheet_id
-    LEFT JOIN public.timesheets AS ts
-      ON ts.timesheet_id = ps.timesheet_id
-     AND ts.is_current IS TRUE
+      ON vts.timesheet_id = coalesce(ts_current.timesheet_id, ps.timesheet_id)
     LEFT JOIN public.candidates_summary AS cs
       ON cs.id = coalesce(vfcr.candidate_id, vts.candidate_id, ps.snooze_candidate_id)
     LEFT JOIN public.tms_users AS u_created
@@ -137856,6 +138535,8 @@ BEGIN
       ON u_updated.id = ps.updated_by_user_id
     LEFT JOIN public.tms_users AS u_cleared
       ON u_cleared.id = ps.cleared_by_user_id
+    LEFT JOIN public.tms_users AS u_cancelled
+      ON u_cancelled.id = ps.cancelled_by_user_id
     WHERE
       (p_candidate_id IS NULL OR coalesce(vfcr.candidate_id, vts.candidate_id, ps.snooze_candidate_id) = p_candidate_id)
       AND (p_client_id IS NULL OR coalesce(vfcr.client_id, vts.client_id) = p_client_id)
@@ -137897,8 +138578,16 @@ BEGIN
     coalesce(
       jsonb_agg(
         jsonb_build_object(
+          'snooze_id', orw.snooze_id::text,
           'snooze_scope', orw.snooze_scope,
           'row_label', orw.row_label,
+          'source_ref', orw.source_ref,
+          'expense_code', orw.expense_code,
+          'expense_source_basis_fingerprint', orw.expense_source_basis_fingerprint,
+          'original_timesheet_id', CASE WHEN orw.original_timesheet_id IS NULL THEN NULL ELSE orw.original_timesheet_id::text END,
+          'current_timesheet_id', CASE WHEN orw.current_timesheet_id IS NULL THEN NULL ELSE orw.current_timesheet_id::text END,
+          'segment_id', orw.segment_id,
+          'segment_stable_key', orw.segment_stable_key,
           'case_type', orw.case_type,
           'candidate_tms_ref', orw.candidate_tms_ref,
           'candidate_tms_ref_num', orw.candidate_tms_ref_num,
@@ -137920,9 +138609,14 @@ BEGIN
           'updated_by_display', orw.updated_by_display,
           'cleared_at_utc', CASE WHEN orw.cleared_at_utc IS NULL THEN NULL ELSE orw.cleared_at_utc::text END,
           'cleared_by_display', orw.cleared_by_display,
+          'cancelled_at_utc', CASE WHEN orw.cancelled_at_utc IS NULL THEN NULL ELSE orw.cancelled_at_utc::text END,
+          'cancelled_by_display', orw.cancelled_by_display,
+          'cancel_reason', orw.cancel_reason,
           'current_visibility_status', orw.current_visibility_status,
           'snooze_lifecycle_status', orw.snooze_lifecycle_status,
-          'linked_case_status', orw.linked_case_status,
+          'linked_case_status', orw.linked_case_status
+        )
+        || jsonb_build_object(
           'original_amount', orw.original_amount,
           'outstanding_amount', orw.outstanding_amount,
           'weekly_due', orw.weekly_due,
@@ -137948,6 +138642,7 @@ BEGIN
     jsonb_build_object(
       'total_count', count(*)::int,
       'finance_case_snooze_count', count(*) FILTER (WHERE orw.snooze_scope = 'FINANCE_CASE')::int,
+      'timesheet_expense_snooze_count', count(*) FILTER (WHERE orw.snooze_scope = 'TIMESHEET_EXPENSE')::int,
       'timesheet_payment_snooze_count', count(*) FILTER (WHERE orw.snooze_scope = 'TIMESHEET_PAYMENT')::int,
       'active_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'ACTIVE')::int,
       'cleared_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'CLEARED')::int,
@@ -137988,6 +138683,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_snoozes_pdf_payload(
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -188903,6 +189599,10 @@ BEGIN
         AND jsonb_typeof(component_element.value) = 'object'
         AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
         AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+        AND (
+          UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) <> 'EXPENSE_CODE'
+          OR UPPER(BTRIM(COALESCE(component_element.value->>'presentation_section', 'READY_TO_PAY'))) = 'READY_TO_PAY'
+        )
     ) AS explicit_component_amounts
     CROSS JOIN LATERAL (
       SELECT ROUND(
@@ -188943,10 +189643,10 @@ BEGIN
       base_rows.base_ordinal,
       base_rows.candidate_id,
       component_timesheet.timesheet_id,
-      base_rows.target_section,
-      base_rows.parent_line_key,
-      ('component:' || COALESCE(NULLIF(BTRIM(component_rows.component_json->>'finance_component_id'), ''), component_rows.component_ord::text)) AS split_suffix,
-      component_rows.component_ord::bigint AS split_ordinal,
+      component_identity.component_target_section as target_section,
+      component_identity.component_parent_line_key as parent_line_key,
+      component_identity.component_split_suffix as split_suffix,
+      component_identity.component_split_ordinal as split_ordinal,
       CASE
         WHEN base_rows.line_type = 'OVERPAYMENT_RECOVERY' THEN 'OVERPAYMENT_RECOVERY'
         WHEN base_rows.line_type = 'UNDERPAYMENT_PAYMENT' THEN 'UNDERPAYMENT_PAYMENT'
@@ -188974,15 +189674,22 @@ BEGIN
           - 'frozen_source_basis_json'
         )
         || jsonb_build_object(
-          'source_kind', 'VALID_PREVIEW_LINE',
-          'preview_row_id', base_rows.parent_line_key || ':component:' || COALESCE(NULLIF(BTRIM(component_rows.component_json->>'finance_component_id'), ''), component_rows.component_ord::text),
-          'line_id', base_rows.parent_line_key || ':component:' || COALESCE(NULLIF(BTRIM(component_rows.component_json->>'finance_component_id'), ''), component_rows.component_ord::text),
-          'line_key', base_rows.parent_line_key || ':component:' || COALESCE(NULLIF(BTRIM(component_rows.component_json->>'finance_component_id'), ''), component_rows.component_ord::text),
-          'row_key', base_rows.parent_line_key || ':component:' || COALESCE(NULLIF(BTRIM(component_rows.component_json->>'finance_component_id'), ''), component_rows.component_ord::text)
+          'source_kind', case when component_identity.component_target_section = 'internal_only' then 'INTERNAL_ONLY' else 'VALID_PREVIEW_LINE' end,
+          'preview_row_id', component_identity.component_line_key,
+          'line_id', component_identity.component_line_key,
+          'line_key', component_identity.component_line_key,
+          'row_key', component_identity.component_line_key,
+          'target_section', component_identity.component_target_section,
+          'section', component_identity.component_target_section
         )
         || jsonb_build_object(
           'presentation_role', 'CHILD',
-          'presentation_parent_line_id', base_rows.parent_line_key,
+          'presentation_parent_line_id', component_identity.component_parent_line_key,
+          'presentation_section', case
+            when component_identity.component_target_section = 'canonical_preview_lines' then 'READY_TO_PAY'
+            when component_identity.component_target_section = 'blocked_for_pay' then 'BLOCKED_FOR_PAY'
+            else 'INTERNAL_ONLY'
+          end,
           'item_type', CASE
             WHEN base_rows.line_type = 'OVERPAYMENT_RECOVERY' THEN 'OVERPAYMENT_RECOVERY'
             WHEN base_rows.line_type = 'UNDERPAYMENT_PAYMENT' THEN 'UNDERPAYMENT_PAYMENT'
@@ -188994,9 +189701,48 @@ BEGIN
             ELSE base_rows.line_type
           END,
           'finance_component_id', NULLIF(BTRIM(COALESCE(component_rows.component_json->>'finance_component_id', '')), ''),
-          'component_key_type', UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')),
-          'component_key_value', NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', '')), '')
+          'component_key_type', component_identity.component_key_type,
+          'component_key_value', component_identity.component_key_value,
+          'source_ref', component_identity.expense_source_ref,
+          'expense_code', case when component_identity.is_expense_component then component_identity.component_key_value else null end,
+          'source_basis_fingerprint', case when component_identity.is_expense_component then component_identity.source_basis_fingerprint else null end,
+          'expense_source_basis_fingerprint', case when component_identity.is_expense_component then component_identity.source_basis_fingerprint else null end,
+          'expense_source_basis_json', case when component_identity.is_expense_component then component_identity.expense_source_basis_json else null end
         )
+        || case
+          when component_identity.is_expense_component then
+            jsonb_build_object(
+              'snooze_identity', component_rows.component_json->'snooze_identity',
+              'snooze_state', component_rows.component_json->'snooze_state',
+              'expense_presentation_state', component_rows.component_json->>'expense_presentation_state',
+              'expense_identity_stale', lower(btrim(coalesce(component_rows.component_json->>'expense_identity_stale', 'false'))) in ('true','t','1','yes','y','on'),
+              'draftable', lower(btrim(coalesce(component_rows.component_json->>'draftable', 'false'))) in ('true','t','1','yes','y','on'),
+              'is_ready_for_draft', lower(btrim(coalesce(component_rows.component_json->>'is_ready_for_draft', 'false'))) in ('true','t','1','yes','y','on'),
+              'is_excluded_from_allocation', lower(btrim(coalesce(component_rows.component_json->>'is_excluded_from_allocation', 'true'))) in ('true','t','1','yes','y','on'),
+              'selection_allowed', lower(btrim(coalesce(component_rows.component_json->>'selection_allowed', 'false'))) in ('true','t','1','yes','y','on')
+            )
+            || jsonb_build_object(
+              'presentation_reason', case
+                when component_identity.expense_identity_valid is not true then 'EXPENSE_SOURCE_IDENTITY_INVALID'
+                when component_identity.component_target_section = 'blocked_for_pay'
+                 and lower(btrim(coalesce(component_rows.component_json#>>'{snooze_state,state}', ''))) = 'stale_source_identity'
+                  then 'EXPENSE_SOURCE_IDENTITY_STALE'
+                when component_identity.component_target_section = 'blocked_for_pay' then 'DATED_EXPENSE_SNOOZE'
+                when component_identity.component_target_section = 'internal_only' then 'INDEFINITE_EXPENSE_SNOOZE'
+                else 'READY_TO_PAY'
+              end,
+              'blocked_reason_codes', case
+                when component_identity.expense_identity_valid is not true then jsonb_build_array('EXPENSE_SOURCE_IDENTITY_INVALID')
+                when component_identity.component_target_section = 'blocked_for_pay'
+                 and upper(btrim(coalesce(component_rows.component_json#>>'{snooze_state,state}', ''))) = 'STALE_SOURCE_IDENTITY'
+                  then jsonb_build_array('EXPENSE_SOURCE_IDENTITY_STALE')
+                when component_identity.component_target_section = 'blocked_for_pay'
+                  then jsonb_build_array('BLOCKED_DATED_EXPENSE_SNOOZE')
+                else '[]'::jsonb
+              end
+            )
+          else '{}'::jsonb
+        end
         || jsonb_build_object(
           'case_components', jsonb_build_array(
             CASE
@@ -189159,20 +189905,350 @@ BEGIN
         AND jsonb_typeof(component_element.value) = 'object'
     ) AS component_rows
     CROSS JOIN LATERAL (
+      SELECT
+        UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')) AS component_key_type,
+        UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', component_rows.component_json->>'expense_code', '')), '')) AS component_key_value,
+        CASE
+          WHEN jsonb_typeof(component_rows.component_json->'expense_source_basis_json') = 'object'
+            THEN COALESCE(component_rows.component_json->'expense_source_basis_json', '{}'::jsonb)
+          WHEN jsonb_typeof(component_rows.component_json->'source_basis_json') = 'object'
+            THEN COALESCE(component_rows.component_json->'source_basis_json', '{}'::jsonb)
+          ELSE '{}'::jsonb
+        END AS expense_source_basis_json,
+        LOWER(NULLIF(BTRIM(COALESCE(
+          component_rows.component_json->>'source_basis_fingerprint',
+          component_rows.component_json->>'expense_source_basis_fingerprint',
+          ''
+        )), '')) AS source_basis_fingerprint,
+        LOWER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'source_ref', '')), '')) AS expense_source_ref
+    ) AS component_contract
+    CROSS JOIN LATERAL (
+      SELECT
+        (component_contract.component_key_type = 'EXPENSE_CODE') AS is_expense_component,
+        (
+          component_contract.component_key_type = 'EXPENSE_CODE'
+          AND component_contract.component_key_value IN ('EXPENSES', 'TRAVEL', 'ACCOMMODATION', 'OTHER', 'MILEAGE')
+          AND component_contract.source_basis_fingerprint ~ '^[0-9a-f]{32}$'
+          AND component_contract.expense_source_ref ~ (
+            '^timesheet-expense:' || base_rows.timesheet_id::text ||
+            ':' || lower(component_contract.component_key_value) ||
+            ':' || component_contract.source_basis_fingerprint || '$'
+          )
+          AND md5(COALESCE(component_contract.expense_source_basis_json, '{}'::jsonb)::text)
+              = component_contract.source_basis_fingerprint
+        ) AS expense_identity_valid,
+        component_contract.component_key_type,
+        component_contract.component_key_value,
+        component_contract.expense_source_basis_json,
+        component_contract.source_basis_fingerprint,
+        component_contract.expense_source_ref,
+        CASE
+          WHEN component_contract.component_key_type = 'EXPENSE_CODE'
+            THEN base_rows.timesheet_id::text
+          ELSE base_rows.parent_line_key
+        END AS component_parent_line_key,
+        CASE
+          WHEN component_contract.component_key_type = 'EXPENSE_CODE'
+            THEN 'component:expense:' || md5(component_contract.component_key_value)
+          ELSE 'component:' || COALESCE(NULLIF(BTRIM(component_rows.component_json->>'finance_component_id'), ''), component_rows.component_ord::text)
+        END AS component_split_suffix,
+        CASE
+          WHEN component_contract.component_key_type = 'EXPENSE_CODE' THEN
+            800000::bigint + CASE component_contract.component_key_value
+              WHEN 'EXPENSES' THEN 1
+              WHEN 'TRAVEL' THEN 2
+              WHEN 'ACCOMMODATION' THEN 3
+              WHEN 'OTHER' THEN 4
+              WHEN 'MILEAGE' THEN 5
+              ELSE 99
+            END
+          ELSE component_rows.component_ord::bigint
+        END AS component_split_ordinal,
+        CASE
+          WHEN component_contract.component_key_type = 'EXPENSE_CODE'
+           AND NOT (
+             component_contract.component_key_value IN ('EXPENSES', 'TRAVEL', 'ACCOMMODATION', 'OTHER', 'MILEAGE')
+             AND component_contract.source_basis_fingerprint ~ '^[0-9a-f]{32}$'
+             AND component_contract.expense_source_ref ~ (
+               '^timesheet-expense:' || base_rows.timesheet_id::text ||
+               ':' || lower(component_contract.component_key_value) ||
+               ':' || component_contract.source_basis_fingerprint || '$'
+             )
+             AND md5(COALESCE(component_contract.expense_source_basis_json, '{}'::jsonb)::text)
+                 = component_contract.source_basis_fingerprint
+           ) THEN 'blocked_for_pay'
+          WHEN component_contract.component_key_type = 'EXPENSE_CODE'
+           AND UPPER(BTRIM(COALESCE(component_rows.component_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+            THEN 'canonical_preview_lines'
+          WHEN component_contract.component_key_type = 'EXPENSE_CODE'
+           AND UPPER(BTRIM(COALESCE(component_rows.component_json->>'presentation_section', ''))) = 'BLOCKED_FOR_PAY'
+            THEN 'blocked_for_pay'
+          WHEN component_contract.component_key_type = 'EXPENSE_CODE'
+            THEN 'internal_only'
+          ELSE base_rows.target_section
+        END AS component_target_section,
+        CASE
+          WHEN component_contract.component_key_type = 'EXPENSE_CODE'
+            THEN base_rows.timesheet_id::text || ':component:expense:' || md5(component_contract.component_key_value)
+          ELSE base_rows.parent_line_key || ':component:' || COALESCE(NULLIF(BTRIM(component_rows.component_json->>'finance_component_id'), ''), component_rows.component_ord::text)
+        END AS component_line_key
+    ) AS component_identity
+    CROSS JOIN LATERAL (
       SELECT base_rows.timesheet_id AS timesheet_id
     ) AS component_timesheet
-    WHERE base_rows.target_section = 'canonical_preview_lines'
+    WHERE jsonb_array_length(COALESCE(base_rows.line_json->'case_components', '[]'::jsonb)) > 0
+      AND ROUND(COALESCE(component_rows.signed_component_amount_ex_vat, 0), 2) <> 0
       AND (
-        base_rows.line_type <> 'TIMESHEET_PAYMENT'
-        OR (
-          base_rows.line_type = 'TIMESHEET_PAYMENT'
-          AND UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
-          AND NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', '')), '') IS NOT NULL
+        (
+          component_identity.is_expense_component
+          AND base_rows.line_type = 'TIMESHEET_PAYMENT'
+          AND base_rows.target_section = component_identity.component_target_section
+        )
+        OR
+        (
+          NOT component_identity.is_expense_component
+          AND base_rows.target_section = 'canonical_preview_lines'
+          AND (
+            base_rows.line_type <> 'TIMESHEET_PAYMENT'
+            OR (
+              base_rows.line_type = 'TIMESHEET_PAYMENT'
+              AND component_identity.component_key_type = 'ADDITIONAL_CODE'
+              AND component_identity.component_key_value IS NOT NULL
+            )
+          )
+          AND LOWER(BTRIM(COALESCE(base_rows.line_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
         )
       )
-      AND LOWER(BTRIM(COALESCE(base_rows.line_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-      AND jsonb_array_length(COALESCE(base_rows.line_json->'case_components', '[]'::jsonb)) > 0
-      AND ROUND(COALESCE(component_rows.signed_component_amount_ex_vat, 0), 2) <> 0
+  ), hidden_expense_component_candidates AS (
+    SELECT DISTINCT ON (hidden_base.timesheet_id, hidden_base.expense_code)
+      hidden_base.candidate_id,
+      hidden_base.timesheet_id,
+      hidden_base.booking_id,
+      hidden_base.ts_role,
+      hidden_base.ts_band,
+      hidden_base.client_id,
+      hidden_base.client_name,
+      hidden_base.week_ending_date,
+      hidden_base.candidate_pay_method,
+      hidden_base.cand_tms_ref,
+      hidden_base.cand_display_name,
+      hidden_base.expense_code,
+      hidden_base.expense_label,
+      hidden_base.expense_item_type,
+      hidden_base.expense_source_ref,
+      hidden_base.source_basis_fingerprint,
+      hidden_base.expense_source_basis_json,
+      hidden_base.component_amount_ex_vat,
+      hidden_base.component_json,
+      hidden_base.component_ordinal
+    FROM (
+      SELECT
+        canonical_timesheet.candidate_id,
+        canonical_timesheet.timesheet_id,
+        canonical_timesheet.booking_id,
+        canonical_timesheet.ts_role,
+        canonical_timesheet.ts_band,
+        canonical_timesheet.client_id,
+        canonical_timesheet.client_name,
+        canonical_timesheet.week_ending_date,
+        canonical_timesheet.candidate_pay_method,
+        canonical_timesheet.cand_tms_ref,
+        canonical_timesheet.cand_display_name,
+        UPPER(NULLIF(BTRIM(COALESCE(
+          component_element.value->>'component_key_value',
+          component_element.value->>'expense_code',
+          ''
+        )), '')) AS expense_code,
+        COALESCE(
+          NULLIF(BTRIM(COALESCE(component_element.value->>'expense_label', '')), ''),
+          CASE UPPER(NULLIF(BTRIM(COALESCE(
+            component_element.value->>'component_key_value',
+            component_element.value->>'expense_code',
+            ''
+          )), ''))
+            WHEN 'EXPENSES' THEN 'Expenses'
+            WHEN 'TRAVEL' THEN 'Travel'
+            WHEN 'ACCOMMODATION' THEN 'Accommodation'
+            WHEN 'OTHER' THEN 'Other'
+            WHEN 'MILEAGE' THEN 'Mileage'
+            ELSE NULL::text
+          END
+        ) AS expense_label,
+        CASE
+          WHEN UPPER(NULLIF(BTRIM(COALESCE(
+            component_element.value->>'component_key_value',
+            component_element.value->>'expense_code',
+            ''
+          )), '')) = 'MILEAGE' THEN 'MILEAGE_DELTA'
+          ELSE 'EXPENSE_DELTA'
+        END AS expense_item_type,
+        LOWER(NULLIF(BTRIM(COALESCE(component_element.value->>'source_ref', '')), '')) AS expense_source_ref,
+        LOWER(NULLIF(BTRIM(COALESCE(
+          component_element.value->>'source_basis_fingerprint',
+          component_element.value->>'expense_source_basis_fingerprint',
+          ''
+        )), '')) AS source_basis_fingerprint,
+        CASE
+          WHEN jsonb_typeof(component_element.value->'expense_source_basis_json') = 'object'
+            THEN COALESCE(component_element.value->'expense_source_basis_json', '{}'::jsonb)
+          WHEN jsonb_typeof(component_element.value->'source_basis_json') = 'object'
+            THEN COALESCE(component_element.value->'source_basis_json', '{}'::jsonb)
+          ELSE '{}'::jsonb
+        END AS expense_source_basis_json,
+        ROUND(COALESCE(
+          CASE WHEN COALESCE(component_element.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (component_element.value->>'ready_preview_amount_ex_vat')::numeric ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (component_element.value->>'preview_component_amount_ex_vat')::numeric ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (component_element.value->>'component_amount_ex_vat')::numeric ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (component_element.value->>'target_pay_ex_vat')::numeric ELSE NULL::numeric END,
+          0::numeric
+        ), 2) AS component_amount_ex_vat,
+        component_element.value AS component_json,
+        component_element.ordinality::integer AS component_ordinal
+      FROM pg_temp.canonical_timesheet_lines AS canonical_timesheet
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(canonical_timesheet.case_components_json) = 'array'
+            THEN COALESCE(canonical_timesheet.case_components_json, '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) WITH ORDINALITY AS component_element(value, ordinality)
+      WHERE component_element.value IS NOT NULL
+        AND jsonb_typeof(component_element.value) = 'object'
+        AND UPPER(BTRIM(COALESCE(component_element.value->>'component_key_type', ''))) = 'EXPENSE_CODE'
+        AND UPPER(BTRIM(COALESCE(component_element.value->>'presentation_section', ''))) = 'INTERNAL_ONLY'
+        AND UPPER(BTRIM(COALESCE(component_element.value->>'expense_presentation_state', ''))) = 'HIDDEN_INDEFINITE'
+    ) AS hidden_base
+    WHERE hidden_base.expense_code IN ('EXPENSES', 'TRAVEL', 'ACCOMMODATION', 'OTHER', 'MILEAGE')
+      AND hidden_base.source_basis_fingerprint ~ '^[0-9a-f]{32}$'
+      AND hidden_base.expense_source_ref ~ (
+        '^timesheet-expense:' || hidden_base.timesheet_id::text || ':' ||
+        LOWER(hidden_base.expense_code) || ':' || hidden_base.source_basis_fingerprint || '$'
+      )
+      AND md5(COALESCE(hidden_base.expense_source_basis_json, '{}'::jsonb)::text)
+          = hidden_base.source_basis_fingerprint
+      AND ROUND(COALESCE(hidden_base.component_amount_ex_vat, 0), 2) <> 0
+    ORDER BY
+      hidden_base.timesheet_id,
+      hidden_base.expense_code,
+      hidden_base.component_ordinal
+  ), hidden_expense_source_rows AS (
+    SELECT
+      (
+        COALESCE((SELECT MAX(existing_base.base_ordinal) FROM base_rows AS existing_base), 0)
+        + ROW_NUMBER() OVER (
+          ORDER BY
+            hidden_component.timesheet_id,
+            CASE hidden_component.expense_code
+              WHEN 'EXPENSES' THEN 1
+              WHEN 'TRAVEL' THEN 2
+              WHEN 'ACCOMMODATION' THEN 3
+              WHEN 'OTHER' THEN 4
+              WHEN 'MILEAGE' THEN 5
+              ELSE 99
+            END,
+            hidden_component.expense_code
+        )
+      )::bigint AS base_ordinal,
+      hidden_component.candidate_id,
+      hidden_component.timesheet_id,
+      'internal_only'::text AS target_section,
+      hidden_component.timesheet_id::text AS parent_line_key,
+      ('component:expense:' || md5(hidden_component.expense_code))::text AS split_suffix,
+      (
+        800000 + CASE hidden_component.expense_code
+          WHEN 'EXPENSES' THEN 1
+          WHEN 'TRAVEL' THEN 2
+          WHEN 'ACCOMMODATION' THEN 3
+          WHEN 'OTHER' THEN 4
+          WHEN 'MILEAGE' THEN 5
+          ELSE 99
+        END
+      )::bigint AS split_ordinal,
+      hidden_component.expense_item_type AS item_type,
+      'EXPENSE_CODE'::text AS key_type_hint,
+      hidden_component.expense_code AS key_value_hint,
+      '{}'::jsonb AS segment_json,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'source_kind', 'INTERNAL_ONLY',
+          'preview_row_id', hidden_component.timesheet_id::text || ':component:expense:' || md5(hidden_component.expense_code),
+          'line_id', hidden_component.timesheet_id::text || ':component:expense:' || md5(hidden_component.expense_code),
+          'line_key', hidden_component.timesheet_id::text || ':component:expense:' || md5(hidden_component.expense_code),
+          'row_key', hidden_component.timesheet_id::text || ':component:expense:' || md5(hidden_component.expense_code),
+          'target_section', 'internal_only',
+          'section', 'internal_only'
+        )
+        || jsonb_build_object(
+          'candidate_id', hidden_component.candidate_id::text,
+          'tms_ref', hidden_component.cand_tms_ref,
+          'display_name', hidden_component.cand_display_name,
+          'candidate_display_name', hidden_component.cand_display_name,
+          'line_type', 'TIMESHEET_PAYMENT',
+          'case_type', 'TIMESHEET_PAYMENT',
+          'case_key', 'timesheet:' || hidden_component.timesheet_id::text,
+          'timesheet_id', hidden_component.timesheet_id::text,
+          'real_business_timesheet_id', hidden_component.timesheet_id::text,
+          'booking_id', hidden_component.booking_id
+        )
+        || jsonb_build_object(
+          'client_id', CASE WHEN hidden_component.client_id IS NULL THEN NULL ELSE hidden_component.client_id::text END,
+          'client_name', hidden_component.client_name,
+          'week_ending_date', CASE WHEN hidden_component.week_ending_date IS NULL THEN NULL ELSE hidden_component.week_ending_date::text END,
+          'role', hidden_component.ts_role,
+          'band', hidden_component.ts_band,
+          'pay_channel', hidden_component.candidate_pay_method,
+          'paye_treatment', CASE WHEN hidden_component.candidate_pay_method = 'PAYE' THEN 'GROSS_ADD' ELSE 'NONE' END,
+          'route_type', 'NORMAL_PAYMENT',
+          'item_type', hidden_component.expense_item_type,
+          'component_key_type', 'EXPENSE_CODE',
+          'component_key_value', hidden_component.expense_code
+        )
+        || jsonb_build_object(
+          'economic_key', jsonb_build_object(
+            'timesheet_id', hidden_component.timesheet_id::text,
+            'key_type', 'EXPENSE_CODE',
+            'key_value', hidden_component.expense_code
+          ),
+          'amount_ex_vat', hidden_component.component_amount_ex_vat,
+          'amount_display', hidden_component.component_amount_ex_vat,
+          'preview_amount_ex_vat', hidden_component.component_amount_ex_vat,
+          'section_amount_ex_vat', hidden_component.component_amount_ex_vat,
+          'section_amount_display', hidden_component.component_amount_ex_vat,
+          'presentation_section', 'INTERNAL_ONLY',
+          'presentation_role', 'CHILD',
+          'presentation_parent_line_id', hidden_component.timesheet_id::text,
+          'presentation_reason', 'INDEFINITE_EXPENSE_SNOOZE'
+        )
+        || jsonb_build_object(
+          'draftable', false,
+          'is_ready_for_draft', false,
+          'is_excluded_from_allocation', true,
+          'selection_allowed', false,
+          'readiness_state', 'INTERNAL_ONLY',
+          'source_ref', hidden_component.expense_source_ref,
+          'expense_code', hidden_component.expense_code,
+          'expense_label', hidden_component.expense_label,
+          'source_basis_fingerprint', hidden_component.source_basis_fingerprint,
+          'expense_source_basis_fingerprint', hidden_component.source_basis_fingerprint,
+          'expense_source_basis_json', hidden_component.expense_source_basis_json,
+          'source_basis_json', hidden_component.expense_source_basis_json
+        )
+        || jsonb_build_object(
+          'snooze_identity', hidden_component.component_json->'snooze_identity',
+          'snooze_state', hidden_component.component_json->'snooze_state',
+          'expense_presentation_state', 'HIDDEN_INDEFINITE',
+          'expense_identity_stale', false,
+          'case_components', jsonb_build_array(hidden_component.component_json),
+          'materialisation_suppressed', true,
+          'materialisation_suppressed_reason', 'INDEFINITE_EXPENSE_SNOOZE',
+          'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+        )
+      ) AS seed_line_json
+    FROM hidden_expense_component_candidates AS hidden_component
   ), parent_display_rows AS (
     SELECT
       base_rows.base_ordinal,
@@ -189197,6 +190273,40 @@ BEGIN
       '{}'::jsonb AS segment_json,
       jsonb_strip_nulls(
         base_rows.line_json
+        || case
+          when base_rows.line_type = 'TIMESHEET_PAYMENT'
+           and base_rows.target_section = 'blocked_for_pay'
+           and round(coalesce(parent_expense_amounts.blocked_expense_amount_ex_vat, 0), 2) <> 0
+          then jsonb_build_object(
+            'amount_ex_vat', round(
+              coalesce(case when coalesce(base_rows.line_json->>'amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (base_rows.line_json->>'amount_ex_vat')::numeric else null::numeric end, 0)
+              - coalesce(parent_expense_amounts.blocked_expense_amount_ex_vat, 0),
+              2
+            ),
+            'amount_display', round(
+              coalesce(case when coalesce(base_rows.line_json->>'amount_display', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (base_rows.line_json->>'amount_display')::numeric else null::numeric end, 0)
+              - coalesce(parent_expense_amounts.blocked_expense_amount_ex_vat, 0),
+              2
+            ),
+            'section_amount_ex_vat', round(
+              coalesce(case when coalesce(base_rows.line_json->>'section_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (base_rows.line_json->>'section_amount_ex_vat')::numeric else null::numeric end, 0)
+              - coalesce(parent_expense_amounts.blocked_expense_amount_ex_vat, 0),
+              2
+            ),
+            'section_amount_display', round(
+              coalesce(case when coalesce(base_rows.line_json->>'section_amount_display', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (base_rows.line_json->>'section_amount_display')::numeric else null::numeric end, 0)
+              - coalesce(parent_expense_amounts.blocked_expense_amount_ex_vat, 0),
+              2
+            ),
+            'section_non_segment_amount_ex_vat', round(
+              coalesce(case when coalesce(base_rows.line_json->>'section_non_segment_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (base_rows.line_json->>'section_non_segment_amount_ex_vat')::numeric else null::numeric end, 0)
+              - coalesce(parent_expense_amounts.blocked_expense_amount_ex_vat, 0),
+              2
+            ),
+            'split_expense_child_amount_ex_vat', round(coalesce(parent_expense_amounts.blocked_expense_amount_ex_vat, 0), 2)
+          )
+          else '{}'::jsonb
+        end
         || jsonb_build_object(
           'source_kind', 'VALID_PREVIEW_LINE',
           'preview_row_id', base_rows.parent_line_key,
@@ -189216,6 +190326,24 @@ BEGIN
         END
       ) AS seed_line_json
     FROM base_rows
+    LEFT JOIN LATERAL (
+      SELECT round(coalesce(sum(
+        coalesce(
+          case when coalesce(expense_component.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'ready_preview_amount_ex_vat')::numeric else null::numeric end,
+          case when coalesce(expense_component.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'preview_component_amount_ex_vat')::numeric else null::numeric end,
+          case when coalesce(expense_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$' then (expense_component.value->>'component_amount_ex_vat')::numeric else null::numeric end,
+          0::numeric
+        )
+      ), 0), 2) as blocked_expense_amount_ex_vat
+      FROM jsonb_array_elements(
+        CASE WHEN jsonb_typeof(base_rows.line_json->'case_components') = 'array'
+          THEN COALESCE(base_rows.line_json->'case_components', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS expense_component(value)
+      WHERE UPPER(BTRIM(COALESCE(expense_component.value->>'component_key_type', ''))) = 'EXPENSE_CODE'
+        AND UPPER(BTRIM(COALESCE(expense_component.value->>'presentation_section', ''))) = 'BLOCKED_FOR_PAY'
+    ) AS parent_expense_amounts ON true
     WHERE base_rows.target_section IN ('cases_resolutions', 'blocked_for_pay')
        OR (
           base_rows.target_section = 'canonical_preview_lines'
@@ -189233,6 +190361,8 @@ BEGIN
     SELECT * FROM timesheet_non_segment_rows
     UNION ALL
     SELECT * FROM finance_component_rows
+    UNION ALL
+    SELECT * FROM hidden_expense_source_rows
     UNION ALL
     SELECT * FROM parent_display_rows
   ), keyed_rows AS (
@@ -189264,6 +190394,14 @@ BEGIN
       contracted_rows.*
     FROM contracted_rows
     WHERE LOWER(BTRIM(COALESCE(contracted_rows.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       OR (
+         contracted_rows.target_section = 'internal_only'
+         AND UPPER(BTRIM(COALESCE(contracted_rows.seed_line_json->>'source_kind', ''))) = 'INTERNAL_ONLY'
+         AND UPPER(BTRIM(COALESCE(contracted_rows.seed_line_json#>>'{snooze_identity,identity_type}', ''))) = 'TIMESHEET_EXPENSE'
+         AND UPPER(BTRIM(COALESCE(contracted_rows.seed_line_json->>'expense_presentation_state', ''))) = 'HIDDEN_INDEFINITE'
+         AND LOWER(BTRIM(COALESCE(contracted_rows.seed_line_json->>'source_ref', ''))) ~
+             '^timesheet-expense:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:(expenses|travel|accommodation|other|mileage):[0-9a-f]{32}$'
+       )
   )
   SELECT numbered_rows.*
   FROM numbered_rows;
@@ -189276,7 +190414,9 @@ BEGIN
   FROM pg_temp.canonical_preview_lines AS source_count_rows
   WHERE source_count_rows.candidate_id = p_candidate_id;
 
-  SELECT COUNT(*)::integer
+  SELECT COUNT(*) FILTER (
+           WHERE LOWER(BTRIM(COALESCE(materialisable_rows.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         )::integer
   INTO v_materialisable_source_line_count
   FROM pg_temp._tmp_pay_wb_preview_line_seed_source AS materialisable_rows;
 
@@ -189476,7 +190616,7 @@ BEGIN
         COALESCE(source_rows.seed_line_json, '{}'::jsonb)
         || jsonb_build_object(
           'source_function', 'pay_workbench_candidate_source_build_chunk',
-          'source_kind', 'VALID_PREVIEW_LINE',
+          'source_kind', CASE WHEN source_rows.target_section = 'internal_only' THEN 'INTERNAL_ONLY' ELSE 'VALID_PREVIEW_LINE' END,
           'session_id', p_session_id::text,
           'session_version', v_session_version,
           'candidate_id', source_rows.candidate_id::text,
@@ -210582,7 +211722,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_project_changed_timesheets_v1(p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_targeted_timesheet_ids uuid[], p_linked_timesheet_ids uuid[], p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -211235,6 +212374,15 @@ BEGIN
       ROUND(COALESCE(timesheet_financial_row.total_hours, 0), 6) AS total_hours,
       ROUND(COALESCE(timesheet_financial_row.total_pay_ex_vat, 0), 2) AS total_pay_ex_vat,
       ROUND(COALESCE(timesheet_financial_row.total_charge_ex_vat, 0), 2) AS total_charge_ex_vat,
+      ROUND(COALESCE(timesheet_financial_row.expenses_charge_ex_vat, 0), 2) AS expenses_charge_ex_vat,
+      ROUND(COALESCE(timesheet_financial_row.travel_charge_ex_vat, 0), 2) AS travel_charge_ex_vat,
+      ROUND(COALESCE(timesheet_financial_row.accommodation_charge_ex_vat, 0), 2) AS accommodation_charge_ex_vat,
+      ROUND(COALESCE(timesheet_financial_row.other_charge_ex_vat, 0), 2) AS other_charge_ex_vat,
+      ROUND(COALESCE(timesheet_financial_row.mileage_charge_ex_vat, 0), 2) AS mileage_charge_ex_vat,
+      CASE
+        WHEN COALESCE(active_settled.active_settled_component_count, 0) > 0 THEN '{}'::jsonb
+        ELSE COALESCE(timesheet_pay_state.last_settled_snapshot_json, '{}'::jsonb)
+      END AS expense_baseline_json,
       ROUND(COALESCE(timesheet_financial_row.hours_day, 0), 6) AS hours_day,
       ROUND(COALESCE(timesheet_financial_row.hours_night, 0), 6) AS hours_night,
       ROUND(COALESCE(timesheet_financial_row.hours_sat, 0), 6) AS hours_sat,
@@ -211260,6 +212408,12 @@ BEGIN
     LEFT JOIN public.timesheets_financials AS timesheet_financial_row
       ON timesheet_financial_row.timesheet_id = timesheet_row.timesheet_id
      AND timesheet_financial_row.is_current = true
+    LEFT JOIN public.timesheet_pay_state AS timesheet_pay_state
+      ON timesheet_pay_state.timesheet_id = timesheet_row.timesheet_id
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*)::integer AS active_settled_component_count
+      FROM public._pay_active_settled_components(ARRAY[timesheet_row.timesheet_id]::uuid[]) AS active_component
+    ) AS active_settled ON true
     LEFT JOIN public.contracts AS contract_row
       ON contract_row.id = timesheet_row.contract_id
     LEFT JOIN public.clients AS client_row
@@ -211297,6 +212451,12 @@ BEGIN
       current_timesheet_rows.total_hours,
       current_timesheet_rows.total_pay_ex_vat,
       current_timesheet_rows.total_charge_ex_vat,
+      current_timesheet_rows.expenses_charge_ex_vat,
+      current_timesheet_rows.travel_charge_ex_vat,
+      current_timesheet_rows.accommodation_charge_ex_vat,
+      current_timesheet_rows.other_charge_ex_vat,
+      current_timesheet_rows.mileage_charge_ex_vat,
+      current_timesheet_rows.expense_baseline_json,
       current_timesheet_rows.hours_day,
       current_timesheet_rows.hours_night,
       current_timesheet_rows.hours_sat,
@@ -211667,6 +212827,12 @@ BEGIN
         projected_component_flags.payee_blocked_reason_codes
         || CASE WHEN projected_component_flags.has_active_snooze THEN jsonb_build_array('BLOCKED_TIMESHEET_SNOOZE') ELSE '[]'::jsonb END
         || CASE WHEN projected_component_flags.outstanding_ex_vat <= 0 THEN jsonb_build_array('ECONOMIC_KEY_OUTSTANDING_NOT_AVAILABLE') ELSE '[]'::jsonb END
+        || CASE
+          WHEN projected_component_flags.key_type = 'EXPENSE_CODE'
+           AND UPPER(projected_component_flags.key_value) NOT IN ('EXPENSES', 'TRAVEL', 'ACCOMMODATION', 'OTHER', 'MILEAGE')
+            THEN jsonb_build_array('EXPENSE_SOURCE_IDENTITY_UNAVAILABLE')
+          ELSE '[]'::jsonb
+        END
       ) AS blocked_reason_codes
     FROM projected_component_flags
   ), row_segment_contract AS (
@@ -211766,6 +212932,70 @@ BEGIN
         (ARRAY_AGG(COALESCE(materialised_segments.segment_json->>'date', materialised_segments.segment_json->>'work_date', materialised_segments.segment_json->>'linked_shift_date') ORDER BY materialised_segments.ordinality))[1] AS top_level_work_date_text
       FROM materialised_segments
     ) AS row_segments ON true
+  ), expense_identity_base AS (
+    SELECT
+      row_segment_contract.*,
+      CASE UPPER(row_segment_contract.key_value)
+        WHEN 'EXPENSES' THEN ROUND(
+          COALESCE(row_segment_contract.expenses_charge_ex_vat, 0)
+          - COALESCE(NULLIF(row_segment_contract.expense_baseline_json #>> '{expenses,expenses_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        WHEN 'TRAVEL' THEN ROUND(
+          COALESCE(row_segment_contract.travel_charge_ex_vat, 0)
+          - COALESCE(NULLIF(row_segment_contract.expense_baseline_json #>> '{expenses,travel_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        WHEN 'ACCOMMODATION' THEN ROUND(
+          COALESCE(row_segment_contract.accommodation_charge_ex_vat, 0)
+          - COALESCE(NULLIF(row_segment_contract.expense_baseline_json #>> '{expenses,accommodation_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        WHEN 'OTHER' THEN ROUND(
+          COALESCE(row_segment_contract.other_charge_ex_vat, 0)
+          - COALESCE(NULLIF(row_segment_contract.expense_baseline_json #>> '{expenses,other_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        WHEN 'MILEAGE' THEN ROUND(
+          COALESCE(row_segment_contract.mileage_charge_ex_vat, 0)
+          - COALESCE(NULLIF(row_segment_contract.expense_baseline_json #>> '{expenses,mileage_charge_ex_vat}', '')::numeric, 0),
+          2
+        )
+        ELSE NULL::numeric
+      END AS expense_source_charge_ex_vat
+    FROM row_segment_contract
+  ), expense_identity AS (
+    SELECT
+      expense_identity_base.*,
+      CASE
+        WHEN expense_identity_base.key_type = 'EXPENSE_CODE'
+         AND UPPER(expense_identity_base.key_value) IN ('EXPENSES', 'TRAVEL', 'ACCOMMODATION', 'OTHER', 'MILEAGE')
+        THEN jsonb_strip_nulls(jsonb_build_object(
+          'timesheet_id', expense_identity_base.canonical_timesheet_id::text,
+          'expense_code', UPPER(expense_identity_base.key_value),
+          'source_charge_ex_vat', expense_identity_base.expense_source_charge_ex_vat,
+          'source_pay_ex_vat', ROUND(COALESCE(expense_identity_base.outstanding_ex_vat, 0), 2)
+        ))
+        ELSE NULL::jsonb
+      END AS expense_source_basis_json
+    FROM expense_identity_base
+  ), expense_identity_final AS (
+    SELECT
+      expense_identity.*,
+      CASE
+        WHEN expense_identity.expense_source_basis_json IS NOT NULL
+          THEN MD5(expense_identity.expense_source_basis_json::text)
+        ELSE NULL::text
+      END AS expense_source_basis_fingerprint,
+      CASE
+        WHEN expense_identity.expense_source_basis_json IS NOT NULL
+          THEN LOWER(
+            'timesheet-expense:' || expense_identity.canonical_timesheet_id::text || ':' ||
+            UPPER(expense_identity.key_value) || ':' || MD5(expense_identity.expense_source_basis_json::text)
+          )
+        ELSE NULL::text
+      END AS expense_source_ref
+    FROM expense_identity
   ), line_json_rows AS (
     SELECT
       row_identity.*,
@@ -211785,8 +213015,14 @@ BEGIN
           'projection_class', v_projection_class,
           'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
           'candidate_id', p_candidate_id::text,
-          'timesheet_id', row_identity.timesheet_id::text,
-          'real_business_timesheet_id', row_identity.timesheet_id::text,
+          'timesheet_id', CASE
+            WHEN row_identity.key_type = 'EXPENSE_CODE' THEN row_identity.canonical_timesheet_id::text
+            ELSE row_identity.timesheet_id::text
+          END,
+          'real_business_timesheet_id', CASE
+            WHEN row_identity.key_type = 'EXPENSE_CODE' THEN row_identity.canonical_timesheet_id::text
+            ELSE row_identity.timesheet_id::text
+          END,
           'canonical_timesheet_id', row_identity.canonical_timesheet_id::text,
           'booking_id', row_identity.booking_id,
           'line_key', row_identity.line_key,
@@ -211794,7 +213030,10 @@ BEGIN
           'preview_row_id', row_identity.row_key,
           'line_id', row_identity.line_key,
           'presentation_line_id', row_identity.line_key,
-          'presentation_parent_line_id', row_identity.line_key,
+          'presentation_parent_line_id', CASE
+            WHEN row_identity.key_type = 'EXPENSE_CODE' THEN row_identity.canonical_timesheet_id::text
+            ELSE row_identity.line_key
+          END,
           'presentation_role', 'PARENT',
           'source_kind', 'VALID_PREVIEW_LINE',
           'line_type', 'TIMESHEET_PAYMENT',
@@ -211884,33 +213123,65 @@ BEGIN
           'active_segment_indefinite_snooze_count', 0,
           'whole_timesheet_snooze_action_blocked', false,
           'segment_snooze_action_blocked', false,
-          'snooze_identity', jsonb_strip_nulls(jsonb_build_object(
-            'identity_type', 'TIMESHEET',
-            'candidate_id', p_candidate_id::text,
-            'timesheet_id', row_identity.timesheet_id::text,
-            'booking_id', row_identity.booking_id
-          )),
+          'source_ref', CASE WHEN row_identity.key_type = 'EXPENSE_CODE' THEN row_identity.expense_source_ref ELSE NULL::text END,
+          'expense_code', CASE WHEN row_identity.key_type = 'EXPENSE_CODE' THEN UPPER(row_identity.key_value) ELSE NULL::text END,
+          'expense_label', CASE UPPER(row_identity.key_value)
+            WHEN 'EXPENSES' THEN 'Expenses'
+            WHEN 'TRAVEL' THEN 'Travel'
+            WHEN 'ACCOMMODATION' THEN 'Accommodation'
+            WHEN 'OTHER' THEN 'Other'
+            WHEN 'MILEAGE' THEN 'Mileage'
+            ELSE NULL::text
+          END,
+          'expense_source_basis_json', CASE WHEN row_identity.key_type = 'EXPENSE_CODE' THEN row_identity.expense_source_basis_json ELSE NULL::jsonb END,
+          'expense_source_basis_fingerprint', CASE WHEN row_identity.key_type = 'EXPENSE_CODE' THEN row_identity.expense_source_basis_fingerprint ELSE NULL::text END,
+          'source_basis_fingerprint', CASE WHEN row_identity.key_type = 'EXPENSE_CODE' THEN row_identity.expense_source_basis_fingerprint ELSE NULL::text END,
+          'snooze_identity', CASE
+            WHEN row_identity.key_type = 'EXPENSE_CODE' THEN jsonb_strip_nulls(jsonb_build_object(
+              'identity_type', 'TIMESHEET_EXPENSE',
+              'candidate_id', p_candidate_id::text,
+              'timesheet_id', row_identity.canonical_timesheet_id::text,
+              'booking_id', row_identity.booking_id,
+              'segment_id', NULL,
+              'segment_stable_key', NULL,
+              'source_ref', row_identity.expense_source_ref,
+              'expense_code', UPPER(row_identity.key_value),
+              'source_basis_fingerprint', row_identity.expense_source_basis_fingerprint
+            ))
+            ELSE jsonb_strip_nulls(jsonb_build_object(
+              'identity_type', 'TIMESHEET',
+              'candidate_id', p_candidate_id::text,
+              'timesheet_id', row_identity.timesheet_id::text,
+              'booking_id', row_identity.booking_id
+            ))
+          END,
           'snooze_state', 'NONE'
         )
         || jsonb_build_object(
           'economic_key', jsonb_build_object(
-            'timesheet_id', row_identity.timesheet_id::text,
+            'timesheet_id', CASE
+              WHEN row_identity.key_type = 'EXPENSE_CODE' THEN row_identity.canonical_timesheet_id::text
+              ELSE row_identity.timesheet_id::text
+            END,
             'key_type', row_identity.key_type,
             'key_value', row_identity.key_value
           ),
-          'source_basis_json', jsonb_build_object(
-            'timesheet_id', row_identity.timesheet_id::text,
-            'component_key_type', row_identity.key_type,
-            'component_key_value', row_identity.key_value,
-            'source_pay_ex_vat', row_identity.truth_ex_vat,
-            'pay_amount_ex_vat', row_identity.outstanding_ex_vat,
-            'live_truth_used', true,
-            'live_pay_eligibility_proven', true,
-            'live_pay_eligibility_status', 'ELIGIBLE',
-            'financial_processing_status', row_identity.financial_processing_status,
-            'authorised_at_server', CASE WHEN row_identity.authorised_at_server IS NULL THEN NULL ELSE row_identity.authorised_at_server::text END,
-            'financial_authorised_at_utc', CASE WHEN row_identity.financial_authorised_at_utc IS NULL THEN NULL ELSE row_identity.financial_authorised_at_utc::text END
-          ),
+          'source_basis_json', CASE
+            WHEN row_identity.key_type = 'EXPENSE_CODE' THEN row_identity.expense_source_basis_json
+            ELSE jsonb_build_object(
+              'timesheet_id', row_identity.timesheet_id::text,
+              'component_key_type', row_identity.key_type,
+              'component_key_value', row_identity.key_value,
+              'source_pay_ex_vat', row_identity.truth_ex_vat,
+              'pay_amount_ex_vat', row_identity.outstanding_ex_vat,
+              'live_truth_used', true,
+              'live_pay_eligibility_proven', true,
+              'live_pay_eligibility_status', 'ELIGIBLE',
+              'financial_processing_status', row_identity.financial_processing_status,
+              'authorised_at_server', CASE WHEN row_identity.authorised_at_server IS NULL THEN NULL ELSE row_identity.authorised_at_server::text END,
+              'financial_authorised_at_utc', CASE WHEN row_identity.financial_authorised_at_utc IS NULL THEN NULL ELSE row_identity.financial_authorised_at_utc::text END
+            )
+          END,
           'live_pay_eligibility', jsonb_build_object(
             'proven', true,
             'status', 'ELIGIBLE',
@@ -211938,7 +213209,7 @@ BEGIN
           )
         )
       ) AS line_json
-    FROM row_segment_contract AS row_identity
+    FROM expense_identity_final AS row_identity
   ), economic_checked AS (
     SELECT
       line_json_rows.*,
@@ -211948,7 +213219,10 @@ BEGIN
       policy_key.key_resolution_failure_reason,
       public.pay_workbench_preview_line_economic_key(
         line_json_rows.line_json,
-        line_json_rows.timesheet_id,
+        CASE
+          WHEN line_json_rows.key_type = 'EXPENSE_CODE' THEN line_json_rows.canonical_timesheet_id
+          ELSE line_json_rows.timesheet_id
+        END,
         CASE
           WHEN line_json_rows.key_type IN ('TS_DAY', 'TS_TOTAL') THEN 'SEGMENT_DELTA'
           WHEN line_json_rows.key_type = 'EXPENSE_CODE' AND UPPER(line_json_rows.key_value) = 'MILEAGE' THEN 'MILEAGE_DELTA'
@@ -211961,7 +213235,10 @@ BEGIN
       ) AS workbench_economic_key_json
     FROM line_json_rows
     LEFT JOIN LATERAL public._pay_policy_x_resolve_pre_draft_economic_key(
-      p_timesheet_id => line_json_rows.timesheet_id,
+      p_timesheet_id => CASE
+        WHEN line_json_rows.key_type = 'EXPENSE_CODE' THEN line_json_rows.canonical_timesheet_id
+        ELSE line_json_rows.timesheet_id
+      END,
       p_live_source_json => line_json_rows.line_json,
       p_item_type => CASE
         WHEN line_json_rows.key_type IN ('TS_DAY', 'TS_TOTAL') THEN 'SEGMENT_DELTA'
@@ -211977,7 +213254,10 @@ BEGIN
     SELECT
       economic_checked.*,
       jsonb_build_object(
-        'timesheet_id', economic_checked.timesheet_id::text,
+        'timesheet_id', CASE
+          WHEN economic_checked.key_type = 'EXPENSE_CODE' THEN economic_checked.canonical_timesheet_id::text
+          ELSE economic_checked.timesheet_id::text
+        END,
         'key_type', economic_checked.key_type,
         'key_value', economic_checked.key_value,
         'key_resolution_source', economic_checked.workbench_economic_key_json->>'key_resolution_source',
@@ -211986,7 +213266,10 @@ BEGIN
       public.pay_workbench_preview_line_contract_ok(
         economic_checked.line_json,
         jsonb_build_object(
-          'timesheet_id', economic_checked.timesheet_id::text,
+          'timesheet_id', CASE
+            WHEN economic_checked.key_type = 'EXPENSE_CODE' THEN economic_checked.canonical_timesheet_id::text
+            ELSE economic_checked.timesheet_id::text
+          END,
           'key_type', economic_checked.key_type,
           'key_value', economic_checked.key_value
         ),
@@ -212118,13 +213401,22 @@ BEGIN
     p_candidate_id,
     v_session_version,
     v_source_change_seq,
-    stage_rows.timesheet_id,
+    CASE
+      WHEN stage_rows.key_type = 'EXPENSE_CODE' THEN stage_rows.canonical_timesheet_id
+      ELSE stage_rows.timesheet_id
+    END,
     stage_rows.canonical_timesheet_id,
     stage_rows.target_section,
     stage_rows.line_key,
     stage_rows.row_key,
-    stage_rows.line_key,
-    stage_rows.key_type || ':' || md5(stage_rows.key_value),
+    CASE
+      WHEN stage_rows.key_type = 'EXPENSE_CODE' THEN stage_rows.canonical_timesheet_id::text
+      ELSE stage_rows.line_key
+    END,
+    CASE
+      WHEN stage_rows.key_type = 'EXPENSE_CODE' THEN 'component:expense:' || md5(stage_rows.key_value)
+      ELSE stage_rows.key_type || ':' || md5(stage_rows.key_value)
+    END,
     (COALESCE(v_scope_row.scope_ordinal, 0) * 1000000 + COALESCE(stage_rows.component_index, 0))::bigint,
     (COALESCE(v_scope_row.scope_ordinal, 0) * 1000000 + COALESCE(stage_rows.component_index, 0))::bigint,
     v_pay_channel_scope,
@@ -212274,7 +213566,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress_debug(
@@ -214845,7 +216136,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_operation_active_snoozes_v1(
   p_operation_id uuid,
   p_workbench_session_id uuid,
@@ -215148,6 +216438,7 @@ BEGIN
     guard_scope.candidate_id,
     guard_scope.timesheet_id,
     guard_scope.segment_stable_key AS selected_segment_stable_key,
+    guard_scope.source_ref AS selected_source_ref,
     snooze_row.id AS snooze_id,
     snooze_row.snooze_kind,
     snooze_row.snooze_until_date,
@@ -215155,7 +216446,11 @@ BEGIN
     snooze_row.booking_id AS snooze_booking_id,
     snooze_row.segment_id AS snooze_segment_id,
     snooze_row.segment_stable_key AS snooze_segment_stable_key,
-    snooze_row.source_ref
+    snooze_row.source_ref AS snooze_source_ref,
+    CASE
+      WHEN guard_scope.source_ref IS NOT NULL THEN 'EXACT_SOURCE_REF'
+      ELSE 'LEGACY_TIMESHEET_SEGMENT'
+    END AS match_scope
   FROM pg_temp._bpay_draft_snooze_guard_scope AS guard_scope
   JOIN public.pay_item_snoozes AS snooze_row
     ON snooze_row.candidate_id = guard_scope.candidate_id
@@ -215168,10 +216463,11 @@ BEGIN
    AND (
      (
        guard_scope.source_ref IS NOT NULL
-       AND NULLIF(BTRIM(COALESCE(snooze_row.source_ref, '')), '') = guard_scope.source_ref
+       AND LOWER(NULLIF(BTRIM(COALESCE(snooze_row.source_ref, '')), '')) = LOWER(guard_scope.source_ref)
      )
      OR (
        guard_scope.source_ref IS NULL
+       AND snooze_row.source_ref IS NULL
        AND (
          (guard_scope.timesheet_id IS NOT NULL AND snooze_row.timesheet_id = guard_scope.timesheet_id)
          OR (
@@ -215213,7 +216509,15 @@ BEGIN
         'snooze_kind', active_snooze.snooze_kind,
         'snooze_until_date', CASE WHEN active_snooze.snooze_until_date IS NULL THEN NULL ELSE active_snooze.snooze_until_date::text END,
         'indefinite', active_snooze.snooze_until_date IS NULL,
-        'source_ref', active_snooze.source_ref
+        'source_ref', active_snooze.selected_source_ref,
+        'snooze_source_ref', active_snooze.snooze_source_ref,
+        'source_match_scope', active_snooze.match_scope,
+        'identity_type', CASE
+          WHEN active_snooze.selected_source_ref ~* '^timesheet-expense:' THEN 'TIMESHEET_EXPENSE'
+          WHEN active_snooze.selected_source_ref IS NOT NULL THEN 'EXACT_SOURCE'
+          WHEN active_snooze.selected_segment_stable_key IS NOT NULL THEN 'TIMESHEET_SEGMENT'
+          ELSE 'TIMESHEET'
+        END
       ))
       ORDER BY active_snooze.candidate_id, active_snooze.timesheet_id, active_snooze.snooze_id
     ),
@@ -215263,7 +216567,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -231122,8 +232425,6 @@ GRANT EXECUTE ON FUNCTION public.timesheet_archive_state_v1(uuid) TO service_rol
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_snooze_upsert_v2(p_candidate_id uuid, p_timesheet_id uuid, p_segment_id text, p_source_ref text, p_snooze_kind text DEFAULT 'DO_NOT_PAY'::text, p_snooze_until_date date DEFAULT NULL::date, p_actor_user_id uuid DEFAULT NULL::uuid, p_note text DEFAULT NULL::text, p_segment_stable_key text DEFAULT NULL::text, p_resolved_rate_acknowledgement_token text DEFAULT NULL::text, p_pay_run_acknowledgement_token text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -231136,7 +232437,14 @@ DECLARE
   v_next_official_pay_date date;
   v_validation_pre_open jsonb := '{}'::jsonb;
   v_validation_pre_save jsonb := '{}'::jsonb;
+  v_post_lock_validation jsonb := '{}'::jsonb;
   v_required_scope_fingerprint text := NULL::text;
+  v_scope_kind text := NULL::text;
+  v_expense_code text := NULL::text;
+  v_expense_source_basis_fingerprint text := NULL::text;
+  v_expense_source_prefix text := NULL::text;
+  v_stale_expense_snoozes_before jsonb := '[]'::jsonb;
+  v_stale_expense_snoozes_cancelled integer := 0;
   v_acknowledgement_row public.pay_snooze_warning_acknowledgements%ROWTYPE;
   v_segment_stable_key_hint text := NULLIF(BTRIM(COALESCE(p_segment_stable_key, '')), '');
   v_kind_input text := upper(btrim(coalesce(p_snooze_kind, 'DO_NOT_PAY')));
@@ -231281,6 +232589,10 @@ BEGIN
     p_validation_phase => 'INTERNAL_PRE_SAVE'
   );
 
+  v_scope_kind := UPPER(NULLIF(BTRIM(COALESCE(v_validation_pre_save->>'scope_kind', '')), ''));
+  v_expense_code := UPPER(NULLIF(BTRIM(COALESCE(v_validation_pre_save->>'expense_code', '')), ''));
+  v_expense_source_basis_fingerprint := LOWER(NULLIF(BTRIM(COALESCE(v_validation_pre_save->>'expense_source_basis_fingerprint', '')), ''));
+
   IF COALESCE((v_validation_pre_save->>'warning_required')::boolean, false) THEN
     v_required_scope_fingerprint := NULLIF(BTRIM(COALESCE(v_validation_pre_save->>'scope_fingerprint', '')), '');
     IF NULLIF(BTRIM(COALESCE(p_pay_run_acknowledgement_token, '')), '') IS NULL
@@ -231341,7 +232653,54 @@ BEGIN
     pg_catalog.hashtext(p_candidate_id::text)
   );
 
-  IF v_kind IN ('OVERPAYMENT_RECOVERY','PAYMENT_ADVANCE_REPAYMENT','MANUAL_DEBT_RECOVERY') THEN
+  v_post_lock_validation := public.pay_snooze_validate_request_v1(
+    p_actor_user_id => p_actor_user_id,
+    p_candidate_id => p_candidate_id,
+    p_timesheet_id => p_timesheet_id,
+    p_segment_id => p_segment_id,
+    p_segment_stable_key => v_segment_stable_key_hint,
+    p_source_ref => v_source_ref,
+    p_snooze_kind => v_kind,
+    p_snooze_until_date => p_snooze_until_date,
+    p_validation_phase => 'INTERNAL_PRE_SAVE'
+  );
+
+  IF NULLIF(BTRIM(COALESCE(v_post_lock_validation->>'scope_fingerprint', '')), '')
+       IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_validation_pre_save->>'scope_fingerprint', '')), '')
+     OR UPPER(NULLIF(BTRIM(COALESCE(v_post_lock_validation->>'scope_kind', '')), ''))
+       IS DISTINCT FROM v_scope_kind
+     OR LOWER(NULLIF(BTRIM(COALESCE(v_post_lock_validation->>'source_ref', '')), ''))
+       IS DISTINCT FROM v_source_ref THEN
+    RAISE EXCEPTION 'SNOOZE_AUTHORITY_CHANGED_DURING_SAVE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'SNOOZE_AUTHORITY_CHANGED_DURING_SAVE',
+              'candidate_id', p_candidate_id::text,
+              'timesheet_id', CASE WHEN p_timesheet_id IS NULL THEN NULL ELSE p_timesheet_id::text END,
+              'source_ref', v_source_ref,
+              'refresh_required', true
+            )::text;
+  END IF;
+
+  v_scope_kind := UPPER(NULLIF(BTRIM(COALESCE(v_post_lock_validation->>'scope_kind', '')), ''));
+  v_expense_code := UPPER(NULLIF(BTRIM(COALESCE(v_post_lock_validation->>'expense_code', '')), ''));
+  v_expense_source_basis_fingerprint := LOWER(NULLIF(BTRIM(COALESCE(v_post_lock_validation->>'expense_source_basis_fingerprint', '')), ''));
+
+  IF v_scope_kind = 'TIMESHEET_EXPENSE' THEN
+    IF v_kind <> 'DO_NOT_PAY'
+       OR v_source_ref IS NULL
+       OR p_timesheet_id IS NULL
+       OR v_segment_id_input IS NOT NULL
+       OR v_segment_stable_key_hint IS NOT NULL THEN
+      RAISE EXCEPTION 'SNOOZE_EXPENSE_SCOPE_IDENTITY_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'SNOOZE_EXPENSE_SCOPE_IDENTITY_INVALID',
+                'source_ref', v_source_ref,
+                'snooze_kind', v_kind
+              )::text;
+    END IF;
+  ELSIF v_kind IN ('OVERPAYMENT_RECOVERY','PAYMENT_ADVANCE_REPAYMENT','MANUAL_DEBT_RECOVERY') THEN
     IF v_source_ref IS NULL THEN
       RAISE EXCEPTION 'source_ref is required for finance-case snoozes';
     END IF;
@@ -231425,7 +232784,37 @@ BEGIN
     END IF;
   END IF;
 
-  IF v_source_ref IS NULL THEN
+  IF v_scope_kind = 'TIMESHEET_EXPENSE' THEN
+    IF COALESCE(v_post_lock_validation->>'timesheet_id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'SNOOZE_EXPENSE_CURRENT_TIMESHEET_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'SNOOZE_EXPENSE_CURRENT_TIMESHEET_INVALID',
+                'source_ref', v_source_ref,
+                'refresh_required', true
+              )::text;
+    END IF;
+
+    v_effective_timesheet_id := (v_post_lock_validation->>'timesheet_id')::uuid;
+    v_current_timesheet_id := v_effective_timesheet_id;
+    v_booking_id := NULLIF(BTRIM(COALESCE(v_post_lock_validation->>'booking_id', '')), '');
+    v_input_booking_id := v_booking_id;
+    v_effective_segment_id := NULL::text;
+    v_segment_stable_key := NULL::text;
+    v_expense_source_prefix := left(v_source_ref, length(v_source_ref) - 32);
+
+    IF v_expense_code IS NULL
+       OR v_expense_source_basis_fingerprint IS NULL
+       OR v_expense_source_prefix IS NULL THEN
+      RAISE EXCEPTION 'SNOOZE_EXPENSE_CANONICAL_IDENTITY_INCOMPLETE'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'SNOOZE_EXPENSE_CANONICAL_IDENTITY_INCOMPLETE',
+                'source_ref', v_source_ref,
+                'refresh_required', true
+              )::text;
+    END IF;
+  ELSIF v_source_ref IS NULL THEN
     SELECT
       nullif(btrim(coalesce(t.booking_id, '')), '')
     INTO v_input_booking_id
@@ -231590,6 +232979,63 @@ BEGIN
     ELSE
       v_segment_stable_key := NULL;
       v_effective_segment_id := NULL;
+    END IF;
+  END IF;
+
+  IF v_scope_kind = 'TIMESHEET_EXPENSE' THEN
+    SELECT COALESCE(
+             jsonb_agg(
+               jsonb_build_object(
+                 'id', stale_snooze.id::text,
+                 'source_ref', stale_snooze.source_ref,
+                 'snooze_until_date', CASE WHEN stale_snooze.snooze_until_date IS NULL THEN NULL ELSE stale_snooze.snooze_until_date::text END,
+                 'note', stale_snooze.note
+               )
+               ORDER BY stale_snooze.created_at_utc, stale_snooze.id
+             ),
+             '[]'::jsonb
+           )
+    INTO v_stale_expense_snoozes_before
+    FROM public.pay_item_snoozes AS stale_snooze
+    WHERE stale_snooze.candidate_id = p_candidate_id
+      AND stale_snooze.timesheet_id = v_effective_timesheet_id
+      AND stale_snooze.source_ref LIKE v_expense_source_prefix || '%'
+      AND stale_snooze.source_ref IS DISTINCT FROM v_source_ref
+      AND stale_snooze.cleared_at_utc IS NULL
+      AND stale_snooze.cancelled_at_utc IS NULL
+      AND UPPER(BTRIM(COALESCE(stale_snooze.snooze_kind, ''))) = 'DO_NOT_PAY';
+
+    UPDATE public.pay_item_snoozes AS stale_snooze
+    SET cancelled_at_utc = now(),
+        cancelled_by_user_id = p_actor_user_id,
+        cancel_reason = 'SUPERSEDED_BY_CURRENT_EXPENSE_SOURCE',
+        updated_at_utc = now(),
+        updated_by_user_id = p_actor_user_id
+    WHERE stale_snooze.candidate_id = p_candidate_id
+      AND stale_snooze.timesheet_id = v_effective_timesheet_id
+      AND stale_snooze.source_ref LIKE v_expense_source_prefix || '%'
+      AND stale_snooze.source_ref IS DISTINCT FROM v_source_ref
+      AND stale_snooze.cleared_at_utc IS NULL
+      AND stale_snooze.cancelled_at_utc IS NULL
+      AND UPPER(BTRIM(COALESCE(stale_snooze.snooze_kind, ''))) = 'DO_NOT_PAY';
+
+    GET DIAGNOSTICS v_stale_expense_snoozes_cancelled = ROW_COUNT;
+
+    IF COALESCE(v_stale_expense_snoozes_cancelled, 0) > 0 THEN
+      PERFORM public._audit_insert(
+        'timesheets',
+        v_effective_timesheet_id::text,
+        'SNOOZE_STALE_EXPENSE_IDENTITIES_CANCELLED',
+        v_stale_expense_snoozes_before,
+        jsonb_build_object(
+          'current_source_ref', v_source_ref,
+          'expense_code', v_expense_code,
+          'cancelled_count', v_stale_expense_snoozes_cancelled,
+          'cancel_reason', 'SUPERSEDED_BY_CURRENT_EXPENSE_SOURCE'
+        ),
+        'SUPERSEDED_BY_CURRENT_EXPENSE_SOURCE',
+        p_actor_user_id
+      );
     END IF;
   END IF;
 
@@ -231772,6 +233218,38 @@ BEGIN
   ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
   LIMIT 1;
 
+  IF v_scope_kind = 'TIMESHEET_EXPENSE' AND v_keeper_id IS NULL THEN
+    SELECT s.id,
+           jsonb_build_object(
+             'id', s.id::text,
+             'candidate_id', s.candidate_id::text,
+             'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
+             'booking_id', s.booking_id,
+             'segment_id', s.segment_id,
+             'segment_stable_key', s.segment_stable_key,
+             'source_ref', s.source_ref,
+             'snooze_kind', s.snooze_kind,
+             'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
+             'note', s.note,
+             'cancelled_at_utc', CASE WHEN s.cancelled_at_utc IS NULL THEN NULL ELSE s.cancelled_at_utc::text END,
+             'cancel_reason', s.cancel_reason
+           )
+    INTO v_keeper_id,
+         v_before
+    FROM public.pay_item_snoozes AS s
+    WHERE s.candidate_id = p_candidate_id
+      AND s.timesheet_id = v_effective_timesheet_id
+      AND s.source_ref IS NOT DISTINCT FROM v_source_ref
+      AND UPPER(BTRIM(COALESCE(s.snooze_kind, ''))) = 'DO_NOT_PAY'
+      AND s.cleared_at_utc IS NULL
+      AND s.cancelled_at_utc IS NOT NULL
+    ORDER BY s.cancelled_at_utc DESC NULLS LAST,
+             s.updated_at_utc DESC NULLS LAST,
+             s.id DESC
+    LIMIT 1
+    FOR UPDATE;
+  END IF;
+
   IF v_source_ref IS NULL AND v_segment_id_input IS NOT NULL AND v_effective_segment_id IS NULL THEN
     IF v_keeper_id IS NOT NULL THEN
       UPDATE public.pay_item_snoozes s
@@ -231870,13 +233348,16 @@ BEGIN
   IF v_keeper_id IS NOT NULL THEN
     UPDATE public.pay_item_snoozes s
     SET
-      timesheet_id = CASE WHEN v_source_ref IS NULL THEN v_effective_timesheet_id ELSE NULL END,
-      booking_id = CASE WHEN v_source_ref IS NULL THEN v_booking_id ELSE NULL END,
+      timesheet_id = CASE WHEN v_source_ref IS NULL OR v_scope_kind = 'TIMESHEET_EXPENSE' THEN v_effective_timesheet_id ELSE NULL END,
+      booking_id = CASE WHEN v_source_ref IS NULL OR v_scope_kind = 'TIMESHEET_EXPENSE' THEN v_booking_id ELSE NULL END,
       segment_id = CASE WHEN v_source_ref IS NULL THEN v_effective_segment_id ELSE NULL END,
       segment_stable_key = CASE WHEN v_source_ref IS NULL THEN v_segment_stable_key ELSE NULL END,
       snooze_kind = v_kind,
       snooze_until_date = p_snooze_until_date,
       note = v_note,
+      cancelled_at_utc = CASE WHEN v_scope_kind = 'TIMESHEET_EXPENSE' THEN NULL ELSE s.cancelled_at_utc END,
+      cancelled_by_user_id = CASE WHEN v_scope_kind = 'TIMESHEET_EXPENSE' THEN NULL ELSE s.cancelled_by_user_id END,
+      cancel_reason = CASE WHEN v_scope_kind = 'TIMESHEET_EXPENSE' THEN NULL ELSE s.cancel_reason END,
       updated_at_utc = now(),
       updated_by_user_id = p_actor_user_id
     WHERE s.id = v_keeper_id;
@@ -231902,8 +233383,8 @@ BEGIN
     )
     VALUES (
       p_candidate_id,
-      CASE WHEN v_source_ref IS NULL THEN v_effective_timesheet_id ELSE NULL END,
-      CASE WHEN v_source_ref IS NULL THEN v_booking_id ELSE NULL END,
+      CASE WHEN v_source_ref IS NULL OR v_scope_kind = 'TIMESHEET_EXPENSE' THEN v_effective_timesheet_id ELSE NULL END,
+      CASE WHEN v_source_ref IS NULL OR v_scope_kind = 'TIMESHEET_EXPENSE' THEN v_booking_id ELSE NULL END,
       CASE WHEN v_source_ref IS NULL THEN v_effective_segment_id ELSE NULL END,
       CASE WHEN v_source_ref IS NULL THEN v_segment_stable_key ELSE NULL END,
       v_source_ref,
@@ -232140,6 +233621,10 @@ BEGIN
       'segment_id', v_effective_segment_id,
       'segment_stable_key', v_segment_stable_key,
       'source_ref', v_source_ref,
+      'scope_kind', v_scope_kind,
+      'expense_code', v_expense_code,
+      'expense_source_basis_fingerprint', v_expense_source_basis_fingerprint,
+      'stale_expense_snoozes_cancelled', COALESCE(v_stale_expense_snoozes_cancelled, 0),
       'finance_case_id', CASE WHEN v_finance_case_id IS NULL THEN NULL ELSE v_finance_case_id::text END,
       'snooze_kind', v_kind,
       'snooze_until_date', CASE WHEN p_snooze_until_date IS NULL THEN NULL ELSE p_snooze_until_date::text END,
@@ -232163,13 +233648,13 @@ BEGIN
 END;
 $function$;
 
+
+
 ALTER FUNCTION public.pay_snooze_upsert_v2(uuid, uuid, text, text, text, date, uuid, text, text, text, text) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.pay_snooze_upsert_v2(uuid, uuid, text, text, text, date, uuid, text, text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.pay_snooze_upsert_v2(uuid, uuid, text, text, text, date, uuid, text, text, text, text) FROM anon;
 REVOKE ALL ON FUNCTION public.pay_snooze_upsert_v2(uuid, uuid, text, text, text, date, uuid, text, text, text, text) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.pay_snooze_upsert_v2(uuid, uuid, text, text, text, date, uuid, text, text, text, text) TO service_role;
-
-
 CREATE OR REPLACE FUNCTION public.pay_snooze_validate_request_v1(
   p_actor_user_id uuid,
   p_candidate_id uuid,
@@ -232198,6 +233683,17 @@ DECLARE
   v_input_segment_id text := NULLIF(BTRIM(COALESCE(p_segment_id, '')), '');
   v_input_segment_stable_key text := NULLIF(BTRIM(COALESCE(p_segment_stable_key, '')), '');
   v_source_ref text := LOWER(NULLIF(BTRIM(COALESCE(p_source_ref, '')), ''));
+  v_is_timesheet_expense_scope boolean := false;
+  v_expense_source_timesheet_id uuid := NULL::uuid;
+  v_expense_code text := NULL::text;
+  v_expense_label text := NULL::text;
+  v_expense_item_type text := NULL::text;
+  v_expense_source_basis_fingerprint text := NULL::text;
+  v_expense_source_basis_json jsonb := NULL::jsonb;
+  v_expense_amount_ex_vat numeric := NULL::numeric;
+  v_expense_amount_display numeric := NULL::numeric;
+  v_expense_source_charge_ex_vat numeric := NULL::numeric;
+  v_expense_source_row_json jsonb := NULL::jsonb;
   v_finance_case_id uuid := NULL::uuid;
   v_expected_finance_case_type public.pay_finance_case_type_enum;
   v_effective_timesheet_id uuid := NULL::uuid;
@@ -232276,6 +233772,24 @@ BEGIN
   END IF;
 
   v_is_payment_scope := v_kind IN ('DO_NOT_PAY', 'BLOCKED_TIMESHEET', 'TIMESHEET_PAYMENT');
+  v_is_timesheet_expense_scope := (
+    v_kind = 'DO_NOT_PAY'
+    AND v_source_ref IS NOT NULL
+    AND v_source_ref ~ '^timesheet-expense:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:(expenses|travel|accommodation|other|mileage):[0-9a-f]{32}$'
+  );
+
+  IF v_source_ref IS NOT NULL
+     AND v_is_payment_scope
+     AND COALESCE(v_is_timesheet_expense_scope, false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'SNOOZE_TIMESHEET_SOURCE_REF_INVALID'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'SNOOZE_TIMESHEET_SOURCE_REF_INVALID',
+              'source_ref', v_source_ref,
+              'snooze_kind', v_kind,
+              'refresh_required', true
+            )::text;
+  END IF;
 
   IF v_is_payment_scope THEN
     IF p_timesheet_id IS NULL THEN
@@ -232331,7 +233845,137 @@ BEGIN
               )::text;
     END IF;
 
-    IF v_kind = 'TIMESHEET_PAYMENT' THEN
+    IF COALESCE(v_is_timesheet_expense_scope, false) THEN
+      IF v_input_segment_id IS NOT NULL OR v_input_segment_stable_key IS NOT NULL THEN
+        RAISE EXCEPTION 'SNOOZE_EXPENSE_SCOPE_MUST_NOT_HAVE_SEGMENT'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'SNOOZE_EXPENSE_SCOPE_MUST_NOT_HAVE_SEGMENT',
+                  'source_ref', v_source_ref
+                )::text;
+      END IF;
+
+      v_expense_source_timesheet_id := split_part(v_source_ref, ':', 2)::uuid;
+      v_expense_code := UPPER(split_part(v_source_ref, ':', 3));
+      v_expense_source_basis_fingerprint := LOWER(split_part(v_source_ref, ':', 4));
+      v_expense_label := CASE v_expense_code
+        WHEN 'EXPENSES' THEN 'Expenses'
+        WHEN 'TRAVEL' THEN 'Travel'
+        WHEN 'ACCOMMODATION' THEN 'Accommodation'
+        WHEN 'OTHER' THEN 'Other'
+        WHEN 'MILEAGE' THEN 'Mileage'
+        ELSE NULL::text
+      END;
+      v_expense_item_type := CASE WHEN v_expense_code = 'MILEAGE' THEN 'MILEAGE_DELTA' ELSE 'EXPENSE_DELTA' END;
+
+      IF v_expense_source_timesheet_id IS DISTINCT FROM v_effective_timesheet_id THEN
+        RAISE EXCEPTION 'SNOOZE_EXPENSE_TIMESHEET_IDENTITY_STALE'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'SNOOZE_EXPENSE_TIMESHEET_IDENTITY_STALE',
+                  'source_ref', v_source_ref,
+                  'source_timesheet_id', v_expense_source_timesheet_id::text,
+                  'current_timesheet_id', v_effective_timesheet_id::text,
+                  'refresh_required', true
+                )::text;
+      END IF;
+
+      SELECT
+        source_line.source_row_json,
+        COALESCE(
+          source_line.source_row_json->'expense_source_basis_json',
+          source_line.source_row_json->'source_basis_json',
+          '{}'::jsonb
+        ),
+        NULLIF(BTRIM(COALESCE(
+          source_line.source_row_json->>'source_basis_fingerprint',
+          source_line.source_row_json->>'expense_source_basis_fingerprint',
+          ''
+        )), ''),
+        CASE
+          WHEN COALESCE(source_line.source_row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (source_line.source_row_json->>'amount_ex_vat')::numeric
+          WHEN COALESCE(source_line.source_row_json->>'preview_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (source_line.source_row_json->>'preview_amount_ex_vat')::numeric
+          ELSE NULL::numeric
+        END,
+        CASE
+          WHEN COALESCE(source_line.source_row_json->>'amount_display', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (source_line.source_row_json->>'amount_display')::numeric
+          WHEN COALESCE(source_line.source_row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (source_line.source_row_json->>'amount_ex_vat')::numeric
+          ELSE NULL::numeric
+        END,
+        CASE
+          WHEN COALESCE(source_line.source_row_json#>>'{expense_source_basis_json,source_charge_ex_vat}', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (source_line.source_row_json#>>'{expense_source_basis_json,source_charge_ex_vat}')::numeric
+          WHEN COALESCE(source_line.source_row_json#>>'{source_basis_json,source_charge_ex_vat}', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+            THEN (source_line.source_row_json#>>'{source_basis_json,source_charge_ex_vat}')::numeric
+          ELSE NULL::numeric
+        END
+      INTO
+        v_expense_source_row_json,
+        v_expense_source_basis_json,
+        v_expense_source_basis_fingerprint,
+        v_expense_amount_ex_vat,
+        v_expense_amount_display,
+        v_expense_source_charge_ex_vat
+      FROM public.banking_pay_workbench_candidate_source_lines AS source_line
+      JOIN public.banking_pay_workbench_sessions AS source_session
+        ON source_session.id = source_line.session_id
+      LEFT JOIN public.app_change_counters AS candidate_counter
+        ON candidate_counter.entity_key = 'pay_candidate:' || p_candidate_id::text
+      WHERE source_line.candidate_id = p_candidate_id
+        AND source_line.timesheet_id = v_effective_timesheet_id
+        AND source_line.status = 'CURRENT'
+        AND source_line.session_version = COALESCE(source_session.version, 1)
+        AND source_line.source_change_seq = COALESCE(candidate_counter.seq, 0)
+        AND UPPER(BTRIM(COALESCE(source_session.status, ''))) = 'OPEN'
+        AND source_session.discarded_at_utc IS NULL
+        AND source_session.replacement_session_id IS NULL
+        AND LOWER(BTRIM(COALESCE(source_line.source_row_json->>'source_ref', ''))) = v_source_ref
+        AND UPPER(BTRIM(COALESCE(source_line.source_row_json#>>'{snooze_identity,identity_type}', ''))) = 'TIMESHEET_EXPENSE'
+        AND UPPER(BTRIM(COALESCE(
+              source_line.economic_key_json->>'key_type',
+              source_line.source_row_json#>>'{economic_key,key_type}',
+              source_line.source_row_json->>'component_key_type',
+              ''
+            ))) = 'EXPENSE_CODE'
+        AND UPPER(BTRIM(COALESCE(
+              source_line.economic_key_json->>'key_value',
+              source_line.source_row_json#>>'{economic_key,key_value}',
+              source_line.source_row_json->>'component_key_value',
+              ''
+            ))) = v_expense_code
+      ORDER BY source_session.updated_at_utc DESC NULLS LAST,
+               source_line.updated_at_utc DESC NULLS LAST,
+               source_line.id DESC
+      LIMIT 1;
+
+      IF v_expense_source_row_json IS NULL
+         OR v_expense_source_basis_fingerprint IS DISTINCT FROM LOWER(split_part(v_source_ref, ':', 4))
+         OR md5(COALESCE(v_expense_source_basis_json, '{}'::jsonb)::text) IS DISTINCT FROM LOWER(split_part(v_source_ref, ':', 4))
+         OR UPPER(BTRIM(COALESCE(v_expense_source_row_json->>'expense_code', v_expense_source_row_json->>'component_key_value', ''))) IS DISTINCT FROM v_expense_code THEN
+        RAISE EXCEPTION 'SNOOZE_EXPENSE_SOURCE_IDENTITY_STALE'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'SNOOZE_EXPENSE_SOURCE_IDENTITY_STALE',
+                  'candidate_id', p_candidate_id::text,
+                  'timesheet_id', v_effective_timesheet_id::text,
+                  'expense_code', v_expense_code,
+                  'source_ref', v_source_ref,
+                  'refresh_required', true
+                )::text;
+      END IF;
+
+      v_scope_kind := 'TIMESHEET_EXPENSE';
+      v_noun := LOWER(v_expense_label || ' expense');
+    ELSIF v_kind = 'TIMESHEET_PAYMENT' THEN
+      IF v_source_ref IS NOT NULL THEN
+        RAISE EXCEPTION 'SNOOZE_TIMESHEET_SCOPE_MUST_NOT_HAVE_SOURCE_REF'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object('code', 'SNOOZE_TIMESHEET_SCOPE_MUST_NOT_HAVE_SOURCE_REF')::text;
+      END IF;
       IF v_input_segment_id IS NOT NULL OR v_input_segment_stable_key IS NOT NULL THEN
         RAISE EXCEPTION 'SNOOZE_TIMESHEET_SCOPE_MUST_NOT_HAVE_SEGMENT'
           USING ERRCODE = 'P0001',
@@ -232340,6 +233984,11 @@ BEGIN
       v_scope_kind := 'TIMESHEET';
       v_noun := 'timesheet';
     ELSE
+      IF v_source_ref IS NOT NULL THEN
+        RAISE EXCEPTION 'SNOOZE_SEGMENT_SCOPE_MUST_NOT_HAVE_SOURCE_REF'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object('code', 'SNOOZE_SEGMENT_SCOPE_MUST_NOT_HAVE_SOURCE_REF')::text;
+      END IF;
       IF v_input_segment_id IS NULL AND v_input_segment_stable_key IS NULL THEN
         RAISE EXCEPTION 'SNOOZE_SEGMENT_IDENTITY_REQUIRED'
           USING ERRCODE = 'P0001',
@@ -232629,11 +234278,20 @@ BEGIN
     'scope_fingerprint', v_scope_fingerprint,
     'candidate_id', p_candidate_id::text,
     'timesheet_id', CASE WHEN v_effective_timesheet_id IS NULL THEN NULL ELSE v_effective_timesheet_id::text END,
+    'booking_id', v_booking_id,
     'segment_id', v_effective_segment_id,
     'segment_stable_key', v_effective_segment_stable_key,
     'source_ref', v_source_ref,
     'scope_kind', v_scope_kind,
     'noun', v_noun,
+    'expense_code', v_expense_code,
+    'expense_label', v_expense_label,
+    'expense_item_type', v_expense_item_type,
+    'expense_source_basis_fingerprint', v_expense_source_basis_fingerprint,
+    'expense_source_basis_json', v_expense_source_basis_json,
+    'expense_amount_ex_vat', v_expense_amount_ex_vat,
+    'expense_amount_display', v_expense_amount_display,
+    'expense_source_charge_ex_vat', v_expense_source_charge_ex_vat,
     'snooze_kind', v_kind,
     'snooze_until_date', CASE WHEN p_snooze_until_date IS NULL THEN NULL ELSE p_snooze_until_date::text END,
     'london_current_date', v_london_current_date::text,
@@ -232650,6 +234308,7 @@ BEGIN
 END;
 $function$;
 
+
 ALTER FUNCTION public.pay_snooze_validate_request_v1(uuid, uuid, uuid, text, text, text, text, date, text) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.pay_snooze_validate_request_v1(uuid, uuid, uuid, text, text, text, text, date, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.pay_snooze_validate_request_v1(uuid, uuid, uuid, text, text, text, text, date, text) FROM anon;
@@ -232657,16 +234316,11 @@ REVOKE ALL ON FUNCTION public.pay_snooze_validate_request_v1(uuid, uuid, uuid, t
 GRANT EXECUTE ON FUNCTION public.pay_snooze_validate_request_v1(uuid, uuid, uuid, text, text, text, text, date, text) TO service_role;
 
 
-
-CREATE OR REPLACE FUNCTION public.pay_snooze_resolution_transition_v1(
-  p_snooze_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_transition_reason text DEFAULT 'MANUAL_UNSNOOZE'::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_catalog', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.pay_snooze_resolution_transition_v1(p_snooze_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_transition_reason text DEFAULT 'MANUAL_UNSNOOZE'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog', 'pg_temp'
 AS $function$
 DECLARE
   v_now timestamptz := clock_timestamp();
@@ -232678,6 +234332,7 @@ DECLARE
   v_snooze public.pay_item_snoozes%ROWTYPE;
   v_candidate_id_hint uuid;
   v_scope_kind text;
+  v_is_timesheet_expense_scope boolean := false;
   v_actor_user_id uuid := p_actor_user_id;
   v_refresh_actor_user_id uuid;
   v_scope record;
@@ -232798,7 +234453,18 @@ BEGIN
             )::text;
   END IF;
 
+  v_is_timesheet_expense_scope := (
+    v_snooze.timesheet_id IS NOT NULL
+    AND NULLIF(BTRIM(COALESCE(v_snooze.segment_stable_key, '')), '') IS NULL
+    AND NULLIF(BTRIM(COALESCE(v_snooze.segment_id, '')), '') IS NULL
+    AND UPPER(BTRIM(COALESCE(v_snooze.snooze_kind, ''))) = 'DO_NOT_PAY'
+    AND LOWER(BTRIM(COALESCE(v_snooze.source_ref, ''))) ~
+      '^timesheet-expense:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:(expenses|travel|accommodation|other|mileage):[0-9a-f]{32}$'
+    AND split_part(LOWER(BTRIM(v_snooze.source_ref)), ':', 2)::uuid IS NOT DISTINCT FROM v_snooze.timesheet_id
+  );
+
   v_scope_kind := CASE
+    WHEN COALESCE(v_is_timesheet_expense_scope, false) THEN 'TIMESHEET_EXPENSE'
     WHEN NULLIF(BTRIM(COALESCE(v_snooze.segment_stable_key, '')), '') IS NOT NULL
       OR NULLIF(BTRIM(COALESCE(v_snooze.segment_id, '')), '') IS NOT NULL
       THEN 'SEGMENT'
@@ -232809,6 +234475,8 @@ BEGIN
     (v_scope_kind = 'SEGMENT' AND UPPER(BTRIM(v_snooze.snooze_kind)) IN ('DO_NOT_PAY', 'BLOCKED_TIMESHEET'))
     OR
     (v_scope_kind = 'TIMESHEET' AND UPPER(BTRIM(v_snooze.snooze_kind)) = 'TIMESHEET_PAYMENT')
+    OR
+    (v_scope_kind = 'TIMESHEET_EXPENSE' AND UPPER(BTRIM(v_snooze.snooze_kind)) = 'DO_NOT_PAY')
   ) THEN
     RAISE EXCEPTION 'SNOOZE_PAYMENT_SCOPE_IDENTITY_MISMATCH'
       USING ERRCODE = 'P0001',
@@ -232834,6 +234502,32 @@ BEGIN
                 'actor_user_id', v_actor_user_id::text
               )::text;
     END IF;
+  END IF;
+
+  IF v_scope_kind = 'TIMESHEET_EXPENSE' THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'state_changed', false,
+      'review_required', false,
+      'reason', 'TIMESHEET_EXPENSE_SCOPE_NO_RATE_TRANSITION',
+      'transition_reason', v_transition_reason,
+      'snooze_id', v_snooze.id::text,
+      'snooze_kind', v_snooze.snooze_kind,
+      'scope_kind', v_scope_kind,
+      'candidate_id', v_snooze.candidate_id::text,
+      'timesheet_id', v_snooze.timesheet_id::text,
+      'source_ref', v_snooze.source_ref,
+      'london_current_date', v_today_uk::text,
+      'current_official_pay_date', v_current_official_pay_date::text,
+      'configuration_fingerprint', v_context_fingerprint,
+      'matched_resolution_count', 0,
+      'cross_week_resolution_count', 0,
+      'stale_same_week_resolution_count', 0,
+      'retained_same_week_resolution_count', 0,
+      'deleted_resolution_count', 0,
+      'job_ids', '[]'::jsonb,
+      'affected_sessions', '[]'::jsonb
+    );
   END IF;
 
   DROP TABLE IF EXISTS pg_temp._bpay_snooze_resolution_transition;
@@ -233146,6 +234840,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 ALTER FUNCTION public.pay_snooze_resolution_transition_v1(uuid, uuid, text) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.pay_snooze_resolution_transition_v1(uuid, uuid, text) FROM PUBLIC, anon, authenticated;

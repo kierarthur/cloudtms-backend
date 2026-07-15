@@ -42655,6 +42655,8 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const expenseSourceRefRe = /^timesheet-expense:([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}):(expenses|travel|accommodation|other|mileage):([0-9a-f]{32})$/i;
+  const financeSourceRefRe = /^advance:([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
   const trimStr = (v) => String(v == null ? '' : v).trim();
   const readUuid = (value) => {
     const text = trimStr(value);
@@ -42759,6 +42761,33 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
     return null;
   };
 
+  const normalizeExpenseRefreshPayload = (payload) => {
+    const src = (payload && typeof payload === 'object') ? payload : null;
+    if (!src) return null;
+    const rawCode = trimStr(src.error_code || src.code || src.error || src.message).toUpperCase();
+    const refreshCodes = new Set([
+      'SNOOZE_TIMESHEET_SOURCE_REF_INVALID',
+      'SNOOZE_EXPENSE_TIMESHEET_IDENTITY_STALE',
+      'SNOOZE_EXPENSE_SOURCE_IDENTITY_STALE',
+      'SNOOZE_EXPENSE_SCOPE_IDENTITY_INVALID',
+      'SNOOZE_EXPENSE_CURRENT_TIMESHEET_INVALID',
+      'SNOOZE_EXPENSE_CANONICAL_IDENTITY_INCOMPLETE'
+    ]);
+    if (!refreshCodes.has(rawCode)) return null;
+    return {
+      ok: false,
+      error: rawCode,
+      error_code: rawCode,
+      message: trimStr(src.user_message || src.message) || 'This expense line has changed or been replaced. Refresh Banking Pay and try again.',
+      refresh_required: true,
+      candidate_id: trimStr(src.candidate_id) || null,
+      timesheet_id: trimStr(src.timesheet_id || src.current_timesheet_id) || null,
+      booking_id: trimStr(src.booking_id) || null,
+      source_ref: trimStr(src.source_ref) || null,
+      expense_code: trimStr(src.expense_code).toUpperCase() || null
+    };
+  };
+
   const normalizeConflictPayload = (payload) => {
     const src = (payload && typeof payload === 'object') ? payload : null;
     if (!src) return null;
@@ -42810,7 +42839,12 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
   const bookingIdHint = trimStr(body.booking_id || body.bookingId) || null;
   const segmentId = trimStr(body.segment_id || body.segmentId) || null;
   const segmentStableKeyHint = trimStr(body.segment_stable_key || body.segmentStableKey) || null;
-  const sourceRef = trimStr(body.source_ref || body.sourceRef) || null;
+  const sourceRefRaw = trimStr(body.source_ref || body.sourceRef);
+  const sourceRef = sourceRefRaw ? sourceRefRaw.toLowerCase() : null;
+  const expenseSourceMatch = sourceRef ? sourceRef.match(expenseSourceRefRe) : null;
+  const financeSourceMatch = sourceRef ? sourceRef.match(financeSourceRefRe) : null;
+  const isTimesheetExpenseRequest = !!expenseSourceMatch;
+  const isFinanceSourceRequest = !!financeSourceMatch;
   const resolvedRateAcknowledgementToken = trimStr(
     body.resolved_rate_acknowledgement_token
     || body.resolvedRateAcknowledgementToken
@@ -42864,13 +42898,29 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
   }
 
   if (sourceRef) {
-    if (timesheetId || segmentId || segmentStableKeyHint || bookingIdHint) {
-      return withCORS(env, req, badRequest('source_ref snoozes must not also provide timesheet/segment identity fields'));
+    if (isTimesheetExpenseRequest) {
+      if (!timesheetId) {
+        return withCORS(env, req, badRequest('timesheet_id is required for a timesheet expense snooze'));
+      }
+      if (segmentId || segmentStableKeyHint) {
+        return withCORS(env, req, badRequest('timesheet expense snoozes must not provide segment_id or segment_stable_key'));
+      }
+      if (snoozeKindNormalized !== 'DO_NOT_PAY') {
+        return withCORS(env, req, badRequest('timesheet expense snoozes must use DO_NOT_PAY'));
+      }
+      if (trimStr(expenseSourceMatch[1]).toLowerCase() !== trimStr(timesheetId).toLowerCase()) {
+        return withCORS(env, req, badRequest('source_ref timesheet identity does not match timesheet_id; refresh Banking Pay and try again'));
+      }
+    } else {
+      if (!isFinanceSourceRequest) {
+        return withCORS(env, req, badRequest('source_ref must be a valid finance-case or timesheet-expense identity'));
+      }
+      if (timesheetId || segmentId || segmentStableKeyHint || bookingIdHint) {
+        return withCORS(env, req, badRequest('finance source_ref snoozes must not also provide timesheet/segment identity fields'));
+      }
     }
-  } else {
-    if (!timesheetId) {
-      return withCORS(env, req, badRequest('timesheet_id is required for timesheet/segment snoozes'));
-    }
+  } else if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required for timesheet/segment snoozes'));
   }
 
   if (snoozeKindNormalized === 'TIMESHEET_PAYMENT' && sourceRef) {
@@ -42946,6 +42996,16 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
     } catch {}
 
     const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const canonicalScopeKind = trimStr(payloadObj.scope_kind || payloadObj.identity_type || '').toUpperCase();
+    if (isTimesheetExpenseRequest && canonicalScopeKind && canonicalScopeKind !== 'TIMESHEET_EXPENSE') {
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        error: 'SNOOZE_EXPENSE_CANONICAL_SCOPE_MISMATCH',
+        error_code: 'SNOOZE_EXPENSE_CANONICAL_SCOPE_MISMATCH',
+        message: 'This expense line is no longer current. Refresh Banking Pay and try again.',
+        refresh_required: true
+      }));
+    }
 
     const resolvedSnoozeId = trimStr(
       payloadObj.snooze_id ||
@@ -43077,6 +43137,10 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
         refresh_required: raised?.refresh_required === true
       }));
     }
+    const expenseRefreshPayload = normalizeExpenseRefreshPayload(raised);
+    if (expenseRefreshPayload) {
+      return withCORS(env, req, jsonResponse(409, expenseRefreshPayload));
+    }
     const conflictPayload = normalizeConflictPayload(raised);
     if (conflictPayload) {
       return withCORS(env, req, jsonResponse(409, conflictPayload));
@@ -43084,6 +43148,8 @@ async function handleBankingPaySnoozeUpsert(env, req, user, ctx = null) {
     return withCORS(env, req, serverError('CloudTMS could not save this snooze. Refresh the page and try again.'));
   }
 }
+
+
 
 async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
   const enc = encodeURIComponent;
