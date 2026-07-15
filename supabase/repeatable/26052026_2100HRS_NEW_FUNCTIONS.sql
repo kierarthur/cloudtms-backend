@@ -199705,6 +199705,7 @@ DECLARE
   v_snapshot_run_id uuid := NULL::uuid;
   v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
   v_session_created boolean := false;
+  v_unique_constraint_name text := NULL::text;
   v_action text := 'WORKBENCH_SESSION_ATTACHED';
   v_work_queued boolean := false;
   v_root_job_id uuid := NULL::uuid;
@@ -200186,8 +200187,9 @@ BEGIN
   SELECT existing_session.*
   INTO v_session_row
   FROM public.banking_pay_workbench_sessions AS existing_session
-  WHERE existing_session.actor_user_id = p_actor_user_id
-    AND existing_session.pay_date = p_pay_date
+  -- The current workbench is shared across authorised actors.  actor_user_id
+  -- records who created it; it is not part of the canonical shared identity.
+  WHERE existing_session.pay_date = p_pay_date
     AND existing_session.week_ending_cutoff = v_effective_week_ending_cutoff
     AND existing_session.status = 'OPEN'
     AND existing_session.discarded_at_utc IS NULL
@@ -200380,10 +200382,19 @@ BEGIN
       v_session_created := true;
     EXCEPTION
       WHEN unique_violation THEN
+        GET STACKED DIAGNOSTICS v_unique_constraint_name = CONSTRAINT_NAME;
+
+        IF v_unique_constraint_name IS DISTINCT FROM 'ux_bpay_workbench_sessions_shared_context_open' THEN
+          RAISE;
+        END IF;
+
         SELECT existing_session.*
         INTO v_session_row
         FROM public.banking_pay_workbench_sessions AS existing_session
-        WHERE existing_session.actor_user_id = p_actor_user_id
+        -- A concurrent authorised actor may have created the shared workbench
+        -- after our initial lookup.  Recover only the exact canonical session
+        -- protected by the shared-context unique index.
+        WHERE existing_session.session_signature IS NOT DISTINCT FROM v_session_signature
           AND existing_session.pay_date = p_pay_date
           AND existing_session.week_ending_cutoff = v_effective_week_ending_cutoff
           AND existing_session.status = 'OPEN'
