@@ -12173,7 +12173,6 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 }
 
 
-
 async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId, ctx = null) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
 
@@ -12462,8 +12461,12 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
       payloadObj?.enqueue_result?.jobId,
       payloadObj?.enqueue_result?.job_ids?.[0],
       payloadObj?.enqueue_result?.jobIds?.[0],
+      payloadObj?.enqueue_result?.session_recompute_job_ids?.[0],
+      payloadObj?.enqueue_result?.sessionRecomputeJobIds?.[0],
       payloadObj?.job_ids?.[0],
-      payloadObj?.jobIds?.[0]
+      payloadObj?.jobIds?.[0],
+      payloadObj?.session_recompute_job_ids?.[0],
+      payloadObj?.sessionRecomputeJobIds?.[0]
     ];
     for (const value of candidates) {
       const uuid = readUuid(value);

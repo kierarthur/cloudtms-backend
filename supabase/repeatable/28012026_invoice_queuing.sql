@@ -1383,6 +1383,7 @@ DECLARE
   v_represented_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_authorised_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_active_advance_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_retained_finance_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_target_details_json jsonb := '[]'::jsonb;
   v_preview_row_count integer := 0;
@@ -1495,6 +1496,146 @@ BEGIN
     FROM candidate_open_scope AS candidate_scope
     WHERE candidate_scope.pay_date = candidate_scope.latest_actor_open_pay_date
   ),
+  retained_case_scope AS (
+    SELECT
+      finance_case.id AS finance_case_id,
+      finance_case.linked_timesheet_id,
+      finance_case.status,
+      finance_case.outstanding_amount,
+      finance_case.updated_at
+    FROM public.pay_advances AS finance_case
+    WHERE finance_case.candidate_id = p_candidate_id
+      AND finance_case.written_off_at_utc IS NULL
+      AND (
+        finance_case.advance_kind IN (
+          'OVERPAYMENT'::public.pay_advance_kind_enum,
+          'UNDERPAYMENT'::public.pay_advance_kind_enum
+        )
+        OR finance_case.case_type IN (
+          'OVERPAYMENT'::public.pay_finance_case_type_enum,
+          'UNDERPAYMENT'::public.pay_finance_case_type_enum
+        )
+      )
+  ),
+  retained_finance_authority_rows AS (
+    -- Current open finance authority.
+    SELECT DISTINCT
+      COALESCE(finance_component.linked_timesheet_id, retained_case.linked_timesheet_id) AS timesheet_id,
+      NULLIF(UPPER(BTRIM(COALESCE(finance_component.source_pay_method, ''))), '') AS source_pay_method,
+      10::integer AS authority_priority,
+      COALESCE(finance_component.updated_at_utc, retained_case.updated_at) AS authority_at_utc,
+      'OPEN_FINANCE_CASE_OR_COMPONENT'::text AS authority_source
+    FROM retained_case_scope AS retained_case
+    LEFT JOIN public.pay_finance_case_components AS finance_component
+      ON finance_component.finance_case_id = retained_case.finance_case_id
+     AND finance_component.candidate_id = p_candidate_id
+    WHERE retained_case.status IN (
+        'ACTIVE'::public.pay_advance_status_enum,
+        'PAUSED'::public.pay_advance_status_enum
+      )
+      AND (
+        ROUND(COALESCE(retained_case.outstanding_amount, 0), 2) > 0
+        OR (
+          finance_component.id IS NOT NULL
+          AND finance_component.closed_at_utc IS NULL
+          AND ROUND(COALESCE(finance_component.remaining_source_amount, 0), 2) > 0
+        )
+      )
+      AND COALESCE(finance_component.linked_timesheet_id, retained_case.linked_timesheet_id) IS NOT NULL
+
+    UNION ALL
+
+    -- Frozen active Draft authority. SETTLED is deliberately excluded here;
+    -- settled authority is proven from the frozen item and settlement evidence
+    -- in the next branch, so it cannot be counted as both active and settled.
+    SELECT DISTINCT
+      COALESCE(finance_component.linked_timesheet_id, retained_case.linked_timesheet_id) AS timesheet_id,
+      NULLIF(UPPER(BTRIM(COALESCE(
+        active_reservation.frozen_source_pay_method,
+        finance_component.source_pay_method,
+        ''
+      ))), '') AS source_pay_method,
+      20::integer AS authority_priority,
+      COALESCE(active_reservation.committed_at_utc, active_reservation.created_at_utc) AS authority_at_utc,
+      'ACTIVE_FINANCE_RESERVATION'::text AS authority_source
+    FROM public.pay_advance_reservations AS active_reservation
+    JOIN retained_case_scope AS retained_case
+      ON retained_case.finance_case_id = active_reservation.finance_case_id
+    LEFT JOIN public.pay_finance_case_components AS finance_component
+      ON finance_component.id = active_reservation.finance_component_id
+     AND finance_component.finance_case_id = retained_case.finance_case_id
+     AND finance_component.candidate_id = p_candidate_id
+    WHERE UPPER(BTRIM(COALESCE(active_reservation.status, ''))) IN ('RESERVED', 'COMMITTED')
+      AND active_reservation.released_at_utc IS NULL
+      AND COALESCE(finance_component.linked_timesheet_id, retained_case.linked_timesheet_id) IS NOT NULL
+
+    UNION ALL
+
+    -- Immutable settled movements that still contribute to projected retained
+    -- value. Voided/reversed no-money authority is excluded exactly once.
+    SELECT DISTINCT
+      COALESCE(batch_item.timesheet_id, finance_component.linked_timesheet_id, retained_case.linked_timesheet_id) AS timesheet_id,
+      NULLIF(UPPER(BTRIM(COALESCE(
+        batch_item.frozen_source_pay_method,
+        finance_component.source_pay_method,
+        batch_item.pay_channel,
+        ''
+      ))), '') AS source_pay_method,
+      30::integer AS authority_priority,
+      COALESCE(bank_transfer.completed_at_utc, batch_candidate.settled_at_utc, batch_item.created_at) AS authority_at_utc,
+      'ACTIVE_SETTLED_FINANCE_MOVEMENT'::text AS authority_source
+    FROM public.pay_batch_items AS batch_item
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id = batch_item.pay_batch_candidate_id
+     AND batch_candidate.candidate_id = p_candidate_id
+    JOIN retained_case_scope AS retained_case
+      ON retained_case.finance_case_id = batch_item.finance_case_id
+    LEFT JOIN public.pay_finance_case_components AS finance_component
+      ON finance_component.id = batch_item.finance_component_id
+     AND finance_component.finance_case_id = retained_case.finance_case_id
+     AND finance_component.candidate_id = p_candidate_id
+    LEFT JOIN public.pay_bank_transfers AS bank_transfer
+      ON bank_transfer.id = batch_item.pay_bank_transfer_id
+    WHERE batch_item.is_voided IS NOT TRUE
+      AND UPPER(BTRIM(COALESCE(batch_item.item_type, ''))) IN ('OVERPAYMENT_RECOVERY', 'UNDERPAYMENT_PAYMENT')
+      AND (
+        UPPER(BTRIM(COALESCE(batch_candidate.settlement_status, ''))) = 'SETTLED'
+        OR batch_candidate.settled_at_utc IS NOT NULL
+        OR UPPER(BTRIM(COALESCE(bank_transfer.status, ''))) = 'COMPLETED'
+        OR bank_transfer.completed_at_utc IS NOT NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_items AS applied_reversal
+        WHERE applied_reversal.pay_batch_item_id = batch_item.id
+          AND applied_reversal.status = 'APPLIED'
+          AND applied_reversal.correction_item_kind IN ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+      )
+      AND COALESCE(batch_item.timesheet_id, finance_component.linked_timesheet_id, retained_case.linked_timesheet_id) IS NOT NULL
+
+    UNION ALL
+
+    -- Applied corrections are retained only where they are one of the exact
+    -- authority-changing correction kinds and remain linked to this finance
+    -- lineage. Generic historic events do not broaden route-change scope.
+    SELECT DISTINCT
+      COALESCE(correction_item.timesheet_id, finance_component.linked_timesheet_id, retained_case.linked_timesheet_id) AS timesheet_id,
+      NULLIF(UPPER(BTRIM(COALESCE(finance_component.source_pay_method, ''))), '') AS source_pay_method,
+      40::integer AS authority_priority,
+      COALESCE(correction_item.applied_at_utc, correction_item.created_at_utc) AS authority_at_utc,
+      'APPLIED_FINANCE_CORRECTION'::text AS authority_source
+    FROM public.pay_payment_correction_items AS correction_item
+    JOIN retained_case_scope AS retained_case
+      ON retained_case.finance_case_id = correction_item.finance_case_id
+    LEFT JOIN public.pay_finance_case_components AS finance_component
+      ON finance_component.id = correction_item.finance_component_id
+     AND finance_component.finance_case_id = retained_case.finance_case_id
+     AND finance_component.candidate_id = p_candidate_id
+    WHERE correction_item.candidate_id = p_candidate_id
+      AND correction_item.status = 'APPLIED'
+      AND correction_item.correction_item_kind IN ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+      AND COALESCE(correction_item.timesheet_id, finance_component.linked_timesheet_id, retained_case.linked_timesheet_id) IS NOT NULL
+  ),
   canonical_seed_ids AS (
     SELECT COALESCE(
       array_agg(DISTINCT seed.timesheet_id ORDER BY seed.timesheet_id),
@@ -1526,6 +1667,12 @@ BEGIN
         AND payment_override.consumed_at_utc IS NULL
         AND payment_override.consumed_by_pay_batch_id IS NULL
         AND payment_override.timesheet_id IS NOT NULL
+
+      UNION
+
+      SELECT retained_authority.timesheet_id
+      FROM retained_finance_authority_rows AS retained_authority
+      WHERE retained_authority.timesheet_id IS NOT NULL
     ) AS seed
   ),
   rotation_scope AS (
@@ -1555,12 +1702,10 @@ BEGIN
     SELECT
       canonical_id.timesheet_id,
       (
-        (
-          current_timesheet.authorised_at_server IS NOT NULL
-          AND current_timesheet.revoked_at IS NULL
-          AND current_timesheet.is_current IS TRUE
-        )
-        OR current_financial.authorised_at_utc IS NOT NULL
+        current_timesheet.archived_at_utc IS NULL
+        AND current_timesheet.revoked_at IS NULL
+        AND current_timesheet.is_current IS TRUE
+        AND current_timesheet.authorised_at_server IS NOT NULL
       ) AS is_authorised,
       EXISTS (
         SELECT 1
@@ -1579,19 +1724,28 @@ BEGIN
             )
           )
       ) AS has_active_advance,
+      EXISTS (
+        SELECT 1
+        FROM retained_finance_authority_rows AS retained_authority
+        WHERE retained_authority.timesheet_id = canonical_id.timesheet_id
+           OR retained_authority.timesheet_id IN (
+             SELECT family_row.family_timesheet_id
+             FROM rotation_scope AS family_row
+             WHERE family_row.canonical_timesheet_id = canonical_id.timesheet_id
+           )
+      ) AS has_retained_finance_authority,
       UPPER(BTRIM(COALESCE(
         current_financial.pay_method,
+        retained_finance_authority.source_pay_method,
         current_contract.pay_method_snapshot,
         ''
       ))) AS source_pay_method
     FROM canonical_ids AS canonical_id
-    JOIN public.timesheets AS current_timesheet
+    LEFT JOIN public.timesheets AS current_timesheet
       ON current_timesheet.timesheet_id = canonical_id.timesheet_id
      AND current_timesheet.is_current IS TRUE
     LEFT JOIN LATERAL (
-      SELECT
-        financial_row.pay_method,
-        financial_row.authorised_at_utc
+      SELECT financial_row.pay_method
       FROM public.timesheets_financials AS financial_row
       WHERE financial_row.timesheet_id = canonical_id.timesheet_id
         AND financial_row.is_current IS TRUE
@@ -1599,6 +1753,24 @@ BEGIN
       ORDER BY financial_row.timesheet_version DESC, financial_row.id DESC
       LIMIT 1
     ) AS current_financial ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT retained_authority.source_pay_method
+      FROM retained_finance_authority_rows AS retained_authority
+      WHERE (
+          retained_authority.timesheet_id = canonical_id.timesheet_id
+          OR retained_authority.timesheet_id IN (
+            SELECT family_row.family_timesheet_id
+            FROM rotation_scope AS family_row
+            WHERE family_row.canonical_timesheet_id = canonical_id.timesheet_id
+          )
+        )
+        AND retained_authority.source_pay_method IN ('PAYE', 'UMBRELLA')
+      ORDER BY
+        retained_authority.authority_priority,
+        retained_authority.authority_at_utc DESC NULLS LAST,
+        retained_authority.source_pay_method
+      LIMIT 1
+    ) AS retained_finance_authority ON TRUE
     LEFT JOIN public.contracts AS current_contract
       ON current_contract.id = current_timesheet.contract_id
      AND current_contract.candidate_id = p_candidate_id
@@ -1608,10 +1780,12 @@ BEGIN
       qualification.timesheet_id,
       qualification.is_authorised,
       qualification.has_active_advance,
+      qualification.has_retained_finance_authority,
       qualification.source_pay_method
     FROM canonical_qualification AS qualification
     WHERE qualification.is_authorised IS TRUE
        OR qualification.has_active_advance IS TRUE
+       OR qualification.has_retained_finance_authority IS TRUE
   ),
   current_preview_rows AS (
     SELECT DISTINCT
@@ -1716,6 +1890,11 @@ BEGIN
       WHERE qualification.has_active_advance IS TRUE
     ), ARRAY[]::uuid[]),
     COALESCE((
+      SELECT array_agg(qualification.timesheet_id ORDER BY qualification.timesheet_id)
+      FROM canonical_qualification AS qualification
+      WHERE qualification.has_retained_finance_authority IS TRUE
+    ), ARRAY[]::uuid[]),
+    COALESCE((
       SELECT array_agg(qualifying.timesheet_id ORDER BY qualifying.timesheet_id)
       FROM qualifying_timesheets AS qualifying
     ), ARRAY[]::uuid[]),
@@ -1725,6 +1904,7 @@ BEGIN
           'timesheet_id', qualifying.timesheet_id::text,
           'is_authorised', qualifying.is_authorised,
           'has_active_advance', qualifying.has_active_advance,
+          'has_retained_finance_authority', qualifying.has_retained_finance_authority,
           'source_pay_method', NULLIF(qualifying.source_pay_method, ''),
           'target_pay_method', v_target_method,
           'source_target_mismatch', (
@@ -1748,6 +1928,7 @@ BEGIN
     v_represented_timesheet_ids,
     v_authorised_timesheet_ids,
     v_active_advance_timesheet_ids,
+    v_retained_finance_timesheet_ids,
     v_targeted_timesheet_ids,
     v_target_details_json,
     v_source_target_mismatch_count;
@@ -1951,12 +2132,14 @@ BEGIN
           'targeted_timesheet_ids', to_jsonb(v_targeted_timesheet_ids),
           'targeted_scope_is_empty', COALESCE(array_length(v_targeted_timesheet_ids, 1), 0) = 0,
           'exact_target_scope', true,
-          'coverage_basis', 'CANONICAL_CURRENT_TIMESHEETS',
+          'coverage_basis', 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY',
           'coverage_complete', true,
           'authorised_timesheet_ids', to_jsonb(v_authorised_timesheet_ids),
           'authorised_timesheet_count', COALESCE(array_length(v_authorised_timesheet_ids, 1), 0),
           'active_advance_timesheet_ids', to_jsonb(v_active_advance_timesheet_ids),
           'active_advance_timesheet_count', COALESCE(array_length(v_active_advance_timesheet_ids, 1), 0),
+          'retained_finance_timesheet_ids', to_jsonb(v_retained_finance_timesheet_ids),
+          'retained_finance_timesheet_count', COALESCE(array_length(v_retained_finance_timesheet_ids, 1), 0),
           'authoritative_sessions', v_authoritative_sessions_json,
           'replaced_source_session_ids', v_replaced_source_session_ids_json,
           'target_details', v_target_details_json,
@@ -2037,14 +2220,15 @@ BEGIN
       'durable_job_status', v_route_job_status,
       'durable_job_dedupe_key', v_route_dedupe_key,
       'durable_scope_persisted', v_route_job_id IS NOT NULL,
-      'coverage_basis', 'CANONICAL_CURRENT_TIMESHEETS',
+      'coverage_basis', 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY',
       'coverage_complete', true,
       'exact_scope', true,
       'authoritative_sessions', v_authoritative_sessions_json,
       'replaced_source_session_ids', v_replaced_source_session_ids_json,
       'represented_timesheet_ids', to_jsonb(v_represented_timesheet_ids),
       'authorised_timesheet_ids', to_jsonb(v_authorised_timesheet_ids),
-      'active_advance_timesheet_ids', to_jsonb(v_active_advance_timesheet_ids)
+      'active_advance_timesheet_ids', to_jsonb(v_active_advance_timesheet_ids),
+      'retained_finance_timesheet_ids', to_jsonb(v_retained_finance_timesheet_ids)
     )
     || jsonb_build_object(
       'targeted_timesheet_ids', to_jsonb(v_targeted_timesheet_ids),
@@ -2054,6 +2238,7 @@ BEGIN
       'represented_timesheet_count', COALESCE(array_length(v_represented_timesheet_ids, 1), 0),
       'authorised_timesheet_count', COALESCE(array_length(v_authorised_timesheet_ids, 1), 0),
       'active_advance_timesheet_count', COALESCE(array_length(v_active_advance_timesheet_ids, 1), 0),
+      'retained_finance_timesheet_count', COALESCE(array_length(v_retained_finance_timesheet_ids, 1), 0),
       'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_ids, 1), 0),
       'source_target_mismatch_count', COALESCE(v_source_target_mismatch_count, 0),
       'target_details', v_target_details_json,
