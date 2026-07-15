@@ -14443,6 +14443,7 @@ declare
   v_cases_amended int := 0;
   v_cases_reopened int := 0;
   v_cases_cleared int := 0;
+  v_case_update_count int := 0;
   v_overpayment_case_count int := 0;
   v_underpayment_case_count int := 0;
   v_case_candidates_json jsonb := '[]'::jsonb;
@@ -16248,6 +16249,11 @@ begin
     from pg_temp.tmp_sync_timesheet_case_candidates t
     order by t.candidate_id, t.timesheet_id
   loop
+    v_selected_event_type := NULL;
+    v_selected_reason := NULL;
+    v_selected_note := NULL;
+    v_case_update_count := 0;
+
     if v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then
       v_target_case_amount_ex := round(v_target_case_row.overpayment_amount_ex, 2)::numeric(12,2);
     elsif v_target_case_row.desired_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum then
@@ -16674,36 +16680,61 @@ begin
           else pa.routing_kind
         end,
         updated_at = now()
-      where pa.id = v_existing_case_row.finance_case_id;
+      where pa.id = v_existing_case_row.finance_case_id
+        and row(
+          pa.client_id,
+          pa.case_type,
+          pa.advance_kind,
+          pa.reason,
+          pa.linked_shift_date,
+          pa.baseline_signature,
+          pa.source_original_paid_amount,
+          pa.source_corrected_paid_amount,
+          pa.original_amount,
+          pa.outstanding_amount,
+          pa.status,
+          pa.cleared_at_utc,
+          pa.cleared_by_user_id,
+          pa.taxability,
+          pa.routing_kind
+        ) is distinct from row(
+          v_target_case_row.client_id,
+          v_target_case_row.desired_case_type,
+          v_target_case_row.desired_advance_kind,
+          v_target_case_row.desired_reason,
+          v_target_case_row.linked_shift_date,
+          v_target_case_row.baseline_signature,
+          v_target_case_row.source_original_paid_amount,
+          v_target_case_row.source_corrected_paid_amount,
+          v_effective_case_amount_ex,
+          v_new_outstanding_amount,
+          case when v_new_outstanding_amount > 0 then 'ACTIVE'::public.pay_advance_status_enum else 'PAID_OFF'::public.pay_advance_status_enum end,
+          case when v_new_outstanding_amount > 0 then null else coalesce(pa.cleared_at_utc, now()) end,
+          case when v_new_outstanding_amount > 0 then null else coalesce(pa.cleared_by_user_id, p_actor_user_id) end,
+          case
+            when v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum and v_case_metadata_component_count > 0 then v_case_taxability
+            else pa.taxability
+          end,
+          case
+            when v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum and v_case_metadata_component_count > 0 then v_case_routing_kind
+            else pa.routing_kind
+          end
+        );
+
+      get diagnostics v_case_update_count = row_count;
 
       v_selected_finance_case_id := v_existing_case_row.finance_case_id;
       v_cases_touched := v_cases_touched + 1;
 
-      if upper(coalesce(v_existing_case_row.old_status::text,'')) = 'PAID_OFF' and v_new_outstanding_amount > 0 then
+      if v_case_update_count > 0
+         and upper(coalesce(v_existing_case_row.old_status::text,'')) = 'PAID_OFF'
+         and v_new_outstanding_amount > 0 then
         v_cases_reopened := v_cases_reopened + 1;
         v_selected_event_type := 'REOPENED';
         v_selected_reason := 'PREVIEW_FINANCE_SYNC';
         v_selected_note := case when v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then 'Reopened overpayment finance case from component-aware preview sync' else 'Reopened lifecycle-tracked underpayment finance case from component-aware preview sync' end;
-      else
-        if v_existing_case_row.old_case_type is distinct from v_target_case_row.desired_case_type
-           or v_existing_case_row.old_original_amount is distinct from v_effective_case_amount_ex
-           or v_existing_case_row.old_outstanding_amount is distinct from v_new_outstanding_amount
-           or v_existing_case_row.old_source_original_paid_amount is distinct from v_target_case_row.source_original_paid_amount
-           or v_existing_case_row.old_source_corrected_paid_amount is distinct from v_target_case_row.source_corrected_paid_amount
-           or (
-             v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-             and v_case_metadata_component_count > 0
-             and v_existing_case_row.old_taxability is distinct from v_case_taxability
-           )
-           or (
-             v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-             and v_case_metadata_component_count > 0
-             and v_existing_case_row.old_routing_kind is distinct from v_case_routing_kind
-           )
-           or v_existing_case_row.old_linked_shift_date is distinct from v_target_case_row.linked_shift_date
-           or v_existing_case_row.old_baseline_signature is distinct from v_target_case_row.baseline_signature then
-          v_cases_amended := v_cases_amended + 1;
-        end if;
+      elsif v_case_update_count > 0 then
+        v_cases_amended := v_cases_amended + 1;
         v_selected_event_type := 'AMENDED';
         v_selected_reason := 'PREVIEW_FINANCE_SYNC';
         v_selected_note := case when v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then 'Amended overpayment finance case from component-aware preview sync' else 'Amended lifecycle-tracked underpayment finance case from component-aware preview sync' end;
@@ -16779,6 +16810,7 @@ begin
       baseline_signature = excluded.baseline_signature,
       components_sync_json = excluded.components_sync_json;
 
+    if v_selected_event_type is not null then
     insert into public.pay_finance_case_events (
       finance_case_id,
       event_type,
@@ -16803,6 +16835,7 @@ begin
       v_selected_reason,
       v_selected_note
     );
+    end if;
 
     IF COALESCE(v_active_reservation_protection_applied, false) THEN
       insert into public.pay_finance_case_events (
@@ -21948,7 +21981,12 @@ BEGIN
             END
           ) = ANY(v_allowed_job_types)
         )
-      ORDER BY claim_job.priority ASC, claim_job.run_at_utc ASC, claim_job.created_at_utc ASC, claim_job.id ASC
+      ORDER BY
+        candidate_serial_is_chain_continuation DESC,
+        claim_job.priority ASC,
+        claim_job.run_at_utc ASC,
+        claim_job.created_at_utc ASC,
+        claim_job.id ASC
       LIMIT GREATEST(v_limit * 5, v_limit)
       FOR UPDATE SKIP LOCKED
     ),
