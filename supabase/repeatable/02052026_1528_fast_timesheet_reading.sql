@@ -5847,19 +5847,55 @@ BEGIN
           'timesheet_id', resolved.resolved_timesheet_id,
           'contract_week_id', resolved.resolved_contract_week_id,
           'kind', 'TIMESHEET',
-          'display_name', 'Uploaded timesheet PDF',
-          'filename', 'Uploaded timesheet PDF',
+          'display_name', COALESCE(
+            NULLIF(BTRIM(contract_week_queue_file.original_filename), ''),
+            NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(resolved.uploaded_pdf_r2_key, ''), '^.*/', '')), ''),
+            'Uploaded timesheet'
+          ),
+          'filename', COALESCE(
+            NULLIF(BTRIM(contract_week_queue_file.original_filename), ''),
+            NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(resolved.uploaded_pdf_r2_key, ''), '^.*/', '')), ''),
+            'Uploaded timesheet'
+          ),
           'storage_key', resolved.uploaded_pdf_r2_key,
           'r2_key', resolved.uploaded_pdf_r2_key,
           'file_key', resolved.uploaded_pdf_r2_key,
           'download_storage_key', resolved.uploaded_pdf_r2_key,
-          'original_filename', 'Uploaded timesheet PDF',
-          'mime_type', 'application/pdf',
-          'content_type', 'application/pdf',
-          'uploaded_at_utc', resolved.contract_week_updated_at,
-          'rotation_degrees', 0,
-          'last_rotation_deg', 0,
-          'page_count', NULL::integer,
+          'original_filename', COALESCE(
+            NULLIF(BTRIM(contract_week_queue_file.original_filename), ''),
+            NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(resolved.uploaded_pdf_r2_key, ''), '^.*/', '')), ''),
+            'Uploaded timesheet'
+          ),
+          'mime_type', COALESCE(
+            NULLIF(BTRIM(contract_week_queue_file.mime_type), ''),
+            CASE
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.png($|[?#])' THEN 'image/png'
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+              ELSE 'application/octet-stream'
+            END
+          ),
+          'content_type', COALESCE(
+            NULLIF(BTRIM(contract_week_queue_file.mime_type), ''),
+            CASE
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.png($|[?#])' THEN 'image/png'
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+              WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+              ELSE 'application/octet-stream'
+            END
+          ),
+          'uploaded_at_utc', COALESCE(contract_week_queue_file.uploaded_at_utc, resolved.contract_week_updated_at),
+          'rotation_degrees', COALESCE(contract_week_queue_file.last_rotation_deg::integer, 0),
+          'last_rotation_deg', COALESCE(contract_week_queue_file.last_rotation_deg::integer, 0),
+          'page_count', CASE
+            WHEN COALESCE(contract_week_queue_file.meta_json->>'page_count', '') ~ '^[0-9]+$'
+              THEN (contract_week_queue_file.meta_json->>'page_count')::integer
+            ELSE NULL::integer
+          END,
           'pages', '[]'::jsonb,
           'system', TRUE,
           'is_view_only', TRUE,
@@ -5868,11 +5904,35 @@ BEGIN
           'can_edit_kind', FALSE,
           'can_edit_type', FALSE,
           'can_return_to_queue', FALSE,
-          'preview_mode', 'PDF',
+          'preview_mode', CASE
+            WHEN NULLIF(BTRIM(contract_week_queue_file.mime_type), '') IS NOT NULL THEN
+              CASE
+                WHEN LOWER(BTRIM(contract_week_queue_file.mime_type)) = 'application/pdf' THEN 'PDF'
+                WHEN LOWER(BTRIM(contract_week_queue_file.mime_type)) LIKE 'image/%' THEN 'IMAGE'
+                ELSE 'FILE'
+              END
+            WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.pdf($|[?#])' THEN 'PDF'
+            WHEN LOWER(COALESCE(resolved.uploaded_pdf_r2_key, '')) ~ '\.(png|jpe?g|gif|webp)($|[?#])' THEN 'IMAGE'
+            ELSE 'FILE'
+          END,
           'source_label', 'System',
           'source_badge', 'System'
         ) AS item_json
       FROM resolved
+      LEFT JOIN LATERAL (
+        SELECT
+          mq_contract_week_file.original_filename,
+          mq_contract_week_file.mime_type,
+          mq_contract_week_file.uploaded_at_utc,
+          mq_contract_week_file.last_rotation_deg,
+          mq_contract_week_file.meta_json
+        FROM public.manual_timesheet_queue AS mq_contract_week_file
+        WHERE UPPER(COALESCE(mq_contract_week_file.status, '')) = 'STAGED'
+          AND mq_contract_week_file.r2_key = resolved.uploaded_pdf_r2_key
+          AND NULLIF(BTRIM(COALESCE(mq_contract_week_file.meta_json->>'contract_week_id', '')), '') = resolved.resolved_contract_week_id::text
+        ORDER BY mq_contract_week_file.uploaded_at_utc DESC NULLS LAST, mq_contract_week_file.id DESC
+        LIMIT 1
+      ) AS contract_week_queue_file ON TRUE
       WHERE resolved.resolved_contract_week_id IS NOT NULL
         AND NULLIF(BTRIM(COALESCE(resolved.uploaded_pdf_r2_key, '')), '') IS NOT NULL
         AND NOT EXISTS (
@@ -7059,15 +7119,78 @@ BEGIN
       0::integer AS sort_order,
       JSONB_BUILD_OBJECT(
         'id', COALESCE(NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_id'), ''), 'sys:timesheet:' || COALESCE(row_ids.timesheet_id::text, row_ids.contract_week_id::text)),
+        'evidence_id', NULL::uuid,
+        'queue_id', NULL::uuid,
         'timesheet_id', row_ids.timesheet_id,
         'contract_week_id', row_ids.contract_week_id,
         'kind', COALESCE(NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_kind'), ''), 'TIMESHEET'),
-        'display_name', COALESCE(NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_display_name'), ''), 'Timesheet PDF'),
-        'filename', COALESCE(NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_display_name'), ''), 'Timesheet PDF'),
+        'display_name', COALESCE(
+          NULLIF(BTRIM(primary_queue_file.original_filename), ''),
+          NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', ''), '^.*/', '')), ''),
+          NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_display_name'), ''),
+          'Timesheet'
+        ),
+        'filename', COALESCE(
+          NULLIF(BTRIM(primary_queue_file.original_filename), ''),
+          NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', ''), '^.*/', '')), ''),
+          NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_display_name'), ''),
+          'Timesheet'
+        ),
         'storage_key', NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_storage_key'), ''),
         'r2_key', NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_storage_key'), ''),
-        'uploaded_at_utc', row_ids.row_json->>'updated_at',
-        'rotation_degrees', COALESCE(NULLIF(row_ids.row_json->>'manual_pdf_rotation_degrees', '')::integer, 0),
+        'file_key', NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_storage_key'), ''),
+        'download_storage_key', NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_storage_key'), ''),
+        'original_filename', COALESCE(
+          NULLIF(BTRIM(primary_queue_file.original_filename), ''),
+          NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', ''), '^.*/', '')), ''),
+          NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_display_name'), ''),
+          'Timesheet'
+        ),
+        'mime_type', COALESCE(
+          NULLIF(BTRIM(primary_queue_file.mime_type), ''),
+          CASE
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.png($|[?#])' THEN 'image/png'
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+            ELSE NULL::text
+          END
+        ),
+        'content_type', COALESCE(
+          NULLIF(BTRIM(primary_queue_file.mime_type), ''),
+          CASE
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.png($|[?#])' THEN 'image/png'
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+            WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+            ELSE NULL::text
+          END
+        ),
+        'uploaded_at_utc', COALESCE(primary_queue_file.uploaded_at_utc::text, row_ids.row_json->>'updated_at'),
+        'rotation_degrees', COALESCE(
+          primary_queue_file.last_rotation_deg::integer,
+          CASE
+            WHEN COALESCE(row_ids.row_json->>'manual_pdf_rotation_degrees', '') ~ '^-?[0-9]+$'
+              THEN (row_ids.row_json->>'manual_pdf_rotation_degrees')::integer
+            ELSE 0
+          END
+        ),
+        'last_rotation_deg', COALESCE(
+          primary_queue_file.last_rotation_deg::integer,
+          CASE
+            WHEN COALESCE(row_ids.row_json->>'manual_pdf_rotation_degrees', '') ~ '^-?[0-9]+$'
+              THEN (row_ids.row_json->>'manual_pdf_rotation_degrees')::integer
+            ELSE 0
+          END
+        ),
+        'page_count', CASE
+          WHEN COALESCE(primary_queue_file.meta_json->>'page_count', '') ~ '^[0-9]+$'
+            THEN (primary_queue_file.meta_json->>'page_count')::integer
+          ELSE NULL::integer
+        END,
+        'pages', '[]'::jsonb,
         'system', TRUE,
         'is_view_only', TRUE,
         'can_delete', FALSE,
@@ -7075,15 +7198,39 @@ BEGIN
         'can_edit_kind', FALSE,
         'can_edit_type', FALSE,
         'can_return_to_queue', FALSE,
-        'preview_mode', COALESCE(NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_preview_mode'), ''), 'PDF'),
+        'preview_mode', CASE
+          WHEN NULLIF(BTRIM(primary_queue_file.mime_type), '') IS NOT NULL THEN
+            CASE
+              WHEN LOWER(BTRIM(primary_queue_file.mime_type)) = 'application/pdf' THEN 'PDF'
+              WHEN LOWER(BTRIM(primary_queue_file.mime_type)) LIKE 'image/%' THEN 'IMAGE'
+              ELSE 'FILE'
+            END
+          WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.pdf($|[?#])' THEN 'PDF'
+          WHEN LOWER(COALESCE(row_ids.row_json->>'primary_artifact_storage_key', '')) ~ '\.(png|jpe?g|gif|webp)($|[?#])' THEN 'IMAGE'
+          ELSE COALESCE(NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_preview_mode'), ''), 'FILE')
+        END,
         'source_label', 'System',
         'source_badge', 'System'
       ) AS item_json
-    FROM row_ids
-    WHERE v_include_evidence = TRUE
+      FROM row_ids
+      LEFT JOIN LATERAL (
+        SELECT
+          mq_primary_file.original_filename,
+          mq_primary_file.mime_type,
+          mq_primary_file.uploaded_at_utc,
+          mq_primary_file.last_rotation_deg,
+          mq_primary_file.meta_json
+        FROM public.manual_timesheet_queue AS mq_primary_file
+        WHERE UPPER(COALESCE(mq_primary_file.status, '')) = 'STAGED'
+          AND mq_primary_file.r2_key = NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_storage_key'), '')
+          AND NULLIF(BTRIM(COALESCE(mq_primary_file.meta_json->>'contract_week_id', '')), '') = row_ids.contract_week_id::text
+        ORDER BY mq_primary_file.uploaded_at_utc DESC NULLS LAST, mq_primary_file.id DESC
+        LIMIT 1
+      ) AS primary_queue_file ON TRUE
+      WHERE v_include_evidence = TRUE
       AND NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_storage_key'), '') IS NOT NULL
       AND NOT (
-        NULLIF(BTRIM(COALESCE(row_ids.row_json->>'primary_artifact_id', '')), '') LIKE 'evidence:%'
+        COALESCE(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'primary_artifact_id', '')), '') LIKE 'evidence:%', FALSE)
         OR (
           row_ids.timesheet_id IS NOT NULL
           AND EXISTS (
