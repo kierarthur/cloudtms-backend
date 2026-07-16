@@ -4645,7 +4645,13 @@ BEGIN
             'can_unprocess', v_canonical_can_unprocess,
             'unprocess_action_visible', v_canonical_unprocess_visible,
             'unprocess_block_reason', v_canonical_unprocess_block_reason,
-            'unprocess_block_message', v_canonical_unprocess_block_message
+            'unprocess_block_message', v_canonical_unprocess_block_message,
+            'permission_state_patch_complete', TRUE,
+            'priority_badges_patch_complete', TRUE,
+            'lifecycle_authority_complete', TRUE,
+            'immediate_lifecycle_patch_available', TRUE,
+            'refresh_required', FALSE,
+            'requires_affected_row_refresh', FALSE
           )
           || jsonb_build_object(
             'is_archived', v_canonical_is_archived,
@@ -4665,7 +4671,13 @@ BEGIN
             'is_archived', v_canonical_is_archived,
             'read_only', v_canonical_is_archived,
             'can_archive', FALSE,
-            'can_unarchive', v_canonical_is_archived
+            'can_unarchive', v_canonical_is_archived,
+            'permission_state_patch_complete', TRUE,
+            'priority_badges_patch_complete', TRUE,
+            'lifecycle_authority_complete', TRUE,
+            'immediate_lifecycle_patch_available', TRUE,
+            'refresh_required', FALSE,
+            'requires_affected_row_refresh', FALSE
           );
         v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
           || v_canonical_lifecycle_overlay;
@@ -5591,7 +5603,13 @@ BEGIN
             'can_unprocess', v_canonical_can_unprocess,
             'unprocess_action_visible', v_canonical_unprocess_visible,
             'unprocess_block_reason', v_canonical_unprocess_block_reason,
-            'unprocess_block_message', v_canonical_unprocess_block_message
+            'unprocess_block_message', v_canonical_unprocess_block_message,
+            'permission_state_patch_complete', TRUE,
+            'priority_badges_patch_complete', TRUE,
+            'lifecycle_authority_complete', TRUE,
+            'immediate_lifecycle_patch_available', TRUE,
+            'refresh_required', FALSE,
+            'requires_affected_row_refresh', FALSE
           )
           || jsonb_build_object(
             'is_archived', v_canonical_is_archived,
@@ -5611,7 +5629,13 @@ BEGIN
             'is_archived', v_canonical_is_archived,
             'read_only', v_canonical_is_archived,
             'can_archive', FALSE,
-            'can_unarchive', v_canonical_is_archived
+            'can_unarchive', v_canonical_is_archived,
+            'permission_state_patch_complete', TRUE,
+            'priority_badges_patch_complete', TRUE,
+            'lifecycle_authority_complete', TRUE,
+            'immediate_lifecycle_patch_available', TRUE,
+            'refresh_required', FALSE,
+            'requires_affected_row_refresh', FALSE
           );
         v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
           || v_canonical_lifecycle_overlay;
@@ -6282,7 +6306,13 @@ BEGIN
             'can_unprocess', v_canonical_can_unprocess,
             'unprocess_action_visible', v_canonical_unprocess_visible,
             'unprocess_block_reason', v_canonical_unprocess_block_reason,
-            'unprocess_block_message', v_canonical_unprocess_block_message
+            'unprocess_block_message', v_canonical_unprocess_block_message,
+            'permission_state_patch_complete', TRUE,
+            'priority_badges_patch_complete', TRUE,
+            'lifecycle_authority_complete', TRUE,
+            'immediate_lifecycle_patch_available', TRUE,
+            'refresh_required', FALSE,
+            'requires_affected_row_refresh', FALSE
           )
           || jsonb_build_object(
             'is_archived', v_canonical_is_archived,
@@ -6302,7 +6332,13 @@ BEGIN
             'is_archived', v_canonical_is_archived,
             'read_only', v_canonical_is_archived,
             'can_archive', FALSE,
-            'can_unarchive', v_canonical_is_archived
+            'can_unarchive', v_canonical_is_archived,
+            'permission_state_patch_complete', TRUE,
+            'priority_badges_patch_complete', TRUE,
+            'lifecycle_authority_complete', TRUE,
+            'immediate_lifecycle_patch_available', TRUE,
+            'refresh_required', FALSE,
+            'requires_affected_row_refresh', FALSE
           );
         v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
           || v_canonical_lifecycle_overlay;
@@ -6616,7 +6652,13 @@ BEGIN
             'can_unprocess', v_canonical_can_unprocess,
             'unprocess_action_visible', v_canonical_unprocess_visible,
             'unprocess_block_reason', v_canonical_unprocess_block_reason,
-            'unprocess_block_message', v_canonical_unprocess_block_message
+            'unprocess_block_message', v_canonical_unprocess_block_message,
+            'permission_state_patch_complete', TRUE,
+            'priority_badges_patch_complete', TRUE,
+            'lifecycle_authority_complete', TRUE,
+            'immediate_lifecycle_patch_available', TRUE,
+            'refresh_required', FALSE,
+            'requires_affected_row_refresh', FALSE
           )
           || jsonb_build_object(
             'is_archived', v_canonical_is_archived,
@@ -6636,7 +6678,13 @@ BEGIN
             'is_archived', v_canonical_is_archived,
             'read_only', v_canonical_is_archived,
             'can_archive', FALSE,
-            'can_unarchive', v_canonical_is_archived
+            'can_unarchive', v_canonical_is_archived,
+            'permission_state_patch_complete', TRUE,
+            'priority_badges_patch_complete', TRUE,
+            'lifecycle_authority_complete', TRUE,
+            'immediate_lifecycle_patch_available', TRUE,
+            'refresh_required', FALSE,
+            'requires_affected_row_refresh', FALSE
           );
         v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
           || v_canonical_lifecycle_overlay;
@@ -8265,7 +8313,13 @@ BEGIN
           'can_unprocess', v_canonical_can_unprocess,
           'unprocess_action_visible', v_canonical_unprocess_visible,
           'unprocess_block_reason', v_canonical_unprocess_block_reason,
-          'unprocess_block_message', v_canonical_unprocess_block_message
+          'unprocess_block_message', v_canonical_unprocess_block_message,
+          'permission_state_patch_complete', TRUE,
+          'priority_badges_patch_complete', TRUE,
+          'lifecycle_authority_complete', TRUE,
+          'immediate_lifecycle_patch_available', TRUE,
+          'refresh_required', FALSE,
+          'requires_affected_row_refresh', FALSE
         )
         || jsonb_build_object(
           'is_archived', v_canonical_is_archived,
@@ -8285,7 +8339,13 @@ BEGIN
           'is_archived', v_canonical_is_archived,
           'read_only', v_canonical_is_archived,
           'can_archive', FALSE,
-          'can_unarchive', v_canonical_is_archived
+          'can_unarchive', v_canonical_is_archived,
+          'permission_state_patch_complete', TRUE,
+          'priority_badges_patch_complete', TRUE,
+          'lifecycle_authority_complete', TRUE,
+          'immediate_lifecycle_patch_available', TRUE,
+          'refresh_required', FALSE,
+          'requires_affected_row_refresh', FALSE
         );
       v_canonical_row_patch := COALESCE(v_canonical_authorise_row_json->'row_patch', '{}'::jsonb)
         || v_canonical_lifecycle_overlay;
