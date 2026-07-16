@@ -14451,7 +14451,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb DEFAULT '{}'::jsonb, p_client_filter_single uuid DEFAULT NULL::uuid, p_force_include_timesheet_ids uuid[] DEFAULT NULL::uuid[], p_exclude_timesheet_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -15861,6 +15860,144 @@ begin
     from timesheet_item_with_baseline tiwb
     cross join lateral jsonb_array_elements(coalesce(tiwb.case_components_json, '[]'::jsonb)) with ordinality as comp(value, ordinality)
   ),
+  finance_component_movements_raw as (
+    select
+      pa.candidate_id,
+      pa.linked_timesheet_id as timesheet_id,
+      upper(btrim(coalesce(pfc.component_key_type, pbi.frozen_component_key_type, ''))) as component_key_type,
+      nullif(btrim(coalesce(pfc.component_key_value, pbi.frozen_component_key_value, '')), '') as component_key_value,
+      upper(btrim(coalesce(pbi.item_type, ''))) as item_type,
+      round(abs(coalesce(
+        par.reserved_source_amount,
+        public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id),
+        pbi.frozen_source_amount,
+        pbi.amount_ex_vat,
+        pbi.amount_inc_vat,
+        par.reserved_amount,
+        0
+      )), 2)::numeric(12,2) as movement_amount_ex,
+      true as is_settled_movement,
+      false as is_active_reservation
+    from public.pay_advances pa
+    join public.pay_batch_items pbi
+      on pbi.finance_case_id = pa.id
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    left join public.pay_bank_transfers pbt
+      on pbt.id = pbi.pay_bank_transfer_id
+    left join public.pay_advance_reservations par
+      on par.pay_batch_item_id = pbi.id
+    left join public.pay_finance_case_components pfc
+      on pfc.id = coalesce(par.finance_component_id, pbi.finance_component_id)
+    where pa.case_type in ('OVERPAYMENT'::public.pay_finance_case_type_enum, 'UNDERPAYMENT'::public.pay_finance_case_type_enum)
+      and pa.linked_timesheet_id is not null
+      and coalesce(pbi.is_voided, false) = false
+      and upper(btrim(coalesce(pbi.item_type, ''))) in ('OVERPAYMENT_RECOVERY', 'UNDERPAYMENT_PAYMENT')
+      and (
+        upper(btrim(coalesce(pbc.settlement_status, ''))) = 'SETTLED'
+        or pbc.settled_at_utc is not null
+        or upper(btrim(coalesce(pbt.status, ''))) = 'COMPLETED'
+        or pbt.completed_at_utc is not null
+        or upper(btrim(coalesce(par.status, ''))) = 'SETTLED'
+        or par.settled_at_utc is not null
+      )
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items pci
+        where pci.pay_batch_item_id = pbi.id
+          and pci.status = 'APPLIED'
+          and pci.correction_item_kind in ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+      )
+
+    union all
+
+    select
+      pa.candidate_id,
+      pa.linked_timesheet_id as timesheet_id,
+      upper(btrim(coalesce(pfc.component_key_type, pbi.frozen_component_key_type, ''))) as component_key_type,
+      nullif(btrim(coalesce(pfc.component_key_value, pbi.frozen_component_key_value, '')), '') as component_key_value,
+      upper(btrim(coalesce(
+        pbi.item_type,
+        case
+          when pa.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then 'OVERPAYMENT_RECOVERY'
+          when pa.case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum then 'UNDERPAYMENT_PAYMENT'
+          else null
+        end,
+        ''
+      ))) as item_type,
+      round(abs(coalesce(
+        par.reserved_source_amount,
+        public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id),
+        pbi.frozen_source_amount,
+        pbi.amount_ex_vat,
+        pbi.amount_inc_vat,
+        par.reserved_amount,
+        0
+      )), 2)::numeric(12,2) as movement_amount_ex,
+      false as is_settled_movement,
+      true as is_active_reservation
+    from public.pay_advance_reservations par
+    join public.pay_advances pa
+      on pa.id = par.finance_case_id
+    left join public.pay_batch_items pbi
+      on pbi.id = par.pay_batch_item_id
+    left join public.pay_finance_case_components pfc
+      on pfc.id = coalesce(par.finance_component_id, pbi.finance_component_id)
+    where pa.case_type in ('OVERPAYMENT'::public.pay_finance_case_type_enum, 'UNDERPAYMENT'::public.pay_finance_case_type_enum)
+      and pa.linked_timesheet_id is not null
+      and upper(btrim(coalesce(par.status, ''))) in ('RESERVED', 'COMMITTED')
+      and par.released_at_utc is null
+      and par.settled_at_utc is null
+      and (pbi.id is null or coalesce(pbi.is_voided, false) = false)
+      and upper(btrim(coalesce(
+        pbi.item_type,
+        case
+          when pa.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then 'OVERPAYMENT_RECOVERY'
+          when pa.case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum then 'UNDERPAYMENT_PAYMENT'
+          else null
+        end,
+        ''
+      ))) in ('OVERPAYMENT_RECOVERY', 'UNDERPAYMENT_PAYMENT')
+  ),
+  finance_component_movements as (
+    select
+      fcmr.candidate_id,
+      fcmr.timesheet_id,
+      fcmr.component_key_type,
+      fcmr.component_key_value,
+      round(coalesce(sum(fcmr.movement_amount_ex) filter (where fcmr.item_type = 'OVERPAYMENT_RECOVERY' and fcmr.is_settled_movement), 0), 2)::numeric(12,2) as settled_overpayment_recovery_ex,
+      round(coalesce(sum(fcmr.movement_amount_ex) filter (where fcmr.item_type = 'OVERPAYMENT_RECOVERY' and fcmr.is_active_reservation), 0), 2)::numeric(12,2) as reserved_overpayment_recovery_ex,
+      round(coalesce(sum(fcmr.movement_amount_ex) filter (where fcmr.item_type = 'UNDERPAYMENT_PAYMENT' and fcmr.is_settled_movement), 0), 2)::numeric(12,2) as settled_underpayment_payment_ex,
+      round(coalesce(sum(fcmr.movement_amount_ex) filter (where fcmr.item_type = 'UNDERPAYMENT_PAYMENT' and fcmr.is_active_reservation), 0), 2)::numeric(12,2) as reserved_underpayment_payment_ex,
+      true as has_finance_movement
+    from finance_component_movements_raw fcmr
+    where fcmr.component_key_type is not null
+      and fcmr.component_key_value is not null
+    group by fcmr.candidate_id, fcmr.timesheet_id, fcmr.component_key_type, fcmr.component_key_value
+  ),
+  timesheet_exploded_with_signed_balance as (
+    select
+      tec.*,
+      coalesce(fcm.settled_overpayment_recovery_ex, 0) as settled_overpayment_recovery_ex,
+      coalesce(fcm.reserved_overpayment_recovery_ex, 0) as reserved_overpayment_recovery_ex,
+      coalesce(fcm.settled_underpayment_payment_ex, 0) as settled_underpayment_payment_ex,
+      coalesce(fcm.reserved_underpayment_payment_ex, 0) as reserved_underpayment_payment_ex,
+      coalesce(fcm.has_finance_movement, false) as has_finance_movement,
+      round(
+        coalesce(tec.component_amount_ex, 0)
+        + coalesce(fcm.settled_overpayment_recovery_ex, 0)
+        + coalesce(fcm.reserved_overpayment_recovery_ex, 0)
+        - coalesce(fcm.settled_underpayment_payment_ex, 0)
+        - coalesce(fcm.reserved_underpayment_payment_ex, 0),
+        2
+      )::numeric(12,2) as signed_component_amount_ex
+    from timesheet_exploded_components tec
+    left join finance_component_movements fcm
+      on fcm.candidate_id = tec.candidate_id
+     and fcm.timesheet_id = tec.timesheet_id
+     and fcm.component_key_type = tec.component_key_type
+     and fcm.component_key_value = tec.component_key_value
+  ),
   timesheet_case_rollup as (
     select
       tec.candidate_id,
@@ -15871,8 +16008,9 @@ begin
       min(tec.baseline_signature) as baseline_signature,
       min(tec.candidate_pay_method) as candidate_pay_method,
       bool_or(tec.case_is_blocked) as case_is_blocked,
-      round(coalesce(sum(case when tec.component_amount_ex < 0 and tec.component_key_type is not null and tec.component_key_value is not null then abs(tec.component_amount_ex) else 0 end), 0), 2)::numeric(12,2) as overpayment_amount_ex,
-      round(coalesce(sum(case when tec.component_amount_ex > 0 and tec.component_key_type is not null and tec.component_key_value is not null then tec.component_amount_ex else 0 end), 0), 2)::numeric(12,2) as underpayment_amount_ex,
+      bool_or(coalesce(tec.has_finance_movement, false)) as has_finance_movement,
+      round(coalesce(sum(case when tec.signed_component_amount_ex < 0 and tec.component_key_type is not null and tec.component_key_value is not null then abs(tec.signed_component_amount_ex) else 0 end), 0), 2)::numeric(12,2) as overpayment_amount_ex,
+      round(coalesce(sum(case when tec.signed_component_amount_ex > 0 and tec.component_key_type is not null and tec.component_key_value is not null then tec.signed_component_amount_ex else 0 end), 0), 2)::numeric(12,2) as underpayment_amount_ex,
       coalesce(
         jsonb_agg(
           jsonb_build_object(
@@ -15901,15 +16039,15 @@ begin
                 'component_key_type', tec.component_key_type,
                 'component_key_value', tec.component_key_value,
                 'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
-                'component_amount_ex_vat', abs(tec.component_amount_ex)
+                'component_amount_ex_vat', abs(tec.signed_component_amount_ex)
               ))
             END,
-            'source_amount', abs(tec.component_amount_ex),
+            'source_amount', abs(tec.signed_component_amount_ex),
             'allocation_priority_group', case when tec.component_json->>'classification' = 'TAXABLE_CHANNEL_SENSITIVE' then 0 else 1 end,
             'allocation_priority_order', tec.component_order
           )
           order by coalesce(tec.component_json->>'classification',''), coalesce(tec.component_json->>'component_key_type',''), coalesce(tec.component_json->>'component_key_value','')
-        ) filter (where tec.component_amount_ex < 0 and tec.component_key_type is not null and tec.component_key_value is not null),
+        ) filter (where tec.signed_component_amount_ex < 0 and tec.component_key_type is not null and tec.component_key_value is not null),
         '[]'::jsonb
       ) as overpayment_components_json,
       coalesce(
@@ -15940,18 +16078,18 @@ begin
                 'component_key_type', tec.component_key_type,
                 'component_key_value', tec.component_key_value,
                 'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
-                'component_amount_ex_vat', abs(tec.component_amount_ex)
+                'component_amount_ex_vat', abs(tec.signed_component_amount_ex)
               ))
             END,
-            'source_amount', abs(tec.component_amount_ex),
+            'source_amount', abs(tec.signed_component_amount_ex),
             'allocation_priority_group', case when tec.component_json->>'classification' = 'TAXABLE_CHANNEL_SENSITIVE' then 0 else 1 end,
             'allocation_priority_order', tec.component_order
           )
           order by coalesce(tec.component_json->>'classification',''), coalesce(tec.component_json->>'component_key_type',''), coalesce(tec.component_json->>'component_key_value','')
-        ) filter (where tec.component_amount_ex > 0 and tec.component_key_type is not null and tec.component_key_value is not null),
+        ) filter (where tec.signed_component_amount_ex > 0 and tec.component_key_type is not null and tec.component_key_value is not null),
         '[]'::jsonb
       ) as underpayment_components_json
-    from timesheet_exploded_components tec
+    from timesheet_exploded_with_signed_balance tec
     group by tec.candidate_id, tec.timesheet_id
   ),
   active_linked_underpayment_cases as (
@@ -15983,6 +16121,7 @@ begin
           and (
             tcr.case_is_blocked = true
             or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+            or coalesce(tcr.has_finance_movement, false) = true
           )
         )
       ) as needs_lifecycle_tracking,
@@ -15994,6 +16133,7 @@ begin
          and (
            tcr.case_is_blocked = true
            or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+           or coalesce(tcr.has_finance_movement, false) = true
          ) then 'UNDERPAYMENT'::public.pay_finance_case_type_enum
         else null::public.pay_finance_case_type_enum
       end as desired_case_type,
@@ -16003,6 +16143,7 @@ begin
          and (
            tcr.case_is_blocked = true
            or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+           or coalesce(tcr.has_finance_movement, false) = true
          ) then 'UNDERPAYMENT'::public.pay_advance_kind_enum
         else null::public.pay_advance_kind_enum
       end as desired_advance_kind,
@@ -16012,6 +16153,7 @@ begin
          and (
            tcr.case_is_blocked = true
            or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+           or coalesce(tcr.has_finance_movement, false) = true
          ) then 'UNDERPAYMENT'::public.pay_advance_reason_enum
         else null::public.pay_advance_reason_enum
       end as desired_reason,
@@ -16021,6 +16163,7 @@ begin
          and (
            tcr.case_is_blocked = true
            or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+           or coalesce(tcr.has_finance_movement, false) = true
          ) then round(tcr.corrected_amount_ex - tcr.underpayment_amount_ex, 2)::numeric(12,2)
         else null::numeric(12,2)
       end as source_original_paid_amount,
@@ -16030,6 +16173,7 @@ begin
          and (
            tcr.case_is_blocked = true
            or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+           or coalesce(tcr.has_finance_movement, false) = true
          ) then round(tcr.corrected_amount_ex, 2)::numeric(12,2)
         else null::numeric(12,2)
       end as source_corrected_paid_amount,
@@ -16039,6 +16183,7 @@ begin
          and (
            tcr.case_is_blocked = true
            or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+           or coalesce(tcr.has_finance_movement, false) = true
          ) then tcr.underpayment_components_json
         else '[]'::jsonb
       end as components_sync_json,
@@ -16053,6 +16198,7 @@ begin
          and (
            tcr.case_is_blocked = true
            or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+           or coalesce(tcr.has_finance_movement, false) = true
          )
        )
   ),
@@ -16345,8 +16491,17 @@ begin
         where sync_safety_events.finance_case_id = pa.id
           and (
             upper(btrim(coalesce(sync_safety_events.event_type, ''))) like '%WRITE%OFF%'
-            or upper(btrim(coalesce(sync_safety_events.event_type, ''))) like '%RESTRUCT%'
-            or upper(btrim(coalesce(sync_safety_events.event_type, ''))) like '%MANUAL%'
+            or upper(btrim(coalesce(sync_safety_events.event_type, ''))) in (
+              'MANUAL_ECONOMIC_OVERRIDE',
+              'MANUAL_WRITE_OFF',
+              'CASE_MANUAL_ECONOMIC_OVERRIDE',
+              'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+            )
+            or upper(btrim(coalesce(sync_safety_events.reason, ''))) in (
+              'MANUAL_ECONOMIC_OVERRIDE',
+              'WRITE_OFF',
+              'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+            )
           )
       ) as old_has_manual_or_restructure_event,
       exists (
@@ -16429,7 +16584,7 @@ begin
     from public.pay_advances pa
     where pa.candidate_id = v_target_case_row.candidate_id
       and pa.linked_timesheet_id = v_target_case_row.timesheet_id
-      and pa.case_type in ('OVERPAYMENT'::public.pay_finance_case_type_enum, 'UNDERPAYMENT'::public.pay_finance_case_type_enum)
+      and pa.case_type = v_target_case_row.desired_case_type
     order by
       case when upper(coalesce(pa.status::text,'')) = 'ACTIVE' then 0 else 1 end,
       pa.updated_at desc,
@@ -16946,15 +17101,18 @@ begin
         where sync_clear_safety_events.finance_case_id = pa.id
           and (
             upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) like '%WRITE%OFF%'
-            or upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) like '%RESTRUCT%'
-            or upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) like '%MANUAL%'
+            or upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) in (
+              'MANUAL_ECONOMIC_OVERRIDE',
+              'MANUAL_WRITE_OFF',
+              'CASE_MANUAL_ECONOMIC_OVERRIDE',
+              'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+            )
+            or upper(btrim(coalesce(sync_clear_safety_events.reason, ''))) in (
+              'MANUAL_ECONOMIC_OVERRIDE',
+              'WRITE_OFF',
+              'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+            )
           )
-      )
-      and not exists (
-        select 1
-        from public.pay_item_snoozes pis
-        where pis.source_ref = ('advance:' || pa.id::text)
-          and pis.cleared_at_utc is null
       )
   loop
     SELECT ROUND(COALESCE(SUM(ABS(COALESCE(advance_reservation.reserved_source_amount, advance_reservation.reserved_amount, batch_item.frozen_source_amount, batch_item.amount_ex_vat, batch_item.amount_inc_vat, 0))), 0), 2)::numeric(12,2)
@@ -46765,6 +46923,17 @@ DECLARE
   v_eligible_linked_timesheet_count integer := 0;
   v_total_affected_timesheet_count integer := 0;
   v_anchor_component_count integer := 0;
+  v_finance_case_id uuid := NULL::uuid;
+  v_finance_case public.pay_advances%ROWTYPE;
+  v_finance_component_before_json jsonb := '[]'::jsonb;
+  v_finance_component_after_json jsonb := '[]'::jsonb;
+  v_finance_cleared_component_ids jsonb := '[]'::jsonb;
+  v_finance_cleared_component_count integer := 0;
+  v_stale_batch_record record;
+  v_stale_batch_signal_count integer := 0;
+  v_stale_batch_ids jsonb := '[]'::jsonb;
+  v_stale_batch_item_ids jsonb := '[]'::jsonb;
+  v_stale_batch_touch_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -46918,6 +47087,423 @@ BEGIN
     v_resolution_payload_json #>> '{case,finance_case_id}',
     ''
   ));
+
+
+  IF v_resolution_family IN ('TAXABLE_CHANNEL_RESTRUCTURE', 'TAXABLE_CHANNEL')
+     AND v_finance_case_id_text <> '' THEN
+    IF v_finance_case_id_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'finance_case_id is invalid';
+    END IF;
+
+    v_finance_case_id := v_finance_case_id_text::uuid;
+
+    IF v_operation = 'LIST_CLEARABLE' THEN
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+               'finance_case_id', finance_case.id::text,
+               'candidate_id', finance_case.candidate_id::text,
+               'case_key', COALESCE(NULLIF(v_case_key, ''), 'finance_case:' || finance_case.id::text),
+               'resolution_family', v_resolution_family,
+               'clearable', true
+             )), '[]'::jsonb)
+      INTO v_clearable_timesheets_json
+      FROM public.pay_advances AS finance_case
+      WHERE finance_case.id = v_finance_case_id
+        AND EXISTS (
+          SELECT 1
+          FROM public.pay_finance_case_components AS finance_component
+          WHERE finance_component.finance_case_id = finance_case.id
+            AND finance_component.closed_at_utc IS NULL
+            AND finance_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            AND (
+              finance_component.saved_target_pay_method IS NOT NULL
+              OR finance_component.saved_resolution_mode IS NOT NULL
+              OR finance_component.saved_resolution_payload_json IS NOT NULL
+              OR finance_component.saved_resolution_result_json IS NOT NULL
+              OR finance_component.resolution_fingerprint IS NOT NULL
+              OR COALESCE(finance_component.is_resolution_stale, false) = true
+            )
+        );
+
+      RETURN jsonb_build_object(
+        'ok', true,
+        'operation', 'LIST_CLEARABLE',
+        'session_id', p_session_id::text,
+        'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
+        'session_version', v_session_row.version,
+        'progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+        'clearable_rows', COALESCE(v_clearable_timesheets_json, '[]'::jsonb)
+      );
+    END IF;
+
+    PERFORM pg_advisory_xact_lock(94201, 1);
+
+    SELECT finance_case.*
+    INTO v_finance_case
+    FROM public.pay_advances AS finance_case
+    WHERE finance_case.id = v_finance_case_id
+    FOR UPDATE;
+
+    IF v_finance_case.id IS NULL THEN
+      RAISE EXCEPTION 'finance case % not found', v_finance_case_id;
+    END IF;
+
+    IF v_candidate_id IS NULL THEN
+      v_candidate_id := v_finance_case.candidate_id;
+    ELSIF v_candidate_id IS DISTINCT FROM v_finance_case.candidate_id THEN
+      RAISE EXCEPTION 'finance case % does not belong to candidate %', v_finance_case_id, v_candidate_id;
+    END IF;
+
+    IF v_finance_case.case_type NOT IN (
+      'OVERPAYMENT'::public.pay_finance_case_type_enum,
+      'UNDERPAYMENT'::public.pay_finance_case_type_enum,
+      'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+      'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+    ) THEN
+      RAISE EXCEPTION 'finance case % is not a taxable finance case-resolution case', v_finance_case_id;
+    END IF;
+
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_workbench_session_scope AS scope_row
+      WHERE scope_row.session_id = p_session_id
+        AND scope_row.candidate_id = v_candidate_id
+    )
+    INTO v_candidate_has_scope_row;
+
+    IF NOT COALESCE(v_candidate_has_scope_row, false) THEN
+      SELECT COALESCE(MAX(scope_row.scope_ordinal), -1) + 1
+      INTO v_next_scope_ordinal
+      FROM public.banking_pay_workbench_session_scope AS scope_row
+      WHERE scope_row.session_id = p_session_id;
+
+      INSERT INTO public.banking_pay_workbench_session_scope(
+        session_id,
+        candidate_id,
+        scope_ordinal,
+        status,
+        pending_job_id,
+        seeded,
+        dirty,
+        error_json,
+        created_at_utc,
+        updated_at_utc
+      )
+      VALUES (
+        p_session_id,
+        v_candidate_id,
+        v_next_scope_ordinal,
+        'READY',
+        NULL::uuid,
+        true,
+        false,
+        NULL::jsonb,
+        v_now,
+        v_now
+      )
+      ON CONFLICT (session_id, candidate_id) DO NOTHING;
+    END IF;
+
+    SELECT COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+             'finance_component_id', component_row.id::text,
+             'classification', component_row.classification::text,
+             'component_key_type', component_row.component_key_type,
+             'component_key_value', component_row.component_key_value,
+             'source_pay_method', component_row.source_pay_method,
+             'source_amount', ROUND(COALESCE(component_row.source_amount, 0), 2),
+             'remaining_source_amount', ROUND(COALESCE(component_row.remaining_source_amount, 0), 2),
+             'saved_target_pay_method', component_row.saved_target_pay_method,
+             'saved_resolution_mode', CASE WHEN component_row.saved_resolution_mode IS NULL THEN NULL ELSE component_row.saved_resolution_mode::text END,
+             'saved_resolution_payload_json', component_row.saved_resolution_payload_json,
+             'saved_resolution_result_json', component_row.saved_resolution_result_json,
+             'resolution_fingerprint', component_row.resolution_fingerprint,
+             'is_resolution_stale', COALESCE(component_row.is_resolution_stale, false),
+             'stale_reason', component_row.stale_reason
+           ) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id), '[]'::jsonb)
+    INTO v_finance_component_before_json
+    FROM public.pay_finance_case_components AS component_row
+    WHERE component_row.finance_case_id = v_finance_case_id
+      AND component_row.closed_at_utc IS NULL;
+
+    WITH cleared_components AS (
+      UPDATE public.pay_finance_case_components AS component_row
+      SET saved_target_pay_method = NULL,
+          saved_resolution_mode = NULL,
+          saved_resolution_payload_json = NULL,
+          saved_resolution_result_json = NULL,
+          resolution_fingerprint = NULL,
+          is_resolution_stale = false,
+          stale_reason = NULL,
+          resolved_at_utc = NULL,
+          updated_at_utc = v_now
+      WHERE component_row.finance_case_id = v_finance_case_id
+        AND component_row.closed_at_utc IS NULL
+        AND component_row.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        AND (
+          component_row.saved_target_pay_method IS NOT NULL
+          OR component_row.saved_resolution_mode IS NOT NULL
+          OR component_row.saved_resolution_payload_json IS NOT NULL
+          OR component_row.saved_resolution_result_json IS NOT NULL
+          OR component_row.resolution_fingerprint IS NOT NULL
+          OR COALESCE(component_row.is_resolution_stale, false) = true
+        )
+      RETURNING component_row.id
+    )
+    SELECT COUNT(*)::integer,
+           COALESCE(jsonb_agg(cleared_components.id::text ORDER BY cleared_components.id::text), '[]'::jsonb)
+    INTO v_finance_cleared_component_count,
+         v_finance_cleared_component_ids
+    FROM cleared_components;
+
+    WITH deleted_resolution_rows AS (
+      DELETE FROM public.banking_pay_workbench_session_case_resolutions AS resolution_row
+      WHERE resolution_row.session_id = p_session_id
+        AND resolution_row.candidate_id = v_candidate_id
+        AND (
+          v_resolution_family = ''
+          OR UPPER(BTRIM(COALESCE(resolution_row.resolution_family, ''))) = v_resolution_family
+        )
+        AND (
+          v_finance_case_id_text = ''
+          OR BTRIM(COALESCE(resolution_row.payload_json->>'finance_case_id', '')) = v_finance_case_id_text
+          OR resolution_row.case_key = v_case_key
+        )
+      RETURNING resolution_row.id::text AS id_text,
+                resolution_row.resolution_identity_key AS identity_key
+    )
+    SELECT COUNT(*)::integer,
+           COALESCE(jsonb_agg(deleted_resolution_rows.id_text ORDER BY deleted_resolution_rows.id_text), '[]'::jsonb),
+           COALESCE(jsonb_agg(deleted_resolution_rows.identity_key ORDER BY deleted_resolution_rows.identity_key) FILTER (WHERE deleted_resolution_rows.identity_key IS NOT NULL), '[]'::jsonb),
+           MIN(deleted_resolution_rows.id_text)
+    INTO v_deleted_count,
+         v_case_resolution_ids,
+         v_resolution_identity_keys,
+         v_case_resolution_id_text
+    FROM deleted_resolution_rows;
+
+    SELECT COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+             'finance_component_id', component_row.id::text,
+             'classification', component_row.classification::text,
+             'component_key_type', component_row.component_key_type,
+             'component_key_value', component_row.component_key_value,
+             'source_pay_method', component_row.source_pay_method,
+             'source_amount', ROUND(COALESCE(component_row.source_amount, 0), 2),
+             'remaining_source_amount', ROUND(COALESCE(component_row.remaining_source_amount, 0), 2),
+             'saved_target_pay_method', component_row.saved_target_pay_method,
+             'saved_resolution_mode', CASE WHEN component_row.saved_resolution_mode IS NULL THEN NULL ELSE component_row.saved_resolution_mode::text END,
+             'saved_resolution_payload_json', component_row.saved_resolution_payload_json,
+             'saved_resolution_result_json', component_row.saved_resolution_result_json,
+             'resolution_fingerprint', component_row.resolution_fingerprint,
+             'is_resolution_stale', COALESCE(component_row.is_resolution_stale, false),
+             'stale_reason', component_row.stale_reason
+           ) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id), '[]'::jsonb)
+    INTO v_finance_component_after_json
+    FROM public.pay_finance_case_components AS component_row
+    WHERE component_row.finance_case_id = v_finance_case_id
+      AND component_row.closed_at_utc IS NULL;
+
+    IF COALESCE(v_finance_cleared_component_count, 0) = 0 AND COALESCE(v_deleted_count, 0) = 0 THEN
+      RETURN jsonb_build_object(
+        'ok', true,
+        'operation', 'CLEAR',
+        'session_id', p_session_id::text,
+        'candidate_id', v_candidate_id::text,
+        'finance_case_id', v_finance_case_id::text,
+        'session_version', v_session_row.version,
+        'progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
+        'job_id', NULL::text,
+        'case_resolution_id', NULL::text,
+        'case_resolution_ids', '[]'::jsonb,
+        'resolution_identity_keys', '[]'::jsonb,
+        'deleted_count', 0,
+        'cleared_component_count', 0,
+        'cleared', false,
+        'state_changed', false,
+        'no_op', true
+      );
+    END IF;
+
+    INSERT INTO public.pay_finance_case_events(
+      finance_case_id,
+      finance_component_id,
+      event_type,
+      event_at_utc,
+      actor_user_id,
+      pay_batch_id,
+      reservation_id,
+      before_json,
+      after_json,
+      reason,
+      note
+    )
+    VALUES (
+      v_finance_case_id,
+      NULL::uuid,
+      'TAXABLE_CHANNEL_RESTRUCTURE_CLEARED',
+      v_now,
+      p_actor_user_id,
+      NULL::uuid,
+      NULL::uuid,
+      jsonb_build_object(
+        'finance_case_id', v_finance_case_id::text,
+        'components', v_finance_component_before_json
+      ),
+      jsonb_build_object(
+        'finance_case_id', v_finance_case_id::text,
+        'cleared_component_ids', COALESCE(v_finance_cleared_component_ids, '[]'::jsonb),
+        'components', v_finance_component_after_json
+      ),
+      'TAXABLE_CHANNEL_RESTRUCTURE_CLEAR',
+      'Cleared current live taxable finance case resolution without changing case balance, reservations, settled history, Snooze, fixed components, or frozen Draft items.'
+    );
+
+    FOR v_stale_batch_record IN
+      SELECT
+        batch_row.id AS pay_batch_id,
+        COALESCE(jsonb_agg(DISTINCT batch_item.id::text ORDER BY batch_item.id::text), '[]'::jsonb) AS pay_batch_item_ids,
+        COUNT(DISTINCT batch_item.id)::integer AS pay_batch_item_count
+      FROM public.pay_batch_items AS batch_item
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.id = batch_item.pay_batch_candidate_id
+      JOIN public.pay_batches AS batch_row
+        ON batch_row.id = batch_candidate.pay_batch_id
+      WHERE batch_candidate.candidate_id = v_candidate_id
+        AND COALESCE(batch_item.is_voided, false) = false
+        AND batch_row.cancelled_at_utc IS NULL
+        AND public._pay_batch_status_is_active_reservation(batch_row.status)
+        AND (
+          batch_item.finance_case_id = v_finance_case_id
+          OR EXISTS (
+            SELECT 1
+            FROM public.pay_finance_case_components AS draft_component_scope
+            WHERE draft_component_scope.finance_case_id = v_finance_case_id
+              AND draft_component_scope.id = batch_item.finance_component_id
+          )
+        )
+      GROUP BY batch_row.id
+      ORDER BY batch_row.id
+    LOOP
+      v_stale_batch_touch_json := public.banking_pay_batch_signal_touch(
+        p_pay_batch_id => v_stale_batch_record.pay_batch_id,
+        p_change_reason => 'CASE_RESOLUTION_CLEARED',
+        p_change_source => 'WORKBENCH_CASE_RESOLUTION_CLEAR',
+        p_change_scope_json => jsonb_build_object(
+          'stale_hint', true,
+          'stale_reason', 'CASE_RESOLUTION_CLEARED',
+          'policy_x_authority_scope', 'FROZEN_DRAFT_CURRENT_LIVE_RESOLUTION_CLEARED',
+          'finance_case_id', v_finance_case_id::text,
+          'candidate_ids', jsonb_build_array(v_candidate_id::text),
+          'pay_batch_item_ids', COALESCE(v_stale_batch_record.pay_batch_item_ids, '[]'::jsonb),
+          'pay_batch_item_count', COALESCE(v_stale_batch_record.pay_batch_item_count, 0),
+          'cleared_component_ids', COALESCE(v_finance_cleared_component_ids, '[]'::jsonb),
+          'resolution_family', 'TAXABLE_CHANNEL_RESTRUCTURE'
+        ),
+        p_touch_payment_status => false,
+        p_touch_correction_progress => false,
+        p_touch_alerts => false,
+        p_touch_overview => true
+      );
+
+      v_stale_batch_signal_count := COALESCE(v_stale_batch_signal_count, 0) + 1;
+      v_stale_batch_ids := COALESCE(v_stale_batch_ids, '[]'::jsonb) || jsonb_build_array(v_stale_batch_record.pay_batch_id::text);
+      v_stale_batch_item_ids := COALESCE(v_stale_batch_item_ids, '[]'::jsonb) || COALESCE(v_stale_batch_record.pay_batch_item_ids, '[]'::jsonb);
+    END LOOP;
+
+    UPDATE public.banking_pay_workbench_sessions AS session_update
+    SET version = session_update.version + 1,
+        progress_counter_version = COALESCE(session_update.progress_counter_version, 0) + 1,
+        progress_updated_at_utc = v_now,
+        updated_at_utc = v_now
+    WHERE session_update.id = p_session_id
+    RETURNING session_update.version, session_update.progress_counter_version
+    INTO v_new_session_version, v_new_progress_counter_version;
+
+    v_job_json := public.pay_workbench_enqueue_session_candidate_refresh(
+      p_session_id => p_session_id,
+      p_candidate_id => v_candidate_id,
+      p_reason => 'SESSION_CASE_RESOLUTION_CLEARED',
+      p_actor_user_id => p_actor_user_id,
+      p_payload_json => jsonb_build_object(
+        'case_key', NULLIF(v_case_key, ''),
+        'finance_case_id', v_finance_case_id::text,
+        'linked_timesheet_id', CASE WHEN v_finance_case.linked_timesheet_id IS NULL THEN NULL ELSE v_finance_case.linked_timesheet_id::text END,
+        'resolution_family', 'TAXABLE_CHANNEL_RESTRUCTURE',
+        'resolution_identity_keys', COALESCE(v_resolution_identity_keys, '[]'::jsonb),
+        'deleted_count', v_deleted_count,
+        'cleared_component_count', v_finance_cleared_component_count,
+        'force_legacy', true,
+        'projection_mode', 'LEGACY',
+        'projection_class', 'CASE_RESOLUTION',
+        'fallback_reason', 'CASE_RESOLUTION_CHANGED',
+        'refresh_scope_kind', CASE WHEN v_finance_case.linked_timesheet_id IS NULL THEN 'CANDIDATE_FULL_LIVE' ELSE 'TARGETED_TIMESHEETS' END,
+        'targeted_timesheet_ids', CASE WHEN v_finance_case.linked_timesheet_id IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(v_finance_case.linked_timesheet_id::text) END,
+        'linked_timesheet_ids', CASE WHEN v_finance_case.linked_timesheet_id IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(v_finance_case.linked_timesheet_id::text) END,
+        'source_build_required', true,
+        'line_work_required', true,
+        'delta_refresh_required', false,
+        'complex_refresh_required', true,
+        'resolved_job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+      )
+    );
+
+    v_job_id_text := BTRIM(COALESCE(
+      v_job_json->>'job_id',
+      v_job_json #>> '{enqueue_result,job_id}',
+      v_job_json #>> '{enqueue_result,job_ids,0}',
+      v_job_json #>> '{job_ids,0}',
+      v_job_json #>> '{enqueue_result,session_recompute_job_ids,0}',
+      v_job_json #>> '{session_recompute_job_ids,0}',
+      ''
+    ));
+    IF v_job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_job_id := v_job_id_text::uuid;
+    END IF;
+    IF v_job_id IS NULL THEN
+      RAISE EXCEPTION 'candidate refresh enqueue did not return a durable job_id for session % candidate %', p_session_id, v_candidate_id;
+    END IF;
+
+    INSERT INTO public.audit_events(
+      object_type,
+      object_id_text,
+      action,
+      before_json,
+      after_json,
+      reason,
+      actor_user_id
+    )
+    VALUES (
+      'pay_finance_case',
+      v_finance_case_id::text,
+      'TAXABLE_CHANNEL_RESTRUCTURE_CLEARED',
+      jsonb_build_object('finance_case_id', v_finance_case_id::text, 'components', v_finance_component_before_json),
+      jsonb_build_object('finance_case_id', v_finance_case_id::text, 'components', v_finance_component_after_json, 'session_version', v_new_session_version, 'progress_counter_version', v_new_progress_counter_version, 'pending_job_id', v_job_id::text),
+      'SESSION_CASE_RESOLUTION_CLEARED',
+      p_actor_user_id
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation', 'CLEAR',
+      'session_id', p_session_id::text,
+      'candidate_id', v_candidate_id::text,
+      'finance_case_id', v_finance_case_id::text,
+      'session_version', v_new_session_version,
+      'progress_counter_version', v_new_progress_counter_version,
+      'job_id', v_job_id::text,
+      'case_resolution_id', v_case_resolution_id_text,
+      'case_resolution_ids', COALESCE(v_case_resolution_ids, '[]'::jsonb),
+      'resolution_identity_keys', COALESCE(v_resolution_identity_keys, '[]'::jsonb),
+      'deleted_count', v_deleted_count,
+      'cleared_component_count', v_finance_cleared_component_count,
+      'cleared_component_ids', COALESCE(v_finance_cleared_component_ids, '[]'::jsonb),
+      'draft_stale_signal_count', COALESCE(v_stale_batch_signal_count, 0),
+      'draft_stale_batch_ids', COALESCE(v_stale_batch_ids, '[]'::jsonb),
+      'draft_stale_pay_batch_item_ids', COALESCE(v_stale_batch_item_ids, '[]'::jsonb),
+      'cleared', true,
+      'state_changed', true,
+      'no_op', false,
+      'refresh_enqueue', COALESCE(v_job_json, '{}'::jsonb)
+    );
+  END IF;
 
   IF v_resolution_family = 'BUCKETED' THEN
     v_anchor_timesheet_id := v_linked_timesheet_id;
@@ -68851,9 +69437,6 @@ $function$;
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_finance_case_taxable_channel_restructure_suggestion(p_finance_case_id uuid, p_actor_user_id uuid, p_effective_pay_date date DEFAULT NULL::date, p_resolution_path text DEFAULT 'SUGGESTED'::text, p_schedule_input_mode text DEFAULT NULL::text, p_weeks_total integer DEFAULT NULL::integer, p_weekly_due numeric DEFAULT NULL::numeric, p_manual_total_remaining numeric DEFAULT NULL::numeric, p_note text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -68880,6 +69463,11 @@ declare
   v_target_total_vat numeric(12,2) := 0;
   v_target_total_inc numeric(12,2) := 0;
   v_taxable_target_total_ex numeric(12,2) := 0;
+  v_fixed_target_total_ex numeric(12,2) := 0;
+  v_fixed_target_total_vat numeric(12,2) := 0;
+  v_fixed_target_total_inc numeric(12,2) := 0;
+  v_taxable_manual_target_ex numeric(12,2) := 0;
+  v_convertible_target_total_ex numeric(12,2) := 0;
 
   v_relevant_erni_pct numeric := null;
   v_vat_rate_pct numeric := null;
@@ -69136,6 +69724,9 @@ begin
     pfc.saved_resolution_result_json as saved_resolution_result_json,
     coalesce(pfc.is_resolution_stale, false) as is_resolution_stale,
     pfc.stale_reason as stale_reason,
+    (
+      pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+    )::boolean as is_taxable_channel_component,
     false::boolean as requires_component_conversion,
     0::numeric(12,2) as target_remaining_ex,
     0::numeric(12,2) as target_remaining_vat,
@@ -69209,14 +69800,11 @@ begin
     target_remaining_vat = round(
       case
         when v_candidate_pay_method = 'UMBRELLA'
+         and trc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+         and trc.source_pay_method = 'PAYE'
+         and v_candidate_pay_method = 'UMBRELLA'
           then coalesce((public._pay_umbrella_vat_calc(
-            case
-              when trc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-               and trc.source_pay_method = 'PAYE'
-               and v_candidate_pay_method = 'UMBRELLA'
-                then coalesce((public._pay_convert_paye_to_umbrella(trc.remaining_source_amount, v_relevant_erni_pct, v_vat_rate_pct, v_umbrella_vat_chargeable)->>'ex')::numeric, 0)
-              else trc.remaining_source_amount
-            end,
+            coalesce((public._pay_convert_paye_to_umbrella(trc.remaining_source_amount, v_relevant_erni_pct, v_vat_rate_pct, v_umbrella_vat_chargeable)->>'ex')::numeric, 0),
             v_vat_rate_pct,
             v_umbrella_vat_chargeable
           )->>'vat')::numeric, 0)
@@ -69234,14 +69822,22 @@ begin
     round(coalesce(sum(trc.target_remaining_ex), 0), 2)::numeric(12,2),
     round(coalesce(sum(trc.target_remaining_vat), 0), 2)::numeric(12,2),
     round(coalesce(sum(trc.target_remaining_inc), 0), 2)::numeric(12,2),
-    round(coalesce(sum(trc.target_remaining_ex) filter (where trc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum), 0), 2)::numeric(12,2)
+    round(coalesce(sum(trc.target_remaining_ex) filter (where trc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum), 0), 2)::numeric(12,2),
+    round(coalesce(sum(trc.target_remaining_ex) filter (where trc.requires_component_conversion is distinct from true), 0), 2)::numeric(12,2),
+    round(coalesce(sum(trc.target_remaining_vat) filter (where trc.requires_component_conversion is distinct from true), 0), 2)::numeric(12,2),
+    round(coalesce(sum(trc.target_remaining_inc) filter (where trc.requires_component_conversion is distinct from true), 0), 2)::numeric(12,2),
+    round(coalesce(sum(trc.target_remaining_ex) filter (where trc.requires_component_conversion), 0), 2)::numeric(12,2)
   into
     v_source_total_ex,
     v_taxable_source_total_ex,
     v_target_total_ex,
     v_target_total_vat,
     v_target_total_inc,
-    v_taxable_target_total_ex
+    v_taxable_target_total_ex,
+    v_fixed_target_total_ex,
+    v_fixed_target_total_vat,
+    v_fixed_target_total_inc,
+    v_convertible_target_total_ex
   from pg_temp._tmp_taxable_channel_restructure_components as trc;
 
   if v_resolution_path_norm = 'MANUAL' and p_manual_total_remaining is not null then
@@ -69255,22 +69851,43 @@ begin
       )::text;
     end if;
 
-    if v_target_total_ex <= 0 then
+    select
+      round(coalesce(sum(trc.target_remaining_ex) filter (where trc.requires_component_conversion is distinct from true), 0), 2)::numeric(12,2),
+      round(coalesce(sum(trc.target_remaining_ex) filter (where trc.requires_component_conversion), 0), 2)::numeric(12,2)
+    into
+      v_fixed_target_total_ex,
+      v_convertible_target_total_ex
+    from pg_temp._tmp_taxable_channel_restructure_components as trc;
+
+    if v_manual_total_remaining_ex < v_fixed_target_total_ex then
       raise exception '%', jsonb_build_object(
         'error', 'PAY_FINANCE_CASE_TAXABLE_CHANNEL_RESTRUCTURE_SUGGESTION',
-        'code', 'TARGET_TOTAL_INVALID',
-        'message', 'pay_finance_case_taxable_channel_restructure_suggestion: target total must be > 0 before manual allocation'
+        'code', 'MANUAL_TOTAL_BELOW_FIXED_COMPONENTS',
+        'message', 'pay_finance_case_taxable_channel_restructure_suggestion: manual_total_remaining cannot be below the unchanged fixed component total',
+        'manual_total_remaining', v_manual_total_remaining_ex,
+        'fixed_component_total_ex_vat', v_fixed_target_total_ex
       )::text;
     end if;
 
+    if v_convertible_target_total_ex <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_CASE_TAXABLE_CHANNEL_RESTRUCTURE_SUGGESTION',
+        'code', 'TAXABLE_TARGET_TOTAL_INVALID',
+        'message', 'pay_finance_case_taxable_channel_restructure_suggestion: taxable target total must be > 0 before manual allocation'
+      )::text;
+    end if;
+
+    v_taxable_manual_target_ex := greatest(round(v_manual_total_remaining_ex - v_fixed_target_total_ex, 2), 0);
+
     update pg_temp._tmp_taxable_channel_restructure_components as trc
     set
-      target_remaining_ex = round((trc.target_remaining_ex / v_target_total_ex) * v_manual_total_remaining_ex, 2),
+      target_remaining_ex = round((trc.target_remaining_ex / v_convertible_target_total_ex) * v_taxable_manual_target_ex, 2),
       target_remaining_vat = case
         when v_candidate_pay_method = 'UMBRELLA'
-          then round(coalesce((public._pay_umbrella_vat_calc(round((trc.target_remaining_ex / v_target_total_ex) * v_manual_total_remaining_ex, 2), v_vat_rate_pct, v_umbrella_vat_chargeable)->>'vat')::numeric, 0), 2)
+          then round(coalesce((public._pay_umbrella_vat_calc(round((trc.target_remaining_ex / v_convertible_target_total_ex) * v_taxable_manual_target_ex, 2), v_vat_rate_pct, v_umbrella_vat_chargeable)->>'vat')::numeric, 0), 2)
         else 0
-      end;
+      end
+    where trc.requires_component_conversion;
 
     update pg_temp._tmp_taxable_channel_restructure_components as trc
     set target_remaining_inc = round(coalesce(trc.target_remaining_ex, 0) + coalesce(trc.target_remaining_vat, 0), 2);
@@ -69278,17 +69895,20 @@ begin
     select trc.finance_component_id
     into v_adjust_component_id
     from pg_temp._tmp_taxable_channel_restructure_components as trc
+    where trc.requires_component_conversion
     order by trc.target_remaining_ex desc, trc.finance_component_id desc
     limit 1;
 
-    select round(v_manual_total_remaining_ex - coalesce(sum(trc.target_remaining_ex), 0), 2)
+    select round(v_taxable_manual_target_ex - coalesce(sum(trc.target_remaining_ex), 0), 2)
     into v_delta
-    from pg_temp._tmp_taxable_channel_restructure_components as trc;
+    from pg_temp._tmp_taxable_channel_restructure_components as trc
+    where trc.requires_component_conversion;
 
     if v_adjust_component_id is not null and v_delta <> 0 then
       update pg_temp._tmp_taxable_channel_restructure_components as trc
       set target_remaining_ex = round(trc.target_remaining_ex + v_delta, 2)
-      where trc.finance_component_id = v_adjust_component_id;
+      where trc.finance_component_id = v_adjust_component_id
+        and trc.requires_component_conversion;
 
       update pg_temp._tmp_taxable_channel_restructure_components as trc
       set
@@ -69302,19 +69922,28 @@ begin
             then round(trc.target_remaining_ex + coalesce((public._pay_umbrella_vat_calc(trc.target_remaining_ex, v_vat_rate_pct, v_umbrella_vat_chargeable)->>'vat')::numeric, 0), 2)
           else trc.target_remaining_ex
         end
-      where trc.finance_component_id = v_adjust_component_id;
+      where trc.finance_component_id = v_adjust_component_id
+        and trc.requires_component_conversion;
     end if;
 
     select
       round(coalesce(sum(trc.target_remaining_ex), 0), 2)::numeric(12,2),
       round(coalesce(sum(trc.target_remaining_vat), 0), 2)::numeric(12,2),
       round(coalesce(sum(trc.target_remaining_inc), 0), 2)::numeric(12,2),
-      round(coalesce(sum(trc.target_remaining_ex) filter (where trc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum), 0), 2)::numeric(12,2)
+      round(coalesce(sum(trc.target_remaining_ex) filter (where trc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum), 0), 2)::numeric(12,2),
+      round(coalesce(sum(trc.target_remaining_ex) filter (where trc.requires_component_conversion is distinct from true), 0), 2)::numeric(12,2),
+      round(coalesce(sum(trc.target_remaining_vat) filter (where trc.requires_component_conversion is distinct from true), 0), 2)::numeric(12,2),
+      round(coalesce(sum(trc.target_remaining_inc) filter (where trc.requires_component_conversion is distinct from true), 0), 2)::numeric(12,2),
+      round(coalesce(sum(trc.target_remaining_ex) filter (where trc.requires_component_conversion), 0), 2)::numeric(12,2)
     into
       v_target_total_ex,
       v_target_total_vat,
       v_target_total_inc,
-      v_taxable_target_total_ex
+      v_taxable_target_total_ex,
+      v_fixed_target_total_ex,
+      v_fixed_target_total_vat,
+      v_fixed_target_total_inc,
+      v_convertible_target_total_ex
     from pg_temp._tmp_taxable_channel_restructure_components as trc;
   end if;
 
@@ -69443,6 +70072,9 @@ begin
           'target_remaining_amount_vat', trc.target_remaining_vat,
           'target_remaining_amount_inc_vat', trc.target_remaining_inc,
           'requires_component_conversion', trc.requires_component_conversion,
+          'is_taxable_channel_component', trc.is_taxable_channel_component,
+          'is_fixed_component', (trc.requires_component_conversion is distinct from true),
+          'fixed_component_unchanged', (trc.requires_component_conversion is distinct from true),
           'saved_target_pay_method', trc.saved_target_pay_method,
           'saved_resolution_mode', case when trc.saved_resolution_mode is null then null else trc.saved_resolution_mode::text end,
           'is_resolution_stale', trc.is_resolution_stale,
@@ -69486,6 +70118,9 @@ begin
     'existing', jsonb_build_object(
       'source_remaining_balance_ex_vat', v_source_total_ex,
       'taxable_source_remaining_balance_ex_vat', v_taxable_source_total_ex,
+      'fixed_component_total_ex_vat', v_fixed_target_total_ex,
+      'fixed_component_total_vat', v_fixed_target_total_vat,
+      'fixed_component_total_inc_vat', v_fixed_target_total_inc,
       'weekly_due', v_existing_weekly_due,
       'weeks_remaining', v_existing_weeks_remaining,
       'final_week_amount', v_existing_final_week_amount,
@@ -69497,6 +70132,10 @@ begin
       'target_remaining_balance_vat', v_target_total_vat,
       'target_remaining_balance_inc_vat', v_target_total_inc,
       'taxable_target_remaining_balance_ex_vat', v_taxable_target_total_ex,
+      'fixed_component_total_ex_vat', v_fixed_target_total_ex,
+      'fixed_component_total_vat', v_fixed_target_total_vat,
+      'fixed_component_total_inc_vat', v_fixed_target_total_inc,
+      'fixed_components_preserved', true,
       'weekly_due', v_suggested_weekly_due,
       'weeks_remaining', v_existing_weeks_remaining,
       'final_week_amount', v_suggested_final_week_amount,
@@ -69508,6 +70147,8 @@ begin
     ),
     'selected', jsonb_build_object(
       'target_remaining_balance_ex_vat', v_target_total_ex,
+      'fixed_component_total_ex_vat', v_fixed_target_total_ex,
+      'taxable_target_remaining_balance_ex_vat', v_taxable_target_total_ex,
       'weekly_due', v_selected_weekly_due,
       'weeks_total', v_selected_weeks_total,
       'final_week_amount', v_selected_final_week_amount,
@@ -69520,6 +70161,7 @@ begin
   );
 end;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_finance_case_apply_taxable_channel_restructure(p_finance_case_id uuid, p_actor_user_id uuid, p_resolution_path text DEFAULT 'SUGGESTED'::text, p_schedule_input_mode text DEFAULT NULL::text, p_weeks_total integer DEFAULT NULL::integer, p_weekly_due numeric DEFAULT NULL::numeric, p_manual_total_remaining numeric DEFAULT NULL::numeric, p_effective_pay_date date DEFAULT NULL::date, p_note text DEFAULT NULL::text)
@@ -69550,6 +70192,11 @@ declare
   v_target_total_ex numeric(12,2) := 0;
   v_target_total_vat numeric(12,2) := 0;
   v_target_total_inc numeric(12,2) := 0;
+  v_source_total_ex numeric(12,2) := 0;
+  v_source_target_ratio numeric := 1;
+  v_source_weekly_due numeric(12,2) := 0;
+  v_source_final_week_amount numeric(12,2) := 0;
+  v_source_schedule_json jsonb := '[]'::jsonb;
   v_weekly_due numeric(12,2) := 0;
   v_weeks_total integer := 0;
   v_final_week_amount numeric(12,2) := 0;
@@ -69604,6 +70251,8 @@ begin
       'resolution_path', p_resolution_path
     )::text;
   end if;
+
+  perform pg_advisory_xact_lock(94201, 1);
 
   select pa.*
   into v_case
@@ -69765,18 +70414,21 @@ begin
 
   select
     count(*)::integer,
+    round(coalesce(sum(trc.remaining_source_amount), 0), 2)::numeric(12,2),
     round(coalesce(sum(trc.target_remaining_ex), 0), 2)::numeric(12,2)
   into
     v_open_component_count,
+    v_source_total_ex,
     v_new_component_remaining_total
   from pg_temp._tmp_taxable_channel_restructure_components as trc;
 
-  if v_open_component_count < 1 or v_new_component_remaining_total <= 0 then
+  if v_open_component_count < 1 or v_source_total_ex <= 0 or v_new_component_remaining_total <= 0 then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_FINANCE_CASE_APPLY_TAXABLE_CHANNEL_RESTRUCTURE',
       'code', 'COMPONENT_TARGET_TOTAL_INVALID',
       'message', 'pay_finance_case_apply_taxable_channel_restructure: target component total must be > 0',
       'open_component_count', v_open_component_count,
+      'source_total_ex', v_source_total_ex,
       'target_total_ex', v_new_component_remaining_total
     )::text;
   end if;
@@ -69797,11 +70449,33 @@ begin
   );
   v_start_week_start := coalesce((v_suggestion->'selected'->>'start_week_start')::date, v_case.next_due_week_start, v_case.start_week_start, public._pay_week_start_monday(v_effective_pay_date));
 
-  if v_target_total_ex <= 0 or v_weekly_due <= 0 or v_weeks_total < 1 then
+  v_source_total_ex := round(coalesce((v_suggestion->'existing'->>'source_remaining_balance_ex_vat')::numeric, v_source_total_ex), 2);
+  v_source_target_ratio := case
+    when round(abs(coalesce(v_source_total_ex, 0)), 2) = 0 then 1
+    else coalesce(v_target_total_ex, 0) / nullif(v_source_total_ex, 0)
+  end;
+  v_source_weekly_due := round(
+    case
+      when round(abs(coalesce(v_source_target_ratio, 0)), 8) = 0 then coalesce(v_weekly_due, 0)
+      else coalesce(v_weekly_due, 0) / v_source_target_ratio
+    end,
+    2
+  );
+  v_source_weekly_due := greatest(coalesce(v_source_weekly_due, 0), 0.01)::numeric(12,2);
+  v_source_final_week_amount := round(
+    least(
+      v_source_weekly_due,
+      greatest(coalesce(v_source_total_ex, 0) - (v_source_weekly_due * greatest(coalesce(v_weeks_total, 1) - 1, 0)), 0)
+    ),
+    2
+  )::numeric(12,2);
+
+  if v_target_total_ex <= 0 or v_source_total_ex <= 0 or v_weekly_due <= 0 or v_weeks_total < 1 then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_FINANCE_CASE_APPLY_TAXABLE_CHANNEL_RESTRUCTURE',
       'code', 'SELECTED_SCHEDULE_INVALID',
-      'message', 'pay_finance_case_apply_taxable_channel_restructure: selected target total, weekly_due and weeks_total must be valid',
+      'message', 'pay_finance_case_apply_taxable_channel_restructure: selected source/target totals, weekly_due and weeks_total must be valid',
+      'source_total_ex', v_source_total_ex,
       'target_total_ex', v_target_total_ex,
       'weekly_due', v_weekly_due,
       'weeks_total', v_weeks_total
@@ -69831,6 +70505,25 @@ begin
   into v_schedule_json
   from generate_series(0, greatest(v_weeks_total, 1) - 1) as gs(i);
 
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'week_start', (v_start_week_start + (gs.i * 7))::date,
+        'amount', round(
+          v_schedule_sign * least(
+            v_source_weekly_due,
+            greatest(v_source_total_ex - (v_source_weekly_due * gs.i), 0)
+          ),
+          2
+        )
+      )
+      order by (v_start_week_start + (gs.i * 7))::date asc
+    ),
+    '[]'::jsonb
+  )
+  into v_source_schedule_json
+  from generate_series(0, greatest(v_weeks_total, 1) - 1) as gs(i);
+
   select min(x.week_start)
   into v_next_due_week_start
   from (
@@ -69848,7 +70541,7 @@ begin
   where abs(coalesce(x.amount, 0)) > 0;
 
   v_recovered_or_paid_so_far_ex := round(greatest(coalesce(v_case.original_amount, 0) - coalesce(v_case.outstanding_amount, 0), 0), 2);
-  v_rebased_original_amount := round(v_recovered_or_paid_so_far_ex + v_target_total_ex, 2);
+  v_rebased_original_amount := round(v_recovered_or_paid_so_far_ex + v_source_total_ex, 2);
 
   select coalesce(
     jsonb_agg(
@@ -69903,19 +70596,6 @@ begin
 
   update public.pay_finance_case_components as pfc
   set
-    source_amount = round(greatest(coalesce(pfc.source_amount, 0) - coalesce(trc.remaining_source_amount, 0), 0) + coalesce(trc.target_remaining_ex, 0), 2),
-    remaining_source_amount = round(coalesce(trc.target_remaining_ex, 0), 2),
-    source_pay_method = v_candidate_pay_method,
-    source_basis_json = coalesce(pfc.source_basis_json, '{}'::jsonb) || jsonb_build_object(
-      'taxable_channel_restructure_applied_at_utc', v_now_utc::text,
-      'taxable_channel_restructure_effective_pay_date', v_effective_pay_date::text,
-      'previous_source_pay_method', trc.source_pay_method,
-      'target_pay_method', v_candidate_pay_method,
-      'source_remaining_amount_before', trc.remaining_source_amount,
-      'target_remaining_amount_ex_vat', trc.target_remaining_ex,
-      'target_remaining_amount_vat', trc.target_remaining_vat,
-      'target_remaining_amount_inc_vat', trc.target_remaining_inc
-    ),
     saved_target_pay_method = v_candidate_pay_method,
     saved_resolution_mode = v_resolution_mode,
     saved_resolution_payload_json = jsonb_strip_nulls(
@@ -69928,6 +70608,9 @@ begin
         'target_pay_method', v_candidate_pay_method,
         'source_remaining_amount_ex_vat', trc.remaining_source_amount,
         'target_remaining_amount_ex_vat', trc.target_remaining_ex,
+        'target_remaining_amount_vat', trc.target_remaining_vat,
+        'target_remaining_amount_inc_vat', trc.target_remaining_inc,
+        'target_source_ratio', case when round(coalesce(trc.remaining_source_amount, 0), 2) <> 0 then round(coalesce(trc.target_remaining_ex, 0) / trc.remaining_source_amount, 12) else null end,
         'relevant_erni_pct', v_suggestion->'suggested'->'erni_rate_pct',
         'vat_rate_pct', v_suggestion->'suggested'->'vat_rate_pct',
         'umbrella_vat_chargeable', v_suggestion->'suggested'->'umbrella_vat_chargeable',
@@ -69949,22 +70632,34 @@ begin
         'target_remaining_amount_inc_vat', trc.target_remaining_inc,
         'source_pay_method_before', trc.source_pay_method,
         'source_pay_method_after', v_candidate_pay_method,
+        'target_pay_method', v_candidate_pay_method,
+        'case_source_remaining_amount_ex_vat', v_source_total_ex,
         'case_target_remaining_amount_ex_vat', v_target_total_ex,
+        'case_source_weekly_due', v_source_weekly_due,
         'case_weekly_due', v_weekly_due,
-        'case_weeks_total', v_weeks_total
+        'case_weeks_total', v_weeks_total,
+        'target_source_ratio', case when round(coalesce(trc.remaining_source_amount, 0), 2) <> 0 then round(coalesce(trc.target_remaining_ex, 0) / trc.remaining_source_amount, 12) else null end
       )
     ),
-    resolution_fingerprint = md5(jsonb_build_object(
-      'resolution_family', 'TAXABLE_CHANNEL_RESTRUCTURE',
-      'finance_component_id', pfc.id::text,
-      'target_pay_method', v_candidate_pay_method,
-      'target_remaining_amount_ex_vat', round(coalesce(trc.target_remaining_ex, 0), 2),
-      'classification', pfc.classification::text,
-      'component_key_type', pfc.component_key_type,
-      'component_key_value', pfc.component_key_value,
-      'effective_pay_date', v_effective_pay_date::text,
-      'resolution_mode', v_resolution_mode::text
-    )::text),
+    resolution_fingerprint = public.pay_finance_component_fingerprint(
+      pfc.source_family_key,
+      pfc.component_key_type,
+      pfc.component_key_value,
+      pfc.classification,
+      pfc.source_pay_method,
+      v_candidate_pay_method,
+      coalesce(pfc.source_basis_json, '{}'::jsonb),
+      round(coalesce(pfc.source_amount, 0), 2),
+      NULL::numeric,
+      coalesce(pfc.source_basis_json, '{}'::jsonb) || jsonb_build_object(
+        'taxable_channel_restructure_effective_pay_date', v_effective_pay_date::text,
+        'target_pay_method', v_candidate_pay_method,
+        'target_remaining_amount_ex_vat', round(coalesce(trc.target_remaining_ex, 0), 2),
+        'target_remaining_amount_vat', round(coalesce(trc.target_remaining_vat, 0), 2),
+        'target_remaining_amount_inc_vat', round(coalesce(trc.target_remaining_inc, 0), 2),
+        'resolution_mode', v_resolution_mode::text
+      )
+    ),
     is_resolution_stale = false,
     stale_reason = null,
     resolved_at_utc = v_now_utc,
@@ -69972,7 +70667,8 @@ begin
   from pg_temp._tmp_taxable_channel_restructure_components as trc
   where pfc.id = trc.finance_component_id
     and pfc.finance_case_id = p_finance_case_id
-    and pfc.closed_at_utc is null;
+    and pfc.closed_at_utc is null
+    and trc.requires_component_conversion;
 
   select
     case
@@ -69991,9 +70687,9 @@ begin
   update public.pay_advances as pa
   set
     original_amount = v_rebased_original_amount,
-    outstanding_amount = v_target_total_ex,
-    schedule_json = coalesce(v_schedule_json, '[]'::jsonb),
-    weekly_due = v_weekly_due,
+    outstanding_amount = v_source_total_ex,
+    schedule_json = coalesce(v_source_schedule_json, '[]'::jsonb),
+    weekly_due = v_source_weekly_due,
     weeks_total = v_weeks_total,
     start_week_start = v_start_week_start,
     next_due_week_start = v_next_due_week_start,
@@ -70007,14 +70703,12 @@ begin
   where pa.id = p_finance_case_id;
 
   select
-    round(coalesce(sum(pfc.remaining_source_amount), 0), 2)::numeric(12,2),
+    round(coalesce(sum(trc.remaining_source_amount), 0), 2)::numeric(12,2),
     count(*)::integer
   into
     v_new_component_remaining_total,
     v_open_component_count
-  from public.pay_finance_case_components as pfc
-  where pfc.finance_case_id = p_finance_case_id
-    and pfc.closed_at_utc is null;
+  from pg_temp._tmp_taxable_channel_restructure_components as trc;
 
   if v_open_component_count < 1 then
     raise exception '%', jsonb_build_object(
@@ -70025,13 +70719,14 @@ begin
     )::text;
   end if;
 
-  if v_new_component_remaining_total <> v_target_total_ex then
+  if v_new_component_remaining_total <> v_source_total_ex then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_FINANCE_CASE_APPLY_TAXABLE_CHANNEL_RESTRUCTURE',
       'code', 'UPDATED_COMPONENT_TOTAL_MISMATCH',
-      'message', 'pay_finance_case_apply_taxable_channel_restructure: updated component remaining total must match selected target total',
+      'message', 'pay_finance_case_apply_taxable_channel_restructure: updated component remaining total must match selected source total',
       'finance_case_id', p_finance_case_id::text,
       'component_remaining_total', v_new_component_remaining_total,
+      'source_total_ex', v_source_total_ex,
       'target_total_ex', v_target_total_ex
     )::text;
   end if;
@@ -70050,13 +70745,14 @@ begin
     )::text;
   end if;
 
-  if round(coalesce(v_updated_case.outstanding_amount, 0), 2) <> v_target_total_ex then
+  if round(coalesce(v_updated_case.outstanding_amount, 0), 2) <> v_source_total_ex then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_FINANCE_CASE_APPLY_TAXABLE_CHANNEL_RESTRUCTURE',
       'code', 'UPDATED_CASE_OUTSTANDING_MISMATCH',
-      'message', 'pay_finance_case_apply_taxable_channel_restructure: updated finance case outstanding_amount must match selected target total',
+      'message', 'pay_finance_case_apply_taxable_channel_restructure: updated finance case outstanding_amount must match selected source total',
       'finance_case_id', p_finance_case_id::text,
       'updated_outstanding_amount', round(coalesce(v_updated_case.outstanding_amount, 0), 2),
+      'source_total_ex', v_source_total_ex,
       'target_total_ex', v_target_total_ex
     )::text;
   end if;
@@ -70152,6 +70848,8 @@ begin
     'resolution_mode', v_resolution_mode::text,
     'effective_pay_date', v_effective_pay_date::text,
     'target_pay_method', v_candidate_pay_method,
+    'source_remaining_balance_ex_vat', v_source_total_ex,
+    'target_remaining_balance_ex_vat', v_target_total_ex,
     'before', v_before_json,
     'after', v_after_json,
     'suggestion', v_suggestion
@@ -141016,6 +141714,9 @@ DECLARE
   v_accepted_resolution_json jsonb;
   v_line_accepted_resolution_json jsonb;
   v_accepted_resolution_fingerprint text;
+  v_resolution_target_ratio numeric := NULL;
+  v_resolution_vat_ratio numeric := NULL;
+  v_resolution_inc_ratio numeric := NULL;
 BEGIN
   IF p_finance_case_id IS NULL THEN
     RAISE EXCEPTION 'p_finance_case_id is required';
@@ -141077,8 +141778,17 @@ BEGIN
     WHERE protected_case_events.finance_case_id = p_finance_case_id
       AND (
         upper(btrim(coalesce(protected_case_events.event_type, ''))) LIKE '%WRITE%OFF%'
-        OR upper(btrim(coalesce(protected_case_events.event_type, ''))) LIKE '%RESTRUCT%'
-        OR upper(btrim(coalesce(protected_case_events.event_type, ''))) LIKE '%MANUAL%'
+        OR upper(btrim(coalesce(protected_case_events.event_type, ''))) IN (
+          'MANUAL_ECONOMIC_OVERRIDE',
+          'MANUAL_WRITE_OFF',
+          'CASE_MANUAL_ECONOMIC_OVERRIDE',
+          'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+        )
+        OR upper(btrim(coalesce(protected_case_events.reason, ''))) IN (
+          'MANUAL_ECONOMIC_OVERRIDE',
+          'WRITE_OFF',
+          'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+        )
       )
   )
   INTO v_case_has_protected_event;
@@ -142108,13 +142818,9 @@ BEGIN
           'OVERPAYMENT'::public.pay_finance_case_type_enum,
           'UNDERPAYMENT'::public.pay_finance_case_type_enum
         )
-        OR (
-          v_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-          AND upper(btrim(coalesce(public.pay_batch_items.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
-        )
-        OR (
-          v_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-          AND upper(btrim(coalesce(public.pay_batch_items.item_type, ''))) = 'UNDERPAYMENT_PAYMENT'
+        OR upper(btrim(coalesce(public.pay_batch_items.item_type, ''))) IN (
+          'OVERPAYMENT_RECOVERY',
+          'UNDERPAYMENT_PAYMENT'
         )
       )
       AND NOT EXISTS (
@@ -142180,13 +142886,9 @@ BEGIN
           'OVERPAYMENT'::public.pay_finance_case_type_enum,
           'UNDERPAYMENT'::public.pay_finance_case_type_enum
         )
-        OR (
-          v_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-          AND upper(btrim(coalesce(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
-        )
-        OR (
-          v_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-          AND upper(btrim(coalesce(active_item.item_type, ''))) = 'UNDERPAYMENT_PAYMENT'
+        OR upper(btrim(coalesce(active_item.item_type, ''))) IN (
+          'OVERPAYMENT_RECOVERY',
+          'UNDERPAYMENT_PAYMENT'
         )
       )
       AND (active_item.id IS NULL OR coalesce(active_item.is_voided, false) = false)
@@ -142302,13 +143004,9 @@ BEGIN
           'OVERPAYMENT'::public.pay_finance_case_type_enum,
           'UNDERPAYMENT'::public.pay_finance_case_type_enum
         )
-        OR (
-          v_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-          AND upper(btrim(coalesce(settled_identity_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
-        )
-        OR (
-          v_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-          AND upper(btrim(coalesce(settled_identity_item.item_type, ''))) = 'UNDERPAYMENT_PAYMENT'
+        OR upper(btrim(coalesce(settled_identity_item.item_type, ''))) IN (
+          'OVERPAYMENT_RECOVERY',
+          'UNDERPAYMENT_PAYMENT'
         )
       )
       AND NOT EXISTS (
@@ -142420,13 +143118,9 @@ BEGIN
           'OVERPAYMENT'::public.pay_finance_case_type_enum,
           'UNDERPAYMENT'::public.pay_finance_case_type_enum
         )
-        OR (
-          v_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-          AND upper(btrim(coalesce(reserved_identity_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
-        )
-        OR (
-          v_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-          AND upper(btrim(coalesce(reserved_identity_item.item_type, ''))) = 'UNDERPAYMENT_PAYMENT'
+        OR upper(btrim(coalesce(reserved_identity_item.item_type, ''))) IN (
+          'OVERPAYMENT_RECOVERY',
+          'UNDERPAYMENT_PAYMENT'
         )
       )
       AND (reserved_identity_item.id IS NULL OR coalesce(reserved_identity_item.is_voided, false) = false)
@@ -142490,13 +143184,9 @@ BEGIN
         'OVERPAYMENT'::public.pay_finance_case_type_enum,
         'UNDERPAYMENT'::public.pay_finance_case_type_enum
       )
-      OR (
-        v_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-        AND upper(btrim(coalesce(case_settled_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
-      )
-      OR (
-        v_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-        AND upper(btrim(coalesce(case_settled_item.item_type, ''))) = 'UNDERPAYMENT_PAYMENT'
+      OR upper(btrim(coalesce(case_settled_item.item_type, ''))) IN (
+        'OVERPAYMENT_RECOVERY',
+        'UNDERPAYMENT_PAYMENT'
       )
     )
     AND NOT EXISTS (
@@ -142544,13 +143234,9 @@ BEGIN
         'OVERPAYMENT'::public.pay_finance_case_type_enum,
         'UNDERPAYMENT'::public.pay_finance_case_type_enum
       )
-      OR (
-        v_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-        AND upper(btrim(coalesce(case_reserved_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
-      )
-      OR (
-        v_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-        AND upper(btrim(coalesce(case_reserved_item.item_type, ''))) = 'UNDERPAYMENT_PAYMENT'
+      OR upper(btrim(coalesce(case_reserved_item.item_type, ''))) IN (
+        'OVERPAYMENT_RECOVERY',
+        'UNDERPAYMENT_PAYMENT'
       )
     )
     AND (case_reserved_item.id IS NULL OR coalesce(case_reserved_item.is_voided, false) = false)
@@ -142625,8 +143311,17 @@ BEGIN
         AND protected_component_events.finance_component_id = v_existing_component.id
         AND (
           upper(btrim(coalesce(protected_component_events.event_type, ''))) LIKE '%WRITE%OFF%'
-          OR upper(btrim(coalesce(protected_component_events.event_type, ''))) LIKE '%RESTRUCT%'
-          OR upper(btrim(coalesce(protected_component_events.event_type, ''))) LIKE '%MANUAL%'
+          OR upper(btrim(coalesce(protected_component_events.event_type, ''))) IN (
+            'MANUAL_ECONOMIC_OVERRIDE',
+            'MANUAL_WRITE_OFF',
+            'CASE_MANUAL_ECONOMIC_OVERRIDE',
+            'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+          )
+          OR upper(btrim(coalesce(protected_component_events.reason, ''))) IN (
+            'MANUAL_ECONOMIC_OVERRIDE',
+            'WRITE_OFF',
+            'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+          )
         )
     )
     INTO v_component_has_protected_event;
@@ -142961,12 +143656,49 @@ BEGIN
       );
 
       IF v_has_saved_resolution THEN
-        IF v_existing_component.saved_target_pay_method IS NOT NULL
+        IF v_existing_component.classification IS DISTINCT FROM v_line_classification THEN
+          v_should_be_stale := true;
+          v_stale_reason := 'COMPONENT_CLASSIFICATION_CHANGED';
+        ELSIF v_existing_component.saved_target_pay_method IS NOT NULL
            AND upper(v_existing_component.saved_target_pay_method) IS DISTINCT FROM upper(v_line_current_target_pay_method) THEN
           v_should_be_stale := true;
           v_stale_reason := 'TARGET_PAY_METHOD_CHANGED';
-        ELSIF v_existing_component.resolution_fingerprint IS NOT NULL
-              AND v_existing_component.resolution_fingerprint IS DISTINCT FROM (v_line_json->>'current_basis_fingerprint') THEN
+        ELSIF upper(coalesce(v_existing_component.source_pay_method, '')) IS DISTINCT FROM upper(coalesce(v_line_source_pay_method, '')) THEN
+          v_should_be_stale := true;
+          v_stale_reason := 'SOURCE_PAY_METHOD_CHANGED';
+        ELSIF (
+          coalesce(v_existing_component.source_basis_json, '{}'::jsonb)
+            - 'amount'
+            - 'amount_ex_vat'
+            - 'amount_inc_vat'
+            - 'component_amount_ex_vat'
+            - 'remaining_source_amount'
+            - 'source_amount'
+            - 'source_units'
+            - 'units'
+            - 'hours'
+            - 'quantity'
+            - 'line_total'
+            - 'total'
+            - 'current_amount'
+            - 'current_units'
+        ) IS DISTINCT FROM (
+          coalesce(v_line_source_basis_json, '{}'::jsonb)
+            - 'amount'
+            - 'amount_ex_vat'
+            - 'amount_inc_vat'
+            - 'component_amount_ex_vat'
+            - 'remaining_source_amount'
+            - 'source_amount'
+            - 'source_units'
+            - 'units'
+            - 'hours'
+            - 'quantity'
+            - 'line_total'
+            - 'total'
+            - 'current_amount'
+            - 'current_units'
+        ) THEN
           v_should_be_stale := true;
           v_stale_reason := 'COMPONENT_BASIS_CHANGED';
         ELSE
@@ -142976,6 +143708,74 @@ BEGIN
       ELSE
         v_should_be_stale := false;
         v_stale_reason := NULL;
+      END IF;
+
+      v_resolution_target_ratio := NULL;
+      v_resolution_vat_ratio := NULL;
+      v_resolution_inc_ratio := NULL;
+
+      IF v_has_saved_resolution AND v_should_be_stale IS DISTINCT FROM true THEN
+        v_resolution_target_ratio := COALESCE(
+          CASE
+            WHEN coalesce(v_existing_component.saved_resolution_result_json->>'target_source_ratio', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN (v_existing_component.saved_resolution_result_json->>'target_source_ratio')::numeric
+            ELSE NULL::numeric
+          END,
+          CASE
+            WHEN coalesce(v_existing_component.saved_resolution_result_json->>'target_remaining_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND coalesce(v_existing_component.saved_resolution_result_json->>'source_remaining_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND round(abs((v_existing_component.saved_resolution_result_json->>'source_remaining_amount_ex_vat')::numeric), 2) <> 0
+              THEN (v_existing_component.saved_resolution_result_json->>'target_remaining_amount_ex_vat')::numeric
+                   / (v_existing_component.saved_resolution_result_json->>'source_remaining_amount_ex_vat')::numeric
+            ELSE NULL::numeric
+          END,
+          CASE
+            WHEN coalesce(v_existing_component.saved_resolution_result_json->>'target_remaining_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND round(abs(coalesce(v_existing_component.remaining_source_amount, 0)), 2) <> 0
+              THEN (v_existing_component.saved_resolution_result_json->>'target_remaining_amount_ex_vat')::numeric
+                   / v_existing_component.remaining_source_amount
+            ELSE NULL::numeric
+          END,
+          1::numeric
+        );
+
+        v_resolution_vat_ratio := COALESCE(
+          CASE
+            WHEN coalesce(v_existing_component.saved_resolution_result_json->>'target_remaining_amount_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND coalesce(v_existing_component.saved_resolution_result_json->>'source_remaining_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND round(abs((v_existing_component.saved_resolution_result_json->>'source_remaining_amount_ex_vat')::numeric), 2) <> 0
+              THEN (v_existing_component.saved_resolution_result_json->>'target_remaining_amount_vat')::numeric
+                   / (v_existing_component.saved_resolution_result_json->>'source_remaining_amount_ex_vat')::numeric
+            ELSE NULL::numeric
+          END,
+          CASE
+            WHEN coalesce(v_existing_component.saved_resolution_result_json->>'target_remaining_amount_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND round(abs(coalesce(v_existing_component.remaining_source_amount, 0)), 2) <> 0
+              THEN (v_existing_component.saved_resolution_result_json->>'target_remaining_amount_vat')::numeric
+                   / v_existing_component.remaining_source_amount
+            ELSE NULL::numeric
+          END,
+          0::numeric
+        );
+
+        v_resolution_inc_ratio := COALESCE(
+          CASE
+            WHEN coalesce(v_existing_component.saved_resolution_result_json->>'target_remaining_amount_inc_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND coalesce(v_existing_component.saved_resolution_result_json->>'source_remaining_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND round(abs((v_existing_component.saved_resolution_result_json->>'source_remaining_amount_ex_vat')::numeric), 2) <> 0
+              THEN (v_existing_component.saved_resolution_result_json->>'target_remaining_amount_inc_vat')::numeric
+                   / (v_existing_component.saved_resolution_result_json->>'source_remaining_amount_ex_vat')::numeric
+            ELSE NULL::numeric
+          END,
+          CASE
+            WHEN coalesce(v_existing_component.saved_resolution_result_json->>'target_remaining_amount_inc_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND round(abs(coalesce(v_existing_component.remaining_source_amount, 0)), 2) <> 0
+              THEN (v_existing_component.saved_resolution_result_json->>'target_remaining_amount_inc_vat')::numeric
+                   / v_existing_component.remaining_source_amount
+            ELSE NULL::numeric
+          END,
+          v_resolution_target_ratio
+        );
       END IF;
 
       v_before_json := jsonb_build_object(
@@ -143005,8 +143805,17 @@ BEGIN
           AND protected_component_events.finance_component_id = v_existing_component.id
           AND (
             upper(btrim(coalesce(protected_component_events.event_type, ''))) LIKE '%WRITE%OFF%'
-            OR upper(btrim(coalesce(protected_component_events.event_type, ''))) LIKE '%RESTRUCT%'
-            OR upper(btrim(coalesce(protected_component_events.event_type, ''))) LIKE '%MANUAL%'
+              OR upper(btrim(coalesce(protected_component_events.event_type, ''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE',
+                'MANUAL_WRITE_OFF',
+                'CASE_MANUAL_ECONOMIC_OVERRIDE',
+                'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+              )
+              OR upper(btrim(coalesce(protected_component_events.reason, ''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE',
+                'WRITE_OFF',
+                'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+              )
           )
       )
       INTO v_component_has_protected_event;
@@ -143035,7 +143844,7 @@ BEGIN
         IF v_component_is_protected
            OR v_existing_component.closed_at_utc IS NOT NULL
            OR v_accepted_resolution_fingerprint IS NULL
-           OR v_accepted_resolution_fingerprint IS DISTINCT FROM (v_line_json->>'current_basis_fingerprint') THEN
+           OR v_should_be_stale THEN
           RAISE EXCEPTION '%', jsonb_build_object(
             'error', 'ACCEPTED_RESOLUTION_STALE',
             'code', 'ACCEPTED_RESOLUTION_STALE',
@@ -143081,7 +143890,7 @@ BEGIN
             'is_resolution_stale', v_existing_component.is_resolution_stale
           ),
           'COMPONENT_SYNC_SKIPPED_PROTECTED_COMPONENT',
-          'Skipped updating finance component because an explicit manual, write-off, or restructure event protects it.'
+          'Skipped updating finance component because an explicit write-off or manual economic override protects it.'
         );
         v_protected_skip_count := v_protected_skip_count + 1;
         CONTINUE;
@@ -143107,8 +143916,17 @@ BEGIN
             AND protected_component_events.finance_component_id = v_existing_component.id
             AND (
               upper(btrim(coalesce(protected_component_events.event_type, ''))) LIKE '%WRITE%OFF%'
-              OR upper(btrim(coalesce(protected_component_events.event_type, ''))) LIKE '%RESTRUCT%'
-              OR upper(btrim(coalesce(protected_component_events.event_type, ''))) LIKE '%MANUAL%'
+              OR upper(btrim(coalesce(protected_component_events.event_type, ''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE',
+                'MANUAL_WRITE_OFF',
+                'CASE_MANUAL_ECONOMIC_OVERRIDE',
+                'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+              )
+              OR upper(btrim(coalesce(protected_component_events.reason, ''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE',
+                'WRITE_OFF',
+                'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+              )
             )
         )
         INTO v_component_has_protected_event;
@@ -143144,7 +143962,7 @@ BEGIN
               'has_protected_event', v_component_has_protected_event
             ),
             'COMPONENT_SYNC_SKIPPED_PROTECTED_COMPONENT',
-            'Skipped updating finance component because it is manually resolved, already restructured, or otherwise protected.'
+            'Skipped updating finance component because it has an explicit write-off or manual economic override protection.'
           );
           v_protected_skip_count := v_protected_skip_count + 1;
           CONTINUE;
@@ -143160,6 +143978,27 @@ BEGIN
           source_basis_json = v_line_source_basis_json,
           source_amount = round(coalesce(v_effective_source_amount, v_line_source_amount, 0), 2)::numeric(12,2),
           remaining_source_amount = round(coalesce(v_new_remaining_source_amount, 0), 2)::numeric(12,2),
+          saved_resolution_result_json = CASE
+            WHEN v_has_saved_resolution AND v_should_be_stale IS DISTINCT FROM true THEN
+              jsonb_strip_nulls(
+                coalesce(pfc.saved_resolution_result_json, '{}'::jsonb)
+                || jsonb_build_object(
+                  'source_remaining_amount_ex_vat', round(coalesce(v_new_remaining_source_amount, 0), 2),
+                  'target_remaining_amount_ex_vat', round(coalesce(v_new_remaining_source_amount, 0) * coalesce(v_resolution_target_ratio, 1), 2),
+                  'target_remaining_amount_vat', round(coalesce(v_new_remaining_source_amount, 0) * coalesce(v_resolution_vat_ratio, 0), 2),
+                  'target_remaining_amount_inc_vat', round(coalesce(v_new_remaining_source_amount, 0) * coalesce(v_resolution_inc_ratio, coalesce(v_resolution_target_ratio, 1)), 2),
+                  'target_source_ratio', round(coalesce(v_resolution_target_ratio, 1), 12),
+                  'amount_only_resolution_reused', true,
+                  'amount_only_resolution_reused_at_utc', v_now_utc::text
+                )
+              )
+            ELSE pfc.saved_resolution_result_json
+          END,
+          resolution_fingerprint = CASE
+            WHEN v_has_saved_resolution AND v_should_be_stale IS DISTINCT FROM true THEN
+              coalesce(nullif(btrim(coalesce(v_line_json->>'current_basis_fingerprint', '')), ''), pfc.resolution_fingerprint)
+            ELSE pfc.resolution_fingerprint
+          END,
           is_resolution_stale = v_should_be_stale,
           stale_reason = v_stale_reason,
           allocation_priority_group = v_line_allocation_priority_group,
@@ -143674,7 +144513,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_finance_component_resolutions_apply(
