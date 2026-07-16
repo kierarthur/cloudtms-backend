@@ -47262,7 +47262,7 @@ BEGIN
                'resolution_fingerprint', component_row.resolution_fingerprint,
                'is_resolution_stale', COALESCE(component_row.is_resolution_stale, false),
                'stale_reason', component_row.stale_reason
-             ) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id)
+             )) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id)
       FROM public.pay_finance_case_components AS component_row
       WHERE component_row.finance_case_id = v_finance_case_id
         AND component_row.closed_at_utc IS NULL
@@ -47349,7 +47349,7 @@ BEGIN
                'resolution_fingerprint', component_row.resolution_fingerprint,
                'is_resolution_stale', COALESCE(component_row.is_resolution_stale, false),
                'stale_reason', component_row.stale_reason
-             ) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id)
+             )) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id)
       FROM public.pay_finance_case_components AS component_row
       WHERE component_row.finance_case_id = v_finance_case_id
         AND component_row.closed_at_utc IS NULL
