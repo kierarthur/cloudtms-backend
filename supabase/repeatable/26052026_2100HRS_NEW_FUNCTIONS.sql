@@ -47052,6 +47052,10 @@ BEGIN
     ''
   )));
 
+  IF v_resolution_family = 'TAXABLE_CHANNEL' THEN
+    v_resolution_family := 'TAXABLE_CHANNEL_RESTRUCTURE';
+  END IF;
+
   v_candidate_id_text := BTRIM(COALESCE(
     v_resolution_payload_json->>'candidate_id',
     v_resolution_payload_json #>> '{case,candidate_id}',
@@ -47088,6 +47092,28 @@ BEGIN
     ''
   ));
 
+  IF v_finance_case_id_text <> ''
+     AND v_resolution_family = '' THEN
+    RAISE EXCEPTION 'resolution_family is required when clearing a finance case resolution'
+      USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+        'code', 'WORKBENCH_FINANCE_RESOLUTION_FAMILY_REQUIRED',
+        'session_id', p_session_id::text,
+        'finance_case_id', v_finance_case_id_text,
+        'message', 'Refresh Banking Pay and try Cancel Resolve again. The finance case resolution family was not supplied.'
+      )::text;
+  END IF;
+
+  IF v_resolution_family IN ('TAXABLE_CHANNEL_RESTRUCTURE', 'TAXABLE_CHANNEL')
+     AND v_finance_case_id_text = '' THEN
+    RAISE EXCEPTION 'finance_case_id is required to clear a taxable finance case resolution'
+      USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+        'code', 'WORKBENCH_TAXABLE_FINANCE_CASE_ID_REQUIRED',
+        'session_id', p_session_id::text,
+        'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
+        'resolution_family', v_resolution_family,
+        'message', 'Refresh Banking Pay and try Cancel Resolve again. The finance case could not be identified.'
+      )::text;
+  END IF;
 
   IF v_resolution_family IN ('TAXABLE_CHANNEL_RESTRUCTURE', 'TAXABLE_CHANNEL')
      AND v_finance_case_id_text <> '' THEN
@@ -47153,11 +47179,11 @@ BEGIN
       RAISE EXCEPTION 'finance case % does not belong to candidate %', v_finance_case_id, v_candidate_id;
     END IF;
 
-    IF v_finance_case.case_type NOT IN (
-      'OVERPAYMENT'::public.pay_finance_case_type_enum,
-      'UNDERPAYMENT'::public.pay_finance_case_type_enum,
-      'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
-      'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+    IF COALESCE(v_finance_case.case_type::text, '') NOT IN (
+      'OVERPAYMENT',
+      'UNDERPAYMENT',
+      'MANUAL_DEBT_ADJUSTMENT',
+      'MANUAL_CREDIT_ADJUSTMENT'
     ) THEN
       RAISE EXCEPTION 'finance case % is not a taxable finance case-resolution case', v_finance_case_id;
     END IF;
@@ -47203,28 +47229,48 @@ BEGIN
       ON CONFLICT (session_id, candidate_id) DO NOTHING;
     END IF;
 
-    SELECT COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-             'finance_component_id', component_row.id::text,
-             'classification', component_row.classification::text,
-             'component_key_type', component_row.component_key_type,
-             'component_key_value', component_row.component_key_value,
-             'source_pay_method', component_row.source_pay_method,
-             'source_amount', ROUND(COALESCE(component_row.source_amount, 0), 2),
-             'remaining_source_amount', ROUND(COALESCE(component_row.remaining_source_amount, 0), 2),
-             'saved_target_pay_method', component_row.saved_target_pay_method,
-             'saved_resolution_mode', CASE WHEN component_row.saved_resolution_mode IS NULL THEN NULL ELSE component_row.saved_resolution_mode::text END,
-             'saved_resolution_payload_json', component_row.saved_resolution_payload_json,
-             'saved_resolution_result_json', component_row.saved_resolution_result_json,
-             'resolution_fingerprint', component_row.resolution_fingerprint,
-             'is_resolution_stale', COALESCE(component_row.is_resolution_stale, false),
-             'stale_reason', component_row.stale_reason
-           ) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id), '[]'::jsonb)
-    INTO v_finance_component_before_json
-    FROM public.pay_finance_case_components AS component_row
-    WHERE component_row.finance_case_id = v_finance_case_id
-      AND component_row.closed_at_utc IS NULL;
+    /*
+     * Keep the taxable finance clear path aligned with the apply path and
+     * Draft creation by locking the current case components in a deterministic
+     * order before any live resolution state is cleared.  Fixed components are
+     * locked as part of the case scope but remain untouched by the UPDATE below.
+     */
+    FOR v_stale_batch_record IN
+      SELECT component_lock.id AS finance_component_id
+      FROM public.pay_finance_case_components AS component_lock
+      WHERE component_lock.finance_case_id = v_finance_case_id
+        AND component_lock.closed_at_utc IS NULL
+      ORDER BY component_lock.id
+      FOR UPDATE
+    LOOP
+      NULL;
+    END LOOP;
 
-    WITH cleared_components AS (
+    v_finance_component_before_json := COALESCE((
+      SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+               'finance_component_id', component_row.id::text,
+               'classification', component_row.classification::text,
+               'component_key_type', component_row.component_key_type,
+               'component_key_value', component_row.component_key_value,
+               'source_pay_method', component_row.source_pay_method,
+               'source_amount', ROUND(COALESCE(component_row.source_amount, 0), 2),
+               'remaining_source_amount', ROUND(COALESCE(component_row.remaining_source_amount, 0), 2),
+               'saved_target_pay_method', component_row.saved_target_pay_method,
+               'saved_resolution_mode', CASE WHEN component_row.saved_resolution_mode IS NULL THEN NULL ELSE component_row.saved_resolution_mode::text END,
+               'saved_resolution_payload_json', component_row.saved_resolution_payload_json,
+               'saved_resolution_result_json', component_row.saved_resolution_result_json,
+               'resolution_fingerprint', component_row.resolution_fingerprint,
+               'is_resolution_stale', COALESCE(component_row.is_resolution_stale, false),
+               'stale_reason', component_row.stale_reason
+             ) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id)
+      FROM public.pay_finance_case_components AS component_row
+      WHERE component_row.finance_case_id = v_finance_case_id
+        AND component_row.closed_at_utc IS NULL
+    ), '[]'::jsonb);
+
+    v_finance_cleared_component_count := 0;
+    v_finance_cleared_component_ids := '[]'::jsonb;
+    FOR v_stale_batch_record IN
       UPDATE public.pay_finance_case_components AS component_row
       SET saved_target_pay_method = NULL,
           saved_resolution_mode = NULL,
@@ -47246,15 +47292,18 @@ BEGIN
           OR component_row.resolution_fingerprint IS NOT NULL
           OR COALESCE(component_row.is_resolution_stale, false) = true
         )
-      RETURNING component_row.id
-    )
-    SELECT COUNT(*)::integer,
-           COALESCE(jsonb_agg(cleared_components.id::text ORDER BY cleared_components.id::text), '[]'::jsonb)
-    INTO v_finance_cleared_component_count,
-         v_finance_cleared_component_ids
-    FROM cleared_components;
+      RETURNING component_row.id AS finance_component_id
+    LOOP
+      v_finance_cleared_component_count := COALESCE(v_finance_cleared_component_count, 0) + 1;
+      v_finance_cleared_component_ids := COALESCE(v_finance_cleared_component_ids, '[]'::jsonb)
+        || jsonb_build_array(v_stale_batch_record.finance_component_id::text);
+    END LOOP;
 
-    WITH deleted_resolution_rows AS (
+    v_deleted_count := 0;
+    v_case_resolution_ids := '[]'::jsonb;
+    v_resolution_identity_keys := '[]'::jsonb;
+    v_case_resolution_id_text := NULL::text;
+    FOR v_stale_batch_record IN
       DELETE FROM public.banking_pay_workbench_session_case_resolutions AS resolution_row
       WHERE resolution_row.session_id = p_session_id
         AND resolution_row.candidate_id = v_candidate_id
@@ -47263,43 +47312,48 @@ BEGIN
           OR UPPER(BTRIM(COALESCE(resolution_row.resolution_family, ''))) = v_resolution_family
         )
         AND (
-          v_finance_case_id_text = ''
-          OR BTRIM(COALESCE(resolution_row.payload_json->>'finance_case_id', '')) = v_finance_case_id_text
-          OR resolution_row.case_key = v_case_key
+          BTRIM(COALESCE(resolution_row.payload_json->>'finance_case_id', '')) = v_finance_case_id_text
+          OR (
+            v_case_key <> ''
+            AND resolution_row.case_key = v_case_key
+          )
         )
       RETURNING resolution_row.id::text AS id_text,
                 resolution_row.resolution_identity_key AS identity_key
-    )
-    SELECT COUNT(*)::integer,
-           COALESCE(jsonb_agg(deleted_resolution_rows.id_text ORDER BY deleted_resolution_rows.id_text), '[]'::jsonb),
-           COALESCE(jsonb_agg(deleted_resolution_rows.identity_key ORDER BY deleted_resolution_rows.identity_key) FILTER (WHERE deleted_resolution_rows.identity_key IS NOT NULL), '[]'::jsonb),
-           MIN(deleted_resolution_rows.id_text)
-    INTO v_deleted_count,
-         v_case_resolution_ids,
-         v_resolution_identity_keys,
-         v_case_resolution_id_text
-    FROM deleted_resolution_rows;
+    LOOP
+      v_deleted_count := COALESCE(v_deleted_count, 0) + 1;
+      v_case_resolution_ids := COALESCE(v_case_resolution_ids, '[]'::jsonb)
+        || jsonb_build_array(v_stale_batch_record.id_text);
+      IF v_stale_batch_record.identity_key IS NOT NULL THEN
+        v_resolution_identity_keys := COALESCE(v_resolution_identity_keys, '[]'::jsonb)
+          || jsonb_build_array(v_stale_batch_record.identity_key);
+      END IF;
+      IF v_case_resolution_id_text IS NULL OR v_stale_batch_record.id_text < v_case_resolution_id_text THEN
+        v_case_resolution_id_text := v_stale_batch_record.id_text;
+      END IF;
+    END LOOP;
 
-    SELECT COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-             'finance_component_id', component_row.id::text,
-             'classification', component_row.classification::text,
-             'component_key_type', component_row.component_key_type,
-             'component_key_value', component_row.component_key_value,
-             'source_pay_method', component_row.source_pay_method,
-             'source_amount', ROUND(COALESCE(component_row.source_amount, 0), 2),
-             'remaining_source_amount', ROUND(COALESCE(component_row.remaining_source_amount, 0), 2),
-             'saved_target_pay_method', component_row.saved_target_pay_method,
-             'saved_resolution_mode', CASE WHEN component_row.saved_resolution_mode IS NULL THEN NULL ELSE component_row.saved_resolution_mode::text END,
-             'saved_resolution_payload_json', component_row.saved_resolution_payload_json,
-             'saved_resolution_result_json', component_row.saved_resolution_result_json,
-             'resolution_fingerprint', component_row.resolution_fingerprint,
-             'is_resolution_stale', COALESCE(component_row.is_resolution_stale, false),
-             'stale_reason', component_row.stale_reason
-           ) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id), '[]'::jsonb)
-    INTO v_finance_component_after_json
-    FROM public.pay_finance_case_components AS component_row
-    WHERE component_row.finance_case_id = v_finance_case_id
-      AND component_row.closed_at_utc IS NULL;
+    v_finance_component_after_json := COALESCE((
+      SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+               'finance_component_id', component_row.id::text,
+               'classification', component_row.classification::text,
+               'component_key_type', component_row.component_key_type,
+               'component_key_value', component_row.component_key_value,
+               'source_pay_method', component_row.source_pay_method,
+               'source_amount', ROUND(COALESCE(component_row.source_amount, 0), 2),
+               'remaining_source_amount', ROUND(COALESCE(component_row.remaining_source_amount, 0), 2),
+               'saved_target_pay_method', component_row.saved_target_pay_method,
+               'saved_resolution_mode', CASE WHEN component_row.saved_resolution_mode IS NULL THEN NULL ELSE component_row.saved_resolution_mode::text END,
+               'saved_resolution_payload_json', component_row.saved_resolution_payload_json,
+               'saved_resolution_result_json', component_row.saved_resolution_result_json,
+               'resolution_fingerprint', component_row.resolution_fingerprint,
+               'is_resolution_stale', COALESCE(component_row.is_resolution_stale, false),
+               'stale_reason', component_row.stale_reason
+             ) ORDER BY component_row.allocation_priority_group NULLS LAST, component_row.allocation_priority_order NULLS LAST, component_row.id)
+      FROM public.pay_finance_case_components AS component_row
+      WHERE component_row.finance_case_id = v_finance_case_id
+        AND component_row.closed_at_utc IS NULL
+    ), '[]'::jsonb);
 
     IF COALESCE(v_finance_cleared_component_count, 0) = 0 AND COALESCE(v_deleted_count, 0) = 0 THEN
       RETURN jsonb_build_object(
