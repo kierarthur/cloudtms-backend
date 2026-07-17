@@ -28,6 +28,12 @@
 import * as XLSX from 'xlsx';
 // QR code generation
 import QRCode from 'qrcode';
+import {
+  classifyBulkAuthoriseInvoiceEvidencePolicy,
+  collectBulkAuthoriseInvoiceIds,
+  missingBulkAuthoriseExpenseEvidenceKinds,
+  normaliseBulkAuthoriseEvidenceKind
+} from './bulk-authorise-evidence-policy.js';
 
 const textEncoder = new TextEncoder();
 
@@ -74048,7 +74054,685 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
 }
 
 async function applyTimesheetEvidenceReplacement(env, args = {}) {
-  throw new Error('Direct evidence replacement is not supported. Delete or return the existing evidence first, then add/attach the new evidence.');
+  const enc = encodeURIComponent;
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const cleanKey = (value) => trimStr(value).replace(/^\/+/, '');
+  const timesheetId = trimStr(args.timesheet_id);
+  const queueId = trimStr(args.queue_id);
+  const expectedStorageKey = cleanKey(args.expected_storage_key);
+  const evidenceId = trimStr(args.evidence_id);
+  const oldStorageKey = cleanKey(args.old_storage_key);
+  const targetKind = normaliseBulkAuthoriseEvidenceKind(args.kind);
+  const disposition = String(args.disposition || '').trim().toUpperCase();
+  const actorUserId = trimStr(args.actor_user_id) || null;
+  const synthetic = args.synthetic === true;
+  let timesheetPointerSnapshot = null;
+  let contractWeekPointerSnapshots = [];
+
+  if (!timesheetId || !queueId || !expectedStorageKey || !oldStorageKey) throw new Error('Replacement context is incomplete.');
+  if (!['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(targetKind)) throw new Error('Invalid replacement evidence kind.');
+  if (!['DELETE', 'RETURN_TO_QUEUE'].includes(disposition)) throw new Error('Invalid displaced evidence disposition.');
+
+  const queue = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}` +
+      `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,last_rotation_deg,meta_json&limit=1`
+  );
+  if (!queue || String(queue.status || '').toUpperCase() !== 'QUEUED' || trimStr(queue.timesheet_id)) {
+    const err = new Error('The selected queue image is no longer available.');
+    err.code = 'QUEUE_ITEM_NOT_AVAILABLE';
+    throw err;
+  }
+  const newStorageKey = cleanKey(queue.r2_key);
+  if (!newStorageKey || newStorageKey !== expectedStorageKey || !(await r2Exists(env, newStorageKey))) {
+    const err = new Error('The selected queue image is no longer displayed or available.');
+    err.code = 'QUEUE_ITEM_STORAGE_MISMATCH';
+    throw err;
+  }
+
+  if (targetKind === 'TIMESHEET') {
+    timesheetPointerSnapshot = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}` +
+        `&is_current=eq.true&select=timesheet_id,manual_pdf_r2_key,manual_pdf_rotation_degrees&limit=1`
+    );
+    const contractWeekPointers = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=id,uploaded_pdf_r2_key`
+    ).catch(() => ({ rows: [] }));
+    contractWeekPointerSnapshots = (contractWeekPointers.rows || []).map((row) => ({
+      id: trimStr(row?.id),
+      uploaded_pdf_r2_key: row?.uploaded_pdf_r2_key || null
+    })).filter((row) => row.id);
+  }
+
+  let existing = null;
+  if (!synthetic) {
+    if (!evidenceId) throw new Error('evidence_id is required for a stored evidence replacement.');
+    existing = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}` +
+        `&timesheet_id=eq.${enc(timesheetId)}&select=id,timesheet_id,kind,display_name,storage_key,created_at,created_by&limit=1`
+    );
+    if (!existing || cleanKey(existing.storage_key) !== oldStorageKey || normaliseBulkAuthoriseEvidenceKind(existing.kind) !== targetKind) {
+      const err = new Error('The evidence being replaced has changed. Refresh the row and try again.');
+      err.code = 'EVIDENCE_CHANGED';
+      throw err;
+    }
+  } else {
+    if (targetKind !== 'TIMESHEET') throw new Error('Only a Timesheet primary artifact can use synthetic replacement.');
+    const currentPointers = [
+      cleanKey(timesheetPointerSnapshot?.manual_pdf_r2_key),
+      ...contractWeekPointerSnapshots.map((row) => cleanKey(row.uploaded_pdf_r2_key))
+    ].filter(Boolean);
+    if (!currentPointers.includes(oldStorageKey)) {
+      const err = new Error('The primary Timesheet artifact has changed. Refresh the row and try again.');
+      err.code = 'EVIDENCE_CHANGED';
+      throw err;
+    }
+    const duplicate = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=eq.${enc(timesheetId)}&kind=eq.TIMESHEET&select=id&limit=1`
+    );
+    if (duplicate?.id) {
+      const err = new Error('A stored Timesheet evidence item now exists. Refresh the row and try again.');
+      err.code = 'EVIDENCE_CHANGED';
+      throw err;
+    }
+  }
+
+  const now = nowIso();
+  const displayName = trimStr(queue.original_filename) || newStorageKey.split('/').pop() || 'Evidence file';
+  let replacementEvidence = null;
+  let insertedEvidenceId = null;
+  let queueAttached = false;
+  let timesheetPointerChanged = false;
+  const changedContractWeekPointers = [];
+
+  const restoreEvidence = async () => {
+    try {
+      if (insertedEvidenceId) {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(insertedEvidenceId)}`, {
+          method: 'DELETE', headers: { Prefer: 'return=minimal' }
+        });
+      } else if (existing?.id) {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(existing.id)}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            kind: existing.kind,
+            display_name: existing.display_name,
+            storage_key: existing.storage_key,
+            created_at: existing.created_at,
+            created_by: existing.created_by
+          })
+        });
+      }
+    } catch {}
+    if (timesheetPointerChanged && targetKind === 'TIMESHEET') {
+      try {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            manual_pdf_r2_key: timesheetPointerSnapshot?.manual_pdf_r2_key || null,
+            manual_pdf_rotation_degrees: Number(timesheetPointerSnapshot?.manual_pdf_rotation_degrees || 0) || 0
+          })
+        });
+      } catch {}
+    }
+    for (const snapshot of changedContractWeekPointers) {
+      try {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(snapshot.id)}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ uploaded_pdf_r2_key: snapshot.uploaded_pdf_r2_key || null })
+        });
+      } catch {}
+    }
+    if (queueAttached) {
+      try {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ status: 'QUEUED', timesheet_id: null, meta_json: queue.meta_json || {} })
+        });
+      } catch {}
+    }
+  };
+
+  try {
+    if (existing?.id) {
+      const updated = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(existing.id)}&select=*`, {
+        method: 'PATCH', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          kind: targetKind,
+          display_name: displayName,
+          storage_key: newStorageKey,
+          created_at: now,
+          created_by: actorUserId
+        })
+      });
+      replacementEvidence = updated.rows?.[0] || null;
+    } else {
+      const inserted = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?select=*`, {
+        method: 'POST', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          timesheet_id: timesheetId,
+          kind: targetKind,
+          display_name: displayName,
+          storage_key: newStorageKey,
+          created_at: now,
+          created_by: actorUserId
+        })
+      });
+      replacementEvidence = inserted.rows?.[0] || null;
+      insertedEvidenceId = trimStr(replacementEvidence?.id);
+      if (!insertedEvidenceId) throw new Error('Replacement evidence insert returned no row.');
+    }
+
+    const queueMeta = (queue.meta_json && typeof queue.meta_json === 'object' && !Array.isArray(queue.meta_json)) ? queue.meta_json : {};
+    await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
+      method: 'PATCH', headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        status: 'ATTACHED',
+        timesheet_id: timesheetId,
+        meta_json: {
+          ...queueMeta,
+          attached_kind: targetKind,
+          attached_to_timesheet_id: timesheetId,
+          attached_at_utc: now,
+          attached_storage_key: newStorageKey,
+          source: 'bulk_authorise_evidence_replacement'
+        }
+      })
+    });
+    queueAttached = true;
+
+    if (targetKind === 'TIMESHEET') {
+      await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ manual_pdf_r2_key: newStorageKey, manual_pdf_rotation_degrees: Number(queue.last_rotation_deg || 0) || 0 })
+      });
+      timesheetPointerChanged = true;
+      for (const snapshot of contractWeekPointerSnapshots) {
+        if (cleanKey(snapshot.uploaded_pdf_r2_key) !== oldStorageKey) continue;
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(snapshot.id)}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ uploaded_pdf_r2_key: newStorageKey })
+        });
+        changedContractWeekPointers.push(snapshot);
+      }
+    }
+
+    const dispositionResult = await applyBulkAuthoriseDisplacedEvidenceDisposition(env, {
+      timesheet_id: timesheetId,
+      evidence_id: existing?.id || null,
+      storage_key: oldStorageKey,
+      display_name: existing?.display_name || oldStorageKey.split('/').pop() || 'Evidence file',
+      kind: targetKind,
+      disposition,
+      actor_user_id: actorUserId,
+      preserve_evidence_row: true
+    });
+
+    return {
+      evidence: replacementEvidence,
+      queue_id: queueId,
+      storage_key: newStorageKey,
+      displaced_storage_key: oldStorageKey,
+      disposition,
+      returned_queue_id: dispositionResult?.queue_id || null,
+      delete_r2_key: dispositionResult?.delete_r2_key || null
+    };
+  } catch (error) {
+    await restoreEvidence();
+    throw error;
+  }
+}
+
+function bulkAuthoriseEvidenceErrorResponse(code, message, status = 409, extra = {}) {
+  return new Response(JSON.stringify({
+    ok: false,
+    error: code,
+    error_code: code,
+    message,
+    ...extra
+  }), { status, headers: JSON_HEADERS });
+}
+
+const BULK_AUTHORISE_EVIDENCE_RUNTIME_MARKER = 'bulk-authorise-evidence-20260716-v2';
+
+async function getBulkAuthoriseEvidenceMutationPolicy(env, timesheetId) {
+  const enc = encodeURIComponent;
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId).catch(() => null);
+  const currentTimesheetId = String(resolved?.current_timesheet_id || '').trim();
+  if (!currentTimesheetId) {
+    return { can_manage_evidence: false, protected_reason: 'INVALID_TIMESHEET_CONTEXT', current_timesheet_id: null };
+  }
+
+  const [genericPolicy, ts, fin] = await Promise.all([
+    getTimesheetEvidenceMutationPolicy(env, currentTimesheetId, { allow_expense_evidence_preflight: true }).catch(() => null),
+    sbGetOne(env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true&select=timesheet_id,authorised_at_server,revoked_at,manual_pdf_r2_key&limit=1`
+    ).catch(() => null),
+    sbGetOne(env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true&select=locked_by_invoice_id,invoice_breakdown_json&limit=1`
+    ).catch(() => null)
+  ]);
+  if (!ts?.timesheet_id) {
+    return { can_manage_evidence: false, protected_reason: 'INVALID_TIMESHEET_CONTEXT', current_timesheet_id: currentTimesheetId };
+  }
+
+  const invoiceIds = collectBulkAuthoriseInvoiceIds(fin || {});
+  let invoiceRows = [];
+  if (invoiceIds.length) {
+    const inList = invoiceIds.map(enc).join(',');
+    const invoiceResult = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=in.(${inList})` +
+        `&select=id,status,issued_at_utc,invoice_pdf_r2_key,invoice_pdf_generated_at_utc,invoice_render_manifest,paper_ts_r2_manifest,updated_at`
+    ).catch(() => ({ rows: [] }));
+    invoiceRows = invoiceResult.rows || [];
+  }
+  const invoicePolicy = classifyBulkAuthoriseInvoiceEvidencePolicy(invoiceIds, invoiceRows);
+  const authorised = !!ts.authorised_at_server && !String(ts.revoked_at || '').trim();
+  const importAuthoritative = genericPolicy?.import_authoritative === true;
+  const protectedReason = importAuthoritative
+    ? 'IMPORT_AUTHORITATIVE_EVIDENCE_BLOCKED'
+    : (!invoicePolicy.allowed ? invoicePolicy.reason : null);
+
+  return {
+    can_manage_evidence: !protectedReason,
+    protected_reason: protectedReason,
+    current_timesheet_id: currentTimesheetId,
+    authorised,
+    import_authoritative: importAuthoritative,
+    candidate_paid_ignored_for_evidence_policy: true,
+    invoice_policy: invoicePolicy,
+    invoice_rows: invoiceRows
+  };
+}
+
+async function invalidateBulkAuthoriseEvidenceInvoices(env, policy) {
+  const enc = encodeURIComponent;
+  const invoiceIds = Array.isArray(policy?.invoice_policy?.mutable_invoice_ids)
+    ? policy.invoice_policy.mutable_invoice_ids
+    : [];
+  for (const invoiceId of invoiceIds) {
+    const patched = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}` +
+        `&status=in.(DRAFT,ON_HOLD)&issued_at_utc=is.null&select=id,status,issued_at_utc`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          invoice_pdf_r2_key: null,
+          invoice_pdf_generated_at_utc: null,
+          invoice_render_manifest: null,
+          paper_ts_r2_manifest: null,
+          updated_at: nowIso()
+        })
+      }
+    );
+    if (!patched.rows?.[0]?.id) throw new Error('Invoice state changed before its evidence cache could be invalidated.');
+    await sbRpc(env, 'invpdf_enqueue_one', { p_invoice_id: invoiceId, p_force_regen: true });
+  }
+  return invoiceIds;
+}
+
+async function hasBulkAuthoriseTimesheetEvidenceArtifact(env, timesheetId) {
+  const enc = encodeURIComponent;
+  const cleanKey = (value) => String(value == null ? '' : value).trim().replace(/^\/+/, '');
+  const [ts, cw, evidenceResult] = await Promise.all([
+    sbGetOne(env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true&select=manual_pdf_r2_key&limit=1`
+    ).catch(() => null),
+    sbGetOne(env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(timesheetId)}` +
+      `&select=uploaded_pdf_r2_key&order=updated_at.desc.nullslast&limit=1`
+    ).catch(() => null),
+    sbFetch(env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=eq.${enc(timesheetId)}&select=id,kind,storage_key`
+    ).catch(() => ({ rows: [] }))
+  ]);
+  const evidenceRows = evidenceResult.rows || [];
+  if (evidenceRows.some((row) => normaliseBulkAuthoriseEvidenceKind(row?.kind) === 'TIMESHEET')) return true;
+  const nonTimesheetKeys = new Set(evidenceRows
+    .filter((row) => normaliseBulkAuthoriseEvidenceKind(row?.kind) !== 'TIMESHEET')
+    .map((row) => cleanKey(row?.storage_key))
+    .filter(Boolean));
+  return [cleanKey(ts?.manual_pdf_r2_key), cleanKey(cw?.uploaded_pdf_r2_key)]
+    .filter(Boolean)
+    .some((key) => !nonTimesheetKeys.has(key));
+}
+
+function bulkAuthoriseEvidenceMimeFromName(name) {
+  const value = String(name || '').toLowerCase();
+  if (value.endsWith('.pdf')) return 'application/pdf';
+  if (value.endsWith('.png')) return 'image/png';
+  return 'image/jpeg';
+}
+
+async function applyBulkAuthoriseDisplacedEvidenceDisposition(env, args = {}) {
+  const enc = encodeURIComponent;
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const storageKey = trimStr(args.storage_key).replace(/^\/+/, '');
+  const timesheetId = trimStr(args.timesheet_id);
+  const evidenceId = trimStr(args.evidence_id);
+  const disposition = String(args.disposition || '').trim().toUpperCase();
+  if (!storageKey || !timesheetId || !['DELETE', 'RETURN_TO_QUEUE'].includes(disposition)) {
+    throw new Error('Evidence disposition context is incomplete.');
+  }
+
+  if (disposition === 'DELETE') {
+    await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?timesheet_id=eq.${enc(timesheetId)}&r2_key=eq.${enc(storageKey)}`,
+      { method: 'DELETE', headers: { Prefer: 'return=minimal' } }
+    );
+    return { queue_id: null, delete_r2_key: storageKey };
+  }
+
+  const existing = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?timesheet_id=eq.${enc(timesheetId)}` +
+      `&r2_key=eq.${enc(storageKey)}&select=id,status,timesheet_id,r2_key,content_hash,meta_json&order=uploaded_at_utc.desc.nullslast&limit=1`
+  ).catch(() => null);
+  const now = nowIso();
+  const displayName = trimStr(args.display_name) || storageKey.split('/').pop() || 'Evidence file';
+  const meta = (existing?.meta_json && typeof existing.meta_json === 'object' && !Array.isArray(existing.meta_json)) ? existing.meta_json : {};
+  const patch = {
+    status: 'QUEUED',
+    timesheet_id: null,
+    meta_json: {
+      ...meta,
+      returned_from_timesheet_id: timesheetId,
+      returned_evidence_id: evidenceId || null,
+      returned_at_utc: now,
+      returned_from_bulk_authorise: true
+    }
+  };
+  if (existing?.id) {
+    let result;
+    try {
+      result = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(existing.id)}&select=id`, {
+        method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch)
+      });
+    } catch (error) {
+      if (!/manual_timesheet_queue_content_hash_active_idx|duplicate key value|23505/i.test(String(error?.message || error))) throw error;
+      result = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(existing.id)}&select=id`, {
+        method: 'PATCH', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ ...patch, content_hash: `bulk-authorise-return:${existing.id}:${Date.now()}` })
+      });
+    }
+    return { queue_id: result.rows?.[0]?.id || existing.id, delete_r2_key: null };
+  }
+
+  const inserted = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?select=id`, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      r2_key: storageKey,
+      original_filename: displayName,
+      mime_type: bulkAuthoriseEvidenceMimeFromName(displayName || storageKey),
+      content_hash: `bulk-authorise-return:${evidenceId || storageKey}:${Date.now()}`,
+      uploaded_by_user_id: args.actor_user_id || null,
+      uploaded_at_utc: now,
+      status: 'QUEUED',
+      timesheet_id: null,
+      last_rotation_deg: 0,
+      meta_json: patch.meta_json
+    })
+  });
+  const queueId = inserted.rows?.[0]?.id || null;
+  if (!queueId) throw new Error('Returned queue item insert returned no row.');
+  return { queue_id: queueId, delete_r2_key: null };
+}
+
+async function handleBulkAuthoriseEvidencePolicy(env, req, tsId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const policy = await getBulkAuthoriseEvidenceMutationPolicy(env, tsId);
+  const safePolicy = {
+    ok: true,
+    runtime_marker: BULK_AUTHORISE_EVIDENCE_RUNTIME_MARKER,
+    can_manage_evidence: policy.can_manage_evidence === true,
+    protected_reason: policy.protected_reason || null,
+    current_timesheet_id: policy.current_timesheet_id || null,
+    authorised: policy.authorised === true,
+    import_authoritative: policy.import_authoritative === true,
+    candidate_paid_ignored_for_evidence_policy: true,
+    has_related_invoice: (policy.invoice_policy?.invoice_ids || []).length > 0,
+    has_mutable_unissued_invoice: (policy.invoice_policy?.mutable_invoice_ids || []).length > 0,
+    invoice_blocked: policy.invoice_policy?.allowed === false
+  };
+  return withCORS(env, req, ok(safePolicy));
+}
+
+async function handleBulkAuthoriseEvidenceMutation(env, req, tsId) {
+  const enc = encodeURIComponent;
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const cleanKey = (value) => trimStr(value).replace(/^\/+/, '');
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON payload')); }
+
+  const policy = await getBulkAuthoriseEvidenceMutationPolicy(env, tsId);
+  const currentTimesheetId = trimStr(policy.current_timesheet_id);
+  if (!currentTimesheetId) return withCORS(env, req, bulkAuthoriseEvidenceErrorResponse('INVALID_TIMESHEET_CONTEXT', 'Invalid or missing current timesheet context.', 400));
+  const expected = trimStr(body?.expected_timesheet_id || body?.expectedTimesheetId);
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+  if (expected !== currentTimesheetId) {
+    return withCORS(env, req, bulkAuthoriseEvidenceErrorResponse('TIMESHEET_MOVED', 'The selected timesheet changed. Refresh the row and try again.', 409, { current_timesheet_id: currentTimesheetId }));
+  }
+  if (!policy.can_manage_evidence) {
+    const code = policy.protected_reason || 'EVIDENCE_MUTATION_BLOCKED';
+    const message = code === 'IMPORT_AUTHORITATIVE_EVIDENCE_BLOCKED'
+      ? 'Evidence is view-only for this import-authoritative timesheet.'
+      : 'Evidence cannot be changed because its related invoice has been issued or its invoice state cannot be verified.';
+    return withCORS(env, req, bulkAuthoriseEvidenceErrorResponse(code, message));
+  }
+
+  const action = String(body?.action || '').trim().toUpperCase();
+  const kind = normaliseBulkAuthoriseEvidenceKind(body?.kind || body?.evidence_kind);
+  const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
+  if (!['ATTACH', 'ADD', 'REMOVE', 'REPLACE'].includes(action)) return withCORS(env, req, badRequest('Invalid Bulk Authorise evidence action'));
+
+  try {
+    let result = null;
+    let deleteR2Key = null;
+
+    if (action === 'ATTACH') {
+      if (!allowedKinds.has(kind)) return withCORS(env, req, badRequest('Invalid evidence kind'));
+      if (kind === 'TIMESHEET' && await hasBulkAuthoriseTimesheetEvidenceArtifact(env, currentTimesheetId)) {
+        return withCORS(env, req, bulkAuthoriseEvidenceErrorResponse('TIMESHEET_EVIDENCE_ALREADY_EXISTS', 'Timesheet evidence is already attached to this row.'));
+      }
+      const queueId = trimStr(body.queue_id);
+      const expectedStorageKey = cleanKey(body.expected_storage_key || body.storage_key);
+      if (!queueId || !expectedStorageKey) return withCORS(env, req, badRequest('queue_id and expected_storage_key are required'));
+      const queue = await sbGetOne(env,
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}` +
+        `&select=id,status,timesheet_id,r2_key&limit=1`
+      );
+      if (!queue || String(queue.status || '').toUpperCase() !== 'QUEUED' || trimStr(queue.timesheet_id) || cleanKey(queue.r2_key) !== expectedStorageKey) {
+        return withCORS(env, req, bulkAuthoriseEvidenceErrorResponse('QUEUE_ITEM_NOT_AVAILABLE', 'The selected queue image is no longer available. Refresh the queue and try again.'));
+      }
+      const rpcPayload = await sbRpc(env, 'manual_timesheet_queue_attach_process_atomic', {
+        p_queue_id: queueId,
+        p_timesheet_id: currentTimesheetId,
+        p_expected_timesheet_id: expected,
+        p_expected_storage_key: expectedStorageKey,
+        p_kind: kind,
+        p_actor_user_id: user?.id || null,
+        p_source_json: { source: 'bulk_authorise_evidence', route: 'bulk-authorise-evidence' },
+        p_now_utc: nowIso()
+      }, { timeoutMs: 45000 });
+      let payload = rpcPayload;
+      if (Array.isArray(payload) && payload.length === 1) payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'manual_timesheet_queue_attach_process_atomic')) payload = payload.manual_timesheet_queue_attach_process_atomic;
+      if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch {} }
+      if (!payload || payload.ok === false || payload.success === false) {
+        const code = String(payload?.error_code || payload?.error || 'ATTACH_FAILED').trim().toUpperCase();
+        return withCORS(env, req, bulkAuthoriseEvidenceErrorResponse(code, payload?.message || 'The queue image could not be attached.'));
+      }
+      result = { evidence_id: payload.evidence_id || null, storage_key: payload.storage_key || expectedStorageKey, queue_id: queueId };
+    }
+
+    if (action === 'ADD') {
+      if (!allowedKinds.has(kind)) return withCORS(env, req, badRequest('Invalid evidence kind'));
+      const storageKey = cleanKey(body.storage_key);
+      const displayName = trimStr(body.display_name) || storageKey.split('/').pop() || 'Evidence file';
+      if (!storageKey || !(await r2Exists(env, storageKey))) return withCORS(env, req, badRequest('Uploaded evidence file is missing'));
+      if (kind === 'TIMESHEET') {
+        if (await hasBulkAuthoriseTimesheetEvidenceArtifact(env, currentTimesheetId)) {
+          return withCORS(env, req, bulkAuthoriseEvidenceErrorResponse('TIMESHEET_EVIDENCE_ALREADY_EXISTS', 'Timesheet evidence is already attached to this row.'));
+        }
+      }
+      const inserted = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?select=*`, {
+        method: 'POST', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          timesheet_id: currentTimesheetId,
+          kind,
+          display_name: displayName,
+          storage_key: storageKey,
+          created_at: nowIso(),
+          created_by: user?.id || null
+        })
+      });
+      const evidence = inserted.rows?.[0] || null;
+      if (!evidence?.id) throw new Error('Evidence insert returned no row.');
+      if (kind === 'TIMESHEET') {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ manual_pdf_r2_key: storageKey, manual_pdf_rotation_degrees: 0 })
+        });
+      }
+      result = { evidence };
+    }
+
+    if (action === 'REMOVE') {
+      const evidenceId = trimStr(body.evidence_id);
+      if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
+      const evidence = await sbGetOne(env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}` +
+        `&timesheet_id=eq.${enc(currentTimesheetId)}&select=id,timesheet_id,kind,display_name,storage_key&limit=1`
+      );
+      if (!evidence?.id) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+      const evidenceKind = normaliseBulkAuthoriseEvidenceKind(evidence.kind);
+      const allEvidenceKinds = await sbFetch(env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=eq.${enc(currentTimesheetId)}&select=id,kind`
+      );
+      const sameKindCount = (allEvidenceKinds.rows || [])
+        .filter((row) => normaliseBulkAuthoriseEvidenceKind(row?.kind) === evidenceKind)
+        .length;
+      if (policy.authorised && sameKindCount <= 1) {
+        return withCORS(env, req, bulkAuthoriseEvidenceErrorResponse('REPLACEMENT_REQUIRED', 'The last evidence item of this type must be replaced for an authorised timesheet.'));
+      }
+      const disposition = String(body.disposition || '').trim().toUpperCase();
+      if (!['DELETE', 'RETURN_TO_QUEUE'].includes(disposition)) return withCORS(env, req, badRequest('Invalid evidence disposition'));
+      const dispositionResult = await applyBulkAuthoriseDisplacedEvidenceDisposition(env, {
+        timesheet_id: currentTimesheetId,
+        evidence_id: evidence.id,
+        storage_key: evidence.storage_key,
+        display_name: evidence.display_name,
+        kind: evidenceKind,
+        disposition,
+        actor_user_id: user?.id || null
+      });
+      try {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidence.id)}`, {
+          method: 'DELETE', headers: { Prefer: 'return=minimal' }
+        });
+      } catch (error) {
+        if (dispositionResult?.queue_id) {
+          await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(dispositionResult.queue_id)}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ status: 'ATTACHED', timesheet_id: currentTimesheetId })
+          }).catch(() => null);
+        }
+        throw error;
+      }
+      if (evidenceKind === 'TIMESHEET') {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true&manual_pdf_r2_key=eq.${enc(cleanKey(evidence.storage_key))}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ manual_pdf_r2_key: null, manual_pdf_rotation_degrees: 0 })
+        });
+      }
+      result = { removed_evidence_id: evidence.id, disposition, returned_queue_id: dispositionResult?.queue_id || null };
+      deleteR2Key = dispositionResult?.delete_r2_key || null;
+    }
+
+    if (action === 'REPLACE') {
+      const disposition = String(body.disposition || '').trim().toUpperCase();
+      result = await applyTimesheetEvidenceReplacement(env, {
+        timesheet_id: currentTimesheetId,
+        queue_id: trimStr(body.queue_id),
+        expected_storage_key: cleanKey(body.expected_storage_key || body.storage_key),
+        evidence_id: trimStr(body.evidence_id),
+        old_storage_key: cleanKey(body.old_storage_key),
+        kind,
+        disposition,
+        synthetic: body.synthetic === true,
+        actor_user_id: user?.id || null
+      });
+      deleteR2Key = result?.delete_r2_key || null;
+    }
+
+    const invalidatedInvoiceIds = await invalidateBulkAuthoriseEvidenceInvoices(env, policy);
+    if (deleteR2Key) {
+      try {
+        const key = cleanKey(deleteR2Key);
+        const [evidenceReference, queueReference] = await Promise.all([
+          sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?storage_key=eq.${enc(key)}&select=id&limit=1`).catch(() => ({ id: 'UNVERIFIED' })),
+          sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?r2_key=eq.${enc(key)}&select=id&limit=1`).catch(() => ({ id: 'UNVERIFIED' }))
+        ]);
+        if (!evidenceReference?.id && !queueReference?.id) {
+          const bucket = env.R2_BUCKET || env.R2;
+          await bucket.delete(key);
+        }
+      } catch (error) {
+        console.warn('[BULK_AUTHORISE_EVIDENCE] displaced R2 delete failed (non-fatal)', { timesheet_id: currentTimesheetId, error: String(error?.message || error) });
+      }
+    }
+
+    const evidenceRows = await sbFetch(env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&select=id,timesheet_id,kind,display_name,storage_key,created_at,created_by&order=created_at.asc`
+    ).then((response) => response.rows || []);
+    try {
+      await writeAudit(env, user, `BULK_AUTHORISE_EVIDENCE_${action}`, {
+        timesheet_id: currentTimesheetId,
+        action,
+        evidence_kind: kind || null,
+        disposition: body.disposition || null,
+        invoice_documents_invalidated: invalidatedInvoiceIds.length
+      }, { entity: 'timesheets', subject_id: currentTimesheetId, req });
+    } catch {}
+
+    return withCORS(env, req, ok({
+      runtime_marker: BULK_AUTHORISE_EVIDENCE_RUNTIME_MARKER,
+      action,
+      requested_timesheet_id: tsId,
+      current_timesheet_id: currentTimesheetId,
+      invoice_documents_invalidated: invalidatedInvoiceIds,
+      workbench_queue_created: action === 'REMOVE' || action === 'REPLACE'
+        ? String(body.disposition || '').trim().toUpperCase() === 'RETURN_TO_QUEUE'
+        : false,
+      ...result,
+      evidence: evidenceRows,
+      ok: true
+    }));
+  } catch (error) {
+    const code = String(error?.code || '').trim().toUpperCase();
+    if (['QUEUE_ITEM_NOT_AVAILABLE', 'QUEUE_ITEM_STORAGE_MISMATCH', 'EVIDENCE_CHANGED'].includes(code)) {
+      return withCORS(env, req, bulkAuthoriseEvidenceErrorResponse(code, error.message || 'Evidence changed. Refresh and try again.'));
+    }
+    return withCORS(env, req, serverError(`Bulk Authorise evidence change failed: ${error?.message || error}`));
+  }
 }
 
 async function handleTimesheetEvidenceList(env, req, tsId) {
@@ -85095,6 +85779,29 @@ function lifecycleBulkIsStaleError(payload) {
   return /ROW_SIGNATURE_MISMATCH|TIMESHEET_MOVED|STALE|EXPECTED_ROW_SIGNATURE|CONFLICT|VERSION/.test(txt);
 }
 
+async function validateBulkAuthoriseRequiredExpenseEvidence(env, timesheetId) {
+  const enc = encodeURIComponent;
+  const [financial, evidenceResult] = await Promise.all([
+    sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(timesheetId)}` +
+        `&is_current=eq.true&select=mileage_units,mileage_pay_ex_vat,mileage_charge_ex_vat,travel_pay_ex_vat,travel_charge_ex_vat,accommodation_pay_ex_vat,accommodation_charge_ex_vat,other_pay_ex_vat,other_charge_ex_vat&limit=1`
+    ),
+    sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=eq.${enc(timesheetId)}&select=kind`
+    )
+  ]);
+  const missingKinds = missingBulkAuthoriseExpenseEvidenceKinds(financial || {}, evidenceResult.rows || []);
+  return {
+    ok: missingKinds.length === 0,
+    missing_kinds: missingKinds,
+    message: missingKinds.length
+      ? `Evidence is required for the following expense type${missingKinds.length === 1 ? '' : 's'} before authorisation: ${missingKinds.map((kind) => kind.charAt(0) + kind.slice(1).toLowerCase()).join(', ')}.`
+      : null
+  };
+}
+
 async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, item, actorUser) {
   const timesheetId = lifecycleBulkReadFirst(item, ['timesheet_id', 'current_timesheet_id', 'requested_timesheet_id']);
   const expectedTimesheetId = lifecycleBulkReadFirst(item, ['expected_timesheet_id', 'current_timesheet_id', 'timesheet_id']) || timesheetId;
@@ -85124,6 +85831,41 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
       stale: true,
       affected_rows: [],
     };
+  }
+
+  if (action === 'AUTHORISE') {
+    let evidenceValidation;
+    try {
+      evidenceValidation = await validateBulkAuthoriseRequiredExpenseEvidence(env, expectedTimesheetId);
+    } catch (error) {
+      return {
+        ok: false,
+        success: false,
+        status: 503,
+        action,
+        timesheet_id: timesheetId,
+        expected_timesheet_id: expectedTimesheetId,
+        error_code: 'EXPENSE_EVIDENCE_VALIDATION_UNAVAILABLE',
+        message: 'Expense evidence could not be verified. Refresh the row and try again.',
+        stale: false,
+        affected_rows: []
+      };
+    }
+    if (!evidenceValidation.ok) {
+      return {
+        ok: false,
+        success: false,
+        status: 409,
+        action,
+        timesheet_id: timesheetId,
+        expected_timesheet_id: expectedTimesheetId,
+        error_code: 'REQUIRED_EXPENSE_EVIDENCE_MISSING',
+        message: evidenceValidation.message,
+        missing_evidence_kinds: evidenceValidation.missing_kinds,
+        stale: false,
+        affected_rows: []
+      };
+    }
   }
 
   const body = {
@@ -188495,6 +189237,21 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
 // ROUTER (insert inside export default fetch(req, env) router, near other admin/backoffice routes)
 
 // Evidence (timesheet_evidence)
+
+// Bulk Authorise evidence has deliberately separate policy and mutation routes.
+// The generic evidence routes below remain unchanged for Bulk Process and other callers.
+{
+  const m = matchPath(p, '/api/timesheets/:id/bulk-authorise-evidence-policy');
+  if (m && req.method === 'GET') {
+    return handleBulkAuthoriseEvidencePolicy(env, req, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/timesheets/:id/bulk-authorise-evidence');
+  if (m && req.method === 'POST') {
+    return handleBulkAuthoriseEvidenceMutation(env, req, m.id);
+  }
+}
 
 // GET /api/timesheets/:id/evidence
 // POST /api/timesheets/:id/evidence
