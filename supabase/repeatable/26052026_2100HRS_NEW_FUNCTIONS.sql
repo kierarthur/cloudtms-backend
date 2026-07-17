@@ -58644,6 +58644,7 @@ BEGIN
     LEFT JOIN LATERAL (
       WITH source_material AS (
         SELECT
+          source_allocation.allocation_basis_json -> 'line' AS allocation_line_json,
           source_allocation.allocation_basis_json #> '{line,target_snapshot_json}' AS allocation_target_json,
           source_allocation.allocation_basis_json #> '{line,base_snapshot_json}' AS allocation_base_json,
           source_batch_item.frozen_source_basis_json AS frozen_source_basis_json,
@@ -58668,6 +58669,8 @@ BEGIN
             'client_name', NULLIF(BTRIM(COALESCE(
               source_material.allocation_target_json ->> 'client_name',
               source_material.allocation_target_json #>> '{client,name}',
+              source_material.allocation_line_json ->> 'client_name',
+              source_material.allocation_line_json #>> '{client,name}',
               source_material.allocation_base_json ->> 'client_name',
               source_material.allocation_base_json #>> '{client,name}',
               source_material.frozen_source_basis_json ->> 'client_name',
@@ -58679,6 +58682,8 @@ BEGIN
             'client_id', NULLIF(BTRIM(COALESCE(
               source_material.allocation_target_json ->> 'client_id',
               source_material.allocation_target_json #>> '{client,id}',
+              source_material.allocation_line_json ->> 'client_id',
+              source_material.allocation_line_json #>> '{client,id}',
               source_material.allocation_base_json ->> 'client_id',
               source_material.allocation_base_json #>> '{client,id}',
               source_material.frozen_source_basis_json ->> 'client_id',
@@ -58690,6 +58695,8 @@ BEGIN
             'week_ending_date', NULLIF(BTRIM(COALESCE(
               source_material.allocation_target_json ->> 'week_ending_date',
               source_material.allocation_target_json ->> 'week_ending',
+              source_material.allocation_line_json ->> 'week_ending_date',
+              source_material.allocation_line_json ->> 'week_ending',
               source_material.allocation_base_json ->> 'week_ending_date',
               source_material.allocation_base_json ->> 'week_ending',
               source_material.frozen_source_basis_json ->> 'week_ending_date',
@@ -58701,6 +58708,8 @@ BEGIN
             'job_title', NULLIF(BTRIM(COALESCE(
               source_material.allocation_target_json ->> 'job_title',
               source_material.allocation_target_json ->> 'jobTitle',
+              source_material.allocation_line_json ->> 'job_title',
+              source_material.allocation_line_json ->> 'jobTitle',
               source_material.allocation_base_json ->> 'job_title',
               source_material.frozen_source_basis_json ->> 'job_title',
               source_material.frozen_source_basis_json #>> '{target_snapshot_json,job_title}',
@@ -58709,6 +58718,7 @@ BEGIN
             )), ''),
             'band', NULLIF(BTRIM(COALESCE(
               source_material.allocation_target_json ->> 'band',
+              source_material.allocation_line_json ->> 'band',
               source_material.allocation_base_json ->> 'band',
               source_material.frozen_source_basis_json ->> 'band',
               source_material.frozen_source_basis_json #>> '{target_snapshot_json,band}',
@@ -58717,6 +58727,7 @@ BEGIN
             )), ''),
             'grade', NULLIF(BTRIM(COALESCE(
               source_material.allocation_target_json ->> 'grade',
+              source_material.allocation_line_json ->> 'grade',
               source_material.allocation_base_json ->> 'grade',
               source_material.frozen_source_basis_json ->> 'grade',
               source_material.frozen_source_basis_json #>> '{target_snapshot_json,grade}',
@@ -58726,6 +58737,8 @@ BEGIN
             'reference_number', NULLIF(BTRIM(COALESCE(
               source_material.allocation_target_json ->> 'reference_number',
               source_material.allocation_target_json ->> 'timesheet_reference',
+              source_material.allocation_line_json ->> 'reference_number',
+              source_material.allocation_line_json ->> 'timesheet_reference',
               source_material.allocation_base_json ->> 'reference_number',
               source_material.allocation_base_json ->> 'timesheet_reference',
               source_material.frozen_source_basis_json ->> 'reference_number',
@@ -58736,6 +58749,7 @@ BEGIN
             )), ''),
             'timesheet_type', NULLIF(BTRIM(COALESCE(
               source_material.allocation_target_json ->> 'timesheet_type',
+              source_material.allocation_line_json ->> 'timesheet_type',
               source_material.allocation_base_json ->> 'timesheet_type',
               source_material.frozen_source_basis_json ->> 'timesheet_type',
               source_material.frozen_source_basis_json #>> '{target_snapshot_json,timesheet_type}',
@@ -58744,6 +58758,7 @@ BEGIN
             )), ''),
             'schedule_rows', COALESCE(
               CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'schedule_rows') = 'array' THEN source_material.allocation_target_json -> 'schedule_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_line_json -> 'schedule_rows') = 'array' THEN source_material.allocation_line_json -> 'schedule_rows' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'schedule_rows') = 'array' THEN source_material.allocation_base_json -> 'schedule_rows' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'schedule_rows') = 'array' THEN source_material.frozen_source_basis_json -> 'schedule_rows' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,schedule_rows}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,schedule_rows}' ELSE NULL::jsonb END,
@@ -58751,6 +58766,7 @@ BEGIN
             ),
             'segments', COALESCE(
               CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'segments') = 'array' THEN source_material.allocation_target_json -> 'segments' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_line_json -> 'segments') = 'array' THEN source_material.allocation_line_json -> 'segments' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'segments') = 'array' THEN source_material.allocation_base_json -> 'segments' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'segments') = 'array' THEN source_material.frozen_source_basis_json -> 'segments' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,segments}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,segments}' ELSE NULL::jsonb END,
@@ -58758,6 +58774,7 @@ BEGIN
             ),
             'segment_rows', COALESCE(
               CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'segment_rows') = 'array' THEN source_material.allocation_target_json -> 'segment_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_line_json -> 'segment_rows') = 'array' THEN source_material.allocation_line_json -> 'segment_rows' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'segment_rows') = 'array' THEN source_material.allocation_base_json -> 'segment_rows' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'segment_rows') = 'array' THEN source_material.frozen_source_basis_json -> 'segment_rows' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,segment_rows}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,segment_rows}' ELSE NULL::jsonb END,
@@ -58765,6 +58782,7 @@ BEGIN
             ),
             'shift_rows', COALESCE(
               CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'shift_rows') = 'array' THEN source_material.allocation_target_json -> 'shift_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_line_json -> 'shift_rows') = 'array' THEN source_material.allocation_line_json -> 'shift_rows' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'shift_rows') = 'array' THEN source_material.allocation_base_json -> 'shift_rows' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'shift_rows') = 'array' THEN source_material.frozen_source_basis_json -> 'shift_rows' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,shift_rows}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,shift_rows}' ELSE NULL::jsonb END,
@@ -58772,6 +58790,7 @@ BEGIN
             ),
             'schedule_changes', COALESCE(
               CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'schedule_changes') = 'array' THEN source_material.allocation_target_json -> 'schedule_changes' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_line_json -> 'schedule_changes') = 'array' THEN source_material.allocation_line_json -> 'schedule_changes' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'schedule_changes') = 'array' THEN source_material.allocation_base_json -> 'schedule_changes' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'schedule_changes') = 'array' THEN source_material.frozen_source_basis_json -> 'schedule_changes' ELSE NULL::jsonb END,
               CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,schedule_changes}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,schedule_changes}' ELSE NULL::jsonb END,
@@ -58780,6 +58799,8 @@ BEGIN
             'amendment_note', NULLIF(BTRIM(COALESCE(
               source_material.allocation_target_json ->> 'amendment_note',
               source_material.allocation_target_json ->> 'schedule_note',
+              source_material.allocation_line_json ->> 'amendment_note',
+              source_material.allocation_line_json ->> 'schedule_note',
               source_material.allocation_base_json ->> 'amendment_note',
               source_material.frozen_source_basis_json ->> 'amendment_note',
               source_material.frozen_source_basis_json #>> '{target_snapshot_json,amendment_note}',
@@ -89938,10 +89959,8 @@ BEGIN
           pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,week_ending_date}',
           pay_batch_item_page.frozen_resolution_payload_json->>'week_ending_date',
           pay_batch_item_page.frozen_resolution_result_json->>'week_ending_date',
-          CASE
-            WHEN timesheet_display_page.week_ending_date IS NULL THEN NULL::text
-            ELSE timesheet_display_page.week_ending_date::text
-          END
+          timesheet_snapshot_page.target_snapshot_json->>'week_ending_date',
+          pay_batch_item_page.payout_instruction_snapshot_json->>'week_ending_bucket'
         )), '') AS week_ending_date,
         NULLIF(BTRIM(COALESCE(
           pay_batch_item_page.frozen_source_basis_json->>'client_name',
@@ -89949,7 +89968,7 @@ BEGIN
           pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,client_name}',
           pay_batch_item_page.frozen_resolution_payload_json->>'client_name',
           pay_batch_item_page.frozen_resolution_result_json->>'client_name',
-          timesheet_display_page.hospital_norm
+          timesheet_snapshot_page.target_snapshot_json->>'client_name'
         )), '') AS client_name,
         NULLIF(BTRIM(COALESCE(
           pay_batch_item_page.frozen_source_basis_json->>'role',
@@ -89960,7 +89979,8 @@ BEGIN
           pay_batch_item_page.frozen_component_snapshot_json#>>'{source_basis_json,job_title}',
           pay_batch_item_page.frozen_resolution_payload_json->>'role',
           pay_batch_item_page.frozen_resolution_payload_json->>'job_title',
-          timesheet_display_page.job_title_norm
+          timesheet_snapshot_page.target_snapshot_json->>'role',
+          timesheet_snapshot_page.target_snapshot_json->>'job_title'
         )), '') AS role,
         NULLIF(BTRIM(COALESCE(
           pay_batch_item_page.frozen_source_basis_json->>'date',
@@ -89984,8 +90004,20 @@ BEGIN
         ON pay_batch_item_page.pay_batch_candidate_id = pay_batch_candidate_page.id
       LEFT JOIN public.pay_bank_transfers AS pay_bank_transfer_page
         ON pay_bank_transfer_page.id = pay_batch_item_page.pay_bank_transfer_id
-      LEFT JOIN public.timesheets AS timesheet_display_page
-        ON timesheet_display_page.timesheet_id = pay_batch_item_page.timesheet_id
+      LEFT JOIN LATERAL (
+        SELECT snapshot_page_inner.target_snapshot_json
+        FROM public.pay_batch_timesheet_snapshots AS snapshot_page_inner
+        WHERE snapshot_page_inner.pay_batch_id = pay_batch_candidate_page.pay_batch_id
+          AND snapshot_page_inner.timesheet_id = pay_batch_item_page.timesheet_id
+          AND snapshot_page_inner.candidate_id = pay_batch_candidate_page.candidate_id
+          AND (
+            snapshot_page_inner.pay_channel IS NOT DISTINCT FROM pay_batch_item_page.pay_channel
+            OR snapshot_page_inner.pay_channel IS NULL
+            OR pay_batch_item_page.pay_channel IS NULL
+          )
+        ORDER BY snapshot_page_inner.created_at_utc DESC, snapshot_page_inner.id DESC
+        LIMIT 1
+      ) AS timesheet_snapshot_page ON true
       WHERE pay_batch_candidate_page.pay_batch_id = p_pay_batch_id
     ),
     raw_item_rows_with_grouping AS (
@@ -90429,8 +90461,6 @@ ELSIF v_section = 'candidates' THEN
         ORDER BY snapshot_page_inner.created_at_utc DESC, snapshot_page_inner.id DESC
         LIMIT 1
       ) AS snapshot_page ON true
-      LEFT JOIN public.timesheets AS timesheet_display_page
-        ON timesheet_display_page.timesheet_id = pay_batch_item_page.timesheet_id
       CROSS JOIN LATERAL (
         SELECT
           NULLIF(BTRIM(COALESCE(
@@ -90442,7 +90472,7 @@ ELSIF v_section = 'candidates' THEN
             breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,week_ending_date}',
             breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,week_ending_date}',
             snapshot_page.target_snapshot_json->>'week_ending_date',
-            CASE WHEN timesheet_display_page.week_ending_date IS NULL THEN NULL ELSE timesheet_display_page.week_ending_date::text END
+            pay_batch_item_page.payout_instruction_snapshot_json->>'week_ending_bucket'
           )), '') AS week_ending_date,
           NULLIF(BTRIM(COALESCE(
             pay_batch_item_page.frozen_source_basis_json->>'client_name',
@@ -90452,8 +90482,7 @@ ELSIF v_section = 'candidates' THEN
             pay_batch_item_page.frozen_resolution_result_json->>'client_name',
             breakdown_display.first_breakdown_meta_json#>>'{source_basis_json,client_name}',
             breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,client_name}',
-            snapshot_page.target_snapshot_json->>'client_name',
-            timesheet_display_page.hospital_norm
+            snapshot_page.target_snapshot_json->>'client_name'
           )), '') AS client_name,
           NULLIF(BTRIM(COALESCE(
             pay_batch_item_page.frozen_source_basis_json->>'role',
@@ -90469,8 +90498,7 @@ ELSIF v_section = 'candidates' THEN
             breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,role}',
             breakdown_display.first_breakdown_meta_json#>>'{resolution_payload_json,job_title}',
             snapshot_page.target_snapshot_json->>'role',
-            snapshot_page.target_snapshot_json->>'job_title',
-            timesheet_display_page.job_title_norm
+            snapshot_page.target_snapshot_json->>'job_title'
           )), '') AS role,
           NULLIF(BTRIM(COALESCE(
             pay_batch_item_page.frozen_source_basis_json->>'date',
@@ -217908,7 +217936,16 @@ BEGIN
   CREATE TEMP TABLE _bpay_batch_mutation_keys ON COMMIT DROP AS
   SELECT DISTINCT
     batch_candidate.candidate_id,
-    batch_item.timesheet_id,
+    COALESCE(
+      batch_item.timesheet_id,
+      CASE
+        WHEN UPPER(BTRIM(COALESCE(batch_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+         AND NULLIF(BTRIM(COALESCE(batch_item.frozen_source_basis_json->>'timesheet_id', '')), '')
+           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN (BTRIM(batch_item.frozen_source_basis_json->>'timesheet_id'))::uuid
+        ELSE NULL::uuid
+      END
+    ) AS timesheet_id,
     NULLIF(BTRIM(COALESCE(
       batch_item.frozen_component_key_type,
       batch_item.frozen_source_basis_json->>'key_type',
