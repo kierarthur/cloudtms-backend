@@ -34,6 +34,7 @@ import {
   missingBulkAuthoriseExpenseEvidenceKinds,
   normaliseBulkAuthoriseEvidenceKind
 } from './bulk-authorise-evidence-policy.js';
+import { buildBulkAuthoriseWatchVector } from './bulk-authorise-watch.js';
 
 const textEncoder = new TextEncoder();
 
@@ -83809,6 +83810,27 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
     });
     const rpcRes = await sbRpc(env, 'bulk_authorise_row_context_v1', { p_filters: compactFilters }, { timeoutMs: 45000 });
     const payload = normaliseReturnedContext(unwrapRpcPayload(rpcRes, 'bulk_authorise_row_context_v1'));
+    if (profile === 'full' && payload.ok !== false && payload.soft_failure !== true && payload.context_degraded !== true) {
+      try {
+        const payloadClassification = trimStr(
+          payload.bulk_authorise_classification ||
+          payload.data_row?.bulk_authorise_classification ||
+          payload.row?.bulk_authorise_classification ||
+          ''
+        ).toUpperCase();
+        const watchIncludesImport = ['NHSP', 'HR', 'HEALTHROSTER'].includes(payloadClassification);
+        payload.watch_vector = await buildBulkAuthoriseWatchVector(payload, {
+          includeEvidence: !watchIncludesImport,
+          includeImport: watchIncludesImport
+        });
+      } catch (watchError) {
+        console.warn('[TS][BULK-AUTH][ROW-CONTEXT][WATCH-VECTOR-FAILED]', {
+          row_key: compactFilters.row_key || null,
+          timesheet_id: compactFilters.timesheet_id || compactFilters.current_timesheet_id || null,
+          error: String(watchError?.message || watchError || 'WATCH_VECTOR_FAILED')
+        });
+      }
+    }
     return withCORS(env, req, ok(payload));
   } catch (err) {
     const message = String(err?.message || err || 'Failed to load bulk authorise row context');
@@ -188815,6 +188837,13 @@ if (req.method === 'GET' && p === '/api/timesheets/bulk-authorise-dataset') {
 }
 
 {
+  const m = matchPath(p, '/api/timesheets/:id/bulk-authorise-watch');
+  if (m && req.method === 'GET') {
+    return handleTimesheetBulkAuthoriseWatch(env, req, m.id);
+  }
+}
+
+{
   const m = matchPath(p, '/api/timesheets/:id/bulk-authorise-context');
   if (m && req.method === 'GET') {
     return handleTimesheetBulkAuthoriseContext(env, req, m.id);
@@ -189253,6 +189282,167 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
   const m = matchPath(p, '/api/timesheets/:id/bulk-authorise-evidence-policy');
   if (m && req.method === 'GET') {
     return handleBulkAuthoriseEvidencePolicy(env, req, m.id);
+  }
+}
+
+async function handleTimesheetBulkAuthoriseWatch(env, req, timesheetId = null) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const startedAt = Date.now();
+  const urlObj = new URL(req.url);
+  const q = (key) => urlObj.searchParams.get(key);
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const boolParam = (value, fallback = false) => {
+    if (value === true || value === false) return value;
+    const raw = trimStr(value).toLowerCase();
+    if (!raw) return fallback;
+    if (['true', '1', 'yes', 'y', 'on'].includes(raw)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(raw)) return false;
+    return fallback;
+  };
+  const unwrap = (value, key) => {
+    let out = value;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, key)) out = out[key];
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    return out && typeof out === 'object' && !Array.isArray(out) ? out : {};
+  };
+  const unwrapRowPatch = (value) => {
+    let out = value;
+    if (Array.isArray(out) && out.length) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, 'row_json')) out = out.row_json;
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, 'bulk_timesheet_row_patch_v1')) out = out.bulk_timesheet_row_patch_v1;
+    if (typeof out === 'string') {
+      try { out = JSON.parse(out); } catch { out = {}; }
+    }
+    return out && typeof out === 'object' && !Array.isArray(out) ? out : {};
+  };
+
+  const rowKey = trimStr(q('row_key') || q('rowKey'));
+  const currentTimesheetId = trimStr(q('current_timesheet_id') || q('currentTimesheetId') || q('timesheet_id') || q('timesheetId') || timesheetId);
+  const contractWeekId = trimStr(q('contract_week_id') || q('contractWeekId'));
+  const includeEvidence = boolParam(q('include_evidence') || q('includeEvidence'), true);
+  const includeImport = boolParam(q('include_import') || q('includeImport'), false);
+  const knownWatchToken = trimStr(q('known_watch_token') || q('knownWatchToken'));
+
+  if (!rowKey && !currentTimesheetId && !contractWeekId) {
+    return withCORS(env, req, ok({
+      ok: false,
+      soft_failure: true,
+      error: 'ROW_WATCH_IDENTITY_REQUIRED',
+      message: 'Bulk Authorise row validation requires a row identity.'
+    }));
+  }
+
+  const identityFilters = {};
+  if (rowKey) identityFilters.row_key = rowKey;
+  if (currentTimesheetId) {
+    identityFilters.timesheet_id = currentTimesheetId;
+    identityFilters.current_timesheet_id = currentTimesheetId;
+  }
+  if (contractWeekId) identityFilters.contract_week_id = contractWeekId;
+
+  const headerFilters = {
+    ...identityFilters,
+    dataset_mode: 'authorise',
+    projection: 'active_row_header',
+    profile: 'list'
+  };
+  const evidenceFilters = {
+    ...identityFilters,
+    profile: 'evidence',
+    context_profile: 'evidence',
+    include_evidence: true,
+    include_compare: false,
+    include_import_source_rows: false,
+    base_only: false
+  };
+  const importFilters = {
+    ...identityFilters,
+    profile: 'compare_import',
+    context_profile: 'compare_import',
+    include_evidence: false,
+    include_compare: true,
+    include_import_source_rows: true,
+    base_only: false
+  };
+
+  try {
+    const requests = [
+      sbRpc(env, 'bulk_timesheet_row_patch_v1', { p_filters: headerFilters }, { timeoutMs: 20000 }),
+      includeEvidence
+        ? sbRpc(env, 'bulk_authorise_row_context_v1', { p_filters: evidenceFilters }, { timeoutMs: 20000 })
+        : Promise.resolve({}),
+      includeImport
+        ? sbRpc(env, 'bulk_authorise_row_context_v1', { p_filters: importFilters }, { timeoutMs: 20000 })
+        : Promise.resolve({})
+    ];
+    const [headerRaw, evidenceRaw, importRaw] = await Promise.all(requests);
+    const headerPayload = unwrapRowPatch(headerRaw);
+    const evidencePayload = includeEvidence ? unwrap(evidenceRaw, 'bulk_authorise_row_context_v1') : {};
+    const importPayload = includeImport ? unwrap(importRaw, 'bulk_authorise_row_context_v1') : {};
+    const degraded = [headerPayload, ...(includeEvidence ? [evidencePayload] : []), ...(includeImport ? [importPayload] : [])]
+      .some((payload) => payload.ok === false || payload.soft_failure === true || payload.context_degraded === true);
+    if (degraded) {
+      return withCORS(env, req, ok({
+        ok: false,
+        soft_failure: true,
+        unchanged: false,
+        error: 'ROW_WATCH_DEGRADED',
+        message: 'The row could not be safely validated, so a full refresh is required.'
+      }));
+    }
+
+    const combinedPayload = {
+      row_key: headerPayload.row_key || rowKey || null,
+      current_timesheet_id: headerPayload.current_timesheet_id || headerPayload.timesheet_id || currentTimesheetId || null,
+      timesheet_id: headerPayload.timesheet_id || headerPayload.current_timesheet_id || currentTimesheetId || null,
+      contract_week_id: headerPayload.contract_week_id || contractWeekId || null,
+      backend_row_signature: headerPayload.backend_row_signature || headerPayload.row_signature || null,
+      row: headerPayload,
+      data_row: headerPayload,
+      evidence: includeEvidence
+        ? (Array.isArray(evidencePayload.evidence)
+            ? evidencePayload.evidence
+            : (Array.isArray(evidencePayload.details?.evidence) ? evidencePayload.details.evidence : []))
+        : [],
+      compare_payload: includeImport
+        ? (importPayload.compare_payload || importPayload.compare || importPayload.details?.compare_payload || importPayload.details?.healthroster_compare || {})
+        : {},
+      details: includeImport ? (importPayload.details || {}) : {},
+      left_pane: includeImport ? (importPayload.left_pane || {}) : {}
+    };
+    const watchVector = await buildBulkAuthoriseWatchVector(combinedPayload, {
+      includeEvidence,
+      includeImport
+    });
+    const unchanged = !!(
+      watchVector.cacheable === true &&
+      knownWatchToken &&
+      knownWatchToken === watchVector.watch_token
+    );
+    return withCORS(env, req, ok({
+      ok: true,
+      unchanged,
+      changed: !unchanged,
+      watch_vector: watchVector,
+      elapsed_ms: Math.max(0, Date.now() - startedAt)
+    }));
+  } catch (error) {
+    console.warn('[TS][BULK-AUTH][ROW-WATCH][FAILED]', {
+      row_key: rowKey || null,
+      timesheet_id: currentTimesheetId || null,
+      contract_week_id: contractWeekId || null,
+      error: String(error?.message || error || 'ROW_WATCH_FAILED')
+    });
+    return withCORS(env, req, ok({
+      ok: false,
+      soft_failure: true,
+      unchanged: false,
+      error: 'ROW_WATCH_FAILED',
+      message: 'The row could not be safely validated, so a full refresh is required.'
+    }));
   }
 }
 {
