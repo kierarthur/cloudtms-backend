@@ -81248,7 +81248,12 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
   const finalCanBulkUnauthorise = lifecycleAuthorityComplete && !isArchived && explicitCanBulkUnauthorise === true && canBulkUnauthorise;
   const finalCanEditTimesheetData = lifecycleAuthorityComplete && !isArchived && explicitCanEditTimesheetData === true && canEditTimesheetData;
   const finalCanManageEvidence = lifecycleAuthorityComplete && !isArchived && explicitCanManageEvidence === true && canManageEvidence;
-  const finalCanAddAdditionalManual = lifecycleAuthorityComplete && !isArchived && explicitCanAddAdditionalManual === true && canAddAdditionalManual;
+  const finalCanAddAdditionalManual = !!(
+    lifecycleAuthorityComplete &&
+    !isArchived &&
+    canAddAdditionalManual &&
+    (isImportAuthoritative || explicitCanAddAdditionalManual === true)
+  );
   const finalBulkAuthoriseSection = finalCanBulkAuthorise
     ? 'processed_eligible'
     : (finalCanBulkUnauthorise ? 'authorised_eligible' : null);
@@ -82102,6 +82107,10 @@ async function handleBulkAuthoriseDataset(env, req) {
     show_electronic: boolParam(param('show_electronic') || param('showElectronic'), true),
     validation_already: boolParam(param('validation_already') || param('validationAlready'), true),
     validation_awaiting: boolParam(param('validation_awaiting') || param('validationAwaiting'), true),
+    show_authorised_invoiced_unissued: boolParam(
+      param('show_authorised_invoiced_unissued') || param('showAuthorisedInvoicedUnissued'),
+      false
+    ),
     limit: numberParam(param('limit') || param('page_size') || param('pageSize'), null, 1, 1000),
     offset: numberParam(param('offset'), 0, 0, null),
     profile: normalizeProfile(param('profile')),

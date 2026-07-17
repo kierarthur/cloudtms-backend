@@ -9229,7 +9229,7 @@ DECLARE
   v_mode text := LOWER(NULLIF(BTRIM(COALESCE(p_mode, 'view_all')), ''));
   v_page integer := GREATEST(COALESCE(p_page, 1), 1);
   v_page_size integer := CASE WHEN COALESCE(p_page_size, 20) <= 0 THEN NULL ELSE LEAST(GREATEST(COALESCE(p_page_size, 20), 1), 500) END;
-  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$';
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
   v_result jsonb := NULL;
 BEGIN
   IF v_classification = 'HEALTHROSTER' THEN

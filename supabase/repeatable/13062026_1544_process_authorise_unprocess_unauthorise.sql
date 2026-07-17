@@ -3271,6 +3271,7 @@ DECLARE
   v_prev_status public.ts_fin_processing_status_enum := NULL;
   v_new_status public.ts_fin_processing_status_enum := 'PENDING_AUTH'::public.ts_fin_processing_status_enum;
   v_has_segment_invoice_lock boolean := false;
+  v_has_invoice_membership boolean := false;
   v_before_signature_json jsonb := '{}'::jsonb;
   v_after_signature_json jsonb := '{}'::jsonb;
   v_current_row_signature text := NULL;
@@ -3428,11 +3429,19 @@ BEGIN
     WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
   ) INTO v_has_segment_invoice_lock;
 
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.invoice_lines AS invoice_line
+    WHERE invoice_line.timesheet_id = v_current_ts.timesheet_id
+  ) INTO v_has_invoice_membership;
+
   IF v_current_ts.archived_at_utc IS NOT NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ARCHIVED', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
   END IF;
 
-  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
+  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL
+     OR COALESCE(v_has_segment_invoice_lock, false)
+     OR COALESCE(v_has_invoice_membership, false) THEN
     RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_LOCKED_BY_INVOICE', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
   END IF;
 
@@ -5409,6 +5418,7 @@ DECLARE
   v_show_electronic boolean := TRUE;
   v_validation_already boolean := TRUE;
   v_validation_awaiting boolean := TRUE;
+  v_show_authorised_invoiced_unissued boolean := FALSE;
   v_limit_text text := NULL;
   v_offset_text text := NULL;
   v_limit integer := NULL;
@@ -5453,6 +5463,11 @@ BEGIN
   v_validation_awaiting := CASE
     WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'validation_awaiting', v_filters->>'validationAwaiting', '')), '')) IN ('false', '0', 'no', 'n', 'off') THEN FALSE
     ELSE TRUE
+  END;
+
+  v_show_authorised_invoiced_unissued := CASE
+    WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'show_authorised_invoiced_unissued', v_filters->>'showAuthorisedInvoicedUnissued', '')), '')) IN ('true', '1', 'yes', 'y', 'on') THEN TRUE
+    ELSE FALSE
   END;
 
   v_limit_text := NULLIF(BTRIM(COALESCE(v_filters->>'limit', v_filters->>'page_size', v_filters->>'pageSize', '')), '');
@@ -5533,7 +5548,38 @@ BEGIN
       (
         COALESCE(lightweight_rows.invoice_is_paid, FALSE) = TRUE
         OR COALESCE(lightweight_rows.invoice_segments_locked, 0) > 0
+        OR EXISTS (
+          SELECT 1
+          FROM public.invoice_lines AS issued_invoice_line
+          JOIN public.invoices AS issued_invoice
+            ON issued_invoice.id = issued_invoice_line.invoice_id
+          WHERE issued_invoice_line.timesheet_id = lightweight_rows.timesheet_id
+            AND (
+              issued_invoice.issued_at_utc IS NOT NULL
+              OR UPPER(COALESCE(issued_invoice.status::text, '')) <> 'DRAFT'
+            )
+        )
       ) AS locked_calc,
+      EXISTS (
+        SELECT 1
+        FROM public.invoice_lines AS draft_invoice_line
+        JOIN public.invoices AS draft_invoice
+          ON draft_invoice.id = draft_invoice_line.invoice_id
+        WHERE draft_invoice_line.timesheet_id = lightweight_rows.timesheet_id
+          AND draft_invoice.issued_at_utc IS NULL
+          AND UPPER(COALESCE(draft_invoice.status::text, '')) = 'DRAFT'
+      ) AS has_unissued_invoice_calc,
+      EXISTS (
+        SELECT 1
+        FROM public.invoice_lines AS issued_invoice_line
+        JOIN public.invoices AS issued_invoice
+          ON issued_invoice.id = issued_invoice_line.invoice_id
+        WHERE issued_invoice_line.timesheet_id = lightweight_rows.timesheet_id
+          AND (
+            issued_invoice.issued_at_utc IS NOT NULL
+            OR UPPER(COALESCE(issued_invoice.status::text, '')) <> 'DRAFT'
+          )
+      ) AS has_issued_invoice_calc,
       COALESCE(lightweight_rows.is_authorised, FALSE) AS authorised_calc,
       (
         UPPER(COALESCE(lightweight_rows.processing_status, '')) = 'PENDING_AUTH'
@@ -5582,11 +5628,15 @@ BEGIN
         AND classified_rows.requires_authorisation_calc = TRUE
         AND classified_rows.authorised_calc = FALSE
         AND classified_rows.qr_unsigned_blocked_calc = FALSE
+        AND classified_rows.has_unissued_invoice_calc = FALSE
+        AND classified_rows.has_issued_invoice_calc = FALSE
       ) AS can_bulk_authorise_calc,
       (
         classified_rows.timesheet_id IS NOT NULL
         AND classified_rows.locked_calc = FALSE
         AND classified_rows.authorised_calc = TRUE
+        AND classified_rows.has_unissued_invoice_calc = FALSE
+        AND classified_rows.has_issued_invoice_calc = FALSE
       ) AS can_bulk_unauthorise_calc,
       (
         (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
@@ -5721,7 +5771,16 @@ BEGIN
         'bulk_authorise_classification',
         decision_rows.bulk_authorise_classification_calc,
         'bulk_authorise_section',
-        CASE WHEN decision_rows.can_bulk_authorise_calc THEN 'processed_eligible' WHEN decision_rows.can_bulk_unauthorise_calc THEN 'authorised_eligible' ELSE NULL::text END,
+        CASE
+          WHEN decision_rows.can_bulk_authorise_calc THEN 'processed_eligible'
+          WHEN decision_rows.timesheet_id IS NOT NULL
+            AND decision_rows.authorised_calc = TRUE
+            AND decision_rows.locked_calc = FALSE
+            AND decision_rows.has_issued_invoice_calc = FALSE
+            AND (decision_rows.has_unissued_invoice_calc = FALSE OR v_show_authorised_invoiced_unissued = TRUE)
+            THEN 'authorised_eligible'
+          ELSE NULL::text
+        END,
         'authorised_at_utc',
         decision_rows.authorised_at_utc,
         'authorised_at_server',
@@ -5757,7 +5816,17 @@ BEGIN
         'invoice_is_paid',
         decision_rows.invoice_is_paid,
         'invoice_issue_stage',
-        decision_rows.invoice_issue_stage,
+        CASE
+          WHEN decision_rows.has_issued_invoice_calc THEN 'ISSUED'
+          WHEN decision_rows.has_unissued_invoice_calc THEN 'DRAFT'
+          ELSE NULL::text
+        END,
+        'has_unissued_invoice',
+        decision_rows.has_unissued_invoice_calc,
+        'has_issued_invoice',
+        decision_rows.has_issued_invoice_calc,
+        'is_invoiced',
+        decision_rows.has_unissued_invoice_calc OR decision_rows.has_issued_invoice_calc,
         'invoice_segment_stage',
         decision_rows.invoice_segment_stage,
         'invoice_segments_total',
@@ -6167,6 +6236,7 @@ BEGIN
       'show_electronic', v_show_electronic,
       'validation_already', v_validation_already,
       'validation_awaiting', v_validation_awaiting,
+      'show_authorised_invoiced_unissued', v_show_authorised_invoiced_unissued,
       'date_from', NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), ''),
       'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
       'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
@@ -6220,6 +6290,7 @@ BEGIN
       'show_electronic', v_show_electronic,
       'validation_already', v_validation_already,
       'validation_awaiting', v_validation_awaiting,
+      'show_authorised_invoiced_unissued', v_show_authorised_invoiced_unissued,
       'date_from', NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), ''),
       'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
       'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
