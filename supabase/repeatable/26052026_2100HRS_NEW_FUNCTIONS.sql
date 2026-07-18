@@ -27386,7 +27386,7 @@ BEGIN
                 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
                 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
               )
-              AND UPPER(COALESCE(finance_case_row.status::text, '')) IN ('ACTIVE', 'PAUSED')
+              AND UPPER(COALESCE(finance_case_row.status::text, '')) = 'ACTIVE'
               AND COALESCE(finance_case_row.outstanding_amount, 0) > 0
               AND UPPER(COALESCE(candidate_scope_row.pay_method, '')) IN ('PAYE', 'UMBRELLA')
               AND (v_effective_client_id IS NULL OR finance_case_row.client_id = v_effective_client_id)
@@ -32653,6 +32653,9 @@ begin
               'adjustment_comment', fcl.adjustment_comment,
               'amount_ex_vat', fcl.signed_amount_ex_vat,
               'amount_display', fcl.signed_amount_ex_vat,
+              'nominal_due_amount_ex_vat', round(coalesce(fcl.nominal_due_amount_ex_vat, 0), 2),
+              'recoverable_this_pay_run_ex_vat', round(greatest(coalesce(fcl.due_amount_ex_vat, 0), 0), 2),
+              'next_due_week_start', case when fcl.next_due_week_start is null then null else fcl.next_due_week_start::text end,
               'is_advanced', false,
               'advanced_override_id', null,
               'advanced_reason', null
@@ -42122,6 +42125,8 @@ begin
                 'destination_label', fcl.destination_label,
                 'amount_ex_vat', fcl.signed_amount_ex_vat,
                 'amount_display', fcl.signed_amount_ex_vat,
+                'nominal_due_amount_ex_vat', round(coalesce(fcl.nominal_due_amount_ex_vat, 0), 2),
+                'recoverable_this_pay_run_ex_vat', round(greatest(coalesce(fcl.due_amount_ex_vat, 0), 0), 2),
                 'paye_treatment', fcl.paye_treatment,
                 'presentation_section', fcl.readiness_state,
                 'case_resolution_summary', fcl.case_resolution_summary_json,
@@ -42935,7 +42940,11 @@ begin
                 case when coalesce(visible_manual_debt_components.component_value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->>'remaining_source_amount')::numeric else null::numeric end,
                 case when coalesce(visible_manual_debt_components.component_value->>'source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->>'source_amount')::numeric else null::numeric end
               )),
-              'nominal_due_amount_ex_vat', to_jsonb(abs(coalesce(case when coalesce(visible_manual_debt_components.line_value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.line_value->>'amount_ex_vat')::numeric else 0::numeric end, 0::numeric))),
+              'nominal_due_amount_ex_vat', to_jsonb(abs(coalesce(
+                case when coalesce(visible_manual_debt_components.line_value->>'nominal_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.line_value->>'nominal_due_amount_ex_vat')::numeric else null::numeric end,
+                case when coalesce(visible_manual_debt_components.line_value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.line_value->>'amount_ex_vat')::numeric else 0::numeric end,
+                0::numeric
+              ))),
               'current_due_amount_ex_vat', to_jsonb(abs(coalesce(case when coalesce(visible_manual_debt_components.line_value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.line_value->>'amount_ex_vat')::numeric else 0::numeric end, 0::numeric))),
               'next_due_week_start', coalesce(
                 nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'next_due_week_start', '')), ''),
@@ -45789,7 +45798,7 @@ begin
           'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
           'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
         )
-          and upper(coalesce(vfcr.status::text,'')) in ('ACTIVE', 'PAUSED')
+          and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
           and coalesce(vfcr.outstanding_amount,0) > 0
           and (
             (

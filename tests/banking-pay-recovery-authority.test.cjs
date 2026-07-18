@@ -28,6 +28,30 @@ test('finance recovery allocation uses central outstanding-component authority',
   assert.doesNotMatch(allocationBlock, /cr\.non_mismatch_total_ex/);
 });
 
+test('Banking Pay admits active finance cases only', () => {
+  const contextBody = functionBody('pay_preview_build_context', 'pay_preview_candidate_build_canonical_lines');
+  const contextFinanceStart = contextBody.indexOf('FROM public.v_finance_cases_register AS finance_case_row');
+  assert.ok(contextFinanceStart >= 0, 'candidate context finance-case scope must be present');
+  const contextFinanceBlock = contextBody.slice(contextFinanceStart, contextBody.indexOf('ORDER BY candidate_scope_row.id', contextFinanceStart));
+  assert.match(contextFinanceBlock, /UPPER\(COALESCE\(finance_case_row\.status::text, ''\)\) = 'ACTIVE'/);
+  assert.doesNotMatch(contextFinanceBlock, /'ACTIVE', 'PAUSED'/);
+
+  const collectBody = functionBody('pay_preview_candidate_collect_scope', 'pay_workbench_session_open');
+  const baselineStart = collectBody.indexOf('create temporary table finance_case_baseline_scope');
+  const baselineEnd = collectBody.indexOf('create temporary table manual_adjustment_carry_forward_scope', baselineStart);
+  assert.ok(baselineStart >= 0 && baselineEnd > baselineStart, 'candidate finance-case baseline scope must be present');
+  const baselineBlock = collectBody.slice(baselineStart, baselineEnd);
+  assert.match(baselineBlock, /upper\(coalesce\(vfcr\.status::text,''\)\) = 'ACTIVE'/);
+  assert.doesNotMatch(baselineBlock, /'ACTIVE', 'PAUSED'/);
+});
+
+test('canonical finance rows expose scheduled and current-run recovery amounts separately', () => {
+  const body = functionBody('pay_preview_candidate_build_canonical_lines', 'pay_preview_candidate_build_summary_fragment');
+  assert.match(body, /'nominal_due_amount_ex_vat', round\(coalesce\(fcl\.nominal_due_amount_ex_vat, 0\), 2\)/);
+  assert.match(body, /'recoverable_this_pay_run_ex_vat', round\(greatest\(coalesce\(fcl\.due_amount_ex_vat, 0\), 0\), 2\)/);
+  assert.match(body, /'next_due_week_start', case when fcl\.next_due_week_start is null then null else fcl\.next_due_week_start::text end/);
+});
+
 test('source-build attestation accepts complete durable or protected coverage only', () => {
   const body = functionBody('pay_workbench_candidate_source_build_chunk', 'pay_workbench_candidate_line_seed_chunk');
   const attestationStart = body.indexOf('A successful reconciliation need not echo a component');
