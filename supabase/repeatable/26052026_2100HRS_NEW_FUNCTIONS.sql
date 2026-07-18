@@ -74644,7 +74644,8 @@ BEGIN
       p_operation_id := provider_submit_review_scope.operation_id,
       p_transfer_id := NULL::uuid,
       p_chunk_id := NULL::uuid,
-      p_counts_only := false
+      p_counts_only := false,
+      p_provider_diagnostic_context := 'PAYMENT_ISSUES_PROVIDER_DIAGNOSTIC'
     ) AS provider_diagnostic(diagnostic_json)
     WHERE (
         (
@@ -74899,7 +74900,8 @@ BEGIN
         public.pay_payment_cancelability_diagnostic(
           scoped_pay_batches.id,
           jsonb_build_object('scope_type', 'BATCH'),
-          p_actor_user_id
+          p_actor_user_id,
+          'PAYMENT_ISSUES_TAB'
         ),
         '{}'::jsonb
       ) AS diagnostic_json
@@ -174587,6 +174589,11 @@ BEGIN
       'requested_action', 'PRE_PROVIDER_CANCEL_AND_RECALCULATE',
       'correction_kind', 'PRE_BANK_CANCEL',
       'scope_type', v_scope_type,
+      'work_unit', CASE
+        WHEN v_scope_type IN ('BATCH', 'WHOLE_BATCH', 'ALL', 'PAY_BATCH') THEN 'BATCH'
+        WHEN jsonb_array_length(COALESCE(v_resolved_scope_json -> 'pay_bank_transfer_ids', '[]'::jsonb)) > 0 THEN 'TRANSFER'
+        ELSE 'CANDIDATE'
+      END,
       'pay_batch_id', p_pay_batch_id::text,
       'pay_batch_item_ids', COALESCE(v_resolved_scope_json -> 'pay_batch_item_ids', '[]'::jsonb),
       'expected_pay_batch_item_ids', COALESCE(v_resolved_scope_json -> 'pay_batch_item_ids', '[]'::jsonb),

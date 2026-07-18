@@ -174614,13 +174614,77 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
       return { ok: true, user: row };
     } catch (e) { return { ok: false, response: serverError(String(e && e.message || e || 'Failed to validate payment permission')) }; }
   };
+  const extractDbRaisedJson = (error) => {
+    const parseJson = (value) => {
+      try { return JSON.parse(String(value || '')); } catch { return null; }
+    };
+    try {
+      const candidates = [];
+      const addEnvelope = (value) => {
+        const envelope = safeObject(value);
+        if (!Object.keys(envelope).length) return;
+        for (const key of ['details', 'detail']) {
+          const detail = envelope[key];
+          if (detail && typeof detail === 'object') candidates.push(detail);
+          else if (typeof detail === 'string' && trimText(detail)) candidates.push({ message: detail });
+        }
+        candidates.push(envelope);
+      };
+      addEnvelope(error && error.json);
+      if (error && typeof error.body === 'string') {
+        const body = parseJson(error.body);
+        addEnvelope(body);
+      }
+      if (error && typeof error.message === 'string') candidates.push({ message: error.message });
+      for (const candidate of candidates) {
+        if ((candidate.code || candidate.error_code) && !candidate.message) return candidate;
+        const text = trimText(candidate.message);
+        if (!text) continue;
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        const payload = parseJson(start >= 0 && end > start ? text.slice(start, end + 1) : text);
+        if (payload && typeof payload === 'object') return payload;
+      }
+    } catch {}
+    return null;
+  };
   const rpcErrorResponse = (e, fallbackCode, fallbackMessage) => {
-    const message = typeof sanitizePaymentIssueDisplayMessage === 'function'
-      ? sanitizePaymentIssueDisplayMessage(e, fallbackMessage)
-      : trimText(e && (e.message || e.error)) || fallbackMessage || 'Unable to update selected payments.';
-    const code = upperText(e && (e.code || e.error_code || e.errorCode)) || fallbackCode;
-    const conflictLike = code.includes('STALE') || code.includes('BLOCK') || code.includes('CONFLICT') || code.includes('PENDING') || code.includes('UNKNOWN') || code.includes('PAID') || code.includes('SETTLED') || code.includes('UNSAFE') || code.includes('WORKBENCH');
-    return withCORS(env, req, jsonResponse(conflictLike ? 409 : 400, { ok: false, error: message, message, error_code: code || fallbackCode }));
+    const dbPayload = safeObject(extractDbRaisedJson(e));
+    const code = upperText(
+      dbPayload.code || dbPayload.error_code ||
+      (e && (e.code || e.error_code || e.errorCode))
+    ) || fallbackCode;
+    const expectedIds = toArray(dbPayload.expected_pay_batch_item_ids);
+    const resolvedIds = toArray(dbPayload.resolved_pay_batch_item_ids);
+    const expectedCountRaw = Number(dbPayload.expected_item_count ?? expectedIds.length);
+    const resolvedCountRaw = Number(dbPayload.resolved_item_count ?? resolvedIds.length);
+    const expectedCount = Number.isFinite(expectedCountRaw) && expectedCountRaw >= 0 ? Math.trunc(expectedCountRaw) : null;
+    const resolvedCount = Number.isFinite(resolvedCountRaw) && resolvedCountRaw >= 0 ? Math.trunc(resolvedCountRaw) : null;
+    const driftCounts = expectedCount !== null && resolvedCount !== null
+      ? ` ${expectedCount} frozen payment item${expectedCount === 1 ? '' : 's'} were expected but ${resolvedCount} ${resolvedCount === 1 ? 'was' : 'were'} selected internally.`
+      : '';
+    const message = code === 'WORK_SELECTION_DRIFT'
+      ? `CloudTMS could not safely select the full frozen draft for cancellation.${driftCounts} Nothing was cancelled. Refresh Banking Pay and try again.`
+      : (typeof sanitizePaymentIssueDisplayMessage === 'function'
+        ? sanitizePaymentIssueDisplayMessage(Object.keys(dbPayload).length ? dbPayload : e, fallbackMessage)
+        : trimText(dbPayload.message || dbPayload.error || (e && (e.message || e.error))) || fallbackMessage || 'Unable to update selected payments.');
+    const safeDetails = {};
+    for (const key of ['reason', 'scope_type', 'status', 'execution_commit_state', 'active_operation_count']) {
+      const value = dbPayload[key];
+      if (value !== undefined && value !== null && trimText(value) !== '') safeDetails[key] = value;
+    }
+    if (expectedCount !== null) safeDetails.expected_item_count = expectedCount;
+    if (resolvedCount !== null) safeDetails.resolved_item_count = resolvedCount;
+    const conflictLike = code.includes('STALE') || code.includes('DRIFT') || code.includes('BLOCK') || code.includes('CONFLICT') || code.includes('PENDING') || code.includes('UNKNOWN') || code.includes('PAID') || code.includes('SETTLED') || code.includes('UNSAFE') || code.includes('WORKBENCH');
+    return withCORS(env, req, jsonResponse(conflictLike ? 409 : 400, {
+      ok: false,
+      error: message,
+      message,
+      user_message: message,
+      error_code: code || fallbackCode,
+      code: code || fallbackCode,
+      details: Object.keys(safeDetails).length ? safeDetails : undefined
+    }));
   };
   const fetchWorkbenchSessionRow = async (sessionId) => {
     const id = trimText(sessionId);
@@ -174940,6 +175004,12 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
   }
   const selectionJson = normaliseSelection(body, 'PRE_PROVIDER_CANCEL_AND_RECALCULATE', 'handleBankingPayBatchCancel.overview');
   if (!selectionJson.scope_type && !selectionJson.scopeType) selectionJson.scope_type = 'BATCH';
+  const cancellationScopeType = upperText(selectionJson.scope_type || selectionJson.scopeType || 'BATCH');
+  // Policy X: the database diagnostic resolves the frozen post-draft item IDs.
+  // Mark their server-controlled work unit so finance metadata cannot narrow that frozen scope.
+  selectionJson.work_unit = ['BATCH', 'WHOLE_BATCH', 'ALL', 'PAY_BATCH'].includes(cancellationScopeType)
+    ? 'BATCH'
+    : (cancellationScopeType === 'TRANSFER' ? 'TRANSFER' : 'CANDIDATE');
   const idempotencyKey = trimText(body.idempotency_key || body.idempotencyKey || req.headers.get('Idempotency-Key') || req.headers.get('X-Idempotency-Key') || `cancel-not-sent-recalculate:${id}:${actorUserId}:${reason}`);
   const confirmationJson = {
     ...safeObject(body.confirmation_json || body.confirmationJson || body.confirmation),
