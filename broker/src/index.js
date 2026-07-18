@@ -14354,6 +14354,7 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
     let hasMore = true;
     let pageCount = 0;
     let candidateCount = 0;
+    let enqueuedCandidateCount = 0;
     let deltaQueuedCount = 0;
     let legacyQueuedCount = 0;
 
@@ -14378,6 +14379,7 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
       const page = unwrapRpc(rpcRes, 'pay_workbench_enqueue_session_candidate_refresh');
       pageCount += 1;
       candidateCount += Math.max(0, Number(page.candidate_count || 0) || 0);
+      enqueuedCandidateCount += Math.max(0, Number(page.enqueued_candidate_count || 0) || 0);
       deltaQueuedCount += Math.max(0, Number(page.delta_queued_count || 0) || 0);
       legacyQueuedCount += Math.max(0, Number(page.legacy_queued_count || 0) || 0);
       cursor = isPlainObject(page.next_cursor) ? page.next_cursor : null;
@@ -14389,7 +14391,7 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
     }
 
     let refreshNudge = null;
-    if (candidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+    if (enqueuedCandidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function') {
       try {
         refreshNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
           origin: 'USER_REQUESTED_FULL_WORKBENCH_REFRESH',
@@ -14410,8 +14412,9 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
     return withCORS(env, req, ok({
       ok: true,
       session_id: id,
-      refresh_enqueued: candidateCount > 0,
+      refresh_enqueued: enqueuedCandidateCount > 0,
       candidate_count: candidateCount,
+      enqueued_candidate_count: enqueuedCandidateCount,
       page_count: pageCount,
       delta_queued_count: deltaQueuedCount,
       legacy_queued_count: legacyQueuedCount,

@@ -7,6 +7,10 @@ const workerSource = fs.readFileSync(
   path.resolve(__dirname, '../broker/src/index.js'),
   'utf8'
 );
+const repeatableSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql'),
+  'utf8'
+);
 
 function functionBody(name, nextName) {
   const start = workerSource.indexOf(`async function ${name}`);
@@ -43,4 +47,22 @@ test('refresh route is registered before generic workbench reads', () => {
     workerSource.slice(refreshRoute, genericReadRoute),
     /req\.method === 'POST'[\s\S]*handleBankingPayWorkbenchSessionRefresh\(env, req, user, m\.id, ctx\)/
   );
+});
+
+test('explicit session refresh bypasses clone-certified reuse and forces full live source retirement', () => {
+  const manyStart = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh_many');
+  const manyEnd = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview_page', manyStart);
+  assert.ok(manyStart >= 0 && manyEnd > manyStart, 'candidate refresh-many function must be present');
+  const manyBody = repeatableSql.slice(manyStart, manyEnd);
+  assert.match(manyBody, /v_force_refresh boolean := false/);
+  assert.match(manyBody, /p_candidate_ids->>'user_requested_refresh'/);
+  assert.match(manyBody, /COALESCE\(v_force_refresh, false\) IS NOT TRUE[\s\S]*v_candidate_clone_certified/);
+  assert.match(manyBody, /'refresh_scope_kind', 'CANDIDATE_FULL_LIVE'/);
+
+  const sessionStart = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_session_candidate_refresh');
+  const sessionEnd = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_refresh_candidate', sessionStart);
+  assert.ok(sessionStart >= 0 && sessionEnd > sessionStart, 'session refresh function must be present');
+  const sessionBody = repeatableSql.slice(sessionStart, sessionEnd);
+  assert.match(sessionBody, /'force_refresh', COALESCE\(v_force_refresh, false\)/);
+  assert.match(sessionBody, /'enqueued_candidate_count', COALESCE\(\(v_page_enqueue_result->>'enqueued_candidate_count'\)::integer, 0\)/);
 });

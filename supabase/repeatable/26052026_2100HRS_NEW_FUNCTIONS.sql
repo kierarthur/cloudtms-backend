@@ -19957,6 +19957,7 @@ DECLARE
   v_payload_json jsonb := CASE WHEN jsonb_typeof(COALESCE(p_payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_payload_json, '{}'::jsonb) ELSE '{}'::jsonb END;
   v_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
   v_direct_result jsonb := '{}'::jsonb;
+  v_force_refresh boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -19978,6 +19979,14 @@ BEGIN
   END IF;
 
   v_actor_user_id := COALESCE(v_actor_user_id, v_session_row.actor_user_id);
+
+  v_force_refresh := LOWER(BTRIM(COALESCE(
+    v_payload_json->>'force_refresh',
+    v_payload_json->>'forceRefresh',
+    v_payload_json->>'user_requested_refresh',
+    v_payload_json->>'userRequestedRefresh',
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
   v_targeted_timesheet_ids_json := CASE
     WHEN jsonb_typeof(v_payload_json->'targeted_timesheet_ids') = 'array' THEN v_payload_json->'targeted_timesheet_ids'
@@ -20031,7 +20040,11 @@ BEGIN
 
     v_page_enqueue_result := public.pay_workbench_enqueue_candidate_refresh_many(
       p_session_id => p_session_id,
-      p_candidate_ids => jsonb_build_array(p_candidate_id::text),
+      p_candidate_ids => jsonb_build_object(
+        'candidate_ids', jsonb_build_array(p_candidate_id::text),
+        'force_refresh', COALESCE(v_force_refresh, false),
+        'user_requested_refresh', COALESCE(v_force_refresh, false)
+      ),
       p_reason => COALESCE(p_reason, 'SESSION_CANDIDATE_LINE_WORK'),
       p_actor_user_id => v_actor_user_id
     );
@@ -20045,6 +20058,8 @@ BEGIN
       'legacy_queued_count', COALESCE((v_page_enqueue_result->>'legacy_queued_count')::integer, 0),
       'paged', false,
       'candidate_count', 1,
+      'enqueued_candidate_count', COALESCE((v_page_enqueue_result->>'enqueued_candidate_count')::integer, 0),
+      'force_refresh', COALESCE(v_force_refresh, false),
       'next_cursor', NULL::jsonb,
       'has_more', false,
       'enqueue_result', COALESCE(v_page_enqueue_result, '{}'::jsonb)
@@ -20106,7 +20121,9 @@ BEGIN
       p_session_id => p_session_id,
       p_candidate_ids => jsonb_build_object(
         'candidate_ids', v_page_candidate_ids,
-        'skip_candidate_ids', CASE WHEN jsonb_typeof(v_payload_json->'skip_candidate_ids') = 'array' THEN v_payload_json->'skip_candidate_ids' ELSE '[]'::jsonb END
+        'skip_candidate_ids', CASE WHEN jsonb_typeof(v_payload_json->'skip_candidate_ids') = 'array' THEN v_payload_json->'skip_candidate_ids' ELSE '[]'::jsonb END,
+        'force_refresh', COALESCE(v_force_refresh, false),
+        'user_requested_refresh', COALESCE(v_force_refresh, false)
       ),
       p_reason => COALESCE(p_reason, 'SESSION_SCOPE_PAGE_LINE_WORK'),
       p_actor_user_id => v_actor_user_id
@@ -20121,6 +20138,8 @@ BEGIN
     'limit', v_page_limit,
     'cursor_scope_ordinal', v_cursor_scope_ordinal,
     'candidate_count', COALESCE(jsonb_array_length(v_page_candidate_ids), 0),
+    'enqueued_candidate_count', COALESCE((v_page_enqueue_result->>'enqueued_candidate_count')::integer, 0),
+    'force_refresh', COALESCE(v_force_refresh, false),
     'next_cursor', v_page_next_cursor,
     'has_more', v_page_next_cursor IS NOT NULL,
     'delta_queued_count', COALESCE((v_page_enqueue_result->>'delta_queued_count')::integer, 0),
@@ -83872,6 +83891,7 @@ DECLARE
   v_previous_pending integer := 0;
   v_source_build_limit integer := 25;
   v_pay_channel_scope text := 'ALL';
+  v_force_refresh boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -83891,6 +83911,13 @@ BEGIN
     v_candidate_ids_input := p_candidate_ids;
   ELSIF jsonb_typeof(p_candidate_ids) = 'object' AND jsonb_typeof(p_candidate_ids->'candidate_ids') = 'array' THEN
     v_candidate_ids_input := p_candidate_ids->'candidate_ids';
+    v_force_refresh := LOWER(BTRIM(COALESCE(
+      p_candidate_ids->>'force_refresh',
+      p_candidate_ids->>'forceRefresh',
+      p_candidate_ids->>'user_requested_refresh',
+      p_candidate_ids->>'userRequestedRefresh',
+      'false'
+    ))) IN ('true', 't', '1', 'yes', 'y', 'on');
     IF jsonb_typeof(p_candidate_ids->'skip_candidate_ids') = 'array' THEN
       v_skip_candidate_ids_input := v_skip_candidate_ids_input || p_candidate_ids->'skip_candidate_ids';
     END IF;
@@ -84062,6 +84089,8 @@ BEGIN
 
     IF v_candidate_id = ANY(COALESCE(v_skip_candidate_ids, ARRAY[]::uuid[]))
        OR (
+         COALESCE(v_force_refresh, false) IS NOT TRUE
+         AND
          COALESCE(v_candidate_clone_certified, false) IS TRUE
          AND v_candidate_scope_status IN ('READY', 'MATERIALISED', 'MATERIALIZED', 'SOURCE_EMPTY')
          AND COALESCE(v_candidate_state_status, 'READY') IN ('READY', 'READY_EMPTY')
@@ -84073,7 +84102,8 @@ BEGIN
       CONTINUE;
     END IF;
 
-    IF COALESCE(v_clone_rebase_queued, false) IS TRUE
+    IF COALESCE(v_force_refresh, false) IS NOT TRUE
+       AND COALESCE(v_clone_rebase_queued, false) IS TRUE
        AND COALESCE(v_candidate_clone_failed, false) IS NOT TRUE THEN
       v_clone_skipped_pending_count := v_clone_skipped_pending_count + 1;
       CONTINUE;
@@ -84200,7 +84230,8 @@ BEGIN
       WHEN COALESCE(v_clone_skipped_pending_count, 0) > 0 THEN 'WORKBENCH_SESSION_CLONE_REBASE'
       ELSE NULL::text
     END,
-    'source_build_limit', v_source_build_limit
+    'source_build_limit', v_source_build_limit,
+    'force_refresh', COALESCE(v_force_refresh, false)
   );
 END;
 $function$;
