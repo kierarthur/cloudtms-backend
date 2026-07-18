@@ -14298,6 +14298,138 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
 }
 
 
+async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId, ctx = null) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const id = trimStr(sessionId);
+  const actorUserId = trimStr(user?.id);
+  const enc = encodeURIComponent;
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+    if (isPlainObject(payload) && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+    return isPlainObject(payload) ? payload : {};
+  };
+  const failure = (status, code, message) => withCORS(env, req, new Response(JSON.stringify({
+    ok: false,
+    code,
+    error_code: code,
+    title: 'Payment preview could not be refreshed',
+    message,
+    user_message: message,
+    friendly_error: { code, title: 'Payment preview could not be refreshed', message }
+  }), { status, headers: JSON_HEADERS }));
+
+  if (!uuidRe.test(actorUserId)) return withCORS(env, req, unauthorized('Unauthorized'));
+  if (!uuidRe.test(id)) return failure(400, 'WORKBENCH_SESSION_INVALID', 'Refresh Banking Pay and try again.');
+
+  let requestBody = {};
+  try {
+    requestBody = await req.json();
+    if (!isPlainObject(requestBody)) requestBody = {};
+  } catch {
+    requestBody = {};
+  }
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,actor_user_id,status,discarded_at_utc` +
+      `&limit=1`,
+      false
+    );
+    const sessionRow = rows && rows[0] ? rows[0] : null;
+    if (!sessionRow) return failure(404, 'WORKBENCH_SESSION_NOT_FOUND', 'This payment preview no longer exists. Reopen Banking Pay.');
+    if (trimStr(sessionRow.actor_user_id) !== actorUserId) return failure(403, 'WORKBENCH_SESSION_FORBIDDEN', 'This payment preview belongs to another user. Reopen Banking Pay.');
+    if (trimStr(sessionRow.status).toUpperCase() !== 'OPEN' || sessionRow.discarded_at_utc) {
+      return failure(409, 'OBSOLETE_SESSION', 'This payment preview is no longer current. Reopen Banking Pay.');
+    }
+
+    const reason = trimStr(requestBody.reason || requestBody.refresh_reason || requestBody.refreshReason || 'USER_REQUESTED_FULL_REFRESH').toUpperCase();
+    let cursor = null;
+    let hasMore = true;
+    let pageCount = 0;
+    let candidateCount = 0;
+    let deltaQueuedCount = 0;
+    let legacyQueuedCount = 0;
+
+    while (hasMore && pageCount < 100) {
+      const rpcPayload = {
+        limit: 100,
+        refresh_scope_kind: 'SESSION_FULL_LIVE',
+        user_requested_refresh: true
+      };
+      if (isPlainObject(cursor)) rpcPayload.cursor = cursor;
+      const rpcRes = await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
+        p_session_id: id,
+        p_candidate_id: null,
+        p_reason: reason || 'USER_REQUESTED_FULL_REFRESH',
+        p_actor_user_id: actorUserId,
+        p_payload_json: rpcPayload
+      }, {
+        routeClass: 'BANKING_PAY_WORKBENCH_REFRESH',
+        purpose: 'USER_REQUESTED_FULL_WORKBENCH_REFRESH',
+        timeoutMs: 15000
+      });
+      const page = unwrapRpc(rpcRes, 'pay_workbench_enqueue_session_candidate_refresh');
+      pageCount += 1;
+      candidateCount += Math.max(0, Number(page.candidate_count || 0) || 0);
+      deltaQueuedCount += Math.max(0, Number(page.delta_queued_count || 0) || 0);
+      legacyQueuedCount += Math.max(0, Number(page.legacy_queued_count || 0) || 0);
+      cursor = isPlainObject(page.next_cursor) ? page.next_cursor : null;
+      hasMore = page.has_more === true && !!cursor;
+    }
+
+    if (hasMore) {
+      return failure(409, 'WORKBENCH_REFRESH_SCOPE_TOO_LARGE', 'The payment preview is too large to refresh in one request. Narrow the filters and try again.');
+    }
+
+    let refreshNudge = null;
+    if (candidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+      try {
+        refreshNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+          origin: 'USER_REQUESTED_FULL_WORKBENCH_REFRESH',
+          reason: reason || 'USER_REQUESTED_FULL_REFRESH',
+          mutation_type: 'WORKBENCH_REFRESH',
+          budgetProfile: 'NUDGE',
+          profile: 'NUDGE',
+          sessionId: id,
+          session_id: id,
+          actorUserId,
+          actor_user_id: actorUserId
+        });
+      } catch (error) {
+        refreshNudge = { ok: false, scheduled: false, message: trimStr(error?.message || error) };
+      }
+    }
+
+    return withCORS(env, req, ok({
+      ok: true,
+      session_id: id,
+      refresh_enqueued: candidateCount > 0,
+      candidate_count: candidateCount,
+      page_count: pageCount,
+      delta_queued_count: deltaQueuedCount,
+      legacy_queued_count: legacyQueuedCount,
+      refresh_nudge_scheduled: refreshNudge?.scheduled === true || refreshNudge?.already_running === true,
+      refresh_nudge: refreshNudge,
+      policy_x_scope: 'PRE_DRAFT_LIVE_WORKBENCH_ONLY',
+      decisions_cleared: false,
+      payment_execution_started: false
+    }));
+  } catch (error) {
+    console.error('[BANKING][PAY][WORKBENCH][REFRESH]', {
+      code: trimStr(error?.code || error?.name || 'WORKBENCH_REFRESH_FAILED')
+    });
+    return failure(500, 'BANKING_PAY_WORKBENCH_REFRESH_FAILED', 'CloudTMS could not refresh the payment preview. Try again.');
+  }
+}
+
+
 async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, sessionId) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -188560,6 +188692,13 @@ if (req.method === 'POST' && p === '/api/banking/pay/auth-token/action') {
 
 if (req.method === 'POST' && p === '/api/banking/pay/workbench/session/open') {
   return handleBankingPayWorkbenchSessionOpen(env, req, user, ctx);
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/workbench/session/:id/refresh');
+  if (m && req.method === 'POST') {
+    return handleBankingPayWorkbenchSessionRefresh(env, req, user, m.id, ctx);
+  }
 }
 
 {
