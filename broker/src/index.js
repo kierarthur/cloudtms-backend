@@ -22947,10 +22947,11 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
   };
   const readGroupedAlertSummary = async (actorUserId) => {
     try {
-      const signal = unwrapRpc(await sbRpc(env, 'banking_alert_signal_for_user', {
+      const signal = unwrapRpc(await sbRpc(env, 'banking_alerts_refresh_for_user', {
         p_actor_user_id: actorUserId,
-        p_last_alert_hash: null
-      }), 'banking_alert_signal_for_user');
+        p_alert_context: 'ALERT_MANAGEMENT',
+        p_limit: 100
+      }), 'banking_alerts_refresh_for_user');
       return Object.keys(signal).length ? signal : null;
     } catch { return null; }
   };
@@ -50270,6 +50271,47 @@ async function handleBankingAlertPreferencesGet(env, req, user) {
 }
 
 
+async function handleBankingAlertsGet(env, req, user) {
+  if (!user || !user.id) return withCORS(env, req, unauthorized('Unauthorized'));
+  if (req.method !== 'GET') {
+    return withCORS(env, req, new Response(JSON.stringify({ ok: false, error_code: 'METHOD_NOT_ALLOWED' }), { status: 405, headers: JSON_HEADERS }));
+  }
+
+  const unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  try {
+    const url = new URL(req.url);
+    const requestedLimit = Number(url.searchParams.get('limit') || 100);
+    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 100, 1), 100);
+    const alerts = unwrapRpcPayload(await sbRpc(env, 'banking_alerts_refresh_for_user', {
+      p_actor_user_id: String(user.id),
+      p_alert_context: 'ALERT_PANEL',
+      p_limit: limit
+    }), 'banking_alerts_refresh_for_user');
+
+    return withCORS(env, req, ok({
+      ...alerts,
+      ok: alerts.ok !== false,
+      banking_alert_summary: alerts,
+      alert_summary: alerts
+    }));
+  } catch (e) {
+    const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
+      ? makeBankingFriendlyErrorPayload(e, { action: 'BANKING_ALERTS_GET' })
+      : { ok: false, error: String(e && e.message || e || 'Banking alerts could not be loaded') };
+    return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
+  }
+}
+
+
 
 async function handleBankingAlertPreferencesUpdate(env, req, user) {
   if (!user || !user.id) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -50312,7 +50354,9 @@ async function handleBankingAlertPreferencesUpdate(env, req, user) {
     'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS',
     'PAID_SETTLED_RECOVERY_REQUIRED',
     'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
-    'WEBHOOK_UNMATCHED_REVIEW_REQUIRED'
+    'WEBHOOK_UNMATCHED_REVIEW_REQUIRED',
+    'BATCH_SCHEDULED_SUCCESS',
+    'BATCH_SETTLED_SUCCESS'
   ]);
   const allowedFailureReasonGroups = new Set([
     'INSUFFICIENT_FUNDS',
@@ -50422,7 +50466,6 @@ async function handleBankingAlertPreferencesUpdate(env, req, user) {
     if (!selectedReasons.length) return withCORS(env, req, badRequest('SELECTED_FAILURE_REASONS requires at least one failure reason group'));
   }
 
-  preferencesPayload.include_success_alerts = false;
   delete preferencesPayload.mode;
   delete preferencesPayload.preference_mode;
   delete preferencesPayload.preferenceMode;
@@ -50526,9 +50569,11 @@ async function handleBankingAlertPreferencesUpdate(env, req, user) {
 
     let alertSignal = {};
     try {
-      alertSignal = unwrapRpcPayload(await sbRpc(env, 'banking_alert_signal_for_user', {
-        p_actor_user_id: String(user.id)
-      }), 'banking_alert_signal_for_user');
+      alertSignal = unwrapRpcPayload(await sbRpc(env, 'banking_alerts_refresh_for_user', {
+        p_actor_user_id: String(user.id),
+        p_alert_context: 'ALERT_MANAGEMENT',
+        p_limit: 100
+      }), 'banking_alerts_refresh_for_user');
     } catch (signalError) {
       alertSignal = {
         ok: false,
@@ -129020,7 +129065,9 @@ async function handleGetSettings(env, req) {
         'PAID_SETTLED_RECOVERY_REQUIRED',
         'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
         'WEBHOOK_UNMATCHED_REVIEW_REQUIRED',
-        'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+        'MANUAL_ADJUSTMENTS_CARRIED_FORWARD',
+        'BATCH_SCHEDULED_SUCCESS',
+        'BATCH_SETTLED_SUCCESS'
       ],
       allowed_failure_reason_groups: [
         'INSUFFICIENT_FUNDS',
@@ -129047,7 +129094,7 @@ async function handleGetSettings(env, req) {
         include_action_required: true,
         include_progress_alerts: true,
         include_informational_alerts: false,
-        include_success_alerts: false,
+        include_success_alerts: true,
         severity_min: 'ACTION_REQUIRED'
       }
     };
@@ -141852,15 +141899,8 @@ async function handleChangesPing(env, req, user) {
     responsePayload.banking_unacknowledged_alert_count = count;
     responsePayload.banking_highest_alert_label = count > 0 ? String(responsePayload.banking_highest_alert_label || '').trim() : '';
     responsePayload.banking_highest_alert_severity = count > 0 ? String(responsePayload.banking_highest_alert_severity || '').trim().toLowerCase() : '';
-    if (count > 0 && (responsePayload.banking_alert_summary_changed === true || body.force_banking_alert_summary === true || body.forceBankingAlertSummary === true)) {
-      const alerts = unwrapRpc(await sbRpc(env, 'banking_alerts_active_for_user', { p_actor_user_id: currentUser.id, p_entity_kind: null, p_entity_id: null, p_include_acknowledged: false, p_limit: 25 }), 'banking_alerts_active_for_user');
-      responsePayload.banking_alert_summary = alerts;
-      responsePayload.banking_alert_summary_included = true;
-      responsePayload.banking_alert_summary_deferred = false;
-    } else {
-      responsePayload.banking_alert_summary_included = false;
-      responsePayload.banking_alert_summary_deferred = count > 0;
-    }
+    responsePayload.banking_alert_summary_included = false;
+    responsePayload.banking_alert_summary_deferred = count > 0;
     if (watchedBatchIds.length) {
       responsePayload.watched_batch_signals = [];
       for (const payBatchId of watchedBatchIds) {
@@ -188218,6 +188258,10 @@ if (req.method === 'GET' && p === '/api/banking/pay/authorisers') {
 
 if (req.method === 'GET' && p === '/api/banking/alerts/preferences') {
   return handleBankingAlertPreferencesGet(env, req, user);
+}
+
+if (req.method === 'GET' && p === '/api/banking/alerts') {
+  return handleBankingAlertsGet(env, req, user);
 }
 
 if (req.method === 'PUT' && p === '/api/banking/alerts/preferences') {
