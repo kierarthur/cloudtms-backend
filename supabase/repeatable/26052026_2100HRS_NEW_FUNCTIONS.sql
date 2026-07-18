@@ -17190,7 +17190,22 @@ begin
     );
     end if;
 
-    IF COALESCE(v_active_reservation_protection_applied, false) THEN
+    IF COALESCE(v_active_reservation_protection_applied, false)
+       AND NOT EXISTS (
+         SELECT 1
+         FROM public.pay_finance_case_events AS protection_event
+         WHERE protection_event.finance_case_id = v_selected_finance_case_id
+           AND protection_event.event_type = 'SYNC_SHRINK_DEFERRED_ACTIVE_RESERVATION'
+           AND protection_event.reason = 'PREVIEW_FINANCE_SYNC_ACTIVE_RESERVATION_PROTECTION'
+           AND protection_event.before_json IS NOT DISTINCT FROM v_case_before_json
+           AND protection_event.after_json = jsonb_build_object(
+             'target_case_amount_ex', v_target_case_amount_ex,
+             'effective_case_amount_ex', v_effective_case_amount_ex,
+             'active_reserved_recovery_amount', v_existing_active_reserved_amount,
+             'existing_recovered_amount', v_existing_recovered_amount,
+             'outstanding_amount', v_new_outstanding_amount
+           )
+       ) THEN
       insert into public.pay_finance_case_events (
         finance_case_id,
         event_type,
@@ -17301,38 +17316,56 @@ begin
       AND (batch_item.id IS NULL OR COALESCE(batch_item.is_voided, false) IS NOT TRUE);
 
     IF COALESCE(v_existing_active_reserved_amount, 0) > 0 THEN
-      insert into public.pay_finance_case_events (
-        finance_case_id,
-        event_type,
-        event_at_utc,
-        actor_user_id,
-        pay_batch_id,
-        reservation_id,
-        before_json,
-        after_json,
-        reason,
-        note
-      )
-      values (
-        v_open_case_candidate.finance_case_id,
-        'SYNC_CLEAR_DEFERRED_ACTIVE_RESERVATION',
-        now(),
-        p_actor_user_id,
-        null,
-        null,
-        jsonb_build_object(
-          'case_type', v_open_case_candidate.old_case_type::text,
-          'status', 'ACTIVE',
-          'original_amount', v_open_case_candidate.old_original_amount,
-          'outstanding_amount', v_open_case_candidate.old_outstanding_amount
-        ),
-        jsonb_build_object(
-          'clear_deferred', true,
-          'active_reserved_recovery_amount', v_existing_active_reserved_amount
-        ),
-        'PREVIEW_FINANCE_SYNC_ACTIVE_RESERVATION_PROTECTION',
-        'Deferred finance case clear because an active recovery reservation exists.'
-      );
+      IF NOT EXISTS (
+        SELECT 1
+        FROM public.pay_finance_case_events AS protection_event
+        WHERE protection_event.finance_case_id = v_open_case_candidate.finance_case_id
+          AND protection_event.event_type = 'SYNC_CLEAR_DEFERRED_ACTIVE_RESERVATION'
+          AND protection_event.reason = 'PREVIEW_FINANCE_SYNC_ACTIVE_RESERVATION_PROTECTION'
+          AND protection_event.before_json = jsonb_build_object(
+            'case_type', v_open_case_candidate.old_case_type::text,
+            'status', 'ACTIVE',
+            'original_amount', v_open_case_candidate.old_original_amount,
+            'outstanding_amount', v_open_case_candidate.old_outstanding_amount
+          )
+          AND protection_event.after_json = jsonb_build_object(
+            'clear_deferred', true,
+            'active_reserved_recovery_amount', v_existing_active_reserved_amount
+          )
+      ) THEN
+        insert into public.pay_finance_case_events (
+          finance_case_id,
+          event_type,
+          event_at_utc,
+          actor_user_id,
+          pay_batch_id,
+          reservation_id,
+          before_json,
+          after_json,
+          reason,
+          note
+        )
+        values (
+          v_open_case_candidate.finance_case_id,
+          'SYNC_CLEAR_DEFERRED_ACTIVE_RESERVATION',
+          now(),
+          p_actor_user_id,
+          null,
+          null,
+          jsonb_build_object(
+            'case_type', v_open_case_candidate.old_case_type::text,
+            'status', 'ACTIVE',
+            'original_amount', v_open_case_candidate.old_original_amount,
+            'outstanding_amount', v_open_case_candidate.old_outstanding_amount
+          ),
+          jsonb_build_object(
+            'clear_deferred', true,
+            'active_reserved_recovery_amount', v_existing_active_reserved_amount
+          ),
+          'PREVIEW_FINANCE_SYNC_ACTIVE_RESERVATION_PROTECTION',
+          'Deferred finance case clear because an active recovery reservation exists.'
+        );
+      END IF;
 
       CONTINUE;
     END IF;
@@ -38179,6 +38212,46 @@ begin
   ;
 
 
+  /* Policy X: recovery headroom is pre-draft live truth, but it must use the
+     same central economic-outstanding authority that preview materialisation
+     uses.  Raw timesheet deltas whose settled baseline is already exhausted
+     must not create funds from which a recovery can be taken. */
+  drop table if exists pg_temp.candidate_authoritative_recovery_headroom;
+
+  create temporary table candidate_authoritative_recovery_headroom on commit drop as
+        with recovery_timesheet_scope as (
+          select
+            cr.candidate_id,
+            coalesce(
+              array_agg(distinct tcr.timesheet_id order by tcr.timesheet_id)
+                filter (where tcr.timesheet_id is not null),
+              array[]::uuid[]
+            ) as timesheet_ids
+          from candidate_rollup cr
+          left join timesheet_case_rollup_payable tcr
+            on tcr.candidate_id = cr.candidate_id
+           and coalesce(tcr.is_blocked, false) = false
+          group by cr.candidate_id
+        )
+        select
+          rts.candidate_id,
+          round(
+            coalesce(
+              sum(greatest(coalesce(oc.outstanding_ex_vat, 0), 0)),
+              0
+            ),
+            2
+          )::numeric(12,2) as authoritative_recovery_headroom_ex
+        from recovery_timesheet_scope rts
+        left join lateral public._pay_outstanding_components(
+          rts.timesheet_ids,
+          null::uuid
+        ) oc on true
+        group by rts.candidate_id
+
+  ;
+
+
 create temporary table finance_case_recovery_rows_base on commit drop as
         select
           vfcr.finance_case_id,
@@ -38186,11 +38259,11 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           vfcr.case_type,
           vfcr.taxability,
           upper(coalesce(cr.cand_pay_method,'')) as candidate_pay_method,
-          round(greatest(coalesce(cr.non_mismatch_total_ex,0),0),2)::numeric(12,2) as run_earnings_headroom_ex,
+          round(greatest(coalesce(carh.authoritative_recovery_headroom_ex,0),0),2)::numeric(12,2) as run_earnings_headroom_ex,
           round(
             greatest(
               coalesce(pwb.paid_wtd_before,0)
-              + greatest(coalesce(cr.non_mismatch_total_ex,0),0),
+              + greatest(coalesce(carh.authoritative_recovery_headroom_ex,0),0),
               0
             ),
             2
@@ -38229,6 +38302,8 @@ create temporary table finance_case_recovery_rows_base on commit drop as
         from finance_case_baseline_scope vfcr
         join candidate_rollup cr
           on cr.candidate_id = vfcr.candidate_id
+        join candidate_authoritative_recovery_headroom carh
+          on carh.candidate_id = vfcr.candidate_id
         join public.candidates c
           on c.id = vfcr.candidate_id
         left join paid_wtd_before pwb
@@ -192458,8 +192533,17 @@ BEGIN
        v_sync_uncovered_component_count
   FROM component_coverage;
 
-  IF COALESCE(v_sync_candidate_covered, false) IS NOT TRUE
-     OR COALESCE(v_sync_uncovered_component_count, 0) > 0 THEN
+  /* A successful reconciliation need not echo a component that was already
+     durably represented.  Durable/protected component authority is the final
+     attestation; sync-result rows remain scope-checked above. */
+  v_sync_candidate_covered := (
+    COALESCE(v_sync_uncovered_component_count, 0) = 0
+    AND COALESCE(v_sync_durable_component_count, 0)
+        + COALESCE(v_sync_protected_component_count, 0)
+        = COALESCE(v_sync_negative_component_count, 0)
+  );
+
+  IF COALESCE(v_sync_candidate_covered, false) IS NOT TRUE THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_OVERPAYMENT_SYNC_UNATTESTED'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(

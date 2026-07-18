@@ -1,0 +1,48 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+
+const sqlPath = path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql');
+const sql = fs.readFileSync(sqlPath, 'utf8');
+
+function functionBody(name, nextName) {
+  const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}`);
+  assert.ok(start >= 0, `${name} must exist`);
+  const end = nextName ? sql.indexOf(`CREATE OR REPLACE FUNCTION public.${nextName}`, start + 1) : -1;
+  return sql.slice(start, end > start ? end : sql.length);
+}
+
+test('finance recovery allocation uses central outstanding-component authority', () => {
+  const body = functionBody('pay_preview_candidate_build_finance_case_baseline', 'pay_preview_candidate_build_finance_case_rows');
+  const resetIndex = body.indexOf('drop table if exists pg_temp.candidate_authoritative_recovery_headroom');
+  const authorityIndex = body.indexOf('candidate_authoritative_recovery_headroom');
+  const allocationIndex = body.indexOf('create temporary table finance_case_recovery_rows_base');
+
+  assert.ok(resetIndex >= 0 && authorityIndex >= resetIndex && allocationIndex > authorityIndex, 'repeatable authoritative recovery headroom must be rebuilt before allocation');
+  assert.match(body, /public\._pay_outstanding_components\([\s\S]*rts\.timesheet_ids[\s\S]*null::uuid/);
+  assert.match(body, /sum\(greatest\(coalesce\(oc\.outstanding_ex_vat, 0\), 0\)\)/);
+
+  const allocationBlock = body.slice(allocationIndex, body.indexOf('create temporary table manual_debt_recovery_rows', allocationIndex));
+  assert.match(allocationBlock, /carh\.authoritative_recovery_headroom_ex/);
+  assert.doesNotMatch(allocationBlock, /cr\.non_mismatch_total_ex/);
+});
+
+test('source-build attestation accepts complete durable or protected coverage only', () => {
+  const body = functionBody('pay_workbench_candidate_source_build_chunk', 'pay_workbench_candidate_line_seed_chunk');
+  const attestationStart = body.indexOf('A successful reconciliation need not echo a component');
+  assert.ok(attestationStart >= 0, 'durable coverage attestation must be present');
+  const attestationBlock = body.slice(attestationStart, body.indexOf('v_sync_result_code :=', attestationStart));
+
+  assert.match(attestationBlock, /v_sync_uncovered_component_count, 0\) = 0/);
+  assert.match(attestationBlock, /v_sync_durable_component_count, 0\)[\s\S]*v_sync_protected_component_count, 0\)[\s\S]*v_sync_negative_component_count, 0\)/);
+  assert.match(attestationBlock, /IF COALESCE\(v_sync_candidate_covered, false\) IS NOT TRUE THEN/);
+  assert.doesNotMatch(attestationBlock, /OR COALESCE\(v_sync_uncovered_component_count/);
+});
+
+test('active-reservation protection audit events are idempotent', () => {
+  const body = functionBody('pay_sync_overpayments_from_preview', 'pay_snooze_apply');
+
+  assert.match(body, /protection_event\.event_type = 'SYNC_SHRINK_DEFERRED_ACTIVE_RESERVATION'[\s\S]*protection_event\.before_json IS NOT DISTINCT FROM v_case_before_json[\s\S]*protection_event\.after_json = jsonb_build_object/);
+  assert.match(body, /protection_event\.event_type = 'SYNC_CLEAR_DEFERRED_ACTIVE_RESERVATION'[\s\S]*protection_event\.before_json = jsonb_build_object[\s\S]*protection_event\.after_json = jsonb_build_object/);
+});
