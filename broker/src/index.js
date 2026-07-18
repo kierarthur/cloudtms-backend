@@ -35,6 +35,7 @@ import {
   normaliseBulkAuthoriseEvidenceKind
 } from './bulk-authorise-evidence-policy.js';
 import { buildBulkAuthoriseWatchVector } from './bulk-authorise-watch.js';
+import { handleBulkRowFreshnessRequest } from './bulk-row-freshness.js';
 
 const textEncoder = new TextEncoder();
 
@@ -80445,6 +80446,15 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
 
 
 
+
+async function handleBulkTimesheetRowFreshness(env, req) {
+  return handleBulkRowFreshnessRequest({
+    requireUser,
+    sbRpc,
+    withCORS,
+    unauthorized
+  }, env, req);
+}
 
 async function handleBulkProcessDataset(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -188834,6 +188844,10 @@ if (req.method === 'GET' && p === '/api/timesheets/bulk-process-dataset') {
 
 if (req.method === 'GET' && p === '/api/timesheets/bulk-authorise-dataset') {
   return handleBulkAuthoriseDataset(env, req);
+}
+
+if (req.method === 'GET' && p === '/api/timesheets/bulk-row-freshness') {
+  return handleBulkTimesheetRowFreshness(env, req);
 }
 
 {
