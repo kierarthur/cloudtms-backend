@@ -181552,7 +181552,10 @@ BEGIN
     COUNT(DISTINCT source_line.session_version)::integer,
     COALESCE(MIN(source_line.source_change_seq), v_source_change_seq),
     COALESCE(MIN(source_line.session_version), COALESCE(v_session_version, v_session_row.version)),
-    COALESCE(BOOL_OR(source_line.refresh_scope_kind = 'CANDIDATE_FULL_LIVE'), false),
+    COALESCE(BOOL_OR(
+      source_line.refresh_scope_kind = 'CANDIDATE_FULL_LIVE'
+      OR UPPER(BTRIM(COALESCE(source_line.source_row_json->>'requested_refresh_scope_kind', ''))) = 'CANDIDATE_FULL_LIVE'
+    ), false),
     COALESCE(MAX(source_line.refresh_scope_kind), 'CANDIDATE_FULL_LIVE'),
     COALESCE(MAX(source_line.pay_channel_scope), 'ALL')
   INTO v_source_rows_available,
@@ -181568,6 +181571,10 @@ BEGIN
     AND source_line.candidate_id = p_candidate_id
     AND source_line.source_build_run_id = v_source_build_run_id
     AND source_line.status = 'CURRENT';
+
+  IF COALESCE(v_full_source_rebuild, false) THEN
+    v_source_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
+  END IF;
 
   IF COALESCE(v_source_rows_available, 0) = 0 THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_LINE_WORK_SEED_SOURCE_ROWS_MISSING'
@@ -196210,6 +196217,8 @@ BEGIN
           'economic_key', source_rows.economic_key_json,
           'preview_contract', source_rows.contract_json,
           'refresh_scope_kind', v_actual_refresh_scope_kind,
+          'requested_refresh_scope_kind', v_requested_refresh_scope_kind,
+          'actual_refresh_scope_kind', v_actual_refresh_scope_kind,
           'pay_channel_scope', v_pay_channel_scope,
           'overpayment_sync_attestation', COALESCE(v_sync_attestation, '{}'::jsonb),
           'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'

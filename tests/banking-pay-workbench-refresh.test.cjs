@@ -66,3 +66,19 @@ test('explicit session refresh bypasses clone-certified reuse and forces full li
   assert.match(sessionBody, /'force_refresh', COALESCE\(v_force_refresh, false\)/);
   assert.match(sessionBody, /'enqueued_candidate_count', COALESCE\(\(v_page_enqueue_result->>'enqueued_candidate_count'\)::integer, 0\)/);
 });
+
+test('full-live source builds retain semantic scope through internally targeted pages', () => {
+  const sourceBuildStart = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_source_build_chunk');
+  const sourceBuildEnd = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public._pay_batch_status_display_label', sourceBuildStart);
+  assert.ok(sourceBuildStart >= 0 && sourceBuildEnd > sourceBuildStart, 'candidate source-build function must be present');
+  const sourceBuildBody = repeatableSql.slice(sourceBuildStart, sourceBuildEnd);
+  assert.match(sourceBuildBody, /'requested_refresh_scope_kind', v_requested_refresh_scope_kind/);
+  assert.match(sourceBuildBody, /'actual_refresh_scope_kind', v_actual_refresh_scope_kind/);
+
+  const lineSeedStart = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_line_work_seed');
+  const lineSeedEnd = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_source_build_chunk', lineSeedStart);
+  assert.ok(lineSeedStart >= 0 && lineSeedEnd > lineSeedStart, 'candidate line-work seed function must be present');
+  const lineSeedBody = repeatableSql.slice(lineSeedStart, lineSeedEnd);
+  assert.match(lineSeedBody, /source_line\.source_row_json->>'requested_refresh_scope_kind'[\s\S]*= 'CANDIDATE_FULL_LIVE'/);
+  assert.match(lineSeedBody, /COALESCE\(v_full_source_rebuild, false\)[\s\S]*existing_line_work\.timesheet_id IS NULL/);
+});
