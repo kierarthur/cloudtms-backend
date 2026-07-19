@@ -91034,6 +91034,7 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
 
       return {
         ...row,
+        status: writtenOff ? 'WRITTEN_OFF' : status,
         row_label: rowLabel,
         blocked_state: blockedState,
         blocked_reason: blockedReason,
@@ -93416,12 +93417,111 @@ async function handleBankingFinanceCaseAudit(env, req, user, financeCaseId) {
   };
 
   try {
-    const rpcRes = await sbRpc(env, 'pay_finance_case_audit_feed', {
-      p_finance_case_id: financeCaseIdText
+    const [rpcRes, actorRpcRes] = await Promise.all([
+      sbRpc(env, 'pay_finance_case_audit_feed', {
+        p_finance_case_id: financeCaseIdText
+      }),
+      sbRpc(env, 'pay_finance_case_audit_actor_index', {
+        p_finance_case_id: financeCaseIdText
+      }).catch(() => null)
+    ]);
+    const payload = unwrapRpc(rpcRes, 'pay_finance_case_audit_feed');
+    const actorPayload = unwrapRpc(actorRpcRes, 'pay_finance_case_audit_actor_index');
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const actorRows = Array.isArray(actorPayload?.events) ? actorPayload.events : [];
+
+    const normaliseAtUtc = (value) => {
+      const text = String(value || '').trim();
+      if (!text) return '';
+      const parsed = new Date(text);
+      return Number.isNaN(parsed.getTime()) ? text : parsed.toISOString();
+    };
+    const normaliseEventType = (value) => String(value || '')
+      .trim()
+      .toUpperCase()
+      .replace(/^FINANCE_CASE_/, '');
+    const actorKeyFor = (row) => [
+      String(row?.source || '').trim().toUpperCase(),
+      normaliseEventType(row?.event_type),
+      normaliseAtUtc(row?.at_utc || row?.event_at_utc || row?.created_at_utc)
+    ].join('|');
+
+    const actorQueues = new Map();
+    for (const actorRow of actorRows) {
+      const key = actorKeyFor(actorRow);
+      if (!actorQueues.has(key)) actorQueues.set(key, []);
+      actorQueues.get(key).push(actorRow);
+    }
+
+    const timelineWithActors = (Array.isArray(payloadObj.timeline) ? payloadObj.timeline : [])
+      .filter((eventRow) => !(
+        normaliseEventType(eventRow?.event_type) === 'SYNC_SKIPPED' &&
+        String(eventRow?.reason || '').trim().toUpperCase() === 'PREVIEW_FINANCE_SYNC_SKIPPED_PROTECTED_CASE'
+      ))
+      .map((eventRow) => {
+        const key = actorKeyFor(eventRow);
+        const matchingActors = actorQueues.get(key) || [];
+        const actorRow = matchingActors.length ? matchingActors.shift() : null;
+        const meta = (eventRow?.meta && typeof eventRow.meta === 'object' && !Array.isArray(eventRow.meta))
+          ? eventRow.meta
+          : {};
+        const actorUserId = String(
+          actorRow?.actor_user_id ||
+          eventRow?.actor_user_id ||
+          meta.actor_user_id ||
+          meta.same_week_paye_override_verified_by_user_id ||
+          ''
+        ).trim() || null;
+        const actorDisplayName = String(
+          actorRow?.actor_display_name ||
+          eventRow?.actor_display_name ||
+          eventRow?.actor_name ||
+          meta.actor_display_name ||
+          meta.actor_display ||
+          meta.same_week_paye_override_verified_by_display ||
+          ''
+        ).trim() || (actorUserId ? 'Former user' : 'System');
+
+        return {
+          ...eventRow,
+          actor_user_id: actorUserId,
+          actor_display_name: actorDisplayName
+        };
+      });
+
+    const canonicalFinanceSignatures = new Set(
+      timelineWithActors
+        .filter((eventRow) => String(eventRow?.source || '').trim().toUpperCase() === 'FINANCE_CASE_EVENT')
+        .map((eventRow) => [
+          normaliseAtUtc(eventRow?.at_utc || eventRow?.event_at_utc || eventRow?.created_at_utc),
+          normaliseEventType(eventRow?.event_type)
+        ].join('|'))
+    );
+    const timeline = timelineWithActors.filter((eventRow) => {
+      if (String(eventRow?.source || '').trim().toUpperCase() !== 'AUDIT') return true;
+      const signature = [
+        normaliseAtUtc(eventRow?.at_utc || eventRow?.event_at_utc || eventRow?.created_at_utc),
+        normaliseEventType(eventRow?.event_type)
+      ].join('|');
+      return !canonicalFinanceSignatures.has(signature);
     });
 
-    const payload = unwrapRpc(rpcRes, 'pay_finance_case_audit_feed');
-    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+    const financeCaseIn = (payloadObj.finance_case && typeof payloadObj.finance_case === 'object' && !Array.isArray(payloadObj.finance_case))
+      ? payloadObj.finance_case
+      : {};
+    const writtenOff = !!financeCaseIn.written_off_at_utc || !!String(financeCaseIn.write_off_reason || '').trim();
+    const normalisedPayload = {
+      ...payloadObj,
+      finance_case: {
+        ...financeCaseIn,
+        status: writtenOff
+          ? 'WRITTEN_OFF'
+          : String(financeCaseIn.status || '').trim().toUpperCase()
+      },
+      timeline
+    };
+
+    return withCORS(env, req, ok(normalisedPayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load finance case audit')));
   }
