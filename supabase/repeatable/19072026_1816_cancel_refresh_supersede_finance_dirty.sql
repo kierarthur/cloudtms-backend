@@ -1,0 +1,279 @@
+-- Prevent a cancellation-generated finance dirty job from overwriting the
+-- authoritative full-candidate refresh queued after the cancellation.
+--
+-- Policy X boundary:
+--   * the batch has already been cancelled using frozen batch artefacts;
+--   * this function changes only PRE_DRAFT_LIVE_TRUTH refresh orchestration;
+--   * no payment, settlement, finance amount, reservation or economic key is
+--     created or changed here.
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1(
+  p_session_id uuid,
+  p_pay_batch_id uuid,
+  p_operation_type text,
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_options_json jsonb DEFAULT '{}'::jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_now timestamptz := now();
+  v_result jsonb := '{}'::jsonb;
+  v_operation_type text := UPPER(BTRIM(COALESCE(p_operation_type, '')));
+  v_session public.banking_pay_workbench_sessions%ROWTYPE;
+  v_candidate_id uuid;
+  v_changed_finance_case_ids uuid[] := ARRAY[]::uuid[];
+  v_enqueue_result jsonb := '{}'::jsonb;
+  v_job_id uuid;
+  v_full_refresh_count integer := 0;
+  v_superseded_targeted_job_count integer := 0;
+  v_superseded_targeted_job_chunk_count integer := 0;
+  v_superseded_finance_dirty_job_count integer := 0;
+  v_full_refresh_job_ids jsonb := '[]'::jsonb;
+BEGIN
+  v_result := public.pay_workbench_patch_preview_after_batch_mutation(
+    p_session_id,
+    p_pay_batch_id,
+    p_operation_type,
+    p_actor_user_id,
+    p_options_json
+  );
+
+  IF COALESCE((v_result->>'ok')::boolean, true) IS NOT TRUE
+     OR v_operation_type NOT IN ('DRAFT_DELETE', 'DRAFT_CANCEL') THEN
+    RETURN v_result;
+  END IF;
+
+  SELECT session_row.*
+  INTO v_session
+  FROM public.banking_pay_workbench_sessions AS session_row
+  WHERE session_row.id = p_session_id
+    AND UPPER(BTRIM(COALESCE(session_row.status, ''))) = 'OPEN'
+    AND session_row.discarded_at_utc IS NULL
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_CANCEL_FULL_REFRESH_SESSION_NOT_OPEN'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAYMENT_CANCEL_FULL_REFRESH_SESSION_NOT_OPEN',
+              'session_id', p_session_id::text,
+              'pay_batch_id', p_pay_batch_id::text
+            )::text;
+  END IF;
+
+  -- The Worker may supply these identifiers, but the cancelled frozen batch is
+  -- the fail-closed authority. Reading its retained (now voided) items makes the
+  -- race guard independent of optional response fields.
+  WITH finance_case_scope AS (
+    SELECT batch_item.finance_case_id
+    FROM public.pay_batch_items AS batch_item
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id = batch_item.pay_batch_candidate_id
+    WHERE batch_candidate.pay_batch_id = p_pay_batch_id
+      AND batch_item.finance_case_id IS NOT NULL
+
+    UNION ALL
+
+    SELECT raw_value.value_text::uuid
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(p_options_json->'changed_finance_case_ids') = 'array'
+          THEN p_options_json->'changed_finance_case_ids'
+        ELSE '[]'::jsonb
+      END
+    ) AS raw_value(value_text)
+    WHERE raw_value.value_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+    UNION ALL
+
+    SELECT raw_value.value_text::uuid
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(p_options_json#>'{cancellation_result,changed_scope_json,changed_finance_case_ids}') = 'array'
+          THEN p_options_json#>'{cancellation_result,changed_scope_json,changed_finance_case_ids}'
+        ELSE '[]'::jsonb
+      END
+    ) AS raw_value(value_text)
+    WHERE raw_value.value_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  )
+  SELECT COALESCE(
+    array_agg(DISTINCT finance_case_scope.finance_case_id ORDER BY finance_case_scope.finance_case_id),
+    ARRAY[]::uuid[]
+  )
+  INTO v_changed_finance_case_ids
+  FROM finance_case_scope
+  WHERE finance_case_scope.finance_case_id IS NOT NULL;
+
+  -- Component restoration and reservation release enqueue finance-case dirty
+  -- work in the cancellation transaction. If allowed to fan out afterwards it
+  -- can narrow the scope to one linked timesheet and overwrite the correct
+  -- candidate-wide recovery allocation. Only still-QUEUED jobs for finance
+  -- cases frozen into this cancelled batch are superseded. RUNNING jobs and all
+  -- unrelated finance cases are deliberately outside this update.
+  WITH superseded_finance_dirty_jobs AS (
+    UPDATE public.banking_pay_workbench_jobs AS finance_dirty_job
+    SET status = 'FAILED',
+        updated_at_utc = v_now,
+        failed_at_utc = v_now,
+        last_error_json = jsonb_build_object(
+          'code', 'WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH',
+          'message', 'The cancellation finance refresh was replaced atomically by the required full-candidate refresh.',
+          'session_id', p_session_id::text,
+          'pay_batch_id', p_pay_batch_id::text,
+          'superseded_at_utc', v_now
+        ),
+        payload_json = COALESCE(finance_dirty_job.payload_json, '{}'::jsonb) || jsonb_build_object(
+          'superseded_by_cancel_full_candidate_refresh', true,
+          'superseding_session_id', p_session_id::text,
+          'superseding_pay_batch_id', p_pay_batch_id::text,
+          'superseded_at_utc', v_now::text
+        )
+    WHERE UPPER(BTRIM(COALESCE(finance_dirty_job.job_type, ''))) = 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'
+      AND UPPER(BTRIM(COALESCE(finance_dirty_job.status, ''))) = 'QUEUED'
+      AND COALESCE(array_length(v_changed_finance_case_ids, 1), 0) > 0
+      AND EXISTS (
+        SELECT 1
+        FROM unnest(v_changed_finance_case_ids) AS changed_finance_case(finance_case_id)
+        WHERE COALESCE(finance_dirty_job.payload_json->>'scope_id', '') = changed_finance_case.finance_case_id::text
+           OR COALESCE(finance_dirty_job.payload_json->>'finance_case_id', '') = changed_finance_case.finance_case_id::text
+           OR COALESCE(finance_dirty_job.payload_json->'finance_case_ids', '[]'::jsonb)
+                @> jsonb_build_array(changed_finance_case.finance_case_id::text)
+      )
+    RETURNING finance_dirty_job.id
+  )
+  SELECT COUNT(*)::integer
+  INTO v_superseded_finance_dirty_job_count
+  FROM superseded_finance_dirty_jobs;
+
+  FOR v_candidate_id IN
+    SELECT DISTINCT candidate_value.value::uuid
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(v_result->'targeted_refresh_candidate_ids') = 'array'
+          THEN v_result->'targeted_refresh_candidate_ids'
+        ELSE '[]'::jsonb
+      END
+    ) AS candidate_value(value)
+    WHERE candidate_value.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ORDER BY candidate_value.value::uuid
+  LOOP
+    WITH superseded_targeted_jobs AS (
+      UPDATE public.banking_pay_workbench_jobs AS targeted_job
+      SET status = 'FAILED',
+          updated_at_utc = v_now,
+          failed_at_utc = v_now,
+          last_error_json = jsonb_build_object(
+            'code', 'WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH',
+            'message', 'The targeted cancellation refresh was replaced atomically by a full-candidate finance refresh.',
+            'session_id', p_session_id::text,
+            'candidate_id', v_candidate_id::text,
+            'pay_batch_id', p_pay_batch_id::text,
+            'superseded_at_utc', v_now
+          ),
+          payload_json = COALESCE(targeted_job.payload_json, '{}'::jsonb) || jsonb_build_object(
+            'superseded_by_cancel_full_candidate_refresh', true,
+            'superseded_at_utc', v_now::text
+          )
+      WHERE targeted_job.session_id = p_session_id
+        AND targeted_job.candidate_id = v_candidate_id
+        AND UPPER(BTRIM(COALESCE(targeted_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+        AND UPPER(BTRIM(COALESCE(targeted_job.status, ''))) = 'QUEUED'
+        AND COALESCE(
+          targeted_job.payload_json->>'pay_batch_id',
+          targeted_job.payload_json#>>'{source_build,pay_batch_id}',
+          ''
+        ) = p_pay_batch_id::text
+        AND UPPER(BTRIM(COALESCE(
+          targeted_job.payload_json->>'refresh_scope_kind',
+          targeted_job.payload_json#>>'{source_build,refresh_scope_kind}',
+          ''
+        ))) = 'TARGETED_TIMESHEETS'
+      RETURNING targeted_job.id
+    )
+    SELECT COUNT(*)::integer
+    INTO v_superseded_targeted_job_chunk_count
+    FROM superseded_targeted_jobs;
+
+    v_superseded_targeted_job_count := v_superseded_targeted_job_count
+      + COALESCE(v_superseded_targeted_job_chunk_count, 0);
+
+    v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh(
+      p_snapshot_run_id => v_session.source_snapshot_run_id,
+      p_candidate_id => v_candidate_id,
+      p_reason => 'POST_DRAFT_CANCEL_FULL_CANDIDATE_FINANCE_REFRESH',
+      p_actor_user_id => COALESCE(p_actor_user_id, v_session.actor_user_id),
+      p_payload_json => jsonb_build_object(
+        'session_id', p_session_id::text,
+        'source_session_id', p_session_id::text,
+        'source_snapshot_run_id', v_session.source_snapshot_run_id::text,
+        'snapshot_run_id', v_session.source_snapshot_run_id::text,
+        'session_version', v_session.version,
+        'session_signature', v_session.session_signature,
+        'operation_type', v_operation_type,
+        'pay_batch_id', p_pay_batch_id::text,
+        'enqueue_origin', 'PAYMENT_CANCEL_FULL_CANDIDATE_REFRESH_V2',
+        'force_legacy', true,
+        'targeted_timesheet_ids', '[]'::jsonb,
+        'targeted_timesheet_ids_requested', '[]'::jsonb,
+        'linked_timesheet_ids', '[]'::jsonb,
+        'linked_timesheet_ids_requested', '[]'::jsonb,
+        'refresh_scope_kind', 'CANDIDATE_FULL_LIVE',
+        'pay_channel_scope', 'ALL',
+        'projection_mode', 'LEGACY',
+        'projection_class', 'POST_DRAFT_CANCEL_FULL_CANDIDATE',
+        'fallback_reason', 'POST_DRAFT_CANCEL_FINANCE_REALLOCATION_REQUIRED',
+        'source_build_required', true,
+        'line_work_required', true,
+        'delta_refresh_required', false,
+        'complex_refresh_required', true,
+        'full_candidate_recovery_reallocation_required', true,
+        'superseded_finance_dirty_job_count', v_superseded_finance_dirty_job_count,
+        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+      )
+    );
+
+    IF COALESCE(v_enqueue_result->>'job_id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       OR UPPER(BTRIM(COALESCE(v_enqueue_result->>'job_type', ''))) <> 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+       OR UPPER(BTRIM(COALESCE(v_enqueue_result->>'refresh_scope_kind', ''))) <> 'CANDIDATE_FULL_LIVE' THEN
+      RAISE EXCEPTION 'PAYMENT_CANCEL_FULL_REFRESH_JOB_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAYMENT_CANCEL_FULL_REFRESH_JOB_INVALID',
+                'session_id', p_session_id::text,
+                'candidate_id', v_candidate_id::text,
+                'pay_batch_id', p_pay_batch_id::text,
+                'enqueue_result', v_enqueue_result
+              )::text;
+    END IF;
+
+    v_job_id := (v_enqueue_result->>'job_id')::uuid;
+    v_full_refresh_job_ids := v_full_refresh_job_ids || jsonb_build_array(v_job_id::text);
+    v_full_refresh_count := v_full_refresh_count + 1;
+  END LOOP;
+
+  RETURN v_result || jsonb_build_object(
+    'targeted_refresh_enqueued', v_full_refresh_count > 0,
+    'targeted_refresh_enqueued_count', v_full_refresh_count,
+    'full_candidate_refresh_enqueued', v_full_refresh_count > 0,
+    'full_candidate_refresh_enqueued_count', v_full_refresh_count,
+    'full_candidate_refresh_job_ids', v_full_refresh_job_ids,
+    'superseded_targeted_refresh_job_count', v_superseded_targeted_job_count,
+    'superseded_finance_dirty_job_count', v_superseded_finance_dirty_job_count,
+    'changed_finance_case_count', COALESCE(array_length(v_changed_finance_case_ids, 1), 0),
+    'refresh_scope_kind', CASE WHEN v_full_refresh_count > 0 THEN 'CANDIDATE_FULL_LIVE' ELSE NULL::text END,
+    'source_session_preserved', true,
+    'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+    'policy_x_checked', true
+  );
+END;
+$function$;
+
+ALTER FUNCTION public.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1(uuid, uuid, text, uuid, jsonb) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1(uuid, uuid, text, uuid, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1(uuid, uuid, text, uuid, jsonb) FROM anon;
+REVOKE ALL ON FUNCTION public.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1(uuid, uuid, text, uuid, jsonb) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1(uuid, uuid, text, uuid, jsonb) TO service_role;

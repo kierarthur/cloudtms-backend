@@ -116,6 +116,15 @@ If a test requires a write, Codex must stop and state:
 
 Do not proceed with the write until the user explicitly approves it in the current task.
 
+## SQL file naming and placement
+
+Every new SQL file must use the filename format `DDMMYYYY_HHMM_name.sql`; the filename must always begin with the date and 24-hour time in that exact order. Use the current UK date and time, and use a short descriptive `snake_case` name.
+
+* Save one-time database migrations in `supabase\migrations`.
+* Save new or replacement SQL function definitions in `supabase\repeatable`.
+* Do not save SQL functions as one-time migrations unless a separately required schema/data migration calls or installs them as part of an explicitly approved change.
+* Never rename an already-applied migration merely to adopt this convention unless the user explicitly requests it and the migration history has been checked safe.
+
 ## TEST-only diagnostic RPC
 
 The TEST Supabase project has a diagnostic RPC:

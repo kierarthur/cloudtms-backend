@@ -1,0 +1,47 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+
+const repeatablePath = path.resolve(
+  __dirname,
+  '../supabase/repeatable/19072026_1816_cancel_refresh_supersede_finance_dirty.sql'
+);
+const sql = fs.readFileSync(repeatablePath, 'utf8');
+
+test('cancellation finance-dirty race fix follows the repeatable SQL convention', () => {
+  assert.match(path.basename(repeatablePath), /^\d{8}_\d{4}_[a-z0-9_]+\.sql$/);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1/);
+});
+
+test('the cancelled frozen batch is the authority for affected finance cases', () => {
+  assert.match(sql, /FROM public\.pay_batch_items AS batch_item/);
+  assert.match(sql, /JOIN public\.pay_batch_candidates AS batch_candidate/);
+  assert.match(sql, /batch_candidate\.pay_batch_id = p_pay_batch_id/);
+  assert.match(sql, /batch_item\.finance_case_id IS NOT NULL/);
+});
+
+test('only queued finance dirty jobs for matching finance cases are superseded', () => {
+  assert.match(sql, /job_type, ''\)\)\) = 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'/);
+  assert.match(sql, /status, ''\)\)\) = 'QUEUED'/);
+  assert.match(sql, /unnest\(v_changed_finance_case_ids\)/);
+  assert.match(sql, /WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
+  assert.doesNotMatch(sql, /status, ''\)\)\) IN \('QUEUED', 'RUNNING'\)/);
+});
+
+test('finance race guard runs before the full candidate refresh is enqueued', () => {
+  const supersedeAt = sql.indexOf('WITH superseded_finance_dirty_jobs AS');
+  const enqueueAt = sql.indexOf('v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh');
+  assert.ok(supersedeAt >= 0);
+  assert.ok(enqueueAt > supersedeAt);
+  assert.match(sql, /'refresh_scope_kind', 'CANDIDATE_FULL_LIVE'/);
+  assert.match(sql, /'full_candidate_recovery_reallocation_required', true/);
+});
+
+test('race fix changes orchestration only and preserves the Policy X boundary', () => {
+  assert.match(sql, /PRE_DRAFT_LIVE_TRUTH/);
+  assert.doesNotMatch(sql, /UPDATE public\.pay_finance_case_components/);
+  assert.doesNotMatch(sql, /UPDATE public\.pay_advances/);
+  assert.doesNotMatch(sql, /UPDATE public\.pay_batch_items/);
+  assert.doesNotMatch(sql, /INSERT INTO public\.pay_batch/);
+});

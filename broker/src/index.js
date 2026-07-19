@@ -28640,6 +28640,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       'BANKING_PAY_CREATE_DRAFT_ROW_CONTRACT_MISMATCH',
       'BANKING_PAY_CREATE_DRAFT_ECONOMIC_KEY_CONTRACT_MISMATCH',
       'BANKING_PAY_CREATE_DRAFT_DRAFT_ROWS_TOO_MANY_FOR_REQUEST',
+      'BANKING_PAY_CREATE_DRAFT_RECOVERY_HEADROOM_INVALID',
       'RESOLVED_SYNTHETIC_TOTAL_ROW_NOT_DRAFTABLE',
       'RESOLVED_SYNTHETIC_TOTAL_ROW_ALLOCATION_BLOCKED',
       'RESOLVED_SYNTHETIC_TOTAL_ROW_ITEM_BLOCKED'
@@ -29232,6 +29233,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     const keyType = upperTrim(previewRow.key_type || economicKey.key_type || rowJson.key_type || rowJson.component_key_type || '');
     const keyValue = trimStr(previewRow.key_value || economicKey.key_value || rowJson.key_value || rowJson.component_key_value || '');
     const payChannel = upperTrim(rowJson.pay_channel || rowJson.current_pay_method || rowJson.candidate_pay_method || '');
+    const lineType = upperTrim(rowJson.line_type || rowJson.item_type || '');
     const amountExVat = numericOrNull(previewRow.amount_ex_vat ?? rowJson.amount_ex_vat ?? rowJson.preview_amount_ex_vat ?? rowJson.amount_display);
     return {
       contract_version: 1,
@@ -29250,6 +29252,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       key_type: keyType || null,
       key_value: keyValue || null,
       pay_channel: payChannel || null,
+      line_type: lineType || null,
       amount_ex_vat: amountExVat,
       presentation_section: upperTrim(rowJson.presentation_section || ''),
       selection_state: upperTrim(previewRow.selection_state || rowJson.selection_state || ''),
@@ -30519,6 +30522,20 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       });
     }
 
+    if (currentSelection && upperTrim(currentSelection.error_code || currentSelection.code || '') === 'BANKING_PAY_CREATE_DRAFT_RECOVERY_HEADROOM_INVALID') {
+      return fail(409, 'BANKING_PAY_CREATE_DRAFT_RECOVERY_HEADROOM_INVALID', trimStr(currentSelection.message) || 'A recovery is selected without enough positive pay from which to deduct it. Banking Pay stopped before creating a batch. Refresh Banking Pay and review the candidate.', {
+        session_id: sessionId,
+        pay_channel_scope: payChannelScope,
+        current_selection: currentSelection,
+        invalid_candidate_count: Math.max(0, Math.trunc(Number(currentSelection.invalid_candidate_count) || 0)),
+        invalid_candidates: Array.isArray(currentSelection.invalid_candidates) ? currentSelection.invalid_candidates.slice(0, 25) : [],
+        operation_started: false,
+        no_operation_started: true,
+        no_batch_created: true,
+        policy_x_authority_scope: 'PRE_DRAFT_FROZEN_BOUNDARY_GUARD'
+      });
+    }
+
     if (currentSelection && ['RESOLVED_SYNTHETIC_TOTAL_ROW_NOT_DRAFTABLE', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ALLOCATION_BLOCKED', 'RESOLVED_SYNTHETIC_TOTAL_ROW_ITEM_BLOCKED'].includes(upperTrim(currentSelection.error_code || currentSelection.code || ''))) {
       const staleCode = upperTrim(currentSelection.error_code || currentSelection.code || 'RESOLVED_SYNTHETIC_TOTAL_ROW_NOT_DRAFTABLE') || 'RESOLVED_SYNTHETIC_TOTAL_ROW_NOT_DRAFTABLE';
       return fail(Number(currentSelection.http_status) || 409, staleCode, trimStr(currentSelection.message) || 'A selected resolved timesheet row is stale and cannot be drafted. Refresh Banking Pay and try Create Draft again.', {
@@ -30645,6 +30662,65 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       operation_started: false,
       no_operation_started: true,
       no_batch_created: true
+    });
+  }
+
+  const financeRecoveryLineTypes = new Set([
+    'MANUAL_DEBT_RECOVERY',
+    'OVERPAYMENT_RECOVERY',
+    'LOAN_REPAYMENT',
+    'PAYMENT_ADVANCE_REPAYMENT'
+  ]);
+  const recoveryHeadroomByCandidateChannel = new Map();
+  for (const contract of selectedPreviewRowContracts) {
+    const candidateId = trimStr(contract && contract.candidate_id);
+    const payChannel = upperTrim(contract && contract.pay_channel);
+    const lineType = upperTrim(contract && contract.line_type);
+    const amount = Number(contract && contract.amount_ex_vat);
+    if (!uuidRe.test(candidateId) || !['PAYE', 'UMBRELLA'].includes(payChannel) || !Number.isFinite(amount)) continue;
+    const groupKey = `${candidateId}|${payChannel}`;
+    const current = recoveryHeadroomByCandidateChannel.get(groupKey) || {
+      candidate_id: candidateId,
+      pay_channel: payChannel,
+      positive_pence: 0,
+      recovery_pence: 0,
+      recovery_row_count: 0
+    };
+    const amountPence = Math.round(amount * 100);
+    if (amountPence > 0) current.positive_pence += amountPence;
+    if (amountPence < 0 && financeRecoveryLineTypes.has(lineType)) {
+      current.recovery_pence += Math.abs(amountPence);
+      current.recovery_row_count += 1;
+    }
+    recoveryHeadroomByCandidateChannel.set(groupKey, current);
+  }
+
+  const invalidRecoveryHeadroomGroups = [];
+  for (const totals of recoveryHeadroomByCandidateChannel.values()) {
+    if (totals.recovery_pence > totals.positive_pence) {
+      invalidRecoveryHeadroomGroups.push({
+        candidate_id: totals.candidate_id,
+        pay_channel: totals.pay_channel,
+        retained_selected_positive_pay_ex_vat: totals.positive_pence / 100,
+        selected_finance_recovery_ex_vat: totals.recovery_pence / 100,
+        selected_finance_recovery_row_count: Math.max(0, Math.trunc(Number(totals.recovery_row_count) || 0))
+      });
+    }
+  }
+
+  if (invalidRecoveryHeadroomGroups.length > 0) {
+    const invalidCandidateIds = uniqueStrings(invalidRecoveryHeadroomGroups.map((group) => group.candidate_id));
+    return fail(409, 'BANKING_PAY_CREATE_DRAFT_RECOVERY_HEADROOM_INVALID', 'A recovery is selected without enough positive pay from which to deduct it. Banking Pay stopped before creating a batch. Refresh Banking Pay and review the candidate.', {
+      session_id: sessionId,
+      pay_channel_scope: payChannelScope,
+      invalid_candidate_count: invalidCandidateIds.length,
+      invalid_candidates: invalidCandidateIds.slice(0, 25),
+      invalid_group_count: invalidRecoveryHeadroomGroups.length,
+      invalid_groups: invalidRecoveryHeadroomGroups.slice(0, 25),
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true,
+      policy_x_authority_scope: 'PRE_DRAFT_FROZEN_BOUNDARY_GUARD'
     });
   }
 
@@ -175285,14 +175361,14 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
       }));
     }
 
-    const result = unwrapRpc(await sbRpc(env, 'pay_payment_cancel_not_sent_and_recalculate', {
+    const result = unwrapRpc(await sbRpc(env, 'pay_payment_cancel_not_sent_and_recalculate_complete_v1', {
       p_pay_batch_id: id,
       p_selection_json: selectionJson,
       p_actor_user_id: actorUserId,
       p_reason: reason,
       p_idempotency_key: idempotencyKey,
       p_confirmation_json: confirmationJson
-    }), 'pay_payment_cancel_not_sent_and_recalculate');
+    }), 'pay_payment_cancel_not_sent_and_recalculate_complete_v1');
 
     const cancellationScope = readChangedCancellationScope(result);
 
@@ -175313,7 +175389,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
     let workbenchWorkerWake = null;
     if (result.ok !== false) {
     try {
-      const patchResult = unwrapRpc(await sbRpc(env, 'pay_workbench_patch_preview_after_batch_mutation', {
+      const patchResult = unwrapRpc(await sbRpc(env, 'pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1', {
         p_session_id: workbenchContext.session_id,
         p_pay_batch_id: id,
         p_operation_type: patchOperationType,
@@ -175358,7 +175434,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
           patch_existing_session_only: true,
           replacement_session_allowed: false
         }
-      }), 'pay_workbench_patch_preview_after_batch_mutation');
+      }), 'pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1');
       const targetedRefreshEnqueuedCount = Number.isFinite(Number(patchResult.targeted_refresh_enqueued_count))
         ? Math.max(0, Math.trunc(Number(patchResult.targeted_refresh_enqueued_count)))
         : 0;
@@ -176787,7 +176863,6 @@ async function revolutPayment_create(env, token, { request_id, local_provider_re
       idempotency_key: reqId || null,
       local_provider_request_id: localReqId || null,
       request_sent_at_utc: requestSentAtUtc,
-      provider_request_dispatched_at_utc: providerRequestDispatchedAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
       rail_meta_json: patch.rail_meta_json || null,
       provider_submit_diagnostic: providerSubmitDiagnostic
@@ -178904,7 +178979,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     max_runtime_ms: maxRuntimeMs,
     effective_max_runtime_ms: effectiveMaxRuntimeMs,
     configured_minimum_rpc_budget_ms: configuredMinimumRpcBudgetMs,
-    configured_minimum_rpc_budget_ms: configuredMinimumRpcBudgetMs,
     minimum_rpc_budget_ms: minimumRpcBudgetMs,
     rpc_safety_buffer_ms: rpcSafetyBufferMs,
     backend_rpc_timeout_ms: dbRpcHardCapMs,
@@ -179108,7 +179182,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     passSummaries.push(summary);
 
     logDrainDiag(sourceOnly ? 'WORKBENCH_SOURCE_BUILD_PARALLEL_LANE_RESULT' : 'WORKBENCH_DRAIN_RPC_RESULT', {
-      rpc_name: 'pay_workbench_worker_drain_chunk',
+      rpc_name: 'pay_workbench_worker_drain_chunk_revalidated_v1',
       ...summary,
       rpc_elapsed_ms: summary.elapsed_ms,
       session_ids_sample: sampleUuidValuesFromJobs(passJobs, ['session_id', 'workbench_session_id']),
@@ -179177,14 +179251,14 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     if (sourceOnly) sourceBuildParallelLaneRpcCount += 1;
     const rpcCallNumber = rpcCallCount;
     try {
-      const aggregate = unwrapRpc(await sbRpc(env, 'pay_workbench_worker_drain_chunk', rpcArgs, {
+      const aggregate = unwrapRpc(await sbRpc(env, 'pay_workbench_worker_drain_chunk_revalidated_v1', rpcArgs, {
         routeClass: 'PREVIEW_CHUNK',
         purpose: sourceOnly ? 'WORKBENCH_SOURCE_BUILD_PARALLEL_LANE' : 'WORKBENCH_DB_WORKER_DRAIN_CHUNK',
         timeoutMs,
         bankingPay: true
-      }), 'pay_workbench_worker_drain_chunk');
+      }), 'pay_workbench_worker_drain_chunk_revalidated_v1');
       if (!isPlainObject(aggregate) || !Object.prototype.hasOwnProperty.call(aggregate, 'more_due')) {
-        const invalidResponseError = new Error('pay_workbench_worker_drain_chunk returned an invalid aggregate response');
+        const invalidResponseError = new Error('pay_workbench_worker_drain_chunk_revalidated_v1 returned an invalid aggregate response');
         invalidResponseError.code = 'BANKING_PAY_WORKBENCH_DRAIN_RPC_INVALID_RESPONSE';
         throw invalidResponseError;
       }
@@ -179301,7 +179375,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         error_code: rpc.error.code
       });
       logDrainDiag('WORKBENCH_DRAIN_RPC_RESULT', {
-        rpc_name: 'pay_workbench_worker_drain_chunk',
+        rpc_name: 'pay_workbench_worker_drain_chunk_revalidated_v1',
         route: 'NORMAL',
         pass_number: passCount,
         rpc_call_count: rpc.rpc_call_number,
@@ -180343,7 +180417,20 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
       throw makeJobError('PREVIEW_ROW_MATERIALISE_INVALID_CONTEXT', 'Preview-row materialise job is missing a valid session_id.', Object.assign({}, baseResult, { retry_after_seconds: 60 }));
     }
     const result = await rpc('pay_workbench_preview_rows_materialise_chunk', buildWorkbenchChunkRpcArgs(jobType));
-    return finish('pay_workbench_preview_rows_materialise_chunk', result);
+    const materialisationComplete = result?.has_more !== true && !(result?.next_cursor && typeof result.next_cursor === 'object');
+    let recoveryHeadroomRevalidation = null;
+    if (materialisationComplete && uuidRe.test(candidateId)) {
+      recoveryHeadroomRevalidation = await rpc('pay_workbench_revalidate_zero_retained_recovery_headroom_v1', {
+        p_session_id: sessionId,
+        p_candidate_id: candidateId
+      });
+    }
+    return finish('pay_workbench_preview_rows_materialise_chunk', result, {
+      recovery_headroom_revalidation: recoveryHeadroomRevalidation,
+      recovery_headroom_revalidation_required: materialisationComplete && uuidRe.test(candidateId),
+      recovery_headroom_revalidation_completed: !!(recoveryHeadroomRevalidation && recoveryHeadroomRevalidation.ok !== false),
+      policy_x_authority_scope: 'PRE_DRAFT_LIVE_WORKBENCH_ONLY'
+    });
   }
 
   if (jobType === 'PAYEE_READINESS_ENSURE') {

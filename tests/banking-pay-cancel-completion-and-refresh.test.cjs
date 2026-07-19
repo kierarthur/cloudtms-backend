@@ -1,0 +1,76 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+
+const repeatablePath = path.resolve(
+  __dirname,
+  '../supabase/repeatable/19072026_1659_cancel_batch_audit_and_full_candidate_refresh.sql'
+);
+const repeatableSql = fs.readFileSync(repeatablePath, 'utf8');
+const workerSource = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
+
+function sliceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.ok(start >= 0, `missing start marker: ${startMarker}`);
+  assert.ok(end > start, `missing end marker: ${endMarker}`);
+  return source.slice(start, end);
+}
+
+test('repeatable follows the SQL function naming and placement convention', () => {
+  assert.match(path.basename(repeatablePath), /^\d{8}_\d{4}_[a-z0-9_]+\.sql$/);
+  assert.match(repeatableSql, /pay_payment_cancel_finalise_metadata_v1/);
+  assert.match(repeatableSql, /pay_payment_cancel_not_sent_and_recalculate_complete_v1/);
+  assert.match(repeatableSql, /pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1/);
+});
+
+test('cancellation completes all frozen work before it can report success', () => {
+  assert.match(repeatableSql, /WHILE v_complete IS NOT TRUE AND v_iteration < 100 LOOP/);
+  assert.match(repeatableSql, /pay_payment_correction_process_chunk\(/);
+  assert.match(repeatableSql, /PAYMENT_CANCEL_COMPLETE_LIMIT_EXCEEDED/);
+  assert.match(repeatableSql, /no partial cancellation was committed/);
+  assert.match(repeatableSql, /'is_complete', true/);
+});
+
+test('terminal cancellation metadata and actor audit are fail-closed and idempotent', () => {
+  assert.match(repeatableSql, /v_request\.correction_kind, ''\)\)\) <> 'PRE_BANK_CANCEL'/);
+  assert.match(repeatableSql, /v_request\.status, ''\)\)\) <> 'APPLIED'/);
+  assert.match(repeatableSql, /execution_commit_state, 'NOT_SUBMITTED'/);
+  assert.match(repeatableSql, /PAYMENT_CANCEL_FINALISE_ACTIVE_ITEMS_REMAIN/);
+  assert.match(repeatableSql, /cancelled_by_user_id = COALESCE/);
+  assert.match(repeatableSql, /'PAY_BATCH_CANCELLED'/);
+  assert.match(repeatableSql, /cancelled_by_display/);
+  assert.match(repeatableSql, /existing_audit\.correlation_id = p_correction_request_id::text/);
+});
+
+test('post-cancel complex candidates receive one full live rebuild with no targeted ids', () => {
+  assert.match(repeatableSql, /WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
+  assert.match(repeatableSql, /'targeted_timesheet_ids', '\[\]'::jsonb/);
+  assert.match(repeatableSql, /'linked_timesheet_ids', '\[\]'::jsonb/);
+  assert.match(repeatableSql, /'refresh_scope_kind', 'CANDIDATE_FULL_LIVE'/);
+  assert.match(repeatableSql, /'full_candidate_recovery_reallocation_required', true/);
+  assert.match(repeatableSql, /'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'/);
+  assert.doesNotMatch(repeatableSql, /selection_state\s*=\s*'READY'/);
+});
+
+test('Worker cancellation route uses only the completing and cancel-safe RPCs', () => {
+  const handler = sliceBetween(
+    workerSource,
+    'async function handleBankingPayBatchCancel',
+    'function buildBankingPayOperationPublicPayload'
+  );
+
+  assert.match(handler, /sbRpc\(env, 'pay_payment_cancel_not_sent_and_recalculate_complete_v1'/);
+  assert.match(handler, /sbRpc\(env, 'pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1'/);
+  assert.doesNotMatch(handler, /sbRpc\(env, 'pay_payment_cancel_not_sent_and_recalculate',/);
+  assert.doesNotMatch(handler, /sbRpc\(env, 'pay_workbench_patch_preview_after_batch_mutation',/);
+  assert.match(handler, /patch_existing_session_only: true/);
+  assert.match(handler, /source_session_discarded: false/);
+});
+
+test('Policy X remains frozen during cancel and switches to live truth only after cancel', () => {
+  assert.match(repeatableSql, /cancellation itself continues to operate only on frozen batch artifacts/);
+  assert.match(repeatableSql, /PRE_DRAFT_LIVE_TRUTH/);
+  assert.doesNotMatch(repeatableSql, /post[_ -]draft.*live.*fallback/i);
+});
