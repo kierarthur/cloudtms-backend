@@ -18046,7 +18046,9 @@ async function ensureCurrentBankingPayWorkbenchSession(env, scope = {}, options 
       'same_week_paye_override_verified_by_user_id', 'sameWeekPayeOverrideVerifiedByUserId',
       'same_week_paye_override_verified_at_utc', 'sameWeekPayeOverrideVerifiedAtUtc',
       'session_signature', 'sessionSignature', 'session_id', 'sessionId', 'source_session_id', 'sourceSessionId', 'workbench_session_id', 'workbenchSessionId',
-      'scope_is_row_backed', 'scope_seed_source', 'scope_count_unknown', 'scopeSeedSource', 'scopeCountUnknown',
+      // Keep the database-authored canonical scope markers. The shared-open
+      // RPC compares them when selecting the previous pay-date clone source.
+      'scopeSeedSource', 'scopeCountUnknown',
       'row_backed_scope', 'rowBackedScope', 'asynchronous', 'root_scope_job_id', 'root_job_id', 'work_queued',
       'progress_state', 'progress_json', 'progress_counter_version', 'replacement_session_id', 'replacement_idempotency_key'
     ]);
@@ -18502,7 +18504,9 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
       'same_week_paye_override_verified_by_user_id', 'sameWeekPayeOverrideVerifiedByUserId',
       'same_week_paye_override_verified_at_utc', 'sameWeekPayeOverrideVerifiedAtUtc',
       'session_signature', 'sessionSignature', 'session_id', 'sessionId', 'source_session_id', 'sourceSessionId', 'workbench_session_id', 'workbenchSessionId',
-      'scope_is_row_backed', 'scope_seed_source', 'scope_count_unknown', 'scopeSeedSource', 'scopeCountUnknown',
+      // Keep the database-authored canonical scope markers. The shared-open
+      // RPC compares them when selecting the previous pay-date clone source.
+      'scopeSeedSource', 'scopeCountUnknown',
       'row_backed_scope', 'rowBackedScope', 'asynchronous', 'root_scope_job_id', 'root_job_id', 'work_queued',
       'progress_state', 'progress_json', 'progress_counter_version', 'replacement_session_id', 'replacement_idempotency_key'
     ]);
@@ -18707,6 +18711,7 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
 
   for (const scope of scopes) {
     let result = null;
+    let cloneFromSessionId = '';
     try {
       const orderedSources = (Array.isArray(scope.source_old_sessions) ? scope.source_old_sessions.slice() : [])
         .filter((row) => uuidRe.test(trimStr(row?.id)) && isoDateRe.test(trimStr(row?.pay_date)))
@@ -18721,7 +18726,7 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
           return trimStr(left.id).localeCompare(trimStr(right.id));
         });
       const selectedSource = orderedSources[0] || null;
-      const cloneFromSessionId = trimStr(selectedSource?.id || '');
+      cloneFromSessionId = trimStr(selectedSource?.id || '');
       const rolloverOpenOptions = {
         allow_session_rebase: true,
         allowSessionRebase: true,
