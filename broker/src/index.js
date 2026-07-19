@@ -8068,6 +8068,19 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
   }
 
   const defaultMessages = {
+    WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED: {
+      ok: false,
+      http_status: 409,
+      severity: 'warning',
+      title: 'Banking Pay selection changed',
+      message: 'Banking Pay was changed by another user or window. The latest selection is now shown. Review it, then click Create Draft again.',
+      user_action: 'REVIEW_LATEST_SELECTION',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      no_operation_started: true,
+      no_batch_created: true
+    },
     EXECUTE_PAYMENT_INVALID_REQUEST: {
       ok: false,
       http_status: 400,
@@ -13971,6 +13984,7 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
       'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID',
       'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID',
       'WORKBENCH_SESSION_PROGRESS_CHANGED',
+      'WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED',
       'OBSOLETE_SESSION',
       'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
     ]);
@@ -14007,7 +14021,8 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
           || c === 'WORKBENCH_SESSION_CONTEXT_REQUIRED'
           || c === 'WORKBENCH_SESSION_VERSION_CONTEXT_REQUIRED'
           || c === 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED'
-          || c === 'WORKBENCH_SESSION_PROGRESS_CHANGED') return 409;
+          || c === 'WORKBENCH_SESSION_PROGRESS_CHANGED'
+          || c === 'WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED') return 409;
       if (c === 'WORKBENCH_SESSION_VERSION_CONTEXT_INVALID'
           || c === 'WORKBENCH_SESSION_PROGRESS_CONTEXT_INVALID') return 400;
       if (validationStatusCodes.has(c)) return 400;
@@ -14344,7 +14359,8 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
     );
     const sessionRow = rows && rows[0] ? rows[0] : null;
     if (!sessionRow) return failure(404, 'WORKBENCH_SESSION_NOT_FOUND', 'This payment preview no longer exists. Reopen Banking Pay.');
-    if (trimStr(sessionRow.actor_user_id) !== actorUserId) return failure(403, 'WORKBENCH_SESSION_FORBIDDEN', 'This payment preview belongs to another user. Reopen Banking Pay.');
+    // Banking Pay workbench sessions are shared. actor_user_id is creation audit only;
+    // the authenticated actor is still passed to each authorised mutation RPC.
     if (trimStr(sessionRow.status).toUpperCase() !== 'OPEN' || sessionRow.discarded_at_utc) {
       return failure(409, 'OBSOLETE_SESSION', 'This payment preview is no longer current. Reopen Banking Pay.');
     }
@@ -30585,6 +30601,27 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   }
 
   const previousSelectedIds = selectedPreviewRowIds.slice();
+  const reviewedGlobalSelectedIds = uniqueStrings(previousSelectedIds).sort();
+  const authoritativeGlobalSelectedIds = uniqueStrings(
+    Array.isArray(currentSelection.all_selected_preview_row_ids)
+      ? currentSelection.all_selected_preview_row_ids
+      : []
+  ).sort();
+  const reviewedSelectionStillCurrent = reviewedGlobalSelectedIds.length === authoritativeGlobalSelectedIds.length
+    && reviewedGlobalSelectedIds.every((rowId, index) => rowId === authoritativeGlobalSelectedIds[index]);
+  if (!reviewedSelectionStillCurrent) {
+    return fail(409, 'WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED', 'Banking Pay was changed by another user or window. The latest selection is now shown. Review it, then click Create Draft again.', {
+      session_id: sessionId,
+      expected_progress_counter_version: suppliedExpectedProgressCounterVersion,
+      current_progress_counter_version: postSyncProgressCounterVersion,
+      reviewed_selected_preview_row_count: reviewedGlobalSelectedIds.length,
+      current_selected_preview_row_count: authoritativeGlobalSelectedIds.length,
+      operation_started: false,
+      no_operation_started: true,
+      no_batch_created: true,
+      selection_review_required: true
+    });
+  }
   const sessionFilters = isPlainObject(currentSelection.filters_json) ? currentSelection.filters_json : {};
   const sessionCandidateFilterId = trimStr(sessionFilters.candidate_id || sessionFilters.candidateId || '');
   const sessionClientFilterId = trimStr(sessionFilters.client_id || sessionFilters.clientId || '');
@@ -31168,10 +31205,18 @@ const idempotencyHash = await sha256Hex(stableStringify({
     draft_selected_economic_keys: selectedEconomicKeys,
     submitted_preview_row_ids_before_current_selection_refresh: previousSelectedIds,
     current_selection_refreshed_before_operation_start: true,
+    expected_workbench_selected_preview_row_ids: reviewedGlobalSelectedIds,
+    expected_workbench_progress_counter_version: postSyncProgressCounterVersion,
+    selection_review_contract_version: 1,
+    selection_reviewed_by_user_id: actorUserId,
     workbench_readiness_snapshot: {
       session_id: sessionId,
       session_version: sessionVersion,
       progress_counter_version: authoritativeReadinessSnapshot ? authoritativeReadinessSnapshot.progress_counter_version : null,
+      expected_workbench_selected_preview_row_ids: reviewedGlobalSelectedIds,
+      expected_workbench_progress_counter_version: postSyncProgressCounterVersion,
+      selection_review_contract_version: 1,
+      selection_reviewed_by_user_id: actorUserId,
       session_ready: authoritativeReadinessSnapshot ? authoritativeReadinessSnapshot.session_ready === true : false,
       ready_for_draft: authoritativeReadinessSnapshot ? authoritativeReadinessSnapshot.ready_for_draft === true : false,
       selected_eligible_ready_row_count: authoritativeReadinessSnapshot ? authoritativeReadinessSnapshot.selected_eligible_ready_row_count : selectedCount,

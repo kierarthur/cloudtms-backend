@@ -26,7 +26,8 @@ test('workbench refresh route recomputes pre-draft live rows without payment exe
     'handleBankingPayWorkbenchSessionGetPreviewPage'
   );
 
-  assert.match(body, /sessionRow\.actor_user_id\) !== actorUserId/);
+  assert.doesNotMatch(body, /sessionRow\.actor_user_id\) !== actorUserId/, 'shared workbench refresh must not be limited to the session creator');
+  assert.match(body, /sessions are shared[\s\S]*authenticated actor is still passed/i);
   assert.match(body, /sessionRow\.status\)\.toUpperCase\(\) !== 'OPEN'/);
   assert.match(body, /pay_workbench_enqueue_session_candidate_refresh/);
   assert.match(body, /refresh_scope_kind: 'SESSION_FULL_LIVE'/);
