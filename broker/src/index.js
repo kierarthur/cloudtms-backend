@@ -19983,6 +19983,27 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
   }
 }
 
+function normalizeFinanceWriteOffDisplayFields(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const writtenOff =
+    !!String(value.written_off_at_utc || '').trim() ||
+    !!String(value.write_off_reason || '').trim() ||
+    String(value.ledger_status || '').trim().toUpperCase() === 'WRITTEN_OFF' ||
+    String(value.status || '').trim().toUpperCase() === 'WRITTEN_OFF';
+
+  if (!writtenOff) return value;
+
+  return {
+    ...value,
+    status: 'WRITTEN_OFF',
+    finance_status: 'WRITTEN_OFF',
+    ledger_status: 'WRITTEN_OFF',
+    lifecycle_status_display: 'Written off',
+    finance_lifecycle_status_display: 'Written off'
+  };
+}
+
 async function handleBankingFinanceLedgerExportCsv(env, req, user) {
   const actorUser = (() => {
     if (user && typeof user === 'object' && user.id) return user;
@@ -20106,7 +20127,9 @@ async function handleBankingFinanceLedgerExportCsv(env, req, user) {
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_finance_ledger_export_rows');
-    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    const rows = Array.isArray(payload?.rows)
+      ? payload.rows.map((row) => normalizeFinanceWriteOffDisplayFields(row))
+      : [];
     const summary = (payload && typeof payload.summary === 'object' && payload.summary) ? payload.summary : {};
     const meta = (payload && typeof payload.meta === 'object' && payload.meta) ? payload.meta : {};
     const appliedFilters = (meta && typeof meta.applied_filters === 'object' && meta.applied_filters) ? meta.applied_filters : {};
@@ -90938,14 +90961,75 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
     true
   );
 
+  const parsePage = (raw, label) => {
+    if (raw == null || String(raw).trim() === '') return { value: 1 };
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) return { error: `${label} must be a whole number greater than or equal to 1` };
+    return { value: n };
+  };
+
+  const parsePageSize = (raw, label) => {
+    if (raw == null || String(raw).trim() === '') return { value: 20 };
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) return { error: `${label} must be a whole number greater than or equal to 1` };
+    return { value: Math.min(n, 20) };
+  };
+
+  const financePageParsed = parsePage(
+    u.searchParams.get('finance_page') ?? u.searchParams.get('financePage'),
+    'finance_page'
+  );
+  const timesheetPageParsed = parsePage(
+    u.searchParams.get('timesheet_page') ?? u.searchParams.get('timesheetPage'),
+    'timesheet_page'
+  );
+  const financePageSizeParsed = parsePageSize(
+    u.searchParams.get('finance_page_size') ?? u.searchParams.get('financePageSize'),
+    'finance_page_size'
+  );
+  const timesheetPageSizeParsed = parsePageSize(
+    u.searchParams.get('timesheet_page_size') ?? u.searchParams.get('timesheetPageSize'),
+    'timesheet_page_size'
+  );
+
+  for (const parsed of [financePageParsed, timesheetPageParsed, financePageSizeParsed, timesheetPageSizeParsed]) {
+    if (parsed.error) return withCORS(env, req, badRequest(parsed.error));
+  }
+
+  const caseTypeRaw = String(u.searchParams.get('case_type') || u.searchParams.get('caseType') || '').trim().toUpperCase();
+  const viewModeRaw = String(u.searchParams.get('view_mode') || u.searchParams.get('viewMode') || '').trim().toUpperCase();
+  const snoozeModeRaw = String(u.searchParams.get('snooze_mode') || u.searchParams.get('snoozeMode') || '').trim().toUpperCase();
+  const financeSortKeyRaw = String(u.searchParams.get('finance_sort_key') || u.searchParams.get('financeSortKey') || 'created_at').trim().toLowerCase();
+  const financeSortDirRaw = String(u.searchParams.get('finance_sort_dir') || u.searchParams.get('financeSortDir') || 'desc').trim().toLowerCase();
+
+  const allowedCaseTypes = new Set(['', 'PAYMENT_ADVANCE', 'OVERPAYMENT', 'UNDERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT', 'MANUAL_CREDIT_ADJUSTMENT']);
+  const allowedViewModes = new Set(['', 'ACTIVE', 'SNOOZED', 'HISTORY']);
+  const allowedSnoozeModes = new Set(['', 'DATED', 'INDEFINITE']);
+  const allowedFinanceSortKeys = new Set(['created_at', 'candidate', 'case_type']);
+
+  if (!allowedCaseTypes.has(caseTypeRaw)) return withCORS(env, req, badRequest('case_type is not supported'));
+  if (!allowedViewModes.has(viewModeRaw)) return withCORS(env, req, badRequest('view_mode must be ACTIVE, SNOOZED, or HISTORY'));
+  if (!allowedSnoozeModes.has(snoozeModeRaw)) return withCORS(env, req, badRequest('snooze_mode must be DATED or INDEFINITE'));
+  if (!allowedFinanceSortKeys.has(financeSortKeyRaw)) return withCORS(env, req, badRequest('finance_sort_key must be created_at, candidate, or case_type'));
+  if (!['asc', 'desc'].includes(financeSortDirRaw)) return withCORS(env, req, badRequest('finance_sort_dir must be asc or desc'));
+
   try {
-    const rpcRes = await sbRpc(env, 'pay_loans_snoozes_list', {
+    const rpcRes = await sbRpc(env, 'pay_loans_snoozes_page', {
       p_candidate_id: candidateIdRaw || null,
       p_client_id: clientIdRaw || null,
-      p_hide_completed_non_current_items: hideCompletedNonCurrentItems
+      p_hide_completed_non_current_items: hideCompletedNonCurrentItems,
+      p_case_type: caseTypeRaw || null,
+      p_view_mode: viewModeRaw || null,
+      p_snooze_mode: snoozeModeRaw || null,
+      p_finance_page: financePageParsed.value,
+      p_finance_page_size: financePageSizeParsed.value,
+      p_finance_sort_key: financeSortKeyRaw,
+      p_finance_sort_dir: financeSortDirRaw,
+      p_timesheet_page: timesheetPageParsed.value,
+      p_timesheet_page_size: timesheetPageSizeParsed.value
     });
 
-    const payload = unwrapRpc(rpcRes, 'pay_loans_snoozes_list');
+    const payload = unwrapRpc(rpcRes, 'pay_loans_snoozes_page');
     const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
 
     const filtersIn = (payloadObj.filters && typeof payloadObj.filters === 'object' && !Array.isArray(payloadObj.filters))
@@ -91033,8 +91117,11 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
         row?.oneoff_bank_details_editable === true;
 
       return {
-        ...row,
+        ...normalizeFinanceWriteOffDisplayFields(row),
         status: writtenOff ? 'WRITTEN_OFF' : status,
+        finance_status: writtenOff ? 'WRITTEN_OFF' : String(row?.finance_status || status || '').trim().toUpperCase(),
+        lifecycle_status_display: writtenOff ? 'Written off' : row?.lifecycle_status_display,
+        finance_lifecycle_status_display: writtenOff ? 'Written off' : (row?.finance_lifecycle_status_display ?? row?.lifecycle_status_display),
         row_label: rowLabel,
         blocked_state: blockedState,
         blocked_reason: blockedReason,
@@ -93393,7 +93480,8 @@ async function handleBankingFinanceCaseWriteOff(env, req, user, financeCaseId) {
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_finance_case_write_off');
-    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+    const payloadObj = (payload && typeof payload === 'object') ? payload : {};
+    return withCORS(env, req, ok(normalizeFinanceWriteOffDisplayFields(payloadObj)));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to write off finance case')));
   }
