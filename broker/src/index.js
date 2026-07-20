@@ -61335,9 +61335,28 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   async function discoverCreatedDraftBatchIds() {
     const extraValues = Array.prototype.slice.call(arguments);
     const ids = new Set();
-    collectPayBatchIdsFromValue(progressJson, ids);
-    collectPayBatchIdsFromValue(inputJson, ids);
-    for (const value of extraValues || []) collectPayBatchIdsFromValue(value, ids);
+    const addExplicitBatchIds = (value, includeSingularIds = false) => {
+      const source = safeObject(value);
+      for (const batchId of uniqueDraftUuidArray([].concat(
+        source.created_pay_batch_ids || [],
+        source.createdPayBatchIds || [],
+        source.pay_batch_ids || [],
+        source.payBatchIds || [],
+        includeSingularIds ? (source.primary_pay_batch_id || []) : [],
+        includeSingularIds ? (source.primaryPayBatchId || []) : [],
+        includeSingularIds ? (source.pay_batch_id || []) : [],
+        includeSingularIds ? (source.payBatchId || []) : []
+      ))) ids.add(batchId);
+    };
+
+    // Only operation-owned creation outputs are cleanup candidates. Draft input and
+    // validation payloads can legitimately mention older batches (for example the
+    // same-week PAYE guardrail) and must never be interpreted as newly created drafts.
+    addExplicitBatchIds(progressJson, true);
+    for (const shellResult of Array.isArray(progressJson?.batch_shells) ? progressJson.batch_shells : []) {
+      addExplicitBatchIds(shellResult, true);
+    }
+    for (const value of extraValues || []) addExplicitBatchIds(value, false);
 
     try {
       const scopes = await fetchCandidateScopes('&limit=50000');
@@ -61349,8 +61368,11 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 
     const chunks = await fetchOperationChunkRowsForCleanup();
     for (const chunk of chunks || []) {
-      collectPayBatchIdsFromValue(chunk?.result_json, ids);
-      collectPayBatchIdsFromValue(chunk?.error_json, ids);
+      const chunkResult = safeObject(chunk?.result_json);
+      addExplicitBatchIds(chunkResult, true);
+      for (const resultRow of Array.isArray(chunkResult.results) ? chunkResult.results : []) {
+        addExplicitBatchIds(resultRow, true);
+      }
     }
 
     return uniqueUuidArray(Array.from(ids));
