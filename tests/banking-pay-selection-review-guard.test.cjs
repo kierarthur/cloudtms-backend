@@ -11,6 +11,10 @@ const guardSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/19072026_2344_banking_pay_shared_selection_guard.sql'),
   'utf8'
 );
+const previewRevisionSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/20072026_0117_banking_pay_preview_selection_revision.sql'),
+  'utf8'
+);
 
 function sliceBetween(source, startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -74,4 +78,15 @@ test('prepare-draft remains service-role only and preserves the Policy X boundar
   assert.match(guardSql, /GRANT EXECUTE ON FUNCTION public\.pay_workbench_prepare_draft[\s\S]*TO service_role;/);
   assert.match(guardSql, /Policy X: this validates live workbench truth only before draft freeze/);
   assert.doesNotMatch(guardSql, /pay_batch_execute|pay_batch_settle|provider_submission/i);
+});
+
+test('preview page exposes the authoritative shared selection revision', () => {
+  assert.equal(
+    (previewRevisionSql.match(/CREATE OR REPLACE FUNCTION public\.pay_workbench_session_get_preview_page/g) || []).length,
+    1
+  );
+  assert.match(previewRevisionSql, /'session_version', v_session_row\.version/);
+  assert.match(previewRevisionSql, /'progress_counter_version', COALESCE\(v_session_row\.progress_counter_version, 0\)/);
+  assert.match(previewRevisionSql, /'selected_row_count', COALESCE\(v_session_row\.selected_row_count, 0\)/);
+  assert.doesNotMatch(previewRevisionSql, /pay_batch_execute|pay_batch_settle|provider_submission/i);
 });
