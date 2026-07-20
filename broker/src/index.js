@@ -60115,6 +60115,84 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     }
     return null;
   };
+  const extractWorkbenchSelectionChangedDraftFailure = (value) => {
+    const queue = [];
+    const seenObjects = new Set();
+    const seenStrings = new Set();
+    const enqueue = (candidate) => {
+      if (candidate == null) return;
+      if (typeof candidate === 'string') {
+        const text = candidate.trim();
+        if (!text || seenStrings.has(text)) return;
+        seenStrings.add(text);
+        queue.push(text);
+        const parsed = parseDraftSafetyEmbeddedObject(text);
+        if (parsed) queue.push(parsed);
+        return;
+      }
+      if (candidate && typeof candidate === 'object') {
+        if (seenObjects.has(candidate)) return;
+        seenObjects.add(candidate);
+      }
+      queue.push(candidate);
+    };
+    enqueue(value);
+    while (queue.length) {
+      const candidate = queue.shift();
+      if (typeof candidate === 'string') {
+        if (!candidate.toUpperCase().includes('WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED')) continue;
+        return {
+          ok: false,
+          code: 'WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED',
+          error_code: 'WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED',
+          title: 'Banking Pay selection changed',
+          message: 'Banking Pay was changed by another user or window. The latest selection is now shown. Review it, then click Create Draft again.',
+          operation_id: operationId || null,
+          workbench_session_id: workbenchSessionId || null,
+          selection_review_required: true,
+          refresh_required: true,
+          next_action: 'REVIEW_LATEST_SELECTION',
+          retryable: false,
+          operation_created: true,
+          operation_started: true,
+          no_operation_started: false,
+          no_batch_created: true
+        };
+      }
+      const node = safeObject(candidate);
+      const directCode = upperTrim(node.code || node.error_code || node.errorCode || '');
+      const directMessage = trimStr(node.message || node.error || node.reason || '');
+      if (directCode === 'WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED'
+          || directMessage.toUpperCase().includes('WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED')) {
+        return {
+          ok: false,
+          code: 'WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED',
+          error_code: 'WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED',
+          title: 'Banking Pay selection changed',
+          message: 'Banking Pay was changed by another user or window. The latest selection is now shown. Review it, then click Create Draft again.',
+          operation_id: trimStr(node.operation_id || node.operationId || operationId) || operationId || null,
+          workbench_session_id: trimStr(node.workbench_session_id || node.workbenchSessionId || node.session_id || node.sessionId || workbenchSessionId) || workbenchSessionId || null,
+          selection_review_required: true,
+          refresh_required: true,
+          next_action: 'REVIEW_LATEST_SELECTION',
+          retryable: false,
+          operation_created: true,
+          operation_started: true,
+          no_operation_started: false,
+          no_batch_created: true
+        };
+      }
+      for (const key of [
+        'details', 'detail', 'body', 'json', 'payload', 'error', 'message', 'reason', 'hint',
+        'error_json', 'errorJson', 'result_json', 'resultJson', 'progress_json', 'progressJson',
+        'rpc_error', 'rpcError', 'original_error', 'originalError', 'cause', 'response'
+      ]) {
+        if (Object.prototype.hasOwnProperty.call(node, key)) enqueue(node[key]);
+      }
+      if (Array.isArray(node.errors)) node.errors.forEach(enqueue);
+    }
+    return null;
+  };
   const scheduleActiveSnoozeDraftRefresh = (failureLike) => {
     const failure = safeObject(failureLike);
     const hasWaitUntil = (value) => !!(value && typeof value === 'object' && typeof value.waitUntil === 'function');
@@ -63539,6 +63617,23 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           save_error: String(saveError?.message || saveError || '')
         });
       }
+    }
+    const selectionChangedFailure = extractWorkbenchSelectionChangedDraftFailure(e);
+    if (selectionChangedFailure) {
+      const failedOperation = await finishFailedWithCleanup(null, selectionChangedFailure, {
+        phase,
+        reason: 'WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED'
+      });
+      return Object.assign({}, safeObject(failedOperation), selectionChangedFailure, {
+        ok: false,
+        status: 'FAILED',
+        phase,
+        terminal: true,
+        requires_user_action: true,
+        review_required: true,
+        error: selectionChangedFailure,
+        error_json: selectionChangedFailure
+      });
     }
     const activeSnoozeFailure = extractActiveSnoozeDraftFailure(e);
     if (activeSnoozeFailure) {

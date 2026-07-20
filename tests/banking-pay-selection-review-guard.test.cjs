@@ -90,3 +90,21 @@ test('preview page exposes the authoritative shared selection revision', () => {
   assert.match(previewRevisionSql, /'selected_row_count', COALESCE\(v_session_row\.selected_row_count, 0\)/);
   assert.doesNotMatch(previewRevisionSql, /pay_batch_execute|pay_batch_settle|provider_submission/i);
 });
+test('draft scope lock mismatch retains the selection-review failure contract', () => {
+  const advanceBody = sliceBetween(
+    workerSource,
+    'async function advanceBankingPayDraftCreateOperation',
+    'async function handleBankingPaySnoozeValidate'
+  );
+
+  assert.match(advanceBody, /const extractWorkbenchSelectionChangedDraftFailure =/);
+  assert.match(advanceBody, /candidate\.toUpperCase\(\)\.includes\('WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED'\)/);
+  assert.match(advanceBody, /operation_created: true/);
+  assert.match(advanceBody, /operation_started: true/);
+  assert.match(advanceBody, /no_operation_started: false/);
+  assert.match(advanceBody, /no_batch_created: true/);
+  const selectionCatch = advanceBody.lastIndexOf('const selectionChangedFailure = extractWorkbenchSelectionChangedDraftFailure(e)');
+  const genericCatch = advanceBody.lastIndexOf("code: 'DRAFT_CREATE_OPERATION_FAILED'");
+  assert.ok(selectionCatch >= 0);
+  assert.ok(genericCatch > selectionCatch, 'selection-review failure must be handled before the generic draft failure');
+});
