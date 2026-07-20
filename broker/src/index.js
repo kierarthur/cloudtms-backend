@@ -91190,10 +91190,10 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
   };
 
   const parsePageSize = (raw, label) => {
-    if (raw == null || String(raw).trim() === '') return { value: 20 };
+    if (raw == null || String(raw).trim() === '') return { value: 10 };
     const n = Number(raw);
     if (!Number.isInteger(n) || n < 1) return { error: `${label} must be a whole number greater than or equal to 1` };
-    return { value: Math.min(n, 20) };
+    return { value: Math.min(n, 50) };
   };
 
   const financePageParsed = parsePage(
@@ -91222,20 +91222,25 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
   const snoozeModeRaw = String(u.searchParams.get('snooze_mode') || u.searchParams.get('snoozeMode') || '').trim().toUpperCase();
   const financeSortKeyRaw = String(u.searchParams.get('finance_sort_key') || u.searchParams.get('financeSortKey') || 'created_at').trim().toLowerCase();
   const financeSortDirRaw = String(u.searchParams.get('finance_sort_dir') || u.searchParams.get('financeSortDir') || 'desc').trim().toLowerCase();
+  const timesheetSortKeyRaw = String(u.searchParams.get('timesheet_sort_key') || u.searchParams.get('timesheetSortKey') || 'created_at').trim().toLowerCase();
+  const timesheetSortDirRaw = String(u.searchParams.get('timesheet_sort_dir') || u.searchParams.get('timesheetSortDir') || 'desc').trim().toLowerCase();
 
   const allowedCaseTypes = new Set(['', 'PAYMENT_ADVANCE', 'OVERPAYMENT', 'UNDERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT', 'MANUAL_CREDIT_ADJUSTMENT']);
   const allowedViewModes = new Set(['', 'ACTIVE', 'SNOOZED', 'HISTORY']);
   const allowedSnoozeModes = new Set(['', 'DATED', 'INDEFINITE']);
   const allowedFinanceSortKeys = new Set(['created_at', 'candidate', 'case_type']);
+  const allowedTimesheetSortKeys = new Set(['created_at', 'candidate', 'timesheet']);
 
   if (!allowedCaseTypes.has(caseTypeRaw)) return withCORS(env, req, badRequest('case_type is not supported'));
   if (!allowedViewModes.has(viewModeRaw)) return withCORS(env, req, badRequest('view_mode must be ACTIVE, SNOOZED, or HISTORY'));
   if (!allowedSnoozeModes.has(snoozeModeRaw)) return withCORS(env, req, badRequest('snooze_mode must be DATED or INDEFINITE'));
   if (!allowedFinanceSortKeys.has(financeSortKeyRaw)) return withCORS(env, req, badRequest('finance_sort_key must be created_at, candidate, or case_type'));
   if (!['asc', 'desc'].includes(financeSortDirRaw)) return withCORS(env, req, badRequest('finance_sort_dir must be asc or desc'));
+  if (!allowedTimesheetSortKeys.has(timesheetSortKeyRaw)) return withCORS(env, req, badRequest('timesheet_sort_key must be created_at, candidate, or timesheet'));
+  if (!['asc', 'desc'].includes(timesheetSortDirRaw)) return withCORS(env, req, badRequest('timesheet_sort_dir must be asc or desc'));
 
   try {
-    const rpcRes = await sbRpc(env, 'pay_loans_snoozes_page', {
+    const rpcRes = await sbRpc(env, 'pay_loans_snoozes_page_v2', {
       p_candidate_id: candidateIdRaw || null,
       p_client_id: clientIdRaw || null,
       p_hide_completed_non_current_items: hideCompletedNonCurrentItems,
@@ -91247,10 +91252,12 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
       p_finance_sort_key: financeSortKeyRaw,
       p_finance_sort_dir: financeSortDirRaw,
       p_timesheet_page: timesheetPageParsed.value,
-      p_timesheet_page_size: timesheetPageSizeParsed.value
+      p_timesheet_page_size: timesheetPageSizeParsed.value,
+      p_timesheet_sort_key: timesheetSortKeyRaw,
+      p_timesheet_sort_dir: timesheetSortDirRaw
     });
 
-    const payload = unwrapRpc(rpcRes, 'pay_loans_snoozes_page');
+    const payload = unwrapRpc(rpcRes, 'pay_loans_snoozes_page_v2');
     const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
 
     const filtersIn = (payloadObj.filters && typeof payloadObj.filters === 'object' && !Array.isArray(payloadObj.filters))
