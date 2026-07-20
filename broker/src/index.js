@@ -22616,9 +22616,9 @@ function buildRemittanceEmailPayload(job, context = {}) {
   const makeCandidate = (candidateLike, rootTimesheets = null) => {
     const candidate = (candidateLike && typeof candidateLike === 'object') ? candidateLike : {};
     const recipient = (sourceJob.recipient && typeof sourceJob.recipient === 'object') ? sourceJob.recipient : {};
-    const candidateId = String(candidate.candidate_id || recipient.candidate_id || '').trim();
-    const displayName = String(candidate.display_name || recipient.display_name || '').trim();
-    const tmsRef = String(candidate.tms_ref || recipient.tms_ref || '').trim();
+    const candidateId = String(candidate.candidate_id || candidate.candidateId || recipient.candidate_id || recipient.candidateId || '').trim();
+    const displayName = String(candidate.display_name || candidate.candidate_display_name || candidate.name || recipient.display_name || recipient.name || '').trim();
+    const tmsRef = String(candidate.tms_ref || candidate.candidate_tms_ref || candidate.works_number || recipient.tms_ref || recipient.works_number || '').trim();
     const timesheetsRaw = Array.isArray(rootTimesheets)
       ? rootTimesheets
       : collectArrays(candidate.timesheets, candidate.timesheet_sections, candidate.timesheetSections, candidate.timesheet_summaries, candidate.timesheetSummaries);
@@ -22717,7 +22717,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
   const scope = String(ctx.scope || sourceJob.pay_channel_scope || sourceJob.scope || 'ALL').trim().toUpperCase();
   const recipientName = isUmbrellaJob
     ? String(recipient.name || sourceJob.umbrella_name || 'Umbrella').trim()
-    : String(recipient.display_name || sourceJob.display_name || 'Candidate').trim();
+    : String(recipient.display_name || recipient.name || sourceJob.display_name || sourceJob.candidate_display_name || sourceJob.candidate?.display_name || sourceJob.candidate?.candidate_display_name || 'Candidate').trim();
   const subjectBase = isUmbrellaJob
     ? `Remittance Advice – ${recipientName || 'Umbrella'} – Pay batch ${shortId(payBatchId)} – ${payDateLabel}`
     : isUmbrellaCopyJob
@@ -22744,11 +22744,16 @@ function buildRemittanceEmailPayload(job, context = {}) {
     sourceJob.other_non_timesheet_lines,
     sourceJob.otherNonTimesheetLines
   ));
-  const sourceCandidates = Array.isArray(sourceJob.candidates) ? sourceJob.candidates : [];
+  const nestedCandidate = (sourceJob.candidate && typeof sourceJob.candidate === 'object' && !Array.isArray(sourceJob.candidate))
+    ? sourceJob.candidate
+    : null;
+  const sourceCandidates = Array.isArray(sourceJob.candidates) && sourceJob.candidates.length
+    ? sourceJob.candidates
+    : (nestedCandidate ? [nestedCandidate] : []);
   const fallbackCandidateFromRoot = {
-    candidate_id: recipient.candidate_id || sourceJob.candidate_id || sourceJob.candidateId || '',
-    display_name: recipient.display_name || sourceJob.display_name || sourceJob.candidate_display_name || '',
-    tms_ref: recipient.tms_ref || sourceJob.tms_ref || sourceJob.candidate_tms_ref || '',
+    candidate_id: recipient.candidate_id || sourceJob.candidate_id || sourceJob.candidateId || nestedCandidate?.candidate_id || '',
+    display_name: recipient.display_name || recipient.name || sourceJob.display_name || sourceJob.candidate_display_name || nestedCandidate?.display_name || nestedCandidate?.candidate_display_name || '',
+    tms_ref: recipient.tms_ref || recipient.works_number || sourceJob.tms_ref || sourceJob.candidate_tms_ref || nestedCandidate?.tms_ref || nestedCandidate?.candidate_tms_ref || nestedCandidate?.works_number || '',
     umbrella_id: recipient.umbrella_id || recipient.umbrellaId || sourceJob.umbrella_id || sourceJob.umbrellaId || '',
     final_payable: sourceJob.final_payable ?? sourceJob.finalPayable ?? null,
     net_inc_vat: sourceJob.net_inc_vat ?? sourceJob.netIncVat ?? null,
@@ -22762,7 +22767,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
   };
   const candidates = isUmbrellaJob
     ? uniqueBy((sourceCandidates.length ? sourceCandidates : ((rootTimesheets.length || rootNonTimesheetLines.length) ? [fallbackCandidateFromRoot] : [])).map((candidate) => makeCandidate(candidate)), candidateKey)
-    : [makeCandidate(fallbackCandidateFromRoot)];
+    : [makeCandidate(sourceCandidates[0] || fallbackCandidateFromRoot)];
   const summary = (sourceJob.summary && typeof sourceJob.summary === 'object') ? sourceJob.summary : {};
   const computedSummary = candidates.reduce((acc, candidate) => {
     const ft = candidate.frozen_totals || {};
@@ -22812,12 +22817,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
     });
     return hasTimesheetRows || normaliseLines(collectArrays(c.non_timesheet_lines, c.nonTsLines, c.nonTimesheetLines, c.deductions, c.recoveries, c.finance_lines, c.financeLines, c.adjustment_lines, c.adjustmentLines, c.other_non_timesheet_lines, c.otherNonTimesheetLines)).length > 0;
   };
-  const candidatePayableAmount = (candidate) => {
-    const ft = (candidate && candidate.frozen_totals && typeof candidate.frozen_totals === 'object') ? candidate.frozen_totals : {};
-    const totals = (candidate && candidate.totals && typeof candidate.totals === 'object') ? candidate.totals : {};
-    return moneyNum(ft.final_payable ?? ft.net_inc_vat ?? ft.gross_inc_vat ?? totals.final_payable ?? totals.net_inc_vat ?? totals.gross_inc_vat);
-  };
-  const renderIncomplete = grandTotals.final_payable > 0 && (!candidates.length || candidates.some((candidate) => candidatePayableAmount(candidate) > 0 && !candidateHasRenderableDetail(candidate)));
+  const renderIncomplete = grandTotals.final_payable > 0 && (!candidates.length || candidates.some((candidate) => !candidateHasRenderableDetail(candidate)));
   const detailedBreakdown = sourceJob.detailed_breakdown === true || ctx.detailedBreakdown === true;
   const headerMessage = firstNonBlank(ctx.headerMessage, sourceJob.header_message, sourceJob.headerMessage, 'Please find below a remittance advice for authorised timesheets:');
   const footerMessage = firstNonBlank(ctx.footerMessage, sourceJob.footer_message, sourceJob.footerMessage, 'Many thanks Arthur Rai Medical Services');
@@ -23473,6 +23473,32 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
   } catch (e) {
     return rpcErrorResponse(e, 'RETRY_PROVIDER_LATER_FAILED', 'Provider retry could not be started.');
   }
+}
+
+
+function classifyFrozenRemittanceItemAmounts(item) {
+  const source = (item && typeof item === 'object' && !Array.isArray(item)) ? item : {};
+  const asMoney = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : 0;
+  };
+  const itemType = String(source.item_type || source.itemType || '').trim().toUpperCase();
+  const amountExVat = asMoney(source.amount_ex_vat ?? source.amountExVat);
+  const amountVat = asMoney(source.amount_vat ?? source.amountVat);
+  const amountIncVat = asMoney(source.amount_inc_vat ?? source.amountIncVat);
+  const isDeduction = ['LOAN_REPAYMENT', 'OVERPAYMENT_RECOVERY', 'MANUAL_DEBT_RECOVERY'].includes(itemType)
+    || amountExVat < 0
+    || amountIncVat < 0;
+
+  return {
+    is_deduction: isDeduction,
+    gross_ex_vat: isDeduction ? 0 : amountExVat,
+    gross_vat: isDeduction ? 0 : amountVat,
+    gross_inc_vat: isDeduction ? 0 : amountIncVat,
+    deductions_ex_vat: isDeduction ? Math.abs(amountExVat) : 0,
+    deductions_vat: isDeduction ? Math.abs(amountVat) : 0,
+    deductions_inc_vat: isDeduction ? Math.abs(amountIncVat) : 0
+  };
 }
 
 
@@ -24169,6 +24195,21 @@ async function handleBankingAlertAcknowledge(env, req, user) {
   try { body = await readBody(); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
   const note = trimText(body.note || body.reason || '') || null;
   const truthy = (value) => value === true || ['1','true','t','yes','y','on'].includes(String(value == null ? '' : value).trim().toLowerCase());
+  const runAlertAcknowledgeRpc = async (rpcName, rpcArgs) => {
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return unwrapRpc(await sbRpc(env, rpcName, rpcArgs), rpcName);
+      } catch (error) {
+        lastError = error;
+        const status = Number(error && error.status);
+        const code = upperText(error && (error.code || error.error_code || error.errorCode));
+        const retryable = status >= 500 || ['ETIMEDOUT', 'ECONNRESET', 'UPSTREAM_TIMEOUT', 'SUPABASE_RPC_FAILED'].some((token) => code.includes(token));
+        if (attempt > 0 || !retryable) throw error;
+      }
+    }
+    throw lastError || new Error('Banking alert acknowledgement failed.');
+  };
   const collectFingerprints = () => {
     const out = [];
     const add = (value) => {
@@ -24188,16 +24229,16 @@ async function handleBankingAlertAcknowledge(env, req, user) {
     let mode;
     if (truthy(body.clear_all ?? body.clearAll ?? body.acknowledge_all ?? body.acknowledgeAll)) {
       mode = 'clear_all';
-      result = unwrapRpc(await sbRpc(env, 'banking_alert_acknowledge_all_current', { p_actor_user_id: actorUserId, p_note: note }), 'banking_alert_acknowledge_all_current');
+      result = await runAlertAcknowledgeRpc('banking_alert_acknowledge_all_current', { p_actor_user_id: actorUserId, p_note: note });
     } else {
       const fingerprints = collectFingerprints();
       if (!fingerprints.length) return withCORS(env, req, badRequest('alert_fingerprint is required'));
       mode = fingerprints.length > 1 ? 'many' : 'single';
-      result = unwrapRpc(await sbRpc(env, 'banking_alert_acknowledge_many', {
+      result = await runAlertAcknowledgeRpc('banking_alert_acknowledge_many', {
         p_actor_user_id: actorUserId,
         p_alerts_json: fingerprints,
         p_note: note
-      }), 'banking_alert_acknowledge_many');
+      });
     }
     const alertSummary = await readGroupedAlertSummary(actorUserId);
     return withCORS(env, req, ok({
@@ -24213,7 +24254,7 @@ async function handleBankingAlertAcknowledge(env, req, user) {
       banking_highest_alert_severity: alertSummary?.banking_highest_alert_severity || alertSummary?.highest_severity || null
     }));
   } catch (e) {
-    return rpcErrorResponse(e, 'BANKING_ALERT_ACKNOWLEDGE_FAILED', 'CloudTMS could not clear this Banking alert. Refresh Banking and try again.');
+    return rpcErrorResponse(e, 'BANKING_ALERT_ACKNOWLEDGE_FAILED', 'The Banking alert service did not complete the clear request. No payment status was changed; reopen Banking alerts and try again.');
   }
 }
 
@@ -122211,8 +122252,8 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
           vat: 0,
           gross_vat: 0,
           gross_inc_vat: 0,
-          deductions_recoveries_inc_vat: moneyValue(candidateRow.loan_repayment_taken) + moneyValue(candidateRow.overpayment_recovery_taken),
-          deductions_inc_vat: moneyValue(candidateRow.loan_repayment_taken) + moneyValue(candidateRow.overpayment_recovery_taken),
+          deductions_recoveries_inc_vat: 0,
+          deductions_inc_vat: 0,
           final_payable: asNumber(candidateRow.net_bank_amount) == null ? 0 : moneyValue(candidateRow.net_bank_amount),
           net_inc_vat: asNumber(candidateRow.net_bank_amount) == null ? 0 : moneyValue(candidateRow.net_bank_amount),
           timesheet_count: 0
@@ -122343,20 +122384,29 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
       if (!candidateRow) continue;
       const candidate = ensureCandidate(candidateRow);
       const itemType = upperText(item.item_type);
-      const itemExVat = moneyValue(item.amount_ex_vat);
-      const itemVat = moneyValue(item.amount_vat);
-      const itemIncVat = moneyValue(item.amount_inc_vat);
+      const itemAmounts = classifyFrozenRemittanceItemAmounts(item);
+      const itemExVat = itemAmounts.gross_ex_vat;
+      const itemVat = itemAmounts.gross_vat;
+      const itemIncVat = itemAmounts.gross_inc_vat;
       const hasTimesheet = isUuidText(item.timesheet_id);
       const timesheet = hasTimesheet && ['SEGMENT_DELTA', 'EXPENSE_DELTA', 'MILEAGE_DELTA', 'ADJUSTMENT_DELTA'].includes(itemType)
         ? ensureTimesheet(candidate, item)
         : null;
 
-      mergeTotalsInto(candidate, itemExVat, itemVat, itemIncVat);
+      if (itemAmounts.is_deduction) {
+        candidate.frozen_totals.deductions_recoveries_inc_vat = addMoney(
+          candidate.frozen_totals.deductions_recoveries_inc_vat,
+          itemAmounts.deductions_inc_vat
+        );
+        candidate.frozen_totals.deductions_inc_vat = candidate.frozen_totals.deductions_recoveries_inc_vat;
+      } else {
+        mergeTotalsInto(candidate, itemExVat, itemVat, itemIncVat);
+      }
       if (asNumber(candidateRow.net_bank_amount) != null) {
         candidate.frozen_totals.final_payable = moneyValue(candidateRow.net_bank_amount);
         candidate.frozen_totals.net_inc_vat = candidate.frozen_totals.final_payable;
       }
-      if (timesheet) {
+      if (timesheet && itemAmounts.is_deduction !== true) {
         mergeTotalsInto(timesheet, itemExVat, itemVat, itemIncVat);
         timesheet.totals = { ...safeObject(timesheet.totals), ...safeObject(timesheet.frozen_totals) };
       }
