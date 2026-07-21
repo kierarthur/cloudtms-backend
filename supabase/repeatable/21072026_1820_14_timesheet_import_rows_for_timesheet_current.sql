@@ -1,5 +1,3 @@
-drop function if exists public.timesheet_import_rows_for_timesheet_current(uuid, boolean, uuid, uuid);
-
 create or replace function public.timesheet_import_rows_for_timesheet_current(
   p_timesheet_id uuid,
   p_include_excluded boolean default true,
@@ -66,8 +64,8 @@ as $$
       )
   ),
 
-  -- ✅ NEW evidence source:  Daily HealthRoster rows linked by payload_json.resolved_timesheet_id
-  -- Only DAILY imports are included here (HEALTHROSTER_DAILY).
+  -- Daily evidence is server-owned once an import review exists.  Historical
+  -- pre-review imports retain the legacy payload link as a compatibility read.
   daily as (
     select
       hr.import_id         as import_id,
@@ -76,10 +74,16 @@ as $$
     from public.hr_rows hr
     join public.hr_imports hi
       on hi.id = hr.import_id
+    left join public.import_review_daily_timesheet_resolutions rr
+      on rr.import_id=hr.import_id and rr.hr_row_id=hr.id and rr.status='APPLIED'
     where hi.source_system = 'HEALTHROSTER_DAILY'::public.hr_source_enum
       and hr.import_id is not null
       and hr.external_row_key is not null
-      and (hr.payload_json->>'resolved_timesheet_id') = (select u.current_timesheet_id::text from use_id u)
+      and (
+        rr.resolved_timesheet_id=(select u.current_timesheet_id from use_id u)
+        or (rr.id is null and not exists(select 1 from public.import_review_states s where s.import_id=hr.import_id)
+          and (hr.payload_json->>'resolved_timesheet_id')=(select u.current_timesheet_id::text from use_id u))
+      )
       and (p_import_id is null or hr.import_id = p_import_id)
       and (p_shift_id is null)  -- shift_id filter only applies to shift-based evidence sources
   ),
@@ -230,3 +234,7 @@ as $$
     on r.import_id = i.import_id
   order by i.source_system, i.uploaded_at_utc nulls last, i.import_id;
 $$;
+
+ALTER FUNCTION public.timesheet_import_rows_for_timesheet_current(uuid,boolean,uuid,uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.timesheet_import_rows_for_timesheet_current(uuid,boolean,uuid,uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.timesheet_import_rows_for_timesheet_current(uuid,boolean,uuid,uuid) TO postgres, service_role;

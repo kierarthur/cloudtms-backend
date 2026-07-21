@@ -1,4 +1,4 @@
--- CloudTMS reviewed direct replacement; review artifact only, not installed.
+-- CloudTMS reviewed direct replacement; installed and verified in TEST on 21 July 2026.
 -- Exact TEST baseline body MD5 prefix: a92a15a29522.
 -- Ordinary and non-import-authoritative branches remain on the installed implementation.
 CREATE OR REPLACE FUNCTION public.weekly_import_create_cancellation_corrections(p_shift_id uuid, p_import_id uuid, p_actor_user_id uuid)
@@ -87,6 +87,8 @@ declare
   v_fnv_i int;
   v_fnv_s text;
   v_fnv_hex text;
+  v_review_status text;
+  v_review_operation_id uuid;
 
   v_sqlstate text;
   v_err text;
@@ -178,6 +180,16 @@ begin
         'client_id',v_shift_client_id,
         'work_date',v_shift_work_date
       )::text;
+  end if;
+
+  select s.status,s.last_operation_id into v_review_status,v_review_operation_id
+  from public.import_review_states s where s.import_id=p_import_id;
+  if found then
+    if v_review_status<>'APPLYING' or v_review_operation_id is null or not exists(
+      select 1 from public.import_review_decisions d
+      where d.import_id=p_import_id and d.is_current and d.selected
+        and d.action_kind='APPLY_CANCELLATION' and d.shift_id=p_shift_id
+    ) then raise exception 'IMPORT_REVIEW_CANCELLATION_CONTEXT_REQUIRED' using errcode='55000'; end if;
   end if;
 
   select public.timesheet_correction_chain_scope_v1(
@@ -714,5 +726,5 @@ end;
 $function$;
 -- CloudTMS deployment metadata preserved from the installed TEST definition.
 ALTER FUNCTION public.weekly_import_create_cancellation_corrections(uuid, uuid, uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.weekly_import_create_cancellation_corrections(uuid, uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.weekly_import_create_cancellation_corrections(uuid, uuid, uuid) TO postgres, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.weekly_import_create_cancellation_corrections(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.weekly_import_create_cancellation_corrections(uuid, uuid, uuid) TO postgres;

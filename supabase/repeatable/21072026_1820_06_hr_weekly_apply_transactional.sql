@@ -1,6 +1,6 @@
--- CloudTMS reviewed direct replacement; review artifact only, not installed.
+-- CloudTMS reviewed direct replacement; installed and verified in TEST on 21 July 2026.
 -- Exact TEST baseline body MD5 prefix: 0305f0d4f038.
--- Ordinary and non-import-authoritative branches remain on the installed implementation.
+-- Hard cutover: every call requires the server-owned import review contract.
 CREATE OR REPLACE FUNCTION public.hr_weekly_apply_transactional(p_import_id uuid, p_payload jsonb, p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -16,12 +16,10 @@ declare
 
   -- payload parts
   v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
-  v_actions_json jsonb := coalesce(v_payload->'selected_action_ids', '[]'::jsonb);
-  v_actions2_json jsonb := coalesce(v_payload->'selected_actions', '[]'::jsonb);
-  v_email_actions jsonb := coalesce(v_payload->'email_actions', '[]'::jsonb);
+  v_actions_json jsonb := '[]'::jsonb;
 
-  -- ✅ NEW: destructive invalidation selections (MODE_A)
-  v_invalidation_actions jsonb := coalesce(v_payload->'invalidation_actions', '[]'::jsonb);
+  -- Expanded only from persisted, selected review decisions.
+  v_invalidation_actions jsonb := '[]'::jsonb;
   v_invalidation_actions_count int := 0;
 
   -- normalized selections
@@ -129,6 +127,14 @@ declare
   v_mode_b_should_run_cancellations boolean := false;
   v_mode_b_should_run_phase3 boolean := false;
 
+  -- Server-owned review contract. A review state is mandatory for every call.
+  v_review_contract jsonb := coalesce(v_payload->'review_contract','{}'::jsonb);
+  v_review_selected_ids jsonb := coalesce(v_payload->'review_selected_action_ids','[]'::jsonb);
+  v_review_operation_id uuid;
+  v_review_guard jsonb;
+  v_review_result jsonb;
+  v_post_commit_email_action_ids jsonb := '[]'::jsonb;
+
   v_phase1_shifts_created int := null;
   v_phase1_shifts_updated int := null;
 
@@ -223,6 +229,40 @@ begin
     raise exception 'hr_weekly_apply_transactional: import % missing client_id.', p_import_id;
   end if;
 
+  if not exists(select 1 from public.import_review_states where import_id=p_import_id) then
+    raise exception 'IMPORT_REVIEW_REQUIRED' using errcode='55000';
+  end if;
+  if jsonb_typeof(v_payload)<>'object' then
+    raise exception 'IMPORT_REVIEW_APPLY_PAYLOAD_INVALID' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_object_keys(v_payload) as keys(key_name)
+    where keys.key_name not in ('review_contract','review_selected_action_ids','invalidation_action_ids')) then
+    raise exception 'IMPORT_REVIEW_BROWSER_AUTHORITY_REJECTED' using errcode='22023';
+  end if;
+  if jsonb_typeof(v_review_contract)<>'object' or jsonb_typeof(v_review_selected_ids)<>'array'
+    or not(v_payload?'invalidation_action_ids') or jsonb_typeof(v_payload->'invalidation_action_ids')<>'array' then
+    raise exception 'IMPORT_REVIEW_APPLY_CONTRACT_REQUIRED' using errcode='22023';
+  end if;
+  v_review_operation_id:=(v_review_contract->>'operation_id')::uuid;
+  v_review_guard:=public.import_review_apply_guard_v1(p_import_id,(v_review_contract->>'state_version')::bigint,
+    v_review_contract->>'coverage_fingerprint',v_review_contract->>'preview_fingerprint',v_review_operation_id,
+    v_review_contract->>'request_hash',v_review_selected_ids,v_payload->'invalidation_action_ids',p_actor_user_id);
+  if coalesce((v_review_guard->>'replay')::boolean,false) then return v_review_guard->'stored_response'; end if;
+  select coalesce(jsonb_agg(to_jsonb(case when d.action_kind='APPLY_CANCELLATION' then 'CANCEL:'||d.shift_id::text else 'ROW:'||d.source_identity end) order by d.action_id),'[]'::jsonb)
+    into v_actions_json
+  from public.import_review_decisions d
+  where d.import_id=p_import_id and d.is_current and d.selected
+    and d.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION');
+  select coalesce(jsonb_agg(jsonb_build_object('timesheet_id',d.timesheet_id,'comparison_key',d.source_identity,'invalidate',true) order by d.action_id),'[]'::jsonb)
+    into v_invalidation_actions
+  from public.import_review_decisions d
+  where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind='INVALIDATE_REFERENCE';
+  select coalesce(jsonb_agg(to_jsonb(d.action_id) order by d.action_id),'[]'::jsonb)
+    into v_post_commit_email_action_ids
+  from public.import_review_decisions d
+  where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER');
+  v_email_actions_count:=jsonb_array_length(v_post_commit_email_action_ids);
+
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_OK','client_id',v_import_client_id::text));
 
   -- ─────────────────────────────────────────────
@@ -230,14 +270,6 @@ begin
   -- ─────────────────────────────────────────────
   if jsonb_typeof(v_actions_json) <> 'array' then
     raise exception 'hr_weekly_apply_transactional: selected_action_ids must be a JSON array.';
-  end if;
-
-  if jsonb_typeof(v_actions2_json) <> 'array' then
-    raise exception 'hr_weekly_apply_transactional: selected_actions must be a JSON array.';
-  end if;
-
-  if jsonb_typeof(v_email_actions) <> 'array' then
-    raise exception 'hr_weekly_apply_transactional: email_actions must be a JSON array.';
   end if;
 
   if jsonb_typeof(v_invalidation_actions) <> 'array' then
@@ -254,12 +286,6 @@ begin
   select distinct nullif(btrim(x.value), '')
   from jsonb_array_elements_text(v_actions_json) as x(value)
   where nullif(btrim(x.value), '') is not null
-  on conflict do nothing;
-
-  insert into tmp_sel_ids(action_id)
-  select distinct nullif(btrim(a.value->>'action_id'), '')
-  from jsonb_array_elements(v_actions2_json) as a(value)
-  where nullif(btrim(a.value->>'action_id'), '') is not null
   on conflict do nothing;
 
   if exists (
@@ -287,7 +313,6 @@ begin
   v_selected_action_ids_count := coalesce(array_length(v_selected_action_ids, 1), 0);
   v_selected_row_keys_count := coalesce(array_length(v_selected_truth_keys, 1), 0);
   v_selected_cancel_shift_ids_count := coalesce(array_length(v_selected_cancel_shift_ids, 1), 0);
-  v_email_actions_count := jsonb_array_length(v_email_actions);
 
   select to_jsonb(coalesce(array_agg(x.a), array[]::text[]))
   into v_selected_action_ids_sample
@@ -1668,9 +1693,6 @@ begin
     nullif(btrim(r.value->>'client_id'), '')::uuid as client_id,
     upper(coalesce(r.value->>'overall_status','')) as overall_status,
     (lower(coalesce(r.value->>'has_mismatch','false')) in ('true','1')) as has_mismatch,
-    nullif(btrim(r.value->>'issue_fingerprint'), '') as issue_fingerprint,
-    nullif(btrim(r.value->>'recipient_email'), '') as recipient_email,
-    (lower(coalesce(r.value->>'emailed_already','false')) in ('true','1')) as emailed_already,
     r.value as row_json
   from jsonb_array_elements(v_weekly_val_payload->'rows') as r(value)
   where nullif(btrim(r.value->>'timesheet_id'), '') is not null
@@ -1786,10 +1808,8 @@ begin
     and nullif(btrim(coalesce(cx.value->>'timesheet_start','')), '') is not null
     and nullif(btrim(coalesce(cx.value->>'timesheet_end','')), '') is not null
     and nullif(btrim(coalesce(cx.value->>'work_date','')), '') is not null
-    and (
-      v_invalidation_actions_count = 0
-      or (ia.timesheet_id is not null and ia.invalidate is true)
-    )
+    and ia.timesheet_id is not null
+    and ia.invalidate is true
   on conflict (timesheet_id, comparison_key) do nothing;
 
   -- ✅ Capture exact timesheets whose refs were cleared (for post-apply QR reissue + regen)
@@ -2059,179 +2079,9 @@ begin
     and vr.has_mismatch is true
     and vr.timesheet_id is not null;
 
-  -- ─────────────────────────────────────────────
-  -- ✅ Email actions: allow Alternative Email override per selected mismatch
-  -- ─────────────────────────────────────────────
-  create temporary table tmp_email_actions on commit drop as
-  select
-    nullif(btrim(a.value->>'timesheet_id'), '')::uuid as timesheet_id,
-    nullif(btrim(a.value->>'issue_fingerprint'), '') as issue_fingerprint,
-    nullif(
-      btrim(
-        coalesce(
-          a.value->>'alternative_email',
-          a.value->>'alt_email',
-          a.value->>'alt_recipient_email'
-        )
-      ),
-      ''
-    ) as alternative_email
-  from jsonb_array_elements(v_email_actions) as a(value)
-  where nullif(btrim(a.value->>'timesheet_id'), '') is not null
-    and nullif(btrim(a.value->>'issue_fingerprint'), '') is not null;
-
-  create temporary table tmp_email_join on commit drop as
-  select
-    ea.timesheet_id,
-    ea.issue_fingerprint,
-    vr.client_id,
-    vr.recipient_email,
-    ea.alternative_email,
-    coalesce(ea.alternative_email, vr.recipient_email) as effective_recipient_email,
-    vr.emailed_already,
-    vr.candidate_id,
-    vr.contract_id,
-    vr.week_ending_date,
-    vr.row_json
-  from tmp_email_actions ea
-  join tmp_val_rows vr
-    on vr.timesheet_id = ea.timesheet_id
-   and vr.issue_fingerprint = ea.issue_fingerprint
-  join tmp_val_mode vm
-    on vm.timesheet_id = vr.timesheet_id
-  where vm.mode = 'MODE_A'
-    and coalesce(ea.alternative_email, vr.recipient_email) is not null;
-
-  insert into public.hr_issue_emails(
-    source_system,
-    import_id,
-    client_id,
-    timesheet_id,
-    reason_code,
-    issue_fingerprint,
-    last_sent_at,
-    created_at,
-    updated_at
-  )
-  select
-    'HEALTHROSTER',
-    p_import_id,
-    ej.client_id,
-    ej.timesheet_id,
-    'HEALTHROSTER_WEEKLY',
-    ej.issue_fingerprint,
-    v_now,
-    v_now,
-    v_now
-  from tmp_email_join ej
-  on conflict (issue_fingerprint) do update
-    set last_sent_at = excluded.last_sent_at,
-        updated_at = excluded.updated_at,
-        import_id = excluded.import_id,
-        client_id = excluded.client_id,
-        timesheet_id = excluded.timesheet_id;
-
-  create temporary table tmp_email_items on commit drop as
-  select
-    ej.effective_recipient_email as recipient_email,
-    ej.timesheet_id as timesheet_id,
-    ej.issue_fingerprint as issue_fingerprint,
-    nullif(btrim(coalesce(ej.row_json->>'candidate_name','')), '') as candidate_name,
-    ej.week_ending_date as week_ending_date,
-    nullif(btrim(coalesce(cx.value->>'work_date','')), '')::date as work_date,
-    nullif(btrim(coalesce(cx.value->>'timesheet_start','')), '') as timesheet_start,
-    nullif(btrim(coalesce(cx.value->>'timesheet_end','')), '') as timesheet_end,
-    coalesce(nullif(btrim(coalesce(cx.value->>'timesheet_break_mins','')), '')::int, 0) as timesheet_break_mins,
-    nullif(btrim(coalesce(cx.value->>'healthroster_start','')), '') as healthroster_start,
-    nullif(btrim(coalesce(cx.value->>'healthroster_end','')), '') as healthroster_end,
-    coalesce(nullif(btrim(coalesce(cx.value->>'healthroster_break_mins','')), '')::int, 0) as healthroster_break_mins,
-    nullif(btrim(coalesce(cx.value->>'match_status','')), '') as match_status,
-    nullif(btrim(coalesce(cx.value->>'ref_before','')), '') as ref_before,
-    nullif(btrim(coalesce(cx.value->>'ref_after','')), '') as ref_after,
-    (lower(coalesce(cx.value->>'invoice_locked','false')) in ('true','1')) as invoice_locked,
-    nullif(btrim(coalesce(cx.value->>'invoice_locked_invoice_id','')), '') as invoice_locked_invoice_id,
-    nullif(btrim(coalesce(cx.value->>'comparison_key','')), '') as comparison_key
-  from tmp_email_join ej
-  cross join lateral jsonb_array_elements(coalesce(ej.row_json->'comparisons','[]'::jsonb)) as cx(value)
-  where coalesce((cx.value->>'match')::boolean,false) is false;
-
-  create temporary table tmp_email_jobs on commit drop as
-  select
-    ej.effective_recipient_email as recipient_email,
-    (count(*) filter (where ej.emailed_already is true))::int as reemail_count,
-    (count(*) filter (where ej.emailed_already is false))::int as email_count
-  from tmp_email_join ej
-  group by ej.effective_recipient_email;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'recipient_email', tj.recipient_email,
-        'email_kind',
-          (case
-            when tj.recipient_email is null then 'NONE'
-            when tj.reemail_count > 0 and tj.email_count = 0 then 'REEMAIL'
-            when tj.reemail_count = 0 and tj.email_count > 0 then 'EMAIL'
-            when tj.reemail_count > 0 and tj.email_count > 0 then 'MIXED'
-            else 'EMAIL'
-          end),
-        'issue_fingerprints',
-          coalesce(
-            (
-              select to_jsonb(array_agg(distinct ej2.issue_fingerprint order by ej2.issue_fingerprint))
-              from tmp_email_join ej2
-              where ej2.effective_recipient_email = tj.recipient_email
-            ),
-            '[]'::jsonb
-          ),
-        'attachment_timesheet_ids',
-          coalesce(
-            (
-              select to_jsonb(array_agg(distinct ej3.timesheet_id::text order by ej3.timesheet_id::text))
-              from tmp_email_join ej3
-              where ej3.effective_recipient_email = tj.recipient_email
-            ),
-            '[]'::jsonb
-          ),
-        'items',
-          coalesce(
-            (
-              select jsonb_agg(
-                jsonb_build_object(
-                  'timesheet_id', ti.timesheet_id::text,
-                  'issue_fingerprint', ti.issue_fingerprint,
-                  'candidate_name', ti.candidate_name,
-                  'week_ending_date', ti.week_ending_date::text,
-                  'work_date', ti.work_date::text,
-                  'timesheet_start', ti.timesheet_start,
-                  'timesheet_end', ti.timesheet_end,
-                  'timesheet_break_mins', ti.timesheet_break_mins,
-                  'healthroster_start', ti.healthroster_start,
-                  'healthroster_end', ti.healthroster_end,
-                  'healthroster_break_mins', ti.healthroster_break_mins,
-                  'match_status', ti.match_status,
-                  'ref_before', ti.ref_before,
-                  'ref_after', ti.ref_after,
-                  'invoice_locked', ti.invoice_locked,
-                  'invoice_locked_invoice_id', ti.invoice_locked_invoice_id,
-                  'comparison_key', ti.comparison_key
-                )
-                order by ti.candidate_name nulls last, ti.work_date asc, ti.timesheet_start nulls last
-              )
-              from tmp_email_items ti
-              where ti.recipient_email = tj.recipient_email
-            ),
-            '[]'::jsonb
-          )
-      )
-      order by tj.recipient_email nulls last
-    ),
-    '[]'::jsonb
-  )
-  into v_email_jobs
-  from tmp_email_jobs tj;
-
-  v_email_jobs_count := jsonb_array_length(coalesce(v_email_jobs, '[]'::jsonb));
+  -- Query emails are intentionally outside the source transaction. The
+  -- database returns selected action IDs; the Worker later calls the
+  -- idempotent outbox-backed enqueue RPC after source commit.
 
   v_steps := v_steps || jsonb_build_array(
     jsonb_build_object(
@@ -2323,7 +2173,7 @@ begin
     null
   );
 
-  return jsonb_build_object(
+  v_review_result:=jsonb_build_object(
     'import_id', p_import_id,
     'client_id', v_import_client_id,
     'mode_b', jsonb_build_object(
@@ -2350,8 +2200,13 @@ begin
     'email_jobs', v_email_jobs,
     'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
     'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[])),
-    'ref_updated_timesheet_ids', to_jsonb(coalesce(v_ref_updated_timesheet_ids, array[]::uuid[]))
+    'ref_updated_timesheet_ids', to_jsonb(coalesce(v_ref_updated_timesheet_ids, array[]::uuid[])),
+    'post_commit_email_action_ids',v_post_commit_email_action_ids,
+    'review_operation_id',v_review_operation_id
   );
+  perform public._import_review_apply_complete_core_v1(p_import_id,v_review_operation_id,p_actor_user_id,v_review_result,
+    jsonb_array_length(v_post_commit_email_action_ids)>0 or cardinality(v_affected_timesheet_ids)>0);
+  return v_review_result;
 
 exception when others then
   get stacked diagnostics v_sqlstate = returned_sqlstate, v_err = message_text;
@@ -2384,5 +2239,5 @@ end;
 $function$;
 -- CloudTMS deployment metadata preserved from the installed TEST definition.
 ALTER FUNCTION public.hr_weekly_apply_transactional(uuid, jsonb, uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.hr_weekly_apply_transactional(uuid, jsonb, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.hr_weekly_apply_transactional(uuid, jsonb, uuid) TO postgres, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.hr_weekly_apply_transactional(uuid, jsonb, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.hr_weekly_apply_transactional(uuid, jsonb, uuid) TO postgres, service_role;

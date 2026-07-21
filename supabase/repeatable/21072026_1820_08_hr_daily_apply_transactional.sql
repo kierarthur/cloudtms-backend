@@ -1,6 +1,6 @@
--- CloudTMS reviewed direct replacement; review artifact only, not installed.
+-- CloudTMS reviewed direct replacement; installed and verified in TEST on 21 July 2026.
 -- Exact TEST baseline body MD5 prefix: e60feb166e3e.
--- Ordinary and non-import-authoritative branches remain on the installed implementation.
+-- Hard cutover: every call requires the server-owned import review contract.
 CREATE OR REPLACE FUNCTION public.hr_daily_apply_transactional(p_import_id uuid, p_payload jsonb, p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -16,11 +16,10 @@ declare
   v_auto_authorise_timesheet_ids uuid[] := array[]::uuid[];
 
   v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
-  v_validation_rows_json jsonb := coalesce(v_payload->'validation_rows', '[]'::jsonb);
-  v_email_actions_json   jsonb := coalesce(v_payload->'email_actions',   '[]'::jsonb);
+  v_validation_rows_json jsonb := '[]'::jsonb;
 
-  -- ✅ NEW: destructive invalidation selections (MODE_A parity)
-  v_invalidation_actions_json jsonb := coalesce(v_payload->'invalidation_actions', '[]'::jsonb);
+  -- Expanded only from persisted, selected review decisions.
+  v_invalidation_actions_json jsonb := '[]'::jsonb;
   v_invalidation_actions_count int := 0;
 
   v_validations_upserted int := 0;
@@ -38,6 +37,13 @@ declare
   v_ref_cleared_timesheet_ids uuid[] := array[]::uuid[];
   v_affected_timesheet_ids uuid[] := array[]::uuid[];
 
+  v_review_contract jsonb := coalesce(v_payload->'review_contract','{}'::jsonb);
+  v_review_selected_ids jsonb := coalesce(v_payload->'review_selected_action_ids','[]'::jsonb);
+  v_review_operation_id uuid;
+  v_review_guard jsonb;
+  v_review_result jsonb;
+  v_post_commit_email_action_ids jsonb := '[]'::jsonb;
+
 begin
   -- 0) Validate import exists + is HEALTHROSTER_DAILY
   select hi.source_system, hi.client_id
@@ -54,19 +60,56 @@ begin
     raise exception 'hr_daily_apply_transactional: import % source_system=%; expected HEALTHROSTER_DAILY.', p_import_id, v_src::text;
   end if;
 
-  -- 1) Validate payload shapes. Invalidation must be explicit so omission can
-  -- never be interpreted as an instruction to clear imported reference truth.
-  if not (v_payload ? 'invalidation_actions') then
-    raise exception using message='INVALIDATION_ACTIONS_REQUIRED', errcode='22023',
-      detail=jsonb_build_object('code','INVALIDATION_ACTIONS_REQUIRED','expected','JSON_ARRAY_INCLUDING_EMPTY')::text;
+  if not exists(select 1 from public.import_review_states where import_id=p_import_id) then
+    raise exception 'IMPORT_REVIEW_REQUIRED' using errcode='55000';
   end if;
+  if jsonb_typeof(v_payload)<>'object' then
+    raise exception 'IMPORT_REVIEW_APPLY_PAYLOAD_INVALID' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_object_keys(v_payload) as keys(key_name)
+    where keys.key_name not in ('review_contract','review_selected_action_ids','invalidation_action_ids')) then
+    raise exception 'IMPORT_REVIEW_BROWSER_AUTHORITY_REJECTED' using errcode='22023';
+  end if;
+  if jsonb_typeof(v_review_contract)<>'object' or jsonb_typeof(v_review_selected_ids)<>'array'
+     or not (v_payload?'invalidation_action_ids') or jsonb_typeof(v_payload->'invalidation_action_ids')<>'array' then
+    raise exception 'IMPORT_REVIEW_APPLY_CONTRACT_REQUIRED' using errcode='22023';
+  end if;
+  v_review_operation_id:=(v_review_contract->>'operation_id')::uuid;
+  v_review_guard:=public.import_review_apply_guard_v1(p_import_id,(v_review_contract->>'state_version')::bigint,
+    v_review_contract->>'coverage_fingerprint',v_review_contract->>'preview_fingerprint',v_review_operation_id,
+    v_review_contract->>'request_hash',v_review_selected_ids,v_payload->'invalidation_action_ids',p_actor_user_id);
+  if coalesce((v_review_guard->>'replay')::boolean,false) then return v_review_guard->'stored_response'; end if;
+  select coalesce(jsonb_agg(v.row_json order by v.sort_key),'[]'::jsonb) into v_validation_rows_json
+  from (
+    select 'row:'||r.hr_row_id::text sort_key,jsonb_build_object('timesheet_id',r.resolved_timesheet_id,
+      'status',case when issue.reason_code is null then 'VALIDATION_OK' else 'VALIDATION_ERROR' end,
+      'reason_code',coalesce(issue.reason_code,'HEALTHROSTER_DAILY'),'hr_request_id',h.hr_request_id) row_json
+    from public.import_review_daily_timesheet_resolutions r
+    join public.hr_rows h on h.id=r.hr_row_id and h.import_id=p_import_id
+    left join lateral (select d.summary_json->>'reason_code' reason_code from public.import_review_decisions d
+      where d.import_id=p_import_id and d.hr_row_id=r.hr_row_id and d.is_current
+        and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER') limit 1) issue on true
+    where r.import_id=p_import_id and r.status='CURRENT' and exists(
+      select 1 from public.import_review_decisions include_decision
+      where include_decision.import_id=p_import_id and include_decision.hr_row_id=r.hr_row_id
+        and include_decision.is_current and include_decision.action_kind='NO_ACTION' and include_decision.selected)
+    union all
+    select 'missing:'||d.action_id,jsonb_build_object('timesheet_id',d.timesheet_id,
+      'status','VALIDATION_ERROR','reason_code','MISSING_FROM_IMPORT','hr_request_id',null)
+    from public.import_review_decisions d
+    where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind='MARK_VALIDATION_ERROR'
+  ) v;
+  select coalesce(jsonb_agg(jsonb_build_object('timesheet_id',d.timesheet_id,'comparison_key',d.source_identity,'invalidate',true) order by d.action_id),'[]'::jsonb)
+  into v_invalidation_actions_json from public.import_review_decisions d
+  where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind='INVALIDATE_REFERENCE';
+  select coalesce(jsonb_agg(to_jsonb(d.action_id) order by d.action_id),'[]'::jsonb) into v_post_commit_email_action_ids
+  from public.import_review_decisions d where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER');
+  v_email_selected_count:=jsonb_array_length(v_post_commit_email_action_ids);
 
+  -- 1) Validate database-built payload shapes. Invalidation is represented by
+  -- explicit selected action IDs and expanded above from persisted decisions.
   if jsonb_typeof(v_validation_rows_json) <> 'array' then
     raise exception 'hr_daily_apply_transactional: validation_rows must be a JSON array.';
-  end if;
-
-  if jsonb_typeof(v_email_actions_json) <> 'array' then
-    raise exception 'hr_daily_apply_transactional: email_actions must be a JSON array.';
   end if;
 
   if jsonb_typeof(v_invalidation_actions_json) <> 'array' then
@@ -80,49 +123,17 @@ begin
     timesheet_id uuid not null,
     status_text text null,
     reason_code text null,
-    hr_request_id text null,
-    -- ✅ NEW: allow apply payload to carry the matched hr_rows.id for stable evidence linkage
-    hr_row_id uuid null
+    hr_request_id text null
   ) on commit drop;
 
-  insert into tmp_val_raw(timesheet_id, status_text, reason_code, hr_request_id, hr_row_id)
+  insert into tmp_val_raw(timesheet_id, status_text, reason_code, hr_request_id)
   select
     nullif(btrim(j.value->>'timesheet_id'), '')::uuid as timesheet_id,
     nullif(btrim(j.value->>'status'), '') as status_text,
     nullif(btrim(j.value->>'reason_code'), '') as reason_code,
-    nullif(btrim(j.value->>'hr_request_id'), '') as hr_request_id,
-    nullif(btrim(j.value->>'hr_row_id'), '')::uuid as hr_row_id
+    nullif(btrim(j.value->>'hr_request_id'), '') as hr_request_id
   from jsonb_array_elements(v_validation_rows_json) as j(value)
   where nullif(btrim(j.value->>'timesheet_id'), '') is not null;
-
-  -- ✅ NEW: stamp matched REAL hr_rows rows with resolved_timesheet_id (evidence linkage)
-  -- Only rows that carry hr_row_id are stamped; synthetic "missing_from_import" rows have no hr_row_id.
-  create temporary table tmp_hr_row_links(
-    hr_row_id uuid primary key,
-    timesheet_id uuid not null
-  ) on commit drop;
-
-  insert into tmp_hr_row_links(hr_row_id, timesheet_id)
-  select distinct
-    vr.hr_row_id,
-    vr.timesheet_id
-  from tmp_val_raw vr
-  where vr.hr_row_id is not null
-    and vr.timesheet_id is not null
-  on conflict (hr_row_id) do update
-    set timesheet_id = excluded.timesheet_id;
-
-  update public.hr_rows hrl
-     set payload_json = jsonb_set(
-       coalesce(hrl.payload_json, '{}'::jsonb),
-       '{resolved_timesheet_id}',
-       to_jsonb(lk.timesheet_id::text),
-       true
-     )
-    from tmp_hr_row_links lk
-   where hrl.id = lk.hr_row_id
-     and hrl.import_id = p_import_id
-     and (hrl.payload_json->>'resolved_timesheet_id') is distinct from lk.timesheet_id::text;
 
   create temporary table tmp_val_by_ts(
     timesheet_id uuid primary key,
@@ -396,148 +407,9 @@ begin
   ) as x
   where x.tsid is not null;
 
-  -- 5) Email actions: upsert hr_issue_emails (transactional) + return email_jobs
-  -- ✅ UPDATED: allow Alternative Email override (MODE_A parity)
-  create temporary table tmp_email_actions(
-    timesheet_id uuid not null,
-    issue_fingerprint text not null,
-    reason_code text null,
-    hr_row_id uuid null,
-    staff_norm text null,
-    hospital_norm text null,
-    work_date date null,
-    alternative_email text null
-  ) on commit drop;
-
-  insert into tmp_email_actions(timesheet_id, issue_fingerprint, reason_code, hr_row_id, staff_norm, hospital_norm, work_date, alternative_email)
-  select
-    nullif(btrim(e.value->>'timesheet_id'), '')::uuid as timesheet_id,
-    nullif(btrim(e.value->>'issue_fingerprint'), '') as issue_fingerprint,
-    nullif(btrim(e.value->>'reason_code'), '') as reason_code,
-    nullif(btrim(e.value->>'hr_row_id'), '')::uuid as hr_row_id,
-    nullif(btrim(e.value->>'staff_norm'), '') as staff_norm,
-    nullif(btrim(e.value->>'hospital_norm'), '') as hospital_norm,
-    nullif(btrim(e.value->>'work_date'), '')::date as work_date,
-    nullif(
-      btrim(
-        coalesce(
-          e.value->>'alternative_email',
-          e.value->>'alt_email',
-          e.value->>'alt_recipient_email'
-        )
-      ),
-      ''
-    ) as alternative_email
-  from jsonb_array_elements(v_email_actions_json) as e(value)
-  where nullif(btrim(e.value->>'timesheet_id'), '') is not null
-    and nullif(btrim(e.value->>'issue_fingerprint'), '') is not null;
-
-  select count(*)::int
-  into v_email_selected_count
-  from tmp_email_actions;
-
-  create temporary table tmp_email_enriched on commit drop as
-  select
-    ea.timesheet_id,
-    ea.issue_fingerprint,
-    coalesce(nullif(ea.reason_code,''), 'actual_hours_mismatch') as reason_code,
-    ea.hr_row_id,
-    ea.staff_norm,
-    ea.hospital_norm,
-    ea.work_date,
-    ea.alternative_email,
-    coalesce(tf.client_id, ct.client_id) as client_id,
-    cli.ts_queries_email as default_recipient_email,
-    coalesce(ea.alternative_email, cli.ts_queries_email) as effective_recipient_email,
-    exists(
-      select 1
-      from public.hr_issue_emails hie
-      where hie.issue_fingerprint = ea.issue_fingerprint
-      limit 1
-    ) as emailed_already
-  from tmp_email_actions ea
-  left join public.timesheets_financials tf
-    on tf.timesheet_id = ea.timesheet_id
-   and tf.is_current = true
-  left join public.timesheets ts
-    on ts.timesheet_id = ea.timesheet_id
-   and ts.is_current = true
-  left join public.contracts ct
-    on ct.id = ts.contract_id
-  left join public.clients cli
-    on cli.id = coalesce(tf.client_id, ct.client_id);
-
-  insert into public.hr_issue_emails(
-    source_system,
-    import_id,
-    client_id,
-    timesheet_id,
-    hr_row_id,
-    staff_norm,
-    hospital_norm,
-    work_date,
-    reason_code,
-    issue_fingerprint,
-    last_sent_at,
-    created_at,
-    updated_at
-  )
-  select
-    'HEALTHROSTER_DAILY',
-    p_import_id,
-    te.client_id,
-    te.timesheet_id,
-    te.hr_row_id,
-    te.staff_norm,
-    te.hospital_norm,
-    te.work_date,
-    te.reason_code,
-    te.issue_fingerprint,
-    v_now,
-    v_now,
-    v_now
-  from tmp_email_enriched te
-  on conflict (issue_fingerprint) do update
-    set last_sent_at  = excluded.last_sent_at,
-        updated_at    = excluded.updated_at,
-        import_id     = excluded.import_id,
-        client_id     = excluded.client_id,
-        timesheet_id  = excluded.timesheet_id,
-        hr_row_id     = excluded.hr_row_id,
-        staff_norm    = excluded.staff_norm,
-        hospital_norm = excluded.hospital_norm,
-        work_date     = excluded.work_date,
-        reason_code   = excluded.reason_code;
-
-  get diagnostics v_email_logs_upserted = row_count;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'timesheet_id', te.timesheet_id::text,
-        'issue_fingerprint', te.issue_fingerprint,
-        'client_id', case when te.client_id is null then null else te.client_id::text end,
-
-        -- ✅ effective recipient (alt overrides default)
-        'recipient_email', te.effective_recipient_email,
-        'recipient_missing', (te.effective_recipient_email is null or length(btrim(te.effective_recipient_email)) = 0),
-
-        'email_kind', case when te.emailed_already then 'REEMAIL' else 'EMAIL' end,
-        'reason_code', te.reason_code,
-
-        -- Optional diagnostics (safe for UI/logs)
-        'default_recipient_email', te.default_recipient_email,
-        'alternative_email', te.alternative_email,
-
-        'hr_row_id', case when te.hr_row_id is null then null else te.hr_row_id::text end,
-        'work_date', case when te.work_date is null then null else te.work_date::text end
-      )
-      order by te.timesheet_id::text
-    ),
-    '[]'::jsonb
-  )
-  into v_email_jobs
-  from tmp_email_enriched te;
+  -- Query emails are intentionally outside the source transaction. The
+  -- database returns selected action IDs; the Worker later calls the
+  -- idempotent outbox-backed enqueue RPC after source commit.
 
   -- ✅ build affected_timesheet_ids = (validation changed) ∪ (reference updated/cleared)
   select coalesce(array_agg(distinct a.tsid order by a.tsid), array[]::uuid[])
@@ -563,7 +435,7 @@ begin
          applied_at = v_now
    where hi2.id = p_import_id;
 
-  return jsonb_build_object(
+  v_review_result:=jsonb_build_object(
     'import_id', p_import_id,
     'source_system', v_src::text,
     'validations_upserted', v_validations_upserted,
@@ -584,11 +456,16 @@ begin
     'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
     'auto_authorise_policy', v_validation_policy,
     'auto_authorise_timesheet_ids', to_jsonb(coalesce(v_auto_authorise_timesheet_ids, array[]::uuid[])),
-    'validation_affected_timesheet_ids', to_jsonb(coalesce(v_daily_validation_changed_timesheet_ids, array[]::uuid[]))
+    'validation_affected_timesheet_ids', to_jsonb(coalesce(v_daily_validation_changed_timesheet_ids, array[]::uuid[])),
+    'post_commit_email_action_ids',v_post_commit_email_action_ids,
+    'review_operation_id',v_review_operation_id
   );
+  perform public._import_review_apply_complete_core_v1(p_import_id,v_review_operation_id,p_actor_user_id,v_review_result,
+    jsonb_array_length(v_post_commit_email_action_ids)>0 or cardinality(v_affected_timesheet_ids)>0);
+  return v_review_result;
 end;
 $function$;
 -- CloudTMS deployment metadata preserved from the installed TEST definition.
 ALTER FUNCTION public.hr_daily_apply_transactional(uuid, jsonb, uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.hr_daily_apply_transactional(uuid, jsonb, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.hr_daily_apply_transactional(uuid, jsonb, uuid) TO postgres, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.hr_daily_apply_transactional(uuid, jsonb, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.hr_daily_apply_transactional(uuid, jsonb, uuid) TO postgres, service_role;

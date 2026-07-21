@@ -264,7 +264,7 @@ BEGIN
 
   PERFORM public._ctms_assert_import_correction_settings_write_v1(
     COALESCE(v_settings_input.is_nhsp, false),
-    COALESCE(v_settings_input.autoprocess_hr, false),
+    COALESCE(v_settings_input.requires_hr, false),
     COALESCE(v_settings_input.no_timesheet_required, false),
     CASE WHEN v_settings_payload ? 'reversal_complete_financials_date'
       THEN v_settings_input.reversal_complete_financials_date
@@ -618,7 +618,7 @@ BEGIN
       CASE WHEN (
         COALESCE(v_settings_input.is_nhsp, false) = true
         OR (
-          COALESCE(v_settings_input.autoprocess_hr, false) = true
+          COALESCE(v_settings_input.requires_hr, false) = true
           AND COALESCE(v_settings_input.no_timesheet_required, false) = true
         )
       ) AND v_settings_payload ? 'reversal_complete_financials_date'
@@ -628,7 +628,7 @@ BEGIN
       CASE WHEN (
         COALESCE(v_settings_input.is_nhsp, false) = true
         OR (
-          COALESCE(v_settings_input.autoprocess_hr, false) = true
+          COALESCE(v_settings_input.requires_hr, false) = true
           AND COALESCE(v_settings_input.no_timesheet_required, false) = true
         )
       ) AND v_settings_payload ? 'reversal_replacement_financials_date'
@@ -652,7 +652,7 @@ BEGIN
         'nhsp_import_auto_authorise',
           v_settings.nhsp_import_auto_authorise,
         'correction_policy_eligible',
-          (v_settings.is_nhsp OR (v_settings.autoprocess_hr AND v_settings.no_timesheet_required)),
+          (v_settings.is_nhsp OR (v_settings.requires_hr AND v_settings.no_timesheet_required)),
         'reversal_complete_financials_date_override',
           v_settings.reversal_complete_financials_date,
         'reversal_complete_financials_date_effective',

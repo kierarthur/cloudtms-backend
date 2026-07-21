@@ -76,6 +76,8 @@ declare
   v_succ_reference_number_required_to_issue_invoice boolean;
   v_succ_send_manual_invoices_to_different_email boolean;
   v_succ_manual_invoices_alt_email_address text;
+  v_succ_send_ts_queries_to_different_email boolean;
+  v_succ_ts_queries_alt_email_address text;
   v_succ_is_ad_hoc boolean;
   v_succ_default_submission_mode public.submission_mode_enum;
 
@@ -1091,6 +1093,22 @@ begin
     v_succ_manual_invoices_alt_email_address := v_cur.manual_invoices_alt_email_address;
   end if;
 
+  if (v_ov ? 'send_ts_queries_to_different_email') then
+    if jsonb_typeof(v_ov->'send_ts_queries_to_different_email') = 'null' then
+      v_succ_send_ts_queries_to_different_email := coalesce(v_cur.send_ts_queries_to_different_email,false);
+    else
+      v_succ_send_ts_queries_to_different_email := (v_ov->>'send_ts_queries_to_different_email')::boolean;
+    end if;
+  else
+    v_succ_send_ts_queries_to_different_email := coalesce(v_cur.send_ts_queries_to_different_email,false);
+  end if;
+
+  if (v_ov ? 'ts_queries_alt_email_address') then
+    v_succ_ts_queries_alt_email_address := nullif(btrim(v_ov->>'ts_queries_alt_email_address'), '');
+  else
+    v_succ_ts_queries_alt_email_address := v_cur.ts_queries_alt_email_address;
+  end if;
+
   if (v_ov ? 'is_ad_hoc') and jsonb_typeof(v_ov->'is_ad_hoc') <> 'null' then
     v_succ_is_ad_hoc := (v_ov->>'is_ad_hoc')::boolean;
   else
@@ -1137,6 +1155,8 @@ begin
           'succ_reference_number_required_to_issue_invoice', case when v_succ_reference_number_required_to_issue_invoice is null then null else v_succ_reference_number_required_to_issue_invoice end,
           'succ_send_manual_invoices_to_different_email', case when v_succ_send_manual_invoices_to_different_email is null then null else v_succ_send_manual_invoices_to_different_email end,
           'succ_manual_invoices_alt_email_address', coalesce(v_succ_manual_invoices_alt_email_address,''),
+          'succ_send_ts_queries_to_different_email', case when v_succ_send_ts_queries_to_different_email is null then null else v_succ_send_ts_queries_to_different_email end,
+          'succ_ts_queries_alt_email_address', coalesce(v_succ_ts_queries_alt_email_address,''),
           'succ_is_ad_hoc', coalesce(v_succ_is_ad_hoc,false),
           'succ_default_submission_mode', coalesce(v_succ_default_submission_mode::text,'')
         ),
@@ -1281,6 +1301,8 @@ begin
     reference_number_required_to_issue_invoice,
     send_manual_invoices_to_different_email,
     manual_invoices_alt_email_address,
+    send_ts_queries_to_different_email,
+    ts_queries_alt_email_address,
     is_ad_hoc
   ) values (
     v_succ_candidate_id,
@@ -1320,6 +1342,8 @@ begin
     v_succ_reference_number_required_to_issue_invoice,
     v_succ_send_manual_invoices_to_different_email,
     v_succ_manual_invoices_alt_email_address,
+    v_succ_send_ts_queries_to_different_email,
+    v_succ_ts_queries_alt_email_address,
     v_succ_is_ad_hoc
   )
   returning c.* into v_succ;
@@ -2194,3 +2218,7 @@ exception when others then
   raise;
 end;
 $$;
+
+ALTER FUNCTION public.contracts_clone_and_extend_atomic(uuid,date,date,date,boolean,uuid,text,jsonb,boolean,boolean,boolean,uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.contracts_clone_and_extend_atomic(uuid,date,date,date,boolean,uuid,text,jsonb,boolean,boolean,boolean,uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.contracts_clone_and_extend_atomic(uuid,date,date,date,boolean,uuid,text,jsonb,boolean,boolean,boolean,uuid) TO postgres, service_role;

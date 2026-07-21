@@ -28,6 +28,8 @@ begin
   if not (
     coalesce(p_is_nhsp, false)
     or (
+      -- Preserve the installed parameter name for named-call compatibility.
+      -- Review callers pass the current requires_hr eligibility value here.
       coalesce(p_autoprocess_hr, false)
       and coalesce(p_no_timesheet_required, false)
     )
@@ -36,7 +38,7 @@ begin
       using errcode = '22023',
             detail = jsonb_build_object(
               'code', 'CORRECTION_POLICY_NOT_AVAILABLE_FOR_CLIENT',
-              'eligibility', 'is_nhsp OR (autoprocess_hr AND no_timesheet_required)',
+              'eligibility', 'is_nhsp OR (requires_hr AND no_timesheet_required)',
               'retained_values_rule', 'stored values may remain but are ignored while ineligible'
             )::text;
   end if;

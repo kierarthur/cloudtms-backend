@@ -1,6 +1,6 @@
--- CloudTMS reviewed direct replacement; review artifact only, not installed.
+-- CloudTMS reviewed direct replacement; installed and verified in TEST on 21 July 2026.
 -- Exact TEST baseline body MD5 prefix: df760b6e8a2c.
--- Ordinary and non-import-authoritative branches remain on the installed implementation.
+-- Hard cutover: every call requires the server-owned import review contract.
 CREATE OR REPLACE FUNCTION public.nhsp_weekly_apply_transactional(p_import_id uuid, p_payload jsonb, p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -15,9 +15,7 @@ declare
 
   -- payload parts
   v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
-  v_actions_json jsonb := coalesce(v_payload->'selected_action_ids', '[]'::jsonb);
-  v_actions2_json jsonb := coalesce(v_payload->'selected_actions', '[]'::jsonb);
-  v_auto_apply_json jsonb := coalesce(v_payload->'auto_apply_action_ids', '[]'::jsonb); -- optional / forward-compatible
+  v_actions_json jsonb := '[]'::jsonb;
 
   -- normalized selections
   v_selected_action_ids text[] := array[]::text[];
@@ -89,6 +87,12 @@ declare
   v_should_run_phase15 boolean := false;
   v_should_run_phase3 boolean := false;
   v_should_run_cancellations boolean := false;
+
+  v_review_contract jsonb := coalesce(v_payload->'review_contract','{}'::jsonb);
+  v_review_selected_ids jsonb := coalesce(v_payload->'review_selected_action_ids','[]'::jsonb);
+  v_review_operation_id uuid;
+  v_review_guard jsonb;
+  v_review_result jsonb;
 
   -- ENSURE BASE WEEKLY TIMESHEET + ATTACH ACTIVE SHIFTS (invariant)
   v_ensure_pairs_count int := 0;
@@ -166,6 +170,31 @@ begin
     raise exception 'nhsp_weekly_apply_transactional: import % source_system=%; expected NHSP.', p_import_id, v_import_source_system;
   end if;
 
+  if not exists(select 1 from public.import_review_states where import_id=p_import_id) then
+    raise exception 'IMPORT_REVIEW_REQUIRED' using errcode='55000';
+  end if;
+  if jsonb_typeof(v_payload)<>'object' then
+    raise exception 'IMPORT_REVIEW_APPLY_PAYLOAD_INVALID' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_object_keys(v_payload) as keys(key_name)
+    where keys.key_name not in ('review_contract','review_selected_action_ids','invalidation_action_ids')) then
+    raise exception 'IMPORT_REVIEW_BROWSER_AUTHORITY_REJECTED' using errcode='22023';
+  end if;
+  if jsonb_typeof(v_review_contract)<>'object' or jsonb_typeof(v_review_selected_ids)<>'array'
+    or not(v_payload?'invalidation_action_ids') or jsonb_typeof(v_payload->'invalidation_action_ids')<>'array' then
+    raise exception 'IMPORT_REVIEW_APPLY_CONTRACT_REQUIRED' using errcode='22023';
+  end if;
+  v_review_operation_id:=(v_review_contract->>'operation_id')::uuid;
+  v_review_guard:=public.import_review_apply_guard_v1(p_import_id,(v_review_contract->>'state_version')::bigint,
+    v_review_contract->>'coverage_fingerprint',v_review_contract->>'preview_fingerprint',v_review_operation_id,
+    v_review_contract->>'request_hash',v_review_selected_ids,v_payload->'invalidation_action_ids',p_actor_user_id);
+  if coalesce((v_review_guard->>'replay')::boolean,false) then return v_review_guard->'stored_response'; end if;
+  select coalesce(jsonb_agg(to_jsonb(case when d.action_kind='APPLY_CANCELLATION' then 'CANCEL:'||d.shift_id::text else 'ROW:'||d.source_identity end) order by d.action_id),'[]'::jsonb)
+    into v_actions_json
+  from public.import_review_decisions d
+  where d.import_id=p_import_id and d.is_current and d.selected
+    and d.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION');
+
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_OK'));
 
   -- ─────────────────────────────────────────────
@@ -173,14 +202,6 @@ begin
   -- ─────────────────────────────────────────────
   if jsonb_typeof(v_actions_json) <> 'array' then
     raise exception 'nhsp_weekly_apply_transactional: selected_action_ids must be a JSON array.';
-  end if;
-
-  if jsonb_typeof(v_actions2_json) <> 'array' then
-    raise exception 'nhsp_weekly_apply_transactional: selected_actions must be a JSON array.';
-  end if;
-
-  if jsonb_typeof(v_auto_apply_json) <> 'array' then
-    raise exception 'nhsp_weekly_apply_transactional: auto_apply_action_ids must be a JSON array when provided.';
   end if;
 
   create temporary table tmp_sel_ids(
@@ -191,19 +212,6 @@ begin
   select distinct nullif(btrim(x.value), '')
   from jsonb_array_elements_text(v_actions_json) as x(value)
   where nullif(btrim(x.value), '') is not null
-  on conflict do nothing;
-
-  insert into tmp_sel_ids(action_id)
-  select distinct nullif(btrim(a.value->>'action_id'), '')
-  from jsonb_array_elements(v_actions2_json) as a(value)
-  where nullif(btrim(a.value->>'action_id'), '') is not null
-  on conflict do nothing;
-
-  -- Forward-compatible: allow FE to pass auto_apply_action_ids explicitly (same ROW:/CANCEL: contract)
-  insert into tmp_sel_ids(action_id)
-  select distinct nullif(btrim(x2.value), '')
-  from jsonb_array_elements_text(v_auto_apply_json) as x2(value)
-  where nullif(btrim(x2.value), '') is not null
   on conflict do nothing;
 
   if exists (
@@ -427,7 +435,7 @@ begin
       null
     );
 
-    return jsonb_build_object(
+    v_review_result:=jsonb_build_object(
       'import_id', p_import_id,
       'mode_b', jsonb_build_object(
         'selected_truth_keys', to_jsonb(array[]::text[]),
@@ -438,8 +446,12 @@ begin
         'phase15', jsonb_build_object('ok_rows', 0, 'shift_updated_rows', 0),
         'cancellations', null
       ),
-      'affected_timesheet_ids', to_jsonb(array[]::uuid[])
+      'affected_timesheet_ids', to_jsonb(array[]::uuid[]),
+      'post_commit_email_action_ids','[]'::jsonb,
+      'review_operation_id',v_review_operation_id
     );
+    perform public._import_review_apply_complete_core_v1(p_import_id,v_review_operation_id,p_actor_user_id,v_review_result,false);
+    return v_review_result;
   end if;
 
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','NOOP_GUARD_PASSED'));
@@ -1474,7 +1486,7 @@ begin
     null
   );
 
-  return jsonb_build_object(
+  v_review_result:=jsonb_build_object(
     'import_id', p_import_id,
     'mode_b', jsonb_build_object(
       'selected_truth_keys', to_jsonb(coalesce(v_selected_truth_keys_ok, array[]::text[])),
@@ -1488,8 +1500,13 @@ begin
       ),
       'cancellations', v_cancellations_result
     ),
-    'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[]))
+    'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
+    'post_commit_email_action_ids','[]'::jsonb,
+    'review_operation_id',v_review_operation_id
   );
+  perform public._import_review_apply_complete_core_v1(p_import_id,v_review_operation_id,p_actor_user_id,v_review_result,
+    cardinality(v_affected_timesheet_ids)>0);
+  return v_review_result;
 
 exception when others then
   get stacked diagnostics v_sqlstate = returned_sqlstate, v_err = message_text;
@@ -1525,5 +1542,5 @@ end;
 $function$;
 -- CloudTMS deployment metadata preserved from the installed TEST definition.
 ALTER FUNCTION public.nhsp_weekly_apply_transactional(uuid, jsonb, uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.nhsp_weekly_apply_transactional(uuid, jsonb, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.nhsp_weekly_apply_transactional(uuid, jsonb, uuid) TO postgres, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.nhsp_weekly_apply_transactional(uuid, jsonb, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.nhsp_weekly_apply_transactional(uuid, jsonb, uuid) TO postgres, service_role;
