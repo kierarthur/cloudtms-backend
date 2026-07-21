@@ -7621,11 +7621,6 @@ COMMIT;
 
 
 
-DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
-
-
-
-
 CREATE OR REPLACE FUNCTION public.cloudtms_format_london_date(p_date date)
 RETURNS text
 LANGUAGE plpgsql

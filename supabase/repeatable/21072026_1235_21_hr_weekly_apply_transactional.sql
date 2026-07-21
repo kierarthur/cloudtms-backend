@@ -1,4 +1,6 @@
-
+-- CloudTMS reviewed direct replacement; review artifact only, not installed.
+-- Exact TEST baseline body MD5 prefix: 0305f0d4f038.
+-- Ordinary and non-import-authoritative branches remain on the installed implementation.
 CREATE OR REPLACE FUNCTION public.hr_weekly_apply_transactional(p_import_id uuid, p_payload jsonb, p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -44,6 +46,8 @@ declare
   v_force_keys_non_invoiced text[] := array[]::text[];
 
   v_phase3_result jsonb := null;
+  v_changed_preflight jsonb := null;
+  v_changed_timesheet_ids uuid[] := array[]::uuid[];
 
   -- Phase 1 / 1.5 (MODE_B)
   v_phase1_result jsonb := null;
@@ -484,6 +488,8 @@ begin
     create temporary table tmp_changed_sel on commit drop as
     select
       ch.external_row_key,
+      ch.timesheet_id,
+      ch.is_paid,
       ch.is_invoiced
     from public.weekly_import_changed_hours_phase3(p_import_id := p_import_id, p_system_type := 'HEALTHROSTER') as ch
     where ch.external_row_key = any(coalesce(v_force_keys_final, array[]::text[]));
@@ -500,6 +506,83 @@ begin
 
     v_invoiced_changed_keys_count := coalesce(array_length(v_invoiced_changed_keys, 1), 0);
     v_not_invoiced_changed_keys_count := coalesce(array_length(v_not_invoiced_changed_keys, 1), 0);
+
+    select coalesce(array_agg(distinct cs.timesheet_id order by cs.timesheet_id), array[]::uuid[])
+      into v_changed_timesheet_ids
+    from tmp_changed_sel cs
+    where cs.timesheet_id is not null;
+
+    if coalesce(array_length(v_changed_timesheet_ids, 1), 0) > 0 then
+      select public.import_timesheet_financial_preflight_v1(
+        p_timesheet_ids := v_changed_timesheet_ids,
+        p_action := 'IMPORT_CHANGED_HOURS',
+        p_actor_user_id := p_actor_user_id,
+        p_expected_state_json := '{}'::jsonb,
+        p_lock_rows := true,
+        p_max_scope := 100
+      ) into v_changed_preflight;
+
+      if coalesce((v_changed_preflight->>'allowed')::boolean, false) is not true then
+        raise exception using
+          message = 'IMPORT_FINANCIAL_PREFLIGHT_BLOCKED',
+          errcode = 'P0001',
+          detail = v_changed_preflight::text;
+      end if;
+
+      if exists (
+        select 1
+        from tmp_changed_sel cs
+        join public.timesheets ts on ts.timesheet_id = cs.timesheet_id
+        left join public.timesheets_financials tf
+          on tf.timesheet_id = ts.timesheet_id and tf.is_current = true
+        where cs.is_invoiced is false
+          and cs.is_paid is false
+          and (ts.authorised_at_server is not null or tf.authorised_at_utc is not null)
+      ) then
+        raise exception using
+          message = 'CANONICAL_UNAUTHORISE_REQUIRED',
+          errcode = 'P0001',
+          detail = jsonb_build_object(
+            'code','CANONICAL_UNAUTHORISE_REQUIRED',
+            'required_path',jsonb_build_array(
+              'UNAUTHORISE','AMEND','RECALCULATE','REAUTHORISE'
+            ),
+            'paid_uninvoiced_rollover_required',false,
+            'timesheet_ids',to_jsonb(v_changed_timesheet_ids)
+          )::text;
+      end if;
+
+      if exists (
+        select 1
+        from tmp_changed_sel cs
+        where cs.is_invoiced is false
+          and exists (
+            select 1 from public.timesheets_financials paid_tf
+            where paid_tf.timesheet_id = cs.timesheet_id
+              and paid_tf.paid_at_utc is not null
+          )
+          and not exists (
+            select 1 from public.timesheets_financials current_tf
+            where current_tf.timesheet_id = cs.timesheet_id
+              and current_tf.is_current = true
+              and current_tf.stale_reason = 'IMPORT_PAID_TSFIN_ROLLOVER_PENDING_CALCULATION'
+              and coalesce((current_tf.policy_snapshot_json->>'requires_frozen_correction_policy')::boolean,false) = true
+          )
+      ) then
+        raise exception using
+          message = 'PAID_UNINVOICED_ROLLOVER_REQUIRED',
+          errcode = 'P0001',
+          detail = jsonb_build_object(
+            'code','PAID_UNINVOICED_ROLLOVER_REQUIRED',
+            'required_path',jsonb_build_array(
+              'UNAUTHORISE','PAID_UNINVOICED_ROLLOVER',
+              'AMEND','RECALCULATE','REAUTHORISE'
+            ),
+            'invoice_policy_without_history','NOW',
+            'timesheet_ids',to_jsonb(v_changed_timesheet_ids)
+          )::text;
+      end if;
+    end if;
 
     v_mode_b_should_run_phase3 := (v_invoiced_changed_keys_count > 0);
 
@@ -1030,7 +1113,7 @@ begin
           'WEEKLY'::public.timesheet_scope_enum,
           'MANUAL'::public.submission_mode_enum,
           'HOURS'::public.timesheet_line_type_enum,
-          v_now,
+          null,
 
           v_occupant_norm,
           v_hospital_norm,
@@ -1068,7 +1151,10 @@ begin
         update public.contract_weeks cw0link
         set
           timesheet_id = v_new_ts_id,
-          status = 'SUBMITTED'::public.contract_week_status_enum,
+          status = case
+            when cw0link.status = 'AUTHORISED'::public.contract_week_status_enum then cw0link.status
+            else 'SUBMITTED'::public.contract_week_status_enum
+          end,
           submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
           updated_at = v_now
         where cw0link.id = v_base_week_id;
@@ -1099,10 +1185,74 @@ begin
 
         update public.contract_weeks cw0keep
         set
-          status = 'SUBMITTED'::public.contract_week_status_enum,
+          status = case
+            when cw0keep.status = 'AUTHORISED'::public.contract_week_status_enum then cw0keep.status
+            else 'SUBMITTED'::public.contract_week_status_enum
+          end,
           submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
           updated_at = v_now
         where cw0keep.id = v_base_week_id;
+
+        if exists (
+          select 1
+          from public.timesheets identity_target
+          where identity_target.timesheet_id=v_base_week_ts_id
+            and (
+              identity_target.week_ending_date is distinct from v_pair_week_ending_date
+              or identity_target.contract_id is distinct from v_pair_contract_id
+              or identity_target.occupant_key_norm is distinct from v_occupant_norm
+              or identity_target.hospital_norm is distinct from v_hospital_norm
+              or identity_target.ward_norm is distinct from v_ward_norm
+              or identity_target.job_title_norm is distinct from v_role_norm
+            )
+        ) then
+          select public.import_timesheet_financial_preflight_v1(
+            p_timesheet_ids := array[v_base_week_ts_id]::uuid[],
+            p_action := 'IMPORT_FINANCIAL_IDENTITY_CHANGE',
+            p_actor_user_id := p_actor_user_id,
+            p_expected_state_json := '{}'::jsonb,
+            p_lock_rows := true,
+            p_max_scope := 100
+          ) into v_changed_preflight;
+
+          if coalesce((v_changed_preflight->>'allowed')::boolean,false) is not true then
+            raise exception using message='IMPORT_FINANCIAL_PREFLIGHT_BLOCKED',errcode='P0001',detail=v_changed_preflight::text;
+          end if;
+
+          if v_changed_preflight->>'required_path'='CREATE_OR_UPDATE_CORRECTION_CHAIN' then
+            raise exception using message='IMPORT_INVOICED_CORRECTION_REQUIRED',errcode='P0001',
+              detail=jsonb_build_object(
+                'code','IMPORT_INVOICED_CORRECTION_REQUIRED','timesheet_id',v_base_week_ts_id,
+                'reason','FINANCIAL_IDENTITY_CHANGE',
+                'required_path','CREATE_OR_UPDATE_CORRECTION_CHAIN'
+              )::text;
+          elsif v_changed_preflight->>'required_path'='UNAUTHORISE_AMEND_RECALCULATE_REAUTHORISE' then
+            raise exception using message='CANONICAL_UNAUTHORISE_REQUIRED',errcode='P0001',
+              detail=jsonb_build_object(
+                'code','CANONICAL_UNAUTHORISE_REQUIRED','timesheet_id',v_base_week_ts_id,
+                'reason','FINANCIAL_IDENTITY_CHANGE',
+                'required_path',jsonb_build_array('UNAUTHORISE','AMEND','RECALCULATE','REAUTHORISE'),
+                'paid_uninvoiced_rollover_required',false
+              )::text;
+          elsif v_changed_preflight->>'required_path'='PAID_UNINVOICED_ROLLOVER'
+            and not exists (
+              select 1 from public.timesheets_financials rollover_identity
+              where rollover_identity.timesheet_id=v_base_week_ts_id
+                and rollover_identity.is_current=true
+                and rollover_identity.stale_reason='IMPORT_PAID_TSFIN_ROLLOVER_PENDING_CALCULATION'
+                and coalesce((rollover_identity.policy_snapshot_json->>'requires_frozen_correction_policy')::boolean,false)=true
+            ) then
+            raise exception using message='PAID_UNINVOICED_ROLLOVER_REQUIRED',errcode='P0001',
+              detail=jsonb_build_object(
+                'code','PAID_UNINVOICED_ROLLOVER_REQUIRED','timesheet_id',v_base_week_ts_id,
+                'reason','FINANCIAL_IDENTITY_CHANGE',
+                'required_path',jsonb_build_array(
+                  'UNAUTHORISE','PAID_UNINVOICED_ROLLOVER','AMEND','RECALCULATE','REAUTHORISE'
+                ),
+                'invoice_policy_without_history','NOW'
+              )::text;
+          end if;
+        end if;
 
         update public.timesheets tnorm
         set
@@ -1111,7 +1261,6 @@ begin
           sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
           submission_mode = 'MANUAL'::public.submission_mode_enum,
           line_type = 'HOURS'::public.timesheet_line_type_enum,
-          authorised_at_server = coalesce(tnorm.authorised_at_server, v_now),
           week_ending_date = v_pair_week_ending_date,
           contract_id = v_pair_contract_id,
           occupant_key_norm = v_occupant_norm,
@@ -1201,6 +1350,92 @@ begin
               limit 10
             ) p2
           );
+      end if;
+
+      if exists (
+        select 1 from public.nhsp_shifts ns_scope
+        where ns_scope.source_system = 'HEALTHROSTER'::public.hr_source_enum
+            and ns_scope.cancelled_at_utc is null
+            and ns_scope.contract_id = v_pair_contract_id
+            and ns_scope.candidate_id = v_pair_candidate_id
+            and ns_scope.client_id = v_pair_client_id
+            and ns_scope.week_ending_date = v_pair_week_ending_date
+            and (
+              ns_scope.timesheet_id is null
+              or not exists (
+                select 1 from public.timesheets existing_link
+                where existing_link.timesheet_id=ns_scope.timesheet_id
+                  and existing_link.is_current=true
+                  and existing_link.revoked_at is null
+              )
+            )
+            and not exists (
+              select 1 from tmp_hr_mode_b_protected_shift_ids protected
+              where protected.shift_id=ns_scope.id
+            )
+      ) then
+        select public.import_timesheet_financial_preflight_v1(
+          p_timesheet_ids := array[v_base_week_ts_id]::uuid[],
+          p_action := 'IMPORT_SOURCE_ASSIGNMENT',
+          p_actor_user_id := p_actor_user_id,
+          p_expected_state_json := '{}'::jsonb,
+          p_lock_rows := true,
+          p_max_scope := 100
+        ) into v_changed_preflight;
+
+        if coalesce((v_changed_preflight->>'allowed')::boolean,false) is not true then
+          raise exception using message='IMPORT_FINANCIAL_PREFLIGHT_BLOCKED',errcode='P0001',detail=v_changed_preflight::text;
+        end if;
+
+        if v_changed_preflight->>'required_path'='CREATE_OR_UPDATE_CORRECTION_CHAIN' then
+          raise exception using message='IMPORT_INVOICED_CORRECTION_REQUIRED',errcode='P0001',
+            detail=jsonb_build_object(
+              'code','IMPORT_INVOICED_CORRECTION_REQUIRED','timesheet_id',v_base_week_ts_id,
+              'reason','FINANCIAL_SOURCE_ASSIGNMENT_CHANGE',
+              'required_path','CREATE_OR_UPDATE_CORRECTION_CHAIN'
+            )::text;
+        end if;
+
+        if exists (
+          select 1 from public.timesheets source_target
+          left join public.timesheets_financials source_target_tf
+            on source_target_tf.timesheet_id=source_target.timesheet_id and source_target_tf.is_current=true
+          where source_target.timesheet_id=v_base_week_ts_id
+            and (source_target.authorised_at_server is not null or source_target_tf.authorised_at_utc is not null)
+            and not exists (
+              select 1 from public.timesheets_financials paid_target
+              where paid_target.timesheet_id=source_target.timesheet_id
+                and paid_target.paid_at_utc is not null
+            )
+        ) then
+          raise exception using message='CANONICAL_UNAUTHORISE_REQUIRED',errcode='P0001',
+            detail=jsonb_build_object(
+              'code','CANONICAL_UNAUTHORISE_REQUIRED','timesheet_id',v_base_week_ts_id,
+              'reason','FINANCIAL_SOURCE_ASSIGNMENT_CHANGE',
+              'required_path',jsonb_build_array('UNAUTHORISE','AMEND','RECALCULATE','REAUTHORISE'),
+              'paid_uninvoiced_rollover_required',false
+            )::text;
+        end if;
+
+        if exists (
+          select 1 from public.timesheets_financials paid_source
+          where paid_source.timesheet_id=v_base_week_ts_id and paid_source.paid_at_utc is not null
+        ) and not exists (
+          select 1 from public.timesheets_financials rollover_source
+          where rollover_source.timesheet_id=v_base_week_ts_id and rollover_source.is_current=true
+            and rollover_source.stale_reason='IMPORT_PAID_TSFIN_ROLLOVER_PENDING_CALCULATION'
+            and coalesce((rollover_source.policy_snapshot_json->>'requires_frozen_correction_policy')::boolean,false)=true
+        ) then
+          raise exception using message='PAID_UNINVOICED_ROLLOVER_REQUIRED',errcode='P0001',
+            detail=jsonb_build_object(
+              'code','PAID_UNINVOICED_ROLLOVER_REQUIRED','timesheet_id',v_base_week_ts_id,
+              'reason','FINANCIAL_SOURCE_ASSIGNMENT_CHANGE',
+              'required_path',jsonb_build_array(
+                'UNAUTHORISE','PAID_UNINVOICED_ROLLOVER','AMEND','RECALCULATE','REAUTHORISE'
+              ),
+              'invoice_policy_without_history','NOW'
+            )::text;
+        end if;
       end if;
 
       update public.nhsp_shifts nsu0
@@ -2147,3 +2382,7 @@ exception when others then
   raise;
 end;
 $function$;
+-- CloudTMS deployment metadata preserved from the installed TEST definition.
+ALTER FUNCTION public.hr_weekly_apply_transactional(uuid, jsonb, uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.hr_weekly_apply_transactional(uuid, jsonb, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.hr_weekly_apply_transactional(uuid, jsonb, uuid) TO postgres, authenticated, service_role;
