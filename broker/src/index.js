@@ -49,6 +49,28 @@ import {
 
 const textEncoder = new TextEncoder();
 
+function unwrapRpcJsonb(raw, fnName) {
+  if (raw == null) return null;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && Object.prototype.hasOwnProperty.call(raw, 'data')) {
+    return unwrapRpcJsonb(raw.data, fnName);
+  }
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return null;
+    if (raw.length === 1) {
+      const row = raw[0];
+      if (row && typeof row === 'object' && fnName && Object.prototype.hasOwnProperty.call(row, fnName)) {
+        return row[fnName];
+      }
+      return row;
+    }
+    return raw;
+  }
+  if (raw && typeof raw === 'object' && fnName && Object.prototype.hasOwnProperty.call(raw, fnName)) {
+    return raw[fnName];
+  }
+  return raw;
+}
+
 const runImportReviewPostCommit = createImportReviewPostCommitRunner({
   sbRpc,
   unwrapRpcJsonb,

@@ -12,6 +12,11 @@ function functionBody(name) {
   return worker.slice(start, next === -1 ? worker.length : next);
 }
 
+test('Worker module initialises with import-review dependencies resolved', async () => {
+  const workerModule = await import(new URL('../src/index.js', import.meta.url));
+  assert.equal(typeof workerModule.default?.fetch, 'function');
+});
+
 test('durable review dispatcher is registered before all legacy import routes', () => {
   const dispatcher = worker.indexOf('const importReviewResponse = await dispatchImportReviewRequest');
   const firstLegacyImportRoute = worker.indexOf("p === '/api/healthroster/autoprocess/import'");
