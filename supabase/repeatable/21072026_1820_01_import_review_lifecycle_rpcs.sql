@@ -174,7 +174,8 @@ create or replace function public.import_review_list_v1(
 )
 returns jsonb language plpgsql stable security definer
 set search_path to 'public','pg_temp' as $function$
-declare v_limit integer:=least(greatest(coalesce(p_page_size,50),1),100); v_items jsonb; v_last record;
+declare v_limit integer:=least(greatest(coalesce(p_page_size,50),1),100); v_items jsonb;
+  v_last_updated_at timestamptz; v_last_import_id uuid; v_has_more boolean:=false;
 begin
   if p_date_from is not null and p_date_to is not null and p_date_from>p_date_to then raise exception 'IMPORT_REVIEW_DATE_FILTER_INVALID' using errcode='22023'; end if;
   if upper(coalesce(p_status_class,'ACTIVE')) not in ('ACTIVE','COMPLETED','ABANDONED','SUPERSEDED','ALL') then raise exception 'IMPORT_REVIEW_STATUS_FILTER_INVALID' using errcode='22023'; end if;
@@ -199,12 +200,13 @@ begin
     'source_hash_prefix',left(source_file_sha256,12),'coverage_mode',coverage_mode,'coverage_start_date',coverage_start_date,'coverage_end_date',coverage_end_date,
     'status',status,'follow_up_status',follow_up_status,'state_version',state_version,'preview_generation',preview_generation,
     'blocker_count',blocker_count,'selected_count',selected_count,'selected_email_count',selected_email_count,
-    'read_only',status in ('APPLIED','ABANDONED','SUPERSEDED'),'updated_at_utc',updated_at_utc) order by updated_at_utc desc,import_id desc),'[]') into v_items from limited;
-  if jsonb_array_length(v_items)>0 then
-    select updated_at_utc,import_id into v_last from public.import_review_states
+    'read_only',status in ('APPLIED','ABANDONED','SUPERSEDED'),'updated_at_utc',updated_at_utc) order by updated_at_utc desc,import_id desc),'[]'),
+    (select count(*)>v_limit from page) into v_items,v_has_more from limited;
+  if v_has_more and jsonb_array_length(v_items)>0 then
+    select updated_at_utc,import_id into v_last_updated_at,v_last_import_id from public.import_review_states
     where import_id=(v_items->(jsonb_array_length(v_items)-1)->>'import_id')::uuid;
   end if;
-  return jsonb_build_object('ok',true,'items',v_items,'page_size',v_limit,'next_cursor',case when jsonb_array_length(v_items)=v_limit then jsonb_build_object('updated_at_utc',v_last.updated_at_utc,'import_id',v_last.import_id) end);
+  return jsonb_build_object('ok',true,'items',v_items,'page_size',v_limit,'next_cursor',case when v_has_more then jsonb_build_object('updated_at_utc',v_last_updated_at,'import_id',v_last_import_id) end);
 end $function$;
 
 create or replace function public.import_review_get_v1(

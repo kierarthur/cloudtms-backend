@@ -55,3 +55,13 @@ test('read contracts expose bounded aggregate follow-up diagnostics for the fron
     assert.match(body, /follow_up_retry_count/);
   }
 });
+
+test('empty and exact-page review lists use typed cursors and emit a cursor only when more rows exist', () => {
+  const body = functionBody(lifecycle, 'import_review_list_v1');
+  assert.match(body, /v_last_updated_at timestamptz/);
+  assert.match(body, /v_last_import_id uuid/);
+  assert.match(body, /v_has_more boolean:=false/);
+  assert.match(body, /select count\(\*\)>v_limit from page/);
+  assert.match(body, /case when v_has_more then jsonb_build_object/);
+  assert.doesNotMatch(body, /v_last record/);
+});
