@@ -13,6 +13,7 @@ as $function$
     'apply_envelope_version','IMPORT_REVIEW_APPLY_V1',
     'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
+    'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
     'legacy_contracts_supported',false
   )
 $function$;
@@ -239,6 +240,8 @@ begin
     'coverage_fingerprint',v_import.coverage_fingerprint,'revision_group_id',v_import.revision_group_id,'revision_no',v_import.revision_no,'supersedes_import_id',v_import.supersedes_import_id),
     'state',jsonb_build_object('schema_contract_version',v_state.schema_contract_version,
       'status',v_state.status,'follow_up_status',v_state.follow_up_status,'state_version',v_state.state_version,
+      'follow_up_error_code',v_state.follow_up_error_code,'follow_up_error_message',v_state.follow_up_error_message,
+      'follow_up_retry_count',v_state.follow_up_retry_count,
       'preview_generation',v_state.preview_generation,'preview_fingerprint',v_state.preview_fingerprint,'ui_state',v_state.ui_state_json,
       'last_opened_at_utc',v_state.last_opened_at_utc,'last_opened_by_user_id',v_state.last_opened_by_user_id,
       'last_operation_id',v_state.last_operation_id,'read_only',v_state.status in ('APPLIED','ABANDONED','SUPERSEDED'),
@@ -474,7 +477,10 @@ begin select * into v from public.import_review_states where import_id=p_import_
 
 create or replace function public._import_review_follow_up_reconcile_core_v1(p_import_id uuid,p_operation_id uuid,p_actor_user_id uuid)
 returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
-declare v public.import_review_states%rowtype; o public.import_apply_operations%rowtype; v_ts text; v_email text; v_aggregate text;
+declare
+  v public.import_review_states%rowtype; o public.import_apply_operations%rowtype;
+  v_ts text; v_email text; v_aggregate text; v_error_code text; v_error_message text;
+  v_ts_error_code text; v_ts_error_message text; v_email_error_code text; v_email_error_message text;
 begin
   select * into v from public.import_review_states where import_id=p_import_id for update;
   select * into o from public.import_apply_operations where id=p_operation_id and import_id=p_import_id for update;
@@ -483,13 +489,33 @@ begin
   end if;
   v_ts:=upper(coalesce(o.response_json->>'review_tsfin_follow_up_status','NOT_REQUIRED'));
   v_email:=upper(coalesce(o.response_json->>'review_email_follow_up_status','NOT_REQUIRED'));
+  if v_ts not in ('PENDING','COMPLETE','FAILED_RETRYABLE','NOT_REQUIRED')
+    or v_email not in ('PENDING','COMPLETE','FAILED_RETRYABLE','NOT_REQUIRED') then
+    raise exception 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_STATE_INVALID' using errcode='23514';
+  end if;
+  v_ts_error_code:=nullif(o.response_json->>'review_tsfin_follow_up_error_code','');
+  v_ts_error_message:=nullif(o.response_json->>'review_tsfin_follow_up_error_message','');
+  v_email_error_code:=nullif(o.response_json->>'review_email_follow_up_error_code','');
+  v_email_error_message:=nullif(o.response_json->>'review_email_follow_up_error_message','');
   v_aggregate:=case when v_ts='FAILED_RETRYABLE' or v_email='FAILED_RETRYABLE' then 'FAILED_RETRYABLE'
     when v_ts in ('COMPLETE','NOT_REQUIRED') and v_email in ('COMPLETE','NOT_REQUIRED')
       then case when v_ts='NOT_REQUIRED' and v_email='NOT_REQUIRED' then 'NOT_REQUIRED' else 'COMPLETE' end
     else 'PENDING' end;
+  if v_aggregate='FAILED_RETRYABLE' then
+    if v_email='FAILED_RETRYABLE' and v_ts='FAILED_RETRYABLE' then
+      v_error_code:='MULTIPLE_FOLLOW_UP_COMPONENTS_FAILED';
+      v_error_message:='Email and TSFIN follow-up require retry.';
+    elsif v_email='FAILED_RETRYABLE' then
+      v_error_code:=coalesce(v_email_error_code,'EMAIL_FOLLOW_UP_FAILED');
+      v_error_message:=coalesce(v_email_error_message,'Query email follow-up failed and can be retried safely.');
+    else
+      v_error_code:=coalesce(v_ts_error_code,'TSFIN_FOLLOW_UP_FAILED');
+      v_error_message:=coalesce(v_ts_error_message,'TSFIN follow-up failed and can be retried safely.');
+    end if;
+  end if;
   update public.import_review_states set follow_up_status=v_aggregate,
-    follow_up_error_code=case when v_aggregate='FAILED_RETRYABLE' then follow_up_error_code end,
-    follow_up_error_message=case when v_aggregate='FAILED_RETRYABLE' then follow_up_error_message end,
+    follow_up_error_code=v_error_code,
+    follow_up_error_message=v_error_message,
     state_version=state_version+case when follow_up_status is distinct from v_aggregate then 1 else 0 end,
     updated_at_utc=now(),updated_by_user_id=p_actor_user_id
   where import_id=p_import_id returning * into v;
@@ -498,29 +524,83 @@ begin
     where id=p_operation_id;
   end if;
   return jsonb_build_object('ok',true,'status',v.status,'follow_up_status',v.follow_up_status,
-    'state_version',v.state_version,'tsfin_follow_up_status',v_ts,'email_follow_up_status',v_email);
+    'follow_up_error_code',v.follow_up_error_code,'follow_up_error_message',v.follow_up_error_message,
+    'state_version',v.state_version,
+    'tsfin_follow_up_status',v_ts,'tsfin_follow_up_error_code',v_ts_error_code,'tsfin_follow_up_error_message',v_ts_error_message,
+    'email_follow_up_status',v_email,'email_follow_up_error_code',v_email_error_code,'email_follow_up_error_message',v_email_error_message);
 end $function$;
 
-create or replace function public.import_review_follow_up_update_v1(p_import_id uuid,p_operation_id uuid,p_expected_follow_up_status text,p_new_follow_up_status text,
+create or replace function public.import_review_follow_up_component_update_v1(
+  p_import_id uuid,p_operation_id uuid,p_request_hash text,p_component text,
+  p_expected_component_status text,p_new_component_status text,
   p_error_code text default null,p_error_message text default null,p_actor_user_id uuid default null)
 returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
-declare v public.import_review_states%rowtype; o public.import_apply_operations%rowtype; n text:=upper(btrim(coalesce(p_new_follow_up_status,''))); v_result jsonb;
-begin perform public._import_review_assert_actor_v1(p_actor_user_id); select * into v from public.import_review_states where import_id=p_import_id for update;
-  if v.status<>'APPLIED' or v.last_operation_id is distinct from p_operation_id then raise exception 'IMPORT_REVIEW_FOLLOW_UP_NOT_APPLIED' using errcode='55000'; end if;
-  if v.follow_up_status<>upper(btrim(coalesce(p_expected_follow_up_status,''))) then raise exception 'IMPORT_REVIEW_FOLLOW_UP_CONFLICT' using errcode='40001'; end if;
-  if n not in ('PENDING','COMPLETE','FAILED_RETRYABLE') or (v.follow_up_status='COMPLETE' and n<>'COMPLETE') or (v.follow_up_status='NOT_REQUIRED' and n='PENDING') then raise exception 'IMPORT_REVIEW_FOLLOW_UP_TRANSITION_INVALID' using errcode='22023'; end if;
-  if length(coalesce(p_error_code,''))>128 or length(coalesce(p_error_message,''))>1000 then raise exception 'IMPORT_REVIEW_FOLLOW_UP_ERROR_TOO_LONG' using errcode='22023'; end if;
+declare
+  v public.import_review_states%rowtype; o public.import_apply_operations%rowtype; v_result jsonb;
+  v_component text:=upper(btrim(coalesce(p_component,'')));
+  v_expected text:=upper(btrim(coalesce(p_expected_component_status,'')));
+  v_new text:=upper(btrim(coalesce(p_new_component_status,'')));
+  v_current text; v_status_key text; v_error_code_key text; v_error_message_key text; v_replay boolean:=false;
+begin
+  perform public._import_review_assert_actor_v1(p_actor_user_id);
+  if p_import_id is null or p_operation_id is null or p_request_hash is null or btrim(p_request_hash)!~'^[0-9a-f]{64}$' then
+    raise exception 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_INPUT_INVALID' using errcode='22023';
+  end if;
+  if v_component not in ('EMAIL','TSFIN') or v_expected not in ('PENDING','COMPLETE','FAILED_RETRYABLE','NOT_REQUIRED')
+    or v_new not in ('PENDING','COMPLETE','FAILED_RETRYABLE','NOT_REQUIRED') then
+    raise exception 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_INPUT_INVALID' using errcode='22023';
+  end if;
+  if length(coalesce(p_error_code,''))>128 or length(coalesce(p_error_message,''))>1000
+    or (v_new='FAILED_RETRYABLE' and (nullif(btrim(coalesce(p_error_code,'')),'') is null or nullif(btrim(coalesce(p_error_message,'')),'') is null)) then
+    raise exception 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_ERROR_INVALID' using errcode='22023';
+  end if;
+  select * into v from public.import_review_states where import_id=p_import_id for update;
+  if not found then raise exception 'IMPORT_REVIEW_NOT_FOUND' using errcode='P0002'; end if;
+  if v.status<>'APPLIED' or v.last_operation_id is distinct from p_operation_id then
+    raise exception 'IMPORT_REVIEW_FOLLOW_UP_NOT_APPLIED' using errcode='55000';
+  end if;
   select * into o from public.import_apply_operations where id=p_operation_id and import_id=p_import_id for update;
-  if not found then raise exception 'IMPORT_REVIEW_OPERATION_NOT_FOUND' using errcode='P0002'; end if;
-  update public.import_apply_operations set response_json=response_json||jsonb_build_object('review_tsfin_follow_up_status',n),updated_at_utc=now() where id=p_operation_id;
-  update public.import_review_states set follow_up_error_code=case when n='FAILED_RETRYABLE' then p_error_code end,
-    follow_up_error_message=case when n='FAILED_RETRYABLE' then p_error_message end,
-    follow_up_retry_count=follow_up_retry_count+case when n='PENDING' then 1 else 0 end,
-    updated_at_utc=now(),updated_by_user_id=p_actor_user_id where import_id=p_import_id returning * into v;
+  if not found or o.committed_at_utc is null then raise exception 'IMPORT_REVIEW_OPERATION_NOT_COMMITTED' using errcode='55000'; end if;
+  if o.request_hash is distinct from lower(btrim(p_request_hash)) then
+    raise exception 'IMPORT_REVIEW_FOLLOW_UP_REQUEST_HASH_MISMATCH' using errcode='40001';
+  end if;
+  v_status_key:=case when v_component='EMAIL' then 'review_email_follow_up_status' else 'review_tsfin_follow_up_status' end;
+  v_error_code_key:=case when v_component='EMAIL' then 'review_email_follow_up_error_code' else 'review_tsfin_follow_up_error_code' end;
+  v_error_message_key:=case when v_component='EMAIL' then 'review_email_follow_up_error_message' else 'review_tsfin_follow_up_error_message' end;
+  v_current:=upper(coalesce(o.response_json->>v_status_key,'NOT_REQUIRED'));
+  if v_current not in ('PENDING','COMPLETE','FAILED_RETRYABLE','NOT_REQUIRED') then
+    raise exception 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_STATE_INVALID' using errcode='23514';
+  end if;
+  if v_current=v_new then
+    v_replay:=true;
+  elsif v_current in ('COMPLETE','NOT_REQUIRED') and v_expected='PENDING' and v_new in ('COMPLETE','FAILED_RETRYABLE') then
+    v_replay:=true;
+  else
+    if v_current<>v_expected then raise exception 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONFLICT' using errcode='40001'; end if;
+    if not ((v_current='PENDING' and v_new in ('COMPLETE','FAILED_RETRYABLE'))
+      or (v_current='FAILED_RETRYABLE' and v_new='PENDING')) then
+      raise exception 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_TRANSITION_INVALID' using errcode='22023';
+    end if;
+    update public.import_apply_operations set response_json=response_json||jsonb_build_object(
+      v_status_key,v_new,
+      v_error_code_key,case when v_new='FAILED_RETRYABLE' then btrim(p_error_code) end,
+      v_error_message_key,case when v_new='FAILED_RETRYABLE' then btrim(p_error_message) end),
+      updated_at_utc=now() where id=p_operation_id;
+    if v_current='FAILED_RETRYABLE' and v_new='PENDING' then
+      update public.import_review_states set follow_up_retry_count=follow_up_retry_count+1,
+        updated_at_utc=now(),updated_by_user_id=p_actor_user_id where import_id=p_import_id;
+    end if;
+  end if;
   v_result:=public._import_review_follow_up_reconcile_core_v1(p_import_id,p_operation_id,p_actor_user_id);
   select * into v from public.import_review_states where import_id=p_import_id;
-  insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json) values(p_import_id,v.state_version,p_operation_id,'TSFIN_FOLLOW_UP_'||n,p_actor_user_id,jsonb_strip_nulls(jsonb_build_object('error_code',p_error_code)));
-  return v_result||jsonb_build_object('retry_count',v.follow_up_retry_count); end $function$;
+  if not v_replay then
+    insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json)
+    values(p_import_id,v.state_version,p_operation_id,v_component||'_FOLLOW_UP_'||v_new,p_actor_user_id,
+      jsonb_strip_nulls(jsonb_build_object('previous_component_status',v_current,'error_code',p_error_code)));
+  end if;
+  return v_result||jsonb_build_object('component',v_component,'component_status',case when v_replay then v_current else v_new end,
+    'replay',v_replay,'retry_count',v.follow_up_retry_count);
+end $function$;
 
 create or replace function public.import_review_apply_status_get_v1(p_import_id uuid,p_operation_id uuid,p_request_hash text default null)
 returns jsonb language plpgsql stable security definer set search_path to 'public','pg_temp' as $function$
@@ -530,6 +610,8 @@ begin select * into s from public.import_review_states where import_id=p_import_
   if o.id is not null and p_request_hash is not null and o.request_hash<>btrim(p_request_hash) then return jsonb_build_object('ok',false,'status','OPERATION_REQUEST_MISMATCH'); end if;
   return jsonb_build_object('ok',true,'schema_contract_version',s.schema_contract_version,
     'import_id',p_import_id,'review_status',s.status,'follow_up_status',s.follow_up_status,'state_version',s.state_version,
+    'follow_up_error_code',s.follow_up_error_code,'follow_up_error_message',s.follow_up_error_message,
+    'follow_up_retry_count',s.follow_up_retry_count,
     'operation_id',o.id,'operation_state',o.state,'outcome',case when s.status='APPLIED' and s.follow_up_status in ('PENDING','FAILED_RETRYABLE') then 'COMMITTED_WITH_FOLLOW_UP_PENDING'
       when s.status='APPLIED' then 'COMMITTED_APPLIED' when s.status='APPLYING' then 'IN_PROGRESS' when s.status in ('ABANDONED','SUPERSEDED') then s.status
       when o.id is null then 'NOT_STARTED' when o.state='FAILED_BEFORE_COMMIT' then 'FAILED_BEFORE_COMMIT' else 'NOT_COMMITTED' end,
@@ -554,7 +636,7 @@ grant execute on function public.import_review_supersede_v1(uuid,uuid,bigint,uui
 revoke all on function public.import_review_apply_guard_v1(uuid,bigint,text,text,uuid,text,jsonb,jsonb,uuid) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_apply_complete_core_v1(uuid,uuid,uuid,jsonb,boolean) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_follow_up_reconcile_core_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;
-revoke all on function public.import_review_follow_up_update_v1(uuid,uuid,text,text,text,text,uuid) from public,anon,authenticated;
-grant execute on function public.import_review_follow_up_update_v1(uuid,uuid,text,text,text,text,uuid) to service_role;
+revoke all on function public.import_review_follow_up_component_update_v1(uuid,uuid,text,text,text,text,text,text,uuid) from public,anon,authenticated;
+grant execute on function public.import_review_follow_up_component_update_v1(uuid,uuid,text,text,text,text,text,text,uuid) to service_role;
 revoke all on function public.import_review_apply_status_get_v1(uuid,uuid,text) from public,anon,authenticated;
 grant execute on function public.import_review_apply_status_get_v1(uuid,uuid,text) to service_role;

@@ -11,6 +11,10 @@ const repeatableSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql'),
   'utf8'
 );
+const sourceBuildSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql'),
+  'utf8'
+);
 
 function functionBody(name, nextName) {
   const start = workerSource.indexOf(`async function ${name}`);
@@ -18,6 +22,14 @@ function functionBody(name, nextName) {
   const end = workerSource.indexOf(`async function ${nextName}`, start + 1);
   assert.ok(end > start, `${nextName} must follow ${name}`);
   return workerSource.slice(start, end);
+}
+
+function sqlFunctionBody(source, name) {
+  const functionMarker = `CREATE OR REPLACE FUNCTION public.${name}`;
+  const start = source.indexOf(functionMarker);
+  assert.ok(start >= 0, `${name} must exist`);
+  const end = source.indexOf('CREATE OR REPLACE FUNCTION public.', start + functionMarker.length);
+  return source.slice(start, end > start ? end : source.length);
 }
 
 test('workbench refresh route recomputes pre-draft live rows without payment execution', () => {
@@ -69,17 +81,11 @@ test('explicit session refresh bypasses clone-certified reuse and forces full li
 });
 
 test('full-live source builds retain semantic scope through internally targeted pages', () => {
-  const sourceBuildStart = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_source_build_chunk');
-  const sourceBuildEnd = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public._pay_batch_status_display_label', sourceBuildStart);
-  assert.ok(sourceBuildStart >= 0 && sourceBuildEnd > sourceBuildStart, 'candidate source-build function must be present');
-  const sourceBuildBody = repeatableSql.slice(sourceBuildStart, sourceBuildEnd);
+  const sourceBuildBody = sqlFunctionBody(sourceBuildSql, 'pay_workbench_candidate_source_build_chunk');
   assert.match(sourceBuildBody, /'requested_refresh_scope_kind', v_requested_refresh_scope_kind/);
   assert.match(sourceBuildBody, /'actual_refresh_scope_kind', v_actual_refresh_scope_kind/);
 
-  const lineSeedStart = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_line_work_seed');
-  const lineSeedEnd = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_source_build_chunk', lineSeedStart);
-  assert.ok(lineSeedStart >= 0 && lineSeedEnd > lineSeedStart, 'candidate line-work seed function must be present');
-  const lineSeedBody = repeatableSql.slice(lineSeedStart, lineSeedEnd);
+  const lineSeedBody = sqlFunctionBody(repeatableSql, 'pay_workbench_candidate_line_work_seed');
   assert.match(lineSeedBody, /source_line\.source_row_json->>'requested_refresh_scope_kind'[\s\S]*= 'CANDIDATE_FULL_LIVE'/);
   assert.match(lineSeedBody, /COALESCE\(v_full_source_rebuild, false\)[\s\S]*existing_line_work\.timesheet_id IS NULL/);
 });

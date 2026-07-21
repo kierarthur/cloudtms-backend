@@ -13,6 +13,10 @@ drop function if exists public.import_apply_operation_claim_v1(
   uuid,public.hr_source_enum,text,text,uuid,jsonb,timestamptz
 );
 
+drop function if exists public.import_review_follow_up_update_v1(
+  uuid,uuid,text,text,text,text,uuid
+);
+
 -- Remove superseded draft overloads so PostgREST has one unambiguous contract.
 drop function if exists public.import_review_get_v1(uuid,text,integer,bigint,integer);
 drop function if exists public.import_review_apply_guard_v1(

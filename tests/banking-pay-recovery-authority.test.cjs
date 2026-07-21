@@ -5,12 +5,23 @@ const test = require('node:test');
 
 const sqlPath = path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql');
 const sql = fs.readFileSync(sqlPath, 'utf8');
+const sourceBuildSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql'),
+  'utf8'
+);
+const overpaymentSyncSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_40_pay_sync_overpayments_from_preview.sql'),
+  'utf8'
+);
 
-function functionBody(name, nextName) {
-  const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}`);
+function functionBody(name, nextName, source = sql) {
+  const functionMarker = `CREATE OR REPLACE FUNCTION public.${name}`;
+  const start = source.indexOf(functionMarker);
   assert.ok(start >= 0, `${name} must exist`);
-  const end = nextName ? sql.indexOf(`CREATE OR REPLACE FUNCTION public.${nextName}`, start + 1) : -1;
-  return sql.slice(start, end > start ? end : sql.length);
+  const end = nextName
+    ? source.indexOf(`CREATE OR REPLACE FUNCTION public.${nextName}`, start + functionMarker.length)
+    : source.indexOf('CREATE OR REPLACE FUNCTION public.', start + functionMarker.length);
+  return source.slice(start, end > start ? end : source.length);
 }
 
 test('finance recovery allocation uses central outstanding-component authority', () => {
@@ -53,7 +64,7 @@ test('canonical finance rows expose scheduled and current-run recovery amounts s
 });
 
 test('source-build attestation accepts complete durable or protected coverage only', () => {
-  const body = functionBody('pay_workbench_candidate_source_build_chunk', 'pay_workbench_candidate_line_seed_chunk');
+  const body = functionBody('pay_workbench_candidate_source_build_chunk', null, sourceBuildSql);
   const attestationStart = body.indexOf('A successful reconciliation need not echo a component');
   assert.ok(attestationStart >= 0, 'durable coverage attestation must be present');
   const attestationBlock = body.slice(attestationStart, body.indexOf('v_sync_result_code :=', attestationStart));
@@ -65,7 +76,7 @@ test('source-build attestation accepts complete durable or protected coverage on
 });
 
 test('active-reservation protection audit events are idempotent', () => {
-  const body = functionBody('pay_sync_overpayments_from_preview', 'pay_snooze_apply');
+  const body = functionBody('pay_sync_overpayments_from_preview', null, overpaymentSyncSql);
 
   assert.match(body, /protection_event\.event_type = 'SYNC_SHRINK_DEFERRED_ACTIVE_RESERVATION'[\s\S]*protection_event\.before_json IS NOT DISTINCT FROM v_case_before_json[\s\S]*protection_event\.after_json = jsonb_build_object/);
   assert.match(body, /protection_event\.event_type = 'SYNC_CLEAR_DEFERRED_ACTIVE_RESERVATION'[\s\S]*protection_event\.before_json = jsonb_build_object[\s\S]*protection_event\.after_json = jsonb_build_object/);

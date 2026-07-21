@@ -36,8 +36,123 @@ import {
 } from './bulk-authorise-evidence-policy.js';
 import { buildBulkAuthoriseWatchVector } from './bulk-authorise-watch.js';
 import { handleBulkRowFreshnessRequest } from './bulk-row-freshness.js';
+import {
+  createImportReviewDispatcher,
+  importReviewSourceEvidenceFromR2,
+  IMPORT_REVIEW_PARSER_VERSION,
+  normalizeContractQueryEmailOverride
+} from './import-review.js';
+import {
+  createImportReviewPostCommitRunner,
+  reconcileTimesheetQueryDeliveryAfterProviderAcceptance
+} from './import-review-follow-up.js';
 
 const textEncoder = new TextEncoder();
+
+const runImportReviewPostCommit = createImportReviewPostCommitRunner({
+  sbRpc,
+  unwrapRpcJsonb,
+  runTsfinWorkerOnce
+});
+
+const dispatchImportReviewRequest = createImportReviewDispatcher({
+  requireUser,
+  sbRpc,
+  runFollowUp: runImportReviewPostCommit
+});
+
+async function handleRetiredImportMutationRoute(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  return withCORS(env, req, new Response(JSON.stringify({
+    ok: false,
+    contract_version: 'IMPORT_REVIEW_DB_V1',
+    error: {
+      code: 'IMPORT_REVIEW_HARD_CUTOVER_REQUIRED',
+      message: 'This legacy import action has been retired. Reopen the import through the durable review workflow.',
+      category: 'RETIRED_ROUTE',
+      retryable: false,
+      action: 'OPEN_IMPORT_REVIEW'
+    }
+  }), {
+    status: 410,
+    headers: { 'content-type': 'application/json; charset=utf-8' }
+  }));
+}
+
+async function findImportStageReplay(env, { sourceSystem, fileKey, clientId = null, sourceEvidence } = {}) {
+  const filters = [
+    `source_system=eq.${encodeURIComponent(sourceSystem)}`,
+    `file_r2_key=eq.${encodeURIComponent(fileKey)}`,
+    'select=id,source_file_sha256,parser_version,parse_summary_json,applied_at,coverage_locked_at',
+    'order=uploaded_at_utc.desc',
+    'limit=2'
+  ];
+  if (clientId) filters.splice(2, 0, `client_id=eq.${encodeURIComponent(clientId)}`);
+  const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/hr_imports?${filters.join('&')}`);
+  if (!Array.isArray(rows) || !rows.length) return null;
+  const matching = rows.find((row) => (
+    String(row.source_file_sha256 || '').toLowerCase() === String(sourceEvidence?.source_file_sha256 || '').toLowerCase()
+    && String(row.parser_version || '') === String(sourceEvidence?.parser_version || '')
+  ));
+  // Replay only an unfinished staging write. Once coverage is locked (including
+  // an abandoned/applied review), the operator may reimport and start afresh.
+  if (matching && !matching.coverage_locked_at && !matching.applied_at) return matching;
+  if (matching) return null;
+  throw new Error('IMPORT_STAGE_SOURCE_CONFLICT');
+}
+
+const CLIENT_CREATE_FIELDS = new Set([
+  'name', 'invoice_address', 'primary_invoice_email', 'ap_phone', 'vat_chargeable',
+  'payment_terms_days', 'mileage_charge_rate', 'ts_queries_email', 'client_address',
+  'contact_title', 'contact_known_as', 'contact_forename', 'contact_surname',
+  'contact_job_title', 'contact_tel', 'contact_mobile', 'contact_email', 'website', 'notes'
+]);
+
+const CLIENT_SETTINGS_CREATE_FIELDS = new Set([
+  'timezone_id', 'day_start', 'day_end', 'night_start', 'night_end', 'bh_source', 'bh_list',
+  'bh_feed_url', 'vat_rate_pct', 'holiday_pay_pct', 'erni_pct', 'apply_holiday_to',
+  'apply_erni_to', 'margin_includes', 'effective_from', 'hr_validation_required',
+  'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'pay_reference_required',
+  'invoice_reference_required', 'default_submission_mode', 'sat_start', 'sat_end', 'sun_start',
+  'sun_end', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices',
+  'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice',
+  'ts_attach_to_invoice', 'bh_start', 'bh_end', 'auto_invoice_default',
+  'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address',
+  'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'opt_in_email',
+  'opt_in_sms', 'opt_in_whatsapp', 'healthroster_import_auto_authorise',
+  'nhsp_import_auto_authorise', 'reversal_complete_financials_date',
+  'reversal_replacement_financials_date'
+]);
+
+async function createClientWithSettingsAtomic(env, user, data) {
+  const source = (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+  const nestedSettings = (source.client_settings && typeof source.client_settings === 'object' && !Array.isArray(source.client_settings))
+    ? source.client_settings
+    : {};
+  const clientJson = {};
+  const settingsJson = {};
+  for (const key of CLIENT_CREATE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) clientJson[key] = source[key];
+  }
+  for (const key of CLIENT_SETTINGS_CREATE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(nestedSettings, key)) settingsJson[key] = nestedSettings[key];
+    else if (Object.prototype.hasOwnProperty.call(source, key)) settingsJson[key] = source[key];
+  }
+  const suppliedId = String(source.client_id || source.id || '').trim();
+  const clientId = suppliedId || crypto.randomUUID();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)) {
+    throw new Error('CLIENT_CREATE_ID_INVALID');
+  }
+  const raw = await sbRpc(env, 'client_create_with_settings_v1', {
+    p_client_id: clientId,
+    p_client_json: clientJson,
+    p_actor_user_id: user.id,
+    p_settings_json: settingsJson,
+    p_now_utc: new Date().toISOString()
+  }, { timeoutMs: 30000 });
+  return unwrapRpcJsonb(raw, 'client_create_with_settings_v1');
+}
 
 // Enable verbose import logging for Wrangler tail
 const wranglerimportlog = true;
@@ -7219,6 +7334,12 @@ async function handleContractsCreate(env, req) {
 
   // NEW: normalise additional_rates_json
   const additional_rates_json = normaliseAdditionalRates(body.additional_rates_json);
+  let queryEmailOverride;
+  try {
+    queryEmailOverride = normalizeContractQueryEmailOverride(body);
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'Invalid timesheet-query email override'));
+  }
 
   // Insert contract
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
@@ -7270,6 +7391,8 @@ async function handleContractsCreate(env, req) {
       require_reference_to_invoice: body.require_reference_to_invoice,
       mileage_pay_rate,
       mileage_charge_rate,
+      send_ts_queries_to_different_email: queryEmailOverride.send_ts_queries_to_different_email,
+      ts_queries_alt_email_address: queryEmailOverride.ts_queries_alt_email_address,
       created_at: nowIso(),
       updated_at: nowIso()
     })
@@ -9922,6 +10045,22 @@ async function handleContractsGet(env, req, contractId) {
     has_timesheets: hasTimesheets
   };
 
+  let query_email = null;
+  try {
+    const raw = await sbRpc(env, 'timesheet_query_recipient_resolve_v1', {
+      p_client_id: contract.client_id,
+      p_contract_id: contract.id
+    }, { timeoutMs: 8000 });
+    query_email = unwrapRpcJsonb(raw, 'timesheet_query_recipient_resolve_v1');
+  } catch (error) {
+    query_email = {
+      client_id: contract.client_id,
+      contract_id: contract.id,
+      configured_override: contract.send_ts_queries_to_different_email === true,
+      configuration_error: String(error?.json?.message || error?.message || 'TIMESHEET_QUERY_RECIPIENT_INVALID').match(/TIMESHEET_QUERY_[A-Z0-9_]+/)?.[0] || 'TIMESHEET_QUERY_RECIPIENT_INVALID'
+    };
+  }
+
   // ── Finance window (VAT/ERNI/etc) + server margin preview ─────────────────────────────
   const toLondonYmd = (dt) => {
     try {
@@ -10121,7 +10260,8 @@ async function handleContractsGet(env, req, contractId) {
       weeks: weeks || [],
       warnings,
       finance,
-      margins
+      margins,
+      query_email
     })
   );
 }
@@ -10247,6 +10387,17 @@ async function handleContractsUpdate(env, req, contractId) {
 
   const patch = { ...schedulePatch };
   const extraWarnings = [];
+
+  if (Object.prototype.hasOwnProperty.call(body, 'send_ts_queries_to_different_email')
+      || Object.prototype.hasOwnProperty.call(body, 'ts_queries_alt_email_address')) {
+    try {
+      const queryOverride = normalizeContractQueryEmailOverride(body, current);
+      patch.send_ts_queries_to_different_email = queryOverride.send_ts_queries_to_different_email;
+      patch.ts_queries_alt_email_address = queryOverride.ts_queries_alt_email_address;
+    } catch (error) {
+      return withCORS(env, req, badRequest(error?.message || 'Invalid timesheet-query email override'));
+    }
+  }
 
   const boolOrNull = (v, fallbackBool) => {
     if (v === null) return null;
@@ -11060,6 +11211,12 @@ async function handleContractsReplace(env, req, contractId) {
 
   const hasIsAdHoc = Object.prototype.hasOwnProperty.call(body, 'is_ad_hoc');
   const isAdHoc = hasIsAdHoc ? clampBool(body.is_ad_hoc, !!current.is_ad_hoc) : !!current.is_ad_hoc;
+  let queryEmailOverride;
+  try {
+    queryEmailOverride = normalizeContractQueryEmailOverride(body, current);
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'Invalid timesheet-query email override'));
+  }
 
   const patch = {
     candidate_id: ('candidate_id' in body ? body.candidate_id : current.candidate_id),
@@ -11102,6 +11259,8 @@ async function handleContractsReplace(env, req, contractId) {
 
     mileage_pay_rate: nextMileagePay,
     mileage_charge_rate: nextMileageCharge,
+    send_ts_queries_to_different_email: queryEmailOverride.send_ts_queries_to_different_email,
+    ts_queries_alt_email_address: queryEmailOverride.ts_queries_alt_email_address,
     updated_at: nowIso(),
     additional_rates_json: ('additional_rates_json' in body)
       ? normaliseAdditionalRates(body.additional_rates_json)
@@ -11452,6 +11611,10 @@ async function handleContractsDuplicate(env, req, contractId) {
       reference_number_required_to_issue_invoice: copyBoolOrNull(src.reference_number_required_to_issue_invoice),
       send_manual_invoices_to_different_email: copyBoolOrNull(src.send_manual_invoices_to_different_email),
       manual_invoices_alt_email_address: (src.manual_invoices_alt_email_address == null) ? null : String(src.manual_invoices_alt_email_address),
+      send_ts_queries_to_different_email: !!src.send_ts_queries_to_different_email,
+      ts_queries_alt_email_address: src.send_ts_queries_to_different_email === true
+        ? (src.ts_queries_alt_email_address == null ? null : String(src.ts_queries_alt_email_address))
+        : null,
 
       mileage_pay_rate: src.mileage_pay_rate != null ? Number(src.mileage_pay_rate) : null,
       mileage_charge_rate: src.mileage_charge_rate != null ? Number(src.mileage_charge_rate) : null,
@@ -19850,10 +20013,24 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
   const splitWorkerNoteRaw =
     (body.split_worker_note === undefined ? null : body.split_worker_note);
 
-  const successorOverrides =
+  let successorOverrides =
     (body.successor_overrides && typeof body.successor_overrides === 'object' && !Array.isArray(body.successor_overrides))
-      ? body.successor_overrides
+      ? { ...body.successor_overrides }
       : null;
+
+  if (successorOverrides && (
+    Object.prototype.hasOwnProperty.call(successorOverrides, 'send_ts_queries_to_different_email')
+    || Object.prototype.hasOwnProperty.call(successorOverrides, 'ts_queries_alt_email_address')
+  )) {
+    try {
+      successorOverrides = {
+        ...successorOverrides,
+        ...normalizeContractQueryEmailOverride(successorOverrides, cur)
+      };
+    } catch (error) {
+      return withCORS(env, req, badRequest(error?.message || 'Invalid successor timesheet-query email override'));
+    }
+  }
 
   const forceScheduleClashes =
     (body.force_schedule_clashes === true);
@@ -103313,6 +103490,25 @@ async function handleImportHrRotaParse(env, req) {
     ...(body.parse_summary_json || {})
   };
 
+  let sourceEvidence;
+  try {
+    sourceEvidence = await importReviewSourceEvidenceFromR2(env, fileKey, `${IMPORT_REVIEW_PARSER_VERSION}:HR_DAILY`);
+    const replay = await findImportStageReplay(env, {
+      sourceSystem: 'HEALTHROSTER_DAILY', fileKey, clientId, sourceEvidence
+    });
+    if (replay) {
+      return withCORS(env, req, ok({
+        import_id: replay.id,
+        replay: true,
+        source_file_sha256: replay.source_file_sha256,
+        parser_version: replay.parser_version,
+        parse_summary_json: replay.parse_summary_json || null
+      }));
+    }
+  } catch (error) {
+    return withCORS(env, req, badRequest(`Unable to verify the staged source file: ${error?.message || String(error)}`));
+  }
+
   const insPayload = {
     filename,
     uploaded_by: user.id,
@@ -103322,6 +103518,8 @@ async function handleImportHrRotaParse(env, req) {
     client_id: clientId,
     import_scope: 'HR_DAILY',          // ✅ set immediately (not later)
     file_r2_key: fileKey,
+    source_file_sha256: sourceEvidence.source_file_sha256,
+    parser_version: sourceEvidence.parser_version,
     parse_summary_json: parseSummaryJson
   };
 
@@ -103460,6 +103658,8 @@ async function handleImportHrRotaParse(env, req) {
 
   return withCORS(env, req, ok({
     import_id: importId,
+    source_file_sha256: sourceEvidence.source_file_sha256,
+    parser_version: sourceEvidence.parser_version,
     parse_summary_json: mergedSummary
   }));
 }
@@ -106695,380 +106895,7 @@ async function handleNhspImportPreview(env, req, importId) {
 
 
 async function handleNhspApply(env, req, importId) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-
-  const logInfo  = (obj) => { if (LOG) console.log('[NHSP_APPLY]', JSON.stringify(obj)); };
-  const logWarn  = (obj) => { if (LOG) console.warn('[NHSP_APPLY]', JSON.stringify(obj)); };
-  const logError = (obj) => { if (LOG) console.error('[NHSP_APPLY]', JSON.stringify(obj)); };
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!importId) return withCORS(env, req, badRequest('import_id is required'));
-
-  const actorUserId = user?.id ? String(user.id) : null;
-  const ip = req?.headers?.get('cf-connecting-ip') || req?.headers?.get('x-forwarded-for') || null;
-  const userAgent = req?.headers?.get('user-agent') || null;
-  const correlationId = req?.headers?.get('cf-ray') || null;
-
-  const safeImpDebugAudit = async (action, afterJson) => {
-    try {
-      await sbRpc(env, "_imp_debug_audit", {
-        p_actor_user_id: actorUserId,
-        p_action: String(action || 'NHSP_APPLY_DEBUG'),
-        p_after_json: afterJson || {},
-        p_entity: 'hr_imports',
-        p_subject_id: String(importId || ''),
-        p_before_json: null,
-        p_ip: ip,
-        p_user_agent: userAgent,
-        p_correlation_id: correlationId
-      });
-    } catch {
-      // Never break apply for debug logging.
-    }
-  };
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON body'));
-  }
-
-  const unwrapRpcJsonb = (raw, fnName) => {
-    const j = raw;
-    if (Array.isArray(j)) {
-      const row0 = j[0];
-      if (row0 && typeof row0 === 'object' && fnName && Object.prototype.hasOwnProperty.call(row0, fnName)) {
-        return row0[fnName];
-      }
-      return row0;
-    }
-    if (j && typeof j === 'object' && fnName && Object.prototype.hasOwnProperty.call(j, fnName)) {
-      return j[fnName];
-    }
-    return j;
-  };
-
-  const uniqStrings = (arr) => {
-    const out = [];
-    const seen = new Set();
-    for (const x of (Array.isArray(arr) ? arr : [])) {
-      const s = String(x || '').trim();
-      if (!s) continue;
-      if (seen.has(s)) continue;
-      seen.add(s);
-      out.push(s);
-    }
-    return out;
-  };
-
-  const capArr = (arr, n) => {
-    const a = Array.isArray(arr) ? arr : [];
-    const lim = Math.max(0, Number(n) || 0);
-    if (!lim) return [];
-    return a.slice(0, lim);
-  };
-
-  const t0 = Date.now();
-
-  // Inputs (new contract)
-  const selectedActionIdsIn = Array.isArray(body.selected_action_ids) ? body.selected_action_ids : [];
-  let selectedActionIds = uniqStrings(selectedActionIdsIn);
-
-  const selectedActionsIn = Array.isArray(body.selected_actions) ? body.selected_actions : [];
-  const selectedActions = selectedActionsIn
-    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
-    .map(x => ({ ...x }));
-
-  // Optional safety: if caller sends auto_apply_action_ids, merge them (auto-applied new shifts).
-  // This does NOT override user ticks; it only ensures hidden auto-applied actions are included.
-  const autoApplyIdsIn = Array.isArray(body.auto_apply_action_ids) ? body.auto_apply_action_ids : [];
-  if (autoApplyIdsIn.length) {
-    const autoApplyIds = uniqStrings(autoApplyIdsIn);
-    selectedActionIds = uniqStrings([ ...selectedActionIds, ...autoApplyIds ]);
-  }
-
-  // Legacy cancellation_actions support: allow shift_id → CANCEL:<shift_id> (explicit shift IDs only)
-  const cancellationActionsIn = Array.isArray(body.cancellation_actions) ? body.cancellation_actions : [];
-  if (cancellationActionsIn.length) {
-    for (const a of cancellationActionsIn) {
-      const sid = a && a.shift_id ? String(a.shift_id).trim() : '';
-      if (!sid) continue;
-      const aid = `CANCEL:${sid}`;
-      if (!selectedActionIds.includes(aid)) selectedActionIds.push(aid);
-    }
-  }
-
-  // Legacy selected_group_ids is NOT supported in apply anymore (no Worker-side expansion).
-  const legacyGroupIds = Array.isArray(body.selected_group_ids) ? uniqStrings(body.selected_group_ids) : [];
-  const hasLegacyGroupIdsOnly =
-    legacyGroupIds.length > 0 &&
-    selectedActionIds.length === 0 &&
-    selectedActions.length === 0;
-
-  if (hasLegacyGroupIdsOnly) {
-    return withCORS(
-      env,
-      req,
-      badRequest('Apply now requires action-level selection (selected_action_ids with ROW:/CANCEL:). Update the frontend; selected_group_ids is no longer accepted for apply.')
-    );
-  }
-
-  // Decisions map (Phase 3) — kept for backward compatibility, but selection is authoritative (“tick = proceed”).
-  const decisions =
-    (body.decisions && typeof body.decisions === 'object' && !Array.isArray(body.decisions))
-      ? body.decisions
-      : {};
-
-  logInfo({
-    stage: 'start',
-    import_id: importId,
-    selected_action_ids_count: selectedActionIds.length,
-    selected_actions_count: selectedActions.length,
-    decisions_keys_count: Object.keys(decisions || {}).length
-  });
-
-  await safeImpDebugAudit('NHSP_WEEKLY_APPLY_START', {
-    import_id: String(importId),
-    selected_action_ids_count: Number(selectedActionIds.length || 0),
-    selected_action_ids_sample: capArr(selectedActionIds, 25),
-    selected_actions_count: Number(selectedActions.length || 0),
-    decisions_keys_count: Number(Object.keys(decisions || {}).length || 0),
-    legacy_group_ids_count: Number(legacyGroupIds.length || 0),
-    legacy_cancellation_actions_count: Number((cancellationActionsIn || []).length || 0),
-    auto_apply_action_ids_in_body_count: Number((autoApplyIdsIn || []).length || 0),
-    correlation_id: correlationId || null
-  });
-
-  // ─────────────────────────────────────────────
-  // 1) Single transactional DB apply RPC (ALL required DB writes)
-  // ─────────────────────────────────────────────
-  let applyPayload;
-  let rpcMs = null;
-
-  try {
-    const tRpc0 = Date.now();
-
-    const rpcRaw = await sbRpc(env, 'nhsp_weekly_apply_transactional', {
-      p_import_id: importId,
-      p_payload: {
-        selected_action_ids: selectedActionIds,
-        selected_actions: selectedActions,
-        decisions
-      },
-      p_actor_user_id: user.id
-    });
-
-    rpcMs = Date.now() - tRpc0;
-    applyPayload = unwrapRpcJsonb(rpcRaw, 'nhsp_weekly_apply_transactional');
-  } catch (e) {
-    const errMsg = String(e?.message || e || '');
-    logError({
-      stage: 'apply_rpc_failed',
-      import_id: importId,
-      err: errMsg
-    });
-
-    await safeImpDebugAudit('NHSP_WEEKLY_APPLY_RPC_FAILED', {
-      import_id: String(importId),
-      error: errMsg,
-      rpc_ms: (rpcMs != null ? Number(rpcMs) : null),
-      selected_action_ids_count: Number(selectedActionIds.length || 0),
-      selected_action_ids_sample: capArr(selectedActionIds, 25),
-      correlation_id: correlationId || null
-    });
-
-    return withCORS(env, req, serverError(`NHSP apply failed: ${e?.message || String(e)}`));
-  }
-
-  if (!applyPayload || typeof applyPayload !== 'object') {
-    await safeImpDebugAudit('NHSP_WEEKLY_APPLY_INVALID_RPC_PAYLOAD', {
-      import_id: String(importId),
-      rpc_ms: (rpcMs != null ? Number(rpcMs) : null),
-      correlation_id: correlationId || null
-    });
-    return withCORS(env, req, serverError('NHSP apply returned invalid payload'));
-  }
-
-  const affectedTimesheetIds = Array.isArray(applyPayload.affected_timesheet_ids)
-    ? uniqStrings(applyPayload.affected_timesheet_ids)
-    : [];
-
-  logInfo({
-    stage: 'apply_rpc_ok',
-    import_id: importId,
-    rpc_ms: rpcMs,
-    affected_timesheet_ids_count: affectedTimesheetIds.length
-  });
-
-  await safeImpDebugAudit('NHSP_WEEKLY_APPLY_RPC_OK', {
-    import_id: String(importId),
-    rpc_ms: (rpcMs != null ? Number(rpcMs) : null),
-    affected_timesheet_ids_count: Number(affectedTimesheetIds.length || 0),
-    affected_timesheet_ids_sample: capArr(affectedTimesheetIds, 25),
-    // Keep payload small & diagnostic-focused (applyPayload may contain nested structures)
-    apply_payload_keys: Object.keys(applyPayload || {}).slice(0, 50),
-    correlation_id: correlationId || null
-  });
-
-  // ─────────────────────────────────────────────
-  // 2) Post-commit: TSFIN Strategy A drain-to-completion (hard requirement)
-  // ─────────────────────────────────────────────
-  let tsfinDrain = null;
-  let tsfinMs = null;
-
-  if (affectedTimesheetIds.length) {
-    const tTs0 = Date.now();
-    try {
-      tsfinDrain = await tsfinTargetedDrainNow(env, {
-        timesheetIds: affectedTimesheetIds,
-        reason: 'CONTEXT_CHANGED',
-        drainAll: true
-      });
-    } catch (e) {
-      tsfinDrain = {
-        drain_all: true,
-        done: false,
-        error: String(e?.message || e || '')
-      };
-    }
-    tsfinMs = Date.now() - tTs0;
-
-    const doneOk = !!(tsfinDrain && tsfinDrain.drain_all === true && tsfinDrain.done === true && Number(tsfinDrain.fail || 0) === 0);
-
-    logInfo({
-      stage: 'tsfin_drain_done',
-      import_id: importId,
-      tsfin_ms: tsfinMs,
-      done_ok: doneOk,
-      fail: (tsfinDrain ? Number(tsfinDrain.fail || 0) : null),
-      pending: (tsfinDrain ? Number(tsfinDrain.pending || 0) : null)
-    });
-
-    await safeImpDebugAudit('NHSP_WEEKLY_APPLY_TSFIN_DRAIN', {
-      import_id: String(importId),
-      tsfin_ms: (tsfinMs != null ? Number(tsfinMs) : null),
-      done_ok: doneOk,
-      tsfin_drain: {
-        drain_all: (tsfinDrain ? !!tsfinDrain.drain_all : null),
-        done: (tsfinDrain ? !!tsfinDrain.done : null),
-        ok: (tsfinDrain ? Number(tsfinDrain.ok || 0) : null),
-        fail: (tsfinDrain ? Number(tsfinDrain.fail || 0) : null),
-        pending: (tsfinDrain ? Number(tsfinDrain.pending || 0) : null),
-        error: (tsfinDrain && tsfinDrain.error ? String(tsfinDrain.error) : null),
-        pending_next_attempt_at_min: (tsfinDrain && tsfinDrain.pending_next_attempt_at_min != null ? tsfinDrain.pending_next_attempt_at_min : null)
-      },
-      affected_timesheet_ids_count: Number(affectedTimesheetIds.length || 0),
-      affected_timesheet_ids_sample: capArr(affectedTimesheetIds, 25),
-      correlation_id: correlationId || null
-    });
-
-    if (!doneOk) {
-      const retryAfterSeconds = 30;
-
-      // Best-effort audit write even on failure response
-      try {
-        await writeAudit(
-          env,
-          user,
-          'NHSP_APPLY_TRANSACTIONAL_TSFIN_FAILED',
-          {
-            import_id: importId,
-            apply: applyPayload,
-            tsfin_drain: tsfinDrain,
-            affected_timesheet_ids: affectedTimesheetIds
-          },
-          { entity: 'hr_imports', subject_id: importId, req }
-        );
-      } catch (e) {
-        logWarn({
-          stage: 'writeAudit_failed_non_fatal',
-          import_id: importId,
-          err: String(e?.message || e || '')
-        });
-      }
-
-      const resp = {
-        error: 'TSFIN_REFRESH_FAILED_AFTER_APPLY',
-        message:
-          'The database apply succeeded, but TSFIN refresh did not complete. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
-        import_id: importId,
-        affected_timesheet_ids: affectedTimesheetIds,
-        tsfin_drain: tsfinDrain,
-        retry: {
-          action: 'RETRY_TSFIN_RECOMPUTE',
-          timesheet_ids: affectedTimesheetIds,
-          next_attempt_at_min: tsfinDrain?.pending_next_attempt_at_min ?? null,
-          retry_after_seconds: retryAfterSeconds
-        },
-        apply: applyPayload
-      };
-
-      return withCORS(env, req, new Response(JSON.stringify(resp), {
-        status: 500,
-        headers: { 'content-type': 'application/json' }
-      }));
-    }
-  } else {
-    await safeImpDebugAudit('NHSP_WEEKLY_APPLY_NO_AFFECTED_TIMESHEETS', {
-      import_id: String(importId),
-      selected_action_ids_count: Number(selectedActionIds.length || 0),
-      selected_action_ids_sample: capArr(selectedActionIds, 25),
-      rpc_ms: (rpcMs != null ? Number(rpcMs) : null),
-      correlation_id: correlationId || null
-    });
-  }
-
-  // ─────────────────────────────────────────────
-  // 3) Audit best-effort
-  // ─────────────────────────────────────────────
-  try {
-    await writeAudit(
-      env,
-      user,
-      'NHSP_APPLY_TRANSACTIONAL_COMPLETED',
-      {
-        import_id: importId,
-        apply: applyPayload,
-        tsfin_drain: tsfinDrain,
-        timings_ms: {
-          total: Number(Date.now() - t0),
-          apply_rpc: (rpcMs != null ? Number(rpcMs) : null),
-          tsfin_drain: (tsfinMs != null ? Number(tsfinMs) : null)
-        }
-      },
-      { entity: 'hr_imports', subject_id: importId, req }
-    );
-  } catch (e) {
-    logWarn({
-      stage: 'writeAudit_failed_non_fatal',
-      import_id: importId,
-      err: String(e?.message || e || '')
-    });
-  }
-
-  await safeImpDebugAudit('NHSP_WEEKLY_APPLY_COMPLETED', {
-    import_id: String(importId),
-    affected_timesheet_ids_count: Number(affectedTimesheetIds.length || 0),
-    affected_timesheet_ids_sample: capArr(affectedTimesheetIds, 25),
-    timings_ms: {
-      total: Number(Date.now() - t0),
-      apply_rpc: (rpcMs != null ? Number(rpcMs) : null),
-      tsfin_drain: (tsfinMs != null ? Number(tsfinMs) : null)
-    },
-    correlation_id: correlationId || null
-  });
-
-  // ─────────────────────────────────────────────
-  // 4) Response
-  // ─────────────────────────────────────────────
-  return withCORS(env, req, ok({
-    import_id: importId,
-    apply: applyPayload,
-    post_commit: {
-      tsfin_drain: tsfinDrain
-    }
-  }));
+  return handleRetiredImportMutationRoute(env, req);
 }
 
 
@@ -107139,6 +106966,19 @@ async function handleHrAutoprocessImport(env, req) {
   try {
     const nowIso = new Date().toISOString();
     const tzAssumption = body.tz_assumption || 'Europe/London';
+    const sourceEvidence = await importReviewSourceEvidenceFromR2(env, fileKey, `${IMPORT_REVIEW_PARSER_VERSION}:HR_WEEKLY`);
+    const replay = await findImportStageReplay(env, {
+      sourceSystem: 'HEALTHROSTER', fileKey, clientId, sourceEvidence
+    });
+    if (replay) {
+      return withCORS(env, req, ok({
+        import_id: replay.id,
+        replay: true,
+        source_file_sha256: replay.source_file_sha256,
+        parser_version: replay.parser_version,
+        parse_summary: replay.parse_summary_json || null
+      }));
+    }
 
     // 1) Create hr_imports row for this HealthRoster file
     const payload = {
@@ -107150,6 +106990,8 @@ async function handleHrAutoprocessImport(env, req) {
       client_id: clientId,
       file_r2_key: fileKey,
       import_scope: 'HR_WEEKLY',
+      source_file_sha256: sourceEvidence.source_file_sha256,
+      parser_version: sourceEvidence.parser_version,
       parse_summary_json: {
         status: 'PENDING_PARSE',
         rows_total: 0,
@@ -107293,6 +107135,8 @@ async function handleHrAutoprocessImport(env, req) {
 
     return withCORS(env, req, ok({
       import_id: importId,
+      source_file_sha256: sourceEvidence.source_file_sha256,
+      parser_version: sourceEvidence.parser_version,
       parse_summary: patchBody.parse_summary_json
     }));
   } catch (e) {
@@ -109897,69 +109741,7 @@ function validateWeeklyImportDecisions(phase3, decisions, opts = {}) {
 }
 
 async function handleNhspImportConfirm(env, req, importId) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-
-  const logWarn  = (obj) => { if (LOG) console.warn('[NHSP_CONFIRM]', JSON.stringify(obj)); };
-  const logError = (obj) => { if (LOG) console.error('[NHSP_CONFIRM]', JSON.stringify(obj)); };
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!importId) return withCORS(env, req, badRequest('import_id is required'));
-
-  // Confirm endpoint is now a thin alias of apply.
-  // IMPORTANT: do NOT consume the original request body stream; read from req.clone() only.
-  let body;
-  try {
-    body = await parseJSONBody(req.clone());
-  } catch {
-    body = null;
-  }
-
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON body'));
-  }
-
-  // ✅ Action-level payload includes auto_apply_action_ids (NEW shifts hidden in UI but still applied)
-  const hasActionLevel =
-    Array.isArray(body.selected_action_ids) ||
-    Array.isArray(body.selected_actions) ||
-    Array.isArray(body.cancellation_actions) ||
-    Array.isArray(body.auto_apply_action_ids) ||
-    (body.decisions && typeof body.decisions === 'object' && !Array.isArray(body.decisions));
-
-  const legacyGroupIds = Array.isArray(body.selected_group_ids)
-    ? [...new Set(body.selected_group_ids.map(String).filter(Boolean))]
-    : [];
-
-  // Legacy group-only confirm is not allowed under tick-only semantics.
-  if (legacyGroupIds.length && !hasActionLevel) {
-    return withCORS(
-      env,
-      req,
-      badRequest('Confirm/apply now requires action-level payload (selected_action_ids with ROW:/CANCEL: or auto_apply_action_ids). selected_group_ids is no longer accepted.')
-    );
-  }
-
-  // If neither action-level fields nor legacy groups exist, fail fast (prevents implicit apply-all drift).
-  if (!hasActionLevel && legacyGroupIds.length === 0) {
-    return withCORS(
-      env,
-      req,
-      badRequest('No selection provided. Confirm/apply requires action-level payload (selected_action_ids with ROW:/CANCEL: or auto_apply_action_ids).')
-    );
-  }
-
-  // Delegate to apply (single transactional RPC + post-commit TSFIN Strategy A drain).
-  try {
-    return await handleNhspApply(env, req, importId);
-  } catch (e) {
-    logError({
-      stage: 'delegate_apply_failed',
-      import_id: importId,
-      err: String(e?.message || e || '')
-    });
-    return withCORS(env, req, serverError(`NHSP confirm failed: ${e?.message || e}`));
-  }
+  return handleRetiredImportMutationRoute(env, req);
 }
 
 async function applyWeeklyHoursCorrections(env, {
@@ -111466,12 +111248,13 @@ async function handleHrRotaValidationPreview(env, req, importId) {
 
     const rows = Array.isArray(result.rows) ? result.rows : [];
 
-    // Load hr_rows payload_json for grade_raw + resolved_timesheet_id (import-scoped)
+    // Load import-scoped grade evidence only. Daily timesheet choices are held in
+    // import_review_daily_timesheet_resolutions and are never read from payload_json.
     const hrRowIds = rows
       .map(r => (r && r.hr_row_id ? String(r.hr_row_id).trim() : ''))
       .filter(Boolean);
 
-    const hrMetaById = new Map(); // hr_row_id -> { grade_raw, resolved_timesheet_id }
+    const hrMetaById = new Map(); // hr_row_id -> { grade_raw }
     if (hrRowIds.length) {
       try {
         const idParam = hrRowIds.map(enc).join(',');
@@ -111501,15 +111284,8 @@ async function handleHrRotaValidationPreview(env, req, importId) {
             payload.grade ||
             null;
 
-          const resolvedTs =
-            payload.resolved_timesheet_id ||
-            payload.resolved_target_timesheet_id ||
-            payload.resolved_target_id ||
-            null;
-
           hrMetaById.set(id, {
-            grade_raw: grade ? String(grade) : null,
-            resolved_timesheet_id: resolvedTs ? String(resolvedTs) : null
+            grade_raw: grade ? String(grade) : null
           });
         }
       } catch (e) {
@@ -111544,8 +111320,6 @@ async function handleHrRotaValidationPreview(env, req, importId) {
       const meta = hrid ? (hrMetaById.get(hrid) || null) : null;
 
       const grade_raw = meta?.grade_raw || null;
-      const resolved_timesheet_id = meta?.resolved_timesheet_id || null;
-
       const staffRaw = row?.staff_name || row?.staff_raw || '';
       const staffNorm = row?.staff_norm || '';
       const trustNorm = row?.trust_norm || '';
@@ -111591,7 +111365,7 @@ async function handleHrRotaValidationPreview(env, req, importId) {
         grade_raw: grade_raw || null,
 
         // timesheet target selection hooks
-        resolved_timesheet_id: resolved_timesheet_id || null,
+        resolved_timesheet_id: null,
         timesheet_target_ambiguous: !!timesheet_target_ambiguous,
         timesheet_target_options: Array.isArray(row?.timesheet_target_options) ? row.timesheet_target_options : [],
 
@@ -117042,6 +116816,19 @@ async function handleNhspImport(env, req) {
   try {
     const nowIso = new Date().toISOString();
     const tzAssumption = body?.tz_assumption || 'Europe/London';
+    const sourceEvidence = await importReviewSourceEvidenceFromR2(env, fileKey, `${IMPORT_REVIEW_PARSER_VERSION}:NHSP`);
+    const replay = await findImportStageReplay(env, {
+      sourceSystem: 'NHSP', fileKey, sourceEvidence
+    });
+    if (replay) {
+      return withCORS(env, req, ok({
+        import_id: replay.id,
+        replay: true,
+        source_file_sha256: replay.source_file_sha256,
+        parser_version: replay.parser_version,
+        parse_summary: replay.parse_summary_json || null
+      }));
+    }
 
     // 1) Create hr_imports row for this NHSP file
     const payload = {
@@ -117051,6 +116838,9 @@ async function handleNhspImport(env, req) {
       tz_assumption: tzAssumption,
       source_system: 'NHSP',
       file_r2_key: fileKey,
+      import_scope: 'NHSP',
+      source_file_sha256: sourceEvidence.source_file_sha256,
+      parser_version: sourceEvidence.parser_version,
       parse_summary_json: {
         status: 'PENDING_PARSE',
         rows_total: 0,
@@ -117207,6 +116997,8 @@ async function handleNhspImport(env, req) {
 
     return withCORS(env, req, ok({
       import_id: importId,
+      source_file_sha256: sourceEvidence.source_file_sha256,
+      parser_version: sourceEvidence.parser_version,
       parse_summary: patchBody.parse_summary_json
     }));
   } catch (e) {
@@ -118230,10 +118022,9 @@ async function classifyHrRotaValidationImport(env, importId) {
     const startLocal    = hr.start_time_local || hr.payload_json?.start_local || null;
     const endLocal      = hr.end_time_local || hr.payload_json?.end_local || null;
 
-    // resolved_timesheet_id override (must win when present)
-    const resolvedTimesheetId = hr.payload_json?.resolved_timesheet_id
-      ? String(hr.payload_json.resolved_timesheet_id).trim()
-      : null;
+    // Browser-selected Daily timesheet authority was removed from hr_rows.payload_json.
+    // The durable review preview/apply RPCs resolve the normalized selection instead.
+    const resolvedTimesheetId = null;
 
     const baseResult = {
       hr_row_id: hrRowId,
@@ -118808,88 +118599,17 @@ async function handleHrRotaResolveMappings(env, req, importId) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // 2) Persist timesheet target selection for this import (resolved_timesheet_id)
-  // ─────────────────────────────────────────────────────────────
-  let roleMappingsApplied = 0;
-
+  // Timesheet evidence is no longer stored in hr_rows.payload_json. The
+  // dedicated review resolution endpoint validates candidate/client/contract/date
+  // scope and applies optimistic concurrency before saving it.
   if (roleMappings.length) {
-    try {
-      const wanted = [];
-      const seen = new Set();
-
-      for (const rm of roleMappings) {
-        if (!rm) continue;
-        const hrRowId = rm.hr_row_id ? String(rm.hr_row_id).trim() : '';
-        const targetId = (rm.target_id || rm.timesheet_target_id || rm.timesheet_id)
-          ? String(rm.target_id || rm.timesheet_target_id || rm.timesheet_id).trim()
-          : '';
-
-        if (!hrRowId || !targetId) continue;
-
-        const k = `${hrRowId}__${targetId}`;
-        if (seen.has(k)) continue;
-        seen.add(k);
-
-        wanted.push({ hrRowId, targetId });
-      }
-
-      if (wanted.length) {
-        const idParam = wanted.map(x => enc(x.hrRowId)).join(',');
-        const { rows: hrRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/hr_rows` +
-            `?import_id=eq.${enc(importId)}` +
-            `&id=in.(${idParam})` +
-            `&select=id,payload_json`
-        );
-
-        const hrMap = new Map((hrRows || []).map(r => [String(r.id), r]));
-
-        for (const it of wanted) {
-          const row = hrMap.get(String(it.hrRowId));
-          if (!row) continue;
-
-          let payload = row.payload_json || {};
-          if (typeof payload === 'string') {
-            try { payload = JSON.parse(payload); } catch { payload = {}; }
-          }
-          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {};
-
-          payload.resolved_timesheet_id = it.targetId;
-          payload.resolved_timesheet_set_at_utc = nowIso;
-          payload.resolved_timesheet_set_by = user?.id || null;
-
-          const patchRes = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/hr_rows?id=eq.${enc(it.hrRowId)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal', 'content-type': 'application/json' },
-              body: JSON.stringify({ payload_json: payload })
-            }
-          );
-
-          if (!patchRes.ok) {
-            const err = await patchRes.text().catch(() => '');
-            console.warn('[HR_ROTA_RESOLVE] hr_rows target patch failed', {
-              import_id: importId,
-              hr_row_id: it.hrRowId,
-              target_id: it.targetId,
-              err
-            });
-            continue;
-          }
-
-          roleMappingsApplied += 1;
-        }
-      }
-    } catch (e) {
-      console.warn('[HR_ROTA_RESOLVE] role_mappings persist failed (non-fatal)', {
-        import_id: importId,
-        err: e?.message || String(e)
-      });
-    }
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      error_code: 'HR_DAILY_TIMESHEET_RESOLUTION_ROUTE_REQUIRED',
+      message: 'Use the import-review Daily timesheet-resolution action for each selected timesheet.'
+    }), { status: 409, headers: JSON_HEADERS }));
   }
+  const roleMappingsApplied = 0;
 
   // ─────────────────────────────────────────────────────────────
   // 3) ✅ NEW: Persist durable grade→role mapping for daily
@@ -119004,1188 +118724,14 @@ async function handleHrRotaResolveMappings(env, req, importId) {
 
 
 async function handleHrAutoprocessApply(env, req, importId) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-
-  // ---- logging helpers (ALL logging is gated by LOG) ----
-  const logInfo  = (obj) => { if (LOG) console.log('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
-  const logWarn  = (obj) => { if (LOG) console.warn('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
-  const logError = (obj) => { if (LOG) console.error('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!importId) return withCORS(env, req, badRequest('import_id is required'));
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON body'));
-  }
-
-  const boolish = (v) => (v === true || v === 'true' || v === 1 || v === '1');
-
-  // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
-  const isBlockedForTsoEmail = (processing_status) => {
-    const s = String(processing_status || '').trim().toUpperCase();
-    if (!s) return true; // safe default
-    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
-  };
-
-  // ✅ Unconfirmed block reason (UI-parity wording)
-  const unconfirmedEmailBlockText = (processing_status) => {
-    const s = String(processing_status || '').trim().toUpperCase();
-    if (s === 'PENDING_AUTH') return 'Timesheet not authorized yet - cannot email temporary staffing';
-    if (s === 'AWAITING_MANUAL_SIGNATURE') return 'Signed timesheet not yet received from worker - cannot email temporary staffing';
-    return 'Email blocked: timesheet is not confirmed (awaiting authorisation/signature).';
-  };
-
-  // ✅ "Invoice-locked / paid ⇒ informative only (no email allowed)"
-  const isInvoiceLockedOrPaid = (locked_by_invoice_id, paid_at_utc) => {
-    const invId = (locked_by_invoice_id != null && String(locked_by_invoice_id).trim())
-      ? String(locked_by_invoice_id).trim()
-      : '';
-    const paidAt = (paid_at_utc != null && String(paid_at_utc).trim())
-      ? String(paid_at_utc).trim()
-      : '';
-    return !!(invId || paidAt);
-  };
-
-  const unwrapRpcJsonb = (raw, fnName) => {
-    const j = raw;
-    if (Array.isArray(j)) {
-      const row0 = j[0];
-      if (row0 && typeof row0 === 'object' && fnName && Object.prototype.hasOwnProperty.call(row0, fnName)) {
-        return row0[fnName];
-      }
-      return row0;
-    }
-    if (j && typeof j === 'object' && fnName && Object.prototype.hasOwnProperty.call(j, fnName)) {
-      return j[fnName];
-    }
-    return j;
-  };
-
-  const uniqStrings = (arr) => {
-    const out = [];
-    const seen = new Set();
-    for (const x of (Array.isArray(arr) ? arr : [])) {
-      const s = String(x || '').trim();
-      if (!s) continue;
-      if (seen.has(s)) continue;
-      seen.add(s);
-      out.push(s);
-    }
-    return out;
-  };
-
-  const chunk = (arr, n) => {
-    const out = [];
-    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
-    return out;
-  };
-
-
-
-  const safeYmd = (v) => {
-    const s = String(v || '').trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    return s || '';
-  };
-
-  // ✅ Format YYYY-MM-DD → "Mon 1 Sep 2026" (Europe/London)
-  const fmtNiceDate = (ymd) => {
-    const s = safeYmd(ymd);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || '—';
-    const d = new Date(`${s}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return s;
-    try {
-      return new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      }).format(d);
-    } catch {
-      return s;
-    }
-  };
-
-  const normEmail = (v) => {
-    const s = String(v ?? '').trim();
-    return s ? s : '';
-  };
-
-  // Inputs (new contract)
-  const selectedActionIdsIn = Array.isArray(body.selected_action_ids) ? body.selected_action_ids : [];
-  const selectedActionIds = uniqStrings(selectedActionIdsIn);
-
-  const selectedActionsIn = Array.isArray(body.selected_actions) ? body.selected_actions : [];
-  const selectedActions = selectedActionsIn
-    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
-    .map(x => ({ ...x }));
-
-  // Legacy cancellation_actions support: allow shift_id → CANCEL:<shift_id> (explicit shift IDs only)
-  const cancellationActionsIn = Array.isArray(body.cancellation_actions) ? body.cancellation_actions : [];
-  for (const a of cancellationActionsIn) {
-    const sid = a && a.shift_id ? String(a.shift_id).trim() : '';
-    if (!sid) continue;
-    const aid = `CANCEL:${sid}`;
-    if (!selectedActionIds.includes(aid)) selectedActionIds.push(aid);
-  }
-
-  // Legacy selected_group_ids is NOT supported in apply anymore (no Worker-side expansion).
-  const legacyGroupIds = Array.isArray(body.selected_group_ids) ? uniqStrings(body.selected_group_ids) : [];
-  const hasLegacyGroupIdsOnly =
-    legacyGroupIds.length > 0 &&
-    selectedActionIds.length === 0 &&
-    selectedActions.length === 0;
-
-  if (hasLegacyGroupIdsOnly) {
-    return withCORS(
-      env,
-      req,
-      badRequest('Apply now requires action-level selection (selected_action_ids with ROW:/CANCEL:). Update the frontend; selected_group_ids is no longer accepted for apply.')
-    );
-  }
-
-  // Decisions map (Phase 3)
-  const decisions =
-    (body.decisions && typeof body.decisions === 'object' && !Array.isArray(body.decisions))
-      ? body.decisions
-      : {};
-
-  // ✅ Mode A email actions (alt email overrides)
-  const emailActionsIn = Array.isArray(body.email_actions)
-    ? body.email_actions
-    : (Array.isArray(body.send_email_actions) ? body.send_email_actions : []);
-
-  const emailActions = (emailActionsIn || [])
-    .map(a => {
-      const tsId = a?.timesheet_id ? String(a.timesheet_id).trim() : null;
-      const fp   = a?.issue_fingerprint ? String(a.issue_fingerprint).trim() : null;
-
-      const alt =
-        normEmail(a?.alt_email) ||
-        normEmail(a?.alternative_email) ||
-        normEmail(a?.alt_recipient_email) ||
-        normEmail(a?.to_email) ||
-        normEmail(a?.toEmail) ||
-        normEmail(a?.recipient_email_override) ||
-        normEmail(a?.override_email) ||
-        '';
-
-      return {
-        timesheet_id: tsId,
-        issue_fingerprint: fp,
-        ...(alt ? { alt_email: alt } : {})
-      };
-    })
-    .filter(a => !!(a.timesheet_id && a.issue_fingerprint)); // ✅ defensive: ignore missing fingerprint
-
-  // ✅ Include-missing-shifts flag
-  const includeMissingShifts =
-    boolish(body.include_missing_shifts) ||
-    boolish(body.includeMissingShifts) ||
-    boolish(body.include_missing) ||
-    boolish(body.includeMissing) ||
-    false;
-
-  // ✅ Destructive invalidation actions (checkbox-driven)
-  const invalidationActionsIn = Array.isArray(body.invalidation_actions) ? body.invalidation_actions : [];
-  const invalidationActions = invalidationActionsIn
-    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
-    .map(x => ({
-      timesheet_id: x?.timesheet_id ? String(x.timesheet_id).trim() : null,
-      comparison_key: x?.comparison_key ? String(x.comparison_key).trim() : null,
-      invalidate: (x?.invalidate === false || x?.invalidate === 'false' || x?.invalidate === 0 || x?.invalidate === '0') ? false : true
-    }))
-    .filter(x => !!(x.timesheet_id && x.comparison_key));
-
-  // ─────────────────────────────────────────────
-  // ✅ Config-driven default for enqueue_tspdf_regen:
-  //   - If request explicitly provides a flag (even false), honour it.
-  //   - Otherwise default to settings.importConfig.tspdf_effective.regen_on_ref_change (recommended default true).
-  // ─────────────────────────────────────────────
-  const hasEnqueueTspdfKey =
-    Object.prototype.hasOwnProperty.call(body, 'enqueue_tspdf_regen') ||
-    Object.prototype.hasOwnProperty.call(body, 'enqueueTspdfRegen') ||
-    Object.prototype.hasOwnProperty.call(body, 'enqueue_pdf_regen') ||
-    Object.prototype.hasOwnProperty.call(body, 'enqueuePdfRegen');
-
-  let enqueueTspdfRegenDefault = true;
-  try {
-    const s = await loadSettingsDefaults(env);
-    const v = s?.importConfig?.tspdf_effective?.regen_on_ref_change;
-    if (v === true || v === false) enqueueTspdfRegenDefault = v;
-  } catch {
-    enqueueTspdfRegenDefault = true;
-  }
-
-  const enqueueTspdfRegen = hasEnqueueTspdfKey
-    ? (
-        boolish(body.enqueue_tspdf_regen) ||
-        boolish(body.enqueueTspdfRegen) ||
-        boolish(body.enqueue_pdf_regen) ||
-        boolish(body.enqueuePdfRegen) ||
-        false
-      )
-    : enqueueTspdfRegenDefault;
-
-  logInfo({
-    stage: 'start',
-    import_id: importId,
-    selected_action_ids_count: selectedActionIds.length,
-    selected_actions_count: selectedActions.length,
-    email_actions_count: emailActions.length,
-    invalidation_actions_count: invalidationActions.length,
-    include_missing_shifts: includeMissingShifts,
-    decisions_keys_count: Object.keys(decisions || {}).length,
-    enqueue_tspdf_regen: enqueueTspdfRegen,
-    enqueue_tspdf_regen_source: hasEnqueueTspdfKey ? 'REQUEST' : 'SETTINGS_DEFAULTS'
-  });
-
-  // ─────────────────────────────────────────────
-  // ✅ Server-side enforcement — block Mode-A emails for:
-  //   - unconfirmed timesheets
-  //   - invoice-locked/paid (informative only)
-  // ─────────────────────────────────────────────
-  if (emailActions.length) {
-    const tsIds = uniqStrings(emailActions.map(a => a?.timesheet_id).filter(Boolean));
-    const metaByTs = new Map();
-
-    if (tsIds.length) {
-      for (const idChunk of chunk(tsIds, 150)) {
-        try {
-          const { rows: tfRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-              `?is_current=eq.true` +
-              `&timesheet_id=in.(${idChunk.map(encodeURIComponent).join(',')})` +
-              `&select=timesheet_id,processing_status,locked_by_invoice_id,paid_at_utc`
-          );
-          for (const tf of (tfRows || [])) {
-            const tsId = tf?.timesheet_id ? String(tf.timesheet_id).trim() : '';
-            if (!tsId) continue;
-            if (!metaByTs.has(tsId)) {
-              metaByTs.set(tsId, {
-                processing_status: tf?.processing_status ?? null,
-                locked_by_invoice_id: tf?.locked_by_invoice_id ?? null,
-                paid_at_utc: tf?.paid_at_utc ?? null
-              });
-            }
-          }
-        } catch {
-          // non-fatal; safe default below blocks if status missing
-        }
-      }
-    }
-
-    const blockedInvoiced = [];
-    const blockedUnconfirmed = [];
-
-    for (const tsId of tsIds) {
-      const meta = metaByTs.has(tsId) ? metaByTs.get(tsId) : null;
-      const ps = meta ? meta.processing_status : null;
-      const inv = meta ? meta.locked_by_invoice_id : null;
-      const paid = meta ? meta.paid_at_utc : null;
-
-      if (isInvoiceLockedOrPaid(inv, paid)) {
-        blockedInvoiced.push(tsId);
-        continue;
-      }
-      if (isBlockedForTsoEmail(ps)) {
-        blockedUnconfirmed.push({
-          timesheet_id: tsId,
-          processing_status: (ps != null ? String(ps) : null),
-          email_blocked_reason: unconfirmedEmailBlockText(ps)
-        });
-        continue;
-      }
-    }
-
-    if (blockedInvoiced.length) {
-      return withCORS(env, req, badRequest(JSON.stringify({
-        error: 'HR_WEEKLY_EMAIL_BLOCKED_INVOICED_TIMESHEET',
-        message: 'Cannot email Temporary Staffing because one or more selected timesheets are invoice-locked / invoiced or paid (informative only).',
-        import_id: importId,
-        blocked_timesheet_ids: blockedInvoiced
-      })));
-    }
-
-    if (blockedUnconfirmed.length) {
-      return withCORS(env, req, badRequest(JSON.stringify({
-        error: 'HR_WEEKLY_EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET',
-        message: 'Cannot email Temporary Staffing because one or more selected timesheets are not confirmed. See blocked_timesheets for the specific reason per timesheet.',
-        import_id: importId,
-        blocked_timesheet_ids: blockedUnconfirmed.map(x => x.timesheet_id),
-        blocked_timesheets: blockedUnconfirmed
-      })));
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 1) Single transactional DB apply RPC
-  // ─────────────────────────────────────────────
-  let applyPayload;
-  try {
-    const rpcRaw = await sbRpc(env, 'hr_weekly_apply_transactional', {
-      p_import_id: importId,
-      p_payload: {
-        selected_action_ids: selectedActionIds,
-        selected_actions: selectedActions,
-        decisions,
-        email_actions: emailActions,
-        include_missing_shifts: includeMissingShifts,
-        invalidation_actions: invalidationActions
-      },
-      p_actor_user_id: user.id
-    });
-
-    applyPayload = unwrapRpcJsonb(rpcRaw, 'hr_weekly_apply_transactional');
-  } catch (e) {
-    logError({
-      stage: 'apply_rpc_failed',
-      import_id: importId,
-      err: String(e?.message || e || '')
-    });
-    return withCORS(env, req, serverError(`HR weekly apply failed: ${e?.message || String(e)}`));
-  }
-
-  if (!applyPayload || typeof applyPayload !== 'object') {
-    return withCORS(env, req, serverError('HR weekly apply returned invalid payload'));
-  }
-
-  const emailJobs = Array.isArray(applyPayload.email_jobs) ? applyPayload.email_jobs : [];
-
-  // ✅ TSFIN drain: include affected + validation-affected + ref-updated (top-level + mode_a)
-  const affectedBase = Array.isArray(applyPayload.affected_timesheet_ids) ? applyPayload.affected_timesheet_ids : [];
-  const affectedValTop = Array.isArray(applyPayload.validation_affected_timesheet_ids) ? applyPayload.validation_affected_timesheet_ids : [];
-  const affectedValModeA = Array.isArray(applyPayload?.mode_a?.validation_affected_timesheet_ids)
-    ? applyPayload.mode_a.validation_affected_timesheet_ids
-    : [];
-
-  const affectedRefTop = Array.isArray(applyPayload.ref_updated_timesheet_ids) ? applyPayload.ref_updated_timesheet_ids : [];
-  const affectedRefModeA = Array.isArray(applyPayload?.mode_a?.ref_updated_timesheet_ids)
-    ? applyPayload.mode_a.ref_updated_timesheet_ids
-    : [];
-
-  const affectedTimesheetIds = uniqStrings([
-    ...(affectedBase || []),
-    ...(affectedValTop || []),
-    ...(affectedValModeA || []),
-    ...(affectedRefTop || []),
-    ...(affectedRefModeA || [])
-  ]);
-
-  // ─────────────────────────────────────────────
-  // 2) Post-commit: queue emails best-effort (group by recipient)
-  // ─────────────────────────────────────────────
-  let emailsQueued = 0;
-  const emailFailures = [];
-
-  // ✅ Agency name from settings_defaults (single row)
-  let agencyName = 'CloudTMS';
-  try {
-    const { rows: defRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=agency_name&limit=1`
-    );
-    const nm = defRows?.[0]?.agency_name;
-    const cleaned = (nm == null) ? '' : String(nm).trim();
-    if (cleaned) agencyName = cleaned;
-  } catch {}
-
-  const buildEmailHtmlTable = (items) => {
-    const rows = Array.isArray(items) ? items : [];
-
-    const head = `
-      <tr>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Candidate</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">W/E</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Date</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Timesheet</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">HealthRoster</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Status</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Reference No.</th>
-      </tr>
-    `;
-
-    const body = rows.map((it) => {
-      const cand = escapeHtml(String(it?.candidate_name || it?.candidate || '') || '—');
-
-      const weNice = escapeHtml(fmtNiceDate(it?.week_ending_date) || '—');
-      const wdNice = escapeHtml(fmtNiceDate(it?.work_date) || '—');
-
-      const tsTxt =
-        `${String(it?.timesheet_start || '—')} → ${String(it?.timesheet_end || '—')}` +
-        ` (break ${it?.timesheet_break_mins == null ? '—' : String(it.timesheet_break_mins)})`;
-
-      const hrStart = String(it?.healthroster_start || '').trim();
-      const hrEnd = String(it?.healthroster_end || '').trim();
-
-      const hrTxt = (!hrStart || !hrEnd)
-        ? 'Missing in Healthroster - please add'
-        : (
-            `${hrStart} → ${hrEnd}` +
-            ` (break ${it?.healthroster_break_mins == null ? '—' : String(it.healthroster_break_mins)})`
-          );
-
-      const ms = escapeHtml(String(it?.match_status || it?.status || '—'));
-
-      const refAfterRaw = (it?.reference_no != null)
-        ? String(it.reference_no)
-        : (it?.ref_after != null)
-          ? String(it.ref_after)
-          : (it?.ref != null)
-            ? String(it.ref)
-            : '';
-      const refNo = escapeHtml((String(refAfterRaw || '').trim()) || 'N/A');
-
-      return `
-        <tr>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${cand}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${weNice}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${wdNice}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(tsTxt)}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(hrTxt)}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${ms}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${refNo}</td>
-        </tr>
-      `;
-    }).join('\n');
-
-    return `
-      <div style="overflow:auto;">
-        <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:13px;">
-          <thead>${head}</thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>
-    `;
-  };
-
-  // Group recipient resolution:
-  // Prefer item alt/override fields, else job.recipient_email, else item.recipient_email
-  const extractRecipientForItem = (job, item) => {
-    const a =
-      normEmail(item?.alt_email) ||
-      normEmail(item?.alternative_email) ||
-      normEmail(item?.alt_recipient_email) ||
-      normEmail(item?.recipient_email_override) ||
-      normEmail(item?.override_email) ||
-      '';
-    if (a) return a;
-
-    const j = normEmail(job?.recipient_email);
-    if (j) return j;
-
-    const i = normEmail(item?.recipient_email);
-    return i || '';
-  };
-
-  const groupEmailWork = () => {
-    const groups = new Map(); // email -> { items: [], tsIds:Set<string> }
-
-    const addToGroup = (email, item) => {
-      const k = normEmail(email);
-      if (!k) return false;
-
-      const cur = groups.get(k) || { items: [], tsIds: new Set() };
-      cur.items.push(item);
-
-      const tsId = String(item?.timesheet_id || '').trim();
-      if (tsId) cur.tsIds.add(tsId);
-
-      groups.set(k, cur);
-      return true;
-    };
-
-    const jobsArr = Array.isArray(emailJobs) ? emailJobs : [];
-
-    for (const job of jobsArr) {
-      const items = Array.isArray(job?.items) ? job.items : [];
-      if (!items.length) continue;
-
-      for (const it0 of items) {
-        const it = (it0 && typeof it0 === 'object') ? it0 : {};
-        const recip = extractRecipientForItem(job, it);
-        const ok = addToGroup(recip, it);
-        if (!ok) {
-          emailFailures.push({
-            reason: 'NO_RECIPIENT_EMAIL',
-            recipient_email: null,
-            timesheet_id: it?.timesheet_id ? String(it.timesheet_id) : null
-          });
-        }
-      }
-    }
-
-    return groups;
-  };
-
-  const grouped = groupEmailWork();
-
-  for (const [recipientEmail, pack] of grouped.entries()) {
-    const items = Array.isArray(pack?.items) ? pack.items : [];
-    const tsIds = (pack?.tsIds instanceof Set) ? Array.from(pack.tsIds) : [];
-
-    if (!recipientEmail) continue;
-    if (!items.length || !tsIds.length) {
-      emailFailures.push({ reason: 'EMPTY_EMAIL_GROUP', recipient_email: recipientEmail });
-      continue;
-    }
-
-    const attachments = [];
-    for (const tsIdRaw of tsIds) {
-      const tsId = String(tsIdRaw || '').trim();
-      if (!tsId) continue;
-
-      let pdfKey = null;
-      try {
-        pdfKey = await ensureTimesheetPdf(env, tsId);
-      } catch (e) {
-        emailFailures.push({
-          reason: 'PDF_GENERATION_FAILED',
-          recipient_email: recipientEmail,
-          timesheet_id: tsId,
-          err: String(e?.message || e)
-        });
-        continue;
-      }
-      if (!pdfKey) {
-        emailFailures.push({ reason: 'PDF_MISSING', recipient_email: recipientEmail, timesheet_id: tsId });
-        continue;
-      }
-      attachments.push({ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` });
-    }
-
-    if (!attachments.length) {
-      emailFailures.push({ reason: 'NO_ATTACHMENTS', recipient_email: recipientEmail });
-      continue;
-    }
-
-    const subject = `HealthRoster weekly validation – shifts to amend`;
-    const tableHtml = buildEmailHtmlTable(items);
-
-    const bodyText = [
-      'Dear Team,',
-      '',
-      'Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.',
-      'Please kindly confirm once actioned.',
-      'Many thanks,',
-      agencyName
-    ].join('\n');
-
-    const bodyHtml = `
-      <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.45;color:#111;">
-        <p style="margin:0 0 10px 0;"><strong>Dear Team,</strong></p>
-        <p style="margin:0 0 10px 0;">Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.</p>
-        <p style="margin:0 0 14px 0;">Please kindly confirm once actioned.</p>
-        ${tableHtml}
-        <p style="margin:14px 0 0 0;">Many thanks,<br/><strong>${escapeHtml(agencyName)}</strong></p>
-      </div>
-    `;
-
-    try {
-      let commsClientId = null;
-      try {
-        const fromItem = items.find(it => it && (it.client_id || it.clientId));
-        const cid = fromItem ? (fromItem.client_id || fromItem.clientId) : null;
-        if (cid && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(cid).trim())) {
-          commsClientId = String(cid).trim();
-        }
-      } catch {}
-
-      if (!commsClientId) {
-        try {
-          const firstTsId = String(tsIds[0] || '').trim();
-          if (firstTsId) {
-            const tgt = await resolveTsoRecipientForTimesheet(env, { timesheet_id: firstTsId, booking_id: null });
-            const cid2 = tgt?.client_id ? String(tgt.client_id).trim() : '';
-            if (cid2 && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cid2)) {
-              commsClientId = cid2;
-            }
-          }
-        } catch {}
-      }
-
-      const commsContextId =
-        (tsIds.length === 1 && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(tsIds[0] || '').trim()))
-          ? String(tsIds[0]).trim()
-          : null;
-
-      const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          type: 'TSO_FAILURE',
-          to: recipientEmail,
-          cc: null,
-          bcc: null,
-          reply_to: null,
-          importance: 'Normal',
-          email_type: 'html',
-          subject,
-          body_html: bodyHtml,
-          body_text: bodyText,
-          attachments,
-          status: 'QUEUED',
-          reference: `hr_weekly_validation:${importId}:consolidated:${recipientEmail}`,
-          recipient_kind: 'client',
-          recipient_id: commsClientId,
-          context_kind: 'timesheets',
-          context_id: commsContextId,
-          mailshot_run_id: null,
-          document_template_id: null,
-          created_by: user?.id || null
-        })
-      });
-
-      if (!insert.ok) {
-        const t = await insert.text().catch(() => '');
-        throw new Error(t || `mail_outbox ${insert.status}`);
-      }
-
-      emailsQueued += 1;
-    } catch (e) {
-      emailFailures.push({ reason: 'MAIL_OUTBOX_INSERT_FAILED', recipient_email: recipientEmail, err: String(e?.message || e) });
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 3) Post-commit: TSFIN Strategy A drain-to-completion (hard requirement)
-  // ─────────────────────────────────────────────
-  const tsfinDrainStats = {
-    ids: affectedTimesheetIds.length,
-    enqueued: 0,
-    loops: 0,
-    picked: 0,
-    ok: 0,
-    fail: 0,
-    pending_total: 0,
-    pending_ready: 0,
-    pending_next_attempt_at_min: null,
-    done: true
-  };
-
-  const getPendingSummary = async () => {
-    const raw = await sbRpc(env, 'tsfin_outbox_pending_summary', {
-      p_timesheet_ids: affectedTimesheetIds
-    });
-    const payload = unwrapRpcJsonb(raw, 'tsfin_outbox_pending_summary');
-    if (!payload || typeof payload !== 'object') {
-      return { total: null, ready: null, next_attempt_at_min: null, now: null };
-    }
-    return payload;
-  };
-
-  if (affectedTimesheetIds.length) {
-    try {
-      try {
-        const enqRaw = await sbRpc(env, 'enqueue_ts_financials_priority', {
-          _timesheet_ids: affectedTimesheetIds,
-          _reason: 'CONTEXT_CHANGED'
-        });
-        const enqNum = Number(
-          (typeof enqRaw === 'number' || typeof enqRaw === 'string')
-            ? enqRaw
-            : (Array.isArray(enqRaw) ? (enqRaw?.[0]?.enqueue_ts_financials_priority ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : null)
-        );
-        tsfinDrainStats.enqueued = Number.isFinite(enqNum) && enqNum > 0 ? enqNum : affectedTimesheetIds.length;
-      } catch {
-        tsfinDrainStats.enqueued = affectedTimesheetIds.length;
-      }
-
-      const maxLoops = 60;
-      while (tsfinDrainStats.loops < maxLoops) {
-        const res = await runTsfinWorkerOnce(env, {
-          limit: Math.min(50, affectedTimesheetIds.length),
-          onlyTimesheetIds: affectedTimesheetIds
-        });
-
-        tsfinDrainStats.loops += 1;
-        tsfinDrainStats.picked += Number(res?.picked || 0);
-        tsfinDrainStats.ok += Number(res?.ok || 0);
-        tsfinDrainStats.fail += Number(res?.fail || 0);
-
-        const pending = await getPendingSummary();
-        tsfinDrainStats.pending_total = Number(pending?.total ?? 0) || 0;
-        tsfinDrainStats.pending_ready = Number(pending?.ready ?? 0) || 0;
-        tsfinDrainStats.pending_next_attempt_at_min = pending?.next_attempt_at_min ?? null;
-
-        if (tsfinDrainStats.pending_total === 0) break;
-        if (!res || Number(res?.picked || 0) === 0) break;
-      }
-
-      if (tsfinDrainStats.fail > 0) tsfinDrainStats.done = false;
-      if (tsfinDrainStats.pending_total > 0) tsfinDrainStats.done = false;
-      if (tsfinDrainStats.loops >= maxLoops && tsfinDrainStats.pending_total > 0) tsfinDrainStats.done = false;
-
-      if (!tsfinDrainStats.done) {
-        logError({
-          stage: 'tsfin_drain_failed_strict_after_apply_commit',
-          import_id: importId,
-          stats: tsfinDrainStats
-        });
-
-        const retryAfterSeconds = 30;
-        const resp = {
-          error: 'TSFIN_REFRESH_FAILED_AFTER_APPLY',
-          message:
-            'The database apply succeeded, but TSFIN refresh did not complete. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
-          import_id: importId,
-          affected_timesheet_ids: affectedTimesheetIds,
-          tsfin_drain: tsfinDrainStats,
-          retry: {
-            action: 'RETRY_TSFIN_RECOMPUTE',
-            timesheet_ids: affectedTimesheetIds,
-            next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min,
-            retry_after_seconds: retryAfterSeconds
-          },
-          apply: applyPayload
-        };
-
-        return withCORS(env, req, new Response(JSON.stringify(resp), {
-          status: 500,
-          headers: { 'content-type': 'application/json' }
-        }));
-      }
-    } catch (e) {
-      logError({
-        stage: 'tsfin_drain_exception_strict_after_apply_commit',
-        import_id: importId,
-        err: String(e?.message || e || ''),
-        stats: tsfinDrainStats
-      });
-
-      const retryAfterSeconds = 30;
-      const resp = {
-        error: 'TSFIN_REFRESH_EXCEPTION_AFTER_APPLY',
-        message:
-          'The database apply succeeded, but TSFIN refresh raised an exception. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
-        import_id: importId,
-        affected_timesheet_ids: affectedTimesheetIds,
-        tsfin_drain: tsfinDrainStats,
-        retry: {
-          action: 'RETRY_TSFIN_RECOMPUTE',
-          timesheet_ids: affectedTimesheetIds,
-          next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min || null,
-          retry_after_seconds: retryAfterSeconds
-        },
-        apply: applyPayload
-      };
-
-      return withCORS(env, req, new Response(JSON.stringify(resp), {
-        status: 500,
-        headers: { 'content-type': 'application/json' }
-      }));
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 3.5) Post-TSFIN: detect QR reissue candidates + optional tspdf enqueue
-  // ─────────────────────────────────────────────
-  let qrReissueCandidates = [];
-  let docFlagsRows = [];
-  let tspdfEnqueued = 0;
-  let tspdfTargetCount = 0;
-
-  if (affectedTimesheetIds.length) {
-    try {
-      const flagsRaw = await sbRpc(env, 'timesheet_doc_flags_batch', {
-        p_timesheet_ids: affectedTimesheetIds
-      });
-
-      docFlagsRows = Array.isArray(flagsRaw) ? flagsRaw : [];
-      qrReissueCandidates = docFlagsRows
-        .filter(r => r && (r.qr_refs_changed === true || r.qr_refs_changed === 'true' || r.qr_refs_changed === 1 || r.qr_refs_changed === '1'))
-        .map(r => ({
-          timesheet_id: String(r.timesheet_id || '').trim() || null,
-          candidate_id: r.candidate_id || null,
-          candidate_name: (r.candidate_name != null ? String(r.candidate_name) : null),
-          client_id: r.client_id || null,
-          client_name: (r.client_name != null ? String(r.client_name) : null),
-          sheet_scope: (r.sheet_scope != null ? String(r.sheet_scope) : null),
-          week_ending_date: (r.week_ending_date != null ? String(r.week_ending_date).slice(0, 10) : null),
-          qr_status: (r.qr_status != null ? String(r.qr_status) : null),
-          current_refs_sig: (r.current_refs_sig != null ? String(r.current_refs_sig) : null),
-          qr_sent_refs_sig: (r.qr_sent_refs_sig != null ? String(r.qr_sent_refs_sig) : null),
-          generated_pdf_refs_sig: (r.generated_pdf_refs_sig != null ? String(r.generated_pdf_refs_sig) : null)
-        }))
-        .filter(x => !!x.timesheet_id);
-
-      if (enqueueTspdfRegen) {
-        const elecIds = uniqStrings(
-          docFlagsRows
-            .filter(r => r && (r.electronic_refs_changed === true || r.electronic_refs_changed === 'true' || r.electronic_refs_changed === 1 || r.electronic_refs_changed === '1'))
-            .map(r => r.timesheet_id)
-        );
-
-        tspdfTargetCount = elecIds.length;
-
-        if (elecIds.length) {
-          const enqRaw = await sbRpc(env, 'tspdf_enqueue_many', {
-            p_timesheet_ids: elecIds,
-            p_force_regen: true,
-            p_prefer_generated: true,
-            p_reason: null,
-            p_limit: 500
-          });
-
-          const enqNum =
-            (typeof enqRaw === 'number' || typeof enqRaw === 'string')
-              ? Number(enqRaw)
-              : (Array.isArray(enqRaw) ? Number(enqRaw?.[0]?.tspdf_enqueue_many ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : NaN);
-
-          tspdfEnqueued = (Number.isFinite(enqNum) ? enqNum : 0);
-        }
-      }
-    } catch (e) {
-      logWarn({
-        stage: 'doc_flags_batch_failed_non_fatal',
-        import_id: importId,
-        err: String(e?.message || e || '')
-      });
-      qrReissueCandidates = [];
-      tspdfEnqueued = 0;
-      tspdfTargetCount = 0;
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 4) Post-commit: audit best-effort
-  // ─────────────────────────────────────────────
-  try {
-    await writeAudit(
-      env,
-      user,
-      'HR_WEEKLY_APPLY_TRANSACTIONAL_COMPLETED',
-      {
-        import_id: importId,
-        mode_a: applyPayload?.mode_a || null,
-        mode_b: applyPayload?.mode_b || null,
-        emails_queued: emailsQueued,
-        email_failures: emailFailures.slice(0, 50),
-        tsfin_drain: tsfinDrainStats,
-        qr_reissue_candidates_count: qrReissueCandidates.length,
-        tspdf_enqueued: tspdfEnqueued,
-        tspdf_target_count: tspdfTargetCount
-      },
-      { entity: 'hr_imports', subject_id: importId, req }
-    );
-  } catch (e) {
-    logWarn({
-      stage: 'writeAudit_failed_non_fatal',
-      import_id: importId,
-      err: String(e?.message || e || '')
-    });
-  }
-
-  // ─────────────────────────────────────────────
-  // 5) Response
-  // ─────────────────────────────────────────────
-  return withCORS(env, req, ok({
-    import_id: importId,
-    apply: applyPayload,
-    qr_reissue_candidates: qrReissueCandidates,
-    tspdf_regen: enqueueTspdfRegen ? { target_count: tspdfTargetCount, enqueued: tspdfEnqueued } : { target_count: 0, enqueued: 0 },
-    post_commit: {
-      emails_queued: emailsQueued,
-      email_failures: emailFailures,
-      tsfin_drain: tsfinDrainStats
-    }
-  }));
+  return handleRetiredImportMutationRoute(env, req);
 }
 
 
 
 async function handleHrRotaQueueTsoEmail(env, req) {
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
-
-  const timesheetId = body?.timesheet_id || body?.timesheetId || null;
-  const importId    = body?.import_id || body?.importId || null;
-
-  const hrRequestId = body?.hr_request_id || body?.hrRequestId || null;
-  const reasonCode  = String(body?.reason_code || body?.reasonCode || 'actual_hours_mismatch').toLowerCase();
-  const mismatch    = body?.mismatch_details || body?.mismatchDetails || null;
-
-  // FE should pass this from preview for exact stability; fallback computes best-effort.
-  const issueFingerprintIn = body?.issue_fingerprint || body?.issueFingerprint || null;
-
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
-
-  // ✅ Confirmation gate + invoice/paid gate (manual endpoint must enforce too)
-  const isBlockedForTsoEmail = (processing_status) => {
-    const s = String(processing_status || '').trim().toUpperCase();
-    if (!s) return true; // safe default
-    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
-  };
-
-  const isInvoiceLockedOrPaid = (locked_by_invoice_id, paid_at_utc) => {
-    const invId = (locked_by_invoice_id != null && String(locked_by_invoice_id).trim())
-      ? String(locked_by_invoice_id).trim()
-      : '';
-    const paidAt = (paid_at_utc != null && String(paid_at_utc).trim())
-      ? String(paid_at_utc).trim()
-      : '';
-    return !!(invId || paidAt);
-  };
-
-  try {
-    const { rows: tfRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=processing_status,locked_by_invoice_id,paid_at_utc` +
-        `&limit=1`
-    );
-
-    const ps = tfRows?.[0]?.processing_status ?? null;
-    const lockedByInvoiceId = tfRows?.[0]?.locked_by_invoice_id ?? null;
-    const paidAtUtc = tfRows?.[0]?.paid_at_utc ?? null;
-
-    if (isInvoiceLockedOrPaid(lockedByInvoiceId, paidAtUtc)) {
-      const invTxt = (lockedByInvoiceId != null && String(lockedByInvoiceId).trim()) ? String(lockedByInvoiceId).trim() : '';
-      const paidTxt = (paidAtUtc != null && String(paidAtUtc).trim()) ? String(paidAtUtc).trim() : '';
-      const why = invTxt
-        ? `Email blocked: timesheet is invoice-locked / invoiced (invoice_id=${invTxt}). Informative only.`
-        : `Email blocked: timesheet is paid (paid_at_utc=${paidTxt || 'UNKNOWN'}). Informative only.`;
-      return withCORS(env, req, badRequest(why));
-    }
-
-    if (isBlockedForTsoEmail(ps)) {
-      const psTxt = String(ps || '').trim() || 'UNKNOWN';
-      return withCORS(env, req, badRequest(
-        `Email blocked: timesheet is not confirmed (awaiting authorisation/signature). processing_status=${psTxt}`
-      ));
-    }
-  } catch (e) {
-    const msg = String(e?.message || e || '');
-    return withCORS(env, req, badRequest(
-      `Email blocked: cannot determine timesheet status (safe default). err=${msg || 'unknown'}`
-    ));
-  }
-
-  // 0) Load agency name from settings_defaults (fallback to CloudTMS)
-  let agencyName = 'CloudTMS';
-  try {
-    const { rows: defRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=agency_name&limit=1`
-    );
-    if (defRows && defRows[0] && defRows[0].agency_name) {
-      agencyName = String(defRows[0].agency_name).trim() || agencyName;
-    }
-  } catch {
-    // ignore
-  }
-
-  // 1) Ensure PDF
-  let pdfKey = null;
-  try {
-    pdfKey = await ensureTimesheetPdf(env, timesheetId);
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to prepare timesheet PDF for email: ${e?.message || e}`));
-  }
-  if (!pdfKey) {
-    return withCORS(env, req, serverError('No timesheet PDF key returned'));
-  }
-
-  // 2) Resolve recipient (clients.ts_queries_email) — MUST use tgt.to
-  let recipientEmail = null;
-  let resolvedClientId = null;
-  try {
-    const tgt = await resolveTsoRecipientForTimesheet(env, {
-      timesheet_id: timesheetId,
-      booking_id: hrRequestId || null
-    });
-    recipientEmail = tgt?.to ? String(tgt.to).trim() : null;
-    resolvedClientId = tgt?.client_id ? String(tgt.client_id) : null;
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to resolve Temporary Staffing email: ${e?.message || e}`));
-  }
-
-  if (!recipientEmail) {
-    return withCORS(env, req, serverError('No Temporary Staffing email available for this timesheet'));
-  }
-
-  // 3) Compose subject/body from mismatch_details (best-effort)
-  const staffName = mismatch?.staff_name || mismatch?.staffName || 'Agency worker';
-  const dateLocal = mismatch?.date_local || mismatch?.dateLocal || 'Unknown date';
-  const hrStart   = mismatch?.hr_start_local || mismatch?.start_local || mismatch?.hrStart || mismatch?.startLocal || 'N/A';
-  const hrEnd     = mismatch?.hr_end_local   || mismatch?.end_local   || mismatch?.hrEnd   || mismatch?.endLocal   || 'N/A';
-  const hrHours   = mismatch?.hr_actual_hours || mismatch?.hours_worked || mismatch?.hrHours || 'N/A';
-  const tsHours   = mismatch?.ts_total_hours  || mismatch?.ts_hours     || mismatch?.tsHours || 'N/A';
-
-  const subject = `Timesheet hours mismatch – ${staffName} – ${dateLocal} – ${hrRequestId || 'no HR ref'}`;
-
-  const lines = [
-    `Dear Temporary Staffing,`,
-    ``,
-    `Please can you amend the hours on HealthRoster for the attached agency shift.`,
-    ``,
-    `Staff: ${staffName}`,
-    `Date: ${dateLocal}`,
-    `HR Request ID: ${hrRequestId || '(not provided)'}`,
-    ``,
-    `HealthRoster shows:`,
-    `  Start: ${hrStart}`,
-    `  End:   ${hrEnd}`,
-    `  Actual Hours: ${hrHours}`,
-    ``,
-    `Signed timesheet attached shows:`,
-    `  Actual Hours: ${tsHours}`,
-    ``,
-    `Once amended, please kindly confirm.`,
-    ``,
-    `Kind regards,`,
-    `${agencyName}`
-  ];
-
-  const body_text = lines.join('\n');
-  const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
-
-  // ✅ Replace correlation_id with reference (mail_outbox has no correlation_id column)
-  const outboxReference = `HR_DAILY_MISMATCH:${timesheetId}:${hrRequestId || ''}`;
-
-  // 4) Insert into mail_outbox (required)
-  const mailPayload = [{
-    to: recipientEmail,
-    subject,
-    body_text,
-    body_html,
-    attachments: [{
-      r2_key: pdfKey,
-      filename: `Timesheet_${timesheetId}.pdf`
-    }],
-    type: 'TSO_FAILURE',
-    reference: outboxReference,
-    bcc: null,
-    reply_to: null,
-    importance: 'Normal',
-    email_type: 'html',
-    recipient_kind: 'client',
-    recipient_id: resolvedClientId ? resolvedClientId : null,
-    context_kind: 'timesheets',
-    context_id: timesheetId,
-    mailshot_run_id: null,
-    document_template_id: null
-  }];
-
-  try {
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/mail_outbox`,
-      {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify(mailPayload)
-      }
-    );
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      return withCORS(env, req, serverError(`Failed to queue mismatch email: ${txt}`));
-    }
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to queue mismatch email: ${e?.message || e}`));
-  }
-
-  // 4.1) After successful mail queue: touch hr_issue_emails via RPC (Email/Re-email state)
-  // Fingerprint: prefer provided value; fallback computes best-effort stable string.
-  let issueFingerprint = issueFingerprintIn ? String(issueFingerprintIn).trim() : null;
-  if (!issueFingerprint) {
-    const staffNorm = String(mismatch?.staff_norm || mismatch?.staff_name || staffName || '').toLowerCase().trim();
-    const unitNorm  = String(mismatch?.unit_norm || mismatch?.unit || mismatch?.hospital_norm || '').toLowerCase().trim();
-    issueFingerprint = [
-      'HEALTHROSTER_DAILY',
-      reasonCode,
-      String(timesheetId || ''),
-      String(hrRequestId || ''),
-      staffNorm,
-      unitNorm,
-      String(dateLocal || ''),
-      String(hrStart || ''),
-      String(hrEnd || ''),
-      String(hrHours || ''),
-      String(tsHours || '')
-    ].join('|');
-  }
-
-  let emailKind = null;
-  let lastSentAtUtc = null;
-
-  try {
-    const staffNorm = String(mismatch?.staff_norm || mismatch?.staff_name || staffName || '').toLowerCase().trim() || null;
-    const hospitalNorm = String(mismatch?.unit_norm || mismatch?.unit || mismatch?.hospital_norm || '').toLowerCase().trim() || null;
-    const workDate = (mismatch?.date_local || dateLocal || null);
-
-    const touchRaw = await sbRpc(env, 'hr_issue_emails_touch', {
-      p_source_system: 'HEALTHROSTER_DAILY',
-      p_import_id: importId || null,
-      p_client_id: resolvedClientId ? resolvedClientId : null,
-      p_timesheet_id: timesheetId,
-      p_reason_code: reasonCode,
-      p_issue_fingerprint: issueFingerprint,
-      p_actor_user_id: user.id,
-      p_hr_row_id: body?.hr_row_id || body?.hrRowId || null,
-      p_staff_norm: staffNorm,
-      p_hospital_norm: hospitalNorm,
-      p_work_date: workDate
-    });
-
-    const payload = (Array.isArray(touchRaw) ? (touchRaw[0]?.hr_issue_emails_touch ?? touchRaw[0]) : (touchRaw?.hr_issue_emails_touch ?? touchRaw)) || null;
-    emailKind = payload?.email_kind || null;
-    lastSentAtUtc = payload?.last_sent_at_utc || null;
-  } catch {
-    emailKind = null;
-    lastSentAtUtc = null;
-  }
-
-  // 5) Audit (best-effort)
-  try {
-    await writeAudit(
-      env,
-      user,
-      'HR_DAILY_MISMATCH_EMAIL_QUEUED',
-      {
-        timesheet_id: timesheetId,
-        hr_request_id: hrRequestId,
-        recipient_email: recipientEmail,
-        reason_code: reasonCode,
-        pdf_key: pdfKey,
-        issue_fingerprint: issueFingerprint,
-        email_kind: emailKind,
-        last_sent_at_utc: lastSentAtUtc,
-        mismatch_details: mismatch || null,
-        reference: outboxReference
-      },
-      { entity: 'timesheets', subject_id: timesheetId, req }
-    );
-  } catch {
-    // ignore
-  }
-
-  return withCORS(env, req, ok({
-    queued: true,
-    email_kind: emailKind,
-    last_sent_at_utc: lastSentAtUtc,
-    issue_fingerprint: issueFingerprint,
-    recipient_email: recipientEmail
-  }));
+  return handleRetiredImportMutationRoute(env, req);
 }
-
 
 async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
   const enc  = encodeURIComponent;
@@ -123248,6 +121794,19 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
+  const markTimesheetQueryDeliverySent = async (row) => {
+    if (String(row?.type || '').trim().toUpperCase() !== 'TIMESHEET_QUERY') return null;
+    const actorUserId = String(row?.created_by || '').trim();
+    if (!actorUserId) throw new Error('TIMESHEET_QUERY_DELIVERY_ACTOR_MISSING');
+    return sbRpc(env, 'timesheet_query_email_delivery_mark_v1', {
+      p_mail_outbox_id: row.id,
+      p_provider_message_id: row.provider_message_id || null,
+      p_provider_status: row.provider_status || 'ACCEPTED',
+      p_accepted_at_utc: row.sent_at || null,
+      p_actor_user_id: actorUserId
+    }, { timeoutMs: 15000 });
+  };
+
   const patchClaimedRowDeferred = async (rowId, msg, currentLeaseToken) => {
     const rows = await patchMailOutboxRows(
       `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
@@ -123635,6 +122194,24 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
           provider_message_id: providerMessageId,
           type: r?.meta?.type || 'BATCH'
         });
+          const deliveryHistory = await reconcileTimesheetQueryDeliveryAfterProviderAcceptance({
+            row: updatedRow,
+            markDelivery: markTimesheetQueryDeliverySent,
+            reconcileDelivery: (sentRow) => sbRpc(env, 'timesheet_query_email_delivery_reconcile_v1', {
+              p_after_delivery_id: null,
+              p_limit: 25,
+              p_actor_user_id: sentRow.created_by
+            }, { timeoutMs: 15000 })
+          });
+          if (deliveryHistory.applicable && !deliveryHistory.history_marked) {
+            // Provider acceptance is authoritative. The outbox row stays SENT;
+            // this bounded repair path cannot invoke the provider or resend.
+            errors.push({
+              id: rowId,
+              error: 'TIMESHEET_QUERY_DELIVERY_MARK_FAILED',
+              delivery_history_mark_failed: true
+            });
+          }
         await markRemittanceDrainResult(rowId, updatedRow, 'SUCCESS', { provider_message_id: providerMessageId });
         continue;
       }
@@ -129546,6 +128123,9 @@ async function handleGetSettings(env, req) {
 
         // Global policy flags
         'ts_reference_required',
+        'reversal_complete_financials_date',
+        'reversal_replacement_financials_date',
+        'updated_at',
 
         // ✅ Adaptability config
         'import_config_json',
@@ -129746,6 +128326,44 @@ async function handleUpdateSettings(env, req) {
 
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const hasImportFinancialPolicy = Object.prototype.hasOwnProperty.call(data, 'reversal_complete_financials_date')
+    || Object.prototype.hasOwnProperty.call(data, 'reversal_replacement_financials_date');
+  if (hasImportFinancialPolicy) {
+    const allowedPolicyKeys = new Set([
+      'reversal_complete_financials_date', 'reversal_replacement_financials_date',
+      'expected_updated_at', 'request_key'
+    ]);
+    const unsupported = Object.keys(data).filter((key) => !allowedPolicyKeys.has(key));
+    if (unsupported.length) {
+      return withCORS(env, req, badRequest('Import financial-date settings must be saved separately from unrelated global settings.'));
+    }
+    const reversal = String(data.reversal_complete_financials_date || '').trim().toUpperCase();
+    const replacement = String(data.reversal_replacement_financials_date || '').trim().toUpperCase();
+    if (!['PAID_DATE', 'NOW'].includes(reversal) || !['PAID_DATE', 'NOW'].includes(replacement)) {
+      return withCORS(env, req, badRequest('Both import financial-date settings must be PAID_DATE or NOW.'));
+    }
+    if (!data.expected_updated_at || String(data.request_key || '').trim().length < 16) {
+      return withCORS(env, req, badRequest('expected_updated_at and a stable request_key are required.'));
+    }
+    try {
+      const raw = await sbRpc(env, 'settings_defaults_import_financial_policy_update_v1', {
+        p_expected_updated_at: data.expected_updated_at,
+        p_reversal_complete_financials_date: reversal,
+        p_reversal_replacement_financials_date: replacement,
+        p_actor_user_id: user.id,
+        p_request_key: String(data.request_key).trim()
+      }, { timeoutMs: 15000 });
+      return withCORS(env, req, ok(unwrapRpcJsonb(raw, 'settings_defaults_import_financial_policy_update_v1')));
+    } catch (error) {
+      const code = String(error?.json?.message || error?.message || '').match(/[A-Z][A-Z0-9_]{4,}/)?.[0] || 'SETTINGS_UPDATE_FAILED';
+      return withCORS(env, req, new Response(JSON.stringify({
+        ok: false,
+        error_code: code,
+        message: /CONFLICT|STALE/.test(code) ? 'Global settings changed. Reload and try again.' : 'The global import financial-date settings were not changed.'
+      }), { status: /CONFLICT|STALE/.test(code) ? 409 : 400, headers: JSON_HEADERS }));
+    }
+  }
 
   const forbiddenBankWebhookSettingKeys = [
     'bank_provider_webhook_signing_secret',
@@ -132766,12 +131384,51 @@ async function handleGetClient(env, req, clientId) {
           'send_manual_invoices_to_different_email',
           'manual_invoices_alt_email_address',
 
+          // Import-authoritative correction financial-date policy overrides
+          'reversal_complete_financials_date',
+          'reversal_replacement_financials_date',
+
           'created_at','updated_at'
         ].join(',') +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
 
     const client_settings = csRows?.[0] || null;
+    let import_financial_policy = null;
+    try {
+      const { rows: defaultsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=reversal_complete_financials_date,reversal_replacement_financials_date,updated_at&limit=1`
+      );
+      const defaults = defaultsRows?.[0] || {};
+      const eligible = client_settings?.is_nhsp === true
+        || (client_settings?.requires_hr === true && client_settings?.no_timesheet_required === true);
+      import_financial_policy = {
+        eligible,
+        client_settings_updated_at: client_settings?.updated_at || null,
+        client_rev: client.rev ?? null,
+        reversal_complete_financials_date: {
+          override: eligible ? (client_settings?.reversal_complete_financials_date ?? null) : null,
+          effective: eligible
+            ? (client_settings?.reversal_complete_financials_date ?? defaults.reversal_complete_financials_date ?? null)
+            : null,
+          source: eligible && client_settings?.reversal_complete_financials_date != null ? 'CLIENT' : (eligible ? 'GLOBAL' : 'NOT_ELIGIBLE')
+        },
+        reversal_replacement_financials_date: {
+          override: eligible ? (client_settings?.reversal_replacement_financials_date ?? null) : null,
+          effective: eligible
+            ? (client_settings?.reversal_replacement_financials_date ?? defaults.reversal_replacement_financials_date ?? null)
+            : null,
+          source: eligible && client_settings?.reversal_replacement_financials_date != null ? 'CLIENT' : (eligible ? 'GLOBAL' : 'NOT_ELIGIBLE')
+        },
+        global_settings_updated_at: defaults.updated_at || null
+      };
+    } catch {
+      import_financial_policy = {
+        eligible: false,
+        configuration_error: 'IMPORT_FINANCIAL_POLICY_UNAVAILABLE'
+      };
+    }
 
     // has_e_history (client-level) for Client modal E-History tab enablement
     let has_e_history = false;
@@ -132793,7 +131450,7 @@ async function handleGetClient(env, req, clientId) {
       has_e_history = false;
     }
 
-    return withCORS(env, req, ok({ client, client_settings, has_e_history }));
+    return withCORS(env, req, ok({ client, client_settings, import_financial_policy, has_e_history }));
   } catch (e) {
     console.error('handleGetClient failed', {
       client_id: clientId,
@@ -132810,320 +131467,20 @@ async function handleCreateClient(env, req) {
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
-  const TIME_KEYS = [
-    'day_start','day_end',
-    'night_start','night_end',
-    'sat_start','sat_end',
-    'sun_start','sun_end',
-    'bh_start','bh_end'
-  ];
-
-  const normTime = (v) => {
-    if (v == null) return null;
-    const s = String(v).trim();
-    if (!s) return null;
-    const m = s.match(/^(\d{2}:\d{2})/);
-    return m ? m[1] : s;
-  };
-
-  const asBool = (v) => {
-    if (v === true) return true;
-    if (v === false || v == null) return false;
-    const s = String(v).trim().toLowerCase();
-    return s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 'on';
-  };
-
-  const normEmail = (v) => {
-    if (v == null) return null;
-    const s = String(v).trim();
-    return s ? s : null;
-  };
-
-  const normInvoiceConsol = (v) => {
-    if (v == null) return null;
-    const s = String(v).trim().toUpperCase();
-    if (!s) return null;
-    if (s === 'ALL') return 'ANY_WEEK';
-    if (s === 'ANY') return 'ANY_WEEK';
-    if (s === 'NONE' || s === 'BY_WEEK' || s === 'ANY_WEEK') return s;
-    return '__INVALID__';
-  };
-
+  // Client and initial settings share one idempotent database transaction.
   try {
-    const {
-      cli_ref,
-      cli_num,
-      client_settings: clientSettingsInput,
-      hr_validation_required,
-      ts_reference_required,
-      pay_reference_required,
-      invoice_reference_required,
-      default_submission_mode,
-
-      auto_invoice_default,
-
-      invoice_consolidation_mode,
-      reference_number_required_to_issue_invoice,
-
-      is_nhsp,
-      self_bill_no_invoices_sent,
-      daily_calc_of_invoices,
-      no_timesheet_required,
-      group_nightsat_sunbh,
-      requires_hr,
-      autoprocess_hr,
-      hr_attach_to_invoice,
-      ts_attach_to_invoice,
-
-      send_manual_invoices_to_different_email,
-      manual_invoices_alt_email_address,
-
-      ...clientOnly
-    } = data || {};
-
-    const nowIso = new Date().toISOString();
-
-    // ✅ Ensure ts_queries_email is clearable and normalised at create time
-    if (Object.prototype.hasOwnProperty.call(clientOnly, 'ts_queries_email')) {
-      clientOnly.ts_queries_email = normEmail(clientOnly.ts_queries_email);
-    }
-
-    const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
-      method: "POST",
-      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...clientOnly, created_at: nowIso })
-    });
-    if (!clientRes.ok) {
-      const err = await clientRes.text();
-      return withCORS(env, req, badRequest(`Client creation failed: ${err}`));
-    }
-    const clientJson = await clientRes.json().catch(() => ({}));
-    const client = Array.isArray(clientJson) ? clientJson[0] : clientJson;
-
-    const csInput = {
-      ...((clientSettingsInput && typeof clientSettingsInput === 'object') ? clientSettingsInput : {}),
-    };
-
-    delete csInput.weekly_mode;
-    delete csInput.hr_weekly_behaviour;
-    delete csInput.__from_ui;
-    delete csInput.ts_queries_email;
-
-    if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!hr_validation_required;
-    if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!ts_reference_required;
-    if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!pay_reference_required;
-    if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!invoice_reference_required;
-    if ('default_submission_mode' in data)       csInput.default_submission_mode       = default_submission_mode;
-
-    if ('auto_invoice_default' in data || 'auto_invoice_default' in csInput) {
-      csInput.auto_invoice_default = asBool(csInput.auto_invoice_default ?? auto_invoice_default);
-    }
-
-    if ('invoice_consolidation_mode' in data || 'invoice_consolidation_mode' in csInput) {
-      const v = normInvoiceConsol(csInput.invoice_consolidation_mode ?? invoice_consolidation_mode);
-      if (v === '__INVALID__') {
-        return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
-      }
-      if (v != null) csInput.invoice_consolidation_mode = v;
-    }
-
-    if ('reference_number_required_to_issue_invoice' in data || 'reference_number_required_to_issue_invoice' in csInput) {
-      csInput.reference_number_required_to_issue_invoice =
-        asBool(csInput.reference_number_required_to_issue_invoice ?? reference_number_required_to_issue_invoice);
-    }
-
-    if ('is_nhsp' in data || 'is_nhsp' in csInput) {
-      csInput.is_nhsp = asBool(csInput.is_nhsp ?? is_nhsp);
-    }
-    if ('self_bill_no_invoices_sent' in data || 'self_bill_no_invoices_sent' in csInput) {
-      csInput.self_bill_no_invoices_sent = asBool(csInput.self_bill_no_invoices_sent ?? self_bill_no_invoices_sent);
-    }
-    if ('daily_calc_of_invoices' in data || 'daily_calc_of_invoices' in csInput) {
-      csInput.daily_calc_of_invoices = asBool(csInput.daily_calc_of_invoices ?? daily_calc_of_invoices);
-    }
-    if ('no_timesheet_required' in data || 'no_timesheet_required' in csInput) {
-      csInput.no_timesheet_required = asBool(csInput.no_timesheet_required ?? no_timesheet_required);
-    }
-    if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
-      csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? group_nightsat_sunbh);
-    }
-
-    if ('requires_hr' in data || 'requires_hr' in csInput) {
-      csInput.requires_hr = asBool(csInput.requires_hr ?? requires_hr);
-    }
-    if ('autoprocess_hr' in data || 'autoprocess_hr' in csInput) {
-      csInput.autoprocess_hr = asBool(csInput.autoprocess_hr ?? autoprocess_hr);
-    }
-    if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
-      csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? hr_attach_to_invoice);
-    }
-    if ('ts_attach_to_invoice' in data || 'ts_attach_to_invoice' in csInput) {
-      csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? ts_attach_to_invoice);
-    }
-
-    if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
-      csInput.send_manual_invoices_to_different_email =
-        asBool(csInput.send_manual_invoices_to_different_email ?? send_manual_invoices_to_different_email);
-    }
-    if ('manual_invoices_alt_email_address' in data || 'manual_invoices_alt_email_address' in csInput) {
-      csInput.manual_invoices_alt_email_address =
-        normEmail(csInput.manual_invoices_alt_email_address ?? manual_invoices_alt_email_address);
-    }
-
-    // ✅ NEW: client comms opt-ins (DB-backed)
-    if ('opt_in_email' in data || 'opt_in_email' in csInput) {
-      csInput.opt_in_email = asBool(csInput.opt_in_email ?? data.opt_in_email);
-    }
-    if ('opt_in_sms' in data || 'opt_in_sms' in csInput) {
-      csInput.opt_in_sms = asBool(csInput.opt_in_sms ?? data.opt_in_sms);
-    }
-    if ('opt_in_whatsapp' in data || 'opt_in_whatsapp' in csInput) {
-      csInput.opt_in_whatsapp = asBool(csInput.opt_in_whatsapp ?? data.opt_in_whatsapp);
-    }
-
-    for (const k of TIME_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(csInput, k)) {
-        csInput[k] = normTime(csInput[k]);
-      }
-    }
-
-    const setDefaultBool = (key, val) => {
-      if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
-    };
-
-    setDefaultBool('is_nhsp', false);
-    setDefaultBool('self_bill_no_invoices_sent', false);
-    setDefaultBool('daily_calc_of_invoices', false);
-    setDefaultBool('no_timesheet_required', false);
-    setDefaultBool('group_nightsat_sunbh', false);
-
-    setDefaultBool('hr_validation_required', false);
-    setDefaultBool('ts_reference_required', false);
-    setDefaultBool('pay_reference_required', false);
-    setDefaultBool('invoice_reference_required', false);
-
-    setDefaultBool('requires_hr', false);
-    setDefaultBool('autoprocess_hr', false);
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'hr_attach_to_invoice')) csInput.hr_attach_to_invoice = true;
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'ts_attach_to_invoice')) csInput.ts_attach_to_invoice = true;
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'auto_invoice_default')) csInput.auto_invoice_default = false;
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'invoice_consolidation_mode')) {
-      csInput.invoice_consolidation_mode = 'NONE';
-    } else {
-      const v = normInvoiceConsol(csInput.invoice_consolidation_mode);
-      if (v === '__INVALID__') {
-        return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
-      }
-      csInput.invoice_consolidation_mode = v || 'NONE';
-    }
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'reference_number_required_to_issue_invoice')) {
-      csInput.reference_number_required_to_issue_invoice = false;
-    } else {
-      csInput.reference_number_required_to_issue_invoice = asBool(csInput.reference_number_required_to_issue_invoice);
-    }
-
-    // ✅ Defaults for client comms opt-ins (DB default is true; we set explicitly for consistency)
-    setDefaultBool('opt_in_email', true);
-    setDefaultBool('opt_in_sms', true);
-    setDefaultBool('opt_in_whatsapp', true);
-
-    if (asBool(csInput.self_bill_no_invoices_sent)) {
-      csInput.auto_invoice_default = false;
-    }
-
-    if (!asBool(csInput.send_manual_invoices_to_different_email)) {
-      csInput.send_manual_invoices_to_different_email = false;
-      csInput.manual_invoices_alt_email_address = null;
-    }
-
-    if (asBool(csInput.send_manual_invoices_to_different_email) && !csInput.manual_invoices_alt_email_address) {
-      return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
-    }
-
-    const setDefaultTimeIfMissing = (key, val) => {
-      if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
-    };
-
-    setDefaultTimeIfMissing('day_start',   '06:00');
-    setDefaultTimeIfMissing('day_end',     '20:00');
-    setDefaultTimeIfMissing('night_start', '20:00');
-    setDefaultTimeIfMissing('night_end',   '06:00');
-
-    setDefaultTimeIfMissing('sat_start', '00:00');
-    setDefaultTimeIfMissing('sat_end',   '00:00');
-    setDefaultTimeIfMissing('sun_start', '00:00');
-    setDefaultTimeIfMissing('sun_end',   '00:00');
-    setDefaultTimeIfMissing('bh_start',  '00:00');
-    setDefaultTimeIfMissing('bh_end',    '00:00');
-
-    {
-      for (const k of TIME_KEYS) {
-        if (Object.prototype.hasOwnProperty.call(csInput, k)) {
-          csInput[k] = normTime(csInput[k]);
-        }
-      }
-
-      const filled = TIME_KEYS.filter(k => csInput[k] != null && String(csInput[k]).trim() !== '');
-      if (filled.length > 0 && filled.length < TIME_KEYS.length) {
-        return withCORS(env, req, badRequest('Shift times must be either all blank (inherit global) or all filled.'));
-      }
-    }
-
-    const we = Number(csInput.week_ending_weekday);
-    csInput.week_ending_weekday = (Number.isInteger(we) && we>=0 && we<=6) ? we : 0;
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'default_submission_mode')) {
-      csInput.default_submission_mode = 'ELECTRONIC';
-    }
-    {
-      let dsm = String(csInput.default_submission_mode || '').toUpperCase();
-      if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
-      csInput.default_submission_mode = dsm;
-    }
-
-    let client_settings;
-    if (Object.keys(csInput).length) {
-      const partsEf = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(new Date(nowIso));
-      const efMap = {};
-      for (const p of partsEf) efMap[p.type] = p.value;
-      const ukTodayYmd = `${efMap.year}-${efMap.month}-${efMap.day}`;
-
-      if (!Object.prototype.hasOwnProperty.call(csInput, 'effective_from') || !String(csInput.effective_from || '').trim()) {
-        csInput.effective_from = ukTodayYmd;
-      }
-
-      const csPayload = {
-        client_id: client.id,
-        ...csInput,
-        created_at: nowIso,
-        updated_at: nowIso
-      };
-
-      const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
-        method: "POST",
-        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-        body: JSON.stringify(csPayload)
-      });
-      if (!csRes.ok) {
-        const err = await csRes.text();
-        return withCORS(env, req, ok({ client, warning: `Client created but client_settings insert failed: ${err}` }));
-      }
-      const csJson = await csRes.json().catch(() => ({}));
-      client_settings = Array.isArray(csJson) ? csJson[0] : csJson;
-    }
-
-    return withCORS(env, req, ok({ client, client_settings }));
-  } catch (e) {
-    return withCORS(env, req, serverError("Failed to create client"));
+    const payload = await createClientWithSettingsAtomic(env, user, data);
+    return withCORS(env, req, ok(payload));
+  } catch (error) {
+    const code = String(error?.json?.message || error?.message || 'CLIENT_CREATE_FAILED').match(/CLIENT_[A-Z0-9_]+/)?.[0] || 'CLIENT_CREATE_FAILED';
+    const status = /CONFLICT|LOCK_BUSY/.test(code) ? 409 : 400;
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      error_code: code,
+      message: code === 'CLIENT_CREATE_FAILED'
+        ? 'Client creation failed safely.'
+        : 'The client or initial settings did not pass server validation.'
+    }), { status, headers: JSON_HEADERS }));
   }
 }
 
@@ -133133,6 +131490,56 @@ async function handleUpdateClient(env, req, clientId) {
 
   const raw = await parseJSONBody(req);
   if (!raw) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const policySource = (raw.client_settings && typeof raw.client_settings === 'object' && !Array.isArray(raw.client_settings))
+    ? raw.client_settings
+    : raw;
+  const hasFinancialPolicy = Object.prototype.hasOwnProperty.call(policySource, 'reversal_complete_financials_date')
+    || Object.prototype.hasOwnProperty.call(policySource, 'reversal_replacement_financials_date');
+  if (hasFinancialPolicy) {
+    const nestedUnsupported = raw.client_settings && typeof raw.client_settings === 'object'
+      ? Object.keys(raw.client_settings).filter((key) => !['reversal_complete_financials_date', 'reversal_replacement_financials_date'].includes(key))
+      : [];
+    if (nestedUnsupported.length) {
+      return withCORS(env, req, badRequest('Import financial-date overrides must be saved separately from unrelated client settings.'));
+    }
+    const policyPatch = {};
+    for (const key of ['reversal_complete_financials_date', 'reversal_replacement_financials_date']) {
+      if (!Object.prototype.hasOwnProperty.call(policySource, key)) continue;
+      const rawValue = policySource[key];
+      const value = rawValue == null || String(rawValue).trim() === '' ? null : String(rawValue).trim().toUpperCase();
+      if (value !== null && !['PAID_DATE', 'NOW'].includes(value)) {
+        return withCORS(env, req, badRequest(`${key} must be PAID_DATE, NOW or blank to inherit.`));
+      }
+      policyPatch[key] = value;
+    }
+    const clientPatch = {};
+    for (const key of CLIENT_CREATE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(raw, key)) clientPatch[key] = raw[key];
+    }
+    if (!Number.isInteger(Number(raw.expected_client_rev)) || !raw.expected_settings_updated_at || String(raw.request_key || '').trim().length < 16) {
+      return withCORS(env, req, badRequest('expected_client_rev, expected_settings_updated_at and a stable request_key are required.'));
+    }
+    try {
+      const rpcRaw = await sbRpc(env, 'client_update_with_settings_v1', {
+        p_client_id: clientId,
+        p_expected_client_rev: Number(raw.expected_client_rev),
+        p_expected_settings_updated_at: raw.expected_settings_updated_at,
+        p_client_patch: clientPatch,
+        p_financial_policy_patch: policyPatch,
+        p_actor_user_id: user.id,
+        p_request_key: String(raw.request_key).trim()
+      }, { timeoutMs: 15000 });
+      return withCORS(env, req, ok(unwrapRpcJsonb(rpcRaw, 'client_update_with_settings_v1')));
+    } catch (error) {
+      const code = String(error?.json?.message || error?.message || '').match(/[A-Z][A-Z0-9_]{4,}/)?.[0] || 'CLIENT_UPDATE_FAILED';
+      return withCORS(env, req, new Response(JSON.stringify({
+        ok: false,
+        error_code: code,
+        message: /CONFLICT|STALE/.test(code) ? 'Client settings changed. Reload and try again.' : 'The client import financial-date settings were not changed.'
+      }), { status: /CONFLICT|STALE/.test(code) ? 409 : 400, headers: JSON_HEADERS }));
+    }
+  }
 
   const { cli_ref, cli_num, ...data } = raw;
 
@@ -188875,6 +187282,11 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
         return handleMe(env, req);
       }
 
+      // Durable import review is contract-gated and must be resolved before the
+      // legacy/generic import routes below can match the same business action.
+      const importReviewResponse = await dispatchImportReviewRequest(req, env, ctx, p);
+      if (importReviewResponse) return withCORS(env, req, importReviewResponse);
+
       // User grid preferences (per-user summary column layout)
       if (req.method === 'GET' && p === '/api/users/me/grid-prefs') {
         return withCORS(env, req, await handleUserGridPrefsGet(env, req));
@@ -189926,7 +188338,7 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
 
         const hrAuto = matchPath(p, '/api/healthroster/:import_id/autoprocess-apply');
         if (hrAuto && req.method === 'POST') {
-          return handleHrAutoprocessApply(env, req, hrAuto.import_id);
+          return handleRetiredImportMutationRoute(env, req);
         }
       }
 // HR Weekly: QR reissue batch (post-apply modal confirm)
@@ -189949,7 +188361,7 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
       {
         const rotaApply = matchPath(p, '/api/imports/hr-rota/:import_id/apply');
         if (rotaApply && req.method === 'POST') {
-          return handleHrRotaValidationApply(env, req, rotaApply.import_id);
+          return handleRetiredImportMutationRoute(env, req);
         }
       }
       {
@@ -189962,7 +188374,7 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
 
       // NEW: HR daily rota TSO email
       if (req.method === 'POST' && p === '/api/hr/rota/tso-email') {
-        return handleHrRotaQueueTsoEmail(env, req);
+        return handleRetiredImportMutationRoute(env, req);
       }
 
           // NHSP imports + apply + diagnostics
@@ -189977,11 +188389,11 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
       }
       {
         const nConf = matchPath(p, '/api/nhsp/:import_id/confirm');
-        if (nConf && req.method === 'POST')                                  return handleNhspImportConfirm(env, req, nConf.import_id);
+        if (nConf && req.method === 'POST')                                  return handleRetiredImportMutationRoute(env, req);
       }
       {
         const nApply = matchPath(p, '/api/nhsp/:import_id/apply');
-        if (nApply && req.method === 'POST')                                 return handleNhspApply(env, req, nApply.import_id);
+        if (nApply && req.method === 'POST')                                 return handleRetiredImportMutationRoute(env, req);
       }
       {
         // NEW: NHSP weekly resolve-conflicts (aliases + contract check)

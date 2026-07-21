@@ -1,0 +1,241 @@
+const MAX_FOLLOW_UP_ITEMS = 500;
+const VALID_COMPONENT_STATUSES = new Set(['PENDING', 'COMPLETE', 'FAILED_RETRYABLE', 'NOT_REQUIRED']);
+
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function uniqueBoundedStrings(value, max = MAX_FOLLOW_UP_ITEMS) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))].slice(0, max);
+}
+
+function componentStatus(storedResponse, component) {
+  const key = component === 'EMAIL'
+    ? 'review_email_follow_up_status'
+    : 'review_tsfin_follow_up_status';
+  const status = String(objectValue(storedResponse)[key] || 'NOT_REQUIRED').trim().toUpperCase();
+  if (!VALID_COMPONENT_STATUSES.has(status)) throw new Error('IMPORT_REVIEW_FOLLOW_UP_COMPONENT_STATE_INVALID');
+  return status;
+}
+
+function safeComponentFailure(component, code, message) {
+  return {
+    component,
+    expectedStatus: 'PENDING',
+    newStatus: 'FAILED_RETRYABLE',
+    errorCode: code,
+    errorMessage: message
+  };
+}
+
+export async function reconcileTimesheetQueryDeliveryAfterProviderAcceptance({ row, markDelivery, reconcileDelivery } = {}) {
+  if (String(row?.type || '').trim().toUpperCase() !== 'TIMESHEET_QUERY') {
+    return { applicable: false, history_marked: false, reconcile_attempted: false };
+  }
+  if (typeof markDelivery !== 'function' || typeof reconcileDelivery !== 'function') {
+    throw new TypeError('Timesheet-query delivery reconciliation dependencies are required');
+  }
+  try {
+    await markDelivery(row);
+    return { applicable: true, history_marked: true, reconcile_attempted: false };
+  } catch {
+    let reconciled = false;
+    try {
+      await reconcileDelivery(row);
+      reconciled = true;
+    } catch {}
+    return {
+      applicable: true,
+      history_marked: false,
+      reconcile_attempted: true,
+      reconcile_completed: reconciled,
+      error_code: 'TIMESHEET_QUERY_DELIVERY_MARK_FAILED'
+    };
+  }
+}
+
+export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runTsfinWorkerOnce } = {}) {
+  if (typeof sbRpc !== 'function' || typeof unwrapRpcJsonb !== 'function' || typeof runTsfinWorkerOnce !== 'function') {
+    throw new TypeError('Import-review follow-up dependencies are required');
+  }
+
+  async function updateComponent(env, details, transition) {
+    const raw = await sbRpc(env, 'import_review_follow_up_component_update_v1', {
+      p_import_id: details.importId,
+      p_operation_id: details.operationId,
+      p_request_hash: details.requestHash || null,
+      p_component: transition.component,
+      p_expected_component_status: transition.expectedStatus,
+      p_new_component_status: transition.newStatus,
+      p_error_code: transition.errorCode || null,
+      p_error_message: transition.errorMessage || null,
+      p_actor_user_id: details.actorUserId
+    }, { timeoutMs: 15000 });
+    return unwrapRpcJsonb(raw, 'import_review_follow_up_component_update_v1') || {};
+  }
+
+  async function failComponent(env, details, transition) {
+    try {
+      return await updateComponent(env, details, transition);
+    } catch (recordError) {
+      const error = new Error('IMPORT_REVIEW_FOLLOW_UP_FAILURE_RECORDING_FAILED');
+      error.cause = recordError;
+      throw error;
+    }
+  }
+
+  return async function runImportReviewPostCommit(env, details = {}) {
+    const statusRaw = await sbRpc(env, 'import_review_apply_status_get_v1', {
+      p_import_id: details.importId,
+      p_operation_id: details.operationId,
+      p_request_hash: details.requestHash || null
+    }, { timeoutMs: 8000 });
+    const status = unwrapRpcJsonb(statusRaw, 'import_review_apply_status_get_v1') || {};
+    if (status.ok === false || !String(status.outcome || '').startsWith('COMMITTED_')) {
+      throw new Error('IMPORT_REVIEW_FOLLOW_UP_SOURCE_NOT_COMMITTED');
+    }
+
+    let storedResponse = objectValue(status.stored_response);
+    if (!Object.keys(storedResponse).length) storedResponse = objectValue(details.applyResult);
+
+    const emailActionIds = uniqueBoundedStrings(storedResponse.post_commit_email_action_ids);
+    const affectedTimesheetIds = uniqueBoundedStrings(storedResponse.affected_timesheet_ids);
+    const componentStates = {
+      EMAIL: componentStatus(storedResponse, 'EMAIL'),
+      TSFIN: componentStatus(storedResponse, 'TSFIN')
+    };
+
+    if (['COMPLETE', 'NOT_REQUIRED'].includes(componentStates.EMAIL)
+      && ['COMPLETE', 'NOT_REQUIRED'].includes(componentStates.TSFIN)) {
+      return {
+        ok: true,
+        source_committed: true,
+        email_follow_up_status: componentStates.EMAIL,
+        tsfin_follow_up_status: componentStates.TSFIN
+      };
+    }
+
+    if (componentStates.EMAIL === 'FAILED_RETRYABLE') {
+      await updateComponent(env, details, {
+        component: 'EMAIL', expectedStatus: 'FAILED_RETRYABLE', newStatus: 'PENDING'
+      });
+      componentStates.EMAIL = 'PENDING';
+    }
+    if (componentStates.TSFIN === 'FAILED_RETRYABLE') {
+      await updateComponent(env, details, {
+        component: 'TSFIN', expectedStatus: 'FAILED_RETRYABLE', newStatus: 'PENDING'
+      });
+      componentStates.TSFIN = 'PENDING';
+    }
+
+    let emailFailure = null;
+    if (componentStates.EMAIL === 'PENDING') {
+      if (!emailActionIds.length) {
+        emailFailure = new Error('IMPORT_REVIEW_EMAIL_ACTION_SET_MISSING');
+        await failComponent(env, details, safeComponentFailure(
+          'EMAIL',
+          'EMAIL_ACTION_SET_MISSING',
+          'Query email follow-up has no persisted action set and requires review.'
+        ));
+      } else {
+        try {
+          await sbRpc(env, 'timesheet_query_email_enqueue_v1', {
+            p_import_id: details.importId,
+            p_operation_id: details.operationId,
+            p_selected_action_ids: emailActionIds,
+            p_actor_user_id: details.actorUserId,
+            p_max_actions: MAX_FOLLOW_UP_ITEMS,
+            p_max_groups: 100
+          }, { timeoutMs: 30000 });
+        } catch (error) {
+          emailFailure = error;
+          await failComponent(env, details, safeComponentFailure(
+            'EMAIL',
+            'EMAIL_ENQUEUE_FAILED',
+            'Query email enqueue failed after source commit and can be retried safely.'
+          ));
+        }
+      }
+    }
+
+    // Reconciliation repairs provider-accepted deliveries whose history marker
+    // did not complete. It never sends or re-enqueues an email.
+    if (componentStates.EMAIL === 'PENDING') {
+      try {
+        await sbRpc(env, 'timesheet_query_email_delivery_reconcile_v1', {
+          p_after_delivery_id: null,
+          p_limit: 100,
+          p_actor_user_id: details.actorUserId
+        }, { timeoutMs: 15000 });
+      } catch {}
+    }
+
+    let tsfinFailure = null;
+    if (componentStates.TSFIN === 'PENDING') {
+      if (!affectedTimesheetIds.length) {
+        tsfinFailure = new Error('IMPORT_REVIEW_TSFIN_TARGET_SET_MISSING');
+        await failComponent(env, details, safeComponentFailure(
+          'TSFIN',
+          'TSFIN_TARGET_SET_MISSING',
+          'TSFIN follow-up has no persisted timesheet set and requires review.'
+        ));
+      } else {
+        let pendingTotal = affectedTimesheetIds.length;
+        let failedCount = 0;
+        try {
+          for (let loop = 0; loop < 10; loop += 1) {
+            const run = await runTsfinWorkerOnce(env, {
+              limit: Math.min(50, affectedTimesheetIds.length),
+              onlyTimesheetIds: affectedTimesheetIds
+            });
+            failedCount += Number(run?.fail || 0);
+
+            const summaryRaw = await sbRpc(env, 'tsfin_outbox_pending_summary', {
+              p_timesheet_ids: affectedTimesheetIds
+            }, { timeoutMs: 8000 });
+            const summary = unwrapRpcJsonb(summaryRaw, 'tsfin_outbox_pending_summary') || {};
+            pendingTotal = Number(summary.total || 0);
+            if (!Number.isFinite(pendingTotal)) pendingTotal = affectedTimesheetIds.length;
+            if (pendingTotal === 0 || Number(run?.picked || 0) === 0) break;
+          }
+
+          if (pendingTotal === 0 && failedCount === 0) {
+            await updateComponent(env, details, {
+              component: 'TSFIN', expectedStatus: 'PENDING', newStatus: 'COMPLETE'
+            });
+          } else {
+            tsfinFailure = new Error('IMPORT_REVIEW_TSFIN_FOLLOW_UP_INCOMPLETE');
+            await failComponent(env, details, safeComponentFailure(
+              'TSFIN',
+              'TSFIN_FOLLOW_UP_INCOMPLETE',
+              'TSFIN refresh remains pending and can be retried safely.'
+            ));
+          }
+        } catch (error) {
+          tsfinFailure = error;
+          if (!String(error?.message || '').includes('FOLLOW_UP_FAILURE_RECORDING_FAILED')) {
+            await failComponent(env, details, safeComponentFailure(
+              'TSFIN',
+              'TSFIN_FOLLOW_UP_FAILED',
+              'TSFIN refresh failed after source commit and can be retried safely.'
+            ));
+          }
+        }
+      }
+    }
+
+    if (emailFailure || tsfinFailure) {
+      const error = new Error('IMPORT_REVIEW_FOLLOW_UP_FAILED_RETRYABLE');
+      error.cause = emailFailure || tsfinFailure;
+      throw error;
+    }
+
+    return {
+      ok: true,
+      source_committed: true,
+      email_follow_up_status: componentStates.EMAIL,
+      tsfin_follow_up_status: componentStates.TSFIN
+    };
+  };
+}
