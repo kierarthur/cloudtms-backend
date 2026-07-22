@@ -36,6 +36,17 @@ const ROUTE_RPCS = Object.freeze(new Set([
   'hr_daily_apply_transactional'
 ]));
 
+const READ_ONLY_ROUTE_RPCS = Object.freeze(new Set([
+  'import_review_contract_version_get_v1',
+  'import_review_list_v1',
+  'import_review_staged_scope_get_v1',
+  'import_review_get_v1',
+  'import_review_actions_page_v1',
+  'import_review_apply_status_get_v1',
+  'nhsp_weekly_review_preview_v1',
+  'hr_daily_validation_preview_v1'
+]));
+
 function isObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -239,8 +250,25 @@ function mapRpcError(error) {
 
 async function runAllowedRpc(sbRpc, env, name, args, options = {}) {
   if (!ROUTE_RPCS.has(name)) throw new Error(`Import-review RPC is not allowlisted: ${name}`);
-  const raw = await sbRpc(env, name, args, { timeoutMs: options.timeoutMs || 15000 });
-  return rpcPayload(raw, name);
+  const canRetryRead = READ_ONLY_ROUTE_RPCS.has(name) && options.retryRead !== false;
+  const maxAttempts = canRetryRead ? 2 : 1;
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const raw = await sbRpc(env, name, args, { timeoutMs: options.timeoutMs || 15000 });
+      return rpcPayload(raw, name);
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.status || 0);
+      const code = String(error?.code || error?.json?.code || '').trim().toUpperCase();
+      const message = String(error?.message || '').toUpperCase();
+      const transient = status === 408 || status === 500 || status === 502 || status === 503 || status === 504
+        || /TIMEOUT|TIMED OUT|ECONNRESET|UPSTREAM/.test(`${code} ${message}`);
+      if (attempt >= maxAttempts || !transient) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+  throw lastError;
 }
 
 async function assertContract(sbRpc, env) {

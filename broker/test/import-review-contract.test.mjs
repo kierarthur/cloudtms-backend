@@ -752,6 +752,32 @@ test('a generic database 500 is not automatically retried as the Supabase platfo
   assert.equal(statusCalls, 0);
 });
 
+test('a transient read failure is retried once without retrying any mutation RPC', async () => {
+  let getCalls = 0;
+  const dispatcher = createImportReviewDispatcher({
+    requireUser: async () => ({ id: ACTOR_ID, role: 'admin' }),
+    sbRpc: async (_env, name) => {
+      if (name === 'import_review_contract_version_get_v1') return installedContract;
+      if (name === 'import_review_get_v1') {
+        getCalls += 1;
+        if (getCalls === 1) {
+          const error = new Error('transient upstream failure');
+          error.status = 502;
+          throw error;
+        }
+        return readyReview();
+      }
+      throw new Error(`unexpected RPC ${name}`);
+    }
+  });
+
+  const response = await dispatcher(jsonRequest('GET', `/api/import-reviews/${IMPORT_ID}`), {}, {});
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 200);
+  assert.equal(captured.body.data.state.status, 'READY');
+  assert.equal(getCalls, 2);
+});
+
 test('refresh retries once after the exact Supabase plpgsql_check transaction abort', async () => {
   let refreshCalls = 0;
   const dispatcher = createImportReviewDispatcher({
