@@ -504,7 +504,7 @@ begin
       select match[1]::uuid as id
       from regexp_matches(
         coalesce(p_payload, '{}'::jsonb)::text,
-        '"(?:timesheet_id|timesheetId|current_timesheet_id|currentTimesheetId|requested_timesheet_id|requestedTimesheetId)"\\s*:\\s*"([0-9a-fA-F-]{36})"',
+        '"(?:timesheet_id|timesheetId|current_timesheet_id|currentTimesheetId|requested_timesheet_id|requestedTimesheetId)"[[:space:]]*:[[:space:]]*"([0-9a-fA-F-]{36})"',
         'g'
       ) match
       where match[1] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
