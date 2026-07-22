@@ -13,6 +13,7 @@ const TIMESHEET_ID = '60000000-0000-4000-8000-000000000006';
 const AUTO_AUTHORISE_TIMESHEET_ID = '70000000-0000-4000-8000-000000000007';
 const ACTION_ID = 'a'.repeat(64);
 const HASH = 'b'.repeat(64);
+const COMMITTED_AT_UTC = '2026-07-22T22:00:00.000Z';
 
 function details(applyResult = {}) {
   return {
@@ -27,6 +28,7 @@ function details(applyResult = {}) {
 function createScenario(storedResponse, options = {}) {
   const calls = [];
   const tsfinRuns = [];
+  let tsfinSummaryCall = 0;
   const sbRpc = async (_env, name, args) => {
     calls.push({ name, args });
     if (name === 'import_review_apply_status_get_v1') {
@@ -34,16 +36,34 @@ function createScenario(storedResponse, options = {}) {
         ok: true,
         outcome: 'COMMITTED_WITH_FOLLOW_UP_PENDING',
         follow_up_status: options.followUpStatus || 'PENDING',
-        stored_response: storedResponse
+        stored_response: storedResponse,
+        committed_at_utc: COMMITTED_AT_UTC
       };
     }
     if (name === 'timesheet_query_email_enqueue_v1' && options.emailEnqueueFails) {
       throw new Error('provider detail must not escape');
     }
-    if (name === 'tsfin_outbox_pending_summary') return {
-      total: options.tsfinPendingTotal || 0,
-      latest_created_at: options.tsfinLatestCreatedAt || null
-    };
+    if (name === 'tsfin_follow_up_target_summary_v1') {
+      const targetCount = Array.isArray(args.p_timesheet_ids) ? args.p_timesheet_ids.length : 0;
+      const sequence = Array.isArray(options.tsfinTargetSummaries)
+        ? options.tsfinTargetSummaries
+        : [
+            { settled: false, pendingTotal: 0 },
+            { settled: true, pendingTotal: 0 }
+          ];
+      const selected = sequence[Math.min(tsfinSummaryCall, sequence.length - 1)] || {};
+      tsfinSummaryCall += 1;
+      const settled = selected.settled === true;
+      return {
+        ok: true,
+        target_count: targetCount,
+        current_target_count: targetCount,
+        fresh_target_count: settled ? targetCount : 0,
+        pending_total: Number(selected.pendingTotal || 0),
+        all_targets_fresh: settled,
+        all_targets_settled: settled
+      };
+    }
     if (name === 'timesheet_authorise_bulk_atomic') {
       const requestedIds = (Array.isArray(args.p_items) ? args.p_items : [])
         .map((item) => item.timesheet_id);
@@ -80,7 +100,8 @@ function createScenario(storedResponse, options = {}) {
   const runner = createImportReviewPostCommitRunner({
     sbRpc,
     unwrapRpcJsonb: (value) => value,
-    runTsfinWorkerOnce
+    runTsfinWorkerOnce,
+    wait: async () => {}
   });
   return { runner, calls, tsfinRuns };
 }
@@ -191,12 +212,13 @@ test('authorised source timesheet is restored only after TSFIN completes', async
   await current.runner({}, details());
 
   const names = current.calls.map((call) => call.name);
+  const initialSummary = names.indexOf('tsfin_follow_up_target_summary_v1');
   const wake = names.indexOf('enqueue_ts_financials_priority');
-  const summary = names.indexOf('tsfin_outbox_pending_summary');
+  const finalSummary = names.lastIndexOf('tsfin_follow_up_target_summary_v1');
   const authorise = names.indexOf('timesheet_authorise_bulk_atomic');
   const complete = current.calls.findIndex((call) => call.name === 'import_review_follow_up_component_update_v1'
     && call.args.p_component === 'TSFIN' && call.args.p_new_component_status === 'COMPLETE');
-  assert.ok(wake >= 0 && summary > wake && authorise > summary && complete > authorise);
+  assert.ok(initialSummary >= 0 && wake > initialSummary && finalSummary > wake && authorise > finalSummary && complete > authorise);
   assert.deepEqual(current.calls[wake].args, {
     _timesheet_ids: [TIMESHEET_ID],
     _reason: 'CONTEXT_CHANGED'
@@ -208,7 +230,7 @@ test('authorised source timesheet is restored only after TSFIN completes', async
   assert.equal(names.some((name) => name.endsWith('_apply_transactional')), false);
 });
 
-test('an older redundant TSFIN lease does not fail follow-up after every exact target rebuilt', async () => {
+test('a concurrently leased TSFIN target completes without a false retryable failure', async () => {
   const current = createScenario({
     post_commit_email_action_ids: [],
     affected_timesheet_ids: [TIMESHEET_ID],
@@ -216,9 +238,12 @@ test('an older redundant TSFIN lease does not fail follow-up after every exact t
     review_email_follow_up_status: 'NOT_REQUIRED',
     review_tsfin_follow_up_status: 'PENDING'
   }, {
-    tsfinPendingTotal: 1,
-    tsfinLatestCreatedAt: '2000-01-01T00:00:00.000Z',
-    tsfinCompletedTimesheetIds: [TIMESHEET_ID]
+    tsfinTargetSummaries: [
+      { settled: false, pendingTotal: 0 },
+      { settled: false, pendingTotal: 1 },
+      { settled: true, pendingTotal: 0 }
+    ],
+    tsfinPicked: 0
   });
 
   await current.runner({}, details());
@@ -227,16 +252,14 @@ test('an older redundant TSFIN lease does not fail follow-up after every exact t
     && call.args.p_component === 'TSFIN' && call.args.p_new_component_status === 'COMPLETE'));
 });
 
-test('new TSFIN work created after the follow-up fence remains retryable', async () => {
+test('a stale or missing TSFIN snapshot remains retryable', async () => {
   const current = createScenario({
     post_commit_email_action_ids: [],
     affected_timesheet_ids: [TIMESHEET_ID],
     review_email_follow_up_status: 'NOT_REQUIRED',
     review_tsfin_follow_up_status: 'PENDING'
   }, {
-    tsfinPendingTotal: 1,
-    tsfinLatestCreatedAt: '2999-01-01T00:00:00.000Z',
-    tsfinCompletedTimesheetIds: [TIMESHEET_ID],
+    tsfinTargetSummaries: [{ settled: false, pendingTotal: 1 }],
     tsfinPicked: 0
   });
 
@@ -245,6 +268,26 @@ test('new TSFIN work created after the follow-up fence remains retryable', async
     && call.args.p_component === 'TSFIN');
   assert.equal(failure.args.p_error_code, 'TSFIN_FOLLOW_UP_INCOMPLETE');
   assert.equal(current.calls.some((call) => call.name === 'timesheet_authorise_bulk_atomic'), false);
+});
+
+test('already-settled exact targets are authorised without re-enqueueing TSFIN', async () => {
+  const current = createScenario({
+    post_commit_email_action_ids: [],
+    affected_timesheet_ids: [TIMESHEET_ID],
+    post_commit_reauthorise_timesheet_ids: [TIMESHEET_ID],
+    review_email_follow_up_status: 'NOT_REQUIRED',
+    review_tsfin_follow_up_status: 'PENDING'
+  }, {
+    tsfinTargetSummaries: [{ settled: true, pendingTotal: 0 }]
+  });
+
+  await current.runner({}, details());
+
+  assert.equal(current.tsfinRuns.length, 0);
+  assert.equal(current.calls.some((call) => call.name === 'enqueue_ts_financials_priority'), false);
+  assert.ok(current.calls.some((call) => call.name === 'timesheet_authorise_bulk_atomic'));
+  assert.ok(current.calls.some((call) => call.name === 'import_review_follow_up_component_update_v1'
+    && call.args.p_component === 'TSFIN' && call.args.p_new_component_status === 'COMPLETE'));
 });
 
 test('configured auto-authorise targets and lifecycle restoration targets share one bounded post-TSFIN call', async () => {

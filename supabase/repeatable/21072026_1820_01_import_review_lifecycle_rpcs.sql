@@ -14,6 +14,7 @@ as $function$
     'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
+    'tsfin_follow_up_settlement_version','IMPORT_REVIEW_TSFIN_SETTLEMENT_V1',
     'incremental_apply_version','IMPORT_REVIEW_INCREMENTAL_APPLY_V1',
     'review_ui_contract_version','IMPORT_REVIEW_UI_V6',
     'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',

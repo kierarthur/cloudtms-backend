@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const lifecycle = readFileSync(new URL('../../supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql', import.meta.url), 'utf8');
 const retirements = readFileSync(new URL('../../supabase/repeatable/21072026_1820_99_import_review_hard_cutover_retirements.sql', import.meta.url), 'utf8');
 const tsfinSummary = readFileSync(new URL('../../supabase/repeatable/04022026_nhsp_hr_code.sql', import.meta.url), 'utf8');
+const tsfinSettlement = readFileSync(new URL('../../supabase/repeatable/23072026_0011_import_review_tsfin_settlement_v1.sql', import.meta.url), 'utf8');
 
 function functionBody(source, name) {
   const marker = `create or replace function public.${name}(`;
@@ -18,6 +19,7 @@ function functionBody(source, name) {
 test('database contract exposes the component-aware follow-up capability', () => {
   const body = functionBody(lifecycle, 'import_review_contract_version_get_v1');
   assert.match(body, /follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1/);
+  assert.match(body, /tsfin_follow_up_settlement_version','IMPORT_REVIEW_TSFIN_SETTLEMENT_V1/);
   assert.match(body, /legacy_contracts_supported',false/);
 });
 
@@ -62,6 +64,18 @@ test('TSFIN pending summary exposes a freshness fence without changing its signa
   assert.match(body, /p_timesheet_ids uuid\[\]/);
   assert.match(body, /max\(o\.created_at\) as latest_created_at/);
   assert.match(body, /'latest_created_at', v_latest_created_at/);
+});
+
+test('TSFIN follow-up settlement proof is bounded, commit-fenced and service-role-only', () => {
+  const body = functionBody(tsfinSettlement, 'tsfin_follow_up_target_summary_v1');
+  assert.match(body, /p_timesheet_ids uuid\[\]/);
+  assert.match(body, /p_not_before_utc timestamptz/);
+  assert.match(body, /v_target_count > 5000/);
+  assert.match(body, /tf\.timesheet_version is not distinct from ts\.version/);
+  assert.match(body, /coalesce\(tf\.computed_at_utc, tf\.updated_at, tf\.created_at\) >= p_not_before_utc/);
+  assert.match(body, /'all_targets_settled'/);
+  assert.match(tsfinSettlement, /revoke all on function public\.tsfin_follow_up_target_summary_v1\(uuid\[\], timestamptz\) from public, anon, authenticated;/);
+  assert.match(tsfinSettlement, /grant execute on function public\.tsfin_follow_up_target_summary_v1\(uuid\[\], timestamptz\) to service_role;/);
 });
 
 test('empty and exact-page review lists use typed cursors and emit a cursor only when more rows exist', () => {

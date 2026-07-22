@@ -27,6 +27,7 @@ const installedContract = Object.freeze({
   apply_operation_version: importReviewContract.operation,
   correction_operation_version: importReviewContract.correction,
   follow_up_component_version: importReviewContract.followUpComponent,
+  tsfin_follow_up_settlement_version: importReviewContract.tsfinSettlement,
   incremental_apply_version: importReviewContract.incrementalApply,
   review_ui_contract_version: importReviewContract.reviewUi,
   email_grouping_version: importReviewContract.emailGrouping,
@@ -353,6 +354,20 @@ test('all business routes fail closed before their RPC when the database contrac
 
 test('the contract gate fails closed when component-aware follow-up support is absent', async () => {
   const { follow_up_component_version: _removed, ...oldContract } = installedContract;
+  const current = scenario({ contract: oldContract });
+  const response = await current.dispatcher(
+    jsonRequest('GET', '/api/import-reviews?page_size=25'),
+    { TEST: true },
+    current.ctx
+  );
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 503);
+  assert.equal(captured.body.error.code, 'IMPORT_REVIEW_CONTRACT_MISMATCH');
+  assert.deepEqual(current.calls.map((call) => call.name), ['import_review_contract_version_get_v1']);
+});
+
+test('the contract gate fails closed when durable TSFIN settlement support is absent', async () => {
+  const { tsfin_follow_up_settlement_version: _removed, ...oldContract } = installedContract;
   const current = scenario({ contract: oldContract });
   const response = await current.dispatcher(
     jsonRequest('GET', '/api/import-reviews?page_size=25'),

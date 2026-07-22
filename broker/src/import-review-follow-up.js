@@ -74,10 +74,13 @@ export async function reconcileTimesheetQueryDeliveryAfterProviderAcceptance({ r
   }
 }
 
-export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runTsfinWorkerOnce } = {}) {
+export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runTsfinWorkerOnce, wait } = {}) {
   if (typeof sbRpc !== 'function' || typeof unwrapRpcJsonb !== 'function' || typeof runTsfinWorkerOnce !== 'function') {
     throw new TypeError('Import-review follow-up dependencies are required');
   }
+  const waitForConcurrentTsfin = typeof wait === 'function'
+    ? wait
+    : (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
 
   async function updateComponent(env, details, transition) {
     const raw = await sbRpc(env, 'import_review_follow_up_component_update_v1', {
@@ -105,7 +108,6 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
   }
 
   return async function runImportReviewPostCommit(env, details = {}) {
-    const followUpStartedAtMs = Date.now();
     const statusRaw = await sbRpc(env, 'import_review_apply_status_get_v1', {
       p_import_id: details.importId,
       p_operation_id: details.operationId,
@@ -114,6 +116,10 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
     const status = unwrapRpcJsonb(statusRaw, 'import_review_apply_status_get_v1') || {};
     if (status.ok === false || !String(status.outcome || '').startsWith('COMMITTED_')) {
       throw new Error('IMPORT_REVIEW_FOLLOW_UP_SOURCE_NOT_COMMITTED');
+    }
+    const committedAtUtc = String(status.committed_at_utc || '').trim();
+    if (!committedAtUtc || !Number.isFinite(Date.parse(committedAtUtc))) {
+      throw new Error('IMPORT_REVIEW_FOLLOW_UP_COMMIT_FENCE_INVALID');
     }
 
     let storedResponse = objectValue(status.stored_response);
@@ -217,44 +223,53 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
           'TSFIN follow-up has no persisted timesheet set and requires review.'
         ));
       } else {
-        let pendingTotal = affectedTimesheetIds.length;
-        let failedCount = 0;
-        const completedTimesheetIds = new Set();
+        let targetsSettled = false;
         try {
-          // Wake only the persisted post-commit targets. This idempotent outbox
-          // operation clears a stale lease but cannot repeat source apply.
-          await sbRpc(env, 'enqueue_ts_financials_priority', {
-            _timesheet_ids: affectedTimesheetIds,
-            _reason: 'CONTEXT_CHANGED'
-          }, { timeoutMs: 8000 });
-
-          for (let loop = 0; loop < 10; loop += 1) {
-            const run = await runTsfinWorkerOnce(env, {
-              limit: 50,
-              onlyTimesheetIds: affectedTimesheetIds
-            });
-            failedCount += Number(run?.fail || 0);
-            for (const timesheetId of uniqueBoundedStrings(run?.completed_timesheet_ids)) {
-              completedTimesheetIds.add(timesheetId.toLowerCase());
-            }
-
-            const summaryRaw = await sbRpc(env, 'tsfin_outbox_pending_summary', {
-              p_timesheet_ids: affectedTimesheetIds
+          const loadTargetSummary = async () => {
+            const raw = await sbRpc(env, 'tsfin_follow_up_target_summary_v1', {
+              p_timesheet_ids: affectedTimesheetIds,
+              p_not_before_utc: committedAtUtc
             }, { timeoutMs: 8000 });
-            const summary = unwrapRpcJsonb(summaryRaw, 'tsfin_outbox_pending_summary') || {};
-            pendingTotal = Number(summary.total || 0);
-            if (!Number.isFinite(pendingTotal)) pendingTotal = affectedTimesheetIds.length;
-            const allTargetsCompleted = affectedTimesheetIds.every((timesheetId) => completedTimesheetIds.has(timesheetId.toLowerCase()));
-            const latestCreatedAtMs = Date.parse(String(summary.latest_created_at || ''));
-            const noNewerPendingWork = !Number.isFinite(latestCreatedAtMs) || latestCreatedAtMs <= followUpStartedAtMs;
-            if (allTargetsCompleted && failedCount === 0 && noNewerPendingWork) {
-              pendingTotal = 0;
-              break;
+            const summary = unwrapRpcJsonb(raw, 'tsfin_follow_up_target_summary_v1') || {};
+            const targetCount = Number(summary.target_count);
+            const freshCount = Number(summary.fresh_target_count);
+            const pendingTotal = Number(summary.pending_total);
+            const completeEvidence = summary.ok === true
+              && targetCount === affectedTimesheetIds.length
+              && freshCount === affectedTimesheetIds.length
+              && pendingTotal === 0
+              && summary.all_targets_fresh === true
+              && summary.all_targets_settled === true;
+            return { ...summary, targetCount, freshCount, pendingTotal, completeEvidence };
+          };
+
+          let summary = await loadTargetSummary();
+          targetsSettled = summary.completeEvidence;
+
+          if (!targetsSettled) {
+            // Wake only the persisted post-commit targets. This idempotent outbox
+            // operation cannot repeat source apply. A bounded recheck allows the
+            // scheduled TSFIN worker to finish rows that it leased concurrently.
+            await sbRpc(env, 'enqueue_ts_financials_priority', {
+              _timesheet_ids: affectedTimesheetIds,
+              _reason: 'CONTEXT_CHANGED'
+            }, { timeoutMs: 8000 });
+
+            for (let loop = 0; loop < 10; loop += 1) {
+              const run = await runTsfinWorkerOnce(env, {
+                limit: 50,
+                onlyTimesheetIds: affectedTimesheetIds
+              });
+              summary = await loadTargetSummary();
+              targetsSettled = summary.completeEvidence;
+              if (targetsSettled) break;
+              if (Number(run?.picked || 0) === 0 && summary.pendingTotal > 0 && loop < 9) {
+                await waitForConcurrentTsfin(200);
+              }
             }
-            if (pendingTotal === 0 || Number(run?.picked || 0) === 0) break;
           }
 
-          if (pendingTotal === 0 && failedCount === 0) {
+          if (targetsSettled) {
             if (authoriseTimesheetIds.length) {
               for (let offset = 0; offset < authoriseTimesheetIds.length; offset += AUTHORISE_CHUNK_SIZE) {
                 const chunk = authoriseTimesheetIds.slice(offset, offset + AUTHORISE_CHUNK_SIZE);
