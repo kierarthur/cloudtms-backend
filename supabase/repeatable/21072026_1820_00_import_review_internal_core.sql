@@ -203,6 +203,56 @@ begin
 end
 $function$;
 
+create or replace function public._import_review_ready_action_ids_core_v1(p_import_id uuid)
+returns table(action_id text)
+language plpgsql
+stable
+security definer
+set search_path to 'public', 'pg_temp'
+as $function$
+begin
+  return query
+  with selected_units as (
+    select distinct d.candidate_id,d.client_id
+    from public.import_review_decisions d
+    where d.import_id=p_import_id and d.is_current and d.selectable and d.selected
+      and not d.blocking and d.candidate_id is not null and d.client_id is not null
+      and not exists (
+        select 1 from public.import_review_action_outcomes o where o.action_id=d.action_id
+      )
+      and not (d.action_kind='NO_ACTION' and exists (
+        select 1 from public.import_review_action_outcomes o
+        where o.import_id=d.import_id and o.source_identity=d.source_identity
+      ))
+  ), eligible_units as (
+    select u.candidate_id,u.client_id
+    from selected_units u
+    where not exists (
+      select 1 from public.import_review_decisions b
+      where b.import_id=p_import_id and b.is_current and b.blocking
+        -- A blocker only owns a resolved candidate/client unit when both
+        -- identities are known.  An unresolved source worker or source client
+        -- must remain pending without freezing unrelated ready candidates in
+        -- the same Trust/import.
+        and b.candidate_id=u.candidate_id
+        and b.client_id=u.client_id
+    )
+  )
+  select d.action_id
+  from public.import_review_decisions d
+  join eligible_units u on u.candidate_id=d.candidate_id and u.client_id=d.client_id
+  where d.import_id=p_import_id and d.is_current and d.selectable and d.selected and not d.blocking
+    and not exists (
+      select 1 from public.import_review_action_outcomes o where o.action_id=d.action_id
+    )
+    and not (d.action_kind='NO_ACTION' and exists (
+      select 1 from public.import_review_action_outcomes o
+      where o.import_id=d.import_id and o.source_identity=d.source_identity
+    ))
+  order by d.action_id;
+end
+$function$;
+
 create or replace function public._import_review_apply_envelope_core_v1(p_import_id uuid)
 returns jsonb
 language plpgsql
@@ -221,12 +271,11 @@ begin
   if v_state.import_id is null or v_import.id is null then
     raise exception 'IMPORT_REVIEW_NOT_FOUND' using errcode='P0002';
   end if;
-  select coalesce(array_agg(d.action_id order by d.action_id),array[]::text[])
-  into v_selected_ids from public.import_review_decisions d
-  where d.import_id=p_import_id and d.is_current and d.selectable and d.selected;
+  select coalesce(array_agg(r.action_id order by r.action_id),array[]::text[])
+  into v_selected_ids from public._import_review_ready_action_ids_core_v1(p_import_id) r;
   select coalesce(array_agg(d.action_id order by d.action_id),array[]::text[])
   into v_invalidation_ids from public.import_review_decisions d
-  where d.import_id=p_import_id and d.is_current and d.selectable and d.selected
+  where d.import_id=p_import_id and d.is_current and d.action_id=any(v_selected_ids)
     and d.action_kind='INVALIDATE_REFERENCE';
   select coalesce(jsonb_agg(jsonb_build_object(
     'action_id',d.action_id,'root_timesheet_id',d.timesheet_id,'source_row_key',d.source_identity,
@@ -238,7 +287,7 @@ begin
   cross join lateral (
     select public._import_review_timesheet_protection_core_v1(d.timesheet_id) as protection
   ) pr
-  where d.import_id=p_import_id and d.is_current and d.selectable and d.selected
+  where d.import_id=p_import_id and d.is_current and d.action_id=any(v_selected_ids)
     and d.action_kind in ('APPLY_AMENDMENT','APPLY_CANCELLATION') and d.timesheet_id is not null
     and (coalesce((pr.protection->>'paid')::boolean,false)
       or coalesce((pr.protection->>'invoice_locked')::boolean,false))
@@ -251,7 +300,13 @@ begin
     'selected_action_ids',to_jsonb(v_selected_ids),'coverage_fingerprint',v_import.coverage_fingerprint,
     'preview_fingerprint',v_state.preview_fingerprint,
     'reference_invalidation_action_ids',to_jsonb(v_invalidation_ids),
-    'correction_units',v_correction_units);
+    'correction_units',v_correction_units,
+    'batch_scope_units',coalesce((select jsonb_agg(jsonb_build_object(
+      'candidate_id',u.candidate_id,'client_id',u.client_id) order by u.candidate_id,u.client_id)
+      from (select distinct d.candidate_id,d.client_id from public.import_review_decisions d
+        where d.import_id=p_import_id and d.action_id=any(v_selected_ids)) u),'[]'::jsonb),
+    'deferred_action_count',(select count(*) from public.import_review_decisions d
+      where d.import_id=p_import_id and d.is_current and d.selectable and not d.selected));
 end
 $function$;
 
@@ -933,9 +988,18 @@ begin
       group by d.candidate_id,d.summary_json->>'week_ending_date'
       having bool_and(d.action_kind='NO_ACTION' and not d.blocking)
     ), missing_timesheets as (
-      select p.* from preview_rows p
+      select p.row_json,p.timesheet_id,p.candidate_id,
+        d.hr_row_id shift_hr_row_id,d.client_id shift_client_id,
+        d.contract_id shift_contract_id,d.source_identity shift_source_identity,
+        d.evidence_fingerprint shift_evidence_fingerprint,d.summary_json shift_summary_json
+      from preview_rows p
       join eligible_validation_groups g on g.candidate_id=p.candidate_id
         and g.week_ending_date=p.row_json->>'week_ending_date'
+      join pg_temp.import_review_catalog_v1 d on d.candidate_id=p.candidate_id
+        and d.summary_json->>'week_ending_date'=p.row_json->>'week_ending_date'
+        and d.summary_json->>'source_route' not like '%DAILY%'
+        and d.summary_json->>'authority_mode'='VALIDATION_ONLY'
+        and d.action_kind='NO_ACTION' and not d.blocking
       where p.row_json->>'overall_status'='MISSING_TIMESHEET'
     ), omitted_shifts as (
       select p.*,cx.value comparison_json
@@ -946,18 +1010,19 @@ begin
       where p.timesheet_id is not null and cx.value->>'match_status'='HR_ONLY'
     )
     select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
-        'WEEKLY_TIMESHEET_NOT_SUBMITTED',m.candidate_id,m.row_json->>'week_ending_date')),
+        'WEEKLY_TIMESHEET_NOT_SUBMITTED',m.shift_hr_row_id)),
       'ADVISORY','BLOCKED',
-      concat_ws(':','weekly-timesheet-not-submitted',m.candidate_id,m.row_json->>'week_ending_date'),
-      concat_ws('|',m.candidate_id,m.row_json->>'week_ending_date'),
-      null::uuid,null::uuid,null::uuid,m.client_id,m.candidate_id,m.contract_id,null::uuid,
-      public._import_review_hash_v1(concat_ws('|','weekly-timesheet-not-submitted-v1',m.row_json::text)),
+      concat_ws(':','weekly-timesheet-not-submitted',m.shift_hr_row_id),
+      m.shift_source_identity,
+      m.shift_hr_row_id,null::uuid,null::uuid,m.shift_client_id,m.candidate_id,m.shift_contract_id,null::uuid,
+      public._import_review_hash_v1(concat_ws('|','weekly-timesheet-not-submitted-v2',
+        m.shift_evidence_fingerprint,m.row_json::text)),
       false,false,true,
-      jsonb_build_object(
+      jsonb_strip_nulls(m.shift_summary_json||jsonb_build_object(
         'reason_code','WEEKLY_TIMESHEET_NOT_SUBMITTED','source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
         'candidate_name',m.row_json->>'candidate_name','week_ending_date',m.row_json->>'week_ending_date',
         'difference_codes',jsonb_build_array('TIMESHEET_NOT_SUBMITTED'),
-        'outcome_label','Request timesheet from candidate')
+        'outcome_label','Request timesheet from candidate'))
     from missing_timesheets m
     union all
     select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
@@ -1332,6 +1397,10 @@ begin
   insert into pg_temp.review_next_actions
     select * from public._import_review_action_catalog_core_v1(p_import_id,v_generation,p_max_actions);
 
+  delete from pg_temp.review_next_actions n
+  using public.import_review_action_outcomes o
+  where o.import_id=p_import_id and o.action_id=n.action_id;
+
   -- Persist database-unambiguous Daily associations in the same normalised table.
   -- This is evidence linkage only and never edits the selected timesheet.
   insert into public.import_review_daily_timesheet_resolutions(
@@ -1356,6 +1425,9 @@ begin
     truncate pg_temp.review_next_actions;
     insert into pg_temp.review_next_actions
       select * from public._import_review_action_catalog_core_v1(p_import_id,v_generation,p_max_actions);
+    delete from pg_temp.review_next_actions n
+    using public.import_review_action_outcomes o
+    where o.import_id=p_import_id and o.action_id=n.action_id;
   end if;
   select public._import_review_hash_v1(coalesce(string_agg(action_id||':'||evidence_fingerprint,'|' order by action_id),''))
   into v_fingerprint from pg_temp.review_next_actions;
@@ -1418,6 +1490,7 @@ $function$;
 
 revoke all on function public._import_review_hash_v1(text) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_assert_actor_v1(uuid) from public,anon,authenticated,service_role;
+revoke all on function public._import_review_ready_action_ids_core_v1(uuid) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_validate_ui_state_v1(jsonb) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_timesheet_protection_core_v1(uuid) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_action_catalog_core_v1(uuid,integer,integer) from public,anon,authenticated,service_role;

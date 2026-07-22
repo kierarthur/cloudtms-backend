@@ -152,6 +152,12 @@ begin
       nullif(btrim(coalesce(r.payload_json->>'ward','')), '') as ward_payload,
       nullif(btrim(coalesce(r.payload_json->>'unit','')), '') as unit_payload,
       nullif(btrim(coalesce(r.unit_raw,'')), '') as unit_raw,
+      nullif(btrim(coalesce(
+        r.assignment_grade_norm,
+        r.payload_json->>'grade_raw',
+        r.payload_json->>'Request_Grade',
+        ''
+      )), '') as assignment_grade,
       (r.payload_json->>'start_utc')::timestamptz as start_utc_raw,
       (r.payload_json->>'end_utc')::timestamptz as end_utc_raw,
       coalesce(
@@ -179,6 +185,7 @@ begin
       nullif(regexp_replace(lower(coalesce(coalesce(h.staff_name_payload, h.staff_raw, h.staff_norm_col), '')), '[^a-z0-9]+', '', 'g'), '') as staff_norm2,
       coalesce(nullif(h.hr_request_id_text,''), nullif(h.hr_request_id_payload,'')) as hr_request_id,
       coalesce(nullif(h.ward_payload,''), nullif(h.unit_payload,''), nullif(h.unit_raw,'')) as hr_location,
+      h.assignment_grade,
       date_trunc('minute', h.start_utc_raw) as start_utc,
       date_trunc('minute', h.end_utc_raw) as end_utc,
       greatest(coalesce(h.break_mins, 0), 0)::int as break_mins
@@ -246,6 +253,7 @@ begin
       r.hr_row_id,
       r.hr_request_id,
       r.hr_location,
+      r.assignment_grade,
 
       to_char((r.start_utc at time zone 'Europe/London'), 'HH24:MI') as hr_start_hhmm,
       to_char((r.end_utc at time zone 'Europe/London'), 'HH24:MI') as hr_end_hhmm,
@@ -332,7 +340,9 @@ begin
       h.hr_end_hhmm,
       h.hr_start_min,
       h.hr_end_min,
-      h.hr_break_mins
+      h.hr_break_mins,
+      h.hr_paid_minutes,
+      h.assignment_grade
     from hr_with_we h
     where h.candidate_id is not null
   ),
@@ -1240,8 +1250,43 @@ begin
         'emailed_already', false,
         'can_email', false,
 
-        'days', '[]'::jsonb,
-        'comparisons', '[]'::jsonb
+        'days', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'date', hd.work_date::text,
+            'hr_minutes', hd.hr_paid_minutes,
+            'ts_minutes', null,
+            'delta_minutes', hd.hr_paid_minutes,
+            'day_status', 'TIMESHEET_NOT_SUBMITTED'
+          ) order by hd.work_date)
+          from hr_day_totals hd
+          where hd.candidate_id=tr.candidate_id
+            and hd.week_ending_date=tr.week_ending_date
+        ), '[]'::jsonb),
+        'comparisons', coalesce((
+          select jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+            'comparison_key', 'hr-row:'||hf.hr_row_id::text,
+            'hr_row_id', hf.hr_row_id,
+            'work_date', hf.work_date::text,
+            'match', false,
+            'time_match', false,
+            'match_status', 'TIMESHEET_NOT_SUBMITTED',
+            'healthroster_start', hf.hr_start_hhmm,
+            'healthroster_end', hf.hr_end_hhmm,
+            'healthroster_break_mins', hf.hr_break_mins,
+            'healthroster_paid_minutes', hf.hr_paid_minutes,
+            'role', hf.assignment_grade,
+            'ref_after', hf.hr_request_id,
+            'location_after', hf.hr_location,
+            'times_after', jsonb_build_object(
+              'start', hf.hr_start_hhmm,
+              'end', hf.hr_end_hhmm,
+              'break_mins', hf.hr_break_mins
+            )
+          )) order by hf.work_date,hf.hr_start_min,hf.hr_end_min,hf.hr_row_id)
+          from hr_entries_flat hf
+          where hf.candidate_id=tr.candidate_id
+            and hf.week_ending_date=tr.week_ending_date
+        ), '[]'::jsonb)
       ) as j
     from hr_triples tr
     where not exists (

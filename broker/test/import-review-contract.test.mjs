@@ -27,6 +27,7 @@ const installedContract = Object.freeze({
   apply_operation_version: importReviewContract.operation,
   correction_operation_version: importReviewContract.correction,
   follow_up_component_version: importReviewContract.followUpComponent,
+  incremental_apply_version: importReviewContract.incrementalApply,
   review_ui_contract_version: importReviewContract.reviewUi,
   email_grouping_version: importReviewContract.emailGrouping,
   legacy_contracts_supported: false
@@ -42,6 +43,7 @@ function readyReview() {
     },
     state: {
       status: 'READY',
+      editability: { allowed_commands: ['APPLY'] },
       state_version: 7,
       preview_generation: 3,
       preview_fingerprint: PREVIEW_HASH,
@@ -363,8 +365,8 @@ test('the contract gate fails closed when component-aware follow-up support is a
   assert.deepEqual(current.calls.map((call) => call.name), ['import_review_contract_version_get_v1']);
 });
 
-test('the V4 Worker fails closed against the superseded V3 review UI contract', async () => {
-  const oldContract = { ...installedContract, review_ui_contract_version: 'IMPORT_REVIEW_UI_V3' };
+test('the V5 Worker fails closed against the superseded V4 review UI contract', async () => {
+  const oldContract = { ...installedContract, review_ui_contract_version: 'IMPORT_REVIEW_UI_V4' };
   const current = scenario({ contract: oldContract });
   const response = await current.dispatcher(
     jsonRequest('GET', '/api/import-reviews?page_size=25'),
@@ -374,6 +376,46 @@ test('the V4 Worker fails closed against the superseded V3 review UI contract', 
   const captured = await responseJson(response);
   assert.equal(captured.status, 503);
   assert.equal(captured.body.error.code, 'IMPORT_REVIEW_CONTRACT_MISMATCH');
+});
+
+test('the Worker fails closed when incremental apply support is absent', async () => {
+  const { incremental_apply_version: _removed, ...oldContract } = installedContract;
+  const current = scenario({ contract: oldContract });
+  const response = await current.dispatcher(
+    jsonRequest('GET', '/api/import-reviews?page_size=25'),
+    { TEST: true },
+    current.ctx
+  );
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 503);
+  assert.equal(captured.body.error.code, 'IMPORT_REVIEW_CONTRACT_MISMATCH');
+});
+
+test('a BLOCKED review may apply its server-issued ready candidate/client batch', async () => {
+  const calls = [];
+  const dispatcher = createImportReviewDispatcher({
+    requireUser: async () => ({ id: ACTOR_ID, role: 'admin' }),
+    sbRpc: async (_env, name, args) => {
+      calls.push({ name, args });
+      if (name === 'import_review_contract_version_get_v1') return installedContract;
+      if (name === 'import_review_get_v1') {
+        const review = readyReview();
+        review.state.status = 'BLOCKED';
+        review.state.editability = { allowed_commands: ['SAVE_SELECTIONS', 'REFRESH', 'ABANDON', 'APPLY'] };
+        return review;
+      }
+      if (name === 'nhsp_weekly_apply_transactional') return { ok: true, partial_application: true };
+      return successRpcValue(name);
+    },
+    runFollowUp: async () => ({ ok: true })
+  });
+  const response = await dispatcher(jsonRequest('POST', `/api/import-reviews/${IMPORT_ID}/apply`, {
+    operation_id: OPERATION_ID, expected_state_version: 7, expected_request_hash: HASH
+  }), { TEST: true }, { waitUntil() {} });
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 200);
+  assert.equal(captured.body.data.apply.partial_application, true);
+  assert.ok(calls.some((call) => call.name === 'nhsp_weekly_apply_transactional'));
 });
 
 test('the former two-step supersede route is retired', async () => {

@@ -248,19 +248,46 @@ begin
     v_review_contract->>'coverage_fingerprint',v_review_contract->>'preview_fingerprint',v_review_operation_id,
     v_review_contract->>'request_hash',v_review_selected_ids,v_payload->'invalidation_action_ids',p_actor_user_id);
   if coalesce((v_review_guard->>'replay')::boolean,false) then return v_review_guard->'stored_response'; end if;
+
+  -- The server guard has reduced the request to complete, ready
+  -- candidate/client units.  Keep that boundary available to every MODE_A
+  -- validation/mirror step; otherwise a partial batch could validate or link
+  -- rows belonging to a candidate that the operator deliberately left
+  -- pending.
+  drop table if exists pg_temp.tmp_review_batch_units;
+  create temporary table tmp_review_batch_units(
+    candidate_id uuid not null,
+    client_id uuid not null,
+    primary key(candidate_id,client_id)
+  ) on commit drop;
+  insert into tmp_review_batch_units(candidate_id,client_id)
+  select distinct d.candidate_id,d.client_id
+  from public.import_review_decisions d
+  where d.import_id=p_import_id and d.is_current
+    and d.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
+    and d.candidate_id is not null and d.client_id is not null
+  on conflict do nothing;
+  if not exists(select 1 from tmp_review_batch_units) then
+    raise exception 'IMPORT_REVIEW_BATCH_SCOPE_EMPTY' using errcode='55000';
+  end if;
   select coalesce(jsonb_agg(to_jsonb(case when d.action_kind='APPLY_CANCELLATION' then 'CANCEL:'||d.shift_id::text else 'ROW:'||d.source_identity end) order by d.action_id),'[]'::jsonb)
     into v_actions_json
   from public.import_review_decisions d
   where d.import_id=p_import_id and d.is_current and d.selected
+    and d.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
     and d.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION');
   select coalesce(jsonb_agg(jsonb_build_object('timesheet_id',d.timesheet_id,'comparison_key',d.source_identity,'invalidate',true) order by d.action_id),'[]'::jsonb)
     into v_invalidation_actions
   from public.import_review_decisions d
-  where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind='INVALIDATE_REFERENCE';
+  where d.import_id=p_import_id and d.is_current and d.selected
+    and d.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
+    and d.action_kind='INVALIDATE_REFERENCE';
   select coalesce(jsonb_agg(to_jsonb(d.action_id) order by d.action_id),'[]'::jsonb)
     into v_post_commit_email_action_ids
   from public.import_review_decisions d
-  where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER');
+  where d.import_id=p_import_id and d.is_current and d.selected
+    and d.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
+    and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER');
   v_email_actions_count:=jsonb_array_length(v_post_commit_email_action_ids);
 
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_OK','client_id',v_import_client_id::text));
@@ -392,7 +419,9 @@ begin
   cross join lateral public._import_review_effective_authority_core_v1(
     'HR_WEEKLY',c.id,c.client_id,t.week_ending_date) a;
 
-  if exists(select 1 from tmp_group_mode where mode='OUT_OF_SCOPE') then
+  if exists(select 1 from tmp_group_mode gm join tmp_review_batch_units bu
+      on bu.candidate_id=gm.candidate_id and bu.client_id=gm.client_id
+      where gm.mode='OUT_OF_SCOPE') then
     raise exception 'HR_WEEKLY_IMPORT_AUTHORITY_OUT_OF_SCOPE' using errcode='40001';
   end if;
 
@@ -415,6 +444,8 @@ begin
   select coalesce(array_agg(distinct m.external_row_key order by m.external_row_key), array[]::text[])
   into v_mode_a_external_keys
   from tmp_p2_ok_mode m
+  join tmp_review_batch_units bu
+    on bu.candidate_id=m.candidate_id and bu.client_id=m.client_id
   where m.mode = 'MODE_A';
 
   select coalesce(array_agg(distinct m.external_row_key order by m.external_row_key), array[]::text[])
@@ -1580,6 +1611,7 @@ begin
    and cw0.is_adjustment is false
    and coalesce(cw0.additional_seq, 0) = 0
   where p2m.mode = 'MODE_A'
+    and p2m.external_row_key = any(coalesce(v_mode_a_external_keys,array[]::text[]))
     and p2m.external_row_key is not null
     and cw0.timesheet_id is not null
   on conflict do nothing;
@@ -1676,7 +1708,12 @@ begin
     and nullif(btrim(r.value->>'candidate_id'), '') is not null
     and nullif(btrim(r.value->>'contract_id'), '') is not null
     and nullif(btrim(r.value->>'week_ending_date'), '') is not null
-    and nullif(btrim(r.value->>'client_id'), '') is not null;
+    and nullif(btrim(r.value->>'client_id'), '') is not null
+    and exists (
+      select 1 from tmp_review_batch_units bu
+      where bu.candidate_id=nullif(btrim(r.value->>'candidate_id'), '')::uuid
+        and bu.client_id=nullif(btrim(r.value->>'client_id'), '')::uuid
+    );
 
   select count(*)::int
   into v_val_rows_count
@@ -2063,15 +2100,16 @@ begin
   end if;
 
   -- ─────────────────────────────────────────────
-  -- 12) Mark import applied (inside transaction)
+  -- 12) Preserve the source route.  Whole-import completion is owned by
+  -- _import_review_apply_complete_core_v1 after it has proved that no
+  -- deferred/selectable work or blockers remain.  An incremental batch must
+  -- never make the staged import look globally applied.
   -- ─────────────────────────────────────────────
   update public.hr_imports hi3
-  set
-    import_scope = 'HR_WEEKLY',
-    applied_at = v_now
+  set import_scope = 'HR_WEEKLY'
   where hi3.id = p_import_id;
 
-  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_APPLIED'));
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_BATCH_APPLIED'));
 
   -- ─────────────────────────────────────────────
   -- 13) Logging (invoice_debug only, via _imp_debug_audit)

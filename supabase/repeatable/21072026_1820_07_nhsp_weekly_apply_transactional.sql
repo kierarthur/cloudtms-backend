@@ -193,6 +193,7 @@ begin
     into v_actions_json
   from public.import_review_decisions d
   where d.import_id=p_import_id and d.is_current and d.selected
+    and d.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
     and d.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION');
 
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_OK'));
@@ -388,12 +389,10 @@ begin
 
   if (v_should_run_phase1 is false and v_should_run_cancellations is false) then
     update public.hr_imports hi_noop
-    set
-      import_scope = 'NHSP',
-      applied_at = v_now
+    set import_scope = 'NHSP'
     where hi_noop.id = p_import_id;
 
-    v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_APPLIED_NOOP'));
+    v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_BATCH_APPLIED_NOOP'));
 
     perform public._imp_debug_audit(
       p_actor_user_id,
@@ -1412,15 +1411,14 @@ begin
   ));
 
   -- ─────────────────────────────────────────────
-  -- 10) Mark import applied (inside transaction)
+  -- 10) Preserve the source route.  Whole-import completion is owned by
+  -- _import_review_apply_complete_core_v1 only after no work remains.
   -- ─────────────────────────────────────────────
   update public.hr_imports hi3
-  set
-    import_scope = 'NHSP',
-    applied_at = v_now
+  set import_scope = 'NHSP'
   where hi3.id = p_import_id;
 
-  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_APPLIED'));
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_BATCH_APPLIED'));
 
   -- ─────────────────────────────────────────────
   -- 11) Debug audit (invoice_debug gated inside _imp_debug_audit)

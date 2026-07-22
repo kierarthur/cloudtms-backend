@@ -14,7 +14,8 @@ as $function$
     'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
-    'review_ui_contract_version','IMPORT_REVIEW_UI_V4',
+    'incremental_apply_version','IMPORT_REVIEW_INCREMENTAL_APPLY_V1',
+    'review_ui_contract_version','IMPORT_REVIEW_UI_V5',
     'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'legacy_contracts_supported',false
   )
@@ -307,6 +308,7 @@ returns jsonb language plpgsql security definer set search_path to 'public','pg_
 declare v_action_limit integer:=least(greatest(coalesce(p_action_limit,100),1),200); v_event_limit integer:=least(greatest(coalesce(p_event_limit,50),1),100);
   v_state public.import_review_states%rowtype; v_import public.hr_imports%rowtype; v_actions jsonb; v_events jsonb; v_last_action text; v_last_event bigint;
   v_apply_envelope jsonb; v_apply_request_hash text; v_allowed_commands jsonb; v_confirmation jsonb; v_read_only boolean;
+  v_can_apply boolean; v_batch_ids text[]; v_applied_outcome_count integer; v_deferred_count integer;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if (p_action_cursor is not null and (length(p_action_cursor)<>64 or p_action_cursor!~'^[0-9a-f]{64}$'))
@@ -317,30 +319,40 @@ begin
   select * into v_import from public.hr_imports where id=p_import_id;
   v_apply_envelope:=public._import_review_apply_envelope_core_v1(p_import_id);
   v_apply_request_hash:=public._import_review_hash_v1(v_apply_envelope::text);
+  select coalesce(array_agg(value order by value),array[]::text[]) into v_batch_ids
+  from jsonb_array_elements_text(coalesce(v_apply_envelope->'selected_action_ids','[]'::jsonb)) value;
+  select count(*) into v_applied_outcome_count from public.import_review_action_outcomes o where o.import_id=p_import_id;
+  select count(*) into v_deferred_count from public.import_review_decisions d
+  where d.import_id=p_import_id and d.is_current and d.selectable and not d.selected;
   v_read_only:=v_state.status in ('APPLYING','APPLIED','ABANDONED','SUPERSEDED');
+  v_can_apply:=v_state.status in ('BLOCKED','READY') and cardinality(v_batch_ids)>0
+    and v_state.follow_up_status in ('NOT_REQUIRED','COMPLETE');
   v_allowed_commands:=to_jsonb(array_remove(array[
     case when v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY') then 'SAVE_SELECTIONS'::text end,
     case when v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY') then 'REFRESH'::text end,
     case when v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY') then 'ABANDON'::text end,
     case when v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY') then 'RESOLVE_DAILY_TIMESHEET'::text end,
-    case when v_state.status='READY' then 'APPLY'::text end,
-    case when v_state.status in ('APPLYING','APPLIED') then 'VIEW_APPLY_STATUS'::text end,
-    case when v_state.status='APPLIED' and v_state.follow_up_status='FAILED_RETRYABLE' then 'RETRY_FOLLOW_UP'::text end
+    case when v_can_apply then 'APPLY'::text end,
+    case when v_state.status in ('APPLYING','APPLIED') or v_state.last_operation_id is not null then 'VIEW_APPLY_STATUS'::text end,
+    case when v_state.status in ('BLOCKED','READY','APPLIED') and v_state.follow_up_status='FAILED_RETRYABLE' then 'RETRY_FOLLOW_UP'::text end
   ],null));
   select jsonb_build_object(
-    'selected_total',count(*) filter(where d.selected),
-    'selected_change_count',count(*) filter(where d.selected and d.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION','MARK_VALIDATION_ERROR')),
-    'selected_email_count',count(*) filter(where d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')),
-    'selected_email_issue_count',count(*) filter(where d.selected and d.action_kind='EMAIL_ISSUE'),
-    'selected_email_reminder_count',count(*) filter(where d.selected and d.action_kind='EMAIL_REMINDER'),
-    'selected_reference_invalidation_count',count(*) filter(where d.selected and d.action_kind='INVALIDATE_REFERENCE'),
+    'selected_total',count(*) filter(where d.action_id=any(v_batch_ids)),
+    'selected_change_count',count(*) filter(where d.action_id=any(v_batch_ids) and d.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION','MARK_VALIDATION_ERROR')),
+    'selected_email_count',count(*) filter(where d.action_id=any(v_batch_ids) and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')),
+    'selected_email_issue_count',count(*) filter(where d.action_id=any(v_batch_ids) and d.action_kind='EMAIL_ISSUE'),
+    'selected_email_reminder_count',count(*) filter(where d.action_id=any(v_batch_ids) and d.action_kind='EMAIL_REMINDER'),
+    'selected_reference_invalidation_count',count(*) filter(where d.action_id=any(v_batch_ids) and d.action_kind='INVALIDATE_REFERENCE'),
     'blocking_count',count(*) filter(where d.blocking),
+    'batch_blocking_count',0,
+    'deferred_count',v_deferred_count,
+    'applied_outcome_count',v_applied_outcome_count,
     'advisory_count',count(*) filter(where d.action_kind='ADVISORY'),
     'daily_resolution_count',count(*) filter(where d.action_kind='DAILY_TIMESHEET_RESOLUTION'),
     'reconfirmation_count',count(*) filter(where d.requires_reconfirmation),
     'action_kind_counts',coalesce((select jsonb_object_agg(k.action_kind,k.item_count) from (
       select d2.action_kind,count(*)::integer item_count from public.import_review_decisions d2
-      where d2.import_id=p_import_id and d2.is_current and d2.selected group by d2.action_kind order by d2.action_kind
+      where d2.import_id=p_import_id and d2.is_current and d2.action_id=any(v_batch_ids) group by d2.action_kind order by d2.action_kind
     ) k),'{}'::jsonb)
   ) into v_confirmation
   from public.import_review_decisions d where d.import_id=p_import_id and d.is_current;
@@ -364,15 +376,17 @@ begin
       'preview_generation',v_state.preview_generation,'preview_fingerprint',v_state.preview_fingerprint,'ui_state',v_state.ui_state_json,
       'last_opened_at_utc',v_state.last_opened_at_utc,'last_opened_by_user_id',v_state.last_opened_by_user_id,
       'last_operation_id',v_state.last_operation_id,'read_only',v_read_only,
+      'partial_application',v_applied_outcome_count>0 and v_state.status<>'APPLIED',
+      'applied_outcome_count',v_applied_outcome_count,'deferred_count',v_deferred_count,
       'editability',jsonb_build_object(
         'read_only',v_read_only,
         'can_edit_selections',v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY'),
         'can_resolve_daily_timesheet',v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY'),
         'can_refresh',v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY'),
         'can_abandon',v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY'),
-        'can_apply',v_state.status='READY',
-        'can_view_apply_status',v_state.status in ('APPLYING','APPLIED'),
-        'can_retry_follow_up',v_state.status='APPLIED' and v_state.follow_up_status='FAILED_RETRYABLE',
+        'can_apply',v_can_apply,
+        'can_view_apply_status',v_state.status in ('APPLYING','APPLIED') or v_state.last_operation_id is not null,
+        'can_retry_follow_up',v_state.status in ('BLOCKED','READY','APPLIED') and v_state.follow_up_status='FAILED_RETRYABLE',
         'allowed_commands',v_allowed_commands),
       'apply_contract',jsonb_build_object('selected_action_ids',v_apply_envelope->'selected_action_ids',
         'reference_invalidation_action_ids',v_apply_envelope->'reference_invalidation_action_ids',
@@ -479,20 +493,21 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id);
     raise exception 'IMPORT_REVIEW_INVALIDATION_ACTION_ID_DUPLICATE' using errcode='22023'; end if;
   select * into v_i from public.hr_imports where id=p_import_id for update; select * into v_s from public.import_review_states where import_id=p_import_id for update;
   if v_i.id is null or v_s.import_id is null then raise exception 'IMPORT_REVIEW_NOT_FOUND' using errcode='P0002'; end if;
-  if v_s.status='APPLIED' and v_s.last_operation_id=p_operation_id then
-    select * into v_o from public.import_apply_operations where id=p_operation_id and import_id=p_import_id;
-    if v_o.id is null then raise exception 'IMPORT_REVIEW_APPLIED_OPERATION_MISSING' using errcode='55000'; end if;
+  select * into v_o from public.import_apply_operations where id=p_operation_id and import_id=p_import_id;
+  if found and v_o.committed_at_utc is not null then
     if lower(btrim(p_request_hash))<>v_o.request_hash then raise exception 'IMPORT_REVIEW_OPERATION_REQUEST_MISMATCH' using errcode='23505'; end if;
     return jsonb_build_object('ok',true,'replay',true,'import_id',p_import_id,'operation_id',p_operation_id,
       'state_version',v_s.state_version,'operation_state',v_o.state,'stored_response',v_o.response_json);
   end if;
-  if v_s.status<>'READY' or v_s.state_version<>p_expected_state_version or v_i.coverage_fingerprint is distinct from p_expected_coverage_fingerprint
+  if v_s.status not in ('BLOCKED','READY') or v_s.follow_up_status not in ('NOT_REQUIRED','COMPLETE')
+    or v_s.state_version<>p_expected_state_version or v_i.coverage_fingerprint is distinct from p_expected_coverage_fingerprint
     or v_s.preview_fingerprint is distinct from p_expected_preview_fingerprint then raise exception 'IMPORT_REVIEW_APPLY_STALE_OR_NOT_READY' using errcode='40001'; end if;
-  if exists(select 1 from public.import_review_decisions where import_id=p_import_id and is_current and blocking) then raise exception 'IMPORT_REVIEW_HAS_BLOCKERS' using errcode='55000'; end if;
-  select coalesce(array_agg(action_id order by action_id),array[]::text[]) into v_db_ids from public.import_review_decisions where import_id=p_import_id and is_current and selectable and selected;
+  select coalesce(array_agg(action_id order by action_id),array[]::text[]) into v_db_ids
+  from public._import_review_ready_action_ids_core_v1(p_import_id);
+  if cardinality(v_db_ids)=0 then raise exception 'IMPORT_REVIEW_NO_READY_SELECTED_ACTIONS' using errcode='55000'; end if;
   if v_ids is distinct from v_db_ids then raise exception 'IMPORT_REVIEW_SELECTED_ACTION_SET_MISMATCH' using errcode='40001'; end if;
   select coalesce(array_agg(action_id order by action_id),array[]::text[]) into v_db_invalidation_ids
-  from public.import_review_decisions where import_id=p_import_id and is_current and selectable and selected
+  from public.import_review_decisions where import_id=p_import_id and is_current and action_id=any(v_ids)
     and action_kind='INVALIDATE_REFERENCE';
   if v_invalidation_ids is distinct from v_db_invalidation_ids then
     raise exception 'IMPORT_REVIEW_INVALIDATION_ACTION_SET_MISMATCH' using errcode='40001'; end if;
@@ -502,11 +517,11 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id);
   -- locks only ensure that a concurrent draft/import race has one winner.
   perform 1 from public.timesheets t
   where t.timesheet_id in (select d.timesheet_id from public.import_review_decisions d
-    where d.import_id=p_import_id and d.is_current and d.selected and d.timesheet_id is not null)
+    where d.import_id=p_import_id and d.is_current and d.action_id=any(v_ids) and d.timesheet_id is not null)
   order by t.timesheet_id for update;
   perform 1 from public.timesheets_financials tf
   where tf.is_current and tf.timesheet_id in (select d.timesheet_id from public.import_review_decisions d
-    where d.import_id=p_import_id and d.is_current and d.selected and d.timesheet_id is not null)
+    where d.import_id=p_import_id and d.is_current and d.action_id=any(v_ids) and d.timesheet_id is not null)
   order by tf.timesheet_id,tf.id for update;
 
   create temporary table if not exists pg_temp.review_apply_fresh_actions on commit drop as
@@ -518,25 +533,34 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id);
   into v_fresh_fingerprint from pg_temp.review_apply_fresh_actions;
   if v_fresh_fingerprint is distinct from v_s.preview_fingerprint then
     raise exception 'IMPORT_REVIEW_APPLY_EVIDENCE_STALE' using errcode='40001'; end if;
-  if exists(select 1 from pg_temp.review_apply_fresh_actions where blocking) then
-    raise exception 'IMPORT_REVIEW_APPLY_REFRESH_REQUIRED' using errcode='40001'; end if;
+  if exists(
+    select 1 from pg_temp.review_apply_fresh_actions b
+    where b.blocking and exists (
+      select 1 from public.import_review_decisions d
+      where d.import_id=p_import_id and d.action_id=any(v_ids)
+        and b.candidate_id=d.candidate_id
+        and b.client_id=d.client_id
+    )
+  ) then raise exception 'IMPORT_REVIEW_APPLY_REFRESH_REQUIRED' using errcode='40001'; end if;
   if exists(
     select 1 from public.import_review_decisions d
     left join pg_temp.review_apply_fresh_actions n on n.action_id=d.action_id
-    where d.import_id=p_import_id and d.is_current and d.selected
+    where d.import_id=p_import_id and d.is_current and d.action_id=any(v_ids)
       and (n.action_id is null or n.evidence_fingerprint is distinct from d.evidence_fingerprint
         or not n.selectable or n.blocking)
   ) then raise exception 'IMPORT_REVIEW_SELECTED_ACTION_STALE' using errcode='40001'; end if;
-  if exists(select 1 from public.import_review_decisions d where d.import_id=p_import_id and d.is_current and d.selected
+  if exists(select 1 from public.import_review_decisions d where d.import_id=p_import_id and d.is_current and d.action_id=any(v_ids)
     and d.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION','INVALIDATE_REFERENCE','MARK_VALIDATION_ERROR') and d.timesheet_id is not null
     and coalesce((public._import_review_timesheet_protection_core_v1(d.timesheet_id)->>'active_pay_draft')::boolean,false)) then raise exception 'BLOCKED_ACTIVE_PAY_DRAFT' using errcode='55000'; end if;
   if v_i.source_system='HEALTHROSTER_DAILY'::public.hr_source_enum and exists(
     select 1 from public.import_review_daily_timesheet_resolutions r
     where r.import_id=p_import_id and r.status='CURRENT' and r.resolved_timesheet_id is not null
+      and exists(select 1 from public.import_review_decisions d where d.import_id=p_import_id
+        and d.hr_row_id=r.hr_row_id and d.action_id=any(v_ids))
       and coalesce((public._import_review_timesheet_protection_core_v1(r.resolved_timesheet_id)->>'active_pay_draft')::boolean,false)
   ) then raise exception 'BLOCKED_ACTIVE_PAY_DRAFT' using errcode='55000'; end if;
   if exists(select 1 from public.import_review_decisions d
-    where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind='INVALIDATE_REFERENCE'
+    where d.import_id=p_import_id and d.is_current and d.action_id=any(v_ids) and d.action_kind='INVALIDATE_REFERENCE'
       and coalesce((public._import_review_timesheet_protection_core_v1(d.timesheet_id)->>'protected')::boolean,false)) then
     raise exception 'IMPORT_REVIEW_REFERENCE_INVALIDATION_PROTECTED' using errcode='55000'; end if;
   v_envelope:=public._import_review_apply_envelope_core_v1(p_import_id);
@@ -547,38 +571,118 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id);
   v_op_result:=public._import_apply_operation_claim_core_v2(p_operation_id,p_import_id,v_i.source_system,
     concat_ws(':',coalesce(v_i.revision_group_id,v_i.id),coalesce(v_i.revision_no,1)),v_server_hash,p_actor_user_id,v_envelope);
   update public.import_review_states set status='APPLYING',state_version=state_version+1,last_operation_id=p_operation_id,updated_at_utc=now(),updated_by_user_id=p_actor_user_id where import_id=p_import_id returning * into v_s;
-  insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json) values(p_import_id,v_s.state_version,p_operation_id,'APPLY_STARTED',p_actor_user_id,jsonb_build_object('request_hash',btrim(p_request_hash),'selected_count',cardinality(v_ids)));
+  insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json) values(p_import_id,v_s.state_version,p_operation_id,'APPLY_STARTED',p_actor_user_id,jsonb_build_object('request_hash',btrim(p_request_hash),'selected_count',cardinality(v_ids),'batch_scope_units',v_envelope->'batch_scope_units'));
   return jsonb_build_object('ok',true,'import_id',p_import_id,'operation_id',p_operation_id,'state_version',v_s.state_version,'selected_action_ids',to_jsonb(v_ids),'operation_state',v_op_result->>'state'); end $function$;
 
 create or replace function public._import_review_apply_complete_core_v1(p_import_id uuid,p_operation_id uuid,p_actor_user_id uuid,p_response_json jsonb,p_follow_up_required boolean)
 returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
-declare v public.import_review_states%rowtype; v_tsfin_required boolean; v_email_required boolean; v_response jsonb;
-begin select * into v from public.import_review_states where import_id=p_import_id for update; if v.status<>'APPLYING' or v.last_operation_id<>p_operation_id then raise exception 'IMPORT_REVIEW_APPLY_COMPLETION_MISMATCH' using errcode='40001'; end if;
+declare
+  v public.import_review_states%rowtype; o public.import_apply_operations%rowtype;
+  v_tsfin_required boolean; v_email_required boolean; v_response jsonb; v_refresh jsonb;
+  v_selected_ids text[]; v_remaining_blockers integer; v_remaining_selectable integer;
+  v_terminal boolean; v_result_status text;
+begin
+  select * into v from public.import_review_states where import_id=p_import_id for update;
+  select * into o from public.import_apply_operations where id=p_operation_id and import_id=p_import_id for update;
+  if v.status<>'APPLYING' or v.last_operation_id<>p_operation_id or o.id is null then
+    raise exception 'IMPORT_REVIEW_APPLY_COMPLETION_MISMATCH' using errcode='40001';
+  end if;
+  select coalesce(array_agg(value order by value),array[]::text[]) into v_selected_ids
+  from jsonb_array_elements_text(coalesce(o.response_json#>'{request_envelope,selected_action_ids}','[]'::jsonb)) value;
+  if cardinality(v_selected_ids)=0 then
+    raise exception 'IMPORT_REVIEW_APPLY_COMPLETION_ACTION_SET_MISSING' using errcode='55000';
+  end if;
   v_tsfin_required:=jsonb_typeof(coalesce(p_response_json->'affected_timesheet_ids','[]'::jsonb))='array'
     and jsonb_array_length(coalesce(p_response_json->'affected_timesheet_ids','[]'::jsonb))>0;
   v_email_required:=jsonb_typeof(coalesce(p_response_json->'post_commit_email_action_ids','[]'::jsonb))='array'
     and jsonb_array_length(coalesce(p_response_json->'post_commit_email_action_ids','[]'::jsonb))>0;
   v_response:=coalesce(p_response_json,'{}'::jsonb)||jsonb_build_object(
     'review_tsfin_follow_up_status',case when v_tsfin_required then 'PENDING' else 'NOT_REQUIRED' end,
-    'review_email_follow_up_status',case when v_email_required then 'PENDING' else 'NOT_REQUIRED' end);
+    'review_email_follow_up_status',case when v_email_required then 'PENDING' else 'NOT_REQUIRED' end,
+    'applied_action_ids',to_jsonb(v_selected_ids),'applied_action_count',cardinality(v_selected_ids));
+
+  insert into public.import_review_action_outcomes(
+    action_id,import_id,operation_id,action_kind,source_identity,candidate_id,client_id,contract_id,
+    hr_row_id,timesheet_id,shift_id,evidence_fingerprint,completed_label,summary_json,applied_by_user_id
+  )
+  select d.action_id,p_import_id,p_operation_id,d.action_kind,d.source_identity,d.candidate_id,d.client_id,d.contract_id,
+    d.hr_row_id,d.timesheet_id,d.shift_id,d.evidence_fingerprint,
+    case d.action_kind
+      when 'INCLUDE_SHIFT' then 'TMS added shift'
+      when 'APPLY_AMENDMENT' then case
+        when coalesce((d.summary_json#>>'{protection,paid}')::boolean,false)
+          or coalesce((d.summary_json#>>'{protection,invoice_locked}')::boolean,false)
+        then 'TMS reversed and replaced shift' else 'TMS amended shift' end
+      when 'APPLY_CANCELLATION' then case
+        when coalesce((d.summary_json#>>'{protection,paid}')::boolean,false)
+          or coalesce((d.summary_json#>>'{protection,invoice_locked}')::boolean,false)
+        then 'TMS reversed shift' else 'TMS cancelled shift' end
+      when 'MARK_VALIDATION_ERROR' then 'Timesheet validated'
+      when 'INVALIDATE_REFERENCE' then 'Stored reference cleared'
+      when 'DAILY_TIMESHEET_RESOLUTION' then 'Timesheet linked'
+      when 'EMAIL_ISSUE' then 'Client query queued'
+      when 'EMAIL_REMINDER' then 'Client query reminder queued'
+      when 'NO_ACTION' then 'No action confirmed'
+      else 'Review action completed' end,
+    d.summary_json,p_actor_user_id
+  from public.import_review_decisions d
+  where d.import_id=p_import_id and d.is_current and d.action_id=any(v_selected_ids)
+    and d.candidate_id is not null and d.client_id is not null
+  on conflict(action_id) do nothing;
+  if (select count(*) from public.import_review_action_outcomes x
+      where x.import_id=p_import_id and x.operation_id=p_operation_id)<>cardinality(v_selected_ids) then
+    raise exception 'IMPORT_REVIEW_APPLY_OUTCOME_SET_MISMATCH' using errcode='55000';
+  end if;
+
+  update public.import_review_daily_timesheet_resolutions r set status='APPLIED',applied_operation_id=p_operation_id,applied_at_utc=now(),updated_at_utc=now()
+  where r.import_id=p_import_id and r.status='CURRENT' and exists(
+    select 1 from public.import_review_decisions d where d.import_id=r.import_id and d.hr_row_id=r.hr_row_id
+      and d.is_current and d.action_id=any(v_selected_ids));
+
+  update public.import_review_states set status='IN_REVIEW',state_version=state_version+1,
+    follow_up_status=case when v_tsfin_required or v_email_required or p_follow_up_required then 'PENDING' else 'NOT_REQUIRED' end,
+    follow_up_error_code=null,follow_up_error_message=null,
+    updated_at_utc=now(),updated_by_user_id=p_actor_user_id
+  where import_id=p_import_id returning * into v;
+
+  v_refresh:=public._import_review_refresh_core_v1(p_import_id,v.state_version,p_actor_user_id,500);
+  select count(*) filter(where d.blocking),count(*) filter(where d.selectable and not (
+      d.action_kind='NO_ACTION' and exists(select 1 from public.import_review_action_outcomes x
+        where x.import_id=d.import_id and x.source_identity=d.source_identity)))
+    into v_remaining_blockers,v_remaining_selectable
+  from public.import_review_decisions d where d.import_id=p_import_id and d.is_current;
+  v_terminal:=v_remaining_blockers=0 and v_remaining_selectable=0;
+  if v_terminal then
+    update public.import_review_states set status='APPLIED',state_version=state_version+1,
+      applied_at_utc=now(),applied_by_user_id=p_actor_user_id,
+      updated_at_utc=now(),updated_by_user_id=p_actor_user_id
+    where import_id=p_import_id returning * into v;
+    update public.hr_imports set applied_at=coalesce(applied_at,now()) where id=p_import_id;
+  else
+    select * into v from public.import_review_states where import_id=p_import_id;
+  end if;
+  v_result_status:=v.status;
+  v_response:=v_response||jsonb_build_object(
+    'partial_application',not v_terminal,
+    'review_status_after_commit',v_result_status,
+    'remaining_blocker_count',v_remaining_blockers,
+    'remaining_selectable_count',v_remaining_selectable);
   update public.import_apply_operations
   set state=case when v_tsfin_required or v_email_required or p_follow_up_required then 'SOURCE_COMMITTED_TSFIN_PENDING' else 'COMPLETE' end,
     committed_at_utc=coalesce(committed_at_utc,now()),
     finalised_at_utc=case when v_tsfin_required or v_email_required or p_follow_up_required then finalised_at_utc else coalesce(finalised_at_utc,now()) end,
     response_json=response_json||v_response,updated_at_utc=now()
   where id=p_operation_id;
-  update public.import_review_states set status='APPLIED',state_version=state_version+1,
-    follow_up_status=case when v_tsfin_required or v_email_required or p_follow_up_required then 'PENDING' else 'NOT_REQUIRED' end,
-    applied_at_utc=now(),applied_by_user_id=p_actor_user_id,updated_at_utc=now(),updated_by_user_id=p_actor_user_id where import_id=p_import_id returning * into v;
-  update public.hr_imports set applied_at=coalesce(applied_at,now()) where id=p_import_id;
-  update public.import_review_daily_timesheet_resolutions r set status='APPLIED',applied_operation_id=p_operation_id,applied_at_utc=now(),updated_at_utc=now()
-  where r.import_id=p_import_id and r.status='CURRENT' and exists(
-    select 1 from public.import_review_decisions d where d.import_id=r.import_id and d.hr_row_id=r.hr_row_id
-      and d.is_current and d.action_kind='NO_ACTION' and d.selected);
-  update public.import_review_daily_timesheet_resolutions r set status='STALE',stale_at_utc=now(),stale_reason_code='EXCLUDED_FROM_APPLY',updated_at_utc=now()
-  where r.import_id=p_import_id and r.status='CURRENT';
-  insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json) values(p_import_id,v.state_version,p_operation_id,'APPLY_COMMITTED',p_actor_user_id,jsonb_build_object('follow_up_status',v.follow_up_status));
-  return jsonb_build_object('ok',true,'status',v.status,'follow_up_status',v.follow_up_status,'state_version',v.state_version); end $function$;
+  insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json)
+  values(p_import_id,v.state_version,p_operation_id,'APPLY_COMMITTED',p_actor_user_id,jsonb_build_object(
+    'follow_up_status',v.follow_up_status,'partial_application',not v_terminal,
+    'applied_action_count',cardinality(v_selected_ids),'remaining_blocker_count',v_remaining_blockers,
+    'remaining_selectable_count',v_remaining_selectable));
+  return jsonb_build_object('ok',true,'status',v.status,'follow_up_status',v.follow_up_status,
+    'state_version',v.state_version,'partial_application',not v_terminal,
+    'applied_action_count',cardinality(v_selected_ids),'remaining_blocker_count',v_remaining_blockers,
+    'remaining_selectable_count',v_remaining_selectable);
+end $function$;
 
 create or replace function public._import_review_follow_up_reconcile_core_v1(p_import_id uuid,p_operation_id uuid,p_actor_user_id uuid)
 returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
@@ -589,7 +693,8 @@ declare
 begin
   select * into v from public.import_review_states where import_id=p_import_id for update;
   select * into o from public.import_apply_operations where id=p_operation_id and import_id=p_import_id for update;
-  if v.status<>'APPLIED' or v.last_operation_id is distinct from p_operation_id or o.id is null then
+  if v.status not in ('IN_REVIEW','BLOCKED','READY','APPLIED')
+    or v.last_operation_id is distinct from p_operation_id or o.id is null then
     raise exception 'IMPORT_REVIEW_FOLLOW_UP_RECONCILE_MISMATCH' using errcode='55000';
   end if;
   v_ts:=upper(coalesce(o.response_json->>'review_tsfin_follow_up_status','NOT_REQUIRED'));
@@ -661,8 +766,8 @@ begin
   end if;
   select * into v from public.import_review_states where import_id=p_import_id for update;
   if not found then raise exception 'IMPORT_REVIEW_NOT_FOUND' using errcode='P0002'; end if;
-  if v.status<>'APPLIED' or v.last_operation_id is distinct from p_operation_id then
-    raise exception 'IMPORT_REVIEW_FOLLOW_UP_NOT_APPLIED' using errcode='55000';
+  if v.status not in ('IN_REVIEW','BLOCKED','READY','APPLIED') or v.last_operation_id is distinct from p_operation_id then
+    raise exception 'IMPORT_REVIEW_FOLLOW_UP_NOT_COMMITTED_REVIEW' using errcode='55000';
   end if;
   select * into o from public.import_apply_operations where id=p_operation_id and import_id=p_import_id for update;
   if not found or o.committed_at_utc is null then raise exception 'IMPORT_REVIEW_OPERATION_NOT_COMMITTED' using errcode='55000'; end if;
@@ -717,8 +822,10 @@ begin select * into s from public.import_review_states where import_id=p_import_
     'import_id',p_import_id,'review_status',s.status,'follow_up_status',s.follow_up_status,'state_version',s.state_version,
     'follow_up_error_code',s.follow_up_error_code,'follow_up_error_message',s.follow_up_error_message,
     'follow_up_retry_count',s.follow_up_retry_count,
-    'operation_id',o.id,'operation_state',o.state,'outcome',case when s.status='APPLIED' and s.follow_up_status in ('PENDING','FAILED_RETRYABLE') then 'COMMITTED_WITH_FOLLOW_UP_PENDING'
-      when s.status='APPLIED' then 'COMMITTED_APPLIED' when s.status='APPLYING' then 'IN_PROGRESS' when s.status in ('ABANDONED','SUPERSEDED') then s.status
+    'operation_id',o.id,'operation_state',o.state,'outcome',case when o.committed_at_utc is not null and s.follow_up_status in ('PENDING','FAILED_RETRYABLE') then 'COMMITTED_WITH_FOLLOW_UP_PENDING'
+      when o.committed_at_utc is not null and s.status='APPLIED' then 'COMMITTED_APPLIED'
+      when o.committed_at_utc is not null then 'COMMITTED_PARTIAL'
+      when s.status='APPLYING' then 'IN_PROGRESS' when s.status in ('ABANDONED','SUPERSEDED') then s.status
       when o.id is null then 'NOT_STARTED' when o.state='FAILED_BEFORE_COMMIT' then 'FAILED_BEFORE_COMMIT' else 'NOT_COMMITTED' end,
     'stored_response',case when o.committed_at_utc is not null then o.response_json end,'committed_at_utc',o.committed_at_utc); end $function$;
 
@@ -754,6 +861,72 @@ begin
     'source_committed',false,'status',s.status,'state_version',s.state_version);
 end $function$;
 
+create or replace function public._import_review_state_guard_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public','pg_temp'
+as $function$
+declare
+  v_transition_allowed boolean:=false;
+  v_old_without_allowed jsonb;
+  v_new_without_allowed jsonb;
+begin
+  if tg_op='DELETE' then raise exception 'IMPORT_REVIEW_STATE_DELETE_BLOCKED' using errcode='55000'; end if;
+  if new.import_id is distinct from old.import_id or new.schema_contract_version is distinct from old.schema_contract_version then
+    raise exception 'IMPORT_REVIEW_STATE_IDENTITY_IMMUTABLE' using errcode='55000';
+  end if;
+  if new.state_version<old.state_version then raise exception 'IMPORT_REVIEW_STATE_VERSION_REGRESSION' using errcode='23514'; end if;
+  if old.status in ('APPLIED','ABANDONED','SUPERSEDED') then
+    if old.status='APPLIED' then
+      v_old_without_allowed:=to_jsonb(old)-array['state_version','follow_up_status','follow_up_error_code','follow_up_error_message','follow_up_retry_count','last_opened_at_utc','last_opened_by_user_id','updated_at_utc','updated_by_user_id'];
+      v_new_without_allowed:=to_jsonb(new)-array['state_version','follow_up_status','follow_up_error_code','follow_up_error_message','follow_up_retry_count','last_opened_at_utc','last_opened_by_user_id','updated_at_utc','updated_by_user_id'];
+    else
+      v_old_without_allowed:=to_jsonb(old)-array['last_opened_at_utc','last_opened_by_user_id','updated_at_utc','updated_by_user_id'];
+      v_new_without_allowed:=to_jsonb(new)-array['last_opened_at_utc','last_opened_by_user_id','updated_at_utc','updated_by_user_id'];
+    end if;
+    if v_old_without_allowed is distinct from v_new_without_allowed then raise exception 'IMPORT_REVIEW_TERMINAL_STATE_IMMUTABLE' using errcode='55000'; end if;
+    return new;
+  end if;
+  v_transition_allowed:=case old.status
+    when 'STAGED' then new.status in ('STAGED','IN_REVIEW','BLOCKED','READY','ABANDONED','SUPERSEDED')
+    when 'IN_REVIEW' then new.status in ('IN_REVIEW','BLOCKED','READY','ABANDONED','SUPERSEDED')
+    when 'BLOCKED' then new.status in ('IN_REVIEW','BLOCKED','READY','APPLYING','ABANDONED','SUPERSEDED')
+    when 'READY' then new.status in ('IN_REVIEW','BLOCKED','READY','APPLYING','APPLIED','ABANDONED','SUPERSEDED')
+    when 'APPLYING' then new.status in ('APPLYING','IN_REVIEW','BLOCKED','READY','APPLIED')
+    else false end;
+  if not v_transition_allowed then
+    raise exception 'IMPORT_REVIEW_STATUS_TRANSITION_INVALID' using errcode='23514',detail=jsonb_build_object('old_status',old.status,'new_status',new.status)::text;
+  end if;
+  if new.status is distinct from old.status and new.state_version<=old.state_version then raise exception 'IMPORT_REVIEW_STATUS_TRANSITION_REQUIRES_VERSION' using errcode='23514'; end if;
+  if new.status='APPLYING' and new.last_operation_id is null then raise exception 'IMPORT_REVIEW_APPLYING_OPERATION_REQUIRED' using errcode='23514'; end if;
+  if new.status='APPLIED' and (new.applied_at_utc is null or new.applied_by_user_id is null or new.last_operation_id is null) then raise exception 'IMPORT_REVIEW_APPLIED_METADATA_REQUIRED' using errcode='23514'; end if;
+  if new.status='ABANDONED' and (new.abandoned_at_utc is null or new.abandoned_by_user_id is null or nullif(btrim(new.abandoned_reason),'') is null) then raise exception 'IMPORT_REVIEW_ABANDONED_METADATA_REQUIRED' using errcode='23514'; end if;
+  if new.status='SUPERSEDED' and (new.superseded_at_utc is null or new.superseded_by_user_id is null) then raise exception 'IMPORT_REVIEW_SUPERSEDED_METADATA_REQUIRED' using errcode='23514'; end if;
+  return new;
+end
+$function$;
+
+create or replace function public._import_review_action_outcomes_immutable_guard_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public','pg_temp'
+as $function$
+begin
+  raise exception 'IMPORT_REVIEW_ACTION_OUTCOMES_ARE_APPEND_ONLY' using errcode='55000';
+end
+$function$;
+
+do $outcome_trigger$
+begin
+  if to_regclass('public.import_review_action_outcomes') is not null then
+    execute 'drop trigger if exists trg_import_review_action_outcomes_immutable on public.import_review_action_outcomes';
+    execute 'create trigger trg_import_review_action_outcomes_immutable before update or delete on public.import_review_action_outcomes for each row execute function public._import_review_action_outcomes_immutable_guard_v1()';
+  end if;
+end
+$outcome_trigger$;
+
 revoke all on function public.import_review_contract_version_get_v1() from public,anon,authenticated;
 grant execute on function public.import_review_contract_version_get_v1() to service_role;
 revoke all on function public.import_review_create_v1(uuid,text,date,date,jsonb,jsonb,text,text,uuid,text) from public,anon,authenticated;
@@ -773,6 +946,8 @@ grant execute on function public.import_review_abandon_v1(uuid,bigint,text,uuid)
 revoke all on function public.import_review_apply_guard_v1(uuid,bigint,text,text,uuid,text,jsonb,jsonb,uuid) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_apply_complete_core_v1(uuid,uuid,uuid,jsonb,boolean) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_follow_up_reconcile_core_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;
+revoke all on function public._import_review_state_guard_v1() from public,anon,authenticated,service_role;
+revoke all on function public._import_review_action_outcomes_immutable_guard_v1() from public,anon,authenticated,service_role;
 revoke all on function public.import_review_follow_up_component_update_v1(uuid,uuid,text,text,text,text,text,text,uuid) from public,anon,authenticated;
 grant execute on function public.import_review_follow_up_component_update_v1(uuid,uuid,text,text,text,text,text,text,uuid) to service_role;
 revoke all on function public.import_review_apply_status_get_v1(uuid,uuid,text) from public,anon,authenticated;

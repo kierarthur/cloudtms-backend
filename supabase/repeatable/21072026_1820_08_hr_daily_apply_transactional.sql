@@ -92,18 +92,25 @@ begin
     where r.import_id=p_import_id and r.status='CURRENT' and exists(
       select 1 from public.import_review_decisions include_decision
       where include_decision.import_id=p_import_id and include_decision.hr_row_id=r.hr_row_id
-        and include_decision.is_current and include_decision.action_kind='NO_ACTION' and include_decision.selected)
+        and include_decision.is_current and include_decision.action_kind='NO_ACTION' and include_decision.selected
+        and include_decision.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids')))
     union all
     select 'missing:'||d.action_id,jsonb_build_object('timesheet_id',d.timesheet_id,
       'status','VALIDATION_ERROR','reason_code','MISSING_FROM_IMPORT','hr_request_id',null)
     from public.import_review_decisions d
-    where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind='MARK_VALIDATION_ERROR'
+    where d.import_id=p_import_id and d.is_current and d.selected
+      and d.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
+      and d.action_kind='MARK_VALIDATION_ERROR'
   ) v;
   select coalesce(jsonb_agg(jsonb_build_object('timesheet_id',d.timesheet_id,'comparison_key',d.source_identity,'invalidate',true) order by d.action_id),'[]'::jsonb)
   into v_invalidation_actions_json from public.import_review_decisions d
-  where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind='INVALIDATE_REFERENCE';
+  where d.import_id=p_import_id and d.is_current and d.selected
+    and d.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
+    and d.action_kind='INVALIDATE_REFERENCE';
   select coalesce(jsonb_agg(to_jsonb(d.action_id) order by d.action_id),'[]'::jsonb) into v_post_commit_email_action_ids
-  from public.import_review_decisions d where d.import_id=p_import_id and d.is_current and d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER');
+  from public.import_review_decisions d where d.import_id=p_import_id and d.is_current and d.selected
+    and d.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
+    and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER');
   v_email_selected_count:=jsonb_array_length(v_post_commit_email_action_ids);
 
   -- 1) Validate database-built payload shapes. Invalidation is represented by
@@ -429,10 +436,10 @@ begin
     );
   end if;
 
-  -- 6) Mark import applied (inside transaction)
+  -- 6) Preserve the source route.  Whole-import completion is owned by
+  -- _import_review_apply_complete_core_v1 only after no work remains.
   update public.hr_imports hi2
-     set import_scope = 'HR_DAILY',
-         applied_at = v_now
+     set import_scope = 'HR_DAILY'
    where hi2.id = p_import_id;
 
   v_review_result:=jsonb_build_object(

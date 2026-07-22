@@ -3,7 +3,8 @@ const IMPORT_REVIEW_APPLY_CONTRACT = 'IMPORT_REVIEW_APPLY_V1';
 const IMPORT_REVIEW_OPERATION_CONTRACT = 'IMPORT_APPLY_OPERATION_V2';
 const IMPORT_REVIEW_CORRECTION_CONTRACT = 'IMPORT_CORRECTION_OPERATION_V2';
 const IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT = 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1';
-const IMPORT_REVIEW_UI_CONTRACT = 'IMPORT_REVIEW_UI_V4';
+const IMPORT_REVIEW_INCREMENTAL_APPLY_CONTRACT = 'IMPORT_REVIEW_INCREMENTAL_APPLY_V1';
+const IMPORT_REVIEW_UI_CONTRACT = 'IMPORT_REVIEW_UI_V5';
 const IMPORT_REVIEW_EMAIL_GROUPING_CONTRACT = 'TIMESHEET_QUERY_RECIPIENT_EMAIL_V1';
 
 export const IMPORT_REVIEW_PARSER_VERSION = 'CLOUDTMS_IMPORT_REVIEW_PARSER_V1';
@@ -244,6 +245,7 @@ async function assertContract(sbRpc, env) {
     && contract.apply_operation_version === IMPORT_REVIEW_OPERATION_CONTRACT
     && contract.correction_operation_version === IMPORT_REVIEW_CORRECTION_CONTRACT
     && contract.follow_up_component_version === IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT
+    && contract.incremental_apply_version === IMPORT_REVIEW_INCREMENTAL_APPLY_CONTRACT
     && contract.review_ui_contract_version === IMPORT_REVIEW_UI_CONTRACT
     && contract.email_grouping_version === IMPORT_REVIEW_EMAIL_GROUPING_CONTRACT
     && contract.legacy_contracts_supported === false;
@@ -342,8 +344,9 @@ async function applyReview({ sbRpc, env, importId, actorId, body, runFollowUp, c
       action: 'RELOAD_REVIEW'
     });
   }
-  if (String(review?.state?.status || '').toUpperCase() !== 'READY') {
-    return failure(409, 'IMPORT_REVIEW_NOT_READY', 'Resolve or exclude all blocking items before applying.', {
+  const allowedCommands = review?.state?.editability?.allowed_commands;
+  if (!Array.isArray(allowedCommands) || !allowedCommands.includes('APPLY')) {
+    return failure(409, 'IMPORT_REVIEW_NOT_READY', 'No selected candidate/client unit is currently ready to apply.', {
       category: 'STATE_CONFLICT',
       action: 'REVIEW_BLOCKERS'
     });
@@ -862,6 +865,7 @@ export const importReviewContract = Object.freeze({
   operation: IMPORT_REVIEW_OPERATION_CONTRACT,
   correction: IMPORT_REVIEW_CORRECTION_CONTRACT,
   followUpComponent: IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT,
+  incrementalApply: IMPORT_REVIEW_INCREMENTAL_APPLY_CONTRACT,
   reviewUi: IMPORT_REVIEW_UI_CONTRACT,
   emailGrouping: IMPORT_REVIEW_EMAIL_GROUPING_CONTRACT
 });

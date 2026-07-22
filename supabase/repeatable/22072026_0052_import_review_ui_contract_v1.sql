@@ -16,7 +16,8 @@ as $function$
     'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
-    'review_ui_contract_version','IMPORT_REVIEW_UI_V4',
+    'incremental_apply_version','IMPORT_REVIEW_INCREMENTAL_APPLY_V1',
+    'review_ui_contract_version','IMPORT_REVIEW_UI_V5',
     'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'legacy_contracts_supported',false
   )
@@ -337,8 +338,10 @@ begin
     raise exception 'IMPORT_REVIEW_NOT_FOUND' using errcode='P0002';
   end if;
 
-  with current_actions as (
-    select d.*,
+  with ready_ids as (
+    select r.action_id from public._import_review_ready_action_ids_core_v1(p_import_id) r
+  ), current_actions as (
+    select d.*,(ready.action_id is not null) batch_eligible,
       coalesce(nullif(btrim(concat_ws(' ',c.first_name,c.last_name)),''),nullif(d.summary_json->>'candidate_name',''),'Unknown candidate') candidate_name,
       lower(coalesce(nullif(c.last_name,''),
         case when position(',' in coalesce(d.summary_json->>'candidate_name',''))>0 then split_part(d.summary_json->>'candidate_name',',',1)
@@ -397,6 +400,7 @@ begin
       nullif(d.summary_json->>'week_ending_date','')::date week_ending_date,
       nullif(d.summary_json->>'work_date','')::date work_date
     from public.import_review_decisions d
+    left join ready_ids ready on ready.action_id=d.action_id
     left join public.candidates c on c.id=d.candidate_id
     left join public.clients cl on cl.id=d.client_id
     left join public.contracts ct on ct.id=d.contract_id
@@ -478,7 +482,7 @@ begin
     ) current_weekly_options on true
     where d.import_id=p_import_id and d.is_current
   ), branch_badge_rows as (
-    select a.candidate_branch_key,b.badge_code,label.badge_label,count(*)::integer badge_count
+    select a.candidate_branch_key,b.badge_code,label.badge_label,count(*)::integer badge_count,'ISSUE'::text badge_tone
     from current_actions a
     cross join lateral unnest(array_remove(array[
       case a.summary_json->>'reason_code'
@@ -529,15 +533,65 @@ begin
       when 'EMAIL_REQUEST_SELECTED' then 'Email request selected' when 'REMINDER_AVAILABLE' then 'Reminder available'
       when 'REFERENCE_REVIEW' then 'Reference review' else b.badge_code end badge_label) label
     group by a.candidate_branch_key,b.badge_code,label.badge_label
+    union all
+    select a.candidate_branch_key,'READY_ACTION:'||a.action_kind,
+      case a.action_kind
+        when 'INCLUDE_SHIFT' then 'TMS to add shift'
+        when 'APPLY_AMENDMENT' then case
+          when coalesce((a.protection->>'paid')::boolean,false)
+            or coalesce((a.protection->>'invoice_locked')::boolean,false)
+          then 'TMS to reverse and replace shift' else 'TMS to amend shift' end
+        when 'APPLY_CANCELLATION' then case
+          when coalesce((a.protection->>'paid')::boolean,false)
+            or coalesce((a.protection->>'invoice_locked')::boolean,false)
+          then 'TMS to reverse shift' else 'TMS to cancel shift' end
+        when 'MARK_VALIDATION_ERROR' then 'Validate timesheet'
+        when 'INVALIDATE_REFERENCE' then 'Clear stored reference'
+        when 'DAILY_TIMESHEET_RESOLUTION' then 'Link existing timesheet'
+        when 'EMAIL_ISSUE' then 'Request client correction'
+        when 'EMAIL_REMINDER' then 'Request client correction reminder'
+        else regexp_replace(a.outcome_label,'^TMS will ','TMS to ','i') end,
+      count(*)::integer,'READY'::text
+    from current_actions a
+    where a.batch_eligible and a.selected and a.action_category in ('READY','EMAIL')
+    group by a.candidate_branch_key,a.action_kind,
+      case a.action_kind
+        when 'INCLUDE_SHIFT' then 'TMS to add shift'
+        when 'APPLY_AMENDMENT' then case
+          when coalesce((a.protection->>'paid')::boolean,false)
+            or coalesce((a.protection->>'invoice_locked')::boolean,false)
+          then 'TMS to reverse and replace shift' else 'TMS to amend shift' end
+        when 'APPLY_CANCELLATION' then case
+          when coalesce((a.protection->>'paid')::boolean,false)
+            or coalesce((a.protection->>'invoice_locked')::boolean,false)
+          then 'TMS to reverse shift' else 'TMS to cancel shift' end
+        when 'MARK_VALIDATION_ERROR' then 'Validate timesheet'
+        when 'INVALIDATE_REFERENCE' then 'Clear stored reference'
+        when 'DAILY_TIMESHEET_RESOLUTION' then 'Link existing timesheet'
+        when 'EMAIL_ISSUE' then 'Request client correction'
+        when 'EMAIL_REMINDER' then 'Request client correction reminder'
+        else regexp_replace(a.outcome_label,'^TMS will ','TMS to ','i') end
+    union all
+    select a.candidate_branch_key,'DEFERRED_ACTION','Deferred',count(*)::integer,'DEFERRED'::text
+    from current_actions a
+    where a.selectable and not a.selected and a.action_category in ('READY','EMAIL')
+    group by a.candidate_branch_key
+    union all
+    select 'candidate:'||o.candidate_id::text,'COMPLETED_ACTION:'||o.action_kind,
+      o.completed_label,count(*)::integer,'COMPLETED'::text
+    from public.import_review_action_outcomes o
+    where o.import_id=p_import_id
+    group by o.candidate_id,o.action_kind,o.completed_label
   ), branch_badges as (
     select candidate_branch_key,jsonb_agg(jsonb_build_object(
-      'code',badge_code,'label',badge_label,'count',badge_count) order by badge_label) badges
+      'code',badge_code,'label',badge_label,'count',badge_count,'tone',badge_tone)
+      order by case badge_tone when 'ISSUE' then 1 when 'READY' then 2 when 'DEFERRED' then 3 else 4 end,badge_label) badges
     from branch_badge_rows badges
     where badges.badge_code<>'NOT_IN_CLOUDTMS'
       or not exists (
         select 1 from branch_badge_rows other
         where other.candidate_branch_key=badges.candidate_branch_key
-          and other.badge_code<>'NOT_IN_CLOUDTMS'
+          and other.badge_code<>'NOT_IN_CLOUDTMS' and other.badge_tone='ISSUE'
       )
     group by candidate_branch_key
   ), filtered as (
@@ -575,7 +629,7 @@ begin
       'hr_row_id',hr_row_id,'timesheet_id',timesheet_id,'shift_id',shift_id,
       'client_id',client_id,'candidate_id',candidate_id,'contract_id',contract_id,'issue_id',issue_id,
       'preview_generation',preview_generation,'evidence_fingerprint',evidence_fingerprint,
-      'selectable',selectable,'selected',selected,'blocking',blocking,
+      'selectable',selectable,'selected',selected,'blocking',blocking,'batch_eligible',batch_eligible,
       'candidate_name',candidate_name,'candidate_surname_sort',candidate_surname_sort,
       'candidate_branch_key',candidate_branch_key,'branch_badges',branch_badges,
       'client_name',client_name,'week_ending_date',week_ending_date,'work_date',work_date,
