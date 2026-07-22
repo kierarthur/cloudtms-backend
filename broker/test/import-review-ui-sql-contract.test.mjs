@@ -227,6 +227,40 @@ test('configured auto-authorisation keeps mandatory corrections separate and adm
   assert.match(dailyApplySql, /'HEALTHROSTER_DAILY'::public\.hr_source_enum,true/);
 });
 
+test('import-authoritative NHSP and HealthRoster block expense-occupied timesheets before mutation', () => {
+  const expenseGuard = functionBody(coreSql, '_import_review_timesheet_has_calculated_expenses_core_v1');
+  for (const field of [
+    'expenses_pay_ex_vat', 'expenses_charge_ex_vat',
+    'mileage_pay_ex_vat', 'mileage_charge_ex_vat',
+    'travel_pay_ex_vat', 'travel_charge_ex_vat',
+    'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat',
+    'other_pay_ex_vat', 'other_charge_ex_vat'
+  ]) assert.match(expenseGuard, new RegExp(`tf\\.${field}`));
+  assert.match(coreSql, /revoke all on function public\._import_review_timesheet_has_calculated_expenses_core_v1\(uuid\) from public,anon,authenticated,service_role/);
+  assert.match(functionBody(coreSql, '_import_review_auto_authorise_targets_core_v1'), /_import_review_timesheet_has_calculated_expenses_core_v1/);
+  const catalog = functionBody(coreSql, '_import_review_action_catalog_core_v1');
+  assert.match(catalog, /authoritative_target_timesheet_id/);
+  assert.match(catalog, /TIMESHEET_OCCUPIED_BY_EXPENSES/);
+  assert.match(catalog, /Timesheet occupied by expenses/);
+  assert.match(catalog, /occupied_timesheet_id/);
+  assert.match(uiSql, /when 'TIMESHEET_OCCUPIED_BY_EXPENSES' then 'Timesheet occupied by expenses'/);
+
+  for (const source of [nhspApplySql, weeklyApplySql]) {
+    assert.match(source, /IMPORT_AUTHORITATIVE_EXPENSE_SEPARATION_REQUIRED/);
+    assert.match(source, /Timesheet occupied by expenses/);
+    assert.match(source, /no import mutation was applied/);
+    assert.match(source, /coalesce\(cw\.additional_seq,0\)=0/);
+    assert.match(source, /existing_import_shift\.external_row_key=p2\.external_row_key/);
+    assert.doesNotMatch(source, /expense_separated_container_count/);
+    assert.doesNotMatch(source, /expense_separated_from_timesheet_id/);
+  }
+  assert.match(nhspApplySql, /source_system='NHSP'::public\.hr_source_enum/);
+  assert.match(weeklyApplySql, /source_system='HEALTHROSTER'::public\.hr_source_enum/);
+  assert.match(weeklyApplySql, /p2\.mode='MODE_B'/);
+  assert.doesNotMatch(dailyApplySql, /expense_separated_container_count/);
+  assert.doesNotMatch(dailyApplySql, /IMPORT_AUTHORITATIVE_EXPENSE_SEPARATION_REQUIRED/);
+});
+
 test('overlap preflight is global for NHSP and client/route aware for HealthRoster', () => {
   const body = functionBody(coreSql, '_import_review_overlap_preflight_core_v2');
   assert.match(body, /hi\.source_system=p_source_system/);

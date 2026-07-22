@@ -440,6 +440,35 @@ begin
 end
 $function$;
 
+create or replace function public._import_review_timesheet_has_calculated_expenses_core_v1(
+  p_timesheet_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path to 'public', 'pg_temp'
+as $function$
+  select p_timesheet_id is not null and exists (
+    select 1
+    from public.timesheets_financials tf
+    where tf.timesheet_id=p_timesheet_id
+      and tf.is_current=true
+      and (
+        coalesce(tf.expenses_pay_ex_vat,0)<>0
+        or coalesce(tf.expenses_charge_ex_vat,0)<>0
+        or coalesce(tf.mileage_pay_ex_vat,0)<>0
+        or coalesce(tf.mileage_charge_ex_vat,0)<>0
+        or coalesce(tf.travel_pay_ex_vat,0)<>0
+        or coalesce(tf.travel_charge_ex_vat,0)<>0
+        or coalesce(tf.accommodation_pay_ex_vat,0)<>0
+        or coalesce(tf.accommodation_charge_ex_vat,0)<>0
+        or coalesce(tf.other_pay_ex_vat,0)<>0
+        or coalesce(tf.other_charge_ex_vat,0)<>0
+      )
+  )
+$function$;
+
 create or replace function public._import_review_auto_authorise_targets_core_v1(
   p_timesheet_ids uuid[],
   p_source_system public.hr_source_enum,
@@ -496,11 +525,15 @@ begin
       and coalesce((protection.value->>'paid')::boolean,false)=false
       and coalesce((protection.value->>'invoice_locked')::boolean,false)=false
       and coalesce((protection.value->>'active_pay_draft')::boolean,false)=false
+      and public._import_review_timesheet_has_calculated_expenses_core_v1(t.timesheet_id)=false
       and coalesce((policy.value->>'effective_value')::boolean,false)=true
   ) target;
   return v_result;
 end
 $function$;
+
+alter function public._import_review_timesheet_has_calculated_expenses_core_v1(uuid) owner to postgres;
+revoke all on function public._import_review_timesheet_has_calculated_expenses_core_v1(uuid) from public,anon,authenticated,service_role;
 
 create or replace function public._import_review_action_catalog_core_v1(
   p_import_id uuid,
@@ -613,6 +646,7 @@ begin
         else con.contract_id end as resolved_contract_id,
       wp.action as weekly_resolution_action,wp.reason as weekly_resolution_reason,
       wp.incoming_code as weekly_incoming_code,
+      wp.week_ending_date as resolved_week_ending_date,
       wm.has_weekly_mapping,wm.mapping_evidence as weekly_mapping_evidence,
       dgm.mapping_count as daily_mapping_count,dgm.mapping_id as daily_mapping_id,
       dgm.role_code as daily_mapped_role,dgm.band_norm as daily_mapped_band,
@@ -813,9 +847,30 @@ begin
     select c.*,
       ts.worked_start_iso,ts.worked_end_iso,ts.break_minutes as ts_break_minutes,ts.worked_minutes,
       ts.reference_number,ts.processing_status::text,ts.tsfin_role,ts.tsfin_band,
-      public._import_review_timesheet_protection_core_v1(coalesce(c.resolved_timesheet_id,c.existing_shift_timesheet_id)) as protection
+      coalesce(c.existing_shift_timesheet_id,base_week.timesheet_id) as authoritative_target_timesheet_id,
+      public._import_review_timesheet_has_calculated_expenses_core_v1(
+        coalesce(c.existing_shift_timesheet_id,base_week.timesheet_id)
+      ) as authoritative_timesheet_has_calculated_expenses,
+      public._import_review_timesheet_protection_core_v1(coalesce(
+        c.resolved_timesheet_id,c.existing_shift_timesheet_id,base_week.timesheet_id
+      )) as protection
     from classified c
     left join public.v_timesheets_daily_match ts on ts.timesheet_id=c.resolved_timesheet_id
+    left join lateral (
+      select cw.timesheet_id
+      from public.contract_weeks cw
+      where not c.is_daily
+        and coalesce(c.import_authoritative,false)
+        and cw.contract_id=c.resolved_contract_id
+        and cw.week_ending_date=coalesce(
+          c.resolved_week_ending_date,
+          c.date_local + ((7-extract(dow from c.date_local)::integer)%7)
+        )
+        and cw.is_adjustment=false
+        and coalesce(cw.additional_seq,0)=0
+      order by cw.id
+      limit 1
+    ) base_week on true
   ), evidenced as (
     select c.*,
       public._import_review_hash_v1(concat_ws('|','row-evidence-v1',c.source_row_key,c.staff_key,c.client_key,c.date_local,
@@ -823,6 +878,7 @@ begin
         c.resolved_contract_id,c.weekly_resolution_action,c.weekly_incoming_code,c.weekly_mapping_evidence,c.contract_rate_evidence,
         c.daily_mapping_id,c.daily_mapping_updated_at,c.daily_mapped_role,c.daily_mapped_band,
         c.timesheet_evidence_hash,c.daily_submitted_timesheet_evidence_hash,c.contract_evidence_hash,c.authority_fingerprint,
+        c.authoritative_target_timesheet_id,c.authoritative_timesheet_has_calculated_expenses,
         coalesce(c.eligible_contract_ids::text,''),coalesce(c.timesheet_ids::text,''),
         coalesce(c.timesheet_contract_ids::text,''),c.protection::text,
         coalesce(c.payload_json::text,''))) as evidence_hash
@@ -842,6 +898,7 @@ begin
         when f.is_daily then 'NO_ACTION'
         when not coalesce(f.import_authoritative,false) then 'NO_ACTION'
         when not coalesce(f.contract_rate_complete,false) then 'ADVISORY'
+        when coalesce(f.authoritative_timesheet_has_calculated_expenses,false) then 'ADVISORY'
         when f.existing_shift_id is null then 'INCLUDE_SHIFT'
         when (f.payload_json->>'start_utc')::timestamptz is distinct from (select n.start_utc from public.nhsp_shifts n where n.id=f.existing_shift_id)
           or (f.payload_json->>'end_utc')::timestamptz is distinct from (select n.end_utc from public.nhsp_shifts n where n.id=f.existing_shift_id)
@@ -882,6 +939,9 @@ begin
           when not m.is_daily and not coalesce(m.contract_route_eligible,false) then 'CONTRACT_OUT_OF_SCOPE'
           when not m.is_daily and coalesce(m.import_authoritative,false)
             and not coalesce(m.contract_rate_complete,false) then 'CONTRACT_RATES_INCOMPLETE'
+          when not m.is_daily and coalesce(m.import_authoritative,false)
+            and coalesce(m.authoritative_timesheet_has_calculated_expenses,false)
+            then 'TIMESHEET_OCCUPIED_BY_EXPENSES'
           when m.is_daily and coalesce(m.timesheet_count,0)=0
             and coalesce(m.daily_submitted_timesheet_count,0)=0 then 'DAILY_TIMESHEET_NOT_SUBMITTED'
           when m.is_daily and coalesce(m.timesheet_count,0)=0 then 'DAILY_SHIFT_ABSENT_FROM_TIMESHEET'
@@ -930,6 +990,8 @@ begin
           when m.is_daily and coalesce(m.timesheet_count,0)=0
             and coalesce(m.daily_submitted_timesheet_count,0)=0 then 'Request timesheet from candidate'
           when m.is_daily and coalesce(m.timesheet_count,0)=0 then 'Candidate timesheet states they did not work this shift'
+          when not m.is_daily and coalesce(m.authoritative_timesheet_has_calculated_expenses,false)
+            then 'Timesheet occupied by expenses'
           when m.action_kind='INCLUDE_SHIFT' then 'TMS will add shift'
           when m.action_kind='APPLY_AMENDMENT' then case when coalesce((m.protection->>'paid')::boolean,false)
             or coalesce((m.protection->>'invoice_locked')::boolean,false)
@@ -955,6 +1017,8 @@ begin
           else jsonb_strip_nulls(jsonb_build_object('mapping_fingerprint',m.weekly_mapping_evidence,
             'resolution_action',m.weekly_resolution_action,'resolution_reason',m.weekly_resolution_reason)) end,
         'timesheet_options',case when m.is_daily then to_jsonb(coalesce(m.timesheet_ids,array[]::uuid[])) else null end,
+        'occupied_timesheet_id',case when coalesce(m.authoritative_timesheet_has_calculated_expenses,false)
+          then m.authoritative_target_timesheet_id end,
         'protection',m.protection
       )) summary_json
     from main_actions m

@@ -512,6 +512,53 @@ begin
   v_skip_keys_count := coalesce(array_length(v_skip_keys_final, 1), 0);
   v_cancellations_count := coalesce(array_length(v_selected_cancel_shift_ids, 1), 0);
 
+  -- Only MODE_B is import-authoritative.  Ignore unrelated expense-only
+  -- timesheets, but refuse to reuse a base contract-week timesheet occupied by
+  -- calculated expenses or to amend/reverse an imported shift whose own linked
+  -- timesheet contains them.  This runs before any source mutation.
+  if exists (
+    select 1
+    from (
+      select cw.timesheet_id
+      from tmp_p2_ok_mode p2
+      join public.contract_weeks cw
+        on cw.contract_id=p2.contract_id
+       and cw.week_ending_date=p2.week_ending_date
+       and cw.is_adjustment=false
+       and coalesce(cw.additional_seq,0)=0
+      where p2.mode='MODE_B'
+        and p2.external_row_key=any(coalesce(v_force_keys_final,array[]::text[]))
+        and cw.timesheet_id is not null
+        and not exists (
+          select 1
+          from public.nhsp_shifts existing_import_shift
+          where existing_import_shift.source_system='HEALTHROSTER'::public.hr_source_enum
+            and existing_import_shift.client_id=v_import_client_id
+            and existing_import_shift.external_row_key=p2.external_row_key
+            and existing_import_shift.cancelled_at_utc is null
+        )
+      union
+      select ns.timesheet_id
+      from public.nhsp_shifts ns
+      where ns.source_system='HEALTHROSTER'::public.hr_source_enum
+        and ns.client_id=v_import_client_id
+        and ns.timesheet_id is not null
+        and (
+          ns.external_row_key=any(coalesce(v_force_keys_final,array[]::text[]))
+          or ns.id=any(coalesce(v_selected_cancel_shift_ids,array[]::uuid[]))
+        )
+    ) expense_target
+    where public._import_review_timesheet_has_calculated_expenses_core_v1(expense_target.timesheet_id)
+  ) then
+    raise exception using
+      message='IMPORT_AUTHORITATIVE_EXPENSE_SEPARATION_REQUIRED',
+      errcode='P0001',
+      detail=jsonb_build_object(
+        'code','IMPORT_AUTHORITATIVE_EXPENSE_SEPARATION_REQUIRED',
+        'message','Timesheet occupied by expenses. Remove the expenses from this timesheet, save or recalculate it, then choose Recheck. Expenses must be invoiced on a separate timesheet for import-authoritative work; no import mutation was applied.'
+      )::text;
+  end if;
+
   v_mode_b_should_run_phase1 := (v_force_keys_count > 0);
   v_mode_b_should_run_phase15 := (v_force_keys_count > 0);
   v_mode_b_should_run_cancellations := (v_cancellations_count > 0);
