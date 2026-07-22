@@ -421,7 +421,7 @@ begin
     ) timesheet_choices on true
     where d.import_id=p_import_id and d.is_current
   ), branch_badge_rows as (
-    select a.candidate_branch_key,b.badge_code,b.badge_label,count(*)::integer badge_count
+    select a.candidate_branch_key,b.badge_code,label.badge_label,count(*)::integer badge_count
     from current_actions a
     cross join lateral unnest(array_remove(array[
       case a.summary_json->>'reason_code'
