@@ -61,6 +61,13 @@ test('action paging supports only the approved sizes and deterministic server-si
   assert.match(body, /ct\.ts_queries_alt_email_address/);
   assert.match(body, /cl\.ts_queries_email/);
   assert.match(body, /RECIPIENT_UNAVAILABLE:/);
+  assert.match(body, /current_weekly_options\.options/);
+  assert.match(body, /option_contract\.candidate_id=d\.candidate_id/);
+  assert.match(body, /option_contract\.client_id=d\.client_id/);
+  assert.match(body, /option_authority\.route_eligible/);
+  assert.match(body, /badges\.badge_code<>'NOT_IN_CLOUDTMS'/);
+  assert.match(body, /other\.badge_code<>'NOT_IN_CLOUDTMS'/);
+  assert.match(body, /Shift not in CloudTMS/);
   assert.doesNotMatch(body, /_timesheet_query_recipient_resolve_core_v1/);
 });
 
@@ -81,7 +88,7 @@ test('weekly action classification consumes the established phase2 mapping autho
   assert.match(body, /Validate existing timesheet only/);
   assert.match(body, /and not coalesce\(m\.contract_rate_complete,false\) then 'CONTRACT_RATES_INCOMPLETE'/);
   assert.match(body, /source_route_eligible',coalesce\(o\.route_eligible,false\)/);
-  assert.match(body, /not coalesce\(o\.import_authoritative,false\) or coalesce\(o\.rate_complete,false\)/);
+  assert.match(body, /'selectable',coalesce\(o\.route_eligible,false\)/);
   assert.match(body, /CONTRACT_NOT_ELIGIBLE/);
   assert.match(body, /'evidence_rows'/);
   assert.match(body, /healthroster_start/);

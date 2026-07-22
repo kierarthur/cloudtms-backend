@@ -619,11 +619,13 @@ begin
         'role',o.role,'band',o.band,'site',o.display_site,'start_date',o.start_date,'end_date',o.end_date,
         'source_route_eligible',coalesce(o.route_eligible,false),'rate_complete',coalesce(o.rate_complete,false),
         'authority_mode',o.authority_mode,
-        'selectable',coalesce(o.route_eligible,false)
-          and (not coalesce(o.import_authoritative,false) or coalesce(o.rate_complete,false)),
-        'disabled_reason_code',case when not coalesce(o.route_eligible,false) then 'CONTRACT_NOT_ELIGIBLE'
-          when coalesce(o.import_authoritative,false) and not coalesce(o.rate_complete,false)
-            then 'CONTRACT_RATES_INCOMPLETE' end,
+        -- Choosing a contract records the server-approved assignment mapping;
+        -- it does not apply the import or grant financial authority.  An
+        -- authoritative contract with incomplete rates must therefore remain
+        -- selectable here and will still be blocked by the refreshed action
+        -- catalogue before final application.
+        'selectable',coalesce(o.route_eligible,false),
+        'disabled_reason_code',case when not coalesce(o.route_eligible,false) then 'CONTRACT_NOT_ELIGIBLE' end,
         'display_label',concat_ws(' · ',nullif(o.role,''),nullif(o.band,''),nullif(o.display_site,''),
           to_char(o.start_date,'DD Mon YYYY')||' to '||coalesce(to_char(o.end_date,'DD Mon YYYY'),'open ended'))
       ) order by lower(coalesce(o.role,'')),lower(coalesce(o.band,'')),o.start_date desc,o.id),'[]'::jsonb) options

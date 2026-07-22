@@ -389,7 +389,9 @@ begin
         when 'DAILY_TIMESHEET_RESOLUTION' then 'Choose existing timesheet' else 'Resolve before continuing' end) outcome_label,
       d.summary_json->>'resolution_kind' resolution_kind,
       d.summary_json->>'authority_mode' authority_mode,
-      coalesce(d.summary_json->'resolution_options','[]'::jsonb) resolution_options,
+      case when d.summary_json->>'resolution_kind'='WEEKLY_ASSIGNMENT_CONTRACT'
+        then coalesce(current_weekly_options.options,'[]'::jsonb)
+        else coalesce(d.summary_json->'resolution_options','[]'::jsonb) end resolution_options,
       coalesce(d.summary_json->'protection','{}'::jsonb) protection,
       d.summary_json->>'default_excluded_reason' default_excluded_reason,
       nullif(d.summary_json->>'week_ending_date','')::date week_ending_date,
@@ -419,6 +421,61 @@ begin
           select value::uuid from jsonb_array_elements_text(coalesce(d.summary_json->'timesheet_options','[]'::jsonb)) value
         )
     ) timesheet_choices on true
+    left join lateral (
+      -- Resolution options are revalidated when they are read so a durable
+      -- review created before a settings/contract correction cannot keep
+      -- showing stale disabled options.  This only authorises creation of the
+      -- assignment mapping; refresh/finalisation still reclassifies the row
+      -- and enforces rates, authority and all financial guards independently.
+      select coalesce(jsonb_agg(
+        option_row.option_json || jsonb_strip_nulls(jsonb_build_object(
+          'option_id',case when option_contract.id is not null then 'contract:'||option_contract.id::text end,
+          'contract_id',option_contract.id,
+          'candidate_id',option_contract.candidate_id,
+          'client_id',option_contract.client_id,
+          'role',option_contract.role,
+          'band',option_contract.band,
+          'site',option_contract.display_site,
+          'start_date',option_contract.start_date,
+          'end_date',option_contract.end_date,
+          'source_route_eligible',coalesce(option_authority.route_eligible,false),
+          'authority_mode',option_authority.authority_mode,
+          'selectable',option_contract.id is not null
+            and option_contract.candidate_id=d.candidate_id
+            and option_contract.client_id=d.client_id
+            and option_contract.start_date<=coalesce(nullif(d.summary_json->>'work_date','')::date,hr.date_local)
+            and (option_contract.end_date is null
+              or option_contract.end_date>=coalesce(nullif(d.summary_json->>'work_date','')::date,hr.date_local))
+            and coalesce(option_authority.route_eligible,false),
+          'disabled_reason_code',case when option_contract.id is null
+              or option_contract.candidate_id is distinct from d.candidate_id
+              or option_contract.client_id is distinct from d.client_id
+              or option_contract.start_date>coalesce(nullif(d.summary_json->>'work_date','')::date,hr.date_local)
+              or (option_contract.end_date is not null
+                and option_contract.end_date<coalesce(nullif(d.summary_json->>'work_date','')::date,hr.date_local))
+              or not coalesce(option_authority.route_eligible,false)
+            then 'CONTRACT_NOT_ELIGIBLE' end,
+          'display_label',case when option_contract.id is not null then concat_ws(' · ',
+            nullif(option_contract.role,''),nullif(option_contract.band,''),nullif(option_contract.display_site,''),
+            to_char(option_contract.start_date,'DD Mon YYYY')||' to '||
+              coalesce(to_char(option_contract.end_date,'DD Mon YYYY'),'open ended')) end
+        )) order by lower(coalesce(option_contract.role,option_row.option_json->>'role','')),
+          lower(coalesce(option_contract.band,option_row.option_json->>'band','')),
+          option_contract.start_date desc nulls last,option_row.option_json->>'option_id'
+      ),'[]'::jsonb) options
+      from jsonb_array_elements(coalesce(d.summary_json->'resolution_options','[]'::jsonb)) option_row(option_json)
+      left join public.contracts option_contract on option_contract.id=case
+        when coalesce(option_row.option_json->>'contract_id','')
+          ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+          then (option_row.option_json->>'contract_id')::uuid end
+      left join lateral public._import_review_effective_authority_core_v1(
+        case when upper(coalesce(d.summary_json->>'source_system',d.summary_json->>'source_route',''))='NHSP'
+          then 'NHSP' else 'HR_WEEKLY' end,
+        option_contract.id,option_contract.client_id,
+        coalesce(nullif(d.summary_json->>'work_date','')::date,hr.date_local)
+      ) option_authority on option_contract.id is not null
+      where d.summary_json->>'resolution_kind'='WEEKLY_ASSIGNMENT_CONTRACT'
+    ) current_weekly_options on true
     where d.import_id=p_import_id and d.is_current
   ), branch_badge_rows as (
     select a.candidate_branch_key,b.badge_code,label.badge_label,count(*)::integer badge_count
@@ -460,7 +517,7 @@ begin
       when 'CHOOSE_TIMESHEET' then 'Choose timesheet' when 'BANKING_PAY_PROTECTED' then 'Banking Pay protected'
       when 'NEEDS_RECHECK' then 'Needs recheck' when 'HOURS_DIFFER' then 'Hours differ'
       when 'TIMES_DIFFER' then 'Times differ' when 'BREAK_DIFFERS' then 'Break differs'
-      when 'MISSING_FROM_FILE' then 'Missing from file' when 'NOT_IN_CLOUDTMS' then 'Not in CloudTMS'
+      when 'MISSING_FROM_FILE' then 'Missing from file' when 'NOT_IN_CLOUDTMS' then 'Shift not in CloudTMS'
       when 'REFERENCE_ISSUE' then 'Reference issue' when 'MATCH_UNCLEAR' then 'Match unclear'
       when 'EMAIL_NOT_CONFIGURED' then 'Email not configured' when 'WEEKLY_MISMATCH' then 'Weekly mismatch'
       when 'EMAIL_REQUEST_SELECTED' then 'Email request selected' when 'REMINDER_AVAILABLE' then 'Reminder available'
@@ -469,7 +526,14 @@ begin
   ), branch_badges as (
     select candidate_branch_key,jsonb_agg(jsonb_build_object(
       'code',badge_code,'label',badge_label,'count',badge_count) order by badge_label) badges
-    from branch_badge_rows group by candidate_branch_key
+    from branch_badge_rows badges
+    where badges.badge_code<>'NOT_IN_CLOUDTMS'
+      or not exists (
+        select 1 from branch_badge_rows other
+        where other.candidate_branch_key=badges.candidate_branch_key
+          and other.badge_code<>'NOT_IN_CLOUDTMS'
+      )
+    group by candidate_branch_key
   ), filtered as (
     select a.*,coalesce(bb.badges,'[]'::jsonb) branch_badges
     from current_actions a left join branch_badges bb using(candidate_branch_key) where case v_view
