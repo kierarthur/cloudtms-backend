@@ -538,7 +538,7 @@ revoke all on function public._import_review_timesheet_has_calculated_expenses_c
 create or replace function public._import_review_action_catalog_core_v1(
   p_import_id uuid,
   p_preview_generation integer,
-  p_max_actions integer default 500
+  p_max_actions integer default 5000
 )
 returns table (
   action_id text,
@@ -565,7 +565,7 @@ set search_path to 'public', 'extensions', 'pg_temp'
 as $function$
 declare v_count integer; v_weekly_preview jsonb;
 begin
-  if p_import_id is null or p_preview_generation<1 or p_max_actions<1 or p_max_actions>500 then
+  if p_import_id is null or p_preview_generation<1 or p_max_actions<1 or p_max_actions>5000 then
     raise exception 'IMPORT_REVIEW_ACTION_CATALOG_INPUT_INVALID' using errcode='22023';
   end if;
 
@@ -1491,7 +1491,7 @@ create or replace function public._import_review_refresh_core_v1(
   p_import_id uuid,
   p_expected_state_version bigint,
   p_actor_user_id uuid,
-  p_max_actions integer default 500
+  p_max_actions integer default 5000
 )
 returns jsonb
 language plpgsql

@@ -1,5 +1,6 @@
-const MAX_FOLLOW_UP_ITEMS = 500;
-const MAX_REAUTHORISE_ITEMS = 100;
+const MAX_FOLLOW_UP_ITEMS = 5000;
+const MAX_REAUTHORISE_ITEMS = 5000;
+const AUTHORISE_CHUNK_SIZE = 100;
 const VALID_COMPONENT_STATUSES = new Set(['PENDING', 'COMPLETE', 'FAILED_RETRYABLE', 'NOT_REQUIRED']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -236,17 +237,20 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
 
           if (pendingTotal === 0 && failedCount === 0) {
             if (authoriseTimesheetIds.length) {
-              const authoriseRaw = await sbRpc(env, 'timesheet_authorise_bulk_atomic', {
-                p_items: authoriseTimesheetIds.map((timesheetId) => ({
-                  timesheet_id: timesheetId,
-                  expected_timesheet_id: timesheetId
-                })),
-                p_actor_user_id: details.actorUserId,
-                p_now_utc: null
-              }, { timeoutMs: 30000 });
-              const authoriseResult = unwrapRpcJsonb(authoriseRaw, 'timesheet_authorise_bulk_atomic') || {};
-              if (!reauthorisationCompleted(authoriseResult, authoriseTimesheetIds)) {
-                throw new Error('IMPORT_REVIEW_AUTHORISE_INCOMPLETE');
+              for (let offset = 0; offset < authoriseTimesheetIds.length; offset += AUTHORISE_CHUNK_SIZE) {
+                const chunk = authoriseTimesheetIds.slice(offset, offset + AUTHORISE_CHUNK_SIZE);
+                const authoriseRaw = await sbRpc(env, 'timesheet_authorise_bulk_atomic', {
+                  p_items: chunk.map((timesheetId) => ({
+                    timesheet_id: timesheetId,
+                    expected_timesheet_id: timesheetId
+                  })),
+                  p_actor_user_id: details.actorUserId,
+                  p_now_utc: null
+                }, { timeoutMs: 30000 });
+                const authoriseResult = unwrapRpcJsonb(authoriseRaw, 'timesheet_authorise_bulk_atomic') || {};
+                if (!reauthorisationCompleted(authoriseResult, chunk)) {
+                  throw new Error('IMPORT_REVIEW_AUTHORISE_INCOMPLETE');
+                }
               }
             }
             await updateComponent(env, details, {

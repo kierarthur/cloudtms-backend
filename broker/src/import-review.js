@@ -4,7 +4,7 @@ const IMPORT_REVIEW_OPERATION_CONTRACT = 'IMPORT_APPLY_OPERATION_V2';
 const IMPORT_REVIEW_CORRECTION_CONTRACT = 'IMPORT_CORRECTION_OPERATION_V2';
 const IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT = 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1';
 const IMPORT_REVIEW_INCREMENTAL_APPLY_CONTRACT = 'IMPORT_REVIEW_INCREMENTAL_APPLY_V1';
-const IMPORT_REVIEW_UI_CONTRACT = 'IMPORT_REVIEW_UI_V5';
+const IMPORT_REVIEW_UI_CONTRACT = 'IMPORT_REVIEW_UI_V6';
 const IMPORT_REVIEW_EMAIL_GROUPING_CONTRACT = 'TIMESHEET_QUERY_RECIPIENT_EMAIL_V1';
 
 export const IMPORT_REVIEW_PARSER_VERSION = 'CLOUDTMS_IMPORT_REVIEW_PARSER_V1';
@@ -14,6 +14,7 @@ const SHA256_RE = /^[0-9a-f]{64}$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BODY_BYTES = 262144;
 const MAX_ACTION_CHANGES = 500;
+const MAX_REVIEW_ACTIONS = 5000;
 
 const ROUTE_RPCS = Object.freeze(new Set([
   'import_review_contract_version_get_v1',
@@ -346,8 +347,8 @@ function stateContractFromGet(review, operationId) {
       preview_fingerprint: state.preview_fingerprint,
       request_hash: apply.request_hash
     },
-    review_selected_action_ids: actionIds(apply.selected_action_ids || [], 'selected_action_ids'),
-    invalidation_action_ids: actionIds(apply.reference_invalidation_action_ids || [], 'invalidation_action_ids')
+    review_selected_action_ids: actionIds(apply.selected_action_ids || [], 'selected_action_ids', MAX_REVIEW_ACTIONS),
+    invalidation_action_ids: actionIds(apply.reference_invalidation_action_ids || [], 'invalidation_action_ids', MAX_REVIEW_ACTIONS)
   };
 }
 
@@ -525,11 +526,15 @@ function parseActionPageQuery(url) {
     throw new ImportReviewInputError('sort_by is invalid');
   }
   if (!['ASC', 'DESC'].includes(sortDirection)) throw new ImportReviewInputError('sort_direction is invalid');
-  if (!['ALL', 'PENDING', 'READY', 'EMAIL', 'NO_ACTION'].includes(view)) {
+  if (![
+    'ALL', 'PENDING', 'READY', 'EMAIL', 'NO_ACTION',
+    'CONFIRM_STANDARD', 'CONFIRM_NON_STANDARD', 'CONFIRM_VALIDATION',
+    'CONFIRM_EMAIL', 'CONFIRM_REFERENCE'
+  ].includes(view)) {
     throw new ImportReviewInputError('view is invalid');
   }
   return {
-    p_page_number: integer(url.searchParams.get('page'), 'page', 1, 100, 1),
+    p_page_number: integer(url.searchParams.get('page'), 'page', 1, 10000, 1),
     p_page_size: allowedPageSize(url.searchParams.get('page_size'), 'page_size', 25),
     p_sort_by: sortBy,
     p_sort_direction: sortDirection,
@@ -741,7 +746,7 @@ export function createImportReviewDispatcher(dependencies) {
           p_import_id: uuid(refresh.import_id, 'import_id'),
           p_expected_state_version: integer(body.expected_state_version, 'expected_state_version', 1, Number.MAX_SAFE_INTEGER),
           p_actor_user_id: user.id,
-          p_max_actions: integer(body.max_actions, 'max_actions', 1, 500, 500)
+          p_max_actions: integer(body.max_actions, 'max_actions', 1, MAX_REVIEW_ACTIONS, MAX_REVIEW_ACTIONS)
         };
         let data;
         try {

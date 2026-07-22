@@ -17,7 +17,7 @@ as $function$
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
     'incremental_apply_version','IMPORT_REVIEW_INCREMENTAL_APPLY_V1',
-    'review_ui_contract_version','IMPORT_REVIEW_UI_V5',
+    'review_ui_contract_version','IMPORT_REVIEW_UI_V6',
     'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'legacy_contracts_supported',false
   )
@@ -71,7 +71,7 @@ begin
   if v_row_count=0 or v_from is null or v_to is null then
     raise exception 'IMPORT_REVIEW_STAGED_ROWS_REQUIRED' using errcode='55000';
   end if;
-  if v_row_count>500 then
+  if v_row_count>5000 then
     raise exception 'IMPORT_REVIEW_STAGED_SCOPE_ROW_LIMIT_EXCEEDED' using errcode='54000';
   end if;
 
@@ -326,12 +326,14 @@ declare
   v_items jsonb;
   v_total integer;
   v_counts jsonb;
+  v_confirmation_counts jsonb;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
-  if p_import_id is null or v_page<1 or v_page>100 or v_size not in (25,50,75,100)
+  if p_import_id is null or v_page<1 or v_page>10000 or v_size not in (25,50,75,100)
      or v_sort not in ('CANDIDATE','CLIENT','WEEK_ENDING','WORK_DATE','ACTION','STATUS')
      or v_direction not in ('ASC','DESC')
-     or v_view not in ('ALL','PENDING','READY','EMAIL','NO_ACTION') then
+     or v_view not in ('ALL','PENDING','READY','EMAIL','NO_ACTION','CONFIRM_STANDARD',
+       'CONFIRM_NON_STANDARD','CONFIRM_VALIDATION','CONFIRM_EMAIL','CONFIRM_REFERENCE') then
     raise exception 'IMPORT_REVIEW_ACTION_PAGE_INPUT_INVALID' using errcode='22023';
   end if;
   if not exists(select 1 from public.import_review_states s where s.import_id=p_import_id) then
@@ -604,10 +606,19 @@ begin
       when 'READY' then a.action_category='READY'
       when 'EMAIL' then a.action_category='EMAIL'
       when 'NO_ACTION' then a.action_category='NO_ACTION'
+      when 'CONFIRM_STANDARD' then a.selected and a.batch_eligible and a.action_kind='INCLUDE_SHIFT'
+      when 'CONFIRM_NON_STANDARD' then a.selected and a.batch_eligible and a.action_kind in ('APPLY_AMENDMENT','APPLY_CANCELLATION')
+      when 'CONFIRM_VALIDATION' then a.selected and a.batch_eligible and a.action_kind='MARK_VALIDATION_ERROR'
+      when 'CONFIRM_EMAIL' then a.selected and a.batch_eligible and a.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+      when 'CONFIRM_REFERENCE' then a.selected and a.batch_eligible and a.action_kind='INVALIDATE_REFERENCE'
       else true end
   ), ordered as (
     select f.*,
       row_number() over(order by
+        case when v_view like 'CONFIRM_%' then lower(client_name) end asc nulls last,
+        case when v_view like 'CONFIRM_%' then candidate_surname_sort end asc nulls last,
+        case when v_view like 'CONFIRM_%' then lower(candidate_name) end asc nulls last,
+        case when v_view like 'CONFIRM_%' then work_date end asc nulls last,
         case when v_sort='CANDIDATE' and v_direction='ASC' then candidate_surname_sort end asc nulls last,
         case when v_sort='CANDIDATE' and v_direction='DESC' then candidate_surname_sort end desc nulls last,
         case when v_sort='CANDIDATE' and v_direction='ASC' then lower(candidate_name) end asc nulls last,
@@ -623,7 +634,9 @@ begin
         case when v_sort='STATUS' and v_direction='ASC' then action_category end asc,
         case when v_sort='STATUS' and v_direction='DESC' then action_category end desc,
         action_id asc) rn,
-      count(*) over() total_count
+      count(*) over() total_count,
+      count(*) over(partition by candidate_branch_key) candidate_section_total_count,
+      count(*) over(partition by client_id,client_name) client_section_total_count
     from filtered f
   )
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -635,6 +648,8 @@ begin
       'selectable',selectable,'selected',selected,'blocking',blocking,'batch_eligible',batch_eligible,
       'candidate_name',candidate_name,'candidate_surname_sort',candidate_surname_sort,
       'candidate_branch_key',candidate_branch_key,'branch_badges',branch_badges,
+      'candidate_section_total_count',candidate_section_total_count,
+      'client_section_total_count',client_section_total_count,
       'client_name',client_name,'week_ending_date',week_ending_date,'work_date',work_date,
       'recipient_email',recipient_email,'recipient_group_key',recipient_group_key,'contract_label',contract_label,
       'daily_timesheet_options',daily_timesheet_options,
@@ -656,8 +671,34 @@ begin
   ) into v_counts
   from public.import_review_decisions d where d.import_id=p_import_id and d.is_current;
 
+  with ready_ids as (
+    select r.action_id from public._import_review_ready_action_ids_core_v1(p_import_id) r
+  ), selected_actions as (
+    select d.action_kind,coalesce(d.summary_json->'protection','{}'::jsonb) protection
+    from public.import_review_decisions d
+    join ready_ids r on r.action_id=d.action_id
+    where d.import_id=p_import_id and d.is_current and d.selected
+  )
+  select jsonb_build_object(
+    'selected_total',count(*),
+    'standard',count(*) filter(where action_kind='INCLUDE_SHIFT'),
+    'non_standard',count(*) filter(where action_kind in ('APPLY_AMENDMENT','APPLY_CANCELLATION')),
+    'amendment',count(*) filter(where action_kind='APPLY_AMENDMENT'
+      and not (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false))),
+    'reversal_replacement',count(*) filter(where action_kind='APPLY_AMENDMENT'
+      and (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false))),
+    'cancellation',count(*) filter(where action_kind='APPLY_CANCELLATION'
+      and not (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false))),
+    'reversal_only',count(*) filter(where action_kind='APPLY_CANCELLATION'
+      and (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false))),
+    'validation',count(*) filter(where action_kind='MARK_VALIDATION_ERROR'),
+    'email',count(*) filter(where action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')),
+    'reference',count(*) filter(where action_kind='INVALIDATE_REFERENCE')
+  ) into v_confirmation_counts from selected_actions;
+
   return jsonb_build_object(
     'ok',true,'import_id',p_import_id,'view',v_view,'view_counts',v_counts,
+    'confirmation_counts',v_confirmation_counts,
     'items',v_items,'total_items',v_total,'page_number',v_page,'page_size',v_size,
     'total_pages',case when v_total=0 then 0 else ceiling(v_total::numeric/v_size)::integer end,
     'has_previous',v_page>1,'has_next',v_page*v_size<v_total,

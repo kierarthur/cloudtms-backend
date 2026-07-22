@@ -34,7 +34,7 @@ $function$;
 
 create or replace function public.timesheet_query_email_enqueue_v1(
   p_import_id uuid,p_operation_id uuid,p_selected_action_ids jsonb,p_actor_user_id uuid default null,
-  p_max_actions integer default 500,p_max_groups integer default 100
+  p_max_actions integer default 5000,p_max_groups integer default 100
 )
 returns jsonb language plpgsql security definer set search_path to 'public','extensions','pg_temp' as $function$
 declare
@@ -45,7 +45,7 @@ declare
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if p_import_id is null or p_operation_id is null or jsonb_typeof(coalesce(p_selected_action_ids,'[]'))<>'array'
-    or p_max_actions<1 or p_max_actions>500 or p_max_groups<1 or p_max_groups>100
+    or p_max_actions<1 or p_max_actions>5000 or p_max_groups<1 or p_max_groups>100
     or jsonb_array_length(coalesce(p_selected_action_ids,'[]'))>p_max_actions then
     raise exception 'TIMESHEET_QUERY_ENQUEUE_INPUT_INVALID' using errcode='22023'; end if;
   if exists(select 1 from jsonb_array_elements(coalesce(p_selected_action_ids,'[]'))x where jsonb_typeof(x)<>'string' or trim(both '"' from x::text)!~'^[0-9a-f]{64}$') then

@@ -29,16 +29,16 @@ function functionBody(source, name) {
 test('the fail-closed database contract exposes the bounded review UI and recipient grouping versions', () => {
   const body = functionBody(uiSql, 'import_review_contract_version_get_v1');
   assert.match(body, /incremental_apply_version','IMPORT_REVIEW_INCREMENTAL_APPLY_V1/);
-  assert.match(body, /review_ui_contract_version','IMPORT_REVIEW_UI_V5/);
+  assert.match(body, /review_ui_contract_version','IMPORT_REVIEW_UI_V6/);
   assert.match(body, /email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1/);
   assert.match(body, /legacy_contracts_supported',false/);
-  assert.match(lifecycleSql, /review_ui_contract_version','IMPORT_REVIEW_UI_V5/);
+  assert.match(lifecycleSql, /review_ui_contract_version','IMPORT_REVIEW_UI_V6/);
 });
 
 test('staged scope discovery is actor-bound, source-owned and bounded', () => {
   const body = functionBody(uiSql, 'import_review_staged_scope_get_v1');
   assert.match(body, /_import_review_assert_actor_v1/);
-  assert.match(body, /v_row_count>500/);
+  assert.match(body, /v_row_count>5000/);
   assert.match(body, /v_size not in \(25,50,75,100,500\)/);
   assert.match(body, /source_file_sha256/);
   assert.match(body, /coverage_start_date/);
@@ -63,6 +63,13 @@ test('action paging supports only the approved sizes and deterministic server-si
   assert.match(body, /'has_previous'/);
   assert.match(body, /'has_next'/);
   assert.match(body, /'view_counts'/);
+  assert.match(body, /'confirmation_counts'/);
+  for (const view of ['CONFIRM_STANDARD', 'CONFIRM_NON_STANDARD', 'CONFIRM_VALIDATION', 'CONFIRM_EMAIL', 'CONFIRM_REFERENCE']) {
+    assert.match(body, new RegExp(view));
+  }
+  assert.match(body, /v_page>10000/);
+  assert.match(body, /candidate_section_total_count/);
+  assert.match(body, /client_section_total_count/);
   for (const field of ['imported_evidence', 'current_evidence', 'difference_codes', 'evidence_rows', 'outcome_label', 'resolution_kind', 'resolution_options']) {
     assert.match(body, new RegExp(`'${field}'`));
   }
@@ -359,6 +366,18 @@ test('query email enqueue consolidates one outbox message per normalised recipie
   assert.match(body, /Items are grouped by client and contract/);
   assert.match(body, /TIMESHEET_QUERY_EMAIL/);
   assert.doesNotMatch(body, /group by route->>'recipient_scope',route->>'recipient_scope_key'/);
+  assert.match(body, /p_max_actions integer default 5000/);
+});
+
+test('large reviews remain hard bounded while confirmation details are server paged', () => {
+  const catalogue = functionBody(coreSql, '_import_review_action_catalog_core_v1');
+  const refresh = functionBody(coreSql, '_import_review_refresh_core_v1');
+  const guard = functionBody(lifecycleSql, 'import_review_apply_guard_v1');
+  assert.match(catalogue, /p_max_actions integer default 5000/);
+  assert.match(catalogue, /p_max_actions>5000/);
+  assert.match(refresh, /p_max_actions integer default 5000/);
+  assert.match(guard, /p_selected_action_ids,'\[\]'.*?>5000/);
+  assert.match(guard, />2097152/);
 });
 
 test('new public read RPCs are service-role-only', () => {

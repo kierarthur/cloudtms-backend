@@ -365,8 +365,8 @@ test('the contract gate fails closed when component-aware follow-up support is a
   assert.deepEqual(current.calls.map((call) => call.name), ['import_review_contract_version_get_v1']);
 });
 
-test('the V5 Worker fails closed against the superseded V4 review UI contract', async () => {
-  const oldContract = { ...installedContract, review_ui_contract_version: 'IMPORT_REVIEW_UI_V4' };
+test('the V6 Worker fails closed against the superseded V5 review UI contract', async () => {
+  const oldContract = { ...installedContract, review_ui_contract_version: 'IMPORT_REVIEW_UI_V5' };
   const current = scenario({ contract: oldContract });
   const response = await current.dispatcher(
     jsonRequest('GET', '/api/import-reviews?page_size=25'),
@@ -376,6 +376,21 @@ test('the V5 Worker fails closed against the superseded V4 review UI contract', 
   const captured = await responseJson(response);
   assert.equal(captured.status, 503);
   assert.equal(captured.body.error.code, 'IMPORT_REVIEW_CONTRACT_MISMATCH');
+});
+
+test('final confirmation views remain allowlisted and support deeply paged bounded reviews', async () => {
+  const current = scenario();
+  const response = await current.dispatcher(
+    jsonRequest('GET', `/api/import-reviews/${IMPORT_ID}/actions?page=101&page_size=100&sort_by=CANDIDATE&sort_direction=ASC&view=CONFIRM_NON_STANDARD`),
+    { TEST: true },
+    current.ctx
+  );
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 200);
+  const actionCall = current.calls.find((call) => call.name === 'import_review_actions_page_v1');
+  assert.equal(actionCall.args.p_page_number, 101);
+  assert.equal(actionCall.args.p_page_size, 100);
+  assert.equal(actionCall.args.p_view, 'CONFIRM_NON_STANDARD');
 });
 
 test('the Worker fails closed when incremental apply support is absent', async () => {

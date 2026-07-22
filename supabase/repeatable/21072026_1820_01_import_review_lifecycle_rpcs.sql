@@ -15,7 +15,7 @@ as $function$
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
     'incremental_apply_version','IMPORT_REVIEW_INCREMENTAL_APPLY_V1',
-    'review_ui_contract_version','IMPORT_REVIEW_UI_V5',
+    'review_ui_contract_version','IMPORT_REVIEW_UI_V6',
     'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'legacy_contracts_supported',false
   )
@@ -221,7 +221,7 @@ begin
       jsonb_build_object('old_import_id',p_supersede_import_id,'revision_group_id',v_revision_group,
         'revision_no',v_revision_no,'atomic_replace',true));
   end if;
-  v_refresh:=public._import_review_refresh_core_v1(p_import_id,1,p_actor_user_id,500);
+  v_refresh:=public._import_review_refresh_core_v1(p_import_id,1,p_actor_user_id,5000);
   return v_refresh||jsonb_build_object('schema_contract_version','IMPORT_REVIEW_DB_V1',
     'replay',false,'coverage_fingerprint',v_fingerprint,'overlapping_unfinished_reviews','[]'::jsonb,
     'superseded_import_id',p_supersede_import_id,
@@ -447,12 +447,12 @@ begin
     'preview_generation',v_state.preview_generation,'preview_fingerprint',v_state.preview_fingerprint,'changed_count',v_changed,'blocker_count',v_blockers);
 end $function$;
 
-create or replace function public.import_review_refresh_v1(p_import_id uuid,p_expected_state_version bigint,p_actor_user_id uuid default null,p_max_actions integer default 500)
+create or replace function public.import_review_refresh_v1(p_import_id uuid,p_expected_state_version bigint,p_actor_user_id uuid default null,p_max_actions integer default 5000)
 returns jsonb language plpgsql security definer
 set search_path to 'public','pg_temp'
 set plpgsql_check.mode to 'disabled'
 as $function$
-begin return public._import_review_refresh_core_v1(p_import_id,p_expected_state_version,p_actor_user_id,least(coalesce(p_max_actions,500),500)); end $function$;
+begin return public._import_review_refresh_core_v1(p_import_id,p_expected_state_version,p_actor_user_id,least(coalesce(p_max_actions,5000),5000)); end $function$;
 
 create or replace function public.import_review_abandon_v1(p_import_id uuid,p_expected_state_version bigint,p_reason text,p_actor_user_id uuid default null)
 returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
@@ -479,9 +479,9 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id);
   if p_operation_id is null or length(btrim(coalesce(p_request_hash,''))) not between 16 and 256
     or jsonb_typeof(coalesce(p_selected_action_ids,'[]'))<>'array'
     or jsonb_typeof(coalesce(p_reference_invalidation_action_ids,'[]'))<>'array'
-    or jsonb_array_length(coalesce(p_selected_action_ids,'[]'))>500
-    or jsonb_array_length(coalesce(p_reference_invalidation_action_ids,'[]'))>500
-    or pg_column_size(coalesce(p_selected_action_ids,'[]'))+pg_column_size(coalesce(p_reference_invalidation_action_ids,'[]'))>262144
+    or jsonb_array_length(coalesce(p_selected_action_ids,'[]'))>5000
+    or jsonb_array_length(coalesce(p_reference_invalidation_action_ids,'[]'))>5000
+    or pg_column_size(coalesce(p_selected_action_ids,'[]'))+pg_column_size(coalesce(p_reference_invalidation_action_ids,'[]'))>2097152
   then raise exception 'IMPORT_REVIEW_APPLY_CONTRACT_INVALID' using errcode='22023'; end if;
   if exists(select 1 from jsonb_array_elements(coalesce(p_selected_action_ids,'[]'))x
       where jsonb_typeof(x)<>'string' or trim(both '"' from x::text)!~'^[0-9a-f]{64}$')
@@ -648,7 +648,7 @@ begin
     updated_at_utc=now(),updated_by_user_id=p_actor_user_id
   where import_id=p_import_id returning * into v;
 
-  v_refresh:=public._import_review_refresh_core_v1(p_import_id,v.state_version,p_actor_user_id,500);
+  v_refresh:=public._import_review_refresh_core_v1(p_import_id,v.state_version,p_actor_user_id,5000);
   select count(*) filter(where d.blocking),count(*) filter(where d.selectable and not (
       d.action_kind='NO_ACTION' and exists(select 1 from public.import_review_action_outcomes x
         where x.import_id=d.import_id and x.source_identity=d.source_identity)))
