@@ -12,6 +12,7 @@ const nhspApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_18
 const dailyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql', import.meta.url), 'utf8');
 const correctionPolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_01_correction_financials_policy_resolve_v1.sql', import.meta.url), 'utf8');
 const correctionGuardSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql', import.meta.url), 'utf8');
+const correctionTransitionSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql', import.meta.url), 'utf8');
 const autoAuthorisePolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_02_import_auto_authorise_policy_resolve_v1.sql', import.meta.url), 'utf8');
 const weeklyPreviewSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql', import.meta.url), 'utf8');
 const retirementSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_99_import_review_hard_cutover_retirements.sql', import.meta.url), 'utf8');
@@ -183,6 +184,13 @@ test('TSFIN correction-unit payload extraction accepts JSON whitespace without d
   const extractor = functionBody(correctionGuardSql, '_ctms_payload_timesheet_ids_v1');
   assert.match(extractor, /"\[\[:space:\]\]\*:\[\[:space:\]\]\*"/);
   assert.doesNotMatch(extractor, /"\\\\s\*:\\\\s\*"/);
+});
+
+test('correction lifecycle expansion preserves the atomic expected-timesheet fence for every member', () => {
+  const transition = functionBody(correctionTransitionSql, 'timesheet_correction_pair_transition_v1');
+  const expander = functionBody(correctionGuardSql, '_ctms_expand_lifecycle_items_v1');
+  assert.match(transition, /'timesheet_id',r\.timesheet_id,'expected_timesheet_id',r\.timesheet_id/);
+  assert.match(expander, /v_transition -> 'transition_items'/);
 });
 
 test('protected amendments prove the new immutable import row before either Weekly route commits', () => {

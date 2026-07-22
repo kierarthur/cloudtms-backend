@@ -149,7 +149,8 @@ begin
       'processing_status',r.processing_status,'policy_ready',v_values_match,
       'leg_fingerprint',v_leg->>'leg_fingerprint'));
     v_items:=v_items||jsonb_build_array(jsonb_build_object(
-      'timesheet_id',r.timesheet_id,'expected_version',r.version,
+      'timesheet_id',r.timesheet_id,'expected_timesheet_id',r.timesheet_id,
+      'expected_version',r.version,
       'expected_policy_envelope_fingerprint',v_envelope->>'envelope_fingerprint',
       'expected_leg_fingerprint',v_leg->>'leg_fingerprint'));
   end loop;
