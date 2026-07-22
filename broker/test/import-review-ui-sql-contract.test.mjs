@@ -300,6 +300,8 @@ test('review get is authoritative for editability, commands, evidence and final 
   assert.match(body, /'evidence'/);
   assert.match(body, /'confirmation_summary'/);
   assert.match(body, /selected_email_reminder_count/);
+  assert.match(body, /'last_operation_request_hash'/);
+  assert.match(body, /o\.id=v_state\.last_operation_id and o\.import_id=p_import_id/);
 });
 
 test('incremental apply is candidate/client scoped, immutable and transactionally bounded', () => {

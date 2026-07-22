@@ -375,7 +375,10 @@ begin
       'follow_up_retry_count',v_state.follow_up_retry_count,
       'preview_generation',v_state.preview_generation,'preview_fingerprint',v_state.preview_fingerprint,'ui_state',v_state.ui_state_json,
       'last_opened_at_utc',v_state.last_opened_at_utc,'last_opened_by_user_id',v_state.last_opened_by_user_id,
-      'last_operation_id',v_state.last_operation_id,'read_only',v_read_only,
+      'last_operation_id',v_state.last_operation_id,
+      'last_operation_request_hash',(select o.request_hash from public.import_apply_operations o
+        where o.id=v_state.last_operation_id and o.import_id=p_import_id),
+      'read_only',v_read_only,
       'partial_application',v_applied_outcome_count>0 and v_state.status<>'APPLIED',
       'applied_outcome_count',v_applied_outcome_count,'deferred_count',v_deferred_count,
       'editability',jsonb_build_object(
