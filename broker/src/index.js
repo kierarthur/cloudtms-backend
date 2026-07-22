@@ -156466,7 +156466,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
     lease = await rpcTsfinDequeueBatchIds(env, { limit });
   }
 
-  if (!Array.isArray(lease) || !lease.length) return { picked: 0, ok: 0, fail: 0 };
+  if (!Array.isArray(lease) || !lease.length) return { picked: 0, ok: 0, fail: 0, completed_timesheet_ids: [] };
 
   // ✅ NEW (logging only): map outbox_id -> reason for invoice_debug gating (no functional impact)
   const reasonByOutboxId = new Map();
@@ -156551,6 +156551,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   // 3) Group outbox rows by effective timesheet_id (dedupe)
   const effToOutboxIds = new Map();
   const effToPrimary = new Map();
+  const effToOriginalIds = new Map();
   const effIds = [];
 
   for (const it of lease) {
@@ -156560,6 +156561,8 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 
     if (!effToOutboxIds.has(eff)) effToOutboxIds.set(eff, []);
     effToOutboxIds.get(eff).push(it.outbox_id);
+    if (!effToOriginalIds.has(eff)) effToOriginalIds.set(eff, new Set());
+    effToOriginalIds.get(eff).add(orig);
 
     if (!effToPrimary.has(eff)) {
       effToPrimary.set(eff, it.outbox_id);
@@ -156577,6 +156580,16 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   }
 
   let ok = 0, fail = 0;
+  const completedTimesheetIds = new Set();
+  const markTimesheetComplete = (effectiveId) => {
+    const eff = String(effectiveId || '').trim().toLowerCase();
+    if (!eff) return;
+    completedTimesheetIds.add(eff);
+    for (const originalId of (effToOriginalIds.get(effectiveId) || effToOriginalIds.get(String(effectiveId)) || [])) {
+      const original = String(originalId || '').trim().toLowerCase();
+      if (original) completedTimesheetIds.add(original);
+    }
+  };
 
   const preFailPrimaryOutboxSet = new Set();
   const weeklyWork = [];
@@ -156590,16 +156603,19 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 
     const ctx = ctxByEff.get(effId) || null;
     if (!ctx) {
+      let contextCleanupFailed = false;
       for (const ob of outboxIds) {
         try {
           await sbRpc(env, "tsfin_mark_revoked", { p_timesheet_id: effId });
           await sbRpc(env, "tsfin_work_success", { p_id: ob });
           ok++;
         } catch (e) {
+          contextCleanupFailed = true;
           await sbRpc(env, "tsfin_work_fail", { p_id: ob, p_error: String(e?.message || e) });
           fail++;
         }
       }
+      if (!contextCleanupFailed) markTimesheetComplete(effId);
       continue;
     }
 
@@ -156609,9 +156625,11 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 
     const isLocked = !!(curFin?.locked_by_invoice_id || curFin?.paid_at_utc);
     if (isLocked) {
+      let lockedCleanupFailed = false;
       for (const ob of outboxIds) {
-        try { await sbRpc(env, "tsfin_work_success", { p_id: ob }); ok++; } catch { fail++; }
+        try { await sbRpc(env, "tsfin_work_success", { p_id: ob }); ok++; } catch { lockedCleanupFailed = true; fail++; }
       }
+      if (!lockedCleanupFailed) markTimesheetComplete(effId);
       continue;
     }
 
@@ -157248,6 +157266,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
           if (okHeal0) {
             await sbRpc(env, "tsfin_work_success", { p_id: outbox_id });
             ok++;
+            markTimesheetComplete(effId);
             continue;
           } else {
             const errMsg0 =
@@ -157277,6 +157296,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
         try {
           await sbRpc(env, "tsfin_work_success", { p_id: outbox_id });
           ok++;
+          markTimesheetComplete(effId);
         } catch (e) {
           await sbRpc(env, "tsfin_work_fail", { p_id: outbox_id, p_error: String(e?.message || e) });
           fail++;
@@ -157556,6 +157576,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
         try {
           await sbRpc(env, "tsfin_work_success", { p_id: outbox_id });
           ok++;
+          markTimesheetComplete(effId);
         } catch (e) {
           await sbRpc(env, "tsfin_work_fail", { p_id: outbox_id, p_error: String(e?.message || e) });
           fail++;
@@ -157601,6 +157622,12 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
     } catch {
       failOutboxSet = new Set();
     }
+    for (const row of rowsToWriteAll) {
+      const outboxId = String(row?.outbox_id || '');
+      if (Number(wr?.fail_count || 0) === 0 && outboxId && !failOutboxSet.has(outboxId) && !preFailPrimaryOutboxSet.has(outboxId)) {
+        markTimesheetComplete(row?.timesheet_id);
+      }
+    }
   }
 
   // Bulk-clear duplicate outbox rows ONLY if primary succeeded
@@ -157637,7 +157664,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
     }
   }
 
-  return { picked: lease.length, ok, fail, write: wr };
+  return { picked: lease.length, ok, fail, write: wr, completed_timesheet_ids: [...completedTimesheetIds].slice(0, 10000) };
 }
 
 

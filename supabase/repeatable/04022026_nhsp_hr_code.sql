@@ -655,12 +655,14 @@ declare
   v_total int := 0;
   v_ready int := 0;
   v_next_attempt_at_min timestamptz := null;
+  v_latest_created_at timestamptz := null;
 begin
   if p_timesheet_ids is null or array_length(p_timesheet_ids, 1) is null then
     return jsonb_build_object(
       'total', 0,
       'ready', 0,
       'next_attempt_at_min', null,
+      'latest_created_at', null,
       'now', v_now
     );
   end if;
@@ -676,17 +678,20 @@ begin
   select
     count(*)::int as total,
     coalesce(sum(case when (o.next_attempt_at is null or o.next_attempt_at <= v_now) then 1 else 0 end), 0)::int as ready,
-    min(o.next_attempt_at) filter (where o.next_attempt_at is not null and o.next_attempt_at > v_now) as next_attempt_at_min
+    min(o.next_attempt_at) filter (where o.next_attempt_at is not null and o.next_attempt_at > v_now) as next_attempt_at_min,
+    max(o.created_at) as latest_created_at
   into
     v_total,
     v_ready,
-    v_next_attempt_at_min
+    v_next_attempt_at_min,
+    v_latest_created_at
   from o;
 
   return jsonb_build_object(
     'total', coalesce(v_total, 0),
     'ready', coalesce(v_ready, 0),
     'next_attempt_at_min', v_next_attempt_at_min,
+    'latest_created_at', v_latest_created_at,
     'now', v_now
   );
 end;

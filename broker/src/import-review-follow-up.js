@@ -105,6 +105,7 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
   }
 
   return async function runImportReviewPostCommit(env, details = {}) {
+    const followUpStartedAtMs = Date.now();
     const statusRaw = await sbRpc(env, 'import_review_apply_status_get_v1', {
       p_import_id: details.importId,
       p_operation_id: details.operationId,
@@ -218,13 +219,17 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
       } else {
         let pendingTotal = affectedTimesheetIds.length;
         let failedCount = 0;
+        const completedTimesheetIds = new Set();
         try {
           for (let loop = 0; loop < 10; loop += 1) {
             const run = await runTsfinWorkerOnce(env, {
-              limit: Math.min(50, affectedTimesheetIds.length),
+              limit: 50,
               onlyTimesheetIds: affectedTimesheetIds
             });
             failedCount += Number(run?.fail || 0);
+            for (const timesheetId of uniqueBoundedStrings(run?.completed_timesheet_ids)) {
+              completedTimesheetIds.add(timesheetId.toLowerCase());
+            }
 
             const summaryRaw = await sbRpc(env, 'tsfin_outbox_pending_summary', {
               p_timesheet_ids: affectedTimesheetIds
@@ -232,6 +237,13 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
             const summary = unwrapRpcJsonb(summaryRaw, 'tsfin_outbox_pending_summary') || {};
             pendingTotal = Number(summary.total || 0);
             if (!Number.isFinite(pendingTotal)) pendingTotal = affectedTimesheetIds.length;
+            const allTargetsCompleted = affectedTimesheetIds.every((timesheetId) => completedTimesheetIds.has(timesheetId.toLowerCase()));
+            const latestCreatedAtMs = Date.parse(String(summary.latest_created_at || ''));
+            const noNewerPendingWork = !Number.isFinite(latestCreatedAtMs) || latestCreatedAtMs <= followUpStartedAtMs;
+            if (allTargetsCompleted && failedCount === 0 && noNewerPendingWork) {
+              pendingTotal = 0;
+              break;
+            }
             if (pendingTotal === 0 || Number(run?.picked || 0) === 0) break;
           }
 

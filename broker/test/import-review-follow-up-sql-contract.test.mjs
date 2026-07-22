@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const lifecycle = readFileSync(new URL('../../supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql', import.meta.url), 'utf8');
 const retirements = readFileSync(new URL('../../supabase/repeatable/21072026_1820_99_import_review_hard_cutover_retirements.sql', import.meta.url), 'utf8');
+const tsfinSummary = readFileSync(new URL('../../supabase/repeatable/04022026_nhsp_hr_code.sql', import.meta.url), 'utf8');
 
 function functionBody(source, name) {
   const marker = `create or replace function public.${name}(`;
@@ -54,6 +55,13 @@ test('read contracts expose bounded aggregate follow-up diagnostics for the fron
     assert.match(body, /follow_up_error_message/);
     assert.match(body, /follow_up_retry_count/);
   }
+});
+
+test('TSFIN pending summary exposes a freshness fence without changing its signature', () => {
+  const body = functionBody(tsfinSummary, 'tsfin_outbox_pending_summary');
+  assert.match(body, /p_timesheet_ids uuid\[\]/);
+  assert.match(body, /max\(o\.created_at\) as latest_created_at/);
+  assert.match(body, /'latest_created_at', v_latest_created_at/);
 });
 
 test('empty and exact-page review lists use typed cursors and emit a cursor only when more rows exist', () => {
