@@ -555,7 +555,7 @@ begin
     from classified c
     left join public.v_timesheets_daily_match ts on ts.timesheet_id=c.resolved_timesheet_id
   ), evidenced as (
-    select f.*,
+    select c.*,
       public._import_review_hash_v1(concat_ws('|','row-evidence-v1',c.source_row_key,c.staff_key,c.client_key,c.date_local,
         c.start_time_local,c.end_time_local,c.hours_worked,c.hr_request_id,c.resolved_candidate_id,c.resolved_client_id,
         c.resolved_contract_id,c.weekly_resolution_action,c.weekly_incoming_code,c.weekly_mapping_evidence,c.contract_rate_evidence,

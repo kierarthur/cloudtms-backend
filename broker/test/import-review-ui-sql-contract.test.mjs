@@ -72,6 +72,8 @@ test('weekly action classification consumes the established phase2 mapping autho
   assert.match(body, /weekly_mapping_evidence/);
   assert.match(body, /contract_rate_evidence/);
   assert.match(body, /import_authoritative/);
+  assert.match(body, /evidenced as\s*\(\s*select c\.\*,[\s\S]*?from facts c/);
+  assert.doesNotMatch(body, /evidenced as\s*\(\s*select f\.\*,[\s\S]*?from facts c/);
   assert.match(body, /when not coalesce\(f\.import_authoritative,false\) then 'NO_ACTION'/);
   assert.match(body, /Validate existing timesheet only/);
   assert.match(body, /and not coalesce\(m\.contract_rate_complete,false\) then 'CONTRACT_RATES_INCOMPLETE'/);
