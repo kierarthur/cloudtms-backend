@@ -376,10 +376,9 @@ begin
   limit 1;
 
   v_invoice_locked := coalesce(v_invoice_locked,false) or exists (
-    select 1 from public.invoice_lines il
-    join public.invoices i on i.id=il.invoice_id
+    select 1
+    from public.invoice_lines il
     where il.timesheet_id=p_timesheet_id
-      and (i.issued_at_utc is not null or upper(coalesce(i.status::text,''))<>'DRAFT')
   );
 
   v_active_draft := exists (
@@ -438,6 +437,68 @@ begin
     'processing_status',v_processing_status,
     'protected',v_active_draft or coalesce(v_paid,false) or coalesce(v_invoice_locked,false)
   );
+end
+$function$;
+
+create or replace function public._import_review_auto_authorise_targets_core_v1(
+  p_timesheet_ids uuid[],
+  p_source_system public.hr_source_enum,
+  p_validation_context boolean default false
+)
+returns uuid[]
+language plpgsql
+security definer
+set search_path to 'public', 'pg_temp'
+as $function$
+declare
+  v_source text:=upper(btrim(coalesce(p_source_system::text,'')));
+  v_result uuid[]:=array[]::uuid[];
+begin
+  if coalesce(cardinality(p_timesheet_ids),0)>100 then
+    raise exception 'IMPORT_REVIEW_AUTO_AUTHORISE_SCOPE_TOO_LARGE' using errcode='54000';
+  end if;
+  if v_source not in ('NHSP','HEALTHROSTER','HEALTHROSTER_DAILY') then
+    raise exception 'IMPORT_REVIEW_AUTO_AUTHORISE_SOURCE_INVALID' using errcode='22023';
+  end if;
+
+  select coalesce(array_agg(target.timesheet_id order by target.timesheet_id),array[]::uuid[])
+  into v_result
+  from (
+    select distinct t.timesheet_id
+    from unnest(coalesce(p_timesheet_ids,array[]::uuid[])) requested(timesheet_id)
+    join public.timesheets t
+      on t.timesheet_id=requested.timesheet_id
+     and t.is_current=true
+     and t.revoked_at is null
+    join public.contracts c on c.id=t.contract_id
+    cross join lateral (
+      select public._import_review_timesheet_protection_core_v1(t.timesheet_id) as value
+    ) protection
+    cross join lateral (
+      select public.import_auto_authorise_policy_resolve_v1(
+        p_source_system,c.client_id,c.id,coalesce(p_validation_context,false)
+      ) as value
+    ) policy
+    where t.authorised_at_server is null
+      -- Import correction reversals/replacements are mandatory-authorisation
+      -- targets owned by the transactional route, not policy-controlled new
+      -- timesheets.  Keep the configuration helper strictly ordinary-only.
+      and not (coalesce(t.is_adjustment,false) and t.correction_id is not null)
+      and not exists (
+        select 1 from public.timesheets_financials tf
+        where tf.timesheet_id=t.timesheet_id and tf.is_current=true
+          and tf.authorised_at_utc is not null
+      )
+      and not exists (
+        select 1 from public.contract_weeks cw
+        where cw.timesheet_id=t.timesheet_id and upper(coalesce(cw.status::text,''))='AUTHORISED'
+      )
+      and coalesce((protection.value->>'paid')::boolean,false)=false
+      and coalesce((protection.value->>'invoice_locked')::boolean,false)=false
+      and coalesce((protection.value->>'active_pay_draft')::boolean,false)=false
+      and coalesce((policy.value->>'effective_value')::boolean,false)=true
+  ) target;
+  return v_result;
 end
 $function$;
 
@@ -1493,6 +1554,7 @@ revoke all on function public._import_review_assert_actor_v1(uuid) from public,a
 revoke all on function public._import_review_ready_action_ids_core_v1(uuid) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_validate_ui_state_v1(jsonb) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_timesheet_protection_core_v1(uuid) from public,anon,authenticated,service_role;
+revoke all on function public._import_review_auto_authorise_targets_core_v1(uuid[],public.hr_source_enum,boolean) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_action_catalog_core_v1(uuid,integer,integer) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_refresh_core_v1(uuid,bigint,uuid,integer) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_apply_envelope_core_v1(uuid) from public,anon,authenticated,service_role;

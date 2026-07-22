@@ -185,11 +185,13 @@ BEGIN
     v_resolution_source := 'GLOBAL_FALLBACK_CLIENT_SETTING_MISSING';
   END IF;
 
+  -- Exact-match HealthRoster validation uses the same explicit source policy
+  -- hierarchy as import-authoritative processing.  The caller owns the
+  -- additional match/reference gates; validation context must not bypass a
+  -- contract override or client setting with a separate global switch.
+  v_effective_value := v_effective_import_value;
   IF COALESCE(p_validation_context, false) THEN
-    v_effective_value := v_global.auto_authorise_on_validation;
-    v_resolution_source := 'GLOBAL_VALIDATION_SETTING';
-  ELSE
-    v_effective_value := v_effective_import_value;
+    v_resolution_source := v_resolution_source || '_VALIDATION_EXACT_MATCH';
   END IF;
 
   v_policy_json := jsonb_strip_nulls(

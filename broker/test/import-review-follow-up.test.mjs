@@ -10,6 +10,7 @@ const IMPORT_ID = '20000000-0000-4000-8000-000000000002';
 const OPERATION_ID = '30000000-0000-4000-8000-000000000003';
 const ACTOR_ID = '10000000-0000-4000-8000-000000000001';
 const TIMESHEET_ID = '60000000-0000-4000-8000-000000000006';
+const AUTO_AUTHORISE_TIMESHEET_ID = '70000000-0000-4000-8000-000000000007';
 const ACTION_ID = 'a'.repeat(64);
 const HASH = 'b'.repeat(64);
 
@@ -41,6 +42,8 @@ function createScenario(storedResponse, options = {}) {
     }
     if (name === 'tsfin_outbox_pending_summary') return { total: options.tsfinPendingTotal || 0 };
     if (name === 'timesheet_authorise_bulk_atomic') {
+      const requestedIds = (Array.isArray(args.p_items) ? args.p_items : [])
+        .map((item) => item.timesheet_id);
       if (options.reauthoriseFails) {
         return {
           ok: true,
@@ -52,8 +55,8 @@ function createScenario(storedResponse, options = {}) {
       return {
         ok: true,
         all_success: true,
-        success_count: 1,
-        results: [{ requested_timesheet_id: TIMESHEET_ID, success: true }]
+        success_count: requestedIds.length,
+        results: requestedIds.map((timesheetId) => ({ requested_timesheet_id: timesheetId, success: true }))
       };
     }
     if (name === 'import_review_follow_up_component_update_v1') {
@@ -192,6 +195,26 @@ test('authorised source timesheet is restored only after TSFIN completes', async
   assert.equal(names.some((name) => name.endsWith('_apply_transactional')), false);
 });
 
+test('configured auto-authorise targets and lifecycle restoration targets share one bounded post-TSFIN call', async () => {
+  const current = createScenario({
+    post_commit_email_action_ids: [],
+    affected_timesheet_ids: [TIMESHEET_ID, AUTO_AUTHORISE_TIMESHEET_ID],
+    post_commit_reauthorise_timesheet_ids: [TIMESHEET_ID],
+    auto_authorise_timesheet_ids: [TIMESHEET_ID, AUTO_AUTHORISE_TIMESHEET_ID],
+    review_email_follow_up_status: 'NOT_REQUIRED',
+    review_tsfin_follow_up_status: 'PENDING'
+  });
+
+  await current.runner({}, details());
+
+  const authorise = current.calls.find((call) => call.name === 'timesheet_authorise_bulk_atomic');
+  assert.deepEqual(authorise.args.p_items, [
+    { timesheet_id: TIMESHEET_ID, expected_timesheet_id: TIMESHEET_ID },
+    { timesheet_id: AUTO_AUTHORISE_TIMESHEET_ID, expected_timesheet_id: AUTO_AUTHORISE_TIMESHEET_ID }
+  ]);
+  assert.equal(current.calls.some((call) => call.name.endsWith('_apply_transactional')), false);
+});
+
 test('reauthorisation failure is retryable and never repeats source apply', async () => {
   const current = createScenario({
     post_commit_email_action_ids: [],
@@ -205,7 +228,7 @@ test('reauthorisation failure is retryable and never repeats source apply', asyn
   const failure = current.calls.find((call) => call.name === 'import_review_follow_up_component_update_v1'
     && call.args.p_component === 'TSFIN');
   assert.equal(failure.args.p_new_component_status, 'FAILED_RETRYABLE');
-  assert.equal(failure.args.p_error_code, 'TSFIN_REAUTHORISE_FAILED');
+  assert.equal(failure.args.p_error_code, 'TSFIN_AUTHORISE_FAILED');
   assert.equal(current.calls.some((call) => call.name.endsWith('_apply_transactional')), false);
 });
 

@@ -86,6 +86,12 @@ declare
 
   -- affected timesheets for TSFIN drain (MODE_B + MODE_A validation changes)
   v_affected_timesheet_ids uuid[] := array[]::uuid[];
+  -- MODE_B targets are ordinary authoritative work.  MODE_A targets are kept
+  -- in a separate array and enter auto-authorisation only after the stricter
+  -- complete whole-timesheet validation gate below.
+  v_authoritative_affected_timesheet_ids uuid[] := array[]::uuid[];
+  v_validation_auto_authorise_timesheet_ids uuid[] := array[]::uuid[];
+  v_auto_authorise_timesheet_ids uuid[] := array[]::uuid[];
 
   -- policy A replacement-day
   v_selected_cancel_shift_id_set text[] := array[]::text[];
@@ -2099,6 +2105,86 @@ begin
     and vr.has_mismatch is true
     and vr.timesheet_id is not null;
 
+  -- A validation-only Weekly timesheet is eligible for configured
+  -- auto-authorisation only when the immutable coverage says omissions are
+  -- meaningful and every segment on the whole timesheet has one exact
+  -- HealthRoster match whose reference has been durably written.  Processing
+  -- one selected row, one day or one matching segment can never authorise the
+  -- rest of the timesheet by implication.
+  select coalesce(array_agg(distinct vr.timesheet_id order by vr.timesheet_id),array[]::uuid[])
+  into v_validation_auto_authorise_timesheet_ids
+  from tmp_val_rows vr
+  join tmp_val_mode vm
+    on vm.timesheet_id=vr.timesheet_id
+   and vm.mode='MODE_A'
+  join tmp_val_upsert vu
+    on vu.timesheet_id=vr.timesheet_id
+  join public.timesheets t
+    on t.timesheet_id=vr.timesheet_id
+   and t.is_current=true
+   and t.revoked_at is null
+  join public.hr_imports hi
+    on hi.id=p_import_id
+  left join public.timesheets_financials tf
+    on tf.timesheet_id=t.timesheet_id
+   and tf.is_current=true
+  cross join lateral (
+    select case
+      when jsonb_typeof(t.actual_schedule_json)='array'
+       and jsonb_array_length(t.actual_schedule_json)>0
+        then jsonb_array_length(t.actual_schedule_json)
+      when jsonb_typeof(tf.invoice_breakdown_json)='object'
+       and jsonb_typeof(tf.invoice_breakdown_json->'segments')='array'
+        then jsonb_array_length(tf.invoice_breakdown_json->'segments')
+      else 0
+    end as segment_count
+  ) whole_timesheet
+  where vu.new_status='VALIDATION_OK'::public.validation_status_enum
+    and vu.new_pre_validated=true
+    and hi.coverage_mode in ('COMPLETE_ALL','COMPLETE_SELECTED_CANDIDATES')
+    and (
+      hi.coverage_mode='COMPLETE_ALL'
+      or exists (
+        select 1
+        from public.import_review_scope_candidates scoped_candidate
+        where scoped_candidate.import_id=p_import_id
+          and scoped_candidate.candidate_id=vr.candidate_id
+      )
+    )
+    and jsonb_typeof(vr.row_json->'comparisons')='array'
+    and jsonb_array_length(vr.row_json->'comparisons')>0
+    and whole_timesheet.segment_count=jsonb_array_length(vr.row_json->'comparisons')
+    and not exists (
+      select 1
+      from jsonb_array_elements(vr.row_json->'comparisons') comparison(value)
+      where not (
+        (
+          upper(coalesce(comparison.value->>'match_status','')) in ('MATCH','MATCHED','OK','PASS')
+          or lower(coalesce(comparison.value->>'match','false')) in ('true','1')
+        )
+        and lower(coalesce(comparison.value->>'time_match','false')) in ('true','1')
+        and nullif(btrim(comparison.value->>'ref_after'),'') is not null
+        and nullif(btrim(comparison.value->>'work_date'),'') is not null
+        and nullif(btrim(comparison.value->>'timesheet_start'),'') is not null
+        and nullif(btrim(comparison.value->>'timesheet_end'),'') is not null
+        and exists (
+          select 1
+          from public.nhsp_shifts matched_shift
+          where matched_shift.source_system='HEALTHROSTER'::public.hr_source_enum
+            and matched_shift.cancelled_at_utc is null
+            and matched_shift.timesheet_id=vr.timesheet_id
+            and matched_shift.work_date=(comparison.value->>'work_date')::date
+            and to_char((date_trunc('minute',matched_shift.start_utc) at time zone 'Europe/London'),'HH24:MI')=
+              comparison.value->>'timesheet_start'
+            and to_char((date_trunc('minute',matched_shift.end_utc) at time zone 'Europe/London'),'HH24:MI')=
+              comparison.value->>'timesheet_end'
+            and coalesce(matched_shift.break_mins,0)=coalesce(nullif(btrim(comparison.value->>'timesheet_break_mins'),'')::integer,0)
+            and matched_shift.ref_num=comparison.value->>'ref_after'
+            and matched_shift.hr_request_id=comparison.value->>'ref_after'
+        )
+      )
+    );
+
   -- Query emails are intentionally outside the source transaction. The
   -- database returns selected action IDs; the Worker later calls the
   -- idempotent outbox-backed enqueue RPC after source commit.
@@ -2129,10 +2215,78 @@ begin
   -- ─────────────────────────────────────────────
   -- 11) Compute affected_timesheet_ids (MODE_B work + MODE_A validation changes)
   -- ─────────────────────────────────────────────
+  -- Build the ordinary authoritative MODE_B scope separately from the
+  -- whole-timesheet MODE_A validation scope calculated above.
+  -- active imported rows, protected amendment correction pairs and
+  -- cancellation/reversal results.  MODE_A validation/reference work is
+  -- deliberately excluded even though it remains part of the TSFIN refresh.
+  select coalesce(array_agg(distinct target.timesheet_id order by target.timesheet_id),array[]::uuid[])
+  into v_authoritative_affected_timesheet_ids
+  from (
+    select ns.timesheet_id
+    from public.nhsp_shifts ns
+    where ns.source_system='HEALTHROSTER'::public.hr_source_enum
+      and ns.client_id=v_import_client_id
+      and ns.cancelled_at_utc is null
+      and ns.external_row_key=any(coalesce(v_force_keys_final,array[]::text[]))
+      and ns.timesheet_id is not null
+    union all
+    select phase3_created.value::uuid
+    from jsonb_array_elements_text(coalesce(v_phase3_result->'created_timesheet_ids','[]'::jsonb)) phase3_created(value)
+    union all
+    select phase3_updated.value::uuid
+    from jsonb_array_elements_text(coalesce(v_phase3_result->'updated_timesheet_ids','[]'::jsonb)) phase3_updated(value)
+    union all
+    select cancelled.value::uuid
+    from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids','[]'::jsonb)) cancelled(value)
+  ) target
+  where target.timesheet_id is not null;
+
+  insert into tmp_aff_ts(timesheet_id)
+  select authoritative.timesheet_id
+  from unnest(coalesce(v_authoritative_affected_timesheet_ids,array[]::uuid[])) authoritative(timesheet_id)
+  where authoritative.timesheet_id is not null
+  on conflict do nothing;
+
   select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
   into v_affected_timesheet_ids
   from tmp_aff_ts a
   where a.timesheet_id is not null;
+
+  -- Restore every previously-authorised mutable source and authorise every
+  -- financial correction member regardless of the ordinary setting.  A
+  -- changed-hours reversal/replacement pair therefore moves together, while
+  -- a true cancellation contributes its reversal only.
+  select coalesce(array_agg(distinct required.timesheet_id order by required.timesheet_id),array[]::uuid[])
+  into v_reauthorise_timesheet_ids
+  from (
+    select existing.timesheet_id
+    from unnest(coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])) existing(timesheet_id)
+    union all
+    select correction.timesheet_id
+    from unnest(coalesce(v_authoritative_affected_timesheet_ids,array[]::uuid[])) affected(timesheet_id)
+    join public.timesheets correction on correction.timesheet_id=affected.timesheet_id
+    where correction.is_current=true
+      and correction.revoked_at is null
+      and coalesce(correction.is_adjustment,false)
+      and correction.correction_id is not null
+  ) required
+  where required.timesheet_id is not null;
+
+  v_auto_authorise_timesheet_ids:=public._import_review_auto_authorise_targets_core_v1(
+    v_authoritative_affected_timesheet_ids,'HEALTHROSTER'::public.hr_source_enum,false
+  );
+
+  select coalesce(array_agg(distinct eligible.timesheet_id order by eligible.timesheet_id),array[]::uuid[])
+  into v_auto_authorise_timesheet_ids
+  from (
+    select unnest(coalesce(v_auto_authorise_timesheet_ids,array[]::uuid[])) as timesheet_id
+    union all
+    select unnest(public._import_review_auto_authorise_targets_core_v1(
+      v_validation_auto_authorise_timesheet_ids,'HEALTHROSTER'::public.hr_source_enum,true
+    )) as timesheet_id
+  ) eligible
+  where eligible.timesheet_id is not null;
 
   if array_length(v_affected_timesheet_ids, 1) is not null then
     perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
@@ -2216,10 +2370,12 @@ begin
       'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[])),
       'mode_a_ref_cleared_count', v_mode_a_ref_cleared_count,
       'mode_a_ref_set_count', v_mode_a_ref_set_count,
-      'ref_updated_timesheet_ids', to_jsonb(coalesce(v_ref_updated_timesheet_ids, array[]::uuid[]))
+      'ref_updated_timesheet_ids', to_jsonb(coalesce(v_ref_updated_timesheet_ids, array[]::uuid[])),
+      'whole_timesheet_auto_authorise_eligible_ids',to_jsonb(coalesce(v_validation_auto_authorise_timesheet_ids,array[]::uuid[]))
     ),
     'email_jobs', v_email_jobs,
     'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
+    'auto_authorise_timesheet_ids',to_jsonb(coalesce(v_auto_authorise_timesheet_ids,array[]::uuid[])),
     'post_commit_reauthorise_timesheet_ids',to_jsonb(coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])),
     'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[])),
     'ref_updated_timesheet_ids', to_jsonb(coalesce(v_ref_updated_timesheet_ids, array[]::uuid[])),

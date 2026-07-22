@@ -42,6 +42,7 @@ declare
   v_changed_preflight jsonb := null;
   v_changed_timesheet_ids uuid[] := array[]::uuid[];
   v_reauthorise_timesheet_ids uuid[] := array[]::uuid[];
+  v_auto_authorise_timesheet_ids uuid[] := array[]::uuid[];
   v_lifecycle_items jsonb := '[]'::jsonb;
   v_unauthorise_result jsonb := null;
   v_phase1_result jsonb := null;
@@ -1424,6 +1425,30 @@ begin
   from tmp_aff_ts a
   where a.timesheet_id is not null;
 
+  -- Authorised-state restoration and imported financial correction members
+  -- are mandatory regardless of the ordinary auto-authorise setting.  This
+  -- keeps a reversal/replacement unit authorised together and also covers a
+  -- reversal-only cancellation without fabricating a replacement.
+  select coalesce(array_agg(distinct required.timesheet_id order by required.timesheet_id),array[]::uuid[])
+  into v_reauthorise_timesheet_ids
+  from (
+    select existing.timesheet_id
+    from unnest(coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])) existing(timesheet_id)
+    union all
+    select correction.timesheet_id
+    from unnest(coalesce(v_affected_timesheet_ids,array[]::uuid[])) affected(timesheet_id)
+    join public.timesheets correction on correction.timesheet_id=affected.timesheet_id
+    where correction.is_current=true
+      and correction.revoked_at is null
+      and coalesce(correction.is_adjustment,false)
+      and correction.correction_id is not null
+  ) required
+  where required.timesheet_id is not null;
+
+  v_auto_authorise_timesheet_ids:=public._import_review_auto_authorise_targets_core_v1(
+    v_affected_timesheet_ids,'NHSP'::public.hr_source_enum,false
+  );
+
   if array_length(v_affected_timesheet_ids, 1) is not null then
     perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
   end if;
@@ -1545,6 +1570,7 @@ begin
       'cancellations', v_cancellations_result
     ),
     'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
+    'auto_authorise_timesheet_ids',to_jsonb(coalesce(v_auto_authorise_timesheet_ids,array[]::uuid[])),
     'post_commit_reauthorise_timesheet_ids',to_jsonb(coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])),
     'post_commit_email_action_ids','[]'::jsonb,
     'review_operation_id',v_review_operation_id

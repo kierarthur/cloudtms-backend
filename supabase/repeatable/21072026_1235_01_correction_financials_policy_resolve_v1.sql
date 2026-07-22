@@ -185,12 +185,24 @@ begin
       using errcode = 'P0001';
   end if;
   if v_action = 'CHANGED_HOURS'
-     and v_shift.latest_import_id is distinct from p_import_id then
+     and not exists (
+       select 1
+       from public.hr_rows source_row
+       where source_row.import_id = p_import_id
+         and source_row.external_row_key = v_source_row_key
+     ) then
+    -- The source shift legitimately belongs to the previously applied import
+    -- until this new immutable revision commits.  Requiring latest_import_id to
+    -- equal the new import before that commit rejects every protected amendment.
+    -- Prove the new evidence instead: the exact canonical source identity must
+    -- be present in this import.  The review guard separately binds the selected
+    -- action, evidence fingerprint and request hash to this same immutable row.
     raise exception 'CORRECTION_POLICY_CHANGED_HOURS_IMPORT_EVIDENCE_MISMATCH'
       using errcode = 'P0001',
             detail = jsonb_build_object(
               'source_shift_id', v_shift.id,
               'expected_import_id', p_import_id,
+              'source_row_key', v_source_row_key,
               'actual_latest_import_id', v_shift.latest_import_id
             )::text;
   end if;
@@ -1261,7 +1273,18 @@ begin
       using errcode='P0001';
   end if;
   if upper(p_correction_action)='CHANGED_HOURS'
-     and v_source_shift.latest_import_id is distinct from v_operation.import_id then
+     and not exists (
+       select 1
+       from public.hr_rows source_row
+       where source_row.import_id = v_operation.import_id
+         and source_row.external_row_key = p_source_row_key
+     ) then
+    -- Phase 3 resolves the frozen correction envelope before it replaces the
+    -- source shift truth.  At this point latest_import_id must still identify
+    -- the preceding committed revision.  Canonicality is instead proven by
+    -- the fingerprinted operation contract above plus the exact immutable row
+    -- in the operation's import; cancellation keeps its separate committed
+    -- cancellation proof below.
     raise exception 'CORRECTION_POLICY_CHANGED_HOURS_ACTION_NOT_CANONICAL'
       using errcode='P0001';
   end if;

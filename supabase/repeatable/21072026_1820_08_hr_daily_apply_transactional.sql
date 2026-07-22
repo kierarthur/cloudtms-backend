@@ -14,6 +14,7 @@ declare
   v_src public.hr_source_enum;
   v_import_client_id uuid;
   v_validation_policy jsonb := '{}'::jsonb;
+  v_validation_eligible_timesheet_ids uuid[] := array[]::uuid[];
   v_auto_authorise_timesheet_ids uuid[] := array[]::uuid[];
 
   v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
@@ -255,23 +256,6 @@ begin
 
   get diagnostics v_validations_upserted = row_count;
 
-  select public.import_auto_authorise_policy_resolve_v1(
-    p_source_system := 'HEALTHROSTER_DAILY'::public.hr_source_enum,
-    p_client_id := v_import_client_id,
-    p_contract_id := null,
-    p_validation_context := true
-  ) into v_validation_policy;
-
-  if coalesce((v_validation_policy->>'effective_value')::boolean,false) then
-    select coalesce(array_agg(distinct u.timesheet_id order by u.timesheet_id), array[]::uuid[])
-      into v_auto_authorise_timesheet_ids
-    from tmp_val_upsert u
-    join public.timesheets t on t.timesheet_id=u.timesheet_id and t.is_current=true
-    where u.new_status='VALIDATION_OK'::public.validation_status_enum
-      and u.new_pre_validated=true
-      and t.authorised_at_server is null;
-  end if;
-
   -- 4) DAILY reference truth:
   -- When VALIDATION_OK and chosen_hr_request_id present, set timesheets.reference_number
   -- ✅ Must NOT update invoiced/paid/locked timesheets
@@ -414,6 +398,82 @@ begin
     select unnest(coalesce(v_ref_cleared_timesheet_ids, array[]::uuid[])) as tsid
   ) as x
   where x.tsid is not null;
+
+  -- Exact-match Daily validation can authorise only after the imported
+  -- reference is durably present.  Every selected row for the timesheet must
+  -- be validation-OK, have one unambiguous HealthRoster reference, and leave
+  -- the current DAILY record carrying that same reference.  The shared helper
+  -- then resolves contract override -> client setting -> global default for
+  -- each timesheet and applies the frozen-artifact safety gates.
+  select coalesce(array_agg(distinct u.timesheet_id order by u.timesheet_id),array[]::uuid[])
+  into v_validation_eligible_timesheet_ids
+  from tmp_val_upsert u
+  join public.timesheets t
+    on t.timesheet_id=u.timesheet_id
+   and t.is_current=true
+   and t.revoked_at is null
+  join public.hr_imports hi
+    on hi.id=p_import_id
+  cross join lateral (
+    select case
+      when jsonb_typeof(t.actual_schedule_json)='array'
+       and jsonb_array_length(t.actual_schedule_json)>0
+        then jsonb_array_length(t.actual_schedule_json)
+      else 1
+    end as segment_count
+  ) whole_timesheet
+  where u.new_status='VALIDATION_OK'::public.validation_status_enum
+    and u.new_pre_validated=true
+    and u.new_hr_request_id is not null
+    and upper(coalesce(t.sheet_scope::text,''))='DAILY'
+    and t.reference_number=u.new_hr_request_id
+    and hi.coverage_mode in ('COMPLETE_ALL','COMPLETE_SELECTED_CANDIDATES')
+    and (
+      hi.coverage_mode='COMPLETE_ALL'
+      or exists (
+        select 1
+        from public.import_review_scope_candidates scoped_candidate
+        join public.contracts scoped_contract
+          on scoped_contract.candidate_id=scoped_candidate.candidate_id
+        where scoped_candidate.import_id=p_import_id
+          and scoped_contract.id=t.contract_id
+      )
+    )
+    and whole_timesheet.segment_count=(
+      select count(*)::integer
+      from tmp_val_raw covered_row
+      where covered_row.timesheet_id=u.timesheet_id
+    )
+    and not exists (
+      select 1
+      from tmp_val_raw raw_row
+      where raw_row.timesheet_id=u.timesheet_id
+        and (
+          upper(coalesce(raw_row.status_text,'')) not in ('VALIDATION_OK','OK','PASS','VALID')
+          or raw_row.hr_request_id is null
+        )
+    )
+    and 1=(
+      select count(distinct raw_ref.hr_request_id)
+      from tmp_val_raw raw_ref
+      where raw_ref.timesheet_id=u.timesheet_id
+        and raw_ref.hr_request_id is not null
+    );
+
+  v_auto_authorise_timesheet_ids:=public._import_review_auto_authorise_targets_core_v1(
+    v_validation_eligible_timesheet_ids,'HEALTHROSTER_DAILY'::public.hr_source_enum,true
+  );
+
+  -- Each target is resolved independently inside the owner-only helper so a
+  -- contract override cannot be hidden by a client-only summary.  Return only
+  -- bounded, non-authoritative diagnostics here.
+  v_validation_policy:=jsonb_build_object(
+    'source_system','HEALTHROSTER_DAILY',
+    'validation_context',true,
+    'hierarchy','CONTRACT_OVERRIDE_CLIENT_GLOBAL',
+    'whole_timesheet_eligible_count',cardinality(v_validation_eligible_timesheet_ids),
+    'auto_authorise_target_count',cardinality(v_auto_authorise_timesheet_ids)
+  );
 
   -- Query emails are intentionally outside the source transaction. The
   -- database returns selected action IDs; the Worker later calls the

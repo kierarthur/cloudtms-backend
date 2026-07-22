@@ -9,9 +9,13 @@ const coreSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_00
 const dailySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql', import.meta.url), 'utf8');
 const weeklyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql', import.meta.url), 'utf8');
 const nhspApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql', import.meta.url), 'utf8');
+const dailyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql', import.meta.url), 'utf8');
+const correctionPolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_01_correction_financials_policy_resolve_v1.sql', import.meta.url), 'utf8');
+const autoAuthorisePolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_02_import_auto_authorise_policy_resolve_v1.sql', import.meta.url), 'utf8');
 const weeklyPreviewSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql', import.meta.url), 'utf8');
 const retirementSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_99_import_review_hard_cutover_retirements.sql', import.meta.url), 'utf8');
 const incrementalMigration = readFileSync(new URL('../../supabase/migrations/22072026_1700_import_review_incremental_outcomes.sql', import.meta.url), 'utf8');
+const autoAuthoriseHierarchyMigration = readFileSync(new URL('../../supabase/migrations/22072026_2041_import_auto_authorise_hierarchy.sql', import.meta.url), 'utf8');
 
 function functionBody(source, name) {
   const marker = `create or replace function public.${name}(`;
@@ -155,6 +159,72 @@ test('one owner-only current-setting authority core governs catalogue and Weekly
   assert.match(apply, /case a\.authority_mode when 'AUTHORITATIVE' then 'MODE_B'/);
   assert.match(apply, /case aval\.authority_mode when 'VALIDATION_ONLY' then 'MODE_A'/);
   assert.doesNotMatch(apply, /effective_no_timesheet_required/);
+});
+
+test('generated draft invoice lines are protected correction evidence in preview and apply', () => {
+  const protection = functionBody(coreSql, '_import_review_timesheet_protection_core_v1');
+  const envelope = functionBody(coreSql, '_import_review_apply_envelope_core_v1');
+  assert.match(protection, /from public\.invoice_lines il\s+where il\.timesheet_id=p_timesheet_id/);
+  assert.doesNotMatch(protection, /issued_at_utc is not null/);
+  assert.doesNotMatch(protection, /status::text[^\n]*DRAFT/);
+  assert.match(envelope, /pr\.protection->>'invoice_locked'/);
+  assert.match(envelope, /'REVERSAL_REPLACEMENT'/);
+});
+
+test('protected amendments prove the new immutable import row before either Weekly route commits', () => {
+  const policy = functionBody(correctionPolicySql, '_ctms_correction_financials_policy_build_v2');
+  const resolver = functionBody(correctionPolicySql, 'correction_financials_policy_resolve_v1');
+  assert.match(policy, /source_row\.import_id\s*=\s*p_import_id/);
+  assert.match(policy, /source_row\.external_row_key\s*=\s*v_source_row_key/);
+  assert.doesNotMatch(policy, /v_shift\.latest_import_id\s+is\s+distinct\s+from\s+p_import_id/);
+  assert.match(resolver, /source_row\.import_id\s*=\s*v_operation\.import_id/);
+  assert.match(resolver, /source_row\.external_row_key\s*=\s*p_source_row_key/);
+  assert.doesNotMatch(resolver, /v_source_shift\.latest_import_id\s+is\s+distinct\s+from\s*v_operation\.import_id/);
+  assert.match(nhspApplySql, /import_review_apply_guard_v1/);
+  assert.match(weeklyApplySql, /import_review_apply_guard_v1/);
+});
+
+test('one complete contract-client-global hierarchy governs HealthRoster and NHSP auto-authorisation', () => {
+  const resolver = functionBody(autoAuthorisePolicySql, 'import_auto_authorise_policy_resolve_v1');
+  assert.match(autoAuthoriseHierarchyMigration, /add column if not exists healthroster_import_auto_authorise_default/);
+  assert.match(autoAuthoriseHierarchyMigration, /add column if not exists nhsp_import_auto_authorise_default/);
+  assert.match(autoAuthoriseHierarchyMigration, /add column if not exists healthroster_import_auto_authorise_override/);
+  assert.match(autoAuthoriseHierarchyMigration, /add column if not exists nhsp_import_auto_authorise_override/);
+  assert.match(resolver, /IF v_contract_override_value IS NOT NULL THEN/);
+  assert.match(resolver, /ELSIF v_client_setting_found THEN/);
+  assert.match(resolver, /GLOBAL_FALLBACK_CLIENT_SETTING_MISSING/);
+  assert.match(resolver, /v_effective_value := v_effective_import_value/);
+  assert.doesNotMatch(resolver, /v_effective_value := v_global\.auto_authorise_on_validation/);
+});
+
+test('configured auto-authorisation keeps mandatory corrections separate and admits only whole-timesheet validation matches', () => {
+  const helper = functionBody(coreSql, '_import_review_auto_authorise_targets_core_v1');
+  assert.match(helper, /import_auto_authorise_policy_resolve_v1/);
+  assert.match(helper, /_import_review_timesheet_protection_core_v1/);
+  assert.match(helper, /invoice_locked/);
+  assert.match(helper, /active_pay_draft/);
+  assert.match(helper, /is_adjustment,false[\s\S]*?correction_id is not null/);
+  assert.match(nhspApplySql, /_import_review_auto_authorise_targets_core_v1\([\s\S]*?'NHSP'::public\.hr_source_enum,false/);
+  assert.match(nhspApplySql, /'auto_authorise_timesheet_ids'/);
+  assert.match(nhspApplySql, /correction\.correction_id is not null[\s\S]*?v_auto_authorise_timesheet_ids/);
+  assert.match(weeklyApplySql, /v_authoritative_affected_timesheet_ids/);
+  assert.match(weeklyApplySql, /_import_review_auto_authorise_targets_core_v1\([\s\S]*?'HEALTHROSTER'::public\.hr_source_enum,false/);
+  assert.match(weeklyApplySql, /v_validation_auto_authorise_timesheet_ids/);
+  assert.match(weeklyApplySql, /hi\.coverage_mode in \('COMPLETE_ALL','COMPLETE_SELECTED_CANDIDATES'\)/);
+  assert.match(weeklyApplySql, /whole_timesheet\.segment_count=jsonb_array_length\(vr\.row_json->'comparisons'\)/);
+  assert.match(weeklyApplySql, /time_match','false'/);
+  assert.match(weeklyApplySql, /matched_shift\.ref_num=comparison\.value->>'ref_after'/);
+  assert.match(weeklyApplySql, /'HEALTHROSTER'::public\.hr_source_enum,true/);
+  assert.doesNotMatch(weeklyApplySql, /hi\.coverage_mode='PARTIAL'[\s\S]*?v_validation_auto_authorise_timesheet_ids/);
+  assert.match(weeklyApplySql, /correction\.correction_id is not null[\s\S]*?v_auto_authorise_timesheet_ids/);
+  assert.match(weeklyApplySql, /'auto_authorise_timesheet_ids'/);
+
+  assert.match(dailyApplySql, /v_validation_eligible_timesheet_ids/);
+  assert.match(dailyApplySql, /hi\.coverage_mode in \('COMPLETE_ALL','COMPLETE_SELECTED_CANDIDATES'\)/);
+  assert.match(dailyApplySql, /whole_timesheet\.segment_count=\(\s*select count\(\*\)::integer\s*from tmp_val_raw/);
+  assert.match(dailyApplySql, /not exists \([\s\S]*?tmp_val_raw raw_row[\s\S]*?VALIDATION_OK/);
+  assert.match(dailyApplySql, /t\.reference_number=u\.new_hr_request_id/);
+  assert.match(dailyApplySql, /'HEALTHROSTER_DAILY'::public\.hr_source_enum,true/);
 });
 
 test('overlap preflight is global for NHSP and client/route aware for HealthRoster', () => {

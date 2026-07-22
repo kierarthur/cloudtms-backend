@@ -119,13 +119,21 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
 
     const emailActionIds = uniqueBoundedStrings(storedResponse.post_commit_email_action_ids);
     const affectedTimesheetIds = uniqueBoundedStrings(storedResponse.affected_timesheet_ids);
-    const reauthoriseTimesheetIds = uniqueBoundedStrings(
-      storedResponse.post_commit_reauthorise_timesheet_ids,
+    const reauthoriseTargets = Array.isArray(storedResponse.post_commit_reauthorise_timesheet_ids)
+      ? storedResponse.post_commit_reauthorise_timesheet_ids
+      : [];
+    const autoAuthoriseTargets = Array.isArray(storedResponse.auto_authorise_timesheet_ids)
+      ? storedResponse.auto_authorise_timesheet_ids
+      : [];
+    const authoriseTimesheetIds = uniqueBoundedStrings(
+      [...reauthoriseTargets, ...autoAuthoriseTargets],
       MAX_REAUTHORISE_ITEMS + 1
     ).map((value) => value.toLowerCase());
-    if (reauthoriseTimesheetIds.length > MAX_REAUTHORISE_ITEMS
-      || reauthoriseTimesheetIds.some((value) => !UUID_PATTERN.test(value))) {
-      throw new Error('IMPORT_REVIEW_REAUTHORISE_TARGET_SET_INVALID');
+    if (reauthoriseTargets.length > MAX_REAUTHORISE_ITEMS
+      || autoAuthoriseTargets.length > MAX_REAUTHORISE_ITEMS
+      || authoriseTimesheetIds.length > MAX_REAUTHORISE_ITEMS
+      || authoriseTimesheetIds.some((value) => !UUID_PATTERN.test(value))) {
+      throw new Error('IMPORT_REVIEW_AUTHORISE_TARGET_SET_INVALID');
     }
     const componentStates = {
       EMAIL: componentStatus(storedResponse, 'EMAIL'),
@@ -227,9 +235,9 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
           }
 
           if (pendingTotal === 0 && failedCount === 0) {
-            if (reauthoriseTimesheetIds.length) {
+            if (authoriseTimesheetIds.length) {
               const authoriseRaw = await sbRpc(env, 'timesheet_authorise_bulk_atomic', {
-                p_items: reauthoriseTimesheetIds.map((timesheetId) => ({
+                p_items: authoriseTimesheetIds.map((timesheetId) => ({
                   timesheet_id: timesheetId,
                   expected_timesheet_id: timesheetId
                 })),
@@ -237,8 +245,8 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
                 p_now_utc: null
               }, { timeoutMs: 30000 });
               const authoriseResult = unwrapRpcJsonb(authoriseRaw, 'timesheet_authorise_bulk_atomic') || {};
-              if (!reauthorisationCompleted(authoriseResult, reauthoriseTimesheetIds)) {
-                throw new Error('IMPORT_REVIEW_REAUTHORISE_INCOMPLETE');
+              if (!reauthorisationCompleted(authoriseResult, authoriseTimesheetIds)) {
+                throw new Error('IMPORT_REVIEW_AUTHORISE_INCOMPLETE');
               }
             }
             await updateComponent(env, details, {
@@ -257,9 +265,9 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
           if (!String(error?.message || '').includes('FOLLOW_UP_FAILURE_RECORDING_FAILED')) {
             await failComponent(env, details, safeComponentFailure(
               'TSFIN',
-              reauthoriseTimesheetIds.length ? 'TSFIN_REAUTHORISE_FAILED' : 'TSFIN_FOLLOW_UP_FAILED',
-              reauthoriseTimesheetIds.length
-                ? 'TSFIN refresh or authorised-state restoration failed after source commit and can be retried safely.'
+              authoriseTimesheetIds.length ? 'TSFIN_AUTHORISE_FAILED' : 'TSFIN_FOLLOW_UP_FAILED',
+              authoriseTimesheetIds.length
+                ? 'TSFIN refresh, configured auto-authorisation or authorised-state restoration failed after source commit and can be retried safely.'
                 : 'TSFIN refresh failed after source commit and can be retried safely.'
             ));
           }
