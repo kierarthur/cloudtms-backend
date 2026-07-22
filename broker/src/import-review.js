@@ -3,7 +3,7 @@ const IMPORT_REVIEW_APPLY_CONTRACT = 'IMPORT_REVIEW_APPLY_V1';
 const IMPORT_REVIEW_OPERATION_CONTRACT = 'IMPORT_APPLY_OPERATION_V2';
 const IMPORT_REVIEW_CORRECTION_CONTRACT = 'IMPORT_CORRECTION_OPERATION_V2';
 const IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT = 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1';
-const IMPORT_REVIEW_UI_CONTRACT = 'IMPORT_REVIEW_UI_V3';
+const IMPORT_REVIEW_UI_CONTRACT = 'IMPORT_REVIEW_UI_V4';
 const IMPORT_REVIEW_EMAIL_GROUPING_CONTRACT = 'TIMESHEET_QUERY_RECIPIENT_EMAIL_V1';
 
 export const IMPORT_REVIEW_PARSER_VERSION = 'CLOUDTMS_IMPORT_REVIEW_PARSER_V1';
@@ -19,12 +19,12 @@ const ROUTE_RPCS = Object.freeze(new Set([
   'import_review_list_v1',
   'import_review_staged_scope_get_v1',
   'import_review_create_v1',
+  'import_review_replace_v1',
   'import_review_get_v1',
   'import_review_actions_page_v1',
   'import_review_save_v1',
   'import_review_refresh_v1',
   'import_review_abandon_v1',
-  'import_review_supersede_v1',
   'hr_daily_timesheet_resolution_save_v1',
   'import_review_apply_status_get_v1',
   'import_review_apply_failed_before_commit_recover_v1',
@@ -517,7 +517,8 @@ export function createImportReviewDispatcher(dependencies) {
         assertAllowedKeys(body, new Set([
           'import_id', 'coverage_mode', 'coverage_start_date', 'coverage_end_date',
           'scope_clients', 'scope_candidates', 'expected_source_file_sha256',
-          'expected_parser_version', 'operation_key'
+          'expected_parser_version', 'operation_key',
+          'supersede_import_id', 'expected_supersede_state_version'
         ]));
         const mode = boundedText(body.coverage_mode, 'coverage_mode', { min: 1, max: 64 }).toUpperCase();
         if (!['COMPLETE_ALL', 'COMPLETE_SELECTED_CANDIDATES', 'PARTIAL'].includes(mode)) {
@@ -565,7 +566,12 @@ export function createImportReviewDispatcher(dependencies) {
             candidate_id: item.candidate_id || null
           };
         });
-        const data = await runAllowedRpc(sbRpc, env, 'import_review_create_v1', {
+        const replaceRequested = body.supersede_import_id != null || body.expected_supersede_state_version != null;
+        if (replaceRequested && (body.supersede_import_id == null || body.expected_supersede_state_version == null)) {
+          throw new ImportReviewInputError('supersede_import_id and expected_supersede_state_version must be supplied together');
+        }
+        const rpcName = replaceRequested ? 'import_review_replace_v1' : 'import_review_create_v1';
+        const rpcArgs = {
           p_import_id: importId,
           p_coverage_mode: mode,
           p_coverage_start_date: expectedStart,
@@ -580,7 +586,17 @@ export function createImportReviewDispatcher(dependencies) {
           p_expected_parser_version: boundedText(body.expected_parser_version, 'expected_parser_version', { min: 1, max: 128 }),
           p_actor_user_id: user.id,
           p_operation_key: boundedText(body.operation_key, 'operation_key', { min: 16, max: 256 })
-        }, { timeoutMs: 30000 });
+        };
+        if (replaceRequested) {
+          rpcArgs.p_supersede_import_id = uuid(body.supersede_import_id, 'supersede_import_id');
+          rpcArgs.p_expected_supersede_state_version = integer(
+            body.expected_supersede_state_version,
+            'expected_supersede_state_version',
+            1,
+            Number.MAX_SAFE_INTEGER
+          );
+        }
+        const data = await runAllowedRpc(sbRpc, env, rpcName, rpcArgs, { timeoutMs: 30000 });
         return success(data, 201);
       }
 
@@ -660,15 +676,11 @@ export function createImportReviewDispatcher(dependencies) {
 
       const supersede = routeMatch(pathname, '/api/import-reviews/:import_id/supersede');
       if (req.method === 'POST' && supersede) {
-        const body = await readBoundedJson(req);
-        assertAllowedKeys(body, new Set(['new_import_id', 'expected_state_version']));
-        const data = await runAllowedRpc(sbRpc, env, 'import_review_supersede_v1', {
-          p_old_import_id: uuid(supersede.import_id, 'import_id'),
-          p_new_import_id: uuid(body.new_import_id, 'new_import_id'),
-          p_expected_old_state_version: integer(body.expected_state_version, 'expected_state_version', 1, Number.MAX_SAFE_INTEGER),
-          p_actor_user_id: user.id
+        return jsonResponse(410, {
+          ok: false,
+          error: 'IMPORT_REVIEW_SUPERSEDE_ROUTE_RETIRED',
+          message: 'Use atomic replacement while creating the new review.'
         });
-        return success(data);
       }
 
       const dailyResolution = routeMatch(pathname, '/api/import-reviews/:import_id/daily-timesheet-resolution');

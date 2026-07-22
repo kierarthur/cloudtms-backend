@@ -1202,6 +1202,12 @@ begin
             and wes.issue_fingerprint is not null
             and v_recipient_email is not null
             and length(btrim(v_recipient_email)) > 0
+            and exists (
+              select 1
+              from jsonb_array_elements(coalesce(wes.comparisons_json,'[]'::jsonb)) as email_cx(value)
+              where coalesce(email_cx.value->>'match_status','MATCH') not in ('MATCH','HR_ONLY')
+                or coalesce((email_cx.value->>'ref_changed')::boolean,false)
+            )
           ),
 
         'days', coalesce(wes.days_json, '[]'::jsonb),

@@ -16,7 +16,7 @@ as $function$
     'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
-    'review_ui_contract_version','IMPORT_REVIEW_UI_V3',
+    'review_ui_contract_version','IMPORT_REVIEW_UI_V4',
     'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'legacy_contracts_supported',false
   )
@@ -490,6 +490,10 @@ begin
         when 'CONTRACT_OUT_OF_SCOPE' then 'CONTRACT_NOT_ELIGIBLE'
         when 'CONTRACT_RATES_INCOMPLETE' then 'RATES_INCOMPLETE'
         when 'TIMESHEET_NOT_FOUND' then 'TIMESHEET_MISSING'
+        when 'WEEKLY_TIMESHEET_NOT_SUBMITTED' then 'TIMESHEET_NOT_SUBMITTED'
+        when 'DAILY_TIMESHEET_NOT_SUBMITTED' then 'TIMESHEET_NOT_SUBMITTED'
+        when 'WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET' then 'SHIFT_MISSING_FROM_TIMESHEET'
+        when 'DAILY_SHIFT_ABSENT_FROM_TIMESHEET' then 'SHIFT_MISSING_FROM_TIMESHEET'
         when 'TIMESHEET_AMBIGUOUS' then 'CHOOSE_TIMESHEET'
         when 'BLOCKED_ACTIVE_PAY_DRAFT' then 'BANKING_PAY_PROTECTED'
         when 'MISSING_FROM_IMPORT' then 'MISSING_FROM_FILE'
@@ -514,6 +518,8 @@ begin
       when 'GRADE_NOT_MAPPED' then 'Grade not mapped' when 'NO_CONTRACT' then 'No contract'
       when 'MULTIPLE_CONTRACTS' then 'Multiple contracts' when 'CONTRACT_NOT_ELIGIBLE' then 'Contract not eligible'
       when 'RATES_INCOMPLETE' then 'Rates incomplete' when 'TIMESHEET_MISSING' then 'Timesheet missing'
+      when 'TIMESHEET_NOT_SUBMITTED' then 'Timesheet not submitted'
+      when 'SHIFT_MISSING_FROM_TIMESHEET' then 'Shift missing from timesheet'
       when 'CHOOSE_TIMESHEET' then 'Choose timesheet' when 'BANKING_PAY_PROTECTED' then 'Banking Pay protected'
       when 'NEEDS_RECHECK' then 'Needs recheck' when 'HOURS_DIFFER' then 'Hours differ'
       when 'TIMES_DIFFER' then 'Times differ' when 'BREAK_DIFFERS' then 'Break differs'

@@ -14,13 +14,13 @@ as $function$
     'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
-    'review_ui_contract_version','IMPORT_REVIEW_UI_V3',
+    'review_ui_contract_version','IMPORT_REVIEW_UI_V4',
     'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'legacy_contracts_supported',false
   )
 $function$;
 
-create or replace function public.import_review_create_v1(
+create or replace function public._import_review_create_core_v2(
   p_import_id uuid,
   p_coverage_mode text,
   p_coverage_start_date date,
@@ -30,7 +30,9 @@ create or replace function public.import_review_create_v1(
   p_expected_source_file_sha256 text default null,
   p_expected_parser_version text default null,
   p_actor_user_id uuid default null,
-  p_operation_key text default null
+  p_operation_key text default null,
+  p_supersede_import_id uuid default null,
+  p_expected_supersede_state_version bigint default null
 )
 returns jsonb
 language plpgsql
@@ -45,6 +47,7 @@ declare
   v_operation_key text:=btrim(coalesce(p_operation_key,''));
   v_request_hash text; v_fingerprint text; v_revision_group uuid; v_revision_no integer;
   v_existing public.hr_imports%rowtype; v_state public.import_review_states%rowtype;
+  v_supersede_import public.hr_imports%rowtype; v_supersede_state public.import_review_states%rowtype;
   v_refresh jsonb; v_overlap jsonb;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
@@ -81,12 +84,15 @@ begin
     raise exception 'IMPORT_REVIEW_SCOPE_ITEM_DUPLICATE' using errcode='22023';
   end if;
 
-  v_request_hash:=public._import_review_hash_v1(jsonb_build_object(
+  v_request_hash:=public._import_review_hash_v1((jsonb_build_object(
     'import_id',p_import_id,'coverage_mode',v_mode,'coverage_start_date',p_coverage_start_date,
     'coverage_end_date',p_coverage_end_date,'clients',(select coalesce(jsonb_agg(x order by x->>'source_client_key'),'[]') from jsonb_array_elements(v_clients)x),
     'candidates',(select coalesce(jsonb_agg(x order by x->>'source_candidate_key'),'[]') from jsonb_array_elements(v_candidates)x),
     'source_file_sha256',lower(btrim(coalesce(p_expected_source_file_sha256,''))),
-    'parser_version',btrim(coalesce(p_expected_parser_version,'')))::text);
+    'parser_version',btrim(coalesce(p_expected_parser_version,'')))
+    || case when p_supersede_import_id is null then '{}'::jsonb else jsonb_build_object(
+      'supersede_import_id',p_supersede_import_id,
+      'expected_supersede_state_version',p_expected_supersede_state_version) end)::text);
 
   select * into v_existing from public.hr_imports where coverage_operation_key=v_operation_key for update;
   if found then
@@ -127,8 +133,53 @@ begin
     raise exception 'IMPORT_REVIEW_SCOPE_RESOLUTION_INVALID' using errcode='22023';
   end if;
 
-  v_revision_group:=coalesce(v_import.revision_group_id,p_import_id);
-  if v_import.revision_no is not null then v_revision_no:=v_import.revision_no;
+  -- Serialize overlap decisions per route/scope. NHSP is a cross-client feed;
+  -- HealthRoster is scoped by its immutable client list and Weekly/Daily route.
+  perform pg_advisory_xact_lock(hashtextextended(concat_ws('|','IMPORT_REVIEW_OVERLAP',
+    v_import.source_system::text,upper(coalesce(v_import.import_scope,v_import.source_system::text)),
+    case when v_import.source_system='NHSP'::public.hr_source_enum then 'ALL_CLIENTS'
+      else coalesce((select string_agg(coalesce(nullif(x->>'client_id',''),x->>'source_client_key'),','
+        order by coalesce(nullif(x->>'client_id',''),x->>'source_client_key')) from jsonb_array_elements(v_clients)x),'NO_CLIENT') end),
+    22072026));
+
+  v_overlap:=public._import_review_overlap_preflight_core_v2(
+    p_import_id,v_import.source_system,coalesce(v_import.import_scope,v_import.source_system::text),
+    p_coverage_start_date,p_coverage_end_date,v_clients);
+
+  if p_supersede_import_id is null then
+    if jsonb_array_length(v_overlap)>0 then
+      raise exception 'IMPORT_REVIEW_OVERLAP_CONFLICT' using errcode='55000',
+        detail=jsonb_build_object('overlapping_unfinished_reviews',v_overlap)::text;
+    end if;
+  else
+    if p_expected_supersede_state_version is null then
+      raise exception 'IMPORT_REVIEW_REPLACE_VERSION_REQUIRED' using errcode='22023';
+    end if;
+    if jsonb_array_length(v_overlap)<>1
+       or (v_overlap->0->>'import_id')::uuid is distinct from p_supersede_import_id then
+      raise exception 'IMPORT_REVIEW_REPLACE_TARGET_CONFLICT' using errcode='40001',
+        detail=jsonb_build_object('overlapping_unfinished_reviews',v_overlap)::text;
+    end if;
+    select * into v_supersede_import from public.hr_imports where id=p_supersede_import_id for update;
+    select * into v_supersede_state from public.import_review_states where import_id=p_supersede_import_id for update;
+    if v_supersede_import.id is null or v_supersede_state.import_id is null then
+      raise exception 'IMPORT_REVIEW_REPLACE_TARGET_NOT_FOUND' using errcode='P0002';
+    end if;
+    if v_supersede_state.state_version<>p_expected_supersede_state_version then
+      raise exception 'IMPORT_REVIEW_VERSION_CONFLICT' using errcode='40001',detail=v_supersede_state.state_version::text;
+    end if;
+    if v_supersede_state.status='APPLYING' then
+      raise exception 'IMPORT_REVIEW_REPLACE_TARGET_APPLYING' using errcode='55000';
+    end if;
+    if v_supersede_state.status not in ('STAGED','IN_REVIEW','BLOCKED','READY') then
+      raise exception 'IMPORT_REVIEW_REPLACE_NOT_ALLOWED' using errcode='55000';
+    end if;
+  end if;
+
+  v_revision_group:=case when p_supersede_import_id is not null
+    then coalesce(v_supersede_import.revision_group_id,v_supersede_import.id)
+    else coalesce(v_import.revision_group_id,p_import_id) end;
+  if p_supersede_import_id is null and v_import.revision_no is not null then v_revision_no:=v_import.revision_no;
   else select coalesce(max(hi.revision_no),0)+1 into v_revision_no from public.hr_imports hi where hi.revision_group_id=v_revision_group; end if;
   v_fingerprint:=public._import_review_hash_v1(jsonb_build_object('schema','IMPORT_REVIEW_COVERAGE_V1',
     'route',coalesce(v_import.import_scope,v_import.source_system::text),'mode',v_mode,
@@ -137,6 +188,7 @@ begin
     'candidates',(select coalesce(jsonb_agg(jsonb_build_object('key',btrim(x->>'source_candidate_key'),'candidate_id',x->>'candidate_id') order by x->>'source_candidate_key'),'[]') from jsonb_array_elements(v_candidates)x))::text);
 
   update public.hr_imports set revision_group_id=v_revision_group,revision_no=v_revision_no,
+    supersedes_import_id=p_supersede_import_id,
     coverage_mode=v_mode,coverage_start_date=p_coverage_start_date,coverage_end_date=p_coverage_end_date,
     coverage_fingerprint=v_fingerprint,coverage_confirmed_by=p_actor_user_id,
     coverage_operation_key=v_operation_key,coverage_request_hash=v_request_hash
@@ -155,14 +207,55 @@ begin
   values(p_import_id,1,'REVIEW_CREATED',p_actor_user_id,jsonb_build_object('coverage_mode',v_mode,'coverage_fingerprint',v_fingerprint,
     'coverage_start_date',p_coverage_start_date,'coverage_end_date',p_coverage_end_date,'operation_key_hash',public._import_review_hash_v1(v_operation_key)));
 
-  v_overlap:=public._import_review_overlap_preflight_core_v2(
-    p_import_id,v_import.source_system,coalesce(v_import.import_scope,v_import.source_system::text),
-    p_coverage_start_date,p_coverage_end_date,v_clients);
+  if p_supersede_import_id is not null then
+    update public.import_review_states set status='SUPERSEDED',state_version=state_version+1,
+      superseded_at_utc=now(),superseded_by_user_id=p_actor_user_id,
+      updated_at_utc=now(),updated_by_user_id=p_actor_user_id
+    where import_id=p_supersede_import_id returning * into v_supersede_state;
+    insert into public.import_review_events(import_id,state_version,event_code,actor_user_id,event_context_json)
+    values(p_supersede_import_id,v_supersede_state.state_version,'REVIEW_SUPERSEDED',p_actor_user_id,
+      jsonb_build_object('new_import_id',p_import_id,'atomic_replace',true));
+    insert into public.import_review_events(import_id,state_version,event_code,actor_user_id,event_context_json)
+    values(p_import_id,1,'REVIEW_SUPERSEDES_PRIOR',p_actor_user_id,
+      jsonb_build_object('old_import_id',p_supersede_import_id,'revision_group_id',v_revision_group,
+        'revision_no',v_revision_no,'atomic_replace',true));
+  end if;
   v_refresh:=public._import_review_refresh_core_v1(p_import_id,1,p_actor_user_id,500);
   return v_refresh||jsonb_build_object('schema_contract_version','IMPORT_REVIEW_DB_V1',
-    'replay',false,'coverage_fingerprint',v_fingerprint,'overlapping_unfinished_reviews',v_overlap);
+    'replay',false,'coverage_fingerprint',v_fingerprint,'overlapping_unfinished_reviews','[]'::jsonb,
+    'superseded_import_id',p_supersede_import_id,
+    'superseded_state_version',case when p_supersede_import_id is not null then v_supersede_state.state_version end);
 end
 $function$;
+
+revoke all on function public._import_review_create_core_v2(uuid,text,date,date,jsonb,jsonb,text,text,uuid,text,uuid,bigint)
+  from public,anon,authenticated,service_role;
+
+create or replace function public.import_review_create_v1(
+  p_import_id uuid,p_coverage_mode text,p_coverage_start_date date,p_coverage_end_date date,
+  p_scope_clients jsonb default '[]'::jsonb,p_scope_candidates jsonb default '[]'::jsonb,
+  p_expected_source_file_sha256 text default null,p_expected_parser_version text default null,
+  p_actor_user_id uuid default null,p_operation_key text default null
+)
+returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
+begin
+  return public._import_review_create_core_v2(p_import_id,p_coverage_mode,p_coverage_start_date,p_coverage_end_date,
+    p_scope_clients,p_scope_candidates,p_expected_source_file_sha256,p_expected_parser_version,
+    p_actor_user_id,p_operation_key,null,null);
+end $function$;
+
+create or replace function public.import_review_replace_v1(
+  p_import_id uuid,p_coverage_mode text,p_coverage_start_date date,p_coverage_end_date date,
+  p_scope_clients jsonb,p_scope_candidates jsonb,p_expected_source_file_sha256 text,
+  p_expected_parser_version text,p_actor_user_id uuid,p_operation_key text,
+  p_supersede_import_id uuid,p_expected_supersede_state_version bigint
+)
+returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
+begin
+  return public._import_review_create_core_v2(p_import_id,p_coverage_mode,p_coverage_start_date,p_coverage_end_date,
+    p_scope_clients,p_scope_candidates,p_expected_source_file_sha256,p_expected_parser_version,
+    p_actor_user_id,p_operation_key,p_supersede_import_id,p_expected_supersede_state_version);
+end $function$;
 
 create or replace function public.import_review_list_v1(
   p_status_class text default 'ACTIVE',p_source_route text default null,p_client_id uuid default null,
@@ -356,35 +449,6 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id); if length(
     abandoned_reason=btrim(p_reason),updated_at_utc=now(),updated_by_user_id=p_actor_user_id where import_id=p_import_id returning * into v;
   insert into public.import_review_events(import_id,state_version,event_code,actor_user_id,event_context_json) values(p_import_id,v.state_version,'REVIEW_ABANDONED',p_actor_user_id,jsonb_build_object('reason',btrim(p_reason)));
   return jsonb_build_object('ok',true,'replay',false,'status',v.status,'state_version',v.state_version); end $function$;
-
-create or replace function public.import_review_supersede_v1(p_old_import_id uuid,p_new_import_id uuid,p_expected_old_state_version bigint,p_actor_user_id uuid default null)
-returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
-declare old_i public.hr_imports%rowtype; new_i public.hr_imports%rowtype; old_s public.import_review_states%rowtype;
-  new_s public.import_review_states%rowtype; v_revision_group uuid; v_next_revision integer;
-begin perform public._import_review_assert_actor_v1(p_actor_user_id); if p_old_import_id is null or p_new_import_id is null or p_old_import_id=p_new_import_id then raise exception 'IMPORT_REVIEW_SUPERSEDE_IDS_INVALID' using errcode='22023'; end if;
-  perform 1 from public.hr_imports where id in(p_old_import_id,p_new_import_id) order by id for update;
-  select * into old_i from public.hr_imports where id=p_old_import_id; select * into new_i from public.hr_imports where id=p_new_import_id;
-  select * into old_s from public.import_review_states where import_id=p_old_import_id for update;
-  select * into new_s from public.import_review_states where import_id=p_new_import_id for update;
-  if old_i.id is null or new_i.id is null or old_s.import_id is null or new_s.import_id is null then raise exception 'IMPORT_REVIEW_SUPERSEDE_NOT_FOUND' using errcode='P0002'; end if;
-  if old_s.state_version<>p_expected_old_state_version then raise exception 'IMPORT_REVIEW_VERSION_CONFLICT' using errcode='40001'; end if;
-  if old_s.status not in ('STAGED','IN_REVIEW','BLOCKED','READY') or new_s.status not in ('STAGED','IN_REVIEW','BLOCKED','READY')
-    or new_i.applied_at is not null or new_i.supersedes_import_id is not null
-  then raise exception 'IMPORT_REVIEW_SUPERSEDE_NOT_ALLOWED' using errcode='55000'; end if;
-  if old_i.source_system<>new_i.source_system or coalesce(old_i.import_scope,'')<>coalesce(new_i.import_scope,'') then
-    raise exception 'IMPORT_REVIEW_SUPERSEDE_ROUTE_MISMATCH' using errcode='22023'; end if;
-  v_revision_group:=coalesce(old_i.revision_group_id,old_i.id);
-  if new_i.revision_group_id is not null and new_i.revision_group_id not in (new_i.id,v_revision_group) then
-    raise exception 'IMPORT_REVIEW_SUPERSEDE_REVISION_GROUP_MISMATCH' using errcode='22023'; end if;
-  perform pg_advisory_xact_lock(hashtextextended('IMPORT_REVIEW_REVISION|'||v_revision_group::text,21072026));
-  select coalesce(max(i.revision_no),0)+1 into v_next_revision from public.hr_imports i where i.revision_group_id=v_revision_group;
-  update public.hr_imports set revision_group_id=v_revision_group,revision_no=v_next_revision,supersedes_import_id=old_i.id where id=new_i.id;
-  update public.import_review_states set status='SUPERSEDED',state_version=state_version+1,superseded_at_utc=now(),superseded_by_user_id=p_actor_user_id,
-    updated_at_utc=now(),updated_by_user_id=p_actor_user_id where import_id=old_i.id returning * into old_s;
-  insert into public.import_review_events(import_id,state_version,event_code,actor_user_id,event_context_json) values(old_i.id,old_s.state_version,'REVIEW_SUPERSEDED',p_actor_user_id,jsonb_build_object('new_import_id',new_i.id));
-  insert into public.import_review_events(import_id,state_version,event_code,actor_user_id,event_context_json)
-  values(new_i.id,new_s.state_version,'REVIEW_SUPERSEDES_PRIOR',p_actor_user_id,jsonb_build_object('old_import_id',old_i.id,'revision_group_id',v_revision_group,'revision_no',v_next_revision));
-  return jsonb_build_object('ok',true,'old_import_id',old_i.id,'new_import_id',new_i.id,'old_status',old_s.status,'old_state_version',old_s.state_version); end $function$;
 
 create or replace function public.import_review_apply_guard_v1(
   p_import_id uuid,p_expected_state_version bigint,p_expected_coverage_fingerprint text,p_expected_preview_fingerprint text,
@@ -694,6 +758,8 @@ revoke all on function public.import_review_contract_version_get_v1() from publi
 grant execute on function public.import_review_contract_version_get_v1() to service_role;
 revoke all on function public.import_review_create_v1(uuid,text,date,date,jsonb,jsonb,text,text,uuid,text) from public,anon,authenticated;
 grant execute on function public.import_review_create_v1(uuid,text,date,date,jsonb,jsonb,text,text,uuid,text) to service_role;
+revoke all on function public.import_review_replace_v1(uuid,text,date,date,jsonb,jsonb,text,text,uuid,text,uuid,bigint) from public,anon,authenticated;
+grant execute on function public.import_review_replace_v1(uuid,text,date,date,jsonb,jsonb,text,text,uuid,text,uuid,bigint) to service_role;
 revoke all on function public.import_review_list_v1(text,text,uuid,date,date,timestamptz,uuid,integer) from public,anon,authenticated;
 grant execute on function public.import_review_list_v1(text,text,uuid,date,date,timestamptz,uuid,integer) to service_role;
 revoke all on function public.import_review_get_v1(uuid,uuid,text,integer,bigint,integer) from public,anon,authenticated;
@@ -704,8 +770,6 @@ revoke all on function public.import_review_refresh_v1(uuid,bigint,uuid,integer)
 grant execute on function public.import_review_refresh_v1(uuid,bigint,uuid,integer) to service_role;
 revoke all on function public.import_review_abandon_v1(uuid,bigint,text,uuid) from public,anon,authenticated;
 grant execute on function public.import_review_abandon_v1(uuid,bigint,text,uuid) to service_role;
-revoke all on function public.import_review_supersede_v1(uuid,uuid,bigint,uuid) from public,anon,authenticated;
-grant execute on function public.import_review_supersede_v1(uuid,uuid,bigint,uuid) to service_role;
 revoke all on function public.import_review_apply_guard_v1(uuid,bigint,text,text,uuid,text,jsonb,jsonb,uuid) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_apply_complete_core_v1(uuid,uuid,uuid,jsonb,boolean) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_follow_up_reconcile_core_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

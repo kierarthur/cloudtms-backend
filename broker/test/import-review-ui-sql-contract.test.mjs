@@ -8,6 +8,7 @@ const lifecycleSql = readFileSync(new URL('../../supabase/repeatable/21072026_18
 const coreSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_00_import_review_internal_core.sql', import.meta.url), 'utf8');
 const dailySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql', import.meta.url), 'utf8');
 const weeklyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql', import.meta.url), 'utf8');
+const retirementSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_99_import_review_hard_cutover_retirements.sql', import.meta.url), 'utf8');
 
 function functionBody(source, name) {
   const marker = `create or replace function public.${name}(`;
@@ -20,10 +21,10 @@ function functionBody(source, name) {
 
 test('the fail-closed database contract exposes the bounded review UI and recipient grouping versions', () => {
   const body = functionBody(uiSql, 'import_review_contract_version_get_v1');
-  assert.match(body, /review_ui_contract_version','IMPORT_REVIEW_UI_V3/);
+  assert.match(body, /review_ui_contract_version','IMPORT_REVIEW_UI_V4/);
   assert.match(body, /email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1/);
   assert.match(body, /legacy_contracts_supported',false/);
-  assert.match(lifecycleSql, /review_ui_contract_version','IMPORT_REVIEW_UI_V3/);
+  assert.match(lifecycleSql, /review_ui_contract_version','IMPORT_REVIEW_UI_V4/);
 });
 
 test('staged scope discovery is actor-bound, source-owned and bounded', () => {
@@ -85,7 +86,14 @@ test('weekly action classification consumes the established phase2 mapping autho
   assert.match(body, /evidenced as\s*\(\s*select c\.\*,[\s\S]*?from facts c/);
   assert.doesNotMatch(body, /evidenced as\s*\(\s*select f\.\*,[\s\S]*?from facts c/);
   assert.match(body, /when not coalesce\(f\.import_authoritative,false\) then 'NO_ACTION'/);
-  assert.match(body, /Validate existing timesheet only/);
+  assert.match(body, /Validate candidate timesheet/);
+  assert.match(body, /WEEKLY_TIMESHEET_NOT_SUBMITTED/);
+  assert.match(body, /WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET/);
+  assert.match(body, /DAILY_TIMESHEET_NOT_SUBMITTED/);
+  assert.match(body, /DAILY_SHIFT_ABSENT_FROM_TIMESHEET/);
+  assert.match(body, /Candidate timesheet states they did not work this shift/);
+  assert.match(body, /match_status','MATCH'\)<>'HR_ONLY'/);
+  assert.match(body, /validation-email-v2/);
   assert.match(body, /and not coalesce\(m\.contract_rate_complete,false\) then 'CONTRACT_RATES_INCOMPLETE'/);
   assert.match(body, /source_route_eligible',coalesce\(o\.route_eligible,false\)/);
   assert.match(body, /'selectable',coalesce\(o\.route_eligible,false\)/);
@@ -129,13 +137,28 @@ test('one owner-only current-setting authority core governs catalogue and Weekly
   assert.doesNotMatch(apply, /effective_no_timesheet_required/);
 });
 
-test('overlap preflight is route, date and client aware', () => {
+test('overlap preflight is global for NHSP and client/route aware for HealthRoster', () => {
   const body = functionBody(coreSql, '_import_review_overlap_preflight_core_v2');
   assert.match(body, /hi\.source_system=p_source_system/);
   assert.match(body, /daterange\(hi\.coverage_start_date,hi\.coverage_end_date,'\[\]'\)/);
   assert.match(body, /current\.client_id is not null and other_client\.client_id=current\.client_id/);
   assert.match(body, /other_client\.source_client_key=current\.source_client_key/);
+  assert.match(body, /'NHSP_PERIOD'/);
+  assert.match(body, /p_source_system='NHSP'/);
   assert.match(body, /limit 20/);
+});
+
+test('review creation rejects overlaps and replacement is atomic', () => {
+  const core = functionBody(lifecycleSql, '_import_review_create_core_v2');
+  const create = functionBody(lifecycleSql, 'import_review_create_v1');
+  const replace = functionBody(lifecycleSql, 'import_review_replace_v1');
+  assert.match(core, /IMPORT_REVIEW_OVERLAP_CONFLICT/);
+  assert.match(core, /IMPORT_REVIEW_REPLACE_TARGET_APPLYING/);
+  assert.match(core, /status='SUPERSEDED'/);
+  assert.match(core, /'atomic_replace',true/);
+  assert.match(create, /_import_review_create_core_v2/);
+  assert.match(replace, /_import_review_create_core_v2/);
+  assert.match(retirementSql, /drop function if exists public\.import_review_supersede_v1/);
 });
 
 test('review get is authoritative for editability, commands, evidence and final confirmation', () => {

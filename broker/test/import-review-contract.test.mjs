@@ -184,6 +184,22 @@ const endpoints = [
     }
   },
   {
+    name: 'atomic replace', method: 'POST', path: '/api/import-reviews', rpc: 'import_review_replace_v1',
+    body: {
+      import_id: IMPORT_ID,
+      coverage_mode: 'COMPLETE_ALL',
+      coverage_start_date: '2026-07-01',
+      coverage_end_date: '2026-07-07',
+      scope_clients: [],
+      scope_candidates: [],
+      expected_source_file_sha256: HASH,
+      expected_parser_version: 'CLOUDTMS_IMPORT_REVIEW_PARSER_V1:NHSP',
+      operation_key: 'replace-import-review-0001',
+      supersede_import_id: OTHER_IMPORT_ID,
+      expected_supersede_state_version: 7
+    }
+  },
+  {
     name: 'get', method: 'GET', path: `/api/import-reviews/${IMPORT_ID}`, rpc: 'import_review_get_v1'
   },
   {
@@ -207,10 +223,6 @@ const endpoints = [
   {
     name: 'abandon', method: 'POST', path: `/api/import-reviews/${IMPORT_ID}/abandon`, rpc: 'import_review_abandon_v1',
     body: { expected_state_version: 7, reason: 'Operator chose to start again.', confirmed: true }
-  },
-  {
-    name: 'supersede', method: 'POST', path: `/api/import-reviews/${IMPORT_ID}/supersede`, rpc: 'import_review_supersede_v1',
-    body: { expected_state_version: 7, new_import_id: OTHER_IMPORT_ID }
   },
   {
     name: 'Daily timesheet resolution', method: 'PUT', path: `/api/import-reviews/${IMPORT_ID}/daily-timesheet-resolution`, rpc: 'hr_daily_timesheet_resolution_save_v1',
@@ -256,7 +268,7 @@ for (const endpoint of endpoints) {
     assert.equal(captured.body.ok, true);
     assert.equal(captured.body.contract_version, importReviewContract.schema);
     assert.ok(Object.prototype.hasOwnProperty.call(captured.body, 'data'));
-    assert.equal(captured.status, endpoint.name === 'create' ? 201 : endpoint.name === 'follow-up retry' ? 202 : 200);
+    assert.equal(captured.status, ['create', 'atomic replace'].includes(endpoint.name) ? 201 : endpoint.name === 'follow-up retry' ? 202 : 200);
     assert.equal(current.calls[0].name, 'import_review_contract_version_get_v1');
     if (endpoint.rpc) assert.ok(current.calls.some((call) => call.name === endpoint.rpc));
     if (endpoint.name === 'apply') {
@@ -351,8 +363,8 @@ test('the contract gate fails closed when component-aware follow-up support is a
   assert.deepEqual(current.calls.map((call) => call.name), ['import_review_contract_version_get_v1']);
 });
 
-test('the V3 Worker fails closed against the superseded V2 review UI contract', async () => {
-  const oldContract = { ...installedContract, review_ui_contract_version: 'IMPORT_REVIEW_UI_V2' };
+test('the V4 Worker fails closed against the superseded V3 review UI contract', async () => {
+  const oldContract = { ...installedContract, review_ui_contract_version: 'IMPORT_REVIEW_UI_V3' };
   const current = scenario({ contract: oldContract });
   const response = await current.dispatcher(
     jsonRequest('GET', '/api/import-reviews?page_size=25'),
@@ -362,6 +374,22 @@ test('the V3 Worker fails closed against the superseded V2 review UI contract', 
   const captured = await responseJson(response);
   assert.equal(captured.status, 503);
   assert.equal(captured.body.error.code, 'IMPORT_REVIEW_CONTRACT_MISMATCH');
+});
+
+test('the former two-step supersede route is retired', async () => {
+  const current = scenario();
+  const response = await current.dispatcher(
+    jsonRequest('POST', `/api/import-reviews/${IMPORT_ID}/supersede`, {
+      expected_state_version: 7,
+      new_import_id: OTHER_IMPORT_ID
+    }),
+    { TEST: true },
+    current.ctx
+  );
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 410);
+  assert.equal(captured.body.error, 'IMPORT_REVIEW_SUPERSEDE_ROUTE_RETIRED');
+  assert.equal(current.calls.some((call) => call.name === 'import_review_supersede_v1'), false);
 });
 
 test('the contract gate fails closed when recipient-address consolidation is absent', async () => {

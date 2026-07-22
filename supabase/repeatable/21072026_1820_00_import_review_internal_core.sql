@@ -32,7 +32,7 @@ as $function$
       and upper(coalesce(hi.import_scope,hi.source_system::text))=upper(coalesce(p_source_route,p_source_system::text))
       and daterange(hi.coverage_start_date,hi.coverage_end_date,'[]')
         && daterange(p_coverage_start_date,p_coverage_end_date,'[]')
-  ), matched as (
+  ), matched_healthroster as (
     select distinct on (active.import_id)
       active.*,
       case when current.client_id is not null and current.client_id=other_client.client_id
@@ -53,8 +53,21 @@ as $function$
     join current_clients current on
       (current.client_id is not null and other_client.client_id=current.client_id)
       or (current.source_client_key is not null and other_client.source_client_key=current.source_client_key)
+    where p_source_system<>'NHSP'::public.hr_source_enum
     order by active.import_id,
       case when current.client_id is not null and current.client_id=other_client.client_id then 0 else 1 end
+  ), matched as (
+    -- NHSP is a single cross-client feed, so any unfinished NHSP review for
+    -- an overlapping period conflicts. HealthRoster feeds are client-owned
+    -- and conflict only for the same client and the same Weekly/Daily route.
+    select active.*,
+      'NHSP_PERIOD'::text as overlap_reason,
+      null::uuid as client_id,
+      null::text as source_client_key
+    from active_reviews active
+    where p_source_system='NHSP'::public.hr_source_enum
+    union all
+    select * from matched_healthroster
   ), bounded as (
     select * from matched order by updated_at_utc desc,import_id desc limit 20
   )
@@ -489,6 +502,8 @@ begin
       dgm.role_code as daily_mapped_role,dgm.band_norm as daily_mapped_band,
       dgm.updated_at as daily_mapping_updated_at,(coalesce(dgm.mapping_count,0)=1) as has_grade_mapping,
       tsx.timesheet_count,tsx.timesheet_ids,tsx.auto_timesheet_id,tsx.timesheet_evidence_hash,
+      dtsx.submitted_timesheet_count as daily_submitted_timesheet_count,
+      dtsx.submitted_timesheet_evidence_hash as daily_submitted_timesheet_evidence_hash,
       tsx.timesheet_contract_ids,dcon.contract_ids as eligible_contract_ids,dcon.contract_evidence_hash,
       cr.route_eligible as contract_route_eligible,cr.rate_complete as contract_rate_complete,
       cr.import_authoritative,cr.authority_mode,cr.authority_fingerprint,
@@ -534,6 +549,19 @@ begin
         and (nullif(btrim(coalesce(dgm.band_norm,'')),'') is null
           or lower(btrim(coalesce(c.band,'')))=lower(btrim(dgm.band_norm)))
     ) dcon on upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
+    left join lateral (
+      select count(*)::integer submitted_timesheet_count,
+        public._import_review_hash_v1(coalesce(string_agg(concat_ws('|',t.timesheet_id,t.worked_start_iso,
+          t.worked_end_iso,t.break_minutes,t.worked_minutes,t.reference_number,t.processing_status,
+          t.tsfin_role,t.tsfin_band,ts.contract_id,ts.updated_at),',' order by t.timesheet_id),''))
+          submitted_timesheet_evidence_hash
+      from public.v_timesheets_daily_match t
+      join public.timesheets ts on ts.timesheet_id=t.timesheet_id and ts.is_current and ts.revoked_at is null
+      where t.candidate_id=m.resolved_candidate_id and t.client_id=m.resolved_client_id
+        and t.sheet_scope::text='DAILY'
+        and (t.worked_start_iso at time zone 'Europe/London')::date=m.date_local
+        and ts.contract_id=any(coalesce(dcon.contract_ids,array[]::uuid[]))
+    ) dtsx on upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
     left join lateral (
       with candidates as (
         select abm.*,
@@ -678,7 +706,7 @@ begin
         c.start_time_local,c.end_time_local,c.hours_worked,c.hr_request_id,c.resolved_candidate_id,c.resolved_client_id,
         c.resolved_contract_id,c.weekly_resolution_action,c.weekly_incoming_code,c.weekly_mapping_evidence,c.contract_rate_evidence,
         c.daily_mapping_id,c.daily_mapping_updated_at,c.daily_mapped_role,c.daily_mapped_band,
-        c.timesheet_evidence_hash,c.contract_evidence_hash,c.authority_fingerprint,
+        c.timesheet_evidence_hash,c.daily_submitted_timesheet_evidence_hash,c.contract_evidence_hash,c.authority_fingerprint,
         coalesce(c.eligible_contract_ids::text,''),coalesce(c.timesheet_ids::text,''),
         coalesce(c.timesheet_contract_ids::text,''),c.protection::text,
         coalesce(c.payload_json::text,''))) as evidence_hash
@@ -696,7 +724,6 @@ begin
         when f.is_daily and coalesce(f.timesheet_count,0)=0 then 'ADVISORY'
         when f.is_daily and f.resolved_timesheet_id is null then 'DAILY_TIMESHEET_RESOLUTION'
         when f.is_daily then 'NO_ACTION'
-        when not coalesce(f.import_authoritative,false) and f.existing_shift_id is null then 'ADVISORY'
         when not coalesce(f.import_authoritative,false) then 'NO_ACTION'
         when not coalesce(f.contract_rate_complete,false) then 'ADVISORY'
         when f.existing_shift_id is null then 'INCLUDE_SHIFT'
@@ -737,11 +764,11 @@ begin
           when coalesce(m.contract_count,0)=0 then 'CONTRACT_MISSING'
           when m.is_daily and m.contract_count>1 then 'CONTRACT_AMBIGUOUS'
           when not m.is_daily and not coalesce(m.contract_route_eligible,false) then 'CONTRACT_OUT_OF_SCOPE'
-          when not m.is_daily and not coalesce(m.import_authoritative,false) and m.existing_shift_id is null
-            then 'TIMESHEET_NOT_FOUND'
           when not m.is_daily and coalesce(m.import_authoritative,false)
             and not coalesce(m.contract_rate_complete,false) then 'CONTRACT_RATES_INCOMPLETE'
-          when m.is_daily and coalesce(m.timesheet_count,0)=0 then 'TIMESHEET_NOT_FOUND'
+          when m.is_daily and coalesce(m.timesheet_count,0)=0
+            and coalesce(m.daily_submitted_timesheet_count,0)=0 then 'DAILY_TIMESHEET_NOT_SUBMITTED'
+          when m.is_daily and coalesce(m.timesheet_count,0)=0 then 'DAILY_SHIFT_ABSENT_FROM_TIMESHEET'
           when m.is_daily and m.resolved_timesheet_id is null then 'TIMESHEET_AMBIGUOUS'
           when coalesce((m.protection->>'active_pay_draft')::boolean,false) then 'BLOCKED_ACTIVE_PAY_DRAFT'
           else null end,
@@ -783,8 +810,10 @@ begin
             and abs((m.hours_worked*60)-m.worked_minutes)>1 then 'WORKED_HOURS'::text end
         ],null)),
         'outcome_label',case
-          when not m.is_daily and not coalesce(m.import_authoritative,false) and m.existing_shift_id is null then 'Request new shift'
-          when not m.is_daily and not coalesce(m.import_authoritative,false) then 'Validate existing timesheet only'
+          when not m.is_daily and not coalesce(m.import_authoritative,false) then 'Validate candidate timesheet'
+          when m.is_daily and coalesce(m.timesheet_count,0)=0
+            and coalesce(m.daily_submitted_timesheet_count,0)=0 then 'Request timesheet from candidate'
+          when m.is_daily and coalesce(m.timesheet_count,0)=0 then 'Candidate timesheet states they did not work this shift'
           when m.action_kind='INCLUDE_SHIFT' then 'TMS will add shift'
           when m.action_kind='APPLY_AMENDMENT' then case when coalesce((m.protection->>'paid')::boolean,false)
             or coalesce((m.protection->>'invoice_locked')::boolean,false)
@@ -884,6 +913,78 @@ begin
       and upper(coalesce(i.import_scope,'HR_WEEKLY')) not like '%DAILY%') then
     v_weekly_preview:=public.hr_weekly_validation_preview(p_import_id);
 
+    -- Validation-only Weekly evidence has two distinct, server-proven states.
+    -- Neither state is an instruction to mutate CloudTMS financial records.
+    insert into pg_temp.import_review_catalog_v1
+    with preview_rows as (
+      select r.value row_json,
+        nullif(r.value->>'timesheet_id','')::uuid timesheet_id,
+        nullif(r.value->>'client_id','')::uuid client_id,
+        nullif(r.value->>'candidate_id','')::uuid candidate_id,
+        nullif(r.value->>'contract_id','')::uuid contract_id
+      from jsonb_array_elements(case when jsonb_typeof(v_weekly_preview->'rows')='array'
+        then v_weekly_preview->'rows' else '[]'::jsonb end) r(value)
+    ), eligible_validation_groups as (
+      select d.candidate_id,d.summary_json->>'week_ending_date' week_ending_date
+      from pg_temp.import_review_catalog_v1 d
+      where d.candidate_id is not null
+        and d.summary_json->>'source_route' not like '%DAILY%'
+        and d.summary_json->>'authority_mode'='VALIDATION_ONLY'
+      group by d.candidate_id,d.summary_json->>'week_ending_date'
+      having bool_and(d.action_kind='NO_ACTION' and not d.blocking)
+    ), missing_timesheets as (
+      select p.* from preview_rows p
+      join eligible_validation_groups g on g.candidate_id=p.candidate_id
+        and g.week_ending_date=p.row_json->>'week_ending_date'
+      where p.row_json->>'overall_status'='MISSING_TIMESHEET'
+    ), omitted_shifts as (
+      select p.*,cx.value comparison_json
+      from preview_rows p
+      join eligible_validation_groups g on g.candidate_id=p.candidate_id
+        and g.week_ending_date=p.row_json->>'week_ending_date'
+      cross join lateral jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
+      where p.timesheet_id is not null and cx.value->>'match_status'='HR_ONLY'
+    )
+    select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
+        'WEEKLY_TIMESHEET_NOT_SUBMITTED',m.candidate_id,m.row_json->>'week_ending_date')),
+      'ADVISORY','BLOCKED',
+      concat_ws(':','weekly-timesheet-not-submitted',m.candidate_id,m.row_json->>'week_ending_date'),
+      concat_ws('|',m.candidate_id,m.row_json->>'week_ending_date'),
+      null::uuid,null::uuid,null::uuid,m.client_id,m.candidate_id,m.contract_id,null::uuid,
+      public._import_review_hash_v1(concat_ws('|','weekly-timesheet-not-submitted-v1',m.row_json::text)),
+      false,false,true,
+      jsonb_build_object(
+        'reason_code','WEEKLY_TIMESHEET_NOT_SUBMITTED','source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
+        'candidate_name',m.row_json->>'candidate_name','week_ending_date',m.row_json->>'week_ending_date',
+        'difference_codes',jsonb_build_array('TIMESHEET_NOT_SUBMITTED'),
+        'outcome_label','Request timesheet from candidate')
+    from missing_timesheets m
+    union all
+    select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
+        'WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET',o.timesheet_id,o.comparison_json->>'work_date',
+        o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end')),
+      'ADVISORY','BLOCKED',
+      concat_ws(':','weekly-shift-absent',o.timesheet_id,o.comparison_json->>'work_date',
+        o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end'),
+      concat_ws('|',o.timesheet_id,o.comparison_json->>'work_date',
+        o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end'),
+      null::uuid,o.timesheet_id,null::uuid,o.client_id,o.candidate_id,o.contract_id,null::uuid,
+      public._import_review_hash_v1(concat_ws('|','weekly-shift-absent-v1',o.timesheet_id,o.comparison_json::text)),
+      false,false,true,
+      jsonb_build_object(
+        'reason_code','WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET','source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
+        'candidate_name',o.row_json->>'candidate_name','week_ending_date',o.row_json->>'week_ending_date',
+        'work_date',o.comparison_json->>'work_date',
+        'imported_evidence',jsonb_strip_nulls(jsonb_build_object(
+          'work_date',o.comparison_json->>'work_date','start',o.comparison_json->>'healthroster_start',
+          'end',o.comparison_json->>'healthroster_end',
+          'break_minutes',nullif(o.comparison_json->>'healthroster_break_mins','')::integer,
+          'reference',o.comparison_json->>'ref_after')),
+        'current_evidence',jsonb_build_object('timesheet_id',o.timesheet_id),
+        'difference_codes',jsonb_build_array('HR_ONLY'),
+        'outcome_label','Candidate timesheet states they did not work this shift')
+    from omitted_shifts o;
+
     insert into pg_temp.import_review_catalog_v1
     with preview_rows as (
       select r.value row_json,
@@ -894,8 +995,19 @@ begin
         nullif(r.value->>'issue_fingerprint','') issue_fingerprint
       from jsonb_array_elements(case when jsonb_typeof(v_weekly_preview->'rows')='array'
         then v_weekly_preview->'rows' else '[]'::jsonb end) r(value)
+    ), email_filtered as (
+      select p.*,
+        coalesce((select jsonb_agg(cx.value order by cx.value->>'work_date',cx.value->>'comparison_key')
+          from jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
+          where coalesce(cx.value->>'match_status','MATCH')<>'HR_ONLY'),'[]'::jsonb) email_comparisons,
+        coalesce((select jsonb_agg(to_jsonb(fr.value))
+          from jsonb_array_elements_text(coalesce(p.row_json->'failure_reasons','[]'::jsonb)) fr(value)
+          where fr.value<>'HealthRoster has a shift not present on the timesheet.'),'[]'::jsonb) email_failure_reasons
+      from preview_rows p
     ), routed as (
-      select p.*,c.rev client_rev,c.updated_at client_updated_at,c.ts_queries_email,
+      select p.*,public._import_review_hash_v1(concat_ws('|','HEALTHROSTER_WEEKLY','validation-email-v2',
+          p.timesheet_id,p.row_json->>'week_ending_date',p.email_comparisons::text)) email_issue_fingerprint,
+        c.rev client_rev,c.updated_at client_updated_at,c.ts_queries_email,
         ct.send_ts_queries_to_different_email,ct.ts_queries_alt_email_address,ct.updated_at contract_updated_at,
         case when coalesce(ct.send_ts_queries_to_different_email,false)
           then 'CONTRACT_OVERRIDE:'||ct.id::text else 'CLIENT_DEFAULT:'||c.id::text end recipient_scope_key,
@@ -905,12 +1017,18 @@ begin
           then ct.ts_queries_alt_email_address else c.ts_queries_email end)) recipient_email,
         public._import_review_timesheet_protection_core_v1(p.timesheet_id) protection,
         e.id issue_id,e.delivery_history_status,e.sent_count
-      from preview_rows p
+      from email_filtered p
       join public.clients c on c.id=p.client_id
       left join public.contracts ct on ct.id=p.contract_id and ct.client_id=p.client_id
-      left join public.hr_issue_emails e on e.issue_fingerprint=p.issue_fingerprint
+      left join public.hr_issue_emails e on e.issue_fingerprint=public._import_review_hash_v1(concat_ws('|',
+        'HEALTHROSTER_WEEKLY','validation-email-v2',p.timesheet_id,p.row_json->>'week_ending_date',p.email_comparisons::text))
       where p.timesheet_id is not null and p.issue_fingerprint is not null
         and coalesce((p.row_json->>'has_mismatch')::boolean,false)
+        and exists (
+          select 1 from jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
+          where coalesce(cx.value->>'match_status','MATCH') not in ('MATCH','HR_ONLY')
+            or coalesce((cx.value->>'ref_changed')::boolean,false)
+        )
     ), email_actions as (
       select r.*,
         public._import_review_hash_v1(concat_ws('|','query-route-v1',r.recipient_scope_key,r.recipient_email,
@@ -921,20 +1039,20 @@ begin
       from routed r
     )
     select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
-        case when a.issue_id is null then 'EMAIL_ISSUE' else 'EMAIL_REMINDER' end,a.issue_fingerprint)),
+        case when a.issue_id is null then 'EMAIL_ISSUE' else 'EMAIL_REMINDER' end,a.email_issue_fingerprint)),
       case when a.issue_id is null then 'EMAIL_ISSUE' else 'EMAIL_REMINDER' end,
       case when coalesce((a.protection->>'active_pay_draft')::boolean,false) then 'BLOCKED' else 'EMAIL' end,
-      'issue:'||a.issue_fingerprint,a.issue_fingerprint,null::uuid,a.timesheet_id,null::uuid,
+      'issue:'||a.email_issue_fingerprint,a.email_issue_fingerprint,null::uuid,a.timesheet_id,null::uuid,
       a.client_id,a.candidate_id,a.contract_id,a.issue_id,
       public._import_review_hash_v1(concat_ws('|','weekly-query-evidence-v1',a.row_json::text,a.protection::text,
         a.route_fingerprint,coalesce(a.delivery_history_status,'NEW'),coalesce(a.sent_count,0))),
       a.valid_email and not coalesce((a.protection->>'active_pay_draft')::boolean,false),
       a.issue_id is null and a.valid_email and not coalesce((a.protection->>'active_pay_draft')::boolean,false),
       coalesce((a.protection->>'active_pay_draft')::boolean,false),
-      jsonb_build_object('reason_code','HEALTHROSTER_WEEKLY','issue_fingerprint',a.issue_fingerprint,
+      jsonb_build_object('reason_code','HEALTHROSTER_WEEKLY','issue_fingerprint',a.email_issue_fingerprint,
         'candidate_name',a.row_json->>'candidate_name','week_ending_date',a.row_json->>'week_ending_date',
-      'failure_reasons',coalesce(a.row_json->'failure_reasons','[]'::jsonb),
-        'days',coalesce(a.row_json->'days','[]'::jsonb),'comparisons',coalesce(a.row_json->'comparisons','[]'::jsonb),
+      'failure_reasons',a.email_failure_reasons,
+        'days',coalesce(a.row_json->'days','[]'::jsonb),'comparisons',a.email_comparisons,
         'evidence_rows',coalesce((
           select jsonb_agg(jsonb_build_object(
             'imported_evidence',jsonb_strip_nulls(jsonb_build_object(
@@ -951,7 +1069,7 @@ begin
               case when coalesce(day_json.value->>'day_status','OK')<>'OK' then 'WORKED_HOURS' end
             ],null))
           ) order by cx.value->>'work_date',cx.value->>'comparison_key')
-          from jsonb_array_elements(coalesce(a.row_json->'comparisons','[]'::jsonb)) cx(value)
+          from jsonb_array_elements(a.email_comparisons) cx(value)
           left join lateral (select d.value from jsonb_array_elements(coalesce(a.row_json->'days','[]'::jsonb)) d(value)
             where d.value->>'date'=cx.value->>'work_date' limit 1) day_json on true
         ),'[]'::jsonb),
