@@ -221,6 +221,13 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
         let failedCount = 0;
         const completedTimesheetIds = new Set();
         try {
+          // Wake only the persisted post-commit targets. This idempotent outbox
+          // operation clears a stale lease but cannot repeat source apply.
+          await sbRpc(env, 'enqueue_ts_financials_priority', {
+            _timesheet_ids: affectedTimesheetIds,
+            _reason: 'CONTEXT_CHANGED'
+          }, { timeoutMs: 8000 });
+
           for (let loop = 0; loop < 10; loop += 1) {
             const run = await runTsfinWorkerOnce(env, {
               limit: 50,

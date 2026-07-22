@@ -46,6 +46,7 @@ import {
   createImportReviewPostCommitRunner,
   reconcileTimesheetQueryDeliveryAfterProviderAcceptance
 } from './import-review-follow-up.js';
+import { normalisePostgresTimestampIso } from './timestamp-normalisation.js';
 
 const textEncoder = new TextEncoder();
 
@@ -3595,8 +3596,7 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
   };
 
   const isIsoLike = (v) => {
-    const s = String(v || '').trim();
-    return !!s && s.includes('T') && (s.endsWith('Z') || /[\+\-]\d{2}:\d{2}$/.test(s));
+    return !!normalisePostgresTimestampIso(v);
   };
 
   const addDays = (ymd, days) => {
@@ -54682,10 +54682,7 @@ const expenseEvidenceKindCategories = {
      return `${yyyy}-${mm}-${dd}`;
    };
  
-   const _isIsoLike = (s) => {
-     const x = String(s || '');
-     return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
-   };
+   const _isIsoLike = (s) => !!normalisePostgresTimestampIso(s);
  
    const _uniqueLocalUtcCandidates = (ymd, hhmm) => {
      const out = [];
@@ -54714,9 +54711,11 @@ const expenseEvidenceKindCategories = {
  
      const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
      const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
-     if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
-       const startMs = new Date(String(startIsoRaw)).getTime();
-       const endMs   = new Date(String(endIsoRaw)).getTime();
+     const startIso = normalisePostgresTimestampIso(startIsoRaw);
+     const endIso = normalisePostgresTimestampIso(endIsoRaw);
+     if (startIso && endIso && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
+       const startMs = new Date(startIso).getTime();
+       const endMs   = new Date(endIso).getTime();
        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
          return { startUtcIso: null, endUtcIso: null, error: `Invalid UTC shift range on ${date}` };
        }
@@ -78036,13 +78035,13 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
       const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
       const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
 
-      const isIsoLike = (s) => {
-        const x = String(s || '');
-        return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
-      };
+      const isIsoLike = (s) => !!normalisePostgresTimestampIso(s);
 
       if (startIsoRaw && endIsoRaw && isIsoLike(startIsoRaw) && isIsoLike(endIsoRaw)) {
-        return { startUtcIso: String(startIsoRaw), endUtcIso: String(endIsoRaw) };
+        return {
+          startUtcIso: normalisePostgresTimestampIso(startIsoRaw),
+          endUtcIso: normalisePostgresTimestampIso(endIsoRaw)
+        };
       }
 
       const startHH = String(seg?.start || '').trim();
@@ -160550,10 +160549,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
   const tzId = _pickTzId();
 
-  const _isIsoLike = (s) => {
-    const x = String(s || '');
-    return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
-  };
+  const _isIsoLike = (s) => !!normalisePostgresTimestampIso(s);
 
   const _uniqueLocalUtcCandidates = (ymd, hhmm) => {
     const out = [];
@@ -160582,9 +160578,11 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
     const startIsoRaw = seg?.start_utc || seg?.start_iso || seg?.startUtc || null;
     const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || seg?.endUtc   || null;
-    if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
-      const startMs = new Date(String(startIsoRaw)).getTime();
-      const endMs   = new Date(String(endIsoRaw)).getTime();
+    const startIso = normalisePostgresTimestampIso(startIsoRaw);
+    const endIso = normalisePostgresTimestampIso(endIsoRaw);
+    if (startIso && endIso && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
+      const startMs = new Date(startIso).getTime();
+      const endMs   = new Date(endIso).getTime();
       if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
         return { startUtcIso: null, endUtcIso: null, error: `Invalid UTC shift range on ${date}` };
       }

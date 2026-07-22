@@ -191,11 +191,16 @@ test('authorised source timesheet is restored only after TSFIN completes', async
   await current.runner({}, details());
 
   const names = current.calls.map((call) => call.name);
+  const wake = names.indexOf('enqueue_ts_financials_priority');
   const summary = names.indexOf('tsfin_outbox_pending_summary');
   const authorise = names.indexOf('timesheet_authorise_bulk_atomic');
   const complete = current.calls.findIndex((call) => call.name === 'import_review_follow_up_component_update_v1'
     && call.args.p_component === 'TSFIN' && call.args.p_new_component_status === 'COMPLETE');
-  assert.ok(summary >= 0 && authorise > summary && complete > authorise);
+  assert.ok(wake >= 0 && summary > wake && authorise > summary && complete > authorise);
+  assert.deepEqual(current.calls[wake].args, {
+    _timesheet_ids: [TIMESHEET_ID],
+    _reason: 'CONTEXT_CHANGED'
+  });
   assert.deepEqual(current.calls[authorise].args.p_items, [{
     timesheet_id: TIMESHEET_ID,
     expected_timesheet_id: TIMESHEET_ID
