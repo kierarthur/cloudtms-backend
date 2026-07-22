@@ -115,6 +115,15 @@ test('HealthRoster client eligibility responses cannot be reused from a browser 
   assert.match(body, /return respond\(ok\(\{ items \}\)\)/);
   assert.match(body, /return respond\(ok\(\{ items: \[\] \}\)\)/);
   assert.match(body, /return respond\(unauthorized\(\)\)/);
+  assert.match(body, /Future-only[\s\S]*return bestEligible/);
+  assert.doesNotMatch(body, /bestAny/);
+  assert.match(body, /start_date=lte/);
+  assert.match(body, /end_date\.gte/);
+  const eligibility = functionBody('currentHealthRosterEligibility');
+  assert.match(eligibility, /effective_from\.lte/);
+  assert.match(eligibility, /activeOverrideCount/);
+  assert.match(functionBody('handleImportHrRotaParse'), /currentHealthRosterEligibility/);
+  assert.match(functionBody('handleHrAutoprocessImport'), /currentHealthRosterEligibility/);
 });
 
 test('Banking Pay refresh remains outside the import-review change boundary', () => {

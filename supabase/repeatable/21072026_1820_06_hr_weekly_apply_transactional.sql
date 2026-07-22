@@ -350,8 +350,8 @@ begin
   ) on commit drop;
 
   -- ─────────────────────────────────────────────
-  -- 2) Load weekly_import_phase2 + compute per-group MODE_A/MODE_B
-  --     MODE switch: effective_no_timesheet_required
+  -- 2) Load weekly_import_phase2 + compute per-group authority through the
+  --    shared current-setting core used by staging and catalogue generation.
   -- ─────────────────────────────────────────────
   create temporary table tmp_p2_all on commit drop as
   select *
@@ -381,30 +381,20 @@ begin
     t.client_id,
     t.week_ending_date,
     ('grp:' || t.contract_id::text || ':' || t.week_ending_date::text || ':' || t.candidate_id::text) as group_id,
-    case
-      when (
-        case
-          when (c.overrideclientsettings is true and c.no_timesheet_required is not null)
-            then c.no_timesheet_required
-          else coalesce(cs.no_timesheet_required, false)
-        end
-      ) is true then 'MODE_B'
-      else 'MODE_A'
-    end as mode
+    case a.authority_mode when 'AUTHORITATIVE' then 'MODE_B'
+      when 'VALIDATION_ONLY' then 'MODE_A' else 'OUT_OF_SCOPE' end as mode
   from (
     select distinct p2ok.contract_id, p2ok.candidate_id, p2ok.client_id, p2ok.week_ending_date
     from tmp_p2_ok p2ok
   ) as t
   join public.contracts c
     on c.id = t.contract_id
-  left join lateral (
-    select cs2.no_timesheet_required
-    from public.client_settings cs2
-    where cs2.client_id = v_import_client_id
-      and (cs2.effective_from is null or cs2.effective_from <= t.week_ending_date)
-    order by cs2.effective_from desc nulls last, cs2.updated_at desc nulls last
-    limit 1
-  ) as cs on true;
+  cross join lateral public._import_review_effective_authority_core_v1(
+    'HR_WEEKLY',c.id,c.client_id,t.week_ending_date) a;
+
+  if exists(select 1 from tmp_group_mode where mode='OUT_OF_SCOPE') then
+    raise exception 'HR_WEEKLY_IMPORT_AUTHORITY_OUT_OF_SCOPE' using errcode='40001';
+  end if;
 
   create temporary table tmp_p2_ok_mode on commit drop as
   select
@@ -874,16 +864,9 @@ begin
         ns.client_id,
         ns.week_ending_date
       from public.nhsp_shifts ns
-      join public.contracts c_cancel
-        on c_cancel.id = ns.contract_id
-      left join lateral (
-        select cs_cancel_0.no_timesheet_required
-        from public.client_settings cs_cancel_0
-        where cs_cancel_0.client_id = ns.client_id
-          and (cs_cancel_0.effective_from is null or cs_cancel_0.effective_from <= ns.week_ending_date)
-        order by cs_cancel_0.effective_from desc nulls last, cs_cancel_0.updated_at desc nulls last
-        limit 1
-      ) as cs_cancel on true
+      join public.contracts c_cancel on c_cancel.id = ns.contract_id
+      cross join lateral public._import_review_effective_authority_core_v1(
+        'HR_WEEKLY',c_cancel.id,c_cancel.client_id,ns.week_ending_date) a_cancel
       where ns.id = any(v_selected_cancel_shift_ids)
         and ns.source_system = 'HEALTHROSTER'::public.hr_source_enum
         and ns.client_id = v_import_client_id
@@ -891,13 +874,7 @@ begin
         and ns.candidate_id is not null
         and ns.client_id is not null
         and ns.week_ending_date is not null
-        and (
-          case
-            when (c_cancel.overrideclientsettings is true and c_cancel.no_timesheet_required is not null)
-              then c_cancel.no_timesheet_required
-            else coalesce(cs_cancel.no_timesheet_required, false)
-          end
-        ) is true
+        and a_cancel.import_authoritative
       on conflict do nothing;
     end if;
 
@@ -1708,50 +1685,17 @@ begin
   create temporary table tmp_val_mode on commit drop as
   select
     vr.timesheet_id,
-    case
-      when (
-        coalesce(
-          case
-            when (cval.overrideclientsettings is true and cval.autoprocess_hr is not null)
-              then cval.autoprocess_hr
-            else csval.autoprocess_hr
-          end,
-          false
-        ) is true
-        and coalesce(
-          case
-            when (cval.overrideclientsettings is true and cval.requires_hr is not null)
-              then cval.requires_hr
-            else csval.requires_hr
-          end,
-          false
-        ) is true
-        and coalesce(
-          case
-            when (cval.overrideclientsettings is true and cval.no_timesheet_required is not null)
-              then cval.no_timesheet_required
-            else csval.no_timesheet_required
-          end,
-          false
-        ) is false
-      )
-      then 'MODE_A'
-      else 'MODE_B'
-    end as mode
+    case aval.authority_mode when 'VALIDATION_ONLY' then 'MODE_A'
+      when 'AUTHORITATIVE' then 'MODE_B' else 'OUT_OF_SCOPE' end as mode
   from tmp_val_rows vr
   join public.contracts cval
     on cval.id = vr.contract_id
-  left join lateral (
-    select
-      cs2.autoprocess_hr,
-      cs2.requires_hr,
-      cs2.no_timesheet_required
-    from public.client_settings cs2
-    where cs2.client_id = v_import_client_id
-      and (cs2.effective_from is null or cs2.effective_from <= vr.week_ending_date)
-    order by cs2.effective_from desc nulls last, cs2.updated_at desc nulls last
-    limit 1
-  ) as csval on true;
+  cross join lateral public._import_review_effective_authority_core_v1(
+    'HR_WEEKLY',cval.id,cval.client_id,vr.week_ending_date) aval;
+
+  if exists(select 1 from tmp_val_mode where mode='OUT_OF_SCOPE') then
+    raise exception 'HR_WEEKLY_VALIDATION_AUTHORITY_OUT_OF_SCOPE' using errcode='40001';
+  end if;
 
   create temporary table tmp_invalidation_actions(
     timesheet_id uuid not null,

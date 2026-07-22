@@ -7,6 +7,7 @@ const emailSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_0
 const lifecycleSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql', import.meta.url), 'utf8');
 const coreSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_00_import_review_internal_core.sql', import.meta.url), 'utf8');
 const dailySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql', import.meta.url), 'utf8');
+const weeklyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql', import.meta.url), 'utf8');
 
 function functionBody(source, name) {
   const marker = `create or replace function public.${name}(`;
@@ -38,9 +39,11 @@ test('staged scope discovery is actor-bound, source-owned and bounded', () => {
   assert.match(body, /authority_mode/);
   assert.match(body, /authority_summary/);
   assert.match(body, /DAILY_EXISTING_TIMESHEET_VALIDATION/);
-  assert.match(body, /EFFECTIVE_CLIENT_AND_CONTRACT_SETTINGS/);
-  assert.match(body, /NHSP_IMPORT_AUTHORITY/);
-  assert.match(body, /overrideclientsettings is true and c\.no_timesheet_required is not null/);
+  assert.match(body, /_import_review_effective_authority_core_v1/);
+  assert.match(body, /CURRENT_CLIENT_AND_CONTRACT_SETTINGS/);
+  assert.match(body, /CURRENT_NHSP_SETTINGS/);
+  assert.match(body, /settings_as_of_date/);
+  assert.doesNotMatch(body, /effective_from<=ric\.week_ending_date/);
 });
 
 test('action paging supports only the approved sizes and deterministic server-side sorts', () => {
@@ -78,7 +81,8 @@ test('weekly action classification consumes the established phase2 mapping autho
   assert.match(body, /Validate existing timesheet only/);
   assert.match(body, /and not coalesce\(m\.contract_rate_complete,false\) then 'CONTRACT_RATES_INCOMPLETE'/);
   assert.match(body, /source_route_eligible',coalesce\(o\.route_eligible,false\)/);
-  assert.match(body, /coalesce\(o\.route_eligible,false\) and coalesce\(o\.rate_complete,false\)/);
+  assert.match(body, /not coalesce\(o\.import_authoritative,false\) or coalesce\(o\.rate_complete,false\)/);
+  assert.match(body, /CONTRACT_NOT_ELIGIBLE/);
   assert.match(body, /'evidence_rows'/);
   assert.match(body, /healthroster_start/);
   assert.match(body, /timesheet_start/);
@@ -90,12 +94,32 @@ test('Daily automatic and saved resolution both enforce the active mapped role a
   assert.match(catalogue, /lower\(btrim\(coalesce\(t\.tsfin_role,''\)\)\)=lower\(btrim\(coalesce\(dgm\.role_code,''\)\)\)/);
   assert.match(catalogue, /t\.tsfin_band/);
   assert.match(catalogue, /daily_mapping_updated_at/);
+  assert.match(catalogue, /dcon\.contract_ids/);
+  assert.match(catalogue, /ts\.contract_id=any\(coalesce\(dcon\.contract_ids,array\[\]::uuid\[\]\)\)/);
+  assert.match(catalogue, /coalesce\(rtsx\.contract_id,dcon\.contract_id\)/);
   assert.match(save, /HR_DAILY_RESOLUTION_GRADE_MAPPING_STALE/);
   assert.match(save, /HR_DAILY_RESOLUTION_GRADE_ROLE_MISMATCH/);
   assert.match(save, /v_mapping\.role_code/);
   assert.match(save, /v_mapping\.band_norm/);
   assert.match(save, /mapping_evidence/);
   assert.match(save, /timesheet_evidence/);
+  assert.match(save, /v_action\.contract_id is not null and v_contract_id is distinct from v_action\.contract_id/);
+  assert.match(save, /HR_DAILY_RESOLUTION_CONTRACT_OUT_OF_SCOPE/);
+});
+
+test('one owner-only current-setting authority core governs catalogue and Weekly apply', () => {
+  const authority = functionBody(coreSql, '_import_review_effective_authority_core_v1');
+  const catalogue = functionBody(coreSql, '_import_review_action_catalog_core_v1');
+  const apply = functionBody(weeklyApplySql, 'hr_weekly_apply_transactional');
+  assert.match(authority, /effective_from<=x\.today_london/);
+  assert.match(authority, /e\.autoprocess_hr and e\.no_timesheet_required/);
+  assert.match(authority, /e\.autoprocess_hr and not e\.no_timesheet_required/);
+  assert.match(authority, /when e\.route in \('HR_DAILY','HEALTHROSTER_DAILY'\) then e\.autoprocess_hr/);
+  assert.match(coreSql, /revoke all on function public\._import_review_effective_authority_core_v1\(text,uuid,uuid,date\)[\s\S]*?service_role/);
+  assert.match(catalogue, /cross join lateral public\._import_review_effective_authority_core_v1/);
+  assert.match(apply, /case a\.authority_mode when 'AUTHORITATIVE' then 'MODE_B'/);
+  assert.match(apply, /case aval\.authority_mode when 'VALIDATION_ONLY' then 'MODE_A'/);
+  assert.doesNotMatch(apply, /effective_no_timesheet_required/);
 });
 
 test('overlap preflight is route, date and client aware', () => {

@@ -103424,6 +103424,45 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   };
 }
 
+function importReviewLondonTodayYmd() {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    const value = `${parts.find((p) => p.type === 'year')?.value || ''}-${parts.find((p) => p.type === 'month')?.value || ''}-${parts.find((p) => p.type === 'day')?.value || ''}`;
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date().toISOString().slice(0, 10);
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+async function currentHealthRosterEligibility(env, clientId) {
+  const id = String(clientId || '').trim();
+  if (!id) return { exists: false, eligible: false, currentSetting: null, activeOverrideCount: 0 };
+  const today = importReviewLondonTodayYmd();
+  const enc = encodeURIComponent;
+  const [{ rows: clients }, { rows: settings }, { rows: overrides }] = await Promise.all([
+    sbFetch(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(id)}&select=id&limit=1`),
+    sbFetch(env, `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${enc(id)}` +
+      `&or=(effective_from.is.null,effective_from.lte.${enc(today)})` +
+      '&select=id,effective_from,autoprocess_hr,updated_at' +
+      '&order=effective_from.desc.nullslast,updated_at.desc.nullslast,id.desc&limit=1'),
+    sbFetch(env, `${env.SUPABASE_URL}/rest/v1/contracts?client_id=eq.${enc(id)}` +
+      '&overrideclientsettings=eq.true&autoprocess_hr=eq.true' +
+      `&start_date=lte.${enc(today)}&or=(end_date.is.null,end_date.gte.${enc(today)})` +
+      '&select=id&limit=2')
+  ]);
+  const currentSetting = Array.isArray(settings) ? (settings[0] || null) : null;
+  const activeOverrideCount = Array.isArray(overrides) ? overrides.length : 0;
+  return {
+    exists: Array.isArray(clients) && clients.length > 0,
+    eligible: currentSetting?.autoprocess_hr === true || activeOverrideCount > 0,
+    currentSetting,
+    activeOverrideCount,
+    settingsAsOfDate: today
+  };
+}
+
 async function handleImportHrRotaParse(env, req) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -103455,31 +103494,14 @@ async function handleImportHrRotaParse(env, req) {
     return withCORS(env, req, badRequest('client_id is required for HealthRoster daily import'));
   }
 
-  // ✅ Validate client_id is a HealthRoster client (same basis as /api/healthroster/autoprocess/clients)
+  // Validate against the same current-setting rule used by the client picker.
   try {
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/vw_picker_clients` +
-        `?id=eq.${enc(clientId)}` +
-        `&select=id,autoprocess_hr` +
-        `&limit=1`,
-      { headers: sbHeaders(env) }
-    );
-
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      return withCORS(env, req, badRequest(`Failed to validate client_id: ${txt || res.status}`));
-    }
-
-    const json = await res.json().catch(() => []);
-    const row = Array.isArray(json) ? json[0] : json;
-
-    if (!row || !row.id) {
+    const eligibility = await currentHealthRosterEligibility(env, clientId);
+    if (!eligibility.exists) {
       return withCORS(env, req, badRequest(`client_id ${clientId} not found`));
     }
-
-    const isHrClient = !!row.autoprocess_hr;
-    if (!isHrClient) {
-      return withCORS(env, req, badRequest(`client_id ${clientId} is not a HealthRoster client (autoprocess_hr=false)`));
+    if (!eligibility.eligible) {
+      return withCORS(env, req, badRequest(`client_id ${clientId} is not currently enabled for HealthRoster`));
     }
   } catch (e) {
     return withCORS(env, req, badRequest(`Failed to validate client_id: ${e?.message || String(e)}`));
@@ -106973,6 +106995,16 @@ async function handleHrAutoprocessImport(env, req) {
   }
   if (!clientId) {
     return withCORS(env, req, badRequest("client_id is required for HealthRoster autoprocess"));
+  }
+
+  try {
+    const eligibility = await currentHealthRosterEligibility(env, clientId);
+    if (!eligibility.exists) return withCORS(env, req, badRequest(`client_id ${clientId} not found`));
+    if (!eligibility.eligible) {
+      return withCORS(env, req, badRequest(`client_id ${clientId} is not currently enabled for HealthRoster`));
+    }
+  } catch (error) {
+    return withCORS(env, req, badRequest(`Failed to validate HealthRoster client: ${error?.message || String(error)}`));
   }
 
   if (LOG) {
@@ -111678,8 +111710,8 @@ async function handleHrAutoprocessClients(env, req) {
     const list = Array.isArray(rows) ? rows : [];
     if (!list.length) return null;
 
-    // Prefer the most recent row whose effective_from <= asOfYmd.
-    // If none qualify, fall back to the most recent row overall (by effective_from/updated_at ordering).
+    // Prefer the most recent row whose effective_from <= asOfYmd. Future-only
+    // settings must never enable an import route early.
     let bestEligible = null;
     for (const r of list) {
       if (!r || typeof r !== 'object') continue;
@@ -111710,37 +111742,7 @@ async function handleHrAutoprocessClients(env, req) {
       }
     }
 
-    if (bestEligible) return bestEligible;
-
-    // No eligible row (all future) -> pick the most recent overall by effective_from then updated_at
-    let bestAny = null;
-    for (const r of list) {
-      if (!r || typeof r !== 'object') continue;
-
-      if (!bestAny) {
-        bestAny = r;
-        continue;
-      }
-
-      const efA = r.effective_from != null ? String(r.effective_from).slice(0, 10) : '';
-      const efB = bestAny.effective_from != null ? String(bestAny.effective_from).slice(0, 10) : '';
-
-      const aOk = /^\d{4}-\d{2}-\d{2}$/.test(efA) ? efA : '';
-      const bOk = /^\d{4}-\d{2}-\d{2}$/.test(efB) ? efB : '';
-
-      if (aOk && (!bOk || aOk > bOk)) {
-        bestAny = r;
-        continue;
-      }
-
-      if (aOk === bOk) {
-        const ua = r.updated_at != null ? String(r.updated_at) : '';
-        const ub = bestAny.updated_at != null ? String(bestAny.updated_at) : '';
-        if (ua && (!ub || ua > ub)) bestAny = r;
-      }
-    }
-
-    return bestAny;
+    return bestEligible;
   };
 
   try {
@@ -111756,6 +111758,8 @@ async function handleHrAutoprocessClients(env, req) {
           `?overrideclientsettings=eq.true` +
           `&autoprocess_hr=eq.true` +
           `&client_id=not.is.null` +
+          `&start_date=lte.${enc(todayYmd)}` +
+          `&or=(end_date.is.null,end_date.gte.${enc(todayYmd)})` +
           `&select=client_id` +
           `&limit=10000`
       );
