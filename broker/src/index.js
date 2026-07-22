@@ -111637,8 +111637,21 @@ async function handleHrRotaValidationPreview(env, req, importId) {
 
 
 async function handleHrAutoprocessClients(env, req) {
+  const respond = (response) => {
+    const corsResponse = withCORS(env, req, response);
+    const headers = new Headers(corsResponse.headers);
+    headers.set('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
+    headers.set('Pragma', 'no-cache');
+    headers.set('Expires', '0');
+    return new Response(corsResponse.body, {
+      status: corsResponse.status,
+      statusText: corsResponse.statusText,
+      headers
+    });
+  };
+
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  if (!user) return respond(unauthorized());
 
   const enc = encodeURIComponent;
 
@@ -111782,7 +111795,7 @@ async function handleHrAutoprocessClients(env, req) {
 
     const candidateClientIds = Array.from(new Set([...(overrideClientIds || []), ...(candidateFromSettings || [])]));
     if (!candidateClientIds.length) {
-      return withCORS(env, req, ok({ items: [] }));
+      return respond(ok({ items: [] }));
     }
 
     // Load client_settings history for candidate clients
@@ -111828,7 +111841,7 @@ async function handleHrAutoprocessClients(env, req) {
     const eligibleClientIds = Array.from(new Set([...(overrideClientIds || []), ...Array.from(enabledViaClientSettings)]));
 
     if (!eligibleClientIds.length) {
-      return withCORS(env, req, ok({ items: [] }));
+      return respond(ok({ items: [] }));
     }
 
     // Fetch client names for eligible clients (deduped) and return sorted list
@@ -111866,10 +111879,10 @@ async function handleHrAutoprocessClients(env, req) {
       return an.localeCompare(bn);
     });
 
-    return withCORS(env, req, ok({ items }));
+    return respond(ok({ items }));
   } catch (e) {
     console.error('[HR_AUTOPROC_CLIENTS] failed', { err: e?.message || String(e) });
-    return withCORS(env, req, serverError('Failed to list HealthRoster autoprocess clients'));
+    return respond(serverError('Failed to list HealthRoster autoprocess clients'));
   }
 }
 

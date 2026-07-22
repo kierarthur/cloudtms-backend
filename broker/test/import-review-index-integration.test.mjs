@@ -107,6 +107,16 @@ test('global/client financial policy writes use the installed atomic CAS RPCs', 
   assert.match(functionBody('handleUpdateClient'), /client_update_with_settings_v1/);
 });
 
+test('HealthRoster client eligibility responses cannot be reused from a browser or shared cache', () => {
+  const body = functionBody('handleHrAutoprocessClients');
+  assert.match(body, /Cache-Control', 'private, no-store, max-age=0, must-revalidate'/);
+  assert.match(body, /Pragma', 'no-cache'/);
+  assert.match(body, /Expires', '0'/);
+  assert.match(body, /return respond\(ok\(\{ items \}\)\)/);
+  assert.match(body, /return respond\(ok\(\{ items: \[\] \}\)\)/);
+  assert.match(body, /return respond\(unauthorized\(\)\)/);
+});
+
 test('Banking Pay refresh remains outside the import-review change boundary', () => {
   const bankingRefresh = functionBody('handleBankingPayWorkbenchSessionRefresh');
   assert.doesNotMatch(bankingRefresh, /send_ts_queries_to_different_email|import_review|reversal_complete_financials_date/);
