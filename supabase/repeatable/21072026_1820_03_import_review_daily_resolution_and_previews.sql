@@ -9,7 +9,9 @@ returns jsonb language plpgsql security definer set search_path to 'public','ext
 declare
   v_state public.import_review_states%rowtype; v_action public.import_review_decisions%rowtype;
   v_hr public.hr_rows%rowtype; v_ts public.v_timesheets_daily_match%rowtype; v_contract_id uuid;
-  v_existing public.import_review_daily_timesheet_resolutions%rowtype; v_refresh jsonb; v_hash text; v_prior jsonb;
+  v_existing public.import_review_daily_timesheet_resolutions%rowtype;
+  v_mapping public.hr_daily_grade_role_mappings%rowtype; v_mapping_count integer; v_timesheet_evidence jsonb;
+  v_refresh jsonb; v_hash text; v_prior jsonb;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if p_request_id is null or p_import_id is null or p_hr_row_id is null then
@@ -59,20 +61,44 @@ begin
       evidence_fingerprint=excluded.evidence_fingerprint,preview_generation=excluded.preview_generation,state_version=excluded.state_version,
       selected_at_utc=now(),selected_by_user_id=excluded.selected_by_user_id,stale_at_utc=now(),stale_reason_code='USER_CLEARED',updated_at_utc=now();
   else
+    select count(*) into v_mapping_count
+    from public.hr_daily_grade_role_mappings gm
+    where gm.client_id=v_action.client_id and gm.active
+      and gm.incoming_grade_norm=lower(btrim(coalesce(nullif(v_hr.assignment_grade_norm,''),
+        v_hr.payload_json->>'grade_raw',v_hr.payload_json->>'Request_Grade','')));
+    if v_mapping_count<>1 then
+      raise exception 'HR_DAILY_RESOLUTION_GRADE_MAPPING_STALE' using errcode='40001';
+    end if;
+    select * into v_mapping from public.hr_daily_grade_role_mappings gm
+    where gm.client_id=v_action.client_id and gm.active
+      and gm.incoming_grade_norm=lower(btrim(coalesce(nullif(v_hr.assignment_grade_norm,''),
+        v_hr.payload_json->>'grade_raw',v_hr.payload_json->>'Request_Grade','')))
+    order by gm.updated_at desc,gm.id limit 1;
     select * into v_ts from public.v_timesheets_daily_match t where t.timesheet_id=p_timesheet_id;
     if not found or v_ts.candidate_id is distinct from v_action.candidate_id or v_ts.client_id is distinct from v_action.client_id
       or v_ts.sheet_scope::text<>'DAILY'
       or (v_ts.worked_start_iso at time zone 'Europe/London')::date<>v_hr.date_local then
       raise exception 'HR_DAILY_RESOLUTION_TARGET_OUTSIDE_ROW_SCOPE' using errcode='22023';
     end if;
+    if lower(btrim(coalesce(v_ts.tsfin_role,''))) is distinct from lower(btrim(coalesce(v_mapping.role_code,'')))
+      or (nullif(btrim(coalesce(v_mapping.band_norm,'')),'') is not null
+        and lower(btrim(coalesce(v_ts.tsfin_band,''))) is distinct from lower(btrim(v_mapping.band_norm))) then
+      raise exception 'HR_DAILY_RESOLUTION_GRADE_ROLE_MISMATCH' using errcode='22023';
+    end if;
     select t.contract_id into v_contract_id from public.timesheets t where t.timesheet_id=p_timesheet_id and t.is_current and t.revoked_at is null;
     if v_action.contract_id is null or v_contract_id is distinct from v_action.contract_id then
       raise exception 'HR_DAILY_RESOLUTION_CONTRACT_MISMATCH' using errcode='22023';
     end if;
-    if not (v_hr.date_local between (select c.start_date from public.contracts c where c.id=v_contract_id)
-      and (select c.end_date from public.contracts c where c.id=v_contract_id)) then
+    if not exists(select 1 from public.contracts c where c.id=v_contract_id and c.start_date<=v_hr.date_local
+      and (c.end_date is null or c.end_date>=v_hr.date_local)) then
       raise exception 'HR_DAILY_RESOLUTION_CONTRACT_DATE_MISMATCH' using errcode='22023';
     end if;
+    select jsonb_strip_nulls(jsonb_build_object('timesheet_id',t.timesheet_id,'updated_at',t.updated_at,
+      'contract_id',t.contract_id,'candidate_id',v_ts.candidate_id,'client_id',v_ts.client_id,
+      'worked_start_iso',v_ts.worked_start_iso,'worked_end_iso',v_ts.worked_end_iso,
+      'worked_minutes',v_ts.worked_minutes,'break_minutes',v_ts.break_minutes,
+      'tsfin_role',v_ts.tsfin_role,'tsfin_band',v_ts.tsfin_band))
+      into v_timesheet_evidence from public.timesheets t where t.timesheet_id=p_timesheet_id and t.is_current;
     insert into public.import_review_daily_timesheet_resolutions(import_id,hr_row_id,resolved_timesheet_id,resolution_method,status,
       evidence_fingerprint,preview_generation,state_version,selected_by_user_id)
     values(p_import_id,p_hr_row_id,p_timesheet_id,'USER_SELECTED','CURRENT',v_action.evidence_fingerprint,v_state.preview_generation,v_state.state_version,p_actor_user_id)
@@ -84,7 +110,11 @@ begin
   where import_id=p_import_id returning * into v_state;
   insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json)
   values(p_import_id,v_state.state_version,p_request_id,'DAILY_TIMESHEET_RESOLUTION_SAVED',p_actor_user_id,jsonb_build_object(
-    'request_hash',v_hash,'hr_row_id',p_hr_row_id,'timesheet_id',p_timesheet_id,'resulting_state_version',v_state.state_version,'status',v_state.status));
+    'request_hash',v_hash,'hr_row_id',p_hr_row_id,'timesheet_id',p_timesheet_id,
+    'mapping_evidence',case when p_timesheet_id is null then null else jsonb_strip_nulls(jsonb_build_object(
+      'mapping_id',v_mapping.id,'mapping_updated_at',v_mapping.updated_at,'mapped_role',v_mapping.role_code,'mapped_band',v_mapping.band_norm)) end,
+    'timesheet_evidence',case when p_timesheet_id is null then null else v_timesheet_evidence end,
+    'resulting_state_version',v_state.state_version,'status',v_state.status));
   v_refresh:=public._import_review_refresh_core_v1(p_import_id,v_state.state_version,p_actor_user_id,500);
   return v_refresh||jsonb_build_object('replay',false,'hr_row_id',p_hr_row_id,'timesheet_id',p_timesheet_id,
     'resolution_method',case when p_timesheet_id is null then 'CLEARED' else 'USER_SELECTED' end);

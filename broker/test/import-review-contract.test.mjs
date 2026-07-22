@@ -74,12 +74,28 @@ function successRpcValue(name) {
     import_id: IMPORT_ID,
     coverage_start_date: '2026-07-01',
     coverage_end_date: '2026-07-07',
+    authority_mode: 'VALIDATION_ONLY',
+    authority_summary: { mode: 'VALIDATION_ONLY', source_route: 'HR_DAILY', basis: 'DAILY_EXISTING_TIMESHEET_VALIDATION' },
     scope_clients: [],
     candidate_options: [],
     candidate_has_next: false
   };
   if (name === 'import_review_actions_page_v1') return {
-    ok: true, items: [], total_items: 0, page_number: 1, page_size: 25, total_pages: 0
+    ok: true,
+    items: [{
+      action_id: ACTION_ID,
+      imported_evidence: { work_date: '2026-07-01', role: 'Band 5' },
+      current_evidence: { work_date: '2026-07-01', role: 'RMN', band: 'Band 5' },
+      difference_codes: ['START_TIME'], outcome_label: 'Apply reviewed amendment',
+      evidence_rows: [{
+        imported_evidence: { work_date: '2026-07-01', start: '08:00' },
+        current_evidence: { work_date: '2026-07-01', start: '08:30' },
+        difference_codes: ['START_TIME']
+      }],
+      resolution_kind: 'WEEKLY_ASSIGNMENT_CONTRACT',
+      resolution_options: [{ option_id: `contract:${IMPORT_ID}`, contract_id: IMPORT_ID, selectable: true }]
+    }],
+    total_items: 1, page_number: 1, page_size: 25, total_pages: 1
   };
   if (name === 'import_review_get_v1') return readyReview();
   if (name === 'import_review_apply_status_get_v1') {
@@ -103,6 +119,21 @@ function successRpcValue(name) {
   }
   return { ok: true, rpc: name, marker: 'happy-path' };
 }
+
+test('staged scope preserves the server-owned authority summary for coverage wording', async () => {
+  const current = scenario();
+  const response = await current.dispatcher(
+    jsonRequest('GET', `/api/import-reviews/staged/${IMPORT_ID}/scope?candidate_page=1&candidate_page_size=25`),
+    { TEST: true },
+    current.ctx
+  );
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 200);
+  assert.equal(captured.body.data.authority_mode, 'VALIDATION_ONLY');
+  assert.deepEqual(captured.body.data.authority_summary, {
+    mode: 'VALIDATION_ONLY', source_route: 'HR_DAILY', basis: 'DAILY_EXISTING_TIMESHEET_VALIDATION'
+  });
+});
 
 function scenario({ conflictRpc = null, conflictToken = 'IMPORT_REVIEW_VERSION_CONFLICT', contract = installedContract } = {}) {
   const calls = [];
@@ -264,6 +295,35 @@ for (const endpoint of endpoints) {
   });
 }
 
+test('paged actions preserve the normalized V3 evidence and server-owned resolution options', async () => {
+  const current = scenario();
+  const response = await current.dispatcher(
+    jsonRequest(
+      'GET',
+      `/api/import-reviews/${IMPORT_ID}/actions?page=1&page_size=25&sort_by=CANDIDATE&sort_direction=ASC&view=PENDING`
+    ),
+    { TEST: true },
+    current.ctx
+  );
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 200);
+  assert.equal(captured.body.contract_version, 'IMPORT_REVIEW_DB_V1');
+  const [item] = captured.body.data.items;
+  assert.deepEqual(item.imported_evidence, { work_date: '2026-07-01', role: 'Band 5' });
+  assert.deepEqual(item.current_evidence, { work_date: '2026-07-01', role: 'RMN', band: 'Band 5' });
+  assert.deepEqual(item.difference_codes, ['START_TIME']);
+  assert.deepEqual(item.evidence_rows, [{
+    imported_evidence: { work_date: '2026-07-01', start: '08:00' },
+    current_evidence: { work_date: '2026-07-01', start: '08:30' },
+    difference_codes: ['START_TIME']
+  }]);
+  assert.equal(item.outcome_label, 'Apply reviewed amendment');
+  assert.equal(item.resolution_kind, 'WEEKLY_ASSIGNMENT_CONTRACT');
+  assert.deepEqual(item.resolution_options, [
+    { option_id: `contract:${IMPORT_ID}`, contract_id: IMPORT_ID, selectable: true }
+  ]);
+});
+
 test('all business routes fail closed before their RPC when the database contract is unavailable', async () => {
   const current = scenario({ contract: null });
   const response = await current.dispatcher(
@@ -291,8 +351,8 @@ test('the contract gate fails closed when component-aware follow-up support is a
   assert.deepEqual(current.calls.map((call) => call.name), ['import_review_contract_version_get_v1']);
 });
 
-test('the contract gate fails closed when the bounded review UI contract is absent', async () => {
-  const { review_ui_contract_version: _ui, ...oldContract } = installedContract;
+test('the V3 Worker fails closed against the superseded V2 review UI contract', async () => {
+  const oldContract = { ...installedContract, review_ui_contract_version: 'IMPORT_REVIEW_UI_V2' };
   const current = scenario({ contract: oldContract });
   const response = await current.dispatcher(
     jsonRequest('GET', '/api/import-reviews?page_size=25'),

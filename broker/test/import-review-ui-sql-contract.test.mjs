@@ -6,6 +6,7 @@ const uiSql = readFileSync(new URL('../../supabase/repeatable/22072026_0052_impo
 const emailSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql', import.meta.url), 'utf8');
 const lifecycleSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql', import.meta.url), 'utf8');
 const coreSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_00_import_review_internal_core.sql', import.meta.url), 'utf8');
+const dailySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql', import.meta.url), 'utf8');
 
 function functionBody(source, name) {
   const marker = `create or replace function public.${name}(`;
@@ -18,9 +19,10 @@ function functionBody(source, name) {
 
 test('the fail-closed database contract exposes the bounded review UI and recipient grouping versions', () => {
   const body = functionBody(uiSql, 'import_review_contract_version_get_v1');
-  assert.match(body, /review_ui_contract_version','IMPORT_REVIEW_UI_V2/);
+  assert.match(body, /review_ui_contract_version','IMPORT_REVIEW_UI_V3/);
   assert.match(body, /email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1/);
   assert.match(body, /legacy_contracts_supported',false/);
+  assert.match(lifecycleSql, /review_ui_contract_version','IMPORT_REVIEW_UI_V3/);
 });
 
 test('staged scope discovery is actor-bound, source-owned and bounded', () => {
@@ -33,6 +35,12 @@ test('staged scope discovery is actor-bound, source-owned and bounded', () => {
   assert.match(body, /candidate_total_pages/);
   assert.match(body, /_import_review_overlap_preflight_core_v2/);
   assert.match(body, /overlapping_unfinished_reviews/);
+  assert.match(body, /authority_mode/);
+  assert.match(body, /authority_summary/);
+  assert.match(body, /DAILY_EXISTING_TIMESHEET_VALIDATION/);
+  assert.match(body, /EFFECTIVE_CLIENT_AND_CONTRACT_SETTINGS/);
+  assert.match(body, /NHSP_IMPORT_AUTHORITY/);
+  assert.match(body, /overrideclientsettings is true and c\.no_timesheet_required is not null/);
 });
 
 test('action paging supports only the approved sizes and deterministic server-side sorts', () => {
@@ -43,6 +51,49 @@ test('action paging supports only the approved sizes and deterministic server-si
   assert.match(body, /'has_previous'/);
   assert.match(body, /'has_next'/);
   assert.match(body, /'view_counts'/);
+  for (const field of ['imported_evidence', 'current_evidence', 'difference_codes', 'evidence_rows', 'outcome_label', 'resolution_kind', 'resolution_options']) {
+    assert.match(body, new RegExp(`'${field}'`));
+  }
+  assert.match(body, /'role',t\.tsfin_role,'band',t\.tsfin_band/);
+  assert.match(body, /ct\.ts_queries_alt_email_address/);
+  assert.match(body, /cl\.ts_queries_email/);
+  assert.match(body, /RECIPIENT_UNAVAILABLE:/);
+  assert.doesNotMatch(body, /_timesheet_query_recipient_resolve_core_v1/);
+});
+
+test('weekly action classification consumes the established phase2 mapping authority', () => {
+  const body = functionBody(coreSql, '_import_review_action_catalog_core_v1');
+  assert.match(body, /weekly_phase as materialized/);
+  assert.match(body, /public\.weekly_import_phase2/);
+  assert.match(body, /assignment_band_mappings/);
+  assert.match(body, /WEEKLY_ASSIGNMENT_CONTRACT/);
+  assert.match(body, /CONTRACT_OUT_OF_SCOPE/);
+  assert.match(body, /CONTRACT_RATES_INCOMPLETE/);
+  assert.match(body, /weekly_mapping_evidence/);
+  assert.match(body, /contract_rate_evidence/);
+  assert.match(body, /import_authoritative/);
+  assert.match(body, /when not coalesce\(f\.import_authoritative,false\) then 'NO_ACTION'/);
+  assert.match(body, /Validate existing timesheet only/);
+  assert.match(body, /and not coalesce\(m\.contract_rate_complete,false\) then 'CONTRACT_RATES_INCOMPLETE'/);
+  assert.match(body, /source_route_eligible',coalesce\(o\.route_eligible,false\)/);
+  assert.match(body, /coalesce\(o\.route_eligible,false\) and coalesce\(o\.rate_complete,false\)/);
+  assert.match(body, /'evidence_rows'/);
+  assert.match(body, /healthroster_start/);
+  assert.match(body, /timesheet_start/);
+});
+
+test('Daily automatic and saved resolution both enforce the active mapped role and band', () => {
+  const catalogue = functionBody(coreSql, '_import_review_action_catalog_core_v1');
+  const save = functionBody(dailySql, 'hr_daily_timesheet_resolution_save_v1');
+  assert.match(catalogue, /lower\(btrim\(coalesce\(t\.tsfin_role,''\)\)\)=lower\(btrim\(coalesce\(dgm\.role_code,''\)\)\)/);
+  assert.match(catalogue, /t\.tsfin_band/);
+  assert.match(catalogue, /daily_mapping_updated_at/);
+  assert.match(save, /HR_DAILY_RESOLUTION_GRADE_MAPPING_STALE/);
+  assert.match(save, /HR_DAILY_RESOLUTION_GRADE_ROLE_MISMATCH/);
+  assert.match(save, /v_mapping\.role_code/);
+  assert.match(save, /v_mapping\.band_norm/);
+  assert.match(save, /mapping_evidence/);
+  assert.match(save, /timesheet_evidence/);
 });
 
 test('overlap preflight is route, date and client aware', () => {

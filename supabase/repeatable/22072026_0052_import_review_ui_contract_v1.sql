@@ -16,7 +16,7 @@ as $function$
     'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
-    'review_ui_contract_version','IMPORT_REVIEW_UI_V2',
+    'review_ui_contract_version','IMPORT_REVIEW_UI_V3',
     'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'legacy_contracts_supported',false
   )
@@ -45,6 +45,10 @@ declare
   v_clients jsonb;
   v_candidate_total integer;
   v_overlap jsonb;
+  v_authority_mode text:='UNRESOLVED';
+  v_authority_summary jsonb:='{}'::jsonb;
+  v_authoritative_contract_count integer:=0;
+  v_validation_contract_count integer:=0;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if p_import_id is null or v_page<1 or v_page>20 or v_size not in (25,50,75,100,500) then
@@ -166,6 +170,99 @@ begin
     raise exception 'IMPORT_REVIEW_STAGED_CLIENT_LIMIT_EXCEEDED' using errcode='54000';
   end if;
 
+  -- Coverage wording is server-owned. Daily HealthRoster is always an
+  -- existing-timesheet validation route. Weekly HealthRoster can be mixed
+  -- because no_timesheet_required may be overridden per contract.
+  if upper(v_import.source_system::text)='HEALTHROSTER_DAILY'
+     or upper(coalesce(v_import.import_scope,'')) like '%DAILY%' then
+    v_authority_mode:='VALIDATION_ONLY';
+    v_authority_summary:=jsonb_build_object(
+      'mode',v_authority_mode,
+      'source_route','HR_DAILY',
+      'authoritative_contract_count',0,
+      'validation_contract_count',0,
+      'basis','DAILY_EXISTING_TIMESHEET_VALIDATION'
+    );
+  elsif upper(v_import.source_system::text)='HEALTHROSTER'
+        and upper(coalesce(v_import.import_scope,'HR_WEEKLY')) not like '%DAILY%' then
+    with resolved_import_contracts as (
+      -- Reuse the Weekly resolver so the coverage explanation describes only
+      -- contracts selected for rows in this file.  Looking at every contract
+      -- owned by the client can incorrectly report MIXED because of an
+      -- unrelated candidate/contract that is absent from the upload.
+      select distinct w.contract_id,w.week_ending_date
+      from public.weekly_import_phase2(p_import_id,'HR_WEEKLY') w
+      where w.contract_id is not null
+    ), applicable_contracts as (
+      select distinct c.id,
+        case
+          when c.overrideclientsettings is true and c.no_timesheet_required is not null
+            then c.no_timesheet_required
+          else coalesce(cs.no_timesheet_required,false)
+        end import_authoritative
+      from resolved_import_contracts ric
+      join public.contracts c on c.id=ric.contract_id
+      left join lateral (
+        select cs2.no_timesheet_required
+        from public.client_settings cs2
+        where cs2.client_id=c.client_id
+          and (cs2.effective_from is null or cs2.effective_from<=ric.week_ending_date)
+        order by cs2.effective_from desc nulls last,cs2.updated_at desc nulls last,cs2.id desc
+        limit 1
+      ) cs on true
+    )
+    select count(*) filter(where import_authoritative),
+           count(*) filter(where not import_authoritative)
+      into v_authoritative_contract_count,v_validation_contract_count
+    from applicable_contracts;
+
+    if v_authoritative_contract_count>0 and v_validation_contract_count>0 then
+      v_authority_mode:='MIXED';
+    elsif v_authoritative_contract_count>0 then
+      v_authority_mode:='AUTHORITATIVE';
+    elsif v_validation_contract_count>0 then
+      v_authority_mode:='VALIDATION_ONLY';
+    else
+      select case when coalesce(cs.no_timesheet_required,false)
+        then 'AUTHORITATIVE' else 'VALIDATION_ONLY' end
+        into v_authority_mode
+      from (select 1) seed
+      left join lateral (
+        select cs2.no_timesheet_required
+        from public.client_settings cs2
+        where cs2.client_id=v_import.client_id
+          and (cs2.effective_from is null or cs2.effective_from<=v_to)
+        order by cs2.effective_from desc nulls last,cs2.updated_at desc nulls last,cs2.id desc
+        limit 1
+      ) cs on true;
+    end if;
+
+    v_authority_summary:=jsonb_build_object(
+      'mode',v_authority_mode,
+      'source_route','HR_WEEKLY',
+      'authoritative_contract_count',v_authoritative_contract_count,
+      'validation_contract_count',v_validation_contract_count,
+      'basis','EFFECTIVE_CLIENT_AND_CONTRACT_SETTINGS'
+    );
+  elsif upper(v_import.source_system::text)='NHSP' then
+    v_authority_mode:='AUTHORITATIVE';
+    v_authority_summary:=jsonb_build_object(
+      'mode',v_authority_mode,
+      'source_route','NHSP',
+      'authoritative_contract_count',0,
+      'validation_contract_count',0,
+      'basis','NHSP_IMPORT_AUTHORITY'
+    );
+  else
+    v_authority_summary:=jsonb_build_object(
+      'mode',v_authority_mode,
+      'source_route',coalesce(v_import.import_scope,v_import.source_system::text),
+      'authoritative_contract_count',0,
+      'validation_contract_count',0,
+      'basis','UNRESOLVED_SOURCE_ROUTE'
+    );
+  end if;
+
   v_overlap:=public._import_review_overlap_preflight_core_v2(
     p_import_id,v_import.source_system,coalesce(v_import.import_scope,v_import.source_system::text),
     v_from,v_to,v_clients);
@@ -190,6 +287,8 @@ begin
     'candidate_total_pages',case when v_candidate_total=0 then 0 else ceiling(v_candidate_total::numeric/v_size)::integer end,
     'candidate_has_previous',v_page>1,
     'candidate_has_next',v_page*v_size<v_candidate_total,
+    'authority_mode',v_authority_mode,
+    'authority_summary',v_authority_summary,
     'review_already_created',v_import.coverage_locked_at is not null,
     'review_status',(select s.status from public.import_review_states s where s.import_id=p_import_id),
     'overlapping_unfinished_reviews',v_overlap
@@ -240,29 +339,68 @@ begin
         case when position(',' in coalesce(d.summary_json->>'candidate_name',''))>0 then split_part(d.summary_json->>'candidate_name',',',1)
              else regexp_replace(btrim(coalesce(d.summary_json->>'candidate_name','')),'^.*\s+','','') end,'')) candidate_surname_sort,
       coalesce(nullif(cl.name,''),nullif(d.summary_json->>'client_name',''),'Unknown client') client_name,
-      case when d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER') then email_route.route->>'recipient_email' end recipient_email,
+      case when d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER') then lower(btrim(case
+        when coalesce(ct.send_ts_queries_to_different_email,false) then ct.ts_queries_alt_email_address
+        else cl.ts_queries_email end)) end recipient_email,
       case when d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER') then
-        'RECIPIENT_EMAIL:'||public._import_review_hash_v1(lower(email_route.route->>'recipient_email')) end recipient_group_key,
+        case when nullif(btrim(case when coalesce(ct.send_ts_queries_to_different_email,false)
+          then ct.ts_queries_alt_email_address else cl.ts_queries_email end),'') is null
+          then 'RECIPIENT_UNAVAILABLE:'||coalesce(d.client_id::text,'UNKNOWN')
+          else 'RECIPIENT_EMAIL:'||public._import_review_hash_v1(lower(btrim(case
+            when coalesce(ct.send_ts_queries_to_different_email,false) then ct.ts_queries_alt_email_address
+            else cl.ts_queries_email end))) end end recipient_group_key,
       case when d.contract_id is null then 'Client default'
         else coalesce(nullif(concat_ws(' · ',nullif(ct.display_site,''),nullif(ct.role,''),nullif(ct.band,'')),''),'Contract') end contract_label,
       coalesce(timesheet_choices.options,'[]'::jsonb) daily_timesheet_options,
+      coalesce(d.summary_json->'imported_evidence',case when hr.id is not null then jsonb_strip_nulls(jsonb_build_object(
+        'work_date',hr.date_local,'start',hr.start_time_local,'end',hr.end_time_local,
+        'break_minutes',coalesce((hr.payload_json->>'actual_break_mins')::integer,(hr.payload_json->>'actual_break_minutes')::integer,
+          (hr.payload_json->>'break_mins')::integer,(hr.payload_json->>'break_minutes')::integer),
+        'worked_hours',hr.hours_worked,'worked_minutes',case when hr.hours_worked is null then null else round(hr.hours_worked*60) end,
+        'reference',hr.hr_request_id,'role',hr.assignment_grade_norm)) end) imported_evidence,
+      coalesce(d.summary_json->'current_evidence',case when ts_ev.timesheet_id is not null then jsonb_strip_nulls(jsonb_build_object(
+        'work_date',(ts_ev.worked_start_iso at time zone 'Europe/London')::date,'start',ts_ev.worked_start_iso,'end',ts_ev.worked_end_iso,
+        'break_minutes',ts_ev.break_minutes,'worked_minutes',ts_ev.worked_minutes,'worked_hours',round(ts_ev.worked_minutes/60.0,2),
+        'reference',ts_ev.reference_number,'role',ts_ev.tsfin_role,'band',ts_ev.tsfin_band,'timesheet_id',ts_ev.timesheet_id))
+        when shift_ev.id is not null then jsonb_strip_nulls(jsonb_build_object(
+        'work_date',shift_ev.work_date,'start',shift_ev.start_utc,'end',shift_ev.end_utc,'break_minutes',shift_ev.break_mins,
+        'worked_minutes',shift_ev.pay_minutes,'role',shift_ev.assignment_code,'timesheet_id',shift_ev.timesheet_id,'shift_id',shift_ev.id)) end) current_evidence,
+      coalesce(d.summary_json->'difference_codes',case when nullif(d.summary_json->>'reason_code','') is not null
+        then jsonb_build_array(d.summary_json->>'reason_code') else '[]'::jsonb end) difference_codes,
+      coalesce(d.summary_json->'evidence_rows','[]'::jsonb) evidence_rows,
+      coalesce(nullif(d.summary_json->>'outcome_label',''),case d.action_kind
+        when 'INCLUDE_SHIFT' then 'Add imported shift' when 'APPLY_AMENDMENT' then 'Apply reviewed amendment'
+        when 'APPLY_CANCELLATION' then 'Cancel omitted shift' when 'MARK_VALIDATION_ERROR' then 'Mark validation issue'
+        when 'EMAIL_ISSUE' then 'Send new query' when 'EMAIL_REMINDER' then 'Send reminder'
+        when 'INVALIDATE_REFERENCE' then 'Clear stored reference' when 'NO_ACTION' then 'No action required'
+        when 'DAILY_TIMESHEET_RESOLUTION' then 'Choose existing timesheet' else 'Resolve before continuing' end) outcome_label,
+      d.summary_json->>'resolution_kind' resolution_kind,
+      d.summary_json->>'authority_mode' authority_mode,
+      coalesce(d.summary_json->'resolution_options','[]'::jsonb) resolution_options,
+      coalesce(d.summary_json->'protection','{}'::jsonb) protection,
+      d.summary_json->>'default_excluded_reason' default_excluded_reason,
       nullif(d.summary_json->>'week_ending_date','')::date week_ending_date,
       nullif(d.summary_json->>'work_date','')::date work_date
     from public.import_review_decisions d
     left join public.candidates c on c.id=d.candidate_id
     left join public.clients cl on cl.id=d.client_id
     left join public.contracts ct on ct.id=d.contract_id
-    left join lateral (
-      select public._timesheet_query_recipient_resolve_core_v1(d.client_id,d.contract_id) route
-      where d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
-    ) email_route on true
+    left join public.hr_rows hr on hr.id=d.hr_row_id and hr.import_id=d.import_id
+    left join public.v_timesheets_daily_match ts_ev on ts_ev.timesheet_id=d.timesheet_id
+    left join public.nhsp_shifts shift_ev on shift_ev.id=d.shift_id
     left join lateral (
       select coalesce(jsonb_agg(jsonb_build_object(
         'timesheet_id',t.timesheet_id,'worked_start_iso',t.worked_start_iso,'worked_end_iso',t.worked_end_iso,
         'break_minutes',t.break_minutes,'worked_minutes',t.worked_minutes,
-        'reference_number',t.reference_number,'processing_status',t.processing_status
+        'reference_number',t.reference_number,'processing_status',t.processing_status,
+        'role',t.tsfin_role,'band',t.tsfin_band,'site',t.hospital_norm,'contract_id',ts.contract_id,
+        'display_label',concat_ws(' · ',to_char((t.worked_start_iso at time zone 'Europe/London')::date,'DD Mon YYYY'),
+          to_char(t.worked_start_iso at time zone 'Europe/London','HH24:MI')||'–'||to_char(t.worked_end_iso at time zone 'Europe/London','HH24:MI'),
+          round(t.worked_minutes/60.0,2)||' hours',nullif(t.tsfin_role,''),nullif(t.tsfin_band,''),nullif(t.hospital_norm,''),
+          case when nullif(t.reference_number,'') is not null then 'ref '||t.reference_number end)
       ) order by t.worked_start_iso,t.timesheet_id),'[]'::jsonb) options
       from public.v_timesheets_daily_match t
+      left join public.timesheets ts on ts.timesheet_id=t.timesheet_id and ts.is_current
       where d.action_kind='DAILY_TIMESHEET_RESOLUTION'
         and t.timesheet_id in (
           select value::uuid from jsonb_array_elements_text(coalesce(d.summary_json->'timesheet_options','[]'::jsonb)) value
@@ -308,6 +446,10 @@ begin
       'client_name',client_name,'week_ending_date',week_ending_date,'work_date',work_date,
       'recipient_email',recipient_email,'recipient_group_key',recipient_group_key,'contract_label',contract_label,
       'daily_timesheet_options',daily_timesheet_options,
+      'imported_evidence',imported_evidence,'current_evidence',current_evidence,
+      'difference_codes',difference_codes,'evidence_rows',evidence_rows,'outcome_label',outcome_label,
+      'resolution_kind',resolution_kind,'authority_mode',authority_mode,'resolution_options',resolution_options,
+      'protection',protection,'default_excluded_reason',default_excluded_reason,
       'summary',summary_json
     ) order by rn),'[]'::jsonb),coalesce(max(total_count),0)
     into v_items,v_total

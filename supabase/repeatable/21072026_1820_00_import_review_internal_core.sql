@@ -366,37 +366,182 @@ begin
       from public.clients c where raw.client_key is not null
         and regexp_replace(lower(coalesce(c.name,'')),'[^a-z0-9]+','','g')=raw.client_key
     ) c_client on raw.import_client_id is null and ch.client_id is null
+  ), weekly_phase as materialized (
+    -- weekly_import_phase2 remains the single authority for assignment-code
+    -- mapping precedence and contract choice.  The review catalogue consumes
+    -- its answer rather than maintaining a second resolver.
+    select w.*
+    from import_row i
+    cross join lateral public.weekly_import_phase2(
+      p_import_id,
+      case when i.source_system='NHSP'::public.hr_source_enum then 'NHSP' else 'HR_WEEKLY' end
+    ) w
+    where not (upper(i.source_system::text)='HEALTHROSTER_DAILY'
+      or upper(coalesce(i.import_scope,'')) like '%DAILY%')
   ), classified as (
     select m.*,
-      con.contract_count,con.contract_id as resolved_contract_id,
-      dgm.has_grade_mapping,
-      tsx.timesheet_count,tsx.timesheet_ids,tsx.auto_timesheet_id,
+      con.contract_count,
+      case when wp.hr_row_id is not null then wp.contract_id else con.contract_id end as resolved_contract_id,
+      wp.action as weekly_resolution_action,wp.reason as weekly_resolution_reason,
+      wp.incoming_code as weekly_incoming_code,
+      wm.has_weekly_mapping,wm.mapping_evidence as weekly_mapping_evidence,
+      dgm.mapping_count as daily_mapping_count,dgm.mapping_id as daily_mapping_id,
+      dgm.role_code as daily_mapped_role,dgm.band_norm as daily_mapped_band,
+      dgm.updated_at as daily_mapping_updated_at,(coalesce(dgm.mapping_count,0)=1) as has_grade_mapping,
+      tsx.timesheet_count,tsx.timesheet_ids,tsx.auto_timesheet_id,tsx.timesheet_evidence_hash,
+      cr.route_eligible as contract_route_eligible,cr.rate_complete as contract_rate_complete,
+      cr.import_authoritative,
+      cr.rate_evidence as contract_rate_evidence,
+      wopts.options as weekly_contract_options,dopts.options as daily_role_options,
       res.resolved_timesheet_id as stored_timesheet_id,res.status as resolution_status,
       coalesce(case when res.resolved_timesheet_id=any(coalesce(tsx.timesheet_ids,array[]::uuid[])) then res.resolved_timesheet_id end,
         tsx.auto_timesheet_id) as resolved_timesheet_id,
       nss.id as existing_shift_id,nss.timesheet_id as existing_shift_timesheet_id,
+      nss.start_utc as existing_shift_start_utc,nss.end_utc as existing_shift_end_utc,
+      nss.break_mins as existing_shift_break_minutes,nss.pay_minutes as existing_shift_paid_minutes,
+      nss.assignment_code as existing_shift_role,
       case when upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%' then true else false end as is_daily
     from mapped m
+    left join weekly_phase wp on wp.hr_row_id=m.id
     left join lateral (
       select count(*)::integer contract_count,
              case when count(*)=1 then (array_agg(c.id order by c.id))[1] end contract_id
       from public.contracts c
       where c.candidate_id=m.resolved_candidate_id and c.client_id=m.resolved_client_id
-        and m.date_local between c.start_date and c.end_date
+        and c.start_date<=m.date_local and (c.end_date is null or c.end_date>=m.date_local)
     ) con on true
     left join lateral (
-      select exists(select 1 from public.hr_daily_grade_role_mappings gm
-        where gm.client_id=m.resolved_client_id and gm.incoming_grade_norm=m.grade_key and gm.active) has_grade_mapping
-    ) dgm on true
+      select count(*)::integer mapping_count,
+        (array_agg(gm.id order by gm.updated_at desc,gm.id))[1] mapping_id,
+        (array_agg(gm.role_code order by gm.updated_at desc,gm.id))[1] role_code,
+        (array_agg(gm.band_norm order by gm.updated_at desc,gm.id))[1] band_norm,
+        (array_agg(gm.updated_at order by gm.updated_at desc,gm.id))[1] updated_at
+      from public.hr_daily_grade_role_mappings gm
+      where gm.client_id=m.resolved_client_id and gm.incoming_grade_norm=m.grade_key and gm.active
+    ) dgm on upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
+    left join lateral (
+      with candidates as (
+        select abm.*,
+          case when abm.candidate_id=m.resolved_candidate_id and abm.client_id=m.resolved_client_id then 3
+            when abm.candidate_id=m.resolved_candidate_id and abm.client_id is null then 2
+            when abm.candidate_id is null and abm.client_id=m.resolved_client_id then 1 else 0 end specificity
+        from public.assignment_band_mappings abm
+        where abm.active and upper(btrim(abm.system_type))=
+          case when upper(m.source_system)='NHSP' then 'NHSP' else 'HR_WEEKLY' end
+          and lower(btrim(abm.incoming_code))=m.grade_key
+          and ((abm.candidate_id=m.resolved_candidate_id and abm.client_id=m.resolved_client_id)
+            or (abm.candidate_id=m.resolved_candidate_id and abm.client_id is null)
+            or (abm.candidate_id is null and abm.client_id=m.resolved_client_id)
+            or (abm.candidate_id is null and abm.client_id is null))
+      ), chosen as (select * from candidates where specificity=(select max(specificity) from candidates))
+      select exists(select 1 from chosen) has_weekly_mapping,
+        public._import_review_hash_v1(coalesce((select string_agg(concat_ws('|',id,updated_at,target_contract_id,band_match_pattern),',' order by id)
+          from chosen),'')) mapping_evidence
+    ) wm on not (upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%')
     left join lateral (
       select count(*)::integer timesheet_count,
              array_agg(t.timesheet_id order by t.worked_start_iso,t.timesheet_id) timesheet_ids,
-             case when count(*)=1 then (array_agg(t.timesheet_id order by t.timesheet_id))[1] end auto_timesheet_id
+             case when count(*)=1 then (array_agg(t.timesheet_id order by t.timesheet_id))[1] end auto_timesheet_id,
+             public._import_review_hash_v1(coalesce(string_agg(concat_ws('|',t.timesheet_id,t.worked_start_iso,t.worked_end_iso,
+               t.break_minutes,t.worked_minutes,t.reference_number,t.processing_status,t.tsfin_role,t.tsfin_band),',' order by t.timesheet_id),'')) timesheet_evidence_hash
       from public.v_timesheets_daily_match t
       where t.candidate_id=m.resolved_candidate_id and t.client_id=m.resolved_client_id
         and t.sheet_scope::text='DAILY'
         and (t.worked_start_iso at time zone 'Europe/London')::date=m.date_local
+        and coalesce(dgm.mapping_count,0)=1
+        and lower(btrim(coalesce(t.tsfin_role,'')))=lower(btrim(coalesce(dgm.role_code,'')))
+        and (nullif(btrim(coalesce(dgm.band_norm,'')),'') is null
+          or lower(btrim(coalesce(t.tsfin_band,'')))=lower(btrim(dgm.band_norm)))
     ) tsx on upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
+    left join lateral (
+      select
+        (case when upper(m.source_system)='NHSP' then
+          case when c.overrideclientsettings and c.is_nhsp is not null then c.is_nhsp else coalesce(cs.is_nhsp,false) end
+        else
+          case when c.overrideclientsettings and c.autoprocess_hr is not null then c.autoprocess_hr else coalesce(cs.autoprocess_hr,false) end
+        end) route_eligible,
+        (case when upper(m.source_system)='NHSP' then
+          case when c.overrideclientsettings and c.is_nhsp is not null then c.is_nhsp else coalesce(cs.is_nhsp,false) end
+        else
+          case when c.overrideclientsettings and c.no_timesheet_required is not null
+            then c.no_timesheet_required else coalesce(cs.no_timesheet_required,false) end
+        end) import_authoritative,
+        (jsonb_typeof(c.rates_json)='object'
+          and upper(coalesce(c.pay_method_snapshot,'')) in ('PAYE','UMBRELLA')
+          and case when upper(c.pay_method_snapshot)='PAYE' then
+            (c.rates_json->>'paye_day')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'paye_night')~'^-?[0-9]+([.][0-9]+)?$'
+            and (c.rates_json->>'paye_sat')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'paye_sun')~'^-?[0-9]+([.][0-9]+)?$'
+            and (c.rates_json->>'paye_bh')~'^-?[0-9]+([.][0-9]+)?$'
+          else
+            (c.rates_json->>'umb_day')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'umb_night')~'^-?[0-9]+([.][0-9]+)?$'
+            and (c.rates_json->>'umb_sat')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'umb_sun')~'^-?[0-9]+([.][0-9]+)?$'
+            and (c.rates_json->>'umb_bh')~'^-?[0-9]+([.][0-9]+)?$' end
+          and (c.rates_json->>'charge_day')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'charge_night')~'^-?[0-9]+([.][0-9]+)?$'
+          and (c.rates_json->>'charge_sat')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'charge_sun')~'^-?[0-9]+([.][0-9]+)?$'
+          and (c.rates_json->>'charge_bh')~'^-?[0-9]+([.][0-9]+)?$') rate_complete,
+        public._import_review_hash_v1(concat_ws('|',c.id,c.updated_at,c.start_date,c.end_date,c.role,c.band,
+          c.pay_method_snapshot,c.rates_json,c.overrideclientsettings,c.is_nhsp,c.autoprocess_hr,c.requires_hr,
+          c.no_timesheet_required,cs.id,cs.updated_at,cs.is_nhsp,cs.autoprocess_hr,cs.requires_hr,
+          cs.no_timesheet_required)) rate_evidence
+      from public.contracts c
+      left join lateral (select s.* from public.client_settings s where s.client_id=c.client_id
+        and (s.effective_from is null or s.effective_from<=case
+          when upper(m.source_system)='HEALTHROSTER' and upper(coalesce(m.import_scope,'HR_WEEKLY')) not like '%DAILY%'
+            then coalesce(wp.week_ending_date,m.date_local)
+          else m.date_local end)
+        order by s.effective_from desc nulls last,s.updated_at desc,s.id desc limit 1) cs on true
+      where c.id=case when wp.hr_row_id is not null then wp.contract_id else con.contract_id end
+    ) cr on true
+    left join lateral (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'option_id','contract:'||o.id::text,'contract_id',o.id,'candidate_id',o.candidate_id,'client_id',o.client_id,
+        'role',o.role,'band',o.band,'site',o.display_site,'start_date',o.start_date,'end_date',o.end_date,
+        'source_route_eligible',coalesce(o.route_eligible,false),'rate_complete',coalesce(o.rate_complete,false),
+        'selectable',coalesce(o.route_eligible,false) and coalesce(o.rate_complete,false),
+        'display_label',concat_ws(' · ',nullif(o.role,''),nullif(o.band,''),nullif(o.display_site,''),
+          to_char(o.start_date,'DD Mon YYYY')||' to '||coalesce(to_char(o.end_date,'DD Mon YYYY'),'open ended'))
+      ) order by lower(coalesce(o.role,'')),lower(coalesce(o.band,'')),o.start_date desc,o.id),'[]'::jsonb) options
+      from (
+        select c.*,
+          (case when upper(m.source_system)='NHSP' then
+            case when c.overrideclientsettings and c.is_nhsp is not null then c.is_nhsp else coalesce(cs.is_nhsp,false) end
+          else
+            case when c.overrideclientsettings and c.autoprocess_hr is not null then c.autoprocess_hr else coalesce(cs.autoprocess_hr,false) end
+          end) route_eligible,
+          (jsonb_typeof(c.rates_json)='object'
+          and upper(coalesce(c.pay_method_snapshot,'')) in ('PAYE','UMBRELLA')
+          and case when upper(c.pay_method_snapshot)='PAYE' then
+            (c.rates_json->>'paye_day')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'paye_night')~'^-?[0-9]+([.][0-9]+)?$'
+            and (c.rates_json->>'paye_sat')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'paye_sun')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'paye_bh')~'^-?[0-9]+([.][0-9]+)?$'
+          else (c.rates_json->>'umb_day')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'umb_night')~'^-?[0-9]+([.][0-9]+)?$'
+            and (c.rates_json->>'umb_sat')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'umb_sun')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'umb_bh')~'^-?[0-9]+([.][0-9]+)?$' end
+          and (c.rates_json->>'charge_day')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'charge_night')~'^-?[0-9]+([.][0-9]+)?$'
+          and (c.rates_json->>'charge_sat')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'charge_sun')~'^-?[0-9]+([.][0-9]+)?$' and (c.rates_json->>'charge_bh')~'^-?[0-9]+([.][0-9]+)?$') rate_complete
+        from public.contracts c
+        left join lateral (select s.* from public.client_settings s where s.client_id=c.client_id
+          and (s.effective_from is null or s.effective_from<=m.date_local)
+          order by s.effective_from desc nulls last,s.updated_at desc,s.id desc limit 1) cs on true
+        where c.candidate_id=m.resolved_candidate_id and c.client_id=m.resolved_client_id
+          and c.start_date<=m.date_local and (c.end_date is null or c.end_date>=m.date_local)
+        order by c.start_date desc,c.id limit 25
+      ) o
+    ) wopts on not (upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%')
+    left join lateral (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'option_id','daily-role:'||public._import_review_hash_v1(lower(concat_ws('|',o.role,o.band))),
+        'role_code',o.role,'band_norm',o.band,'selectable',true,
+        'display_label',concat_ws(' · ',nullif(o.role,''),coalesce(nullif(o.band,''),'No band'))
+      ) order by lower(o.role),lower(coalesce(o.band,''))),'[]'::jsonb) options
+      from (select distinct c.role,c.band from public.contracts c
+        left join lateral (select s.* from public.client_settings s where s.client_id=c.client_id
+          and (s.effective_from is null or s.effective_from<=m.date_local)
+          order by s.effective_from desc nulls last,s.updated_at desc,s.id desc limit 1) cs on true
+        where c.candidate_id=m.resolved_candidate_id and c.client_id=m.resolved_client_id
+          and c.start_date<=m.date_local and (c.end_date is null or c.end_date>=m.date_local)
+          and (case when c.overrideclientsettings and c.autoprocess_hr is not null
+            then c.autoprocess_hr else coalesce(cs.autoprocess_hr,false) end)
+          and nullif(btrim(c.role),'') is not null order by c.role,c.band limit 25) o
+    ) dopts on upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
     left join public.import_review_daily_timesheet_resolutions res
       on res.import_id=p_import_id and res.hr_row_id=m.id and res.status in ('CURRENT','APPLIED')
     left join public.nhsp_shifts nss
@@ -405,25 +550,34 @@ begin
   ), facts as (
     select c.*,
       ts.worked_start_iso,ts.worked_end_iso,ts.break_minutes as ts_break_minutes,ts.worked_minutes,
-      ts.reference_number,ts.processing_status::text,
-      public._import_review_timesheet_protection_core_v1(coalesce(c.resolved_timesheet_id,c.existing_shift_timesheet_id)) as protection,
-      public._import_review_hash_v1(concat_ws('|','row-evidence-v1',c.source_row_key,c.staff_key,c.client_key,c.date_local,
-        c.start_time_local,c.end_time_local,c.hours_worked,c.hr_request_id,c.resolved_candidate_id,c.resolved_client_id,
-        c.resolved_contract_id,coalesce(c.timesheet_ids::text,''),
-        coalesce(c.payload_json::text,''))) as evidence_hash
+      ts.reference_number,ts.processing_status::text,ts.tsfin_role,ts.tsfin_band,
+      public._import_review_timesheet_protection_core_v1(coalesce(c.resolved_timesheet_id,c.existing_shift_timesheet_id)) as protection
     from classified c
     left join public.v_timesheets_daily_match ts on ts.timesheet_id=c.resolved_timesheet_id
+  ), evidenced as (
+    select f.*,
+      public._import_review_hash_v1(concat_ws('|','row-evidence-v1',c.source_row_key,c.staff_key,c.client_key,c.date_local,
+        c.start_time_local,c.end_time_local,c.hours_worked,c.hr_request_id,c.resolved_candidate_id,c.resolved_client_id,
+        c.resolved_contract_id,c.weekly_resolution_action,c.weekly_incoming_code,c.weekly_mapping_evidence,c.contract_rate_evidence,
+        c.daily_mapping_id,c.daily_mapping_updated_at,c.daily_mapped_role,c.daily_mapped_band,
+        c.timesheet_evidence_hash,coalesce(c.timesheet_ids::text,''),c.protection::text,
+        coalesce(c.payload_json::text,''))) as evidence_hash
+    from facts c
   ), main_actions as (
     select
       case
         when f.resolved_candidate_id is null then 'ADVISORY'
         when f.resolved_client_id is null then 'ADVISORY'
-        when coalesce(f.contract_count,0)=0 then 'ADVISORY'
-        when f.contract_count>1 then 'ADVISORY'
         when f.is_daily and not coalesce(f.has_grade_mapping,false) then 'ADVISORY'
+        when not f.is_daily and coalesce(f.weekly_resolution_action,'')<>'OK' then 'ADVISORY'
+        when coalesce(f.contract_count,0)=0 then 'ADVISORY'
+        when f.is_daily and f.contract_count>1 then 'ADVISORY'
+        when not f.is_daily and not coalesce(f.contract_route_eligible,false) then 'ADVISORY'
         when f.is_daily and coalesce(f.timesheet_count,0)=0 then 'ADVISORY'
         when f.is_daily and f.resolved_timesheet_id is null then 'DAILY_TIMESHEET_RESOLUTION'
         when f.is_daily then 'NO_ACTION'
+        when not coalesce(f.import_authoritative,false) then 'NO_ACTION'
+        when not coalesce(f.contract_rate_complete,false) then 'ADVISORY'
         when f.existing_shift_id is null then 'INCLUDE_SHIFT'
         when (f.payload_json->>'start_utc')::timestamptz is distinct from (select n.start_utc from public.nhsp_shifts n where n.id=f.existing_shift_id)
           or (f.payload_json->>'end_utc')::timestamptz is distinct from (select n.end_utc from public.nhsp_shifts n where n.id=f.existing_shift_id)
@@ -432,7 +586,7 @@ begin
         else 'NO_ACTION'
       end action_kind,
       f.*
-    from facts f
+    from evidenced f
   ), rendered as (
     select
       public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,m.action_kind,m.source_row_key)) action_id,
@@ -454,19 +608,77 @@ begin
         'reason_code',case
           when m.resolved_candidate_id is null then 'CANDIDATE_UNRESOLVED'
           when m.resolved_client_id is null then 'CLIENT_UNRESOLVED'
-          when coalesce(m.contract_count,0)=0 then 'CONTRACT_MISSING'
-          when m.contract_count>1 then 'CONTRACT_AMBIGUOUS'
           when m.is_daily and not coalesce(m.has_grade_mapping,false) then 'GRADE_MAPPING_REQUIRED'
+          when not m.is_daily and m.weekly_resolution_action='REJECT_NO_CONTRACT' then 'CONTRACT_MISSING'
+          when not m.is_daily and m.weekly_resolution_action='REJECT_NO_CONTRACT_BAND_MISMATCH'
+            and not coalesce(m.has_weekly_mapping,false) then 'GRADE_MAPPING_REQUIRED'
+          when not m.is_daily and coalesce(m.weekly_resolution_action,'')<>'OK' then 'CONTRACT_OUT_OF_SCOPE'
+          when coalesce(m.contract_count,0)=0 then 'CONTRACT_MISSING'
+          when m.is_daily and m.contract_count>1 then 'CONTRACT_AMBIGUOUS'
+          when not m.is_daily and not coalesce(m.contract_route_eligible,false) then 'CONTRACT_OUT_OF_SCOPE'
+          when not m.is_daily and coalesce(m.import_authoritative,false)
+            and not coalesce(m.contract_rate_complete,false) then 'CONTRACT_RATES_INCOMPLETE'
           when m.is_daily and coalesce(m.timesheet_count,0)=0 then 'TIMESHEET_NOT_FOUND'
           when m.is_daily and m.resolved_timesheet_id is null then 'TIMESHEET_AMBIGUOUS'
           when coalesce((m.protection->>'active_pay_draft')::boolean,false) then 'BLOCKED_ACTIVE_PAY_DRAFT'
           else null end,
         'source_system',m.source_system,'source_route',m.import_scope,'is_daily',m.is_daily,
+        'authority_mode',case when m.is_daily or not coalesce(m.import_authoritative,false)
+          then 'VALIDATION_ONLY' else 'AUTHORITATIVE' end,
         'candidate_name',m.staff_label,'client_name',m.client_label,'work_date',m.date_local,
         'week_ending_date',m.date_local + ((7-extract(dow from m.date_local)::integer)%7),
         'start_time',m.start_time_local,'end_time',m.end_time_local,
-        'break_minutes',coalesce((m.payload_json->>'break_mins')::integer,(m.payload_json->>'break_minutes')::integer),
-        'hours_worked',m.hours_worked,'role',m.assignment_grade_norm,
+        'break_minutes',coalesce((m.payload_json->>'actual_break_mins')::integer,(m.payload_json->>'actual_break_minutes')::integer,
+          (m.payload_json->>'break_mins')::integer,(m.payload_json->>'break_minutes')::integer),
+        'hours_worked',m.hours_worked,'role',coalesce(m.weekly_incoming_code,m.assignment_grade_norm),
+        'imported_evidence',jsonb_strip_nulls(jsonb_build_object(
+          'work_date',m.date_local,'start',m.start_time_local,'end',m.end_time_local,
+          'break_minutes',coalesce((m.payload_json->>'actual_break_mins')::integer,(m.payload_json->>'actual_break_minutes')::integer,
+            (m.payload_json->>'break_mins')::integer,(m.payload_json->>'break_minutes')::integer),
+          'worked_hours',m.hours_worked,'worked_minutes',case when m.hours_worked is null then null else round(m.hours_worked*60) end,
+          'reference',m.hr_request_id,'role',coalesce(m.weekly_incoming_code,m.assignment_grade_norm),'grade',m.grade_key)),
+        'current_evidence',case when m.is_daily and m.resolved_timesheet_id is not null then jsonb_strip_nulls(jsonb_build_object(
+          'work_date',(m.worked_start_iso at time zone 'Europe/London')::date,'start',m.worked_start_iso,'end',m.worked_end_iso,
+          'break_minutes',m.ts_break_minutes,'worked_minutes',m.worked_minutes,'worked_hours',round(m.worked_minutes/60.0,2),
+          'reference',m.reference_number,'role',m.tsfin_role,'band',m.tsfin_band,'timesheet_id',m.resolved_timesheet_id))
+          when not m.is_daily and m.existing_shift_id is not null then jsonb_strip_nulls(jsonb_build_object(
+          'work_date',m.date_local,'start',m.existing_shift_start_utc,'end',m.existing_shift_end_utc,
+          'break_minutes',m.existing_shift_break_minutes,'worked_minutes',m.existing_shift_paid_minutes,
+          'role',m.existing_shift_role,'timesheet_id',m.existing_shift_timesheet_id,'shift_id',m.existing_shift_id)) end,
+        'difference_codes',to_jsonb(array_remove(array[
+          case when m.existing_shift_id is null and not m.is_daily then 'NEW_SHIFT'::text end,
+          case when m.is_daily and m.resolved_timesheet_id is null then 'TIMESHEET_SELECTION_REQUIRED'::text end,
+          case when m.is_daily and m.resolved_timesheet_id is not null and m.start_time_local is distinct from
+            (m.worked_start_iso at time zone 'Europe/London')::time then 'START_TIME'::text end,
+          case when m.is_daily and m.resolved_timesheet_id is not null and m.end_time_local is distinct from
+            (m.worked_end_iso at time zone 'Europe/London')::time then 'END_TIME'::text end,
+          case when m.is_daily and m.resolved_timesheet_id is not null and coalesce((m.payload_json->>'actual_break_mins')::integer,
+            (m.payload_json->>'actual_break_minutes')::integer,(m.payload_json->>'break_mins')::integer,
+            (m.payload_json->>'break_minutes')::integer,0) is distinct from coalesce(m.ts_break_minutes,0) then 'BREAK_MINUTES'::text end,
+          case when m.is_daily and m.resolved_timesheet_id is not null and m.hours_worked is not null
+            and abs((m.hours_worked*60)-m.worked_minutes)>1 then 'WORKED_HOURS'::text end
+        ],null)),
+        'outcome_label',case
+          when not m.is_daily and not coalesce(m.import_authoritative,false) then 'Validate existing timesheet only'
+          when m.action_kind='INCLUDE_SHIFT' then 'Add imported shift'
+          when m.action_kind='APPLY_AMENDMENT' then 'Apply reviewed amendment' when m.action_kind='APPLY_CANCELLATION' then 'Cancel omitted shift'
+          when m.action_kind='DAILY_TIMESHEET_RESOLUTION' then 'Choose existing timesheet' when m.action_kind='NO_ACTION' then 'No action required'
+          else 'Resolve before continuing' end,
+        'resolution_kind',case
+          when m.resolved_candidate_id is null then 'CANDIDATE_LINK'
+          when m.resolved_client_id is null then 'CLIENT_LINK'
+          when m.is_daily and not coalesce(m.has_grade_mapping,false) then 'DAILY_GRADE_ROLE'
+          when not m.is_daily and m.weekly_resolution_action='REJECT_NO_CONTRACT_BAND_MISMATCH'
+            and not coalesce(m.has_weekly_mapping,false) then 'WEEKLY_ASSIGNMENT_CONTRACT'
+          when m.is_daily and m.resolved_timesheet_id is null and coalesce(m.timesheet_count,0)>0 then 'DAILY_EXISTING_TIMESHEET' end,
+        'resolution_options',case
+          when m.is_daily and not coalesce(m.has_grade_mapping,false) then m.daily_role_options
+          when not m.is_daily and m.weekly_resolution_action='REJECT_NO_CONTRACT_BAND_MISMATCH' then m.weekly_contract_options
+          else '[]'::jsonb end,
+        'mapping_evidence',case when m.is_daily then jsonb_strip_nulls(jsonb_build_object(
+          'mapping_id',m.daily_mapping_id,'updated_at',m.daily_mapping_updated_at,'role',m.daily_mapped_role,'band',m.daily_mapped_band))
+          else jsonb_strip_nulls(jsonb_build_object('mapping_fingerprint',m.weekly_mapping_evidence,
+            'resolution_action',m.weekly_resolution_action,'resolution_reason',m.weekly_resolution_reason)) end,
         'timesheet_options',case when m.is_daily then to_jsonb(coalesce(m.timesheet_ids,array[]::uuid[])) else null end,
         'protection',m.protection
       )) summary_json
@@ -591,8 +803,29 @@ begin
       coalesce((a.protection->>'active_pay_draft')::boolean,false),
       jsonb_build_object('reason_code','HEALTHROSTER_WEEKLY','issue_fingerprint',a.issue_fingerprint,
         'candidate_name',a.row_json->>'candidate_name','week_ending_date',a.row_json->>'week_ending_date',
-        'failure_reasons',coalesce(a.row_json->'failure_reasons','[]'::jsonb),
+      'failure_reasons',coalesce(a.row_json->'failure_reasons','[]'::jsonb),
         'days',coalesce(a.row_json->'days','[]'::jsonb),'comparisons',coalesce(a.row_json->'comparisons','[]'::jsonb),
+        'evidence_rows',coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'imported_evidence',jsonb_strip_nulls(jsonb_build_object(
+              'work_date',cx.value->>'work_date','start',cx.value->>'healthroster_start',
+              'end',cx.value->>'healthroster_end','break_minutes',nullif(cx.value->>'healthroster_break_mins','')::integer,
+              'worked_minutes',nullif(day_json.value->>'hr_minutes','')::integer,'reference',cx.value->>'ref_after')),
+            'current_evidence',jsonb_strip_nulls(jsonb_build_object(
+              'work_date',cx.value->>'work_date','start',cx.value->>'timesheet_start',
+              'end',cx.value->>'timesheet_end','break_minutes',nullif(cx.value->>'timesheet_break_mins','')::integer,
+              'worked_minutes',nullif(day_json.value->>'ts_minutes','')::integer,'reference',cx.value->>'ref_before')),
+            'difference_codes',to_jsonb(array_remove(array[
+              case when coalesce(cx.value->>'match_status','MATCH')<>'MATCH' then cx.value->>'match_status' end,
+              case when coalesce((cx.value->>'ref_changed')::boolean,false) then 'REFERENCE' end,
+              case when coalesce(day_json.value->>'day_status','OK')<>'OK' then 'WORKED_HOURS' end
+            ],null))
+          ) order by cx.value->>'work_date',cx.value->>'comparison_key')
+          from jsonb_array_elements(coalesce(a.row_json->'comparisons','[]'::jsonb)) cx(value)
+          left join lateral (select d.value from jsonb_array_elements(coalesce(a.row_json->'days','[]'::jsonb)) d(value)
+            where d.value->>'date'=cx.value->>'work_date' limit 1) day_json on true
+        ),'[]'::jsonb),
+        'outcome_label',case when a.issue_id is null then 'Send new query' else 'Send reminder' end,
         'recipient_scope_key',a.recipient_scope_key,'recipient_route_fingerprint',a.route_fingerprint,
         'delivery_history_status',coalesce(a.delivery_history_status,'NEW'),'sent_count',coalesce(a.sent_count,0),
         'default_excluded_reason',case when a.issue_id is not null then 'PREVIOUS_OR_LEGACY_HISTORY_REQUIRES_EXPLICIT_REMINDER'
