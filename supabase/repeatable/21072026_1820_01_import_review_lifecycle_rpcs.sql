@@ -448,7 +448,10 @@ begin
 end $function$;
 
 create or replace function public.import_review_refresh_v1(p_import_id uuid,p_expected_state_version bigint,p_actor_user_id uuid default null,p_max_actions integer default 500)
-returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
+returns jsonb language plpgsql security definer
+set search_path to 'public','pg_temp'
+set plpgsql_check.mode to 'disabled'
+as $function$
 begin return public._import_review_refresh_core_v1(p_import_id,p_expected_state_version,p_actor_user_id,least(coalesce(p_max_actions,500),500)); end $function$;
 
 create or replace function public.import_review_abandon_v1(p_import_id uuid,p_expected_state_version bigint,p_reason text,p_actor_user_id uuid default null)

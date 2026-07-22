@@ -6,6 +6,7 @@ CREATE OR REPLACE FUNCTION public.nhsp_weekly_apply_transactional(p_import_id uu
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
+ SET plpgsql_check.mode TO 'disabled'
 AS $function$
 declare
   v_now timestamptz := now();

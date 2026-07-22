@@ -179,6 +179,20 @@ function postgresErrorToken(error) {
     || token.startsWith('BLOCKED_')) || null;
 }
 
+function isPlpgsqlCheckCallStackFailure(error) {
+  const status = Number(error?.status || 0);
+  const code = String(error?.json?.code || error?.code || '').trim().toUpperCase();
+  const message = [
+    error?.json?.message,
+    error?.json?.details,
+    error?.body,
+    error?.message
+  ].filter(Boolean).map(String).join(' ').toLowerCase();
+  return status >= 500
+    && (!code || code === 'XX000')
+    && message.includes('cannot find parent statement on pldbgapi2 call stack');
+}
+
 function mapRpcError(error) {
   if (error instanceof ImportReviewInputError) {
     return failure(400, 'IMPORT_REVIEW_INVALID_REQUEST', error.message, {
@@ -367,7 +381,26 @@ async function applyReview({ sbRpc, env, importId, actorId, body, runFollowUp, c
     else return task;
     return true;
   };
+  const readApplyStatus = () => runAllowedRpc(sbRpc, env, 'import_review_apply_status_get_v1', {
+    p_import_id: importId,
+    p_operation_id: operationId,
+    p_request_hash: expectedRequestHash
+  }, { timeoutMs: 8000 });
+  const committedResponse = async (status, recoveryKind) => {
+    if (!String(status?.outcome || '').startsWith('COMMITTED_')) return null;
+    const recovered = status?.stored_response || {};
+    const followUp = startFollowUp(recovered);
+    if (followUp && typeof followUp.then === 'function') await followUp;
+    return success({
+      apply: recovered,
+      operation: status,
+      recovered_from_unknown_outcome: recoveryKind === 'UNKNOWN_OUTCOME',
+      recovered_from_database_interruption: recoveryKind === 'PLPGSQL_CHECK',
+      follow_up_started: followUp !== false
+    });
+  };
   let applied;
+  let recoveredFromDatabaseInterruption = false;
   try {
     applied = await runAllowedRpc(sbRpc, env, rpcName, {
       p_import_id: importId,
@@ -376,27 +409,44 @@ async function applyReview({ sbRpc, env, importId, actorId, body, runFollowUp, c
     }, { timeoutMs: 30000 });
   } catch (error) {
     const timeout = Number(error?.status) === 408 || /TIMEOUT|TIMED OUT|ABORT/.test(String(error?.message || '').toUpperCase());
-    if (!timeout) throw error;
+    const plpgsqlCheckFailure = isPlpgsqlCheckCallStackFailure(error);
+    if (!timeout && !plpgsqlCheckFailure) throw error;
     try {
-      const status = await runAllowedRpc(sbRpc, env, 'import_review_apply_status_get_v1', {
-        p_import_id: importId,
-        p_operation_id: operationId,
-        p_request_hash: expectedRequestHash
-      }, { timeoutMs: 8000 });
-      if (String(status?.outcome || '').startsWith('COMMITTED_')) {
-        const recovered = status?.stored_response || {};
-        const followUp = startFollowUp(recovered);
-        if (followUp && typeof followUp.then === 'function') await followUp;
-        return success({
-          apply: recovered,
-          operation: status,
-          recovered_from_unknown_outcome: true,
-          follow_up_started: followUp !== false
+      const status = await readApplyStatus();
+      const committed = await committedResponse(status, plpgsqlCheckFailure ? 'PLPGSQL_CHECK' : 'UNKNOWN_OUTCOME');
+      if (committed) return committed;
+
+      if (plpgsqlCheckFailure && String(status?.outcome || '').toUpperCase() === 'NOT_STARTED') {
+        console.warn(JSON.stringify({
+          event: 'IMPORT_REVIEW_PLPGSQL_CHECK_RECOVERY',
+          rpc: rpcName,
+          outcome: 'NOT_STARTED',
+          retry_attempt: 1
+        }));
+        try {
+          applied = await runAllowedRpc(sbRpc, env, rpcName, {
+            p_import_id: importId,
+            p_payload: payload,
+            p_actor_user_id: actorId
+          }, { timeoutMs: 30000 });
+          recoveredFromDatabaseInterruption = true;
+        } catch (retryError) {
+          try {
+            const retryStatus = await readApplyStatus();
+            const retryCommitted = await committedResponse(retryStatus, 'PLPGSQL_CHECK');
+            if (retryCommitted) return retryCommitted;
+          } catch {}
+          return failure(503, 'IMPORT_REVIEW_DATABASE_INTERRUPTED', 'A temporary database interruption prevented this application batch. CloudTMS verified that no source commit can be confirmed.', {
+            category: 'DATABASE',
+            retryable: true,
+            action: 'CHECK_APPLY_STATUS'
+          });
+        }
+      } else {
+        return failure(202, 'IMPORT_REVIEW_OUTCOME_UNKNOWN', 'The database outcome is not yet known. Check operation status before retrying.', {
+          category: 'UNKNOWN_OUTCOME', retryable: true, action: 'CHECK_APPLY_STATUS'
         });
       }
-      return failure(202, 'IMPORT_REVIEW_OUTCOME_UNKNOWN', 'The database outcome is not yet known. Check operation status before retrying.', {
-        category: 'UNKNOWN_OUTCOME', retryable: true, action: 'CHECK_APPLY_STATUS'
-      });
     } catch {
       return failure(202, 'IMPORT_REVIEW_OUTCOME_UNKNOWN', 'The database outcome is not yet known. Check operation status before retrying.', {
         category: 'UNKNOWN_OUTCOME', retryable: true, action: 'CHECK_APPLY_STATUS'
@@ -406,7 +456,12 @@ async function applyReview({ sbRpc, env, importId, actorId, body, runFollowUp, c
 
   const followUp = startFollowUp(applied);
   if (followUp && typeof followUp.then === 'function') await followUp;
-  return success({ apply: applied, operation_id: operationId, follow_up_started: followUp !== false });
+  return success({
+    apply: applied,
+    operation_id: operationId,
+    recovered_from_database_interruption: recoveredFromDatabaseInterruption,
+    follow_up_started: followUp !== false
+  });
 }
 
 function parseListQuery(url) {
@@ -654,12 +709,25 @@ export function createImportReviewDispatcher(dependencies) {
       if (req.method === 'POST' && refresh) {
         const body = await readBoundedJson(req);
         assertAllowedKeys(body, new Set(['expected_state_version', 'max_actions']));
-        const data = await runAllowedRpc(sbRpc, env, 'import_review_refresh_v1', {
+        const refreshArgs = {
           p_import_id: uuid(refresh.import_id, 'import_id'),
           p_expected_state_version: integer(body.expected_state_version, 'expected_state_version', 1, Number.MAX_SAFE_INTEGER),
           p_actor_user_id: user.id,
           p_max_actions: integer(body.max_actions, 'max_actions', 1, 500, 500)
-        }, { timeoutMs: 30000 });
+        };
+        let data;
+        try {
+          data = await runAllowedRpc(sbRpc, env, 'import_review_refresh_v1', refreshArgs, { timeoutMs: 30000 });
+        } catch (error) {
+          if (!isPlpgsqlCheckCallStackFailure(error)) throw error;
+          console.warn(JSON.stringify({
+            event: 'IMPORT_REVIEW_PLPGSQL_CHECK_RECOVERY',
+            rpc: 'import_review_refresh_v1',
+            outcome: 'TRANSACTION_ABORTED',
+            retry_attempt: 1
+          }));
+          data = await runAllowedRpc(sbRpc, env, 'import_review_refresh_v1', refreshArgs, { timeoutMs: 30000 });
+        }
         return success(data);
       }
 

@@ -642,6 +642,147 @@ test('a committed apply recovered after timeout still starts idempotent post-com
   assert.equal(followUps[0].applyResult.affected_timesheet_ids[0], TIMESHEET_ID);
 });
 
+test('the known Supabase plpgsql_check failure is status-checked and retried once only when not started', async () => {
+  let applyCalls = 0;
+  let statusCalls = 0;
+  const followUps = [];
+  const dispatcher = createImportReviewDispatcher({
+    requireUser: async () => ({ id: ACTOR_ID, role: 'admin' }),
+    sbRpc: async (_env, name) => {
+      if (name === 'import_review_contract_version_get_v1') return installedContract;
+      if (name === 'import_review_get_v1') return readyReview();
+      if (name === 'nhsp_weekly_apply_transactional') {
+        applyCalls += 1;
+        if (applyCalls === 1) {
+          const error = new Error('cannot find parent statement on pldbgapi2 call stack');
+          error.status = 500;
+          error.json = { code: 'XX000', message: error.message };
+          throw error;
+        }
+        return { ok: true, affected_timesheet_ids: [TIMESHEET_ID], post_commit_email_action_ids: [] };
+      }
+      if (name === 'import_review_apply_status_get_v1') {
+        statusCalls += 1;
+        return { ok: true, outcome: 'NOT_STARTED' };
+      }
+      throw new Error(`unexpected RPC ${name}`);
+    },
+    runFollowUp: async (_env, details) => { followUps.push(details); }
+  });
+
+  const response = await dispatcher(jsonRequest(
+    'POST',
+    `/api/import-reviews/${IMPORT_ID}/apply`,
+    { operation_id: OPERATION_ID, expected_state_version: 7, expected_request_hash: HASH }
+  ), {}, {});
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 200);
+  assert.equal(captured.body.data.recovered_from_database_interruption, true);
+  assert.equal(applyCalls, 2);
+  assert.equal(statusCalls, 1);
+  assert.equal(followUps.length, 1);
+});
+
+test('the known Supabase plpgsql_check failure never retries when status proves the operation committed', async () => {
+  let applyCalls = 0;
+  let statusCalls = 0;
+  const dispatcher = createImportReviewDispatcher({
+    requireUser: async () => ({ id: ACTOR_ID, role: 'admin' }),
+    sbRpc: async (_env, name) => {
+      if (name === 'import_review_contract_version_get_v1') return installedContract;
+      if (name === 'import_review_get_v1') return readyReview();
+      if (name === 'nhsp_weekly_apply_transactional') {
+        applyCalls += 1;
+        const error = new Error('cannot find parent statement on pldbgapi2 call stack');
+        error.status = 500;
+        error.json = { code: 'XX000', message: error.message };
+        throw error;
+      }
+      if (name === 'import_review_apply_status_get_v1') {
+        statusCalls += 1;
+        return {
+          ok: true,
+          outcome: 'COMMITTED_APPLIED',
+          stored_response: { ok: true, affected_timesheet_ids: [TIMESHEET_ID], post_commit_email_action_ids: [] }
+        };
+      }
+      throw new Error(`unexpected RPC ${name}`);
+    }
+  });
+
+  const response = await dispatcher(jsonRequest(
+    'POST',
+    `/api/import-reviews/${IMPORT_ID}/apply`,
+    { operation_id: OPERATION_ID, expected_state_version: 7, expected_request_hash: HASH }
+  ), {}, {});
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 200);
+  assert.equal(captured.body.data.recovered_from_database_interruption, true);
+  assert.equal(applyCalls, 1);
+  assert.equal(statusCalls, 1);
+});
+
+test('a generic database 500 is not automatically retried as the Supabase platform failure', async () => {
+  let applyCalls = 0;
+  let statusCalls = 0;
+  const dispatcher = createImportReviewDispatcher({
+    requireUser: async () => ({ id: ACTOR_ID, role: 'admin' }),
+    sbRpc: async (_env, name) => {
+      if (name === 'import_review_contract_version_get_v1') return installedContract;
+      if (name === 'import_review_get_v1') return readyReview();
+      if (name === 'nhsp_weekly_apply_transactional') {
+        applyCalls += 1;
+        const error = new Error('generic upstream failure');
+        error.status = 500;
+        throw error;
+      }
+      if (name === 'import_review_apply_status_get_v1') statusCalls += 1;
+      throw new Error(`unexpected RPC ${name}`);
+    }
+  });
+
+  const response = await dispatcher(jsonRequest(
+    'POST',
+    `/api/import-reviews/${IMPORT_ID}/apply`,
+    { operation_id: OPERATION_ID, expected_state_version: 7, expected_request_hash: HASH }
+  ), {}, {});
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 502);
+  assert.equal(applyCalls, 1);
+  assert.equal(statusCalls, 0);
+});
+
+test('refresh retries once after the exact Supabase plpgsql_check transaction abort', async () => {
+  let refreshCalls = 0;
+  const dispatcher = createImportReviewDispatcher({
+    requireUser: async () => ({ id: ACTOR_ID, role: 'admin' }),
+    sbRpc: async (_env, name) => {
+      if (name === 'import_review_contract_version_get_v1') return installedContract;
+      if (name === 'import_review_refresh_v1') {
+        refreshCalls += 1;
+        if (refreshCalls === 1) {
+          const error = new Error('cannot find parent statement on pldbgapi2 call stack');
+          error.status = 500;
+          error.json = { code: 'XX000', message: error.message };
+          throw error;
+        }
+        return { ok: true, status: 'READY', state_version: 8 };
+      }
+      throw new Error(`unexpected RPC ${name}`);
+    }
+  });
+
+  const response = await dispatcher(jsonRequest(
+    'POST',
+    `/api/import-reviews/${IMPORT_ID}/refresh`,
+    { expected_state_version: 7, max_actions: 500 }
+  ), {}, {});
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 200);
+  assert.equal(captured.body.data.state_version, 8);
+  assert.equal(refreshCalls, 2);
+});
+
 test('contract query-email override is normalized and cannot be enabled without an address', () => {
   assert.deepEqual(normalizeContractQueryEmailOverride({
     send_ts_queries_to_different_email: true,
