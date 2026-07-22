@@ -3,7 +3,7 @@ const IMPORT_REVIEW_APPLY_CONTRACT = 'IMPORT_REVIEW_APPLY_V1';
 const IMPORT_REVIEW_OPERATION_CONTRACT = 'IMPORT_APPLY_OPERATION_V2';
 const IMPORT_REVIEW_CORRECTION_CONTRACT = 'IMPORT_CORRECTION_OPERATION_V2';
 const IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT = 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1';
-const IMPORT_REVIEW_UI_CONTRACT = 'IMPORT_REVIEW_UI_V1';
+const IMPORT_REVIEW_UI_CONTRACT = 'IMPORT_REVIEW_UI_V2';
 const IMPORT_REVIEW_EMAIL_GROUPING_CONTRACT = 'TIMESHEET_QUERY_RECIPIENT_EMAIL_V1';
 
 export const IMPORT_REVIEW_PARSER_VERSION = 'CLOUDTMS_IMPORT_REVIEW_PARSER_V1';
@@ -27,6 +27,7 @@ const ROUTE_RPCS = Object.freeze(new Set([
   'import_review_supersede_v1',
   'hr_daily_timesheet_resolution_save_v1',
   'import_review_apply_status_get_v1',
+  'import_review_apply_failed_before_commit_recover_v1',
   'nhsp_weekly_review_preview_v1',
   'hr_daily_validation_preview_v1',
   'nhsp_weekly_apply_transactional',
@@ -730,6 +731,19 @@ export function createImportReviewDispatcher(dependencies) {
             category: 'STALE_CONFLICT', action: 'RELOAD_REVIEW'
           });
         }
+        return success(data);
+      }
+
+      const recover = routeMatch(pathname, '/api/import-reviews/:import_id/apply-recover');
+      if (req.method === 'POST' && recover) {
+        const body = await readBoundedJson(req);
+        assertAllowedKeys(body, new Set(['operation_id', 'request_hash']));
+        const data = await runAllowedRpc(sbRpc, env, 'import_review_apply_failed_before_commit_recover_v1', {
+          p_import_id: uuid(recover.import_id, 'import_id'),
+          p_operation_id: uuid(body.operation_id, 'operation_id'),
+          p_request_hash: sha256(body.request_hash, 'request_hash'),
+          p_actor_user_id: user.id
+        }, { timeoutMs: 8000 });
         return success(data);
       }
 

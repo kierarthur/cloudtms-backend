@@ -204,6 +204,10 @@ const endpoints = [
     rpc: 'import_review_apply_status_get_v1'
   },
   {
+    name: 'failed-before-commit recovery', method: 'POST', path: `/api/import-reviews/${IMPORT_ID}/apply-recover`,
+    rpc: 'import_review_apply_failed_before_commit_recover_v1', body: { operation_id: OPERATION_ID, request_hash: HASH }
+  },
+  {
     name: 'follow-up retry', method: 'POST', path: `/api/import-reviews/${IMPORT_ID}/follow-up/retry`, rpc: 'import_review_apply_status_get_v1',
     body: { operation_id: OPERATION_ID, request_hash: HASH }
   }

@@ -1,6 +1,75 @@
 -- Owner-only core used by the import-review RPC surface.
 -- Public RPCs do not orchestrate other public RPCs; shared work is kept here.
 
+create or replace function public._import_review_overlap_preflight_core_v2(
+  p_import_id uuid,
+  p_source_system public.hr_source_enum,
+  p_source_route text,
+  p_coverage_start_date date,
+  p_coverage_end_date date,
+  p_scope_clients jsonb default '[]'::jsonb
+)
+returns jsonb
+language sql
+stable
+security definer
+set search_path to 'public', 'pg_temp'
+as $function$
+  with current_clients as (
+    select nullif(client.value->>'client_id','')::uuid as client_id,
+           nullif(btrim(client.value->>'source_client_key'),'') as source_client_key
+    from jsonb_array_elements(case when jsonb_typeof(coalesce(p_scope_clients,'[]'::jsonb))='array'
+      then coalesce(p_scope_clients,'[]'::jsonb) else '[]'::jsonb end) client(value)
+  ), active_reviews as (
+    select s.import_id,s.status,s.state_version,s.updated_at_utc,
+           hi.filename,hi.coverage_start_date,hi.coverage_end_date,
+           coalesce(hi.import_scope,hi.source_system::text) as source_route
+    from public.import_review_states s
+    join public.hr_imports hi on hi.id=s.import_id
+    where s.import_id<>p_import_id
+      and s.status in ('STAGED','IN_REVIEW','BLOCKED','READY','APPLYING')
+      and hi.source_system=p_source_system
+      and upper(coalesce(hi.import_scope,hi.source_system::text))=upper(coalesce(p_source_route,p_source_system::text))
+      and daterange(hi.coverage_start_date,hi.coverage_end_date,'[]')
+        && daterange(p_coverage_start_date,p_coverage_end_date,'[]')
+  ), matched as (
+    select distinct on (active.import_id)
+      active.*,
+      case when current.client_id is not null and current.client_id=other_client.client_id
+        then 'RESOLVED_CLIENT' else 'SOURCE_CLIENT_KEY' end as overlap_reason,
+      coalesce(current.client_id,other_client.client_id) as client_id,
+      coalesce(current.source_client_key,other_client.source_client_key) as source_client_key
+    from active_reviews active
+    join lateral (
+      select sc.client_id,sc.source_client_key
+      from public.import_review_scope_clients sc
+      where sc.import_id=active.import_id
+      union all
+      select hi.client_id,'client:'||hi.client_id::text
+      from public.hr_imports hi
+      where hi.id=active.import_id and hi.client_id is not null
+        and not exists(select 1 from public.import_review_scope_clients sc where sc.import_id=active.import_id)
+    ) other_client on true
+    join current_clients current on
+      (current.client_id is not null and other_client.client_id=current.client_id)
+      or (current.source_client_key is not null and other_client.source_client_key=current.source_client_key)
+    order by active.import_id,
+      case when current.client_id is not null and current.client_id=other_client.client_id then 0 else 1 end
+  ), bounded as (
+    select * from matched order by updated_at_utc desc,import_id desc limit 20
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'import_id',import_id,'status',status,'state_version',state_version,'filename',filename,
+    'source_route',source_route,'coverage_start_date',coverage_start_date,'coverage_end_date',coverage_end_date,
+    'overlap_reason',overlap_reason,'client_id',client_id,'source_client_key',source_client_key,
+    'updated_at_utc',updated_at_utc
+  ) order by updated_at_utc desc,import_id desc),'[]'::jsonb)
+  from bounded
+$function$;
+
+revoke all on function public._import_review_overlap_preflight_core_v2(uuid,public.hr_source_enum,text,date,date,jsonb)
+  from public,anon,authenticated,service_role;
+
 create or replace function public._import_review_hash_v1(p_value text)
 returns text
 language sql

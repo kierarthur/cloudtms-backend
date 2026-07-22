@@ -14,6 +14,8 @@ as $function$
     'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
+    'review_ui_contract_version','IMPORT_REVIEW_UI_V2',
+    'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'legacy_contracts_supported',false
   )
 $function$;
@@ -153,14 +155,9 @@ begin
   values(p_import_id,1,'REVIEW_CREATED',p_actor_user_id,jsonb_build_object('coverage_mode',v_mode,'coverage_fingerprint',v_fingerprint,
     'coverage_start_date',p_coverage_start_date,'coverage_end_date',p_coverage_end_date,'operation_key_hash',public._import_review_hash_v1(v_operation_key)));
 
-  select coalesce(jsonb_agg(x),'[]'::jsonb) into v_overlap from (
-    select jsonb_build_object('import_id',s.import_id,'status',s.status,'filename',hi.filename) x
-    from public.import_review_states s join public.hr_imports hi on hi.id=s.import_id
-    where s.import_id<>p_import_id and s.status in ('STAGED','IN_REVIEW','BLOCKED','READY','APPLYING')
-      and hi.source_system=v_import.source_system
-      and daterange(hi.coverage_start_date,hi.coverage_end_date,'[]') && daterange(p_coverage_start_date,p_coverage_end_date,'[]')
-    order by s.updated_at_utc desc,s.import_id limit 20
-  ) q;
+  v_overlap:=public._import_review_overlap_preflight_core_v2(
+    p_import_id,v_import.source_system,coalesce(v_import.import_scope,v_import.source_system::text),
+    p_coverage_start_date,p_coverage_end_date,v_clients);
   v_refresh:=public._import_review_refresh_core_v1(p_import_id,1,p_actor_user_id,500);
   return v_refresh||jsonb_build_object('schema_contract_version','IMPORT_REVIEW_DB_V1',
     'replay',false,'coverage_fingerprint',v_fingerprint,'overlapping_unfinished_reviews',v_overlap);
@@ -200,7 +197,7 @@ begin
     'source_hash_prefix',left(source_file_sha256,12),'coverage_mode',coverage_mode,'coverage_start_date',coverage_start_date,'coverage_end_date',coverage_end_date,
     'status',status,'follow_up_status',follow_up_status,'state_version',state_version,'preview_generation',preview_generation,
     'blocker_count',blocker_count,'selected_count',selected_count,'selected_email_count',selected_email_count,
-    'read_only',status in ('APPLIED','ABANDONED','SUPERSEDED'),'updated_at_utc',updated_at_utc) order by updated_at_utc desc,import_id desc),'[]'),
+    'read_only',status in ('APPLYING','APPLIED','ABANDONED','SUPERSEDED'),'updated_at_utc',updated_at_utc) order by updated_at_utc desc,import_id desc),'[]'),
     (select count(*)>v_limit from page) into v_items,v_has_more from limited;
   if v_has_more and jsonb_array_length(v_items)>0 then
     select updated_at_utc,import_id into v_last_updated_at,v_last_import_id from public.import_review_states
@@ -216,7 +213,7 @@ create or replace function public.import_review_get_v1(
 returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
 declare v_action_limit integer:=least(greatest(coalesce(p_action_limit,100),1),200); v_event_limit integer:=least(greatest(coalesce(p_event_limit,50),1),100);
   v_state public.import_review_states%rowtype; v_import public.hr_imports%rowtype; v_actions jsonb; v_events jsonb; v_last_action text; v_last_event bigint;
-  v_apply_envelope jsonb; v_apply_request_hash text;
+  v_apply_envelope jsonb; v_apply_request_hash text; v_allowed_commands jsonb; v_confirmation jsonb; v_read_only boolean;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if (p_action_cursor is not null and (length(p_action_cursor)<>64 or p_action_cursor!~'^[0-9a-f]{64}$'))
@@ -227,6 +224,33 @@ begin
   select * into v_import from public.hr_imports where id=p_import_id;
   v_apply_envelope:=public._import_review_apply_envelope_core_v1(p_import_id);
   v_apply_request_hash:=public._import_review_hash_v1(v_apply_envelope::text);
+  v_read_only:=v_state.status in ('APPLYING','APPLIED','ABANDONED','SUPERSEDED');
+  v_allowed_commands:=to_jsonb(array_remove(array[
+    case when v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY') then 'SAVE_SELECTIONS'::text end,
+    case when v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY') then 'REFRESH'::text end,
+    case when v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY') then 'ABANDON'::text end,
+    case when v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY') then 'RESOLVE_DAILY_TIMESHEET'::text end,
+    case when v_state.status='READY' then 'APPLY'::text end,
+    case when v_state.status in ('APPLYING','APPLIED') then 'VIEW_APPLY_STATUS'::text end,
+    case when v_state.status='APPLIED' and v_state.follow_up_status='FAILED_RETRYABLE' then 'RETRY_FOLLOW_UP'::text end
+  ],null));
+  select jsonb_build_object(
+    'selected_total',count(*) filter(where d.selected),
+    'selected_change_count',count(*) filter(where d.selected and d.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION','MARK_VALIDATION_ERROR')),
+    'selected_email_count',count(*) filter(where d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')),
+    'selected_email_issue_count',count(*) filter(where d.selected and d.action_kind='EMAIL_ISSUE'),
+    'selected_email_reminder_count',count(*) filter(where d.selected and d.action_kind='EMAIL_REMINDER'),
+    'selected_reference_invalidation_count',count(*) filter(where d.selected and d.action_kind='INVALIDATE_REFERENCE'),
+    'blocking_count',count(*) filter(where d.blocking),
+    'advisory_count',count(*) filter(where d.action_kind='ADVISORY'),
+    'daily_resolution_count',count(*) filter(where d.action_kind='DAILY_TIMESHEET_RESOLUTION'),
+    'reconfirmation_count',count(*) filter(where d.requires_reconfirmation),
+    'action_kind_counts',coalesce((select jsonb_object_agg(k.action_kind,k.item_count) from (
+      select d2.action_kind,count(*)::integer item_count from public.import_review_decisions d2
+      where d2.import_id=p_import_id and d2.is_current and d2.selected group by d2.action_kind order by d2.action_kind
+    ) k),'{}'::jsonb)
+  ) into v_confirmation
+  from public.import_review_decisions d where d.import_id=p_import_id and d.is_current;
   with p as (select * from public.import_review_decisions d where d.import_id=p_import_id and d.is_current and (p_action_cursor is null or d.action_id>p_action_cursor) order by d.action_id limit v_action_limit+1),
   l as (select * from p order by action_id limit v_action_limit)
   select coalesce(jsonb_agg(jsonb_build_object('action_id',action_id,'kind',action_kind,'category',action_category,'target_key',target_key,
@@ -246,10 +270,25 @@ begin
       'follow_up_retry_count',v_state.follow_up_retry_count,
       'preview_generation',v_state.preview_generation,'preview_fingerprint',v_state.preview_fingerprint,'ui_state',v_state.ui_state_json,
       'last_opened_at_utc',v_state.last_opened_at_utc,'last_opened_by_user_id',v_state.last_opened_by_user_id,
-      'last_operation_id',v_state.last_operation_id,'read_only',v_state.status in ('APPLIED','ABANDONED','SUPERSEDED'),
+      'last_operation_id',v_state.last_operation_id,'read_only',v_read_only,
+      'editability',jsonb_build_object(
+        'read_only',v_read_only,
+        'can_edit_selections',v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY'),
+        'can_resolve_daily_timesheet',v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY'),
+        'can_refresh',v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY'),
+        'can_abandon',v_state.status in ('STAGED','IN_REVIEW','BLOCKED','READY'),
+        'can_apply',v_state.status='READY',
+        'can_view_apply_status',v_state.status in ('APPLYING','APPLIED'),
+        'can_retry_follow_up',v_state.status='APPLIED' and v_state.follow_up_status='FAILED_RETRYABLE',
+        'allowed_commands',v_allowed_commands),
       'apply_contract',jsonb_build_object('selected_action_ids',v_apply_envelope->'selected_action_ids',
         'reference_invalidation_action_ids',v_apply_envelope->'reference_invalidation_action_ids',
         'request_envelope',v_apply_envelope,'request_hash',v_apply_request_hash)),
+    'evidence',jsonb_build_object(
+      'source_file_sha256',v_import.source_file_sha256,'parser_version',v_import.parser_version,
+      'coverage_fingerprint',v_import.coverage_fingerprint,'preview_fingerprint',v_state.preview_fingerprint,
+      'preview_generation',v_state.preview_generation),
+    'confirmation_summary',v_confirmation,
     'actions',v_actions,'actions_next_cursor',case when jsonb_array_length(v_actions)=v_action_limit then v_last_action end,
     'events',v_events,'events_next_cursor',case when jsonb_array_length(v_events)=v_event_limit then v_last_event end);
 end $function$;
@@ -619,6 +658,38 @@ begin select * into s from public.import_review_states where import_id=p_import_
       when o.id is null then 'NOT_STARTED' when o.state='FAILED_BEFORE_COMMIT' then 'FAILED_BEFORE_COMMIT' else 'NOT_COMMITTED' end,
     'stored_response',case when o.committed_at_utc is not null then o.response_json end,'committed_at_utc',o.committed_at_utc); end $function$;
 
+create or replace function public.import_review_apply_failed_before_commit_recover_v1(
+  p_import_id uuid,p_operation_id uuid,p_request_hash text,p_actor_user_id uuid default null)
+returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
+declare s public.import_review_states%rowtype; o public.import_apply_operations%rowtype; v_status text; v_blockers integer;
+begin
+  perform public._import_review_assert_actor_v1(p_actor_user_id);
+  if p_import_id is null or p_operation_id is null or btrim(coalesce(p_request_hash,''))!~'^[0-9a-f]{64}$' then
+    raise exception 'IMPORT_REVIEW_APPLY_RECOVERY_INPUT_INVALID' using errcode='22023';
+  end if;
+  select * into s from public.import_review_states where import_id=p_import_id for update;
+  select * into o from public.import_apply_operations where id=p_operation_id and import_id=p_import_id for update;
+  if s.import_id is null or o.id is null then raise exception 'IMPORT_REVIEW_APPLY_RECOVERY_NOT_FOUND' using errcode='P0002'; end if;
+  if o.request_hash is distinct from lower(btrim(p_request_hash)) then
+    raise exception 'IMPORT_REVIEW_APPLY_RECOVERY_REQUEST_MISMATCH' using errcode='40001';
+  end if;
+  if s.status<>'APPLYING' or s.last_operation_id is distinct from p_operation_id
+     or o.state<>'FAILED_BEFORE_COMMIT' or o.committed_at_utc is not null then
+    raise exception 'IMPORT_REVIEW_APPLY_RECOVERY_NOT_ALLOWED' using errcode='55000';
+  end if;
+  select count(*) into v_blockers from public.import_review_decisions d
+  where d.import_id=p_import_id and d.is_current and d.blocking;
+  v_status:=case when v_blockers>0 then 'BLOCKED' else 'READY' end;
+  update public.import_review_states set status=v_status,state_version=state_version+1,
+    updated_at_utc=now(),updated_by_user_id=p_actor_user_id
+  where import_id=p_import_id returning * into s;
+  insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json)
+  values(p_import_id,s.state_version,p_operation_id,'APPLY_FAILED_BEFORE_COMMIT_RECOVERED',p_actor_user_id,
+    jsonb_build_object('operation_state',o.state,'source_committed',false));
+  return jsonb_build_object('ok',true,'import_id',p_import_id,'operation_id',p_operation_id,
+    'source_committed',false,'status',s.status,'state_version',s.state_version);
+end $function$;
+
 revoke all on function public.import_review_contract_version_get_v1() from public,anon,authenticated;
 grant execute on function public.import_review_contract_version_get_v1() to service_role;
 revoke all on function public.import_review_create_v1(uuid,text,date,date,jsonb,jsonb,text,text,uuid,text) from public,anon,authenticated;
@@ -642,3 +713,5 @@ revoke all on function public.import_review_follow_up_component_update_v1(uuid,u
 grant execute on function public.import_review_follow_up_component_update_v1(uuid,uuid,text,text,text,text,text,text,uuid) to service_role;
 revoke all on function public.import_review_apply_status_get_v1(uuid,uuid,text) from public,anon,authenticated;
 grant execute on function public.import_review_apply_status_get_v1(uuid,uuid,text) to service_role;
+revoke all on function public.import_review_apply_failed_before_commit_recover_v1(uuid,uuid,text,uuid) from public,anon,authenticated;
+grant execute on function public.import_review_apply_failed_before_commit_recover_v1(uuid,uuid,text,uuid) to service_role;

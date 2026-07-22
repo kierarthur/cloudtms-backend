@@ -16,7 +16,7 @@ as $function$
     'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
     'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
     'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
-    'review_ui_contract_version','IMPORT_REVIEW_UI_V1',
+    'review_ui_contract_version','IMPORT_REVIEW_UI_V2',
     'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'legacy_contracts_supported',false
   )
@@ -44,6 +44,7 @@ declare
   v_candidates jsonb;
   v_clients jsonb;
   v_candidate_total integer;
+  v_overlap jsonb;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if p_import_id is null or v_page<1 or v_page>20 or v_size not in (25,50,75,100,500) then
@@ -165,6 +166,10 @@ begin
     raise exception 'IMPORT_REVIEW_STAGED_CLIENT_LIMIT_EXCEEDED' using errcode='54000';
   end if;
 
+  v_overlap:=public._import_review_overlap_preflight_core_v2(
+    p_import_id,v_import.source_system,coalesce(v_import.import_scope,v_import.source_system::text),
+    v_from,v_to,v_clients);
+
   return jsonb_build_object(
     'ok',true,
     'import_id',v_import.id,
@@ -186,7 +191,8 @@ begin
     'candidate_has_previous',v_page>1,
     'candidate_has_next',v_page*v_size<v_candidate_total,
     'review_already_created',v_import.coverage_locked_at is not null,
-    'review_status',(select s.status from public.import_review_states s where s.import_id=p_import_id)
+    'review_status',(select s.status from public.import_review_states s where s.import_id=p_import_id),
+    'overlapping_unfinished_reviews',v_overlap
   );
 end
 $function$;
