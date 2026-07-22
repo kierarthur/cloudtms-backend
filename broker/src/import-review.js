@@ -3,6 +3,8 @@ const IMPORT_REVIEW_APPLY_CONTRACT = 'IMPORT_REVIEW_APPLY_V1';
 const IMPORT_REVIEW_OPERATION_CONTRACT = 'IMPORT_APPLY_OPERATION_V2';
 const IMPORT_REVIEW_CORRECTION_CONTRACT = 'IMPORT_CORRECTION_OPERATION_V2';
 const IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT = 'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1';
+const IMPORT_REVIEW_UI_CONTRACT = 'IMPORT_REVIEW_UI_V1';
+const IMPORT_REVIEW_EMAIL_GROUPING_CONTRACT = 'TIMESHEET_QUERY_RECIPIENT_EMAIL_V1';
 
 export const IMPORT_REVIEW_PARSER_VERSION = 'CLOUDTMS_IMPORT_REVIEW_PARSER_V1';
 
@@ -15,8 +17,10 @@ const MAX_ACTION_CHANGES = 500;
 const ROUTE_RPCS = Object.freeze(new Set([
   'import_review_contract_version_get_v1',
   'import_review_list_v1',
+  'import_review_staged_scope_get_v1',
   'import_review_create_v1',
   'import_review_get_v1',
+  'import_review_actions_page_v1',
   'import_review_save_v1',
   'import_review_refresh_v1',
   'import_review_abandon_v1',
@@ -239,6 +243,8 @@ async function assertContract(sbRpc, env) {
     && contract.apply_operation_version === IMPORT_REVIEW_OPERATION_CONTRACT
     && contract.correction_operation_version === IMPORT_REVIEW_CORRECTION_CONTRACT
     && contract.follow_up_component_version === IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT
+    && contract.review_ui_contract_version === IMPORT_REVIEW_UI_CONTRACT
+    && contract.email_grouping_version === IMPORT_REVIEW_EMAIL_GROUPING_CONTRACT
     && contract.legacy_contracts_supported === false;
   if (!valid) {
     const mismatch = new Error('IMPORT_REVIEW_CONTRACT_MISMATCH');
@@ -416,6 +422,44 @@ function parseListQuery(url) {
   };
 }
 
+function allowedPageSize(value, field, fallback = 25) {
+  const out = integer(value, field, 25, 100, fallback);
+  if (![25, 50, 75, 100].includes(out)) {
+    throw new ImportReviewInputError(`${field} must be 25, 50, 75 or 100`);
+  }
+  return out;
+}
+
+function parseActionPageQuery(url) {
+  const sortBy = boundedText(url.searchParams.get('sort_by') || 'CANDIDATE', 'sort_by', { min: 1, max: 32 }).toUpperCase();
+  const sortDirection = boundedText(url.searchParams.get('sort_direction') || 'ASC', 'sort_direction', { min: 1, max: 4 }).toUpperCase();
+  const view = boundedText(url.searchParams.get('view') || 'ALL', 'view', { min: 1, max: 32 }).toUpperCase();
+  if (!['CANDIDATE', 'CLIENT', 'WEEK_ENDING', 'WORK_DATE', 'ACTION', 'STATUS'].includes(sortBy)) {
+    throw new ImportReviewInputError('sort_by is invalid');
+  }
+  if (!['ASC', 'DESC'].includes(sortDirection)) throw new ImportReviewInputError('sort_direction is invalid');
+  if (!['ALL', 'PENDING', 'READY', 'EMAIL', 'NO_ACTION'].includes(view)) {
+    throw new ImportReviewInputError('view is invalid');
+  }
+  return {
+    p_page_number: integer(url.searchParams.get('page'), 'page', 1, 100, 1),
+    p_page_size: allowedPageSize(url.searchParams.get('page_size'), 'page_size', 25),
+    p_sort_by: sortBy,
+    p_sort_direction: sortDirection,
+    p_view: view
+  };
+}
+
+function sourceKeys(items, keyName) {
+  return (Array.isArray(items) ? items : []).map((item) => String(item?.[keyName] || '').trim()).filter(Boolean);
+}
+
+function sameStringSet(left, right) {
+  const a = [...new Set(left)].sort();
+  const b = [...new Set(right)].sort();
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
 function routeMatch(pathname, pattern) {
   const actual = pathname.split('/').filter(Boolean);
   const expected = pattern.split('/').filter(Boolean);
@@ -456,6 +500,17 @@ export function createImportReviewDispatcher(dependencies) {
         return success(data);
       }
 
+      const stagedScope = routeMatch(pathname, '/api/import-reviews/staged/:import_id/scope');
+      if (req.method === 'GET' && stagedScope) {
+        const data = await runAllowedRpc(sbRpc, env, 'import_review_staged_scope_get_v1', {
+          p_import_id: uuid(stagedScope.import_id, 'import_id'),
+          p_actor_user_id: user.id,
+          p_candidate_page: integer(url.searchParams.get('candidate_page'), 'candidate_page', 1, 20, 1),
+          p_candidate_page_size: allowedPageSize(url.searchParams.get('candidate_page_size'), 'candidate_page_size', 100)
+        });
+        return success(data);
+      }
+
       if (req.method === 'POST' && pathname === '/api/import-reviews') {
         const body = await readBoundedJson(req);
         assertAllowedKeys(body, new Set([
@@ -467,13 +522,59 @@ export function createImportReviewDispatcher(dependencies) {
         if (!['COMPLETE_ALL', 'COMPLETE_SELECTED_CANDIDATES', 'PARTIAL'].includes(mode)) {
           throw new ImportReviewInputError('coverage_mode is invalid');
         }
+        const importId = uuid(body.import_id, 'import_id');
+        const staged = await runAllowedRpc(sbRpc, env, 'import_review_staged_scope_get_v1', {
+          p_import_id: importId,
+          p_actor_user_id: user.id,
+          p_candidate_page: 1,
+          p_candidate_page_size: 500
+        });
+        if (!isObject(staged) || staged.candidate_has_next === true) {
+          throw new ImportReviewInputError('The staged import scope could not be proven within the configured bound');
+        }
+        const stagedClients = Array.isArray(staged.scope_clients) ? staged.scope_clients : [];
+        const stagedCandidates = Array.isArray(staged.candidate_options) ? staged.candidate_options : [];
+        const submittedClients = coverageScopeItems(body.scope_clients || [], 'scope_clients', 'source_client_key', 100);
+        const submittedCandidates = coverageScopeItems(body.scope_candidates || [], 'scope_candidates', 'source_candidate_key', 500);
+        const expectedStart = isoDate(body.coverage_start_date, 'coverage_start_date');
+        const expectedEnd = isoDate(body.coverage_end_date, 'coverage_end_date');
+        if (expectedStart !== String(staged.coverage_start_date || '') || expectedEnd !== String(staged.coverage_end_date || '')) {
+          throw new ImportReviewInputError('Coverage dates must match the server-owned staged file date range');
+        }
+        const stagedClientKeys = sourceKeys(stagedClients, 'source_client_key');
+        if (submittedClients.length && !sameStringSet(sourceKeys(submittedClients, 'source_client_key'), stagedClientKeys)) {
+          throw new ImportReviewInputError('scope_clients must match the server-owned staged client scope');
+        }
+        const candidateByKey = new Map(stagedCandidates.map((item) => [String(item?.source_candidate_key || '').trim(), item]));
+        const submittedCandidateKeys = sourceKeys(submittedCandidates, 'source_candidate_key');
+        if (submittedCandidateKeys.some((key) => !candidateByKey.has(key))) {
+          throw new ImportReviewInputError('scope_candidates contains a candidate outside the staged file');
+        }
+        if (mode === 'COMPLETE_SELECTED_CANDIDATES' && submittedCandidateKeys.length === 0) {
+          throw new ImportReviewInputError('scope_candidates is required for COMPLETE_SELECTED_CANDIDATES');
+        }
+        if (mode !== 'COMPLETE_SELECTED_CANDIDATES' && submittedCandidateKeys.length > 0) {
+          throw new ImportReviewInputError('scope_candidates is only allowed for COMPLETE_SELECTED_CANDIDATES');
+        }
+        const serverCandidates = submittedCandidateKeys.map((key) => {
+          const item = candidateByKey.get(key) || {};
+          return {
+            source_candidate_key: key,
+            source_display_label: item.source_display_label == null ? null : String(item.source_display_label),
+            candidate_id: item.candidate_id || null
+          };
+        });
         const data = await runAllowedRpc(sbRpc, env, 'import_review_create_v1', {
-          p_import_id: uuid(body.import_id, 'import_id'),
+          p_import_id: importId,
           p_coverage_mode: mode,
-          p_coverage_start_date: isoDate(body.coverage_start_date, 'coverage_start_date'),
-          p_coverage_end_date: isoDate(body.coverage_end_date, 'coverage_end_date'),
-          p_scope_clients: coverageScopeItems(body.scope_clients || [], 'scope_clients', 'source_client_key', 100),
-          p_scope_candidates: coverageScopeItems(body.scope_candidates || [], 'scope_candidates', 'source_candidate_key', 500),
+          p_coverage_start_date: expectedStart,
+          p_coverage_end_date: expectedEnd,
+          p_scope_clients: stagedClients.map((item) => ({
+            source_client_key: String(item.source_client_key || '').trim(),
+            source_display_label: item.source_display_label == null ? null : String(item.source_display_label),
+            client_id: item.client_id || null
+          })),
+          p_scope_candidates: serverCandidates,
           p_expected_source_file_sha256: sha256(body.expected_source_file_sha256, 'expected_source_file_sha256'),
           p_expected_parser_version: boundedText(body.expected_parser_version, 'expected_parser_version', { min: 1, max: 128 }),
           p_actor_user_id: user.id,
@@ -490,6 +591,16 @@ export function createImportReviewDispatcher(dependencies) {
           actionLimit: integer(url.searchParams.get('action_limit'), 'action_limit', 1, 200, 100),
           eventCursor: url.searchParams.get('event_cursor') == null ? null : integer(url.searchParams.get('event_cursor'), 'event_cursor', 0, Number.MAX_SAFE_INTEGER),
           eventLimit: integer(url.searchParams.get('event_limit'), 'event_limit', 1, 100, 50)
+        });
+        return success(data);
+      }
+
+      const actionPage = routeMatch(pathname, '/api/import-reviews/:import_id/actions');
+      if (req.method === 'GET' && actionPage) {
+        const data = await runAllowedRpc(sbRpc, env, 'import_review_actions_page_v1', {
+          p_import_id: uuid(actionPage.import_id, 'import_id'),
+          p_actor_user_id: user.id,
+          ...parseActionPageQuery(url)
         });
         return success(data);
       }
@@ -724,5 +835,7 @@ export const importReviewContract = Object.freeze({
   apply: IMPORT_REVIEW_APPLY_CONTRACT,
   operation: IMPORT_REVIEW_OPERATION_CONTRACT,
   correction: IMPORT_REVIEW_CORRECTION_CONTRACT,
-  followUpComponent: IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT
+  followUpComponent: IMPORT_REVIEW_FOLLOW_UP_COMPONENT_CONTRACT,
+  reviewUi: IMPORT_REVIEW_UI_CONTRACT,
+  emailGrouping: IMPORT_REVIEW_EMAIL_GROUPING_CONTRACT
 });

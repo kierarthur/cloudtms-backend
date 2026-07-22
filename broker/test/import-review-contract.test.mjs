@@ -27,6 +27,8 @@ const installedContract = Object.freeze({
   apply_operation_version: importReviewContract.operation,
   correction_operation_version: importReviewContract.correction,
   follow_up_component_version: importReviewContract.followUpComponent,
+  review_ui_contract_version: importReviewContract.reviewUi,
+  email_grouping_version: importReviewContract.emailGrouping,
   legacy_contracts_supported: false
 });
 
@@ -67,6 +69,18 @@ async function responseJson(response) {
 
 function successRpcValue(name) {
   if (name === 'import_review_contract_version_get_v1') return installedContract;
+  if (name === 'import_review_staged_scope_get_v1') return {
+    ok: true,
+    import_id: IMPORT_ID,
+    coverage_start_date: '2026-07-01',
+    coverage_end_date: '2026-07-07',
+    scope_clients: [],
+    candidate_options: [],
+    candidate_has_next: false
+  };
+  if (name === 'import_review_actions_page_v1') return {
+    ok: true, items: [], total_items: 0, page_number: 1, page_size: 25, total_pages: 0
+  };
   if (name === 'import_review_get_v1') return readyReview();
   if (name === 'import_review_apply_status_get_v1') {
     return {
@@ -122,6 +136,9 @@ const endpoints = [
     name: 'list', method: 'GET', path: '/api/import-reviews?page_size=25', rpc: 'import_review_list_v1'
   },
   {
+    name: 'staged scope', method: 'GET', path: `/api/import-reviews/staged/${IMPORT_ID}/scope?candidate_page=1&candidate_page_size=25`, rpc: 'import_review_staged_scope_get_v1'
+  },
+  {
     name: 'create', method: 'POST', path: '/api/import-reviews', rpc: 'import_review_create_v1',
     body: {
       import_id: IMPORT_ID,
@@ -137,6 +154,9 @@ const endpoints = [
   },
   {
     name: 'get', method: 'GET', path: `/api/import-reviews/${IMPORT_ID}`, rpc: 'import_review_get_v1'
+  },
+  {
+    name: 'paged actions', method: 'GET', path: `/api/import-reviews/${IMPORT_ID}/actions?page=1&page_size=25&sort_by=CANDIDATE&sort_direction=ASC&view=PENDING`, rpc: 'import_review_actions_page_v1'
   },
   {
     name: 'save selections', method: 'PUT', path: `/api/import-reviews/${IMPORT_ID}/selections`, rpc: 'import_review_save_v1',
@@ -265,6 +285,32 @@ test('the contract gate fails closed when component-aware follow-up support is a
   assert.equal(captured.status, 503);
   assert.equal(captured.body.error.code, 'IMPORT_REVIEW_CONTRACT_MISMATCH');
   assert.deepEqual(current.calls.map((call) => call.name), ['import_review_contract_version_get_v1']);
+});
+
+test('the contract gate fails closed when the bounded review UI contract is absent', async () => {
+  const { review_ui_contract_version: _ui, ...oldContract } = installedContract;
+  const current = scenario({ contract: oldContract });
+  const response = await current.dispatcher(
+    jsonRequest('GET', '/api/import-reviews?page_size=25'),
+    { TEST: true },
+    current.ctx
+  );
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 503);
+  assert.equal(captured.body.error.code, 'IMPORT_REVIEW_CONTRACT_MISMATCH');
+});
+
+test('the contract gate fails closed when recipient-address consolidation is absent', async () => {
+  const { email_grouping_version: _email, ...oldContract } = installedContract;
+  const current = scenario({ contract: oldContract });
+  const response = await current.dispatcher(
+    jsonRequest('GET', '/api/import-reviews?page_size=25'),
+    { TEST: true },
+    current.ctx
+  );
+  const captured = await responseJson(response);
+  assert.equal(captured.status, 503);
+  assert.equal(captured.body.error.code, 'IMPORT_REVIEW_CONTRACT_MISMATCH');
 });
 
 test('follow-up retry waits while work is pending and never starts a second runner', async () => {

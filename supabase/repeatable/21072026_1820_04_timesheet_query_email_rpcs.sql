@@ -41,7 +41,7 @@ declare
   v_state public.import_review_states%rowtype; v_ids text[]; v_db_ids text[]; v_group record; v_route jsonb;
   v_issue_ids uuid[]; v_issue_set_hash text; v_outbox_key text; v_delivery_id uuid; v_outbox_id uuid;
   v_html text; v_text text; v_subject text; v_results jsonb:='[]'; v_group_count integer:=0; v_reminder integer;
-  v_new_delivery_count integer:=0; v_group_replay boolean;
+  v_new_delivery_count integer:=0; v_group_replay boolean; v_recipient_group_key text;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if p_import_id is null or p_operation_id is null or jsonb_typeof(coalesce(p_selected_action_ids,'[]'))<>'array'
@@ -82,18 +82,21 @@ begin
   update pg_temp.query_email_issues q set issue_id=e.id from public.hr_issue_emails e where e.issue_fingerprint=q.issue_fingerprint;
 
   for v_group in
-    select route->>'recipient_scope' recipient_scope,route->>'recipient_scope_key' recipient_scope_key,
-      route->>'recipient_email' recipient_email,route->>'route_fingerprint' route_fingerprint,
+    select lower(route->>'recipient_email') recipient_email,
+      case when count(distinct route->>'recipient_scope_key')=1 then min(route->>'recipient_scope') else 'CONTRACT_OVERRIDE' end recipient_scope,
+      public._import_review_hash_v1(string_agg(distinct route->>'route_fingerprint','|' order by route->>'route_fingerprint')) route_fingerprint,
+      count(distinct route->>'recipient_scope_key') business_route_count,
       count(*) issue_count,max(coalesce(e.sent_count,0))+case when bool_or(q.action_kind='EMAIL_REMINDER') then 1 else 0 end reminder_sequence
     from pg_temp.query_email_issues q join public.hr_issue_emails e on e.id=q.issue_id
-    group by route->>'recipient_scope',route->>'recipient_scope_key',route->>'recipient_email',route->>'route_fingerprint'
-    order by route->>'recipient_scope_key'
+    group by lower(route->>'recipient_email')
+    order by lower(route->>'recipient_email')
   loop
     v_group_count:=v_group_count+1; if v_group_count>p_max_groups then raise exception 'TIMESHEET_QUERY_GROUP_LIMIT_EXCEEDED' using errcode='54000'; end if;
+    v_recipient_group_key:='RECIPIENT_EMAIL:'||public._import_review_hash_v1(v_group.recipient_email);
     select array_agg(q.issue_id order by q.issue_id),public._import_review_hash_v1(string_agg(q.issue_fingerprint,'|' order by q.issue_fingerprint))
-      into v_issue_ids,v_issue_set_hash from pg_temp.query_email_issues q where q.route->>'recipient_scope_key'=v_group.recipient_scope_key;
+      into v_issue_ids,v_issue_set_hash from pg_temp.query_email_issues q where lower(q.route->>'recipient_email')=v_group.recipient_email;
     v_reminder:=v_group.reminder_sequence;
-    v_outbox_key:='TIMESHEET_QUERY:'||public._import_review_hash_v1(concat_ws('|',p_operation_id,v_group.recipient_scope_key,v_issue_set_hash,v_reminder));
+    v_outbox_key:='TIMESHEET_QUERY:'||public._import_review_hash_v1(concat_ws('|',p_operation_id,v_recipient_group_key,v_issue_set_hash,v_reminder));
     v_delivery_id:=null;v_outbox_id:=null;v_group_replay:=false;
     select d.id,d.mail_outbox_id into v_delivery_id,v_outbox_id from public.hr_issue_email_deliveries d where d.deterministic_outbox_key=v_outbox_key for update;
     if not found then
@@ -102,6 +105,12 @@ begin
       v_subject:=case when v_reminder>0 then 'Reminder: timesheet corrections required' else 'Timesheet corrections required' end;
       with lines as (
         select q.action_id||':'||row_number() over(partition by q.action_id order by cx.value->>'comparison_key') sort_key,
+          coalesce(nullif(cl.name,''),nullif(q.summary_json->>'client_name',''),'Client') client_name,
+          coalesce(q.contract_id::text,'client-default') contract_sort,
+          case when q.contract_id is null then 'Client default'
+            else coalesce(nullif(concat_ws(' · ',nullif(ct.display_site,''),nullif(ct.role,''),nullif(ct.band,'')),''),'Contract')
+              ||case when ct.start_date is not null then ' ('||to_char(ct.start_date,'FMDD Mon YYYY')||'–'||to_char(ct.end_date,'FMDD Mon YYYY')||')' else '' end
+          end contract_label,
           q.summary_json->>'candidate_name' candidate_name,
           coalesce(nullif(cx.value->>'work_date',''),nullif(q.summary_json->>'work_date','')) work_date,
           coalesce(nullif(cx.value->>'match_status',''),nullif(q.summary_json->>'reason_code','')) issue_code,
@@ -113,6 +122,8 @@ begin
             case when nullif(cx.value->>'healthroster_break_mins','') is not null then 'break '||(cx.value->>'healthroster_break_mins')||' min' end) import_detail,
           concat_ws(' → ',nullif(cx.value->>'ref_before',''),nullif(cx.value->>'ref_after','')) reference_detail
         from pg_temp.query_email_issues q
+        left join public.clients cl on cl.id=q.client_id
+        left join public.contracts ct on ct.id=q.contract_id
         cross join lateral (
           select c.value from jsonb_array_elements(coalesce(q.summary_json->'comparisons','[]'::jsonb)) c(value)
           where coalesce(c.value->>'match_status','')<>'MATCH'
@@ -123,23 +134,40 @@ begin
             where coalesce(c2.value->>'match_status','')<>'MATCH'
                or coalesce(c2.value->>'ref_before','')<>coalesce(c2.value->>'ref_after',''))
         ) cx
-        where q.route->>'recipient_scope_key'=v_group.recipient_scope_key
+        where lower(q.route->>'recipient_email')=v_group.recipient_email
+      ), rendered_rows as (
+        select l.*,'<tr><td style="padding:8px;border:1px solid #dbe2ea">'||public._import_review_html_escape_v1(l.candidate_name)||'</td><td style="padding:8px;border:1px solid #dbe2ea;white-space:nowrap">'||
+          public._import_review_html_escape_v1(case when l.work_date~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then to_char(l.work_date::date,'FMDD Mon YYYY') else l.work_date end)||'</td><td style="padding:8px;border:1px solid #dbe2ea">'||
+          public._import_review_html_escape_v1(replace(initcap(lower(l.issue_code)),'_',' '))||'</td><td style="padding:8px;border:1px solid #dbe2ea">'||
+          public._import_review_html_escape_v1(l.timesheet_detail)||'</td><td style="padding:8px;border:1px solid #dbe2ea">'||public._import_review_html_escape_v1(l.import_detail)||'</td><td style="padding:8px;border:1px solid #dbe2ea">'||
+          public._import_review_html_escape_v1(l.reference_detail)||'</td></tr>' row_html
+        from lines l
+      ), contract_tables as (
+        select client_name,contract_sort,contract_label,
+          '<h4 style="margin:18px 0 8px;color:#334155;font-size:14px">'||public._import_review_html_escape_v1(contract_label)||'</h4>'||
+          '<table role="table" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px"><thead><tr style="background:#eef2f7;color:#1e293b"><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Worker</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Date</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Issue</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Timesheet</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">HealthRoster</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Reference</th></tr></thead><tbody>'||
+          string_agg(row_html,'' order by sort_key)||'</tbody></table>' contract_html
+        from rendered_rows group by client_name,contract_sort,contract_label
+      ), client_sections as (
+        select client_name,'<section style="margin:24px 0"><h3 style="margin:0 0 10px;color:#0f172a;font-size:17px">'||
+          public._import_review_html_escape_v1(client_name)||'</h3>'||string_agg(contract_html,'' order by contract_label,contract_sort)||'</section>' client_html
+        from contract_tables group by client_name
       )
-      select '<p>Please review the following timesheet discrepancies.</p><table border="1" cellspacing="0" cellpadding="6"><thead><tr><th>Worker</th><th>Date</th><th>Issue</th><th>Timesheet</th><th>HealthRoster</th><th>Reference</th></tr></thead><tbody>'||
-        string_agg('<tr><td>'||public._import_review_html_escape_v1(l.candidate_name)||'</td><td>'||
-          public._import_review_html_escape_v1(case when l.work_date~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then to_char(l.work_date::date,'FMDD Mon YYYY') else l.work_date end)||'</td><td>'||
-          public._import_review_html_escape_v1(replace(initcap(lower(l.issue_code)),'_',' '))||'</td><td>'||
-          public._import_review_html_escape_v1(l.timesheet_detail)||'</td><td>'||public._import_review_html_escape_v1(l.import_detail)||'</td><td>'||
-          public._import_review_html_escape_v1(l.reference_detail)||'</td></tr>','' order by l.sort_key)||'</tbody></table>'
-        into v_html from lines l;
+      select '<div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.45"><p>Please review the following timesheet discrepancies. Items are grouped by client and contract.</p>'||
+        string_agg(client_html,'' order by client_name)||'</div>' into v_html from client_sections;
       with lines as (
         select q.action_id||':'||row_number() over(partition by q.action_id order by cx.value->>'comparison_key') sort_key,
+          coalesce(nullif(cl.name,''),nullif(q.summary_json->>'client_name',''),'Client') client_name,
+          case when q.contract_id is null then 'Client default'
+            else coalesce(nullif(concat_ws(' · ',nullif(ct.display_site,''),nullif(ct.role,''),nullif(ct.band,'')),''),'Contract') end contract_label,
           q.summary_json->>'candidate_name' candidate_name,
           coalesce(nullif(cx.value->>'work_date',''),nullif(q.summary_json->>'work_date','')) work_date,
           coalesce(nullif(cx.value->>'match_status',''),nullif(q.summary_json->>'reason_code','')) issue_code,
           concat_ws(' ',cx.value->>'timesheet_start',cx.value->>'timesheet_end',cx.value->>'healthroster_start',cx.value->>'healthroster_end',
             q.summary_json->>'start_time',q.summary_json->>'end_time',q.summary_json->>'hours_worked') detail
         from pg_temp.query_email_issues q
+        left join public.clients cl on cl.id=q.client_id
+        left join public.contracts ct on ct.id=q.contract_id
         cross join lateral (
           select c.value from jsonb_array_elements(coalesce(q.summary_json->'comparisons','[]'::jsonb)) c(value)
           where coalesce(c.value->>'match_status','')<>'MATCH'
@@ -150,31 +178,32 @@ begin
             where coalesce(c2.value->>'match_status','')<>'MATCH'
                or coalesce(c2.value->>'ref_before','')<>coalesce(c2.value->>'ref_after',''))
         ) cx
-        where q.route->>'recipient_scope_key'=v_group.recipient_scope_key
+        where lower(q.route->>'recipient_email')=v_group.recipient_email
       )
-      select string_agg(concat_ws(' | ',l.candidate_name,l.work_date,l.issue_code,l.detail),'\n' order by l.sort_key)
+      select string_agg(concat_ws(' | ',l.client_name,l.contract_label,l.candidate_name,l.work_date,l.issue_code,l.detail),'\n' order by l.client_name,l.contract_label,l.sort_key)
         into v_text from lines l;
       if length(v_html)>262144 or length(v_text)>131072 then raise exception 'TIMESHEET_QUERY_BODY_LIMIT_EXCEEDED' using errcode='54000'; end if;
       insert into public.mail_outbox(type,"to",subject,body_html,body_text,status,created_by,reference,recipient_kind,recipient_id,
         context_kind,context_id,email_type,deterministic_outbox_key,payment_scope_json)
       values('TIMESHEET_QUERY',v_group.recipient_email,v_subject,v_html,v_text,'QUEUED'::public.mail_status_enum,p_actor_user_id,
-        v_outbox_key,v_group.recipient_scope,case when v_group.recipient_scope='CONTRACT_OVERRIDE' then split_part(v_group.recipient_scope_key,':',2)::uuid else split_part(v_group.recipient_scope_key,':',2)::uuid end,
+        v_outbox_key,'TIMESHEET_QUERY_EMAIL',null,
         'TIMESHEET_QUERY_DELIVERY',v_delivery_id,'TIMESHEET_QUERY',v_outbox_key,'{}'::jsonb)
       on conflict do nothing;
       select id into v_outbox_id from public.mail_outbox where deterministic_outbox_key=v_outbox_key;
       if v_outbox_id is null then raise exception 'TIMESHEET_QUERY_OUTBOX_CLAIM_FAILED' using errcode='23505'; end if;
       insert into public.hr_issue_email_deliveries(id,import_id,operation_id,recipient_scope,recipient_scope_key,recipient_route_fingerprint,
         recipient_email,reminder_sequence,issue_set_fingerprint,deterministic_outbox_key,mail_outbox_id,status,created_by_user_id)
-      values(v_delivery_id,p_import_id,p_operation_id,v_group.recipient_scope,v_group.recipient_scope_key,v_group.route_fingerprint,
+      values(v_delivery_id,p_import_id,p_operation_id,v_group.recipient_scope,v_recipient_group_key,v_group.route_fingerprint,
         v_group.recipient_email,v_reminder,v_issue_set_hash,v_outbox_key,v_outbox_id,'QUEUED',p_actor_user_id);
       insert into public.hr_issue_email_delivery_items(delivery_id,issue_id,action_id,issue_fingerprint)
       select v_delivery_id,q.issue_id,q.action_id,q.issue_fingerprint from pg_temp.query_email_issues q
-      where q.route->>'recipient_scope_key'=v_group.recipient_scope_key order by q.action_id;
+      where lower(q.route->>'recipient_email')=v_group.recipient_email order by q.action_id;
     else
       v_group_replay:=true;
     end if;
     v_results:=v_results||jsonb_build_array(jsonb_build_object('delivery_id',v_delivery_id,'mail_outbox_id',v_outbox_id,
-      'recipient_scope',v_group.recipient_scope,'recipient_scope_key',v_group.recipient_scope_key,'issue_count',v_group.issue_count,
+      'recipient_scope',v_group.recipient_scope,'recipient_scope_key',v_recipient_group_key,
+      'business_route_count',v_group.business_route_count,'issue_count',v_group.issue_count,
       'reminder_sequence',v_reminder,'replay',v_group_replay));
   end loop;
   if v_new_delivery_count>0 then

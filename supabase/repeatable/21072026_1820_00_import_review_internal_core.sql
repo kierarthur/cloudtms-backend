@@ -92,7 +92,8 @@ begin
   end if;
   for v_key in select jsonb_object_keys(v) loop
     if v_key not in ('expanded_candidates','expanded_clients','expanded_weeks','expanded_shifts',
-                     'active_section','scroll_anchor','show_no_action','show_automatic') then
+                     'active_section','scroll_anchor','show_no_action','show_automatic',
+                     'page_number','page_size','sort_by','sort_direction') then
       raise exception 'IMPORT_REVIEW_UI_STATE_KEY_NOT_ALLOWED' using errcode='22023',detail=v_key;
     end if;
   end loop;
@@ -103,6 +104,16 @@ begin
     select 1 from jsonb_each(v) e
     where jsonb_array_length(case when jsonb_typeof(e.value)='array' then e.value else '[]'::jsonb end)>500
   ) then raise exception 'IMPORT_REVIEW_UI_STATE_ARRAY_LIMIT_EXCEEDED' using errcode='22023'; end if;
+  if v?'page_number' and (jsonb_typeof(v->'page_number')<>'number' or (v->>'page_number')!~'^\d+$'
+      or (v->>'page_number')::integer not between 1 and 100) then
+    raise exception 'IMPORT_REVIEW_UI_STATE_PAGE_INVALID' using errcode='22023'; end if;
+  if v?'page_size' and (jsonb_typeof(v->'page_size')<>'number' or (v->>'page_size')!~'^\d+$'
+      or (v->>'page_size')::integer not in (25,50,75,100)) then
+    raise exception 'IMPORT_REVIEW_UI_STATE_PAGE_SIZE_INVALID' using errcode='22023'; end if;
+  if v?'sort_by' and upper(v->>'sort_by') not in ('CANDIDATE','CLIENT','WEEK_ENDING','WORK_DATE','ACTION','STATUS') then
+    raise exception 'IMPORT_REVIEW_UI_STATE_SORT_INVALID' using errcode='22023'; end if;
+  if v?'sort_direction' and upper(v->>'sort_direction') not in ('ASC','DESC') then
+    raise exception 'IMPORT_REVIEW_UI_STATE_SORT_DIRECTION_INVALID' using errcode='22023'; end if;
   return v;
 end
 $function$;
