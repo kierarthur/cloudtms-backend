@@ -1,5 +1,7 @@
 const MAX_FOLLOW_UP_ITEMS = 500;
+const MAX_REAUTHORISE_ITEMS = 100;
 const VALID_COMPONENT_STATUSES = new Set(['PENDING', 'COMPLETE', 'FAILED_RETRYABLE', 'NOT_REQUIRED']);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function objectValue(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -27,6 +29,22 @@ function safeComponentFailure(component, code, message) {
     errorCode: code,
     errorMessage: message
   };
+}
+
+function reauthorisationCompleted(result, expectedTimesheetIds) {
+  if (result?.ok !== true) return false;
+  const expected = new Set(expectedTimesheetIds);
+  const rows = Array.isArray(result?.results) ? result.results : [];
+  if (result?.all_success === true && Number(result?.success_count || 0) >= expected.size) return true;
+  const completed = new Set();
+  for (const row of rows) {
+    const id = String(row?.requested_timesheet_id || row?.current_timesheet_id || '').trim().toLowerCase();
+    if (!expected.has(id)) continue;
+    if (row?.success === true || String(row?.error_code || '').trim().toUpperCase() === 'ALREADY_AUTHORISED') {
+      completed.add(id);
+    }
+  }
+  return completed.size === expected.size;
 }
 
 export async function reconcileTimesheetQueryDeliveryAfterProviderAcceptance({ row, markDelivery, reconcileDelivery } = {}) {
@@ -101,6 +119,14 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
 
     const emailActionIds = uniqueBoundedStrings(storedResponse.post_commit_email_action_ids);
     const affectedTimesheetIds = uniqueBoundedStrings(storedResponse.affected_timesheet_ids);
+    const reauthoriseTimesheetIds = uniqueBoundedStrings(
+      storedResponse.post_commit_reauthorise_timesheet_ids,
+      MAX_REAUTHORISE_ITEMS + 1
+    ).map((value) => value.toLowerCase());
+    if (reauthoriseTimesheetIds.length > MAX_REAUTHORISE_ITEMS
+      || reauthoriseTimesheetIds.some((value) => !UUID_PATTERN.test(value))) {
+      throw new Error('IMPORT_REVIEW_REAUTHORISE_TARGET_SET_INVALID');
+    }
     const componentStates = {
       EMAIL: componentStatus(storedResponse, 'EMAIL'),
       TSFIN: componentStatus(storedResponse, 'TSFIN')
@@ -201,6 +227,20 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
           }
 
           if (pendingTotal === 0 && failedCount === 0) {
+            if (reauthoriseTimesheetIds.length) {
+              const authoriseRaw = await sbRpc(env, 'timesheet_authorise_bulk_atomic', {
+                p_items: reauthoriseTimesheetIds.map((timesheetId) => ({
+                  timesheet_id: timesheetId,
+                  expected_timesheet_id: timesheetId
+                })),
+                p_actor_user_id: details.actorUserId,
+                p_now_utc: null
+              }, { timeoutMs: 30000 });
+              const authoriseResult = unwrapRpcJsonb(authoriseRaw, 'timesheet_authorise_bulk_atomic') || {};
+              if (!reauthorisationCompleted(authoriseResult, reauthoriseTimesheetIds)) {
+                throw new Error('IMPORT_REVIEW_REAUTHORISE_INCOMPLETE');
+              }
+            }
             await updateComponent(env, details, {
               component: 'TSFIN', expectedStatus: 'PENDING', newStatus: 'COMPLETE'
             });
@@ -217,8 +257,10 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
           if (!String(error?.message || '').includes('FOLLOW_UP_FAILURE_RECORDING_FAILED')) {
             await failComponent(env, details, safeComponentFailure(
               'TSFIN',
-              'TSFIN_FOLLOW_UP_FAILED',
-              'TSFIN refresh failed after source commit and can be retried safely.'
+              reauthoriseTimesheetIds.length ? 'TSFIN_REAUTHORISE_FAILED' : 'TSFIN_FOLLOW_UP_FAILED',
+              reauthoriseTimesheetIds.length
+                ? 'TSFIN refresh or authorised-state restoration failed after source commit and can be retried safely.'
+                : 'TSFIN refresh failed after source commit and can be retried safely.'
             ));
           }
         }

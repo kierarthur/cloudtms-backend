@@ -41,6 +41,9 @@ declare
   v_phase3_result jsonb := null;
   v_changed_preflight jsonb := null;
   v_changed_timesheet_ids uuid[] := array[]::uuid[];
+  v_reauthorise_timesheet_ids uuid[] := array[]::uuid[];
+  v_lifecycle_items jsonb := '[]'::jsonb;
+  v_unauthorise_result jsonb := null;
   v_phase1_result jsonb := null;
   v_phase15_ok int := 0;
   v_phase15_updated int := 0;
@@ -502,23 +505,6 @@ begin
 
     if exists (
       select 1 from tmp_changed_sel cs
-      join public.timesheets ts on ts.timesheet_id=cs.timesheet_id
-      left join public.timesheets_financials tf on tf.timesheet_id=ts.timesheet_id and tf.is_current=true
-      where cs.is_invoiced is false
-        and cs.is_paid is false
-        and (ts.authorised_at_server is not null or tf.authorised_at_utc is not null)
-    ) then
-      raise exception using message='CANONICAL_UNAUTHORISE_REQUIRED', errcode='P0001',
-        detail=jsonb_build_object(
-          'code','CANONICAL_UNAUTHORISE_REQUIRED',
-          'required_path',jsonb_build_array('UNAUTHORISE','AMEND','RECALCULATE','REAUTHORISE'),
-          'paid_uninvoiced_rollover_required',false,
-          'timesheet_ids',to_jsonb(v_changed_timesheet_ids)
-        )::text;
-    end if;
-
-    if exists (
-      select 1 from tmp_changed_sel cs
       where cs.is_invoiced is false
         and exists (select 1 from public.timesheets_financials paid_tf where paid_tf.timesheet_id=cs.timesheet_id and paid_tf.paid_at_utc is not null)
         and not exists (
@@ -538,6 +524,65 @@ begin
           'timesheet_ids',to_jsonb(v_changed_timesheet_ids)
         )::text;
     end if;
+  end if;
+
+  -- Preserve the lifecycle state of authorised, mutable source timesheets.
+  -- The source transaction performs the canonical unauthorise step before
+  -- changing truth.  The Worker reauthorises exactly this persisted set only
+  -- after its bounded TSFIN follow-up has completed successfully.
+  select coalesce(array_agg(distinct lifecycle_scope.timesheet_id order by lifecycle_scope.timesheet_id),array[]::uuid[])
+  into v_reauthorise_timesheet_ids
+  from (
+    select cs.timesheet_id
+    from tmp_changed_sel cs
+    join public.timesheets ts on ts.timesheet_id=cs.timesheet_id and ts.is_current=true
+    left join public.timesheets_financials tf on tf.timesheet_id=ts.timesheet_id and tf.is_current=true
+    left join public.contract_weeks cw on cw.timesheet_id=ts.timesheet_id
+    where cs.timesheet_id is not null
+      and cs.is_invoiced is false
+      and cs.is_paid is false
+      and (ts.authorised_at_server is not null or tf.authorised_at_utc is not null
+        or cw.status='AUTHORISED'::public.contract_week_status_enum)
+    union
+    select ns.timesheet_id
+    from public.nhsp_shifts ns
+    join public.timesheets ts on ts.timesheet_id=ns.timesheet_id and ts.is_current=true
+    left join public.timesheets_financials tf on tf.timesheet_id=ts.timesheet_id and tf.is_current=true
+    left join public.contract_weeks cw on cw.timesheet_id=ts.timesheet_id
+    where ns.id=any(coalesce(v_selected_cancel_shift_ids,array[]::uuid[]))
+      and ns.timesheet_id is not null
+      and coalesce((public._import_review_timesheet_protection_core_v1(ns.timesheet_id)->>'paid')::boolean,false)=false
+      and coalesce((public._import_review_timesheet_protection_core_v1(ns.timesheet_id)->>'invoice_locked')::boolean,false)=false
+      and (ts.authorised_at_server is not null or tf.authorised_at_utc is not null
+        or cw.status='AUTHORISED'::public.contract_week_status_enum)
+  ) lifecycle_scope;
+
+  if cardinality(v_reauthorise_timesheet_ids)>100 then
+    raise exception 'IMPORT_REVIEW_REAUTHORISE_SCOPE_TOO_LARGE' using errcode='54000';
+  end if;
+  if cardinality(v_reauthorise_timesheet_ids)>0 then
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'timesheet_id',target_id::text,
+      'expected_timesheet_id',target_id::text
+    ) order by target_id),'[]'::jsonb)
+    into v_lifecycle_items
+    from unnest(v_reauthorise_timesheet_ids) as lifecycle_target(target_id);
+
+    select public.timesheet_unauthorise_bulk_atomic(v_lifecycle_items,p_actor_user_id,v_now)
+    into v_unauthorise_result;
+    if coalesce((v_unauthorise_result->>'ok')::boolean,false) is not true
+      or coalesce((v_unauthorise_result->>'all_success')::boolean,false) is not true then
+      raise exception using message='IMPORT_REVIEW_CANONICAL_UNAUTHORISE_FAILED',errcode='P0001',
+        detail=jsonb_build_object(
+          'code','IMPORT_REVIEW_CANONICAL_UNAUTHORISE_FAILED',
+          'timesheet_ids',to_jsonb(v_reauthorise_timesheet_ids),
+          'failure_count',coalesce((v_unauthorise_result->>'failure_count')::int,cardinality(v_reauthorise_timesheet_ids))
+        )::text;
+    end if;
+    v_steps:=v_steps||jsonb_build_array(jsonb_build_object(
+      'step','CANONICAL_UNAUTHORISE_COMPLETE',
+      'reauthorise_timesheet_count',cardinality(v_reauthorise_timesheet_ids)
+    ));
   end if;
 
   v_should_run_phase3 := (v_invoiced_changed_keys_count > 0);
@@ -1500,6 +1545,7 @@ begin
       'cancellations', v_cancellations_result
     ),
     'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
+    'post_commit_reauthorise_timesheet_ids',to_jsonb(coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])),
     'post_commit_email_action_ids','[]'::jsonb,
     'review_operation_id',v_review_operation_id
   );

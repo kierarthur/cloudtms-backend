@@ -8,6 +8,7 @@ const lifecycleSql = readFileSync(new URL('../../supabase/repeatable/21072026_18
 const coreSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_00_import_review_internal_core.sql', import.meta.url), 'utf8');
 const dailySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql', import.meta.url), 'utf8');
 const weeklyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql', import.meta.url), 'utf8');
+const nhspApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql', import.meta.url), 'utf8');
 const weeklyPreviewSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql', import.meta.url), 'utf8');
 const retirementSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_99_import_review_hard_cutover_retirements.sql', import.meta.url), 'utf8');
 const incrementalMigration = readFileSync(new URL('../../supabase/migrations/22072026_1700_import_review_incremental_outcomes.sql', import.meta.url), 'utf8');
@@ -217,7 +218,6 @@ test('incremental apply is candidate/client scoped, immutable and transactionall
 
 test('all transactional apply routes restrict execution to the guarded batch action IDs', () => {
   const dailyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql', import.meta.url), 'utf8');
-  const nhspApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql', import.meta.url), 'utf8');
   for (const source of [weeklyApplySql, dailyApplySql, nhspApplySql]) {
     assert.match(source, /jsonb_array_elements_text\(v_review_guard->'selected_action_ids'\)/);
     assert.doesNotMatch(source, /applied_at\s*=\s*v_now/);
@@ -225,6 +225,17 @@ test('all transactional apply routes restrict execution to the guarded batch act
   assert.match(weeklyApplySql, /tmp_review_batch_units/);
   assert.match(weeklyApplySql, /p2m\.external_row_key = any\(coalesce\(v_mode_a_external_keys/);
   assert.match(weeklyApplySql, /bu\.candidate_id=nullif\(btrim\(r\.value->>'candidate_id'/);
+});
+
+test('authoritative Weekly apply preserves authorised lifecycle through TSFIN follow-up', () => {
+  for (const source of [weeklyApplySql, nhspApplySql]) {
+    assert.match(source, /v_reauthorise_timesheet_ids uuid\[\]/);
+    assert.match(source, /timesheet_unauthorise_bulk_atomic\(v_lifecycle_items,p_actor_user_id,v_now\)/);
+    assert.match(source, /post_commit_reauthorise_timesheet_ids/);
+    assert.match(source, /CANONICAL_UNAUTHORISE_COMPLETE/);
+  }
+  assert.doesNotMatch(nhspApplySql, /if exists \([\s\S]{0,500}tmp_changed_sel[\s\S]{0,500}message='CANONICAL_UNAUTHORISE_REQUIRED'/);
+  assert.doesNotMatch(weeklyApplySql, /if exists \([\s\S]{0,650}tmp_changed_sel[\s\S]{0,650}message = 'CANONICAL_UNAUTHORISE_REQUIRED'/);
 });
 
 test('failed-before-commit recovery proves no commit before reopening the review', () => {
