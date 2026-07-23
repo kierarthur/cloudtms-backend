@@ -76,6 +76,14 @@ begin
         and tf.is_current is true
         and coalesce(tf.is_stale, false) is false
         and tf.timesheet_version is not distinct from ts.version
+        and (
+          coalesce((public._ctms_import_correction_classify_v1(ts.timesheet_id)
+            ->>'is_import_authoritative_correction')::boolean,false) is false
+          or (
+            tf.policy_snapshot_json->'correction_financials_policy_envelope'
+              is not distinct from ts.candidate_hint_text->'correction_financials_policy_envelope'
+          )
+        )
         and coalesce(tf.computed_at_utc, tf.updated_at, tf.created_at) >= p_not_before_utc
       ) as is_fresh_target,
       coalesce(tf.computed_at_utc, tf.updated_at, tf.created_at) as computed_at_utc

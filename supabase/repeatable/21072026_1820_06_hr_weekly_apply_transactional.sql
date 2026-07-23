@@ -2289,6 +2289,34 @@ begin
   ) target
   where target.timesheet_id is not null;
 
+  -- A protected correction must remain a complete TSFIN/lifecycle unit even
+  -- when this batch changes only its mutable replacement member.
+  select coalesce(array_agg(distinct expanded.timesheet_id order by expanded.timesheet_id),array[]::uuid[])
+  into v_authoritative_affected_timesheet_ids
+  from (
+    select requested.timesheet_id
+    from unnest(coalesce(v_authoritative_affected_timesheet_ids,array[]::uuid[])) requested(timesheet_id)
+    where requested.timesheet_id is not null
+    union
+    select partner.timesheet_id
+    from unnest(coalesce(v_authoritative_affected_timesheet_ids,array[]::uuid[])) requested(timesheet_id)
+    join public.timesheets seed
+      on seed.timesheet_id=requested.timesheet_id
+     and seed.is_current=true
+     and seed.correction_id is not null
+     and upper(btrim(coalesce(seed.adjustment_origin,''))) in (
+       'IMPORT_CORRECTION','IMPORT_CANCELLATION','HEALTHROSTER_CHANGED_HOURS',
+       'NHSP_CHANGED_HOURS','HEALTHROSTER_CANCELLATION','NHSP_CANCELLATION'
+     )
+    join public.timesheets partner
+      on partner.correction_id=seed.correction_id
+     and partner.is_current=true
+     and upper(btrim(coalesce(partner.adjustment_origin,''))) in (
+       'IMPORT_CORRECTION','IMPORT_CANCELLATION','HEALTHROSTER_CHANGED_HOURS',
+       'NHSP_CHANGED_HOURS','HEALTHROSTER_CANCELLATION','NHSP_CANCELLATION'
+     )
+  ) expanded
+  where expanded.timesheet_id is not null;
   insert into tmp_aff_ts(timesheet_id)
   select authoritative.timesheet_id
   from unnest(coalesce(v_authoritative_affected_timesheet_ids,array[]::uuid[])) authoritative(timesheet_id)

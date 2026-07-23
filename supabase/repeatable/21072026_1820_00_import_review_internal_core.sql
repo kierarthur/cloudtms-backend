@@ -983,7 +983,16 @@ begin
             (m.payload_json->>'actual_break_minutes')::integer,(m.payload_json->>'break_mins')::integer,
             (m.payload_json->>'break_minutes')::integer,0) is distinct from coalesce(m.ts_break_minutes,0) then 'BREAK_MINUTES'::text end,
           case when m.is_daily and m.resolved_timesheet_id is not null and m.hours_worked is not null
-            and abs((m.hours_worked*60)-m.worked_minutes)>1 then 'WORKED_HOURS'::text end
+            and abs((m.hours_worked*60)-m.worked_minutes)>1 then 'WORKED_HOURS'::text end,
+          case when not m.is_daily and m.existing_shift_id is not null and m.start_time_local is distinct from
+            (m.existing_shift_start_utc at time zone 'Europe/London')::time then 'START_TIME'::text end,
+          case when not m.is_daily and m.existing_shift_id is not null and m.end_time_local is distinct from
+            (m.existing_shift_end_utc at time zone 'Europe/London')::time then 'END_TIME'::text end,
+          case when not m.is_daily and m.existing_shift_id is not null and coalesce((m.payload_json->>'actual_break_mins')::integer,
+            (m.payload_json->>'actual_break_minutes')::integer,(m.payload_json->>'break_mins')::integer,
+            (m.payload_json->>'break_minutes')::integer,0) is distinct from coalesce(m.existing_shift_break_minutes,0) then 'BREAK_MINUTES'::text end,
+          case when not m.is_daily and m.existing_shift_id is not null and m.hours_worked is not null
+            and abs((m.hours_worked*60)-m.existing_shift_paid_minutes)>1 then 'WORKED_HOURS'::text end
         ],null)),
         'outcome_label',case
           when not m.is_daily and not coalesce(m.import_authoritative,false) then 'Validate candidate timesheet'

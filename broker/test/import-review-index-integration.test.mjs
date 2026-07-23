@@ -130,3 +130,12 @@ test('Banking Pay refresh remains outside the import-review change boundary', ()
   const bankingRefresh = functionBody('handleBankingPayWorkbenchSessionRefresh');
   assert.doesNotMatch(bankingRefresh, /send_ts_queries_to_different_email|import_review|reversal_complete_financials_date/);
 });
+
+test('TSFIN no-op optimisation preserves complete import-correction units', () => {
+  const workerBody = functionBody('runTsfinWorkerOnce');
+  const guardedNoops = [...workerBody.matchAll(/_isSnapshotNoop\(snapshot, curFin\) && !isCorrectionTs/g)];
+  assert.equal(guardedNoops.length, 2, 'Weekly and Daily no-op paths must retain correction members');
+  assert.match(workerBody, /dailyCorrectionKindU/);
+  assert.match(workerBody, /dailyAdjustmentOriginU === 'IMPORT_CORRECTION'/);
+  assert.match(workerBody, /rowsToWriteAll\.push/);
+});

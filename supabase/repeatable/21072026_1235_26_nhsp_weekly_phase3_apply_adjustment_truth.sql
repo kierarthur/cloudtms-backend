@@ -72,6 +72,7 @@ declare
   v_existing_pos_ts_id uuid := null;
   v_existing_pos_correction_id text := null;
   v_existing_pos_schedule jsonb := null;
+  v_existing_pos_hint jsonb := null;
   v_existing_pos_is_invoiced boolean := false;
   v_existing_pos_tf_locked_by_invoice_id uuid := null;
   v_existing_pos_tf_invoice_breakdown_json jsonb := null;
@@ -616,11 +617,13 @@ begin
     select
       tpos.timesheet_id,
       tpos.correction_id,
-      tpos.actual_schedule_json
+      tpos.actual_schedule_json,
+      coalesce(tpos.candidate_hint_text,tpos.qr_payload_json,'{}'::jsonb)
     into
       v_existing_pos_ts_id,
       v_existing_pos_correction_id,
-      v_existing_pos_schedule
+      v_existing_pos_schedule,
+      v_existing_pos_hint
     from public.timesheets tpos
     where tpos.is_adjustment is true
       and tpos.is_current is true
@@ -959,6 +962,24 @@ begin
       );
 
 
+      -- This is an amendment within the existing correction unit, not a new
+      -- correction unit. Preserve the pair's shared frozen policy envelope and
+      -- operation identity; otherwise the untouched reversal and amended
+      -- replacement become two invalid one-member units. Only append bounded
+      -- provenance for the import that amended the mutable replacement.
+      if jsonb_typeof(v_existing_pos_hint) <> 'object'
+         or jsonb_typeof(v_existing_pos_hint->'correction_financials_policy_envelope') <> 'object'
+         or nullif(v_existing_pos_hint#>>'{correction_financials_policy_envelope,operation,operation_id}','') is null then
+        raise exception using message='EXISTING_CORRECTION_POLICY_ENVELOPE_INVALID',errcode='P0001',
+          detail=jsonb_build_object(
+            'code','EXISTING_CORRECTION_POLICY_ENVELOPE_INVALID',
+            'timesheet_id',v_existing_pos_ts_id
+          )::text;
+      end if;
+      v_hint := v_existing_pos_hint || jsonb_build_object(
+        'import_correction',coalesce(v_existing_pos_hint->'import_correction','{}'::jsonb)
+          || jsonb_build_object('updated_from_import_id',p_import_id::text)
+      );
       -- Lock and update the existing replacement timesheet in place
       perform 1
       from public.timesheets tlock

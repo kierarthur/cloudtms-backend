@@ -299,6 +299,13 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
             ));
           }
         } catch (error) {
+          try {
+            console.warn('[IMPORT_REVIEW][TSFIN_FOLLOW_UP_FAILED]', {
+              error: String(error?.message || error || 'UNKNOWN').slice(0, 500),
+              cause: String(error?.cause?.message || error?.cause || '').slice(0, 500)
+            });
+          } catch {}
+
           tsfinFailure = error;
           if (!String(error?.message || '').includes('FOLLOW_UP_FAILURE_RECORDING_FAILED')) {
             await failComponent(env, details, safeComponentFailure(

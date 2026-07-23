@@ -72,6 +72,9 @@ test('TSFIN follow-up settlement proof is bounded, commit-fenced and service-rol
   assert.match(body, /p_not_before_utc timestamptz/);
   assert.match(body, /v_target_count > 5000/);
   assert.match(body, /tf\.timesheet_version is not distinct from ts\.version/);
+  assert.match(body, /_ctms_import_correction_classify_v1\(ts\.timesheet_id\)/);
+  assert.match(body, /tf\.policy_snapshot_json->'correction_financials_policy_envelope'/);
+  assert.match(body, /is not distinct from ts\.candidate_hint_text->'correction_financials_policy_envelope'/);
   assert.match(body, /coalesce\(tf\.computed_at_utc, tf\.updated_at, tf\.created_at\) >= p_not_before_utc/);
   assert.match(body, /'all_targets_settled'/);
   assert.match(tsfinSettlement, /revoke all on function public\.tsfin_follow_up_target_summary_v1\(uuid\[\], timestamptz\) from public, anon, authenticated;/);

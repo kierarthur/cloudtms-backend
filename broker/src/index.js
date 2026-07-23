@@ -156711,6 +156711,12 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       let rate_type = 'UMBRELLA';
       const pm = String(candidate?.pay_method || '').toUpperCase();
       if (pm === 'PAYE' || pm === 'UMBRELLA') rate_type = pm;
+      const dailyCorrectionKindU = String(ts?.correction_kind || '').trim().toUpperCase();
+      const dailyAdjustmentOriginU = String(ts?.adjustment_origin || '').trim().toUpperCase();
+      const isCorrectionTs =
+        !!dailyCorrectionKindU ||
+        dailyAdjustmentOriginU === 'IMPORT_CORRECTION' ||
+        dailyAdjustmentOriginU === 'IMPORT_CANCELLATION';
 
       dailyItemsForRates.push({
         k: String(effId),
@@ -156738,7 +156744,8 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
         roleForRates,
         bandForRates,
         rate_type,
-        isAuthorised: !!ts?.authorised_at_server
+        isAuthorised: !!ts?.authorised_at_server,
+        isCorrectionTs,
       });
     } catch (e) {
       for (const ob of outboxIds) {
@@ -157291,7 +157298,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       }
 
       // ✅ NEW: no-op write optimisation (skip DB write if identical)
-      if (_isSnapshotNoop(snapshot, curFin)) {
+      if (_isSnapshotNoop(snapshot, curFin) && !isCorrectionTs) {
         try {
           await sbRpc(env, "tsfin_work_success", { p_id: outbox_id });
           ok++;
@@ -157318,7 +157325,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 
   // --- DAILY snapshots (UPDATED: uses batch fields hr_validation_required_for_invoice + validation_status; no per-timesheet queries) ---
   for (const w of dailyWork) {
-    const { effId, outbox_id, ts, policy, candidate, candidate_id, client_id, isAuthorised, curFin } = w;
+    const { effId, outbox_id, ts, policy, candidate, candidate_id, client_id, isAuthorised, curFin, isCorrectionTs } = w;
 
     try {
       const r = ratesByK.get(String(effId)) || null;
@@ -157571,7 +157578,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       };
 
       // ✅ NEW: no-op write optimisation for daily too
-      if (_isSnapshotNoop(snapshot, curFin)) {
+      if (_isSnapshotNoop(snapshot, curFin) && !isCorrectionTs) {
         try {
           await sbRpc(env, "tsfin_work_success", { p_id: outbox_id });
           ok++;

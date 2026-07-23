@@ -589,6 +589,46 @@ begin
       and (ts.authorised_at_server is not null or tf.authorised_at_utc is not null
         or cw.status='AUTHORISED'::public.contract_week_status_enum)
     union
+    -- A protected source timesheet can already have a later, still-mutable
+    -- correction pair. Phase 3 deliberately amends that pair's replacement
+    -- in place. Put its currently authorised replacement through the same
+    -- canonical lifecycle; the bulk RPC expands it to the complete pair.
+    select existing_replacement.timesheet_id
+    from tmp_changed_sel cs
+    cross join lateral (
+      select ns_existing.id
+      from public.nhsp_shifts ns_existing
+      where ns_existing.source_system='NHSP'::public.hr_source_enum
+        and ns_existing.external_row_key=cs.external_row_key
+        and ns_existing.cancelled_at_utc is null
+      order by ns_existing.updated_at desc nulls last,ns_existing.created_at desc nulls last
+      limit 1
+    ) source_shift
+    cross join lateral (
+      select tpos.timesheet_id
+      from public.timesheets tpos
+      where tpos.is_adjustment is true
+        and tpos.is_current is true
+        and tpos.correction_kind='CHANGED_HOURS_REPLACEMENT'
+        and jsonb_typeof(tpos.actual_schedule_json)='array'
+        and tpos.actual_schedule_json @> jsonb_build_array(jsonb_build_object(
+          'shift_id',source_shift.id::text,
+          'external_row_key',cs.external_row_key
+        ))
+      order by tpos.updated_at desc nulls last,tpos.created_at desc nulls last
+      limit 1
+    ) existing_replacement
+    join public.timesheets pair_pos
+      on pair_pos.timesheet_id=existing_replacement.timesheet_id and pair_pos.is_current=true
+    left join public.timesheets_financials pair_tf
+      on pair_tf.timesheet_id=pair_pos.timesheet_id and pair_tf.is_current=true
+    left join public.contract_weeks pair_cw on pair_cw.timesheet_id=pair_pos.timesheet_id
+    where cs.is_invoiced is true
+      and coalesce((public._import_review_timesheet_protection_core_v1(existing_replacement.timesheet_id)->>'paid')::boolean,false)=false
+      and coalesce((public._import_review_timesheet_protection_core_v1(existing_replacement.timesheet_id)->>'invoice_locked')::boolean,false)=false
+      and (pair_pos.authorised_at_server is not null or pair_tf.authorised_at_utc is not null
+        or pair_cw.status='AUTHORISED'::public.contract_week_status_enum)
+    union
     select ns.timesheet_id
     from public.nhsp_shifts ns
     join public.timesheets ts on ts.timesheet_id=ns.timesheet_id and ts.is_current=true
@@ -1464,6 +1504,27 @@ begin
     and ns.timesheet_id is not null
   on conflict do nothing;
 
+  insert into tmp_aff_ts(timesheet_id)
+  select distinct partner.timesheet_id
+  from tmp_aff_ts seed
+  join public.timesheets seed_ts
+    on seed_ts.timesheet_id=seed.timesheet_id
+   and seed_ts.is_current=true
+   and seed_ts.correction_id is not null
+   and upper(btrim(coalesce(seed_ts.adjustment_origin,''))) in (
+     'IMPORT_CORRECTION','IMPORT_CANCELLATION','HEALTHROSTER_CHANGED_HOURS',
+     'NHSP_CHANGED_HOURS','HEALTHROSTER_CANCELLATION','NHSP_CANCELLATION'
+   )
+  join public.timesheets partner
+    on partner.correction_id=seed_ts.correction_id
+   and partner.is_current=true
+   and upper(btrim(coalesce(partner.adjustment_origin,''))) in (
+     'IMPORT_CORRECTION','IMPORT_CANCELLATION','HEALTHROSTER_CHANGED_HOURS',
+     'NHSP_CHANGED_HOURS','HEALTHROSTER_CANCELLATION','NHSP_CANCELLATION'
+   )
+  on conflict do nothing;
+
+  -- Persist and enqueue complete correction units, including unchanged legs.
   select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
   into v_affected_timesheet_ids
   from tmp_aff_ts a

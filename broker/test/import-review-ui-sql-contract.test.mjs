@@ -10,10 +10,13 @@ const dailySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_0
 const weeklyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql', import.meta.url), 'utf8');
 const nhspApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql', import.meta.url), 'utf8');
 const dailyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql', import.meta.url), 'utf8');
+const nhspPhase3Sql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql', import.meta.url), 'utf8');
 const correctionPolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_01_correction_financials_policy_resolve_v1.sql', import.meta.url), 'utf8');
 const correctionGuardSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql', import.meta.url), 'utf8');
 const correctionTransitionSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql', import.meta.url), 'utf8');
 const autoAuthorisePolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_02_import_auto_authorise_policy_resolve_v1.sql', import.meta.url), 'utf8');
+const priorityEnqueueSql = readFileSync(new URL('../../supabase/repeatable/04012026_enqueue_ts_financials_priority.sql', import.meta.url), 'utf8');
+const targetedDequeueSql = readFileSync(new URL('../../supabase/repeatable/05012026_tsfin_batch_rpcs_part1.sql', import.meta.url), 'utf8');
 const weeklyPreviewSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql', import.meta.url), 'utf8');
 const retirementSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_99_import_review_hard_cutover_retirements.sql', import.meta.url), 'utf8');
 const incrementalMigration = readFileSync(new URL('../../supabase/migrations/22072026_1700_import_review_incremental_outcomes.sql', import.meta.url), 'utf8');
@@ -364,6 +367,25 @@ test('authoritative Weekly apply preserves authorised lifecycle through TSFIN fo
   }
   assert.doesNotMatch(nhspApplySql, /if exists \([\s\S]{0,500}tmp_changed_sel[\s\S]{0,500}message='CANONICAL_UNAUTHORISE_REQUIRED'/);
   assert.doesNotMatch(weeklyApplySql, /if exists \([\s\S]{0,650}tmp_changed_sel[\s\S]{0,650}message = 'CANONICAL_UNAUTHORISE_REQUIRED'/);
+  assert.match(nhspApplySql, /Phase 3 deliberately amends that pair's replacement[\s\S]*?correction_kind='CHANGED_HOURS_REPLACEMENT'/);
+  assert.match(nhspApplySql, /actual_schedule_json @> jsonb_build_array\(jsonb_build_object\([\s\S]*?'shift_id',source_shift\.id::text,[\s\S]*?'external_row_key',cs\.external_row_key/);
+  assert.match(nhspPhase3Sql, /amendment within the existing correction unit, not a new/);
+  assert.match(nhspPhase3Sql, /v_existing_pos_hint#>>'\{correction_financials_policy_envelope,operation,operation_id\}'/);
+  assert.match(nhspPhase3Sql, /EXISTING_CORRECTION_POLICY_ENVELOPE_INVALID/);
+  assert.match(nhspPhase3Sql, /v_hint := v_existing_pos_hint \|\| jsonb_build_object/);
+  assert.doesNotMatch(nhspPhase3Sql, /v_existing_pos_hint[\s\S]{0,800}update public\.timesheets[\s\S]{0,800}correction_financials_policy_envelope', v_correction_financials_policy_envelope/);
+  assert.match(nhspApplySql, /existing_replacement\.timesheet_id[\s\S]*?_import_review_timesheet_protection_core_v1\(existing_replacement\.timesheet_id\)[\s\S]*?'invoice_locked'/);
+  assert.doesNotMatch(weeklyApplySql, /Phase 3 deliberately amends that pair's replacement/);
+  assert.match(nhspApplySql, /Persist and enqueue complete correction units/);
+  assert.match(weeklyApplySql, /complete TSFIN\/lifecycle unit/);
+  assert.match(priorityEnqueueSql, /TSFIN_PRIORITY_ENQUEUE_TARGET_LIMIT_EXCEEDED/);
+  assert.match(priorityEnqueueSql, /partner\.correction_id = seed\.correction_id/);
+  assert.match(priorityEnqueueSql, /HEALTHROSTER_CHANGED_HOURS/);
+  assert.match(priorityEnqueueSql, /NHSP_CHANGED_HOURS/);
+  const targetedDequeue = functionBody(targetedDequeueSql, 'tsfin_dequeue_specific');
+  assert.match(targetedDequeue, /TSFIN_SPECIFIC_DEQUEUE_TARGET_LIMIT_EXCEEDED/);
+  assert.match(targetedDequeue, /partner\.correction_id=seed\.correction_id/);
+  assert.match(targetedDequeue, /limit 100/);
 });
 
 test('failed-before-commit recovery proves no commit before reopening the review', () => {

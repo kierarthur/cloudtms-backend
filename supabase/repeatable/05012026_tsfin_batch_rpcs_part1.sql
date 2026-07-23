@@ -31,21 +31,54 @@ begin
     return;
   end if;
 
-  v_lim := coalesce(p_limit, array_length(p_timesheet_ids, 1));
+  if cardinality(p_timesheet_ids) > 5000 then
+    raise exception 'TSFIN_SPECIFIC_DEQUEUE_TARGET_LIMIT_EXCEEDED'
+      using errcode = '22023';
+  end if;
+
+  v_lim := least(50, coalesce(p_limit, array_length(p_timesheet_ids, 1)));
 
   return query
-  with wanted as (
-    select distinct unnest(p_timesheet_ids) as timesheet_id
-  ),
-  picked as (
+  with requested as (
+    select distinct input.timesheet_id
+    from unnest(p_timesheet_ids) input(timesheet_id)
+    where input.timesheet_id is not null
+    order by input.timesheet_id
+    limit v_lim
+  ), expanded as (
+    select r.timesheet_id from requested r
+    union
+    select partner.timesheet_id
+    from requested r
+    join public.timesheets seed
+      on seed.timesheet_id=r.timesheet_id
+     and seed.is_current=true
+     and seed.correction_id is not null
+     and upper(btrim(coalesce(seed.adjustment_origin,''))) in (
+       'IMPORT_CORRECTION','IMPORT_CANCELLATION',
+       'HEALTHROSTER_CHANGED_HOURS','NHSP_CHANGED_HOURS',
+       'HEALTHROSTER_CANCELLATION','NHSP_CANCELLATION'
+     )
+    join public.timesheets partner
+      on partner.correction_id=seed.correction_id
+     and partner.is_current=true
+     and upper(btrim(coalesce(partner.adjustment_origin,''))) in (
+       'IMPORT_CORRECTION','IMPORT_CANCELLATION',
+       'HEALTHROSTER_CHANGED_HOURS','NHSP_CHANGED_HOURS',
+       'HEALTHROSTER_CANCELLATION','NHSP_CANCELLATION'
+     )
+  ), wanted as (
+    select distinct timesheet_id from expanded
+  ), picked as (
     select o.id
     from public.ts_financials_outbox o
-    join wanted w on w.timesheet_id = o.timesheet_id
-    where o.next_attempt_at is null or o.next_attempt_at <= v_now
-    order by o.next_attempt_at nulls first, o.created_at
-    limit v_lim
+    join wanted w on w.timesheet_id=o.timesheet_id
+    where o.next_attempt_at is null or o.next_attempt_at<=v_now
+    order by o.next_attempt_at nulls first,o.created_at,o.id
+    limit 100
     for update skip locked
   )
+
   update public.ts_financials_outbox o
   set attempt_count   = o.attempt_count + 1,
       next_attempt_at = v_now + interval '5 minutes'
