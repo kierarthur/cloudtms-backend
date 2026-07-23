@@ -29,6 +29,7 @@ function createScenario(storedResponse, options = {}) {
   const calls = [];
   const tsfinRuns = [];
   let tsfinSummaryCall = 0;
+  let authoriseAttempt = 0;
   const sbRpc = async (_env, name, args) => {
     calls.push({ name, args });
     if (name === 'import_review_apply_status_get_v1') {
@@ -65,6 +66,13 @@ function createScenario(storedResponse, options = {}) {
       };
     }
     if (name === 'timesheet_authorise_bulk_atomic') {
+      authoriseAttempt += 1;
+      if (options.reauthoriseThrowsOnce && authoriseAttempt === 1) {
+        const error = new Error('cannot find parent statement on pldbgapi2 call stack');
+        error.status = 500;
+        error.code = 'XX000';
+        throw error;
+      }
       const requestedIds = (Array.isArray(args.p_items) ? args.p_items : [])
         .map((item) => item.timesheet_id);
       if (options.reauthoriseFails) {
@@ -214,11 +222,14 @@ test('authorised source timesheet is restored only after TSFIN completes', async
   const names = current.calls.map((call) => call.name);
   const initialSummary = names.indexOf('tsfin_follow_up_target_summary_v1');
   const wake = names.indexOf('enqueue_ts_financials_priority');
-  const finalSummary = names.lastIndexOf('tsfin_follow_up_target_summary_v1');
+  const summaryIndexes = names.map((name, index) => name === 'tsfin_follow_up_target_summary_v1' ? index : -1).filter((index) => index >= 0);
   const authorise = names.indexOf('timesheet_authorise_bulk_atomic');
   const complete = current.calls.findIndex((call) => call.name === 'import_review_follow_up_component_update_v1'
     && call.args.p_component === 'TSFIN' && call.args.p_new_component_status === 'COMPLETE');
-  assert.ok(initialSummary >= 0 && wake > initialSummary && finalSummary > wake && authorise > finalSummary && complete > authorise);
+  const preAuthoriseSummary = summaryIndexes.find((index) => index > wake && index < authorise);
+  const postAuthoriseSummary = summaryIndexes.find((index) => index > authorise);
+  assert.ok(initialSummary >= 0 && wake > initialSummary && preAuthoriseSummary > wake
+    && authorise > preAuthoriseSummary && postAuthoriseSummary > authorise && complete > postAuthoriseSummary);
   assert.deepEqual(current.calls[wake].args, {
     _timesheet_ids: [TIMESHEET_ID],
     _reason: 'CONTEXT_CHANGED'
@@ -228,6 +239,49 @@ test('authorised source timesheet is restored only after TSFIN completes', async
     expected_timesheet_id: TIMESHEET_ID
   }]);
   assert.equal(names.some((name) => name.endsWith('_apply_transactional')), false);
+});
+
+test('one transient idempotent authorisation failure is retried without source reapply', async () => {
+  const current = createScenario({
+    post_commit_email_action_ids: [],
+    affected_timesheet_ids: [TIMESHEET_ID],
+    post_commit_reauthorise_timesheet_ids: [TIMESHEET_ID],
+    review_email_follow_up_status: 'NOT_REQUIRED',
+    review_tsfin_follow_up_status: 'PENDING'
+  }, {
+    tsfinTargetSummaries: [{ settled: true, pendingTotal: 0 }],
+    reauthoriseThrowsOnce: true
+  });
+
+  await current.runner({}, details());
+
+  assert.equal(current.calls.filter((call) => call.name === 'timesheet_authorise_bulk_atomic').length, 2);
+  assert.ok(current.calls.some((call) => call.name === 'import_review_follow_up_component_update_v1'
+    && call.args.p_component === 'TSFIN' && call.args.p_new_component_status === 'COMPLETE'));
+  assert.equal(current.calls.some((call) => call.name.endsWith('_apply_transactional')), false);
+});
+
+test('post-authorisation TSFIN is settled before follow-up completes', async () => {
+  const current = createScenario({
+    post_commit_email_action_ids: [],
+    affected_timesheet_ids: [TIMESHEET_ID],
+    post_commit_reauthorise_timesheet_ids: [TIMESHEET_ID],
+    review_email_follow_up_status: 'NOT_REQUIRED',
+    review_tsfin_follow_up_status: 'PENDING'
+  }, {
+    tsfinTargetSummaries: [
+      { settled: true, pendingTotal: 0 },
+      { settled: false, pendingTotal: 1 },
+      { settled: true, pendingTotal: 0 }
+    ]
+  });
+
+  await current.runner({}, details());
+
+  assert.equal(current.tsfinRuns.length, 1);
+  assert.equal(current.calls.filter((call) => call.name === 'tsfin_follow_up_target_summary_v1').length, 3);
+  assert.ok(current.calls.some((call) => call.name === 'import_review_follow_up_component_update_v1'
+    && call.args.p_component === 'TSFIN' && call.args.p_new_component_status === 'COMPLETE'));
 });
 
 test('a concurrently leased TSFIN target completes without a false retryable failure', async () => {

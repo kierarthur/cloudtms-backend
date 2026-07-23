@@ -278,10 +278,36 @@ begin
             'source_family_key',v_residual->>'source_family_key',
             'correction_chain_residual',v_residual,
             'correction_chain_component',v_component,
+            'case_components',jsonb_build_array(
+              v_component||jsonb_build_object(
+                'component_key_type',v_component->>'component_key_type',
+                'component_key_value',v_component->>'component_key_value',
+                'target_pay_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+                'component_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+                'preview_due_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+                'source_pay_ex_vat',abs((v_component->>'target_outstanding_ex_vat')::numeric),
+                'source_amount_ex_vat',abs((v_component->>'target_outstanding_ex_vat')::numeric),
+                'source_entitlement_amount_ex_vat',abs((v_component->>'truth_ex_vat')::numeric),
+                'source_reservation_amount_ex_vat',abs((v_component->>'target_outstanding_ex_vat')::numeric),
+                'remaining_source_amount',abs((v_component->>'target_outstanding_ex_vat')::numeric)
+              )
+            ),
             'correction_chain_residual_fingerprint',v_residual->>'residual_fingerprint',
             'amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+            'amount_display',(v_component->>'target_outstanding_ex_vat')::numeric,
             'preview_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
             'ready_preview_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+            'section_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+            'section_amount_display',(v_component->>'target_outstanding_ex_vat')::numeric,
+            'component_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+            'preview_component_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+            'target_pay_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+            'preview_contract',coalesce(l.source_row_json->'preview_contract','{}'::jsonb)||jsonb_build_object(
+              'amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+              'selection_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+              'source_entitlement_amount_ex_vat',abs((v_component->>'truth_ex_vat')::numeric),
+              'source_reservation_amount_ex_vat',abs((v_component->>'target_outstanding_ex_vat')::numeric)
+            ),
             'raw_correction_member_rows_suppressed',true
           ),
           economic_key_json=jsonb_build_object(

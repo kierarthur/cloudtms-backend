@@ -886,7 +886,8 @@ async function loadSettingsDefaults(env) {
       `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
         `?select=*` +
         `&id=eq.1` +
-        `&limit=1`
+        `&limit=1`,
+      { timeoutMs: 8000 }
     );
 
     const row = rows?.[0] || {};
@@ -1527,6 +1528,7 @@ async function loadSettingsDefaults(env) {
     };
 
     // Store TTL cache
+    try { Object.defineProperty(out, '__load_failed', { value: false, enumerable: false }); } catch {}
     __SETTINGS_DEFAULTS_CACHE = { ts: Date.now(), value: out };
 
     if (LOG) {
@@ -1982,6 +1984,7 @@ async function loadSettingsDefaults(env) {
     out.banking_pay_workbench_effective = out.importConfig.bankingPayWorkbenchEffective;
     out.importConfig.banking_pay_workbench_effective = out.importConfig.bankingPayWorkbenchEffective;
 
+    try { Object.defineProperty(out, '__load_failed', { value: true, enumerable: false }); } catch {}
     __SETTINGS_DEFAULTS_CACHE = { ts: Date.now(), value: out };
     return out;
   }
@@ -129210,6 +129213,10 @@ async function resolveBankingPayOfficialDateContext(env, options = {}) {
 
   const rpcResult = await sbRpc(env, 'pay_banking_official_date_context_v1', {
     p_as_of_utc: asOfUtc
+  }, {
+    routeClass: 'DISPLAY',
+    purpose: 'BANKING_PAY_OFFICIAL_DATE_CONTEXT',
+    timeoutMs: 8000
   });
 
   let payload = rpcResult;
@@ -154336,6 +154343,19 @@ async function sbFetch(env, url, third, fourth) {
     init = { ...init, ...fourth };
   }
 
+  const requestedTimeoutMs = Number.isFinite(Number(init.timeoutMs)) && Number(init.timeoutMs) > 0
+    ? Math.trunc(Number(init.timeoutMs))
+    : null;
+  const callerSignal = init.signal;
+  const controller = requestedTimeoutMs && !callerSignal ? new AbortController() : null;
+  const timeoutHandle = controller
+    ? setTimeout(() => {
+        try { controller.abort(new Error(`Supabase fetch timed out after ${requestedTimeoutMs}ms`)); } catch {}
+      }, requestedTimeoutMs)
+    : null;
+  delete init.timeoutMs;
+  if (controller) init.signal = controller.signal;
+
   const callerPrefer = init.headers && (init.headers.Prefer || init.headers['Prefer']);
   const headers = {
     ...sbHeaders(env),
@@ -154343,8 +154363,22 @@ async function sbFetch(env, url, third, fourth) {
     ...(init.headers || {})
   };
 
-  const res = await fetch(url, { ...init, headers });
-  const text = await res.text();
+  let res;
+  let text;
+  try {
+    res = await fetch(url, { ...init, headers });
+    text = await res.text();
+  } catch (error) {
+    if (controller?.signal.aborted) {
+      const timeoutError = new Error(`Supabase fetch timed out after ${requestedTimeoutMs}ms`);
+      timeoutError.status = 408;
+      timeoutError.code = 'SUPABASE_FETCH_TIMEOUT';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
 
   let json;
   try { json = text ? JSON.parse(text) : null; } catch { json = null; }
@@ -189688,7 +189722,7 @@ async scheduled(event, env, ctx) {
 
     if (lim.enqueueFirst) {
       try {
-        await sbRpc(env, 'invpdf_enqueue_ready_for_render', { p_limit: lim.enqueueLimit });
+        await sbRpc(env, 'invpdf_enqueue_ready_for_render', { p_limit: lim.enqueueLimit }, { timeoutMs: 10000 });
       } catch (e) {
         console.warn('[scheduled] invpdf_enqueue_ready_for_render failed:', e?.message || e);
       }
@@ -189697,7 +189731,7 @@ async scheduled(event, env, ctx) {
     const req = new Request((env.PUBLIC_DOWNLOAD_BASE_URL || 'https://localhost') + '/internal/invpdf-worker');
 
     for (let b = 0; b < lim.maxBatchesInvpdf; b++) {
-      const dq = await sbRpc(env, 'invpdf_dequeue_batch_ids', { p_limit: lim.dequeueLimit });
+      const dq = await sbRpc(env, 'invpdf_dequeue_batch_ids', { p_limit: lim.dequeueLimit }, { timeoutMs: 10000 });
       const jobs = _rowsLocal(dq);
       if (!jobs.length) break;
 
@@ -189730,7 +189764,7 @@ async scheduled(event, env, ctx) {
 
       if (successIds.length) {
         try {
-          await sbRpc(env, 'invpdf_work_success_bulk', { p_ids: successIds });
+          await sbRpc(env, 'invpdf_work_success_bulk', { p_ids: successIds }, { timeoutMs: 10000 });
         } catch (e) {
           console.warn('[scheduled] invpdf_work_success_bulk failed:', e?.message || e);
         }
@@ -189738,7 +189772,7 @@ async scheduled(event, env, ctx) {
 
       if (failRows.length) {
         try {
-          await sbRpc(env, 'invpdf_work_fail_bulk', { p_rows: failRows });
+          await sbRpc(env, 'invpdf_work_fail_bulk', { p_rows: failRows }, { timeoutMs: 10000 });
         } catch (e) {
           console.warn('[scheduled] invpdf_work_fail_bulk failed:', e?.message || e);
         }
@@ -189756,6 +189790,12 @@ async scheduled(event, env, ctx) {
     || ''
   ).trim() || null;
 
+  const scheduledSettingsPromise = loadSettingsDefaults(env);
+  const getScheduledSettings = async () => {
+    const settings = await scheduledSettingsPromise;
+    return settings && settings.__load_failed !== true ? settings : null;
+  };
+
   const bankingPayWorkbenchTask = (async () => {
     const taskStartedAtMs = Date.now();
     console.log('[scheduled] Banking Pay workbench task started:', {
@@ -189765,6 +189805,11 @@ async scheduled(event, env, ctx) {
       deployment_version: deploymentVersion,
       ctx_present: !!ctx
     });
+    const scheduledSettings = await getScheduledSettings();
+    if (!scheduledSettings) {
+      console.warn('[scheduled] Banking Pay workbench task skipped: database settings gate unavailable');
+      return { ok: false, skipped: true, code: 'SCHEDULED_DATABASE_UNAVAILABLE', claimed: 0, processed: 0 };
+    }
     try {
       if (typeof bankingPayWorkbenchCronTick !== 'function') {
         throw new Error('bankingPayWorkbenchCronTick is not available');
@@ -189811,6 +189856,12 @@ async scheduled(event, env, ctx) {
       limit: claimLimit,
       lease_seconds: leaseSeconds
     });
+
+    const scheduledSettings = await getScheduledSettings();
+    if (!scheduledSettings) {
+      console.warn('[scheduled] Timesheet R2 cleanup task skipped: database settings gate unavailable');
+      return { ok: false, skipped: true, code: 'SCHEDULED_DATABASE_UNAVAILABLE', claimed: 0 };
+    }
 
     try {
       if (typeof processTimesheetR2CleanupRetryBatch !== 'function') {
@@ -189868,6 +189919,12 @@ async scheduled(event, env, ctx) {
   })();
 
   const broaderScheduledTask = (async () => {
+    const scheduledSettings = await getScheduledSettings();
+    if (!scheduledSettings) {
+      console.warn('[scheduled] Broader scheduled task skipped: database settings gate unavailable');
+      return { ok: false, skipped: true, code: 'SCHEDULED_DATABASE_UNAVAILABLE' };
+    }
+
     try {
       await bankingCronTick(env);
     } catch (e) {

@@ -87,7 +87,7 @@ begin
 
   for r in
     select ts.timesheet_id,ts.correction_kind,ts.contract_id,ts.week_ending_date,
-      tf.id tsfin_id,tf.client_id,tf.processing_status,tf.is_stale,
+      tf.id tsfin_id,tf.client_id,tf.basis,tf.processing_status,tf.is_stale,
       tf.policy_snapshot_json,tf.rate_source_refs_json,tf.pay_vat_rate_pct_snapshot,
       c.self_bill
     from public.timesheets ts
@@ -97,7 +97,13 @@ begin
     order by ts.timesheet_id
   loop
     v_leg:=public._ctms_correction_policy_leg_read_v1(r.timesheet_id);
-    v_current_stream:=case when coalesce(r.self_bill,false) then 'SELF_BILL' else 'NORMAL' end;
+    v_current_stream:=case
+      when upper(coalesce(r.basis::text,'')) in (
+        'NHSP','NHSP_ADJUSTMENT',
+        'HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'
+      ) then 'SELF_BILL'
+      else 'NORMAL'
+    end;
     v_policy_ready:=
       coalesce(r.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',
                r.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}',
@@ -132,11 +138,16 @@ begin
   end loop;
 
   select count(distinct tf.client_id),count(distinct ts.contract_id),count(distinct ts.week_ending_date),
-    count(distinct case when coalesce(c.self_bill,false) then 'SELF_BILL' else 'NORMAL' end)
+    count(distinct case
+      when upper(coalesce(tf.basis::text,'')) in (
+        'NHSP','NHSP_ADJUSTMENT',
+        'HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'
+      ) then 'SELF_BILL'
+      else 'NORMAL'
+    end)
   into v_client_count,v_contract_count,v_week_count,v_stream_count
   from public.timesheets ts
   join public.timesheets_financials tf on tf.timesheet_id=ts.timesheet_id and tf.is_current=true
-  left join public.contracts c on c.id=ts.contract_id
   where ts.timesheet_id=any(v_ids);
 
   select count(distinct il.timesheet_id),count(distinct il.invoice_id)
@@ -160,9 +171,16 @@ begin
   if exists (
     select 1
     from public.timesheets ts
-    left join public.contracts c on c.id=ts.contract_id
+    join public.timesheets_financials tf
+      on tf.timesheet_id=ts.timesheet_id and tf.is_current=true
     where ts.timesheet_id=any(v_ids)
-      and (case when coalesce(c.self_bill,false) then 'SELF_BILL' else 'NORMAL' end)
+      and (case
+        when upper(coalesce(tf.basis::text,'')) in (
+          'NHSP','NHSP_ADJUSTMENT',
+          'HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'
+        ) then 'SELF_BILL'
+        else 'NORMAL'
+      end)
         is distinct from v_expected_stream
   ) then
     v_errors:=v_errors||jsonb_build_array(jsonb_build_object(

@@ -163309,7 +163309,12 @@ BEGIN
       component_probe.economic_key_type,
       component_probe.economic_key_value,
       component_probe.single_fixed_reimbursement_key_type,
-      component_probe.single_fixed_reimbursement_key_value
+      component_probe.single_fixed_reimbursement_key_value,
+      (
+        NULLIF(BTRIM(COALESCE(canonical_ready_rows.result_row_json->>'source_family_key', '')), '') LIKE 'correction-chain:%'
+        AND jsonb_typeof(canonical_ready_rows.result_row_json->'correction_chain_residual') = 'object'
+        AND jsonb_typeof(canonical_ready_rows.result_row_json->'correction_chain_component') = 'object'
+      ) AS is_correction_chain_residual
     FROM canonical_ready_rows
     CROSS JOIN LATERAL (
       SELECT
@@ -163376,7 +163381,8 @@ BEGIN
       AND (
         component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
         OR (
-          component_probe_rows.target_section = 'canonical_preview_lines'
+          component_probe_rows.is_correction_chain_residual IS NOT TRUE
+          AND component_probe_rows.target_section = 'canonical_preview_lines'
           AND component_probe_rows.economic_key_type IS NOT NULL
           AND component_probe_rows.economic_key_value IS NOT NULL
           AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
@@ -163445,6 +163451,7 @@ BEGIN
       ROUND(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0), 2) AS economic_outstanding_ex_vat,
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NULL
+        AND component_probe_rows.is_correction_chain_residual IS NOT TRUE
         AND component_probe_rows.target_section = 'canonical_preview_lines'
         AND component_probe_rows.economic_key_type IS NOT NULL
         AND component_probe_rows.economic_key_value IS NOT NULL
@@ -163455,6 +163462,7 @@ BEGIN
       ) AS suppress_zero_outstanding_economic_key,
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NULL
+        AND component_probe_rows.is_correction_chain_residual IS NOT TRUE
         AND component_probe_rows.target_section = 'canonical_preview_lines'
         AND component_probe_rows.economic_key_type IS NOT NULL
         AND component_probe_rows.economic_key_value IS NOT NULL
@@ -163465,6 +163473,7 @@ BEGIN
       ) AS suppress_negative_outstanding_economic_key,
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NULL
+        AND component_probe_rows.is_correction_chain_residual IS NOT TRUE
         AND component_probe_rows.target_section = 'canonical_preview_lines'
         AND component_probe_rows.economic_key_type IS NOT NULL
         AND component_probe_rows.economic_key_value IS NOT NULL

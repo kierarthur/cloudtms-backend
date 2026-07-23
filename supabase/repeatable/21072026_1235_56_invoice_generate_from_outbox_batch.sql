@@ -2822,71 +2822,81 @@ limit 1;
           end if;
 
           if v_consol_mode = 'NONE' then
-            -- Mode NONE: one invoice per timesheet (baseline), still split by stream invariants.
+            -- Mode NONE keeps ordinary timesheets separate, but an import-authoritative
+            -- correction unit is an atomic invoice group and must never be split by leg.
             truncate table pg_temp._inv_groups;
 
+            with classified as (
+              select
+                u.tid,
+                ts.correction_id,
+                case
+                  when coalesce(ts.is_adjustment, false) = true
+                    and not (
+                      upper(coalesce(ts.adjustment_origin, '')) like 'IMPORT_%'
+                      or ts.correction_kind is not null
+                      or ts.correction_id is not null
+                    )
+                  then 'NORMAL'
+                  when coalesce(ts.is_adjustment, false) = true
+                    and (
+                      upper(coalesce(ts.adjustment_origin, '')) like 'IMPORT_%'
+                      or ts.correction_kind is not null
+                      or ts.correction_id is not null
+                    )
+                    and ts.parent_timesheet_id is not null
+                    and ptf.timesheet_id is not null
+                  then case
+                    when upper(coalesce(ptf.basis::text, '')) in (
+                      'NHSP','NHSP_ADJUSTMENT',
+                      'HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'
+                    ) then 'SELF_BILL'
+                    else 'NORMAL'
+                  end
+                  else case
+                    when upper(coalesce(tf.basis::text, '')) in (
+                      'NHSP','NHSP_ADJUSTMENT',
+                      'HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'
+                    ) then 'SELF_BILL'
+                    else 'NORMAL'
+                  end
+                end as stream_mode,
+                ts.week_ending_date::date as week_ending_date,
+                case
+                  when coalesce((public._ctms_import_correction_classify_v1(u.tid)
+                    ->>'is_import_authoritative_correction')::boolean,false)
+                  then coalesce(ts.correction_id::text,u.tid::text)
+                  else u.tid::text
+                end as invoice_group_key
+              from unnest(v_ts_ids_to_use) as u(tid)
+              left join public.timesheets_financials tf
+                on tf.timesheet_id = u.tid and tf.is_current
+              left join public.timesheets ts
+                on ts.timesheet_id = u.tid
+              left join public.timesheets_financials ptf
+                on ptf.timesheet_id = ts.parent_timesheet_id and ptf.is_current
+            ),
+            grouped as (
+              select
+                stream_mode,
+                week_ending_date,
+                invoice_group_key,
+                array_agg(tid order by tid)::uuid[] as ts_ids
+              from classified
+              group by stream_mode,week_ending_date,invoice_group_key
+            )
             insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
             select
-              case
-                -- ✅ Stream rule for adjustments:
-                -- - Manual adjustments must always be NORMAL (never self-bill).
-                -- - Only IMPORT/system adjustments may inherit self-bill stream from their parent.
-                when coalesce(ts.is_adjustment, false) = true
-                  and not (
-                    upper(coalesce(ts.adjustment_origin, '')) like 'IMPORT_%'
-                    or ts.correction_kind is not null
-                    or ts.correction_id is not null
-                  )
-                then 'NORMAL'
-
-                when coalesce(ts.is_adjustment, false) = true
-                  and (
-                    upper(coalesce(ts.adjustment_origin, '')) like 'IMPORT_%'
-                    or ts.correction_kind is not null
-                    or ts.correction_id is not null
-                  )
-                  and ts.parent_timesheet_id is not null
-                  and ptf.timesheet_id is not null
-                then
-                  case
-                    when upper(coalesce(ptf.basis::text, '')) in (
-                      'NHSP',
-                      'NHSP_ADJUSTMENT',
-                      'HEALTHROSTER_SELF_BILL',
-                      'HEALTHROSTER_ADJUSTMENT'
-                    ) then 'SELF_BILL'
-                    else 'NORMAL'
-                  end
-
-                else
-                  case
-                    when upper(coalesce(tf.basis::text, '')) in (
-                      'NHSP',
-                      'NHSP_ADJUSTMENT',
-                      'HEALTHROSTER_SELF_BILL',
-                      'HEALTHROSTER_ADJUSTMENT'
-                    ) then 'SELF_BILL'
-                    else 'NORMAL'
-                  end
-              end as stream_mode,
-              ts.week_ending_date::date as week_ending_date,
-              array[u.tid]::uuid[] as ts_ids,
+              g.stream_mode,
+              g.week_ending_date,
+              g.ts_ids,
               coalesce((
                 select jsonb_agg(e.value order by (e.value->>'entry_ord')::int)
                 from jsonb_array_elements(v_entries_all) as e(value)
                 where nullif(coalesce(e.value->>'timesheet_id',''), '') is not null
-                  and (e.value->>'timesheet_id')::uuid = u.tid
+                  and (e.value->>'timesheet_id')::uuid = any(g.ts_ids)
               ), '[]'::jsonb) as entries
-            from unnest(v_ts_ids_to_use) as u(tid)
-            left join public.timesheets_financials tf
-              on tf.timesheet_id = u.tid
-             and tf.is_current
-            left join public.timesheets ts
-              on ts.timesheet_id = u.tid
-            left join public.timesheets_financials ptf
-              on ptf.timesheet_id = ts.parent_timesheet_id
-             and ptf.is_current;
-
+            from grouped g;
           elsif v_consol_mode = 'BY_WEEK' then
             -- Mode BY_WEEK: one invoice per week-ending date per stream.
             truncate table pg_temp._inv_groups;

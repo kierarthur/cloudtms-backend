@@ -599,6 +599,82 @@ BEGIN
     WHERE linked_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ) AS parsed_linked_ids;
 
+  /* A targeted refresh of one import-authoritative correction leg must rebuild
+     the whole correction chain.  The residual materialiser deliberately emits
+     one net PRE_DRAFT_LIVE_TRUTH row per economic component and therefore needs
+     a source carrier from the root or another member for every component.  A
+     single-leg scope can never satisfy that invariant reliably. */
+  IF v_requested_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+     AND EXISTS (
+       SELECT 1
+       FROM unnest(
+         COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])
+         || COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[])
+       ) AS requested_correction_scope(timesheet_id)
+       WHERE COALESCE((public._ctms_import_correction_classify_v1(requested_correction_scope.timesheet_id)
+         ->>'is_import_authoritative_correction')::boolean, false)
+     ) THEN
+    IF EXISTS (
+      SELECT 1
+      FROM unnest(
+        COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])
+        || COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[])
+      ) AS requested_correction_scope(timesheet_id)
+      CROSS JOIN LATERAL (
+        SELECT public.timesheet_correction_chain_scope_v1(
+          requested_correction_scope.timesheet_id, false, 32, 100
+        ) AS chain_json
+      ) AS requested_chain
+      WHERE COALESCE((public._ctms_import_correction_classify_v1(requested_correction_scope.timesheet_id)
+          ->>'is_import_authoritative_correction')::boolean, false)
+        AND COALESCE((requested_chain.chain_json->>'valid')::boolean, false) IS NOT TRUE
+    ) THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CORRECTION_CHAIN_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CORRECTION_CHAIN_INVALID',
+                'session_id', p_session_id::text,
+                'candidate_id', p_candidate_id::text,
+                'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+              )::text;
+    END IF;
+
+    WITH requested_scope AS (
+      SELECT DISTINCT requested_id AS timesheet_id
+      FROM unnest(
+        COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])
+        || COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[])
+      ) AS requested_values(requested_id)
+      WHERE requested_id IS NOT NULL
+    ), correction_chains AS (
+      SELECT public.timesheet_correction_chain_scope_v1(
+        requested_scope.timesheet_id, false, 32, 100
+      ) AS chain_json
+      FROM requested_scope
+      WHERE COALESCE((public._ctms_import_correction_classify_v1(requested_scope.timesheet_id)
+        ->>'is_import_authoritative_correction')::boolean, false)
+    ), expanded_member_ids AS (
+      SELECT DISTINCT member_id.value::uuid AS timesheet_id
+      FROM correction_chains
+      CROSS JOIN LATERAL jsonb_array_elements_text(
+        COALESCE(correction_chains.chain_json->'member_timesheet_ids', '[]'::jsonb)
+      ) AS member_id(value)
+      WHERE member_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), expanded_linked_scope AS (
+      SELECT linked_id AS timesheet_id
+      FROM unnest(COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[])) AS linked_values(linked_id)
+      UNION
+      SELECT expanded_member_ids.timesheet_id
+      FROM expanded_member_ids
+      WHERE NOT (expanded_member_ids.timesheet_id = ANY(COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])))
+    )
+    SELECT COALESCE(ARRAY_AGG(expanded_linked_scope.timesheet_id ORDER BY expanded_linked_scope.timesheet_id), ARRAY[]::uuid[])
+    INTO v_linked_timesheet_ids
+    FROM expanded_linked_scope;
+
+    v_linked_timesheet_ids_json := to_jsonb(COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[]));
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM unnest(COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[]) || COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[])) AS requested_scope(timesheet_id)

@@ -48,6 +48,14 @@ function reauthorisationCompleted(result, expectedTimesheetIds) {
   return completed.size === expected.size;
 }
 
+function isTransientFollowUpRpcFailure(error) {
+  const status = Number(error?.status || 0);
+  const detail = [error?.code, error?.json?.code, error?.json?.message, error?.json?.details, error?.message]
+    .filter(Boolean).map(String).join(' ').toUpperCase();
+  return [408, 429, 500, 502, 503, 504].includes(status)
+    || /TIMEOUT|TIMED OUT|ECONNRESET|ECONNABORTED|UPSTREAM|PLDBGAPI2/.test(detail);
+}
+
 export async function reconcileTimesheetQueryDeliveryAfterProviderAcceptance({ row, markDelivery, reconcileDelivery } = {}) {
   if (String(row?.type || '').trim().toUpperCase() !== 'TIMESHEET_QUERY') {
     return { applicable: false, history_marked: false, reconcile_attempted: false };
@@ -273,20 +281,52 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
             if (authoriseTimesheetIds.length) {
               for (let offset = 0; offset < authoriseTimesheetIds.length; offset += AUTHORISE_CHUNK_SIZE) {
                 const chunk = authoriseTimesheetIds.slice(offset, offset + AUTHORISE_CHUNK_SIZE);
-                const authoriseRaw = await sbRpc(env, 'timesheet_authorise_bulk_atomic', {
-                  p_items: chunk.map((timesheetId) => ({
-                    timesheet_id: timesheetId,
-                    expected_timesheet_id: timesheetId
-                  })),
-                  p_actor_user_id: details.actorUserId,
-                  p_now_utc: null
-                }, { timeoutMs: 30000 });
-                const authoriseResult = unwrapRpcJsonb(authoriseRaw, 'timesheet_authorise_bulk_atomic') || {};
+                let authoriseResult = null;
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                  try {
+                    const authoriseRaw = await sbRpc(env, 'timesheet_authorise_bulk_atomic', {
+                      p_items: chunk.map((timesheetId) => ({
+                        timesheet_id: timesheetId,
+                        expected_timesheet_id: timesheetId
+                      })),
+                      p_actor_user_id: details.actorUserId,
+                      p_now_utc: null
+                    }, { timeoutMs: 30000 });
+                    authoriseResult = unwrapRpcJsonb(authoriseRaw, 'timesheet_authorise_bulk_atomic') || {};
+                    break;
+                  } catch (error) {
+                    if (attempt > 0 || !isTransientFollowUpRpcFailure(error)) throw error;
+                    await waitForConcurrentTsfin(200);
+                  }
+                }
                 if (!reauthorisationCompleted(authoriseResult, chunk)) {
                   throw new Error('IMPORT_REVIEW_AUTHORISE_INCOMPLETE');
                 }
               }
             }
+
+            if (authoriseTimesheetIds.length) {
+              let postAuthoriseSummary = await loadTargetSummary();
+              let postAuthoriseSettled = postAuthoriseSummary.completeEvidence;
+              for (let loop = 0; !postAuthoriseSettled && loop < 10; loop += 1) {
+                const run = await runTsfinWorkerOnce(env, {
+                  limit: 50,
+                  onlyTimesheetIds: authoriseTimesheetIds
+                });
+                postAuthoriseSummary = await loadTargetSummary();
+                postAuthoriseSettled = postAuthoriseSummary.completeEvidence;
+                if (!postAuthoriseSettled
+                    && Number(run?.picked || 0) === 0
+                    && postAuthoriseSummary.pendingTotal > 0
+                    && loop < 9) {
+                  await waitForConcurrentTsfin(200);
+                }
+              }
+              if (!postAuthoriseSettled) {
+                throw new Error('IMPORT_REVIEW_POST_AUTHORISE_TSFIN_INCOMPLETE');
+              }
+            }
+
             await updateComponent(env, details, {
               component: 'TSFIN', expectedStatus: 'PENDING', newStatus: 'COMPLETE'
             });

@@ -6,6 +6,8 @@ const lifecycle = readFileSync(new URL('../../supabase/repeatable/21072026_1820_
 const retirements = readFileSync(new URL('../../supabase/repeatable/21072026_1820_99_import_review_hard_cutover_retirements.sql', import.meta.url), 'utf8');
 const tsfinSummary = readFileSync(new URL('../../supabase/repeatable/04022026_nhsp_hr_code.sql', import.meta.url), 'utf8');
 const tsfinSettlement = readFileSync(new URL('../../supabase/repeatable/23072026_0011_import_review_tsfin_settlement_v1.sql', import.meta.url), 'utf8');
+const invoiceCorrectionScope = readFileSync(new URL('../../supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql', import.meta.url), 'utf8');
+const invoiceOutboxGenerator = readFileSync(new URL('../../supabase/repeatable/21072026_1235_56_invoice_generate_from_outbox_batch.sql', import.meta.url), 'utf8');
 
 function functionBody(source, name) {
   const marker = `create or replace function public.${name}(`;
@@ -79,6 +81,26 @@ test('TSFIN follow-up settlement proof is bounded, commit-fenced and service-rol
   assert.match(body, /'all_targets_settled'/);
   assert.match(tsfinSettlement, /revoke all on function public\.tsfin_follow_up_target_summary_v1\(uuid\[\], timestamptz\) from public, anon, authenticated;/);
   assert.match(tsfinSettlement, /grant execute on function public\.tsfin_follow_up_target_summary_v1\(uuid\[\], timestamptz\) to service_role;/);
+});
+
+test('invoice correction scope follows the frozen TSFIN stream used by the generator', () => {
+  const body = functionBody(invoiceCorrectionScope, 'invoice_correction_pair_scope_v1');
+  assert.match(body, /tf.basis/);
+  assert.match(body, /'NHSP','NHSP_ADJUSTMENT'/);
+  assert.match(body, /'HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'/);
+  assert.match(body, /v_current_stream is not distinct from v_expected_stream/);
+  assert.doesNotMatch(body, /v_current_stream:=case when coalesce(r.self_bill,false)/);
+  assert.doesNotMatch(body, /case when coalesce(c.self_bill,false) then 'SELF_BILL'/);
+});
+
+test('NONE invoice consolidation keeps each correction unit atomic without merging ordinary timesheets', () => {
+  const body = functionBody(invoiceOutboxGenerator, 'invoice_generate_from_outbox_batch');
+  assert.match(body, /Mode NONE keeps ordinary timesheets separate/);
+  assert.ok(body.includes('_ctms_import_correction_classify_v1(u.tid)'));
+  assert.ok(body.includes('then coalesce(ts.correction_id::text,u.tid::text)'));
+  assert.match(body, /else u.tid::text/);
+  assert.ok(body.includes('array_agg(tid order by tid)::uuid[] as ts_ids'));
+  assert.ok(body.includes("(e.value->>'timesheet_id')::uuid = any(g.ts_ids)"));
 });
 
 test('empty and exact-page review lists use typed cursors and emit a cursor only when more rows exist', () => {
