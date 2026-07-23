@@ -466,41 +466,6 @@ BEGIN
           ) AS reservation_overrun_detected
     FROM raw_component_totals AS component_total
   ),
-  source_basis AS (
-    SELECT
-      raw_component.*,
-      encode(
-        extensions.digest(
-          convert_to(
-            jsonb_build_object(
-              'source_family_key', v_source_family_key,
-              'root_timesheet_id', v_root_timesheet_id::text,
-              'correction_financials_policy_envelope_fingerprint',
-                v_correction_financials_policy_envelope_fingerprint,
-              'candidate_id', p_candidate_id::text,
-              'source_pay_methods', v_source_pay_methods,
-              'target_pay_method', v_target_pay_method,
-              'component_key_type', raw_component.key_type,
-              'component_key_value', raw_component.key_value,
-              'truth_ex_vat', raw_component.truth_ex_vat,
-              'baseline_ex_vat', raw_component.baseline_ex_vat,
-              'reserved_ex_vat', raw_component.reserved_ex_vat,
-              'raw_outstanding_ex_vat',
-                raw_component.raw_outstanding_ex_vat,
-              'truth_inc_vat', raw_component.truth_inc_vat,
-              'baseline_inc_vat', raw_component.baseline_inc_vat,
-              'reserved_inc_vat', raw_component.reserved_inc_vat,
-              'raw_outstanding_inc_vat',
-                raw_component.raw_outstanding_inc_vat
-            )::text,
-            'UTF8'
-          ),
-          'sha256'
-        ),
-        'hex'
-      ) AS source_basis_fingerprint
-    FROM raw_outstanding AS raw_component
-  ),
   family_components AS (
     SELECT
       finance_component.id AS finance_component_id,
@@ -625,6 +590,66 @@ BEGIN
     GROUP BY
       UPPER(BTRIM(family_component.component_key_type)),
       BTRIM(family_component.component_key_value)
+  ),
+  -- Settled and actively reserved recovery/payment movements are part of the
+  -- pre-draft source basis.  Including them in the fingerprint makes a saved
+  -- PAYE/umbrella resolution stale whenever the net economic balance changes.
+  source_basis AS (
+    SELECT
+      raw_component.*,
+      COALESCE(settled_movement.settled_recovery_ex, 0)
+        AS settled_recovery_ex,
+      COALESCE(settled_movement.settled_underpayment_ex, 0)
+        AS settled_underpayment_ex,
+      COALESCE(active_reservation.reserved_recovery_ex, 0)
+        AS reserved_recovery_ex,
+      COALESCE(active_reservation.reserved_underpayment_ex, 0)
+        AS reserved_underpayment_ex,
+      encode(
+        extensions.digest(
+          convert_to(
+            jsonb_build_object(
+              'source_family_key', v_source_family_key,
+              'root_timesheet_id', v_root_timesheet_id::text,
+              'correction_financials_policy_envelope_fingerprint',
+                v_correction_financials_policy_envelope_fingerprint,
+              'candidate_id', p_candidate_id::text,
+              'source_pay_methods', v_source_pay_methods,
+              'target_pay_method', v_target_pay_method,
+              'component_key_type', raw_component.key_type,
+              'component_key_value', raw_component.key_value,
+              'truth_ex_vat', raw_component.truth_ex_vat,
+              'baseline_ex_vat', raw_component.baseline_ex_vat,
+              'reserved_ex_vat', raw_component.reserved_ex_vat,
+              'raw_outstanding_ex_vat',
+                raw_component.raw_outstanding_ex_vat,
+              'truth_inc_vat', raw_component.truth_inc_vat,
+              'baseline_inc_vat', raw_component.baseline_inc_vat,
+              'reserved_inc_vat', raw_component.reserved_inc_vat,
+              'raw_outstanding_inc_vat',
+                raw_component.raw_outstanding_inc_vat,
+              'settled_recovery_ex',
+                COALESCE(settled_movement.settled_recovery_ex, 0),
+              'settled_underpayment_ex',
+                COALESCE(settled_movement.settled_underpayment_ex, 0),
+              'reserved_recovery_ex',
+                COALESCE(active_reservation.reserved_recovery_ex, 0),
+              'reserved_underpayment_ex',
+                COALESCE(active_reservation.reserved_underpayment_ex, 0)
+            )::text,
+            'UTF8'
+          ),
+          'sha256'
+        ),
+        'hex'
+      ) AS source_basis_fingerprint
+    FROM raw_outstanding AS raw_component
+    LEFT JOIN settled_movements AS settled_movement
+      ON settled_movement.key_type = raw_component.key_type
+     AND settled_movement.key_value = raw_component.key_value
+    LEFT JOIN active_case_reservations AS active_reservation
+      ON active_reservation.key_type = raw_component.key_type
+     AND active_reservation.key_value = raw_component.key_value
   ),
   latest_session_resolution AS (
     SELECT ranked.*
@@ -768,44 +793,18 @@ BEGIN
   component_result AS (
     SELECT
       raw_component.*,
-      COALESCE(settled_movement.settled_recovery_ex, 0)
-        AS settled_recovery_ex,
-      COALESCE(settled_movement.settled_underpayment_ex, 0)
-        AS settled_underpayment_ex,
-      COALESCE(active_reservation.reserved_recovery_ex, 0)
-        AS reserved_recovery_ex,
-      COALESCE(active_reservation.reserved_underpayment_ex, 0)
-        AS reserved_underpayment_ex,
-
-      CASE
-        WHEN raw_component.raw_outstanding_ex_vat < 0 THEN
-          round(
-            LEAST(
-              0,
-              raw_component.raw_outstanding_ex_vat
-              + COALESCE(settled_movement.settled_recovery_ex, 0)
-              + COALESCE(active_reservation.reserved_recovery_ex, 0)
-            ),
-            2
-          )
-        WHEN raw_component.raw_outstanding_ex_vat > 0 THEN
-          round(
-            GREATEST(
-              0,
-              raw_component.raw_outstanding_ex_vat
-              - COALESCE(
-                  settled_movement.settled_underpayment_ex,
-                  0
-                )
-              - COALESCE(
-                  active_reservation.reserved_underpayment_ex,
-                  0
-                )
-            ),
-            2
-          )
-        ELSE 0
-      END::numeric(18,2) AS effective_outstanding_ex_vat,
+      -- Recovery and underpayment movements form one signed ledger.  Do not
+      -- clamp by the current raw sign: a later correction can legitimately
+      -- cross zero, for example repaying money that was recovered in an
+      -- earlier settled Banking Pay batch.
+      round(
+        raw_component.raw_outstanding_ex_vat
+        + raw_component.settled_recovery_ex
+        + raw_component.reserved_recovery_ex
+        - raw_component.settled_underpayment_ex
+        - raw_component.reserved_underpayment_ex,
+        2
+      )::numeric(18,2) AS effective_outstanding_ex_vat,
 
       v_mismatched_source_method_count > 0
         AS resolution_required,
@@ -841,12 +840,6 @@ BEGIN
         ELSE false
       END AS resolution_complete
     FROM source_basis AS raw_component
-    LEFT JOIN settled_movements AS settled_movement
-      ON settled_movement.key_type = raw_component.key_type
-     AND settled_movement.key_value = raw_component.key_value
-    LEFT JOIN active_case_reservations AS active_reservation
-      ON active_reservation.key_type = raw_component.key_type
-     AND active_reservation.key_value = raw_component.key_value
     LEFT JOIN session_resolution_rows AS session_resolution
       ON session_resolution.key_type = raw_component.key_type
      AND session_resolution.key_value = raw_component.key_value
@@ -855,9 +848,7 @@ BEGIN
     SELECT
       component_row.*,
       CASE
-        WHEN component_row.raw_outstanding_ex_vat = 0
-          THEN component_row.raw_outstanding_inc_vat
-        ELSE round(
+        WHEN component_row.raw_outstanding_ex_vat <> 0 THEN round(
           component_row.raw_outstanding_inc_vat
           * (
               component_row.effective_outstanding_ex_vat
@@ -865,14 +856,32 @@ BEGIN
             ),
           2
         )
+        WHEN component_row.effective_outstanding_ex_vat = 0 THEN 0
+        WHEN component_row.truth_ex_vat <> 0 THEN round(
+          component_row.effective_outstanding_ex_vat
+          * (component_row.truth_inc_vat / component_row.truth_ex_vat),
+          2
+        )
+        WHEN component_row.baseline_ex_vat <> 0 THEN round(
+          component_row.effective_outstanding_ex_vat
+          * (component_row.baseline_inc_vat / component_row.baseline_ex_vat),
+          2
+        )
+        ELSE component_row.effective_outstanding_ex_vat
       END::numeric(18,2) AS effective_outstanding_inc_vat,
       CASE
         WHEN component_row.resolution_required
          AND component_row.resolution_complete
           THEN round(
             CASE
-              WHEN component_row.raw_outstanding_ex_vat = 0
+              WHEN component_row.effective_outstanding_ex_vat = 0
                 THEN 0
+              WHEN component_row.raw_outstanding_ex_vat = 0
+                THEN sign(component_row.effective_outstanding_ex_vat)
+                     * abs(COALESCE(
+                         component_row.resolved_target_amount_ex_vat,
+                         0
+                       ))
               ELSE
                 sign(component_row.effective_outstanding_ex_vat)
                 * abs(COALESCE(

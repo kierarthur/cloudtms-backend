@@ -11,6 +11,7 @@ const weeklyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_
 const nhspApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql', import.meta.url), 'utf8');
 const dailyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql', import.meta.url), 'utf8');
 const nhspPhase3Sql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql', import.meta.url), 'utf8');
+const weeklyPhase3Sql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql', import.meta.url), 'utf8');
 const correctionPolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_01_correction_financials_policy_resolve_v1.sql', import.meta.url), 'utf8');
 const correctionGuardSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql', import.meta.url), 'utf8');
 const correctionTransitionSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql', import.meta.url), 'utf8');
@@ -386,6 +387,32 @@ test('authoritative Weekly apply preserves authorised lifecycle through TSFIN fo
   assert.match(targetedDequeue, /TSFIN_SPECIFIC_DEQUEUE_TARGET_LIMIT_EXCEEDED/);
   assert.match(targetedDequeue, /partner\.correction_id=seed\.correction_id/);
   assert.match(targetedDequeue, /limit 100/);
+});
+
+test('mutable NHSP and HealthRoster correction replays preserve one shared pair parent', () => {
+  for (const source of [nhspPhase3Sql, weeklyPhase3Sql]) {
+    const body = functionBody(source, source === nhspPhase3Sql
+      ? 'nhsp_weekly_phase3_apply_adjustment_truth'
+      : 'hr_weekly_phase3_apply_adjustment_truth');
+    const lifecycleGuard = body.indexOf("message='CORRECTION_PAIR_LIFECYCLE_TRANSITION_REQUIRED'");
+    const repair = body.indexOf('update public.timesheets pair_replacement');
+    const replacementUpdate = body.indexOf('update public.timesheets tup', repair);
+    const replacementUpdateEnd = body.indexOf('where tup.timesheet_id = v_existing_pos_ts_id', replacementUpdate);
+
+    assert.notEqual(lifecycleGuard, -1);
+    assert.notEqual(repair, -1);
+    assert.ok(lifecycleGuard < repair, 'frozen/lifecycle evidence must be rejected before repair');
+    assert.match(body, /v_existing_pair_parent_timesheet_id uuid := null/);
+    assert.match(body, /pair_reversal\.correction_kind='CHANGED_HOURS_REVERSAL'/);
+    assert.match(body, /pair_replacement\.parent_timesheet_id is distinct from v_existing_pair_parent_timesheet_id/);
+    assert.match(body, /count\(distinct pair_check\.parent_timesheet_id\) = 1/);
+    assert.match(body, /count\(pair_check\.parent_timesheet_id\) = 2/);
+    assert.match(body, /CORRECTION_PAIR_PARENT_MISSING/);
+    assert.doesNotMatch(
+      body.slice(replacementUpdate, replacementUpdateEnd),
+      /parent_timesheet_id\s*=\s*v_base_timesheet_id/
+    );
+  }
 });
 
 test('failed-before-commit recovery proves no commit before reopening the review', () => {

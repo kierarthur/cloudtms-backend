@@ -83,6 +83,7 @@ declare
   v_existing_pos_old_end_str text := null;
   v_existing_pos_old_break_str text := null;
   v_existing_pos_import_id uuid := null;
+  v_existing_pair_parent_timesheet_id uuid := null;
 
   -- ✅ NEW: Existing base reversal (NEG₀) for edge-case deletion
   v_existing_neg_ts_id uuid := null;
@@ -252,6 +253,7 @@ begin
     v_existing_pos_old_end_str := null;
     v_existing_pos_old_break_str := null;
     v_existing_pos_import_id := null;
+    v_existing_pair_parent_timesheet_id := null;
 
     v_existing_neg_ts_id := null;
     v_existing_neg_schedule := null;
@@ -980,17 +982,20 @@ begin
         'import_correction',coalesce(v_existing_pos_hint->'import_correction','{}'::jsonb)
           || jsonb_build_object('updated_from_import_id',p_import_id::text)
       );
-      -- Lock and update the existing replacement timesheet in place
+      -- Lock the complete existing correction unit before validating or
+      -- repairing its shared parent identity.
       perform 1
-      from public.timesheets tlock
-      where tlock.timesheet_id = v_existing_pos_ts_id
-      for update;
+       from public.timesheets tlock
+       where tlock.correction_id = v_existing_pos_correction_id
+         and tlock.is_current = true
+         and tlock.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+       order by tlock.timesheet_id
+       for update;
 
       if (
         select count(*) = 2
           and count(*) filter (where pair_check.correction_kind='CHANGED_HOURS_REVERSAL') = 1
           and count(*) filter (where pair_check.correction_kind='CHANGED_HOURS_REPLACEMENT') = 1
-          and count(distinct pair_check.parent_timesheet_id) = 1
         from public.timesheets pair_check
         where pair_check.correction_id=v_existing_pos_correction_id
           and pair_check.is_current=true
@@ -1024,6 +1029,49 @@ begin
           )::text;
       end if;
 
+      select pair_reversal.parent_timesheet_id
+      into v_existing_pair_parent_timesheet_id
+      from public.timesheets pair_reversal
+      where pair_reversal.correction_id=v_existing_pos_correction_id
+        and pair_reversal.is_current=true
+        and pair_reversal.correction_kind='CHANGED_HOURS_REVERSAL'
+      limit 1;
+
+      if v_existing_pair_parent_timesheet_id is null then
+        raise exception using message='CORRECTION_PAIR_PARENT_MISSING',errcode='P0001',
+          detail=jsonb_build_object(
+            'code','CORRECTION_PAIR_PARENT_MISSING',
+            'correction_id',v_existing_pos_correction_id
+          )::text;
+      end if;
+
+      -- A previous implementation could rewrite only the mutable replacement
+      -- to the latest base timesheet during replay, splitting the pair's
+      -- parent identity. Repair only that exact, complete, mutable pair before
+      -- continuing; lifecycle/frozen evidence was rejected above.
+      update public.timesheets pair_replacement
+      set parent_timesheet_id=v_existing_pair_parent_timesheet_id,
+          updated_at=v_now
+      where pair_replacement.correction_id=v_existing_pos_correction_id
+        and pair_replacement.is_current=true
+        and pair_replacement.correction_kind='CHANGED_HOURS_REPLACEMENT'
+        and pair_replacement.parent_timesheet_id is distinct from v_existing_pair_parent_timesheet_id;
+
+      if (
+        select count(*) = 2
+          and count(*) filter (where pair_check.correction_kind='CHANGED_HOURS_REVERSAL') = 1
+          and count(*) filter (where pair_check.correction_kind='CHANGED_HOURS_REPLACEMENT') = 1
+          and count(distinct pair_check.parent_timesheet_id) = 1
+          and count(pair_check.parent_timesheet_id) = 2
+        from public.timesheets pair_check
+        where pair_check.correction_id=v_existing_pos_correction_id
+          and pair_check.is_current=true
+          and pair_check.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+      ) is not true then
+        raise exception using message='CORRECTION_PAIR_INCOMPLETE',errcode='P0001',
+          detail=jsonb_build_object('code','CORRECTION_PAIR_INCOMPLETE','correction_id',v_existing_pos_correction_id)::text;
+      end if;
+
       update public.timesheets tup
       set
         actual_schedule_json = v_schedule,
@@ -1033,7 +1081,6 @@ begin
         -- ✅ inherit policy identity from base timesheet
         sheet_scope = v_parent_sheet_scope,
         submission_mode = v_parent_submission_mode,
-        parent_timesheet_id = v_base_timesheet_id,
 
         updated_at = v_now
       where tup.timesheet_id = v_existing_pos_ts_id;

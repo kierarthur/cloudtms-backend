@@ -57760,6 +57760,90 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
     }
   };
 
+  const enrichCommunicationRecipientNames = async (section, payload) => {
+    const sectionKey = trimText(section).toLowerCase();
+    const source = safeObject(payload);
+    if (!['remittances', 'communications'].includes(sectionKey)) return source;
+
+    const sourceRows = Array.isArray(source.rows)
+      ? source.rows
+      : (Array.isArray(source.items) ? source.items : []);
+    if (!sourceRows.length) return source;
+
+    const unique = (values) => Array.from(new Set(values.map(trimText).filter(Boolean)));
+    const candidateIds = unique(sourceRows
+      .filter((row) => trimText(row?.recipient_kind).toLowerCase() === 'candidate' && uuidRe.test(trimText(row?.recipient_id)))
+      .map((row) => row.recipient_id));
+    const umbrellaIds = unique(sourceRows
+      .filter((row) => trimText(row?.recipient_kind).toLowerCase() === 'umbrella' && uuidRe.test(trimText(row?.recipient_id)))
+      .map((row) => row.recipient_id));
+    const userEmails = unique(sourceRows
+      .filter((row) => !['candidate', 'umbrella'].includes(trimText(row?.recipient_kind).toLowerCase()))
+      .map((row) => trimText(row?.mail_to || row?.to_address || row?.to).toLowerCase()));
+
+    const fetchLookupRows = async ({ table, select, column, values, quoted = false }) => {
+      const rows = [];
+      const chunkSize = 75;
+      for (let offset = 0; offset < values.length; offset += chunkSize) {
+        const chunk = values.slice(offset, offset + chunkSize);
+        if (!chunk.length) continue;
+        const tokens = quoted
+          ? chunk.map((value) => JSON.stringify(value)).join(',')
+          : chunk.join(',');
+        const filter = encodeURIComponent(`in.(${tokens})`);
+        const url = `${env.SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}&${column}=${filter}&order=id.asc&limit=${chunkSize}`;
+        const result = await sbFetch(env, url, false);
+        if (Array.isArray(result?.rows)) rows.push(...result.rows);
+      }
+      return rows;
+    };
+
+    const [candidateRows, umbrellaRows, userRows] = await Promise.all([
+      candidateIds.length
+        ? fetchLookupRows({ table: 'candidates', select: 'id,display_name,first_name,last_name', column: 'id', values: candidateIds })
+        : [],
+      umbrellaIds.length
+        ? fetchLookupRows({ table: 'umbrellas', select: 'id,name', column: 'id', values: umbrellaIds })
+        : [],
+      userEmails.length
+        ? fetchLookupRows({ table: 'tms_users', select: 'id,email,display_name', column: 'email', values: userEmails, quoted: true })
+        : []
+    ]);
+
+    const candidateNames = new Map(candidateRows.map((row) => {
+      const displayName = trimText(row?.display_name) || trimText([row?.first_name, row?.last_name].map(trimText).filter(Boolean).join(' '));
+      return [trimText(row?.id), displayName];
+    }).filter((entry) => entry[0] && entry[1]));
+    const umbrellaNames = new Map(umbrellaRows
+      .map((row) => [trimText(row?.id), trimText(row?.name)])
+      .filter((entry) => entry[0] && entry[1]));
+    const userNamesByEmail = new Map();
+    for (const row of userRows) {
+      const email = trimText(row?.email).toLowerCase();
+      const displayName = trimText(row?.display_name);
+      if (email && displayName && !userNamesByEmail.has(email)) userNamesByEmail.set(email, displayName);
+    }
+
+    const enrichedRows = sourceRows.map((rowLike) => {
+      const row = safeObject(rowLike);
+      if (trimText(row.recipient_display_name)) return row;
+      const recipientKind = trimText(row.recipient_kind).toLowerCase();
+      const recipientId = trimText(row.recipient_id);
+      const recipientEmail = trimText(row.mail_to || row.to_address || row.to).toLowerCase();
+      let recipientDisplayName = '';
+      if (recipientKind === 'candidate') recipientDisplayName = candidateNames.get(recipientId) || '';
+      else if (recipientKind === 'umbrella') recipientDisplayName = umbrellaNames.get(recipientId) || '';
+      else recipientDisplayName = userNamesByEmail.get(recipientEmail) || '';
+      return recipientDisplayName ? Object.assign({}, row, { recipient_display_name: recipientDisplayName }) : row;
+    });
+
+    return Object.assign({}, source, {
+      rows: enrichedRows,
+      items: enrichedRows,
+      recipient_names_resolved: true
+    });
+  };
+
   const normaliseRouteToken = (value) => trimText(value).toLowerCase().replace(/[\s-]+/g, '_');
   const normaliseSection = (value) => {
     const key = normaliseRouteToken(value);
@@ -57982,7 +58066,7 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
         p_purpose: rpcPurpose
       };
       const routeClass = routeClassForSectionPage(section, rpcPurpose, uiPurpose);
-      const payload = unwrapRpc(await sbRpc(env, 'pay_batch_get_section_page', args, {
+      const rawPayload = unwrapRpc(await sbRpc(env, 'pay_batch_get_section_page', args, {
         routeClass,
         purpose: uiPurpose,
         rpcPurpose,
@@ -57990,6 +58074,7 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
         timeoutMs: rpcPurpose === 'OVERVIEW' ? 8000 : 60000,
         bankingPay: true
       }), 'pay_batch_get_section_page');
+      const payload = await enrichCommunicationRecipientNames(section, rawPayload);
       let signal = null;
       if (rpcPurpose === 'OVERVIEW') {
         signal = preflightSignal;
@@ -122120,6 +122205,32 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         },
         p_actor_user_id: actorUserId
       });
+      try {
+        await touchBankingPayBatchPaymentStateChanged(env, payBatchId, {
+          actorUserId,
+          reason: providerAccepted
+            ? (isPayoutNotice ? 'PAYOUT_NOTICE_DELIVERY_RECORDED' : 'REMITTANCE_DELIVERY_RECORDED')
+            : (isPayoutNotice ? 'PAYOUT_NOTICE_DELIVERY_FAILED' : 'REMITTANCE_DELIVERY_FAILED'),
+          source: 'drainMailOutbox.markRemittanceDrainResult',
+          lanes: ['overview', 'remittances'],
+          bestEffort: true,
+          changeScopeJson: {
+            message_kind: messageKind,
+            mail_outbox_id: entry.mail_outbox_id,
+            recipient_kind: entry.recipient_kind,
+            delivery_status: entry.delivery_status,
+            trigger_status: entry.trigger_status
+          }
+        });
+      } catch (touchError) {
+        try {
+          console.warn('[MailOutboxDrain] remittance live refresh touch failed', {
+            pay_batch_id: payBatchId,
+            mail_outbox_id: entry.mail_outbox_id,
+            error: String(touchError?.message || touchError || 'Banking Pay live refresh touch failed').slice(0, 1000)
+          });
+        } catch {}
+      }
     } catch (e) {
       errors.push({
         id: rowId,

@@ -42668,6 +42668,8 @@ DECLARE
   v_effective_payees_json jsonb := '[]'::jsonb;
   v_candidate_state_row public.banking_pay_workbench_session_candidate_state%ROWTYPE;
   v_pending_job_type text := NULL::text;
+  v_current_source_change_seq bigint := 0;
+  v_live_source_change_seq bigint := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -42713,6 +42715,54 @@ BEGIN
   ORDER BY candidate_state.updated_at_utc DESC, candidate_state.id DESC
   LIMIT 1;
 
+  SELECT GREATEST(
+           COALESCE((
+             SELECT MAX(source_line.source_change_seq)
+             FROM public.banking_pay_workbench_candidate_source_lines AS source_line
+             WHERE source_line.session_id = p_session_id
+               AND source_line.candidate_id = p_candidate_id
+               AND source_line.session_version = COALESCE(v_session_row.version, 1)
+               AND UPPER(BTRIM(COALESCE(source_line.status, ''))) = 'CURRENT'
+           ), 0),
+           COALESCE((
+             SELECT MAX(GREATEST(
+               CASE
+                 WHEN COALESCE(source_job.payload_json->>'latest_source_change_seq', '')
+                      ~ '^[0-9]{1,18}$'
+                   THEN (source_job.payload_json->>'latest_source_change_seq')::bigint
+                 ELSE 0::bigint
+               END,
+               CASE
+                 WHEN COALESCE(source_job.payload_json->>'source_change_seq', '')
+                      ~ '^[0-9]{1,18}$'
+                   THEN (source_job.payload_json->>'source_change_seq')::bigint
+                 ELSE 0::bigint
+               END,
+               CASE
+                 WHEN COALESCE(source_job.payload_json->>'source_change_sequence', '')
+                      ~ '^[0-9]{1,18}$'
+                   THEN (source_job.payload_json->>'source_change_sequence')::bigint
+                 ELSE 0::bigint
+               END
+             ))
+             FROM public.banking_pay_workbench_jobs AS source_job
+             WHERE source_job.session_id = p_session_id
+               AND source_job.candidate_id = p_candidate_id
+               AND UPPER(BTRIM(COALESCE(source_job.status, ''))) = 'SUCCEEDED'
+               AND UPPER(BTRIM(COALESCE(source_job.job_type, ''))) IN (
+                 'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+                 'CANDIDATE_SOURCE_BUILD'
+               )
+           ), 0)
+         )
+  INTO v_current_source_change_seq;
+
+  SELECT COALESCE(change_counter.seq, 0)
+  INTO v_live_source_change_seq
+  FROM public.app_change_counters AS change_counter
+  WHERE change_counter.entity_key =
+        'pay_candidate:' || p_candidate_id::text;
+
   IF v_scope_row.pending_job_id IS NOT NULL THEN
     SELECT UPPER(BTRIM(COALESCE(pending_job.job_type, '')))
     INTO v_pending_job_type
@@ -42750,7 +42800,14 @@ BEGIN
        v_scope_row.error_json IS NULL
        OR v_scope_row.error_json = '{}'::jsonb
        OR v_scope_row.error_json = 'null'::jsonb
-     ) THEN
+     )
+     AND COALESCE(v_candidate_state_row.source_change_seq, 0)
+           >= GREATEST(
+                COALESCE(v_current_source_change_seq, 0),
+                COALESCE(v_live_source_change_seq, 0)
+              )
+     AND COALESCE(v_current_source_change_seq, 0)
+           >= COALESCE(v_live_source_change_seq, 0) THEN
     RETURN jsonb_build_object(
       'ok', true,
       'session_id', p_session_id::text,
@@ -42960,7 +43017,7 @@ BEGIN
     COALESCE(v_effective_payees_json, '[]'::jsonb),
     COALESCE(v_case_resolution_states_json, '[]'::jsonb),
     COALESCE(v_canonical_preview_lines_json, '[]'::jsonb),
-    0,
+    COALESCE(v_current_source_change_seq, 0),
     COALESCE(v_session_row.version, 1),
     CASE WHEN v_candidate_status = 'PENDING' THEN p_job_id ELSE NULL::uuid END,
     v_now,
@@ -42978,6 +43035,7 @@ BEGIN
       effective_payees_json = EXCLUDED.effective_payees_json,
       effective_case_resolution_states_json = EXCLUDED.effective_case_resolution_states_json,
       effective_canonical_preview_lines_json = EXCLUDED.effective_canonical_preview_lines_json,
+      source_change_seq = EXCLUDED.source_change_seq,
       session_version = EXCLUDED.session_version,
       pending_job_id = EXCLUDED.pending_job_id,
       updated_at_utc = v_now,
@@ -43022,6 +43080,18 @@ BEGIN
   );
 END;
 $function$;
+
+REVOKE ALL ON FUNCTION public.pay_workbench_session_recompute_candidate(
+  uuid,
+  uuid,
+  uuid
+) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.pay_workbench_session_recompute_candidate(
+  uuid,
+  uuid,
+  uuid
+) TO service_role;
 
 
 
@@ -45718,7 +45788,14 @@ BEGIN
           'operation_source_key', normalised_rows.operation_source_key,
           'timesheet_id', CASE WHEN normalised_rows.timesheet_id IS NULL THEN NULL ELSE normalised_rows.timesheet_id::text END,
           'component_key_type', normalised_rows.key_type,
-          'component_key_value', normalised_rows.key_value
+          'component_key_value', normalised_rows.key_value,
+          'source_family_key', NULLIF(BTRIM(COALESCE(normalised_rows.line_json->>'source_family_key', '')), ''),
+          'correction_chain_residual', CASE
+            WHEN NULLIF(BTRIM(COALESCE(normalised_rows.line_json->>'source_family_key', '')), '') LIKE 'correction-chain:%'
+             AND jsonb_typeof(normalised_rows.line_json->'correction_chain_residual') = 'object'
+              THEN normalised_rows.line_json->'correction_chain_residual'
+            ELSE NULL
+          END
         )
         || CASE
           WHEN normalised_rows.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
@@ -45763,7 +45840,14 @@ BEGIN
           'allocation_row_id', normalised_rows.allocation_row_id::text,
           'timesheet_id', CASE WHEN normalised_rows.timesheet_id IS NULL THEN NULL ELSE normalised_rows.timesheet_id::text END,
           'key_type', normalised_rows.key_type,
-          'key_value', normalised_rows.key_value
+          'key_value', normalised_rows.key_value,
+          'source_family_key', NULLIF(BTRIM(COALESCE(normalised_rows.line_json->>'source_family_key', '')), ''),
+          'correction_chain_residual', CASE
+            WHEN NULLIF(BTRIM(COALESCE(normalised_rows.line_json->>'source_family_key', '')), '') LIKE 'correction-chain:%'
+             AND jsonb_typeof(normalised_rows.line_json->'correction_chain_residual') = 'object'
+              THEN normalised_rows.line_json->'correction_chain_residual'
+            ELSE NULL
+          END
         )
         || CASE
           WHEN normalised_rows.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
@@ -46076,7 +46160,16 @@ BEGIN
            economic_component.key_type,
            economic_component.key_value,
            economic_component.source_amount_ex_vat,
-           economic_component.key_resolution_failure_reason
+           economic_component.key_resolution_failure_reason,
+           NULLIF(BTRIM(COALESCE(
+             pay_batch_item.frozen_source_basis_json->>'source_family_key',
+             pay_batch_item.frozen_component_snapshot_json->>'source_family_key',
+             ''
+           )), '') AS source_family_key,
+           COALESCE(
+             pay_batch_item.frozen_source_basis_json->'correction_chain_residual',
+             pay_batch_item.frozen_component_snapshot_json->'correction_chain_residual'
+           ) AS correction_chain_residual
     FROM public.pay_batch_items AS pay_batch_item
     JOIN public.pay_batch_candidates AS pay_batch_candidate
       ON pay_batch_candidate.id = pay_batch_item.pay_batch_candidate_id
@@ -46098,6 +46191,24 @@ BEGIN
              WHEN scoped_items.key_value IS NULL OR BTRIM(COALESCE(scoped_items.key_value, '')) = '' THEN 'MISSING_ECONOMIC_KEY_VALUE'
              WHEN scoped_items.key_type = 'TS_DAY' AND scoped_items.key_value !~ '^\d{4}-\d{2}-\d{2}$' THEN 'INVALID_TS_DAY_KEY_VALUE'
              WHEN scoped_items.source_amount_ex_vat IS NULL THEN 'MISSING_SOURCE_RESERVATION_AMOUNT'
+             WHEN scoped_items.source_family_key LIKE 'correction-chain:%'
+              AND jsonb_typeof(scoped_items.correction_chain_residual) IS DISTINCT FROM 'object'
+               THEN 'MISSING_FROZEN_CORRECTION_CHAIN_RESIDUAL'
+             WHEN scoped_items.source_family_key LIKE 'correction-chain:%'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(
+                  CASE
+                    WHEN jsonb_typeof(scoped_items.correction_chain_residual->'components') = 'array'
+                      THEN scoped_items.correction_chain_residual->'components'
+                    ELSE '[]'::jsonb
+                  END
+                ) AS frozen_component(component_json)
+                WHERE UPPER(BTRIM(COALESCE(frozen_component.component_json->>'component_key_type', ''))) = scoped_items.key_type
+                  AND BTRIM(COALESCE(frozen_component.component_json->>'component_key_value', '')) = scoped_items.key_value
+                  AND COALESCE(frozen_component.component_json->>'effective_source_outstanding_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              )
+               THEN 'MISSING_FROZEN_CORRECTION_CHAIN_COMPONENT'
              ELSE NULL::text
            END AS failure_reason
     FROM scoped_items
@@ -46109,6 +46220,7 @@ BEGIN
            'key_type', invalid_items.key_type,
            'key_value', invalid_items.key_value,
            'source_amount_ex_vat', invalid_items.source_amount_ex_vat,
+           'source_family_key', invalid_items.source_family_key,
            'failure_reason', invalid_items.failure_reason
          ) ORDER BY invalid_items.pay_batch_item_id::text), '[]'::jsonb)
   INTO v_invalid_item_sample
@@ -46124,11 +46236,17 @@ BEGIN
     )::text;
   END IF;
 
-  WITH scoped_components AS (
+  WITH scoped_item_components AS (
     SELECT economic_component.timesheet_id,
            economic_component.key_type,
            economic_component.key_value,
-           SUM(ROUND(COALESCE(economic_component.source_amount_ex_vat, 0), 2)) AS requested_source_amount_ex_vat
+           economic_component.source_amount_ex_vat,
+           NULLIF(BTRIM(COALESCE(
+             pay_batch_item.frozen_source_basis_json->>'source_family_key',
+             pay_batch_item.frozen_component_snapshot_json->>'source_family_key',
+             ''
+           )), '') AS source_family_key,
+           frozen_chain_component.component_json AS correction_chain_component
     FROM public.pay_batch_items AS pay_batch_item
     JOIN public.pay_batch_candidates AS pay_batch_candidate
       ON pay_batch_candidate.id = pay_batch_item.pay_batch_candidate_id
@@ -46137,6 +46255,30 @@ BEGIN
      AND allocation_row.operation_id = p_operation_id
     JOIN LATERAL public._pay_batch_item_economic_components(NULL::uuid, ARRAY[pay_batch_item.id]::uuid[]) AS economic_component
       ON true
+    LEFT JOIN LATERAL (
+      SELECT frozen_component.component_json
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(COALESCE(
+            pay_batch_item.frozen_source_basis_json->'correction_chain_residual',
+            pay_batch_item.frozen_component_snapshot_json->'correction_chain_residual'
+          )->'components') = 'array'
+            THEN COALESCE(
+              pay_batch_item.frozen_source_basis_json->'correction_chain_residual',
+              pay_batch_item.frozen_component_snapshot_json->'correction_chain_residual'
+            )->'components'
+          ELSE '[]'::jsonb
+        END
+      ) AS frozen_component(component_json)
+      WHERE UPPER(BTRIM(COALESCE(frozen_component.component_json->>'component_key_type', ''))) = economic_component.key_type
+        AND BTRIM(COALESCE(frozen_component.component_json->>'component_key_value', '')) = economic_component.key_value
+      LIMIT 1
+    ) AS frozen_chain_component
+      ON NULLIF(BTRIM(COALESCE(
+           pay_batch_item.frozen_source_basis_json->>'source_family_key',
+           pay_batch_item.frozen_component_snapshot_json->>'source_family_key',
+           ''
+         )), '') LIKE 'correction-chain:%'
     WHERE pay_batch_candidate.pay_batch_id = p_pay_batch_id
       AND allocation_row.candidate_scope_id IN (SELECT finalize_scope.id FROM pg_temp.tmp_pay_batch_finalize_scope AS finalize_scope)
       AND economic_component.timesheet_id IS NOT NULL
@@ -46144,10 +46286,31 @@ BEGIN
       AND economic_component.key_value IS NOT NULL
       AND NOT (economic_component.key_type = 'TS_DAY' AND economic_component.key_value !~ '^\d{4}-\d{2}-\d{2}$')
       AND economic_component.source_amount_ex_vat IS NOT NULL
-    GROUP BY economic_component.timesheet_id, economic_component.key_type, economic_component.key_value
+  ), scoped_components AS (
+    SELECT scoped_item_component.timesheet_id,
+           scoped_item_component.key_type,
+           scoped_item_component.key_value,
+           scoped_item_component.source_family_key,
+           scoped_item_component.source_family_key LIKE 'correction-chain:%' AS is_correction_chain_residual,
+           SUM(ROUND(COALESCE(scoped_item_component.source_amount_ex_vat, 0), 2)) AS requested_source_amount_ex_vat,
+           MAX(
+             CASE
+               WHEN scoped_item_component.source_family_key LIKE 'correction-chain:%'
+                AND COALESCE(scoped_item_component.correction_chain_component->>'effective_source_outstanding_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                 THEN ROUND((scoped_item_component.correction_chain_component->>'effective_source_outstanding_ex_vat')::numeric, 2)
+               ELSE NULL::numeric
+             END
+           ) AS frozen_chain_outstanding_ex_vat
+    FROM scoped_item_components AS scoped_item_component
+    GROUP BY
+      scoped_item_component.timesheet_id,
+      scoped_item_component.key_type,
+      scoped_item_component.key_value,
+      scoped_item_component.source_family_key
   ), timesheet_ids AS (
     SELECT COALESCE(array_agg(DISTINCT scoped_component_rows.timesheet_id), ARRAY[]::uuid[]) AS timesheet_id_array
     FROM scoped_components AS scoped_component_rows
+    WHERE scoped_component_rows.is_correction_chain_residual IS NOT TRUE
   ), outstanding_components AS (
     SELECT outstanding_component.timesheet_id,
            UPPER(BTRIM(COALESCE(outstanding_component.key_type, ''))) AS key_type,
@@ -46161,19 +46324,33 @@ BEGIN
     SELECT scoped_component_rows.timesheet_id,
            scoped_component_rows.key_type,
            scoped_component_rows.key_value,
+           scoped_component_rows.source_family_key,
+           scoped_component_rows.is_correction_chain_residual,
            ROUND(scoped_component_rows.requested_source_amount_ex_vat, 2) AS requested_source_amount_ex_vat,
-           ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) AS outstanding_ex_vat
+           CASE
+             WHEN scoped_component_rows.is_correction_chain_residual
+               THEN ROUND(COALESCE(scoped_component_rows.frozen_chain_outstanding_ex_vat, 0), 2)
+             ELSE ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2)
+           END AS outstanding_ex_vat,
+           CASE
+             WHEN scoped_component_rows.is_correction_chain_residual
+               THEN 'FROZEN_CORRECTION_CHAIN_RESIDUAL'
+             ELSE 'LIVE_PRE_DRAFT_OUTSTANDING'
+           END AS outstanding_evidence_source
     FROM scoped_components AS scoped_component_rows
     LEFT JOIN outstanding_components AS outstanding_component_rows
-      ON outstanding_component_rows.timesheet_id = scoped_component_rows.timesheet_id
+      ON scoped_component_rows.is_correction_chain_residual IS NOT TRUE
+     AND outstanding_component_rows.timesheet_id = scoped_component_rows.timesheet_id
      AND outstanding_component_rows.key_type = scoped_component_rows.key_type
      AND outstanding_component_rows.key_value = scoped_component_rows.key_value
   ), overruns AS (
     SELECT joined_component_rows.timesheet_id,
            joined_component_rows.key_type,
            joined_component_rows.key_value,
+           joined_component_rows.source_family_key,
            joined_component_rows.requested_source_amount_ex_vat,
-           joined_component_rows.outstanding_ex_vat
+           joined_component_rows.outstanding_ex_vat,
+           joined_component_rows.outstanding_evidence_source
     FROM joined_components AS joined_component_rows
     WHERE joined_component_rows.requested_source_amount_ex_vat > joined_component_rows.outstanding_ex_vat + 0.01
   )
@@ -46184,8 +46361,10 @@ BEGIN
                         'timesheet_id', overrun_sample_rows.timesheet_id::text,
                         'key_type', overrun_sample_rows.key_type,
                         'key_value', overrun_sample_rows.key_value,
+                        'source_family_key', overrun_sample_rows.source_family_key,
                         'requested_source_amount_ex_vat', overrun_sample_rows.requested_source_amount_ex_vat,
-                        'outstanding_ex_vat', overrun_sample_rows.outstanding_ex_vat
+                        'outstanding_ex_vat', overrun_sample_rows.outstanding_ex_vat,
+                        'outstanding_evidence_source', overrun_sample_rows.outstanding_evidence_source
                       )
                       ORDER BY overrun_sample_rows.timesheet_id::text,
                                overrun_sample_rows.key_type,
@@ -73550,6 +73729,11 @@ begin
         pbec.pay_batch_item_id,
         pbec.timesheet_id,
         upper(nullif(btrim(coalesce(pbec.item_type, '')), '')) as item_type,
+        nullif(btrim(coalesce(
+          pbi_this_fresh.frozen_source_basis_json->>'source_family_key',
+          pbi_this_fresh.frozen_component_snapshot_json->>'source_family_key',
+          ''
+        )), '') as source_family_key,
         upper(nullif(btrim(coalesce(pbec.key_type, '')), '')) as key_type,
         nullif(btrim(coalesce(pbec.key_value, '')), '') as key_value,
         pbec.source_amount_ex_vat as source_amount_ex_vat_raw,
@@ -73573,6 +73757,14 @@ begin
             and ppc_this_fresh_exclusion.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
         )
         and upper(nullif(btrim(coalesce(pbec.item_type, '')), '')) in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+        and coalesce(
+          nullif(btrim(coalesce(
+            pbi_this_fresh.frozen_source_basis_json->>'source_family_key',
+            pbi_this_fresh.frozen_component_snapshot_json->>'source_family_key',
+            ''
+          )), ''),
+          ''
+        ) not like 'correction-chain:%'
     ),
     this_component_resolution_failures as (
       select
@@ -73661,6 +73853,186 @@ begin
         upper(nullif(btrim(coalesce(rc.key_type, '')), '')),
         nullif(btrim(coalesce(rc.key_value, '')), '')
     ),
+    correction_chain_items as (
+      select distinct on (
+        correction_item.source_family_key,
+        correction_item.candidate_id,
+        correction_item.target_pay_method
+      )
+        correction_item.pay_batch_item_id,
+        correction_item.timesheet_id,
+        correction_item.candidate_id,
+        correction_item.source_family_key,
+        correction_item.target_pay_method,
+        correction_item.correction_chain_residual
+      from (
+        select
+          correction_batch_item.id as pay_batch_item_id,
+          coalesce(
+            case
+              when coalesce(
+                correction_batch_item.frozen_source_basis_json->>'source_family_key',
+                correction_batch_item.frozen_component_snapshot_json->>'source_family_key',
+                ''
+              ) ~ '^correction-chain:[0-9a-fA-F-]{36}$'
+                then replace(
+                  coalesce(
+                    correction_batch_item.frozen_source_basis_json->>'source_family_key',
+                    correction_batch_item.frozen_component_snapshot_json->>'source_family_key'
+                  ),
+                  'correction-chain:',
+                  ''
+                )::uuid
+              else null::uuid
+            end,
+            correction_batch_item.timesheet_id
+          ) as timesheet_id,
+          correction_batch_candidate.candidate_id,
+          nullif(btrim(coalesce(
+            correction_batch_item.frozen_source_basis_json->>'source_family_key',
+            correction_batch_item.frozen_component_snapshot_json->>'source_family_key',
+            ''
+          )), '') as source_family_key,
+          upper(nullif(btrim(coalesce(
+            correction_batch_item.frozen_target_pay_method,
+            correction_batch_item.pay_channel,
+            ''
+          )), '')) as target_pay_method,
+          coalesce(
+            correction_batch_item.frozen_source_basis_json->'correction_chain_residual',
+            correction_batch_item.frozen_component_snapshot_json->'correction_chain_residual'
+          ) as correction_chain_residual
+        from public.pay_batch_items as correction_batch_item
+        join public.pay_batch_candidates as correction_batch_candidate
+          on correction_batch_candidate.id = correction_batch_item.pay_batch_candidate_id
+        where correction_batch_candidate.pay_batch_id = p_pay_batch_id
+          and coalesce(correction_batch_item.is_voided, false) = false
+          and coalesce(
+            nullif(btrim(coalesce(
+              correction_batch_item.frozen_source_basis_json->>'source_family_key',
+              correction_batch_item.frozen_component_snapshot_json->>'source_family_key',
+              ''
+            )), ''),
+            ''
+          ) like 'correction-chain:%'
+          and not exists (
+            select 1
+            from public.pay_payment_correction_items as correction_item_exclusion
+            where correction_item_exclusion.pay_batch_item_id = correction_batch_item.id
+              and correction_item_exclusion.status = 'APPLIED'
+              and correction_item_exclusion.correction_item_kind in (
+                'PRE_BANK_CANCEL',
+                'NO_MONEY_UNWIND',
+                'SETTLED_REVERSAL'
+              )
+          )
+      ) as correction_item
+      where correction_item.timesheet_id is not null
+        and correction_item.candidate_id is not null
+        and correction_item.target_pay_method in ('PAYE', 'UMBRELLA')
+        and jsonb_typeof(correction_item.correction_chain_residual) = 'object'
+      order by
+        correction_item.source_family_key,
+        correction_item.candidate_id,
+        correction_item.target_pay_method,
+        correction_item.pay_batch_item_id
+    ),
+    correction_chain_live as (
+      select
+        correction_chain_item.pay_batch_item_id,
+        correction_chain_item.timesheet_id,
+        correction_chain_item.candidate_id,
+        correction_chain_item.source_family_key,
+        correction_chain_item.target_pay_method,
+        correction_chain_item.correction_chain_residual as frozen_residual,
+        public.pay_correction_chain_residual_v1(
+          correction_chain_item.timesheet_id,
+          correction_chain_item.candidate_id,
+          correction_chain_item.target_pay_method,
+          null::uuid,
+          p_pay_batch_id,
+          100
+        ) as live_residual
+      from correction_chain_items as correction_chain_item
+    ),
+    correction_chain_expected_components as (
+      select
+        correction_chain_live_row.timesheet_id,
+        correction_chain_live_row.source_family_key,
+        upper(nullif(btrim(frozen_component.component_json->>'component_key_type'), '')) as key_type,
+        nullif(btrim(frozen_component.component_json->>'component_key_value'), '') as key_value,
+        case
+          when coalesce(
+            frozen_component.component_json->>'effective_source_outstanding_ex_vat',
+            ''
+          ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+            then round(
+              (frozen_component.component_json->>'effective_source_outstanding_ex_vat')::numeric,
+              2
+            )::numeric(12,2)
+          else null::numeric(12,2)
+        end as expected_ex
+      from correction_chain_live as correction_chain_live_row
+      cross join lateral jsonb_array_elements(
+        case
+          when jsonb_typeof(correction_chain_live_row.frozen_residual->'components') = 'array'
+            then correction_chain_live_row.frozen_residual->'components'
+          else '[]'::jsonb
+        end
+      ) as frozen_component(component_json)
+    ),
+    correction_chain_actual_components as (
+      select
+        correction_chain_live_row.timesheet_id,
+        correction_chain_live_row.source_family_key,
+        upper(nullif(btrim(live_component.component_json->>'component_key_type'), '')) as key_type,
+        nullif(btrim(live_component.component_json->>'component_key_value'), '') as key_value,
+        case
+          when coalesce(
+            live_component.component_json->>'effective_source_outstanding_ex_vat',
+            ''
+          ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+            then round(
+              (live_component.component_json->>'effective_source_outstanding_ex_vat')::numeric,
+              2
+            )::numeric(12,2)
+          else null::numeric(12,2)
+        end as actual_ex
+      from correction_chain_live as correction_chain_live_row
+      cross join lateral jsonb_array_elements(
+        case
+          when jsonb_typeof(correction_chain_live_row.live_residual->'components') = 'array'
+            then correction_chain_live_row.live_residual->'components'
+          else '[]'::jsonb
+        end
+      ) as live_component(component_json)
+    ),
+    correction_chain_mismatches as (
+      select
+        coalesce(expected_component.timesheet_id, actual_component.timesheet_id) as timesheet_id,
+        coalesce(expected_component.key_type, actual_component.key_type, 'CORRECTION_CHAIN') as key_type,
+        coalesce(
+          expected_component.key_value,
+          actual_component.key_value,
+          expected_component.source_family_key,
+          actual_component.source_family_key,
+          'UNKNOWN'
+        ) as key_value,
+        expected_component.expected_ex,
+        actual_component.actual_ex,
+        2 as ord
+      from correction_chain_expected_components as expected_component
+      full join correction_chain_actual_components as actual_component
+        on actual_component.source_family_key = expected_component.source_family_key
+       and actual_component.key_type = expected_component.key_type
+       and actual_component.key_value = expected_component.key_value
+      where expected_component.expected_ex is null
+         or actual_component.actual_ex is null
+         or abs(
+           round(coalesce(actual_component.actual_ex, 0), 2)
+           - round(coalesce(expected_component.expected_ex, 0), 2)
+         ) > 0.01
+    ),
     reservation_comparison as (
       select
         tc.timesheet_id,
@@ -73716,7 +74088,18 @@ begin
       rm.expected_ex,
       rm.actual_ex,
       rm.ord
-    from reservation_mismatches as rm;
+    from reservation_mismatches as rm
+
+    union all
+
+    select
+      ccm.timesheet_id,
+      ccm.key_type,
+      ccm.key_value,
+      ccm.expected_ex,
+      ccm.actual_ex,
+      ccm.ord
+    from correction_chain_mismatches as ccm;
   end if;
 
   select count(*)::int
@@ -161970,6 +162353,8 @@ BEGIN
           WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_candidate_line_work.status, ''))) = 'SKIPPED' THEN
             CASE
               WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_candidate_line_work.result_row_json->>'source_kind', ''))) = 'RETIRED_PREVIEW_LINE'
+                OR public.banking_pay_workbench_candidate_line_work.work_payload_json IS DISTINCT FROM EXCLUDED.work_payload_json
+                OR public.banking_pay_workbench_candidate_line_work.result_row_json IS NULL
                 THEN EXCLUDED.status
               ELSE public.banking_pay_workbench_candidate_line_work.status
             END
@@ -161982,6 +162367,8 @@ BEGIN
           WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_candidate_line_work.status, ''))) = 'SKIPPED' THEN
             CASE
               WHEN UPPER(BTRIM(COALESCE(public.banking_pay_workbench_candidate_line_work.result_row_json->>'source_kind', ''))) = 'RETIRED_PREVIEW_LINE'
+                OR public.banking_pay_workbench_candidate_line_work.work_payload_json IS DISTINCT FROM EXCLUDED.work_payload_json
+                OR public.banking_pay_workbench_candidate_line_work.result_row_json IS NULL
                 THEN NULL::jsonb
               ELSE public.banking_pay_workbench_candidate_line_work.result_row_json
             END
@@ -163208,6 +163595,10 @@ DECLARE
   v_explicit_selected_preview_row_ids jsonb := '[]'::jsonb;
   v_reconciled_selected_preview_row_ids jsonb := '[]'::jsonb;
   v_reconciled_selected_row_count integer := 0;
+  v_candidate_state_candidate_id uuid := NULL::uuid;
+  v_candidate_state_source_change_seq bigint := 0;
+  v_candidate_state_result jsonb := '{}'::jsonb;
+  v_candidate_state_update_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -164555,6 +164946,135 @@ BEGIN
   WHERE scope_row.session_id = p_session_id
     AND scope_row.candidate_id = scope_delta.candidate_id;
 
+  /* Materialisation is the final full-refresh evidence boundary.  Publish the
+     row-backed candidate state here so a completed source/line/preview job
+     chain cannot leave the workbench reading an older READY snapshot. */
+  IF to_regprocedure(
+       'public.pay_workbench_delta_update_candidate_state_v1(uuid,uuid,uuid,jsonb)'
+     ) IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_STATE_PUBLISHER_UNAVAILABLE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_CANDIDATE_STATE_PUBLISHER_UNAVAILABLE',
+              'session_id', p_session_id::text
+            )::text;
+  END IF;
+
+  FOR v_candidate_state_candidate_id IN
+    SELECT scope_delta.candidate_id
+    FROM pg_temp._tmp_pay_wb_materialise_scope_delta AS scope_delta
+    WHERE scope_delta.new_status = 'MATERIALISED'
+    ORDER BY scope_delta.candidate_id
+    LIMIT 100
+  LOOP
+    SELECT GREATEST(
+             COALESCE((
+               SELECT MAX(source_line.source_change_seq)
+               FROM public.banking_pay_workbench_candidate_source_lines
+                 AS source_line
+               WHERE source_line.session_id = p_session_id
+                 AND source_line.candidate_id =
+                     v_candidate_state_candidate_id
+                 AND source_line.session_version =
+                     COALESCE(v_session_row.version, 1)
+                 AND UPPER(BTRIM(COALESCE(
+                       source_line.status,
+                       ''
+                     ))) = 'CURRENT'
+             ), 0),
+             COALESCE((
+               SELECT MAX(
+                 CASE
+                   WHEN COALESCE(
+                          source_job.payload_json->>'source_change_seq',
+                          source_job.payload_json->>
+                            'source_change_sequence',
+                          source_job.payload_json->
+                            'result_json'->>'source_change_seq',
+                          ''
+                        ) ~ '^[0-9]{1,18}$'
+                     THEN COALESCE(
+                            source_job.payload_json->
+                              'result_json'->>'source_change_seq',
+                            source_job.payload_json->
+                              'result_json'->>'source_change_sequence',
+                            source_job.payload_json->
+                              'completion_json'->>'source_change_seq',
+                            source_job.payload_json->
+                              'completion_json'->>'source_change_sequence',
+                            source_job.payload_json->>
+                              'source_change_seq',
+                            source_job.payload_json->>
+                              'source_change_sequence'
+                          )::bigint
+                   ELSE 0::bigint
+                 END
+               )
+               FROM public.banking_pay_workbench_jobs AS source_job
+               WHERE source_job.session_id = p_session_id
+                 AND source_job.candidate_id =
+                     v_candidate_state_candidate_id
+                 AND UPPER(BTRIM(COALESCE(
+                       source_job.status,
+                       ''
+                     ))) = 'SUCCEEDED'
+                 AND UPPER(BTRIM(COALESCE(
+                       source_job.job_type,
+                       ''
+                     ))) IN (
+                       'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+                       'CANDIDATE_SOURCE_BUILD'
+                     )
+             ), 0)
+           )
+    INTO v_candidate_state_source_change_seq;
+
+    EXECUTE
+      'SELECT public.pay_workbench_delta_update_candidate_state_v1($1,$2,$3,$4)'
+    INTO v_candidate_state_result
+    USING
+      p_session_id,
+      v_candidate_state_candidate_id,
+      p_session_id,
+      jsonb_build_object(
+        'context', 'DELTA_REFRESH',
+        'update_context', 'FULL_PREVIEW_MATERIALISATION',
+        'source_change_seq',
+          COALESCE(v_candidate_state_source_change_seq, 0),
+        'session_version', COALESCE(v_session_row.version, 1),
+        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+      );
+
+    IF COALESCE((v_candidate_state_result->>'ok')::boolean, false)
+         IS NOT TRUE
+       OR LOWER(BTRIM(COALESCE(
+            v_candidate_state_result->>
+              'stale_candidate_state_update_skipped',
+            'false'
+          ))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_STATE_PUBLISH_FAILED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_CANDIDATE_STATE_PUBLISH_FAILED',
+                'session_id', p_session_id::text,
+                'candidate_id',
+                  v_candidate_state_candidate_id::text,
+                'source_change_seq',
+                  COALESCE(v_candidate_state_source_change_seq, 0),
+                'publisher_status',
+                  v_candidate_state_result->>'status',
+                'publisher_reason',
+                  COALESCE(
+                    v_candidate_state_result->>'fallback_reason',
+                    v_candidate_state_result->>'stale_guard'
+                  )
+              )::text;
+    END IF;
+
+    v_candidate_state_update_count :=
+      v_candidate_state_update_count + 1;
+  END LOOP;
+
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
            'candidate_id', scope_delta.candidate_id::text,
            'old_status', scope_delta.old_status,
@@ -164698,6 +165218,8 @@ BEGIN
     ),
     'terminal_readiness_deferred', true,
     'terminal_readiness_deferred_to', 'pay_workbench_complete_job',
+    'candidate_state_update_count',
+      COALESCE(v_candidate_state_update_count, 0),
     'stable_row_ordinal_scheme', 'scope_ordinal_times_1000000_plus_line_ordinal',
     'cursor_scheme', 'last_scope_ordinal_last_line_ordinal_last_line_work_id'
   );
@@ -166225,7 +166747,7 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid, p_allow_large_full_scan boolean DEFAULT false)
+CREATE OR REPLACE FUNCTION public._pay_batch_validate_freshness_base_v1(p_pay_batch_id uuid, p_actor_user_id uuid, p_allow_large_full_scan boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -168564,6 +169086,404 @@ begin
   );
 end;
 $function$;
+
+
+REVOKE ALL ON FUNCTION public._pay_batch_validate_freshness_base_v1(
+  uuid,
+  uuid,
+  boolean
+) FROM PUBLIC, anon, authenticated, service_role;
+
+
+CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid,
+  p_allow_large_full_scan boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_base_result jsonb;
+  v_base_diff jsonb := '[]'::jsonb;
+  v_filtered_diff jsonb := '[]'::jsonb;
+  v_reasons jsonb := '[]'::jsonb;
+  v_fresh_chain_components jsonb := '[]'::jsonb;
+  v_original_key_diff_count integer := 0;
+  v_suppressed_key_diff_count integer := 0;
+  v_remaining_key_diff_count integer := 0;
+BEGIN
+  v_base_result := public._pay_batch_validate_freshness_base_v1(
+    p_pay_batch_id,
+    p_actor_user_id,
+    p_allow_large_full_scan
+  );
+
+  v_base_diff := COALESCE(v_base_result->'diff', '[]'::jsonb);
+  v_reasons := COALESCE(v_base_result->'stale_reasons', '[]'::jsonb);
+
+  /*
+   * A correction-chain item freezes its complete residual evidence when the
+   * draft is created. The base freshness validator intentionally uses the
+   * ordinary timesheet entitlement comparison for all economic rows. That
+   * ordinary comparison cannot distinguish a correction-chain residual from
+   * its root timesheet and therefore sees this batch's own reservation as a
+   * change.
+   *
+   * Reconstruct the pre-current-batch correction-chain residual through the
+   * bounded Policy X helper. Suppress only the exact base diff when every
+   * frozen component still equals the reconstructed component. Any helper
+   * error or real component change fails closed and leaves the base stale
+   * result untouched.
+   */
+  WITH correction_items AS (
+    SELECT DISTINCT ON (
+      correction_item.source_family_key,
+      correction_item.candidate_id,
+      correction_item.target_pay_method
+    )
+      correction_item.pay_batch_item_id,
+      correction_item.root_timesheet_id,
+      correction_item.candidate_id,
+      correction_item.source_family_key,
+      correction_item.target_pay_method,
+      correction_item.frozen_residual
+    FROM (
+      SELECT
+        pay_batch_item.id AS pay_batch_item_id,
+        COALESCE(
+          NULLIF(
+            COALESCE(
+              pay_batch_item.frozen_source_basis_json
+                #>> '{correction_chain_residual,root_timesheet_id}',
+              pay_batch_item.frozen_component_snapshot_json
+                #>> '{correction_chain_residual,root_timesheet_id}'
+            ),
+            ''
+          )::uuid,
+          CASE
+            WHEN COALESCE(
+              pay_batch_item.frozen_source_basis_json->>'source_family_key',
+              pay_batch_item.frozen_component_snapshot_json->>'source_family_key',
+              ''
+            ) ~ '^correction-chain:[0-9a-fA-F-]{36}$'
+              THEN replace(
+                COALESCE(
+                  pay_batch_item.frozen_source_basis_json->>'source_family_key',
+                  pay_batch_item.frozen_component_snapshot_json->>'source_family_key'
+                ),
+                'correction-chain:',
+                ''
+              )::uuid
+            ELSE pay_batch_item.timesheet_id
+          END
+        ) AS root_timesheet_id,
+        pay_batch_candidate.candidate_id,
+        NULLIF(BTRIM(COALESCE(
+          pay_batch_item.frozen_source_basis_json->>'source_family_key',
+          pay_batch_item.frozen_component_snapshot_json->>'source_family_key',
+          ''
+        )), '') AS source_family_key,
+        UPPER(NULLIF(BTRIM(COALESCE(
+          pay_batch_item.frozen_target_pay_method,
+          pay_batch_item.pay_channel,
+          pay_batch.batch_kind_fixed,
+          ''
+        )), '')) AS target_pay_method,
+        COALESCE(
+          pay_batch_item.frozen_source_basis_json->'correction_chain_residual',
+          pay_batch_item.frozen_component_snapshot_json->'correction_chain_residual'
+        ) AS frozen_residual
+      FROM public.pay_batch_items AS pay_batch_item
+      JOIN public.pay_batch_candidates AS pay_batch_candidate
+        ON pay_batch_candidate.id = pay_batch_item.pay_batch_candidate_id
+      JOIN public.pay_batches AS pay_batch
+        ON pay_batch.id = pay_batch_candidate.pay_batch_id
+      WHERE pay_batch_candidate.pay_batch_id = p_pay_batch_id
+        AND COALESCE(pay_batch_item.is_voided, false) = false
+        AND COALESCE(
+          NULLIF(BTRIM(COALESCE(
+            pay_batch_item.frozen_source_basis_json->>'source_family_key',
+            pay_batch_item.frozen_component_snapshot_json->>'source_family_key',
+            ''
+          )), ''),
+          ''
+        ) LIKE 'correction-chain:%'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.pay_payment_correction_items AS correction_item_exclusion
+          WHERE correction_item_exclusion.pay_batch_item_id = pay_batch_item.id
+            AND correction_item_exclusion.status = 'APPLIED'
+            AND correction_item_exclusion.correction_item_kind IN (
+              'PRE_BANK_CANCEL',
+              'NO_MONEY_UNWIND',
+              'SETTLED_REVERSAL'
+            )
+        )
+    ) AS correction_item
+    WHERE correction_item.root_timesheet_id IS NOT NULL
+      AND correction_item.candidate_id IS NOT NULL
+      AND correction_item.target_pay_method IN ('PAYE', 'UMBRELLA')
+      AND jsonb_typeof(correction_item.frozen_residual) = 'object'
+    ORDER BY
+      correction_item.source_family_key,
+      correction_item.candidate_id,
+      correction_item.target_pay_method,
+      correction_item.pay_batch_item_id
+  ),
+  chain_results AS (
+    SELECT
+      correction_item.*,
+      public.pay_correction_chain_residual_v1(
+        correction_item.root_timesheet_id,
+        correction_item.candidate_id,
+        correction_item.target_pay_method,
+        NULL::uuid,
+        p_pay_batch_id,
+        100
+      ) AS live_residual
+    FROM correction_items AS correction_item
+  ),
+  expected_components AS (
+    SELECT
+      chain_result.root_timesheet_id,
+      chain_result.source_family_key,
+      UPPER(NULLIF(BTRIM(component.component_json->>'component_key_type'), ''))
+        AS key_type,
+      NULLIF(BTRIM(component.component_json->>'component_key_value'), '')
+        AS key_value,
+      CASE
+        WHEN COALESCE(
+          component.component_json->>'effective_source_outstanding_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(
+            (
+              component.component_json
+                ->>'effective_source_outstanding_ex_vat'
+            )::numeric,
+            2
+          )::numeric(12,2)
+        ELSE NULL::numeric(12,2)
+      END AS amount_ex
+    FROM chain_results AS chain_result
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE
+        WHEN jsonb_typeof(chain_result.frozen_residual->'components') = 'array'
+          THEN chain_result.frozen_residual->'components'
+        ELSE '[]'::jsonb
+      END
+    ) AS component(component_json)
+  ),
+  live_components AS (
+    SELECT
+      chain_result.root_timesheet_id,
+      chain_result.source_family_key,
+      UPPER(NULLIF(BTRIM(component.component_json->>'component_key_type'), ''))
+        AS key_type,
+      NULLIF(BTRIM(component.component_json->>'component_key_value'), '')
+        AS key_value,
+      CASE
+        WHEN COALESCE(
+          component.component_json->>'effective_source_outstanding_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(
+            (
+              component.component_json
+                ->>'effective_source_outstanding_ex_vat'
+            )::numeric,
+            2
+          )::numeric(12,2)
+        ELSE NULL::numeric(12,2)
+      END AS amount_ex
+    FROM chain_results AS chain_result
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE
+        WHEN jsonb_typeof(chain_result.live_residual->'components') = 'array'
+          THEN chain_result.live_residual->'components'
+        ELSE '[]'::jsonb
+      END
+    ) AS component(component_json)
+  ),
+  chain_component_comparison AS (
+    SELECT
+      COALESCE(expected.root_timesheet_id, live.root_timesheet_id)
+        AS root_timesheet_id,
+      COALESCE(expected.source_family_key, live.source_family_key)
+        AS source_family_key,
+      COALESCE(expected.key_type, live.key_type) AS key_type,
+      COALESCE(expected.key_value, live.key_value) AS key_value,
+      expected.amount_ex AS expected_ex,
+      live.amount_ex AS actual_ex,
+      (
+        expected.amount_ex IS NOT NULL
+        AND live.amount_ex IS NOT NULL
+        AND ABS(
+          ROUND(expected.amount_ex, 2) - ROUND(live.amount_ex, 2)
+        ) <= 0.01
+      ) AS component_matches
+    FROM expected_components AS expected
+    FULL JOIN live_components AS live
+      ON live.source_family_key = expected.source_family_key
+     AND live.key_type = expected.key_type
+     AND live.key_value = expected.key_value
+  ),
+  fresh_families AS (
+    SELECT comparison.source_family_key
+    FROM chain_component_comparison AS comparison
+    GROUP BY comparison.source_family_key
+    HAVING COUNT(*) > 0
+       AND BOOL_AND(comparison.component_matches)
+  ),
+  fresh_components AS (
+    SELECT comparison.*
+    FROM chain_component_comparison AS comparison
+    JOIN fresh_families AS fresh_family
+      ON fresh_family.source_family_key = comparison.source_family_key
+  )
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'timesheet_id', fresh_component.root_timesheet_id::text,
+        'key_type', fresh_component.key_type,
+        'key_value', fresh_component.key_value,
+        'expected_ex', fresh_component.expected_ex
+      )
+      ORDER BY
+        fresh_component.root_timesheet_id,
+        fresh_component.key_type,
+        fresh_component.key_value
+    ),
+    '[]'::jsonb
+  )
+  INTO v_fresh_chain_components
+  FROM fresh_components AS fresh_component;
+
+  SELECT COALESCE(
+    MAX(
+      CASE
+        WHEN diff_row.value->>'key_type' = 'INFO'
+         AND diff_row.value->>'key_value' = 'COUNTS'
+          THEN COALESCE(
+            (diff_row.value#>>'{expected,key_diffs}')::integer,
+            0
+          )
+        ELSE NULL
+      END
+    ),
+    0
+  )
+  INTO v_original_key_diff_count
+  FROM jsonb_array_elements(v_base_diff) AS diff_row(value);
+
+  SELECT COUNT(*)::integer
+  INTO v_suppressed_key_diff_count
+  FROM jsonb_array_elements(v_base_diff) WITH ORDINALITY AS diff_row(value, ordinality)
+  WHERE EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_fresh_chain_components)
+      AS fresh_component(value)
+    WHERE fresh_component.value->>'timesheet_id'
+            = diff_row.value->>'timesheet_id'
+      AND fresh_component.value->>'key_type'
+            = diff_row.value->>'key_type'
+      AND fresh_component.value->>'key_value'
+            = diff_row.value->>'key_value'
+      AND COALESCE(diff_row.value->>'expected', '')
+            ~ '^-?[0-9]+(\.[0-9]+)?$'
+      AND ABS(
+        ROUND((diff_row.value->>'expected')::numeric, 2)
+        - ROUND((fresh_component.value->>'expected_ex')::numeric, 2)
+      ) <= 0.01
+  );
+
+  SELECT COALESCE(
+    jsonb_agg(diff_row.value ORDER BY diff_row.ordinality),
+    '[]'::jsonb
+  )
+  INTO v_filtered_diff
+  FROM jsonb_array_elements(v_base_diff) WITH ORDINALITY AS diff_row(value, ordinality)
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_fresh_chain_components)
+      AS fresh_component(value)
+    WHERE fresh_component.value->>'timesheet_id'
+            = diff_row.value->>'timesheet_id'
+      AND fresh_component.value->>'key_type'
+            = diff_row.value->>'key_type'
+      AND fresh_component.value->>'key_value'
+            = diff_row.value->>'key_value'
+      AND COALESCE(diff_row.value->>'expected', '')
+            ~ '^-?[0-9]+(\.[0-9]+)?$'
+      AND ABS(
+        ROUND((diff_row.value->>'expected')::numeric, 2)
+        - ROUND((fresh_component.value->>'expected_ex')::numeric, 2)
+      ) <= 0.01
+  );
+
+  v_remaining_key_diff_count := GREATEST(
+    v_original_key_diff_count - v_suppressed_key_diff_count,
+    0
+  );
+
+  SELECT COALESCE(
+    jsonb_agg(
+      CASE
+        WHEN diff_row.value->>'key_type' = 'INFO'
+         AND diff_row.value->>'key_value' = 'COUNTS'
+          THEN jsonb_set(
+            diff_row.value,
+            '{expected,key_diffs}',
+            to_jsonb(v_remaining_key_diff_count),
+            true
+          )
+        ELSE diff_row.value
+      END
+      ORDER BY diff_row.ordinality
+    ),
+    '[]'::jsonb
+  )
+  INTO v_filtered_diff
+  FROM jsonb_array_elements(v_filtered_diff)
+    WITH ORDINALITY AS diff_row(value, ordinality);
+
+  IF v_remaining_key_diff_count = 0 THEN
+    SELECT COALESCE(jsonb_agg(reason.value ORDER BY reason.ordinality), '[]'::jsonb)
+    INTO v_reasons
+    FROM jsonb_array_elements(v_reasons)
+      WITH ORDINALITY AS reason(value, ordinality)
+    WHERE reason.value <> to_jsonb('RESERVATION_CHANGED'::text);
+  END IF;
+
+  RETURN jsonb_build_object(
+    'is_stale', jsonb_array_length(v_reasons) > 0,
+    'stale_reasons', v_reasons,
+    'diff', v_filtered_diff
+  );
+END;
+$function$;
+
+COMMENT ON FUNCTION public.pay_batch_validate_freshness(
+  uuid,
+  uuid,
+  boolean
+) IS
+'Validates frozen Banking Pay batch freshness and uses the bounded correction-chain residual authority to exclude the current batch reservation from correction-chain comparisons.';
+
+REVOKE ALL ON FUNCTION public.pay_batch_validate_freshness(
+  uuid,
+  uuid,
+  boolean
+) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.pay_batch_validate_freshness(
+  uuid,
+  uuid,
+  boolean
+) TO service_role;
 
 
 

@@ -253,6 +253,184 @@ test('correction residual source authority excludes its own finance cases', () =
   assert.doesNotMatch(body, /\bNHSP\b|\bHR_WEEKLY\b|\bHR_DAILY\b/);
 });
 
+test('correction residual uses one signed settlement and reservation ledger across zero', () => {
+  const body = functionBody(
+    'pay_correction_chain_residual_v1',
+    null,
+    correctionResidualSql
+  );
+  const sourceStart = body.indexOf('source_basis AS (');
+  const componentStart = body.indexOf('component_result AS (', sourceStart);
+  const balancedStart = body.indexOf('component_balanced AS (', componentStart);
+  assert.ok(
+    sourceStart >= 0 && componentStart > sourceStart && balancedStart > componentStart,
+    'source-basis, component-result and balanced-component stages must exist'
+  );
+
+  const sourceBlock = body.slice(sourceStart, componentStart);
+  assert.match(sourceBlock, /'settled_recovery_ex'/);
+  assert.match(sourceBlock, /'settled_underpayment_ex'/);
+  assert.match(sourceBlock, /'reserved_recovery_ex'/);
+  assert.match(sourceBlock, /'reserved_underpayment_ex'/);
+
+  const componentBlock = body.slice(componentStart, balancedStart);
+  assert.match(
+    componentBlock,
+    /raw_component\.raw_outstanding_ex_vat\s*\+\s*raw_component\.settled_recovery_ex\s*\+\s*raw_component\.reserved_recovery_ex\s*-\s*raw_component\.settled_underpayment_ex\s*-\s*raw_component\.reserved_underpayment_ex/
+  );
+  assert.doesNotMatch(componentBlock, /LEAST\s*\(\s*0|GREATEST\s*\(\s*0/i);
+
+  const signedOutstanding = ({
+    raw = 0,
+    settledRecovery = 0,
+    reservedRecovery = 0,
+    settledUnderpayment = 0,
+    reservedUnderpayment = 0,
+  }) => Number((
+    raw
+    + settledRecovery
+    + reservedRecovery
+    - settledUnderpayment
+    - reservedUnderpayment
+  ).toFixed(2));
+
+  assert.equal(signedOutstanding({ raw: -17.39 }), -17.39);
+  assert.equal(signedOutstanding({ settledRecovery: 17.39 }), 17.39);
+  assert.equal(signedOutstanding({ settledUnderpayment: 17.39 }), -17.39);
+  assert.equal(
+    signedOutstanding({ raw: -17.39, reservedRecovery: 17.39 }),
+    0
+  );
+});
+
+test('zero-raw correction residual preserves VAT and cross-channel target authority', () => {
+  const body = functionBody(
+    'pay_correction_chain_residual_v1',
+    null,
+    correctionResidualSql
+  );
+  const balancedStart = body.indexOf('component_balanced AS (');
+  const outputStart = body.indexOf('\n  )\n  SELECT', balancedStart);
+  assert.ok(
+    balancedStart >= 0 && outputStart > balancedStart,
+    'balanced correction component stage must exist'
+  );
+  const balancedBlock = body.slice(balancedStart, outputStart);
+
+  assert.match(
+    balancedBlock,
+    /WHEN component_row\.truth_ex_vat <> 0[\s\S]*component_row\.truth_inc_vat \/ component_row\.truth_ex_vat/
+  );
+  assert.match(
+    balancedBlock,
+    /WHEN component_row\.baseline_ex_vat <> 0[\s\S]*component_row\.baseline_inc_vat \/ component_row\.baseline_ex_vat/
+  );
+  assert.match(
+    balancedBlock,
+    /WHEN component_row\.raw_outstanding_ex_vat = 0[\s\S]*sign\(component_row\.effective_outstanding_ex_vat\)[\s\S]*resolved_target_amount_ex_vat/
+  );
+});
+
+test('candidate recompute cannot reuse a READY state older than current source evidence', () => {
+  const body = functionBody(
+    'pay_workbench_session_recompute_candidate',
+    'pay_workbench_session_recompute'
+  );
+  assert.match(
+    body,
+    /banking_pay_workbench_candidate_source_lines[\s\S]*status, ''\)\)\) = 'CURRENT'/
+  );
+  assert.match(
+    body,
+    /banking_pay_workbench_jobs[\s\S]*status, ''\)\)\) = 'SUCCEEDED'[\s\S]*WORKBENCH_CANDIDATE_SOURCE_BUILD/
+  );
+  assert.match(
+    body,
+    /app_change_counters[\s\S]*'pay_candidate:' \|\| p_candidate_id::text/
+  );
+
+  const readyStart = body.indexOf(
+    "UPPER(BTRIM(COALESCE(v_candidate_state_row.status, ''))) = 'READY'"
+  );
+  const readyEnd = body.indexOf('RETURN jsonb_build_object(', readyStart);
+  assert.ok(readyStart >= 0 && readyEnd > readyStart, 'READY fast path must exist');
+  const readyGuard = body.slice(readyStart, readyEnd);
+  assert.match(
+    readyGuard,
+    /v_candidate_state_row\.source_change_seq[\s\S]*v_current_source_change_seq[\s\S]*v_live_source_change_seq/
+  );
+  assert.match(
+    readyGuard,
+    /v_current_source_change_seq[\s\S]*>= COALESCE\(v_live_source_change_seq/
+  );
+
+  const upsertStart = body.indexOf(
+    'INSERT INTO public.banking_pay_workbench_session_candidate_state'
+  );
+  const upsertBlock = body.slice(upsertStart);
+  assert.match(upsertBlock, /COALESCE\(v_current_source_change_seq, 0\)/);
+  assert.match(
+    upsertBlock,
+    /source_change_seq = EXCLUDED\.source_change_seq/
+  );
+  assert.match(
+    body,
+    /REVOKE ALL ON FUNCTION public\.pay_workbench_session_recompute_candidate\([\s\S]*FROM PUBLIC, anon, authenticated/
+  );
+  assert.match(
+    body,
+    /GRANT EXECUTE ON FUNCTION public\.pay_workbench_session_recompute_candidate\([\s\S]*TO service_role/
+  );
+});
+
+test('full preview materialisation publishes a current bounded candidate state', () => {
+  const body = functionBody(
+    'pay_workbench_preview_rows_materialise_chunk',
+    'pay_workbench_mark_finance_case_dirty'
+  );
+  const publishStart = body.indexOf(
+    'Materialisation is the final full-refresh evidence boundary'
+  );
+  const sampleStart = body.indexOf(
+    'SELECT COALESCE(jsonb_agg(jsonb_build_object(',
+    publishStart
+  );
+  assert.ok(
+    publishStart >= 0 && sampleStart > publishStart,
+    'candidate-state publication must follow materialisation and precede final reporting'
+  );
+  const publishBlock = body.slice(publishStart, sampleStart);
+
+  assert.match(
+    publishBlock,
+    /pay_workbench_delta_update_candidate_state_v1\(uuid,uuid,uuid,jsonb\)/
+  );
+  assert.match(
+    publishBlock,
+    /WHERE scope_delta\.new_status = 'MATERIALISED'[\s\S]*LIMIT 100/
+  );
+  assert.match(
+    publishBlock,
+    /banking_pay_workbench_candidate_source_lines[\s\S]*source_change_seq/
+  );
+  assert.match(
+    publishBlock,
+    /banking_pay_workbench_jobs[\s\S]*WORKBENCH_CANDIDATE_SOURCE_BUILD/
+  );
+  assert.match(
+    publishBlock,
+    /'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'/
+  );
+  assert.match(
+    publishBlock,
+    /stale_candidate_state_update_skipped[\s\S]*PAY_WORKBENCH_CANDIDATE_STATE_PUBLISH_FAILED/
+  );
+  assert.match(
+    body,
+    /'candidate_state_update_count',[\s\S]*COALESCE\(v_candidate_state_update_count, 0\)/
+  );
+});
+
 
 test('correction residual carrier replaces stale root components with the chain-wide residual', () => {
   const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
@@ -488,6 +666,87 @@ test('preview materialisation does not double-clamp correction-chain residuals t
   assert.match(body, /clamp_economic_key_to_outstanding/);
 });
 
+test('changed or incomplete source evidence requeues a previously skipped candidate line', () => {
+  assert.match(
+    sql,
+    /WHEN UPPER\(BTRIM\(COALESCE\(public\.banking_pay_workbench_candidate_line_work\.status, ''\)\)\) = 'SKIPPED' THEN[\s\S]*?work_payload_json IS DISTINCT FROM EXCLUDED\.work_payload_json[\s\S]*?result_row_json IS NULL[\s\S]*?THEN EXCLUDED\.status/,
+    'a skipped line must return to PENDING when its server-owned source evidence changes or its prior result is incomplete'
+  );
+  assert.match(
+    sql,
+    /result_row_json = CASE[\s\S]*?WHEN UPPER\(BTRIM\(COALESCE\(public\.banking_pay_workbench_candidate_line_work\.status, ''\)\)\) = 'SKIPPED' THEN[\s\S]*?work_payload_json IS DISTINCT FROM EXCLUDED\.work_payload_json[\s\S]*?result_row_json IS NULL[\s\S]*?THEN NULL::jsonb/,
+    'the stale skipped result must be cleared before the changed line is reprocessed'
+  );
+});
+
+test('draft items freeze correction-chain residual identity before reservation finalisation', () => {
+  const body = functionBody('pay_batch_insert_items_from_preview', 'pay_batch_finalize_reservations_and_markers');
+  assert.match(body, /'source_family_key', NULLIF\(BTRIM\(COALESCE\(normalised_rows\.line_json->>'source_family_key'/);
+  assert.equal(
+    (body.match(/'correction_chain_residual', CASE/g) || []).length,
+    2,
+    'both component and source-basis snapshots must freeze correction-chain residual evidence'
+  );
+  assert.match(
+    body,
+    /jsonb_typeof\(normalised_rows\.line_json->'correction_chain_residual'\) = 'object'[\s\S]*normalised_rows\.line_json->'correction_chain_residual'/
+  );
+});
+
+test('final reservation checks use frozen correction-chain residual evidence without Policy X drift', () => {
+  const marker = 'CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers';
+  const start = sql.indexOf(marker);
+  assert.ok(start >= 0, 'pay_batch_finalize_reservations_and_markers must exist');
+  const end = sql.indexOf('$function$;', start + marker.length);
+  assert.ok(end > start, 'pay_batch_finalize_reservations_and_markers must have a bounded body');
+  const body = sql.slice(start, end + '$function$;'.length);
+  assert.match(body, /MISSING_FROZEN_CORRECTION_CHAIN_RESIDUAL/);
+  assert.match(body, /MISSING_FROZEN_CORRECTION_CHAIN_COMPONENT/);
+  assert.match(body, /effective_source_outstanding_ex_vat/);
+  assert.match(body, /FROZEN_CORRECTION_CHAIN_RESIDUAL/);
+  assert.match(
+    body,
+    /WHERE scoped_component_rows\.is_correction_chain_residual IS NOT TRUE[\s\S]*public\._pay_outstanding_components/
+  );
+  assert.match(
+    body,
+    /WHEN scoped_component_rows\.is_correction_chain_residual[\s\S]*frozen_chain_outstanding_ex_vat[\s\S]*ELSE ROUND\(COALESCE\(outstanding_component_rows\.outstanding_ex_vat/
+  );
+  assert.doesNotMatch(body, /pay_correction_chain_residual_v1\s*\(/);
+  assert.doesNotMatch(body, /\bNHSP\b|\bHR_WEEKLY\b|\bHR_DAILY\b/);
+});
+
+test('batch freshness excludes its own correction-chain reservation and compares the live chain source', () => {
+  const marker = 'CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness';
+  const start = sql.lastIndexOf(marker);
+  assert.ok(start >= 0, 'the active batch freshness function must exist');
+  const end = sql.indexOf('CREATE OR REPLACE FUNCTION public.', start + marker.length);
+  const body = sql.slice(start, end > start ? end : sql.length);
+
+  assert.match(body, /_pay_batch_validate_freshness_base_v1\(/);
+  assert.match(body, /correction_items AS \(/);
+  assert.match(body, /source_family_key[\s\S]*LIKE 'correction-chain:%'/);
+  assert.match(
+    body,
+    /public\.pay_correction_chain_residual_v1\([\s\S]*p_pay_batch_id,[\s\S]*100[\s\S]*\) AS live_residual/,
+    'freshness must reconstruct live correction-chain truth while excluding this batch reservation'
+  );
+  assert.match(body, /expected_components AS \(/);
+  assert.match(body, /live_components AS \(/);
+  assert.match(body, /fresh_families AS \(/);
+  assert.match(
+    body,
+    /v_remaining_key_diff_count = 0[\s\S]*RESERVATION_CHANGED/,
+    'the ordinary false-positive reservation reason must be removed only when no real key diff remains'
+  );
+  assert.match(
+    sql,
+    /REVOKE ALL ON FUNCTION public\._pay_batch_validate_freshness_base_v1\([\s\S]*FROM PUBLIC, anon, authenticated, service_role/,
+    'the base implementation must remain owner-only'
+  );
+  assert.doesNotMatch(body, /\bNHSP\b|\bHR_WEEKLY\b|\bHR_DAILY\b/);
+});
+
 
 test('scheduled Banking Pay prerequisites and invoice-PDF queue calls fail fast when Supabase is unavailable', () => {
   const settingsStart = workerSource.indexOf('async function loadSettingsDefaults');
@@ -522,4 +781,31 @@ test('scheduled Banking Pay prerequisites and invoice-PDF queue calls fail fast 
   assert.equal((scheduledBody.match(/await getScheduledSettings\(\)/g) || []).length, 3);
   assert.equal((scheduledBody.match(/code: 'SCHEDULED_DATABASE_UNAVAILABLE'/g) || []).length, 3);
   assert.match(scheduledBody, /settings && settings\.__load_failed !== true \? settings : null/);
+});
+
+test('paged remittance rows expose server-resolved candidate, umbrella and CloudTMS user names', () => {
+  const start = workerSource.indexOf('const enrichCommunicationRecipientNames = async');
+  const end = workerSource.indexOf('const normaliseRouteToken =', start);
+  assert.ok(start >= 0 && end > start, 'bounded communication recipient enrichment must exist');
+  const body = workerSource.slice(start, end);
+
+  assert.match(body, /table: 'candidates'/);
+  assert.match(body, /table: 'umbrellas'/);
+  assert.match(body, /table: 'tms_users'/);
+  assert.match(body, /recipient_display_name: recipientDisplayName/);
+  assert.match(body, /const chunkSize = 75/);
+  assert.match(workerSource, /const payload = await enrichCommunicationRecipientNames\(section, rawPayload\)/);
+});
+
+test('successful remittance delivery wakes the Banking Pay overview and remittance lanes', () => {
+  const start = workerSource.indexOf('const markRemittanceDrainResult = async');
+  const end = workerSource.indexOf('let sentStateRetryCount = 0', start);
+  assert.ok(start >= 0 && end > start, 'remittance drain result handler must exist');
+  const body = workerSource.slice(start, end);
+
+  assert.match(body, /pay_remittance_mark_sent/);
+  assert.match(body, /touchBankingPayBatchPaymentStateChanged\(env, payBatchId/);
+  assert.match(body, /lanes: \['overview', 'remittances'\]/);
+  assert.match(body, /REMITTANCE_DELIVERY_RECORDED/);
+  assert.match(body, /PAYOUT_NOTICE_DELIVERY_RECORDED/);
 });
