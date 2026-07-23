@@ -1,16 +1,9 @@
--- CloudTMS reviewed direct replacement; review artifact only, not installed.
--- Exact TEST baseline body MD5 prefix: 812c3c45cfa6.
--- Ordinary and non-import-authoritative branches remain on the installed implementation.
-create or replace function public.invoice_apply_edits(
-  p_invoice_id uuid,
-  p_payload jsonb,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.invoice_apply_edits(p_invoice_id uuid, p_payload jsonb, p_actor_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_now timestamptz := now();
   v_anchor_ymd date := (now() at time zone 'Europe/London')::date;
@@ -159,6 +152,7 @@ v_ref_seg_cur_ref text;
   vat_amt numeric; inc_amt numeric;
   line_desc text;
   v_source_key text;
+  v_exact_timesheet_document_r2_key text;
 
   -- daily aggregation record
   r_day record;
@@ -192,7 +186,22 @@ v_ref_seg_cur_ref text;
   v_hdr_meta_segment_count int := 0;
 
   v_manifest jsonb;
+  v_service boolean:=coalesce(auth.role(),'')='service_role';
+  v_actor_role text;
 begin
+
+  if not v_service
+     and(auth.uid() is null or auth.uid() is distinct from p_actor_user_id) then
+    raise exception using errcode='42501',
+      message='AUTHENTICATED_ACTOR_MISMATCH';
+  end if;
+  select lower(btrim(coalesce(u.role,''))) into v_actor_role
+  from public.tms_users u
+  where u.id=p_actor_user_id and u.is_active;
+  if(not found or v_actor_role<>'admin') and not v_service then
+    raise exception using errcode='42501',
+      message='INVOICE_ADMINISTRATOR_PERMISSION_REQUIRED';
+  end if;
 
   perform public._ctms_assert_invoice_mutable_draft_v1(
     p_invoice_id,'INVOICE_APPLY_EDITS',true
@@ -972,7 +981,8 @@ if v_has_seg_ops then
         where tf.id = v_tsfin_id
           and tf.is_current = true
           and tf.client_id = v_inv.client_id
-          and upper(coalesce(pcv.precheck_status,'')) = 'OK'
+          and upper(coalesce(pcv.precheck_status,''))
+            in ('OK','BLOCK_NO_PDF')
         limit 1;
 
         if not found then
@@ -1116,6 +1126,23 @@ if v_has_seg_ops then
         v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object('step','add_timesheet_loaded','timesheet_id',tsid::text,'tsfin_id',snap.id::text));
       end if;
 
+      select v.r2_key
+      into v_exact_timesheet_document_r2_key
+      from public.timesheets t
+      join public.invoice_document_versions v
+        on v.entity_type='TIMESHEET'
+       and v.entity_id=t.timesheet_id
+       and v.purpose='TIMESHEET'
+       and v.source_revision=t.document_revision::text
+       and v.status='READY'
+       and nullif(v.r2_key,'') is not null
+       and nullif(v.sha256,'') is not null
+       and coalesce(v.size_bytes,0)>0
+       and coalesce(v.page_count,0)>0
+      where t.timesheet_id=tsid and t.is_current
+      order by v.ready_at_utc desc nulls last,v.id desc
+      limit 1;
+
 
       contract_id := snap.contract_id;
       c_daily_calc := false;
@@ -1258,7 +1285,7 @@ end if;
               null,null,null,null,null,
               pay_ex, chg_ex, margin_ex,
               v_vat_rate, vat_amt, inc_amt,
-              ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+              v_exact_timesheet_document_r2_key,
               v_meta,
               v_source_key
             )
@@ -1311,7 +1338,7 @@ end if;
     null,null,null,null,null,
     pay_ex, chg_ex, margin_ex,
     v_vat_rate, vat_amt, inc_amt,
-    ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+    v_exact_timesheet_document_r2_key,
     v_meta,
     v_source_key
   )
@@ -1432,7 +1459,8 @@ end if;
         and tf.is_current = true
         and tf.locked_by_invoice_id is null
         and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-        and upper(coalesce(pcv.precheck_status,'')) = 'OK'
+        and upper(coalesce(pcv.precheck_status,''))
+          in ('OK','BLOCK_NO_PDF')
         and tf.client_id = v_inv.client_id
         and (
           pcv.require_reference_to_invoice is not true
@@ -1581,22 +1609,14 @@ end if;
     v_hdr_meta_segment_count := coalesce(v_hdr_meta_timesheet_count,0);
   end if;
 
-  -- Ensure render cache invalidated (generated timestamp cleared as well) and persist refreshed meta counters
+  -- The statement triggers are the sole document/issue invalidation authority.
+  -- This update changes only the authoritative business snapshot counters.
   update public.invoices invu
-  set
-    invoice_pdf_generated_at_utc = null,
-    header_snapshot_json = jsonb_set(
-      jsonb_set(
-        coalesce(invu.header_snapshot_json,'{}'::jsonb),
-        '{meta,timesheet_count}',
-        to_jsonb(v_hdr_meta_timesheet_count),
-        true
-      ),
-      '{meta,segment_count}',
-      to_jsonb(v_hdr_meta_segment_count),
-      true
-    )
-  where invu.id = p_invoice_id;
+  set header_snapshot_json=jsonb_set(jsonb_set(coalesce(invu.header_snapshot_json,'{}'::jsonb),
+      '{meta,timesheet_count}',to_jsonb(v_hdr_meta_timesheet_count),true),
+      '{meta,segment_count}',to_jsonb(v_hdr_meta_segment_count),true),
+    updated_at=now()
+  where invu.id=p_invoice_id;
 -- Refresh invoice-level NHSP/HR cache after timesheet/segment changes
   if coalesce(v_refresh_hr_cache,false) = true then
     perform 1
@@ -1604,9 +1624,14 @@ end if;
     limit 1;
   end if;
 
--- Return updated manifest
-  select public.invoice_render_manifest(p_invoice_id) into v_manifest;
-  v_manifest := coalesce(v_manifest, '{}'::jsonb);
+-- Return compact state only; never build a manifest or PDF here.
+  select jsonb_build_object('invoice_id',i.id,'status',i.status,
+    'subtotal_ex_vat',i.subtotal_ex_vat,'vat_amount',i.vat_amount,'total_inc_vat',i.total_inc_vat,
+    'document_revision',i.document_revision,'document_state',i.document_state,
+    'preview_document_version_id',i.preview_document_version_id,
+    'active_document_operation_id',i.active_document_operation_id,
+    'issue_state',i.issue_state,'active_issue_operation_id',i.active_issue_operation_id)
+  into v_manifest from public.invoices i where i.id=p_invoice_id;
 
   if v_invoice_debug then
     begin
@@ -1689,4 +1714,8 @@ exception when others then
 
   raise;
 end;
-$$;
+$function$;
+
+revoke all on function public.invoice_apply_edits(uuid,jsonb,uuid)
+  from public,anon,authenticated;
+grant execute on function public.invoice_apply_edits(uuid,jsonb,uuid) to authenticated,service_role;

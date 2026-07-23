@@ -1,0 +1,93 @@
+create or replace function public.email_outbox_claim_ready_batch(
+  p_limit integer,
+  p_attempt_lease_token text,
+  p_lease_minutes integer default 5
+) returns setof public.mail_outbox
+language plpgsql
+security invoker
+set search_path to 'public','pg_temp'
+as $function$
+declare
+  v_now timestamptz:=now();
+  v_limit integer:=greatest(0,least(coalesce(p_limit,0),500));
+  v_lease integer:=greatest(1,least(coalesce(p_lease_minutes,5),30));
+begin
+  if coalesce(btrim(p_attempt_lease_token),'')='' then raise exception 'attempt_lease_token is required'; end if;
+  if v_limit=0 then return; end if;
+
+  return query
+  with picked as materialized (
+    select mo.id
+    from public.mail_outbox mo
+    where mo.status='QUEUED' and mo.sent_at is null and mo.delivered_at is null and mo.read_at is null
+      and coalesce(mo.next_attempt_at_utc,mo.scheduled_for_utc,mo.created_at_utc)<=v_now
+      and (mo.attempt_lease_token is null or mo.attempt_lease_expires_at_utc is null
+        or mo.attempt_lease_expires_at_utc<=v_now)
+      and (
+        upper(coalesce(mo.type,''))<>'INVOICE'
+        or (
+          mo.attachments_ready=true and mo.waiting_invoice_operation_id is null
+          and jsonb_typeof(mo.attachments)='array' and jsonb_array_length(mo.attachments)>0
+          and not exists (
+            select 1 from jsonb_array_elements(mo.attachments) a
+            left join lateral (
+              select
+                case when coalesce(a->>'document_version_id','') ~*
+                  '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+                  then(a->>'document_version_id')::uuid end document_version_id,
+                case when coalesce(a->>'invoice_id','') ~*
+                  '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+                  then(a->>'invoice_id')::uuid end invoice_id,
+                case when coalesce(a->>'size_bytes','') ~ '^[0-9]{1,18}$'
+                  then(a->>'size_bytes')::bigint end size_bytes,
+                case when coalesce(a->>'page_count','') ~ '^[0-9]{1,9}$'
+                  then(a->>'page_count')::integer end page_count,
+                upper(coalesce(nullif(a->>'delivery_mode',''),
+                  'ATTACHMENT')) delivery_mode,
+                lower(coalesce(a->>'secure_link_required','false'))
+                  in('true','t','1','yes') secure_link_required
+            ) parsed on true
+            left join public.invoice_document_versions v
+              on v.id=parsed.document_version_id
+            left join public.invoices i on i.id=parsed.invoice_id
+            where parsed.document_version_id is null or parsed.invoice_id is null
+              or parsed.delivery_mode not in('ATTACHMENT','SECURE_LINK')
+              or nullif(a->>'sha256','') is null
+              or nullif(a->>'filename','') is null
+              or coalesce(parsed.size_bytes,0)<=0 or coalesce(parsed.page_count,0)<=0
+              or v.id is null or v.status<>'READY' or v.superseded_at_utc is not null
+              or v.purpose<>'FINAL_ISSUE' or v.entity_type<>'INVOICE'
+              or v.entity_id is distinct from parsed.invoice_id
+              or i.id is null or i.status<>'ISSUED'
+              or i.issued_document_version_id is distinct from v.id
+              or v.sha256 is distinct from a->>'sha256'
+              or v.size_bytes is distinct from parsed.size_bytes
+              or v.page_count is distinct from parsed.page_count
+              or(parsed.delivery_mode='ATTACHMENT' and(
+                nullif(a->>'r2_key','') is null
+                or nullif(a->>'mime_type','') is null
+                or v.r2_key is distinct from a->>'r2_key'))
+              or(parsed.delivery_mode='SECURE_LINK' and(
+                parsed.secure_link_required is not true
+                or nullif(a->>'r2_key','') is not null))
+          )
+        )
+      )
+    order by coalesce(mo.next_attempt_at_utc,mo.scheduled_for_utc,mo.created_at_utc),
+      mo.created_at_utc,mo.id
+    for update skip locked limit v_limit
+  ),
+  updated as (
+    update public.mail_outbox mo set attempt_lease_token=p_attempt_lease_token,
+      attempt_leased_at_utc=v_now,attempt_lease_expires_at_utc=v_now+make_interval(mins=>v_lease)
+    from picked p where mo.id=p.id returning mo.*
+  )
+  select u.* from updated u
+  order by coalesce(u.next_attempt_at_utc,u.scheduled_for_utc,u.created_at_utc),u.created_at_utc,u.id;
+end;
+$function$;
+
+revoke all on function public.email_outbox_claim_ready_batch(integer,text,integer)
+  from public,anon,authenticated;
+grant execute on function public.email_outbox_claim_ready_batch(integer,text,integer)
+  to service_role;
