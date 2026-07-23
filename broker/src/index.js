@@ -149268,7 +149268,7 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
       String(scope.candidate_current_method || '').trim().toUpperCase() !== originalMethod ||
       String(scope.source_method || '').trim().toUpperCase() !== originalMethod ||
       String(scope.target_method || '').trim().toUpperCase() !== newMethod ||
-      String(scope.coverage_basis || '').trim().toUpperCase() !== 'CANONICAL_CURRENT_TIMESHEETS' ||
+      String(scope.coverage_basis || '').trim().toUpperCase() !== 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY' ||
       scope.coverage_complete !== true ||
       scope.exact_scope !== true
     ) {
@@ -149278,6 +149278,10 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
     const targetedTimesheetIds = canonicalUuidArray(scope.targeted_timesheet_ids, 'targeted_timesheet_ids');
     const authorisedTimesheetIds = canonicalUuidArray(scope.authorised_timesheet_ids, 'authorised_timesheet_ids');
     const activeAdvanceTimesheetIds = canonicalUuidArray(scope.active_advance_timesheet_ids, 'active_advance_timesheet_ids');
+    const retainedFinanceTimesheetIds = canonicalUuidArray(
+      scope.retained_finance_timesheet_ids,
+      'retained_finance_timesheet_ids'
+    );
     const representedTimesheetIds = canonicalUuidArray(scope.represented_timesheet_ids, 'represented_timesheet_ids');
     const replacedSourceSessionIds = canonicalUuidArray(
       scope.replaced_source_session_ids,
@@ -149286,11 +149290,12 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
     );
     const expectedTargetIds = Array.from(new Set([
       ...authorisedTimesheetIds,
-      ...activeAdvanceTimesheetIds
+      ...activeAdvanceTimesheetIds,
+      ...retainedFinanceTimesheetIds
     ])).sort();
 
     if (!arraysEqual(targetedTimesheetIds, expectedTargetIds)) {
-      invalidScope('Pay-method preview target set does not equal the canonical authorised-or-active-Advance set.', {
+      invalidScope('Pay-method preview target set does not equal the canonical authorised, active-Advance or retained-finance set.', {
         targeted_timesheet_ids: targetedTimesheetIds,
         expected_timesheet_ids: expectedTargetIds
       });
@@ -149308,6 +149313,10 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
     const representedTimesheetCount = nonNegativeInteger(scope.represented_timesheet_count ?? 0, 'represented_timesheet_count');
     const authorisedTimesheetCount = nonNegativeInteger(scope.authorised_timesheet_count ?? 0, 'authorised_timesheet_count');
     const activeAdvanceTimesheetCount = nonNegativeInteger(scope.active_advance_timesheet_count ?? 0, 'active_advance_timesheet_count');
+    const retainedFinanceTimesheetCount = nonNegativeInteger(
+      scope.retained_finance_timesheet_count ?? 0,
+      'retained_finance_timesheet_count'
+    );
     const targetedTimesheetCount = nonNegativeInteger(scope.targeted_timesheet_count ?? 0, 'targeted_timesheet_count');
     const sourceTargetMismatchCount = nonNegativeInteger(scope.source_target_mismatch_count ?? 0, 'source_target_mismatch_count');
 
@@ -149315,6 +149324,7 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
       representedTimesheetCount !== representedTimesheetIds.length ||
       authorisedTimesheetCount !== authorisedTimesheetIds.length ||
       activeAdvanceTimesheetCount !== activeAdvanceTimesheetIds.length ||
+      retainedFinanceTimesheetCount !== retainedFinanceTimesheetIds.length ||
       targetedTimesheetCount !== targetedTimesheetIds.length ||
       sourceTargetMismatchCount > targetedTimesheetIds.length ||
       Boolean(scope.targeted_scope_is_empty) !== (targetedTimesheetIds.length === 0)
@@ -149393,7 +149403,7 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
         : {},
       can_apply: blockers.length === 0,
       blockers,
-      coverage_basis: 'CANONICAL_CURRENT_TIMESHEETS',
+      coverage_basis: 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY',
       coverage_complete: true,
       exact_scope: true,
       authoritative_sessions: authoritativeSessions,
@@ -149405,6 +149415,8 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
       authorised_timesheet_count: authorisedTimesheetCount,
       active_advance_timesheet_ids: activeAdvanceTimesheetIds,
       active_advance_timesheet_count: activeAdvanceTimesheetCount,
+      retained_finance_timesheet_ids: retainedFinanceTimesheetIds,
+      retained_finance_timesheet_count: retainedFinanceTimesheetCount,
       targeted_timesheet_ids: targetedTimesheetIds,
       canonical_qualifying_timesheet_ids: targetedTimesheetIds,
       targeted_timesheet_count: targetedTimesheetCount,
@@ -149542,7 +149554,15 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
     const extraIds = canonicalUuidArray(result.extra_targeted_timesheet_ids, 'extra_targeted_timesheet_ids');
     const authorisedIds = canonicalUuidArray(result.authorised_timesheet_ids, 'authorised_timesheet_ids');
     const activeAdvanceIds = canonicalUuidArray(result.active_advance_timesheet_ids, 'active_advance_timesheet_ids');
-    const canonicalQualifyingIds = Array.from(new Set([...authorisedIds, ...activeAdvanceIds])).sort();
+    const retainedFinanceIds = canonicalUuidArray(
+      result.retained_finance_timesheet_ids,
+      'retained_finance_timesheet_ids'
+    );
+    const canonicalQualifyingIds = Array.from(new Set([
+      ...authorisedIds,
+      ...activeAdvanceIds,
+      ...retainedFinanceIds
+    ])).sort();
     const targetedCount = nonNegativeInteger(result.targeted_timesheet_count, 'targeted_timesheet_count');
     const effectiveDuplicateCount = nonNegativeInteger(result.effective_duplicate_count, 'effective_duplicate_count');
     const invalidTargetCount = nonNegativeInteger(result.invalid_target_count, 'invalid_target_count');
@@ -149558,7 +149578,7 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
     if (
       !uuidRe.test(jobId) ||
       !(superseded ? supersededJobStatuses : currentJobStatuses).has(jobStatus) ||
-      String(result.coverage_basis || '').trim().toUpperCase() !== 'CANONICAL_CURRENT_TIMESHEETS' ||
+      String(result.coverage_basis || '').trim().toUpperCase() !== 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY' ||
       result.coverage_complete !== true ||
       result.exact_target_scope !== true ||
       result.exact_set_equality !== true ||
@@ -149591,6 +149611,7 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
       persisted_targeted_timesheet_ids: persistedIds,
       authorised_timesheet_ids: authorisedIds,
       active_advance_timesheet_ids: activeAdvanceIds,
+      retained_finance_timesheet_ids: retainedFinanceIds,
       source_change_seq: sourceChangeSeq,
       preview_source_change_seq: resultPreviewSourceChangeSeq,
       refresh_completed: refreshCompleted

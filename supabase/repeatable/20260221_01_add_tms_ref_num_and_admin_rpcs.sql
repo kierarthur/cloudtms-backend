@@ -500,6 +500,13 @@ BEGIN
         'effective_duplicate_count', v_effective_duplicate_count,
         'invalid_target_count', v_enqueued_invalid_count,
         'exact_set_equality', true,
+        'coverage_basis', COALESCE(
+          NULLIF(v_job_payload->>'coverage_basis', ''),
+          NULLIF(v_existing_operation_result->>'coverage_basis', ''),
+          'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'
+        ),
+        'coverage_complete', true,
+        'exact_target_scope', true,
         'authorised_timesheet_ids', CASE
           WHEN jsonb_typeof(v_existing_operation_result->'authorised_timesheet_ids') = 'array'
             THEN v_existing_operation_result->'authorised_timesheet_ids'
@@ -512,6 +519,15 @@ BEGIN
             THEN v_existing_operation_result->'active_advance_timesheet_ids'
           WHEN jsonb_typeof(v_existing_operation_after_json->'active_advance_timesheet_ids') = 'array'
             THEN v_existing_operation_after_json->'active_advance_timesheet_ids'
+          ELSE '[]'::jsonb
+        END,
+        'retained_finance_timesheet_ids', CASE
+          WHEN jsonb_typeof(v_existing_operation_result->'retained_finance_timesheet_ids') = 'array'
+            THEN v_existing_operation_result->'retained_finance_timesheet_ids'
+          WHEN jsonb_typeof(v_existing_operation_after_json->'retained_finance_timesheet_ids') = 'array'
+            THEN v_existing_operation_after_json->'retained_finance_timesheet_ids'
+          WHEN jsonb_typeof(v_job_payload->'retained_finance_timesheet_ids') = 'array'
+            THEN v_job_payload->'retained_finance_timesheet_ids'
           ELSE '[]'::jsonb
         END,
         'authoritative_sessions', CASE
@@ -561,6 +577,17 @@ BEGIN
               THEN (v_existing_operation_result->>'active_advance_timesheet_count')::integer
             WHEN jsonb_typeof(v_existing_operation_after_json->'active_advance_timesheet_ids') = 'array'
               THEN jsonb_array_length(v_existing_operation_after_json->'active_advance_timesheet_ids')
+          END,
+          0
+        ),
+        'retained_finance_timesheet_count', COALESCE(
+          CASE
+            WHEN COALESCE(v_existing_operation_result->>'retained_finance_timesheet_count', '') ~ '^[0-9]{1,10}$'
+              THEN (v_existing_operation_result->>'retained_finance_timesheet_count')::integer
+            WHEN jsonb_typeof(v_existing_operation_after_json->'retained_finance_timesheet_ids') = 'array'
+              THEN jsonb_array_length(v_existing_operation_after_json->'retained_finance_timesheet_ids')
+            WHEN jsonb_typeof(v_job_payload->'retained_finance_timesheet_ids') = 'array'
+              THEN jsonb_array_length(v_job_payload->'retained_finance_timesheet_ids')
           END,
           0
         ),
@@ -641,6 +668,7 @@ BEGIN
   IF COALESCE(v_scope_result->>'ok', 'false') <> 'true'
      OR v_scope_exact IS NOT TRUE
      OR v_scope_complete IS NOT TRUE
+     OR UPPER(BTRIM(COALESCE(v_scope_result->>'coverage_basis', ''))) <> 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'
      OR jsonb_typeof(v_scope_result->'targeted_timesheet_ids') IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_EXACT_SCOPE_UNAVAILABLE'
       USING ERRCODE = 'P0001', DETAIL = COALESCE(v_scope_result, '{}'::jsonb)::text;
@@ -842,6 +870,7 @@ BEGIN
      OR COALESCE(array_length(v_missing_targeted_timesheet_ids, 1), 0) <> 0
      OR COALESCE(array_length(v_extra_targeted_timesheet_ids, 1), 0) <> 0
      OR LOWER(BTRIM(COALESCE(v_job_payload->>'exact_target_scope', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+     OR UPPER(BTRIM(COALESCE(v_job_payload->>'coverage_basis', ''))) <> 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'
      OR UPPER(BTRIM(COALESCE(v_job_payload->>'refresh_scope_kind', ''))) <> 'TARGETED_TIMESHEETS' THEN
     RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH'
       USING ERRCODE = 'P0001',
@@ -865,6 +894,7 @@ BEGIN
   IF COALESCE(v_post_scope_result->>'ok', 'false') <> 'true'
      OR LOWER(BTRIM(COALESCE(v_post_scope_result->>'exact_scope', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
      OR LOWER(BTRIM(COALESCE(v_post_scope_result->>'coverage_complete', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+     OR UPPER(BTRIM(COALESCE(v_post_scope_result->>'coverage_basis', ''))) <> 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'
      OR jsonb_typeof(v_post_scope_result->'targeted_timesheet_ids') IS DISTINCT FROM 'array'
      OR EXISTS (
        SELECT 1
@@ -930,7 +960,7 @@ BEGIN
       'effective_duplicate_count', v_effective_duplicate_count,
       'invalid_target_count', v_enqueued_invalid_count,
       'exact_set_equality', true,
-      'coverage_basis', COALESCE(v_scope_result->>'coverage_basis', 'CANONICAL_CURRENT_TIMESHEETS'),
+      'coverage_basis', COALESCE(v_scope_result->>'coverage_basis', 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'),
       'coverage_complete', true,
       'exact_target_scope', true,
       'authorised_timesheet_ids', CASE
@@ -954,6 +984,18 @@ BEGIN
         CASE
           WHEN COALESCE(v_job_payload->>'active_advance_timesheet_count', '') ~ '^[0-9]{1,10}$'
             THEN (v_job_payload->>'active_advance_timesheet_count')::integer
+        END,
+        0
+      ),
+      'retained_finance_timesheet_ids', CASE
+        WHEN jsonb_typeof(v_job_payload->'retained_finance_timesheet_ids') = 'array'
+          THEN v_job_payload->'retained_finance_timesheet_ids'
+        ELSE '[]'::jsonb
+      END,
+      'retained_finance_timesheet_count', COALESCE(
+        CASE
+          WHEN COALESCE(v_job_payload->>'retained_finance_timesheet_count', '') ~ '^[0-9]{1,10}$'
+            THEN (v_job_payload->>'retained_finance_timesheet_count')::integer
         END,
         0
       ),
