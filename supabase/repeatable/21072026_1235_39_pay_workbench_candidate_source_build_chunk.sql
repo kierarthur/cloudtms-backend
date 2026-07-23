@@ -1390,6 +1390,25 @@ BEGIN
     COALESCE(v_client_filter_single::text, '')
   );
 
+  /* The post-sync scope can legitimately expand when the reconciliation
+     creates or rediscovers durable finance-case authority.  Rebuild the
+     rotation map from that final scope before attesting the resulting
+     components; retaining the pre-sync map makes newly discovered family
+     members impossible to attest. */
+  TRUNCATE TABLE pg_temp._tmp_pay_wb_sync_rotation_scope;
+  INSERT INTO pg_temp._tmp_pay_wb_sync_rotation_scope (
+    requested_timesheet_id,
+    canonical_timesheet_id,
+    family_timesheet_id
+  )
+  SELECT DISTINCT
+    rotation_scope.requested_timesheet_id,
+    rotation_scope.canonical_timesheet_id,
+    rotation_scope.family_timesheet_id
+  FROM public._pay_timesheet_rotation_scope(
+    COALESCE(v_post_sync_scope_timesheet_ids, ARRAY[]::uuid[])
+  ) AS rotation_scope;
+
   TRUNCATE TABLE pg_temp._tmp_pay_wb_sync_negative_components;
 
   WITH post_live_entitlement_components AS (
@@ -1467,8 +1486,32 @@ BEGIN
     post_negative.baseline_ex_vat,
     post_negative.reserved_ex_vat,
     post_negative.outstanding_ex_vat,
-    NULL::text
+    CASE
+      WHEN COALESCE(post_active_settled_basis.active_settled_component_count, 0) > 0
+        THEN post_active_settled_basis.active_settled_signature
+      ELSE COALESCE(
+        post_timesheet_pay_state.last_settled_signature,
+        md5(COALESCE(post_timesheet_pay_state.last_settled_snapshot_json::text, '{}'))
+      )
+    END
   FROM post_raw_outstanding_components AS post_negative
+  LEFT JOIN public.timesheet_pay_state AS post_timesheet_pay_state
+    ON post_timesheet_pay_state.timesheet_id = post_negative.timesheet_id
+  LEFT JOIN LATERAL (
+    SELECT
+      COUNT(*)::integer AS active_settled_component_count,
+      md5(COALESCE(jsonb_agg(
+        jsonb_build_object(
+          'key_type', post_active_settled_component.key_type,
+          'key_value', post_active_settled_component.key_value,
+          'amount_ex_vat', ROUND(COALESCE(post_active_settled_component.amount_ex_vat, 0), 2),
+          'amount_inc_vat', ROUND(COALESCE(post_active_settled_component.amount_inc_vat, 0), 2)
+        ) ORDER BY post_active_settled_component.key_type, post_active_settled_component.key_value
+      )::text, '[]')) AS active_settled_signature
+    FROM public._pay_active_settled_components(
+      ARRAY[post_negative.timesheet_id]::uuid[]
+    ) AS post_active_settled_component
+  ) AS post_active_settled_basis ON true
   WHERE post_negative.outstanding_ex_vat < 0;
 
   PERFORM public._ctms_rewrite_source_build_correction_negative_components_v1(

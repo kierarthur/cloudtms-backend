@@ -311,6 +311,42 @@ test('source-build attestation rewrites correction members to the coupled chain 
   );
 });
 
+test('post-sync attestation rebuilds rotation and settled-baseline authority from the final scope', () => {
+  const postScopeIndex = sourceBuildSql.indexOf(
+    "v_post_sync_scope_digest := md5("
+  );
+  const postNegativeIndex = sourceBuildSql.indexOf(
+    'TRUNCATE TABLE pg_temp._tmp_pay_wb_sync_negative_components',
+    postScopeIndex
+  );
+  const postAttestationIndex = sourceBuildSql.indexOf(
+    'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_OVERPAYMENT_SYNC_UNATTESTED',
+    postNegativeIndex
+  );
+  assert.ok(
+    postScopeIndex >= 0 && postNegativeIndex > postScopeIndex && postAttestationIndex > postNegativeIndex,
+    'post-sync scope, negative-component rebuild and attestation must remain ordered'
+  );
+
+  const postSyncBlock = sourceBuildSql.slice(postScopeIndex, postAttestationIndex);
+  assert.match(
+    postSyncBlock,
+    /TRUNCATE TABLE pg_temp\._tmp_pay_wb_sync_rotation_scope[\s\S]*public\._pay_timesheet_rotation_scope\(\s*COALESCE\(v_post_sync_scope_timesheet_ids/
+  );
+  assert.match(
+    postSyncBlock,
+    /post_timesheet_pay_state\.last_settled_signature/
+  );
+  assert.match(
+    postSyncBlock,
+    /public\._pay_active_settled_components\(\s*ARRAY\[post_negative\.timesheet_id\]::uuid\[\]/
+  );
+  assert.doesNotMatch(
+    postSyncBlock,
+    /post_negative\.outstanding_ex_vat,\s*NULL::text/
+  );
+});
+
 test('central overpayment sync attests the same coupled correction-chain residual as source build', () => {
   const helperStart = correctionRuntimeSql.indexOf(
     'create or replace function public._ctms_rewrite_sync_authoritative_correction_negative_components_v1'

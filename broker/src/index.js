@@ -15209,33 +15209,61 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
       let openPayload = {};
       lastDiagnosticStage = 'PAY_WORKBENCH_SESSION_OPEN_SHARED_V2_RPC';
       lastDiagnosticRpc = 'pay_workbench_session_open_shared_v2';
-      try {
-        const openRpcRaw = await sbRpc(env, 'pay_workbench_session_open_shared_v2', openRpcArgs, {
-          routeClass: 'PREVIEW_OPEN',
-          purpose: 'WORKBENCH_SESSION_OPEN_SHARED_V2',
-          timeoutMs: 10000,
-          bankingPay: true
-        });
-        openPayload = stripLegacyArrays(unwrapRpc(openRpcRaw, 'pay_workbench_session_open_shared_v2'));
-      } catch (rpcError) {
-        const err = attachDiagnosticToError(
-          rpcError,
-          'PAY_WORKBENCH_SESSION_OPEN_SHARED_V2_RPC',
-          'pay_workbench_session_open_shared_v2',
-          { rpc_args: rpcArgsSummary(openRpcArgs) }
-        );
-        logWorkbenchSessionOpenDiagnostic(
-          'error',
-          'PAY_WORKBENCH_SESSION_OPEN_SHARED_V2_RPC',
-          'pay_workbench_session_open_shared_v2 failed before a valid workbench session was returned.',
-          {
-            rpc_name: 'pay_workbench_session_open_shared_v2',
-            rpc_args: rpcArgsSummary(openRpcArgs),
-            destructive_flags_ignored: forceNewSession === true || discardSourceSession === true || !!sourceSessionId,
-            error: err
+      const maxOpenRpcAttempts = 3;
+      for (let openAttempt = 1; openAttempt <= maxOpenRpcAttempts; openAttempt += 1) {
+        try {
+          const openRpcRaw = await sbRpc(env, 'pay_workbench_session_open_shared_v2', openRpcArgs, {
+            routeClass: 'PREVIEW_OPEN',
+            purpose: 'WORKBENCH_SESSION_OPEN_SHARED_V2',
+            timeoutMs: 10000,
+            bankingPay: true
+          });
+          openPayload = stripLegacyArrays(unwrapRpc(openRpcRaw, 'pay_workbench_session_open_shared_v2'));
+          break;
+        } catch (rpcError) {
+          const rpcStatus = Number(rpcError?.status || 0);
+          const rpcMessage = String(rpcError?.message || rpcError || '');
+          const retryableOpenTimeout = rpcStatus === 408
+            || rpcStatus === 504
+            || rpcStatus === 524
+            || /timeout|timed out|aborted/i.test(rpcMessage);
+          if (retryableOpenTimeout && openAttempt < maxOpenRpcAttempts) {
+            logWorkbenchSessionOpenDiagnostic(
+              'warn',
+              'PAY_WORKBENCH_SESSION_OPEN_SHARED_V2_TRANSIENT_RETRY',
+              'The idempotent Banking Pay workbench session open timed out transiently and will be retried once.',
+              {
+                rpc_name: 'pay_workbench_session_open_shared_v2',
+                rpc_args: rpcArgsSummary(openRpcArgs),
+                attempt: openAttempt,
+                max_attempts: maxOpenRpcAttempts,
+                error: rpcError
+              }
+            );
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            continue;
           }
-        );
-        throw err;
+          const err = attachDiagnosticToError(
+            rpcError,
+            'PAY_WORKBENCH_SESSION_OPEN_SHARED_V2_RPC',
+            'pay_workbench_session_open_shared_v2',
+            { rpc_args: rpcArgsSummary(openRpcArgs), attempt: openAttempt, max_attempts: maxOpenRpcAttempts }
+          );
+          logWorkbenchSessionOpenDiagnostic(
+            'error',
+            'PAY_WORKBENCH_SESSION_OPEN_SHARED_V2_RPC',
+            'pay_workbench_session_open_shared_v2 failed before a valid workbench session was returned.',
+            {
+              rpc_name: 'pay_workbench_session_open_shared_v2',
+              rpc_args: rpcArgsSummary(openRpcArgs),
+              attempt: openAttempt,
+              max_attempts: maxOpenRpcAttempts,
+              destructive_flags_ignored: forceNewSession === true || discardSourceSession === true || !!sourceSessionId,
+              error: err
+            }
+          );
+          throw err;
+        }
       }
 
       const sessionId = trimStr(openPayload.session_id || '');

@@ -7,6 +7,10 @@ const sql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql'),
   'utf8'
 );
+const worker = fs.readFileSync(
+  path.resolve(__dirname, '../broker/src/index.js'),
+  'utf8'
+);
 
 function extractFunction(name, nextFunctionName) {
   const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
@@ -59,4 +63,20 @@ test('competing sessions are linked to the authoritative replacement before comm
   assert.match(source, /replacement_session_id = v_session_row\.id/);
   assert.match(source, /progress_state = 'DISCARDED'/);
   assert.match(source, /discarded_by_function', 'pay_workbench_session_open_shared_v2'/);
+});
+
+test('Worker retries an idempotent workbench open within a strict three-attempt transient-timeout bound', () => {
+  const start = worker.indexOf('async function handleBankingPayWorkbenchSessionOpen');
+  const end = worker.indexOf('\nfunction bankingPayWorkbenchLogsEnabled', start);
+  assert.ok(start >= 0 && end > start, 'workbench open handler must be present');
+  const source = worker.slice(start, end);
+
+  assert.match(source, /const maxOpenRpcAttempts = 3;/);
+  assert.match(source, /openAttempt <= maxOpenRpcAttempts/);
+  assert.match(source, /rpcStatus === 408/);
+  assert.match(source, /rpcStatus === 504/);
+  assert.match(source, /rpcStatus === 524/);
+  assert.match(source, /PAY_WORKBENCH_SESSION_OPEN_SHARED_V2_TRANSIENT_RETRY/);
+  assert.match(source, /openAttempt < maxOpenRpcAttempts/);
+  assert.match(source, /await new Promise\(\(resolve\) => setTimeout\(resolve, 250\)\)/);
 });
