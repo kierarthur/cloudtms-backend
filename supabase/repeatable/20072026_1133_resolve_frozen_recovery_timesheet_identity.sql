@@ -158,9 +158,13 @@ BEGIN
     FROM (
       VALUES
         (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'linked_timesheet_id', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,timesheet_id}', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json->>'timesheet_id', '')), '')),
-        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'timesheet_id', '')), ''))
+        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json->>'linked_timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'linked_timesheet_id', '')), ''))
     ) AS frozen_timesheet_candidate(candidate_value)
     WHERE frozen_timesheet_candidate.candidate_value IS NOT NULL;
 

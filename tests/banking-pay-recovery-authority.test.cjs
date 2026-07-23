@@ -29,6 +29,10 @@ const financeAdjustmentSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql'),
   'utf8'
 );
+const frozenRecoveryIdentitySql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/20072026_1133_resolve_frozen_recovery_timesheet_identity.sql'),
+  'utf8'
+);
 const workerSource = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
 
 function functionBody(name, nextName, source = sql) {
@@ -111,6 +115,27 @@ test('draft staging freezes line-level recovery component identity into a single
     /line_element\.value#>>'\{frozen_component_snapshot_json,source_pay_method\}'/
   );
   assert.match(body, /'frozen_source_amount'/);
+});
+
+test('post-draft recovery identity accepts linked timesheet identity only from frozen artifacts', () => {
+  const body = functionBody(
+    '_pay_policy_x_resolve_post_draft_economic_key',
+    null,
+    frozenRecoveryIdentitySql
+  );
+  assert.match(body, /v_frozen_source_basis_json->>'linked_timesheet_id'/);
+  assert.match(
+    body,
+    /v_frozen_component_snapshot_json#>>'\{source_basis_json,linked_timesheet_id\}'/
+  );
+  assert.match(body, /v_frozen_component_snapshot_json->>'linked_timesheet_id'/);
+  assert.match(body, /v_breakdown_meta_json->>'linked_timesheet_id'/);
+  assert.match(
+    body,
+    /COUNT\(DISTINCT frozen_timesheet_candidate\.candidate_value\)/i
+  );
+  assert.match(body, /_pay_policy_x_assert_economic_key/);
+  assert.doesNotMatch(body, /FROM public\.timesheets|JOIN public\.timesheets/);
 });
 
 test('finance adjustment draft creation treats signed recovery component amounts as magnitudes', () => {
