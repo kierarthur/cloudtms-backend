@@ -952,65 +952,16 @@ end;
 $$;
 
 -- ============================================================
--- Trigger: timesheets → enqueue regen when refs truth changes
+-- Legacy row-level PDF enqueue triggers retired by Stage 1
 -- ============================================================
+-- Keep the drops in this repeatable so a later replay cannot recreate or
+-- overlap the statement-level invalidation triggers installed by the
+-- controlled Stage 1 cutover.
 
 DROP TRIGGER IF EXISTS trg_timesheets_enqueue_pdf_regen_on_refs_change ON public.timesheets;
-
-CREATE TRIGGER trg_timesheets_enqueue_pdf_regen_on_refs_change
-AFTER UPDATE OF
-  reference_number,
-  day_references_json,
-  actual_schedule_json,
-  worked_start_iso,
-  worked_end_iso,
-  scheduled_start_iso,
-  scheduled_end_iso,
-  week_ending_date
-ON public.timesheets
-FOR EACH ROW
-WHEN (
-  COALESCE(NEW.is_current,false) = true
-  AND COALESCE(OLD.is_current,false) = true
-  AND (
-    NEW.reference_number        IS DISTINCT FROM OLD.reference_number
-    OR NEW.day_references_json  IS DISTINCT FROM OLD.day_references_json
-    OR NEW.actual_schedule_json IS DISTINCT FROM OLD.actual_schedule_json
-    OR NEW.worked_start_iso     IS DISTINCT FROM OLD.worked_start_iso
-    OR NEW.worked_end_iso       IS DISTINCT FROM OLD.worked_end_iso
-    OR NEW.scheduled_start_iso  IS DISTINCT FROM OLD.scheduled_start_iso
-    OR NEW.scheduled_end_iso    IS DISTINCT FROM OLD.scheduled_end_iso
-    OR NEW.week_ending_date     IS DISTINCT FROM OLD.week_ending_date
-  )
-)
-EXECUTE FUNCTION public.trg_timesheets_enqueue_pdf_regen_on_refs_change();
-
--- ============================================================
--- Triggers: TSFIN → enqueue regen when invoice_breakdown_json changes
--- (FIX: drop both AI/AU triggers too, otherwise reruns fail)
--- ============================================================
-
 DROP TRIGGER IF EXISTS trg_tsfin_enqueue_tspdf_on_refs_change ON public.timesheets_financials;
 DROP TRIGGER IF EXISTS trg_tsfin_enqueue_tspdf_on_refs_change_ai ON public.timesheets_financials;
 DROP TRIGGER IF EXISTS trg_tsfin_enqueue_tspdf_on_refs_change_au ON public.timesheets_financials;
-
--- INSERT: new current TSFIN rows
-CREATE TRIGGER trg_tsfin_enqueue_tspdf_on_refs_change_ai
-AFTER INSERT ON public.timesheets_financials
-FOR EACH ROW
-WHEN (COALESCE(NEW.is_current,false) = true)
-EXECUTE FUNCTION public.trg_tsfin_enqueue_tspdf_on_refs_change();
-
--- UPDATE: only when invoice_breakdown_json truly changes
-CREATE TRIGGER trg_tsfin_enqueue_tspdf_on_refs_change_au
-AFTER UPDATE OF invoice_breakdown_json ON public.timesheets_financials
-FOR EACH ROW
-WHEN (
-  COALESCE(NEW.is_current,false) = true
-  AND NEW.invoice_breakdown_json IS DISTINCT FROM OLD.invoice_breakdown_json
-)
-EXECUTE FUNCTION public.trg_tsfin_enqueue_tspdf_on_refs_change();
-
 -- ============================================================
 -- (26) NEW: public.timesheet_doc_flags_batch(p_timesheet_ids uuid[])
 -- ============================================================
