@@ -155150,7 +155150,7 @@ async function rpcTsfinWriteSnapshotsAndComplete(env, { rows = [] } = {}) {
         const cur = tid ? (currentByTsId.get(tid) || null) : null;
 
         // If we can prove no-op, do NOT write; just clear outbox.
-        if (cur && snapshotMatchesCurrent(r.snapshot, cur)) {
+        if (r?.is_correction_ts !== true && cur && snapshotMatchesCurrent(r.snapshot, cur)) {
           const ob = r?.outbox_id != null ? r.outbox_id : null;
           if (ob != null) noop.push(ob);
           continue;
@@ -155198,7 +155198,13 @@ async function rpcTsfinWriteSnapshotsAndComplete(env, { rows = [] } = {}) {
     return { ok_count: noopCleared, fail_count: 0, errors: [] };
   }
 
-  const args = { p_rows: rowsToWrite };
+  const args = {
+    p_rows: rowsToWrite.map((row) => ({
+      outbox_id: row.outbox_id,
+      timesheet_id: row.timesheet_id,
+      snapshot: row.snapshot
+    }))
+  };
 
   _tsfinRpcLog('tsfin_write_snapshots_and_complete -> call', {
     count: rowsToWrite.length,
@@ -157313,7 +157319,8 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       rowsToWriteAll.push({
         outbox_id,
         timesheet_id: ts.timesheet_id,
-        snapshot
+        snapshot,
+        is_correction_ts: isCorrectionTs
       });
     } catch (e) {
       for (const ob of [outbox_id, ...(extra_outbox_ids || [])].filter(Boolean)) {
@@ -157593,7 +157600,8 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       rowsToWriteAll.push({
         outbox_id,
         timesheet_id: ts.timesheet_id,
-        snapshot
+        snapshot,
+        is_correction_ts: isCorrectionTs
       });
     } catch (e) {
       const allObs = [w.outbox_id, ...(w.extra_outbox_ids || [])].filter(Boolean);

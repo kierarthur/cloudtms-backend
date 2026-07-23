@@ -137,5 +137,9 @@ test('TSFIN no-op optimisation preserves complete import-correction units', () =
   assert.equal(guardedNoops.length, 2, 'Weekly and Daily no-op paths must retain correction members');
   assert.match(workerBody, /dailyCorrectionKindU/);
   assert.match(workerBody, /dailyAdjustmentOriginU === 'IMPORT_CORRECTION'/);
-  assert.match(workerBody, /rowsToWriteAll\.push/);
+  assert.equal([...workerBody.matchAll(/is_correction_ts: isCorrectionTs/g)].length, 2,
+    'Weekly and Daily correction rows must retain their atomic-unit marker');
+  const batchWriterBody = functionBody('rpcTsfinWriteSnapshotsAndComplete');
+  assert.match(batchWriterBody, /r\?\.is_correction_ts !== true && cur && snapshotMatchesCurrent/);
+  assert.match(batchWriterBody, /p_rows: rowsToWrite\.map/);
 });
