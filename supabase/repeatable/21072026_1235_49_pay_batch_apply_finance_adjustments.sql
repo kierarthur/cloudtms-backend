@@ -794,7 +794,9 @@ v_stage := 'STAGE_12D_APPLY_MANUAL_CREDIT_PAYOUTS';
       nullif(btrim(coalesce(comp.comp_json->'suggested_resolution_payload_json'->>'resolution_mode','')), '') as preview_resolution_mode_text,
       round(
         case
-          when coalesce(comp.comp_json->>'source_amount','') ~ '^-?\d+(\.\d+)?$' then (comp.comp_json->>'source_amount')::numeric
+          when coalesce(comp.comp_json->>'source_amount','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'source_amount')::numeric)
+          when coalesce(comp.comp_json->>'source_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'source_amount_ex_vat')::numeric)
+          when coalesce(comp.comp_json->>'frozen_source_amount','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'frozen_source_amount')::numeric)
           when coalesce(comp.comp_json->>'remaining_source_amount','') ~ '^-?\d+(\.\d+)?$' then (comp.comp_json->>'remaining_source_amount')::numeric
           else 0
         end,
@@ -802,22 +804,25 @@ v_stage := 'STAGE_12D_APPLY_MANUAL_CREDIT_PAYOUTS';
       )::numeric(12,2) as source_amount_ex_vat,
       round(
         case
-          when coalesce(comp.comp_json->>'remaining_source_amount','') ~ '^-?\d+(\.\d+)?$' then (comp.comp_json->>'remaining_source_amount')::numeric
-          when coalesce(comp.comp_json->>'source_amount','') ~ '^-?\d+(\.\d+)?$' then (comp.comp_json->>'source_amount')::numeric
+          when coalesce(comp.comp_json->>'remaining_source_amount','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'remaining_source_amount')::numeric)
+          when coalesce(comp.comp_json->>'remaining_source_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'remaining_source_amount_ex_vat')::numeric)
+          when coalesce(comp.comp_json->>'source_amount','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'source_amount')::numeric)
+          when coalesce(comp.comp_json->>'source_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'source_amount_ex_vat')::numeric)
+          when coalesce(comp.comp_json->>'frozen_source_amount','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'frozen_source_amount')::numeric)
           else 0
         end,
         2
       )::numeric(12,2) as remaining_source_amount_ex_vat,
       round(
         case
-          when coalesce(comp.comp_json->>'allocated_source_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (comp.comp_json->>'allocated_source_due_amount_ex_vat')::numeric
+          when coalesce(comp.comp_json->>'allocated_source_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'allocated_source_due_amount_ex_vat')::numeric)
           else 0
         end,
         2
       )::numeric(12,2) as allocated_source_due_amount_ex_vat,
       round(
         case
-          when coalesce(comp.comp_json->>'preview_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (comp.comp_json->>'preview_due_amount_ex_vat')::numeric
+          when coalesce(comp.comp_json->>'preview_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'preview_due_amount_ex_vat')::numeric)
           else 0
         end,
         2
@@ -1789,8 +1794,8 @@ v_stage := 'STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY';
       )::numeric(12,2) as preview_due_amount_ex_vat,
       round(
         case
-          when coalesce(comp.comp_json->>'target_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (comp.comp_json->>'target_pay_ex_vat')::numeric
-          when coalesce(comp.comp_json->>'preview_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (comp.comp_json->>'preview_due_amount_ex_vat')::numeric
+          when coalesce(comp.comp_json->>'target_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'target_pay_ex_vat')::numeric)
+          when coalesce(comp.comp_json->>'preview_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'preview_due_amount_ex_vat')::numeric)
           else 0
         end,
         2
@@ -1849,7 +1854,7 @@ v_stage := 'STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY';
     where jsonb_typeof(comp.comp_json) = 'object'
       and round(
         case
-          when coalesce(comp.comp_json->>'preview_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (comp.comp_json->>'preview_due_amount_ex_vat')::numeric
+          when coalesce(comp.comp_json->>'preview_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then abs((comp.comp_json->>'preview_due_amount_ex_vat')::numeric)
           else 0
         end,
         2

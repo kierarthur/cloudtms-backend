@@ -721,6 +721,12 @@ begin
     ) AS active_settled_basis ON true
     WHERE raw_component.outstanding_ex_vat < 0;
 
+    PERFORM public._ctms_rewrite_sync_authoritative_correction_negative_components_v1(
+      nullif(btrim(p_mismatch_choices->>'workbench_session_id'), '')::uuid,
+      v_authoritative_candidate_id,
+      coalesce(p_force_include_timesheet_ids, array[]::uuid[])
+    );
+
     SELECT
       COUNT(*)::integer,
       md5(COALESCE(jsonb_agg(
@@ -728,10 +734,10 @@ begin
           'timesheet_id', negative_component.timesheet_id::text,
           'key_type', negative_component.key_type,
           'key_value', negative_component.key_value,
-          'truth_ex_vat', negative_component.truth_ex_vat,
-          'baseline_ex_vat', negative_component.baseline_ex_vat,
-          'reserved_ex_vat', negative_component.reserved_ex_vat,
-          'outstanding_ex_vat', negative_component.outstanding_ex_vat
+          'truth_ex_vat', ROUND(negative_component.truth_ex_vat, 2)::numeric(12,2),
+          'baseline_ex_vat', ROUND(negative_component.baseline_ex_vat, 2)::numeric(12,2),
+          'reserved_ex_vat', ROUND(negative_component.reserved_ex_vat, 2)::numeric(12,2),
+          'outstanding_ex_vat', ROUND(negative_component.outstanding_ex_vat, 2)::numeric(12,2)
         ) ORDER BY negative_component.timesheet_id, negative_component.key_type, negative_component.key_value
       )::text, '[]'))
     INTO
@@ -838,9 +844,26 @@ begin
       IF COALESCE(v_authoritative_timesheet_scope, false)
          AND to_regclass('pg_temp.timesheet_case_rollup') IS NOT NULL THEN
         IF EXISTS (
-          WITH preview_component_totals AS (
+          WITH correction_member_roots AS (
+            SELECT DISTINCT
+              member_id.value::uuid AS member_timesheet_id,
+              (residual.value->>'root_timesheet_id')::uuid AS root_timesheet_id
+            FROM jsonb_array_elements(public._ctms_candidate_correction_residuals_v1(
+              v_workbench_session_id_text::uuid,
+              v_preview_candidate_loop_id,
+              NULL::uuid,
+              'PAY_SYNC_OVERPAYMENTS_FROM_PREVIEW_METADATA'
+            )) AS residual(value)
+            CROSS JOIN LATERAL jsonb_array_elements_text(
+              COALESCE(residual.value->'member_timesheet_ids', '[]'::jsonb)
+            ) AS member_id(value)
+            WHERE COALESCE(residual.value->>'root_timesheet_id', '')
+                    ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              AND member_id.value
+                    ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          ), preview_component_totals AS (
             SELECT
-              raw_case.timesheet_id,
+              COALESCE(correction_member.root_timesheet_id, raw_case.timesheet_id) AS timesheet_id,
               UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))) AS key_type,
               BTRIM(COALESCE(raw_component.value->>'component_key_value', '')) AS key_value,
               COUNT(*)::integer AS preview_component_count,
@@ -856,12 +879,14 @@ begin
                 ELSE '[]'::jsonb
               END
             ) AS raw_component(value)
+            LEFT JOIN correction_member_roots AS correction_member
+              ON correction_member.member_timesheet_id = raw_case.timesheet_id
             WHERE raw_case.candidate_id = v_preview_candidate_loop_id
               AND raw_case.timesheet_id = ANY(COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[]))
               AND NOT (raw_case.timesheet_id = ANY(COALESCE(p_exclude_timesheet_ids, ARRAY[]::uuid[])))
               AND COALESCE(raw_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
             GROUP BY
-              raw_case.timesheet_id,
+              COALESCE(correction_member.root_timesheet_id, raw_case.timesheet_id),
               UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', ''))),
               BTRIM(COALESCE(raw_component.value->>'component_key_value', ''))
           )
@@ -2125,6 +2150,17 @@ begin
     dcc.components_sync_json
   from deduped_case_candidates dcc
   where dcc.desired_case_type is not null;
+
+  perform public._ctms_rewrite_sync_correction_cases_v1(
+    case
+      when nullif(btrim(coalesce(p_mismatch_choices->>'workbench_session_id', '')), '')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      then nullif(btrim(p_mismatch_choices->>'workbench_session_id'), '')::uuid
+      else null::uuid
+    end,
+    coalesce(p_candidate_ids, array[]::uuid[]),
+    coalesce(p_force_include_timesheet_ids, array[]::uuid[])
+  );
 
   select count(*)::int into v_timesheet_case_count from pg_temp.tmp_sync_timesheet_case_candidates;
   select count(*)::int into v_overpayment_case_count from pg_temp.tmp_sync_timesheet_case_candidates where desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum;

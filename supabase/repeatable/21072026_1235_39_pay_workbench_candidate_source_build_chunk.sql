@@ -118,6 +118,7 @@ DECLARE
   v_post_sync_scope_digest text := NULL::text;
   v_post_sync_negative_component_count integer := 0;
   v_post_sync_negative_digest text := NULL::text;
+  v_post_sync_negative_components_diagnostic jsonb := '[]'::jsonb;
   v_post_sync_baseline_digest text := NULL::text;
   v_sync_started_at_utc timestamptz := NULL::timestamptz;
   v_sync_authority_token text := NULL::text;
@@ -1062,16 +1063,22 @@ BEGIN
   ) AS active_settled_basis ON true
   WHERE raw_outstanding_component.outstanding_ex_vat < 0;
 
+  PERFORM public._ctms_rewrite_source_build_correction_negative_components_v1(
+    p_session_id,
+    p_candidate_id,
+    COALESCE(v_sync_scope_timesheet_ids, ARRAY[]::uuid[])
+  );
+
   SELECT COUNT(*)::integer,
          md5(COALESCE(jsonb_agg(
            jsonb_build_object(
              'timesheet_id', negative_component.timesheet_id::text,
              'key_type', negative_component.key_type,
              'key_value', negative_component.key_value,
-             'truth_ex_vat', negative_component.truth_ex_vat,
-             'baseline_ex_vat', negative_component.baseline_ex_vat,
-             'reserved_ex_vat', negative_component.reserved_ex_vat,
-             'outstanding_ex_vat', negative_component.outstanding_ex_vat
+             'truth_ex_vat', ROUND(negative_component.truth_ex_vat, 2)::numeric(12,2),
+             'baseline_ex_vat', ROUND(negative_component.baseline_ex_vat, 2)::numeric(12,2),
+             'reserved_ex_vat', ROUND(negative_component.reserved_ex_vat, 2)::numeric(12,2),
+             'outstanding_ex_vat', ROUND(negative_component.outstanding_ex_vat, 2)::numeric(12,2)
            ) ORDER BY negative_component.timesheet_id, negative_component.key_type, negative_component.key_value
          )::text, '[]'))
   INTO v_sync_negative_component_count,
@@ -1383,6 +1390,8 @@ BEGIN
     COALESCE(v_client_filter_single::text, '')
   );
 
+  TRUNCATE TABLE pg_temp._tmp_pay_wb_sync_negative_components;
+
   WITH post_live_entitlement_components AS (
     SELECT
       entitlement_component.timesheet_id,
@@ -1440,22 +1449,71 @@ BEGIN
      AND reserved_component.key_type = live_key.key_type
      AND reserved_component.key_value = live_key.key_value
   )
+  INSERT INTO pg_temp._tmp_pay_wb_sync_negative_components (
+    timesheet_id,
+    key_type,
+    key_value,
+    truth_ex_vat,
+    baseline_ex_vat,
+    reserved_ex_vat,
+    outstanding_ex_vat,
+    baseline_signature
+  )
+  SELECT
+    post_negative.timesheet_id,
+    post_negative.key_type,
+    post_negative.key_value,
+    post_negative.truth_ex_vat,
+    post_negative.baseline_ex_vat,
+    post_negative.reserved_ex_vat,
+    post_negative.outstanding_ex_vat,
+    NULL::text
+  FROM post_raw_outstanding_components AS post_negative
+  WHERE post_negative.outstanding_ex_vat < 0;
+
+  PERFORM public._ctms_rewrite_source_build_correction_negative_components_v1(
+    p_session_id,
+    p_candidate_id,
+    COALESCE(v_post_sync_scope_timesheet_ids, ARRAY[]::uuid[])
+  );
+
   SELECT COUNT(*)::integer,
          md5(COALESCE(jsonb_agg(
            jsonb_build_object(
              'timesheet_id', post_negative.timesheet_id::text,
              'key_type', post_negative.key_type,
              'key_value', post_negative.key_value,
-             'truth_ex_vat', post_negative.truth_ex_vat,
-             'baseline_ex_vat', post_negative.baseline_ex_vat,
-             'reserved_ex_vat', post_negative.reserved_ex_vat,
-             'outstanding_ex_vat', post_negative.outstanding_ex_vat
+             'truth_ex_vat', ROUND(post_negative.truth_ex_vat, 2)::numeric(12,2),
+             'baseline_ex_vat', ROUND(post_negative.baseline_ex_vat, 2)::numeric(12,2),
+             'reserved_ex_vat', ROUND(post_negative.reserved_ex_vat, 2)::numeric(12,2),
+             'outstanding_ex_vat', ROUND(post_negative.outstanding_ex_vat, 2)::numeric(12,2)
            ) ORDER BY post_negative.timesheet_id, post_negative.key_type, post_negative.key_value
          )::text, '[]'))
   INTO v_post_sync_negative_component_count,
        v_post_sync_negative_digest
-  FROM post_raw_outstanding_components AS post_negative
-  WHERE post_negative.outstanding_ex_vat < 0;
+  FROM pg_temp._tmp_pay_wb_sync_negative_components AS post_negative;
+
+  SELECT COALESCE(jsonb_agg(
+           jsonb_build_object(
+             'timesheet_id', bounded_negative.timesheet_id::text,
+             'key_type', bounded_negative.key_type,
+             'key_value', bounded_negative.key_value,
+             'truth_ex_vat', ROUND(bounded_negative.truth_ex_vat, 2)::numeric(12,2),
+             'baseline_ex_vat', ROUND(bounded_negative.baseline_ex_vat, 2)::numeric(12,2),
+             'reserved_ex_vat', ROUND(bounded_negative.reserved_ex_vat, 2)::numeric(12,2),
+             'outstanding_ex_vat', ROUND(bounded_negative.outstanding_ex_vat, 2)::numeric(12,2)
+           )
+           ORDER BY bounded_negative.timesheet_id,
+                    bounded_negative.key_type,
+                    bounded_negative.key_value
+         ), '[]'::jsonb)
+  INTO v_post_sync_negative_components_diagnostic
+  FROM (
+    SELECT *
+    FROM pg_temp._tmp_pay_wb_sync_negative_components
+    ORDER BY timesheet_id, key_type, key_value
+    LIMIT 20
+  ) AS bounded_negative;
 
   SELECT md5(COALESCE(jsonb_agg(
            jsonb_build_object(
@@ -1494,6 +1552,9 @@ BEGIN
               'post_sync_scope_digest', v_post_sync_scope_digest,
               'initial_negative_component_digest', v_sync_negative_digest,
               'post_sync_negative_component_digest', v_post_sync_negative_digest,
+              'initial_negative_component_count', v_sync_negative_component_count,
+              'post_sync_negative_component_count', v_post_sync_negative_component_count,
+              'post_sync_negative_components', v_post_sync_negative_components_diagnostic,
               'initial_settled_baseline_digest', v_sync_baseline_digest,
               'post_sync_settled_baseline_digest', v_post_sync_baseline_digest
             )::text;

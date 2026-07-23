@@ -19505,6 +19505,7 @@ DECLARE
   v_job_session_id uuid := NULL::uuid;
   v_job_candidate_id uuid := NULL::uuid;
   v_job_dedupe_key text := NULL;
+  v_job_created_at_utc timestamptz := NULL::timestamptz;
   v_job_payload_json jsonb := '{}'::jsonb;
   v_job_source_change_seq bigint := 0;
   v_job_session_version bigint := 0;
@@ -19545,6 +19546,7 @@ BEGIN
          j.session_id,
          j.candidate_id,
          j.dedupe_key,
+         j.created_at_utc,
          COALESCE(j.payload_json, '{}'::jsonb)
   INTO v_job_type,
        v_attempt_count,
@@ -19553,6 +19555,7 @@ BEGIN
        v_job_session_id,
        v_job_candidate_id,
        v_job_dedupe_key,
+       v_job_created_at_utc,
        v_job_payload_json
   FROM public.banking_pay_workbench_jobs AS j
   WHERE j.id = p_job_id;
@@ -19845,6 +19848,95 @@ BEGIN
         v_obsolete_reason := 'SUPERSEDED_BY_LIVE_CHANGE_SEQ';
       END IF;
     END IF;
+
+    IF v_is_obsolete IS NOT TRUE
+       AND v_canonical_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+       AND v_source_build_run_id_text IS NOT NULL
+       AND v_job_session_id IS NOT NULL
+       AND v_job_candidate_id IS NOT NULL
+       AND v_job_source_change_seq > 0 THEN
+      SELECT completed_source_build.id
+      INTO v_completed_equivalent_job_id
+      FROM public.banking_pay_workbench_jobs AS completed_source_build
+      CROSS JOIN LATERAL (
+        SELECT NULLIF(BTRIM(COALESCE(
+          completed_source_build.payload_json->>'source_build_run_id',
+          completed_source_build.payload_json#>>'{source_build,source_build_run_id}',
+          completed_source_build.payload_json#>>'{source_build,run_id}',
+          completed_source_build.payload_json#>>'{cursor,source_build_run_id}',
+          completed_source_build.payload_json#>>'{cursor_json,source_build_run_id}',
+          completed_source_build.payload_json#>>'{result_json,source_build_run_id}',
+          ''
+        )), '') AS source_build_run_id_text
+      ) AS completed_run
+      CROSS JOIN LATERAL (
+        SELECT CASE
+          WHEN COALESCE(completed_source_build.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
+            THEN (completed_source_build.payload_json->>'source_change_seq')::bigint
+          WHEN COALESCE(completed_source_build.payload_json#>>'{source_build,source_change_seq}', '') ~ '^[0-9]+$'
+            THEN (completed_source_build.payload_json#>>'{source_build,source_change_seq}')::bigint
+          ELSE 0::bigint
+        END AS source_change_seq
+      ) AS completed_seq
+      CROSS JOIN LATERAL (
+        SELECT CASE
+          WHEN COALESCE(completed_source_build.payload_json->>'session_version', '') ~ '^[0-9]+$'
+            THEN (completed_source_build.payload_json->>'session_version')::bigint
+          WHEN COALESCE(completed_source_build.payload_json#>>'{source_build,session_version}', '') ~ '^[0-9]+$'
+            THEN (completed_source_build.payload_json#>>'{source_build,session_version}')::bigint
+          ELSE 0::bigint
+        END AS session_version
+      ) AS completed_version
+      WHERE completed_source_build.id <> p_job_id
+        AND completed_source_build.session_id = v_job_session_id
+        AND completed_source_build.candidate_id = v_job_candidate_id
+        AND completed_source_build.snapshot_run_id IS NOT DISTINCT FROM v_job_snapshot_run_id
+        AND UPPER(BTRIM(COALESCE(completed_source_build.status, ''))) = 'SUCCEEDED'
+        AND completed_source_build.completed_at_utc IS NOT NULL
+        AND completed_source_build.failed_at_utc IS NULL
+        AND completed_source_build.created_at_utc > v_job_created_at_utc
+        AND CASE
+              WHEN UPPER(BTRIM(COALESCE(completed_source_build.job_type, ''))) IN (
+                'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+                'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
+                'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
+                'CANDIDATE_SOURCE_BUILD',
+                'CANDIDATE_SOURCE_BUILD_CHUNK',
+                'SOURCE_BUILD',
+                'SOURCE_BUILD_PAGE'
+              ) THEN 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+              ELSE UPPER(BTRIM(COALESCE(completed_source_build.job_type, '')))
+            END = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+        AND completed_run.source_build_run_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND completed_run.source_build_run_id_text IS DISTINCT FROM v_source_build_run_id_text
+        AND completed_seq.source_change_seq = v_job_source_change_seq
+        AND (
+          v_job_session_version <= 0
+          OR completed_version.session_version = v_job_session_version
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_candidate_source_lines AS completed_source_row
+          WHERE completed_source_row.session_id = v_job_session_id
+            AND completed_source_row.candidate_id = v_job_candidate_id
+            AND completed_source_row.source_build_run_id = completed_run.source_build_run_id_text::uuid
+            AND completed_source_row.source_change_seq = v_job_source_change_seq
+            AND (
+              v_job_session_version <= 0
+              OR completed_source_row.session_version = v_job_session_version
+            )
+            AND UPPER(BTRIM(COALESCE(completed_source_row.status, ''))) = 'CURRENT'
+        )
+      ORDER BY completed_source_build.completed_at_utc DESC,
+               completed_source_build.created_at_utc DESC,
+               completed_source_build.id DESC
+      LIMIT 1;
+
+      IF v_completed_equivalent_job_id IS NOT NULL THEN
+        v_is_obsolete := true;
+        v_obsolete_reason := 'SUPERSEDED_BY_NEWER_SUCCESSFUL_SOURCE_BUILD';
+      END IF;
+    END IF;
   ELSIF v_job_type = 'PAYEE_READINESS_ENSURE' THEN
     IF v_job_candidate_id IS NULL THEN
       v_is_obsolete := true;
@@ -19974,6 +20066,16 @@ BEGIN
               'non_blocking_terminal_failure_at_utc', v_now::text,
               'source_build_run_id_required', true,
               'policy_x_authority_scope', 'PRE_DRAFT_WORKBENCH_REPAIR_ONLY'
+            )
+          WHEN v_canonical_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+               AND v_obsolete_reason = 'SUPERSEDED_BY_NEWER_SUCCESSFUL_SOURCE_BUILD' THEN
+            jsonb_build_object(
+              'superseded_at_utc', v_now::text,
+              'superseded_reason', v_obsolete_reason,
+              'superseded_by_job_id', v_completed_equivalent_job_id::text,
+              'non_blocking_terminal_failure', true,
+              'non_blocking_terminal_failure_reason', v_obsolete_reason,
+              'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
             )
           ELSE '{}'::jsonb
         END
@@ -20192,7 +20294,15 @@ BEGIN
       'source_build_run_id', v_source_build_run_id_text,
       'invalid_source_build_without_run_id_failed_closed', COALESCE(v_invalid_source_build_without_run_id, false),
       'invalid_source_build_without_run_id_non_blocking', COALESCE(v_invalid_source_build_without_run_id, false) AND v_new_status <> 'QUEUED',
-      'non_blocking_terminal_failure', COALESCE(v_invalid_source_build_without_run_id, false) AND v_new_status <> 'QUEUED',
+      'superseded_by_job_id', CASE
+        WHEN v_obsolete_reason = 'SUPERSEDED_BY_NEWER_SUCCESSFUL_SOURCE_BUILD'
+          THEN v_completed_equivalent_job_id::text
+        ELSE NULL::text
+      END,
+      'non_blocking_terminal_failure', (
+        COALESCE(v_invalid_source_build_without_run_id, false)
+        OR v_obsolete_reason = 'SUPERSEDED_BY_NEWER_SUCCESSFUL_SOURCE_BUILD'
+      ) AND v_new_status <> 'QUEUED',
       'line_work_failed_count', COALESCE(v_failed_line_work_count, 0),
       'source_rows_marked_error_count', COALESCE(v_failed_source_row_count, 0)
     ),
@@ -20225,7 +20335,15 @@ BEGIN
     'source_build_run_id', v_source_build_run_id_text,
     'invalid_source_build_without_run_id_failed_closed', COALESCE(v_invalid_source_build_without_run_id, false),
     'invalid_source_build_without_run_id_non_blocking', COALESCE(v_invalid_source_build_without_run_id, false) AND v_new_status <> 'QUEUED',
-    'non_blocking_terminal_failure', COALESCE(v_invalid_source_build_without_run_id, false) AND v_new_status <> 'QUEUED',
+    'superseded_by_job_id', CASE
+      WHEN v_obsolete_reason = 'SUPERSEDED_BY_NEWER_SUCCESSFUL_SOURCE_BUILD'
+        THEN v_completed_equivalent_job_id::text
+      ELSE NULL::text
+    END,
+    'non_blocking_terminal_failure', (
+      COALESCE(v_invalid_source_build_without_run_id, false)
+      OR v_obsolete_reason = 'SUPERSEDED_BY_NEWER_SUCCESSFUL_SOURCE_BUILD'
+    ) AND v_new_status <> 'QUEUED',
     'line_work_failed_count', COALESCE(v_failed_line_work_count, 0),
     'source_rows_marked_error_count', COALESCE(v_failed_source_row_count, 0)
   );
@@ -20901,6 +21019,14 @@ BEGIN
         ROW_NUMBER() OVER (ORDER BY candidate_scope_row.id) AS page_ordinal
       FROM public.candidates AS candidate_scope_row
       WHERE (v_last_candidate_id IS NULL OR candidate_scope_row.id > v_last_candidate_id)
+        -- A selected candidate is a hard scope boundary, not merely another
+        -- way for a candidate to qualify.  Without this outer predicate an
+        -- unrelated candidate with an eligible finance case could enter a
+        -- candidate-filtered workbench session through a later OR branch.
+        AND (
+          v_effective_candidate_id IS NULL
+          OR candidate_scope_row.id = v_effective_candidate_id
+        )
         AND (
           (
             v_effective_candidate_id IS NOT NULL
@@ -47319,7 +47445,15 @@ BEGIN
         WHEN item_page.item_type = 'SEGMENT_DELTA' THEN 'TS_BUCKET'
         WHEN item_page.item_type = 'MILEAGE_DELTA' THEN 'MILEAGE'
         WHEN item_page.item_type = 'ADJUSTMENT_DELTA' THEN 'ADJUSTMENT'
-        WHEN item_page.item_type IN ('MANUAL_CREDIT_PAYOUT', 'MANUAL_DEBT_RECOVERY') THEN item_page.item_type
+        WHEN item_page.item_type IN (
+          'OVERPAYMENT_RECOVERY',
+          'LOAN_REPAYMENT',
+          'MANUAL_DEBT_RECOVERY',
+          'MANUAL_CREDIT_PAYOUT',
+          'LOAN_PAYOUT',
+          'UNDERPAYMENT_PAYMENT',
+          'DEBT_CREATED'
+        ) THEN item_page.item_type
         ELSE 'EXPENSE'
       END AS line_kind,
       NULLIF(UPPER(BTRIM(COALESCE(item_page.frozen_component_snapshot_json->>'bucket_code', item_page.frozen_source_basis_json->>'bucket_code', ''))), '') AS bucket_code,
@@ -52709,7 +52843,8 @@ BEGIN
 
   UPDATE public.banking_pay_workbench_sessions AS ws
   SET server_selected_preview_row_ids = '[]'::jsonb,
-      server_selected_preview_row_ids_provided = false,
+      server_selected_preview_row_ids_provided = true,
+      selected_row_count = 0,
       version = ws.version + 1,
       updated_at_utc = v_now
   WHERE ws.id = p_session_id
@@ -52777,7 +52912,7 @@ BEGIN
     'status', v_session_row.status,
     'version', v_new_session_version,
     'server_selected_preview_row_ids', '[]'::jsonb,
-    'server_selected_preview_row_ids_provided', false,
+    'server_selected_preview_row_ids_provided', true,
     'cleared_case_resolution_count', v_deleted_case_resolution_count,
     'cleared_case_resolution_ids', v_deleted_case_resolution_ids,
     'cleared_override_count', v_deleted_override_count,
@@ -52811,7 +52946,7 @@ BEGIN
     'status', v_session_row.status,
     'session_version', v_new_session_version,
     'server_selected_preview_row_ids', '[]'::jsonb,
-    'server_selected_preview_row_ids_provided', false,
+    'server_selected_preview_row_ids_provided', true,
     'cleared_case_resolution_count', v_deleted_case_resolution_count,
     'cleared_override_count', v_deleted_override_count,
     'cleared_selected_preview_row_count', v_selected_preview_row_count,
@@ -67146,7 +67281,80 @@ begin
             coalesce(case when lower(coalesce(line_element.value->>'is_candidate_directed_oneoff_payout', '')) in ('true', 'false') then (line_element.value->>'is_candidate_directed_oneoff_payout')::boolean else null::boolean end, false) as is_candidate_directed_oneoff_payout,
             coalesce(case when lower(coalesce(line_element.value->>'appears_on_umbrella_remittance', '')) in ('true', 'false') then (line_element.value->>'appears_on_umbrella_remittance')::boolean else null::boolean end, false) as appears_on_umbrella_remittance,
             coalesce(case when lower(coalesce(line_element.value->>'generates_candidate_payment_advice', '')) in ('true', 'false') then (line_element.value->>'generates_candidate_payment_advice')::boolean else null::boolean end, false) as generates_candidate_payment_advice,
-            coalesce(line_element.value->'case_components', line_element.value->'components', '[]'::jsonb) as case_components_json,
+            case
+              when upper(btrim(coalesce(line_element.value->>'line_type', ''))) in ('OVERPAYMENT_RECOVERY', 'UNDERPAYMENT_PAYMENT')
+               and jsonb_typeof(coalesce(line_element.value->'case_components', line_element.value->'components')) = 'array'
+               and jsonb_array_length(coalesce(line_element.value->'case_components', line_element.value->'components')) = 1
+              then (
+                select jsonb_build_array(
+                  component_element.value
+                  || coalesce(line_element.value->'frozen_component_snapshot_json', '{}'::jsonb)
+                  || jsonb_strip_nulls(jsonb_build_object(
+                    'finance_component_id', line_element.value->>'finance_component_id',
+                    'component_key_type', coalesce(
+                      line_element.value->>'frozen_component_key_type',
+                      line_element.value->>'component_key_type'
+                    ),
+                    'component_key_value', coalesce(
+                      line_element.value->>'frozen_component_key_value',
+                      line_element.value->>'component_key_value'
+                    ),
+                    'classification', coalesce(
+                      line_element.value->>'frozen_component_classification',
+                      line_element.value->>'classification'
+                    ),
+                    'source_pay_method', coalesce(
+                      line_element.value#>>'{frozen_component_snapshot_json,source_pay_method}',
+                      line_element.value->>'frozen_source_pay_method'
+                    ),
+                    'source_basis_json', coalesce(
+                      line_element.value->'frozen_source_basis_json',
+                      line_element.value->'source_basis_json'
+                    ),
+                    'saved_resolution_mode', coalesce(
+                      line_element.value->>'frozen_resolution_mode',
+                      line_element.value->>'saved_resolution_mode'
+                    ),
+                    'saved_resolution_payload_json', coalesce(
+                      line_element.value->'frozen_resolution_payload_json',
+                      line_element.value->'saved_resolution_payload_json',
+                      line_element.value->'resolution_payload_json'
+                    ),
+                    'saved_resolution_result_json', coalesce(
+                      line_element.value->'frozen_resolution_result_json',
+                      line_element.value->'saved_resolution_result_json',
+                      line_element.value->'resolution_result_json'
+                    ),
+                    'source_amount', coalesce(
+                      line_element.value->>'frozen_source_amount',
+                      line_element.value->>'source_amount_ex_vat',
+                      line_element.value->>'source_amount'
+                    ),
+                    'remaining_source_amount', coalesce(
+                      component_element.value->>'remaining_source_amount',
+                      line_element.value->>'remaining_source_amount',
+                      line_element.value->>'frozen_source_amount',
+                      line_element.value->>'source_amount_ex_vat'
+                    ),
+                    'preview_due_amount_ex_vat', coalesce(
+                      component_element.value->>'preview_due_amount_ex_vat',
+                      line_element.value->>'preview_amount_ex_vat',
+                      line_element.value->>'amount_ex_vat'
+                    ),
+                    'target_pay_ex_vat', coalesce(
+                      component_element.value->>'target_pay_ex_vat',
+                      line_element.value->>'target_pay_ex_vat',
+                      line_element.value->>'preview_amount_ex_vat',
+                      line_element.value->>'amount_ex_vat'
+                    )
+                  ))
+                )
+                from jsonb_array_elements(
+                  coalesce(line_element.value->'case_components', line_element.value->'components')
+                ) as component_element(value)
+              )
+              else coalesce(line_element.value->'case_components', line_element.value->'components', '[]'::jsonb)
+            end as case_components_json,
             line_element.ord as line_ordinal
         from pg_temp.tmp_pay_build_operation_candidate_scope as staged_scope
         cross join lateral jsonb_array_elements(staged_scope.selected_canonical_preview_lines_json) with ordinality as line_element(value, ord)
@@ -179584,11 +179792,14 @@ BEGIN
   LIMIT 1;
   v_clone_rebase_enabled := COALESCE(v_clone_rebase_enabled, false);
 
-  -- Serialise all opens for the same actor before taking the narrower
-  -- pay-date-specific lock.  The session signature currently includes the
-  -- pay date in several caller fallbacks, so signature-only uniqueness does
-  -- not retire older pay-week sessions.  This actor-level lock prevents two
-  -- concurrent opens for adjacent pay dates from both remaining OPEN.
+  -- The Banking Pay workbench is globally shared. Serialise every open before
+  -- the actor/context locks so two authorised actors or two different filter
+  -- contexts cannot each commit a separate OPEN authoritative session.
+  PERFORM pg_advisory_xact_lock(
+    pg_catalog.hashtext('public.pay_workbench_session_open_shared_v2.global_open')
+  );
+
+  -- Retain the narrower locks for deterministic same-actor/context replay.
   PERFORM pg_advisory_xact_lock(
     pg_catalog.hashtext('public.pay_workbench_session_open_shared_v2.actor'),
     pg_catalog.hashtext(p_actor_user_id::text)
@@ -180445,82 +180656,9 @@ BEGIN
   CREATE TEMP TABLE _bpay_open_shared_duplicate_inventory ON COMMIT DROP AS
   SELECT duplicate_session.id
   FROM public.banking_pay_workbench_sessions AS duplicate_session
-  WHERE duplicate_session.actor_user_id = p_actor_user_id
-      AND duplicate_session.id IS DISTINCT FROM v_session_row.id
-      AND duplicate_session.pay_date = p_pay_date
-      AND duplicate_session.week_ending_cutoff = v_effective_week_ending_cutoff
-      AND duplicate_session.status = 'OPEN'
-      AND duplicate_session.discarded_at_utc IS NULL
-      AND EXISTS (
-        SELECT 1
-        FROM LATERAL (
-          SELECT COALESCE(duplicate_session.filters_json, '{}'::jsonb) AS filtered_json
-        ) AS session_filter
-        CROSS JOIN LATERAL (
-          SELECT
-            CASE WHEN jsonb_typeof(session_filter.filtered_json->'filters') = 'object' THEN COALESCE(session_filter.filtered_json->'filters', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filters_json,
-            CASE WHEN jsonb_typeof(session_filter.filtered_json->'filter') = 'object' THEN COALESCE(session_filter.filtered_json->'filter', '{}'::jsonb) ELSE '{}'::jsonb END AS nested_filter_json
-        ) AS session_nested
-        CROSS JOIN LATERAL (
-          WITH raw_candidate_ids(candidate_id_text) AS (
-            SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidate_id'), '')
-            UNION ALL SELECT NULLIF(BTRIM(session_filter.filtered_json->>'candidateId'), '')
-            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidate_id'), '')
-            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filters_json->>'candidateId'), '')
-            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidate_id'), '')
-            UNION ALL SELECT NULLIF(BTRIM(session_nested.nested_filter_json->>'candidateId'), '')
-            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
-            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidate_ids') = 'array' THEN session_filter.filtered_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
-            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
-            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_filter.filtered_json->'candidateIds') = 'array' THEN session_filter.filtered_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
-            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
-            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidate_ids') = 'array' THEN session_nested.nested_filters_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
-            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
-            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filters_json->'candidateIds') = 'array' THEN session_nested.nested_filters_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
-            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
-            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidate_ids') = 'array' THEN session_nested.nested_filter_json->'candidate_ids' ELSE '[]'::jsonb END) AS candidate_id_value(value)
-            UNION ALL SELECT NULLIF(BTRIM(candidate_id_value.value), '')
-            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(session_nested.nested_filter_json->'candidateIds') = 'array' THEN session_nested.nested_filter_json->'candidateIds' ELSE '[]'::jsonb END) AS candidate_id_value(value)
-          ), valid_candidate_ids AS (
-            SELECT DISTINCT LOWER(raw_candidate_ids.candidate_id_text) AS candidate_id_text
-            FROM raw_candidate_ids
-            WHERE raw_candidate_ids.candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          )
-          SELECT COALESCE(jsonb_agg(valid_candidate_ids.candidate_id_text ORDER BY valid_candidate_ids.candidate_id_text), '[]'::jsonb) AS candidate_ids_json
-          FROM valid_candidate_ids
-        ) AS session_candidate_ids
-        WHERE COALESCE(NULLIF(BTRIM(COALESCE(
-                session_filter.filtered_json->>'candidate_filter_id',
-                session_filter.filtered_json->>'candidateFilterId',
-                session_filter.filtered_json->>'filter_candidate_id',
-                session_nested.nested_filters_json->>'candidate_filter_id',
-                session_nested.nested_filters_json->>'candidateFilterId',
-                session_nested.nested_filters_json->>'filter_candidate_id',
-                session_nested.nested_filter_json->>'candidate_filter_id',
-                session_nested.nested_filter_json->>'candidateFilterId',
-                session_nested.nested_filter_json->>'filter_candidate_id',
-                ''
-              )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_candidate_filter_id, '')
-          AND COALESCE(NULLIF(BTRIM(COALESCE(
-                session_filter.filtered_json->>'client_filter_id',
-                session_filter.filtered_json->>'clientFilterId',
-                session_filter.filtered_json->>'filter_client_id',
-                session_filter.filtered_json->>'client_id',
-                session_filter.filtered_json->>'clientId',
-                session_nested.nested_filters_json->>'client_filter_id',
-                session_nested.nested_filters_json->>'clientFilterId',
-                session_nested.nested_filters_json->>'filter_client_id',
-                session_nested.nested_filters_json->>'client_id',
-                session_nested.nested_filters_json->>'clientId',
-                session_nested.nested_filter_json->>'client_filter_id',
-                session_nested.nested_filter_json->>'clientFilterId',
-                session_nested.nested_filter_json->>'filter_client_id',
-                session_nested.nested_filter_json->>'client_id',
-                session_nested.nested_filter_json->>'clientId',
-                ''
-              )), ''), '') IS NOT DISTINCT FROM COALESCE(v_signature_client_filter_id, '')
-          AND COALESCE(session_candidate_ids.candidate_ids_json, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(v_signature_candidate_ids, '[]'::jsonb)
-      )
+  WHERE duplicate_session.id IS DISTINCT FROM v_session_row.id
+    AND duplicate_session.status = 'OPEN'
+    AND duplicate_session.discarded_at_utc IS NULL
   ORDER BY duplicate_session.updated_at_utc, duplicate_session.id
   FOR UPDATE;
 

@@ -14842,8 +14842,16 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
       const responseRows = Array.isArray(payload.rows)
         ? payload.rows
         : (Array.isArray(payload.items) ? payload.items : []);
+      // The RPC keeps both aliases for direct database compatibility. Do not
+      // send both over HTTP: for Banking Pay rows the duplicate JSON array can
+      // be hundreds of kilobytes and needlessly doubles browser parse memory.
+      const {
+        rows: _rpcRows,
+        items: _rpcItems,
+        ...responseMetadata
+      } = payload;
       const responsePayload = {
-        ...payload,
+        ...responseMetadata,
         ok: payload.ok !== false,
         session_id: payload.session_id || id,
         request_section: section,
@@ -14852,7 +14860,6 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
         section_alias_applied: payload.section_alias_applied === true || (requestedSection !== resolvedSection),
         section: trimStr(payload.section || resolvedSection).toLowerCase() || resolvedSection,
         rows: responseRows,
-        items: Array.isArray(payload.items) ? payload.items : responseRows,
         has_more: payload.has_more === true || payload.next_cursor != null,
         next_cursor: payload.next_cursor ?? null,
         total_count_estimate: payload.total_count_estimate ?? payload.known_count ?? null,
@@ -108695,20 +108702,11 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
       ''
     ) || null;
 
-    const canonicalSelectedPreviewRowIds = normalizeStringArray(
-      previewObj.server_selected_preview_row_ids ??
-      previewObj.selected_preview_row_ids ??
-      previewSessionObj.server_selected_preview_row_ids ??
-      previewSessionObj.selected_preview_row_ids ??
-      clearObj.server_selected_preview_row_ids ??
-      []
-    );
-    const canonicalSelectedPreviewRowIdsProvided = (
-      previewObj.server_selected_preview_row_ids_provided ??
-      previewSessionObj.server_selected_preview_row_ids_provided ??
-      clearObj.server_selected_preview_row_ids_provided ??
-      false
-    ) === true;
+    // This endpoint has one authoritative postcondition: the saved selection is
+    // explicitly empty. Do not allow a stale preview envelope to turn that into
+    // the workbench's implicit/default "select all eligible rows" behaviour.
+    const canonicalSelectedPreviewRowIds = [];
+    const canonicalSelectedPreviewRowIdsProvided = true;
 
     const pendingCandidateIds = normalizeStringArray(
       previewObj.pending_candidate_ids ??

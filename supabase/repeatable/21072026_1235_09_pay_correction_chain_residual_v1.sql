@@ -340,37 +340,131 @@ BEGIN
     'correction-chain:' || v_root_timesheet_id::text;
 
   WITH
-  raw_outstanding AS (
+  -- Correction-chain source truth must come from the timesheet entitlement
+  -- and timesheet reservation authorities only. _pay_outstanding_components
+  -- also projects open finance cases, including a correction finance case
+  -- created by the synchronisation that consumes this helper. Reusing that
+  -- mixed projection here would feed the new case back into its own source
+  -- truth and double the residual on the post-sync recheck.
+  live_entitlement_components AS (
     SELECT
-      UPPER(BTRIM(outstanding_row.key_type)) AS key_type,
-      BTRIM(outstanding_row.key_value) AS key_value,
-      round(sum(outstanding_row.truth_ex_vat), 2)::numeric(18,2)
-        AS truth_ex_vat,
-      round(sum(outstanding_row.baseline_ex_vat), 2)::numeric(18,2)
-        AS baseline_ex_vat,
-      round(sum(outstanding_row.reserved_ex_vat), 2)::numeric(18,2)
-        AS reserved_ex_vat,
-      round(sum(outstanding_row.outstanding_ex_vat), 2)::numeric(18,2)
-        AS raw_outstanding_ex_vat,
-      round(sum(outstanding_row.truth_inc_vat), 2)::numeric(18,2)
-        AS truth_inc_vat,
-      round(sum(outstanding_row.baseline_inc_vat), 2)::numeric(18,2)
-        AS baseline_inc_vat,
-      round(sum(outstanding_row.reserved_inc_vat), 2)::numeric(18,2)
-        AS reserved_inc_vat,
-      round(sum(outstanding_row.outstanding_inc_vat), 2)::numeric(18,2)
-        AS raw_outstanding_inc_vat,
-      bool_or(outstanding_row.reservation_overrun_detected)
-        AS reservation_overrun_detected
-    FROM public._pay_outstanding_components(
+      entitlement_row.timesheet_id,
+      UPPER(BTRIM(entitlement_row.key_type)) AS key_type,
+      BTRIM(entitlement_row.key_value) AS key_value,
+      entitlement_row.truth_ex_vat,
+      entitlement_row.baseline_ex_vat,
+      entitlement_row.truth_inc_vat,
+      entitlement_row.baseline_inc_vat
+    FROM public._pay_current_timesheet_entitlement_components(
+      v_member_ids
+    ) AS entitlement_row
+    WHERE UPPER(BTRIM(entitlement_row.key_type)) = 'TS_DAY'
+      AND NULLIF(BTRIM(entitlement_row.key_value), '') IS NOT NULL
+  ),
+  active_entitlement_reservations AS (
+    SELECT
+      reservation_row.timesheet_id,
+      UPPER(BTRIM(reservation_row.key_type)) AS key_type,
+      BTRIM(reservation_row.key_value) AS key_value,
+      reservation_row.amount_ex_vat,
+      reservation_row.amount_inc_vat
+    FROM public._pay_reserved_components(
       v_member_ids,
       p_exclude_pay_batch_id
-    ) AS outstanding_row
-    WHERE UPPER(BTRIM(outstanding_row.key_type)) = 'TS_DAY'
-      AND NULLIF(BTRIM(outstanding_row.key_value), '') IS NOT NULL
+    ) AS reservation_row
+    WHERE UPPER(BTRIM(reservation_row.key_type)) = 'TS_DAY'
+      AND NULLIF(BTRIM(reservation_row.key_value), '') IS NOT NULL
+  ),
+  entitlement_keys AS (
+    SELECT DISTINCT
+      entitlement_row.timesheet_id,
+      entitlement_row.key_type,
+      entitlement_row.key_value
+    FROM live_entitlement_components AS entitlement_row
+
+    UNION
+
+    SELECT DISTINCT
+      reservation_row.timesheet_id,
+      reservation_row.key_type,
+      reservation_row.key_value
+    FROM active_entitlement_reservations AS reservation_row
+  ),
+  entitlement_joined AS (
+    SELECT
+      component_key.timesheet_id,
+      component_key.key_type,
+      component_key.key_value,
+      COALESCE(entitlement_row.truth_ex_vat, 0) AS truth_ex_vat,
+      COALESCE(entitlement_row.baseline_ex_vat, 0) AS baseline_ex_vat,
+      COALESCE(reservation_row.amount_ex_vat, 0) AS reserved_ex_vat,
+      COALESCE(entitlement_row.truth_inc_vat, 0) AS truth_inc_vat,
+      COALESCE(entitlement_row.baseline_inc_vat, 0)
+        AS baseline_inc_vat,
+      COALESCE(reservation_row.amount_inc_vat, 0) AS reserved_inc_vat
+    FROM entitlement_keys AS component_key
+    LEFT JOIN live_entitlement_components AS entitlement_row
+      ON entitlement_row.timesheet_id = component_key.timesheet_id
+     AND entitlement_row.key_type = component_key.key_type
+     AND entitlement_row.key_value = component_key.key_value
+    LEFT JOIN active_entitlement_reservations AS reservation_row
+      ON reservation_row.timesheet_id = component_key.timesheet_id
+     AND reservation_row.key_type = component_key.key_type
+     AND reservation_row.key_value = component_key.key_value
+  ),
+  raw_component_totals AS (
+    SELECT
+      component_row.key_type,
+      component_row.key_value,
+      round(sum(component_row.truth_ex_vat), 2)::numeric(18,2)
+        AS truth_ex_vat,
+      round(sum(component_row.baseline_ex_vat), 2)::numeric(18,2)
+        AS baseline_ex_vat,
+      round(sum(component_row.reserved_ex_vat), 2)::numeric(18,2)
+        AS reserved_ex_vat,
+      round(sum(component_row.truth_inc_vat), 2)::numeric(18,2)
+        AS truth_inc_vat,
+      round(sum(component_row.baseline_inc_vat), 2)::numeric(18,2)
+        AS baseline_inc_vat,
+      round(sum(component_row.reserved_inc_vat), 2)::numeric(18,2)
+        AS reserved_inc_vat
+    FROM entitlement_joined AS component_row
     GROUP BY
-      UPPER(BTRIM(outstanding_row.key_type)),
-      BTRIM(outstanding_row.key_value)
+      component_row.key_type,
+      component_row.key_value
+  ),
+  raw_outstanding AS (
+    SELECT
+      component_total.key_type,
+      component_total.key_value,
+      component_total.truth_ex_vat,
+      component_total.baseline_ex_vat,
+      component_total.reserved_ex_vat,
+      round(
+        component_total.truth_ex_vat
+        - component_total.baseline_ex_vat
+        - component_total.reserved_ex_vat,
+        2
+      )::numeric(18,2) AS raw_outstanding_ex_vat,
+      component_total.truth_inc_vat,
+      component_total.baseline_inc_vat,
+      component_total.reserved_inc_vat,
+      round(
+        component_total.truth_inc_vat
+        - component_total.baseline_inc_vat
+        - component_total.reserved_inc_vat,
+        2
+      )::numeric(18,2) AS raw_outstanding_inc_vat,
+      round(abs(component_total.reserved_ex_vat), 2)
+        > round(
+            abs(GREATEST(
+              component_total.truth_ex_vat
+              - component_total.baseline_ex_vat,
+              0
+            )),
+            2
+          ) AS reservation_overrun_detected
+    FROM raw_component_totals AS component_total
   ),
   source_basis AS (
     SELECT
