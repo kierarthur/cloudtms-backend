@@ -31,7 +31,7 @@ begin
       from base b where b.entity_type='INVOICE'
     )) r
   ),
-  version_seed as materialized (
+  legacy_version_seed as materialized (
     select b.*,v.id version_id,
       case when b.purpose='FINAL_ISSUE' then v.snapshot_json
         when b.entity_type='INVOICE' then
@@ -249,32 +249,62 @@ begin
       and v.entity_type=b.entity_type and v.entity_id=b.entity_id
       and v.purpose=b.purpose
   ),
+  presentation_batch as materialized (
+    select p.*
+    from private._invoice_presentation_snapshot_batch(
+      (select coalesce(jsonb_agg(jsonb_build_object(
+        'request_key',s.id::text,
+        'entity_type',s.entity_type,
+        'entity_id',s.entity_id,
+        'purpose',s.purpose,
+        'template_version',s.template_version
+      ) order by s.id),'[]'::jsonb)
+      from legacy_version_seed s
+      where s.purpose<>'FINAL_ISSUE'),
+      v_now
+    ) p
+  ),
+  version_seed as materialized (
+    select s.*,
+      case when s.purpose='FINAL_ISSUE' then s.snapshot_json
+        else p.snapshot_json end snapshot_json_v5,
+      p.snapshot_hash snapshot_hash_v5,
+      p.valid presentation_valid,
+      p.error_code presentation_error_code,
+      p.error_detail presentation_error_detail
+    from legacy_version_seed s
+    left join presentation_batch p on p.request_key=s.id::text
+  ),
   missing_versions as materialized (
     update public.invoice_operation_chunks c
     set status='BLOCKED',phase='BLOCKED',failed_at_utc=v_now,
         lease_owner=null,lease_token=null,lease_expires_at_utc=null,
         error_json=jsonb_build_object(
-          'code','DOCUMENT_VERSION_REQUIRED',
-          'document_version_id',c.document_version_id),
+          'code',coalesce(s.presentation_error_code,'DOCUMENT_VERSION_REQUIRED'),
+          'document_version_id',c.document_version_id,
+          'detail',coalesce(s.presentation_error_detail,'{}'::jsonb)),
         updated_at_utc=v_now
     from base b
-    where c.id=b.id and not exists(
-      select 1 from version_seed s where s.id=b.id)
+    left join version_seed s on s.id=b.id
+    where c.id=b.id and (s.id is null
+      or (s.purpose<>'FINAL_ISSUE' and coalesce(s.presentation_valid,false)=false))
     returning c.id,c.status,c.phase,c.document_version_id,c.error_json
   ),
   updated_versions as (
     update public.invoice_document_versions v
     set snapshot_json=case when s.purpose='FINAL_ISSUE'
-          then v.snapshot_json else s.snapshot_json end,
+          then v.snapshot_json else s.snapshot_json_v5 end,
         snapshot_hash=case when s.purpose='FINAL_ISSUE'
-          then v.snapshot_hash else encode(digest(s.snapshot_json::text,'sha256'),'hex') end,
+          then v.snapshot_hash else s.snapshot_hash_v5 end,
         status=case when v.status='FAILED' then 'PLANNING' else v.status end
     from version_seed s where v.id=s.version_id
+      and (s.purpose='FINAL_ISSUE' or s.presentation_valid)
     returning v.id
   ),
   linked as materialized (
     select c.*,s.purpose,s.version_id resolved_document_version_id
     from public.invoice_operation_chunks c join version_seed s on s.id=c.id
+      and (s.purpose='FINAL_ISSUE' or s.presentation_valid)
   ),
   invoice_timesheets as materialized (
     select distinct l.id chunk_id,l.resolved_document_version_id document_version_id,

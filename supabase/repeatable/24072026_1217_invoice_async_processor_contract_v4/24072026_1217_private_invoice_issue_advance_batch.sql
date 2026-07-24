@@ -122,7 +122,7 @@ begin
     cross join lateral private._invoice_delivery_routes_batch(
       g.request_json,g.evaluation_date) r
   ),
-  frozen as materialized (
+  legacy_frozen as materialized (
     select c.id chunk_id,c.operation_id,c.entity_id invoice_id,c.payload_json,
       i.document_revision,i.invoice_no,i.client_id,
       jsonb_build_object(
@@ -339,6 +339,55 @@ begin
       on dr.request_key=c.id::text and dr.invoice_id=i.id
     left join freeze_route_requests rr on rr.chunk_id=c.id
     where sd.id=1
+  ),
+  presentation_batch as materialized (
+    select p.*
+    from private._invoice_presentation_snapshot_batch(
+      (select coalesce(jsonb_agg(jsonb_build_object(
+        'request_key',f.chunk_id::text,
+        'entity_type','INVOICE',
+        'entity_id',f.invoice_id,
+        'purpose','FINAL_ISSUE',
+        'template_version','invoice-professional-v1',
+        'issue_at_utc',f.snapshot->'issue_date_utc',
+        'tax_point_utc',f.snapshot->'tax_point_utc',
+        'due_at_utc',f.snapshot->'due_date_utc'
+      ) order by f.chunk_id),'[]'::jsonb)
+      from legacy_frozen f),
+      v_now
+    ) p
+  ),
+  invalid_presentations as materialized (
+    update public.invoice_operation_chunks c
+    set status='BLOCKED',phase='BLOCKED',failed_at_utc=v_now,
+      lease_owner=null,lease_token=null,lease_expires_at_utc=null,
+      error_json=jsonb_build_object(
+        'code',coalesce(p.error_code,'INVOICE_PRESENTATION_MODEL_INVALID'),
+        'detail',coalesce(p.error_detail,'{}'::jsonb)),
+      progress_json=jsonb_build_object(
+        'status_message','Final legal presentation snapshot is invalid'),
+      updated_at_utc=v_now
+    from legacy_frozen f
+    left join presentation_batch p on p.request_key=f.chunk_id::text
+    where c.id=f.chunk_id and coalesce(p.valid,false)=false
+    returning c.id
+  ),
+  frozen as materialized (
+    select f.chunk_id,f.operation_id,f.invoice_id,f.payload_json,
+      f.document_revision,f.invoice_no,f.client_id,
+      (f.snapshot - 'lines' - 'timesheet_sources' - 'source_support'
+        - 'presentation_model')
+      || p.snapshot_json || jsonb_build_object(
+        'snapshot_schema_version','FINAL_ISSUE_PRESENTATION_SNAPSHOT_V5',
+        'routing_request',f.snapshot->'routing_request',
+        'frozen_delivery_route',f.snapshot->'delivery_route',
+        'delivery_route',f.snapshot->'delivery_route',
+        'delivery_intent',f.snapshot->'delivery_intent',
+        'delivery_request_token',f.snapshot->'delivery_request_token',
+        'deliver',f.snapshot->'deliver'
+      ) snapshot
+    from legacy_frozen f
+    join presentation_batch p on p.request_key=f.chunk_id::text and p.valid
   ),
   existing_versions as materialized (
     select f.*,v.id existing_document_version_id,v.operation_id doc_operation_id,

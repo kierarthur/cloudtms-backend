@@ -304,7 +304,12 @@ begin
               a.invoice_id::text)||'.pdf',
             'sha256',a.sha256,'size_bytes',a.size_bytes,
             'page_count',a.page_count,'delivery_mode','SECURE_LINK',
-            'secure_link_required',true)
+            'secure_link_required',true,
+            'recipient_set_hash',a.recipient_set_hash,
+            'delivery_template',a.template_version,
+            'delivery_policy',a.requested_delivery_policy,
+            'route_policy_hash',a.route_policy_hash,
+            'max_attachment_bytes',a.max_individual_attachment_bytes)
         else jsonb_build_object(
             'invoice_id',a.invoice_id,
             'document_version_id',a.document_version_id,
@@ -313,7 +318,12 @@ begin
               a.invoice_id::text)||'.pdf',
             'r2_key',a.r2_key,'sha256',a.sha256,
             'mime_type','application/pdf','size_bytes',a.size_bytes,
-            'page_count',a.page_count,'delivery_mode','ATTACHMENT')
+            'page_count',a.page_count,'delivery_mode','ATTACHMENT',
+            'recipient_set_hash',a.recipient_set_hash,
+            'delivery_template',a.template_version,
+            'delivery_policy',a.requested_delivery_policy,
+            'route_policy_hash',a.route_policy_hash,
+            'max_attachment_bytes',a.max_individual_attachment_bytes)
         end order by a.input_no) attachments,
       sum(case when a.descriptor_mode='ATTACHMENT'
         then a.size_bytes else 0 end)::bigint attachment_total_bytes

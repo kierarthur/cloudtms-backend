@@ -57009,12 +57009,18 @@ async function handleContractWeekPresignManualPdf(env, req, weekId) {
   let randHex = '';
   randBytes.forEach(b => { randHex += b.toString(16).padStart(2, '0'); });
 
-  const key = `/files/${dateTag}/file_${randHex}${ext || ''}`;
+  const key = `files/${dateTag}/file_${randHex}${ext || ''}`;
 
   const expiresSec = Math.min(parseInt(env.PRESIGN_EXPIRES_SECONDS || '600', 10) || 600, 900);
-  const exp = Math.floor(Date.now() / 1000) + expiresSec;
 
-  const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: 'file_upload', key, exp });
+  const immutableUpload = await createImmutableInvoiceUploadToken(env, {
+    key,
+    uploadPurpose: 'CONTRACT_WEEK_MANUAL_TIMESHEET',
+    maxBytes: 20 * 1024 * 1024,
+    contentTypes: [contentType],
+    expiresSec
+  });
+  const token = immutableUpload.token;
 
   const uploadBase = new URL(req.url);
   uploadBase.pathname = '/api/files/upload';
@@ -57022,9 +57028,6 @@ async function handleContractWeekPresignManualPdf(env, req, weekId) {
   uploadBase.searchParams.set('key', key);
   uploadBase.searchParams.set('token', token);
   const upload_url = uploadBase.toString();
-
-  // Persist the key on the week (legacy behaviour)
-  await patchContractWeekScan(env, cw.id, key);
 
   return withCORS(
     env,
@@ -57034,8 +57037,11 @@ async function handleContractWeekPresignManualPdf(env, req, weekId) {
       upload_url,
       token,
       expires_in: expiresSec,
-      expires_at: new Date(exp * 1000).toISOString(),
-      max_bytes: parseInt(env.FILE_MAX_BYTES || '5000000', 10)
+      expires_at: immutableUpload.expiresAt,
+      max_bytes: immutableUpload.maxBytes,
+      content_type: contentType,
+      immutable: true,
+      requires_attachment_confirmation: true
     })
   );
 }
@@ -96217,15 +96223,30 @@ async function handleUserChangePassword(env, req) {
   if (!cw) return withCORS(env, req, notFound('Week not found'));
   if (String(cw.candidate_id) !== String(candidateId)) return withCORS(env, req, unauthorized());
 
-  const weC = ymdCompact(cw.week_ending_date);
-  const key = `paper_ts/we=${weC}/cw_${cw.id}_${Date.now()}.upload`;
-  const token = await createToken(env, 'UPLOAD', { key, c: 'manual_ts', ttlSec: 3600, maxBytes: 25*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png'] });
+  const contentType = String(body.content_type || 'application/pdf').trim().toLowerCase();
+  const allowed = new Set(['application/pdf','image/jpeg','image/png']);
+  if (!allowed.has(contentType)) return withCORS(env, req, badRequest('Only PDF, JPEG/JPG and static PNG files are supported.'));
+  const key = createCanonicalInvoiceUploadKey(contentType);
+  const immutableUpload = await createImmutableInvoiceUploadToken(env, {
+    key,
+    uploadPurpose: 'MANUAL_TIMESHEET',
+    maxBytes: 20 * 1024 * 1024,
+    contentTypes: [contentType],
+    expiresSec: 900
+  });
+  const token = immutableUpload.token;
   const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
-
-  // Optimistically attach key
-  await patchContractWeekScan(env, cw.id, key);
-
-  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
+  return withCORS(env, req, ok({
+    key,
+    upload_url,
+    token,
+    expires_in: 900,
+    expires_at: immutableUpload.expiresAt,
+    max_bytes: immutableUpload.maxBytes,
+    content_type: contentType,
+    immutable: true,
+    requires_attachment_confirmation: true
+  }));
 }
 
 async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
@@ -98372,10 +98393,32 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']); // backoffice presign; workers can use public files if needed
   if (!user) return withCORS(env, req, unauthorized());
 
-  const key = `docs/receipts/ts_${timesheetId}/${Date.now()}_${Math.random().toString(16).slice(2)}.upload`;
-  const token = await createToken(env, 'UPLOAD', { key, c: 'receipt', ttlSec: 3600, maxBytes: 20*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png'] });
+  let body = {};
+  try { body = await parseJSONBody(req); } catch {}
+  const contentType = String(body?.content_type || 'application/pdf').trim().toLowerCase();
+  const allowed = new Set(['application/pdf','image/jpeg','image/png']);
+  if (!allowed.has(contentType)) return withCORS(env, req, badRequest('Only PDF, JPEG/JPG and static PNG files are supported.'));
+  const key = createCanonicalInvoiceUploadKey(contentType);
+  const immutableUpload = await createImmutableInvoiceUploadToken(env, {
+    key,
+    uploadPurpose: 'TIMESHEET_EXPENSE_EVIDENCE',
+    maxBytes: 20 * 1024 * 1024,
+    contentTypes: [contentType],
+    expiresSec: 900
+  });
+  const token = immutableUpload.token;
   const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
-  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
+  return withCORS(env, req, ok({
+    key,
+    upload_url,
+    token,
+    expires_in: 900,
+    expires_at: immutableUpload.expiresAt,
+    max_bytes: immutableUpload.maxBytes,
+    content_type: contentType,
+    immutable: true,
+    requires_attachment_confirmation: true
+  }));
 }
 export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -120984,6 +121027,7 @@ function normalizeEmailPayload(raw) {
         recipient_set_hash: a.recipient_set_hash ? String(a.recipient_set_hash) : undefined,
         delivery_template: a.delivery_template ? String(a.delivery_template) : undefined,
         delivery_policy: a.delivery_policy ? String(a.delivery_policy) : undefined,
+        route_policy_hash: a.route_policy_hash ? String(a.route_policy_hash) : undefined,
         max_attachment_bytes: a.max_attachment_bytes,
         delivery_mode: 'SECURE_LINK',
         secure_link_required: true
@@ -121005,6 +121049,7 @@ function normalizeEmailPayload(raw) {
         recipient_set_hash: a.recipient_set_hash ? String(a.recipient_set_hash) : undefined,
         delivery_template: a.delivery_template ? String(a.delivery_template) : undefined,
         delivery_policy: a.delivery_policy ? String(a.delivery_policy) : undefined,
+        route_policy_hash: a.route_policy_hash ? String(a.route_policy_hash) : undefined,
         max_attachment_bytes: a.max_attachment_bytes,
         delivery_mode: String(a.delivery_mode || 'ATTACHMENT').toUpperCase()
       });
@@ -121047,6 +121092,40 @@ function validateEmailPayload(p) {
 
 // ---------- Build PA payload (single email) in Apps Script structure ----------
 
+function renderInvoiceDeliveryEmail({
+  templateVersion,
+  htmlBody,
+  textBody,
+  secureLinks,
+  expiresAtUtc
+}) {
+  const template = String(templateVersion || '').trim();
+  if (!['invoice-delivery-v1','INVOICE_EMAIL_V1'].includes(template)) {
+    throw Object.assign(new Error('INVOICE_DELIVERY_TEMPLATE_UNSUPPORTED'), { code: 'INVOICE_DELIVERY_TEMPLATE_UNSUPPORTED' });
+  }
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
+  const links = Array.isArray(secureLinks) ? secureLinks : [];
+  if (!links.length) return { htmlBody: String(htmlBody || ''), textBody: String(textBody || '') };
+  const expiryText = new Date(expiresAtUtc).toLocaleString('en-GB', {
+    timeZone: 'Europe/London',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const linkHtml = links.map(link =>
+    `<tr><td style="padding:8px 0"><a href="${escapeHtml(link.href)}" style="display:inline-block;padding:10px 16px;background:#17365d;color:#fff;text-decoration:none;border-radius:4px">${escapeHtml(link.filename)}</a></td></tr>`
+  ).join('');
+  const linkText = links.map(link => `${link.filename}: ${link.href}`).join('\n');
+  return {
+    htmlBody: `<div data-invoice-delivery-template="${escapeHtml(template)}">${String(htmlBody || '')}<section aria-label="Secure invoice documents"><h2>Your invoice documents</h2><table role="presentation">${linkHtml}</table><p>For your security, these links expire at ${escapeHtml(expiryText)} (UK time).</p></section></div>`,
+    textBody: `${String(textBody || '').trim()}\n\nYour invoice documents\n${linkText}\n\nFor your security, these links expire at ${expiryText} (UK time).`.trim()
+  };
+}
 
 async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -121729,6 +121808,34 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   const secureDocumentLinks = [];
   const asyncInvoiceDelivery = isInvoiceAsyncPipelineEnabled(env)
     && String(outboxRow.type || '').trim().toUpperCase() === 'INVOICE';
+  let invoiceDescriptorContract = null;
+  if (asyncInvoiceDelivery) {
+    for (const descriptor of (base.attachments || [])) {
+      const mode = String(descriptor?.delivery_mode || '').trim().toUpperCase();
+      const template = String(descriptor?.delivery_template || '').trim();
+      const routePolicyHash = String(descriptor?.route_policy_hash || '').trim().toLowerCase();
+      const deliveryPolicy = String(descriptor?.delivery_policy || '').trim().toUpperCase();
+      if (
+        !['ATTACHMENT','SECURE_LINK'].includes(mode)
+        || !template
+        || !/^[0-9a-f]{64}$/.test(routePolicyHash)
+        || !['ATTACH','SPLIT','SECURE_LINK'].includes(deliveryPolicy)
+      ) {
+        throw new Error('INVOICE_DELIVERY_DESCRIPTOR_CONTRACT_INVALID');
+      }
+      const current = { mode, template, routePolicyHash, deliveryPolicy };
+      if (!invoiceDescriptorContract) invoiceDescriptorContract = current;
+      else if (
+        current.mode !== invoiceDescriptorContract.mode
+        || current.template !== invoiceDescriptorContract.template
+        || current.routePolicyHash !== invoiceDescriptorContract.routePolicyHash
+        || current.deliveryPolicy !== invoiceDescriptorContract.deliveryPolicy
+      ) {
+        throw new Error('INVOICE_DELIVERY_DESCRIPTOR_GROUP_MISMATCH');
+      }
+    }
+    if (!invoiceDescriptorContract) throw new Error('INVOICE_DELIVERY_DESCRIPTOR_REQUIRED');
+  }
 
   for (const a of (base.attachments || [])) {
     if (!a) continue;
@@ -121915,15 +122022,19 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   }
 
   if (secureDocumentLinks.length) {
-    const escapeMailHtml = (value) => String(value ?? '').replace(/[&<>"']/g, character => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[character]);
-    const htmlLinks = secureDocumentLinks.map(link =>
-      `<li><a href="${escapeMailHtml(link.href)}">${escapeMailHtml(link.filename)}</a></li>`
-    ).join('');
-    const textLinks = secureDocumentLinks.map(link => `${link.filename}: ${link.href}`).join('\n');
-    base.htmlBody = `${base.htmlBody || ''}<p>Secure invoice documents:</p><ul>${htmlLinks}</ul>`;
-    base.body = `${base.body || ''}\n\nSecure invoice documents:\n${textLinks}`.trim();
+    const ttlSeconds = Math.max(300, Math.min(
+      7 * 24 * 60 * 60,
+      Math.trunc(Number(env.INVOICE_DOCUMENT_ACCESS_TTL_SECONDS) || 86400)
+    ));
+    const rendered = renderInvoiceDeliveryEmail({
+      templateVersion: invoiceDescriptorContract?.template,
+      htmlBody: base.htmlBody,
+      textBody: base.body,
+      secureLinks: secureDocumentLinks,
+      expiresAtUtc: new Date(Date.now() + ttlSeconds * 1000).toISOString()
+    });
+    base.htmlBody = rendered.htmlBody;
+    base.body = rendered.textBody;
   }
 
   // Filter out empties (Apps Script does this too)
@@ -121948,6 +122059,12 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
       context_id: outboxRow.context_id || null,
       mailshot_run_id: outboxRow.mailshot_run_id || null,
       document_template_id: outboxRow.document_template_id || null,
+      ...(asyncInvoiceDelivery ? {
+        invoice_async_delivery: true,
+        delivery_mode: invoiceDescriptorContract.mode,
+        route_policy_hash: invoiceDescriptorContract.routePolicyHash,
+        delivery_template: invoiceDescriptorContract.template
+      } : {}),
       ...(base.metadata && typeof base.metadata === 'object' ? base.metadata : {})
     }
   };
@@ -121967,8 +122084,7 @@ async function limitOrLinkAttachments(env, { payload }) {
   const limitBytes = Number(env.EMAIL_MAX_PAYLOAD_BYTES) || EMAIL_MAX_PAYLOAD_BYTES;
   let currentBytes = estimatePayloadSizeBytes(payload);
   if (currentBytes <= limitBytes) return { payload, trimmed: false };
-  if (isInvoiceAsyncPipelineEnabled(env)
-      && String(payload?.meta?.type || payload?.metadata?.type || '').toUpperCase() === 'INVOICE') {
+  if (payload?.meta?.invoice_async_delivery === true) {
     throw new Error('INVOICE_DELIVERY_PAYLOAD_EXCEEDS_FROZEN_POLICY');
   }
 
@@ -128348,6 +128464,56 @@ async function verifyToken(secret, token) {
   const now = Math.floor(Date.now() / 1000);
   if (typeof payload.exp === "number" && now > payload.exp) return { ok: false, error: "Token expired" };
   return { ok: true, payload };
+}
+
+function createCanonicalInvoiceUploadKey(contentType) {
+  const extension = {
+    'application/pdf': '.pdf',
+    'image/jpeg': '.jpg',
+    'image/png': '.png'
+  }[String(contentType || '').trim().toLowerCase()];
+  if (!extension) throw Object.assign(new Error('ASSET_MEDIA_TYPE_UNSUPPORTED'), { code: 'ASSET_MEDIA_TYPE_UNSUPPORTED' });
+  const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const random = crypto.getRandomValues(new Uint8Array(8));
+  const randomHex = [...random].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  return `files/${dateTag}/file_${randomHex}${extension}`;
+}
+
+async function createImmutableInvoiceUploadToken(env, {
+  key,
+  uploadPurpose,
+  maxBytes,
+  contentTypes,
+  expiresSec = 600
+}) {
+  if (!env.UPLOAD_TOKEN_SECRET) throw Object.assign(new Error('UPLOAD_TOKEN_SECRET_MISSING'), { code: 'UPLOAD_TOKEN_SECRET_MISSING' });
+  const normalisedKey = String(key || '').replace(/^\/+/, '').trim();
+  if (!/^files\/\d{8}\/file_[0-9a-f]{16}\.(?:pdf|jpg|jpeg|png)$/i.test(normalisedKey)) {
+    throw Object.assign(new Error('INVALID_IMMUTABLE_SOURCE_KEY'), { code: 'INVALID_IMMUTABLE_SOURCE_KEY' });
+  }
+  const allowed = [...new Set((Array.isArray(contentTypes) ? contentTypes : [])
+    .map(value => String(value || '').trim().toLowerCase())
+    .filter(value => ['application/pdf','image/jpeg','image/png'].includes(value)))];
+  if (!allowed.length) throw Object.assign(new Error('ASSET_MEDIA_TYPE_UNSUPPORTED'), { code: 'ASSET_MEDIA_TYPE_UNSUPPORTED' });
+  const boundedMax = Math.max(1, Math.min(20 * 1024 * 1024, Math.trunc(Number(maxBytes) || 0)));
+  const boundedExpiry = Math.max(60, Math.min(900, Math.trunc(Number(expiresSec) || 600)));
+  const exp = Math.floor(Date.now() / 1000) + boundedExpiry;
+  const payload = {
+    typ: 'file_upload',
+    key: normalisedKey,
+    exp,
+    immutable: true,
+    upload_purpose: String(uploadPurpose || 'INVOICE_EVIDENCE').slice(0, 80),
+    max_bytes: boundedMax,
+    content_types: allowed,
+    nonce: crypto.randomUUID()
+  };
+  return {
+    token: await createToken(env.UPLOAD_TOKEN_SECRET, payload),
+    expiresAt: new Date(exp * 1000).toISOString(),
+    maxBytes: boundedMax,
+    contentTypes: allowed
+  };
 }
 
 // ---------------------- Date / Time ----------------------
@@ -154093,7 +154259,20 @@ async function handleFilePresignUpload(env, req) {
   if (!data || !data.content_type) return withCORS(env, req, badRequest("content_type required"));
 
   const filename = data.filename || "";
-  const contentType = String(data.content_type);
+  const contentType = String(data.content_type).trim().toLowerCase();
+  const uploadPurpose = String(data.upload_purpose || data.purpose || '').trim().toUpperCase();
+  const immutableInvoicePurposes = new Set([
+    'INVOICE_EVIDENCE',
+    'MANUAL_TIMESHEET',
+    'CONTRACT_WEEK_MANUAL_TIMESHEET',
+    'TIMESHEET_EXPENSE_EVIDENCE',
+    'INVOICE_BRANDING',
+    'TIMESHEET_SIGNATURE'
+  ]);
+  const immutableInvoiceUpload = immutableInvoicePurposes.has(uploadPurpose);
+  if (immutableInvoiceUpload && !['application/pdf','image/jpeg','image/png'].includes(contentType)) {
+    return withCORS(env, req, unsupported('Only PDF, JPEG/JPG and static PNG files are supported.'));
+  }
 
   let ext = "";
   if (filename && filename.includes(".")) {
@@ -154123,7 +154302,18 @@ async function handleFilePresignUpload(env, req) {
   const expiresSec = Math.min(parseInt(env.PRESIGN_EXPIRES_SECONDS || "600", 10), 900);
   const exp = Math.floor(Date.now() / 1000) + expiresSec;
 
-  const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "file_upload", key: fileKey, exp });
+  const requestedMax = Math.trunc(Number(data.max_bytes || env.FILE_MAX_BYTES || 5000000));
+  const immutableToken = immutableInvoiceUpload
+    ? await createImmutableInvoiceUploadToken(env, {
+        key: fileKey,
+        uploadPurpose,
+        maxBytes: requestedMax,
+        contentTypes: [contentType],
+        expiresSec
+      })
+    : null;
+  const token = immutableToken?.token
+    || await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "file_upload", key: fileKey, exp });
 
   const baseUrl = new URL(req.url);
   baseUrl.pathname = "/api/files/upload";
@@ -154136,8 +154326,10 @@ async function handleFilePresignUpload(env, req) {
     upload_url: baseUrl.toString(),
     token,
     expires_at: new Date(exp * 1000).toISOString(),
-    max_bytes: parseInt(env.FILE_MAX_BYTES || "5000000", 10),
-    content_type: contentType
+    max_bytes: immutableToken?.maxBytes ?? parseInt(env.FILE_MAX_BYTES || "5000000", 10),
+    content_type: contentType,
+    immutable: immutableInvoiceUpload,
+    requires_attachment_confirmation: immutableInvoiceUpload
   }));
 }
 async function handleFileUpload(env, req, url) {
@@ -154205,7 +154397,90 @@ async function handleFileUpload(env, req, url) {
     return withCORS(env, req, badRequest("Invalid key"));
   }
 
-  const ct = req.headers.get("content-type") || "";
+  const ct = String(req.headers.get("content-type") || "").split(';')[0].trim().toLowerCase();
+  if (p.immutable === true) {
+    const allowed = Array.isArray(p.content_types)
+      ? p.content_types.map(value => String(value || '').trim().toLowerCase())
+      : [];
+    const maxBytes = Math.trunc(Number(p.max_bytes));
+    const contentLengthText = req.headers.get('content-length');
+    const contentLength = Number(contentLengthText);
+    if (
+      !allowed.length
+      || !allowed.every(value => ['application/pdf','image/jpeg','image/png'].includes(value))
+      || !allowed.includes(ct)
+    ) {
+      return withCORS(env, req, unsupported('ASSET_MEDIA_TYPE_UNSUPPORTED'));
+    }
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 20 * 1024 * 1024) {
+      return withCORS(env, req, unauthorized('IMMUTABLE_UPLOAD_POLICY_INVALID'));
+    }
+    if (!Number.isSafeInteger(contentLength) || contentLength < 1) {
+      return withCORS(env, req, badRequest('CONTENT_LENGTH_REQUIRED'));
+    }
+    if (contentLength > maxBytes) {
+      return withCORS(env, req, tooLarge(`Max ${maxBytes} bytes`));
+    }
+    const bucket = env.R2_BUCKET || env.R2;
+    const existing = await bucket.head(key).catch(() => null);
+    if (existing) {
+      return withCORS(env, req, new Response(JSON.stringify({
+        error: 'IMMUTABLE_SOURCE_KEY_ALREADY_EXISTS'
+      }), { status: 409, headers: JSON_HEADERS }));
+    }
+    if (!req.body) return withCORS(env, req, badRequest('UPLOAD_BODY_REQUIRED'));
+    const nonceHash = await sha256Hex(String(p.nonce || ''));
+    const putOptions = {
+      onlyIf: { etagDoesNotMatch: '*' },
+      httpMetadata: { contentType: ct },
+      customMetadata: {
+        immutable_source: 'true',
+        declared_media_type: ct,
+        upload_purpose: String(p.upload_purpose || 'INVOICE_EVIDENCE').slice(0, 80),
+        token_nonce_hash: nonceHash,
+        declared_size_bytes: String(contentLength)
+      }
+    };
+    let putResult;
+    try {
+      if (typeof FixedLengthStream === 'function') {
+        const fixed = new FixedLengthStream(contentLength);
+        const transfer = req.body.pipeTo(fixed.writable);
+        [putResult] = await Promise.all([
+          bucket.put(key, fixed.readable, putOptions),
+          transfer
+        ]);
+      } else {
+        putResult = await bucket.put(key, req.body, putOptions);
+      }
+    } catch (error) {
+      const raced = await bucket.head(key).catch(() => null);
+      if (raced) {
+        return withCORS(env, req, new Response(JSON.stringify({
+          error: 'IMMUTABLE_SOURCE_KEY_ALREADY_EXISTS'
+        }), { status: 409, headers: JSON_HEADERS }));
+      }
+      throw error;
+    }
+    if (!putResult) {
+      return withCORS(env, req, new Response(JSON.stringify({
+        error: 'IMMUTABLE_SOURCE_KEY_ALREADY_EXISTS'
+      }), { status: 409, headers: JSON_HEADERS }));
+    }
+    const stored = await bucket.head(key).catch(() => null);
+    if (!stored || Number(stored.size) !== contentLength) {
+      return withCORS(env, req, serverError('IMMUTABLE_SOURCE_SIZE_MISMATCH'));
+    }
+    return withCORS(env, req, ok({
+      ok: true,
+      key,
+      etag: stored.etag || putResult.etag || null,
+      size: contentLength,
+      immutable: true,
+      upload_purpose: String(p.upload_purpose || 'INVOICE_EVIDENCE').slice(0, 80)
+    }));
+  }
+
   const allowedTypes = /^(image\/|application\/pdf|text\/|application\/vnd\.openxmlformats|application\/vnd\.ms-excel)/i;
   if (!allowedTypes.test(ct)) {
     if (LOG) {
@@ -154289,16 +154564,38 @@ async function handleFileUpload(env, req, url) {
   return withCORS(env, req, ok({ ok: true, key, etag: putRes?.etag, size: actualLen || undefined }));
 }
 
+function inspectPngChunks(bytes) {
+  if (bytes.length < 8) return { valid: false, truncated: true, animated: false };
+  let offset = 8;
+  while (offset < bytes.length) {
+    if (offset + 12 > bytes.length) return { valid: false, truncated: true, animated: false };
+    const length = (
+      (bytes[offset] * 0x1000000)
+      + (bytes[offset + 1] << 16)
+      + (bytes[offset + 2] << 8)
+      + bytes[offset + 3]
+    ) >>> 0;
+    if (length > 64 * 1024 * 1024) return { valid: false, truncated: false, animated: false };
+    const end = offset + 12 + length;
+    if (end > bytes.length) return { valid: false, truncated: true, animated: false };
+    const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+    if (type === 'acTL') return { valid: true, truncated: false, animated: true };
+    offset = end;
+    if (type === 'IEND') return { valid: true, truncated: false, animated: false };
+  }
+  return { valid: false, truncated: true, animated: false };
+}
+
 function detectPdfOrImageContentKind(bytesLike) {
   const bytes = bytesLike instanceof Uint8Array ? bytesLike : new Uint8Array(bytesLike || []);
   if (!bytes.length) return 'empty';
   if (bytes.length < 5) return 'truncated';
   if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d) return 'application/pdf';
   if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) {
-    for (let index = 8; index + 3 < bytes.length; index += 1) {
-      if (bytes[index] === 0x61 && bytes[index + 1] === 0x63 && bytes[index + 2] === 0x54 && bytes[index + 3] === 0x4c) return 'unsupported';
-    }
-    return 'image/png';
+    const png = inspectPngChunks(bytes);
+    if (png.animated) return 'unsupported';
+    if (png.truncated) return 'truncated';
+    return png.valid ? 'image/png' : 'unknown';
   }
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
   const ascii = start => String.fromCharCode(...bytes.slice(start, start + 4));

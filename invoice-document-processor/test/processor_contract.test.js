@@ -45,12 +45,12 @@ test('V4 action descriptors use inspected original identity and verify existing 
     expected_original_sha256: 'a'.repeat(64),
     expected_original_size_bytes: 123,
     expected_original_media_type: 'application/pdf'
-  }), [{ r2_key: 'original/source.pdf', media_type: 'application/pdf', size_bytes: 123, sha256: 'a'.repeat(64) }]);
+  }), [{ r2_key: 'original/source.pdf', media_type: 'application/pdf', size_bytes: 123, sha256: 'a'.repeat(64), require_stored_sha256: false }]);
   assert.deepEqual(findInputDescriptors('DOCUMENT_VERIFY', {
     final_candidate_key: 'final/candidate.pdf',
     final_candidate_sha256: 'b'.repeat(64),
     final_candidate_size_bytes: 456
-  }), [{ r2_key: 'final/candidate.pdf', sha256: 'b'.repeat(64), size_bytes: 456 }]);
+  }), [{ r2_key: 'final/candidate.pdf', sha256: 'b'.repeat(64), size_bytes: 456, require_stored_sha256: true }]);
 });
 
 test('R2 inputs reject duplicates, missing objects, and stored identity mismatch before transfer', async () => {

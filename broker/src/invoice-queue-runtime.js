@@ -10,6 +10,7 @@ import {
   invoiceProcessorSha256Hex,
   signInvoiceProcessorRequest
 } from '../../shared/invoice-processor-security.js';
+import { validateFrozenPresentationModel } from './invoice-presentation-contract.js';
 
 export const INVOICE_DATABASE_CHUNK_TYPES = Object.freeze([
   'GENERATION_GROUP',
@@ -113,6 +114,8 @@ export function getInvoiceQueueRuntimeConfig(env = {}) {
     maximumContinuationDepth: 4,
     safetyMarginMs: parseBoundedInteger(env.INVOICE_QUEUE_SAFETY_MARGIN_MS, 1500, 250, 5000),
     heartbeatMs: parseBoundedInteger(env.INVOICE_PROCESSOR_HEARTBEAT_MS, 20000, 5000, 60000),
+    heartbeatRpcTimeoutMs: parseBoundedInteger(env.INVOICE_HEARTBEAT_RPC_TIMEOUT_MS, 8000, 1000, 30000),
+    finalTouchRpcTimeoutMs: parseBoundedInteger(env.INVOICE_FINAL_TOUCH_RPC_TIMEOUT_MS, 8000, 1000, 30000),
     nativeRequestTimeoutMs: parseBoundedInteger(env.INVOICE_NATIVE_REQUEST_TIMEOUT_MS, 120000, 10000, 300000),
     browserRenderTimeoutMs: parseBoundedInteger(env.INVOICE_BROWSER_RENDER_TIMEOUT_MS, 45000, 5000, 90000),
     browserRenderOutputMaxBytes: parseBoundedInteger(env.INVOICE_BROWSER_RENDER_OUTPUT_MAX_BYTES, 16777216, 1048576, 67108864),
@@ -126,6 +129,16 @@ export function getInvoiceQueueRuntimeConfig(env = {}) {
     reconciliationPageSize: parseBoundedInteger(env.INVOICE_RECONCILIATION_PAGE_SIZE, 100, 1, 100),
     reconciliationMaximumPagesPerInvocation: parseBoundedInteger(env.INVOICE_RECONCILIATION_MAXIMUM_PAGES, 4, 1, 4),
     userNudgeProcessesExternalWork: parseBooleanFlag(env.INVOICE_USER_NUDGE_PROCESSES_EXTERNAL_WORK, false),
+    autoStartBatchSize: parseBoundedInteger(env.INVOICE_AUTO_START_BATCH_SIZE, 500, 1, 1000),
+    autoMaximumStartBatchesPerInvocation: parseBoundedInteger(env.INVOICE_AUTO_MAX_START_BATCHES, 2, 1, 10),
+    expectedProcessorImplementationVersion: String(
+      env.INVOICE_EXPECTED_PROCESSOR_IMPLEMENTATION_VERSION
+        || 'cloudtms-invoice-document-worker-v6'
+    ).trim(),
+    nativeToolReadinessRequired: parseBooleanFlag(
+      env.INVOICE_NATIVE_TOOL_READINESS_REQUIRED,
+      true
+    ),
     processorPolicyVersion: String(env.INVOICE_PROCESSOR_POLICY_VERSION || PROCESSOR_POLICY_VERSION),
     systemActorUserId: String(env.INVOICE_ACTOR_USER_ID || '').trim()
   };
@@ -144,6 +157,9 @@ export function validateQueueRuntimeConfiguration(env = {}) {
   if (config.processorEnabled && !env.INVOICE_DOCUMENT_PROCESSOR_SECRET) errors.push('INVOICE_DOCUMENT_PROCESSOR_SECRET_MISSING');
   if (config.browserRenderOutputMaxBytes > config.browserInMemoryPdfMaxBytes) errors.push('INVOICE_BROWSER_MEMORY_LIMIT_INVALID');
   if (config.heartbeatFailureAbortMarginMs >= config.leaseSeconds * 1000) errors.push('INVOICE_HEARTBEAT_ABORT_MARGIN_INVALID');
+  if (config.heartbeatRpcTimeoutMs >= config.heartbeatMs) errors.push('INVOICE_HEARTBEAT_RPC_TIMEOUT_INVALID');
+  if (config.finalTouchRpcTimeoutMs >= config.heartbeatFailureAbortMarginMs) errors.push('INVOICE_FINAL_TOUCH_RPC_TIMEOUT_INVALID');
+  if (config.processorEnabled && !config.expectedProcessorImplementationVersion) errors.push('INVOICE_PROCESSOR_IMPLEMENTATION_VERSION_MISSING');
   if (config.userNudgeProcessesExternalWork) errors.push('INVOICE_USER_NUDGE_EXTERNAL_WORK_UNSAFE');
   return { ok: errors.length === 0, errors, config };
 }
@@ -325,18 +341,23 @@ function deriveAttachmentDisplayMap(layout, finalIndexPageCount) {
 
 async function resolveApprovedRenderAsset(env, identity, cache = new Map()) {
   if (!identity?.r2_key) return {};
-  const cacheKey = `${String(identity.r2_key)}|${String(identity.sha256 || '')}`;
+  const expectedHash = String(identity.sha256 || '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(expectedHash)) {
+    throw Object.assign(new Error('RENDER_ASSET_HASH_REQUIRED'), { code: 'RENDER_ASSET_HASH_REQUIRED' });
+  }
+  const cacheKey = `${String(identity.r2_key)}|${expectedHash}`;
   if (cache.has(cacheKey)) return cache.get(cacheKey);
   const object = await env.R2.get(String(identity.r2_key));
   if (!object) throw Object.assign(new Error('RENDER_ASSET_MISSING'), { code: 'RENDER_ASSET_MISSING' });
   if (identity.size_bytes != null && Number(identity.size_bytes) !== Number(object.size)) throw Object.assign(new Error('RENDER_ASSET_SIZE_MISMATCH'), { code: 'RENDER_ASSET_SIZE_MISMATCH' });
-  if (!identity.sha256 || object.customMetadata?.sha256 !== identity.sha256) throw Object.assign(new Error('RENDER_ASSET_HASH_MISMATCH'), { code: 'RENDER_ASSET_HASH_MISMATCH' });
+  const storedHash = String(object.customMetadata?.sha256 || '').toLowerCase();
+  if (storedHash && storedHash !== expectedHash) throw Object.assign(new Error('RENDER_ASSET_HASH_MISMATCH'), { code: 'RENDER_ASSET_HASH_MISMATCH' });
   if (Number(object.size) > 2 * 1024 * 1024) throw Object.assign(new Error('RENDER_ASSET_TOO_LARGE'), { code: 'RENDER_ASSET_TOO_LARGE' });
   const mediaType = String(identity.media_type || object.httpMetadata?.contentType || 'image/png');
   if (!['image/png','image/jpeg'].includes(mediaType)) throw Object.assign(new Error('RENDER_ASSET_MEDIA_UNSUPPORTED'), { code: 'RENDER_ASSET_MEDIA_UNSUPPORTED' });
   const bytes = new Uint8Array(await object.arrayBuffer());
   const actualHash = await sha256Hex(bytes);
-  if (actualHash !== String(identity.sha256).toLowerCase()) throw Object.assign(new Error('RENDER_ASSET_HASH_MISMATCH'), { code: 'RENDER_ASSET_HASH_MISMATCH' });
+  if (actualHash !== expectedHash) throw Object.assign(new Error('RENDER_ASSET_HASH_MISMATCH'), { code: 'RENDER_ASSET_HASH_MISMATCH' });
   let binary = '';
   for (let offset = 0; offset < bytes.length; offset += 32768) binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
   const resolved = Object.freeze({
@@ -352,9 +373,18 @@ async function resolveApprovedRenderAsset(env, identity, cache = new Map()) {
 async function resolveEmbeddedBrandingAssets(env, sourceModel, config) {
   const model = structuredClone(sourceModel || {});
   const cache = new Map();
-  if (model.branding?.r2_key) model.branding = await resolveApprovedRenderAsset(env, model.branding, cache);
-  for (const key of ['candidate_signature','nurse_signature','authoriser_signature']) {
-    if (model[key]?.r2_key) model[key] = await resolveApprovedRenderAsset(env, model[key], cache);
+  const resolveIdentity = async identity => {
+    if (!identity?.r2_key) return identity;
+    return { ...identity, ...(await resolveApprovedRenderAsset(env, identity, cache)) };
+  };
+  if (model.branding?.logo?.r2_key) {
+    model.branding.logo = await resolveIdentity(model.branding.logo);
+  }
+  if (model.signatures?.candidate?.r2_key) {
+    model.signatures.candidate = await resolveIdentity(model.signatures.candidate);
+  }
+  if (model.signatures?.authoriser?.r2_key) {
+    model.signatures.authoriser = await resolveIdentity(model.signatures.authoriser);
   }
   const assets = [...cache.values()];
   if (assets.length > config.maximumEmbeddedRenderAssets) {
@@ -372,14 +402,18 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
   const context = contextRow.context || {};
   const identity = processorIdentity(contextRow);
   const renderKind = String(identity.render_kind || context.render_kind || '').toUpperCase();
-  const frozenSnapshot = context.model || context.frozen_presentation_model
-    || context.frozen_invoice_snapshot || context.snapshot || {};
-  const presentationModel = frozenSnapshot.presentation_model || frozenSnapshot.render_model || frozenSnapshot;
+  const presentationModel = context.frozen_presentation_model;
+  if (!presentationModel || typeof presentationModel !== 'object' || Array.isArray(presentationModel)) {
+    throw Object.assign(new Error('RENDER_MODEL_MISSING'), { code: 'RENDER_MODEL_MISSING' });
+  }
   const embeddedModel = await resolveEmbeddedBrandingAssets(env, presentationModel, config);
   const layout = context.attachment_index_layout || {};
   const model = renderKind === 'ATTACHMENT_INDEX'
     ? { ...embeddedModel, display_rows: deriveAttachmentDisplayMap(layout, Number(layout.expected_index_page_count || 1)) }
     : embeddedModel;
+  validateFrozenPresentationModel(renderKind, model, {
+    templateVersion: identity.template_version || context.template_version
+  });
   const html = renderKind === 'INVOICE_CORE'
     ? buildProfessionalInvoiceHtml(model)
     : buildInvoiceSourceDocumentHtml(renderKind, model);
@@ -432,7 +466,9 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
     const result = {
       ...identity, output_prefix: outputPrefix, output_type: 'application/pdf', r2_key: r2Key,
       sha256, size_bytes: bytes.byteLength, page_count: pageCount, parse_verified: true,
-      processor_version: 'cloudtms-browser-renderer-v4'
+      processor_version: 'cloudtms-browser-renderer-v4',
+      presentation_model_schema_version: context.presentation_model_schema_version,
+      presentation_model_hash: context.presentation_model_hash
     };
     if (renderKind === 'ATTACHMENT_INDEX') {
       const rows = deriveAttachmentDisplayMap(layout, pageCount);
@@ -526,6 +562,7 @@ export async function checkInvoiceDocumentProcessorReady(env, options = {}) {
     body_sha256: await invoiceProcessorSha256Hex(body)
   };
   const signature = await signInvoiceProcessorRequest(env.INVOICE_DOCUMENT_PROCESSOR_SECRET, fields);
+  const config = options.config || getInvoiceQueueRuntimeConfig(env);
   const timeoutMs = parseBoundedInteger(options.timeoutMs, 5000, 1000, 10000);
   try {
     const response = await env.INVOICE_DOCUMENT_PROCESSOR.fetch(
@@ -540,14 +577,40 @@ export async function checkInvoiceDocumentProcessorReady(env, options = {}) {
         signal: AbortSignal.timeout(timeoutMs)
       }
     );
-    const result = await response.json().catch(() => null);
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > 16384) {
+      return { ok: false, code: 'INVOICE_PROCESSOR_READY_RESPONSE_TOO_LARGE' };
+    }
+    let result = null;
+    try { result = text ? JSON.parse(text) : null; } catch {}
     if (!response.ok || result?.ok !== true) return { ok: false, code: result?.code || `INVOICE_PROCESSOR_READY_HTTP_${response.status}` };
     if (result.processor_policy_version !== PROCESSOR_POLICY_VERSION) return { ok: false, code: 'INVOICE_PROCESSOR_READY_POLICY_MISMATCH' };
-    if (!result.container_ready || !result.native_tools_ready) return { ok: false, code: 'INVOICE_PROCESSOR_NATIVE_NOT_READY' };
+    const media = Array.isArray(result.supported_media_types)
+      ? [...result.supported_media_types].sort()
+      : [];
+    if (JSON.stringify(media) !== JSON.stringify(['application/pdf', 'image/jpeg', 'image/png'].sort())) {
+      return { ok: false, code: 'INVOICE_PROCESSOR_MEDIA_CONTRACT_MISMATCH' };
+    }
+    const receipts = result.receipt_contracts || {};
+    if (
+      receipts.object !== 'ACTUAL_BYTES_OBJECT_RECEIPT_V3'
+      || receipts.logical !== 'LOGICAL_SOURCE_RECEIPT_V3'
+      || receipts.merge !== 'ACTUAL_BYTES_MERGE_RECEIPT_V3'
+      || receipts.root !== 'DOCUMENT_ROOT_RECEIPT_V3'
+      || receipts.ordered_input !== 'ACTUAL_ORDERED_INPUT_V1'
+    ) return { ok: false, code: 'INVOICE_PROCESSOR_RECEIPT_CONTRACT_MISMATCH' };
+    const implementation = String(result.processor_implementation_version || '');
+    if (!implementation || implementation !== config.expectedProcessorImplementationVersion) {
+      return { ok: false, code: 'INVOICE_PROCESSOR_IMPLEMENTATION_MISMATCH' };
+    }
+    if (!result.container_ready) return { ok: false, code: 'INVOICE_PROCESSOR_NATIVE_NOT_READY' };
+    if (config.nativeToolReadinessRequired && !result.native_tools_ready) {
+      return { ok: false, code: 'INVOICE_PROCESSOR_NATIVE_TOOLS_NOT_READY' };
+    }
     return {
       ok: true,
       processor_policy_version: result.processor_policy_version,
-      processor_implementation_version: String(result.processor_implementation_version || '').slice(0, 120)
+      processor_implementation_version: implementation.slice(0, 120)
     };
   } catch {
     return { ok: false, code: 'INVOICE_DOCUMENT_PROCESSOR_NOT_READY' };
@@ -735,13 +798,17 @@ function markInvoiceHeartbeatFailure(jobs, config, now = Date.now()) {
   return aborted;
 }
 
-async function heartbeatActiveInvoiceJobs(rpc, jobs) {
+async function heartbeatActiveInvoiceJobs(rpc, jobs, timeoutMs) {
   const raw = await rpc('invoice_work_touch_batch', {
     p_touches: jobs.map(job => ({
       ...claimIdentity(job.claim),
       progress: { status_message: 'Processing document' }
     })),
     p_now_utc: new Date().toISOString()
+  }, {
+    routeClass: 'INVOICE_QUEUE_HEARTBEAT',
+    purpose: 'INVOICE_LEASE_TOUCH',
+    timeoutMs
   });
   return valueFromRpc(raw);
 }
@@ -756,7 +823,7 @@ async function performFinalInvoiceOwnershipCheck(rpc, jobs, config) {
   );
   if (!required.length) return { ownership_lost: 0, checked: 0 };
   try {
-    const rows = await heartbeatActiveInvoiceJobs(rpc, required);
+    const rows = await heartbeatActiveInvoiceJobs(rpc, required, config.finalTouchRpcTimeoutMs);
     return {
       ownership_lost: applyInvoiceHeartbeatResults(required, rows),
       checked: required.length
@@ -811,7 +878,7 @@ export async function processInvoiceDocumentChunksBatch(env, claims, options) {
     );
     if (!jobs.length) return;
     try {
-      const rows = await heartbeatActiveInvoiceJobs(rpc, jobs);
+      const rows = await heartbeatActiveInvoiceJobs(rpc, jobs, config.heartbeatRpcTimeoutMs);
       applyInvoiceHeartbeatResults(jobs, rows);
       nextHeartbeatDelayMs = config.heartbeatMs;
     } catch (error) {
@@ -1174,31 +1241,80 @@ export async function runAutoInvoiceCycleAsync(env, options = {}) {
   const candidateResponse = await rpc('invoice_autoinvoice_candidate_groups', {
     p_limit: parseBoundedInteger(env.INVOICE_AUTO_GROUP_LIMIT, 500, 1, 5000)
   });
-  const candidates = rowsFromRpc(candidateResponse).filter(row => row?.eligible_for_submission === true);
+  const candidates = rowsFromRpc(candidateResponse)
+    .filter(row => row?.eligible_for_submission === true)
+    .sort((left, right) => String(
+      left?.group_key || left?.client_id || ''
+    ).localeCompare(String(right?.group_key || right?.client_id || ''))
+      || String(left?.invoice_week_start || '').localeCompare(String(right?.invoice_week_start || ''))
+      || String(left?.source_revision_hash || '').localeCompare(String(right?.source_revision_hash || '')));
   if (!candidates.length) return { ok: true, candidates: 0, operations: [] };
-  const commands = candidates.map(row => ({
-    command_type: 'GENERATE_AUTO',
-    source_ids: row.source_ids,
-    canonical_source_members: row.canonical_source_members,
-    target_invoice_week: row.invoice_week_start,
-    consolidation_mode: row.consolidation_mode,
-    source_revision_hash: row.source_revision_hash,
-    invoice_stream: row.stream,
-    allow_early: false,
-    command_token: `AUTO:${row.client_id}:${row.invoice_week_start}:${row.source_revision_hash}`
-  }));
-  const startResponse = await rpc('invoice_operation_start_batch', {
-    p_commands: commands,
-    p_actor_user_id: actorUserId,
-    p_now_utc: new Date().toISOString()
-  });
-  const operations = valueFromRpc(startResponse);
-  await nudgeInvoiceOperations(env, operations, {
-    ...options,
-    config,
-    lanes: ['DATABASE']
-  });
-  return { ok: true, candidates: candidates.length, operations };
+  const maximumCommands = config.autoStartBatchSize
+    * config.autoMaximumStartBatchesPerInvocation;
+  const selected = candidates.slice(0, maximumCommands);
+  const operations = [];
+  const perCandidate = [];
+  for (let offset = 0; offset < selected.length; offset += config.autoStartBatchSize) {
+    const batch = selected.slice(offset, offset + config.autoStartBatchSize);
+    const commands = batch.map(row => ({
+      command_type: 'GENERATE_AUTO',
+      source_ids: row.source_ids,
+      canonical_source_members: row.canonical_source_members,
+      target_invoice_week: row.invoice_week_start,
+      consolidation_mode: row.consolidation_mode,
+      source_revision_hash: row.source_revision_hash,
+      invoice_stream: row.stream,
+      allow_early: false,
+      command_token: `AUTO:${row.group_key || row.client_id}:${row.source_revision_hash}`
+    }));
+    const startResponse = await rpc('invoice_operation_start_batch', {
+      p_commands: commands,
+      p_actor_user_id: actorUserId,
+      p_now_utc: new Date().toISOString()
+    });
+    const started = valueFromRpc(startResponse);
+    const byCommandNo = new Map();
+    for (const result of started) {
+      const commandNo = Number(result?.command_no);
+      if (!Number.isSafeInteger(commandNo) || commandNo < 1 || commandNo > batch.length
+        || byCommandNo.has(commandNo)) {
+        throw Object.assign(new Error('INVOICE_AUTO_START_RESULT_CORRELATION_INVALID'), {
+          code: 'INVOICE_AUTO_START_RESULT_CORRELATION_INVALID'
+        });
+      }
+      byCommandNo.set(commandNo, result);
+    }
+    for (let index = 0; index < batch.length; index += 1) {
+      const result = byCommandNo.get(index + 1);
+      if (!result) throw Object.assign(new Error('INVOICE_AUTO_START_RESULT_MISSING'), {
+        code: 'INVOICE_AUTO_START_RESULT_MISSING'
+      });
+      operations.push(result);
+      perCandidate.push({
+        group_key: batch[index].group_key || null,
+        command_no: index + 1,
+        operation_id: result.operation_id || null,
+        status: result.status || null,
+        created: result.created === true,
+        reused_active: result.reused_active === true,
+        reused_ready: result.reused_ready === true,
+        blocked: result.blocked === true
+      });
+    }
+    await nudgeInvoiceOperations(env, started, {
+      ...options,
+      config,
+      lanes: ['DATABASE']
+    });
+  }
+  return {
+    ok: true,
+    candidates: candidates.length,
+    submitted: selected.length,
+    remaining_eligible: Math.max(0, candidates.length - selected.length),
+    operations,
+    per_candidate: perCandidate
+  };
 }
 
 export async function runInvoiceReconciliationCycle(env, options = {}) {

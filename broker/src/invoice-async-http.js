@@ -215,12 +215,9 @@ async function handleNhspCandidates(req, deps) {
     p_limit: 5000
   });
   const clientId = String(url.searchParams.get('client_id') || '').trim();
-  const candidates = (Array.isArray(rpcValue(raw)) ? rpcValue(raw) : [])
+  const candidates = candidateGroupsFromRpc(raw)
     .filter(row => {
-      const command = row?.canonical_command
-        || row?.command_ready_payload
-        || row?.command_payload
-        || row;
+      const command = row?.command_payload || {};
       const members = Array.isArray(command?.canonical_source_members)
         ? command.canonical_source_members
         : [];
@@ -228,8 +225,19 @@ async function handleNhspCandidates(req, deps) {
         || String(command?.invoice_stream || command?.stream || '').toUpperCase().includes('NHSP')
         || members.some(member =>
           String(member?.source_type || member?.source_kind || '').toUpperCase().includes('NHSP'));
-      return nhsp && (!clientId || String(command?.client_id || row?.client_id || '') === clientId);
-    });
+      return nhsp && (!clientId || String(row?.client_id || '') === clientId);
+    })
+    .map(row => ({
+      client_id: row.client_id || null,
+      group_key: row.group_key,
+      canonical_source_members: row.canonical_source_members || row.command_payload?.canonical_source_members || [],
+      canonical_source_revision: row.canonical_source_revision || row.command_payload?.source_revision || null,
+      blocker_code: row.blocker_code || null,
+      blocker_detail: row.blocker_detail || null,
+      document_dependencies: Array.isArray(row.document_dependencies) ? row.document_dependencies : [],
+      command_payload: row.command_payload,
+      timesheets: Array.isArray(row.timesheets) ? row.timesheets : []
+    }));
   return jsonResponse({
     ok: true,
     candidate_family: 'NHSP',
@@ -275,6 +283,7 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
       .filter(([key]) => key)
   );
   const staleScopes = [];
+  const hardBlockedScopes = [];
   const selected = [];
   for (const scopeKey of scopeKeys) {
     const candidate = candidateByScope.get(scopeKey);
@@ -292,6 +301,20 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
       staleScopes.push({ scope_key: scopeKey, code: 'CANDIDATE_SCOPE_CHANGED' });
       continue;
     }
+    const blockerCode = String(candidate.blocker_code || '').trim().toUpperCase();
+    if (blockerCode) {
+      hardBlockedScopes.push({
+        scope_key: scopeKey,
+        code: blockerCode,
+        detail: candidate.blocker_detail || null
+      });
+      continue;
+    }
+    const canonical = candidate.command_payload;
+    if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
+      hardBlockedScopes.push({ scope_key: scopeKey, code: 'CANONICAL_COMMAND_REQUIRED' });
+      continue;
+    }
     selected.push({ scopeKey, candidate, currentRevision });
   }
   if (!selected.length) {
@@ -299,8 +322,9 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
       ok: false,
       accepted: false,
       accepted_count: 0,
-      rejected_count: staleScopes.length,
-      stale_scopes: staleScopes
+      rejected_count: staleScopes.length + hardBlockedScopes.length,
+      stale_scopes: staleScopes,
+      hard_blocked_scopes: hardBlockedScopes
     }, 409);
   }
   const commandContextByNo = new Map();
@@ -323,12 +347,13 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
     }, canonical.command_type || 'GENERATE_SELECTED');
   }));
   return startCommands(env, req, ctx, user, commands, deps, ['DATABASE'], {
-    additionalRejectedCount: staleScopes.length,
+    additionalRejectedCount: staleScopes.length + hardBlockedScopes.length,
     commandContextByNo,
     extendResult: (summary, operationRows) => ({
       enqueued: summary.accepted_count,
       generated: summary.reused_ready_count,
       stale_scopes: staleScopes,
+      hard_blocked_scopes: hardBlockedScopes,
       results_invoices: operationRows.map(operation => ({
         scope_key: commandContextByNo.get(Number(operation?.command_no)) || null,
         operation_id: operation?.operation_id || null,
@@ -349,9 +374,11 @@ async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
   const rows = Array.isArray(body.rows) ? body.rows : [];
   const invoiceIds = canonicalUuidArray(body.invoice_ids || rows.map(row => row.invoice_id));
   const deliver = boolValue(body.deliver ?? body.send_email, false);
-  const policy = canonicalDeliveryPolicy(body.delivery_policy);
+  const policy = deliver ? canonicalDeliveryPolicy(body.delivery_policy) : null;
   const requestToken = commandToken(req, body);
-  const deliveryRequestToken = String(body.delivery_request_token || requestToken).slice(0, 200);
+  const deliveryRequestToken = deliver
+    ? String(body.delivery_request_token || requestToken).slice(0, 200)
+    : null;
   const expectedRevisions = {
     ...Object.fromEntries(
       Object.entries(body.expected_revisions || {})
@@ -367,7 +394,7 @@ async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
   if (invoiceIds.some(invoiceId => !expectedRevisions[invoiceId])) {
     return jsonResponse({ error: 'EXPECTED_INVOICE_REVISION_REQUIRED' }, 400);
   }
-  const command = { command_type: 'ISSUE_INVOICES', invoice_ids: invoiceIds, expected_revisions: expectedRevisions, allow_early: boolValue(body.allow_early, false), deliver, command_token: requestToken, delivery_intent: deliver ? { recipient_set: canonicalEmailArray(body.recipient_set || body.to || []), cc: canonicalEmailArray(body.cc || []), bcc: canonicalEmailArray(body.bcc || []), delivery_policy: policy, template_version: body.template_version || 'INVOICE_EMAIL_V1', delivery_request_token: deliveryRequestToken } : { deliver: false, delivery_request_token: deliveryRequestToken } };
+  const command = { command_type: 'ISSUE_INVOICES', invoice_ids: invoiceIds, expected_revisions: expectedRevisions, allow_early: boolValue(body.allow_early, false), deliver, command_token: requestToken, delivery_intent: deliver ? { recipient_set: canonicalEmailArray(body.recipient_set || body.to || []), cc: canonicalEmailArray(body.cc || []), bcc: canonicalEmailArray(body.bcc || []), delivery_policy: policy, template_version: body.template_version || 'INVOICE_EMAIL_V1', delivery_request_token: deliveryRequestToken } : { deliver: false } };
   return startCommands(env, req, ctx, user, [command], deps, ['DATABASE','DOCUMENT'], {
     extendResult: (summary, operationRows) => {
       const root = operationRows[0] || {};
@@ -717,7 +744,7 @@ function legacyOutboxSearchExpression(search) {
   if (!search) return null;
   if (UUID_PATTERN.test(search)) return `or(outbox_id.eq.${search},context_id.eq.${search},recipient_id.eq.${search})`;
   if (!/^[a-z0-9 _-]{1,80}$/i.test(search)) throw Object.assign(new Error('INVALID_OUTBOX_SEARCH'), { code: 'INVALID_OUTBOX_SEARCH' });
-  const term = search.replace(/\\/g, '\\\\').replace(/_/g, '\\_').replace(/ +/g, '%');
+  const term = search.replace(/\\/g, '\\\\').replace(/_/g, '\\_').replace(/%/g, '\\%').replace(/ +/g, '%');
   return `or(to_address.ilike.*${term}*,subject.ilike.*${term}*,reference.ilike.*${term}*,provider_message_id.ilike.*${term}*)`;
 }
 
@@ -732,6 +759,41 @@ function legacyOutboxQueueStateExpression(queueState, snapshotAt) {
   }
   if (queueState === 'QUEUED') {
     return `and(read_at.is.null,delivered_at.is.null,sent_at.is.null,failed_at.is.null,status.eq.QUEUED,or(next_attempt_at_utc.lte.${snapshotAt},and(next_attempt_at_utc.is.null,scheduled_for_utc.lte.${snapshotAt}),and(next_attempt_at_utc.is.null,scheduled_for_utc.is.null,created_at_utc.lte.${snapshotAt})))`;
+  }
+  if (queueState === 'RUNNING' || queueState === 'ACTION_REQUIRED') {
+    return 'outbox_id.is.null';
+  }
+  throw Object.assign(new Error('INVALID_OUTBOX_QUEUE_STATE'), { code: 'INVALID_OUTBOX_QUEUE_STATE' });
+}
+
+function normaliseInvoiceOutboxQueueState(queueState, snapshotAt) {
+  const state = String(queueState || '').trim().toUpperCase();
+  if (!state) return { expression: null, requiresAction: null, semantics: null };
+  if (state === 'QUEUED') {
+    return {
+      expression: `or(status.in.(QUEUED,WAITING),and(status.eq.RETRY_WAIT,run_after_utc.lte.${snapshotAt}))`,
+      requiresAction: null,
+      semantics: 'QUEUED_OR_WAITING_OR_DUE_RETRY'
+    };
+  }
+  if (state === 'RUNNING') {
+    return { expression: 'status.eq.RUNNING', requiresAction: null, semantics: 'RUNNING' };
+  }
+  if (state === 'SCHEDULED') {
+    return {
+      expression: `and(status.eq.RETRY_WAIT,run_after_utc.gt.${snapshotAt})`,
+      requiresAction: null,
+      semantics: 'FUTURE_RETRY'
+    };
+  }
+  if (state === 'FAILED') {
+    return { expression: 'status.in.(FAILED,DEAD_LETTER,BLOCKED)', requiresAction: null, semantics: 'FAILED_OR_BLOCKED' };
+  }
+  if (state === 'ACTION_REQUIRED') {
+    return { expression: null, requiresAction: 'true', semantics: 'REQUIRES_USER_ACTION' };
+  }
+  if (['SENT','DELIVERED','READ'].includes(state)) {
+    return { expression: 'id.is.null', requiresAction: null, semantics: 'NOT_APPLICABLE_TO_INVOICE_OPERATIONS' };
   }
   throw Object.assign(new Error('INVALID_OUTBOX_QUEUE_STATE'), { code: 'INVALID_OUTBOX_QUEUE_STATE' });
 }
@@ -756,23 +818,25 @@ async function loadUnifiedOutboxCursorPage(env, {
   cursorPayload
 }) {
   const snapshotAt = cursorPayload?.snapshot_at_utc || new Date().toISOString();
+  const invoiceQueue = normaliseInvoiceOutboxQueueState(queueState, snapshotAt);
   const perSourceLimit = limit + 1;
   const invoiceQuery = new URL(`${env.SUPABASE_URL}/rest/v1/invoice_operations`);
   invoiceQuery.searchParams.set('select', 'id,operation_type,entity_type,entity_id,status,phase,priority,total_units,completed_units,failed_units,progress_json,result_json,error_json,requires_user_action,change_seq,created_at_utc,updated_at_utc,run_after_utc,parent_operation_id');
   invoiceQuery.searchParams.set('created_at_utc', `lte.${snapshotAt}`);
-  const invoicePageStatus = queueState || status;
-  if (invoicePageStatus && /^[A-Z_]+$/.test(invoicePageStatus)) invoiceQuery.searchParams.set('status', `eq.${invoicePageStatus}`);
+  if (status && /^[A-Z_]+$/.test(status)) invoiceQuery.searchParams.set('status', `eq.${status}`);
   if (operationType && /^[A-Z_]+$/.test(operationType)) invoiceQuery.searchParams.set('operation_type', `eq.${operationType}`);
   if (entityId) invoiceQuery.searchParams.set('entity_id', `eq.${entityId}`);
-  if (requiresAction === 'true' || requiresAction === 'false') invoiceQuery.searchParams.set('requires_user_action', `eq.${requiresAction}`);
+  const invoiceRequiresAction = invoiceQueue.requiresAction ?? requiresAction;
+  if (invoiceRequiresAction === 'true' || invoiceRequiresAction === 'false') invoiceQuery.searchParams.set('requires_user_action', `eq.${invoiceRequiresAction}`);
   const invoiceExpressions = [];
   if (search) {
     if (UUID_PATTERN.test(search)) invoiceExpressions.push(`or(id.eq.${search},entity_id.eq.${search})`);
     else {
-      const term = search.replace(/\\/g, '\\\\').replace(/_/g, '\\_').replace(/ +/g, '%');
+      const term = search.replace(/\\/g, '\\\\').replace(/_/g, '\\_').replace(/%/g, '\\%').replace(/ +/g, '%');
       invoiceExpressions.push(`or(operation_type.ilike.*${term}*,phase.ilike.*${term}*)`);
     }
   }
+  invoiceExpressions.push(invoiceQueue.expression);
   invoiceExpressions.push(outboxCursorKeysetExpression(cursorPayload?.invoice, 'id'));
   applyPostgrestAndExpressions(invoiceQuery, invoiceExpressions);
   invoiceQuery.searchParams.set('order', 'created_at_utc.desc,id.desc');
@@ -828,7 +892,7 @@ async function handleUnifiedOutboxCursorList(env, {
   if (offset !== 0) return jsonResponse({ error: 'UNIFIED_OUTBOX_USE_CURSOR' }, 400);
   if (sortBy !== 'created_at_utc' || sortDir !== 'desc') return jsonResponse({ error: 'UNIFIED_OUTBOX_SORT_UNSUPPORTED' }, 400);
   if (status && !/^[A-Z_]+$/.test(status)) return jsonResponse({ error: 'INVALID_OUTBOX_STATUS' }, 400);
-  if (queueState && !new Set(['SCHEDULED','QUEUED','SENT','DELIVERED','READ','FAILED']).has(queueState)) return jsonResponse({ error: 'INVALID_OUTBOX_QUEUE_STATE' }, 400);
+  if (queueState && !new Set(['SCHEDULED','QUEUED','RUNNING','ACTION_REQUIRED','SENT','DELIVERED','READ','FAILED']).has(queueState)) return jsonResponse({ error: 'INVALID_OUTBOX_QUEUE_STATE' }, 400);
   if (entityId && !UUID_PATTERN.test(entityId)) return jsonResponse({ error: 'INVALID_ENTITY_ID' }, 400);
   if (search && !UUID_PATTERN.test(search) && !/^[a-z0-9 _-]{1,80}$/i.test(search)) return jsonResponse({ error: 'INVALID_OUTBOX_SEARCH' }, 400);
 
@@ -890,8 +954,14 @@ async function handleInvoiceOutboxList(env, req, deps) {
   if (!new Set(['created_at_utc','scheduled_for_utc','effective_ready_at_utc','status','channel']).has(sortBy) || !['asc','desc'].includes(sortDir)) return jsonResponse({ error: 'INVALID_OUTBOX_SORT' }, 400);
   const query = new URL(`${env.SUPABASE_URL}/rest/v1/invoice_operations`);
   query.searchParams.set('select', 'id,operation_type,entity_type,entity_id,status,phase,priority,total_units,completed_units,failed_units,progress_json,result_json,error_json,requires_user_action,change_seq,created_at_utc,updated_at_utc,run_after_utc,parent_operation_id');
-  const invoiceStatus = queueState || status;
-  if (invoiceStatus && /^[A-Z_]+$/.test(invoiceStatus)) query.searchParams.set('status', `eq.${invoiceStatus}`);
+  const snapshotAt = new Date().toISOString();
+  let invoiceQueue;
+  try {
+    invoiceQueue = normaliseInvoiceOutboxQueueState(queueState, snapshotAt);
+  } catch (error) {
+    return jsonResponse({ error: String(error?.code || error?.message || 'INVALID_OUTBOX_QUEUE_STATE') }, 400);
+  }
+  if (status && /^[A-Z_]+$/.test(status)) query.searchParams.set('status', `eq.${status}`);
   const operationType = String(url.searchParams.get('operation_type') || '').trim().toUpperCase();
   if (operationType && /^[A-Z_]+$/.test(operationType)) query.searchParams.set('operation_type', `eq.${operationType}`);
   const entityId = String(url.searchParams.get('entity_id') || '').trim().toLowerCase();
@@ -921,13 +991,16 @@ async function handleInvoiceOutboxList(env, req, deps) {
       return jsonResponse({ error: code }, statusCode);
     }
   }
-  if (requiresAction === 'true' || requiresAction === 'false') query.searchParams.set('requires_user_action', `eq.${requiresAction}`);
+  const invoiceRequiresAction = invoiceQueue.requiresAction ?? requiresAction;
+  if (invoiceRequiresAction === 'true' || invoiceRequiresAction === 'false') query.searchParams.set('requires_user_action', `eq.${invoiceRequiresAction}`);
+  if (invoiceQueue.expression) applyPostgrestAndExpressions(query, [invoiceQueue.expression]);
   if (search) {
     if (UUID_PATTERN.test(search)) query.searchParams.set('or', `(id.eq.${search},entity_id.eq.${search})`);
     else if (/^[a-z0-9 _-]{1,80}$/i.test(search)) {
       const term = search
         .replace(/\\/g, '\\\\')
         .replace(/_/g, '\\_')
+        .replace(/%/g, '\\%')
         .replace(/ +/g, '%');
       query.searchParams.set('or', `(operation_type.ilike.*${term}*,phase.ilike.*${term}*)`);
     } else return jsonResponse({ error: 'INVALID_OUTBOX_SEARCH' }, 400);
@@ -955,7 +1028,16 @@ async function handleInvoiceOutboxList(env, req, deps) {
   const invoiceItems = invoiceRows.map(invoiceOperationOutboxRow);
   const invoiceTotalRaw = Number((response.headers.get('content-range') || '').split('/')[1]);
   const invoiceTotal = Number.isFinite(invoiceTotalRaw) ? invoiceTotalRaw : invoiceItems.length;
-  return jsonResponse({ ok: true, channel, total_count: invoiceTotal, limit, offset, returned_count: invoiceItems.length, items: invoiceItems });
+  return jsonResponse({
+    ok: true,
+    channel,
+    total_count: invoiceTotal,
+    limit,
+    offset,
+    returned_count: invoiceItems.length,
+    items: invoiceItems,
+    queue_state_semantics: invoiceQueue.semantics
+  });
 }
 async function handleInvoiceOutboxControl(env, req, ctx, user, deps, operationId, action) {
   const body = req.method === 'POST' ? (await parseBody(req) || {}) : {};

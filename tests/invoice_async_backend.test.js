@@ -172,13 +172,33 @@ test('canonical command payload preserves canonical members and rejects malforme
 test('invoice HTML is deterministic and escapes all mutable presentation values', () => {
   assert.equal(escapeInvoiceDocumentHtml('<script>&"'), '&lt;script&gt;&amp;&quot;');
   const model = {
+    schema_version: 'INVOICE_RENDER_MODEL_V1',
+    purpose: 'DRAFT_PREVIEW',
+    document_type: 'INVOICE',
     invoice_number: 'INV-1<script>',
-    supplier: { name: 'Supplier & Co' },
-    customer: { name: 'Customer "A"' },
-    lines: [{ description: '<unsafe>', quantity: 1, unit_price: 10, net: 10 }],
-    net_total: 10,
-    vat_total: 2,
-    gross_total: 12
+    supplier: { legal_name: 'Supplier & Co' },
+    customer: { legal_name: 'Customer "A"' },
+    references: {},
+    lines: [{
+      row_key: 'line-1',
+      source_invoice_line_id: '00000000-0000-4000-8000-000000000001',
+      description: '<unsafe>',
+      unit: 'HOUR',
+      quantity: 1,
+      unit_price: 10,
+      net_amount: 10,
+      vat_rate: 20,
+      vat_amount: 2,
+      gross_amount: 12,
+      display_order: 1
+    }],
+    vat_breakdown: [],
+    totals: { net: 10, vat: 2, gross: 12 },
+    payment: {},
+    credit_note: { is_credit_note: false },
+    self_bill: { is_self_bill: false },
+    legal_wording: [],
+    template_version: 'invoice-professional-v1'
   };
   const first = buildProfessionalInvoiceHtml(model);
   const second = buildProfessionalInvoiceHtml(model);
@@ -190,6 +210,7 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
 test('attachment index renders one logical row with physical page totals', () => {
   const html = buildAttachmentIndexHtml({
     display_rows: [{
+      row_id: 'attachment-1',
       document_type: 'Manual timesheet',
       start_page: 5,
       page_count: 4,
@@ -501,12 +522,26 @@ test('issued document view selects the exact FINAL_ISSUE version and never queue
 });
 
 test('professional source templates use explicit allowlisted fields', () => {
-  const ts = buildElectronicTimesheetHtml({ candidate_name: 'Worker', client_name: 'Client', site: 'Hospital', ward: 'Ward', daily_schedule_rows: [{ date: '2026-07-24', worked_start: '08:00', worked_end: '16:00', break_minutes: 30, hours: 7.5 }] });
+  const ts = buildElectronicTimesheetHtml({
+    schema_version: 'TIMESHEET_RENDER_MODEL_V1',
+    timesheet_id: '00000000-0000-4000-8000-000000000001',
+    candidate: { id: 'worker-1', name: 'Worker' },
+    client: { id: 'client-1', name: 'Client' },
+    contract: { id: 'contract-1', reference: 'C-1' },
+    work: { hospital: 'Hospital', site: 'Hospital', ward: 'Ward' },
+    references: { whole: 'TS-1', day: [], segment: [] },
+    authorisation: { authorised: true },
+    signatures: { candidate: {}, authoriser: {} },
+    qr: { required: false, signed: false },
+    daily_schedule_rows: [{ date: '2026-07-24', worked_start: '08:00', worked_end: '16:00', break_minutes: 30, hours: 7.5, display_order: 1 }],
+    weekly_schedule_rows: [],
+    template_version: 'timesheet-professional-v1'
+  });
   assert.ok(ts.includes('Hospital'));
   assert.ok(ts.includes('7.5'));
-  const hr = buildHealthRosterSupportHtml({ rows: [{ worker: 'Worker', assignment: 'Assignment', secret_future_key: 'must-not-render' }] });
-  const nhsp = buildNhspSupportHtml({ rows: [{ worker: 'Worker', nhsp_shift_id: 'SHIFT-1', secret_future_key: 'must-not-render' }] });
-  const higher = buildHigherRateSupportHtml({ rows: [{ worker_source: 'Worker', applied_rate: '25.00', secret_future_key: 'must-not-render' }] });
+  const hr = buildHealthRosterSupportHtml({ schema_version: 'HEALTHROSTER_PRESENTATION_V1', rows: [{ worker: 'Worker', assignment: 'Assignment', shift_date: null, shift_times: null, site: null, ward: null, reference: null, units_hours: null, validation_state: null, source_identity: null, secret_future_key: 'must-not-render' }] });
+  const nhsp = buildNhspSupportHtml({ schema_version: 'NHSP_PRESENTATION_V1', rows: [{ worker: 'Worker', nhsp_shift_id: 'SHIFT-1', booking_reference: null, site_ward: null, shift_date: null, shift_times: null, hours_units: null, source_identity: null, validation_state: null, secret_future_key: 'must-not-render' }] });
+  const higher = buildHigherRateSupportHtml({ schema_version: 'HIGHER_RATE_PRESENTATION_V1', rows: [{ worker_source: 'Worker', shift_date: null, original_rate: null, applied_rate: '25.00', units: null, display_amount: null, reason: null, approval_identity: null, reference: null, secret_future_key: 'must-not-render' }] });
   assert.ok(hr.includes('Assignment'));
   assert.ok(nhsp.includes('SHIFT-1'));
   assert.ok(higher.includes('25.00'));

@@ -51,10 +51,10 @@ async function authenticateProcessorRequest(request, env, text) {
 }
 
 function findInputDescriptors(action, context) {
-  if (action === 'ASSET_INSPECT') return [{ r2_key: context.original_r2_key, media_type: context.declared_media_type, size_bytes: context.expected_original_size_bytes, sha256: context.expected_original_sha256 }];
-  if (action === 'ASSET_NORMALISE') return [{ r2_key: context.expected_original_r2_key || context.original_r2_key, media_type: context.expected_original_media_type || context.detected_media_type, size_bytes: context.expected_original_size_bytes, sha256: context.expected_original_sha256 }];
-  if (action === 'PDF_MERGE') return Array.isArray(context.ordered_inputs) ? context.ordered_inputs.map(input => ({ ...input })) : [];
-  if (action === 'DOCUMENT_VERIFY') return [{ r2_key: context.final_candidate_key, sha256: context.final_candidate_sha256, size_bytes: context.final_candidate_size_bytes }];
+  if (action === 'ASSET_INSPECT') return [{ r2_key: context.original_r2_key, media_type: context.declared_media_type, size_bytes: context.expected_original_size_bytes, sha256: context.expected_original_sha256, require_stored_sha256: false }];
+  if (action === 'ASSET_NORMALISE') return [{ r2_key: context.expected_original_r2_key || context.original_r2_key, media_type: context.expected_original_media_type || context.detected_media_type, size_bytes: context.expected_original_size_bytes, sha256: context.expected_original_sha256, require_stored_sha256: false }];
+  if (action === 'PDF_MERGE') return Array.isArray(context.ordered_inputs) ? context.ordered_inputs.map(input => ({ ...input, require_stored_sha256: true })) : [];
+  if (action === 'DOCUMENT_VERIFY') return [{ r2_key: context.final_candidate_key, sha256: context.final_candidate_sha256, size_bytes: context.final_candidate_size_bytes, require_stored_sha256: true }];
   throw Object.assign(new Error('UNSUPPORTED_NATIVE_ACTION'), { code: 'UNSUPPORTED_NATIVE_ACTION' });
 }
 
@@ -75,8 +75,10 @@ async function resolveR2Inputs(bucket, descriptors) {
     const object = await bucket.get(key);
     if (!object) throw Object.assign(new Error('INPUT_R2_OBJECT_MISSING'), { code: 'INPUT_R2_OBJECT_MISSING' });
     if (descriptor.size_bytes != null && Number(descriptor.size_bytes) !== Number(object.size)) throw Object.assign(new Error('INPUT_SIZE_MISMATCH'), { code: 'INPUT_SIZE_MISMATCH' });
-    const storedHash = object.customMetadata?.sha256;
-    if (descriptor.sha256 && descriptor.sha256 !== storedHash) throw Object.assign(new Error('INPUT_STORED_HASH_MISMATCH'), { code: 'INPUT_STORED_HASH_MISMATCH' });
+    const expectedHash = String(descriptor.sha256 || '').toLowerCase();
+    const storedHash = String(object.customMetadata?.sha256 || '').toLowerCase();
+    if (descriptor.require_stored_sha256 && !storedHash) throw Object.assign(new Error('INPUT_STORED_HASH_MISSING'), { code: 'INPUT_STORED_HASH_MISSING' });
+    if (expectedHash && storedHash && expectedHash !== storedHash) throw Object.assign(new Error('INPUT_STORED_HASH_MISMATCH'), { code: 'INPUT_STORED_HASH_MISMATCH' });
     resolved.push({ descriptor, object, header: { input_order: index + 1, input_chunk_id: descriptor.input_chunk_id || null, r2_key: key, size_bytes: object.size, expected_sha256: descriptor.sha256 || null, media_type: descriptor.media_type || object.httpMetadata?.contentType || 'application/octet-stream' } });
   }
   return resolved;
@@ -149,18 +151,37 @@ function validateProcessorMetadata(metadata, response, action, context) {
   if (!/^[0-9a-f]{64}$/i.test(String(metadata.sha256 || ''))) throw Object.assign(new Error('PROCESSOR_OUTPUT_HASH_INVALID'), { code: 'PROCESSOR_OUTPUT_HASH_INVALID' });
   if (!Number.isSafeInteger(Number(metadata.size_bytes)) || Number(metadata.size_bytes) < 1) throw Object.assign(new Error('PROCESSOR_OUTPUT_SIZE_INVALID'), { code: 'PROCESSOR_OUTPUT_SIZE_INVALID' });
   if (!Number.isSafeInteger(Number(metadata.page_count)) || Number(metadata.page_count) < 1) throw Object.assign(new Error('PROCESSOR_OUTPUT_PAGE_COUNT_INVALID'), { code: 'PROCESSOR_OUTPUT_PAGE_COUNT_INVALID' });
+  if (metadata.parse_verified !== true) throw Object.assign(new Error('PROCESSOR_OUTPUT_PARSE_NOT_VERIFIED'), { code: 'PROCESSOR_OUTPUT_PARSE_NOT_VERIFIED' });
   if (!String(metadata.processor_version || '').startsWith('cloudtms-native-')) throw Object.assign(new Error('PROCESSOR_VERSION_INVALID'), { code: 'PROCESSOR_VERSION_INVALID' });
   const length = Number(response.headers.get('content-length'));
   if (Number.isFinite(length) && length !== Number(metadata.size_bytes)) throw Object.assign(new Error('PROCESSOR_RESPONSE_SIZE_MISMATCH'), { code: 'PROCESSOR_RESPONSE_SIZE_MISMATCH' });
-  if (action === 'PDF_MERGE' && !Array.isArray(metadata.actual_inputs)) throw Object.assign(new Error('PROCESSOR_INPUT_RECEIPTS_MISSING'), { code: 'PROCESSOR_INPUT_RECEIPTS_MISSING' });
+  if (action === 'PDF_MERGE' && (
+    !Array.isArray(metadata.actual_inputs)
+    || metadata.actual_inputs.length !== Number(context.ordered_inputs?.length || 0)
+    || metadata.actual_inputs.reduce((sum, input) => sum + Number(input.page_count || 0), 0)
+      !== Number(metadata.page_count)
+  )) throw Object.assign(new Error('PROCESSOR_INPUT_RECEIPTS_MISSING'), { code: 'PROCESSOR_INPUT_RECEIPTS_MISSING' });
+  if (action === 'ASSET_NORMALISE') {
+    const actual = Array.isArray(metadata.actual_inputs) ? metadata.actual_inputs : [];
+    const expectedKey = String(context.expected_original_r2_key || context.original_r2_key || '');
+    if (
+      actual.length !== 1
+      || String(actual[0]?.r2_key || '') !== expectedKey
+      || !/^[0-9a-f]{64}$/i.test(String(actual[0]?.sha256 || ''))
+      || !Number.isSafeInteger(Number(actual[0]?.size_bytes))
+      || Number(actual[0]?.size_bytes) < 1
+    ) {
+      throw Object.assign(new Error('PROCESSOR_SOURCE_IDENTITY_MISSING'), { code: 'PROCESSOR_SOURCE_IDENTITY_MISSING' });
+    }
+  }
   const limits = action === 'ASSET_NORMALISE'
     ? (context.output_profile || {})
     : (context.limits || context.verification_policy || {});
-  const maximumOutputBytes = safePositive(
-    limits.max_output_bytes
-    || limits.max_part_bytes
-    || limits.max_merge_output_bytes
-  );
+  const maximumOutputBytes = action === 'ASSET_NORMALISE'
+    ? safePositive(limits.max_pdf_part_bytes)
+    : action === 'PDF_MERGE'
+      ? Math.min(safePositive(limits.max_input_bytes) || Number.MAX_SAFE_INTEGER, 512 * 1024 * 1024)
+      : null;
   if (maximumOutputBytes && Number(metadata.size_bytes) > maximumOutputBytes) {
     throw Object.assign(new Error('PROCESSOR_OUTPUT_BYTES_EXCEED_POLICY'), { code: 'PROCESSOR_OUTPUT_BYTES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
   }
@@ -185,13 +206,17 @@ async function putImmutableProcessorArtifact(bucket, key, body, identity, metada
   const expected = artifactMetadata(identity, metadata);
   const existing = await bucket.head(key);
   if (existing) {
-    if (artifactMatches(existing, expected)) return { reused: true };
+    if (artifactMatches(existing, expected)) {
+      try { await body?.cancel?.('immutable-artifact-reused'); } catch {}
+      return { reused: true, object: existing };
+    }
+    try { await body?.cancel?.('immutable-artifact-conflict'); } catch {}
     throw Object.assign(new Error('IMMUTABLE_ARTIFACT_KEY_CONFLICT'), { code: 'IMMUTABLE_ARTIFACT_KEY_CONFLICT' });
   }
   const result = await bucket.put(key, body, { onlyIf: { etagDoesNotMatch: '*' }, sha256: metadata.sha256, httpMetadata: { contentType: 'application/pdf' }, customMetadata: expected });
-  if (result) return { reused: false };
+  if (result) return { reused: false, object: result };
   const raced = await bucket.head(key);
-  if (artifactMatches(raced, expected)) return { reused: true };
+  if (artifactMatches(raced, expected)) return { reused: true, object: raced };
   throw Object.assign(new Error('IMMUTABLE_ARTIFACT_KEY_CONFLICT'), { code: 'IMMUTABLE_ARTIFACT_KEY_CONFLICT' });
 }
 
@@ -200,7 +225,17 @@ async function buildVerificationOnlyResult(identity, context, metadata) {
   const expected = [[context.final_candidate_key, metadata.verified_candidate_r2_key, 'FINAL_CANDIDATE_KEY_MISMATCH'], [context.final_candidate_sha256, metadata.verified_candidate_sha256, 'FINAL_CANDIDATE_HASH_MISMATCH'], [String(context.final_candidate_size_bytes), String(metadata.verified_candidate_size_bytes), 'FINAL_CANDIDATE_SIZE_MISMATCH'], [String(context.expected_page_count), String(metadata.actual_page_count), 'FINAL_PAGE_COUNT_MISMATCH']];
   for (const [wanted, actual, code] of expected) if (wanted && wanted !== actual) throw Object.assign(new Error(code), { code });
   const root = context.final_merge_receipt || {};
-  const leaves = flattenLeafInputReceipts(root).sort((a, b) => Number(a.logical_ordinal) - Number(b.logical_ordinal) || Number(a.physical_part_no) - Number(b.physical_part_no));
+  if (root.receipt_contract !== 'ACTUAL_BYTES_MERGE_RECEIPT_V3') throw Object.assign(new Error('RECEIPT_STRUCTURE_INVALID'), { code: 'RECEIPT_STRUCTURE_INVALID' });
+  if (identity.processor_policy_version !== POLICY_VERSION) throw Object.assign(new Error('PROCESSOR_POLICY_UNSUPPORTED'), { code: 'PROCESSOR_POLICY_UNSUPPORTED' });
+  const verificationPolicy = context.verification_policy || {};
+  const leaves = flattenLeafInputReceipts(root, [], {
+    maximum_depth: safePositive(verificationPolicy.max_merge_levels || verificationPolicy.max_depth) || 8,
+    maximum_receipts: safePositive(verificationPolicy.max_receipts) || 10000
+  }).sort((a, b) => Number(a.logical_ordinal) - Number(b.logical_ordinal) || Number(a.physical_part_no) - Number(b.physical_part_no));
+  const tupleKeys = leaves.map(row => `${row.logical_source_key || ''}|${row.logical_ordinal}|${row.physical_part_no}`);
+  if (new Set(tupleKeys).size !== tupleKeys.length) throw Object.assign(new Error('RECEIPT_STRUCTURE_INVALID'), { code: 'RECEIPT_STRUCTURE_INVALID' });
+  if (context.expected_physical_input_count != null && leaves.length !== Number(context.expected_physical_input_count)) throw Object.assign(new Error('FINAL_PHYSICAL_INPUT_COUNT_MISMATCH'), { code: 'FINAL_PHYSICAL_INPUT_COUNT_MISMATCH' });
+  if (context.expected_logical_source_count != null && new Set(leaves.map(row => row.logical_ordinal)).size !== Number(context.expected_logical_source_count)) throw Object.assign(new Error('FINAL_LOGICAL_INPUT_COUNT_MISMATCH'), { code: 'FINAL_LOGICAL_INPUT_COUNT_MISMATCH' });
   const actualPhysicalInputHash = await hashJoined(leaves.map(row => [row.logical_ordinal,row.physical_part_no,row.r2_key,row.sha256,row.page_count,row.size_bytes].join('|')));
   const actualOrderedRoot = root.actual_ordered_input_hash || root.actual_child_receipt_hash;
   const actualRootIdentity = await hashPostgresJsonb({ receipt_contract: 'DOCUMENT_ROOT_RECEIPT_V3', logical_root: root.combined_logical_receipt_root, physical_root: root.combined_physical_receipt_root, ordered_input_root: actualOrderedRoot, page_count: Number(metadata.actual_page_count), output_sha256: metadata.verified_candidate_sha256 });
@@ -241,7 +276,12 @@ async function processWithContainer(env, payload, signal) {
     return buildVerificationOnlyResult(identity, context, body.result || body);
   }
   const metadata = decodeProcessorHeader(response);
-  validateProcessorMetadata(metadata, response, action, context);
+  try {
+    validateProcessorMetadata(metadata, response, action, context);
+  } catch (error) {
+    try { await response.body?.cancel?.('processor-metadata-invalid'); } catch {}
+    throw error;
+  }
   const outputKey = `${identity.output_prefix}${action.toLowerCase()}-${metadata.sha256}.pdf`;
   await putImmutableProcessorArtifact(env.R2, outputKey, response.body, identity, metadata);
   const result = { ...identity, r2_key: outputKey, sha256: metadata.sha256, size_bytes: metadata.size_bytes, page_count: metadata.page_count, parse_verified: metadata.parse_verified === true, output_type: 'application/pdf', processor_version: metadata.processor_version };
@@ -304,7 +344,11 @@ export async function handleInvoiceDocumentProcessorRequest(request, env) {
         supported_media_types: SUPPORTED_MEDIA_TYPES,
         receipt_contracts: RECEIPT_CONTRACTS,
         container_ready: containerReady,
-        native_tools_ready: containerReady && String(health?.processor_version || '').startsWith('cloudtms-native-'),
+        native_tools_ready: containerReady
+          && health?.qpdf_ready === true
+          && health?.poppler_ready === true
+          && health?.imagemagick_ready === true
+          && health?.img2pdf_ready === true,
         checked_at_utc: new Date().toISOString()
       }, containerReady ? 200 : 503);
     }
