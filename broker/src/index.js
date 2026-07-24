@@ -47,6 +47,11 @@ import {
   reconcileTimesheetQueryDeliveryAfterProviderAcceptance
 } from './import-review-follow-up.js';
 import { normalisePostgresTimestampIso } from './timestamp-normalisation.js';
+import {
+  evaluateTestCsvExecutionBypass,
+  isTestCsvExecutionOnlyToken,
+  testCsvExecutionTokenMatchesMode
+} from './test-csv-execution-bypass.js';
 
 const textEncoder = new TextEncoder();
 
@@ -41991,7 +41996,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
 
   let reauthResult;
   try {
-    reauthResult = await verifyPaymentScheduleReauth(env, user, reauthToken);
+    reauthResult = await verifyPaymentScheduleReauth(env, user, reauthToken, { executionMode });
   } catch (error) {
     return fail(401, 'REAUTH_VERIFICATION_FAILED', String(error?.message || error || 'Payment verification failed.'));
   }
@@ -42661,7 +42666,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
 
 
 
-async function verifyPaymentScheduleReauth(env, user, reauthToken) {
+async function verifyPaymentScheduleReauth(env, user, reauthToken, options = {}) {
   const token = String(reauthToken || '').trim();
   if (!token) return { ok: false, response: badRequest('reauth_token is required') };
 
@@ -42672,8 +42677,15 @@ async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   if (String(payload.typ || '').trim() !== 'reauth') return { ok: false, response: unauthorized('Invalid reauth_token') };
   if (String(payload.purpose || '').trim() !== 'PAYMENT_SCHEDULE') return { ok: false, response: unauthorized('Invalid reauth_token') };
   if (String(payload.sub || '').trim() !== String(user?.id || '').trim()) return { ok: false, response: unauthorized('Invalid reauth_token') };
+  if (!testCsvExecutionTokenMatchesMode(payload, options?.executionMode)) {
+    return { ok: false, response: unauthorized('Invalid reauth_token') };
+  }
 
-  return { ok: true, payload };
+  return {
+    ok: true,
+    payload,
+    test_csv_execution_bypass_used: isTestCsvExecutionOnlyToken(payload)
+  };
 }
 
 
@@ -129712,6 +129724,7 @@ async function handleAuthReauthStart(env, req) {
   const requestedPurpose = String(body.purpose || 'PAYMENT_SCHEDULE').trim().toUpperCase();
   const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL']);
   if (!allowedPurposes.has(requestedPurpose)) return badRequest('invalid_reauth_purpose');
+  const requestedExecutionMode = String(body.execution_mode || body.executionMode || '').trim().toUpperCase();
 
   // Verify current password against stored hash
   const userRow = await sbGetUserById(env, u.id); // includes password_hash
@@ -129719,6 +129732,43 @@ async function handleAuthReauthStart(env, req) {
 
   const okPw = await pbkdf2Verify(password, userRow.password_hash || '');
   if (!okPw) return unauthorized('Invalid credentials');
+
+  const testCsvBypass = evaluateTestCsvExecutionBypass({
+    env,
+    user: userRow,
+    purpose: requestedPurpose,
+    executionMode: requestedExecutionMode
+  });
+  if (testCsvBypass.allowed) {
+    const ttlSec = 300;
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const payload = {
+      typ: 'reauth',
+      sub: String(userRow.id),
+      purpose: 'PAYMENT_SCHEDULE',
+      test_csv_execution_only: true,
+      iat: nowUnix,
+      exp: nowUnix + ttlSec
+    };
+    let token;
+    try {
+      token = await createToken(sessionSecret(env), payload);
+    } catch (e) {
+      return serverError(e?.message || String(e));
+    }
+    try {
+      console.warn('[security] TEST-only CSV settlement 2FA override used after password verification.');
+    } catch {}
+    return new Response(JSON.stringify({
+      ok: true,
+      tfa_required: false,
+      purpose: 'PAYMENT_SCHEDULE',
+      execution_mode: 'CSV_SETTLEMENT',
+      reauth_token: token,
+      expires_in: ttlSec,
+      test_csv_execution_bypass: true
+    }), { status: 200, headers: JSON_HEADERS });
+  }
 
   // Load auth policy (reuse same policy source as login 2FA)
   let authEffective = null;
