@@ -359,7 +359,7 @@ timesheet_models as materialized (
         'whole',t.reference_number,
         'day',coalesce(t.day_references_json,'[]'::jsonb),
         'segment','[]'::jsonb),
-      'additional_units',coalesce(t.additional_units_week,0),
+      'additional_units',coalesce(t.additional_units_week,'0'::jsonb),
       'authorisation',jsonb_build_object(
         'authorised',t.authorised_at_server is not null,
         'name',t.auth_name,'role',t.auth_job_title,
