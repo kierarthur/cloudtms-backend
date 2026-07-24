@@ -423,6 +423,8 @@ declare
   v_linked_shift_date date;
   v_components_json jsonb;
   v_rewritten_count integer := 0;
+  v_resolution_pending_count integer := 0;
+  v_resolution_pending_member_ids uuid[] := array[]::uuid[];
 begin
   if p_session_id is null
      or coalesce(array_length(p_candidate_ids, 1), 0) = 0
@@ -478,6 +480,31 @@ begin
                   'root_timesheet_id', v_root_id::text,
                   'message', 'A frozen Banking Pay reservation exists for a correction-chain member.'
                 )::text;
+      end if;
+
+      if coalesce((v_residual->>'draftable')::boolean,false) is not true then
+        if coalesce(v_residual->>'block_code','')
+             = 'CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED'
+           and coalesce((v_residual->>'unresolved_count')::integer,0) > 0
+           and coalesce((v_residual->>'reservation_overrun_count')::integer,0) = 0
+           and coalesce((v_residual->>'component_count')::integer,0) > 0 then
+          -- The unresolved chain must remain visible to the Workbench's
+          -- existing case-resolution projection, but it must not create,
+          -- amend or clear finance authority until the saved resolution is
+          -- fresh.  Suppress every member as one coupled economic unit.
+          delete from pg_temp.tmp_sync_timesheet_case_candidates candidate_row
+          where candidate_row.candidate_id = v_candidate_id
+            and candidate_row.timesheet_id = any(v_member_ids);
+
+          select coalesce(array_agg(distinct member_id order by member_id),array[]::uuid[])
+          into v_resolution_pending_member_ids
+          from unnest(v_resolution_pending_member_ids || v_member_ids) member_id;
+          v_resolution_pending_count := v_resolution_pending_count + 1;
+          continue;
+        end if;
+
+        raise exception 'CORRECTION_RESIDUAL_NOT_READY_FOR_OVERPAYMENT_SYNC'
+          using errcode='P0001',detail=v_residual::text;
       end if;
 
       select candidate_row.*
@@ -606,7 +633,10 @@ begin
 
   return jsonb_build_object(
     'ok', true,
-    'rewritten_chain_count', v_rewritten_count
+    'rewritten_chain_count', v_rewritten_count,
+    'resolution_pending_chain_count', v_resolution_pending_count,
+    'resolution_pending_member_timesheet_ids',
+      to_jsonb(v_resolution_pending_member_ids)
   );
 end;
 $function$;
@@ -721,6 +751,17 @@ begin
   );
   for v_residual in select value from jsonb_array_elements(v_residuals) loop
     if coalesce((v_residual->>'draftable')::boolean,false) is not true then
+      if coalesce(v_residual->>'block_code','')
+           = 'CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED'
+         and coalesce((v_residual->>'unresolved_count')::integer,0) > 0
+         and coalesce((v_residual->>'reservation_overrun_count')::integer,0) = 0
+         and coalesce((v_residual->>'component_count')::integer,0) > 0 then
+        -- Keep the ordinary source rows intact so the existing Workbench
+        -- case-resolution renderer can collect and display the coupled
+        -- PAYE/umbrella decision. Draft creation remains blocked by
+        -- _ctms_assert_session_correction_residuals_draftable_v1.
+        continue;
+      end if;
       raise exception 'CORRECTION_RESIDUAL_NOT_DRAFTABLE'
         using errcode='P0001',detail=v_residual::text;
     end if;

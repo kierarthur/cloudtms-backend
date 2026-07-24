@@ -107,6 +107,7 @@ DECLARE
   v_sync_negative_component_count integer := 0;
   v_sync_durable_component_count integer := 0;
   v_sync_protected_component_count integer := 0;
+  v_sync_resolution_pending_component_count integer := 0;
   v_sync_uncovered_component_count integer := 0;
   v_sync_candidate_covered boolean := false;
   v_sync_result_out_of_scope_count integer := 0;
@@ -1719,6 +1720,18 @@ BEGIN
       CASE
         WHEN EXISTS (
           SELECT 1
+          FROM jsonb_array_elements_text(
+            coalesce(
+              v_sync_result
+                ->'correction_resolution_pending_member_timesheet_ids',
+              '[]'::jsonb
+            )
+          ) pending_member(value)
+          WHERE pending_member.value::uuid
+                = negative_component.timesheet_id
+        ) THEN 'RESOLUTION_PENDING'
+        WHEN EXISTS (
+          SELECT 1
           FROM pg_temp._tmp_pay_wb_sync_rotation_scope AS rotation_scope
           JOIN public.pay_advances AS finance_case
             ON finance_case.linked_timesheet_id = rotation_scope.family_timesheet_id
@@ -1946,19 +1959,24 @@ BEGIN
   SELECT
     COUNT(*) FILTER (WHERE component_coverage.coverage_kind = 'DURABLE_COMPONENT')::integer,
     COUNT(*) FILTER (WHERE component_coverage.coverage_kind = 'PROTECTED_CASE')::integer,
+    COUNT(*) FILTER (WHERE component_coverage.coverage_kind = 'RESOLUTION_PENDING')::integer,
     COUNT(*) FILTER (WHERE component_coverage.coverage_kind = 'UNCOVERED')::integer
   INTO v_sync_durable_component_count,
        v_sync_protected_component_count,
+       v_sync_resolution_pending_component_count,
        v_sync_uncovered_component_count
   FROM component_coverage;
 
   /* A successful reconciliation need not echo a component that was already
-     durably represented.  Durable/protected component authority is the final
-     attestation; sync-result rows remain scope-checked above. */
+     durably represented. A component awaiting the existing PAYE/umbrella
+     resolution UI is intentionally not finance authority: the sync helper
+     suppresses its mutation and draft creation remains fail-closed until the
+     resolution is saved. Sync-result rows remain scope-checked above. */
   v_sync_candidate_covered := (
     COALESCE(v_sync_uncovered_component_count, 0) = 0
     AND COALESCE(v_sync_durable_component_count, 0)
         + COALESCE(v_sync_protected_component_count, 0)
+        + COALESCE(v_sync_resolution_pending_component_count, 0)
         = COALESCE(v_sync_negative_component_count, 0)
   );
 
@@ -1975,6 +1993,8 @@ BEGIN
               'negative_component_count', COALESCE(v_sync_negative_component_count, 0),
               'durable_component_count', COALESCE(v_sync_durable_component_count, 0),
               'protected_component_count', COALESCE(v_sync_protected_component_count, 0),
+              'resolution_pending_component_count',
+                COALESCE(v_sync_resolution_pending_component_count, 0),
               'uncovered_component_count', COALESCE(v_sync_uncovered_component_count, 0),
               'sync_result', COALESCE(v_sync_result, '{}'::jsonb)
             )::text;
@@ -1982,6 +2002,8 @@ BEGIN
 
   v_sync_result_code := CASE
     WHEN COALESCE(v_sync_negative_component_count, 0) = 0 THEN 'NO_NEGATIVE_COMPONENTS'
+    WHEN COALESCE(v_sync_resolution_pending_component_count, 0) > 0
+      THEN 'PAY_METHOD_RESOLUTION_REQUIRED'
     WHEN COALESCE(v_sync_protected_component_count, 0) = COALESCE(v_sync_negative_component_count, 0) THEN 'PROTECTED_TERMINAL'
     WHEN COALESCE(v_sync_protected_component_count, 0) > 0 THEN 'RECONCILED_WITH_PROTECTED_COMPONENTS'
     ELSE 'RECONCILED_DURABLE_CASE_COMPONENTS'
@@ -2010,6 +2032,8 @@ BEGIN
     'negative_component_count', COALESCE(v_sync_negative_component_count, 0),
     'durable_component_count', COALESCE(v_sync_durable_component_count, 0),
     'protected_component_count', COALESCE(v_sync_protected_component_count, 0),
+    'resolution_pending_component_count',
+      COALESCE(v_sync_resolution_pending_component_count, 0),
     'uncovered_component_count', COALESCE(v_sync_uncovered_component_count, 0),
     'sync_invoked', COALESCE(v_sync_invoked, false),
     'sync_marker_reused', false

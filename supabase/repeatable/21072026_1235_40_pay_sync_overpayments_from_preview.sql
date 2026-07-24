@@ -48,6 +48,8 @@ declare
   v_existing_active_reserved_amount numeric(12,2) := 0;
   v_effective_case_amount_ex numeric(12,2);
   v_active_reservation_protection_applied boolean := false;
+  v_correction_rewrite_result jsonb := '{}'::jsonb;
+  v_resolution_pending_member_ids uuid[] := array[]::uuid[];
 
   v_target_case_row record;
   v_existing_case_row record;
@@ -86,7 +88,29 @@ begin
   begin
     foreach v_correction_candidate in array coalesce(p_candidate_ids,array[]::uuid[]) loop
       v_residuals:=public._ctms_candidate_correction_residuals_v1(null::uuid,v_correction_candidate,null::uuid,'PAY_SYNC_OVERPAYMENTS');
-      if exists(select 1 from jsonb_array_elements(v_residuals) r where coalesce((r->>'draftable')::boolean,false) is not true) then
+      if exists(
+        select 1
+        from jsonb_array_elements(v_residuals) r
+        where coalesce((r->>'draftable')::boolean,false) is not true
+          and not (
+            coalesce(r->>'block_code','')
+              = 'CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED'
+            and coalesce((r->>'unresolved_count')::integer,0) > 0
+            and coalesce((r->>'reservation_overrun_count')::integer,0) = 0
+            and coalesce((r->>'component_count')::integer,0) > 0
+          )
+          and (
+            coalesce(array_length(p_force_include_timesheet_ids,1),0)=0
+            or exists (
+              select 1
+              from jsonb_array_elements_text(
+                coalesce(r->'member_timesheet_ids','[]'::jsonb)
+              ) member_id(value)
+              where member_id.value::uuid
+                    = any(coalesce(p_force_include_timesheet_ids,array[]::uuid[]))
+            )
+          )
+      ) then
         raise exception 'CORRECTION_RESIDUAL_NOT_READY_FOR_OVERPAYMENT_SYNC' using errcode='P0001',detail=v_residuals::text;
       end if;
     end loop;
@@ -2151,7 +2175,8 @@ begin
   from deduped_case_candidates dcc
   where dcc.desired_case_type is not null;
 
-  perform public._ctms_rewrite_sync_correction_cases_v1(
+  v_correction_rewrite_result :=
+    public._ctms_rewrite_sync_correction_cases_v1(
     case
       when nullif(btrim(coalesce(p_mismatch_choices->>'workbench_session_id', '')), '')
         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -2161,6 +2186,16 @@ begin
     coalesce(p_candidate_ids, array[]::uuid[]),
     coalesce(p_force_include_timesheet_ids, array[]::uuid[])
   );
+
+  select coalesce(array_agg(distinct value::uuid order by value::uuid),array[]::uuid[])
+  into v_resolution_pending_member_ids
+  from jsonb_array_elements_text(
+    coalesce(
+      v_correction_rewrite_result
+        ->'resolution_pending_member_timesheet_ids',
+      '[]'::jsonb
+    )
+  ) pending_member(value);
 
   select count(*)::int into v_timesheet_case_count from pg_temp.tmp_sync_timesheet_case_candidates;
   select count(*)::int into v_overpayment_case_count from pg_temp.tmp_sync_timesheet_case_candidates where desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum;
@@ -2935,6 +2970,11 @@ begin
         coalesce(array_length(p_exclude_timesheet_ids, 1), 0) > 0
         and pa.linked_timesheet_id = any(p_exclude_timesheet_ids)
       )
+      and not (
+        coalesce(array_length(v_resolution_pending_member_ids, 1), 0) > 0
+        and pa.linked_timesheet_id
+              = any(v_resolution_pending_member_ids)
+      )
       and not exists (
         select 1
         from pg_temp.tmp_sync_case_links l
@@ -3345,6 +3385,17 @@ begin
     'underpayment_cases', v_underpayment_json,
     'timesheet_finance_case_candidates_count', v_timesheet_case_count,
     'timesheet_finance_case_candidates', v_case_candidates_json,
+    'correction_resolution_pending_chain_count',
+      coalesce(
+        nullif(
+          v_correction_rewrite_result
+            ->>'resolution_pending_chain_count',
+          ''
+        )::integer,
+        0
+      ),
+    'correction_resolution_pending_member_timesheet_ids',
+      to_jsonb(v_resolution_pending_member_ids),
     'cases_inserted', v_cases_inserted,
     'cases_touched', v_cases_touched,
     'cases_amended', v_cases_amended,

@@ -167,9 +167,95 @@ test('source-build attestation accepts complete durable or protected coverage on
   const attestationBlock = body.slice(attestationStart, body.indexOf('v_sync_result_code :=', attestationStart));
 
   assert.match(attestationBlock, /v_sync_uncovered_component_count, 0\) = 0/);
-  assert.match(attestationBlock, /v_sync_durable_component_count, 0\)[\s\S]*v_sync_protected_component_count, 0\)[\s\S]*v_sync_negative_component_count, 0\)/);
+  assert.match(attestationBlock, /v_sync_durable_component_count, 0\)[\s\S]*v_sync_protected_component_count, 0\)[\s\S]*v_sync_resolution_pending_component_count, 0\)[\s\S]*v_sync_negative_component_count, 0\)/);
   assert.match(attestationBlock, /IF COALESCE\(v_sync_candidate_covered, false\) IS NOT TRUE THEN/);
   assert.doesNotMatch(attestationBlock, /OR COALESCE\(v_sync_uncovered_component_count/);
+});
+
+test('pay-method correction resolution is surfaced without creating or clearing finance authority', () => {
+  const helperStart = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_rewrite_sync_correction_cases_v1'
+  );
+  const helperEnd = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_assert_payload_corrections_fresh_v1',
+    helperStart
+  );
+  const helperBody = correctionRuntimeSql.slice(helperStart, helperEnd);
+  assert.match(
+    helperBody,
+    /CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*delete from pg_temp\.tmp_sync_timesheet_case_candidates[\s\S]*v_resolution_pending_member_ids[\s\S]*continue;/
+  );
+  assert.match(
+    helperBody,
+    /CORRECTION_CHAIN_ACTIVE_FINANCE_RESERVATION[\s\S]*CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED/
+  );
+
+  const syncBody = functionBody(
+    'pay_sync_overpayments_from_preview',
+    null,
+    overpaymentSyncSql
+  );
+  assert.match(
+    syncBody,
+    /v_correction_rewrite_result[\s\S]*resolution_pending_member_timesheet_ids/
+  );
+  assert.match(
+    syncBody,
+    /and not \([\s\S]*v_resolution_pending_member_ids[\s\S]*pa\.linked_timesheet_id[\s\S]*any\(v_resolution_pending_member_ids\)/
+  );
+  assert.match(
+    syncBody,
+    /CORRECTION_RESIDUAL_NOT_READY_FOR_OVERPAYMENT_SYNC/
+  );
+});
+
+test('source build attests pending pay-method resolution but draft gate remains fail-closed', () => {
+  const sourceBody = functionBody(
+    'pay_workbench_candidate_source_build_chunk',
+    null,
+    sourceBuildSql
+  );
+  assert.match(
+    sourceBody,
+    /correction_resolution_pending_member_timesheet_ids[\s\S]*THEN 'RESOLUTION_PENDING'/
+  );
+  assert.match(
+    sourceBody,
+    /PAY_METHOD_RESOLUTION_REQUIRED/
+  );
+
+  const materialiserStart = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_materialise_candidate_correction_residuals_v1'
+  );
+  const materialiserEnd = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_enrich_correction_resolution_payload_v1',
+    materialiserStart
+  );
+  const materialiserBody = correctionRuntimeSql.slice(
+    materialiserStart,
+    materialiserEnd
+  );
+  assert.match(
+    materialiserBody,
+    /CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*continue;[\s\S]*CORRECTION_RESIDUAL_NOT_DRAFTABLE/
+  );
+
+  const draftGateStart = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_assert_session_correction_residuals_draftable_v1'
+  );
+  const draftGateEnd = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_materialise_candidate_correction_residuals_v1',
+    draftGateStart
+  );
+  const draftGateBody = correctionRuntimeSql.slice(draftGateStart, draftGateEnd);
+  assert.match(
+    draftGateBody,
+    /draftable[\s\S]*CORRECTION_RESIDUAL_NOT_DRAFTABLE/
+  );
+  assert.doesNotMatch(
+    draftGateBody,
+    /CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*continue;/
+  );
 });
 
 test('active-reservation protection audit events are idempotent', () => {
