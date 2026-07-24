@@ -480,7 +480,7 @@ select coalesce(jsonb_agg(jsonb_build_object(
     cross join lateral jsonb_array_elements_text(g->'canonical_source_ids') source_id
   ),0)
 ) order by c.client_name,c.client_id),'[]'::jsonb)
-from clients c;
+from clients c
   );
 end;
 $function$;
