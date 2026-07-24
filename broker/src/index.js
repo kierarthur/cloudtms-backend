@@ -52,6 +52,21 @@ import {
   isTestCsvExecutionOnlyToken,
   testCsvExecutionTokenMatchesMode
 } from './test-csv-execution-bypass.js';
+import {
+  createReadyInvoiceDocumentLink,
+  handleInvoiceAsyncHttpRequest
+} from './invoice-async-http.js';
+import {
+  drainInvoiceOperations,
+  getInvoiceQueueRuntimeConfig,
+  handleInvoiceQueueDrainRequest,
+  isInvoiceAsyncPipelineEnabled,
+  runAutoInvoiceCycleAsync,
+  runInvoiceReconciliationCycle,
+  validateInvoiceSystemActor,
+  validateQueueRuntimeConfiguration
+} from './invoice-queue-runtime.js';
+import { parseInvoiceAsyncAllowedUserIds } from './invoice-queue-security.js';
 
 const textEncoder = new TextEncoder();
 
@@ -534,6 +549,78 @@ async function withBrowser(env, fn) {
 // ============================================================================
 async function ensureInvoicePdf(env, invoiceId, opts = {}) {
   const enc = encodeURIComponent;
+
+  if (isInvoiceAsyncPipelineEnabled(env)) {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}` +
+        `&select=id,status,preview_document_version_id,issued_document_version_id&limit=1`,
+      false
+    );
+    const invoice = rows?.[0] || null;
+    if (!invoice) return { ok: false, code: 'INVOICE_NOT_FOUND', invoice_id: invoiceId };
+    const invoiceStatus = String(invoice.status || '').toUpperCase();
+    const versionId = String(
+      ['ISSUED', 'PAID'].includes(invoiceStatus)
+        ? invoice.issued_document_version_id || ''
+        : invoice.preview_document_version_id || ''
+    ).trim();
+    if (versionId) {
+      const { rows: versionRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/invoice_document_versions?id=eq.${enc(versionId)}` +
+          `&entity_type=eq.INVOICE&entity_id=eq.${enc(invoiceId)}` +
+          `&purpose=eq.${['ISSUED', 'PAID'].includes(invoiceStatus) ? 'FINAL_ISSUE' : 'DRAFT_PREVIEW'}` +
+          `&status=eq.READY&select=id,r2_key,sha256,size_bytes,page_count&limit=1`,
+        false
+      );
+      const version = versionRows?.[0] || null;
+      if (
+        version?.r2_key
+        && version?.sha256
+        && Number(version?.size_bytes) > 0
+        && Number(version?.page_count) > 0
+      ) {
+        return {
+          ok: true,
+          invoice_id: invoiceId,
+          invoice_pdf_r2_key: version.r2_key,
+          document_version_id: version.id,
+          rendered: false,
+          cached: true
+        };
+      }
+    }
+    const actorUserId = opts?.user?.id || opts?.actor_user_id || null;
+    if (['ISSUED', 'PAID'].includes(invoiceStatus)) {
+      return {
+        ok: false,
+        code: 'ISSUED_DOCUMENT_NOT_READY',
+        invoice_id: invoiceId,
+        document_version_id: versionId || null
+      };
+    }
+    if (!actorUserId) {
+      return { ok: false, code: 'INVOICE_DOCUMENT_NOT_READY', invoice_id: invoiceId };
+    }
+    const started = await sbRpc(env, 'invoice_operation_start_batch', {
+      p_commands: [{
+        command_type: 'VIEW_INVOICE_DOCUMENT',
+        invoice_id: invoiceId,
+        purpose: 'DRAFT_PREVIEW',
+        priority_reason: opts?.priority_reason || 'ENSURE_DOCUMENT'
+      }],
+      p_actor_user_id: actorUserId,
+      p_now_utc: new Date().toISOString()
+    });
+    const operations = unwrapRpcJsonb(started, 'invoice_operation_start_batch') || started;
+    await nudgeInvoiceOperations(env, operations, {
+      ctx: opts?.ctx,
+      rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+      lanes: ['DATABASE', 'DOCUMENT']
+    });
+    return { ok: false, code: 'INVOICE_DOCUMENT_QUEUED', invoice_id: invoiceId, operations };
+  }
 
   const req =
     (opts && opts.req) ||
@@ -4892,9 +4979,17 @@ async function rpcTspdfWorkFailBulk(env, { fails = [] } = {}) {
 // POST /api/tspdf/queue/drain
 // Body: { "limit": 5, "enqueue_first": true, "enqueue_limit": 500 }
 // ─────────────────────────────────────────────────────────────
-async function handleTsPdfDrain(env, req) {
+async function handleTsPdfDrain(env, req, ctx) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (isInvoiceAsyncPipelineEnabled(env)) {
+    const report = await drainInvoiceOperations(env, {
+      ctx,
+      rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+      lanes: ['DOCUMENT']
+    });
+    return withCORS(env, req, ok({ ...report, delegated_to: 'INVOICE_OPERATION_QUEUE' }));
+  }
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -5088,9 +5183,17 @@ async function runInvoicePdfWorkerOnce(env, { limit = 1, enqueueFirst = true, en
 // POST /api/invpdf/queue/drain
 // Body: { "limit": 1, "enqueue_first": true, "enqueue_limit": 500 }
 // ─────────────────────────────────────────────────────────────
-async function handleInvoicePdfDrain(env, req) {
+async function handleInvoicePdfDrain(env, req, ctx) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (isInvoiceAsyncPipelineEnabled(env)) {
+    const report = await drainInvoiceOperations(env, {
+      ctx,
+      rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+      lanes: ['DOCUMENT']
+    });
+    return withCORS(env, req, ok({ ...report, delegated_to: 'INVOICE_OPERATION_QUEUE' }));
+  }
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -56887,25 +56990,15 @@ async function handleContractWeekPresignManualPdf(env, req, weekId) {
     (body && (body.filename || body.name)) ||
     `contract_week_${cw.id}.pdf`;
 
-  const contentType = String(contentTypeRaw || 'application/pdf');
+  const contentType = String(contentTypeRaw || 'application/pdf').trim().toLowerCase();
   const filename = String(filenameRaw || '');
-
-  // Derive extension like handleFilePresignUpload (so key matches /api/files/upload regex)
-  let ext = '';
-  if (filename && filename.includes('.')) {
-    ext = filename.substring(filename.lastIndexOf('.'));
-  } else {
-    const ctMap = {
-      'image/png': '.png',
-      'image/jpeg': '.jpg',
-      'image/gif': '.gif',
-      'image/webp': '.webp',
-      'image/heic': '.heic',
-      'image/heif': '.heif',
-      'application/pdf': '.pdf'
-    };
-    if (contentType in ctMap) ext = ctMap[contentType];
-  }
+  const allowedContentTypes = new Set(['application/pdf','image/jpeg','image/png']);
+  const allowedExtensions = new Set(['.pdf','.jpg','.jpeg','.png']);
+  if (!allowedContentTypes.has(contentType)) return withCORS(env, req, badRequest('Only PDF, JPEG/JPG and static PNG files are supported.'));
+  let ext = filename && filename.includes('.') ? filename.substring(filename.lastIndexOf('.')).toLowerCase() : '';
+  if (!ext) ext = contentType === 'application/pdf' ? '.pdf' : (contentType === 'image/png' ? '.png' : '.jpg');
+  if (!allowedExtensions.has(ext)) return withCORS(env, req, badRequest('Only .pdf, .jpg, .jpeg and .png files are supported.'));
+  if ((contentType === 'application/pdf' && ext !== '.pdf') || (contentType === 'image/png' && ext !== '.png') || (contentType === 'image/jpeg' && !['.jpg','.jpeg'].includes(ext))) return withCORS(env, req, badRequest('Filename extension does not match the requested media type.'));
 
   // MUST match /api/files/upload:
   //   key:  /^\/files\/\d{8}\/file_[0-9a-f]{16}(\.[A-Za-z0-9]{3,10})?$/
@@ -65323,8 +65416,28 @@ async function handleManualTimesheetQueueDelete(env, req, queueId) {
     const canDelete = !!(bucket && typeof bucket.delete === 'function');
     const storageKey = String(item.r2_key || '').trim().replace(/^\/+/, '');
     let storageDeleted = false;
+    let storagePreservedReason = null;
 
-    if (storageKey && canDelete) {
+    if (storageKey && isInvoiceAsyncPipelineEnabled(env)) {
+      const { rows: registeredAssets } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/invoice_document_assets`
+          + `?original_r2_key=eq.${enc(storageKey)}`
+          + '&select=id,status,operation_id'
+          + '&limit=100',
+        false
+      );
+      const immutableReference = (registeredAssets || []).find(asset =>
+        String(asset?.status || '').toUpperCase() === 'READY'
+      );
+      if (immutableReference || registeredAssets?.length) {
+        storagePreservedReason = immutableReference
+          ? 'READY_ASSET_REFERENCE'
+          : 'REGISTERED_ASSET_PROVENANCE';
+      }
+    }
+
+    if (storageKey && canDelete && !storagePreservedReason) {
       try {
         await bucket.delete(storageKey);
         storageDeleted = true;
@@ -65355,7 +65468,8 @@ async function handleManualTimesheetQueueDelete(env, req, queueId) {
           queue_id: item.id,
           r2_key: item.r2_key,
           original_filename: item.original_filename,
-          storage_deleted: storageDeleted
+          storage_deleted: storageDeleted,
+          storage_preserved_reason: storagePreservedReason
         },
         { entity: 'manual_timesheet_queue', subject_id: item.id, req }
       );
@@ -65366,7 +65480,8 @@ async function handleManualTimesheetQueueDelete(env, req, queueId) {
     return withCORS(env, req, ok({
       deleted: true,
       id: item.id,
-      storage_deleted: storageDeleted
+      storage_deleted: storageDeleted,
+      storage_preserved_reason: storagePreservedReason
     }));
   } catch (e) {
     console.error('[MT_QUEUE_DELETE] error', {
@@ -66634,7 +66749,7 @@ async function handleContractWeekStagedEvidenceDelete(env, req, weekId, queueId)
 
 
 
-async function handleManualTimesheetQueueAttach(env, req, queueId) {
+async function handleManualTimesheetQueueAttach(env, req, queueId, ctx) {
   const enc = encodeURIComponent;
   const STALE_QUEUE_IMAGE_MESSAGE = 'This timesheet image no longer exists and therefore the timesheet cannot be processed with this image. Please find another image and try again.';
 
@@ -66867,6 +66982,18 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       return withCORS(env, req, new Response(JSON.stringify({ ...payload, error: code || 'ATTACH_FAILED', error_code: code || 'ATTACH_FAILED', message }), { status: statusCode, headers: JSON_HEADERS }));
     }
 
+    if (isInvoiceAsyncPipelineEnabled(env) && payload.operation_id) {
+      await nudgeInvoiceOperations(env, [{
+        operation_id: payload.operation_id,
+        status: payload.asset_state === 'READY' ? 'COMPLETE' : 'QUEUED',
+        accepted: true
+      }], {
+        ctx,
+        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+        lanes: ['DOCUMENT']
+      });
+    }
+
     try {
       await writeAudit(
         env,
@@ -66888,17 +67015,33 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       );
     } catch {}
 
-    return withCORS(env, req, ok({
+    const attachResponse = {
+      ok: true,
       attached: true,
       id: item.id,
       queue_id: item.id,
       evidence_id: payload.evidence_id || null,
+      asset_id: payload.asset_id || payload.document_asset_id || null,
+      operation_id: payload.operation_id || null,
+      document_operation_id: payload.document_operation_id || null,
+      document_version_id: payload.document_version_id || null,
+      asset_state: payload.asset_state || null,
+      document_state: payload.document_state || null,
+      reused: payload.asset_reused === true || payload.reused === true,
       kind: requestedKind,
       storage_key: payload.storage_key || expectedStorageKey || null,
       timesheet_id: currentTimesheetId,
       current_timesheet_id: currentTimesheetId,
       consumed_queue_item: true,
       queue_item_consumed: true
+    };
+    const attachStatus = (
+      isInvoiceAsyncPipelineEnabled(env)
+      && String(payload.asset_state || '').toUpperCase() !== 'READY'
+    ) ? 202 : 200;
+    return withCORS(env, req, new Response(JSON.stringify(attachResponse), {
+      status: attachStatus,
+      headers: JSON_HEADERS
     }));
   } catch (e) {
     const message = String(e?.message || e || 'Failed to attach manual timesheet queue item');
@@ -66951,20 +67094,64 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
       `?id=eq.${enc(queueId)}` +
-      `&select=id,last_rotation_deg` +
+      `&select=id,status,timesheet_id,r2_key,content_hash,last_rotation_deg,meta_json` +
       `&limit=1`
     );
     const item = rows?.[0] || null;
     if (!item) {
       return withCORS(env, req, notFound('Queue item not found'));
     }
+    const currentStatus = String(item.status || '').trim().toUpperCase();
+    if (
+      isInvoiceAsyncPipelineEnabled(env)
+      && ['ATTACHED', 'STAGED', 'DISCARDED'].includes(currentStatus)
+    ) {
+      return withCORS(env, req, conflict(
+        'This queue item is no longer an editable upload. Rotate it through the attached evidence flow so a new immutable source revision can be registered.'
+      ));
+    }
+
+    const currentRotation = normaliseRotation(item.last_rotation_deg);
+    const currentMeta = item.meta_json && typeof item.meta_json === 'object'
+      && !Array.isArray(item.meta_json)
+      ? item.meta_json
+      : {};
+    const rotationRevision = isInvoiceAsyncPipelineEnabled(env)
+      ? await sha256Hex([
+          'MANUAL_TIMESHEET_QUEUE_ROTATION_V1',
+          queueId,
+          String(item.r2_key || ''),
+          String(item.content_hash || ''),
+          String(deg)
+        ].join('|'))
+      : null;
+    const priorHistory = Array.isArray(currentMeta.rotation_revision_history)
+      ? currentMeta.rotation_revision_history
+      : [];
+    const nextMeta = isInvoiceAsyncPipelineEnabled(env)
+      ? {
+          ...currentMeta,
+          rotation_revision: rotationRevision,
+          rotation_revision_history: [
+            ...priorHistory,
+            {
+              rotation_degrees: currentRotation,
+              rotation_revision: currentMeta.rotation_revision || null,
+              superseded_at_utc: nowIso()
+            }
+          ].slice(-8)
+        }
+      : currentMeta;
 
     const patchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-        body: JSON.stringify({ last_rotation_deg: deg })
+        body: JSON.stringify({
+          last_rotation_deg: deg,
+          ...(isInvoiceAsyncPipelineEnabled(env) ? { meta_json: nextMeta } : {})
+        })
       }
     );
 
@@ -66982,7 +67169,8 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
         'MANUAL_TIMESHEET_QUEUE_ROTATED',
         {
           queue_id: updated.id,
-          last_rotation_deg: updated.last_rotation_deg
+          last_rotation_deg: updated.last_rotation_deg,
+          source_revision: rotationRevision
         },
         { entity: 'manual_timesheet_queue', subject_id: updated.id, req }
       );
@@ -66992,7 +67180,9 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
 
     return withCORS(env, req, ok({
       id: updated.id,
-      last_rotation_deg: updated.last_rotation_deg
+      last_rotation_deg: updated.last_rotation_deg,
+      source_revision: rotationRevision,
+      immutable_original_preserved: isInvoiceAsyncPipelineEnabled(env)
     }));
   } catch (e) {
     console.error('[MT_QUEUE_ROTATE] error', {
@@ -75666,6 +75856,12 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
             // PDF pointer (manual + QR)
             'manual_pdf_r2_key',
             'manual_pdf_rotation_degrees',
+            'manual_document_asset_id',
+            'document_revision',
+            'document_state',
+            'current_document_version_id',
+            'active_document_operation_id',
+            'last_document_error_json',
 
             // QR state
             'qr_status',
@@ -75796,12 +75992,56 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
           `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&select=id,kind,display_name,storage_key,created_at,created_by` +
+          `&select=id,kind,display_name,storage_key,created_at,created_by,document_asset_id,source_revision,processing_state,processing_error_json` +
           `&order=created_at.asc`
       );
       return Array.isArray(rows) ? rows : [];
     };
     const evRows = await fetchTimesheetEvidenceRows();
+    const assetIds = Array.from(new Set(
+      evRows.map(row => asUuidStringOrNull(row?.document_asset_id)).filter(Boolean)
+    ));
+    const assetById = {};
+    if (assetIds.length) {
+      try {
+        const { rows: assetRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoice_document_assets` +
+            `?id=in.(${assetIds.map(enc).join(',')})` +
+            `&select=id,status,operation_id,detected_media_type,original_size_bytes,source_page_count,normalised_size_bytes,normalised_page_count,normalised_r2_key,normalised_manifest_json,error_json,updated_at_utc,ready_at_utc` +
+            `&limit=1000`
+        );
+        for (const asset of (assetRows || [])) {
+          if (asset?.id) assetById[String(asset.id)] = asset;
+        }
+      } catch (e) {
+        console.warn('[handleTimesheetEvidenceList] asset state enrichment failed (non-fatal)', {
+          timesheet_id: currentTsId,
+          err: e?.message || String(e)
+        });
+      }
+    }
+
+    let currentTimesheetDocument = null;
+    if (asUuidStringOrNull(ts?.current_document_version_id)) {
+      try {
+        currentTimesheetDocument = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoice_document_versions` +
+            `?id=eq.${enc(ts.current_document_version_id)}` +
+            `&entity_type=eq.TIMESHEET` +
+            `&entity_id=eq.${enc(currentTsId)}` +
+            `&purpose=eq.TIMESHEET` +
+            `&select=id,status,source_revision,template_version,r2_key,sha256,size_bytes,page_count,error_json,ready_at_utc` +
+            `&limit=1`
+        );
+      } catch (e) {
+        console.warn('[handleTimesheetEvidenceList] document state enrichment failed (non-fatal)', {
+          timesheet_id: currentTsId,
+          err: e?.message || String(e)
+        });
+      }
+    }
 
     const evidenceStorageKeys = Array.from(new Set(
       (evRows || [])
@@ -75842,6 +76082,8 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       const queueMetaObj = (queueMatch?.meta_json && typeof queueMatch.meta_json === 'object' && !Array.isArray(queueMatch.meta_json))
         ? queueMatch.meta_json
         : null;
+      const assetId = asUuidStringOrNull(out.document_asset_id);
+      const asset = assetId ? assetById[assetId] : null;
 
       out.timesheet_id = currentTsId;
       out.filename = out.display_name || null;
@@ -75865,6 +76107,29 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       out.can_reclassify = itemEvidenceEditable;
       out.can_return_to_queue = itemEvidenceEditable;
       out.source_badge = 'Attached';
+      out.document_asset_id = assetId;
+      out.asset_state = asset?.status || out.processing_state || (assetId ? 'DISCOVERED' : 'NOT_REGISTERED');
+      out.asset_operation_id = asset?.operation_id || null;
+      out.detected_media_type = asset?.detected_media_type || null;
+      out.original_size_bytes = asset?.original_size_bytes ?? null;
+      out.source_page_count = asset?.source_page_count ?? null;
+      out.normalised_size_bytes = asset?.normalised_size_bytes ?? null;
+      out.normalised_page_count = asset?.normalised_page_count ?? null;
+      out.normalised_state = asset?.status || null;
+      out.asset_error = asset?.error_json || out.processing_error_json || null;
+      out.asset_retryable = ['FAILED', 'CORRUPT', 'UNSUPPORTED', 'MISSING'].includes(
+        String(asset?.status || out.processing_state || '').toUpperCase()
+      );
+      if (evidenceKindU === 'TIMESHEET') {
+        out.timesheet_document_state = ts?.document_state || 'NOT_REQUESTED';
+        out.timesheet_document_version_id = currentTimesheetDocument?.id || null;
+        out.timesheet_document_version_status = currentTimesheetDocument?.status || null;
+        out.timesheet_document_pages = currentTimesheetDocument?.page_count ?? null;
+        out.active_timesheet_document_operation_id = ts?.active_document_operation_id || null;
+        out.timesheet_document_error = currentTimesheetDocument?.error_json
+          || ts?.last_document_error_json
+          || null;
+      }
       if (!out.uploaded_at_utc && out.created_at) out.uploaded_at_utc = out.created_at;
       return out;
     });
@@ -76303,6 +76568,13 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         route_type: summary?.route_type || null,
         import_authoritative: importAuthoritative,
         route_evidence_editable: routeEvidenceEditable,
+        timesheet_document: {
+          document_revision: ts?.document_revision ?? null,
+          state: ts?.document_state || 'NOT_REQUESTED',
+          version: currentTimesheetDocument,
+          active_operation_id: ts?.active_document_operation_id || null,
+          last_error: ts?.last_document_error_json || currentTimesheetDocument?.error_json || null
+        },
         evidence: all
       }));
     }
@@ -95946,7 +96218,7 @@ async function handleUserChangePassword(env, req) {
 
   const weC = ymdCompact(cw.week_ending_date);
   const key = `paper_ts/we=${weC}/cw_${cw.id}_${Date.now()}.upload`;
-  const token = await createToken(env, 'UPLOAD', { key, c: 'manual_ts', ttlSec: 3600, maxBytes: 25*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
+  const token = await createToken(env, 'UPLOAD', { key, c: 'manual_ts', ttlSec: 3600, maxBytes: 25*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png'] });
   const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
 
   // Optimistically attach key
@@ -98100,7 +98372,7 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const key = `docs/receipts/ts_${timesheetId}/${Date.now()}_${Math.random().toString(16).slice(2)}.upload`;
-  const token = await createToken(env, 'UPLOAD', { key, c: 'receipt', ttlSec: 3600, maxBytes: 20*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
+  const token = await createToken(env, 'UPLOAD', { key, c: 'receipt', ttlSec: 3600, maxBytes: 20*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png'] });
   const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
   return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
 }
@@ -100783,7 +101055,7 @@ async function handleMe(env, req) {
 
 
 
-async function handleInvoiceSaveEdits(env, req, invoiceId) {
+async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -100930,6 +101202,80 @@ async function handleInvoiceSaveEdits(env, req, invoiceId) {
       );
     } catch {}
 
+    let accepted_operations = [];
+    let operation_submission_error = null;
+    if (isInvoiceAsyncPipelineEnabled(env)) {
+      const requestPreview = payload.request_preview === true
+        || payload.prepare_preview === true
+        || payload.render_pdf === true;
+      const requestIssue = payload.issue === true
+        || payload.issue_invoice === true
+        || payload.issue_after_save === true;
+      const requestDelivery = requestIssue && (
+        payload.deliver === true
+        || payload.send_email === true
+        || payload.email_after_issue === true
+      );
+      const commands = [];
+      if (requestPreview) {
+        commands.push({
+          command_type: 'VIEW_INVOICE_DOCUMENT',
+          invoice_id: invoiceId,
+          purpose: 'DRAFT_PREVIEW',
+          priority_reason: 'VIEW_NOW',
+          template_version: payload.template_version || undefined
+        });
+      }
+      if (requestIssue) {
+        commands.push({
+          command_type: 'ISSUE_INVOICES',
+          invoice_ids: [invoiceId],
+          allow_early: payload.allow_early === true,
+          deliver: requestDelivery,
+          command_token: String(
+            payload.command_token
+            || payload.issue_command_token
+            || req.headers.get('idempotency-key')
+            || crypto.randomUUID()
+          ).slice(0, 200),
+          delivery_intent: requestDelivery ? {
+            recipient_set: payload.recipient_set || payload.to || [],
+            cc: payload.cc || [],
+            bcc: payload.bcc || [],
+            delivery_policy: payload.delivery_policy || 'ATTACH',
+            template_version: payload.delivery_template_version || 'INVOICE_EMAIL_V1',
+            delivery_request_token: String(
+              payload.delivery_request_token
+              || payload.command_token
+              || crypto.randomUUID()
+            ).slice(0, 200)
+          } : { deliver: false }
+        });
+      }
+      if (commands.length) {
+        try {
+          const started = await sbRpc(env, 'invoice_operation_start_batch', {
+            p_commands: commands,
+            p_actor_user_id: user.id,
+            p_now_utc: new Date().toISOString()
+          });
+          accepted_operations = Array.isArray(started)
+            ? started
+            : (Array.isArray(started?.data) ? started.data : [started].filter(Boolean));
+          await nudgeInvoiceOperations(env, accepted_operations, {
+            ctx,
+            rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+            lanes: ['DATABASE', 'DOCUMENT']
+          });
+        } catch (operationError) {
+          operation_submission_error = {
+            code: 'INVOICE_OPERATION_SUBMISSION_FAILED',
+            message: String(operationError?.message || operationError).slice(0, 500)
+          };
+        }
+      }
+    }
+
     return withCORS(env, req, ok({
       ok: true,
 
@@ -100953,6 +101299,9 @@ async function handleInvoiceSaveEdits(env, req, invoiceId) {
       history,
       tsfin_id_by_timesheet_id,
       reference_rows,
+      accepted_operations,
+      async_processing: accepted_operations.length > 0,
+      operation_submission_error,
 
       // also return the raw manifest for any future UI needs
       manifest
@@ -113188,6 +113537,12 @@ async function handleInvoiceRemoveTimesheet(env, req, invoiceId) {
     const rows = Array.isArray(r) ? r : (r?.data || []);
     const x = rows?.[0] || null;
     if (!x) return withCORS(env, req, serverError('Remove shifts RPC returned no result'));
+    const detail = isInvoiceAsyncPipelineEnabled(env)
+      ? unwrapRpcJsonb(await sbRpc(env, 'invoice_detail_get', {
+          p_invoice_id: invoiceId,
+          p_actor_user_id: actorUserId
+        }), 'invoice_detail_get')
+      : null;
 
     // Return a minimal invoice shape for FE compatibility
     return withCORS(env, req, ok({
@@ -113196,7 +113551,8 @@ async function handleInvoiceRemoveTimesheet(env, req, invoiceId) {
         subtotal_ex_vat: Number(x.subtotal_ex_vat || 0),
         vat_amount: Number(x.vat_amount || 0),
         total_inc_vat: Number(x.total_inc_vat || 0)
-      }
+      },
+      ...(detail ? { invoice_detail: detail } : {})
     }));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to remove NHSP shifts from invoice: ${e?.message || e}`));
@@ -120490,20 +120846,46 @@ function base64FromArrayBuffer(buf) {
 // ------------------------------
 // Attachments
 // ------------------------------
-async function fetchAttachmentBase64FromR2(env, r2Key) {
-  // Try common binding names – adjust if your binding name differs.
+async function fetchAttachmentBase64FromR2(env, r2Key, expected = {}) {
   const bucket = env.DOCS_BUCKET || env.R2 || env.R2_BUCKET || env.FILES_BUCKET;
-  if (!bucket || typeof bucket.get !== 'function') {
-    throw new Error('R2 binding not available on env (expected DOCS_BUCKET or R2)');
-  }
-  const obj = await bucket.get(r2Key);
-  if (!obj) throw new Error(`R2 object not found for key: ${r2Key}`);
-  const arrBuf = await obj.arrayBuffer();
-  const base64 = base64FromArrayBuffer(arrBuf);
-  // if the filename is not known here, caller should supply display name
-  return base64;
-}
+  if (!bucket || typeof bucket.get !== 'function') throw new Error('R2_BINDING_UNAVAILABLE');
 
+  const strictInvoiceIdentity = expected.invoice_async === true;
+  const expectedHash = String(expected.sha256 || '').trim().toLowerCase();
+  const expectedSize = Number(expected.size_bytes);
+  const requestedMaximum = Number(expected.max_bytes);
+  const maximumBytes = strictInvoiceIdentity
+    ? requestedMaximum
+    : Math.max(1, Math.min(50 * 1024 * 1024, Number.isFinite(requestedMaximum)
+      ? requestedMaximum
+      : Number(env.EMAIL_MAX_ATTACHMENT_BYTES || 25 * 1024 * 1024)));
+
+  if (strictInvoiceIdentity) {
+    if (!/^[0-9a-f]{64}$/.test(expectedHash)) throw new Error('R2_ATTACHMENT_HASH_REQUIRED');
+    if (!Number.isSafeInteger(expectedSize) || expectedSize <= 0) throw new Error('R2_ATTACHMENT_SIZE_REQUIRED');
+    if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0) throw new Error('R2_ATTACHMENT_FROZEN_LIMIT_REQUIRED');
+    if (expectedSize > maximumBytes) throw new Error('R2_ATTACHMENT_TOO_LARGE');
+  }
+
+  const obj = await bucket.get(r2Key);
+  if (!obj) throw new Error('R2_ATTACHMENT_NOT_FOUND');
+  if (strictInvoiceIdentity && Number(obj.size) !== expectedSize) throw new Error('R2_ATTACHMENT_SIZE_MISMATCH');
+  if (Number(obj.size) > maximumBytes) throw new Error('R2_ATTACHMENT_TOO_LARGE');
+  if (strictInvoiceIdentity) {
+    const storedHash = String(obj.customMetadata?.sha256 || '').trim().toLowerCase();
+    if (!storedHash || storedHash !== expectedHash) throw new Error('R2_ATTACHMENT_HASH_MISMATCH');
+  }
+
+  const arrBuf = await obj.arrayBuffer();
+  if (strictInvoiceIdentity) {
+    const digest = await crypto.subtle.digest('SHA-256', arrBuf);
+    const actualHash = Array.from(new Uint8Array(digest))
+      .map(value => value.toString(16).padStart(2, '0'))
+      .join('');
+    if (actualHash !== expectedHash) throw new Error('R2_ATTACHMENT_HASH_MISMATCH');
+  }
+  return base64FromArrayBuffer(arrBuf);
+}
 
 function _asEmailString(v) {
   // Apps Script expects strings for to/cc/bcc/replyTo. :contentReference[oaicite:6]{index=6}
@@ -120587,18 +120969,47 @@ function normalizeEmailPayload(raw) {
       continue;
     }
 
+    if (a.secure_link_required === true || String(a.delivery_mode || '').toUpperCase() === 'SECURE_LINK') {
+      attachments.push({
+        invoice_id: a.invoice_id ? String(a.invoice_id) : undefined,
+        document_version_id: a.document_version_id ? String(a.document_version_id) : undefined,
+        filename: String(a.filename || a.name || 'Invoice.pdf'),
+        name: String(a.name || a.filename || 'Invoice.pdf'),
+        sha256: a.sha256 ? String(a.sha256) : undefined,
+        size_bytes: a.size_bytes,
+        page_count: a.page_count,
+        recipient_set_hash: a.recipient_set_hash ? String(a.recipient_set_hash) : undefined,
+        delivery_template: a.delivery_template ? String(a.delivery_template) : undefined,
+        delivery_policy: a.delivery_policy ? String(a.delivery_policy) : undefined,
+        max_attachment_bytes: a.max_attachment_bytes,
+        delivery_mode: 'SECURE_LINK',
+        secure_link_required: true
+      });
+      continue;
+    }
+
     // R2 placeholder: { r2_key, filename/name }
     if (a.r2_key) {
       attachments.push({
         r2_key: String(a.r2_key),
         name: String(a.name || a.filename || 'attachment'),
-        filename: a.filename ? String(a.filename) : undefined
+        filename: a.filename ? String(a.filename) : undefined,
+        invoice_id: a.invoice_id ? String(a.invoice_id) : undefined,
+        document_version_id: a.document_version_id ? String(a.document_version_id) : undefined,
+        sha256: a.sha256 ? String(a.sha256) : undefined,
+        size_bytes: a.size_bytes,
+        page_count: a.page_count,
+        recipient_set_hash: a.recipient_set_hash ? String(a.recipient_set_hash) : undefined,
+        delivery_template: a.delivery_template ? String(a.delivery_template) : undefined,
+        delivery_policy: a.delivery_policy ? String(a.delivery_policy) : undefined,
+        max_attachment_bytes: a.max_attachment_bytes,
+        delivery_mode: String(a.delivery_mode || 'ATTACHMENT').toUpperCase()
       });
       continue;
     }
 
     // Invoice placeholder: { invoice_id, filename/name }
-    if (a.invoice_id) {
+    if (a.invoice_id && !a.r2_key) {
       attachments.push({
         invoice_id: String(a.invoice_id),
         filename: String(a.filename || a.name || `Invoice_${String(a.invoice_id)}.pdf`),
@@ -121305,20 +121716,128 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   } catch {}
 
   const invpdfMode = String(invpdfEffective?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
-  const emailWorkerCanRender = (invpdfMode === 'paid') && (invpdfEffective?.email_worker_can_render === true);
+  const emailWorkerCanRender = !isInvoiceAsyncPipelineEnabled(env)
+    && (invpdfMode === 'paid')
+    && (invpdfEffective?.email_worker_can_render === true);
 
 
   // Resolve to Apps Script attachmentsV2: [{ Name, ContentBytes }]
   const attachmentsV2 = [];
+  const secureDocumentLinks = [];
+  const asyncInvoiceDelivery = isInvoiceAsyncPipelineEnabled(env)
+    && String(outboxRow.type || '').trim().toUpperCase() === 'INVOICE';
 
   for (const a of (base.attachments || [])) {
     if (!a) continue;
 
+    if (a.secure_link_required === true || String(a.delivery_mode || '').toUpperCase() === 'SECURE_LINK') {
+      const versionId = String(a.document_version_id || '').trim();
+      const invoiceId = String(a.invoice_id || '').trim();
+      if (!isUuidText(versionId) || !isUuidText(invoiceId)) {
+        throw new Error('SECURE_LINK_DESCRIPTOR_INVALID');
+      }
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/invoice_document_versions` +
+          `?id=eq.${enc(versionId)}` +
+          `&entity_type=eq.INVOICE&entity_id=eq.${enc(invoiceId)}` +
+          `&purpose=eq.FINAL_ISSUE&status=eq.READY` +
+          `&select=id,entity_type,entity_id,r2_key,sha256,size_bytes,page_count&limit=1`,
+        false
+      );
+      const version = rows?.[0] || null;
+      if (!version?.r2_key
+          || String(version.sha256 || '') !== String(a.sha256 || '')
+          || Number(version.size_bytes) !== Number(a.size_bytes)
+          || Number(version.page_count) !== Number(a.page_count)) {
+        throw new Error('SECURE_LINK_DOCUMENT_IDENTITY_MISMATCH');
+      }
+      const href = await createReadyInvoiceDocumentLink(env, {
+        entity_type: 'INVOICE',
+        entity_id: invoiceId,
+        document_version_id: versionId,
+        r2_key: version.r2_key,
+        recipient_set_hash: a.recipient_set_hash || null,
+        filename: a.filename || a.name || 'Invoice.pdf'
+      }, outboxRow.created_by || 'mail-outbox');
+      secureDocumentLinks.push({
+        filename: String(a.filename || a.name || 'Invoice.pdf'),
+        href
+      });
+      continue;
+    }
+
     // Direct base64
     if (a.contentBase64 && a.name) {
+      if (asyncInvoiceDelivery) throw new Error('INVOICE_ATTACHMENT_EXACT_DESCRIPTOR_REQUIRED');
       attachmentsV2.push({
         Name: String(a.name || 'attachment'),
         ContentBytes: String(a.contentBase64 || '')
+      });
+      continue;
+    }
+
+    // Revision 8 immutable invoice descriptor -> validate exact issued version,
+    // current issued pointer and object identity before loading bytes.
+    if (a.document_version_id || a.invoice_document_version_id) {
+      if (asyncInvoiceDelivery && String(a.delivery_mode || '').toUpperCase() !== 'ATTACHMENT') {
+        throw new Error('INVOICE_DELIVERY_MODE_MISMATCH');
+      }
+      const frozenDirectLimit = Number(a.max_attachment_bytes);
+      if (asyncInvoiceDelivery && (!Number.isSafeInteger(frozenDirectLimit) || frozenDirectLimit <= 0)) {
+        throw new Error('INVOICE_ATTACHMENT_FROZEN_LIMIT_REQUIRED');
+      }
+      const versionId = String(
+        a.document_version_id || a.invoice_document_version_id || ''
+      ).trim();
+      const invoiceId = String(a.invoice_id || a.entity_id || '').trim();
+      if (!isUuidText(versionId) || !isUuidText(invoiceId)) {
+        throw new Error('INVOICE_ATTACHMENT_DESCRIPTOR_INVALID');
+      }
+      const [versionResult, invoiceResult] = await Promise.all([
+        sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoice_document_versions`
+            + `?id=eq.${enc(versionId)}`
+            + `&entity_type=eq.INVOICE&entity_id=eq.${enc(invoiceId)}`
+            + '&purpose=eq.FINAL_ISSUE&status=eq.READY'
+            + '&select=id,r2_key,sha256,size_bytes,page_count&limit=1',
+          false
+        ),
+        sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoices`
+            + `?id=eq.${enc(invoiceId)}`
+            + `&issued_document_version_id=eq.${enc(versionId)}`
+            + '&status=in.(ISSUED,PAID)'
+            + '&select=id,issued_document_version_id&limit=1',
+          false
+        )
+      ]);
+      const version = versionResult?.rows?.[0] || null;
+      const invoice = invoiceResult?.rows?.[0] || null;
+      if (
+        !version?.r2_key
+        || !invoice?.id
+        || String(version.sha256 || '') !== String(a.sha256 || '')
+        || Number(version.size_bytes) !== Number(a.size_bytes)
+        || Number(version.page_count) !== Number(a.page_count)
+      ) {
+        throw new Error('INVOICE_ATTACHMENT_DOCUMENT_IDENTITY_MISMATCH');
+      }
+      const contentBase64 = await fetchAttachmentBase64FromR2(
+        env,
+        version.r2_key,
+        {
+          sha256: version.sha256,
+          size_bytes: version.size_bytes,
+          max_bytes: frozenDirectLimit,
+          invoice_async: asyncInvoiceDelivery
+        }
+      );
+      attachmentsV2.push({
+        Name: String(a.filename || a.name || `Invoice_${invoiceId}.pdf`),
+        ContentBytes: String(contentBase64 || '')
       });
       continue;
     }
@@ -121327,6 +121846,9 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
     if (a.invoice_id) {
       const invId = String(a.invoice_id).trim();
       if (!invId) throw new Error('Invalid invoice_id attachment');
+      if (isInvoiceAsyncPipelineEnabled(env)) {
+        throw new Error('INVOICE_ATTACHMENT_EXACT_DESCRIPTOR_REQUIRED');
+      }
 
       let pdfKey = null;
 
@@ -121374,6 +121896,7 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
 
     // r2_key attachment
     if (a.r2_key) {
+      if (asyncInvoiceDelivery) throw new Error('INVOICE_ATTACHMENT_EXACT_DESCRIPTOR_REQUIRED');
       const key = String(a.r2_key).trim();
       if (!key) throw new Error('Invalid r2_key attachment');
 
@@ -121386,6 +121909,18 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
 
       continue;
     }
+  }
+
+  if (secureDocumentLinks.length) {
+    const escapeMailHtml = (value) => String(value ?? '').replace(/[&<>"']/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[character]);
+    const htmlLinks = secureDocumentLinks.map(link =>
+      `<li><a href="${escapeMailHtml(link.href)}">${escapeMailHtml(link.filename)}</a></li>`
+    ).join('');
+    const textLinks = secureDocumentLinks.map(link => `${link.filename}: ${link.href}`).join('\n');
+    base.htmlBody = `${base.htmlBody || ''}<p>Secure invoice documents:</p><ul>${htmlLinks}</ul>`;
+    base.body = `${base.body || ''}\n\nSecure invoice documents:\n${textLinks}`.trim();
   }
 
   // Filter out empties (Apps Script does this too)
@@ -121429,6 +121964,10 @@ async function limitOrLinkAttachments(env, { payload }) {
   const limitBytes = Number(env.EMAIL_MAX_PAYLOAD_BYTES) || EMAIL_MAX_PAYLOAD_BYTES;
   let currentBytes = estimatePayloadSizeBytes(payload);
   if (currentBytes <= limitBytes) return { payload, trimmed: false };
+  if (isInvoiceAsyncPipelineEnabled(env)
+      && String(payload?.meta?.type || payload?.metadata?.type || '').toUpperCase() === 'INVOICE') {
+    throw new Error('INVOICE_DELIVERY_PAYLOAD_EXCEEDS_FROZEN_POLICY');
+  }
 
   // Prefer to keep a PDF invoice if present, trim the rest and inject links.
   const kept = [];
@@ -134269,7 +134808,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 // - Keeps other/system kinds as UPPER(TRIM(...))
 // ============================================================
 
-async function handleTimesheetEvidenceAdd(env, req, tsId) {
+async function handleTimesheetEvidenceAdd(env, req, tsId, ctx) {
   const enc = encodeURIComponent;
 
   const evidencePolicyBlockedResponse = (policy, actionLabel) => {
@@ -134621,7 +135160,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       row = null;
     }
 
-    if (String(kind).toUpperCase() === 'TIMESHEET') {
+    if (String(kind).toUpperCase() === 'TIMESHEET' && !isInvoiceAsyncPipelineEnabled(env)) {
       try {
         const updRes = await fetch(
           `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
@@ -134645,6 +135184,34 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
           err: e?.message || String(e)
         });
       }
+    }
+
+    let documentPreparation = null;
+    if (isInvoiceAsyncPipelineEnabled(env) && row?.id) {
+      const originalObject = await env.R2.head(finalStorageKey);
+      if (!originalObject) {
+        return withCORS(env, req, serverError('Uploaded evidence object is missing before document preparation'));
+      }
+      const started = await sbRpc(env, 'invoice_operation_start_batch', {
+        p_commands: [{
+          command_type: 'PREPARE_ASSET',
+          source_kind: kind === 'TIMESHEET' ? 'MANUAL_TIMESHEET' : 'TIMESHEET_EVIDENCE',
+          source_id: row.id,
+          source_revision: `EVIDENCE:${row.id}:${nowIso}`,
+          original_r2_key: finalStorageKey,
+          original_filename: payload[0].display_name,
+          declared_media_type: originalObject.httpMetadata?.contentType || 'application/octet-stream',
+          rotation_degrees: normalizeRightAngleRotation(ts.manual_pdf_rotation_degrees || 0)
+        }],
+        p_actor_user_id: user.id,
+        p_now_utc: nowIso
+      });
+      documentPreparation = unwrapRpcJsonb(started, 'invoice_operation_start_batch') || started;
+      await nudgeInvoiceOperations(env, documentPreparation, {
+        ctx,
+        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+        lanes: ['DOCUMENT']
+      });
     }
 
     try {
@@ -134676,7 +135243,8 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       requested_timesheet_id: resolved.requested_timesheet_id || tsId,
       current_timesheet_id: currentTsId,
       was_stale: !!resolved.was_stale,
-      evidence: row || null
+      evidence: row || null,
+      document_preparation: documentPreparation
     };
     handleTimesheetEvidenceAddDiagLog('response_shape', {
       mode: 'inserted',
@@ -134690,13 +135258,16 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       response_contains: handleTimesheetEvidenceAddDiagResponseContains(responsePayload)
     });
 
-    return withCORS(env, req, ok(responsePayload));
+    return withCORS(env, req, new Response(JSON.stringify(responsePayload), {
+      status: documentPreparation ? 202 : 200,
+      headers: JSON_HEADERS
+    }));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to add timesheet evidence: ${e?.message || e}`));
   }
 }
 
-async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
+async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId, ctx) {
   const enc = encodeURIComponent;
 
   const evidencePolicyBlockedResponse = (policy, actionLabel) => {
@@ -134898,7 +135469,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
         `?id=eq.${enc(evidenceId)}` +
         `&timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=id,kind,display_name,storage_key,created_at,created_by` +
+        `&select=id,kind,display_name,storage_key,created_at,created_by,document_asset_id,source_revision,processing_state,processing_error_json` +
         `&limit=1`
     );
 
@@ -134957,14 +135528,16 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
         return withCORS(env, req, badRequest('Only one TIMESHEET evidence file may be attached to a timesheet at a time'));
       }
 
-      try {
-        const validatedTimesheetStorage = await validateTimesheetStorageKey(
-          originalStorageKey,
-          'timesheet_evidence.storage_key'
-        );
-        updatedStorageKey = String(validatedTimesheetStorage.storageKey || '').trim().replace(/^\/+/, '');
-      } catch (e) {
-        return withCORS(env, req, badRequest(e?.message || 'Unsupported TIMESHEET evidence'));
+      if (!isInvoiceAsyncPipelineEnabled(env)) {
+        try {
+          const validatedTimesheetStorage = await validateTimesheetStorageKey(
+            originalStorageKey,
+            'timesheet_evidence.storage_key'
+          );
+          updatedStorageKey = String(validatedTimesheetStorage.storageKey || '').trim().replace(/^\/+/, '');
+        } catch (e) {
+          return withCORS(env, req, badRequest(e?.message || 'Unsupported TIMESHEET evidence'));
+        }
       }
 
       if (!updatedStorageKey) {
@@ -134973,7 +135546,9 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
     }
 
     const patchPayload = { kind: newKind };
-    if (newKindU === 'TIMESHEET') patchPayload.storage_key = updatedStorageKey;
+    if (newKindU === 'TIMESHEET' && !isInvoiceAsyncPipelineEnabled(env)) {
+      patchPayload.storage_key = updatedStorageKey;
+    }
 
     handleTimesheetEvidenceUpdateKindDiagLog('before_write', {
       current_timesheet_id: currentTsId || null,
@@ -135018,7 +135593,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
           `${env.SUPABASE_URL}/rest/v1/timesheets` +
             `?timesheet_id=eq.${enc(currentTsId)}` +
             `&is_current=eq.true` +
-            `&select=manual_pdf_r2_key` +
+            `&select=manual_pdf_r2_key,manual_document_asset_id,document_revision,document_state,active_document_operation_id` +
             `&limit=1`
         );
         tsRow = tsRows?.[0] || null;
@@ -135028,7 +135603,20 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
 
       const curMk = (tsRow?.manual_pdf_r2_key != null) ? String(tsRow.manual_pdf_r2_key).trim().replace(/^\/+/, '') : '';
 
-      if (newKindU === 'TIMESHEET') {
+      if (newKindU === 'TIMESHEET' && isInvoiceAsyncPipelineEnabled(env)) {
+        const updRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({ manual_document_asset_id: ev.document_asset_id || null })
+          }
+        );
+        if (!updRes.ok) {
+          const t2 = await updRes.text().catch(() => '');
+          return withCORS(env, req, serverError(`Failed to update timesheet document asset pointer: ${t2}`));
+        }
+      } else if (newKindU === 'TIMESHEET') {
         const updRes = await fetch(
           `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
           {
@@ -135050,6 +135638,27 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
             ).catch(() => {});
           } catch {}
           return withCORS(env, req, serverError(`Failed to update timesheet manual PDF pointer: ${t2}`));
+        }
+      } else if (oldKindU === 'TIMESHEET' && isInvoiceAsyncPipelineEnabled(env)) {
+        if (
+          ev.document_asset_id
+          && String(tsRow?.manual_document_asset_id || '') === String(ev.document_asset_id)
+        ) {
+          const updRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+              body: JSON.stringify({ manual_document_asset_id: null })
+            }
+          );
+          if (!updRes.ok) {
+            const t2 = await updRes.text().catch(() => '');
+            console.warn('[handleTimesheetEvidenceUpdateKind] clear manual_document_asset_id failed (non-fatal)', {
+              timesheet_id: currentTsId,
+              err: t2
+            });
+          }
         }
       } else if (oldKindU === 'TIMESHEET') {
         if (curMk && curMk === originalStorageKey) {
@@ -135108,13 +135717,53 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       );
     } catch {}
 
+    let asset_operation = null;
+    if (
+      isInvoiceAsyncPipelineEnabled(env)
+      && !ev.document_asset_id
+      && effectiveUpdatedStorageKey
+    ) {
+      try {
+        const started = await sbRpc(env, 'invoice_operation_start_batch', {
+          p_commands: [{
+            command_type: 'PREPARE_ASSET',
+            source_kind: newKindU === 'TIMESHEET' ? 'MANUAL_TIMESHEET' : 'TIMESHEET_EVIDENCE',
+            source_id: evidenceId,
+            source_revision: ev.source_revision || `LEGACY_EVIDENCE_V1:${evidenceId}`,
+            original_r2_key: effectiveUpdatedStorageKey,
+            original_filename: ev.display_name || `evidence-${evidenceId}`,
+            declared_media_type: 'application/octet-stream',
+            rotation_degrees: 0
+          }],
+          p_actor_user_id: user.id,
+          p_now_utc: new Date().toISOString()
+        });
+        const startedRows = Array.isArray(started)
+          ? started
+          : (Array.isArray(started?.data) ? started.data : [started].filter(Boolean));
+        asset_operation = startedRows[0] || null;
+        await nudgeInvoiceOperations(env, startedRows, {
+          ctx,
+          rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+          lanes: ['DOCUMENT']
+        });
+      } catch (assetError) {
+        asset_operation = {
+          accepted: false,
+          error_code: 'ASSET_REGISTRATION_FAILED',
+          message: String(assetError?.message || assetError).slice(0, 500)
+        };
+      }
+    }
+
     const afterSignatureDiag = await fetchhandleTimesheetEvidenceUpdateKindLifecycleSignatureDiag(currentTsId, null);
     const responsePayload = {
       ok: true,
       requested_timesheet_id: resolved.requested_timesheet_id || tsId,
       current_timesheet_id: currentTsId,
       was_stale: !!resolved.was_stale,
-      evidence: updated || { ok: true }
+      evidence: updated || { ok: true },
+      asset_operation
     };
     handleTimesheetEvidenceUpdateKindDiagLog('response_shape', {
       mode: 'updated_kind',
@@ -135299,7 +135948,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
         `?id=eq.${enc(evidenceId)}` +
         `&timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=id,storage_key,kind,display_name` +
+        `&select=id,storage_key,kind,display_name,document_asset_id,source_revision,processing_state` +
         `&limit=1`
     );
     const ev = evRows?.[0] || null;
@@ -135317,7 +135966,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
           `?timesheet_id=eq.${enc(currentTsId)}` +
           `&is_current=eq.true` +
-          `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,manual_pdf_r2_key,manual_pdf_rotation_degrees,generated_pdf_at_utc` +
+          `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,manual_pdf_r2_key,manual_pdf_rotation_degrees,generated_pdf_at_utc,manual_document_asset_id,document_revision,document_state,active_document_operation_id` +
           `&limit=1`
       );
       tsMeta = tsRows?.[0] || null;
@@ -135336,7 +135985,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     });
 
     try {
-      if (storageKeyForR2) {
+      if (storageKeyForR2 && !isInvoiceAsyncPipelineEnabled(env)) {
         await r2DeleteLocal(storageKeyForR2);
       }
     } catch (e) {
@@ -135356,7 +136005,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${t}`));
     }
 
-    if (storageKeyForR2) {
+    if (storageKeyForR2 && !isInvoiceAsyncPipelineEnabled(env)) {
       try {
         const provDelRes = await fetch(
           `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
@@ -135391,13 +136040,21 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       const sk = storageKeyForR2 ? String(storageKeyForR2).trim() : '';
       const evKindU = String(ev.kind || '').toUpperCase();
 
-      if (evKindU === 'TIMESHEET' && mk && sk && mk === sk) {
-        patches.manual_pdf_r2_key = null;
-        patches.manual_pdf_rotation_degrees = 0;
+      if (evKindU === 'TIMESHEET') {
+        if (
+          isInvoiceAsyncPipelineEnabled(env)
+          && ev.document_asset_id
+          && String(tsMeta?.manual_document_asset_id || '') === String(ev.document_asset_id)
+        ) {
+          patches.manual_document_asset_id = null;
+        } else if (!isInvoiceAsyncPipelineEnabled(env) && mk && sk && mk === sk) {
+          patches.manual_pdf_r2_key = null;
+          patches.manual_pdf_rotation_degrees = 0;
+        }
       }
 
       const generatedKey = `docs-pdf/timesheets/ts_${currentTsId}.pdf`;
-      if (sk && sk === generatedKey) {
+      if (!isInvoiceAsyncPipelineEnabled(env) && sk && sk === generatedKey) {
         patches.generated_pdf_at_utc = null;
       }
 
@@ -135452,7 +136109,11 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       ok: true,
       requested_timesheet_id: resolved.requested_timesheet_id || tsId,
       current_timesheet_id: currentTsId,
-      was_stale: !!resolved.was_stale
+      was_stale: !!resolved.was_stale,
+      document_revision: tsMeta?.document_revision ?? null,
+      document_state: tsMeta?.document_state || null,
+      active_document_operation_id: tsMeta?.active_document_operation_id || null,
+      immutable_source_preserved: isInvoiceAsyncPipelineEnabled(env)
     };
     handleTimesheetEvidenceDeleteDiagLog('response_shape', {
       status: 200,
@@ -141148,10 +141809,34 @@ async function handleChangesPing(env, req, user) {
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) && !watchedBatchIds.includes(text) && watchedBatchIds.length < 20) watchedBatchIds.push(text);
   };
   addWatched(body.watched_pay_batch_ids || body.watchedPayBatchIds || body.open_pay_batch_ids || body.openPayBatchIds || body.open_batch_ids || body.openBatchIds);
+  const watchedInvoiceOperationIds = [];
+  const addWatchedInvoiceOperation = (value) => {
+    if (Array.isArray(value)) {
+      for (const item of value) addWatchedInvoiceOperation(item);
+      return;
+    }
+    const text = String(value || '').trim();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
+        && !watchedInvoiceOperationIds.includes(text)
+        && watchedInvoiceOperationIds.length < 100) {
+      watchedInvoiceOperationIds.push(text);
+    }
+  };
+  addWatchedInvoiceOperation(
+    body.watched_invoice_operation_ids
+    || body.watchedInvoiceOperationIds
+    || lastSeen.watched_invoice_operation_ids
+  );
   const previousBankingAlertHash = String(body.banking_alert_hash || body.bankingAlertHash || body.last_banking_alert_hash || body.lastBankingAlertHash || body.banking_alert_summary_signature || '').trim();
   try {
     const payload = unwrapRpc(await sbRpc(env, 'rpc_changes_ping', {
-      p_last_seen: { ...lastSeen, __banking_actor_user_id: currentUser.id, __banking_alert_hash: previousBankingAlertHash || '', __watched_pay_batch_ids: watchedBatchIds }
+      p_last_seen: {
+        ...lastSeen,
+        __banking_actor_user_id: currentUser.id,
+        __banking_alert_hash: previousBankingAlertHash || '',
+        __watched_pay_batch_ids: watchedBatchIds,
+        __watched_invoice_operation_ids: watchedInvoiceOperationIds
+      }
     }), 'rpc_changes_ping');
     const responsePayload = { ...payload };
     const count = normaliseCount(responsePayload.banking_unacknowledged_alert_count, 0);
@@ -144639,7 +145324,7 @@ async function handleInvoiceDeleteOne(env, req, invoiceId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/invoices` +
         `?id=eq.${enc(invoiceId)}` +
-        `&select=id,type,status,issued_at_utc,paid_at_utc` +
+        `&select=id,type,status,issued_at_utc,paid_at_utc,active_document_operation_id,active_issue_operation_id` +
         `&limit=1`,
       false
     );
@@ -144672,6 +145357,43 @@ async function handleInvoiceDeleteOne(env, req, invoiceId) {
     );
     if (lineCheck?.length) {
       return withCORS(env, req, badRequest('Invoice still has lines. Remove all timesheets/lines before deleting.'));
+    }
+
+    if (isInvoiceAsyncPipelineEnabled(env)) {
+      const operationIds = new Set([
+        inv.active_document_operation_id,
+        inv.active_issue_operation_id
+      ].filter(Boolean).map(String));
+      const { rows: chunkRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/invoice_operation_chunks`
+          + `?entity_type=eq.INVOICE&entity_id=eq.${enc(invoiceId)}`
+          + '&status=in.(QUEUED,RUNNING,WAITING,RETRY_WAIT,BLOCKED)'
+          + '&select=operation_id&limit=500',
+        false
+      );
+      for (const row of (chunkRows || [])) {
+        if (row?.operation_id) operationIds.add(String(row.operation_id));
+      }
+      if (operationIds.size) {
+        const control = await sbRpc(env, 'invoice_operation_control_batch', {
+          p_actions: Array.from(operationIds).map(operation_id => ({
+            operation_id,
+            action: 'CANCEL'
+          })),
+          p_actor_user_id: user.id,
+          p_now_utc: new Date().toISOString()
+        });
+        const controlRows = Array.isArray(control)
+          ? control
+          : (Array.isArray(control?.data) ? control.data : [control].filter(Boolean));
+        const rejected = controlRows.filter(row =>
+          row?.accepted === false || String(row?.status || '').toUpperCase() === 'REJECTED'
+        );
+        if (rejected.length) {
+          return withCORS(env, req, conflict('Active invoice work could not be cancelled safely.'));
+        }
+      }
     }
 
     // 3) Best-effort cleanup: invoice HR cache rows (if table exists)
@@ -144799,6 +145521,14 @@ async function handleListInvoices(env, req) {
     'paid_at_utc',
     'on_hold_reason',
     'invoice_pdf_r2_key',
+    'document_revision',
+    'document_state',
+    'preview_document_version_id',
+    'issued_document_version_id',
+    'active_document_operation_id',
+    'active_issue_operation_id',
+    'last_document_error_json',
+    'last_issue_error_json',
     'header_snapshot_json',
     'client:clients(name,primary_invoice_email)'
   ].join(',');
@@ -147704,6 +148434,7 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
       let safeBytes = bytes;
       try {
         safeBytes = await ensureManualTimesheetBytesArePdf(bytes, {
+          env,
           sourceLabel: 'Manual timesheet document',
           storageKey: norm
         });
@@ -148214,11 +148945,18 @@ async function handleInvoiceHold(env, req, invoiceId) {
     const rows = Array.isArray(r) ? r : (r?.data || []);
     const x = rows?.[0] || null;
     if (!x) return withCORS(env, req, serverError('Hold RPC returned no result'));
+    const detail = isInvoiceAsyncPipelineEnabled(env)
+      ? unwrapRpcJsonb(await sbRpc(env, 'invoice_detail_get', {
+          p_invoice_id: invoiceId,
+          p_actor_user_id: actorUserId
+        }), 'invoice_detail_get')
+      : null;
 
     return withCORS(env, req, ok({
       ok: true,
       status: x.status || 'ON_HOLD',
-      on_hold_reason: x.on_hold_reason || reason || null
+      on_hold_reason: x.on_hold_reason || reason || null,
+      ...(detail ? { invoice_detail: detail } : {})
     }));
   } catch (e) {
     return withCORS(env, req, serverError('Failed to hold invoice'));
@@ -148240,8 +148978,18 @@ async function handleInvoiceUnhold(env, req, invoiceId) {
     const rows = Array.isArray(r) ? r : (r?.data || []);
     const x = rows?.[0] || null;
     if (!x) return withCORS(env, req, serverError('Unhold RPC returned no result'));
+    const detail = isInvoiceAsyncPipelineEnabled(env)
+      ? unwrapRpcJsonb(await sbRpc(env, 'invoice_detail_get', {
+          p_invoice_id: invoiceId,
+          p_actor_user_id: actorUserId
+        }), 'invoice_detail_get')
+      : null;
 
-    return withCORS(env, req, ok({ ok: true, status: x.status || 'DRAFT' }));
+    return withCORS(env, req, ok({
+      ok: true,
+      status: x.status || 'DRAFT',
+      ...(detail ? { invoice_detail: detail } : {})
+    }));
   } catch (e) {
     return withCORS(env, req, serverError('Failed to unhold invoice'));
   }
@@ -153540,47 +154288,26 @@ async function handleFileUpload(env, req, url) {
 
 function detectPdfOrImageContentKind(bytesLike) {
   const bytes = bytesLike instanceof Uint8Array ? bytesLike : new Uint8Array(bytesLike || []);
-  if (!bytes.length) return 'unknown';
-
-  // PDF: %PDF-
-  if (
-    bytes.length >= 5 &&
-    bytes[0] === 0x25 && // %
-    bytes[1] === 0x50 && // P
-    bytes[2] === 0x44 && // D
-    bytes[3] === 0x46 && // F
-    bytes[4] === 0x2d    // -
-  ) return 'application/pdf';
-
-  // PNG
-  if (
-    bytes.length >= 8 &&
-    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
-    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
-  ) return 'image/png';
-
-  // JPEG
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return 'image/jpeg';
+  if (!bytes.length) return 'empty';
+  if (bytes.length < 5) return 'truncated';
+  if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d) return 'application/pdf';
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) {
+    for (let index = 8; index + 3 < bytes.length; index += 1) {
+      if (bytes[index] === 0x61 && bytes[index + 1] === 0x63 && bytes[index + 2] === 0x54 && bytes[index + 3] === 0x4c) return 'unsupported';
+    }
+    return 'image/png';
   }
-
-  // GIF
-  if (
-    bytes.length >= 6 &&
-    bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 &&
-    bytes[3] === 0x38 && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61
-  ) return 'image/gif';
-
-  // WEBP
-  if (
-    bytes.length >= 12 &&
-    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
-    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
-  ) return 'image/webp';
-
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  const ascii = start => String.fromCharCode(...bytes.slice(start, start + 4));
+  if (bytes.length >= 12 && ascii(0) === 'RIFF' && ascii(8) === 'WEBP') return 'unsupported';
+  if (bytes.length >= 4 && ((bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) || (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a))) return 'unsupported';
+  if (bytes.length >= 12 && ascii(4) === 'ftyp') return 'unsupported';
+  if (bytes.length >= 6 && (String.fromCharCode(...bytes.slice(0, 6)) === 'GIF87a' || String.fromCharCode(...bytes.slice(0, 6)) === 'GIF89a')) return 'unsupported';
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) return 'unsupported';
+  const prefix = new TextDecoder().decode(bytes.slice(0, Math.min(bytes.length, 256))).trimStart().toLowerCase();
+  if (prefix.startsWith('<svg') || prefix.startsWith('<?xml')) return 'unsupported';
   return 'unknown';
 }
-
 function normalizeRightAngleRotation(rawDeg) {
   let n = Number(rawDeg);
   if (!Number.isFinite(n)) return 0;
@@ -153614,6 +154341,12 @@ async function buildSingleImagePdfBytes(imageBytes, contentKind, rotationDegrees
 async function ensureTimesheetEvidencePdfArtifact(env, { sourceKey, displayName, rotationDegrees, timesheetId, sourceLabel }) {
   const src = normalizeKey(sourceKey);
   if (!src) throw new Error('Manual timesheet evidence source key is required');
+  if (isInvoiceAsyncPipelineEnabled(env)) {
+    const error = new Error('TIMESHEET_EVIDENCE_ASSET_NOT_READY');
+    error.code = 'TIMESHEET_EVIDENCE_ASSET_NOT_READY';
+    error.source_key = src;
+    throw error;
+  }
 
   const sourceBytes = await r2GetBytes(env, src);
   if (!sourceBytes?.length) throw new Error('Manual timesheet evidence source file is missing or empty');
@@ -153653,6 +154386,11 @@ async function ensureTimesheetEvidencePdfArtifact(env, { sourceKey, displayName,
 }
 
 async function ensureManualTimesheetBytesArePdf(bytes, context = {}) {
+  if (isInvoiceAsyncPipelineEnabled(context?.env)) {
+    const error = new Error('MANUAL_TIMESHEET_DOCUMENT_NOT_READY');
+    error.code = 'MANUAL_TIMESHEET_DOCUMENT_NOT_READY';
+    throw error;
+  }
   const contentKind = detectPdfOrImageContentKind(bytes);
   if (contentKind === 'application/pdf') return bytes;
   if (contentKind === 'image/png' || contentKind === 'image/jpeg') {
@@ -153666,6 +154404,45 @@ async function ensureManualTimesheetBytesArePdf(bytes, context = {}) {
 
 async function ensureTimesheetPdf(env, timesheetId, opts) {
   const enc = encodeURIComponent;
+
+  if (isInvoiceAsyncPipelineEnabled(env)) {
+    const current = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,document_revision,document_state,current_document_version_id,active_document_operation_id,last_document_error_json` +
+        `&limit=1`
+    );
+    if (!current) {
+      const error = new Error('TIMESHEET_NOT_FOUND');
+      error.code = 'TIMESHEET_NOT_FOUND';
+      throw error;
+    }
+    if (current.current_document_version_id) {
+      const version = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/invoice_document_versions` +
+          `?id=eq.${enc(current.current_document_version_id)}` +
+          `&entity_type=eq.TIMESHEET` +
+          `&entity_id=eq.${enc(timesheetId)}` +
+          `&purpose=eq.TIMESHEET` +
+          `&source_revision=eq.${enc(String(current.document_revision))}` +
+          `&status=eq.READY` +
+          `&select=id,r2_key,sha256,size_bytes,page_count,status` +
+          `&limit=1`
+      );
+      if (version?.r2_key && version?.sha256 && Number(version?.size_bytes) > 0 && Number(version?.page_count) > 0) {
+        return normalizeKey(version.r2_key);
+      }
+    }
+    const error = new Error('TIMESHEET_DOCUMENT_NOT_READY');
+    error.code = 'TIMESHEET_DOCUMENT_NOT_READY';
+    error.document_state = current.document_state || 'NOT_REQUESTED';
+    error.operation_id = current.active_document_operation_id || null;
+    error.detail = current.last_document_error_json || null;
+    throw error;
+  }
 
   const force_regen = !!(opts && typeof opts === 'object' && opts.force_regen);
   const prefer_generated = !!(opts && typeof opts === 'object' && opts.prefer_generated);
@@ -154198,6 +154975,13 @@ async function handleFilePresignDownload(env, req) {
       // ✅ IMPORTANT: do NOT pass prefer_generated here (must respect manual PDFs)
       await ensureTimesheetPdf(env, m[1]);
     } catch (e) {
+      if (isInvoiceAsyncPipelineEnabled(env) && e?.code === 'TIMESHEET_DOCUMENT_NOT_READY') {
+        return withCORS(env, req, new Response(JSON.stringify({
+          error: 'DOCUMENT_NOT_READY',
+          document_state: e.document_state || 'NOT_REQUESTED',
+          operation_id: e.operation_id || null
+        }), { status: 409, headers: JSON_HEADERS }));
+      }
       return withCORS(env, req, serverError(`Failed to prepare timesheet PDF: ${e?.message || String(e)}`));
     }
   }
@@ -154309,6 +155093,13 @@ async function handleFileDownload(env, req, url) {
           err: e?.message || String(e)
         }));
       }
+      if (isInvoiceAsyncPipelineEnabled(env) && e?.code === 'TIMESHEET_DOCUMENT_NOT_READY') {
+        return withCORS(env, req, new Response(JSON.stringify({
+          error: 'DOCUMENT_NOT_READY',
+          document_state: e.document_state || 'NOT_REQUESTED',
+          operation_id: e.operation_id || null
+        }), { status: 409, headers: JSON_HEADERS }));
+      }
       return withCORS(env, req, serverError(`Failed to prepare timesheet PDF: ${e?.message || String(e)}`));
     }
   }
@@ -154349,11 +155140,32 @@ async function handleHealth(env) {
 }
 async function handleReady(env) {
   const missing = [];
-  for (const k of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) if (!env[k]) missing.push(k);
-  if (!env.R2) missing.push("R2");
-  for (const k of ["SESSION_TOKEN_SECRET","UPLOAD_TOKEN_SECRET"]) if (!env[k]) missing.push(k);
-  if (missing.length) return new Response("missing: " + missing.join(","), { status: 503, headers: TEXT_PLAIN });
-  return new Response("ready", { status: 200, headers: TEXT_PLAIN });
+  for (const key of ['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY']) if (!env[key]) missing.push(key);
+  if (!env.R2) missing.push('R2');
+  for (const key of ['SESSION_TOKEN_SECRET','UPLOAD_TOKEN_SECRET']) if (!env[key]) missing.push(key);
+  const parsed = parseInvoiceAsyncAllowedUserIds(env.INVOICE_ASYNC_ALLOWED_USER_IDS);
+  const diagnostics = { ready: false, async_pipeline_enabled: isInvoiceAsyncPipelineEnabled(env), processor_enabled: String(env.INVOICE_DOCUMENT_PROCESSOR_ENABLED || '').toLowerCase() === 'true', controlled_cohort_enabled: false, allowed_user_count: 0, system_actor_valid: false, dispatcher_ready: false };
+  if (diagnostics.async_pipeline_enabled) {
+    diagnostics.controlled_cohort_enabled = parsed.ok && parsed.ids.length > 0;
+    diagnostics.allowed_user_count = parsed.ok ? parsed.ids.length : 0;
+    if (!parsed.ok) missing.push('INVOICE_ASYNC_ALLOWED_USER_IDS_INVALID');
+    if (!parsed.ids.length) missing.push('INVOICE_ASYNC_ALLOWED_USER_IDS_EMPTY');
+    missing.push(...validateQueueRuntimeConfiguration(env).errors);
+    if (!env.BROWSER) missing.push('BROWSER');
+    if (!env.INVOICE_DOCUMENT_PROCESSOR) missing.push('INVOICE_DOCUMENT_PROCESSOR');
+    if (!env.INVOICE_QUEUE_DISPATCHER) missing.push('INVOICE_QUEUE_DISPATCHER');
+    if (!env.INVOICE_DOCUMENT_ACCESS_SECRET) missing.push('INVOICE_DOCUMENT_ACCESS_SECRET');
+    if (!env.INVOICE_QUEUE_DISPATCH_SECRET) missing.push('INVOICE_QUEUE_DISPATCH_SECRET');
+    diagnostics.system_actor_valid = await validateInvoiceSystemActor(env, getInvoiceQueueRuntimeConfig(env).systemActorUserId).catch(() => false);
+    if (!diagnostics.system_actor_valid) missing.push('INVOICE_SYSTEM_ACTOR_INVALID');
+    if (env.INVOICE_QUEUE_DISPATCHER) {
+      try { const response = await env.INVOICE_QUEUE_DISPATCHER.fetch('https://invoice-queue-dispatcher.internal/ready', { headers: { 'x-cloudtms-internal-service': 'invoice-queue-main-v1' } }); diagnostics.dispatcher_ready = response.ok; } catch { diagnostics.dispatcher_ready = false; }
+      if (!diagnostics.dispatcher_ready) missing.push('INVOICE_QUEUE_DISPATCHER_NOT_READY');
+    }
+  }
+  diagnostics.ready = missing.length === 0;
+  if (!diagnostics.ready) diagnostics.code = 'CLOUDTMS_CONFIGURATION_INCOMPLETE';
+  return new Response(JSON.stringify(diagnostics), { status: diagnostics.ready ? 200 : 503, headers: { ...JSON_HEADERS, 'cache-control': 'no-store' } });
 }
 function handleVersion() {
   return new Response(JSON.stringify({ version: "1.2.0", built_at: new Date().toISOString() }), { status: 200, headers: JSON_HEADERS });
@@ -187572,6 +188384,10 @@ export default {
     const url = new URL(req.url);
     const p = url.pathname;
 
+    if (req.method === 'POST' && p === '/internal/invoice-queue/drain') {
+      return handleInvoiceQueueDrainRequest(req, env, { ctx, rpc: (functionName, args, options) => sbRpc(env, functionName, args, options) });
+    }
+
     try {
       // ====================== AUTH ======================
       if (req.method === 'POST' && p === '/auth/login')   return withCORS(env, req, await handleAuthLogin(env, req));
@@ -187602,6 +188418,12 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
       if (req.method === 'GET' && p === '/api/me') {
         return handleMe(env, req);
       }
+
+      const invoiceAsyncResponse = await handleInvoiceAsyncHttpRequest(req, env, ctx, {
+        requireUser,
+        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options)
+      });
+      if (invoiceAsyncResponse) return withCORS(env, req, invoiceAsyncResponse);
 
       // Durable import review is contract-gated and must be resolved before the
       // legacy/generic import routes below can match the same business action.
@@ -188962,7 +189784,7 @@ async function handleTimesheetBulkAuthoriseWatch(env, req, timesheetId = null) {
     return withCORS(env, req, await handleTimesheetEvidenceList(env, req, m.id));
   }
   if (m && req.method === 'POST') {
-    return withCORS(env, req, await handleTimesheetEvidenceAdd(env, req, m.id));
+    return withCORS(env, req, await handleTimesheetEvidenceAdd(env, req, m.id, ctx));
   }
 }
 
@@ -188972,7 +189794,7 @@ async function handleTimesheetBulkAuthoriseWatch(env, req, timesheetId = null) {
   const m = matchPath(p, '/api/timesheets/:id/evidence/:evidence_id');
 
   if (m && req.method === 'PATCH') {
-    return withCORS(env, req, await handleTimesheetEvidenceUpdateKind(env, req, m.id, m.evidence_id));
+    return withCORS(env, req, await handleTimesheetEvidenceUpdateKind(env, req, m.id, m.evidence_id, ctx));
   }
 
   if (m && req.method === 'DELETE') {
@@ -189064,7 +189886,7 @@ if (req.method === 'POST' && p === '/api/invoices/batch-issue/confirm')       re
       }
          {
         const inv = matchPath(p, '/api/invoices/:invoice_id/save-edits');
-        if (inv && req.method === 'POST')                                    return handleInvoiceSaveEdits(env, req, inv.invoice_id);
+        if (inv && req.method === 'POST')                                    return handleInvoiceSaveEdits(env, req, inv.invoice_id, ctx);
       }
       {
         const inv = matchPath(p, '/api/invoices/:invoice_id/eligible-timesheets');
@@ -189092,7 +189914,7 @@ if (req.method === 'POST' && p === '/api/invoices/batch-issue/confirm')       re
       }
 
 if (req.method === 'POST' && p === '/api/tspdf/queue/drain') {
-  return withCORS(env, req, await handleTsPdfDrain(env, req));
+  return withCORS(env, req, await handleTsPdfDrain(env, req, ctx));
 }
 
 
@@ -189698,7 +190520,7 @@ if (req.method === 'GET' && p === '/api/comms/by-recipient') {
       }
       {
         const m = matchPath(p, '/api/manual-timesheet-queue/:id/attach');
-        if (m && req.method === 'POST') return handleManualTimesheetQueueAttach(env, req, m.id);
+        if (m && req.method === 'POST') return handleManualTimesheetQueueAttach(env, req, m.id, ctx);
       }
       {
         const m = matchPath(p, '/api/manual-timesheet-queue/:id/rotation');
@@ -189866,6 +190688,8 @@ async scheduled(event, env, ctx) {
 
   const cronExpr = (event && typeof event.cron === 'string') ? event.cron : '';
   const isInvpdfMinuteCron = (cronExpr === '* * * * *');
+  const invoiceAsyncEnabled = isInvoiceAsyncPipelineEnabled(env);
+  const invoiceAsyncScheduledEnabled = String(env.INVOICE_ASYNC_SCHEDULED_ENABLED || '').toLowerCase() === 'true';
 
   const _rowsLocal = (v) => {
     if (Array.isArray(v)) return v;
@@ -190139,7 +190963,34 @@ async scheduled(event, env, ctx) {
       console.warn('[scheduled] Banking cron tick failed:', e?.message || e);
     }
 
+    if (invoiceAsyncEnabled) {
+      try {
+        if (!isInvpdfMinuteCron && invoiceAsyncScheduledEnabled) {
+          await runAutoInvoiceCycleAsync(env, {
+            ctx,
+            actorUserId: invActorUserId,
+            rpc: (functionName, args, options) => sbRpc(env, functionName, args, options)
+          });
+          await runInvoiceReconciliationCycle(env, {
+            ctx,
+            actorUserId: invActorUserId,
+            rpc: (functionName, args, options) => sbRpc(env, functionName, args, options)
+          });
+        }
+        await drainInvoiceOperations(env, {
+          ctx,
+          rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+          lanes: ['ALL'],
+          mode: 'scheduled',
+          priorityClass: 'SCHEDULED'
+        });
+      } catch (e) {
+        console.warn('[scheduled] Invoice operation drain failed:', e?.message || e);
+      }
+    }
+
     if (isInvpdfMinuteCron) {
+      if (invoiceAsyncEnabled) return;
       try {
         await drainInvpdfOnce();
       } catch (e) {
@@ -190183,17 +191034,19 @@ async scheduled(event, env, ctx) {
       console.warn('[scheduled] TSFIN worker failed:', e?.message || e);
     }
 
-    try {
-      for (let i = 0; i < tsPdfMaxBatches; i++) {
-        const res = await runTsPdfWorkerOnce(env, {
-          limit: tsPdfBatchSize,
-          enqueueFirst: (i === 0),
-          enqueueLimit: tsPdfEnqLimit
-        });
-        if (!res || res.picked === 0) break;
+    if (!invoiceAsyncEnabled) {
+      try {
+        for (let i = 0; i < tsPdfMaxBatches; i++) {
+          const res = await runTsPdfWorkerOnce(env, {
+            limit: tsPdfBatchSize,
+            enqueueFirst: (i === 0),
+            enqueueLimit: tsPdfEnqLimit
+          });
+          if (!res || res.picked === 0) break;
+        }
+      } catch (e) {
+        console.warn('[scheduled] TS PDF worker failed:', e?.message || e);
       }
-    } catch (e) {
-      console.warn('[scheduled] TS PDF worker failed:', e?.message || e);
     }
 
     const enqueueAutoInvoiceGroupsOnce = async () => {
@@ -190244,7 +191097,7 @@ async scheduled(event, env, ctx) {
       }
     };
 
-    try {
+    if (!invoiceAsyncEnabled) try {
       if (invEnqueueFirst) {
         try {
           await enqueueAutoInvoiceGroupsOnce();
@@ -190272,10 +191125,12 @@ async scheduled(event, env, ctx) {
       console.warn('[scheduled] Invoice SQL worker failed:', e?.message || e);
     }
 
-    try {
-      await drainInvpdfOnce();
-    } catch (e) {
-      console.warn('[scheduled] Invoice PDF worker failed:', e?.message || e);
+    if (!invoiceAsyncEnabled) {
+      try {
+        await drainInvpdfOnce();
+      } catch (e) {
+        console.warn('[scheduled] Invoice PDF worker failed:', e?.message || e);
+      }
     }
 
     try {

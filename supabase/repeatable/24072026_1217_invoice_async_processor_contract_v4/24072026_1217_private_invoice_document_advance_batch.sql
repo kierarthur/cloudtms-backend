@@ -36,6 +36,48 @@ begin
       case when b.purpose='FINAL_ISSUE' then v.snapshot_json
         when b.entity_type='INVOICE' then
           jsonb_build_object(
+            'snapshot_schema_version','INVOICE_PRESENTATION_SNAPSHOT_V4',
+            'presentation_model',(select jsonb_build_object(
+              'document_type',case when i.type='CREDIT_NOTE' then 'CREDIT_NOTE'
+                when lower(coalesce(i.header_snapshot_json->>'self_bill','false'))='true' then 'SELF_BILL_INVOICE'
+                else 'INVOICE' end,
+              'invoice_number',i.invoice_no,
+              'issue_date',i.issued_at_utc,
+              'preview_date',case when i.status='DRAFT' then v_now else null end,
+              'tax_point',i.header_snapshot_json->'tax_point_utc',
+              'due_date',i.due_at_utc,
+              'currency',coalesce(i.header_snapshot_json->'currency','"GBP"'::jsonb),
+              'po_reference',i.header_snapshot_json->'po_reference',
+              'payment_terms_days',i.header_snapshot_json->'payment_terms_days',
+              'payment_terms_text',i.header_snapshot_json->'payment_terms_text',
+              'supplier_legal_name',i.header_snapshot_json->'agency_name',
+              'supplier_trading_name',i.header_snapshot_json->'agency_trading_name',
+              'supplier_registered_address',i.header_snapshot_json->'registered_address',
+              'company_registration_number',i.header_snapshot_json->'company_reg_number',
+              'vat_registration_number',i.header_snapshot_json->'vat_registration_number',
+              'supplier_contact',i.header_snapshot_json->'supplier_contact',
+              'bank_name',i.header_snapshot_json->'bank_name',
+              'bank_sort_code',i.header_snapshot_json->'bank_sort_code',
+              'bank_account_number',i.header_snapshot_json->'bank_account_number',
+              'client_legal_name',i.header_snapshot_json->'client_name',
+              'client_billing_address',i.header_snapshot_json->'client_invoice_address',
+              'client_reference',i.header_snapshot_json->'client_reference',
+              'net_total',i.subtotal_ex_vat,'vat_total',i.vat_amount,'gross_total',i.total_inc_vat,
+              'amount_paid',i.header_snapshot_json->'amount_paid',
+              'amount_credited',i.header_snapshot_json->'amount_credited',
+              'amount_outstanding',i.header_snapshot_json->'amount_outstanding',
+              'vat_breakdown',i.header_snapshot_json->'vat_breakdown',
+              'credit_note',jsonb_build_object('original_invoice_id',i.original_invoice_id,
+                'original_invoice_number',i.header_snapshot_json->'original_invoice_number',
+                'original_invoice_date',i.header_snapshot_json->'original_invoice_date',
+                'reason',i.header_snapshot_json->'credit_reason'),
+              'self_bill_wording',i.header_snapshot_json->'self_bill_wording',
+              'legal_wording',i.header_snapshot_json->'legal_wording',
+              'attachment_policy',i.header_snapshot_json->'attachment_policy',
+              'branding_asset_identity',i.header_snapshot_json->'agency_logo',
+              'template_version',b.template_version,'locale','en-GB',
+              'page_geometry','A4_PORTRAIT_210X297MM')
+              from public.invoices i where i.id=b.entity_id),
             'invoice',(select jsonb_build_object(
               'id',i.id,'type',i.type,'status',i.status,'invoice_no',i.invoice_no,
               'client_id',i.client_id,'status_date_utc',i.status_date_utc,
@@ -153,6 +195,7 @@ begin
               where s.invoice_id=b.entity_id),'[]'::jsonb))
         else
           jsonb_build_object(
+            'snapshot_schema_version','TIMESHEET_PRESENTATION_SNAPSHOT_V4',
             'timesheet',(select jsonb_build_object(
               'timesheet_id',t.timesheet_id,'booking_id',t.booking_id,
               'contract_id',t.contract_id,
@@ -1146,7 +1189,7 @@ begin
   leaf_groups as materialized (
     select d.operation_id,d.document_version_id,p.group_no,
       jsonb_agg(jsonb_build_object('input_chunk_id',d.id,
-        'input_order',p.group_input_count,'ordinal',d.sequence_no,
+        'input_order',d.input_no,'ordinal',d.sequence_no,
         'physical_part_no',d.physical_part_no,
         'r2_key',d.physical_r2_key,'sha256',d.physical_sha256,
         'page_count',d.actual_page_count,'size_bytes',d.actual_byte_count,
@@ -1157,8 +1200,8 @@ begin
         'decoded_estimate_bytes',d.result_json->>'decoded_estimate_bytes')
         order by d.sequence_no,d.physical_part_no,d.id) inputs,
       encode(digest(string_agg(concat_ws('|',d.input_no::text,d.id::text,
-        d.physical_sha256,d.actual_page_count::text,
-        d.actual_byte_count::text),'||'
+        d.physical_r2_key,d.physical_sha256,d.actual_page_count::text,
+        d.actual_byte_count::text,''),'||'
         order by d.sequence_no,d.physical_part_no,d.id),
         'sha256'),'hex') ordered_input_hash,
       roots.expected_child_receipt_hash,
@@ -1480,8 +1523,10 @@ begin
           '{merge_receipt,combined_physical_receipt_root}')
         order by m.sequence_no,m.id) inputs,
       encode(digest(string_agg(concat_ws('|',m.input_no::text,m.id::text,
-        m.result_json->>'sha256',m.actual_page_count::text,
-        m.actual_byte_count::text),'||' order by m.sequence_no,m.id),
+        m.result_json->>'r2_key',m.result_json->>'sha256',m.actual_page_count::text,
+        m.actual_byte_count::text,encode(digest(
+          coalesce(m.result_json->'merge_receipt','{}'::jsonb)::text,
+          'sha256'),'hex')),'||' order by m.sequence_no,m.id),
         'sha256'),'hex') ordered_input_hash,
       encode(digest(string_agg(encode(digest(
         coalesce(m.result_json->'merge_receipt','{}'::jsonb)::text,

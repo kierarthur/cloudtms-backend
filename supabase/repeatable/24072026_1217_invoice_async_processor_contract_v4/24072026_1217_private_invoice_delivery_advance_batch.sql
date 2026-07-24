@@ -138,7 +138,7 @@ begin
   classified as materialized (
     select f.*,
       case
-        when f.processor_policy->>'version'<>'INVOICE_PROCESSOR_LIMITS_V3'
+        when f.processor_policy->>'version'<>'INVOICE_PROCESSOR_LIMITS_V4'
           or f.max_attachments_per_message is null
           or f.max_cumulative_attachment_bytes is null
           or f.max_individual_attachment_bytes is null

@@ -65,7 +65,9 @@ begin
       o.control_version operation_current_control_version,
       o.config_json->'processor_policy' processor_policy,
       a.source_revision asset_source_revision,
+      a.original_r2_key registered_original_r2_key,
       a.original_sha256 registered_original_sha256,
+      a.original_size_bytes registered_original_size_bytes,
       dv.source_revision document_source_revision,dv.manifest_hash,dv.manifest_json,
       case
         when s.chunk_id is null or s.lease_token is null
@@ -111,9 +113,7 @@ begin
           then 'invoice-documents/'||i.document_version_id||'/merge/'||
             i.level_no||'/'||i.sequence_no||'/'||i.chunk_id||'/'||
             i.fence_token||'/'
-        when i.chunk_type='DOCUMENT_VERIFY'
-          then 'invoice-documents/'||i.document_version_id||'/verify/'||
-            i.chunk_id||'/'||i.fence_token||'/'
+        when i.chunk_type='DOCUMENT_VERIFY' then null
       end expected_output_prefix,
       case when coalesce(
           i.processor_policy->'result'->>i.chunk_type,'')~'^[1-9][0-9]{0,9}$'
@@ -126,7 +126,7 @@ begin
       case
         when i.outcome not in('SUCCESS','RETRY','BLOCKED','FAILED','SUPERSEDED','CANCELLED')
           then 'INVALID_OUTCOME'
-        when i.processor_policy->>'version'<>'INVOICE_PROCESSOR_LIMITS_V3'
+        when i.processor_policy->>'version'<>'INVOICE_PROCESSOR_LIMITS_V4'
           or i.result_limit_bytes is null
           then 'PROCESSOR_POLICY_INVALID'
         when jsonb_typeof(i.processor_result)<>'object'
@@ -156,8 +156,9 @@ begin
             i.plan_generation::text
           or coalesce(i.processor_result->>'processor_policy_version','')<>
             coalesce(i.processor_policy->>'version','')
-          or coalesce(i.processor_result->>'output_prefix','')<>
-            coalesce(i.expected_output_prefix,'')
+          or(i.chunk_type<>'DOCUMENT_VERIFY' and
+            coalesce(i.processor_result->>'output_prefix','')<>
+              coalesce(i.expected_output_prefix,''))
           or(i.document_version_id is not null
             and nullif(i.document_source_revision,'') is not null
             and coalesce(i.processor_result->>'template_version','')<>
@@ -176,25 +177,24 @@ begin
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and lower(coalesce(i.processor_result->>'detected_media_type',
             i.processor_result->>'detected_kind','')) in('','unknown','application/octet-stream')
-          then 'UNSUPPORTED_MEDIA'
+          then 'ASSET_MEDIA_TYPE_UNSUPPORTED'
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and lower(coalesce(i.processor_result->>'detected_kind',''))='empty'
-          then 'EMPTY_FILE'
+          then 'ASSET_EMPTY'
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and lower(coalesce(i.processor_result->>'detected_kind',''))='truncated'
-          then 'TRUNCATED_FILE'
+          then 'ASSET_TRUNCATED'
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and lower(coalesce(i.processor_result->>'detected_kind',''))='missing'
           then 'MISSING_SOURCE'
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and coalesce(i.processor_result->>'is_encrypted','false')='true'
-          then 'PASSWORD_PROTECTED_PDF'
+          then 'ASSET_PDF_ENCRYPTED'
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and lower(coalesce(i.processor_result->>'detected_media_type',
             i.processor_result->>'detected_kind','')) not in(
-              'application/pdf','pdf','image/jpeg','jpeg','jpg','image/png','png',
-              'image/webp','webp','image/tiff','tiff','image/heic','heic','image/heif','heif')
-          then 'UNSUPPORTED_MEDIA'
+              'application/pdf','pdf','image/jpeg','jpeg','jpg','image/png','png')
+          then 'ASSET_MEDIA_TYPE_UNSUPPORTED'
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and(coalesce(i.processor_result->>'original_size_bytes','') !~ '^[0-9]{1,18}$'
             or case when coalesce(i.processor_result->>'original_size_bytes','')
@@ -214,7 +214,7 @@ begin
                 i.processor_policy#>'{asset,allowed_media_types}') allowed(media_type)
               where allowed.media_type=lower(
                 i.processor_result->>'detected_media_type')))
-          then 'ASSET_INSPECTION_POLICY_EXCEEDED'
+          then 'ASSET_SOURCE_SIZE_EXCEEDED'
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and lower(coalesce(i.processor_result->>'detected_media_type',
             i.processor_result->>'detected_kind','')) in('application/pdf','pdf')
@@ -225,8 +225,7 @@ begin
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and lower(coalesce(i.processor_result->>'detected_media_type',
             i.processor_result->>'detected_kind','')) in(
-              'image/jpeg','jpeg','jpg','image/png','png','image/webp','webp',
-              'image/tiff','tiff','image/heic','heic','image/heif','heif')
+              'image/jpeg','jpeg','jpg','image/png','png')
           and(coalesce(i.processor_result->>'width_pixels','') !~ '^[1-9][0-9]{0,8}$'
             or coalesce(i.processor_result->>'height_pixels','') !~ '^[1-9][0-9]{0,8}$'
             or coalesce(i.processor_result->>'estimated_decoded_bytes','')
@@ -238,8 +237,7 @@ begin
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and lower(coalesce(i.processor_result->>'detected_media_type',
             i.processor_result->>'detected_kind','')) in(
-              'image/jpeg','jpeg','jpg','image/png','png','image/webp','webp',
-              'image/tiff','tiff','image/heic','heic','image/heif','heif')
+              'image/jpeg','jpeg','jpg','image/png','png')
           and(
             (i.processor_result->>'width_pixels')::bigint*
               (i.processor_result->>'height_pixels')::bigint>
@@ -253,7 +251,7 @@ begin
             is distinct from i.registered_original_sha256
           then 'ORIGINAL_HASH_MISMATCH'
         when i.outcome='SUCCESS'
-          and i.chunk_type in('ASSET_NORMALISE','SOURCE_RENDER','INVOICE_CORE_RENDER','PDF_MERGE','DOCUMENT_VERIFY')
+          and i.chunk_type in('ASSET_NORMALISE','SOURCE_RENDER','INVOICE_CORE_RENDER','PDF_MERGE')
           and(coalesce(i.processor_result->>'r2_key','')=''
             or coalesce(i.processor_result->>'sha256','')
               !~ '^[0-9a-f]{64}$'
@@ -268,7 +266,7 @@ begin
             or coalesce(i.processor_result->>'parse_verified','false')<>'true')
           then 'INVALID_ARTIFACT_RESULT'
         when i.outcome='SUCCESS'
-          and i.chunk_type in('ASSET_NORMALISE','SOURCE_RENDER','INVOICE_CORE_RENDER','PDF_MERGE','DOCUMENT_VERIFY')
+          and i.chunk_type in('ASSET_NORMALISE','SOURCE_RENDER','INVOICE_CORE_RENDER','PDF_MERGE')
           and left(i.processor_result->>'r2_key',length(
             case
               when i.chunk_type in('ASSET_NORMALISE','ASSET_INSPECT')
@@ -533,6 +531,11 @@ begin
                 i.expected_page_count)
           then 'MERGE_PAGE_COUNT_MISMATCH'
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_NORMALISE'
+          and(coalesce(i.processor_result->>'consumed_original_r2_key','')<>coalesce(i.registered_original_r2_key,'')
+            or coalesce(i.processor_result->>'consumed_original_sha256','')<>coalesce(i.registered_original_sha256,'')
+            or coalesce(i.processor_result->>'consumed_original_size_bytes','')<>coalesce(i.registered_original_size_bytes::text,''))
+          then 'ASSET_SOURCE_IDENTITY_CHANGED'
+        when i.outcome='SUCCESS' and i.chunk_type='ASSET_NORMALISE'
           and(i.expected_page_count is null
             or case when coalesce(i.processor_result->>'page_count','')
                 ~ '^[0-9]{1,9}$'
@@ -641,18 +644,18 @@ begin
                 'ordered_input_root',i.processor_result->
                   'actual_ordered_input_root',
                 'page_count',case when coalesce(
-                    i.processor_result->>'page_count','')~'^[1-9][0-9]{0,8}$'
-                  then(i.processor_result->>'page_count')::integer end,
-                'output_sha256',i.processor_result->>'sha256')::text,
+                    i.processor_result->>'actual_page_count','')~'^[1-9][0-9]{0,8}$'
+                  then(i.processor_result->>'actual_page_count')::integer end,
+                'output_sha256',i.processor_result->>'verified_candidate_sha256')::text,
               'sha256'),'hex')<>
                 coalesce(i.payload_json->>'root_merge_receipt_identity','')
             or coalesce(i.processor_result->>
               'verified_candidate_sha256','')<>
                 coalesce(i.payload_json->>'candidate_sha256','')
-            or coalesce(i.processor_result->>'sha256','')<>
-                coalesce(i.payload_json->>'candidate_sha256','')
-            or coalesce(i.processor_result->>'size_bytes','')<>
+            or coalesce(i.processor_result->>'verified_candidate_size_bytes','')<>
                 coalesce(i.payload_json->>'candidate_size_bytes','')
+            or coalesce(i.processor_result->>'actual_page_count','')<>
+                coalesce(i.expected_page_count::text,'')
             or coalesce(i.processor_result->>
               'verified_candidate_r2_key','')<>
                 coalesce(i.payload_json->>'candidate_r2_key','')
@@ -771,9 +774,7 @@ begin
           s.item#>>'{result,detected_kind}'))
           when 'pdf' then 'application/pdf'
           when 'jpeg' then 'image/jpeg' when 'jpg' then 'image/jpeg'
-          when 'png' then 'image/png' when 'webp' then 'image/webp'
-          when 'tiff' then 'image/tiff' when 'heic' then 'image/heic'
-          when 'heif' then 'image/heif'
+          when 'png' then 'image/png'
           else lower(coalesce(s.item#>>'{result,detected_media_type}',
             s.item#>>'{result,detected_kind}')) end,
         original_sha256=s.item#>>'{result,original_sha256}',
@@ -791,8 +792,7 @@ begin
             then(s.item#>>'{result,page_count}')::integer
           when lower(coalesce(s.item#>>'{result,detected_media_type}',
             s.item#>>'{result,detected_kind}')) in(
-              'image/jpeg','jpeg','jpg','image/png','png','image/webp','webp',
-              'image/tiff','tiff','image/heic','heic','image/heif','heif') then 1
+              'image/jpeg','jpeg','jpg','image/png','png') then 1
           else null end,
         is_encrypted=false,status='NORMALISING',updated_at_utc=v_now,error_json=null
     from supplied s
@@ -1605,15 +1605,16 @@ begin
         c.payload_json->>'candidate_sha256'
       and x#>>'{result,verified_candidate_r2_key}'=
         c.payload_json->>'candidate_r2_key'
-      and x#>>'{result,sha256}'=c.payload_json->>'candidate_sha256'
-      and coalesce(x#>>'{result,page_count}','')~'^[0-9]{1,9}$'
-      and(x#>>'{result,page_count}')::integer=c.expected_page_count
+      and x#>>'{result,verified_candidate_size_bytes}'=c.payload_json->>'candidate_size_bytes'
+      and coalesce(x#>>'{result,actual_page_count}','')~'^[0-9]{1,9}$'
+      and(x#>>'{result,actual_page_count}')::integer=c.expected_page_count
   ),
   ready_versions as materialized (
     update public.invoice_document_versions v
-    set status='READY',r2_key=q.result->>'r2_key',sha256=q.result->>'sha256',
-        size_bytes=(q.result->>'size_bytes')::bigint,
-        page_count=(q.result->>'page_count')::integer,
+    set status='READY',r2_key=q.result->>'verified_candidate_r2_key',
+        sha256=q.result->>'verified_candidate_sha256',
+        size_bytes=(q.result->>'verified_candidate_size_bytes')::bigint,
+        page_count=(q.result->>'actual_page_count')::integer,
         core_page_count=case when coalesce(q.result->>'core_page_count','') ~ '^[0-9]{1,9}$'
           then(q.result->>'core_page_count')::integer end,
         supporting_page_count=case
@@ -1726,8 +1727,8 @@ begin
   asset_failures as materialized (
     update public.invoice_document_assets a
     set status=case upper(coalesce(t.error_json->>'code',''))
-          when 'UNSUPPORTED_MEDIA' then 'UNSUPPORTED'
-          when 'PASSWORD_PROTECTED_PDF' then 'UNSUPPORTED'
+          when 'ASSET_MEDIA_TYPE_UNSUPPORTED' then 'UNSUPPORTED'
+          when 'ASSET_PDF_ENCRYPTED' then 'UNSUPPORTED'
           when 'CORRUPT_PDF' then 'CORRUPT'
           when 'TRUNCATED_FILE' then 'CORRUPT'
           when 'EMPTY_FILE' then 'CORRUPT'

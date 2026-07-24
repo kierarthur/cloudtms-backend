@@ -6,8 +6,8 @@ security definer
 set search_path to 'pg_catalog','pg_temp'
 as $function$
   select jsonb_build_object(
-    'version','INVOICE_PROCESSOR_LIMITS_V3',
-    'policy_version','INVOICE_PROCESSOR_LIMITS_V3',
+    'version','INVOICE_PROCESSOR_LIMITS_V4',
+    'policy_version','INVOICE_PROCESSOR_LIMITS_V4',
     'context',jsonb_build_object(
       'ASSET_INSPECT',262144,
       'ASSET_NORMALISE',262144,
@@ -27,8 +27,7 @@ as $function$
       'max_decoded_bytes',536870912,
       'max_source_bytes',268435456,
       'allowed_media_types',jsonb_build_array(
-        'application/pdf','image/jpeg','image/png','image/webp',
-        'image/tiff','image/heic','image/heif'),
+        'application/pdf','image/jpeg','image/png'),
       'image_normalisation_profile','INVOICE_IMAGE_NORMALISATION_V1',
       'pdf_normalisation_profile','INVOICE_PDF_NORMALISATION_V1',
       'max_pdf_part_pages',100,
@@ -51,7 +50,11 @@ as $function$
       'locale_identity','en-GB_DDMMYYYY',
       'max_render_passes',3),
     'verify',jsonb_build_object(
-      'receipt_schema_version','INVOICE_MERGE_RECEIPT_V1',
+      'object_receipt_contract','ACTUAL_BYTES_OBJECT_RECEIPT_V3',
+      'logical_receipt_contract','LOGICAL_SOURCE_RECEIPT_V3',
+      'merge_receipt_contract','ACTUAL_BYTES_MERGE_RECEIPT_V3',
+      'document_root_receipt_contract','DOCUMENT_ROOT_RECEIPT_V3',
+      'ordered_input_hash_contract','ACTUAL_ORDERED_INPUT_V1',
       'receipt_hash_algorithm','SHA256',
       'max_receipts',4096,
       'require_parse_success',true,

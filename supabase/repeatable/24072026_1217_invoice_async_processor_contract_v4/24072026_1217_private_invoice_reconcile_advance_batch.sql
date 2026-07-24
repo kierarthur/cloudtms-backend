@@ -563,9 +563,9 @@ begin
       and(
         jsonb_typeof(o.config_json->'processor_policy')<>'object'
         or o.config_json#>>'{processor_policy,version}'
-          is distinct from 'INVOICE_PROCESSOR_LIMITS_V3'
+          is distinct from 'INVOICE_PROCESSOR_LIMITS_V4'
         or o.config_json#>>'{processor_policy,policy_version}'
-          is distinct from 'INVOICE_PROCESSOR_LIMITS_V3'
+          is distinct from 'INVOICE_PROCESSOR_LIMITS_V4'
         or jsonb_typeof(o.config_json#>'{processor_policy,context}')
           <>'object'
         or jsonb_typeof(o.config_json#>'{processor_policy,result}')
@@ -573,7 +573,24 @@ begin
         or jsonb_typeof(o.config_json#>
           '{processor_policy,delivery,allowed_policies}')<>'array'
         or o.config_json#>'{processor_policy,delivery,allowed_policies}'
-          is distinct from '["ATTACH","SPLIT","SECURE_LINK"]'::jsonb)
+          is distinct from '["ATTACH","SPLIT","SECURE_LINK"]'::jsonb
+        or o.config_json#>'{processor_policy,asset,allowed_media_types}'
+          is distinct from '["application/pdf","image/jpeg","image/png"]'::jsonb
+        or o.config_json#>>'{processor_policy,verify,object_receipt_contract}'
+          is distinct from 'ACTUAL_BYTES_OBJECT_RECEIPT_V3'
+        or o.config_json#>>'{processor_policy,verify,logical_receipt_contract}'
+          is distinct from 'LOGICAL_SOURCE_RECEIPT_V3'
+        or o.config_json#>>'{processor_policy,verify,merge_receipt_contract}'
+          is distinct from 'ACTUAL_BYTES_MERGE_RECEIPT_V3'
+        or o.config_json#>>'{processor_policy,verify,document_root_receipt_contract}'
+          is distinct from 'DOCUMENT_ROOT_RECEIPT_V3'
+        or o.config_json#>>'{processor_policy,verify,ordered_input_hash_contract}'
+          is distinct from 'ACTUAL_ORDERED_INPUT_V1'
+        or(c.chunk_type='ASSET_NORMALISE' and exists(
+          select 1 from public.invoice_document_assets a
+          where a.id=c.document_asset_id
+            and(a.original_sha256 is null or a.original_size_bytes is null)))
+        or(c.chunk_type='DOCUMENT_VERIFY' and c.payload_json ? 'immutable_destination_prefix'))
     returning c.id,c.operation_id
   ),
   invalid_request_correlation as (

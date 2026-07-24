@@ -1,0 +1,16 @@
+{
+  "name": "cloudtms-invoice-document-processor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "wrangler deploy --dry-run --env test",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "0.3.7"
+  },
+  "devDependencies": {
+    "wrangler": "^4.43.0"
+  }
+}

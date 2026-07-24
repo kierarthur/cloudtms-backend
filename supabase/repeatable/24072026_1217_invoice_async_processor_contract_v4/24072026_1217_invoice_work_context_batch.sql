@@ -92,6 +92,7 @@ begin
   valid as materialized (
     select i.*,a.id asset_exists,a.source_kind,a.source_id,a.source_revision asset_source_revision,
       a.original_r2_key,a.original_filename,a.declared_media_type,a.detected_media_type,
+      a.original_sha256,a.original_size_bytes,
       a.orientation_degrees,a.source_page_count,a.normalised_manifest_json,
       dv.id version_exists,dv.entity_type document_entity_type,dv.entity_id document_entity_id,
       dv.purpose,dv.source_revision document_source_revision,dv.template_version,
@@ -196,6 +197,14 @@ begin
       case
         when v.chunk_type in('ASSET_INSPECT','ASSET_NORMALISE') then jsonb_build_object(
           'original_r2_key',v.original_r2_key,
+          'expected_original_r2_key',case when v.chunk_type='ASSET_NORMALISE' then v.original_r2_key end,
+          'expected_original_sha256',case when v.chunk_type='ASSET_NORMALISE' then v.original_sha256 end,
+          'expected_original_size_bytes',case when v.chunk_type='ASSET_NORMALISE' then v.original_size_bytes end,
+          'expected_original_media_type',case when v.chunk_type='ASSET_NORMALISE' then coalesce(v.detected_media_type,v.declared_media_type) end,
+          'expected_source_revision',v.asset_source_revision,
+          'expected_source_page_count',case when v.chunk_type='ASSET_NORMALISE' then v.source_page_count end,
+          'allowed_media_types',v.processor_limits#>'{asset,allowed_media_types}',
+          'max_source_bytes',v.processor_limits#>'{asset,max_source_bytes}',
           'original_filename',v.original_filename,
           'declared_media_type',v.declared_media_type,
           'detected_media_type',v.detected_media_type,
@@ -301,6 +310,7 @@ begin
             '/merge/'||v.level_no||'/'||v.sequence_no||'/'||v.chunk_id||'/'||
             v.fence_token||'/')
         when v.chunk_type='DOCUMENT_VERIFY' then jsonb_build_object(
+          'verification_mode','VERIFY_EXISTING_CANDIDATE',
           'final_candidate_key',v.payload_json->>'candidate_r2_key',
           'final_candidate_sha256',v.payload_json->>'candidate_sha256',
           'final_candidate_size_bytes',v.payload_json->'candidate_size_bytes',
@@ -341,9 +351,7 @@ begin
           'final_merge_receipt_hash',
             v.payload_json->>'final_merge_receipt_hash',
           'verification_policy',v.processor_limits->'verify',
-          'document_version_id',v.document_version_id,
-          'immutable_destination_prefix','invoice-documents/'||v.document_version_id||
-            '/verify/'||v.chunk_id||'/'||v.fence_token||'/')
+          'document_version_id',v.document_version_id)
         else '{}'::jsonb
       end context
     from valid v left join source_models sm on sm.chunk_id=v.chunk_id

@@ -1,0 +1,13 @@
+{
+  "name": "cloudtms-invoice-queue-dispatcher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "wrangler deploy --dry-run --env test",
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.43.0"
+  }
+}
