@@ -367,7 +367,7 @@ begin
   end if;
 
   select coalesce(tf.paid_at_utc is not null,false),
-         false,
+         coalesce(tf.locked_by_invoice_id is not null,false),
          tf.processing_status::text
   into v_paid,v_invoice_locked,v_processing_status
   from public.timesheets_financials tf
@@ -375,20 +375,13 @@ begin
   order by tf.updated_at desc nulls last
   limit 1;
 
-  -- A draft invoice is mutable application state: import-authoritative changes
-  -- invalidate/rebuild it through the existing invoice pipeline.  Only issued
-  -- or paid invoice evidence is frozen economic authority that requires a
-  -- reversal/correction route.
-  v_invoice_locked := exists (
+  -- Once any invoice line exists, the timesheet must not be amended in place.
+  -- This applies equally to draft, unissued, issued and paid invoices: every
+  -- subsequent import-authoritative change must use the reversal route.
+  v_invoice_locked := coalesce(v_invoice_locked,false) or exists (
     select 1
     from public.invoice_lines il
-    join public.invoices invoice_row on invoice_row.id=il.invoice_id
     where il.timesheet_id=p_timesheet_id
-      and (
-        invoice_row.issued_at_utc is not null
-        or invoice_row.paid_at_utc is not null
-        or upper(coalesce(invoice_row.status::text,'')) in ('ISSUED','PAID')
-      )
   );
 
   v_active_draft := exists (

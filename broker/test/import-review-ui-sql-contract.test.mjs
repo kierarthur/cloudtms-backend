@@ -174,15 +174,15 @@ test('one owner-only current-setting authority core governs catalogue and Weekly
   assert.doesNotMatch(apply, /effective_no_timesheet_required/);
 });
 
-test('only issued or paid invoice lines are frozen correction evidence in preview and apply', () => {
+test('every generated invoice line is protected correction evidence in preview and apply', () => {
   const protection = functionBody(coreSql, '_import_review_timesheet_protection_core_v1');
   const envelope = functionBody(coreSql, '_import_review_apply_envelope_core_v1');
-  assert.match(protection, /from public\.invoice_lines il\s+join public\.invoices invoice_row on invoice_row\.id=il\.invoice_id/);
-  assert.match(protection, /invoice_row\.issued_at_utc is not null/);
-  assert.match(protection, /invoice_row\.paid_at_utc is not null/);
-  assert.match(protection, /upper\(coalesce\(invoice_row\.status::text,''\)\) in \('ISSUED','PAID'\)/);
-  assert.doesNotMatch(protection, /locked_by_invoice_id is not null/);
-  assert.doesNotMatch(protection, /in \('DRAFT'/);
+  assert.match(protection, /coalesce\(tf\.locked_by_invoice_id is not null,false\)/);
+  assert.match(protection, /from public\.invoice_lines il\s+where il\.timesheet_id=p_timesheet_id/);
+  assert.doesNotMatch(protection, /join public\.invoices invoice_row/);
+  assert.doesNotMatch(protection, /invoice_row\.issued_at_utc is not null/);
+  assert.doesNotMatch(protection, /invoice_row\.paid_at_utc is not null/);
+  assert.doesNotMatch(protection, /status::text[\s\S]*?\('ISSUED','PAID'\)/);
   assert.match(envelope, /pr\.protection->>'invoice_locked'/);
   assert.match(envelope, /'REVERSAL_REPLACEMENT'/);
 });
