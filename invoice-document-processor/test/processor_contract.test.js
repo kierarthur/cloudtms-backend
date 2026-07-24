@@ -1,13 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import {
+  invoiceProcessorIdentityHeaders,
+  invoiceProcessorSha256Hex,
+  signInvoiceProcessorRequest
+} from '../../shared/invoice-processor-security.js';
 
 const workerPath = new URL('../src/worker.js', import.meta.url);
 const receiptUrl = new URL('../src/receipt-contract.js', import.meta.url).href;
+const securityUrl = new URL('../../shared/invoice-processor-security.js', import.meta.url).href;
 const workerSource = (await readFile(workerPath, 'utf8'))
   .replace("import { Container, getContainer } from '@cloudflare/containers';", 'class Container {}\nconst getContainer = () => { throw new Error("CONTAINER_NOT_AVAILABLE_IN_UNIT_TEST"); };')
-  .replace("'./receipt-contract.js'", JSON.stringify(receiptUrl));
-const { invoiceDocumentProcessorInternals } = await import(`data:text/javascript;base64,${Buffer.from(workerSource).toString('base64')}`);
+  .replace("'./receipt-contract.js'", JSON.stringify(receiptUrl))
+  .replace("'../../shared/invoice-processor-security.js'", JSON.stringify(securityUrl));
+const processorModule = await import(`data:text/javascript;base64,${Buffer.from(workerSource).toString('base64')}`);
+const {
+  handleInvoiceDocumentProcessorRequest,
+  invoiceDocumentProcessorInternals
+} = processorModule;
 
 const {
   findInputDescriptors,
@@ -89,4 +100,82 @@ test('processor error categories distinguish timeout, input, policy, identity an
   assert.equal(classifyError(new Error('INPUT_HASH_MISMATCH')), 'IDENTITY_MISMATCH');
   assert.equal(classifyError(new Error('unexpected')), 'PROCESSOR_BUG');
   assert.equal(resultIdentity({ action: 'DOCUMENT_VERIFY', processor_policy_version: 'INVOICE_PROCESSOR_LIMITS_V4' }).output_prefix, undefined);
+});
+
+test('processor request authentication rejects missing, invalid, expired, and tampered signatures', async () => {
+  const secret = 'processor-test-secret-with-more-than-thirty-two-characters';
+  const baseFields = {
+    method: 'POST',
+    path: '/process',
+    timestamp: Date.now(),
+    nonce: crypto.randomUUID(),
+    chunk_id: '00000000-0000-4000-8000-000000000001',
+    fence_token: '2',
+    action: 'ASSET_INSPECT',
+    plan_generation: '1',
+    processor_policy_version: 'INVOICE_PROCESSOR_LIMITS_V4'
+  };
+  const body = JSON.stringify({
+    context: {},
+    expected_result_identity: {
+      chunk_id: baseFields.chunk_id,
+      fence_token: 2,
+      action: baseFields.action,
+      plan_generation: 1,
+      processor_policy_version: baseFields.processor_policy_version
+    }
+  });
+  const signedFields = {
+    ...baseFields,
+    body_sha256: await invoiceProcessorSha256Hex(body)
+  };
+  const signature = await signInvoiceProcessorRequest(secret, signedFields);
+  const env = {
+    R2: {},
+    INVOICE_DOCUMENT_CONTAINER: {},
+    INVOICE_DOCUMENT_PROCESSOR_SECRET: secret
+  };
+  const request = (fields, bodyText, signedValue) => new Request(
+    'https://processor.internal/process',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...invoiceProcessorIdentityHeaders(fields, signedValue)
+      },
+      body: bodyText
+    }
+  );
+
+  const missing = await handleInvoiceDocumentProcessorRequest(
+    new Request('https://processor.internal/process', { method: 'POST', body }),
+    env
+  );
+  assert.equal(missing.status, 404);
+
+  const invalid = await handleInvoiceDocumentProcessorRequest(
+    request(signedFields, body, '0'.repeat(64)),
+    env
+  );
+  assert.equal(invalid.status, 403);
+
+  const expiredFields = {
+    ...signedFields,
+    timestamp: Date.now() - 61_000
+  };
+  const expired = await handleInvoiceDocumentProcessorRequest(
+    request(
+      expiredFields,
+      body,
+      await signInvoiceProcessorRequest(secret, expiredFields)
+    ),
+    env
+  );
+  assert.equal(expired.status, 403);
+
+  const tampered = await handleInvoiceDocumentProcessorRequest(
+    request(signedFields, `${body} `, signature),
+    env
+  );
+  assert.equal(tampered.status, 403);
 });

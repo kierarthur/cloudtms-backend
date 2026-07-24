@@ -11,10 +11,16 @@ function json(value, status = 200) {
 }
 
 function canonicalMessage(payload) {
+  const cursor = payload.reconciliation_cursor;
   return JSON.stringify({
     version: 'INVOICE_QUEUE_DISPATCH_V1', timestamp: Number(payload.timestamp), nonce: String(payload.nonce || ''),
     depth: Number(payload.depth), lanes: [...new Set((payload.lanes || []).map(value => String(value).toUpperCase()))].sort(),
-    priority_class: String(payload.priority_class || 'SCHEDULED').toUpperCase()
+    priority_class: String(payload.priority_class || 'SCHEDULED').toUpperCase(),
+    reconciliation_cursor: cursor ? {
+      snapshot_at_utc: String(cursor.snapshot_at_utc || ''),
+      updated_at_utc: String(cursor.updated_at_utc || ''),
+      operation_id: String(cursor.operation_id || '').toLowerCase()
+    } : null
   });
 }
 
@@ -53,9 +59,38 @@ function validatePayload(body) {
   const lanes = [...new Set((Array.isArray(body?.lanes) ? body.lanes : []).map(value => String(value || '').toUpperCase()))].sort();
   if (!Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > 60000) return { ok: false, code: 'INVOICE_DISPATCH_TIMESTAMP_INVALID' };
   if (!Number.isInteger(depth) || depth < 0 || depth > 4) return { ok: false, code: 'INVOICE_DISPATCH_DEPTH_INVALID' };
-  if (!/^[0-9a-f-]{36}$/i.test(String(body?.nonce || ''))) return { ok: false, code: 'INVOICE_DISPATCH_NONCE_INVALID' };
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(body?.nonce || ''))) {
+    return { ok: false, code: 'INVOICE_DISPATCH_NONCE_INVALID' };
+  }
   if (!lanes.length || lanes.some(lane => !ALLOWED_LANES.has(lane))) return { ok: false, code: 'INVOICE_DISPATCH_LANES_INVALID' };
-  return { ok: true, payload: { timestamp, depth, lanes, nonce: body.nonce, priority_class: String(body.priority_class || 'SCHEDULED').toUpperCase() } };
+  let reconciliationCursor = null;
+  if (body?.reconciliation_cursor != null) {
+    const cursor = body.reconciliation_cursor;
+    if (!lanes.includes('RECONCILE')) {
+      return { ok: false, code: 'INVOICE_RECONCILIATION_CURSOR_LANE_INVALID' };
+    }
+    if (
+      !Number.isFinite(Date.parse(cursor?.snapshot_at_utc || ''))
+      || !Number.isFinite(Date.parse(cursor?.updated_at_utc || ''))
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(cursor?.operation_id || ''))
+    ) return { ok: false, code: 'INVOICE_DISPATCH_RECONCILIATION_CURSOR_INVALID' };
+    reconciliationCursor = {
+      snapshot_at_utc: new Date(cursor.snapshot_at_utc).toISOString(),
+      updated_at_utc: new Date(cursor.updated_at_utc).toISOString(),
+      operation_id: String(cursor.operation_id).toLowerCase()
+    };
+  }
+  return {
+    ok: true,
+    payload: {
+      timestamp,
+      depth,
+      lanes,
+      nonce: body.nonce,
+      priority_class: String(body.priority_class || 'SCHEDULED').toUpperCase(),
+      reconciliation_cursor: reconciliationCursor
+    }
+  };
 }
 
 export class InvoiceDispatchNonceGate extends DurableObject {
@@ -89,7 +124,19 @@ export default {
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
     if (request.headers.get('x-cloudtms-internal-service') !== 'invoice-queue-main-v1') return json({ ok: false, code: 'INVOICE_DISPATCH_CALLER_INVALID' }, 403);
-    if (request.method === 'GET' && path === '/ready') return json({ ok: !!env.INVOICE_DISPATCH_NONCE_GATE && !!env.INVOICE_QUEUE_MAIN, nonce_gate: !!env.INVOICE_DISPATCH_NONCE_GATE, main_binding: !!env.INVOICE_QUEUE_MAIN }, env.INVOICE_DISPATCH_NONCE_GATE && env.INVOICE_QUEUE_MAIN ? 200 : 503);
+    if (request.method === 'GET' && path === '/ready') {
+      if (request.headers.get('x-cloudtms-internal-service') !== 'invoice-queue-main-v1') {
+        return json({ ok: false, code: 'DISPATCHER_CALLER_INVALID' }, 403);
+      }
+      return json(
+        {
+          ok: !!env.INVOICE_DISPATCH_NONCE_GATE && !!env.INVOICE_QUEUE_MAIN,
+          nonce_gate: !!env.INVOICE_DISPATCH_NONCE_GATE,
+          main_binding: !!env.INVOICE_QUEUE_MAIN
+        },
+        env.INVOICE_DISPATCH_NONCE_GATE && env.INVOICE_QUEUE_MAIN ? 200 : 503
+      );
+    }
     if (request.method !== 'POST' || path !== '/dispatch') return json({ ok: false, code: 'NOT_FOUND' }, 404);
     if (Number(request.headers.get('content-length') || 0) > 8192) return json({ ok: false, code: 'INVOICE_DISPATCH_REQUEST_TOO_LARGE' }, 413);
     const body = await request.json().catch(() => null);

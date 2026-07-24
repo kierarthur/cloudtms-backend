@@ -1,9 +1,24 @@
 import { Container, getContainer } from '@cloudflare/containers';
 import { buildMergeReceipt, flattenLeafInputReceipts, hashJoined, hashPostgresJsonb } from './receipt-contract.js';
+import {
+  invoiceProcessorFieldsFromHeaders,
+  invoiceProcessorSha256Hex,
+  validateInvoiceProcessorRequestFields,
+  verifyInvoiceProcessorRequest
+} from '../../shared/invoice-processor-security.js';
 
 const encoder = new TextEncoder();
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 const POLICY_VERSION = 'INVOICE_PROCESSOR_LIMITS_V4';
+const IMPLEMENTATION_VERSION = 'cloudtms-invoice-document-worker-v6';
+const SUPPORTED_MEDIA_TYPES = Object.freeze(['application/pdf','image/jpeg','image/png']);
+const RECEIPT_CONTRACTS = Object.freeze({
+  object: 'ACTUAL_BYTES_OBJECT_RECEIPT_V3',
+  logical: 'LOGICAL_SOURCE_RECEIPT_V3',
+  merge: 'ACTUAL_BYTES_MERGE_RECEIPT_V3',
+  root: 'DOCUMENT_ROOT_RECEIPT_V3',
+  ordered_input: 'ACTUAL_ORDERED_INPUT_V1'
+});
 
 export class InvoiceDocumentContainer extends Container {
   defaultPort = 8080;
@@ -17,9 +32,22 @@ function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 }
 
-function validateInternalRequest(request) {
-  return request.method === 'POST' && new URL(request.url).pathname === '/process'
+function hasInternalProcessorMarker(request) {
+  return request.method === 'POST'
     && request.headers.get('x-cloudtms-internal-service') === 'invoice-document-v1';
+}
+
+async function authenticateProcessorRequest(request, env, text) {
+  if (!hasInternalProcessorMarker(request)) return { ok: false, code: 'PROCESSOR_CALLER_INVALID' };
+  const bodySha256 = await invoiceProcessorSha256Hex(text);
+  const fields = invoiceProcessorFieldsFromHeaders(request, bodySha256);
+  const validated = validateInvoiceProcessorRequestFields(fields);
+  if (!validated.ok) return validated;
+  const signature = request.headers.get('x-cloudtms-signature');
+  if (!(await verifyInvoiceProcessorRequest(env.INVOICE_DOCUMENT_PROCESSOR_SECRET, fields, signature))) {
+    return { ok: false, code: 'PROCESSOR_REQUEST_SIGNATURE_INVALID' };
+  }
+  return { ok: true, fields };
 }
 
 function findInputDescriptors(action, context) {
@@ -48,7 +76,7 @@ async function resolveR2Inputs(bucket, descriptors) {
     if (!object) throw Object.assign(new Error('INPUT_R2_OBJECT_MISSING'), { code: 'INPUT_R2_OBJECT_MISSING' });
     if (descriptor.size_bytes != null && Number(descriptor.size_bytes) !== Number(object.size)) throw Object.assign(new Error('INPUT_SIZE_MISMATCH'), { code: 'INPUT_SIZE_MISMATCH' });
     const storedHash = object.customMetadata?.sha256;
-    if (descriptor.sha256 && storedHash && descriptor.sha256 !== storedHash) throw Object.assign(new Error('INPUT_STORED_HASH_MISMATCH'), { code: 'INPUT_STORED_HASH_MISMATCH' });
+    if (descriptor.sha256 && descriptor.sha256 !== storedHash) throw Object.assign(new Error('INPUT_STORED_HASH_MISMATCH'), { code: 'INPUT_STORED_HASH_MISMATCH' });
     resolved.push({ descriptor, object, header: { input_order: index + 1, input_chunk_id: descriptor.input_chunk_id || null, r2_key: key, size_bytes: object.size, expected_sha256: descriptor.sha256 || null, media_type: descriptor.media_type || object.httpMetadata?.contentType || 'application/octet-stream' } });
   }
   return resolved;
@@ -117,7 +145,7 @@ function decodeProcessorHeader(response) {
   catch { throw Object.assign(new Error('PROCESSOR_RESULT_HEADER_INVALID'), { code: 'PROCESSOR_RESULT_HEADER_INVALID' }); }
 }
 
-function validateProcessorMetadata(metadata, response, action) {
+function validateProcessorMetadata(metadata, response, action, context) {
   if (!/^[0-9a-f]{64}$/i.test(String(metadata.sha256 || ''))) throw Object.assign(new Error('PROCESSOR_OUTPUT_HASH_INVALID'), { code: 'PROCESSOR_OUTPUT_HASH_INVALID' });
   if (!Number.isSafeInteger(Number(metadata.size_bytes)) || Number(metadata.size_bytes) < 1) throw Object.assign(new Error('PROCESSOR_OUTPUT_SIZE_INVALID'), { code: 'PROCESSOR_OUTPUT_SIZE_INVALID' });
   if (!Number.isSafeInteger(Number(metadata.page_count)) || Number(metadata.page_count) < 1) throw Object.assign(new Error('PROCESSOR_OUTPUT_PAGE_COUNT_INVALID'), { code: 'PROCESSOR_OUTPUT_PAGE_COUNT_INVALID' });
@@ -125,6 +153,17 @@ function validateProcessorMetadata(metadata, response, action) {
   const length = Number(response.headers.get('content-length'));
   if (Number.isFinite(length) && length !== Number(metadata.size_bytes)) throw Object.assign(new Error('PROCESSOR_RESPONSE_SIZE_MISMATCH'), { code: 'PROCESSOR_RESPONSE_SIZE_MISMATCH' });
   if (action === 'PDF_MERGE' && !Array.isArray(metadata.actual_inputs)) throw Object.assign(new Error('PROCESSOR_INPUT_RECEIPTS_MISSING'), { code: 'PROCESSOR_INPUT_RECEIPTS_MISSING' });
+  const limits = action === 'ASSET_NORMALISE'
+    ? (context.output_profile || {})
+    : (context.limits || context.verification_policy || {});
+  const maximumOutputBytes = safePositive(
+    limits.max_output_bytes
+    || limits.max_part_bytes
+    || limits.max_merge_output_bytes
+  );
+  if (maximumOutputBytes && Number(metadata.size_bytes) > maximumOutputBytes) {
+    throw Object.assign(new Error('PROCESSOR_OUTPUT_BYTES_EXCEED_POLICY'), { code: 'PROCESSOR_OUTPUT_BYTES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
+  }
 }
 
 function artifactMetadata(identity, metadata) {
@@ -181,7 +220,13 @@ async function processWithContainer(env, payload, signal) {
   validateNativeInputLimits(action, context, inputs);
   const header = { action, context, processor_policy_version: POLICY_VERSION, action_timeout_ms: Number(context.action_timeout_ms || 120000), inputs: inputs.map(input => input.header) };
   const request = new Request('http://container/process', { method: 'POST', headers: { 'content-type': 'application/x-cloudtms-framed-files-v1' }, body: framedBody(header, inputs, signal), signal });
-  const container = getContainer(env.INVOICE_DOCUMENT_CONTAINER, `invoice-native-${identity.chunk_id.slice(0, 8)}`);
+  const containerIdentity = await invoiceProcessorSha256Hex(
+    `${identity.chunk_id}|${identity.fence_token}|${action}`
+  );
+  const container = getContainer(
+    env.INVOICE_DOCUMENT_CONTAINER,
+    `invoice-native-${containerIdentity.slice(0, 32)}`
+  );
   const response = await container.fetch(request);
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
@@ -196,7 +241,7 @@ async function processWithContainer(env, payload, signal) {
     return buildVerificationOnlyResult(identity, context, body.result || body);
   }
   const metadata = decodeProcessorHeader(response);
-  validateProcessorMetadata(metadata, response, action);
+  validateProcessorMetadata(metadata, response, action, context);
   const outputKey = `${identity.output_prefix}${action.toLowerCase()}-${metadata.sha256}.pdf`;
   await putImmutableProcessorArtifact(env.R2, outputKey, response.body, identity, metadata);
   const result = { ...identity, r2_key: outputKey, sha256: metadata.sha256, size_bytes: metadata.size_bytes, page_count: metadata.page_count, parse_verified: metadata.parse_verified === true, output_type: 'application/pdf', processor_version: metadata.processor_version };
@@ -225,13 +270,55 @@ function classifyError(error) {
 }
 
 export async function handleInvoiceDocumentProcessorRequest(request, env) {
-  if (!validateInternalRequest(request)) return json({ ok: false, code: 'NOT_FOUND' }, 404);
+  const path = new URL(request.url).pathname;
+  if (!hasInternalProcessorMarker(request) || !['/process','/ready'].includes(path)) {
+    return json({ ok: false, code: 'NOT_FOUND' }, 404);
+  }
   if (!env.R2 || !env.INVOICE_DOCUMENT_CONTAINER) return json({ ok: false, code: 'PROCESSOR_BINDING_MISSING', category: 'TRANSIENT_INFRASTRUCTURE' }, 503);
+  if (!env.INVOICE_DOCUMENT_PROCESSOR_SECRET) {
+    return json({ ok: false, code: 'INVOICE_DOCUMENT_PROCESSOR_SECRET_MISSING', category: 'TRANSIENT_INFRASTRUCTURE', retryable: false }, 503);
+  }
   if (Number(request.headers.get('content-length') || 0) > MAX_REQUEST_BYTES) return json({ ok: false, code: 'PROCESSOR_REQUEST_TOO_LARGE', category: 'POLICY_VIOLATION' }, 413);
   try {
     const text = await request.text();
     if (encoder.encode(text).byteLength > MAX_REQUEST_BYTES) throw Object.assign(new Error('PROCESSOR_REQUEST_TOO_LARGE'), { code: 'PROCESSOR_REQUEST_TOO_LARGE' });
+    const authentication = await authenticateProcessorRequest(request, env, text);
+    if (!authentication.ok) return json({ ok: false, code: authentication.code, category: 'IDENTITY_MISMATCH', retryable: false }, 403);
     const payload = JSON.parse(text);
+    if (path === '/ready') {
+      if (text !== '{}' || authentication.fields.action !== 'READY' || authentication.fields.processor_policy_version !== POLICY_VERSION) {
+        return json({ ok: false, code: 'PROCESSOR_READY_REQUEST_INVALID', category: 'IDENTITY_MISMATCH', retryable: false }, 403);
+      }
+      const container = getContainer(env.INVOICE_DOCUMENT_CONTAINER, 'invoice-native-readiness-v4');
+      const response = await container.fetch(new Request('http://container/health', {
+        method: 'GET',
+        signal: AbortSignal.timeout(3000)
+      }));
+      const health = await response.json().catch(() => null);
+      const containerReady = response.ok && health?.ok === true;
+      return json({
+        ok: containerReady,
+        service: 'invoice-document-processor',
+        processor_policy_version: POLICY_VERSION,
+        processor_implementation_version: IMPLEMENTATION_VERSION,
+        supported_media_types: SUPPORTED_MEDIA_TYPES,
+        receipt_contracts: RECEIPT_CONTRACTS,
+        container_ready: containerReady,
+        native_tools_ready: containerReady && String(health?.processor_version || '').startsWith('cloudtms-native-'),
+        checked_at_utc: new Date().toISOString()
+      }, containerReady ? 200 : 503);
+    }
+    const expected = payload?.expected_result_identity || {};
+    const identityAssertions = [
+      [authentication.fields.chunk_id, expected.chunk_id],
+      [String(authentication.fields.fence_token), String(expected.fence_token)],
+      [authentication.fields.action, String(expected.action || '').toUpperCase()],
+      [String(authentication.fields.plan_generation), String(expected.plan_generation ?? '')],
+      [authentication.fields.processor_policy_version, expected.processor_policy_version]
+    ];
+    if (identityAssertions.some(([header, body]) => header !== body)) {
+      return json({ ok: false, code: 'PROCESSOR_REQUEST_IDENTITY_MISMATCH', category: 'IDENTITY_MISMATCH', retryable: false }, 403);
+    }
     const timeoutMs = Math.max(10000, Math.min(300000, Number(payload.context?.action_timeout_ms || 120000)));
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(timeoutMs)]);
     return json({ ok: true, result: await processWithContainer(env, payload, signal) });
@@ -243,4 +330,4 @@ export async function handleInvoiceDocumentProcessorRequest(request, env) {
 }
 
 export default { fetch(request, env) { return handleInvoiceDocumentProcessorRequest(request, env); } };
-export const invoiceDocumentProcessorInternals = Object.freeze({ findInputDescriptors, resolveR2Inputs, framedBody, resultIdentity, buildMergeReceipt, flattenLeafInputReceipts, putImmutableProcessorArtifact, buildVerificationOnlyResult, processWithContainer, classifyError });
+export const invoiceDocumentProcessorInternals = Object.freeze({ findInputDescriptors, resolveR2Inputs, framedBody, resultIdentity, buildMergeReceipt, flattenLeafInputReceipts, putImmutableProcessorArtifact, buildVerificationOnlyResult, processWithContainer, classifyError, authenticateProcessorRequest });

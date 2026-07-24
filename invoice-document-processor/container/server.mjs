@@ -13,6 +13,7 @@ const MAX_INPUTS = 64;
 const MAX_SINGLE_INPUT_BYTES = 512 * 1024 * 1024;
 const MAX_AGGREGATE_BYTES = 1024 * 1024 * 1024;
 const MAX_CAPTURE_BYTES = 64 * 1024;
+const MAX_OUTPUT_BYTES = 512 * 1024 * 1024;
 const PROCESSOR_VERSION = 'cloudtms-native-qpdf-poppler-v4';
 
 function json(res, status, body) {
@@ -30,30 +31,51 @@ async function run(command, args, options = {}) {
   const timeoutMs = Math.max(1000, Math.min(300000, Number(options.timeoutMs || 120000)));
   return new Promise((resolve, reject) => {
     let settled = false;
+    let timedOut = false;
+    let timer = null;
+    let killTimer = null;
+    let forceSettleTimer = null;
     let stdout = '';
     let stderr = '';
     const child = spawn(command, args, { cwd: options.cwd, stdio: ['ignore','pipe','pipe'], env: { ...process.env, MAGICK_THREAD_LIMIT: '1', OMP_NUM_THREADS: '1' } });
-    const finish = (error, value) => {
+    const clearResources = () => {
+      if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      if (forceSettleTimer) clearTimeout(forceSettleTimer);
+      child.removeAllListeners();
+      child.stdout?.removeAllListeners();
+      child.stderr?.removeAllListeners();
+    };
+    const settle = (error, value) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer); clearTimeout(killTimer);
-      child.removeAllListeners(); child.stdout?.removeAllListeners(); child.stderr?.removeAllListeners();
+      clearResources();
       error ? reject(error) : resolve(value);
+    };
+    const timeoutError = () => Object.assign(
+      new Error('PROCESSOR_NATIVE_TIMEOUT'),
+      { code: 'PROCESSOR_NATIVE_TIMEOUT', category: 'PROCESSOR_TIMEOUT' }
+    );
+    const forceKill = () => {
+      try { child.kill('SIGKILL'); } catch {}
+      forceSettleTimer = setTimeout(() => settle(timeoutError()), 1000);
+    };
+    const beginTermination = () => {
+      if (timedOut || settled) return;
+      timedOut = true;
+      try { child.kill('SIGTERM'); } catch {}
+      killTimer = setTimeout(forceKill, 2000);
     };
     child.stdout.on('data', chunk => { stdout = boundedAppend(stdout, chunk); });
     child.stderr.on('data', chunk => { stderr = boundedAppend(stderr, chunk); });
-    child.once('error', error => finish(error));
+    child.once('error', error => settle(timedOut ? timeoutError() : error));
     child.once('close', code => {
+      if (timedOut) return settle(timeoutError());
       const allowed = options.allowedExitCodes || [0];
-      if (allowed.includes(code)) finish(null, { stdout, stderr, code });
-      else finish(Object.assign(new Error(`${command} exited ${code}: ${stderr.slice(0, 500)}`), { code: `${command.toUpperCase()}_FAILED` }));
+      if (allowed.includes(code)) settle(null, { stdout, stderr, code });
+      else settle(Object.assign(new Error(`${command} exited ${code}: ${stderr.slice(0, 500)}`), { code: `${command.toUpperCase()}_FAILED` }));
     });
-    let killTimer = null;
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      killTimer = setTimeout(() => child.kill('SIGKILL'), 2000);
-      finish(Object.assign(new Error('PROCESSOR_NATIVE_TIMEOUT'), { code: 'PROCESSOR_NATIVE_TIMEOUT', category: 'PROCESSOR_TIMEOUT' }));
-    }, timeoutMs);
+    timer = setTimeout(beginTermination, timeoutMs);
   });
 }
 
@@ -129,9 +151,16 @@ async function readFramedRequest(req, directory) {
   try { header = JSON.parse(pending.subarray(0, headerLength).toString('utf8')); }
   catch { throw Object.assign(new Error('PROCESSOR_HEADER_JSON_INVALID'), { code: 'PROCESSOR_HEADER_JSON_INVALID' }); }
   pending = pending.subarray(headerLength);
+  const action = String(header.action || '').toUpperCase();
+  if (!['ASSET_INSPECT','ASSET_NORMALISE','PDF_MERGE','DOCUMENT_VERIFY'].includes(action)) throw Object.assign(new Error('UNSUPPORTED_ACTION'), { code: 'UNSUPPORTED_ACTION' });
   const inputHeaders = Array.isArray(header.inputs) ? header.inputs : [];
   if (!inputHeaders.length || inputHeaders.length > MAX_INPUTS) throw Object.assign(new Error('PROCESSOR_INPUT_COUNT_INVALID'), { code: 'PROCESSOR_INPUT_COUNT_INVALID' });
-  const allowEmptyInput = String(header.action || '').toUpperCase() === 'ASSET_INSPECT';
+  if (action !== 'PDF_MERGE' && inputHeaders.length !== 1) throw Object.assign(new Error('PROCESSOR_INPUT_COUNT_INVALID'), { code: 'PROCESSOR_INPUT_COUNT_INVALID' });
+  const orders = inputHeaders.map(input => Number(input.input_order));
+  if (new Set(orders).size !== orders.length || orders.some((order, index) => !Number.isSafeInteger(order) || order !== index + 1)) {
+    throw Object.assign(new Error('PROCESSOR_INPUT_ORDER_INVALID'), { code: 'PROCESSOR_INPUT_ORDER_INVALID' });
+  }
+  const allowEmptyInput = action === 'ASSET_INSPECT';
   let aggregate = 0;
   for (const input of inputHeaders) {
     const size = Number(input.size_bytes);
@@ -142,12 +171,14 @@ async function readFramedRequest(req, directory) {
   const disk = await statfs(directory);
   if (Number(disk.bavail) * Number(disk.bsize) < aggregate * 2 + 128 * 1024 * 1024) throw Object.assign(new Error('PROCESSOR_TEMP_DISK_LIMIT'), { code: 'PROCESSOR_TEMP_DISK_LIMIT', category: 'POLICY_VIOLATION' });
   const files = [];
+  let actualAggregate = 0;
   for (let index = 0; index < inputHeaders.length; index += 1) {
     const input = inputHeaders[index];
     const path = join(directory, `input-${String(index + 1).padStart(4,'0')}.bin`);
     const output = createWriteStream(path, { flags: 'wx' });
     let remaining = Number(input.size_bytes);
     while (remaining > 0) {
+      if (req.aborted || req.destroyed) throw Object.assign(new Error('PROCESSOR_CLIENT_ABORTED'), { code: 'PROCESSOR_CLIENT_ABORTED', category: 'TRANSIENT_INFRASTRUCTURE' });
       if (!pending.length) {
         const next = await iterator.next();
         if (next.done) throw Object.assign(new Error('PROCESSOR_INPUT_TRUNCATED'), { code: 'PROCESSOR_INPUT_TRUNCATED' });
@@ -155,11 +186,16 @@ async function readFramedRequest(req, directory) {
       }
       const take = Math.min(remaining, pending.length);
       if (!output.write(pending.subarray(0, take))) await new Promise((resolve, reject) => { output.once('drain', resolve); output.once('error', reject); });
-      pending = pending.subarray(take); remaining -= take;
+      pending = pending.subarray(take); remaining -= take; actualAggregate += take;
     }
     output.end(); await new Promise((resolve, reject) => { output.once('finish', resolve); output.once('error', reject); });
     files.push({ ...input, path });
+    const currentDisk = await statfs(directory);
+    if (Number(currentDisk.bavail) * Number(currentDisk.bsize) < 64 * 1024 * 1024) {
+      throw Object.assign(new Error('PROCESSOR_TEMP_DISK_LIMIT'), { code: 'PROCESSOR_TEMP_DISK_LIMIT', category: 'POLICY_VIOLATION' });
+    }
   }
+  if (actualAggregate !== aggregate) throw Object.assign(new Error('PROCESSOR_AGGREGATE_SIZE_MISMATCH'), { code: 'PROCESSOR_AGGREGATE_SIZE_MISMATCH' });
   if (pending.length) throw Object.assign(new Error('PROCESSOR_TRAILING_DATA'), { code: 'PROCESSOR_TRAILING_DATA' });
   const trailing = await iterator.next();
   if (!trailing.done && Buffer.from(trailing.value).length) throw Object.assign(new Error('PROCESSOR_TRAILING_DATA'), { code: 'PROCESSOR_TRAILING_DATA' });
@@ -220,7 +256,10 @@ async function normaliseAsset(header, file, outputPath, timeoutMs) {
   return { ...output, actual_inputs: [{ input_order: 1, ...consumed, page_count: 1 }] };
 }
 
-async function mergePdfs(files, outputPath, timeoutMs) {
+async function mergePdfs(files, outputPath, timeoutMs, context = {}) {
+  const limits = context.limits || {};
+  const maximumInputs = safePositive(limits.max_inputs);
+  if (maximumInputs && files.length > maximumInputs) throw Object.assign(new Error('MERGE_INPUT_COUNT_EXCEEDS_POLICY'), { code: 'MERGE_INPUT_COUNT_EXCEEDS_POLICY', category: 'POLICY_VIOLATION' });
   const actualInputs = [];
   for (const [index, file] of files.entries()) {
     const actual = await actualInputMetadata(file, timeoutMs);
@@ -228,6 +267,10 @@ async function mergePdfs(files, outputPath, timeoutMs) {
     if (file.expected_sha256 && file.expected_sha256 !== actual.sha256) throw Object.assign(new Error('INPUT_SHA256_MISMATCH'), { code: 'INPUT_SHA256_MISMATCH' });
     actualInputs.push(actual);
   }
+  const inputBytes = actualInputs.reduce((sum, input) => sum + input.size_bytes, 0);
+  const inputPages = actualInputs.reduce((sum, input) => sum + input.page_count, 0);
+  if (safePositive(limits.max_input_bytes) && inputBytes > Number(limits.max_input_bytes)) throw Object.assign(new Error('MERGE_INPUT_BYTES_EXCEED_POLICY'), { code: 'MERGE_INPUT_BYTES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
+  if (safePositive(limits.max_pages) && inputPages > Number(limits.max_pages)) throw Object.assign(new Error('MERGE_INPUT_PAGES_EXCEED_POLICY'), { code: 'MERGE_INPUT_PAGES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
   const args = ['--empty','--pages']; for (const file of files) args.push(file.path,'1-z'); args.push('--',outputPath);
   await run('qpdf', args, { timeoutMs });
   const output = await pdfMetadata(outputPath, timeoutMs);
@@ -264,8 +307,13 @@ async function processRequest(req, res) {
     const outputPath = join(directory, 'output.pdf');
     const metadata = action === 'ASSET_NORMALISE'
       ? await normaliseAsset(header, files[0], outputPath, timeoutMs)
-      : action === 'PDF_MERGE' ? await mergePdfs(files, outputPath, timeoutMs) : (() => { throw Object.assign(new Error('UNSUPPORTED_ACTION'), { code: 'UNSUPPORTED_ACTION' }); })();
+      : action === 'PDF_MERGE' ? await mergePdfs(files, outputPath, timeoutMs, header.context || {}) : (() => { throw Object.assign(new Error('UNSUPPORTED_ACTION'), { code: 'UNSUPPORTED_ACTION' }); })();
     const outputStat = await stat(outputPath);
+    const limits = action === 'ASSET_NORMALISE'
+      ? (header.context?.output_profile || {})
+      : (header.context?.limits || {});
+    const outputLimit = safePositive(limits.max_output_bytes || limits.max_part_bytes || limits.max_merge_output_bytes) || MAX_OUTPUT_BYTES;
+    if (outputStat.size > Math.min(outputLimit, MAX_OUTPUT_BYTES)) throw Object.assign(new Error('PROCESSOR_OUTPUT_BYTES_EXCEED_POLICY'), { code: 'PROCESSOR_OUTPUT_BYTES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
     const result = { ok: true, sha256: await sha256File(outputPath), size_bytes: outputStat.size, ...metadata, processor_version: PROCESSOR_VERSION };
     res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': String(outputStat.size), 'x-cloudtms-result': Buffer.from(JSON.stringify(result)).toString('base64url') });
     await pipeline(createReadStream(outputPath), res);

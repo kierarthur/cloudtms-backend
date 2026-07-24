@@ -57,6 +57,7 @@ import {
   handleInvoiceAsyncHttpRequest
 } from './invoice-async-http.js';
 import {
+  checkInvoiceDocumentProcessorReady,
   drainInvoiceOperations,
   getInvoiceQueueRuntimeConfig,
   handleInvoiceQueueDrainRequest,
@@ -120861,19 +120862,21 @@ async function fetchAttachmentBase64FromR2(env, r2Key, expected = {}) {
       : Number(env.EMAIL_MAX_ATTACHMENT_BYTES || 25 * 1024 * 1024)));
 
   if (strictInvoiceIdentity) {
-    if (!/^[0-9a-f]{64}$/.test(expectedHash)) throw new Error('R2_ATTACHMENT_HASH_REQUIRED');
-    if (!Number.isSafeInteger(expectedSize) || expectedSize <= 0) throw new Error('R2_ATTACHMENT_SIZE_REQUIRED');
-    if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0) throw new Error('R2_ATTACHMENT_FROZEN_LIMIT_REQUIRED');
-    if (expectedSize > maximumBytes) throw new Error('R2_ATTACHMENT_TOO_LARGE');
+    if (!/^[0-9a-f]{64}$/.test(expectedHash)) throw new Error('ATTACHMENT_HASH_REQUIRED');
+    if (!Number.isSafeInteger(expectedSize) || expectedSize <= 0) throw new Error('ATTACHMENT_SIZE_REQUIRED');
+    if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0) throw new Error('INVOICE_ATTACHMENT_FROZEN_LIMIT_REQUIRED');
+    if (expectedSize > maximumBytes) throw new Error('ATTACHMENT_TOO_LARGE');
   }
 
   const obj = await bucket.get(r2Key);
-  if (!obj) throw new Error('R2_ATTACHMENT_NOT_FOUND');
-  if (strictInvoiceIdentity && Number(obj.size) !== expectedSize) throw new Error('R2_ATTACHMENT_SIZE_MISMATCH');
-  if (Number(obj.size) > maximumBytes) throw new Error('R2_ATTACHMENT_TOO_LARGE');
+  if (!obj) throw new Error(strictInvoiceIdentity ? 'ATTACHMENT_MISSING' : 'R2_ATTACHMENT_NOT_FOUND');
+  if (strictInvoiceIdentity && Number(obj.size) !== expectedSize) throw new Error('ATTACHMENT_SIZE_MISMATCH');
+  if (Number(obj.size) > maximumBytes) {
+    throw new Error(strictInvoiceIdentity ? 'ATTACHMENT_TOO_LARGE' : 'R2_ATTACHMENT_TOO_LARGE');
+  }
   if (strictInvoiceIdentity) {
     const storedHash = String(obj.customMetadata?.sha256 || '').trim().toLowerCase();
-    if (!storedHash || storedHash !== expectedHash) throw new Error('R2_ATTACHMENT_HASH_MISMATCH');
+    if (!storedHash || storedHash !== expectedHash) throw new Error('ATTACHMENT_HASH_MISMATCH');
   }
 
   const arrBuf = await obj.arrayBuffer();
@@ -120882,7 +120885,7 @@ async function fetchAttachmentBase64FromR2(env, r2Key, expected = {}) {
     const actualHash = Array.from(new Uint8Array(digest))
       .map(value => value.toString(16).padStart(2, '0'))
       .join('');
-    if (actualHash !== expectedHash) throw new Error('R2_ATTACHMENT_HASH_MISMATCH');
+    if (actualHash !== expectedHash) throw new Error('ATTACHMENT_HASH_MISMATCH');
   }
   return base64FromArrayBuffer(arrBuf);
 }
@@ -155144,7 +155147,46 @@ async function handleReady(env) {
   if (!env.R2) missing.push('R2');
   for (const key of ['SESSION_TOKEN_SECRET','UPLOAD_TOKEN_SECRET']) if (!env[key]) missing.push(key);
   const parsed = parseInvoiceAsyncAllowedUserIds(env.INVOICE_ASYNC_ALLOWED_USER_IDS);
-  const diagnostics = { ready: false, async_pipeline_enabled: isInvoiceAsyncPipelineEnabled(env), processor_enabled: String(env.INVOICE_DOCUMENT_PROCESSOR_ENABLED || '').toLowerCase() === 'true', controlled_cohort_enabled: false, allowed_user_count: 0, system_actor_valid: false, dispatcher_ready: false };
+  const diagnostics = {
+    ready: false,
+    backend_ready: false,
+    processor_ready: false,
+    dispatcher_ready: false,
+    interactive_async_ready: false,
+    scheduled_async_ready: false,
+    async_pipeline_enabled: isInvoiceAsyncPipelineEnabled(env),
+    scheduled_async_enabled: String(env.INVOICE_ASYNC_SCHEDULED_ENABLED || '').toLowerCase() === 'true',
+    processor_enabled: String(env.INVOICE_DOCUMENT_PROCESSOR_ENABLED || '').toLowerCase() === 'true',
+    controlled_cohort_enabled: false,
+    allowed_user_count: 0,
+    system_actor_valid: false
+  };
+  if (diagnostics.processor_enabled) {
+    if (!env.INVOICE_DOCUMENT_PROCESSOR) missing.push('INVOICE_DOCUMENT_PROCESSOR');
+    if (!env.INVOICE_DOCUMENT_PROCESSOR_SECRET) missing.push('INVOICE_DOCUMENT_PROCESSOR_SECRET');
+    const processor = await checkInvoiceDocumentProcessorReady(env).catch(() => ({ ok: false }));
+    diagnostics.processor_ready = processor.ok === true;
+    if (!diagnostics.processor_ready) missing.push('INVOICE_DOCUMENT_PROCESSOR_NOT_READY');
+  }
+  const continuationEnabled = String(env.INVOICE_QUEUE_CONTINUATION_ENABLED || 'true').toLowerCase() === 'true';
+  if (continuationEnabled) {
+    if (!env.INVOICE_QUEUE_DISPATCHER) missing.push('INVOICE_QUEUE_DISPATCHER');
+    if (!env.INVOICE_QUEUE_DISPATCH_SECRET) missing.push('INVOICE_QUEUE_DISPATCH_SECRET');
+    if (env.INVOICE_QUEUE_DISPATCHER) {
+      try {
+        const response = await env.INVOICE_QUEUE_DISPATCHER.fetch(
+          'https://invoice-queue-dispatcher.internal/ready',
+          { headers: { 'x-cloudtms-internal-service': 'invoice-queue-main-v1' } }
+        );
+        diagnostics.dispatcher_ready = response.ok;
+      } catch {
+        diagnostics.dispatcher_ready = false;
+      }
+      if (!diagnostics.dispatcher_ready) missing.push('INVOICE_QUEUE_DISPATCHER_NOT_READY');
+    }
+  } else {
+    diagnostics.dispatcher_ready = true;
+  }
   if (diagnostics.async_pipeline_enabled) {
     diagnostics.controlled_cohort_enabled = parsed.ok && parsed.ids.length > 0;
     diagnostics.allowed_user_count = parsed.ok ? parsed.ids.length : 0;
@@ -155152,17 +155194,25 @@ async function handleReady(env) {
     if (!parsed.ids.length) missing.push('INVOICE_ASYNC_ALLOWED_USER_IDS_EMPTY');
     missing.push(...validateQueueRuntimeConfiguration(env).errors);
     if (!env.BROWSER) missing.push('BROWSER');
-    if (!env.INVOICE_DOCUMENT_PROCESSOR) missing.push('INVOICE_DOCUMENT_PROCESSOR');
-    if (!env.INVOICE_QUEUE_DISPATCHER) missing.push('INVOICE_QUEUE_DISPATCHER');
     if (!env.INVOICE_DOCUMENT_ACCESS_SECRET) missing.push('INVOICE_DOCUMENT_ACCESS_SECRET');
-    if (!env.INVOICE_QUEUE_DISPATCH_SECRET) missing.push('INVOICE_QUEUE_DISPATCH_SECRET');
     diagnostics.system_actor_valid = await validateInvoiceSystemActor(env, getInvoiceQueueRuntimeConfig(env).systemActorUserId).catch(() => false);
     if (!diagnostics.system_actor_valid) missing.push('INVOICE_SYSTEM_ACTOR_INVALID');
-    if (env.INVOICE_QUEUE_DISPATCHER) {
-      try { const response = await env.INVOICE_QUEUE_DISPATCHER.fetch('https://invoice-queue-dispatcher.internal/ready', { headers: { 'x-cloudtms-internal-service': 'invoice-queue-main-v1' } }); diagnostics.dispatcher_ready = response.ok; } catch { diagnostics.dispatcher_ready = false; }
-      if (!diagnostics.dispatcher_ready) missing.push('INVOICE_QUEUE_DISPATCHER_NOT_READY');
-    }
   }
+  if (diagnostics.scheduled_async_enabled && !diagnostics.async_pipeline_enabled) missing.push('INVOICE_SCHEDULED_ASYNC_PIPELINE_DISABLED');
+  if (diagnostics.scheduled_async_enabled && !diagnostics.system_actor_valid) {
+    diagnostics.system_actor_valid = await validateInvoiceSystemActor(env, getInvoiceQueueRuntimeConfig(env).systemActorUserId).catch(() => false);
+    if (!diagnostics.system_actor_valid) missing.push('INVOICE_SYSTEM_ACTOR_INVALID');
+  }
+  diagnostics.backend_ready = missing.filter(code => !String(code).startsWith('INVOICE_')).length === 0;
+  diagnostics.interactive_async_ready = diagnostics.async_pipeline_enabled
+    && diagnostics.processor_ready
+    && diagnostics.dispatcher_ready
+    && diagnostics.controlled_cohort_enabled
+    && diagnostics.system_actor_valid;
+  diagnostics.scheduled_async_ready = diagnostics.scheduled_async_enabled
+    && diagnostics.processor_ready
+    && diagnostics.dispatcher_ready
+    && diagnostics.system_actor_valid;
   diagnostics.ready = missing.length === 0;
   if (!diagnostics.ready) diagnostics.code = 'CLOUDTMS_CONFIGURATION_INCOMPLETE';
   return new Response(JSON.stringify(diagnostics), { status: diagnostics.ready ? 200 : 503, headers: { ...JSON_HEADERS, 'cache-control': 'no-store' } });

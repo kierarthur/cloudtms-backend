@@ -7,7 +7,10 @@ import {
 import {
   getInvoiceQueueRuntimeConfig,
   invoiceQueueRuntimeInternals,
-  processInvoiceDatabaseChunksBatch
+  processInvoiceDatabaseChunksBatch,
+  processInvoiceDocumentChunksBatch,
+  drainInvoiceOperations,
+  runInvoiceReconciliationCycle
 } from '../broker/src/invoice-queue-runtime.js';
 import {
   buildAttachmentIndexHtml,
@@ -47,6 +50,32 @@ test('runtime configuration is disabled by default and clamps every limit', () =
   assert.equal(config.scheduledDrainDeadlineMs, 25000);
   assert.equal(config.assetConcurrency, 8);
   assert.equal(config.maximumContinuationDepth, 4);
+});
+
+test('unified outbox cursor is signed, filter-bound and preserves independent source positions', async () => {
+  const env = { SESSION_TOKEN_SECRET: 'test-session-secret-with-more-than-thirty-two-characters' };
+  const payload = {
+    v: 1,
+    snapshot_at_utc: '2026-07-24T12:00:00.000Z',
+    filters_hash: 'a'.repeat(64),
+    sort: 'created_at_utc_desc_channel_rank_id_desc',
+    legacy: {
+      created_at_utc: '2026-07-24T11:59:00.000Z',
+      id: '00000000-0000-4000-8000-000000000001'
+    },
+    invoice: {
+      created_at_utc: '2026-07-24T11:58:00.000Z',
+      id: '00000000-0000-4000-8000-000000000002'
+    },
+    totals: { legacy: 12, invoice: 8 }
+  };
+  const token = await invoiceAsyncHttpInternals.encodeUnifiedOutboxCursor(env, payload);
+  assert.deepEqual(await invoiceAsyncHttpInternals.decodeUnifiedOutboxCursor(env, token), payload);
+  const tampered = `${token.slice(0, -1)}${token.endsWith('a') ? 'b' : 'a'}`;
+  await assert.rejects(
+    () => invoiceAsyncHttpInternals.decodeUnifiedOutboxCursor(env, tampered),
+    /OUTBOX_CURSOR_INVALID/
+  );
 });
 
 test('database batch advances all claims through one RPC call', async () => {
@@ -269,8 +298,8 @@ test('document view returns 200 only for an exact READY version', async () => {
         }
       }
     );
-    assert.equal(response.status, 200);
     const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
     assert.equal(body.ready, true);
     assert.equal(body.document_version.sha256, 'a'.repeat(64));
   } finally {
@@ -286,17 +315,25 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
         ? request
         : (request instanceof URL ? request.href : request.url)
     );
-    assert.equal(url.pathname, '/rest/v1/invoice_operations');
-    return new Response(JSON.stringify([{
-      id: '00000000-0000-4000-8000-000000000030',
-      operation_type: 'BUILD_DOCUMENT',
-      entity_type: 'INVOICE',
-      entity_id: '00000000-0000-4000-8000-000000000031',
-      status: 'RUNNING',
-      phase: 'RENDERING',
-      created_at_utc: '2026-07-24T12:00:00.000Z',
-      run_after_utc: null
-    }]), {
+    assert.ok(['/rest/v1/invoice_operations', '/rest/v1/v_outbox_unified'].includes(url.pathname));
+    const rows = url.pathname === '/rest/v1/invoice_operations'
+      ? [{
+          id: '00000000-0000-4000-8000-000000000030',
+          operation_type: 'BUILD_DOCUMENT',
+          entity_type: 'INVOICE',
+          entity_id: '00000000-0000-4000-8000-000000000031',
+          status: 'RUNNING',
+          phase: 'RENDERING',
+          created_at_utc: '2026-07-24T12:00:00.000Z',
+          run_after_utc: null
+        }]
+      : [{
+          channel: 'EMAIL',
+          outbox_id: '00000000-0000-4000-8000-000000000032',
+          status: 'QUEUED',
+          created_at_utc: '2026-07-24T11:00:00.000Z'
+        }];
+    return new Response(JSON.stringify(rows), {
       status: 200,
       headers: {
         'content-type': 'application/json',
@@ -311,6 +348,7 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
         INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
         SUPABASE_URL: 'https://supabase.test',
         SUPABASE_SERVICE_ROLE_KEY: 'test-only',
+        SESSION_TOKEN_SECRET: 'test-session-secret-with-more-than-thirty-two-characters',
         INVOICE_ASYNC_ALLOWED_USER_IDS: '00000000-0000-4000-8000-000000000010'
       },
       {},
@@ -319,22 +357,11 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
           id: '00000000-0000-4000-8000-000000000010',
           role: 'admin'
         }),
-        rpc: async name => {
-          assert.equal(name, 'outbox_unified_list');
-          return {
-            items: [{
-              channel: 'EMAIL',
-              outbox_id: '00000000-0000-4000-8000-000000000032',
-              status: 'QUEUED',
-              created_at_utc: '2026-07-24T11:00:00.000Z'
-            }],
-            total_count: 1
-          };
-        }
+        rpc: async () => { throw new Error('Unified cursor listing must not use the offset RPC'); }
       }
     );
-    assert.equal(response.status, 200);
     const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
     assert.equal(body.total_count, 2);
     assert.equal(body.items[0].channel, 'INVOICE');
     assert.equal(body.items[1].channel, 'EMAIL');
@@ -506,4 +533,328 @@ test('unrelated API routes bypass async admin and cohort checks', async () => {
   );
   assert.equal(response, null);
   assert.equal(authCalls, 0);
+});
+
+test('complete heartbeat RPC failure aborts owned work before completion submission', async () => {
+  const chunkId = '00000000-0000-4000-8000-000000000041';
+  const leaseToken = '00000000-0000-4000-8000-000000000042';
+  let completionCalled = false;
+  let processorAborted = false;
+  const claim = {
+    chunk_id: chunkId,
+    lease_token: leaseToken,
+    fence_token: 4,
+    operation_control_version: 1,
+    lease_expires_at_utc: new Date(Date.now() + 120_000).toISOString()
+  };
+  const config = {
+    ...getInvoiceQueueRuntimeConfig({}),
+    processorEnabled: true,
+    heartbeatMs: 10,
+    heartbeatFailureAbortMarginMs: 30_000,
+    maximumConsecutiveHeartbeatFailures: 1,
+    finalOwnershipCheckRequired: true,
+    assetConcurrency: 1,
+    nativeRequestTimeoutMs: 5000
+  };
+  const env = {
+    INVOICE_DOCUMENT_PROCESSOR_SECRET:
+      'processor-test-secret-with-more-than-thirty-two-characters',
+    INVOICE_DOCUMENT_PROCESSOR: {
+      fetch(_url, init) {
+        return new Promise((resolve, reject) => {
+          init.signal.addEventListener('abort', () => {
+            processorAborted = true;
+            reject(Object.assign(new Error('aborted'), { code: 'PROCESSOR_ABORTED' }));
+          }, { once: true });
+        });
+      }
+    }
+  };
+  const result = await processInvoiceDocumentChunksBatch(env, [claim], {
+    config,
+    rpc: async name => {
+      if (name === 'invoice_work_context_batch') {
+        return [{
+          accepted: true,
+          status: 'OK',
+          chunk_id: chunkId,
+          chunk_type: 'ASSET_INSPECT',
+          expected_result_identity: {
+            chunk_id: chunkId,
+            fence_token: 4,
+            action: 'ASSET_INSPECT',
+            plan_generation: 1,
+            processor_policy_version: 'INVOICE_PROCESSOR_LIMITS_V4',
+            immutable_destination_prefix: 'invoice-assets/test/'
+          },
+          original_r2_key: 'source/test.pdf'
+        }];
+      }
+      if (name === 'invoice_work_touch_batch') {
+        throw Object.assign(new Error('touch unavailable'), { code: 'TOUCH_UNAVAILABLE' });
+      }
+      if (name === 'invoice_work_complete_batch') {
+        completionCalled = true;
+        return [];
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    }
+  });
+  assert.equal(processorAborted, true);
+  assert.equal(completionCalled, false);
+  assert.equal(result.ownership_lost, 1);
+  assert.equal(result.completed, 0);
+});
+
+test('USER_NUDGE advances database work only and dispatches released document lanes', async () => {
+  const claimedTypes = [];
+  const dispatcherPayloads = [];
+  let claimCount = 0;
+  const result = await drainInvoiceOperations({
+    INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
+    INVOICE_QUEUE_DISPATCH_SECRET:
+      'dispatcher-test-secret-with-more-than-thirty-two-characters',
+    INVOICE_QUEUE_DISPATCHER: {
+      async fetch(_url, init) {
+        dispatcherPayloads.push(JSON.parse(init.body));
+        return new Response('{}', { status: 202 });
+      }
+    }
+  }, {
+    mode: 'user_nudge',
+    lanes: ['DATABASE'],
+    config: {
+      ...getInvoiceQueueRuntimeConfig({}),
+      enabled: true,
+      userNudgeDatabaseClaimLimit: 2,
+      userNudgeDocumentClaimLimit: 2,
+      userNudgeCycles: 1,
+      userNudgeDeadlineMs: 5000,
+      scheduledDocumentClaimLimit: 2,
+      safetyMarginMs: 100,
+      continuationEnabled: true,
+      maximumContinuationDepth: 4
+    },
+    rpc: async (name, args) => {
+      if (name === 'invoice_work_claim_batch') {
+        claimedTypes.push(args.p_chunk_types);
+        claimCount += 1;
+        return claimCount === 1 ? [{
+          chunk_id: '00000000-0000-4000-8000-000000000051',
+          lease_token: '00000000-0000-4000-8000-000000000052',
+          fence_token: 1,
+          operation_control_version: 1
+        }] : [];
+      }
+      if (name === 'invoice_operation_advance_batch') {
+        return [{
+          accepted: true,
+          status: 'WAITING',
+          released_chunk_types: ['PDF_MERGE']
+        }];
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    }
+  });
+  assert.equal(claimedTypes.length, 1);
+  assert.equal(claimedTypes[0].includes('PDF_MERGE'), false);
+  assert.equal(result.document.claimed, 0);
+  assert.equal(result.continuation_dispatched, true);
+  assert.ok(dispatcherPayloads[0].lanes.includes('PDF_MERGE'));
+});
+
+test('reconciliation uses bounded keyset pages and emits a signed continuation cursor', async () => {
+  const originalFetch = globalThis.fetch;
+  const actor = '00000000-0000-4000-8000-000000000060';
+  const dispatcherBodies = [];
+  let scopePage = 0;
+  globalThis.fetch = async request => {
+    const url = new URL(
+      typeof request === 'string'
+        ? request
+        : (request instanceof URL ? request.href : request.url)
+    );
+    if (url.pathname.endsWith('/tms_users')) {
+      return new Response(JSON.stringify([{ id: actor, is_active: true, role: 'admin' }]), { status: 200 });
+    }
+    assert.ok(url.pathname.endsWith('/invoice_operations'));
+    scopePage += 1;
+    const start = (scopePage - 1) * 2;
+    const rows = Array.from({ length: 3 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(start + index + 70).padStart(12, '0')}`,
+      updated_at_utc: new Date(Date.UTC(2026, 6, 20, 0, 0, start + index)).toISOString()
+    }));
+    return new Response(JSON.stringify(rows), { status: 200 });
+  };
+  try {
+    const result = await runInvoiceReconciliationCycle({
+      INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
+      INVOICE_ACTOR_USER_ID: actor,
+      SUPABASE_URL: 'https://supabase.test',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-only',
+      INVOICE_QUEUE_DISPATCH_SECRET:
+        'dispatcher-test-secret-with-more-than-thirty-two-characters',
+      INVOICE_QUEUE_DISPATCHER: {
+        async fetch(_url, init) {
+          dispatcherBodies.push(JSON.parse(init.body));
+          return new Response('{}', { status: 202 });
+        }
+      }
+    }, {
+      config: {
+        ...getInvoiceQueueRuntimeConfig({}),
+        enabled: true,
+        reconciliationPageSize: 2,
+        reconciliationMaximumPagesPerInvocation: 1,
+        continuationEnabled: true,
+        maximumContinuationDepth: 4
+      },
+      rpc: async name => {
+        if (name === 'invoice_operation_start_batch') {
+          return [{
+            accepted: true,
+            operation_id: '00000000-0000-4000-8000-000000000090',
+            operation_type: 'RECONCILE',
+            status: 'QUEUED'
+          }];
+        }
+        if (name === 'invoice_work_claim_batch') return [];
+        throw new Error(`Unexpected RPC ${name}`);
+      }
+    });
+    assert.equal(result.rows_examined, 2);
+    assert.equal(result.continuation_requested, true);
+    assert.ok(result.next_cursor.operation_id);
+    assert.ok(dispatcherBodies.some(body => body.reconciliation_cursor));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('capabilities remain available while async is disabled and do not disclose cohort IDs', async () => {
+  const actor = '00000000-0000-4000-8000-000000000010';
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoice-async/capabilities'),
+    {
+      INVOICE_ASYNC_PIPELINE_ENABLED: 'false',
+      INVOICE_DOCUMENT_PROCESSOR_ENABLED: 'true',
+      INVOICE_ASYNC_ALLOWED_USER_IDS: actor
+    },
+    {},
+    {
+      requireUser: async () => ({ id: actor, role: 'admin', active: true }),
+      rpc: async () => assert.fail('Capability route must not call a queue RPC')
+    }
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.pipeline_enabled, false);
+  assert.equal(body.enabled_for_user, false);
+  assert.equal(JSON.stringify(body).includes(actor), false);
+});
+
+test('single issue requires the revision reviewed by the modal', async () => {
+  const actor = '00000000-0000-4000-8000-000000000010';
+  const invoice = '00000000-0000-4000-8000-000000000011';
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request(`https://example.test/api/invoices/${invoice}/issue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}'
+    }),
+    {
+      INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
+      INVOICE_DOCUMENT_PROCESSOR_ENABLED: 'true',
+      INVOICE_ASYNC_ALLOWED_USER_IDS: actor
+    },
+    {},
+    {
+      requireUser: async () => ({ id: actor, role: 'admin', active: true }),
+      rpc: async () => assert.fail('Issue RPC must not run without expected revision')
+    }
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, 'EXPECTED_INVOICE_REVISION_REQUIRED');
+});
+
+test('batch generation re-resolves selected scopes and correlates start results by command_no', async () => {
+  const actor = '00000000-0000-4000-8000-000000000010';
+  const timesheet = '00000000-0000-4000-8000-000000000011';
+  const scopeKey = 'scope:client:week';
+  const calls = [];
+  const background = [];
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoices/batch-generate/confirm', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'batch-root-token'
+      },
+      body: JSON.stringify({
+        rows: [{
+          scope_key: scopeKey,
+          canonical_source_revision: 'revision-1',
+          canonical_command: {
+            source_ids: ['00000000-0000-4000-8000-999999999999'],
+            actor_user_id: '00000000-0000-4000-8000-999999999998'
+          }
+        }]
+      })
+    }),
+    {
+      INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
+      INVOICE_DOCUMENT_PROCESSOR_ENABLED: 'true',
+      INVOICE_ASYNC_ALLOWED_USER_IDS: actor
+    },
+    {
+      waitUntil(promise) {
+        background.push(promise);
+      }
+    },
+    {
+      requireUser: async () => ({ id: actor, role: 'admin', active: true }),
+      rpc: async (name, args) => {
+        calls.push({ name, args });
+        if (name === 'invoice_batch_generate_candidates') {
+          assert.deepEqual(args.p_scope_keys, [scopeKey]);
+          return [{
+            client_id: '00000000-0000-4000-8000-000000000012',
+            groups: [{
+              group_key: scopeKey,
+              canonical_source_revision: 'revision-1',
+              command_payload: {
+                command_type: 'GENERATE_SELECTED',
+                group_key: scopeKey,
+                canonical_source_ids: [timesheet],
+                canonical_source_members: [{
+                  source_type: 'TIMESHEET',
+                  source_id: timesheet
+                }],
+                source_revision: 'revision-1'
+              }
+            }]
+          }];
+        }
+        if (name === 'invoice_operation_start_batch') {
+          assert.deepEqual(args.p_commands[0].source_ids, [timesheet]);
+          assert.equal(args.p_commands[0].actor_user_id, undefined);
+          return [{
+            command_no: 1,
+            accepted: true,
+            created: true,
+            status: 'QUEUED',
+            operation_id: '00000000-0000-4000-8000-000000000013'
+          }];
+        }
+        if (name === 'invoice_work_claim_batch') return [];
+        throw new Error(`Unexpected RPC ${name}`);
+      }
+    }
+  );
+  assert.equal(response.status, 202);
+  const result = await response.json();
+  assert.equal(result.results_invoices[0].scope_key, scopeKey);
+  assert.equal(calls.filter(call => call.name === 'invoice_operation_start_batch').length, 1);
+  await Promise.all(background);
 });

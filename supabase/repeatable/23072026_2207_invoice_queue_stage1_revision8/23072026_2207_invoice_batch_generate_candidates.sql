@@ -1,12 +1,44 @@
+drop function if exists public.invoice_batch_generate_candidates(boolean,integer);
+
 create or replace function public.invoice_batch_generate_candidates(
   p_allow_early boolean default false,
-  p_limit integer default 5000
+  p_limit integer default 5000,
+  p_scope_keys text[] default null
 ) returns jsonb
-language sql
+language plpgsql
 stable
 security definer
 set search_path to 'public','private','extensions','pg_temp'
 as $function$
+declare
+  v_scope_keys text[];
+begin
+  if p_scope_keys is not null then
+    if cardinality(p_scope_keys)>500 then
+      raise exception using
+        errcode='22023',
+        message='CANDIDATE_SCOPE_KEY_LIMIT_EXCEEDED';
+    end if;
+    if exists(
+      select 1
+      from unnest(p_scope_keys) value
+      where value is null
+        or btrim(value)=''
+        or length(btrim(value))>512
+    ) then
+      raise exception using
+        errcode='22023',
+        message='CANDIDATE_SCOPE_KEY_INVALID';
+    end if;
+    select coalesce(array_agg(value order by value),'{}'::text[])
+    into v_scope_keys
+    from(
+      select distinct btrim(raw_value) value
+      from unnest(p_scope_keys) raw_value
+    ) deduplicated;
+  end if;
+
+  return(
 with anchor as materialized (
   select now() evaluation_utc,(now() at time zone 'Europe/London')::date today
 ),
@@ -35,8 +67,14 @@ resolved_groups as materialized (
 groups as materialized (
   select r.*
   from resolved_groups r
+  where v_scope_keys is null
+     or r.group_key=any(v_scope_keys)
   order by r.target_invoice_week nulls last,r.client_id,r.invoice_stream,r.group_key
-  limit greatest(1,least(coalesce(p_limit,5000),20000))
+  limit case
+    when v_scope_keys is null
+      then greatest(1,least(coalesce(p_limit,5000),20000))
+    else 500
+  end
 ),
 group_sources as materialized (
   select g.*,m.value member,
@@ -442,9 +480,11 @@ select coalesce(jsonb_agg(jsonb_build_object(
   ),0)
 ) order by c.client_name,c.client_id),'[]'::jsonb)
 from clients c;
+  );
+end;
 $function$;
 
-revoke all on function public.invoice_batch_generate_candidates(boolean,integer)
+revoke all on function public.invoice_batch_generate_candidates(boolean,integer,text[])
   from public,anon,authenticated;
-grant execute on function public.invoice_batch_generate_candidates(boolean,integer)
+grant execute on function public.invoice_batch_generate_candidates(boolean,integer,text[])
   to service_role;

@@ -5,6 +5,11 @@ import {
   buildProfessionalInvoiceHtml
 } from './invoice-document-templates.js';
 import { signInvoiceDrainRequest, verifyInvoiceDrainSignature } from './invoice-queue-security.js';
+import {
+  invoiceProcessorIdentityHeaders,
+  invoiceProcessorSha256Hex,
+  signInvoiceProcessorRequest
+} from '../../shared/invoice-processor-security.js';
 
 export const INVOICE_DATABASE_CHUNK_TYPES = Object.freeze([
   'GENERATION_GROUP',
@@ -112,6 +117,15 @@ export function getInvoiceQueueRuntimeConfig(env = {}) {
     browserRenderTimeoutMs: parseBoundedInteger(env.INVOICE_BROWSER_RENDER_TIMEOUT_MS, 45000, 5000, 90000),
     browserRenderOutputMaxBytes: parseBoundedInteger(env.INVOICE_BROWSER_RENDER_OUTPUT_MAX_BYTES, 16777216, 1048576, 67108864),
     browserRenderOutputMaxPages: parseBoundedInteger(env.INVOICE_BROWSER_RENDER_OUTPUT_MAX_PAGES, 250, 1, 1000),
+    browserInMemoryPdfMaxBytes: parseBoundedInteger(env.INVOICE_BROWSER_MEMORY_PDF_MAX_BYTES, 16777216, 1048576, 33554432),
+    heartbeatFailureAbortMarginMs: parseBoundedInteger(env.INVOICE_HEARTBEAT_FAILURE_ABORT_MARGIN_MS, 30000, 5000, 90000),
+    maximumConsecutiveHeartbeatFailures: parseBoundedInteger(env.INVOICE_MAXIMUM_CONSECUTIVE_HEARTBEAT_FAILURES, 2, 1, 5),
+    finalOwnershipCheckRequired: parseBooleanFlag(env.INVOICE_FINAL_OWNERSHIP_CHECK_REQUIRED, true),
+    maximumEmbeddedRenderAssets: parseBoundedInteger(env.INVOICE_MAXIMUM_EMBEDDED_RENDER_ASSETS, 4, 1, 16),
+    maximumEmbeddedRenderAssetBytes: parseBoundedInteger(env.INVOICE_MAXIMUM_EMBEDDED_RENDER_ASSET_BYTES, 4194304, 262144, 16777216),
+    reconciliationPageSize: parseBoundedInteger(env.INVOICE_RECONCILIATION_PAGE_SIZE, 100, 1, 100),
+    reconciliationMaximumPagesPerInvocation: parseBoundedInteger(env.INVOICE_RECONCILIATION_MAXIMUM_PAGES, 4, 1, 4),
+    userNudgeProcessesExternalWork: parseBooleanFlag(env.INVOICE_USER_NUDGE_PROCESSES_EXTERNAL_WORK, false),
     processorPolicyVersion: String(env.INVOICE_PROCESSOR_POLICY_VERSION || PROCESSOR_POLICY_VERSION),
     systemActorUserId: String(env.INVOICE_ACTOR_USER_ID || '').trim()
   };
@@ -126,6 +140,11 @@ export function validateQueueRuntimeConfiguration(env = {}) {
   if (config.enabled && !config.processorEnabled) errors.push('INVOICE_PROCESSOR_DISABLED');
   if (config.enabled && !config.systemActorUserId) errors.push('INVOICE_ACTOR_USER_ID_MISSING');
   if (config.enabled && !env.INVOICE_QUEUE_DISPATCHER) errors.push('INVOICE_QUEUE_DISPATCHER_BINDING_MISSING');
+  if (config.processorEnabled && !env.INVOICE_DOCUMENT_PROCESSOR) errors.push('INVOICE_DOCUMENT_PROCESSOR_BINDING_MISSING');
+  if (config.processorEnabled && !env.INVOICE_DOCUMENT_PROCESSOR_SECRET) errors.push('INVOICE_DOCUMENT_PROCESSOR_SECRET_MISSING');
+  if (config.browserRenderOutputMaxBytes > config.browserInMemoryPdfMaxBytes) errors.push('INVOICE_BROWSER_MEMORY_LIMIT_INVALID');
+  if (config.heartbeatFailureAbortMarginMs >= config.leaseSeconds * 1000) errors.push('INVOICE_HEARTBEAT_ABORT_MARGIN_INVALID');
+  if (config.userNudgeProcessesExternalWork) errors.push('INVOICE_USER_NUDGE_EXTERNAL_WORK_UNSAFE');
   return { ok: errors.length === 0, errors, config };
 }
 
@@ -256,15 +275,21 @@ async function putImmutableInvoiceArtifact(bucket, key, bytes, metadata) {
 function deriveAttachmentDisplayMap(layout, finalIndexPageCount) {
   const stream = Array.isArray(layout.pagination_stream) ? layout.pagination_stream : [];
   const displayed = new Map();
+  const physicalParts = new Set();
   let currentPage = 1;
   for (const part of stream) {
     const pages = Math.max(0, Number(part.page_count || part.pages || 0));
+    if (!Number.isSafeInteger(pages)) throw Object.assign(new Error('ATTACHMENT_PAGINATION_PAGE_COUNT_INVALID'), { code: 'ATTACHMENT_PAGINATION_PAGE_COUNT_INVALID' });
     const kind = String(part.kind || part.section_type || '').toUpperCase();
     if (kind === 'CORE') currentPage += pages;
     else if (kind === 'ATTACHMENT_INDEX') currentPage += finalIndexPageCount;
     else if (kind === 'SEPARATOR') currentPage += pages;
     else {
       const rowId = String(part.display_row_id || part.logical_source_id || '');
+      if (!rowId) throw Object.assign(new Error('ATTACHMENT_PAGINATION_LOGICAL_ROW_MISSING'), { code: 'ATTACHMENT_PAGINATION_LOGICAL_ROW_MISSING' });
+      const physicalPartId = String(part.physical_part_id || part.artifact_id || `${rowId}:${part.physical_part_no || ''}`);
+      if (physicalParts.has(physicalPartId)) throw Object.assign(new Error('ATTACHMENT_PAGINATION_PHYSICAL_PART_DUPLICATE'), { code: 'ATTACHMENT_PAGINATION_PHYSICAL_PART_DUPLICATE' });
+      physicalParts.add(physicalPartId);
       if (rowId) {
         const row = displayed.get(rowId) || {
           row_id: rowId,
@@ -283,11 +308,25 @@ function deriveAttachmentDisplayMap(layout, finalIndexPageCount) {
       currentPage += pages;
     }
   }
-  return [...displayed.values()];
+  const rows = [...displayed.values()];
+  if (rows.some((row, index) => index > 0 && row.start_page < rows[index - 1].start_page)) {
+    throw Object.assign(new Error('ATTACHMENT_PAGINATION_START_PAGE_ORDER_INVALID'), { code: 'ATTACHMENT_PAGINATION_START_PAGE_ORDER_INVALID' });
+  }
+  const expectedRows = Number(layout.expected_logical_attachment_count ?? layout.expected_displayed_row_count);
+  if (Number.isSafeInteger(expectedRows) && expectedRows >= 0 && rows.length !== expectedRows) {
+    throw Object.assign(new Error('ATTACHMENT_PAGINATION_LOGICAL_ROW_COUNT_MISMATCH'), { code: 'ATTACHMENT_PAGINATION_LOGICAL_ROW_COUNT_MISMATCH' });
+  }
+  const expectedPages = Number(layout.expected_physical_page_count);
+  if (Number.isSafeInteger(expectedPages) && expectedPages >= 0 && currentPage - 1 !== expectedPages) {
+    throw Object.assign(new Error('ATTACHMENT_PAGINATION_PHYSICAL_PAGE_COUNT_MISMATCH'), { code: 'ATTACHMENT_PAGINATION_PHYSICAL_PAGE_COUNT_MISMATCH' });
+  }
+  return rows;
 }
 
-async function resolveApprovedRenderAsset(env, identity) {
-  if (!identity?.r2_key) return identity || {};
+async function resolveApprovedRenderAsset(env, identity, cache = new Map()) {
+  if (!identity?.r2_key) return {};
+  const cacheKey = `${String(identity.r2_key)}|${String(identity.sha256 || '')}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
   const object = await env.R2.get(String(identity.r2_key));
   if (!object) throw Object.assign(new Error('RENDER_ASSET_MISSING'), { code: 'RENDER_ASSET_MISSING' });
   if (identity.size_bytes != null && Number(identity.size_bytes) !== Number(object.size)) throw Object.assign(new Error('RENDER_ASSET_SIZE_MISMATCH'), { code: 'RENDER_ASSET_SIZE_MISMATCH' });
@@ -296,16 +335,34 @@ async function resolveApprovedRenderAsset(env, identity) {
   const mediaType = String(identity.media_type || object.httpMetadata?.contentType || 'image/png');
   if (!['image/png','image/jpeg'].includes(mediaType)) throw Object.assign(new Error('RENDER_ASSET_MEDIA_UNSUPPORTED'), { code: 'RENDER_ASSET_MEDIA_UNSUPPORTED' });
   const bytes = new Uint8Array(await object.arrayBuffer());
+  const actualHash = await sha256Hex(bytes);
+  if (actualHash !== String(identity.sha256).toLowerCase()) throw Object.assign(new Error('RENDER_ASSET_HASH_MISMATCH'), { code: 'RENDER_ASSET_HASH_MISMATCH' });
   let binary = '';
   for (let offset = 0; offset < bytes.length; offset += 32768) binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
-  return { ...identity, data_url: `data:${mediaType};base64,${btoa(binary)}` };
+  const resolved = Object.freeze({
+    data_url: `data:${mediaType};base64,${btoa(binary)}`,
+    size_bytes: bytes.byteLength,
+    sha256: actualHash,
+    media_type: mediaType
+  });
+  cache.set(cacheKey, resolved);
+  return resolved;
 }
 
-async function resolveEmbeddedBrandingAssets(env, sourceModel) {
+async function resolveEmbeddedBrandingAssets(env, sourceModel, config) {
   const model = structuredClone(sourceModel || {});
-  if (model.branding?.r2_key) model.branding = await resolveApprovedRenderAsset(env, model.branding);
+  const cache = new Map();
+  if (model.branding?.r2_key) model.branding = await resolveApprovedRenderAsset(env, model.branding, cache);
   for (const key of ['candidate_signature','nurse_signature','authoriser_signature']) {
-    if (model[key]?.r2_key) model[key] = await resolveApprovedRenderAsset(env, model[key]);
+    if (model[key]?.r2_key) model[key] = await resolveApprovedRenderAsset(env, model[key], cache);
+  }
+  const assets = [...cache.values()];
+  if (assets.length > config.maximumEmbeddedRenderAssets) {
+    throw Object.assign(new Error('RENDER_ASSET_COUNT_LIMIT_EXCEEDED'), { code: 'RENDER_ASSET_COUNT_LIMIT_EXCEEDED' });
+  }
+  const aggregateBytes = assets.reduce((sum, asset) => sum + Number(asset.size_bytes || 0), 0);
+  if (aggregateBytes > config.maximumEmbeddedRenderAssetBytes) {
+    throw Object.assign(new Error('RENDER_ASSET_AGGREGATE_SIZE_EXCEEDED'), { code: 'RENDER_ASSET_AGGREGATE_SIZE_EXCEEDED' });
   }
   return model;
 }
@@ -318,7 +375,7 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
   const frozenSnapshot = context.model || context.frozen_presentation_model
     || context.frozen_invoice_snapshot || context.snapshot || {};
   const presentationModel = frozenSnapshot.presentation_model || frozenSnapshot.render_model || frozenSnapshot;
-  const embeddedModel = await resolveEmbeddedBrandingAssets(env, presentationModel);
+  const embeddedModel = await resolveEmbeddedBrandingAssets(env, presentationModel, config);
   const layout = context.attachment_index_layout || {};
   const model = renderKind === 'ATTACHMENT_INDEX'
     ? { ...embeddedModel, display_rows: deriveAttachmentDisplayMap(layout, Number(layout.expected_index_page_count || 1)) }
@@ -326,12 +383,18 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
   const html = renderKind === 'INVOICE_CORE'
     ? buildProfessionalInvoiceHtml(model)
     : buildInvoiceSourceDocumentHtml(renderKind, model);
+  const browserTimeout = AbortSignal.timeout(config.browserRenderTimeoutMs);
+  const combinedSignal = signal ? AbortSignal.any([signal, browserTimeout]) : browserTimeout;
   const browser = await puppeteer.launch(env.BROWSER);
-  const abort = () => { void browser.close().catch(() => undefined); };
-  signal?.addEventListener('abort', abort, { once: true });
+  let page = null;
+  const abort = () => {
+    void page?.close().catch(() => undefined);
+    void browser.close().catch(() => undefined);
+  };
+  combinedSignal.addEventListener('abort', abort, { once: true });
   try {
-    if (signal?.aborted) throw Object.assign(new Error('OWNERSHIP_LOST'), { code: 'OWNERSHIP_LOST' });
-    const page = await browser.newPage();
+    if (combinedSignal.aborted) throw Object.assign(new Error(signal?.aborted ? 'OWNERSHIP_LOST' : 'BROWSER_RENDER_TIMEOUT'), { code: signal?.aborted ? 'OWNERSHIP_LOST' : 'BROWSER_RENDER_TIMEOUT' });
+    page = await browser.newPage();
     await page.setRequestInterception(true);
     page.on('request', request => {
       const url = request.url();
@@ -348,6 +411,9 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
       margin: { top: '12mm', right: '12mm', bottom: '16mm', left: '12mm' }
     });
     const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    if (config.browserRenderOutputMaxBytes > config.browserInMemoryPdfMaxBytes) {
+      throw Object.assign(new Error('INVOICE_BROWSER_MEMORY_LIMIT_INVALID'), { code: 'INVOICE_BROWSER_MEMORY_LIMIT_INVALID' });
+    }
     if (bytes.byteLength > config.browserRenderOutputMaxBytes) throw Object.assign(new Error('BROWSER_RENDER_OUTPUT_TOO_LARGE'), { code: 'BROWSER_RENDER_OUTPUT_TOO_LARGE' });
     const sha256 = await sha256Hex(bytes);
     const pageCount = await pdfPageCount(bytes);
@@ -390,15 +456,34 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
     }
     return result;
   } finally {
-    signal?.removeEventListener('abort', abort);
+    combinedSignal.removeEventListener('abort', abort);
+    await page?.close().catch(() => undefined);
     await browser.close().catch(() => undefined);
   }
 }
 
 async function runNativeProcessor(env, contextRow, config, signal) {
   if (!env.INVOICE_DOCUMENT_PROCESSOR) {
-    throw new Error('INVOICE_DOCUMENT_PROCESSOR_BINDING_MISSING');
+    throw Object.assign(new Error('INVOICE_DOCUMENT_PROCESSOR_BINDING_MISSING'), { code: 'INVOICE_DOCUMENT_PROCESSOR_BINDING_MISSING', category: 'TRANSIENT_INFRASTRUCTURE' });
   }
+  const identity = processorIdentity(contextRow);
+  const body = JSON.stringify({
+    expected_result_identity: contextRow.expected_result_identity,
+    context: contextRow.context
+  });
+  const fields = {
+    method: 'POST',
+    path: '/process',
+    timestamp: Date.now(),
+    nonce: crypto.randomUUID(),
+    chunk_id: identity.chunk_id,
+    fence_token: identity.fence_token,
+    action: identity.action,
+    plan_generation: identity.plan_generation,
+    processor_policy_version: identity.processor_policy_version,
+    body_sha256: await invoiceProcessorSha256Hex(body)
+  };
+  const signature = await signInvoiceProcessorRequest(env.INVOICE_DOCUMENT_PROCESSOR_SECRET, fields);
   const timeout = AbortSignal.timeout(config.nativeRequestTimeoutMs);
   const combinedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
   const response = await env.INVOICE_DOCUMENT_PROCESSOR.fetch(
@@ -407,12 +492,9 @@ async function runNativeProcessor(env, contextRow, config, signal) {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-cloudtms-internal-service': 'invoice-document-v1'
+        ...invoiceProcessorIdentityHeaders(fields, signature)
       },
-      body: JSON.stringify({
-        expected_result_identity: contextRow.expected_result_identity,
-        context: contextRow.context
-      }),
+      body,
       signal: combinedSignal
     }
   );
@@ -420,9 +502,56 @@ async function runNativeProcessor(env, contextRow, config, signal) {
   if (!response.ok || result?.ok === false) {
     const error = new Error(result?.message || result?.code || `PROCESSOR_HTTP_${response.status}`);
     error.code = result?.code || `PROCESSOR_HTTP_${response.status}`;
+    error.category = result?.category || (response.status >= 500 ? 'TRANSIENT_INFRASTRUCTURE' : 'PROCESSOR_BUG');
+    error.retryable = result?.retryable === true;
     throw error;
   }
   return result.result || result;
+}
+
+export async function checkInvoiceDocumentProcessorReady(env, options = {}) {
+  if (!env.INVOICE_DOCUMENT_PROCESSOR) return { ok: false, code: 'INVOICE_DOCUMENT_PROCESSOR_BINDING_MISSING' };
+  if (!env.INVOICE_DOCUMENT_PROCESSOR_SECRET) return { ok: false, code: 'INVOICE_DOCUMENT_PROCESSOR_SECRET_MISSING' };
+  const body = '{}';
+  const fields = {
+    method: 'POST',
+    path: '/ready',
+    timestamp: Date.now(),
+    nonce: crypto.randomUUID(),
+    chunk_id: '',
+    fence_token: '',
+    action: 'READY',
+    plan_generation: '',
+    processor_policy_version: PROCESSOR_POLICY_VERSION,
+    body_sha256: await invoiceProcessorSha256Hex(body)
+  };
+  const signature = await signInvoiceProcessorRequest(env.INVOICE_DOCUMENT_PROCESSOR_SECRET, fields);
+  const timeoutMs = parseBoundedInteger(options.timeoutMs, 5000, 1000, 10000);
+  try {
+    const response = await env.INVOICE_DOCUMENT_PROCESSOR.fetch(
+      'https://invoice-document-processor.internal/ready',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...invoiceProcessorIdentityHeaders(fields, signature)
+        },
+        body,
+        signal: AbortSignal.timeout(timeoutMs)
+      }
+    );
+    const result = await response.json().catch(() => null);
+    if (!response.ok || result?.ok !== true) return { ok: false, code: result?.code || `INVOICE_PROCESSOR_READY_HTTP_${response.status}` };
+    if (result.processor_policy_version !== PROCESSOR_POLICY_VERSION) return { ok: false, code: 'INVOICE_PROCESSOR_READY_POLICY_MISMATCH' };
+    if (!result.container_ready || !result.native_tools_ready) return { ok: false, code: 'INVOICE_PROCESSOR_NATIVE_NOT_READY' };
+    return {
+      ok: true,
+      processor_policy_version: result.processor_policy_version,
+      processor_implementation_version: String(result.processor_implementation_version || '').slice(0, 120)
+    };
+  } catch {
+    return { ok: false, code: 'INVOICE_DOCUMENT_PROCESSOR_NOT_READY' };
+  }
 }
 
 export async function runInvoiceDocumentProcessor(env, contextRow, options = {}) {
@@ -536,10 +665,24 @@ function actionConcurrency(config, chunkType) {
 }
 
 function createActiveDocumentJob(context, claim) {
+  const now = Date.now();
   return {
-    context, claim, abortController: new AbortController(),
-    latestLeaseExpiry: claim.lease_expires_at_utc || null,
-    ownershipState: 'OWNED', processorPromise: null
+    context,
+    claim,
+    abortController: new AbortController(),
+    latestLeaseExpiry:
+      context?.lease_expires_at_utc
+      || claim?.lease_expires_at_utc
+      || null,
+    lastSuccessfulTouchAt: now,
+    heartbeatFailureCount: 0,
+    ownershipUncertain: false,
+    ownershipState: 'OWNED',
+    abortReason: null,
+    completionAllowed: true,
+    processorActive: false,
+    processorFinished: false,
+    processorPromise: null
   };
 }
 
@@ -547,8 +690,100 @@ function touchAccepted(row) {
   return row?.accepted === true && !['REJECTED','STALE','OWNERSHIP_LOST'].includes(String(row?.status || '').toUpperCase());
 }
 
+function abortInvoiceDocumentJob(job, reason = 'OWNERSHIP_LOST') {
+  if (!job || job.ownershipState === 'OWNERSHIP_LOST') return false;
+  job.ownershipState = 'OWNERSHIP_LOST';
+  job.abortReason = reason;
+  job.completionAllowed = false;
+  if (!job.abortController.signal.aborted) job.abortController.abort(reason);
+  return true;
+}
+
+function applyInvoiceHeartbeatResults(jobs, rows) {
+  const byId = new Map(rows.map(row => [row?.chunk_id, row]));
+  const now = Date.now();
+  let ownershipLost = 0;
+  for (const job of jobs) {
+    const row = byId.get(job.claim?.chunk_id);
+    if (!touchAccepted(row)) {
+      if (abortInvoiceDocumentJob(job, 'OWNERSHIP_LOST')) ownershipLost += 1;
+      continue;
+    }
+    job.lastSuccessfulTouchAt = now;
+    job.heartbeatFailureCount = 0;
+    job.ownershipUncertain = false;
+    if (row.lease_expires_at_utc) job.latestLeaseExpiry = row.lease_expires_at_utc;
+  }
+  return ownershipLost;
+}
+
+function markInvoiceHeartbeatFailure(jobs, config, now = Date.now()) {
+  let aborted = 0;
+  for (const job of jobs) {
+    if (job.ownershipState !== 'OWNED') continue;
+    job.heartbeatFailureCount += 1;
+    job.ownershipUncertain = true;
+    const expiryMs = Date.parse(job.latestLeaseExpiry || '');
+    const tooCloseToExpiry = Number.isFinite(expiryMs)
+      && now >= expiryMs - config.heartbeatFailureAbortMarginMs;
+    const failureLimitReached =
+      job.heartbeatFailureCount >= config.maximumConsecutiveHeartbeatFailures;
+    if (tooCloseToExpiry || failureLimitReached) {
+      if (abortInvoiceDocumentJob(job, 'OWNERSHIP_UNCERTAIN')) aborted += 1;
+    }
+  }
+  return aborted;
+}
+
+async function heartbeatActiveInvoiceJobs(rpc, jobs) {
+  const raw = await rpc('invoice_work_touch_batch', {
+    p_touches: jobs.map(job => ({
+      ...claimIdentity(job.claim),
+      progress: { status_message: 'Processing document' }
+    })),
+    p_now_utc: new Date().toISOString()
+  });
+  return valueFromRpc(raw);
+}
+
+async function performFinalInvoiceOwnershipCheck(rpc, jobs, config) {
+  if (!config.finalOwnershipCheckRequired) return { ownership_lost: 0, checked: 0 };
+  const cutoff = Date.now() - config.heartbeatMs;
+  const required = jobs.filter(job =>
+    job.completionAllowed
+    && job.ownershipState === 'OWNED'
+    && (job.ownershipUncertain || job.lastSuccessfulTouchAt <= cutoff)
+  );
+  if (!required.length) return { ownership_lost: 0, checked: 0 };
+  try {
+    const rows = await heartbeatActiveInvoiceJobs(rpc, required);
+    return {
+      ownership_lost: applyInvoiceHeartbeatResults(required, rows),
+      checked: required.length
+    };
+  } catch {
+    for (const job of required) abortInvoiceDocumentJob(job, 'OWNERSHIP_UNCERTAIN');
+    return { ownership_lost: required.length, checked: required.length };
+  }
+}
+
 export async function processInvoiceDocumentChunksBatch(env, claims, options) {
-  if (!claims.length) return { claimed: 0, processed: 0, rejected: 0, completed: 0, ownership_lost: 0 };
+  if (!claims.length) {
+    return {
+      claimed: 0,
+      processed: 0,
+      rejected: 0,
+      completed: 0,
+      processor_succeeded: 0,
+      db_completion_accepted: 0,
+      db_completion_retry: 0,
+      db_completion_permanent_failed: 0,
+      db_completion_rejected: 0,
+      context_failed: 0,
+      ownership_lost: 0,
+      released_lanes: []
+    };
+  }
   const rpc = options.rpc;
   const config = options.config || getInvoiceQueueRuntimeConfig(env);
   const contextResponse = await rpc('invoice_work_context_batch', {
@@ -559,32 +794,29 @@ export async function processInvoiceDocumentChunksBatch(env, claims, options) {
   const contextErrors = contexts.filter(row => row?.accepted === true && row?.status === 'CONTEXT_ERROR');
   const rejected = contexts.filter(row => row?.accepted !== true);
   const claimById = new Map(claims.map(claim => [claim.chunk_id, claim]));
-  const activeJobs = new Map(valid.map(context => [context.chunk_id, createActiveDocumentJob(context, claimById.get(context.chunk_id))]));
+  const activeJobs = new Map(
+    [...valid, ...contextErrors].map(context => [
+      context.chunk_id,
+      createActiveDocumentJob(context, claimById.get(context.chunk_id))
+    ])
+  );
   let heartbeatStopped = false;
   let heartbeatPromise = Promise.resolve();
   let heartbeatTimer = null;
+  let nextHeartbeatDelayMs = config.heartbeatMs;
 
   const heartbeat = async () => {
-    const jobs = [...activeJobs.values()].filter(job => job.ownershipState === 'OWNED');
+    const jobs = [...activeJobs.values()].filter(job =>
+      job.ownershipState === 'OWNED' && job.completionAllowed
+    );
     if (!jobs.length) return;
     try {
-      const raw = await rpc('invoice_work_touch_batch', {
-        p_touches: jobs.map(job => ({
-          ...claimIdentity(job.claim), progress: { status_message: 'Processing document' }
-        })),
-        p_now_utc: new Date().toISOString()
-      });
-      const rows = valueFromRpc(raw);
-      const byId = new Map(rows.map(row => [row.chunk_id, row]));
-      for (const job of jobs) {
-        const row = byId.get(job.claim.chunk_id);
-        if (!touchAccepted(row)) {
-          job.ownershipState = 'OWNERSHIP_LOST';
-          job.abortController.abort('OWNERSHIP_LOST');
-          activeJobs.delete(job.claim.chunk_id);
-        } else if (row.lease_expires_at_utc) job.latestLeaseExpiry = row.lease_expires_at_utc;
-      }
+      const rows = await heartbeatActiveInvoiceJobs(rpc, jobs);
+      applyInvoiceHeartbeatResults(jobs, rows);
+      nextHeartbeatDelayMs = config.heartbeatMs;
     } catch (error) {
+      markInvoiceHeartbeatFailure(jobs, config);
+      nextHeartbeatDelayMs = Math.min(5000, config.heartbeatMs);
       console.warn(JSON.stringify({ event: 'invoice_document_heartbeat_failed', code: String(error?.code || error?.message || 'HEARTBEAT_FAILED').slice(0, 120), active_count: jobs.length }));
     }
   };
@@ -592,7 +824,7 @@ export async function processInvoiceDocumentChunksBatch(env, claims, options) {
     if (heartbeatStopped) return;
     heartbeatTimer = setTimeout(() => {
       heartbeatPromise = heartbeatPromise.then(heartbeat).finally(scheduleHeartbeat);
-    }, config.heartbeatMs);
+    }, nextHeartbeatDelayMs);
   };
   if (activeJobs.size) scheduleHeartbeat();
 
@@ -608,10 +840,11 @@ export async function processInvoiceDocumentChunksBatch(env, claims, options) {
         const job = activeJobs.get(contextRow.chunk_id);
         if (!job || job.ownershipState !== 'OWNED') return { ownership_lost: true, chunk_id: contextRow.chunk_id };
         try {
+          job.processorActive = true;
           job.processorPromise = runInvoiceDocumentProcessor(env, contextRow, { config, signal: job.abortController.signal });
           const result = await job.processorPromise;
           if (job.ownershipState !== 'OWNED') return { ownership_lost: true, chunk_id: contextRow.chunk_id };
-          return { ...claimIdentity(job.claim), outcome: 'SUCCESS', result };
+          return { ...claimIdentity(job.claim), chunk_id: contextRow.chunk_id, outcome: 'SUCCESS', result };
         } catch (error) {
           if (job.ownershipState !== 'OWNED' || job.abortController.signal.aborted) {
             return { ownership_lost: true, chunk_id: contextRow.chunk_id };
@@ -622,9 +855,10 @@ export async function processInvoiceDocumentChunksBatch(env, claims, options) {
             'ASSET_PDF_ENCRYPTED','ASSET_SOURCE_IDENTITY_CHANGED','IMMUTABLE_ARTIFACT_KEY_CONFLICT',
             'ATTACHMENT_INDEX_LAYOUT_UNSTABLE','POLICY_VIOLATION','IDENTITY_MISMATCH'
           ].some(value => code.includes(value));
-          return { ...claimIdentity(job.claim), outcome: permanent ? 'FAILED' : 'RETRY', error: compactError(error, !permanent) };
+          return { ...claimIdentity(job.claim), chunk_id: contextRow.chunk_id, outcome: permanent ? 'FAILED' : 'RETRY', error: compactError(error, !permanent) };
         } finally {
-          activeJobs.delete(contextRow.chunk_id);
+          job.processorActive = false;
+          job.processorFinished = true;
         }
       });
       processorResults.push(...results);
@@ -635,13 +869,25 @@ export async function processInvoiceDocumentChunksBatch(env, claims, options) {
     await heartbeatPromise;
   }
 
-  const ownershipLost = processorResults.filter(row => row?.ownership_lost === true);
-  const terminalProcessorResults = processorResults.filter(row => row?.ownership_lost !== true);
-  const contextFailureResults = contextErrors.map(row => ({
-    ...claimIdentity(claimById.get(row.chunk_id)),
-    outcome: row.retryable ? 'RETRY' : 'FAILED',
-    error: { code: row.code || 'INVOICE_DOCUMENT_CONTEXT_ERROR', retryable: row.retryable === true, context_size_bytes: row.context_size_bytes }
-  }));
+  await performFinalInvoiceOwnershipCheck(rpc, [...activeJobs.values()], config);
+  const ownershipLostIds = new Set([
+    ...processorResults.filter(row => row?.ownership_lost === true).map(row => row.chunk_id),
+    ...[...activeJobs.values()]
+      .filter(job => !job.completionAllowed || job.ownershipState !== 'OWNED')
+      .map(job => job.claim?.chunk_id)
+  ].filter(Boolean));
+  const terminalProcessorResults = processorResults.filter(row =>
+    row?.ownership_lost !== true
+    && !ownershipLostIds.has(row.chunk_id)
+    && activeJobs.get(row.chunk_id)?.completionAllowed !== false
+  );
+  const contextFailureResults = contextErrors
+    .filter(row => !ownershipLostIds.has(row.chunk_id))
+    .map(row => ({
+      ...claimIdentity(claimById.get(row.chunk_id)),
+      outcome: row.retryable ? 'RETRY' : 'FAILED',
+      error: { code: row.code || 'INVOICE_DOCUMENT_CONTEXT_ERROR', retryable: row.retryable === true, context_size_bytes: row.context_size_bytes }
+    }));
   const completionPayload = [...terminalProcessorResults, ...contextFailureResults];
   let completion = [];
   if (completionPayload.length) {
@@ -649,12 +895,33 @@ export async function processInvoiceDocumentChunksBatch(env, claims, options) {
       p_results: completionPayload, p_now_utc: new Date().toISOString()
     }));
   }
+  const completionAccepted = completion.filter(row =>
+    row?.accepted === true
+    && !['REJECTED','STALE','OWNERSHIP_LOST'].includes(String(row?.status || '').toUpperCase())
+  );
+  const completionRetry = completionAccepted.filter(row =>
+    ['QUEUED','WAITING','RETRY_WAIT'].includes(String(row?.status || '').toUpperCase())
+  );
+  const completionPermanent = completionAccepted.filter(row =>
+    ['FAILED','DEAD_LETTER'].includes(String(row?.status || '').toUpperCase())
+  );
+  const completionComplete = completionAccepted.filter(row =>
+    String(row?.status || '').toUpperCase() === 'COMPLETE'
+  );
   return {
     claimed: claims.length, valid_contexts: valid.length, rejected: rejected.length,
     processed: completionPayload.length,
-    completed: completion.filter(row => row?.accepted === true && !['REJECTED','STALE'].includes(String(row?.status || '').toUpperCase())).length,
-    ownership_lost: ownershipLost.length,
-    context_rejections: rejected.map(row => ({ chunk_id: row.chunk_id, code: row.code })), completion
+    processor_succeeded: terminalProcessorResults.filter(row => row.outcome === 'SUCCESS').length,
+    completed: completionComplete.length,
+    db_completion_accepted: completionAccepted.length,
+    db_completion_retry: completionRetry.length,
+    db_completion_permanent_failed: completionPermanent.length,
+    db_completion_rejected: completion.length - completionAccepted.length,
+    context_failed: contextFailureResults.length,
+    ownership_lost: ownershipLostIds.size,
+    released_lanes: deriveReleasedInvoiceLanes(completionAccepted),
+    context_rejections: rejected.map(row => ({ chunk_id: row.chunk_id, code: row.code })),
+    completion
   };
 }
 
@@ -728,6 +995,21 @@ export async function requestFreshInvoiceContinuation(env, options = {}) {
     lanes: normaliseInvoiceLanes(options.lanes || ['ALL']),
     priority_class: normaliseInvoicePriorityClass(options.priorityClass || 'SCHEDULED')
   };
+  if (options.reconciliationCursor != null) {
+    if (!payload.lanes.includes('RECONCILE')) return { dispatched: false, code: 'INVOICE_RECONCILIATION_CURSOR_LANE_INVALID' };
+    const cursor = options.reconciliationCursor;
+    if (
+      !cursor
+      || !Number.isFinite(Date.parse(cursor.snapshot_at_utc || ''))
+      || !Number.isFinite(Date.parse(cursor.updated_at_utc || ''))
+      || !UUID_PATTERN.test(String(cursor.operation_id || ''))
+    ) return { dispatched: false, code: 'INVOICE_RECONCILIATION_CURSOR_INVALID' };
+    payload.reconciliation_cursor = {
+      snapshot_at_utc: new Date(cursor.snapshot_at_utc).toISOString(),
+      updated_at_utc: new Date(cursor.updated_at_utc).toISOString(),
+      operation_id: String(cursor.operation_id).toLowerCase()
+    };
+  }
   const signature = await signInvoiceDrainRequest(env.INVOICE_QUEUE_DISPATCH_SECRET, payload);
   try {
     const response = await env.INVOICE_QUEUE_DISPATCHER.fetch('https://invoice-queue-dispatcher.internal/dispatch', {
@@ -749,13 +1031,13 @@ export async function drainInvoiceOperations(env, options = {}) {
   const mode = selectInvoiceDrainMode(options);
   const userMode = mode === 'user_nudge';
   const databaseClaimLimit = userMode ? config.userNudgeDatabaseClaimLimit : config.scheduledDatabaseClaimLimit;
-  const documentClaimLimit = userMode ? config.userNudgeDocumentClaimLimit : config.scheduledDocumentClaimLimit;
+  const documentClaimLimit = userMode ? 0 : config.scheduledDocumentClaimLimit;
   const maxCycles = userMode ? config.userNudgeCycles : config.scheduledCycles;
   const startedAt = Date.now();
   const deadline = startedAt + (userMode ? config.userNudgeDeadlineMs : config.scheduledDrainDeadlineMs) - config.safetyMarginMs;
   const requestedLanes = new Set(normaliseInvoiceLanes(options.lanes || ['ALL']));
   const cycles = [];
-  let likelyRunnable = false;
+  let continuationRequired = false;
   for (let cycle = 0; cycle < maxCycles && Date.now() < deadline; cycle += 1) {
     const resolved = lanesToChunkTypes([...requestedLanes]);
     const workerSuffix = crypto.randomUUID();
@@ -763,16 +1045,21 @@ export async function drainInvoiceOperations(env, options = {}) {
     const database = await processInvoiceDatabaseChunksBatch(env, databaseClaims, { rpc: options.rpc, config });
     for (const lane of database.released_lanes || []) requestedLanes.add(lane);
     const released = lanesToChunkTypes([...requestedLanes]);
-    const documentClaims = Date.now() < deadline
+    const documentClaims = !userMode && Date.now() < deadline
       ? await claimBatch(options.rpc, released.document, `${config.workerId}:doc:${workerSuffix}`, documentClaimLimit, config.leaseSeconds)
       : [];
     const document = await processInvoiceDocumentChunksBatch(env, documentClaims, { rpc: options.rpc, config });
-    likelyRunnable = databaseClaims.length >= databaseClaimLimit
-      || documentClaims.length >= documentClaimLimit
-      || database.advanced > 0 || document.completed > 0;
+    for (const lane of document.released_lanes || []) requestedLanes.add(lane);
+    const explicitDocumentLanes = lanesToChunkTypes([...requestedLanes]).document.length > 0;
+    continuationRequired =
+      databaseClaims.length >= databaseClaimLimit
+      || (!userMode && documentClaimLimit > 0 && documentClaims.length >= documentClaimLimit)
+      || (database.released_lanes || []).length > 0
+      || (document.released_lanes || []).length > 0
+      || (userMode && explicitDocumentLanes);
     cycles.push({ database, document });
-    if (!databaseClaims.length && !documentClaims.length) { likelyRunnable = false; break; }
-    if (!likelyRunnable) break;
+    if (!databaseClaims.length && !documentClaims.length) break;
+    if (userMode || !continuationRequired) break;
   }
   const aggregate = (key, field) => cycles.reduce((total, cycle) => total + Number(cycle[key]?.[field] || 0), 0);
   const summary = {
@@ -780,13 +1067,14 @@ export async function drainInvoiceOperations(env, options = {}) {
     elapsed_ms: Date.now() - startedAt, cycles: cycles.length,
     database: { claimed: aggregate('database','claimed'), advanced: aggregate('database','advanced'), rejected: aggregate('database','rejected') },
     document: { claimed: aggregate('document','claimed'), processed: aggregate('document','processed'), completed: aggregate('document','completed'), rejected: aggregate('document','rejected'), ownership_lost: aggregate('document','ownership_lost') },
-    continuation_required: likelyRunnable,
+    continuation_required: continuationRequired,
     released_lanes: normaliseInvoiceLanes([...requestedLanes])
   };
-  if (likelyRunnable) {
+  if (continuationRequired) {
     const continuation = await requestFreshInvoiceContinuation(env, {
       config, lanes: [...requestedLanes], continuationDepth: Number(options.continuationDepth || 0),
-      priorityClass: options.priorityClass || (userMode ? 'INTERACTIVE' : 'SCHEDULED')
+      priorityClass: options.priorityClass || (userMode ? 'INTERACTIVE' : 'SCHEDULED'),
+      reconciliationCursor: options.reconciliationCursor
     });
     summary.continuation_dispatched = continuation.dispatched;
     summary.continuation_code = continuation.code;
@@ -821,16 +1109,47 @@ export async function handleInvoiceQueueDrainRequest(request, env, options = {})
   if (contentLength > 8192) return new Response(JSON.stringify({ ok: false, code: 'INVOICE_DRAIN_REQUEST_TOO_LARGE' }), { status: 413, headers: { 'content-type': 'application/json' } });
   const body = await request.json().catch(() => null);
   if (!body) return new Response(JSON.stringify({ ok: false, code: 'INVOICE_DRAIN_REQUEST_INVALID' }), { status: 400, headers: { 'content-type': 'application/json' } });
-  const payload = { timestamp: body.timestamp, nonce: body.nonce, depth: body.depth, lanes: body.lanes, priority_class: body.priority_class };
+  const payload = {
+    timestamp: body.timestamp,
+    nonce: body.nonce,
+    depth: body.depth,
+    lanes: body.lanes,
+    priority_class: body.priority_class,
+    reconciliation_cursor: body.reconciliation_cursor
+  };
   const age = Math.abs(Date.now() - Number(payload.timestamp));
   const validDepth = Number.isInteger(Number(payload.depth)) && Number(payload.depth) >= 0 && Number(payload.depth) <= 4;
   let lanes;
   try { lanes = normaliseInvoiceLanes(payload.lanes); } catch { lanes = null; }
-  const signatureValid = age <= 60000 && validDepth && lanes
+  const cursor = payload.reconciliation_cursor;
+  const validCursor = cursor == null || (
+    lanes?.includes('RECONCILE')
+    && Number.isFinite(Date.parse(cursor.snapshot_at_utc || ''))
+    && Number.isFinite(Date.parse(cursor.updated_at_utc || ''))
+    && UUID_PATTERN.test(String(cursor.operation_id || ''))
+  );
+  const signatureValid = age <= 60000 && validDepth && lanes && validCursor
     ? await verifyInvoiceDrainSignature(env.INVOICE_QUEUE_DISPATCH_SECRET, payload, body.signature)
     : false;
   if (!signatureValid) return new Response(JSON.stringify({ ok: false, code: 'INVOICE_DRAIN_AUTH_INVALID' }), { status: 403, headers: { 'content-type': 'application/json' } });
-  const task = drainInvoiceOperations(env, { rpc: options.rpc, config: options.config, lanes, mode: 'internal', continuationDepth: Number(payload.depth), priorityClass: payload.priority_class });
+  const task = (async () => {
+    if (payload.reconciliation_cursor) {
+      await runInvoiceReconciliationCycle(env, {
+        rpc: options.rpc,
+        config: options.config,
+        continuationDepth: Number(payload.depth),
+        reconciliationCursor: payload.reconciliation_cursor
+      });
+    }
+    return drainInvoiceOperations(env, {
+      rpc: options.rpc,
+      config: options.config,
+      lanes,
+      mode: 'internal',
+      continuationDepth: Number(payload.depth),
+      priorityClass: payload.priority_class
+    });
+  })();
   if (options.ctx) options.ctx.waitUntil(task); else await task;
   return new Response(JSON.stringify({ ok: true, accepted: true, depth: Number(payload.depth) }), { status: 202, headers: { 'content-type': 'application/json' } });
 }
@@ -888,38 +1207,102 @@ export async function runInvoiceReconciliationCycle(env, options = {}) {
   const rpc = options.rpc;
   const actorUserId = String(options.actorUserId || env.INVOICE_ACTOR_USER_ID || '').trim();
   if (!actorUserId || !(await validateInvoiceSystemActor(env, actorUserId))) return { ok: false, skipped: true, code: 'INVOICE_SYSTEM_ACTOR_INVALID' };
-  const query = new URL(`${env.SUPABASE_URL}/rest/v1/invoice_operations`);
-  query.searchParams.set('status', 'in.(QUEUED,RUNNING,WAITING,RETRY_WAIT,BLOCKED)');
-  query.searchParams.set('select', 'id');
-  query.searchParams.set('order', 'updated_at_utc.asc,id.asc');
-  query.searchParams.set('limit', '100');
-  const response = await fetch(query, {
-    headers: {
-      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-      authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+  const olderThanSeconds = parseBoundedInteger(options.olderThanSeconds, 300, 60, 86400);
+  const nowMs = Date.now();
+  const cutoffUtc = new Date(nowMs - olderThanSeconds * 1000).toISOString();
+  const initialCursor = options.reconciliationCursor || null;
+  const snapshotUtc = initialCursor?.snapshot_at_utc
+    ? new Date(initialCursor.snapshot_at_utc).toISOString()
+    : new Date(nowMs).toISOString();
+  let cursor = initialCursor ? {
+    snapshot_at_utc: snapshotUtc,
+    updated_at_utc: new Date(initialCursor.updated_at_utc).toISOString(),
+    operation_id: String(initialCursor.operation_id).toLowerCase()
+  } : null;
+  let rowsExamined = 0;
+  let rowsSubmitted = 0;
+  let hasMore = false;
+  const reconciliation = [];
+  for (
+    let page = 0;
+    page < config.reconciliationMaximumPagesPerInvocation;
+    page += 1
+  ) {
+    const query = new URL(`${env.SUPABASE_URL}/rest/v1/invoice_operations`);
+    query.searchParams.set('status', 'in.(QUEUED,RUNNING,WAITING,RETRY_WAIT,BLOCKED)');
+    query.searchParams.set('select', 'id,updated_at_utc');
+    query.searchParams.set('and', `(updated_at_utc.lt.${cutoffUtc},updated_at_utc.lte.${snapshotUtc})`);
+    if (cursor) {
+      query.searchParams.set(
+        'or',
+        `(updated_at_utc.gt.${cursor.updated_at_utc},and(updated_at_utc.eq.${cursor.updated_at_utc},id.gt.${cursor.operation_id}))`
+      );
     }
-  });
-  const rows = await response.json().catch(() => []);
-  if (!response.ok) throw new Error('INVOICE_RECONCILIATION_SCOPE_QUERY_FAILED');
-  const operationIds = rows.map(row => row?.id).filter(Boolean);
-  if (!operationIds.length) return { ok: true, operations_scoped: 0, reconciliation: [] };
-  const started = await rpc('invoice_operation_start_batch', {
-    p_commands: [{
-      command_type: 'RECONCILE',
-      operation_ids: operationIds,
-      older_than_seconds: 300,
-      max_rows: 100
-    }],
-    p_actor_user_id: actorUserId,
-    p_now_utc: new Date().toISOString()
-  });
-  const operations = valueFromRpc(started);
-  await nudgeInvoiceOperations(env, operations, {
-    ...options,
-    config,
-    lanes: ['RECONCILE']
-  });
-  return { ok: true, operations_scoped: operationIds.length, reconciliation: operations };
+    query.searchParams.set('order', 'updated_at_utc.asc,id.asc');
+    query.searchParams.set('limit', String(config.reconciliationPageSize + 1));
+    const response = await fetch(query, {
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+      }
+    });
+    const loaded = await response.json().catch(() => []);
+    if (!response.ok || !Array.isArray(loaded)) throw Object.assign(new Error('INVOICE_RECONCILIATION_SCOPE_QUERY_FAILED'), { code: 'INVOICE_RECONCILIATION_SCOPE_QUERY_FAILED' });
+    hasMore = loaded.length > config.reconciliationPageSize;
+    const rows = loaded.slice(0, config.reconciliationPageSize);
+    rowsExamined += rows.length;
+    if (!rows.length) { hasMore = false; break; }
+    const operationIds = rows.map(row => row?.id).filter(id => UUID_PATTERN.test(String(id || '')));
+    if (operationIds.length) {
+      const started = await rpc('invoice_operation_start_batch', {
+        p_commands: [{
+          command_type: 'RECONCILE',
+          operation_ids: operationIds,
+          older_than_seconds: olderThanSeconds,
+          max_rows: config.reconciliationPageSize
+        }],
+        p_actor_user_id: actorUserId,
+        p_now_utc: new Date().toISOString()
+      });
+      const operationRows = valueFromRpc(started);
+      reconciliation.push(...operationRows);
+      rowsSubmitted += operationIds.length;
+    }
+    const last = rows.at(-1);
+    cursor = {
+      snapshot_at_utc: snapshotUtc,
+      updated_at_utc: new Date(last.updated_at_utc).toISOString(),
+      operation_id: String(last.id).toLowerCase()
+    };
+    if (!hasMore) break;
+  }
+  if (reconciliation.length) {
+    await nudgeInvoiceOperations(env, reconciliation, {
+      ...options,
+      config,
+      lanes: ['RECONCILE'],
+      priorityClass: 'RECONCILE'
+    });
+  }
+  let continuation = { dispatched: false };
+  if (hasMore && cursor) {
+    continuation = await requestFreshInvoiceContinuation(env, {
+      config,
+      lanes: ['RECONCILE'],
+      continuationDepth: Number(options.continuationDepth || 0),
+      priorityClass: 'RECONCILE',
+      reconciliationCursor: cursor
+    });
+  }
+  return {
+    ok: true,
+    rows_examined: rowsExamined,
+    operations_scoped: rowsSubmitted,
+    reconciliation,
+    next_cursor: hasMore ? cursor : null,
+    continuation_requested: hasMore,
+    continuation_dispatched: continuation.dispatched === true
+  };
 }
 
 export const invoiceQueueRuntimeInternals = Object.freeze({

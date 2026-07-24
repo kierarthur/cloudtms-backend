@@ -42,13 +42,19 @@ function decodeHex(value) {
 }
 
 export function canonicalInvoiceDrainMessage(payload) {
+  const cursor = payload.reconciliation_cursor;
   return JSON.stringify({
     version: 'INVOICE_QUEUE_DISPATCH_V1',
     timestamp: Number(payload.timestamp),
     nonce: String(payload.nonce || ''),
     depth: Number(payload.depth),
     lanes: [...new Set((payload.lanes || []).map(value => String(value).toUpperCase()))].sort(),
-    priority_class: String(payload.priority_class || 'SCHEDULED').toUpperCase()
+    priority_class: String(payload.priority_class || 'SCHEDULED').toUpperCase(),
+    reconciliation_cursor: cursor ? {
+      snapshot_at_utc: String(cursor.snapshot_at_utc || ''),
+      updated_at_utc: String(cursor.updated_at_utc || ''),
+      operation_id: String(cursor.operation_id || '').toLowerCase()
+    } : null
   });
 }
 

@@ -54,6 +54,36 @@ test('dispatcher signatures bind canonical lane set and continuation identity', 
   assert.equal(await verify(secret, { ...payload, lanes: ['DATABASE'] }, signature), false);
 });
 
+test('reconciliation cursor is accepted only on the RECONCILE lane and is HMAC-bound', async () => {
+  const { validatePayload, sign, verify } = await loadDispatcherModule();
+  const cursor = {
+    snapshot_at_utc: '2026-07-24T12:00:00.000Z',
+    updated_at_utc: '2026-07-20T12:00:00.000Z',
+    operation_id: '00000000-0000-4000-8000-000000000001'
+  };
+  const raw = {
+    timestamp: Date.now(),
+    depth: 2,
+    nonce: crypto.randomUUID(),
+    lanes: ['RECONCILE'],
+    priority_class: 'RECONCILE',
+    reconciliation_cursor: cursor
+  };
+  const validated = validatePayload(raw);
+  assert.equal(validated.ok, true);
+  const secret = 'test-only-secret';
+  const signature = await sign(secret, validated.payload);
+  assert.equal(await verify(secret, validated.payload, signature), true);
+  assert.equal(await verify(secret, {
+    ...validated.payload,
+    reconciliation_cursor: {
+      ...validated.payload.reconciliation_cursor,
+      operation_id: '00000000-0000-4000-8000-000000000002'
+    }
+  }, signature), false);
+  assert.equal(validatePayload({ ...raw, lanes: ['DATABASE'] }).code, 'INVOICE_RECONCILIATION_CURSOR_LANE_INVALID');
+});
+
 test('SQLite nonce gate consumes a nonce once', async () => {
   const { InvoiceDispatchNonceGate, sha256 } = await loadDispatcherModule();
   const storage = fakeSqlStorage();
