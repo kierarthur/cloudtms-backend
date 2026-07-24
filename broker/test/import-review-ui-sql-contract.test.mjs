@@ -10,6 +10,7 @@ const dailySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_0
 const weeklyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql', import.meta.url), 'utf8');
 const nhspApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql', import.meta.url), 'utf8');
 const dailyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql', import.meta.url), 'utf8');
+const changedHoursSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_20_weekly_import_changed_hours_phase3.sql', import.meta.url), 'utf8');
 const nhspPhase3Sql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql', import.meta.url), 'utf8');
 const weeklyPhase3Sql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql', import.meta.url), 'utf8');
 const correctionPolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_01_correction_financials_policy_resolve_v1.sql', import.meta.url), 'utf8');
@@ -185,6 +186,11 @@ test('every generated invoice line is protected correction evidence in preview a
   assert.doesNotMatch(protection, /status::text[\s\S]*?\('ISSUED','PAID'\)/);
   assert.match(envelope, /pr\.protection->>'invoice_locked'/);
   assert.match(envelope, /'REVERSAL_REPLACEMENT'/);
+  assert.match(changedHoursSql, /left join lateral \(\s+select il\.invoice_id\s+from public\.invoice_lines il/);
+  assert.match(changedHoursSql, /or a\.invoice_line_invoice_id is not null\s+\)\s+as is_invoiced/);
+  assert.doesNotMatch(changedHoursSql, /upper\(coalesce\(i\.status::text,''\)\) in \('ISSUED','PAID'\)/);
+  assert.match(nhspApplySql, /weekly_import_changed_hours_phase3\(p_import_id := p_import_id, p_system_type := 'NHSP'\)/);
+  assert.match(weeklyApplySql, /weekly_import_changed_hours_phase3\(p_import_id := p_import_id, p_system_type := 'HEALTHROSTER'\)/);
 });
 
 test('TSFIN correction-unit payload extraction accepts JSON whitespace without double escaping', () => {
