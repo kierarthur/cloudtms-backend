@@ -632,7 +632,7 @@ begin
       par.pay_batch_id,
       par.pay_batch_candidate_id,
       par.pay_batch_item_id,
-      round(coalesce(par.reserved_amount, 0), 2)::numeric(12,2) as reserved_amount_ex,
+      round(coalesce(par.reserved_source_amount, par.reserved_amount, 0), 2)::numeric(12,2) as reserved_amount_ex,
       par.repayment_week_start,
       upper(coalesce(par.status, '')) as reservation_status
     from public.pay_advance_reservations par
@@ -1333,11 +1333,11 @@ begin
       round(greatest(
         coalesce(
           case
+            when pbi_rt.frozen_source_amount is not null then abs(pbi_rt.frozen_source_amount)
             when nullif(btrim(pbi_rt.frozen_component_snapshot_json->>'remaining_source_amount'), '') is not null then (pbi_rt.frozen_component_snapshot_json->>'remaining_source_amount')::numeric
             when nullif(btrim(pbi_rt.frozen_source_basis_json->>'remaining_source_amount'), '') is not null then (pbi_rt.frozen_source_basis_json->>'remaining_source_amount')::numeric
             when nullif(btrim(pbi_rt.frozen_source_basis_json->>'outstanding_amount'), '') is not null then (pbi_rt.frozen_source_basis_json->>'outstanding_amount')::numeric
             when nullif(btrim(pbi_rt.frozen_source_basis_json->>'amount'), '') is not null then abs((pbi_rt.frozen_source_basis_json->>'amount')::numeric)
-            when pbi_rt.frozen_source_amount is not null then abs(pbi_rt.frozen_source_amount)
             else 0::numeric
           end,
           0::numeric
@@ -1345,8 +1345,11 @@ begin
         0::numeric
       ), 2)::numeric(12,2) as frozen_remaining_source_amount,
       case
-        when nullif(btrim(pbi_rt.frozen_source_basis_json->>'weekly_due'), '') is null then 0::numeric(12,2)
-        else round(greatest(abs((pbi_rt.frozen_source_basis_json->>'weekly_due')::numeric), 0), 2)::numeric(12,2)
+        when nullif(btrim(pbi_rt.frozen_resolution_result_json->>'case_source_weekly_due'), '') is not null
+          then round(greatest(abs((pbi_rt.frozen_resolution_result_json->>'case_source_weekly_due')::numeric), 0), 2)::numeric(12,2)
+        when nullif(btrim(pbi_rt.frozen_source_basis_json->>'weekly_due'), '') is not null
+          then round(greatest(abs((pbi_rt.frozen_source_basis_json->>'weekly_due')::numeric), 0), 2)::numeric(12,2)
+        else 0::numeric(12,2)
       end as frozen_weekly_due_amount,
       case
         when nullif(btrim(pbi_rt.frozen_source_basis_json->>'next_due_week_start'), '') is null then null::date
@@ -1564,7 +1567,7 @@ begin
             else null
           end
         ) as finance_case_id,
-        round(sum(-coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0)), 2)::numeric(12,2) as expected_ex
+        round(sum(coalesce(abs(pbi.frozen_source_amount), -pbi.amount_ex_vat, -pbi.amount_inc_vat, 0)), 2)::numeric(12,2) as expected_ex
       from public.pay_batch_items pbi
       join public.pay_batch_candidates pbc
         on pbc.id = pbi.pay_batch_candidate_id
@@ -1914,7 +1917,7 @@ begin
             else null
           end
         ) as finance_case_id,
-        round(sum(-coalesce(pbi_md.amount_ex_vat, pbi_md.amount_inc_vat, 0)), 2)::numeric(12,2) as expected_ex
+        round(sum(coalesce(abs(pbi_md.frozen_source_amount), -pbi_md.amount_ex_vat, -pbi_md.amount_inc_vat, 0)), 2)::numeric(12,2) as expected_ex
       from public.pay_batch_items pbi_md
       join public.pay_batch_candidates pbc_md
         on pbc_md.id = pbi_md.pay_batch_candidate_id
@@ -1980,7 +1983,7 @@ begin
             else null
           end
         ) as finance_case_id,
-        round(sum(-coalesce(pbi_ln.amount_ex_vat, pbi_ln.amount_inc_vat, 0)), 2)::numeric(12,2) as expected_ex
+        round(sum(coalesce(abs(pbi_ln.frozen_source_amount), -pbi_ln.amount_ex_vat, -pbi_ln.amount_inc_vat, 0)), 2)::numeric(12,2) as expected_ex
       from public.pay_batch_items pbi_ln
       join public.pay_batch_candidates pbc_ln
         on pbc_ln.id = pbi_ln.pay_batch_candidate_id
@@ -2374,4 +2377,3 @@ begin
   );
 end;
 $function$;
-

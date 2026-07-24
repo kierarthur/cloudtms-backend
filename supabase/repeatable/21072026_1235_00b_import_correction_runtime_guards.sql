@@ -208,7 +208,17 @@ begin
        or (
          coalesce(array_length(p_scope_timesheet_ids, 1), 0) > 0
          and not (v_member_ids && p_scope_timesheet_ids)
-       ) then
+    ) then
+      continue;
+    end if;
+
+    -- A pay-method mismatch remains visible through the Workbench resolution
+    -- surface, but its raw member rows must not remain in the authoritative
+    -- negative-component set.  They would otherwise manufacture recovery
+    -- authority from an unresolved target amount and fail the metadata gate.
+    if coalesce((v_residual->>'draftable')::boolean, false) is not true then
+      delete from pg_temp._tmp_pay_wb_sync_negative_components negative_component
+      where negative_component.timesheet_id = any(v_member_ids);
       continue;
     end if;
 
@@ -333,7 +343,15 @@ begin
        or (
          coalesce(array_length(p_scope_timesheet_ids, 1), 0) > 0
          and not (v_member_ids && p_scope_timesheet_ids)
-       ) then
+    ) then
+      continue;
+    end if;
+
+    -- Mirror the source-build boundary.  A non-draftable pay-method mismatch
+    -- must remain a resolution case, not a raw recovery component.
+    if coalesce((v_residual->>'draftable')::boolean, false) is not true then
+      delete from pg_temp.tmp_sync_authoritative_negative_components negative_component
+      where negative_component.timesheet_id = any(v_member_ids);
       continue;
     end if;
 
@@ -512,8 +530,12 @@ begin
       from pg_temp.tmp_sync_timesheet_case_candidates candidate_row
       where candidate_row.candidate_id = v_candidate_id
         and candidate_row.timesheet_id = any(v_member_ids)
-        and candidate_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
       order by
+        case
+          when candidate_row.desired_case_type =
+               'OVERPAYMENT'::public.pay_finance_case_type_enum then 0
+          else 1
+        end,
         case when candidate_row.timesheet_id = v_root_id then 0 else 1 end,
         candidate_row.timesheet_id
       limit 1;
@@ -537,7 +559,10 @@ begin
             'component_key_type', component->>'component_key_type',
             'component_key_value', component->>'component_key_value',
             'classification', coalesce(component->>'classification', 'TAXABLE_CHANNEL_SENSITIVE'),
-            'source_pay_method', coalesce(component#>>'{source_pay_methods,0}', v_residual->>'target_pay_method'),
+            -- The correction-chain resolution has already converted this
+            -- amount onto the current target pay channel.  Finance sync must
+            -- not offer a second PAYE/umbrella conversion for the same money.
+            'source_pay_method', v_residual->>'target_pay_method',
             'current_target_pay_method', v_residual->>'target_pay_method',
             'source_amount', abs(nullif(component->>'target_outstanding_ex_vat', '')::numeric),
             'remaining_source_amount', abs(nullif(component->>'target_outstanding_ex_vat', '')::numeric),
@@ -552,6 +577,7 @@ begin
               'truth_ex_vat', component->>'truth_ex_vat',
               'correction_chain_fingerprint', v_residual->>'chain_fingerprint',
               'correction_chain_residual_fingerprint', v_residual->>'residual_fingerprint',
+              'upstream_correction_pay_method_resolution_applied', true,
               'correction_financials_policy_envelope', component->'correction_financials_policy_envelope',
               'correction_financials_policy_envelope_fingerprint', component->>'correction_financials_policy_envelope_fingerprint'
             )),
@@ -577,16 +603,11 @@ begin
         and candidate_row.timesheet_id = any(v_member_ids);
 
       if coalesce(v_negative_amount, 0) > 0 then
-        if v_template.candidate_id is null then
-          raise exception 'CORRECTION_CHAIN_OVERPAYMENT_SYNC_TEMPLATE_REQUIRED'
-            using errcode='P0001',
-                  detail=jsonb_build_object(
-                    'candidate_id', v_candidate_id::text,
-                    'root_timesheet_id', v_root_id::text,
-                    'negative_amount', v_negative_amount
-                  )::text;
-        end if;
-
+        -- Correction members are deliberately suppressed once their coupled
+        -- residual becomes the sole finance authority.  Therefore a raw
+        -- member template may be absent here.  The residual already carries
+        -- the authoritative client, target channel, amounts and component
+        -- evidence needed to create the single coupled recovery candidate.
         insert into pg_temp.tmp_sync_timesheet_case_candidates (
           candidate_id,
           timesheet_id,
@@ -619,8 +640,8 @@ begin
           v_negative_amount,
           0,
           'OVERPAYMENT'::public.pay_finance_case_type_enum,
-          v_template.desired_advance_kind,
-          v_template.desired_reason,
+          'OVERPAYMENT'::public.pay_advance_kind_enum,
+          'OVERPAYMENT'::public.pay_advance_reason_enum,
           v_source_original_paid,
           v_source_corrected_paid,
           v_components_json
@@ -738,9 +759,11 @@ declare
   v_residual jsonb;
   v_component jsonb;
   v_member_ids uuid[];
+  v_carrier_row_ids uuid[];
   v_root_id uuid;
   v_carrier_row_id uuid;
   v_carrier_has_finance_case boolean;
+  v_chain_in_source_build boolean;
   v_line_key text;
   v_updated integer := 0;
   v_superseded integer := 0;
@@ -768,7 +791,51 @@ begin
     select coalesce(array_agg(value::uuid order by value),array[]::uuid[]) into v_member_ids
     from jsonb_array_elements_text(v_residual->'member_timesheet_ids') value;
     v_root_id:=nullif(v_residual->>'root_timesheet_id','')::uuid;
+    v_carrier_row_ids:=array[]::uuid[];
+
+    -- Targeted source builds deliberately contain only the timesheet family
+    -- that dirtied the workbench.  Do not require an unrelated historical
+    -- correction chain to be present in that bounded build.  If any member of
+    -- the chain is present, the component-level carrier checks below continue
+    -- to fail closed exactly as before.
+    select exists (
+      select 1
+      from public.banking_pay_workbench_candidate_source_lines source_line
+      where source_line.session_id=p_session_id
+        and source_line.candidate_id=p_candidate_id
+        and source_line.source_build_run_id=p_source_build_run_id
+        and source_line.status='CURRENT'
+        and source_line.timesheet_id=any(v_member_ids)
+    )
+    into v_chain_in_source_build;
+    if coalesce(v_chain_in_source_build,false) is not true then
+      continue;
+    end if;
+
     for v_component in select value from jsonb_array_elements(v_residual->'components') loop
+      if round(coalesce(
+        nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+        0
+      ),2)=0 then
+        update public.banking_pay_workbench_candidate_source_lines l
+        set status='SUPERSEDED',
+            updated_at_utc=coalesce(p_now_utc,now())
+        where l.session_id=p_session_id
+          and l.candidate_id=p_candidate_id
+          and l.source_build_run_id=p_source_build_run_id
+          and l.status='CURRENT'
+          and l.timesheet_id=any(v_member_ids)
+          and upper(coalesce(l.economic_key_json->>'key_type',''))
+              =upper(coalesce(v_component->>'component_key_type',''))
+          and coalesce(l.economic_key_json->>'key_value','')
+              =coalesce(v_component->>'component_key_value','');
+        get diagnostics v_row_count = row_count;
+        v_superseded:=v_superseded+v_row_count;
+        continue;
+      end if;
+
+      v_line_key:='correction-chain:'||v_root_id::text||':'||lower(v_component->>'component_key_type')||':'||lower(v_component->>'component_key_value');
+
       select l.id into v_carrier_row_id
       from public.banking_pay_workbench_candidate_source_lines l
       where l.session_id=p_session_id and l.candidate_id=p_candidate_id
@@ -777,6 +844,9 @@ begin
         and upper(coalesce(l.economic_key_json->>'key_type',''))=upper(coalesce(v_component->>'component_key_type',''))
         and coalesce(l.economic_key_json->>'key_value','')=coalesce(v_component->>'component_key_value','')
       order by
+        -- Replays of the same source-build run must retain the carrier that
+        -- already owns the canonical correction-chain identity.
+        case when l.line_key=v_line_key then 0 else 1 end,
         case
           when round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) < 0
            and nullif(btrim(coalesce(l.source_row_json->>'finance_case_id','')),'') is not null then 0
@@ -817,8 +887,6 @@ begin
           using errcode='P0001',
                 detail=jsonb_build_object('residual',v_residual,'component',v_component)::text;
       end if;
-      v_line_key:='correction-chain:'||v_root_id::text||':'||lower(v_component->>'component_key_type')||':'||lower(v_component->>'component_key_value');
-
       update public.banking_pay_workbench_candidate_source_lines l
       set timesheet_id=v_root_id,
           line_key=v_line_key,
@@ -884,6 +952,7 @@ begin
           updated_at_utc=coalesce(p_now_utc,now())
       where l.id=v_carrier_row_id;
       v_updated:=v_updated+1;
+      v_carrier_row_ids:=array_append(v_carrier_row_ids,v_carrier_row_id);
 
       update public.banking_pay_workbench_candidate_source_lines l
       set status='SUPERSEDED',updated_at_utc=coalesce(p_now_utc,now())
@@ -895,6 +964,24 @@ begin
       get diagnostics v_row_count = row_count;
       v_superseded := v_superseded + v_row_count;
     end loop;
+
+    -- A correction chain is one coupled economic unit.  Once its dated
+    -- component carriers have been materialised, no raw member row may remain
+    -- current merely because it used a broader TS_TOTAL key.  Preserve every
+    -- selected carrier (there may be several dated components) and supersede
+    -- every other raw member row from this source build.
+    update public.banking_pay_workbench_candidate_source_lines l
+    set status='SUPERSEDED',updated_at_utc=coalesce(p_now_utc,now())
+    where l.session_id=p_session_id and l.candidate_id=p_candidate_id
+      and l.source_build_run_id=p_source_build_run_id and l.status='CURRENT'
+      and l.timesheet_id=any(v_member_ids)
+      and not exists (
+        select 1
+        from unnest(coalesce(v_carrier_row_ids,array[]::uuid[])) as retained_carrier(carrier_row_id)
+        where retained_carrier.carrier_row_id=l.id
+      );
+    get diagnostics v_row_count = row_count;
+    v_superseded:=v_superseded+v_row_count;
   end loop;
   return jsonb_build_object('ok',true,'residual_count',jsonb_array_length(v_residuals),
     'materialised_component_count',v_updated,'superseded_raw_member_row_count',v_superseded);
@@ -928,16 +1015,371 @@ begin
   v_residuals:=public._ctms_candidate_correction_residuals_v1(
     p_session_id,v_candidate,null::uuid,'PAY_CASE_RESOLUTION'
   );
-  v_residual:=v_residuals->0;
-  if jsonb_typeof(v_residual)<>'object' then
+  select residual.value
+  into v_residual
+  from jsonb_array_elements(v_residuals) as residual(value)
+  where exists (
+    select 1
+    from jsonb_array_elements_text(
+      coalesce(residual.value->'member_timesheet_ids','[]'::jsonb)
+    ) as member(member_id)
+    where member.member_id=v_timesheet::text
+  )
+  limit 1;
+  if v_residual is null or jsonb_typeof(v_residual)<>'object' then
     raise exception 'CORRECTION_RESIDUAL_REQUIRED_FOR_CASE_RESOLUTION' using errcode='P0001';
   end if;
   return v_payload||jsonb_build_object(
-    'source_family_key',coalesce(v_payload->>'source_family_key',v_residual->>'source_family_key'),
+    'source_family_key',v_residual->>'source_family_key',
     'correction_financials_policy_envelope',v_residual->'correction_financials_policy_envelope',
     'correction_financials_policy_envelope_fingerprint',v_residual->>'correction_financials_policy_envelope_fingerprint',
     'correction_chain_residual_fingerprint',v_residual->>'residual_fingerprint',
     'correction_chain_fingerprint',v_residual->>'chain_fingerprint'
+  );
+end;
+$function$;
+
+create or replace function public._ctms_normalise_correction_case_resolutions_v1(
+  p_session_id uuid,
+  p_candidate_id uuid,
+  p_anchor_timesheet_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public', 'extensions', 'pg_temp'
+as $function$
+declare
+  v_residuals jsonb;
+  v_residual jsonb;
+  v_component jsonb;
+  v_member_ids uuid[];
+  v_resolution public.banking_pay_workbench_session_case_resolutions%rowtype;
+  v_bucket jsonb;
+  v_source_amount numeric;
+  v_original_source_amount numeric;
+  v_original_target_amount numeric;
+  v_target_amount numeric;
+  v_source_rate numeric;
+  v_source_units numeric;
+  v_component_timesheet_id uuid;
+  v_updated integer:=0;
+begin
+  if p_session_id is null
+     or p_candidate_id is null
+     or p_anchor_timesheet_id is null
+     or coalesce((public._ctms_import_correction_classify_v1(
+       p_anchor_timesheet_id
+     )->>'is_import_authoritative_correction')::boolean,false) is not true then
+    return jsonb_build_object('ok',true,'normalised_count',0);
+  end if;
+
+  v_residuals:=public._ctms_candidate_correction_residuals_v1(
+    p_session_id,p_candidate_id,null::uuid,'PAY_CASE_RESOLUTION_NORMALISE'
+  );
+
+  select residual.value
+  into v_residual
+  from jsonb_array_elements(v_residuals) as residual(value)
+  where exists (
+    select 1
+    from jsonb_array_elements_text(
+      coalesce(residual.value->'member_timesheet_ids','[]'::jsonb)
+    ) as member(member_id)
+    where member.member_id=p_anchor_timesheet_id::text
+  )
+  limit 1;
+
+  if v_residual is null or jsonb_typeof(v_residual)<>'object' then
+    raise exception 'CORRECTION_RESIDUAL_REQUIRED_FOR_CASE_RESOLUTION'
+      using errcode='P0001';
+  end if;
+
+  select coalesce(array_agg(member_id::uuid order by member_id),array[]::uuid[])
+  into v_member_ids
+  from jsonb_array_elements_text(
+    coalesce(v_residual->'member_timesheet_ids','[]'::jsonb)
+  ) as member(member_id);
+
+  for v_component in
+    select component.value
+    from jsonb_array_elements(
+      coalesce(v_residual->'components','[]'::jsonb)
+    ) as component(value)
+    where coalesce((component.value->>'resolution_required')::boolean,false)
+      and round(coalesce(
+        nullif(component.value->>'effective_source_outstanding_ex_vat','')::numeric,
+        0
+      ),2)<>0
+    order by component.value->>'component_key_type',
+             component.value->>'component_key_value'
+  loop
+    v_resolution:=null;
+    select resolution_row.*
+    into v_resolution
+    from public.banking_pay_workbench_session_case_resolutions as resolution_row
+    where resolution_row.session_id=p_session_id
+      and resolution_row.candidate_id=p_candidate_id
+      and resolution_row.resolution_family='BUCKETED'
+      and resolution_row.timesheet_id=any(v_member_ids)
+      and upper(btrim(coalesce(resolution_row.component_key_type,'')))
+          =upper(btrim(coalesce(v_component->>'component_key_type','')))
+      and btrim(coalesce(resolution_row.component_key_value,''))
+          =btrim(coalesce(v_component->>'component_key_value',''))
+    order by resolution_row.updated_at_utc desc,
+             resolution_row.created_at_utc desc,
+             resolution_row.id desc
+    limit 1
+    for update;
+
+    if v_resolution.id is null then
+      -- A correction chain can contain a financially material component that
+      -- has no standalone workbench preview row (for example, the historical
+      -- carrier day of a paired reversal).  "Resolve linked work" must cover
+      -- that component too; otherwise the preview can look complete while
+      -- draft seeding correctly rejects the incomplete chain.  Clone only a
+      -- decision from the same fingerprinted source family, then bind the new
+      -- row to this component's own current source basis below.
+      select resolution_row.*
+      into v_resolution
+      from public.banking_pay_workbench_session_case_resolutions as resolution_row
+      where resolution_row.session_id=p_session_id
+        and resolution_row.candidate_id=p_candidate_id
+        and resolution_row.resolution_family='BUCKETED'
+        and resolution_row.timesheet_id=any(v_member_ids)
+        and resolution_row.source_family_key=v_residual->>'source_family_key'
+      order by resolution_row.updated_at_utc desc,
+               resolution_row.created_at_utc desc,
+               resolution_row.id desc
+      limit 1
+      for update;
+
+      if v_resolution.id is null then
+        raise exception 'CORRECTION_CHAIN_RESOLUTION_ROW_REQUIRED'
+          using errcode='P0001',
+                detail=jsonb_build_object(
+                  'session_id',p_session_id,
+                  'candidate_id',p_candidate_id,
+                  'source_family_key',v_residual->>'source_family_key',
+                  'component_key_type',v_component->>'component_key_type',
+                  'component_key_value',v_component->>'component_key_value'
+                )::text;
+      end if;
+
+      v_component_timesheet_id:=nullif(
+        btrim(coalesce(v_component->>'carrier_timesheet_id','')),
+        ''
+      )::uuid;
+      if v_component_timesheet_id is null
+         or v_component_timesheet_id<>all(v_member_ids) then
+        raise exception 'CORRECTION_CHAIN_RESOLUTION_CARRIER_ID_REQUIRED'
+          using errcode='P0001',
+                detail=jsonb_build_object(
+                  'session_id',p_session_id,
+                  'candidate_id',p_candidate_id,
+                  'source_family_key',v_residual->>'source_family_key',
+                  'component_key_type',v_component->>'component_key_type',
+                  'component_key_value',v_component->>'component_key_value'
+                )::text;
+      end if;
+
+      insert into public.banking_pay_workbench_session_case_resolutions (
+        session_id,
+        candidate_id,
+        case_key,
+        resolution_family,
+        resolution_identity_key,
+        timesheet_id,
+        source_basis_fingerprint,
+        source_family_key,
+        bucket_code,
+        component_key_type,
+        component_key_value,
+        payload_json,
+        created_at_utc,
+        updated_at_utc
+      )
+      values (
+        p_session_id,
+        p_candidate_id,
+        'timesheet:'||v_component_timesheet_id::text,
+        'BUCKETED',
+        concat_ws(
+          '|',
+          'BUCKETED',
+          'timesheet:'||v_component_timesheet_id::text,
+          v_component_timesheet_id::text,
+          v_component->>'source_basis_fingerprint',
+          v_residual->>'source_family_key',
+          coalesce(v_resolution.bucket_code,'~'),
+          upper(v_component->>'component_key_type'),
+          v_component->>'component_key_value'
+        ),
+        v_component_timesheet_id,
+        v_component->>'source_basis_fingerprint',
+        v_residual->>'source_family_key',
+        v_resolution.bucket_code,
+        upper(v_component->>'component_key_type'),
+        v_component->>'component_key_value',
+        coalesce(v_resolution.payload_json,'{}'::jsonb)
+          ||jsonb_build_object(
+            'linked_timesheet_id',v_component_timesheet_id::text,
+            'timesheet_id',v_component_timesheet_id::text,
+            'case_key','timesheet:'||v_component_timesheet_id::text,
+            'applied_via_linked_scope',true,
+            'source_anchor_case_key',v_resolution.case_key
+          ),
+        now(),
+        now()
+      )
+      on conflict (session_id,resolution_identity_key)
+      do update
+      set source_basis_fingerprint=excluded.source_basis_fingerprint,
+          source_family_key=excluded.source_family_key,
+          component_key_type=excluded.component_key_type,
+          component_key_value=excluded.component_key_value,
+          payload_json=excluded.payload_json,
+          updated_at_utc=now()
+      returning public.banking_pay_workbench_session_case_resolutions.*
+      into v_resolution;
+    end if;
+
+    v_bucket:=coalesce(v_resolution.payload_json#>'{bucket_resolutions,0}','{}'::jsonb);
+    v_component_timesheet_id:=coalesce(
+      nullif(btrim(coalesce(v_component->>'carrier_timesheet_id','')),'')::uuid,
+      case
+        when btrim(coalesce(v_resolution.case_key,'')) ~*
+             '^timesheet:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then substring(btrim(v_resolution.case_key) from 11)::uuid
+        else v_resolution.timesheet_id
+      end
+    );
+    if v_component_timesheet_id is null
+       or v_component_timesheet_id<>all(v_member_ids) then
+      raise exception 'CORRECTION_CHAIN_RESOLUTION_MEMBER_ID_REQUIRED'
+        using errcode='P0001',
+              detail=jsonb_build_object(
+                'session_id',p_session_id,
+                'candidate_id',p_candidate_id,
+                'case_key',v_resolution.case_key
+              )::text;
+    end if;
+    v_source_amount:=abs(round(
+      (v_component->>'effective_source_outstanding_ex_vat')::numeric,2
+    ));
+    v_original_source_amount:=abs(coalesce(
+      nullif(v_bucket->>'source_pay_ex_vat','')::numeric,
+      nullif(v_bucket#>>'{saved_resolution_result_json,source_pay_ex_vat}','')::numeric,
+      0
+    ));
+    v_original_target_amount:=abs(coalesce(
+      nullif(v_bucket->>'target_pay_ex_vat','')::numeric,
+      nullif(v_bucket->>'target_amount_ex_vat','')::numeric,
+      nullif(v_bucket#>>'{saved_resolution_result_json,target_pay_ex_vat}','')::numeric,
+      nullif(v_bucket#>>'{saved_resolution_result_json,target_amount_ex_vat}','')::numeric,
+      0
+    ));
+    v_source_rate:=abs(coalesce(nullif(v_bucket->>'source_rate','')::numeric,0));
+
+    if v_original_source_amount<=0 or v_original_target_amount<=0 then
+      raise exception 'CORRECTION_CHAIN_RESOLUTION_CONVERSION_BASIS_REQUIRED'
+        using errcode='P0001',
+              detail=jsonb_build_object(
+                'session_id',p_session_id,
+                'candidate_id',p_candidate_id,
+                'component_key_value',v_component->>'component_key_value'
+              )::text;
+    end if;
+
+    v_target_amount:=round(
+      v_source_amount*(v_original_target_amount/v_original_source_amount),2
+    );
+    v_source_units:=case
+      when v_source_rate>0 then round(v_source_amount/v_source_rate,6)
+      else round(
+        coalesce(nullif(v_bucket->>'source_units','')::numeric,0)
+        *(v_source_amount/v_original_source_amount),6
+      )
+    end;
+
+    v_bucket:=v_bucket
+      ||jsonb_build_object(
+        'timesheet_id',v_component_timesheet_id::text,
+        'source_family_key',v_residual->>'source_family_key',
+        'source_basis_fingerprint',v_component->>'source_basis_fingerprint',
+        'source_basis_json',
+          coalesce(v_bucket->'source_basis_json','{}'::jsonb)
+          ||jsonb_build_object(
+            'source_family_key',v_residual->>'source_family_key',
+            'root_timesheet_id',v_residual->>'root_timesheet_id',
+            'component_key_type',v_component->>'component_key_type',
+            'component_key_value',v_component->>'component_key_value',
+            'effective_source_outstanding_ex_vat',
+              (v_component->>'effective_source_outstanding_ex_vat')::numeric,
+            'correction_chain_fingerprint',v_residual->>'chain_fingerprint',
+            'correction_chain_residual_fingerprint',
+              v_residual->>'residual_fingerprint',
+            'correction_financials_policy_envelope_fingerprint',
+              v_residual->>'correction_financials_policy_envelope_fingerprint'
+          ),
+        'source_units',v_source_units,
+        'target_units',v_source_units,
+        'source_pay_ex_vat',v_source_amount,
+        'target_amount_ex_vat',v_target_amount,
+        'target_pay_ex_vat',v_target_amount,
+        'saved_resolution_result_json',
+          coalesce(v_bucket->'saved_resolution_result_json','{}'::jsonb)
+          ||jsonb_build_object(
+            'source_pay_ex_vat',v_source_amount,
+            'target_units',v_source_units,
+            'target_amount_ex_vat',v_target_amount,
+            'target_pay_ex_vat',v_target_amount
+          ),
+        'correction_chain_fingerprint',v_residual->>'chain_fingerprint',
+        'correction_chain_residual_fingerprint',v_residual->>'residual_fingerprint',
+        'correction_financials_policy_envelope_fingerprint',
+          v_residual->>'correction_financials_policy_envelope_fingerprint'
+      );
+
+    update public.banking_pay_workbench_session_case_resolutions
+    set timesheet_id=v_component_timesheet_id,
+        source_basis_fingerprint=v_component->>'source_basis_fingerprint',
+        source_family_key=v_residual->>'source_family_key',
+        component_key_type=upper(v_component->>'component_key_type'),
+        component_key_value=v_component->>'component_key_value',
+        payload_json=coalesce(v_resolution.payload_json,'{}'::jsonb)
+          ||jsonb_build_object(
+            'linked_timesheet_id',v_component_timesheet_id::text,
+            'timesheet_id',v_component_timesheet_id::text,
+            'source_family_key',v_residual->>'source_family_key',
+            -- Keep the canonical component result available both at the
+            -- resolution row boundary and in its detailed bucket.  The
+            -- correction residual reader accepts both shapes so decisions
+            -- saved before this repeatable was installed remain valid.
+            'target_pay_method',v_bucket->>'target_pay_method',
+            'target_amount_ex_vat',v_target_amount,
+            'target_pay_ex_vat',v_target_amount,
+            'saved_resolution_result_json',
+              v_bucket->'saved_resolution_result_json',
+            'correction_chain_fingerprint',v_residual->>'chain_fingerprint',
+            'correction_chain_residual_fingerprint',
+              v_residual->>'residual_fingerprint',
+            'correction_financials_policy_envelope',
+              v_residual->'correction_financials_policy_envelope',
+            'correction_financials_policy_envelope_fingerprint',
+              v_residual->>'correction_financials_policy_envelope_fingerprint',
+            'bucket_resolutions',jsonb_build_array(v_bucket)
+          ),
+        updated_at_utc=now()
+    where id=v_resolution.id;
+    v_updated:=v_updated+1;
+  end loop;
+
+  return jsonb_build_object(
+    'ok',true,
+    'normalised_count',v_updated,
+    'source_family_key',v_residual->>'source_family_key',
+    'root_timesheet_id',v_residual->>'root_timesheet_id'
   );
 end;
 $function$;
@@ -1199,6 +1641,7 @@ revoke all on function public._ctms_assert_payload_corrections_fresh_v1(jsonb,te
 revoke all on function public._ctms_assert_session_correction_residuals_draftable_v1(uuid,jsonb,text) from public,anon,authenticated,service_role;
 revoke all on function public._ctms_materialise_candidate_correction_residuals_v1(uuid,uuid,uuid,timestamptz) from public,anon,authenticated,service_role;
 revoke all on function public._ctms_enrich_correction_resolution_payload_v1(uuid,jsonb) from public,anon,authenticated,service_role;
+revoke all on function public._ctms_normalise_correction_case_resolutions_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;
 revoke all on function public._ctms_clear_correction_chain_snoozes_v1(uuid,uuid) from public,anon,authenticated,service_role;
 revoke all on function public._ctms_invoice_week_candidate_ids_v1(uuid,date,integer) from public,anon,authenticated,service_role;
 revoke all on function public._ctms_invoice_payload_has_financial_edit_v1(jsonb) from public,anon,authenticated,service_role;

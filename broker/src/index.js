@@ -19670,7 +19670,11 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
     const candidateMaterialisationPending = countFirst(candidateCounts.materialisation_pending);
     const candidateDirty = countFirst(candidateCounts.dirty);
     const candidateUnknown = countFirst(candidateCounts.unknown);
-    const candidateUnseeded = countFirst(candidateCounts.unseeded, total > 0 ? Math.max(0, total - countFirst(src.scope_seeded_count, src.scope_seeded)) : 0);
+    const candidateUnseededReported = countFirst(candidateCounts.unseeded, total > 0 ? Math.max(0, total - countFirst(src.scope_seeded_count, src.scope_seeded)) : 0);
+    const candidateUnseededCapacity = total > 0
+      ? Math.max(0, total - completed - failed)
+      : candidateUnseededReported;
+    const candidateUnseeded = Math.min(candidateUnseededReported, candidateUnseededCapacity);
 
     const lineUnitsTotal = countFirst(src.line_units_total, src.total_line_units, src.line_unit_count, lineCounts.total);
     const lineUnitsComplete = countFirst(src.line_units_complete, src.completed_line_units, src.line_units_completed, lineCounts.complete, lineCounts.materialised_or_skipped);
@@ -29034,6 +29038,13 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   };
   const fail = (status, code, message, details = {}) => {
     const safeDetails = isPlainObject(details) ? details : {};
+    try {
+      console.warn('BANKING_PAY_CREATE_DRAFT_REJECTED', JSON.stringify({
+        status: Number(status) || 500,
+        code: upperTrim(code) || 'BANKING_PAY_CREATE_DRAFT_FAILED',
+        stage: trimStr(safeDetails.stage || safeDetails.readiness_stage || '') || null
+      }));
+    } catch {}
     const safeTitle = trimStr(safeDetails.title || safeDetails.friendly_title || safeDetails.friendlyTitle || '');
     const preserveSpecificMessageCodes = new Set([
       'BANKING_PAY_CREATE_DRAFT_FILTER_CONTEXT_INVALID',
@@ -29901,7 +29912,10 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     });
     if (siblingHasRealTsDayRow) return true;
 
-    return !createDraftPreviewRowHasWorkDate(row) && createDraftPreviewSegmentRows(row).length <= 0;
+    // A genuine TS_TOTAL payment has no work date or segment rows by design.
+    // It is synthetic only when the source explicitly says that dated rows
+    // replace it, or when a real TS_DAY sibling proves that replacement.
+    return false;
   };
   const fetchCurrentSessionSelectionForCreateDraft = async (sessionIdValue, scopeValue = 'ALL', readinessSnapshot = null) => {
     const id = trimStr(sessionIdValue);
@@ -31544,6 +31558,7 @@ const idempotencyHash = await sha256Hex(stableStringify({
   pay_channel_scope: payChannelScope,
   selected_preview_row_hash: selectedPreviewRowHash,
   session_version: sessionVersion,
+  progress_counter_version: postSyncProgressCounterVersion,
   session_signature: sessionSignature,
   same_week_paye_override: verifiedSameWeekPayeOverride ? {
     used: true,

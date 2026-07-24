@@ -111,6 +111,7 @@ DECLARE
   v_sync_uncovered_component_count integer := 0;
   v_sync_candidate_covered boolean := false;
   v_sync_result_out_of_scope_count integer := 0;
+  v_current_resolution_pending_member_ids uuid[] := ARRAY[]::uuid[];
   v_current_source_change_seq bigint := 0;
   v_final_source_change_seq bigint := 0;
   v_post_sync_candidate_pay_channel_scope text := NULL::text;
@@ -662,18 +663,27 @@ BEGIN
         COALESCE(correction_chains.chain_json->'member_timesheet_ids', '[]'::jsonb)
       ) AS member_id(value)
       WHERE member_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-    ), expanded_linked_scope AS (
-      SELECT linked_id AS timesheet_id
-      FROM unnest(COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[])) AS linked_values(linked_id)
+    ), expanded_target_scope AS (
+      SELECT targeted_id AS timesheet_id
+      FROM unnest(COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])) AS targeted_values(targeted_id)
       UNION
       SELECT expanded_member_ids.timesheet_id
       FROM expanded_member_ids
-      WHERE NOT (expanded_member_ids.timesheet_id = ANY(COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])))
     )
-    SELECT COALESCE(ARRAY_AGG(expanded_linked_scope.timesheet_id ORDER BY expanded_linked_scope.timesheet_id), ARRAY[]::uuid[])
-    INTO v_linked_timesheet_ids
-    FROM expanded_linked_scope;
+    SELECT COALESCE(ARRAY_AGG(expanded_target_scope.timesheet_id ORDER BY expanded_target_scope.timesheet_id), ARRAY[]::uuid[])
+    INTO v_targeted_timesheet_ids
+    FROM expanded_target_scope;
 
+    -- Linked scope carries resolution context but does not guarantee that a
+    -- payable source row is materialised. Promote every correction member to
+    -- the actual targeted set and retain only genuinely additional linked
+    -- identifiers here.
+    SELECT COALESCE(ARRAY_AGG(linked_id ORDER BY linked_id), ARRAY[]::uuid[])
+    INTO v_linked_timesheet_ids
+    FROM unnest(COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[])) AS linked_values(linked_id)
+    WHERE NOT (linked_id = ANY(COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])));
+
+    v_targeted_timesheet_ids_json := to_jsonb(COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[]));
     v_linked_timesheet_ids_json := to_jsonb(COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[]));
   END IF;
 
@@ -910,6 +920,45 @@ BEGIN
 
     UNION
 
+    /* Full-live seeds normally contain only current/frozen carriers.  Import-
+       authoritative correction residuals, however, are chain economic truth:
+       an archived reversal or replacement member can still carry the positive
+       side required to net a current negative recovery.  Promote every valid
+       chain member before source collection so full-live and targeted refreshes
+       materialise the same complete component family. */
+    SELECT correction_member.value::uuid
+    FROM seed_timesheet_ids AS correction_seed
+    JOIN public.timesheets AS correction_seed_timesheet
+      ON correction_seed_timesheet.timesheet_id = correction_seed.timesheet_id
+    CROSS JOIN LATERAL (
+      SELECT public.timesheet_correction_chain_scope_v1(
+        correction_seed.timesheet_id, false, 32, 100
+      ) AS chain_json
+    ) AS correction_chain
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(correction_chain.chain_json->'member_timesheet_ids', '[]'::jsonb)
+    ) AS correction_member(value)
+    WHERE correction_seed.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.timesheets_financials AS correction_seed_financials
+        WHERE correction_seed_financials.timesheet_id = correction_seed.timesheet_id
+          AND correction_seed_financials.candidate_id = p_candidate_id
+      )
+      AND COALESCE((correction_chain.chain_json->>'valid')::boolean, false)
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(
+          COALESCE(correction_chain.chain_json->'member_timesheet_ids', '[]'::jsonb)
+        ) AS classified_member(value)
+        WHERE classified_member.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND COALESCE((public._ctms_import_correction_classify_v1(classified_member.value::uuid)
+            ->>'is_import_authoritative_correction')::boolean, false)
+      )
+      AND correction_member.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+    UNION
+
     SELECT rotation_scope.canonical_timesheet_id
     FROM seed_array
     JOIN public._pay_timesheet_rotation_scope(seed_array.timesheet_ids) AS rotation_scope ON true
@@ -1063,6 +1112,38 @@ BEGIN
     FROM public._pay_active_settled_components(ARRAY[raw_outstanding_component.timesheet_id]::uuid[]) AS active_settled_component
   ) AS active_settled_basis ON true
   WHERE raw_outstanding_component.outstanding_ex_vat < 0;
+
+  /*
+   * Capture durable correction-resolution membership before the source-row
+   * rewrite below. The rewrite intentionally replaces the candidate's
+   * correction source rows; asking the residual helper afterwards creates a
+   * short-lived blind spot on continuation pages and can misclassify an
+   * already-pending coupled component as unattested.
+   */
+  SELECT COALESCE(
+    ARRAY_AGG(DISTINCT pending_member.value::uuid ORDER BY pending_member.value::uuid),
+    ARRAY[]::uuid[]
+  )
+  INTO v_current_resolution_pending_member_ids
+  FROM jsonb_array_elements(
+    public._ctms_candidate_correction_residuals_v1(
+      p_session_id,
+      p_candidate_id,
+      NULL::uuid,
+      'PAY_WORKBENCH_SOURCE_BUILD_ATTESTATION'
+    )
+  ) AS pending_residual(value)
+  CROSS JOIN LATERAL jsonb_array_elements_text(
+    COALESCE(pending_residual.value->'member_timesheet_ids', '[]'::jsonb)
+  ) AS pending_member(value)
+  WHERE COALESCE((pending_residual.value->>'draftable')::boolean, false) IS NOT TRUE
+    AND COALESCE(pending_residual.value->>'block_code', '')
+          = 'CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED'
+    AND COALESCE((pending_residual.value->>'unresolved_count')::integer, 0) > 0
+    AND COALESCE((pending_residual.value->>'reservation_overrun_count')::integer, 0) = 0
+    AND COALESCE((pending_residual.value->>'component_count')::integer, 0) > 0
+    AND pending_member.value
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 
   PERFORM public._ctms_rewrite_source_build_correction_negative_components_v1(
     p_session_id,
@@ -1335,6 +1416,39 @@ BEGIN
     SELECT post_seed_timesheet_ids.timesheet_id
     FROM post_seed_timesheet_ids
     WHERE post_seed_timesheet_ids.timesheet_id IS NOT NULL
+
+    UNION
+
+    SELECT correction_member.value::uuid
+    FROM post_seed_timesheet_ids AS correction_seed
+    JOIN public.timesheets AS correction_seed_timesheet
+      ON correction_seed_timesheet.timesheet_id = correction_seed.timesheet_id
+    CROSS JOIN LATERAL (
+      SELECT public.timesheet_correction_chain_scope_v1(
+        correction_seed.timesheet_id, false, 32, 100
+      ) AS chain_json
+    ) AS correction_chain
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(correction_chain.chain_json->'member_timesheet_ids', '[]'::jsonb)
+    ) AS correction_member(value)
+    WHERE correction_seed.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.timesheets_financials AS correction_seed_financials
+        WHERE correction_seed_financials.timesheet_id = correction_seed.timesheet_id
+          AND correction_seed_financials.candidate_id = p_candidate_id
+      )
+      AND COALESCE((correction_chain.chain_json->>'valid')::boolean, false)
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(
+          COALESCE(correction_chain.chain_json->'member_timesheet_ids', '[]'::jsonb)
+        ) AS classified_member(value)
+        WHERE classified_member.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND COALESCE((public._ctms_import_correction_classify_v1(classified_member.value::uuid)
+            ->>'is_import_authoritative_correction')::boolean, false)
+      )
+      AND correction_member.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 
     UNION
 
@@ -1729,6 +1843,9 @@ BEGIN
           ) pending_member(value)
           WHERE pending_member.value::uuid
                 = negative_component.timesheet_id
+        )
+        OR negative_component.timesheet_id = ANY(
+          COALESCE(v_current_resolution_pending_member_ids, ARRAY[]::uuid[])
         ) THEN 'RESOLUTION_PENDING'
         WHEN EXISTS (
           SELECT 1
@@ -1744,7 +1861,29 @@ BEGIN
            AND UPPER(BTRIM(finance_component.component_key_type)) = negative_component.key_type
            AND BTRIM(finance_component.component_key_value) = negative_component.key_value
           WHERE rotation_scope.requested_timesheet_id = negative_component.timesheet_id
-            AND finance_case.baseline_signature IS NOT DISTINCT FROM negative_component.baseline_signature
+            AND (
+              finance_case.baseline_signature IS NOT DISTINCT FROM negative_component.baseline_signature
+              OR (
+                LOWER(BTRIM(COALESCE(finance_component.source_family_key, '')))
+                    LIKE 'correction-chain:%'
+                AND NULLIF(
+                      BTRIM(COALESCE(
+                        finance_component.source_basis_json
+                          ->>'correction_chain_residual_fingerprint',
+                        ''
+                      )),
+                      ''
+                    ) IS NOT NULL
+                AND finance_case.baseline_signature IS NOT DISTINCT FROM NULLIF(
+                      BTRIM(COALESCE(
+                        finance_component.source_basis_json
+                          ->>'correction_chain_residual_fingerprint',
+                        ''
+                      )),
+                      ''
+                    )
+              )
+            )
             AND finance_case.written_off_at_utc IS NULL
             AND finance_component.closed_at_utc IS NULL
             AND ROUND(COALESCE(finance_component.source_amount, 0), 2) >= ABS(negative_component.outstanding_ex_vat) - 0.01
@@ -2086,6 +2225,7 @@ BEGIN
         'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
         'targeted_timesheet_ids_requested', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
         'linked_timesheet_ids_requested', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
+        'source_build_force_include_timesheet_ids', COALESCE(v_post_sync_scope_timesheet_ids_json, '[]'::jsonb),
         'pay_channel_scope', v_pay_channel_scope,
         'source_build_run_id', v_source_build_run_id::text,
         'source_change_seq', v_source_change_seq,
@@ -2129,6 +2269,7 @@ BEGIN
       'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
       'targeted_timesheet_ids_requested', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
       'linked_timesheet_ids_requested', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
+      'source_build_force_include_timesheet_ids', COALESCE(v_post_sync_scope_timesheet_ids_json, '[]'::jsonb),
       'pay_channel_scope', v_pay_channel_scope,
       'source_build_run_id', v_source_build_run_id::text,
       'source_change_seq', v_source_change_seq,
@@ -4116,7 +4257,19 @@ BEGIN
     )
   );
 
-  perform public._ctms_materialise_candidate_correction_residuals_v1(p_session_id,p_candidate_id,v_source_build_run_id,v_now);
+  -- A full-live candidate build is paged. Correction-chain members can fall on
+  -- different pages, so validating/materialising the coupled residual before
+  -- the terminal page would reject a temporarily incomplete (but valid) run.
+  -- The terminal page still fails closed before line-work seeding if any
+  -- required component is absent.
+  IF COALESCE(v_has_more, false) IS NOT TRUE THEN
+    PERFORM public._ctms_materialise_candidate_correction_residuals_v1(
+      p_session_id,
+      p_candidate_id,
+      v_source_build_run_id,
+      v_now
+    );
+  END IF;
 
   RETURN jsonb_build_object(
     'ok', true,

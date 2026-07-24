@@ -13,6 +13,10 @@ const overpaymentSyncSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/21072026_1235_40_pay_sync_overpayments_from_preview.sql'),
   'utf8'
 );
+const sessionCaseResolutionSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_41_pay_workbench_session_apply_case_resolution.sql'),
+  'utf8'
+);
 const correctionRuntimeSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql'),
   'utf8'
@@ -33,6 +37,10 @@ const frozenRecoveryIdentitySql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/20072026_1133_resolve_frozen_recovery_timesheet_identity.sql'),
   'utf8'
 );
+const laterFreshnessSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/20072026_1052_preserve_gross_deductions_on_paye_net.sql'),
+  'utf8'
+);
 const workerSource = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
 
 function functionBody(name, nextName, source = sql) {
@@ -42,6 +50,14 @@ function functionBody(name, nextName, source = sql) {
   const end = nextName
     ? source.indexOf(`CREATE OR REPLACE FUNCTION public.${nextName}`, start + functionMarker.length)
     : source.indexOf('CREATE OR REPLACE FUNCTION public.', start + functionMarker.length);
+  return source.slice(start, end > start ? end : source.length);
+}
+
+function lastFunctionBody(name, source = sql) {
+  const functionMarker = `CREATE OR REPLACE FUNCTION public.${name}`;
+  const start = source.lastIndexOf(functionMarker);
+  assert.ok(start >= 0, `${name} must exist`);
+  const end = source.indexOf('CREATE OR REPLACE FUNCTION public.', start + functionMarker.length);
   return source.slice(start, end > start ? end : source.length);
 }
 
@@ -153,6 +169,22 @@ test('finance adjustment draft creation treats signed recovery component amounts
   assert.match(body, /OPERATION_ALLOCATION_ROWS_NOT_LINKED/);
 });
 
+test('finance adjustment draft creation freezes correction payout authority into a positive destination group', () => {
+  const body = functionBody('pay_batch_apply_finance_adjustments', null, financeAdjustmentSql);
+  assert.match(
+    body,
+    /pbi\.item_type in \('OVERPAYMENT_RECOVERY', 'UNDERPAYMENT_PAYMENT'\)[\s\S]*matching_positive_group\.week_ending_bucket/
+  );
+  assert.match(
+    body,
+    /left join lateral \([\s\S]*positive_item\.pay_batch_candidate_id = pbi\.pay_batch_candidate_id[\s\S]*round\(coalesce\(positive_item\.amount_inc_vat, positive_item\.amount_ex_vat, 0\), 2\) > 0/
+  );
+  assert.match(
+    body,
+    /pbi\.item_type in \('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','UNDERPAYMENT_PAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY','LOAN_REPAYMENT'\)/
+  );
+});
+
 test('canonical finance rows expose scheduled and current-run recovery amounts separately', () => {
   const body = functionBody('pay_preview_candidate_build_canonical_lines', 'pay_preview_candidate_build_summary_fragment');
   assert.match(body, /'nominal_due_amount_ex_vat', round\(coalesce\(fcl\.nominal_due_amount_ex_vat, 0\), 2\)/);
@@ -207,6 +239,28 @@ test('pay-method correction resolution is surfaced without creating or clearing 
     syncBody,
     /CORRECTION_RESIDUAL_NOT_READY_FOR_OVERPAYMENT_SYNC/
   );
+  assert.match(
+    syncBody,
+    /v_resolution_pending_root_ids uuid\[\][\s\S]*CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*root_timesheet_id/
+  );
+  assert.match(
+    syncBody,
+    /authoritative_component\.timesheet_id[\s\S]*ANY\(COALESCE\(v_resolution_pending_root_ids, ARRAY\[\]::uuid\[\]\)\)/
+  );
+  const pendingMetadataGuards = [
+    ...syncBody.matchAll(
+      /authoritative_component\.timesheet_id\s*=\s*ANY\(COALESCE\(v_resolution_pending_root_ids, ARRAY\[\]::uuid\[\]\)\)[\s\S]{0,240}?authoritative_component\.timesheet_id\s*=\s*ANY\(COALESCE\(v_resolution_pending_member_ids, ARRAY\[\]::uuid\[\]\)\)/g
+    ),
+  ];
+  assert.equal(
+    pendingMetadataGuards.length,
+    3,
+    'all authoritative-negative metadata guards must exempt both pending roots and their member timesheets'
+  );
+  assert.match(
+    syncBody,
+    /raw_case\.timesheet_id[\s\S]*ANY\(COALESCE\(v_resolution_pending_member_ids, ARRAY\[\]::uuid\[\]\)\)[\s\S]*tmp_sync_raw_negative_timesheet_rows/
+  );
 });
 
 test('source build attests pending pay-method resolution but draft gate remains fail-closed', () => {
@@ -218,6 +272,14 @@ test('source build attests pending pay-method resolution but draft gate remains 
   assert.match(
     sourceBody,
     /correction_resolution_pending_member_timesheet_ids[\s\S]*THEN 'RESOLUTION_PENDING'/
+  );
+  assert.match(
+    sourceBody,
+    /v_current_resolution_pending_member_ids uuid\[\][\s\S]*PAY_WORKBENCH_SOURCE_BUILD_ATTESTATION[\s\S]*CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED/
+  );
+  assert.match(
+    sourceBody,
+    /negative_component\.timesheet_id = ANY\([\s\S]*v_current_resolution_pending_member_ids/
   );
   assert.match(
     sourceBody,
@@ -258,6 +320,38 @@ test('source build attests pending pay-method resolution but draft gate remains 
   );
 });
 
+test('case resolution refreshes the complete candidate after advancing the session version', () => {
+  const resolutionBody = functionBody(
+    'pay_workbench_session_apply_case_resolution',
+    null,
+    sessionCaseResolutionSql
+  );
+  assert.match(
+    resolutionBody,
+    /UPDATE public\.banking_pay_workbench_sessions[\s\S]*SET version = public\.banking_pay_workbench_sessions\.version \+ 1[\s\S]*v_case_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';[\s\S]*pay_workbench_enqueue_session_candidate_refresh/
+  );
+  assert.match(
+    resolutionBody,
+    /'targeted_timesheet_ids', CASE[\s\S]*v_case_refresh_scope_kind = 'CANDIDATE_FULL_LIVE' THEN '\[\]'::jsonb/
+  );
+  assert.match(
+    resolutionBody,
+    /'linked_timesheet_ids', CASE[\s\S]*v_case_refresh_scope_kind = 'CANDIDATE_FULL_LIVE' THEN '\[\]'::jsonb/
+  );
+});
+
+test('source-build continuation attests correction-chain residual fingerprints without weakening ordinary baseline checks', () => {
+  const sourceBuildBody = functionBody(
+    'pay_workbench_candidate_source_build_chunk',
+    null,
+    sourceBuildSql
+  );
+  assert.match(
+    sourceBuildBody,
+    /finance_case\.baseline_signature IS NOT DISTINCT FROM negative_component\.baseline_signature[\s\S]*finance_component\.source_family_key[\s\S]*LIKE 'correction-chain:%'[\s\S]*correction_chain_residual_fingerprint[\s\S]*finance_case\.baseline_signature IS NOT DISTINCT FROM/
+  );
+});
+
 test('active-reservation protection audit events are idempotent', () => {
   const body = functionBody('pay_sync_overpayments_from_preview', null, overpaymentSyncSql);
 
@@ -277,9 +371,89 @@ test('targeted correction refresh expands to the complete correction chain befor
   assert.ok(expansionEnd > expansionStart, 'expanded chain scope must be persisted for collection');
   const expansionBlock = body.slice(expansionStart, expansionEnd);
   assert.match(expansionBlock, /timesheet_correction_chain_scope_v1\([\s\S]*member_timesheet_ids/);
+  assert.match(expansionBlock, /expanded_target_scope[\s\S]*INTO v_targeted_timesheet_ids/);
+  assert.match(expansionBlock, /v_targeted_timesheet_ids_json := to_jsonb/);
   assert.match(expansionBlock, /v_linked_timesheet_ids_json := to_jsonb/);
+  assert.match(
+    expansionBlock,
+    /SELECT expanded_member_ids\.timesheet_id[\s\S]*FROM expanded_member_ids[\s\S]*INTO v_targeted_timesheet_ids/
+  );
   assert.match(expansionBlock, /PRE_DRAFT_LIVE_TRUTH/);
   assert.doesNotMatch(expansionBlock, /PAY_BATCH|bank_csv_export_json|settlement/);
+});
+
+test('full-live source scope promotes valid import-authoritative correction chain members before and after sync', () => {
+  const body = functionBody('pay_workbench_candidate_source_build_chunk', null, sourceBuildSql);
+  const preSyncStart = body.indexOf('Full-live seeds normally contain only current/frozen carriers');
+  const preSyncEnd = body.indexOf('SELECT rotation_scope.canonical_timesheet_id', preSyncStart);
+  assert.ok(preSyncStart >= 0 && preSyncEnd > preSyncStart, 'pre-sync full-live chain expansion must exist');
+  const preSyncBlock = body.slice(preSyncStart, preSyncEnd);
+  assert.match(preSyncBlock, /timesheet_correction_chain_scope_v1\(/);
+  assert.match(preSyncBlock, /member_timesheet_ids/);
+  assert.match(preSyncBlock, /is_import_authoritative_correction/);
+  assert.match(preSyncBlock, /correction_member\.value::uuid/);
+  assert.match(
+    preSyncBlock,
+    /JOIN public\.timesheets AS correction_seed_timesheet[\s\S]*FROM public\.timesheets_financials AS correction_seed_financials[\s\S]*correction_seed_financials\.candidate_id = p_candidate_id/,
+    'stale retained identifiers must be rejected before invoking the correction-chain helper'
+  );
+
+  const postSyncStart = body.indexOf(
+    'SELECT correction_member.value::uuid',
+    body.indexOf('post_expanded_timesheet_ids AS (')
+  );
+  const postSyncEnd = body.indexOf('SELECT rotation_scope.canonical_timesheet_id', postSyncStart);
+  assert.ok(postSyncStart >= 0 && postSyncEnd > postSyncStart, 'post-sync full-live chain expansion must exist');
+  const postSyncBlock = body.slice(postSyncStart, postSyncEnd);
+  assert.match(postSyncBlock, /timesheet_correction_chain_scope_v1\(/);
+  assert.match(postSyncBlock, /member_timesheet_ids/);
+  assert.match(postSyncBlock, /is_import_authoritative_correction/);
+  assert.match(
+    postSyncBlock,
+    /JOIN public\.timesheets AS correction_seed_timesheet[\s\S]*FROM public\.timesheets_financials AS correction_seed_financials[\s\S]*correction_seed_financials\.candidate_id = p_candidate_id/,
+    'post-sync correction-chain expansion must ignore stale or cross-candidate retained identifiers'
+  );
+});
+
+test('full-live collection receives correction-chain carriers through a bounded internal-only handoff', () => {
+  const sourceBody = functionBody('pay_workbench_candidate_source_build_chunk', null, sourceBuildSql);
+  assert.equal(
+    (sourceBody.match(/'source_build_force_include_timesheet_ids', COALESCE\(v_post_sync_scope_timesheet_ids_json, '\[\]'::jsonb\)/g) || []).length,
+    2,
+    'the preview decisions and final collector context must carry the post-sync authoritative scope'
+  );
+
+  const collectBody = functionBody('pay_preview_candidate_collect_scope', 'pay_workbench_session_open');
+  const fullLiveStart = collectBody.indexOf(
+    "COALESCE(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE') = 'CANDIDATE_FULL_LIVE'"
+  );
+  const fullLiveEnd = collectBody.indexOf('v_targeted_timesheet_ids_requested_json :=', fullLiveStart);
+  assert.ok(fullLiveStart >= 0 && fullLiveEnd > fullLiveStart, 'full-live source page must exist');
+  const fullLiveBlock = collectBody.slice(fullLiveStart, fullLiveEnd);
+
+  assert.match(fullLiveBlock, /v_internal_reconciliation_authorised IS TRUE/);
+  assert.match(fullLiveBlock, /source_build_force_include_timesheet_ids/);
+  assert.match(fullLiveBlock, /WITH ORDINALITY AS forced_source_values\(value, position\)/);
+  assert.match(fullLiveBlock, /forced_source_values\.position <= 500/);
+  assert.match(
+    fullLiveBlock,
+    /JOIN public\.timesheets AS forced_candidate_timesheet[\s\S]*FROM public\.timesheets_financials AS forced_candidate_financials[\s\S]*forced_candidate_financials\.candidate_id = v_candidate_id/,
+    'forced source identities must be restricted to the candidate being rebuilt'
+  );
+});
+
+test('paged source build materialises coupled correction residuals only after the terminal page', () => {
+  const body = functionBody('pay_workbench_candidate_source_build_chunk', null, sourceBuildSql);
+  assert.match(
+    body,
+    /IF COALESCE\(v_has_more, false\) IS NOT TRUE THEN[\s\S]*PERFORM public\._ctms_materialise_candidate_correction_residuals_v1\([\s\S]*END IF;/,
+    'an intermediate page must not validate a correction chain before all source carriers are accumulated'
+  );
+  assert.equal(
+    (body.match(/_ctms_materialise_candidate_correction_residuals_v1\s*\(/g) || []).length,
+    1,
+    'the terminal-page guard must be the only correction residual materialisation call'
+  );
 });
 
 test('correction-chain channel resolution uses the candidate current pay method once per chain', () => {
@@ -389,6 +563,100 @@ test('correction residual uses one signed settlement and reservation ledger acro
   );
 });
 
+test('normalised pay-method correction target is not proportioned twice', () => {
+  assert.match(
+    correctionResidualSql,
+    /WHEN component_row\.resolution_required[\s\S]*AND component_row\.resolution_complete[\s\S]*sign\(component_row\.effective_outstanding_ex_vat\)[\s\S]*abs\(COALESCE\([\s\S]*component_row\.resolved_target_amount_ex_vat/
+  );
+  assert.doesNotMatch(
+    correctionResidualSql,
+    /resolved_target_amount_ex_vat[\s\S]{0,500}effective_outstanding_ex_vat[\s\S]{0,200}raw_outstanding_ex_vat/
+  );
+});
+
+test('correction-chain resolution normalisation preserves each member identity', () => {
+  const start = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_normalise_correction_case_resolutions_v1'
+  );
+  const end = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_clear_correction_chain_snoozes_v1',
+    start
+  );
+  assert.ok(start >= 0 && end > start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(
+    body,
+    /v_component_timesheet_id:=coalesce\([\s\S]*v_component->>'carrier_timesheet_id'[\s\S]*substring\(btrim\(v_resolution\.case_key\) from 11\)::uuid/
+  );
+  assert.match(body, /v_component_timesheet_id<>all\(v_member_ids\)/);
+  assert.match(body, /set timesheet_id=v_component_timesheet_id/);
+  assert.match(body, /'linked_timesheet_id',v_component_timesheet_id::text/);
+  assert.doesNotMatch(body, /set timesheet_id=p_anchor_timesheet_id/);
+});
+
+test('linked correction resolution expands to required components without preview rows', () => {
+  const start = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_normalise_correction_case_resolutions_v1'
+  );
+  const end = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_clear_correction_chain_snoozes_v1',
+    start
+  );
+  assert.ok(start >= 0 && end > start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(
+    body,
+    /if v_resolution\.id is null then[\s\S]*source_family_key=v_residual->>'source_family_key'/
+  );
+  assert.match(
+    body,
+    /insert into public\.banking_pay_workbench_session_case_resolutions[\s\S]*'applied_via_linked_scope',true/
+  );
+  assert.match(
+    body,
+    /v_component->>'source_basis_fingerprint'[\s\S]*upper\(v_component->>'component_key_type'\)[\s\S]*v_component->>'component_key_value'/
+  );
+  assert.match(
+    body,
+    /CORRECTION_CHAIN_RESOLUTION_CARRIER_ID_REQUIRED/
+  );
+});
+
+test('correction-chain finance sync can build recovery from a non-recovery member template', () => {
+  const start = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_rewrite_sync_correction_cases_v1'
+  );
+  const end = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_normalise_correction_case_resolutions_v1',
+    start
+  );
+  assert.ok(start >= 0 && end > start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.doesNotMatch(
+    body,
+    /where candidate_row\.candidate_id = v_candidate_id[\s\S]{0,180}and candidate_row\.desired_case_type = 'OVERPAYMENT'/
+  );
+  assert.match(
+    body,
+    /when candidate_row\.desired_case_type =\s*'OVERPAYMENT'::public\.pay_finance_case_type_enum then 0/
+  );
+  assert.match(
+    body,
+    /'OVERPAYMENT'::public\.pay_advance_kind_enum/
+  );
+  assert.match(
+    body,
+    /'OVERPAYMENT'::public\.pay_advance_reason_enum/
+  );
+  assert.doesNotMatch(
+    body,
+    /CORRECTION_CHAIN_OVERPAYMENT_SYNC_TEMPLATE_REQUIRED/
+  );
+});
+
 test('zero-raw correction residual preserves VAT and cross-channel target authority', () => {
   const body = functionBody(
     'pay_correction_chain_residual_v1',
@@ -413,7 +681,7 @@ test('zero-raw correction residual preserves VAT and cross-channel target author
   );
   assert.match(
     balancedBlock,
-    /WHEN component_row\.raw_outstanding_ex_vat = 0[\s\S]*sign\(component_row\.effective_outstanding_ex_vat\)[\s\S]*resolved_target_amount_ex_vat/
+    /WHEN component_row\.effective_outstanding_ex_vat = 0[\s\S]*THEN 0[\s\S]*sign\(component_row\.effective_outstanding_ex_vat\)[\s\S]*resolved_target_amount_ex_vat/
   );
 });
 
@@ -652,6 +920,10 @@ test('central overpayment sync attests the same coupled correction-chain residua
   assert.match(helperBody, /insert into pg_temp\.tmp_sync_authoritative_negative_components/i);
   assert.match(helperBody, /CORRECTION_CHAIN_SYNC_SCOPE_MUST_INCLUDE_ROOT/);
   assert.match(helperBody, /target_outstanding_ex_vat/);
+  assert.match(
+    helperBody,
+    /coalesce\(\(v_residual->>'draftable'\)::boolean, false\) is not true[\s\S]*continue;/
+  );
 
   const rewriteIndex = overpaymentSyncSql.indexOf(
     '_ctms_rewrite_sync_authoritative_correction_negative_components_v1'
@@ -666,29 +938,75 @@ test('central overpayment sync attests the same coupled correction-chain residua
     'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_NEGATIVE_COMPONENT_METADATA_MISMATCH'
   );
   const memberRootIndex = overpaymentSyncSql.lastIndexOf(
-    'WITH correction_member_roots AS',
+    'WITH correction_residuals AS',
     metadataGuardIndex
   );
   assert.ok(memberRootIndex >= 0 && metadataGuardIndex > memberRootIndex);
   assert.match(
     overpaymentSyncSql.slice(memberRootIndex, metadataGuardIndex),
-    /COALESCE\(correction_member\.root_timesheet_id, raw_case\.timesheet_id\)/
+    /correction_component_totals AS/
+  );
+  assert.match(
+    overpaymentSyncSql.slice(memberRootIndex, metadataGuardIndex),
+    /component\.value->>'truth_ex_vat'/
+  );
+  assert.match(
+    overpaymentSyncSql.slice(memberRootIndex, metadataGuardIndex),
+    /NOT EXISTS \([\s\S]*FROM correction_member_roots AS correction_member/
   );
 });
 
 test('the Supabase pldbgapi2 workaround is scoped to the correction-chain Banking entry points', () => {
   assert.equal(
     (correctionPlpgsqlGuardSql.match(/SET plpgsql_check\.mode TO 'disabled'/g) || []).length,
-    7
+    12
   );
   assert.match(correctionPlpgsqlGuardSql, /pay_correction_chain_residual_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_pay_batch_item_source_reservation_amount_ex_vat\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_ctms_import_correction_classify_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_candidate_correction_residuals_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_ctms_materialise_candidate_correction_residuals_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_ctms_rewrite_sync_correction_cases_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_workbench_candidate_source_build_chunk\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_sync_overpayments_from_preview\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_preview_candidate_collect_scope\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_workbench_worker_drain_chunk\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_workbench_worker_drain_chunk_revalidated_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /pay_finance_case_apply_taxable_channel_restructure\s*\(/);
   assert.doesNotMatch(correctionPlpgsqlGuardSql, /\bUPDATE\b|\bINSERT\b|\bDELETE\b|\bTRUNCATE\b|\bDROP\b/i);
+  assert.match(overpaymentSyncSql, /SET plpgsql_check\.mode TO 'disabled'/);
+  assert.match(
+    overpaymentSyncSql,
+    /_pay_workbench_authoritative_scope_valid_v1[\s\S]*WHEN authoritative_session\.version IS NULL THEN 1[\s\S]*ELSE authoritative_session\.version[\s\S]*END = p_session_version/
+  );
+  assert.doesNotMatch(
+    overpaymentSyncSql,
+    /COALESCE\(authoritative_session\.version,\s*1\)\s*=\s*v_workbench_session_version/
+  );
+  assert.match(
+    overpaymentSyncSql,
+    /v_authoritative_session_valid :=[\s\S]*public\._pay_workbench_authoritative_scope_valid_v1\([\s\S]*v_workbench_session_id/
+  );
+  assert.match(
+    overpaymentSyncSql,
+    /REVOKE ALL ON FUNCTION public\._pay_workbench_authoritative_scope_valid_v1\([\s\S]*FROM PUBLIC/
+  );
+});
+
+test('taxable finance restructure persists the exact fingerprint basis consumed by preview', () => {
+  const body = functionBody(
+    'pay_finance_case_apply_taxable_channel_restructure',
+    'pay_manual_debt_adjustment_resolve_taxable_channel_change'
+  );
+
+  assert.match(
+    body,
+    /resolution_fingerprint\s*=\s*public\.pay_finance_component_fingerprint\([\s\S]*nullif\(v_suggestion->'suggested'->>'erni_rate_pct', ''\)::numeric[\s\S]*jsonb_strip_nulls\([\s\S]*'resolution_family', 'TAXABLE_CHANNEL_RESTRUCTURE'[\s\S]*'effective_pay_date', v_effective_pay_date::text[\s\S]*'target_remaining_amount_inc_vat', trc\.target_remaining_inc[\s\S]*'note', nullif\(btrim\(coalesce\(p_note, ''\)\), ''\)/
+  );
+  assert.doesNotMatch(
+    body,
+    /taxable_channel_restructure_effective_pay_date/
+  );
 });
 
 test('negative correction residuals preserve the finance-case carrier while positive residuals stay pay lines', () => {
@@ -699,6 +1017,54 @@ test('negative correction residuals preserve the finance-case carrier while posi
   assert.match(body, /target_outstanding_ex_vat'[\s\S]*< 0[\s\S]*source_row_json->>'finance_case_id'/);
   assert.match(body, /when round\(coalesce\(nullif\(v_component->>'target_outstanding_ex_vat',''\)::numeric,0\),2\) < 0[\s\S]*then '\{\}'::jsonb/);
   assert.match(body, /else jsonb_build_object\([\s\S]*'amount_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
+});
+
+test('materialised correction chains suppress every non-carrier raw member row', () => {
+  const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
+  const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(body, /v_carrier_row_ids uuid\[\]/);
+  assert.match(body, /v_carrier_row_ids:=array_append\(v_carrier_row_ids,v_carrier_row_id\)/);
+  assert.match(body, /case when l\.line_key=v_line_key then 0 else 1 end/);
+  assert.match(
+    body,
+    /and l\.timesheet_id=any\(v_member_ids\)[\s\S]*and not exists \([\s\S]*unnest\(coalesce\(v_carrier_row_ids,array\[\]::uuid\[\]\)\)[\s\S]*carrier_row_id=l\.id/
+  );
+  assert.doesNotMatch(body, /not \(l\.id=any\(v_carrier_row_ids\)\)/);
+});
+
+test('targeted source builds ignore correction chains wholly outside the dirty timesheet family', () => {
+  const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
+  const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(body, /v_chain_in_source_build boolean/);
+  assert.match(
+    body,
+    /source_line\.source_build_run_id=p_source_build_run_id[\s\S]*source_line\.timesheet_id=any\(v_member_ids\)/
+  );
+  assert.match(
+    body,
+    /if coalesce\(v_chain_in_source_build,false\) is not true then[\s\S]*continue;[\s\S]*end if;[\s\S]*for v_component/
+  );
+  assert.match(body, /CORRECTION_RESIDUAL_SOURCE_COMPONENT_MISSING/);
+});
+
+test('an upstream correction pay-method resolution cannot be applied a second time by finance sync', () => {
+  const rewriteStart = correctionRuntimeSql.indexOf('create or replace function public._ctms_rewrite_sync_correction_cases_v1');
+  const rewriteEnd = correctionRuntimeSql.indexOf('create or replace function public._ctms_assert_session_correction_residuals_draftable_v1', rewriteStart);
+  const rewriteBody = correctionRuntimeSql.slice(rewriteStart, rewriteEnd);
+  assert.match(rewriteBody, /'source_pay_method', v_residual->>'target_pay_method'/);
+  assert.match(rewriteBody, /'upstream_correction_pay_method_resolution_applied', true/);
+
+  const syncBody = functionBody('pay_finance_components_sync_from_preview');
+  assert.match(syncBody, /v_upstream_correction_resolution_applied boolean := false/);
+  assert.match(syncBody, /upstream_correction_pay_method_resolution_applied/);
+  assert.match(syncBody, /saved_target_pay_method = CASE[\s\S]*WHEN v_upstream_correction_resolution_applied THEN NULL/);
+  assert.match(syncBody, /saved_resolution_mode = CASE[\s\S]*WHEN v_upstream_correction_resolution_applied THEN NULL/);
+  assert.match(syncBody, /saved_resolution_payload_json = CASE[\s\S]*WHEN v_upstream_correction_resolution_applied THEN NULL/);
+  assert.match(syncBody, /resolution_fingerprint = CASE[\s\S]*WHEN v_upstream_correction_resolution_applied THEN NULL/);
 });
 
 test('zero-value correction residual components do not require a Banking Pay carrier row', () => {
@@ -802,6 +1168,67 @@ test('final reservation checks use frozen correction-chain residual evidence wit
   assert.doesNotMatch(body, /\bNHSP\b|\bHR_WEEKLY\b|\bHR_DAILY\b/);
 });
 
+test('final reservation checks accept only a fresh exact pre-draft resolved target', () => {
+  const marker = 'CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers';
+  const start = sql.indexOf(marker);
+  assert.ok(start >= 0, 'pay_batch_finalize_reservations_and_markers must exist');
+  const end = sql.indexOf('$function$;', start + marker.length);
+  assert.ok(end > start, 'pay_batch_finalize_reservations_and_markers must have a bounded body');
+  const body = sql.slice(start, end + '$function$;'.length);
+
+  assert.match(body, /resolved_component_is_fresh/);
+  assert.match(body, /is_resolution_stale/);
+  assert.match(body, /is_stale_saved_resolution/);
+  assert.match(body, /resolved_rate_resolution_id/);
+  assert.match(
+    body,
+    /resolved_source_amount_ex_vat[\s\S]*outstanding_component_rows\.outstanding_ex_vat[\s\S]*resolved_target_amount_ex_vat[\s\S]*requested_source_amount_ex_vat/
+  );
+  assert.match(body, /FROZEN_FRESH_PRE_DRAFT_RESOLUTION_TARGET/);
+  assert.match(body, /ELSE 'LIVE_PRE_DRAFT_OUTSTANDING'/);
+});
+
+test('post-draft source reservations use the frozen resolved source before the frozen target amount', () => {
+  const body = lastFunctionBody('_pay_batch_item_source_reservation_amount_ex_vat');
+  const frozenResolvedSourceIndex = body.indexOf('v_frozen_resolved_source_text');
+  const frozenSourceAmountIndex = body.indexOf('IF v_frozen_source_amount IS NOT NULL THEN');
+
+  assert.ok(
+    frozenResolvedSourceIndex >= 0 && frozenSourceAmountIndex > frozenResolvedSourceIndex,
+    'the frozen resolved source entitlement must be checked before the target-valued frozen_source_amount fallback'
+  );
+  assert.ok(
+    body.includes("v_frozen_resolution_payload_json->'case_components'"),
+    'the frozen resolution case-component catalogue must be the source authority'
+  );
+  assert.match(body, /component_key_type[\s\S]*v_resolved_key_type/);
+  assert.match(body, /component_key_value[\s\S]*v_resolved_key_value/);
+  assert.match(body, /source_pay_ex_vat/);
+  assert.match(body, /is_resolution_stale/);
+  assert.match(body, /is_stale_saved_resolution/);
+  assert.match(body, /requires_resolution/);
+  assert.match(body, /resolved_rate_resolution_id/);
+  assert.doesNotMatch(
+    body.slice(frozenResolvedSourceIndex, frozenSourceAmountIndex),
+    /_pay_outstanding_components|pay_correction_chain_residual_v1/,
+    'post-draft source entitlement must come only from frozen batch evidence'
+  );
+});
+
+test('Umbrella deductions share the coupled Umbrella destination during draft integrity', () => {
+  const body = functionBody('pay_batch_assert_integrity');
+  assert.equal(
+    (body.match(/when di\.pay_channel = 'UMBRELLA' then/gi) || []).length,
+    3,
+    'entity kind, entity id and bank hash must all use the Umbrella destination'
+  );
+  assert.doesNotMatch(
+    body,
+    /di\.item_type IN \('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA'\)[\s\S]{0,120}di\.pay_channel = 'UMBRELLA'/,
+    'recovery and other deductions must not fall back to a separate candidate destination'
+  );
+});
+
 test('batch freshness excludes its own correction-chain reservation and compares the live chain source', () => {
   const marker = 'CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness';
   const start = sql.lastIndexOf(marker);
@@ -831,6 +1258,68 @@ test('batch freshness excludes its own correction-chain reservation and compares
     'the base implementation must remain owner-only'
   );
   assert.doesNotMatch(body, /\bNHSP\b|\bHR_WEEKLY\b|\bHR_DAILY\b/);
+});
+
+test('batch freshness compares resolved deductions and reservations on frozen source authority', () => {
+  const marker = 'CREATE OR REPLACE FUNCTION public._pay_batch_validate_freshness_base_v1';
+  const start = sql.lastIndexOf(marker);
+  assert.ok(start >= 0, 'the active base freshness function must exist');
+  const end = sql.indexOf('CREATE OR REPLACE FUNCTION public.', start + marker.length);
+  const body = sql.slice(start, end > start ? end : sql.length);
+
+  assert.match(
+    body,
+    /coalesce\(par\.reserved_source_amount,\s*par\.reserved_amount,\s*0\)/i,
+    'a cross-pay-method reservation must be compared using its frozen source amount'
+  );
+  assert.match(
+    body,
+    /when pbi_rt\.frozen_source_amount is not null then abs\(pbi_rt\.frozen_source_amount\)[\s\S]*frozen_remaining_source_amount/i,
+    'the frozen selected source amount must take precedence over a larger case residual'
+  );
+  assert.match(
+    body,
+    /frozen_resolution_result_json->>'case_source_weekly_due'/i,
+    'resolved scheduled deductions must retain their source-side weekly authority'
+  );
+  assert.equal(
+    (body.match(/sum\(coalesce\(abs\(pbi(?:_md|_ln)?\.frozen_source_amount\),\s*-pbi(?:_md|_ln)?\.amount_ex_vat/gi) || []).length,
+    3,
+    'overpayment, manual-debt and loan freshness must all compare source-side amounts'
+  );
+});
+
+test('the later public freshness repeatable cannot restore target-side recovery comparisons', () => {
+  assert.match(laterFreshnessSql, /coalesce\(par\.reserved_source_amount,\s*par\.reserved_amount,\s*0\)/i);
+  assert.match(
+    laterFreshnessSql,
+    /when pbi_rt\.frozen_source_amount is not null then abs\(pbi_rt\.frozen_source_amount\)[\s\S]*frozen_remaining_source_amount/i
+  );
+  assert.match(laterFreshnessSql, /frozen_resolution_result_json->>'case_source_weekly_due'/i);
+  assert.equal(
+    (laterFreshnessSql.match(/sum\(coalesce\(abs\(pbi(?:_md|_ln)?\.frozen_source_amount\),\s*-pbi(?:_md|_ln)?\.amount_ex_vat/gi) || []).length,
+    3
+  );
+});
+
+test('rail settlement rolls resolved recoveries up on frozen source authority', () => {
+  const body = functionBody('pay_settle_rail', 'pay_manual_payment_retry');
+
+  assert.match(
+    body,
+    /insert into _tmp_repay_taken[\s\S]*pbi\.frozen_source_amount[\s\S]*pbi\.amount_ex_vat[\s\S]*as taken_amount/i,
+    'the case roll-up must consume the same frozen source amount as its finance component'
+  );
+  assert.equal(
+    (body.match(/pbi\.frozen_source_amount/g) || []).length >= 2,
+    true,
+    'both the selected rows and positive-value guard must use frozen source authority'
+  );
+  assert.match(
+    body,
+    /if exists \([\s\S]*pay_finance_case_components pfc_any[\s\S]*sum\(coalesce\(pfc_open\.remaining_source_amount,\s*0\)\)[\s\S]*into v_new_out/i,
+    'componentised cases must roll up their post-settlement balance from the open source-component ledger'
+  );
 });
 
 
@@ -894,4 +1383,60 @@ test('successful remittance delivery wakes the Banking Pay overview and remittan
   assert.match(body, /lanes: \['overview', 'remittances'\]/);
   assert.match(body, /REMITTANCE_DELIVERY_RECORDED/);
   assert.match(body, /PAYOUT_NOTICE_DELIVERY_RECORDED/);
+});
+
+test('explicit correction residual remaining is not consumed twice during finance component refresh', () => {
+  const start = sql.indexOf('CREATE OR REPLACE FUNCTION public.pay_finance_components_sync_from_preview');
+  const end = sql.indexOf('\\nCREATE OR REPLACE FUNCTION ', start + 20);
+  const body = sql.slice(start, end > start ? end : undefined);
+
+  assert.match(
+    body,
+    /v_new_remaining_source_amount\s*:=\s*greatest\([\s\S]*incoming_remaining_source_amount[\s\S]*\)::numeric\(12,2\)/
+  );
+  assert.match(body, /Correction[\s\S]*residual inputs already include settled recovery\/underpayment/);
+  assert.match(
+    body,
+    /v_effective_source_amount\s*:=\s*greatest\([\s\S]*v_line_source_amount[\s\S]*v_consumed_amount[\s\S]*v_new_remaining_source_amount/
+  );
+});
+
+test('cancelling or unwinding an unsettled draft does not add its reservation to component outstanding', () => {
+  const preBankCancel = functionBody('pay_pre_bank_cancel_apply_work_item', 'pay_no_money_unwind_apply_work_item');
+  const noMoneyUnwind = functionBody('pay_no_money_unwind_apply_work_item', '_pay_payment_correction_validate_accepted_finance_resolution');
+
+  for (const body of [preBankCancel, noMoneyUnwind]) {
+    assert.match(
+      body,
+      /remaining_source_amount,\s*0\)\s+AS remaining_after/
+    );
+    assert.doesNotMatch(
+      body,
+      /remaining_source_amount,\s*0\)\s*\+\s*COALESCE\(component_restore\.restore_source_amount/
+    );
+  }
+});
+
+test('a non-draftable correction pay-method mismatch cannot leave raw recovery authority behind', () => {
+  const sourceStart = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_rewrite_source_build_correction_negative_components_v1'
+  );
+  const syncStart = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_rewrite_sync_authoritative_correction_negative_components_v1'
+  );
+  const nextStart = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_rewrite_sync_correction_cases_v1'
+  );
+  assert.ok(sourceStart >= 0 && syncStart > sourceStart && nextStart > syncStart);
+  const sourceRewrite = correctionRuntimeSql.slice(sourceStart, syncStart);
+  const syncRewrite = correctionRuntimeSql.slice(syncStart, nextStart);
+
+  assert.match(
+    sourceRewrite,
+    /draftable[\s\S]*delete from pg_temp\._tmp_pay_wb_sync_negative_components[\s\S]*timesheet_id = any\(v_member_ids\)/
+  );
+  assert.match(
+    syncRewrite,
+    /draftable[\s\S]*delete from pg_temp\.tmp_sync_authoritative_negative_components[\s\S]*timesheet_id = any\(v_member_ids\)/
+  );
 });

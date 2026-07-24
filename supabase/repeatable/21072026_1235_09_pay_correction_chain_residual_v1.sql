@@ -705,6 +705,14 @@ BEGIN
             '{saved_resolution_result_json,target_amount_ex_vat}',
           resolution_row.payload_json #>>
             '{result,target_amount_ex_vat}',
+          resolution_row.payload_json #>>
+            '{bucket_resolutions,0,resolution_result,target_amount_ex_vat}',
+          resolution_row.payload_json #>>
+            '{bucket_resolutions,0,saved_resolution_result_json,target_amount_ex_vat}',
+          resolution_row.payload_json #>>
+            '{bucket_resolutions,0,result,target_amount_ex_vat}',
+          resolution_row.payload_json #>>
+            '{bucket_resolutions,0,target_amount_ex_vat}',
           resolution_row.payload_json ->>
             'target_amount_ex_vat',
           ''
@@ -719,6 +727,14 @@ BEGIN
               '{saved_resolution_result_json,target_amount_ex_vat}',
             resolution_row.payload_json #>>
               '{result,target_amount_ex_vat}',
+            resolution_row.payload_json #>>
+              '{bucket_resolutions,0,resolution_result,target_amount_ex_vat}',
+            resolution_row.payload_json #>>
+              '{bucket_resolutions,0,saved_resolution_result_json,target_amount_ex_vat}',
+            resolution_row.payload_json #>>
+              '{bucket_resolutions,0,result,target_amount_ex_vat}',
+            resolution_row.payload_json #>>
+              '{bucket_resolutions,0,target_amount_ex_vat}',
             resolution_row.payload_json ->>
               'target_amount_ex_vat',
             ''
@@ -730,6 +746,14 @@ BEGIN
               '{saved_resolution_result_json,target_amount_ex_vat}',
             resolution_row.payload_json #>>
               '{result,target_amount_ex_vat}',
+            resolution_row.payload_json #>>
+              '{bucket_resolutions,0,resolution_result,target_amount_ex_vat}',
+            resolution_row.payload_json #>>
+              '{bucket_resolutions,0,saved_resolution_result_json,target_amount_ex_vat}',
+            resolution_row.payload_json #>>
+              '{bucket_resolutions,0,result,target_amount_ex_vat}',
+            resolution_row.payload_json #>>
+              '{bucket_resolutions,0,target_amount_ex_vat}',
             resolution_row.payload_json ->>
               'target_amount_ex_vat'
           )::numeric
@@ -741,6 +765,10 @@ BEGIN
           resolution_row.payload_json ->> 'target_pay_method',
           resolution_row.payload_json #>>
             '{saved_resolution_payload_json,target_pay_method}',
+          resolution_row.payload_json #>>
+            '{bucket_resolutions,0,saved_resolution_payload_json,target_pay_method}',
+          resolution_row.payload_json #>>
+            '{bucket_resolutions,0,target_pay_method}',
           ''
         ))) = v_target_pay_method
       ) AS target_method_matches,
@@ -749,6 +777,8 @@ BEGIN
           resolution_row.payload_json ->> 'is_resolution_stale',
           resolution_row.payload_json #>>
             '{component_state_json,is_resolution_stale}',
+          resolution_row.payload_json #>>
+            '{bucket_resolutions,0,component_state_json,is_resolution_stale}',
           'false'
         ))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
       ) AS resolution_not_stale,
@@ -806,8 +836,17 @@ BEGIN
         2
       )::numeric(18,2) AS effective_outstanding_ex_vat,
 
-      v_mismatched_source_method_count > 0
-        AS resolution_required,
+      (
+        v_mismatched_source_method_count > 0
+        AND round(
+          raw_component.raw_outstanding_ex_vat
+          + raw_component.settled_recovery_ex
+          + raw_component.reserved_recovery_ex
+          - raw_component.settled_underpayment_ex
+          - raw_component.reserved_underpayment_ex,
+          2
+        ) <> 0
+      ) AS resolution_required,
 
       COALESCE(session_resolution.resolution_row_count, 0)
         AS resolution_row_count,
@@ -828,6 +867,14 @@ BEGIN
 
       CASE
         WHEN v_mismatched_source_method_count = 0 THEN true
+        WHEN round(
+          raw_component.raw_outstanding_ex_vat
+          + raw_component.settled_recovery_ex
+          + raw_component.reserved_recovery_ex
+          - raw_component.settled_underpayment_ex
+          - raw_component.reserved_underpayment_ex,
+          2
+        ) = 0 THEN true
         WHEN COALESCE(
                session_resolution.valid_target_amount_count,
                0
@@ -876,25 +923,12 @@ BEGIN
             CASE
               WHEN component_row.effective_outstanding_ex_vat = 0
                 THEN 0
-              WHEN component_row.raw_outstanding_ex_vat = 0
-                THEN sign(component_row.effective_outstanding_ex_vat)
-                     * abs(COALESCE(
-                         component_row.resolved_target_amount_ex_vat,
-                         0
-                       ))
               ELSE
                 sign(component_row.effective_outstanding_ex_vat)
                 * abs(COALESCE(
                     component_row.resolved_target_amount_ex_vat,
                     0
                   ))
-                * LEAST(
-                    1,
-                    abs(
-                      component_row.effective_outstanding_ex_vat
-                      / component_row.raw_outstanding_ex_vat
-                    )
-                  )
             END,
             2
           )

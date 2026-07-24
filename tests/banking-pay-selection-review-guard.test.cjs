@@ -57,6 +57,20 @@ test('Create Draft persists the exact reviewed set and revision for the database
   assert.match(createBody, /selection_reviewed_by_user_id: actorUserId/);
 });
 
+test('Create Draft idempotency advances after a corrected workbench recompute', () => {
+  const createBody = sliceBetween(
+    workerSource,
+    'async function handleBankingPayCreateDraft',
+    'async function handleTimesheetAdvancePayment'
+  );
+
+  assert.match(
+    createBody,
+    /const idempotencyHash = await sha256Hex\(stableStringify\(\{[\s\S]*progress_counter_version: postSyncProgressCounterVersion/,
+    'a failed draft must not be replayed after the reviewed workbench truth has materially advanced'
+  );
+});
+
 test('prepare-draft repeatable enforces selection and revision under the session lock', () => {
   assert.equal(
     (guardSql.match(/CREATE OR REPLACE FUNCTION public\.pay_workbench_prepare_draft/g) || []).length,

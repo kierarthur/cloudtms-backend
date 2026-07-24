@@ -3456,7 +3456,18 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
             case
               when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA'
                and upper(coalesce(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', fpc.routing_kind), '')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
-                then coalesce(case when ts_ctx.week_ending_date is null then null else ts_ctx.week_ending_date::text end, (v_week_start + 6)::text)
+                then case
+                  when pbi.item_type in ('OVERPAYMENT_RECOVERY', 'UNDERPAYMENT_PAYMENT')
+                    then coalesce(
+                      matching_positive_group.week_ending_bucket,
+                      case when ts_ctx.week_ending_date is null then null else ts_ctx.week_ending_date::text end,
+                      (v_week_start + 6)::text
+                    )
+                  else coalesce(
+                    case when ts_ctx.week_ending_date is null then null else ts_ctx.week_ending_date::text end,
+                    (v_week_start + 6)::text
+                  )
+                end
               else null
             end,
           'rail_provider', upper(btrim(coalesce(pb.rail_provider_snapshot, ''))),
@@ -3508,10 +3519,31 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
       on obd.finance_case_id = pbi.finance_case_id
     left join pg_temp.tmp_pay_build_timesheet_snapshots_ctx as ts_ctx
       on ts_ctx.timesheet_id = coalesce(pbi.timesheet_id, fpc.linked_timesheet_id)
+    left join lateral (
+      select
+        positive_item.payout_instruction_snapshot_json->>'week_ending_bucket' as week_ending_bucket
+      from public.pay_batch_items as positive_item
+      where positive_item.pay_batch_candidate_id = pbi.pay_batch_candidate_id
+        and positive_item.id <> pbi.id
+        and coalesce(positive_item.is_voided, false) = false
+        and upper(coalesce(positive_item.pay_channel::text, '')) = upper(coalesce(pbi.pay_channel::text, ''))
+        and round(coalesce(positive_item.amount_inc_vat, positive_item.amount_ex_vat, 0), 2) > 0
+        and coalesce(positive_item.payout_instruction_snapshot_json->>'week_ending_bucket', '') ~ '^\d{4}-\d{2}-\d{2}$'
+        and (
+          upper(coalesce(pbi.pay_channel::text, '')) <> 'UMBRELLA'
+          or coalesce(positive_item.umbrella_id, c.umbrella_id)
+             is not distinct from coalesce(pbi.umbrella_id, c.umbrella_id)
+        )
+      order by
+        (positive_item.payout_instruction_snapshot_json->>'week_ending_bucket')::date,
+        positive_item.id
+      limit 1
+    ) as matching_positive_group
+      on pbi.item_type in ('OVERPAYMENT_RECOVERY', 'UNDERPAYMENT_PAYMENT')
     where pbc.pay_batch_id = v_batch_id
       and coalesce(pbi.is_voided, false) = false
       and pbi.finance_case_id is not null
-      and pbi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','UNDERPAYMENT_PAYMENT','MANUAL_DEBT_RECOVERY','LOAN_REPAYMENT')
+      and pbi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','UNDERPAYMENT_PAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY','LOAN_REPAYMENT')
   ) as pbi_src
   where pbi_set.id = pbi_src.pay_batch_item_id;
 

@@ -112,7 +112,10 @@ DECLARE
   v_total_affected_timesheet_count integer := 1;
   v_anchor_blocking_batches jsonb := '[]'::jsonb;
 BEGIN
-  p_resolution_payload_json:=public._ctms_enrich_correction_resolution_payload_v1(p_session_id,p_resolution_payload_json);
+  v_resolution_payload_json:=public._ctms_enrich_correction_resolution_payload_v1(
+    p_session_id,
+    v_resolution_payload_json
+  );
   v_operation := UPPER(BTRIM(COALESCE(
     v_resolution_payload_json->>'operation',
     v_resolution_payload_json->>'action',
@@ -3102,6 +3105,16 @@ BEGIN
     );
   END IF;
 
+  IF v_resolution_family='BUCKETED'
+     AND v_anchor_timesheet_id IS NOT NULL
+     AND COALESCE(v_resolved_candidate_id,v_candidate_id) IS NOT NULL THEN
+    PERFORM public._ctms_normalise_correction_case_resolutions_v1(
+      p_session_id,
+      COALESCE(v_resolved_candidate_id,v_candidate_id),
+      v_anchor_timesheet_id
+    );
+  END IF;
+
   UPDATE public.banking_pay_workbench_sessions
   SET version = public.banking_pay_workbench_sessions.version + 1,
       progress_counter_version = COALESCE(public.banking_pay_workbench_sessions.progress_counter_version, 0) + 1,
@@ -3160,6 +3173,13 @@ BEGIN
     END IF;
   END IF;
 
+  -- Applying any case resolution advances the session version. Rebuild the
+  -- complete affected candidate so independent ready lines and the candidate-
+  -- wide recovery headroom remain on that same version. A targeted rebuild
+  -- would correctly refresh the resolved chain but leave unrelated candidate
+  -- lines on the previous version, making them disappear from the preview.
+  v_case_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
+
   v_job_json := public.pay_workbench_enqueue_session_candidate_refresh(
     p_session_id => p_session_id,
     p_candidate_id => COALESCE(v_resolved_candidate_id, v_candidate_id),
@@ -3175,8 +3195,18 @@ BEGIN
       'projection_class', 'CASE_RESOLUTION',
       'fallback_reason', 'CASE_RESOLUTION_CHANGED',
       'refresh_scope_kind', v_case_refresh_scope_kind,
-      'targeted_timesheet_ids', COALESCE(to_jsonb(v_case_targeted_timesheet_ids), '[]'::jsonb),
-      'linked_timesheet_ids', COALESCE(to_jsonb(v_case_linked_timesheet_ids), '[]'::jsonb),
+      -- A case-resolution save advances the whole candidate to a new session
+      -- version.  Do not let the affected-row evidence below silently turn
+      -- that rebuild back into a targeted refresh: later source pages may
+      -- contain other members required to prove a correction-chain residual.
+      'targeted_timesheet_ids', CASE
+        WHEN v_case_refresh_scope_kind = 'CANDIDATE_FULL_LIVE' THEN '[]'::jsonb
+        ELSE COALESCE(to_jsonb(v_case_targeted_timesheet_ids), '[]'::jsonb)
+      END,
+      'linked_timesheet_ids', CASE
+        WHEN v_case_refresh_scope_kind = 'CANDIDATE_FULL_LIVE' THEN '[]'::jsonb
+        ELSE COALESCE(to_jsonb(v_case_linked_timesheet_ids), '[]'::jsonb)
+      END,
       'source_build_required', true,
       'line_work_required', true,
       'delta_refresh_required', false
