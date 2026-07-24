@@ -131,10 +131,11 @@ async function readFramedRequest(req, directory) {
   pending = pending.subarray(headerLength);
   const inputHeaders = Array.isArray(header.inputs) ? header.inputs : [];
   if (!inputHeaders.length || inputHeaders.length > MAX_INPUTS) throw Object.assign(new Error('PROCESSOR_INPUT_COUNT_INVALID'), { code: 'PROCESSOR_INPUT_COUNT_INVALID' });
+  const allowEmptyInput = String(header.action || '').toUpperCase() === 'ASSET_INSPECT';
   let aggregate = 0;
   for (const input of inputHeaders) {
     const size = Number(input.size_bytes);
-    if (!Number.isSafeInteger(size) || size < 1 || size > MAX_SINGLE_INPUT_BYTES) throw Object.assign(new Error('PROCESSOR_INPUT_SIZE_INVALID'), { code: 'PROCESSOR_INPUT_SIZE_INVALID' });
+    if (!Number.isSafeInteger(size) || size < 0 || (!allowEmptyInput && size === 0) || size > MAX_SINGLE_INPUT_BYTES) throw Object.assign(new Error('PROCESSOR_INPUT_SIZE_INVALID'), { code: 'PROCESSOR_INPUT_SIZE_INVALID' });
     aggregate += size;
     if (!Number.isSafeInteger(aggregate) || aggregate > MAX_AGGREGATE_BYTES) throw Object.assign(new Error('PROCESSOR_AGGREGATE_INPUT_LIMIT'), { code: 'PROCESSOR_AGGREGATE_INPUT_LIMIT' });
   }
