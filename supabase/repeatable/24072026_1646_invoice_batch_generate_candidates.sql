@@ -1,3 +1,4 @@
+-- Latest authoritative selected-scope candidate contract.
 drop function if exists public.invoice_batch_generate_candidates(boolean,integer);
 
 create or replace function public.invoice_batch_generate_candidates(
