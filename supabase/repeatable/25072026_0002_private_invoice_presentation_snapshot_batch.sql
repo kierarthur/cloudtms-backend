@@ -173,15 +173,23 @@ presentation_lines as materialized (
   from line_vat_allocated c
   group by c.request_key
 ),
+vat_breakdown_rows as materialized (
+  select c.request_key,c.vat_rate_pct,
+    sum(c.net_amount)::numeric net_amount,
+    sum(c.allocated_vat)::numeric vat_amount,
+    sum(c.net_amount+c.allocated_vat)::numeric gross_amount
+  from line_vat_allocated c
+  group by c.request_key,c.vat_rate_pct
+),
 vat_breakdowns as materialized (
   select c.request_key,
     jsonb_agg(jsonb_build_object(
       'rate',c.vat_rate_pct,
-      'net_amount',sum(c.net_amount),
-      'vat_amount',sum(c.allocated_vat),
-      'gross_amount',sum(c.net_amount+c.allocated_vat)
+      'net_amount',c.net_amount,
+      'vat_amount',c.vat_amount,
+      'gross_amount',c.gross_amount
     ) order by c.vat_rate_pct) vat_breakdown
-  from line_vat_allocated c
+  from vat_breakdown_rows c
   group by c.request_key
 ),
 invoice_models as materialized (
