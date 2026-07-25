@@ -65,6 +65,85 @@ REVOKE ALL ON FUNCTION public._ctms_correction_carrier_identity_v1(
 ) FROM PUBLIC, anon, authenticated, service_role;
 
 
+CREATE OR REPLACE FUNCTION
+  public._ctms_correction_resolution_authority_fingerprint_v1(
+    p_residual jsonb,
+    p_component jsonb
+  )
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+STRICT
+PARALLEL SAFE
+SECURITY INVOKER
+SET search_path TO 'pg_catalog', 'extensions'
+AS $function$
+  SELECT encode(
+    extensions.digest(
+      convert_to(
+        jsonb_build_object(
+          'canonical_correction_key',
+            p_component ->> 'canonical_correction_key',
+          'ordered_member_timesheet_ids',
+            coalesce(
+              p_residual -> 'ordered_member_timesheet_ids',
+              p_residual -> 'member_timesheet_ids',
+              '[]'::jsonb
+            ),
+          'component_lineage_fingerprint',
+            p_component ->> 'component_lineage_fingerprint',
+          'chain_fingerprint', p_residual ->> 'chain_fingerprint',
+          'source_basis_fingerprint',
+            p_component ->> 'source_basis_fingerprint',
+          'correction_financials_policy_envelope_fingerprint',
+            p_residual
+              ->> 'correction_financials_policy_envelope_fingerprint',
+          'classification',
+            coalesce(
+              p_component ->> 'classification',
+              'TAXABLE_CHANNEL_SENSITIVE'
+            ),
+          'source_pay_methods',
+            coalesce(p_residual -> 'source_pay_methods', '[]'::jsonb),
+          'target_pay_method', p_residual ->> 'target_pay_method',
+          'truth_ex_vat', p_component -> 'truth_ex_vat',
+          'baseline_ex_vat', p_component -> 'baseline_ex_vat',
+          'reserved_ex_vat', p_component -> 'reserved_ex_vat',
+          'raw_outstanding_ex_vat',
+            p_component -> 'raw_outstanding_ex_vat',
+          'effective_source_outstanding_ex_vat',
+            p_component -> 'effective_source_outstanding_ex_vat',
+          'raw_outstanding_inc_vat',
+            p_component -> 'raw_outstanding_inc_vat',
+          'effective_source_outstanding_inc_vat',
+            p_component -> 'effective_source_outstanding_inc_vat',
+          'reservation_overrun_detected',
+            p_component -> 'reservation_overrun_detected'
+        )::text,
+        'UTF8'
+      ),
+      'sha256'
+    ),
+    'hex'
+  );
+$function$;
+
+ALTER FUNCTION
+  public._ctms_correction_resolution_authority_fingerprint_v1(
+    jsonb,
+    jsonb
+  )
+OWNER TO postgres;
+
+REVOKE ALL
+ON FUNCTION
+  public._ctms_correction_resolution_authority_fingerprint_v1(
+    jsonb,
+    jsonb
+  )
+FROM PUBLIC, anon, authenticated, service_role;
+
+
 CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_projection_contract()
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -292,6 +371,7 @@ DECLARE
   v_component jsonb;
   v_canonical_key text;
   v_economic_fingerprint text;
+  v_authority_fingerprint text;
   v_scope_kind text;
   v_registered_count integer := 0;
   v_incompatible_count integer := 0;
@@ -394,6 +474,7 @@ BEGIN
   LOOP
     v_canonical_key := NULL;
     v_economic_fingerprint := NULL;
+    v_authority_fingerprint := NULL;
     v_scope_kind := 'NON_CORRECTION';
     v_residual := NULL;
     v_component := NULL;
@@ -447,6 +528,11 @@ BEGIN
         );
       v_economic_fingerprint :=
         nullif(v_component ->> 'resolution_economic_fingerprint', '');
+      v_authority_fingerprint :=
+        public._ctms_correction_resolution_authority_fingerprint_v1(
+          v_residual,
+          v_component
+        );
     ELSE
       v_canonical_key :=
         nullif(btrim(v_resolution.resolution_identity_key), '');
@@ -469,10 +555,13 @@ BEGIN
           ),
           'hex'
         );
+        v_authority_fingerprint := v_economic_fingerprint;
       END IF;
     END IF;
 
-    IF v_canonical_key IS NULL OR v_economic_fingerprint IS NULL THEN
+    IF v_canonical_key IS NULL
+       OR v_economic_fingerprint IS NULL
+       OR v_authority_fingerprint IS NULL THEN
       v_canonical_key := 'INCOMPATIBLE|' || v_resolution.id::text;
       v_economic_fingerprint := encode(
         extensions.digest(
@@ -525,6 +614,8 @@ BEGIN
           'resolution', to_jsonb(v_resolution),
           'correction_residual', v_residual,
           'correction_component', v_component,
+          'source_resolution_authority_fingerprint',
+            v_authority_fingerprint,
           'registered_at_utc', v_now,
           'policy_x_authority_scope',
             'PRE_DRAFT_CASE_RESOLUTION_STATE_ONLY'
@@ -659,6 +750,8 @@ DECLARE
   v_residual jsonb;
   v_component jsonb;
   v_target_fingerprint text;
+  v_source_authority_fingerprint text;
+  v_target_authority_fingerprint text;
   v_target_resolution_id uuid;
   v_existing record;
   v_status text;
@@ -707,6 +800,8 @@ BEGIN
     v_status := NULL;
     v_reason_code := NULL;
     v_target_fingerprint := NULL;
+    v_source_authority_fingerprint := NULL;
+    v_target_authority_fingerprint := NULL;
     v_target_resolution_id := NULL;
     v_residual := NULL;
     v_component := NULL;
@@ -749,12 +844,25 @@ BEGIN
 
       v_target_fingerprint :=
         nullif(v_component ->> 'resolution_economic_fingerprint', '');
+      v_source_authority_fingerprint :=
+        nullif(
+          v_snapshot
+            ->> 'source_resolution_authority_fingerprint',
+          ''
+        );
+      v_target_authority_fingerprint :=
+        public._ctms_correction_resolution_authority_fingerprint_v1(
+          v_residual,
+          v_component
+        );
 
-      IF v_target_fingerprint IS NULL THEN
+      IF v_target_fingerprint IS NULL
+         OR v_source_authority_fingerprint IS NULL
+         OR v_target_authority_fingerprint IS NULL THEN
         v_status := 'INCOMPATIBLE';
-        v_reason_code := 'TARGET_ECONOMIC_FINGERPRINT_MISSING';
-      ELSIF v_target_fingerprint
-        IS DISTINCT FROM v_registration.source_economic_fingerprint THEN
+        v_reason_code := 'AUTHORITY_OR_ECONOMIC_FINGERPRINT_MISSING';
+      ELSIF v_target_authority_fingerprint
+        IS DISTINCT FROM v_source_authority_fingerprint THEN
         v_status := 'STALE';
         v_reason_code := CASE
           WHEN v_component ->> 'component_lineage_fingerprint'
@@ -940,7 +1048,58 @@ BEGIN
             v_status := 'SUPERSEDED';
             v_reason_code := 'TARGET_AUTHORITATIVE_DECISION_EXISTS';
           ELSE
-            v_status := 'CARRIED';
+            PERFORM
+              public._ctms_normalise_correction_case_resolutions_v1(
+                p_target_session_id,
+                p_candidate_id,
+                nullif(
+                  v_component ->> 'carrier_timesheet_id',
+                  ''
+                )::uuid
+              );
+
+            v_residuals :=
+              public._ctms_candidate_correction_residuals_v1(
+                p_target_session_id,
+                p_candidate_id,
+                NULL::uuid,
+                'PAY_WORKBENCH_CARRY_VALIDATE_DECISION'
+              );
+
+            v_residual := NULL;
+            v_component := NULL;
+            SELECT residual.value, component.value
+            INTO v_residual, v_component
+            FROM jsonb_array_elements(
+              coalesce(v_residuals, '[]'::jsonb)
+            ) residual(value)
+            CROSS JOIN LATERAL jsonb_array_elements(
+              coalesce(residual.value -> 'components', '[]'::jsonb)
+            ) component(value)
+            WHERE component.value ->> 'canonical_correction_key'
+              = v_registration.canonical_resolution_key
+            LIMIT 1;
+
+            v_target_fingerprint :=
+              nullif(
+                v_component ->> 'resolution_economic_fingerprint',
+                ''
+              );
+
+            IF v_target_fingerprint IS NULL
+               OR v_target_fingerprint IS DISTINCT FROM
+                    v_registration.source_economic_fingerprint THEN
+              DELETE FROM
+                public.banking_pay_workbench_session_case_resolutions
+              WHERE session_id = p_target_session_id
+                AND payload_json ->> 'carry_registration_id'
+                  = v_registration.id::text;
+              v_target_resolution_id := NULL;
+              v_status := 'STALE';
+              v_reason_code := 'DECISION_RESULT_CHANGED';
+            ELSE
+              v_status := 'CARRIED';
+            END IF;
           END IF;
         END IF;
       END IF;

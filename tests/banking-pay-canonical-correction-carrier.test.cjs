@@ -85,6 +85,64 @@ test('canonical identity is exact, TS_DAY-only and internal', () => {
   );
 });
 
+test('carry compares stable authority before replaying and validating the saved decision', () => {
+  const authorityStart = carrier.indexOf(
+    'public._ctms_correction_resolution_authority_fingerprint_v1'
+  );
+  const authorityEnd = carrier.indexOf(
+    '\nCREATE OR REPLACE FUNCTION ',
+    authorityStart + 10
+  );
+  const authority = carrier.slice(authorityStart, authorityEnd);
+  const processStart = carrier.indexOf(
+    'public._pay_workbench_case_resolution_carry_process_candidate_v1'
+  );
+  const processEnd = carrier.indexOf(
+    '\nCREATE OR REPLACE FUNCTION ',
+    processStart + 10
+  );
+  const process = carrier.slice(processStart, processEnd);
+
+  assert.ok(authorityStart >= 0);
+  assert.match(authority, /IMMUTABLE[\s\S]*STRICT[\s\S]*SECURITY INVOKER/);
+  for (const authorityField of [
+    'canonical_correction_key',
+    'ordered_member_timesheet_ids',
+    'component_lineage_fingerprint',
+    'source_basis_fingerprint',
+    'correction_financials_policy_envelope_fingerprint',
+    'target_pay_method',
+    'effective_source_outstanding_ex_vat',
+  ]) {
+    assert.match(authority, new RegExp(authorityField));
+  }
+  assert.doesNotMatch(authority, /target_outstanding_ex_vat/);
+  assert.doesNotMatch(authority, /resolved_target_amount_ex_vat/);
+  assert.doesNotMatch(authority, /resolution_complete/);
+
+  assert.match(
+    process,
+    /v_target_authority_fingerprint[\s\S]*IS DISTINCT FROM v_source_authority_fingerprint/
+  );
+  assert.match(
+    process,
+    /_ctms_normalise_correction_case_resolutions_v1/
+  );
+  assert.match(
+    process,
+    /PAY_WORKBENCH_CARRY_VALIDATE_DECISION/
+  );
+  assert.match(process, /DECISION_RESULT_CHANGED/);
+  assert.ok(
+    process.indexOf(
+      'v_target_authority_fingerprint'
+    ) < process.indexOf(
+      '_ctms_normalise_correction_case_resolutions_v1'
+    ),
+    'authority must be compared before replaying a saved decision'
+  );
+});
+
 test('session rollover registers before source retirement and missing provenance becomes review work', () => {
   const carryCall = sessionSql.indexOf(
     'pay_workbench_session_carry_forward_case_resolutions_v1'
