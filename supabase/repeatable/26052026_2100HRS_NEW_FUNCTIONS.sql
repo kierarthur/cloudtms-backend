@@ -210249,7 +210249,10 @@ BEGIN
           lower(BTRIM(COALESCE(queued_job.payload_json->>'source_build_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
           AND NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'fallback_reason', '')), '') IS NOT NULL
         )
-        OR NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'source_job_id', queued_job.payload_json->>'continuation_source_job_id', queued_job.payload_json->>'bounded_continuation_source_job_id', '')), '') IS NOT NULL
+        OR (
+          NULLIF(BTRIM(COALESCE(queued_job.payload_json->>'source_job_id', queued_job.payload_json->>'continuation_source_job_id', queued_job.payload_json->>'bounded_continuation_source_job_id', '')), '') IS NOT NULL
+          AND UPPER(BTRIM(COALESCE(queued_job.payload_json->>'run_mode', ''))) NOT IN ('LATEST_STATE_HEAD', 'LATEST_RERUN_AFTER_RUNNING')
+        )
       )
     ORDER BY queued_job.run_at_utc ASC, queued_job.priority ASC, queued_job.created_at_utc ASC, queued_job.id ASC
     LIMIT 1;

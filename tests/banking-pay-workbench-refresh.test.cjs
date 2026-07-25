@@ -89,3 +89,21 @@ test('full-live source builds retain semantic scope through internally targeted 
   assert.match(lineSeedBody, /source_line\.source_row_json->>'requested_refresh_scope_kind'[\s\S]*= 'CANDIDATE_FULL_LIVE'/);
   assert.match(lineSeedBody, /COALESCE\(v_full_source_rebuild, false\)[\s\S]*existing_line_work\.timesheet_id IS NULL/);
 });
+
+test('latest-state reruns do not mutually deadlock as queued chain continuations', () => {
+  const serialStateBody = sqlFunctionBody(
+    repeatableSql,
+    '_pay_workbench_candidate_serial_active_state'
+  );
+
+  const ownContinuationPredicate = serialStateBody.indexOf(
+    "AND UPPER(BTRIM(COALESCE(v_payload->>'run_mode', ''))) NOT IN ('LATEST_STATE_HEAD', 'LATEST_RERUN_AFTER_RUNNING')"
+  );
+  const queuedContinuationPredicate = serialStateBody.indexOf(
+    "AND UPPER(BTRIM(COALESCE(queued_job.payload_json->>'run_mode', ''))) NOT IN ('LATEST_STATE_HEAD', 'LATEST_RERUN_AFTER_RUNNING')"
+  );
+
+  assert.ok(ownContinuationPredicate >= 0, 'the current-job continuation predicate must exclude latest-state reruns');
+  assert.ok(queuedContinuationPredicate > ownContinuationPredicate, 'queued jobs must use the same latest-state exclusion');
+  assert.match(serialStateBody, /v_reason := 'CANDIDATE_SERIAL_BLOCKED_BY_ACTIVE_CONTINUATION'/);
+});
