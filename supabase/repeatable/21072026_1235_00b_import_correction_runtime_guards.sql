@@ -1000,7 +1000,14 @@ begin
         end if;
       end if;
       update public.banking_pay_workbench_candidate_source_lines l
-      set timesheet_id=v_root_id,
+      set section=case
+            when round(coalesce(
+              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+              0
+            ),2)>0 then 'canonical_preview_lines'
+            else 'blocked_for_pay'
+          end,
+          timesheet_id=v_root_id,
           line_key=v_line_key,
           parent_line_key='correction-chain:'||v_root_id::text,
           split_suffix=lower(v_component->>'component_key_type')||':'||lower(v_component->>'component_key_value'),
@@ -1039,7 +1046,55 @@ begin
               )
             ),
             'correction_chain_residual_fingerprint',v_residual->>'residual_fingerprint',
-            'raw_correction_member_rows_suppressed',true
+            'raw_correction_member_rows_suppressed',true,
+            -- The raw source row was classified before carried decisions were
+            -- replayed.  Once the canonical residual proves the component
+            -- complete and draftable, project the resolved positive carrier
+            -- into Ready to Pay.  Negative components remain resolved but
+            -- blocked by pay headroom.  Draft seeding still revalidates the
+            -- canonical key and fingerprints transactionally.
+            'target_section',case
+              when round(coalesce(
+                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                0
+              ),2)>0 then 'canonical_preview_lines'
+              else 'blocked_for_pay'
+            end,
+            'section',case
+              when round(coalesce(
+                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                0
+              ),2)>0 then 'canonical_preview_lines'
+              else 'blocked_for_pay'
+            end,
+            'presentation_section',case
+              when round(coalesce(
+                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                0
+              ),2)>0 then 'READY_TO_PAY'
+              else 'BLOCKED_FOR_PAY'
+            end,
+            'draftable',round(coalesce(
+              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+              0
+            ),2)>0,
+            'is_ready_for_draft',round(coalesce(
+              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+              0
+            ),2)>0,
+            'case_is_blocked',false,
+            'case_needs_resolution_now',false,
+            'is_case_resolution_satisfied',true,
+            'resolution_badge','RESOLVED',
+            'resolution_state','RESOLVED',
+            'policy_x_pre_draft_key_resolved',true,
+            'presentation_reason',case
+              when round(coalesce(
+                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                0
+              ),2)>0 then 'READY_TO_PAY'
+              else 'NO_PAY_HEADROOM'
+            end
           )
           || case
             when round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) < 0

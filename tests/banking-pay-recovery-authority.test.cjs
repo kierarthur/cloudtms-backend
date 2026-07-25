@@ -654,6 +654,35 @@ test('linked correction expansion never preempts an explicit pending canonical c
   );
 });
 
+test('materialised carried correction authority is recategorised after resolution replay', () => {
+  const start = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_materialise_candidate_correction_residuals_v1'
+  );
+  const end = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_enrich_correction_resolution_payload_v1',
+    start
+  );
+  assert.ok(start >= 0 && end > start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(
+    body,
+    /set section=case[\s\S]*target_outstanding_ex_vat[\s\S]*then 'canonical_preview_lines'[\s\S]*else 'blocked_for_pay'/
+  );
+  assert.match(
+    body,
+    /'presentation_section',case[\s\S]*then 'READY_TO_PAY'[\s\S]*else 'BLOCKED_FOR_PAY'/
+  );
+  assert.match(
+    body,
+    /'case_needs_resolution_now',false[\s\S]*'is_case_resolution_satisfied',true[\s\S]*'policy_x_pre_draft_key_resolved',true/
+  );
+  assert.match(
+    body,
+    /'presentation_reason',case[\s\S]*then 'READY_TO_PAY'[\s\S]*else 'NO_PAY_HEADROOM'/
+  );
+});
+
 test('correction-chain finance sync can build recovery from a non-recovery member template', () => {
   const start = correctionRuntimeSql.indexOf(
     'create or replace function public._ctms_rewrite_sync_correction_cases_v1'
