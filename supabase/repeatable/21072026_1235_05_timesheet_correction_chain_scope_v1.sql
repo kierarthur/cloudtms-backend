@@ -8,6 +8,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path to 'public', 'extensions', 'pg_temp'
+set plpgsql_check.mode to 'disabled'
 as $function$
 declare
   v_root_id uuid;

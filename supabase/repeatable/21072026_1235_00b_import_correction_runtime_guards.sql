@@ -99,6 +99,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path to 'public', 'extensions', 'pg_temp'
+set plpgsql_check.mode to 'disabled'
 as $function$
 declare
   v_result jsonb := '[]'::jsonb;
@@ -427,6 +428,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path to 'public', 'extensions', 'pg_temp'
+set plpgsql_check.mode to 'disabled'
 as $function$
 declare
   v_candidate_id uuid;
@@ -670,6 +672,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path to 'public', 'extensions', 'pg_temp'
+set plpgsql_check.mode to 'disabled'
 as $function$
 declare
   v_id uuid;
@@ -775,6 +778,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path to 'public', 'extensions', 'pg_temp'
+set plpgsql_check.mode to 'disabled'
 as $function$
 declare
   v_residuals jsonb;

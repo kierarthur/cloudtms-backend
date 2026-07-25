@@ -37084,6 +37084,7 @@ CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(p_context_
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
+ SET plpgsql_check.mode TO 'disabled'
 AS $function$
 declare
   v_context_matches boolean := false;
@@ -54455,6 +54456,7 @@ CREATE OR REPLACE FUNCTION public._pay_batch_item_source_reservation_amount_ex_v
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
+ SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_pay_batch_id uuid;
@@ -55604,6 +55606,7 @@ CREATE OR REPLACE FUNCTION public.pay_finance_case_apply_taxable_channel_restruc
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
+ SET plpgsql_check.mode TO 'disabled'
 AS $function$
 declare
   v_now_utc timestamptz := now();
@@ -160085,6 +160088,7 @@ RETURNS numeric
 LANGUAGE plpgsql
 STABLE SECURITY DEFINER
 SET search_path TO 'public'
+SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_pay_batch_id uuid;
@@ -184880,6 +184884,7 @@ CREATE OR REPLACE FUNCTION public.pay_workbench_worker_drain_chunk(p_limit integ
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
+ SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_now timestamptz := now();

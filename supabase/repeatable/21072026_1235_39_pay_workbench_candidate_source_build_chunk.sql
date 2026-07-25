@@ -6,6 +6,7 @@ CREATE OR REPLACE FUNCTION public.pay_workbench_candidate_source_build_chunk(p_s
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
+ SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_now timestamptz := now();

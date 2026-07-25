@@ -486,6 +486,7 @@ LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
 SET search_path TO 'public'
+SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_drain_result jsonb := '{}'::jsonb;

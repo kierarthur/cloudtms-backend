@@ -21,6 +21,27 @@ const correctionGuardPath = path.join(
 const cancellationGuard = fs.readFileSync(cancellationGuardPath, 'utf8');
 const correctionGuard = fs.readFileSync(correctionGuardPath, 'utf8');
 
+const correctionEntryPointSources = [
+  ['21072026_1235_00_import_correction_policy_helpers.sql', ['_ctms_import_correction_classify_v1']],
+  ['21072026_1235_00b_import_correction_runtime_guards.sql', [
+    '_ctms_candidate_correction_residuals_v1',
+    '_ctms_rewrite_sync_correction_cases_v1',
+    '_ctms_assert_payload_corrections_fresh_v1',
+    '_ctms_materialise_candidate_correction_residuals_v1'
+  ]],
+  ['21072026_1235_05_timesheet_correction_chain_scope_v1.sql', ['timesheet_correction_chain_scope_v1']],
+  ['21072026_1235_09_pay_correction_chain_residual_v1.sql', ['pay_correction_chain_residual_v1']],
+  ['21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql', ['pay_workbench_candidate_source_build_chunk']],
+  ['21072026_1235_40_pay_sync_overpayments_from_preview.sql', ['pay_sync_overpayments_from_preview']],
+  ['19072026_1405_revalidate_recovery_headroom_after_materialisation.sql', ['pay_workbench_worker_drain_chunk_revalidated_v1']],
+  ['26052026_2100HRS_NEW_FUNCTIONS.sql', [
+    '_pay_batch_item_source_reservation_amount_ex_vat',
+    'pay_preview_candidate_collect_scope',
+    'pay_workbench_worker_drain_chunk',
+    'pay_finance_case_apply_taxable_channel_restructure'
+  ]]
+];
+
 test('draft cancellation and post-cancel refresh entry points disable faulty passive instrumentation', () => {
   for (const signature of [
     /ALTER FUNCTION public\.pay_payment_cancelability_diagnostic\(\s*uuid,\s*jsonb,\s*uuid,\s*text\s*\) SET plpgsql_check\.mode TO 'disabled';/s,
@@ -37,4 +58,27 @@ test('instrumentation guards do not redefine Banking Pay economic or mutation bo
   assert.doesNotMatch(combined, /\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/i);
   assert.doesNotMatch(combined, /\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b/i);
   assert.doesNotMatch(combined, /\bpay_batch_items\b|\bpay_advance_reservations\b|\bpay_bank_transfers\b/i);
+});
+
+test('correction-chain entry point definitions retain the checker guard when deployed independently', () => {
+  for (const [fileName, functionNames] of correctionEntryPointSources) {
+    const sql = fs.readFileSync(path.join(repoRoot, 'supabase', 'repeatable', fileName), 'utf8');
+    for (const functionName of functionNames) {
+      const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const definitions = [
+        ...sql.matchAll(new RegExp(
+          `CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${escapedName}\\b[\\s\\S]*?AS\\s+\\$function\\$`,
+          'gi'
+        ))
+      ];
+      assert.ok(definitions.length > 0, `${functionName} definition is present in ${fileName}`);
+      for (const definition of definitions) {
+        assert.match(
+          definition[0],
+          /SET\s+plpgsql_check\.mode\s+TO\s+'disabled'/i,
+          `${functionName} keeps its guard when ${fileName} is installed without the later ALTER repeatable`
+        );
+      }
+    }
+  }
 });

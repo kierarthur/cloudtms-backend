@@ -11,6 +11,7 @@ language sql
 stable
 security definer
 set search_path to 'public', 'extensions', 'pg_temp'
+set plpgsql_check.mode to 'disabled'
 as $function$
   with target as (
     select

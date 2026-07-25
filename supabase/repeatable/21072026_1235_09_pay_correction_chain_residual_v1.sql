@@ -37,6 +37,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO 'public', 'extensions', 'pg_temp'
+SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_target_pay_method text :=
