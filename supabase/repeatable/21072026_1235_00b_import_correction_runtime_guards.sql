@@ -910,6 +910,7 @@ begin
           and l.source_build_run_id=p_source_build_run_id
           and l.status='CURRENT'
           and l.timesheet_id=any(v_member_ids)
+          and l.section='cases_resolutions'
           and upper(coalesce(l.economic_key_json->>'key_type',''))='TS_TOTAL'
           and nullif(
             btrim(coalesce(l.source_row_json->>'finance_case_id','')),
@@ -1052,16 +1053,18 @@ begin
       v_superseded := v_superseded + v_row_count;
     end loop;
 
-    -- A correction chain is one coupled economic unit.  Once its dated
-    -- component carriers have been materialised, no raw member row may remain
-    -- current merely because it used a broader TS_TOTAL key.  Preserve every
-    -- selected carrier (there may be several dated components) and supersede
-    -- every other raw member row from this source build.
+    -- A correction chain is one coupled economic unit. Once its dated
+    -- component carriers have been materialised, no unresolved raw
+    -- cases/resolutions alias may remain current merely because it used a
+    -- broader TS_TOTAL key. Preserve independent canonical-preview totals:
+    -- those include fixed no-action channel deltas and other separately
+    -- authoritative components that are not represented by the residual.
     update public.banking_pay_workbench_candidate_source_lines l
     set status='SUPERSEDED',updated_at_utc=coalesce(p_now_utc,now())
     where l.session_id=p_session_id and l.candidate_id=p_candidate_id
       and l.source_build_run_id=p_source_build_run_id and l.status='CURRENT'
       and l.timesheet_id=any(v_member_ids)
+      and l.section='cases_resolutions'
       and upper(coalesce(l.economic_key_json->>'key_type',''))='TS_TOTAL'
       and not exists (
         select 1

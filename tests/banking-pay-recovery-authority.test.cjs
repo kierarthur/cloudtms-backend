@@ -1021,7 +1021,7 @@ test('negative correction residuals preserve the finance-case carrier while posi
   assert.match(body, /else jsonb_build_object\([\s\S]*'amount_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
 });
 
-test('materialised correction chains suppress every non-carrier raw member row', () => {
+test('materialised correction chains suppress every non-carrier raw resolution alias', () => {
   const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
   const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
   const body = correctionRuntimeSql.slice(start, end);
@@ -1031,7 +1031,7 @@ test('materialised correction chains suppress every non-carrier raw member row',
   assert.match(body, /case when l\.line_key=v_line_key then 0 else 1 end/);
   assert.match(
     body,
-    /and l\.timesheet_id=any\(v_member_ids\)[\s\S]*and not exists \([\s\S]*unnest\(coalesce\(v_carrier_row_ids,array\[\]::uuid\[\]\)\)[\s\S]*carrier_row_id=l\.id/
+    /and l\.timesheet_id=any\(v_member_ids\)[\s\S]*and l\.section='cases_resolutions'[\s\S]*and not exists \([\s\S]*unnest\(coalesce\(v_carrier_row_ids,array\[\]::uuid\[\]\)\)[\s\S]*carrier_row_id=l\.id/
   );
   assert.doesNotMatch(body, /not \(l\.id=any\(v_carrier_row_ids\)\)/);
 });
@@ -1043,7 +1043,7 @@ test('positive dated correction residuals can claim one unretained raw TS_TOTAL 
 
   assert.match(
     body,
-    /v_carrier_row_id is null[\s\S]*target_outstanding_ex_vat[\s\S]*> 0[\s\S]*economic_key_json->>'key_type',''\)\)='TS_TOTAL'/
+    /v_carrier_row_id is null[\s\S]*target_outstanding_ex_vat[\s\S]*> 0[\s\S]*l\.section='cases_resolutions'[\s\S]*economic_key_json->>'key_type',''\)\)='TS_TOTAL'/
   );
   assert.match(
     body,
@@ -1052,6 +1052,22 @@ test('positive dated correction residuals can claim one unretained raw TS_TOTAL 
   assert.match(
     body,
     /Negative[\s\S]*components must still use their exact finance-case row/
+  );
+});
+
+test('independent canonical-preview totals survive dated correction materialisation', () => {
+  const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
+  const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(
+    body,
+    /Preserve independent canonical-preview totals/
+  );
+  assert.equal(
+    (body.match(/and l\.section='cases_resolutions'/g) || []).length,
+    2,
+    'both the TS_TOTAL fallback and final alias suppression must stay inside cases/resolutions'
   );
 });
 
