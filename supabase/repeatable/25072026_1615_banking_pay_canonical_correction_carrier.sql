@@ -1167,3 +1167,7 @@ GRANT EXECUTE
 ON FUNCTION
   public.pay_workbench_case_resolution_carry_status_get_v1(uuid, uuid)
 TO service_role;
+
+-- Newly introduced RPCs must be visible to the Worker immediately after this
+-- repeatable transaction commits.
+NOTIFY pgrst, 'reload schema';

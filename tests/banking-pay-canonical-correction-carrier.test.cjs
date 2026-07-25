@@ -202,6 +202,14 @@ test('Worker fails closed before public mutations and background job claims', ()
   );
   assert.match(worker, /workbench_job_claimed: false/);
   assert.match(worker, /mutation_attempted: false/);
+  assert.match(
+    worker,
+    /function bankingPayWorkbenchContractFailure[\s\S]*status: 503[\s\S]*headers: JSON_HEADERS/
+  );
+  assert.doesNotMatch(
+    worker,
+    /function bankingPayWorkbenchContractFailure[\s\S]{0,200}\breturn fail\(/
+  );
 });
 
 test('import review contract requires the canonical carrier marker', () => {
@@ -217,4 +225,5 @@ test('import review contract requires the canonical carrier marker', () => {
     carrier,
     /'canonical_correction_carrier_version'[\s\S]*v_projection_contract/
   );
+  assert.match(carrier, /NOTIFY pgrst, 'reload schema'/);
 });

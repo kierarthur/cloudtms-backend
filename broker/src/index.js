@@ -140,6 +140,11 @@ async function assertBankingPayWorkbenchContract(env, entryPoint) {
         BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION,
       actual_contract_version: null,
       actual_canonical_correction_carrier_version: null,
+      upstream_status: Number.isFinite(Number(cause?.status))
+        ? Number(cause.status)
+        : null,
+      upstream_code:
+        String(cause?.json?.code || cause?.code || '').trim() || null,
       entry_point: entryPoint,
       mutation_attempted: false,
       workbench_job_claimed: false
@@ -186,11 +191,17 @@ async function assertBankingPayWorkbenchContract(env, entryPoint) {
 }
 
 function bankingPayWorkbenchContractFailure(error) {
-  return fail(
-    503,
-    'BANKING_PAY_WORKBENCH_CONTRACT_MISMATCH',
-    'Banking Pay is temporarily unavailable because the Worker cannot prove the required database contract.',
-    {
+  const code = 'BANKING_PAY_WORKBENCH_CONTRACT_MISMATCH';
+  const message =
+    'Banking Pay is temporarily unavailable because the Worker cannot prove the required database contract.';
+  return new Response(JSON.stringify({
+    ok: false,
+    code,
+    error_code: code,
+    message,
+    error: {
+      code,
+      message,
       category: 'CONTRACT_GATE',
       retryable: true,
       action: 'RETRY_LATER',
@@ -205,7 +216,10 @@ function bankingPayWorkbenchContractFailure(error) {
       mutation_attempted: false,
       workbench_job_claimed: false
     }
-  );
+  }), {
+    status: 503,
+    headers: JSON_HEADERS
+  });
 }
 
 async function handleRetiredImportMutationRoute(env, req) {
