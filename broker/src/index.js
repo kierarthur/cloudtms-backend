@@ -112,7 +112,7 @@ const BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION =
 async function assertBankingPayWorkbenchContract(env, entryPoint) {
   let contract = null;
   try {
-    contract = unwrapRpc(
+    contract = unwrapRpcJsonb(
       await sbRpc(
         env,
         'pay_workbench_contract_version_get_v1',

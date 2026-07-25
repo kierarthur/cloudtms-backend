@@ -200,6 +200,10 @@ test('Worker fails closed before public mutations and background job claims', ()
     jobBody.indexOf('assertBankingPayWorkbenchContract')
       < jobBody.indexOf('sbRpc(')
   );
+  assert.match(
+    worker,
+    /async function assertBankingPayWorkbenchContract[\s\S]*contract = unwrapRpcJsonb\([\s\S]*pay_workbench_contract_version_get_v1/
+  );
   assert.match(worker, /workbench_job_claimed: false/);
   assert.match(worker, /mutation_attempted: false/);
   assert.match(
