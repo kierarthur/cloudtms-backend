@@ -196,6 +196,15 @@ test('residual and applied resolution use the same canonical component identity'
     applyResolution,
     /CORRECTION_CARRIER_IDENTITY_MISMATCH/
   );
+  assert.match(
+    applyResolution,
+    /banking_pay_workbench_case_resolution_carry_registrations[\s\S]*status IN \('PENDING', 'STALE'\)[\s\S]*TARGET_AUTHORITATIVE_DECISION_EXISTS/
+  );
+  assert.match(
+    applyResolution,
+    /target_resolution\.resolution_identity_key =[\s\S]*carry_row\.canonical_resolution_key/
+  );
+  assert.match(applyResolution, /'CARRY_SUPERSEDED'/);
 });
 
 test('draft freeze adds provenance only to the four existing frozen JSON authorities', () => {

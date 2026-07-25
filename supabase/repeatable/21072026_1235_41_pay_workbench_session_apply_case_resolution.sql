@@ -3149,6 +3149,85 @@ BEGIN
     );
   END IF;
 
+  -- A fresh target-session decision is authoritative for its canonical
+  -- component.  Any deferred or stale predecessor carry for that exact key
+  -- must stop blocking draftability once this transaction has saved and
+  -- normalised the replacement decision.
+  WITH superseded_carry AS (
+    UPDATE
+      public.banking_pay_workbench_case_resolution_carry_registrations
+        carry_row
+    SET status = 'SUPERSEDED',
+        state_reason_code = 'TARGET_AUTHORITATIVE_DECISION_EXISTS',
+        target_resolution_id = target_resolution.id,
+        target_economic_fingerprint =
+          NULLIF(
+            target_resolution.payload_json
+              ->> 'resolution_economic_fingerprint',
+            ''
+          ),
+        last_error_json = NULL,
+        updated_at_utc = v_now,
+        completed_at_utc = v_now
+    FROM public.banking_pay_workbench_session_case_resolutions
+      target_resolution
+    WHERE carry_row.target_session_id = p_session_id
+      AND carry_row.candidate_id =
+        COALESCE(v_resolved_candidate_id, v_candidate_id)
+      AND carry_row.status IN ('PENDING', 'STALE')
+      AND target_resolution.session_id = p_session_id
+      AND target_resolution.candidate_id =
+        COALESCE(v_resolved_candidate_id, v_candidate_id)
+      AND target_resolution.resolution_identity_key =
+        carry_row.canonical_resolution_key
+      AND target_resolution.resolution_identity_key IN (
+        SELECT resolution_key.value
+        FROM jsonb_array_elements_text(
+          COALESCE(v_resolution_identity_keys, '[]'::jsonb)
+        ) resolution_key(value)
+      )
+    RETURNING
+      carry_row.id,
+      carry_row.source_session_id,
+      carry_row.source_resolution_id,
+      carry_row.canonical_resolution_key,
+      target_resolution.id AS target_resolution_id
+  )
+  INSERT INTO public.audit_events (
+    actor_user_id,
+    object_type,
+    object_id_text,
+    action,
+    before_json,
+    after_json,
+    reason
+  )
+  SELECT
+    p_actor_user_id,
+    'BANKING_PAY_CASE_RESOLUTION_CARRY',
+    superseded_carry.id::text,
+    'CARRY_SUPERSEDED',
+    jsonb_build_object(
+      'status',
+      'STALE_OR_PENDING'
+    ),
+    jsonb_build_object(
+      'status',
+      'SUPERSEDED',
+      'source_session_id',
+      superseded_carry.source_session_id,
+      'source_resolution_id',
+      superseded_carry.source_resolution_id,
+      'canonical_resolution_key',
+      superseded_carry.canonical_resolution_key,
+      'target_resolution_id',
+      superseded_carry.target_resolution_id,
+      'state_reason_code',
+      'TARGET_AUTHORITATIVE_DECISION_EXISTS'
+    ),
+    'TARGET_AUTHORITATIVE_DECISION_EXISTS'
+  FROM superseded_carry;
+
   UPDATE public.banking_pay_workbench_sessions
   SET version = public.banking_pay_workbench_sessions.version + 1,
       progress_counter_version = COALESCE(public.banking_pay_workbench_sessions.progress_counter_version, 0) + 1,
