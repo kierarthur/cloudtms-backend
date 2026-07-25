@@ -1317,6 +1317,26 @@ begin
     for update;
 
     if v_resolution.id is null then
+      -- A durable carry registered for this exact canonical component is the
+      -- authoritative pending decision source.  Do not manufacture a linked
+      -- decision from another dated component while that carry is still
+      -- waiting to be replayed.  Otherwise the synthetic row wins the unique
+      -- session/key constraint and the genuine carried decision is
+      -- incorrectly superseded.
+      if exists (
+        select 1
+        from public.banking_pay_workbench_case_resolution_carry_registrations
+          as pending_carry
+        where pending_carry.target_session_id=p_session_id
+          and pending_carry.candidate_id=p_candidate_id
+          and pending_carry.status='PENDING'
+          and pending_carry.resolution_scope_kind='CORRECTION_COMPONENT'
+          and pending_carry.canonical_resolution_key=
+            v_component->>'canonical_correction_key'
+      ) then
+        continue;
+      end if;
+
       -- A correction chain can contain a financially material component that
       -- has no standalone workbench preview row (for example, the historical
       -- carrier day of a paired reversal).  "Resolve linked work" must cover

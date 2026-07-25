@@ -624,6 +624,36 @@ test('linked correction resolution expands to required components without previe
   );
 });
 
+test('linked correction expansion never preempts an explicit pending canonical carry', () => {
+  const start = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_normalise_correction_case_resolutions_v1'
+  );
+  const end = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_clear_correction_chain_snoozes_v1',
+    start
+  );
+  assert.ok(start >= 0 && end > start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  const missingComponentBranch = body.indexOf('if v_resolution.id is null then');
+  const pendingCarryGuard = body.indexOf(
+    'banking_pay_workbench_case_resolution_carry_registrations',
+    missingComponentBranch
+  );
+  const linkedClone = body.indexOf(
+    "source_family_key=v_residual->>'source_family_key'",
+    pendingCarryGuard
+  );
+
+  assert.ok(missingComponentBranch >= 0);
+  assert.ok(pendingCarryGuard > missingComponentBranch);
+  assert.ok(linkedClone > pendingCarryGuard);
+  assert.match(
+    body.slice(pendingCarryGuard, linkedClone),
+    /target_session_id=p_session_id[\s\S]*candidate_id=p_candidate_id[\s\S]*status='PENDING'[\s\S]*resolution_scope_kind='CORRECTION_COMPONENT'[\s\S]*canonical_resolution_key=[\s\S]*v_component->>'canonical_correction_key'[\s\S]*continue/
+  );
+});
+
 test('correction-chain finance sync can build recovery from a non-recovery member template', () => {
   const start = correctionRuntimeSql.indexOf(
     'create or replace function public._ctms_rewrite_sync_correction_cases_v1'
