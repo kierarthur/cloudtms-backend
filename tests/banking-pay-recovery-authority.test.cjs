@@ -959,9 +959,11 @@ test('central overpayment sync attests the same coupled correction-chain residua
 test('the Supabase pldbgapi2 workaround is scoped to the correction-chain Banking entry points', () => {
   assert.equal(
     (correctionPlpgsqlGuardSql.match(/SET plpgsql_check\.mode TO 'disabled'/g) || []).length,
-    12
+    14
   );
   assert.match(correctionPlpgsqlGuardSql, /pay_correction_chain_residual_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_ctms_assert_payload_corrections_fresh_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /timesheet_correction_chain_scope_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_pay_batch_item_source_reservation_amount_ex_vat\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_import_correction_classify_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_candidate_correction_residuals_v1\s*\(/);

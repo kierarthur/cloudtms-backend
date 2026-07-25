@@ -34,6 +34,24 @@ ALTER FUNCTION public._ctms_import_correction_classify_v1(
   uuid
 ) SET plpgsql_check.mode TO 'disabled';
 
+-- Payload freshness enters the same bounded correction-chain classifier for
+-- every linked member.  The fatal checker has been observed corrupting this
+-- parent frame even when the nested residual helpers are already guarded.
+ALTER FUNCTION public._ctms_assert_payload_corrections_fresh_v1(
+  jsonb,
+  text
+) SET plpgsql_check.mode TO 'disabled';
+
+-- The correction-chain scope CTE is the first bounded lineage frame used by
+-- source build and freshness validation.  Guard that exact frame as well;
+-- this changes no lineage result or financial authority.
+ALTER FUNCTION public.timesheet_correction_chain_scope_v1(
+  uuid,
+  boolean,
+  integer,
+  integer
+) SET plpgsql_check.mode TO 'disabled';
+
 ALTER FUNCTION public._ctms_candidate_correction_residuals_v1(
   uuid,
   uuid,
