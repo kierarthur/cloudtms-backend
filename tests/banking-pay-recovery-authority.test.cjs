@@ -1034,6 +1034,25 @@ test('materialised correction chains suppress every non-carrier raw member row',
   assert.doesNotMatch(body, /not \(l\.id=any\(v_carrier_row_ids\)\)/);
 });
 
+test('positive dated correction residuals can claim one unretained raw TS_TOTAL carrier', () => {
+  const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
+  const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(
+    body,
+    /v_carrier_row_id is null[\s\S]*target_outstanding_ex_vat[\s\S]*> 0[\s\S]*economic_key_json->>'key_type',''\)\)='TS_TOTAL'/
+  );
+  assert.match(
+    body,
+    /from unnest\([\s\S]*coalesce\(v_carrier_row_ids,array\[\]::uuid\[\]\)[\s\S]*retained_carrier\.carrier_row_id=l\.id/
+  );
+  assert.match(
+    body,
+    /Negative[\s\S]*components must still use their exact finance-case row/
+  );
+});
+
 test('targeted source builds ignore correction chains wholly outside the dirty timesheet family', () => {
   const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
   const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);

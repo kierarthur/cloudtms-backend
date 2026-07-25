@@ -891,6 +891,45 @@ begin
         l.source_ordinal,
         l.id
       limit 1 for update;
+
+      -- The bounded source builder may expose an unresolved correction member
+      -- as one TS_TOTAL row before its saved dated decisions are normalised.
+      -- Use one unretained raw member as the positive dated carrier, then
+      -- rewrite its key below from the server-owned residual.  Negative
+      -- components must still use their exact finance-case row and therefore
+      -- never enter this fallback.
+      if v_carrier_row_id is null
+         and round(coalesce(
+           nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+           0
+         ),2) > 0 then
+        select l.id into v_carrier_row_id
+        from public.banking_pay_workbench_candidate_source_lines l
+        where l.session_id=p_session_id
+          and l.candidate_id=p_candidate_id
+          and l.source_build_run_id=p_source_build_run_id
+          and l.status='CURRENT'
+          and l.timesheet_id=any(v_member_ids)
+          and upper(coalesce(l.economic_key_json->>'key_type',''))='TS_TOTAL'
+          and nullif(
+            btrim(coalesce(l.source_row_json->>'finance_case_id','')),
+            ''
+          ) is null
+          and not exists (
+            select 1
+            from unnest(
+              coalesce(v_carrier_row_ids,array[]::uuid[])
+            ) as retained_carrier(carrier_row_id)
+            where retained_carrier.carrier_row_id=l.id
+          )
+        order by
+          case when l.timesheet_id=v_root_id then 0 else 1 end,
+          l.source_ordinal,
+          l.id
+        limit 1
+        for update;
+      end if;
+
       if v_carrier_row_id is null then
         -- A chain-wide residual includes settled/unchanged dated components so
         -- the live calculation remains complete. Those zero-outstanding
