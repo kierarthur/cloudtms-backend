@@ -786,6 +786,7 @@ declare
   v_carrier_row_id uuid;
   v_carrier_has_finance_case boolean;
   v_chain_in_source_build boolean;
+  v_source_pay_method text;
   v_line_key text;
   v_updated integer := 0;
   v_superseded integer := 0;
@@ -966,6 +967,34 @@ begin
           using errcode='P0001',
                 detail=jsonb_build_object('residual',v_residual,'component',v_component)::text;
       end if;
+      v_source_pay_method:=null;
+      if round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) > 0 then
+        select case
+                 when count(distinct upper(btrim(source_method.value)))=1
+                   then max(upper(btrim(source_method.value)))
+                 else null
+               end
+        into v_source_pay_method
+        from jsonb_array_elements_text(
+          case
+            when jsonb_typeof(v_component->'source_pay_methods')='array'
+              then v_component->'source_pay_methods'
+            else '[]'::jsonb
+          end
+        ) as source_method(value)
+        where upper(btrim(source_method.value)) in ('PAYE','UMBRELLA');
+
+        if v_source_pay_method is null then
+          raise exception 'CORRECTION_CHAIN_SOURCE_PAY_METHOD_REQUIRED'
+            using errcode='P0001',
+                  detail=jsonb_build_object(
+                    'canonical_correction_key',
+                      v_component->>'canonical_correction_key',
+                    'source_pay_methods',
+                      coalesce(v_component->'source_pay_methods','[]'::jsonb)
+                  )::text;
+        end if;
+      end if;
       update public.banking_pay_workbench_candidate_source_lines l
       set timesheet_id=v_root_id,
           line_key=v_line_key,
@@ -1020,6 +1049,12 @@ begin
               'section_amount_display',(v_component->>'target_outstanding_ex_vat')::numeric,
               'component_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
               'preview_component_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+              'source_pay_method',v_source_pay_method,
+              'target_pay_method',upper(v_component->>'target_pay_method'),
+              'source_pay_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
+              'source_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
+              'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
+              'remaining_source_amount',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
               'target_pay_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
               'preview_contract',coalesce(l.source_row_json->'preview_contract','{}'::jsonb)||jsonb_build_object(
                 'amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,

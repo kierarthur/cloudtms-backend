@@ -1061,10 +1061,17 @@ test('positive correction carriers preserve source and target amounts on their s
   const body = correctionRuntimeSql.slice(start, end);
 
   assert.match(body, /CORRECTION_CHAIN_SOURCE_OUTSTANDING_REQUIRED/);
+  assert.match(body, /CORRECTION_CHAIN_SOURCE_PAY_METHOD_REQUIRED/);
+  assert.match(
+    body,
+    /jsonb_array_elements_text\([\s\S]*v_component->'source_pay_methods'[\s\S]*in \('PAYE','UMBRELLA'\)/
+  );
+  assert.match(body, /'source_pay_method',v_source_pay_method/);
+  assert.match(body, /'target_pay_method',upper\(v_component->>'target_pay_method'\)/);
   assert.equal(
     (body.match(/abs\(\(v_component->>'effective_source_outstanding_ex_vat'\)::numeric\)/g) || []).length,
-    5,
-    'source pay, source amount, both reservation projections and remaining source must use source-channel authority'
+    9,
+    'nested and top-level source pay, source amount, reservation projections and remaining source must use source-channel authority'
   );
   assert.doesNotMatch(
     body,
