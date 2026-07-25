@@ -793,7 +793,7 @@ test('correction residual carrier replaces stale root components with the chain-
   const body = correctionRuntimeSql.slice(start, end);
   assert.match(body, /'case_components',jsonb_build_array\([\s\S]*'target_pay_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
   assert.match(body, /'source_entitlement_amount_ex_vat',abs\(\(v_component->>'truth_ex_vat'\)::numeric\)/);
-  assert.match(body, /'source_reservation_amount_ex_vat',abs\(\(v_component->>'target_outstanding_ex_vat'\)::numeric\)/);
+  assert.match(body, /'source_reservation_amount_ex_vat',abs\(\(v_component->>'effective_source_outstanding_ex_vat'\)::numeric\)/);
   assert.match(body, /'section_amount_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
   assert.match(
     body,
@@ -1021,7 +1021,7 @@ test('negative correction residuals preserve the finance-case carrier while posi
   assert.match(body, /else jsonb_build_object\([\s\S]*'amount_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
 });
 
-test('materialised correction chains suppress every non-carrier raw resolution alias', () => {
+test('materialised correction chains suppress every non-carrier raw member row', () => {
   const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
   const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
   const body = correctionRuntimeSql.slice(start, end);
@@ -1031,7 +1031,7 @@ test('materialised correction chains suppress every non-carrier raw resolution a
   assert.match(body, /case when l\.line_key=v_line_key then 0 else 1 end/);
   assert.match(
     body,
-    /and l\.timesheet_id=any\(v_member_ids\)[\s\S]*and l\.section='cases_resolutions'[\s\S]*and not exists \([\s\S]*unnest\(coalesce\(v_carrier_row_ids,array\[\]::uuid\[\]\)\)[\s\S]*carrier_row_id=l\.id/
+    /and l\.timesheet_id=any\(v_member_ids\)[\s\S]*and not exists \([\s\S]*unnest\(coalesce\(v_carrier_row_ids,array\[\]::uuid\[\]\)\)[\s\S]*carrier_row_id=l\.id/
   );
   assert.doesNotMatch(body, /not \(l\.id=any\(v_carrier_row_ids\)\)/);
 });
@@ -1055,20 +1055,22 @@ test('positive dated correction residuals can claim one unretained raw TS_TOTAL 
   );
 });
 
-test('independent canonical-preview totals survive dated correction materialisation', () => {
+test('positive correction carriers preserve source and target amounts on their separate authorities', () => {
   const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
   const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
   const body = correctionRuntimeSql.slice(start, end);
 
-  assert.match(
-    body,
-    /Preserve independent canonical-preview totals/
-  );
+  assert.match(body, /CORRECTION_CHAIN_SOURCE_OUTSTANDING_REQUIRED/);
   assert.equal(
-    (body.match(/and l\.section='cases_resolutions'/g) || []).length,
-    2,
-    'both the TS_TOTAL fallback and final alias suppression must stay inside cases/resolutions'
+    (body.match(/abs\(\(v_component->>'effective_source_outstanding_ex_vat'\)::numeric\)/g) || []).length,
+    5,
+    'source pay, source amount, both reservation projections and remaining source must use source-channel authority'
   );
+  assert.doesNotMatch(
+    body,
+    /'source_(?:pay_ex_vat|amount_ex_vat|reservation_amount_ex_vat)',abs\(\(v_component->>'target_outstanding_ex_vat'\)::numeric\)/
+  );
+  assert.match(body, /'target_pay_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
 });
 
 test('targeted source builds ignore correction chains wholly outside the dirty timesheet family', () => {

@@ -960,6 +960,12 @@ begin
           using errcode='P0001',
                 detail=jsonb_build_object('residual',v_residual,'component',v_component)::text;
       end if;
+      if round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) > 0
+         and nullif(v_component->>'effective_source_outstanding_ex_vat','') is null then
+        raise exception 'CORRECTION_CHAIN_SOURCE_OUTSTANDING_REQUIRED'
+          using errcode='P0001',
+                detail=jsonb_build_object('residual',v_residual,'component',v_component)::text;
+      end if;
       update public.banking_pay_workbench_candidate_source_lines l
       set timesheet_id=v_root_id,
           line_key=v_line_key,
@@ -992,11 +998,11 @@ begin
                 'target_pay_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
                 'component_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
                 'preview_due_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
-                'source_pay_ex_vat',abs((v_component->>'target_outstanding_ex_vat')::numeric),
-                'source_amount_ex_vat',abs((v_component->>'target_outstanding_ex_vat')::numeric),
+                'source_pay_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
+                'source_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
                 'source_entitlement_amount_ex_vat',abs((v_component->>'truth_ex_vat')::numeric),
-                'source_reservation_amount_ex_vat',abs((v_component->>'target_outstanding_ex_vat')::numeric),
-                'remaining_source_amount',abs((v_component->>'target_outstanding_ex_vat')::numeric)
+                'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
+                'remaining_source_amount',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric)
               )
             ),
             'correction_chain_residual_fingerprint',v_residual->>'residual_fingerprint',
@@ -1019,7 +1025,7 @@ begin
                 'amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
                 'selection_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
                 'source_entitlement_amount_ex_vat',abs((v_component->>'truth_ex_vat')::numeric),
-                'source_reservation_amount_ex_vat',abs((v_component->>'target_outstanding_ex_vat')::numeric)
+                'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric)
               )
             )
           end,
@@ -1054,17 +1060,15 @@ begin
     end loop;
 
     -- A correction chain is one coupled economic unit. Once its dated
-    -- component carriers have been materialised, no unresolved raw
-    -- cases/resolutions alias may remain current merely because it used a
-    -- broader TS_TOTAL key. Preserve independent canonical-preview totals:
-    -- those include fixed no-action channel deltas and other separately
-    -- authoritative components that are not represented by the residual.
+    -- component carriers have been materialised, no raw member row may remain
+    -- current merely because it used a broader TS_TOTAL key. Independent
+    -- expenses and additional codes retain their own non-TS_TOTAL component
+    -- keys and are not affected by this lineage suppression.
     update public.banking_pay_workbench_candidate_source_lines l
     set status='SUPERSEDED',updated_at_utc=coalesce(p_now_utc,now())
     where l.session_id=p_session_id and l.candidate_id=p_candidate_id
       and l.source_build_run_id=p_source_build_run_id and l.status='CURRENT'
       and l.timesheet_id=any(v_member_ids)
-      and l.section='cases_resolutions'
       and upper(coalesce(l.economic_key_json->>'key_type',''))='TS_TOTAL'
       and not exists (
         select 1
