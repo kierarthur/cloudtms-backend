@@ -101,12 +101,43 @@ AS $function$
 DECLARE
   v_projection_contract jsonb :=
     public._pay_workbench_candidate_projection_contract();
+  v_selection_carry_table_oid oid :=
+    to_regclass(
+      'public.banking_pay_workbench_selection_carry_registrations'
+    );
+  v_canonical_contract_version text;
 BEGIN
+  v_canonical_contract_version := CASE
+    WHEN v_selection_carry_table_oid IS NOT NULL
+      AND to_regprocedure(
+        'public.pay_workbench_session_carry_forward_preview_selections_v1(uuid,uuid,jsonb)'
+      ) IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_trigger AS trigger_row
+        WHERE trigger_row.tgrelid =
+          'public.banking_pay_workbench_preview_rows'::regclass
+          AND trigger_row.tgname =
+            'trg_banking_pay_preview_selection_carry_apply'
+          AND trigger_row.tgenabled <> 'D'
+          AND trigger_row.tgisinternal IS FALSE
+      )
+      THEN v_projection_contract ->> 'canonical_correction_carrier_version'
+    ELSE 'BANKING_PAY_CANONICAL_CORRECTION_CARRIER_INCOMPLETE'
+  END;
+
+  v_projection_contract := jsonb_set(
+    v_projection_contract,
+    '{canonical_correction_carrier_version}',
+    to_jsonb(v_canonical_contract_version),
+    true
+  );
+
   RETURN jsonb_build_object(
     'ok', true,
     'contract_version', 'BANKING_PAY_WORKBENCH_DB_V1',
     'canonical_correction_carrier_version',
-      v_projection_contract ->> 'canonical_correction_carrier_version',
+      v_canonical_contract_version,
     'candidate_projection_contract', v_projection_contract
   );
 END;
@@ -134,7 +165,31 @@ AS $function$
 DECLARE
   v_projection_contract jsonb :=
     public._pay_workbench_candidate_projection_contract();
+  v_selection_carry_table_oid oid :=
+    to_regclass(
+      'public.banking_pay_workbench_selection_carry_registrations'
+    );
+  v_canonical_contract_version text;
 BEGIN
+  v_canonical_contract_version := CASE
+    WHEN v_selection_carry_table_oid IS NOT NULL
+      AND to_regprocedure(
+        'public.pay_workbench_session_carry_forward_preview_selections_v1(uuid,uuid,jsonb)'
+      ) IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_trigger AS trigger_row
+        WHERE trigger_row.tgrelid =
+          'public.banking_pay_workbench_preview_rows'::regclass
+          AND trigger_row.tgname =
+            'trg_banking_pay_preview_selection_carry_apply'
+          AND trigger_row.tgenabled <> 'D'
+          AND trigger_row.tgisinternal IS FALSE
+      )
+      THEN v_projection_contract ->> 'canonical_correction_carrier_version'
+    ELSE 'BANKING_PAY_CANONICAL_CORRECTION_CARRIER_INCOMPLETE'
+  END;
+
   RETURN jsonb_build_object(
     'ok', true,
     'schema_contract_version', 'IMPORT_REVIEW_DB_V1',
@@ -147,7 +202,7 @@ BEGIN
     'review_ui_contract_version', 'IMPORT_REVIEW_UI_V6',
     'email_grouping_version', 'TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'canonical_correction_carrier_version',
-      v_projection_contract ->> 'canonical_correction_carrier_version',
+      v_canonical_contract_version,
     'legacy_contracts_supported', false
   );
 END;
@@ -283,8 +338,7 @@ BEGIN
       USING ERRCODE = '55000';
   END IF;
 
-  IF v_source.actor_user_id IS DISTINCT FROM v_target.actor_user_id
-     OR v_source.week_ending_cutoff IS DISTINCT FROM v_target.week_ending_cutoff
+  IF v_source.week_ending_cutoff IS DISTINCT FROM v_target.week_ending_cutoff
      OR v_source.pay_date > v_target.pay_date
      OR (
        v_source.pay_date = v_target.pay_date

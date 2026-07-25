@@ -180660,8 +180660,6 @@ BEGIN
 
       IF NOT FOUND THEN
         v_clone_explicit_rejection_reason := 'EXPLICIT_SOURCE_INVALID';
-      ELSIF v_clone_source_session_row.actor_user_id IS DISTINCT FROM p_actor_user_id THEN
-        v_clone_explicit_rejection_reason := 'SOURCE_ACTOR_MISMATCH';
       ELSIF v_clone_source_session_row.id IS NOT DISTINCT FROM v_session_row.id THEN
         v_clone_explicit_rejection_reason := 'EXPLICIT_SOURCE_INVALID';
       ELSIF v_clone_source_session_row.pay_date >= p_pay_date THEN
@@ -180695,8 +180693,7 @@ BEGIN
       SELECT discovered_source.*
       INTO v_clone_source_session_row
       FROM public.banking_pay_workbench_sessions AS discovered_source
-      WHERE discovered_source.actor_user_id = p_actor_user_id
-        AND discovered_source.id IS DISTINCT FROM v_requested_clone_from_session_id
+      WHERE discovered_source.id IS DISTINCT FROM v_requested_clone_from_session_id
         AND discovered_source.pay_date < p_pay_date
         AND discovered_source.week_ending_cutoff = v_effective_week_ending_cutoff
         AND UPPER(BTRIM(COALESCE(discovered_source.status, ''))) = 'OPEN'
@@ -180751,8 +180748,7 @@ BEGIN
   CREATE TEMP TABLE _bpay_open_shared_older_source_inventory ON COMMIT DROP AS
   SELECT old_session.id
   FROM public.banking_pay_workbench_sessions AS old_session
-  WHERE old_session.actor_user_id = p_actor_user_id
-    AND old_session.status = 'OPEN'
+  WHERE old_session.status = 'OPEN'
     AND old_session.discarded_at_utc IS NULL
     AND old_session.replacement_session_id IS NULL
     AND old_session.pay_date < p_pay_date
@@ -181604,7 +181600,6 @@ BEGIN
       FROM raw_sources AS raw_source
       JOIN public.banking_pay_workbench_sessions AS source_session
         ON source_session.id = raw_source.source_session_id
-       AND source_session.actor_user_id = p_actor_user_id
        AND source_session.week_ending_cutoff = v_effective_week_ending_cutoff
        AND source_session.pay_date <= p_pay_date
        AND source_session.status = 'OPEN'
@@ -181631,6 +181626,17 @@ BEGIN
       ORDER BY carry_source.source_priority, carry_source.source_session_id
     LOOP
       v_case_carry_forward_result := public.pay_workbench_session_carry_forward_case_resolutions_v1(
+        p_source_session_id => v_case_carry_source.source_session_id,
+        p_target_session_id => v_session_row.id,
+        p_options_json => jsonb_build_object(
+          'actor_user_id', p_actor_user_id::text,
+          'carry_forward_reason', v_case_carry_source.carry_forward_reason,
+          'allow_same_pay_date_duplicate', v_case_carry_source.carry_forward_reason = 'CANONICAL_DUPLICATE_SESSION_RETIREMENT',
+          'source_priority', v_case_carry_source.source_priority
+        )
+      );
+
+      PERFORM public.pay_workbench_session_carry_forward_preview_selections_v1(
         p_source_session_id => v_case_carry_source.source_session_id,
         p_target_session_id => v_session_row.id,
         p_options_json => jsonb_build_object(

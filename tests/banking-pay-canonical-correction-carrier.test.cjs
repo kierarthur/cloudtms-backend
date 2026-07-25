@@ -30,6 +30,12 @@ const importReview = read('broker/src/import-review.js');
 const sessionSql = read(
   'supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql'
 );
+const selectionCarryMigration = read(
+  'supabase/migrations/25072026_2152_banking_pay_selection_carry_registrations.sql'
+);
+const selectionCarryRuntime = read(
+  'supabase/repeatable/25072026_2153_banking_pay_selection_carry_runtime.sql'
+);
 
 test('durable carry registrations have bounded states, immutable authorities and RLS', () => {
   assert.match(
@@ -230,4 +236,117 @@ test('import review contract requires the canonical carrier marker', () => {
     /'canonical_correction_carrier_version'[\s\S]*v_projection_contract/
   );
   assert.match(carrier, /NOTIFY pgrst, 'reload schema'/);
+});
+
+test('canonical contract fails closed until durable selection carry is installed', () => {
+  assert.match(
+    carrier,
+    /banking_pay_workbench_selection_carry_registrations/
+  );
+  assert.match(
+    carrier,
+    /pay_workbench_session_carry_forward_preview_selections_v1\(uuid,uuid,jsonb\)/
+  );
+  assert.match(
+    carrier,
+    /trg_banking_pay_preview_selection_carry_apply/
+  );
+  assert.match(
+    carrier,
+    /BANKING_PAY_CANONICAL_CORRECTION_CARRIER_INCOMPLETE/
+  );
+});
+
+test('shared workbench replacement carries decisions across authorised actors', () => {
+  const openSharedStart = sessionSql.indexOf(
+    'CREATE OR REPLACE FUNCTION public.pay_workbench_session_open_shared_v2'
+  );
+  const openSharedEnd = sessionSql.indexOf(
+    '\nCREATE OR REPLACE FUNCTION ',
+    openSharedStart + 10
+  );
+  const openShared = sessionSql.slice(openSharedStart, openSharedEnd);
+
+  assert.ok(openSharedStart >= 0);
+  assert.doesNotMatch(openShared, /SOURCE_ACTOR_MISMATCH/);
+  assert.doesNotMatch(
+    openShared,
+    /source_session\.actor_user_id\s*=\s*p_actor_user_id/
+  );
+  assert.match(
+    openShared,
+    /pay_workbench_session_carry_forward_case_resolutions_v1/
+  );
+  assert.match(
+    openShared,
+    /pay_workbench_session_carry_forward_preview_selections_v1/
+  );
+  assert.ok(
+    openShared.indexOf(
+      'pay_workbench_session_carry_forward_preview_selections_v1'
+    ) < openShared.indexOf('WITH retired_sources AS (')
+  );
+});
+
+test('selection carry stores pre-draft intent durably without browser grants', () => {
+  assert.match(
+    selectionCarryMigration,
+    /CREATE TABLE IF NOT EXISTS public\.banking_pay_workbench_selection_carry_registrations/
+  );
+  assert.match(
+    selectionCarryMigration,
+    /status IN \('PENDING', 'APPLIED', 'SUPERSEDED', 'AMBIGUOUS'\)/
+  );
+  assert.match(selectionCarryMigration, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(
+    selectionCarryMigration,
+    /REVOKE ALL[\s\S]*FROM PUBLIC, anon, authenticated, service_role/
+  );
+  assert.match(
+    selectionCarryMigration,
+    /CREATE TRIGGER trg_banking_pay_preview_selection_carry_apply/
+  );
+  assert.match(
+    selectionCarryRuntime,
+    /CREATE OR REPLACE FUNCTION public\._pay_workbench_preview_selection_key_v1/
+  );
+  assert.match(
+    selectionCarryRuntime,
+    /CREATE OR REPLACE FUNCTION public\.pay_workbench_session_carry_forward_preview_selections_v1/
+  );
+  assert.match(
+    selectionCarryRuntime,
+    /CREATE OR REPLACE FUNCTION public\.trg_banking_pay_preview_selection_carry_apply/
+  );
+  assert.match(
+    selectionCarryRuntime,
+    /policy_x_authority_scope', 'PRE_DRAFT_SELECTION_INTENT_ONLY/
+  );
+  assert.doesNotMatch(
+    selectionCarryRuntime,
+    /GRANT EXECUTE[\s\S]*TO (?:anon|authenticated|service_role)/
+  );
+});
+
+test('selection carry restores explicit unselection and selected-row authority by stable component key', () => {
+  assert.match(
+    selectionCarryRuntime,
+    /'CORRECTION'[\s\S]*v_canonical_key/
+  );
+  assert.match(
+    selectionCarryRuntime,
+    /'TIMESHEET_COMPONENT'[\s\S]*p_timesheet_id::text[\s\S]*v_key_type[\s\S]*v_key_value/
+  );
+  assert.match(
+    selectionCarryRuntime,
+    /IN \('SELECTED', 'UNSELECTED'\)/
+  );
+  assert.match(
+    selectionCarryRuntime,
+    /SET selected = v_registration\.selected,[\s\S]*selection_state = v_registration\.selection_state/
+  );
+  assert.match(
+    selectionCarryRuntime,
+    /server_selected_preview_row_ids = v_selected_ids/
+  );
 });
