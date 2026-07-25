@@ -31,6 +31,8 @@ const installedContract = Object.freeze({
   incremental_apply_version: importReviewContract.incrementalApply,
   review_ui_contract_version: importReviewContract.reviewUi,
   email_grouping_version: importReviewContract.emailGrouping,
+  canonical_correction_carrier_version:
+    importReviewContract.canonicalCorrectionCarrier,
   legacy_contracts_supported: false
 });
 

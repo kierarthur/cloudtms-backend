@@ -941,6 +941,96 @@ BEGIN
     COALESCE(
       jsonb_agg(
         jsonb_build_object(
+          'canonical_correction_key',
+            concat_ws(
+              '|',
+              'CORRECTION_CHAIN_V1',
+              p_candidate_id::text,
+              v_root_timesheet_id::text,
+              upper(btrim(component_row.key_type)),
+              CASE
+                WHEN upper(btrim(component_row.key_type)) = 'TS_DAY'
+                  THEN (component_row.key_value::date)::text
+                ELSE btrim(component_row.key_value)
+              END
+            ),
+          'correction_identity_version', 'CORRECTION_CHAIN_V1',
+          'correction_root_id', v_root_timesheet_id::text,
+          'ordered_member_timesheet_ids', to_jsonb(v_member_ids),
+          'component_lineage_fingerprint',
+            encode(
+              extensions.digest(
+                convert_to(
+                  jsonb_build_object(
+                    'identity_version', 'CORRECTION_CHAIN_V1',
+                    'candidate_id', p_candidate_id::text,
+                    'correction_root_id', v_root_timesheet_id::text,
+                    'component_key_type', upper(btrim(component_row.key_type)),
+                    'component_key_value', CASE
+                      WHEN upper(btrim(component_row.key_type)) = 'TS_DAY'
+                        THEN (component_row.key_value::date)::text
+                      ELSE btrim(component_row.key_value)
+                    END,
+                    'ordered_member_timesheet_ids', to_jsonb(v_member_ids),
+                    'chain_fingerprint', v_chain ->> 'chain_fingerprint'
+                  )::text,
+                  'UTF8'
+                ),
+                'sha256'
+              ),
+              'hex'
+            ),
+          'resolution_economic_fingerprint',
+            encode(
+              extensions.digest(
+                convert_to(
+                  jsonb_build_object(
+                    'canonical_correction_key',
+                      concat_ws(
+                        '|',
+                        'CORRECTION_CHAIN_V1',
+                        p_candidate_id::text,
+                        v_root_timesheet_id::text,
+                        upper(btrim(component_row.key_type)),
+                        CASE
+                          WHEN upper(btrim(component_row.key_type)) = 'TS_DAY'
+                            THEN (component_row.key_value::date)::text
+                          ELSE btrim(component_row.key_value)
+                        END
+                      ),
+                    'ordered_member_timesheet_ids', to_jsonb(v_member_ids),
+                    'chain_fingerprint', v_chain ->> 'chain_fingerprint',
+                    'source_basis_fingerprint',
+                      component_row.source_basis_fingerprint,
+                    'correction_financials_policy_envelope_fingerprint',
+                      v_correction_financials_policy_envelope_fingerprint,
+                    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+                    'source_pay_methods', v_source_pay_methods,
+                    'target_pay_method', v_target_pay_method,
+                    'truth_ex_vat', component_row.truth_ex_vat,
+                    'baseline_ex_vat', component_row.baseline_ex_vat,
+                    'reserved_ex_vat', component_row.reserved_ex_vat,
+                    'raw_outstanding_ex_vat',
+                      component_row.raw_outstanding_ex_vat,
+                    'effective_source_outstanding_ex_vat',
+                      component_row.effective_outstanding_ex_vat,
+                    'target_outstanding_ex_vat',
+                      component_row.target_outstanding_ex_vat,
+                    'raw_outstanding_inc_vat',
+                      component_row.raw_outstanding_inc_vat,
+                    'effective_source_outstanding_inc_vat',
+                      component_row.effective_outstanding_inc_vat,
+                    'resolution_required', component_row.resolution_required,
+                    'resolution_complete', component_row.resolution_complete,
+                    'resolved_target_amount_ex_vat',
+                      component_row.resolved_target_amount_ex_vat
+                  )::text,
+                  'UTF8'
+                ),
+                'sha256'
+              ),
+              'hex'
+            ),
           'carrier_timesheet_id',
             v_latest_positive_timesheet_id::text,
           'source_family_key', v_source_family_key,
@@ -1072,6 +1162,8 @@ BEGIN
     'ok', true,
     'draftable', v_draftable,
     'root_timesheet_id', v_root_timesheet_id::text,
+    'correction_identity_version', 'CORRECTION_CHAIN_V1',
+    'ordered_member_timesheet_ids', to_jsonb(v_member_ids),
     'latest_positive_timesheet_id',
       v_latest_positive_timesheet_id::text,
     'member_timesheet_ids', to_jsonb(v_member_ids),

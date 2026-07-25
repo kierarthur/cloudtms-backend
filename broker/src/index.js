@@ -105,6 +105,109 @@ const dispatchImportReviewRequest = createImportReviewDispatcher({
   runFollowUp: runImportReviewPostCommit
 });
 
+const BANKING_PAY_WORKBENCH_DB_CONTRACT = 'BANKING_PAY_WORKBENCH_DB_V1';
+const BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION =
+  'BANKING_PAY_CANONICAL_CORRECTION_CARRIER_V1';
+
+async function assertBankingPayWorkbenchContract(env, entryPoint) {
+  let contract = null;
+  try {
+    contract = unwrapRpc(
+      await sbRpc(
+        env,
+        'pay_workbench_contract_version_get_v1',
+        {},
+        {
+          routeClass: 'CONTROL',
+          purpose: 'BANKING_PAY_WORKBENCH_CONTRACT',
+          timeoutMs: 8000,
+          bankingPay: true
+        }
+      ),
+      'pay_workbench_contract_version_get_v1'
+    );
+  } catch (cause) {
+    const error = new Error('BANKING_PAY_WORKBENCH_CONTRACT_MISMATCH');
+    error.code = 'BANKING_PAY_WORKBENCH_CONTRACT_MISMATCH';
+    error.status = 503;
+    error.entryPoint = entryPoint;
+    error.actualContract = null;
+    error.cause = cause;
+    console.error('[BankingPayWorkbenchContract]', JSON.stringify({
+      code: error.code,
+      expected_contract_version: BANKING_PAY_WORKBENCH_DB_CONTRACT,
+      expected_canonical_correction_carrier_version:
+        BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION,
+      actual_contract_version: null,
+      actual_canonical_correction_carrier_version: null,
+      entry_point: entryPoint,
+      mutation_attempted: false,
+      workbench_job_claimed: false
+    }));
+    throw error;
+  }
+
+  const projectionContract =
+    contract && typeof contract.candidate_projection_contract === 'object'
+      ? contract.candidate_projection_contract
+      : null;
+  const valid =
+    contract
+    && contract.ok === true
+    && contract.contract_version === BANKING_PAY_WORKBENCH_DB_CONTRACT
+    && contract.canonical_correction_carrier_version
+      === BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION
+    && projectionContract
+    && projectionContract.canonical_correction_carrier_version
+      === BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION;
+
+  if (!valid) {
+    const error = new Error('BANKING_PAY_WORKBENCH_CONTRACT_MISMATCH');
+    error.code = 'BANKING_PAY_WORKBENCH_CONTRACT_MISMATCH';
+    error.status = 503;
+    error.entryPoint = entryPoint;
+    error.actualContract = contract;
+    console.error('[BankingPayWorkbenchContract]', JSON.stringify({
+      code: error.code,
+      expected_contract_version: BANKING_PAY_WORKBENCH_DB_CONTRACT,
+      expected_canonical_correction_carrier_version:
+        BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION,
+      actual_contract_version: contract?.contract_version || null,
+      actual_canonical_correction_carrier_version:
+        contract?.canonical_correction_carrier_version || null,
+      entry_point: entryPoint,
+      mutation_attempted: false,
+      workbench_job_claimed: false
+    }));
+    throw error;
+  }
+
+  return contract;
+}
+
+function bankingPayWorkbenchContractFailure(error) {
+  return fail(
+    503,
+    'BANKING_PAY_WORKBENCH_CONTRACT_MISMATCH',
+    'Banking Pay is temporarily unavailable because the Worker cannot prove the required database contract.',
+    {
+      category: 'CONTRACT_GATE',
+      retryable: true,
+      action: 'RETRY_LATER',
+      expected_contract_version: BANKING_PAY_WORKBENCH_DB_CONTRACT,
+      expected_canonical_correction_carrier_version:
+        BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION,
+      actual_contract_version:
+        error?.actualContract?.contract_version || null,
+      actual_canonical_correction_carrier_version:
+        error?.actualContract?.canonical_correction_carrier_version || null,
+      entry_point: error?.entryPoint || null,
+      mutation_attempted: false,
+      workbench_job_claimed: false
+    }
+  );
+}
+
 async function handleRetiredImportMutationRoute(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -15409,6 +15512,39 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
           { session_id: sessionId, action: openPayload.action || null }
         );
       }
+
+      lastDiagnosticStage = 'PAY_WORKBENCH_CARRY_STATUS_GET_V1_RPC';
+      lastDiagnosticRpc =
+        'pay_workbench_case_resolution_carry_status_get_v1';
+      const carryStatus = unwrapRpc(
+        await sbRpc(
+          env,
+          'pay_workbench_case_resolution_carry_status_get_v1',
+          {
+            p_target_session_id: sessionId,
+            p_candidate_id: null
+          },
+          {
+            routeClass: 'PREVIEW_PROGRESS',
+            purpose: 'WORKBENCH_SESSION_OPEN_CARRY_STATUS',
+            timeoutMs: 5000,
+            bankingPay: true
+          }
+        ),
+        'pay_workbench_case_resolution_carry_status_get_v1'
+      );
+      openPayload = {
+        ...openPayload,
+        case_resolution_carry: carryStatus,
+        case_resolution_carry_state:
+          trimStr(carryStatus.carry_state || '') || 'NOT_REQUIRED',
+        case_resolution_carry_pending_count:
+          Number(carryStatus.pending_count || 0),
+        case_resolution_carry_stale_count:
+          Number(carryStatus.stale_count || 0),
+        case_resolution_carry_incompatible_count:
+          Number(carryStatus.incompatible_count || 0)
+      };
 
       let expiryResult = {
         ok: true,
@@ -60437,6 +60573,11 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 
 
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
+  await assertBankingPayWorkbenchContract(
+    env,
+    'advanceBankingPayDraftCreateOperation'
+  );
+
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
     try {
@@ -178175,6 +178316,11 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
 
 
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
+  await assertBankingPayWorkbenchContract(
+    env,
+    opts?.source || 'drainBankingPayWorkbenchJobs'
+  );
+
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -188820,6 +188966,25 @@ if (p.startsWith('/api/banking/')) {
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const requiresBankingPayWorkbenchContract =
+    p.startsWith('/api/banking/pay/workbench/')
+    || p === '/api/banking/pay/preview'
+    || p === '/api/banking/pay/batch/create-draft';
+  if (requiresBankingPayWorkbenchContract) {
+    try {
+      await assertBankingPayWorkbenchContract(
+        env,
+        `${req.method} ${p}`
+      );
+    } catch (error) {
+      return withCORS(
+        env,
+        req,
+        bankingPayWorkbenchContractFailure(error)
+      );
+    }
+  }
 
   if (req.method === 'GET' && p === '/api/banking/capabilities') {
     return handleBankingCapabilities(env, req, user);

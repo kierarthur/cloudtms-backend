@@ -709,6 +709,7 @@ declare
   v_candidate uuid;
   v_residuals jsonb;
   v_bad jsonb;
+  v_carry_bad jsonb;
   v_all jsonb := '[]'::jsonb;
 begin
   if p_session_id is null then raise exception 'WORKBENCH_SESSION_ID_REQUIRED' using errcode='22023'; end if;
@@ -727,6 +728,27 @@ begin
       and coalesce((public._ctms_import_correction_classify_v1(pr.timesheet_id)
         ->> 'is_import_authoritative_correction')::boolean, false)
   loop
+    select jsonb_agg(jsonb_build_object(
+      'registration_id',carry_row.id,
+      'status',carry_row.status,
+      'state_reason_code',carry_row.state_reason_code,
+      'canonical_resolution_key',carry_row.canonical_resolution_key
+    ) order by carry_row.source_priority,carry_row.created_at_utc)
+    into v_carry_bad
+    from public.banking_pay_workbench_case_resolution_carry_registrations carry_row
+    where carry_row.target_session_id=p_session_id
+      and carry_row.candidate_id=v_candidate
+      and carry_row.status in ('PENDING','STALE','INCOMPATIBLE');
+
+    if jsonb_array_length(coalesce(v_carry_bad,'[]'::jsonb))>0 then
+      raise exception 'CORRECTION_RESOLUTION_CARRY_NOT_DRAFTABLE'
+        using errcode='P0001',
+              detail=jsonb_build_object(
+                'candidate_id',v_candidate,
+                'carry_registrations',v_carry_bad
+              )::text;
+    end if;
+
     v_residuals := public._ctms_candidate_correction_residuals_v1(
       p_session_id, v_candidate, null, p_context
     );
@@ -769,6 +791,17 @@ declare
   v_superseded integer := 0;
   v_row_count integer := 0;
 begin
+  -- Session replacement registers saved decisions before retiring the source
+  -- session. Candidate source build is the first point at which target
+  -- correction evidence is authoritative, so consume the candidate's locked
+  -- registrations here. Missing evidence remains durably PENDING.
+  perform public._pay_workbench_case_resolution_carry_process_candidate_v1(
+    p_session_id,
+    p_candidate_id,
+    p_source_build_run_id,
+    coalesce(p_now_utc,now())
+  );
+
   v_residuals := public._ctms_candidate_correction_residuals_v1(
     p_session_id,p_candidate_id,null::uuid,'PAY_WORKBENCH_SOURCE_BUILD'
   );
@@ -900,6 +933,16 @@ begin
               'key_value',v_component->>'component_key_value'
             ),
             'source_family_key',v_residual->>'source_family_key',
+            'canonical_correction_key',
+              v_component->>'canonical_correction_key',
+            'correction_identity_version','CORRECTION_CHAIN_V1',
+            'correction_root_id',v_residual->>'root_timesheet_id',
+            'ordered_member_timesheet_ids',
+              v_residual->'ordered_member_timesheet_ids',
+            'component_lineage_fingerprint',
+              v_component->>'component_lineage_fingerprint',
+            'resolution_economic_fingerprint',
+              v_component->>'resolution_economic_fingerprint',
             'correction_chain_residual',v_residual,
             'correction_chain_component',v_component,
             'case_components',jsonb_build_array(
@@ -947,7 +990,12 @@ begin
           ),
           contract_json=coalesce(l.contract_json,'{}'::jsonb)||jsonb_build_object(
             'policy_x_authority_scope','PRE_DRAFT_CORRECTION_RESIDUAL',
-            'residual_fingerprint',v_residual->>'residual_fingerprint'
+            'residual_fingerprint',v_residual->>'residual_fingerprint',
+            'canonical_correction_key',
+              v_component->>'canonical_correction_key',
+            'correction_identity_version','CORRECTION_CHAIN_V1',
+            'resolution_economic_fingerprint',
+              v_component->>'resolution_economic_fingerprint'
           ),
           updated_at_utc=coalesce(p_now_utc,now())
       where l.id=v_carrier_row_id;
@@ -975,6 +1023,7 @@ begin
     where l.session_id=p_session_id and l.candidate_id=p_candidate_id
       and l.source_build_run_id=p_source_build_run_id and l.status='CURRENT'
       and l.timesheet_id=any(v_member_ids)
+      and upper(coalesce(l.economic_key_json->>'key_type',''))='TS_TOTAL'
       and not exists (
         select 1
         from unnest(coalesce(v_carrier_row_ids,array[]::uuid[])) as retained_carrier(carrier_row_id)
@@ -1003,6 +1052,7 @@ declare
   v_timesheet uuid;
   v_residuals jsonb;
   v_residual jsonb;
+  v_component jsonb;
 begin
   perform public._ctms_assert_payload_corrections_fresh_v1(v_payload,'PAY_CASE_RESOLUTION');
   v_candidate:=nullif(v_payload->>'candidate_id','')::uuid;
@@ -1029,7 +1079,56 @@ begin
   if v_residual is null or jsonb_typeof(v_residual)<>'object' then
     raise exception 'CORRECTION_RESIDUAL_REQUIRED_FOR_CASE_RESOLUTION' using errcode='P0001';
   end if;
+
+  select component.value
+  into v_component
+  from jsonb_array_elements(
+    coalesce(v_residual->'components','[]'::jsonb)
+  ) component(value)
+  where upper(component.value->>'component_key_type')=upper(coalesce(
+      v_payload->>'component_key_type',
+      v_payload#>>'{bucket_resolutions,0,component_key_type}',
+      v_payload#>>'{bucket_resolutions,0,key_type}',
+      ''
+    ))
+    and component.value->>'component_key_value'=coalesce(
+      v_payload->>'component_key_value',
+      v_payload#>>'{bucket_resolutions,0,component_key_value}',
+      v_payload#>>'{bucket_resolutions,0,key_value}',
+      ''
+    )
+  limit 1;
+
+  if v_component is null or jsonb_typeof(v_component)<>'object' then
+    raise exception 'CORRECTION_COMPONENT_REQUIRED_FOR_CASE_RESOLUTION'
+      using errcode='P0001',
+            detail=jsonb_build_object(
+              'candidate_id',v_candidate,
+              'timesheet_id',v_timesheet,
+              'component_key_type',coalesce(
+                v_payload->>'component_key_type',
+                v_payload#>>'{bucket_resolutions,0,component_key_type}',
+                v_payload#>>'{bucket_resolutions,0,key_type}'
+              ),
+              'component_key_value',coalesce(
+                v_payload->>'component_key_value',
+                v_payload#>>'{bucket_resolutions,0,component_key_value}',
+                v_payload#>>'{bucket_resolutions,0,key_value}'
+              )
+            )::text;
+  end if;
+
   return v_payload||jsonb_build_object(
+    'resolution_identity_key',v_component->>'canonical_correction_key',
+    'resolution_identity_version','CORRECTION_CHAIN_V1',
+    'canonical_correction_key',v_component->>'canonical_correction_key',
+    'resolution_economic_fingerprint',
+      v_component->>'resolution_economic_fingerprint',
+    'correction_root_id',v_residual->>'root_timesheet_id',
+    'ordered_member_timesheet_ids',
+      v_residual->'ordered_member_timesheet_ids',
+    'component_lineage_fingerprint',
+      v_component->>'component_lineage_fingerprint',
     'source_family_key',v_residual->>'source_family_key',
     'correction_financials_policy_envelope',v_residual->'correction_financials_policy_envelope',
     'correction_financials_policy_envelope_fingerprint',v_residual->>'correction_financials_policy_envelope_fingerprint',
@@ -1204,17 +1303,7 @@ begin
         p_candidate_id,
         'timesheet:'||v_component_timesheet_id::text,
         'BUCKETED',
-        concat_ws(
-          '|',
-          'BUCKETED',
-          'timesheet:'||v_component_timesheet_id::text,
-          v_component_timesheet_id::text,
-          v_component->>'source_basis_fingerprint',
-          v_residual->>'source_family_key',
-          coalesce(v_resolution.bucket_code,'~'),
-          upper(v_component->>'component_key_type'),
-          v_component->>'component_key_value'
-        ),
+        v_component->>'canonical_correction_key',
         v_component_timesheet_id,
         v_component->>'source_basis_fingerprint',
         v_residual->>'source_family_key',
@@ -1311,6 +1400,18 @@ begin
           coalesce(v_bucket->'source_basis_json','{}'::jsonb)
           ||jsonb_build_object(
             'source_family_key',v_residual->>'source_family_key',
+            'resolution_identity_key',
+              v_component->>'canonical_correction_key',
+            'resolution_identity_version','CORRECTION_CHAIN_V1',
+            'canonical_correction_key',
+              v_component->>'canonical_correction_key',
+            'resolution_economic_fingerprint',
+              v_component->>'resolution_economic_fingerprint',
+            'correction_root_id',v_residual->>'root_timesheet_id',
+            'ordered_member_timesheet_ids',
+              v_residual->'ordered_member_timesheet_ids',
+            'component_lineage_fingerprint',
+              v_component->>'component_lineage_fingerprint',
             'root_timesheet_id',v_residual->>'root_timesheet_id',
             'component_key_type',v_component->>'component_key_type',
             'component_key_value',v_component->>'component_key_value',
@@ -1343,6 +1444,8 @@ begin
 
     update public.banking_pay_workbench_session_case_resolutions
     set timesheet_id=v_component_timesheet_id,
+        resolution_identity_key=
+          v_component->>'canonical_correction_key',
         source_basis_fingerprint=v_component->>'source_basis_fingerprint',
         source_family_key=v_residual->>'source_family_key',
         component_key_type=upper(v_component->>'component_key_type'),
@@ -1352,6 +1455,18 @@ begin
             'linked_timesheet_id',v_component_timesheet_id::text,
             'timesheet_id',v_component_timesheet_id::text,
             'source_family_key',v_residual->>'source_family_key',
+            'resolution_identity_key',
+              v_component->>'canonical_correction_key',
+            'resolution_identity_version','CORRECTION_CHAIN_V1',
+            'canonical_correction_key',
+              v_component->>'canonical_correction_key',
+            'resolution_economic_fingerprint',
+              v_component->>'resolution_economic_fingerprint',
+            'correction_root_id',v_residual->>'root_timesheet_id',
+            'ordered_member_timesheet_ids',
+              v_residual->'ordered_member_timesheet_ids',
+            'component_lineage_fingerprint',
+              v_component->>'component_lineage_fingerprint',
             -- Keep the canonical component result available both at the
             -- resolution row boundary and in its detailed bucket.  The
             -- correction residual reader accepts both shapes so decisions

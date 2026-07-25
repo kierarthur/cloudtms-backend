@@ -861,17 +861,51 @@ BEGIN
         RAISE EXCEPTION 'Invalid TS_DAY economic key in BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
       END IF;
 
-      v_bucket_resolution_identity_key := concat_ws(
-        '|',
-        'BUCKETED',
-        COALESCE(NULLIF(v_case_key, ''), '~'),
-        COALESCE(CASE WHEN v_bucket_timesheet_id IS NULL THEN NULL ELSE v_bucket_timesheet_id::text END, '~'),
-        COALESCE(NULLIF(v_bucket_source_basis_fingerprint, ''), '~'),
-        COALESCE(NULLIF(v_bucket_source_family_key, ''), '~'),
-        COALESCE(NULLIF(v_bucket_bucket_code, ''), '~'),
-        COALESCE(NULLIF(v_bucket_component_key_type, ''), '~'),
-        COALESCE(NULLIF(v_bucket_component_key_value, ''), '~')
-      );
+      IF v_bucket_source_family_key LIKE 'correction-chain:%' THEN
+        v_bucket_resolution_identity_key :=
+          public._ctms_correction_carrier_identity_v1(
+            v_candidate_id,
+            NULLIF(
+              COALESCE(
+                v_bucket_element.bucket_json->>'correction_root_id',
+                v_resolution_payload_json->>'correction_root_id'
+              ),
+              ''
+            )::uuid,
+            v_bucket_component_key_type,
+            v_bucket_component_key_value
+          );
+
+        IF NULLIF(
+          COALESCE(
+            v_bucket_element.bucket_json->>'canonical_correction_key',
+            v_resolution_payload_json->>'canonical_correction_key'
+          ),
+          ''
+        ) IS DISTINCT FROM v_bucket_resolution_identity_key THEN
+          RAISE EXCEPTION 'CORRECTION_CARRIER_IDENTITY_MISMATCH'
+            USING ERRCODE='P0001',
+                  DETAIL=jsonb_build_object(
+                    'expected_identity',v_bucket_resolution_identity_key,
+                    'provided_identity',COALESCE(
+                      v_bucket_element.bucket_json->>'canonical_correction_key',
+                      v_resolution_payload_json->>'canonical_correction_key'
+                    )
+                  )::text;
+        END IF;
+      ELSE
+        v_bucket_resolution_identity_key := concat_ws(
+          '|',
+          'BUCKETED',
+          COALESCE(NULLIF(v_case_key, ''), '~'),
+          COALESCE(CASE WHEN v_bucket_timesheet_id IS NULL THEN NULL ELSE v_bucket_timesheet_id::text END, '~'),
+          COALESCE(NULLIF(v_bucket_source_basis_fingerprint, ''), '~'),
+          COALESCE(NULLIF(v_bucket_source_family_key, ''), '~'),
+          COALESCE(NULLIF(v_bucket_bucket_code, ''), '~'),
+          COALESCE(NULLIF(v_bucket_component_key_type, ''), '~'),
+          COALESCE(NULLIF(v_bucket_component_key_value, ''), '~')
+        );
+      END IF;
 
       INSERT INTO _tmp_bpay_session_bucket_resolution (
         bucket_ordinal,
@@ -3337,3 +3371,8 @@ BEGIN
   );
 END;
 $function$;
+
+REVOKE ALL ON FUNCTION public.pay_workbench_session_apply_case_resolution(uuid, uuid, jsonb)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_session_apply_case_resolution(uuid, uuid, jsonb)
+  TO service_role;

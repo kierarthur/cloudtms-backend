@@ -52,6 +52,7 @@ DECLARE
   v_operation_allocation_total integer := 0;
   v_operation_allocation_done integer := 0;
   v_operation_mismatch_details jsonb := '{}'::jsonb;
+  v_canonical_provenance_mismatch_details jsonb := '[]'::jsonb;
 BEGIN
   perform public._ctms_assert_pay_batch_mutable_v1(p_pay_batch_id,'PAY_BATCH_APPLY_FINANCE_ADJUSTMENTS');
   IF p_pay_batch_id IS NULL THEN
@@ -3289,6 +3290,307 @@ v_stage := 'STAGE_16BD_INSERT_DORMANT_RECOVERY_TEMPLATES';
     end if;
   end if;
 
+v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:' || v_stage,
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  with correction_items as (
+    select
+      batch_item.id as pay_batch_item_id,
+      batch_candidate.candidate_id,
+      batch.source_workbench_session_id,
+      coalesce(
+        nullif(batch_item.frozen_component_snapshot_json
+          ->>'canonical_correction_key',''),
+        nullif(batch_item.frozen_resolution_payload_json
+          ->>'canonical_correction_key',''),
+        nullif(batch_item.frozen_resolution_payload_json
+          ->>'resolution_identity_key','')
+      ) as canonical_correction_key,
+      coalesce(
+        nullif(batch_item.frozen_component_snapshot_json
+          ->>'resolution_economic_fingerprint',''),
+        nullif(batch_item.frozen_resolution_payload_json
+          ->>'resolution_economic_fingerprint','')
+      ) as resolution_economic_fingerprint,
+      batch_item.frozen_component_snapshot_json,
+      batch_item.frozen_source_basis_json,
+      batch_item.frozen_resolution_payload_json,
+      batch_item.frozen_resolution_result_json
+    from public.pay_batch_items batch_item
+    join public.pay_batch_candidates batch_candidate
+      on batch_candidate.id=batch_item.pay_batch_candidate_id
+    join public.pay_batches batch
+      on batch.id=batch_candidate.pay_batch_id
+    where batch.id=v_batch_id
+      and (
+        coalesce(batch_item.frozen_source_basis_json
+          ->>'source_family_key','') like 'correction-chain:%'
+        or coalesce(batch_item.frozen_component_snapshot_json
+          ->>'source_family_key','') like 'correction-chain:%'
+        or coalesce(batch_item.frozen_resolution_payload_json
+          ->>'source_family_key','') like 'correction-chain:%'
+        or coalesce(batch_item.source_ref,'') like 'correction-chain:%'
+      )
+  ), authoritative_resolution as (
+    select correction_item.*,
+      resolution_row.id as target_resolution_id,
+      resolution_row.resolution_origin_session_id,
+      resolution_row.resolution_origin_pay_date,
+      resolution_row.resolution_origin_source_basis_fingerprint,
+      resolution_row.payload_json as current_resolution_payload_json,
+      carry_row.id as carry_registration_id,
+      carry_row.source_resolution_id,
+      carry_row.source_resolution_identity_key
+    from correction_items correction_item
+    left join lateral (
+      select saved_resolution.*
+      from public.banking_pay_workbench_session_case_resolutions
+        saved_resolution
+      where saved_resolution.session_id=
+          correction_item.source_workbench_session_id
+        and saved_resolution.candidate_id=correction_item.candidate_id
+        and saved_resolution.resolution_identity_key=
+          correction_item.canonical_correction_key
+      order by saved_resolution.updated_at_utc desc,
+               saved_resolution.id desc
+      limit 1
+    ) resolution_row on true
+    left join lateral (
+      select registration.*
+      from public.banking_pay_workbench_case_resolution_carry_registrations
+        registration
+      where registration.target_session_id=
+          correction_item.source_workbench_session_id
+        and registration.candidate_id=correction_item.candidate_id
+        and registration.canonical_resolution_key=
+          correction_item.canonical_correction_key
+        and registration.status='CARRIED'
+        and registration.target_resolution_id=resolution_row.id
+      order by registration.completed_at_utc desc,
+               registration.id desc
+      limit 1
+    ) carry_row on true
+  ), frozen as (
+    select authoritative_resolution.*,
+      encode(
+        extensions.digest(
+          convert_to(
+            (
+              coalesce(
+                authoritative_resolution.frozen_resolution_result_json,
+                '{}'::jsonb
+              )-'resolution_result_fingerprint'
+            )::text,
+            'UTF8'
+          ),
+          'sha256'
+        ),
+        'hex'
+      ) as resolution_result_fingerprint
+    from authoritative_resolution
+  )
+  update public.pay_batch_items batch_item
+  set frozen_component_snapshot_json=
+        coalesce(batch_item.frozen_component_snapshot_json,'{}'::jsonb)
+        ||jsonb_build_object(
+          'canonical_correction_key',frozen.canonical_correction_key,
+          'correction_identity_version','CORRECTION_CHAIN_V1',
+          'correction_root_id',coalesce(
+            batch_item.frozen_component_snapshot_json
+              ->>'correction_root_id',
+            frozen.current_resolution_payload_json
+              ->>'correction_root_id'
+          ),
+          'component_key_type',
+            batch_item.frozen_component_key_type,
+          'component_key_value',
+            batch_item.frozen_component_key_value,
+          'ordered_member_timesheet_ids',coalesce(
+            batch_item.frozen_component_snapshot_json
+              ->'ordered_member_timesheet_ids',
+            frozen.current_resolution_payload_json
+              ->'ordered_member_timesheet_ids',
+            '[]'::jsonb
+          ),
+          'component_lineage_fingerprint',coalesce(
+            batch_item.frozen_component_snapshot_json
+              ->>'component_lineage_fingerprint',
+            frozen.current_resolution_payload_json
+              ->>'component_lineage_fingerprint'
+          ),
+          'carrier_source_line_id',coalesce(
+            batch_item.frozen_component_snapshot_json
+              ->>'carrier_source_line_id',
+            batch_item.frozen_component_snapshot_json
+              ->>'source_line_id'
+          ),
+          'resolution_economic_fingerprint',
+            frozen.resolution_economic_fingerprint
+        ),
+      frozen_source_basis_json=
+        coalesce(batch_item.frozen_source_basis_json,'{}'::jsonb)
+        ||jsonb_build_object(
+          'source_family_key',coalesce(
+            batch_item.frozen_source_basis_json
+              ->>'source_family_key',
+            batch_item.frozen_component_snapshot_json
+              ->>'source_family_key',
+            frozen.current_resolution_payload_json
+              ->>'source_family_key'
+          ),
+          'source_basis_fingerprint',coalesce(
+            batch_item.frozen_source_basis_json
+              ->>'source_basis_fingerprint',
+            batch_item.frozen_component_snapshot_json
+              ->>'source_basis_fingerprint'
+          ),
+          'correction_chain_fingerprint',coalesce(
+            batch_item.frozen_source_basis_json
+              ->>'correction_chain_fingerprint',
+            frozen.current_resolution_payload_json
+              ->>'correction_chain_fingerprint'
+          ),
+          'correction_residual_fingerprint',coalesce(
+            batch_item.frozen_source_basis_json
+              ->>'correction_residual_fingerprint',
+            batch_item.frozen_source_basis_json
+              ->>'correction_chain_residual_fingerprint',
+            frozen.current_resolution_payload_json
+              ->>'correction_chain_residual_fingerprint'
+          ),
+          'correction_financials_policy_envelope_fingerprint',
+            coalesce(
+              batch_item.frozen_source_basis_json
+                ->>'correction_financials_policy_envelope_fingerprint',
+              frozen.current_resolution_payload_json
+                ->>'correction_financials_policy_envelope_fingerprint'
+            ),
+          'represented_source_family_key',coalesce(
+            batch_item.frozen_source_basis_json
+              ->>'represented_source_family_key',
+            batch_item.frozen_source_basis_json
+              ->>'source_family_key'
+          ),
+          'source_build_run_id',coalesce(
+            batch_item.frozen_source_basis_json
+              ->>'source_build_run_id',
+            batch_item.frozen_component_snapshot_json
+              ->>'source_build_run_id'
+          )
+        ),
+      frozen_resolution_payload_json=
+        coalesce(batch_item.frozen_resolution_payload_json,'{}'::jsonb)
+        ||jsonb_build_object(
+          'resolution_identity_key',frozen.canonical_correction_key,
+          'resolution_identity_version','CORRECTION_CHAIN_V1',
+          'canonical_correction_key',frozen.canonical_correction_key,
+          'resolution_economic_fingerprint',
+            frozen.resolution_economic_fingerprint,
+          'source_resolution_id',coalesce(
+            frozen.source_resolution_id,
+            frozen.target_resolution_id
+          ),
+          'source_resolution_identity_key',coalesce(
+            frozen.source_resolution_identity_key,
+            frozen.canonical_correction_key
+          ),
+          'target_resolution_id',frozen.target_resolution_id,
+          'carry_registration_id',frozen.carry_registration_id,
+          'resolution_origin_session_id',
+            frozen.resolution_origin_session_id,
+          'resolution_origin_pay_date',
+            frozen.resolution_origin_pay_date,
+          'resolution_origin_source_basis_fingerprint',
+            frozen.resolution_origin_source_basis_fingerprint
+        ),
+      frozen_resolution_result_json=
+        coalesce(batch_item.frozen_resolution_result_json,'{}'::jsonb)
+        ||jsonb_build_object(
+          'resolution_result_fingerprint',
+            frozen.resolution_result_fingerprint
+        ),
+      updated_at=v_now_utc
+  from frozen
+  where batch_item.id=frozen.pay_batch_item_id;
+
+  select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+    'pay_batch_item_id',batch_item.id,
+    'candidate_id',batch_candidate.candidate_id,
+    'canonical_component_key',
+      batch_item.frozen_component_snapshot_json
+        ->>'canonical_correction_key',
+    'canonical_resolution_key',
+      batch_item.frozen_resolution_payload_json
+        ->>'resolution_identity_key',
+    'component_economic_fingerprint',
+      batch_item.frozen_component_snapshot_json
+        ->>'resolution_economic_fingerprint',
+    'resolution_economic_fingerprint',
+      batch_item.frozen_resolution_payload_json
+        ->>'resolution_economic_fingerprint'
+  )) order by batch_item.id),'[]'::jsonb)
+  into v_canonical_provenance_mismatch_details
+  from public.pay_batch_items batch_item
+  join public.pay_batch_candidates batch_candidate
+    on batch_candidate.id=batch_item.pay_batch_candidate_id
+  where batch_candidate.pay_batch_id=v_batch_id
+    and (
+      coalesce(batch_item.frozen_source_basis_json
+        ->>'source_family_key','') like 'correction-chain:%'
+      or coalesce(batch_item.source_ref,'') like 'correction-chain:%'
+    )
+    and (
+      nullif(batch_item.frozen_component_snapshot_json
+        ->>'canonical_correction_key','') is null
+      or nullif(batch_item.frozen_component_snapshot_json
+        ->>'correction_identity_version','')
+          is distinct from 'CORRECTION_CHAIN_V1'
+      or nullif(batch_item.frozen_component_snapshot_json
+        ->>'component_lineage_fingerprint','') is null
+      or jsonb_typeof(batch_item.frozen_component_snapshot_json
+        ->'ordered_member_timesheet_ids') is distinct from 'array'
+      or nullif(batch_item.frozen_resolution_payload_json
+        ->>'resolution_identity_key','') is null
+      or nullif(batch_item.frozen_resolution_payload_json
+        ->>'resolution_economic_fingerprint','') is null
+      or nullif(batch_item.frozen_resolution_payload_json
+        ->>'target_resolution_id','') is null
+      or nullif(batch_item.frozen_resolution_result_json
+        ->>'resolution_result_fingerprint','') is null
+      or batch_item.frozen_component_snapshot_json
+          ->>'canonical_correction_key'
+        is distinct from
+          batch_item.frozen_resolution_payload_json
+            ->>'resolution_identity_key'
+      or batch_item.frozen_component_snapshot_json
+          ->>'resolution_economic_fingerprint'
+        is distinct from
+          batch_item.frozen_resolution_payload_json
+            ->>'resolution_economic_fingerprint'
+    );
+
+  if jsonb_array_length(v_canonical_provenance_mismatch_details)>0 then
+    raise exception 'PAY_BATCH_CANONICAL_CORRECTION_PROVENANCE_INVALID'
+      using errcode='P0001',
+            detail=jsonb_build_object(
+              'code','PAY_BATCH_CANONICAL_CORRECTION_PROVENANCE_INVALID',
+              'pay_batch_id',v_batch_id,
+              'mismatches',v_canonical_provenance_mismatch_details
+            )::text;
+  end if;
+
 v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
   begin
     perform public._imp_debug_audit(
@@ -3697,3 +3999,22 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
   );
 END;
 $function$;
+
+REVOKE ALL ON FUNCTION public.pay_batch_apply_finance_adjustments(
+  uuid,
+  text,
+  uuid,
+  numeric,
+  date,
+  uuid,
+  jsonb
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.pay_batch_apply_finance_adjustments(
+  uuid,
+  text,
+  uuid,
+  numeric,
+  date,
+  uuid,
+  jsonb
+) TO service_role;
