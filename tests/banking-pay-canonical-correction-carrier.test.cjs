@@ -36,6 +36,9 @@ const selectionCarryMigration = read(
 const selectionCarryRuntime = read(
   'supabase/repeatable/25072026_2153_banking_pay_selection_carry_runtime.sql'
 );
+const finalFreshnessWrapper = read(
+  'supabase/repeatable/26072026_1519_pay_batch_validate_freshness_correction_chain_wrapper.sql'
+);
 
 test('durable carry registrations have bounded states, immutable authorities and RLS', () => {
   assert.match(
@@ -419,10 +422,10 @@ test('selection carry restores explicit unselection and selected-row authority b
 });
 
 test('post-draft freshness selects the correction carrier snapshot before family deduplication', () => {
-  const wrapperStart = sessionSql.lastIndexOf(
+  const wrapperStart = finalFreshnessWrapper.lastIndexOf(
     'CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness('
   );
-  const wrapper = sessionSql.slice(wrapperStart);
+  const wrapper = finalFreshnessWrapper.slice(wrapperStart);
   const familyFilter = wrapper.indexOf("LIKE 'correction-chain:%'");
   const snapshotFilter = wrapper.indexOf(
     "jsonb_typeof(\n          COALESCE(\n            pay_batch_item.frozen_source_basis_json->'correction_chain_residual'"
@@ -444,5 +447,9 @@ test('post-draft freshness selects the correction carrier snapshot before family
   assert.match(
     wrapper,
     /pay_correction_chain_residual_v1\([\s\S]*p_pay_batch_id,[\s\S]*100/
+  );
+  assert.match(
+    finalFreshnessWrapper,
+    /REVOKE ALL ON FUNCTION public\.pay_batch_validate_freshness\([\s\S]*FROM PUBLIC, anon, authenticated;[\s\S]*GRANT EXECUTE[\s\S]*TO service_role;/
   );
 });
