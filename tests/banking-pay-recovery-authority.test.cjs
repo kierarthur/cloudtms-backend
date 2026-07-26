@@ -1151,6 +1151,32 @@ test('positive correction carriers preserve source and target amounts on their s
   assert.match(body, /'target_pay_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
 });
 
+test('resolved correction carriers remain selectable after draft cancellation refresh', () => {
+  const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
+  const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(body, /'case_resolution_satisfied_now',true/);
+  assert.match(body, /'has_resolved_rate',true/);
+  assert.match(body, /'resolved_rate_family','BUCKETED'/);
+  assert.match(
+    body,
+    /'blocked_reason_codes',case[\s\S]*target_outstanding_ex_vat[\s\S]*>0 then '\[\]'::jsonb[\s\S]*jsonb_build_array\('NO_PAY_HEADROOM'\)/
+  );
+  assert.match(
+    body,
+    /'case_resolution_summary',[\s\S]*'case_needs_resolution',false[\s\S]*'case_resolution_satisfied_now',true[\s\S]*'unresolved_taxable_count',0[\s\S]*'blocked_reason_codes','\[\]'::jsonb/
+  );
+  assert.match(
+    body,
+    /'preview_contract',[\s\S]*'key_type',v_component->>'component_key_type'[\s\S]*'key_value',v_component->>'component_key_value'[\s\S]*'selection_allowed',round\(coalesce\([\s\S]*target_outstanding_ex_vat[\s\S]*\),2\)>0/
+  );
+  assert.match(
+    body,
+    /'is_excluded_from_allocation',round\(coalesce\([\s\S]*target_outstanding_ex_vat[\s\S]*\),2\)<=0/
+  );
+});
+
 test('targeted source builds ignore correction chains wholly outside the dirty timesheet family', () => {
   const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
   const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);

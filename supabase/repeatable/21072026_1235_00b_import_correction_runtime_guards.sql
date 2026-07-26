@@ -1089,6 +1089,41 @@ begin
             'case_is_blocked',false,
             'case_needs_resolution_now',false,
             'is_case_resolution_satisfied',true,
+            'case_resolution_satisfied_now',true,
+            'has_resolved_rate',true,
+            'resolved_rate_family','BUCKETED',
+            'selection_allowed',round(coalesce(
+              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+              0
+            ),2)>0,
+            'blocked_reason_codes',case
+              when round(coalesce(
+                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                0
+              ),2)>0 then '[]'::jsonb
+              else jsonb_build_array('NO_PAY_HEADROOM')
+            end,
+            'case_resolution_summary',
+              coalesce(l.source_row_json->'case_resolution_summary','{}'::jsonb)
+              || jsonb_build_object(
+                'is_blocked',false,
+                'has_resolved_rate',true,
+                'case_needs_resolution',false,
+                'case_resolution_satisfied_now',true,
+                'resolved_rate_family','BUCKETED',
+                'resolved_rate_component_count',1,
+                'unresolved_taxable_count',0,
+                'unresolved_taxable_amount_ex_vat',0,
+                'blocked_case_amount_ex_vat',0,
+                'safe_amount_ex_vat',greatest(
+                  round(coalesce(
+                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                    0
+                  ),2),
+                  0
+                ),
+                'blocked_reason_codes','[]'::jsonb
+              ),
             'resolution_badge','RESOLVED',
             'resolution_state','RESOLVED',
             'policy_x_pre_draft_key_resolved',true,
@@ -1123,7 +1158,54 @@ begin
                 'amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
                 'selection_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
                 'source_entitlement_amount_ex_vat',abs((v_component->>'truth_ex_vat')::numeric),
-                'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric)
+                'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
+                'key_type',v_component->>'component_key_type',
+                'key_value',v_component->>'component_key_value',
+                'line_key',v_line_key,
+                'target_section',case
+                  when round(coalesce(
+                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                    0
+                  ),2)>0 then 'canonical_preview_lines'
+                  else 'blocked_for_pay'
+                end,
+                'presentation_section',case
+                  when round(coalesce(
+                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                    0
+                  ),2)>0 then 'READY_TO_PAY'
+                  else 'BLOCKED_FOR_PAY'
+                end,
+                'draftable',round(coalesce(
+                  nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                  0
+                ),2)>0,
+                'is_ready_for_draft',round(coalesce(
+                  nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                  0
+                ),2)>0,
+                'selection_allowed',round(coalesce(
+                  nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                  0
+                ),2)>0,
+                'is_excluded_from_allocation',round(coalesce(
+                  nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                  0
+                ),2)<=0,
+                'reasons',case
+                  when round(coalesce(
+                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                    0
+                  ),2)>0 then '[]'::jsonb
+                  else jsonb_build_array('NO_PAY_HEADROOM')
+                end,
+                'reason_count',case
+                  when round(coalesce(
+                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+                    0
+                  ),2)>0 then 0
+                  else 1
+                end
               )
             )
           end,
