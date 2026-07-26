@@ -1830,14 +1830,6 @@ BEGIN
 END;
 $function$;
 
-
-
-
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(p_pay_date date, p_week_ending_cutoff date, p_pay_channel_scope text, p_actor_user_id uuid, p_preview_decisions_json jsonb, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid, p_force_include_timesheet_ids uuid[] DEFAULT NULL::uuid[], p_override_reason text DEFAULT NULL::text, p_override_mode pay_override_mode_enum DEFAULT 'NONE'::pay_override_mode_enum, p_operation_id uuid DEFAULT NULL::uuid, p_allow_legacy_unchunked boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -40790,6 +40782,24 @@ BEGIN
         AND preview_row.candidate_id = p_candidate_id
         AND preview_row.session_version = v_session_row.version
         AND preview_row.status = 'READY'
+        AND NOT (
+          COALESCE(
+            lower(BTRIM(COALESCE(preview_row.row_json->>'post_draft_unavailable', '')))
+              IN ('true', 't', '1', 'yes', 'y', 'on'),
+            false
+          )
+          OR (
+            COALESCE(
+              lower(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_applied', '')))
+                IN ('true', 't', '1', 'yes', 'y', 'on'),
+              false
+            )
+            AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_operation_type', '')))
+              IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLE')
+            AND lower(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_active', 'true')))
+              NOT IN ('false', 'f', '0', 'no', 'n', 'off')
+          )
+        )
         AND (
           v_last_section IS NULL
           OR preview_row.section > v_last_section
@@ -40891,6 +40901,10 @@ BEGIN
 END;
 $function$;
 
+REVOKE ALL ON FUNCTION public.pay_workbench_session_get_candidate_preview(uuid, uuid, jsonb, integer)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_session_get_candidate_preview(uuid, uuid, jsonb, integer)
+  TO service_role;
 
 -- SHA-256 suffix: e048d1c90624
 
