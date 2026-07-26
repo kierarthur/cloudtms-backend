@@ -19,6 +19,7 @@ language plpgsql
 security definer
 set search_path to 'public','private','extensions','pg_temp'
 as $function$
+#variable_conflict use_column
 declare
   v_now timestamptz := coalesce(p_now_utc, now());
 begin
