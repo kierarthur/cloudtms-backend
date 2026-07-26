@@ -836,6 +836,10 @@ declare
   v_chain_in_source_build boolean;
   v_source_pay_method text;
   v_line_key text;
+  v_resolution_pending boolean := false;
+  v_component_needs_resolution boolean := false;
+  v_component_outstanding numeric := 0;
+  v_component_source_outstanding numeric := 0;
   v_updated integer := 0;
   v_superseded integer := 0;
   v_row_count integer := 0;
@@ -856,6 +860,7 @@ begin
   );
   for v_residual in select value from jsonb_array_elements(v_residuals) loop
     v_root_id:=nullif(v_residual->>'root_timesheet_id','')::uuid;
+    v_resolution_pending:=false;
 
     if coalesce(v_residual->>'block_code','')
          = 'CORRECTION_CHAIN_RESERVATION_OVERRUN'
@@ -959,14 +964,18 @@ begin
         get diagnostics v_row_count = row_count;
         v_superseded:=v_superseded+v_row_count;
 
-        -- Keep the ordinary source rows intact so the existing Workbench
-        -- case-resolution renderer can collect and display the coupled
-        -- PAYE/umbrella decision. Draft creation remains blocked by
-        -- _ctms_assert_session_correction_residuals_draftable_v1.
-        continue;
+        -- Keep the chain fail-closed for drafting, but do not leave its raw
+        -- member rows as four independent browser decisions.  The component
+        -- loop below rewrites exactly one server-owned carrier per canonical
+        -- date/total key into Cases / Resolutions and supersedes every alias.
+        -- Components whose saved decision is still fresh remain visible as
+        -- waiting siblings; only components with resolution_required=true
+        -- ask the user for a new PAYE/umbrella decision.
+        v_resolution_pending:=true;
+      else
+        raise exception 'CORRECTION_RESIDUAL_NOT_DRAFTABLE'
+          using errcode='P0001',detail=v_residual::text;
       end if;
-      raise exception 'CORRECTION_RESIDUAL_NOT_DRAFTABLE'
-        using errcode='P0001',detail=v_residual::text;
     end if;
     select coalesce(array_agg(value::uuid order by value),array[]::uuid[]) into v_member_ids
     from jsonb_array_elements_text(v_residual->'member_timesheet_ids') value;
@@ -992,10 +1001,24 @@ begin
     end if;
 
     for v_component in select value from jsonb_array_elements(v_residual->'components') loop
-      if round(coalesce(
-        nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+      v_component_needs_resolution:=v_resolution_pending
+        and coalesce((v_component->>'resolution_required')::boolean,false)
+        and coalesce((v_component->>'resolution_complete')::boolean,false) is not true;
+      v_component_source_outstanding:=round(coalesce(
+        nullif(v_component->>'effective_source_outstanding_ex_vat','')::numeric,
+        nullif(v_component->>'truth_ex_vat','')::numeric,
         0
-      ),2)=0 then
+      ),2);
+      v_component_outstanding:=case
+        when v_component_needs_resolution
+          then v_component_source_outstanding
+        else round(coalesce(
+          nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+          0
+        ),2)
+      end;
+
+      if v_component_outstanding=0 then
         update public.banking_pay_workbench_candidate_source_lines l
         set status='SUPERSEDED',
             updated_at_utc=coalesce(p_now_utc,now())
@@ -1027,9 +1050,9 @@ begin
         -- already owns the canonical correction-chain identity.
         case when l.line_key=v_line_key then 0 else 1 end,
         case
-          when round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) < 0
+          when v_component_outstanding < 0
            and nullif(btrim(coalesce(l.source_row_json->>'finance_case_id','')),'') is not null then 0
-          when round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) >= 0
+          when v_component_outstanding >= 0
            and nullif(btrim(coalesce(l.source_row_json->>'finance_case_id','')),'') is null then 0
           else 1
         end,
@@ -1045,10 +1068,7 @@ begin
       -- components must still use their exact finance-case row and therefore
       -- never enter this fallback.
       if v_carrier_row_id is null
-         and round(coalesce(
-           nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-           0
-         ),2) > 0 then
+         and v_component_outstanding > 0 then
         select l.id into v_carrier_row_id
         from public.banking_pay_workbench_candidate_source_lines l
         where l.session_id=p_session_id
@@ -1082,7 +1102,7 @@ begin
         -- the live calculation remains complete. Those zero-outstanding
         -- components legitimately have no current Banking Pay source row.
         -- Only money-bearing components require a carrier and fail closed.
-        if round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2)=0 then
+        if v_component_outstanding=0 then
           continue;
         end if;
         raise exception 'CORRECTION_RESIDUAL_SOURCE_COMPONENT_MISSING'
@@ -1100,20 +1120,20 @@ begin
       )
       into v_carrier_has_finance_case;
 
-      if round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) < 0
+      if v_component_outstanding < 0
          and coalesce(v_carrier_has_finance_case,false) is not true then
         raise exception 'CORRECTION_CHAIN_OVERPAYMENT_FINANCE_CASE_CARRIER_REQUIRED'
           using errcode='P0001',
                 detail=jsonb_build_object('residual',v_residual,'component',v_component)::text;
       end if;
-      if round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) > 0
+      if v_component_outstanding > 0
          and nullif(v_component->>'effective_source_outstanding_ex_vat','') is null then
         raise exception 'CORRECTION_CHAIN_SOURCE_OUTSTANDING_REQUIRED'
           using errcode='P0001',
                 detail=jsonb_build_object('residual',v_residual,'component',v_component)::text;
       end if;
       v_source_pay_method:=null;
-      if round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) > 0 then
+      if v_component_outstanding > 0 or v_component_needs_resolution then
         select case
                  when count(distinct upper(btrim(source_method.value)))=1
                    then max(upper(btrim(source_method.value)))
@@ -1142,10 +1162,8 @@ begin
       end if;
       update public.banking_pay_workbench_candidate_source_lines l
       set section=case
-            when round(coalesce(
-              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-              0
-            ),2)>0 then 'canonical_preview_lines'
+            when v_resolution_pending then 'cases_resolutions'
+            when v_component_outstanding>0 then 'canonical_preview_lines'
             else 'blocked_for_pay'
           end,
           timesheet_id=v_root_id,
@@ -1162,6 +1180,10 @@ begin
             'source_family_key',v_residual->>'source_family_key',
             'canonical_correction_key',
               v_component->>'canonical_correction_key',
+            'resolution_identity',
+              v_component->>'canonical_correction_key',
+            'case_key',v_line_key,
+            'linked_timesheet_id',v_root_id::text,
             'correction_identity_version','CORRECTION_CHAIN_V1',
             'correction_root_id',v_residual->>'root_timesheet_id',
             'ordered_member_timesheet_ids',
@@ -1174,11 +1196,24 @@ begin
             'correction_chain_component',v_component,
             'case_components',jsonb_build_array(
               v_component||jsonb_build_object(
+                'candidate_id',p_candidate_id::text,
+                'linked_timesheet_id',v_root_id::text,
+                'component_resolution_key',
+                  v_component->>'canonical_correction_key',
+                'resolution_identity',
+                  v_component->>'canonical_correction_key',
+                'source_family_key',v_residual->>'source_family_key',
                 'component_key_type',v_component->>'component_key_type',
                 'component_key_value',v_component->>'component_key_value',
-                'target_pay_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
-                'component_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
-                'preview_due_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+                'source_pay_method',v_source_pay_method,
+                'current_target_pay_method',
+                  upper(v_component->>'target_pay_method'),
+                'target_pay_ex_vat',case
+                  when v_component_needs_resolution then null
+                  else v_component_outstanding
+                end,
+                'component_amount_ex_vat',v_component_outstanding,
+                'preview_due_amount_ex_vat',v_component_outstanding,
                 'source_pay_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
                 'source_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
                 'source_entitlement_amount_ex_vat',abs((v_component->>'truth_ex_vat')::numeric),
@@ -1189,162 +1224,163 @@ begin
             'correction_chain_residual_fingerprint',v_residual->>'residual_fingerprint',
             'raw_correction_member_rows_suppressed',true,
             -- The raw source row was classified before carried decisions were
-            -- replayed.  Once the canonical residual proves the component
-            -- complete and draftable, project the resolved positive carrier
-            -- into Ready to Pay.  Negative components remain resolved but
-            -- blocked by pay headroom.  Draft seeding still revalidates the
-            -- canonical key and fingerprints transactionally.
+            -- replayed.  Project an incomplete component into one canonical
+            -- Cases / Resolutions row; project the chain into Ready or Blocked
+            -- only after every required component is complete. Draft seeding
+            -- still revalidates the canonical key and fingerprints
+            -- transactionally.
             'target_section',case
-              when round(coalesce(
-                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                0
-              ),2)>0 then 'canonical_preview_lines'
+              when v_resolution_pending then 'cases_resolutions'
+              when v_component_outstanding>0 then 'canonical_preview_lines'
               else 'blocked_for_pay'
             end,
             'section',case
-              when round(coalesce(
-                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                0
-              ),2)>0 then 'canonical_preview_lines'
+              when v_resolution_pending then 'cases_resolutions'
+              when v_component_outstanding>0 then 'canonical_preview_lines'
               else 'blocked_for_pay'
             end,
             'presentation_section',case
-              when round(coalesce(
-                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                0
-              ),2)>0 then 'READY_TO_PAY'
+              when v_resolution_pending then 'CASES_RESOLUTIONS'
+              when v_component_outstanding>0 then 'READY_TO_PAY'
               else 'BLOCKED_FOR_PAY'
             end,
-            'draftable',round(coalesce(
-              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-              0
-            ),2)>0,
-            'is_ready_for_draft',round(coalesce(
-              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-              0
-            ),2)>0,
-            'is_excluded_from_allocation',round(coalesce(
-              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-              0
-            ),2)<=0,
+            'draftable',not v_resolution_pending and v_component_outstanding>0,
+            'is_ready_for_draft',not v_resolution_pending and v_component_outstanding>0,
+            'is_excluded_from_allocation',v_resolution_pending or v_component_outstanding<=0,
             'case_is_blocked',false,
-            'case_needs_resolution_now',false,
-            'is_case_resolution_satisfied',true,
-            'case_resolution_satisfied_now',true,
-            'has_resolved_rate',true,
+            'case_needs_resolution_now',v_component_needs_resolution,
+            'case_needs_resolution',v_component_needs_resolution,
+            'is_case_resolution_satisfied',not v_component_needs_resolution,
+            'case_resolution_satisfied_now',not v_component_needs_resolution,
+            'has_resolved_rate',not v_component_needs_resolution,
             'resolved_rate_family','BUCKETED',
-            'selection_allowed',round(coalesce(
-              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-              0
-            ),2)>0,
+            'resolution_family','BUCKETED',
+            'resolution_action_label','Suggested Rate',
+            'selection_allowed',not v_resolution_pending and v_component_outstanding>0,
             'blocked_reason_codes',case
-              when round(coalesce(
-                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                0
-              ),2)>0 then '[]'::jsonb
+              when v_component_needs_resolution
+                then jsonb_build_array('PAY_METHOD_RESOLUTION_REQUIRED')
+              when v_resolution_pending
+                then jsonb_build_array('LINKED_CORRECTION_RESOLUTION_PENDING')
+              when v_component_outstanding>0 then '[]'::jsonb
               else jsonb_build_array('NO_PAY_HEADROOM')
             end,
             'case_resolution_summary',
               coalesce(l.source_row_json->'case_resolution_summary','{}'::jsonb)
               || jsonb_build_object(
                 'is_blocked',false,
-                'has_resolved_rate',true,
-                'case_needs_resolution',false,
-                'case_resolution_satisfied_now',true,
+                'has_resolved_rate',not v_component_needs_resolution,
+                'case_needs_resolution',v_component_needs_resolution,
+                'case_resolution_satisfied_now',not v_component_needs_resolution,
                 'resolved_rate_family','BUCKETED',
-                'resolved_rate_component_count',1,
-                'unresolved_taxable_count',0,
-                'unresolved_taxable_amount_ex_vat',0,
+                'resolution_family','BUCKETED',
+                'resolution_action_label','Suggested Rate',
+                'resolved_rate_component_count',case
+                  when v_component_needs_resolution then 0
+                  else 1
+                end,
+                'unresolved_taxable_count',case
+                  when v_component_needs_resolution then 1
+                  else 0
+                end,
+                'unresolved_taxable_amount_ex_vat',case
+                  when v_component_needs_resolution
+                    then abs(v_component_source_outstanding)
+                  else 0
+                end,
                 'blocked_case_amount_ex_vat',0,
-                'safe_amount_ex_vat',greatest(
-                  round(coalesce(
-                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                    0
-                  ),2),
-                  0
-                ),
-                'blocked_reason_codes','[]'::jsonb
+                'safe_amount_ex_vat',case
+                  when v_resolution_pending then 0
+                  else greatest(v_component_outstanding,0)
+                end,
+                'blocked_reason_codes',case
+                  when v_component_needs_resolution
+                    then jsonb_build_array('PAY_METHOD_RESOLUTION_REQUIRED')
+                  when v_resolution_pending
+                    then jsonb_build_array('LINKED_CORRECTION_RESOLUTION_PENDING')
+                  when v_component_outstanding>0 then '[]'::jsonb
+                  else jsonb_build_array('NO_PAY_HEADROOM')
+                end
               ),
-            'resolution_badge','RESOLVED',
-            'resolution_state','RESOLVED',
-            'policy_x_pre_draft_key_resolved',true,
+            'resolution_badge',case
+              when v_component_needs_resolution then 'REQUIRES_RESOLUTION'
+              when v_resolution_pending then 'WAITING'
+              else 'RESOLVED'
+            end,
+            'resolution_state',case
+              when v_component_needs_resolution then 'RESOLUTION_REQUIRED'
+              when v_resolution_pending then 'WAITING_LINKED_RESOLUTION'
+              else 'RESOLVED'
+            end,
+            'policy_x_pre_draft_key_resolved',not v_component_needs_resolution,
             'presentation_reason',case
-              when round(coalesce(
-                nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                0
-              ),2)>0 then 'READY_TO_PAY'
+              when v_component_needs_resolution then 'PAY_METHOD_RESOLUTION_REQUIRED'
+              when v_resolution_pending then 'LINKED_CORRECTION_RESOLUTION_PENDING'
+              when v_component_outstanding>0 then 'READY_TO_PAY'
               else 'NO_PAY_HEADROOM'
             end
           )
           || case
-            when round(coalesce(nullif(v_component->>'target_outstanding_ex_vat','')::numeric,0),2) < 0
+            when v_component_outstanding < 0
               then '{}'::jsonb
             else jsonb_build_object(
-              'amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
-              'amount_display',(v_component->>'target_outstanding_ex_vat')::numeric,
-              'preview_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
-              'ready_preview_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
-              'section_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
-              'section_amount_display',(v_component->>'target_outstanding_ex_vat')::numeric,
-              'component_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
-              'preview_component_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+              'amount_ex_vat',v_component_outstanding,
+              'amount_display',v_component_outstanding,
+              'preview_amount_ex_vat',v_component_outstanding,
+              'ready_preview_amount_ex_vat',case
+                when v_resolution_pending then 0
+                else v_component_outstanding
+              end,
+              'section_amount_ex_vat',v_component_outstanding,
+              'section_amount_display',v_component_outstanding,
+              'component_amount_ex_vat',v_component_outstanding,
+              'preview_component_amount_ex_vat',v_component_outstanding,
               'source_pay_method',v_source_pay_method,
               'target_pay_method',upper(v_component->>'target_pay_method'),
               'source_pay_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
               'source_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
               'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
               'remaining_source_amount',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
-              'target_pay_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+              'target_pay_ex_vat',case
+                when v_component_needs_resolution then null
+                else v_component_outstanding
+              end,
               'preview_contract',coalesce(l.source_row_json->'preview_contract','{}'::jsonb)||jsonb_build_object(
-                'amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
-                'selection_amount_ex_vat',(v_component->>'target_outstanding_ex_vat')::numeric,
+                'amount_ex_vat',v_component_outstanding,
+                'selection_amount_ex_vat',case
+                  when v_resolution_pending then 0
+                  else v_component_outstanding
+                end,
                 'source_entitlement_amount_ex_vat',abs((v_component->>'truth_ex_vat')::numeric),
                 'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
                 'key_type',v_component->>'component_key_type',
                 'key_value',v_component->>'component_key_value',
                 'line_key',v_line_key,
                 'target_section',case
-                  when round(coalesce(
-                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                    0
-                  ),2)>0 then 'canonical_preview_lines'
+                  when v_resolution_pending then 'cases_resolutions'
+                  when v_component_outstanding>0 then 'canonical_preview_lines'
                   else 'blocked_for_pay'
                 end,
                 'presentation_section',case
-                  when round(coalesce(
-                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                    0
-                  ),2)>0 then 'READY_TO_PAY'
+                  when v_resolution_pending then 'CASES_RESOLUTIONS'
+                  when v_component_outstanding>0 then 'READY_TO_PAY'
                   else 'BLOCKED_FOR_PAY'
                 end,
-                'draftable',round(coalesce(
-                  nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                  0
-                ),2)>0,
-                'is_ready_for_draft',round(coalesce(
-                  nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                  0
-                ),2)>0,
-                'selection_allowed',round(coalesce(
-                  nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                  0
-                ),2)>0,
-                'is_excluded_from_allocation',round(coalesce(
-                  nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                  0
-                ),2)<=0,
+                'draftable',not v_resolution_pending and v_component_outstanding>0,
+                'is_ready_for_draft',not v_resolution_pending and v_component_outstanding>0,
+                'selection_allowed',not v_resolution_pending and v_component_outstanding>0,
+                'is_excluded_from_allocation',v_resolution_pending or v_component_outstanding<=0,
                 'reasons',case
-                  when round(coalesce(
-                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                    0
-                  ),2)>0 then '[]'::jsonb
+                  when v_component_needs_resolution
+                    then jsonb_build_array('PAY_METHOD_RESOLUTION_REQUIRED')
+                  when v_resolution_pending
+                    then jsonb_build_array('LINKED_CORRECTION_RESOLUTION_PENDING')
+                  when v_component_outstanding>0 then '[]'::jsonb
                   else jsonb_build_array('NO_PAY_HEADROOM')
                 end,
                 'reason_count',case
-                  when round(coalesce(
-                    nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
-                    0
-                  ),2)>0 then 0
+                  when v_resolution_pending then 1
+                  when v_component_outstanding>0 then 0
                   else 1
                 end
               )

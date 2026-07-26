@@ -375,7 +375,19 @@ test('source build attests pending pay-method resolution but draft gate remains 
   );
   assert.match(
     materialiserBody,
-    /CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*continue;[\s\S]*CORRECTION_RESIDUAL_NOT_DRAFTABLE/
+    /CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*v_resolution_pending:=true;[\s\S]*CORRECTION_RESIDUAL_NOT_DRAFTABLE/
+  );
+  assert.match(
+    materialiserBody,
+    /v_resolution_pending[\s\S]*for v_component[\s\S]*v_component_needs_resolution:=v_resolution_pending[\s\S]*resolution_required[\s\S]*resolution_complete/
+  );
+  assert.match(
+    materialiserBody,
+    /when v_resolution_pending then 'cases_resolutions'[\s\S]*when v_component_needs_resolution then 'RESOLUTION_REQUIRED'[\s\S]*when v_resolution_pending then 'WAITING_LINKED_RESOLUTION'/
+  );
+  assert.doesNotMatch(
+    materialiserBody,
+    /CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]{0,1800}?continue;[\s\S]{0,200}?CORRECTION_RESIDUAL_NOT_DRAFTABLE/
   );
   assert.match(
     materialiserBody,
@@ -777,23 +789,23 @@ test('materialised carried correction authority is recategorised after resolutio
 
   assert.match(
     body,
-    /set section=case[\s\S]*target_outstanding_ex_vat[\s\S]*then 'canonical_preview_lines'[\s\S]*else 'blocked_for_pay'/
+    /set section=case[\s\S]*when v_resolution_pending then 'cases_resolutions'[\s\S]*when v_component_outstanding>0 then 'canonical_preview_lines'[\s\S]*else 'blocked_for_pay'/
   );
   assert.match(
     body,
-    /'presentation_section',case[\s\S]*then 'READY_TO_PAY'[\s\S]*else 'BLOCKED_FOR_PAY'/
+    /'presentation_section',case[\s\S]*when v_resolution_pending then 'CASES_RESOLUTIONS'[\s\S]*when v_component_outstanding>0 then 'READY_TO_PAY'[\s\S]*else 'BLOCKED_FOR_PAY'/
   );
   assert.match(
     body,
-    /'case_needs_resolution_now',false[\s\S]*'is_case_resolution_satisfied',true[\s\S]*'policy_x_pre_draft_key_resolved',true/
+    /'case_needs_resolution_now',v_component_needs_resolution[\s\S]*'is_case_resolution_satisfied',not v_component_needs_resolution[\s\S]*'policy_x_pre_draft_key_resolved',not v_component_needs_resolution/
   );
   assert.match(
     body,
-    /'is_ready_for_draft',[\s\S]*target_outstanding_ex_vat[\s\S]*'is_excluded_from_allocation',[\s\S]*target_outstanding_ex_vat[\s\S]*<=0/
+    /'is_ready_for_draft',not v_resolution_pending and v_component_outstanding>0[\s\S]*'is_excluded_from_allocation',v_resolution_pending or v_component_outstanding<=0/
   );
   assert.match(
     body,
-    /'presentation_reason',case[\s\S]*then 'READY_TO_PAY'[\s\S]*else 'NO_PAY_HEADROOM'/
+    /'presentation_reason',case[\s\S]*when v_component_needs_resolution then 'PAY_METHOD_RESOLUTION_REQUIRED'[\s\S]*when v_resolution_pending then 'LINKED_CORRECTION_RESOLUTION_PENDING'[\s\S]*when v_component_outstanding>0 then 'READY_TO_PAY'[\s\S]*else 'NO_PAY_HEADROOM'/
   );
 });
 
@@ -964,17 +976,17 @@ test('correction residual carrier replaces stale root components with the chain-
   const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
   assert.ok(start >= 0 && end > start, 'correction residual materialiser must exist');
   const body = correctionRuntimeSql.slice(start, end);
-  assert.match(body, /'case_components',jsonb_build_array\([\s\S]*'target_pay_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
+  assert.match(body, /'case_components',jsonb_build_array\([\s\S]*'component_resolution_key',[\s\S]*v_component->>'canonical_correction_key'[\s\S]*'target_pay_ex_vat',case[\s\S]*when v_component_needs_resolution then null[\s\S]*else v_component_outstanding/);
   assert.match(body, /'source_entitlement_amount_ex_vat',abs\(\(v_component->>'truth_ex_vat'\)::numeric\)/);
   assert.match(body, /'source_reservation_amount_ex_vat',abs\(\(v_component->>'effective_source_outstanding_ex_vat'\)::numeric\)/);
-  assert.match(body, /'section_amount_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
+  assert.match(body, /'section_amount_ex_vat',v_component_outstanding/);
   assert.match(
     body,
     /'economic_key',coalesce\(l\.source_row_json->'economic_key','\{\}'::jsonb\)\|\|jsonb_build_object\([\s\S]*'timesheet_id',v_root_id::text,[\s\S]*'key_type',v_component->>'component_key_type',[\s\S]*'key_value',v_component->>'component_key_value'/
   );
   assert.match(body, /economic_key_json=jsonb_build_object\([\s\S]*'timesheet_id',v_root_id::text/);
   assert.match(body, /'preview_contract',coalesce\(l\.source_row_json->'preview_contract','\{\}'::jsonb\)\|\|jsonb_build_object/);
-  assert.match(body, /'selection_amount_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
+  assert.match(body, /'selection_amount_ex_vat',case[\s\S]*when v_resolution_pending then 0[\s\S]*else v_component_outstanding/);
 });
 
 test('correction-chain finance sync couples member cases before the central case lifecycle runs', () => {
@@ -1194,9 +1206,9 @@ test('negative correction residuals preserve the finance-case carrier while posi
   const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
   const body = correctionRuntimeSql.slice(start, end);
   assert.match(body, /CORRECTION_CHAIN_OVERPAYMENT_FINANCE_CASE_CARRIER_REQUIRED/);
-  assert.match(body, /target_outstanding_ex_vat'[\s\S]*< 0[\s\S]*source_row_json->>'finance_case_id'/);
-  assert.match(body, /when round\(coalesce\(nullif\(v_component->>'target_outstanding_ex_vat',''\)::numeric,0\),2\) < 0[\s\S]*then '\{\}'::jsonb/);
-  assert.match(body, /else jsonb_build_object\([\s\S]*'amount_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
+  assert.match(body, /v_component_outstanding < 0[\s\S]*source_row_json->>'finance_case_id'/);
+  assert.match(body, /when v_component_outstanding < 0[\s\S]*then '\{\}'::jsonb/);
+  assert.match(body, /else jsonb_build_object\([\s\S]*'amount_ex_vat',v_component_outstanding/);
 });
 
 test('materialised correction chains suppress every non-carrier unresolved raw member row', () => {
@@ -1221,7 +1233,7 @@ test('positive dated correction residuals can claim one unretained raw TS_TOTAL 
 
   assert.match(
     body,
-    /v_carrier_row_id is null[\s\S]*target_outstanding_ex_vat[\s\S]*> 0[\s\S]*l\.section in \('cases_resolutions','canonical_preview_lines'\)[\s\S]*economic_key_json->>'key_type',''\)\)='TS_TOTAL'/
+    /v_carrier_row_id is null[\s\S]*v_component_outstanding > 0[\s\S]*l\.section in \('cases_resolutions','canonical_preview_lines'\)[\s\S]*economic_key_json->>'key_type',''\)\)='TS_TOTAL'/
   );
   assert.match(
     body,
@@ -1255,7 +1267,10 @@ test('positive correction carriers preserve source and target amounts on their s
     body,
     /'source_(?:pay_ex_vat|amount_ex_vat|reservation_amount_ex_vat)',abs\(\(v_component->>'target_outstanding_ex_vat'\)::numeric\)/
   );
-  assert.match(body, /'target_pay_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
+  assert.match(
+    body,
+    /'target_pay_ex_vat',case[\s\S]*when v_component_needs_resolution then null[\s\S]*else v_component_outstanding/
+  );
 });
 
 test('resolved correction carriers remain selectable after draft cancellation refresh', () => {
@@ -1263,24 +1278,24 @@ test('resolved correction carriers remain selectable after draft cancellation re
   const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
   const body = correctionRuntimeSql.slice(start, end);
 
-  assert.match(body, /'case_resolution_satisfied_now',true/);
-  assert.match(body, /'has_resolved_rate',true/);
+  assert.match(body, /'case_resolution_satisfied_now',not v_component_needs_resolution/);
+  assert.match(body, /'has_resolved_rate',not v_component_needs_resolution/);
   assert.match(body, /'resolved_rate_family','BUCKETED'/);
   assert.match(
     body,
-    /'blocked_reason_codes',case[\s\S]*target_outstanding_ex_vat[\s\S]*>0 then '\[\]'::jsonb[\s\S]*jsonb_build_array\('NO_PAY_HEADROOM'\)/
+    /'blocked_reason_codes',case[\s\S]*when v_component_needs_resolution[\s\S]*PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*when v_resolution_pending[\s\S]*LINKED_CORRECTION_RESOLUTION_PENDING[\s\S]*when v_component_outstanding>0 then '\[\]'::jsonb[\s\S]*jsonb_build_array\('NO_PAY_HEADROOM'\)/
   );
   assert.match(
     body,
-    /'case_resolution_summary',[\s\S]*'case_needs_resolution',false[\s\S]*'case_resolution_satisfied_now',true[\s\S]*'unresolved_taxable_count',0[\s\S]*'blocked_reason_codes','\[\]'::jsonb/
+    /'case_resolution_summary',[\s\S]*'case_needs_resolution',v_component_needs_resolution[\s\S]*'case_resolution_satisfied_now',not v_component_needs_resolution[\s\S]*'unresolved_taxable_count',case[\s\S]*when v_component_needs_resolution then 1[\s\S]*'blocked_reason_codes',case/
   );
   assert.match(
     body,
-    /'preview_contract',[\s\S]*'key_type',v_component->>'component_key_type'[\s\S]*'key_value',v_component->>'component_key_value'[\s\S]*'selection_allowed',round\(coalesce\([\s\S]*target_outstanding_ex_vat[\s\S]*\),2\)>0/
+    /'preview_contract',[\s\S]*'key_type',v_component->>'component_key_type'[\s\S]*'key_value',v_component->>'component_key_value'[\s\S]*'selection_allowed',not v_resolution_pending and v_component_outstanding>0/
   );
   assert.match(
     body,
-    /'is_excluded_from_allocation',round\(coalesce\([\s\S]*target_outstanding_ex_vat[\s\S]*\),2\)<=0/
+    /'is_excluded_from_allocation',v_resolution_pending or v_component_outstanding<=0/
   );
 });
 
@@ -1328,7 +1343,7 @@ test('zero-value correction residual components do not require a Banking Pay car
   const missingCarrierGuard = body.slice(missingCarrierStart, missingCarrierEnd);
   assert.match(
     missingCarrierGuard,
-    /round\(coalesce\(nullif\(v_component->>'target_outstanding_ex_vat',''\)::numeric,0\),2\)=0[\s\S]*continue;/
+    /v_component_outstanding=0[\s\S]*continue;/
   );
 });
 
