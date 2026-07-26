@@ -16,6 +16,7 @@ DECLARE
   v_recovery_group_count integer := 0;
   v_promoted_count integer := 0;
   v_promoted_selected_count integer := 0;
+  v_repaired_authority_scope_count integer := 0;
   v_demoted_count integer := 0;
   v_superseded_count integer := 0;
   v_line_work_revalidated_count integer := 0;
@@ -140,6 +141,74 @@ BEGIN
      * retained positive pay in the same pay channel, and leave every financial
      * amount sourced from the already-materialised pre-draft authority.
      */
+    WITH repair_source AS (
+      SELECT
+        ready_recovery_row.id,
+        ready_recovery_row.row_json
+          || jsonb_build_object(
+            'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+            'materialisation_recovery_headroom_revalidated', true,
+            'materialisation_recovery_headroom_revalidated_at_utc', v_now::text
+          ) AS repaired_row_json
+      FROM public.banking_pay_workbench_preview_rows AS ready_recovery_row
+      WHERE ready_recovery_row.session_id = p_session_id
+        AND ready_recovery_row.session_version = COALESCE(v_session_row.version, 1)
+        AND ready_recovery_row.candidate_id = p_candidate_id
+        AND LOWER(BTRIM(COALESCE(ready_recovery_row.section, ''))) = 'canonical_preview_lines'
+        AND UPPER(BTRIM(COALESCE(ready_recovery_row.status, ''))) = 'READY'
+        AND LOWER(BTRIM(COALESCE(ready_recovery_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND LOWER(BTRIM(COALESCE(ready_recovery_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND LOWER(BTRIM(COALESCE(ready_recovery_row.row_json->>'post_draft_overlay_applied', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND LOWER(BTRIM(COALESCE(ready_recovery_row.row_json->>'materialisation_recovery_headroom_revalidated', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND UPPER(BTRIM(COALESCE(ready_recovery_row.row_json->>'line_type', ready_recovery_row.row_json->>'item_type', ''))) IN (
+          'MANUAL_DEBT_RECOVERY',
+          'OVERPAYMENT_RECOVERY',
+          'LOAN_REPAYMENT',
+          'PAYMENT_ADVANCE_REPAYMENT'
+        )
+        AND UPPER(BTRIM(COALESCE(ready_recovery_row.row_json->>'policy_x_authority_scope', ''))) = 'PRE_DRAFT_LIVE_WORKBENCH_ONLY'
+    ), contracted_repair AS (
+      SELECT
+        repair_source.id,
+        repair_source.repaired_row_json,
+        public.pay_workbench_preview_line_contract_ok(
+          p_line_json => repair_source.repaired_row_json,
+          p_economic_key_json => COALESCE(repair_source.repaired_row_json->'economic_key', '{}'::jsonb),
+          p_target_section => 'canonical_preview_lines'
+        ) AS repaired_contract_json
+      FROM repair_source
+    )
+    UPDATE public.banking_pay_workbench_preview_rows AS ready_recovery_row
+    SET row_json = contracted_repair.repaired_row_json
+          || jsonb_build_object(
+            'preview_contract', contracted_repair.repaired_contract_json,
+            'selection_allowed', true
+          ),
+        updated_at_utc = v_now
+    FROM contracted_repair
+    WHERE ready_recovery_row.id = contracted_repair.id
+      AND LOWER(BTRIM(COALESCE(contracted_repair.repaired_contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND LOWER(BTRIM(COALESCE(contracted_repair.repaired_contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+    GET DIAGNOSTICS v_repaired_authority_scope_count = ROW_COUNT;
+
+    IF COALESCE(v_repaired_authority_scope_count, 0) > 0 THEN
+      UPDATE public.banking_pay_workbench_candidate_line_work AS line_work
+      SET result_row_json = ready_recovery_row.row_json,
+          updated_at_utc = v_now
+      FROM public.banking_pay_workbench_preview_rows AS ready_recovery_row
+      WHERE line_work.session_id = p_session_id
+        AND line_work.candidate_id = p_candidate_id
+        AND ready_recovery_row.session_id = p_session_id
+        AND ready_recovery_row.session_version = COALESCE(v_session_row.version, 1)
+        AND ready_recovery_row.candidate_id = p_candidate_id
+        AND ready_recovery_row.updated_at_utc = v_now
+        AND LOWER(BTRIM(COALESCE(ready_recovery_row.section, ''))) = 'canonical_preview_lines'
+        AND UPPER(BTRIM(COALESCE(ready_recovery_row.status, ''))) = 'READY'
+        AND UPPER(BTRIM(COALESCE(ready_recovery_row.row_json->>'policy_x_authority_scope', ''))) = 'PRE_DRAFT_LIVE_TRUTH'
+        AND line_work.line_key = ready_recovery_row.row_key;
+    END IF;
+
     DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_positive_headroom_recovery;
     CREATE TEMP TABLE _tmp_pay_wb_positive_headroom_recovery ON COMMIT DROP AS
     WITH positive_by_channel AS (
@@ -524,6 +593,7 @@ BEGIN
         'retained_positive_headroom_ex_vat', v_retained_positive_headroom,
         'promoted_recovery_count', COALESCE(v_promoted_count, 0),
         'promoted_selected_count', COALESCE(v_promoted_selected_count, 0),
+        'repaired_authority_scope_count', COALESCE(v_repaired_authority_scope_count, 0),
         'selected_row_count', COALESCE(v_selected_row_count, 0),
         'progress_recomputed', COALESCE(v_progress_json, '{}'::jsonb),
         'demoted_recovery_count', 0,
@@ -535,11 +605,16 @@ BEGIN
 
     RETURN jsonb_build_object(
       'ok', true,
-      'action', 'RETAINED_POSITIVE_PAY_PRESENT',
+      'action', CASE
+        WHEN COALESCE(v_repaired_authority_scope_count, 0) > 0
+          THEN 'REPAIRED_EXISTING_RECOVERY_AUTHORITY_SCOPE'
+        ELSE 'RETAINED_POSITIVE_PAY_PRESENT'
+      END,
       'session_id', p_session_id::text,
       'candidate_id', p_candidate_id::text,
       'retained_positive_headroom_ex_vat', v_retained_positive_headroom,
       'promoted_recovery_count', 0,
+      'repaired_authority_scope_count', COALESCE(v_repaired_authority_scope_count, 0),
       'demoted_recovery_count', 0,
       'policy_x_authority_scope', 'PRE_DRAFT_LIVE_WORKBENCH_ONLY',
       'post_draft_artifacts_touched', false,

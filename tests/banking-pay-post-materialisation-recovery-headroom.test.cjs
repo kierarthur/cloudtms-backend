@@ -37,8 +37,15 @@ test('revalidator uses final retained positive pay to promote stale no-headroom 
   assert.match(repeatableSql, /positive_by_channel/);
   assert.equal(
     (repeatableSql.match(/post_draft_overlay_applied[\s\S]{0,160}NOT IN \('true', 't', '1', 'yes', 'y', 'on'\)/g) || []).length,
-    2,
-    'both aggregate and channel headroom must exclude frozen/post-draft overlays'
+    3,
+    'aggregate, channel and repair paths must exclude frozen/post-draft overlays'
+  );
+  assert.match(repeatableSql, /v_repaired_authority_scope_count/);
+  assert.match(repeatableSql, /REPAIRED_EXISTING_RECOVERY_AUTHORITY_SCOPE/);
+  assert.match(
+    repeatableSql,
+    /materialisation_recovery_headroom_revalidated[\s\S]*PRE_DRAFT_LIVE_WORKBENCH_ONLY[\s\S]*pay_workbench_preview_line_contract_ok/,
+    'an already-promoted pre-draft recovery must be contract-checked before its authority scope is repaired'
   );
   assert.match(repeatableSql, /presentation_reason', NULL/);
   assert.match(repeatableSql, /'presentation_section', 'READY_TO_PAY'/);
@@ -52,7 +59,7 @@ test('revalidator uses final retained positive pay to promote stale no-headroom 
   );
   assert.match(repeatableSql, /pay_workbench_preview_line_contract_ok/);
   assert.match(repeatableSql, /'action', 'PROMOTED_RECOVERY_WITH_RETAINED_POSITIVE_PAY'/);
-  assert.match(repeatableSql, /'action', 'RETAINED_POSITIVE_PAY_PRESENT'/);
+  assert.match(repeatableSql, /RETAINED_POSITIVE_PAY_PRESENT/);
 });
 
 test('zero retained headroom demotes recovery and clears draft selection', () => {
