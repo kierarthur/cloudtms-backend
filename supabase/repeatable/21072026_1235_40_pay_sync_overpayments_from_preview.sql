@@ -203,6 +203,31 @@ begin
             and coalesce((r->>'reservation_overrun_count')::integer,0) = 0
             and coalesce((r->>'component_count')::integer,0) > 0
           )
+          and not (
+            coalesce(r->>'block_code','') = 'CORRECTION_CHAIN_RESERVATION_OVERRUN'
+            and coalesce((r->>'reservation_overrun_count')::integer,0) > 0
+            and exists (
+              select 1
+              from public.pay_batch_items active_batch_item
+              join public.pay_batch_candidates active_batch_candidate
+                on active_batch_candidate.id = active_batch_item.pay_batch_candidate_id
+              join public.pay_batches active_batch
+                on active_batch.id = active_batch_candidate.pay_batch_id
+              where active_batch_candidate.candidate_id = v_correction_candidate
+                and coalesce(active_batch_item.is_voided, false) is not true
+                and active_batch.cancelled_at_utc is null
+                and upper(btrim(coalesce(active_batch.status, ''))) in (
+                  'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM',
+                  'PARTIAL', 'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+                  'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+                )
+                and coalesce(
+                  active_batch_item.frozen_component_snapshot_json->>'correction_root_id',
+                  active_batch_item.frozen_resolution_payload_json->>'correction_root_id',
+                  ''
+                ) = coalesce(r->>'root_timesheet_id','')
+            )
+          )
           and (
             coalesce(array_length(p_force_include_timesheet_ids,1),0)=0
             or exists (
@@ -3630,3 +3655,11 @@ exception
     RAISE;
 end;
 $function$;
+
+REVOKE ALL ON FUNCTION public.pay_sync_overpayments_from_preview(
+  date, date, uuid, text, uuid[], jsonb, uuid, uuid[], uuid[]
+) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.pay_sync_overpayments_from_preview(
+  date, date, uuid, text, uuid[], jsonb, uuid, uuid[], uuid[]
+) TO service_role;

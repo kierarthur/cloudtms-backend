@@ -241,6 +241,26 @@ test('pay-method correction resolution is surfaced without creating or clearing 
   );
   assert.match(
     syncBody,
+    /CORRECTION_CHAIN_RESERVATION_OVERRUN[\s\S]*pay_batch_items active_batch_item[\s\S]*pay_batch_candidates active_batch_candidate[\s\S]*active_batch_candidate\.candidate_id = v_correction_candidate/
+  );
+  assert.match(
+    syncBody,
+    /active_batch_item\.frozen_component_snapshot_json->>'correction_root_id'[\s\S]*= coalesce\(r->>'root_timesheet_id',''\)/
+  );
+  assert.match(
+    syncBody,
+    /active_batch\.cancelled_at_utc is null[\s\S]*'DRAFT'[\s\S]*'EXECUTING'[\s\S]*'AUTHORISED_FOR_PAYMENT'/
+  );
+  assert.match(
+    overpaymentSyncSql,
+    /REVOKE ALL ON FUNCTION public\.pay_sync_overpayments_from_preview\([\s\S]*\) FROM PUBLIC, anon, authenticated;/
+  );
+  assert.match(
+    overpaymentSyncSql,
+    /GRANT EXECUTE ON FUNCTION public\.pay_sync_overpayments_from_preview\([\s\S]*\) TO service_role;/
+  );
+  assert.match(
+    syncBody,
     /v_resolution_pending_root_ids uuid\[\][\s\S]*CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*root_timesheet_id/
   );
   assert.match(
@@ -261,6 +281,22 @@ test('pay-method correction resolution is surfaced without creating or clearing 
     syncBody,
     /raw_case\.timesheet_id[\s\S]*ANY\(COALESCE\(v_resolution_pending_member_ids, ARRAY\[\]::uuid\[\]\)\)[\s\S]*tmp_sync_raw_negative_timesheet_rows/
   );
+});
+
+test('only the current overpayment-sync function body remains in repeatable sources', () => {
+  const repeatableDir = path.resolve(__dirname, '../supabase/repeatable');
+  const definitions = [];
+  for (const entry of fs.readdirSync(repeatableDir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const source = fs.readFileSync(path.join(repeatableDir, entry.name), 'utf8');
+    const matches = source.match(
+      /CREATE OR REPLACE FUNCTION\s+public\.pay_sync_overpayments_from_preview\s*\(/gi
+    );
+    for (let index = 0; index < (matches || []).length; index += 1) {
+      definitions.push(entry.name);
+    }
+  }
+  assert.deepEqual(definitions, ['21072026_1235_40_pay_sync_overpayments_from_preview.sql']);
 });
 
 test('source build attests pending pay-method resolution but draft gate remains fail-closed', () => {
