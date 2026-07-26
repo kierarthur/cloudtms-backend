@@ -23,6 +23,7 @@ DECLARE
   v_returned_count integer := 0;
   v_raw_count integer := 0;
   v_known_count integer := 0;
+  v_selected_eligible_count integer := 0;
   v_next_cursor jsonb := NULL::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
@@ -110,8 +111,10 @@ BEGIN
     v_last_id := (v_cursor_json->>'last_id')::uuid;
   END IF;
 
-  SELECT COUNT(*)::integer
-  INTO v_known_count
+  SELECT
+    COUNT(*)::integer,
+    COUNT(*) FILTER (WHERE preview_count_row.selected IS TRUE)::integer
+  INTO v_known_count, v_selected_eligible_count
   FROM public.banking_pay_workbench_preview_rows AS preview_count_row
   WHERE preview_count_row.session_id = p_session_id
     AND preview_count_row.session_version = v_session_row.version
@@ -551,7 +554,11 @@ BEGIN
     'limit', v_limit,
     'session_version', v_session_row.version,
     'progress_counter_version', COALESCE(v_session_row.progress_counter_version, 0),
-    'selected_row_count', COALESCE(v_session_row.selected_row_count, 0),
+    'selected_row_count', CASE
+      WHEN v_resolved_section = 'canonical_preview_lines'
+        THEN COALESCE(v_selected_eligible_count, 0)
+      ELSE COALESCE(v_session_row.selected_row_count, 0)
+    END,
     'session_signature', v_session_row.session_signature,
     'ready', true,
     'paging_mode', 'preview_rows_keyset_section_row_ordinal_id'

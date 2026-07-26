@@ -101,7 +101,10 @@ test('preview page exposes the authoritative shared selection revision', () => {
   );
   assert.match(previewRevisionSql, /'session_version', v_session_row\.version/);
   assert.match(previewRevisionSql, /'progress_counter_version', COALESCE\(v_session_row\.progress_counter_version, 0\)/);
-  assert.match(previewRevisionSql, /'selected_row_count', COALESCE\(v_session_row\.selected_row_count, 0\)/);
+  assert.match(
+    previewRevisionSql,
+    /'selected_row_count', CASE[\s\S]*WHEN v_resolved_section = 'canonical_preview_lines'[\s\S]*THEN COALESCE\(v_selected_eligible_count, 0\)/
+  );
   assert.doesNotMatch(previewRevisionSql, /pay_batch_execute|pay_batch_settle|provider_submission/i);
 });
 test('draft scope lock mismatch retains the selection-review failure contract', () => {

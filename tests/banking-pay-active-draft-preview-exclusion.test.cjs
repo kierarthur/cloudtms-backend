@@ -86,6 +86,14 @@ test('paged Ready to Pay count and rows use the same active-batch exclusion', ()
   assert.match(body, /active_batch_item\.finance_case_id::text/);
   assert.match(body, /'DRAFT'[\s\S]*'EXECUTING'[\s\S]*'AUTHORISED_FOR_PAYMENT'/);
   assert.match(
+    body,
+    /COUNT\(\*\) FILTER \(WHERE preview_count_row\.selected IS TRUE\)::integer/
+  );
+  assert.match(
+    body,
+    /WHEN v_resolved_section = 'canonical_preview_lines'[\s\S]*THEN COALESCE\(v_selected_eligible_count, 0\)/
+  );
+  assert.match(
     currentPreviewPageSql,
     /REVOKE ALL ON FUNCTION public\.pay_workbench_session_get_preview_page\(uuid, text, jsonb, integer\)\s+FROM PUBLIC, anon, authenticated;/
   );
