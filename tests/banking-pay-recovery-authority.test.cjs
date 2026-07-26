@@ -221,6 +221,18 @@ test('pay-method correction resolution is surfaced without creating or clearing 
     helperBody,
     /CORRECTION_CHAIN_ACTIVE_FINANCE_RESERVATION[\s\S]*CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED/
   );
+  assert.match(
+    helperBody,
+    /active_batch_candidate\.candidate_id = v_candidate_id[\s\S]*active_batch\.cancelled_at_utc is null[\s\S]*'DRAFT'[\s\S]*'EXECUTING'[\s\S]*'AUTHORISED_FOR_PAYMENT'/
+  );
+  assert.match(
+    helperBody,
+    /batch_item\.frozen_component_snapshot_json->>'correction_root_id'[\s\S]*= v_root_id::text/
+  );
+  assert.match(
+    helperBody,
+    /delete from pg_temp\.tmp_sync_timesheet_case_candidates candidate_row[\s\S]*candidate_row\.timesheet_id = any\(v_member_ids\);[\s\S]*continue;/
+  );
 
   const syncBody = functionBody(
     'pay_sync_overpayments_from_preview',

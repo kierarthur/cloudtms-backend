@@ -493,13 +493,55 @@ begin
           and reservation.released_at_utc is null
           and (batch_item.id is null or coalesce(batch_item.is_voided, false) is not true)
       ) then
-        raise exception 'CORRECTION_CHAIN_ACTIVE_FINANCE_RESERVATION'
-          using errcode='P0001',
-                detail=jsonb_build_object(
-                  'candidate_id', v_candidate_id::text,
-                  'root_timesheet_id', v_root_id::text,
-                  'message', 'A frozen Banking Pay reservation exists for a correction-chain member.'
-                )::text;
+        if exists (
+          select 1
+          from public.pay_advances finance_case
+          join public.pay_advance_reservations reservation
+            on reservation.finance_case_id = finance_case.id
+          left join public.pay_batch_items batch_item
+            on batch_item.id = reservation.pay_batch_item_id
+          where finance_case.candidate_id = v_candidate_id
+            and finance_case.linked_timesheet_id = any(v_member_ids)
+            and upper(btrim(coalesce(reservation.status, ''))) in ('RESERVED', 'COMMITTED')
+            and reservation.released_at_utc is null
+            and (batch_item.id is null or coalesce(batch_item.is_voided, false) is not true)
+            and not exists (
+              select 1
+              from public.pay_batch_candidates active_batch_candidate
+              join public.pay_batches active_batch
+                on active_batch.id = active_batch_candidate.pay_batch_id
+              where active_batch_candidate.id = batch_item.pay_batch_candidate_id
+                and active_batch_candidate.candidate_id = v_candidate_id
+                and active_batch.cancelled_at_utc is null
+                and upper(btrim(coalesce(active_batch.status, ''))) in (
+                  'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM',
+                  'PARTIAL', 'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+                  'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+                )
+                and coalesce(
+                  batch_item.frozen_component_snapshot_json->>'correction_root_id',
+                  batch_item.frozen_resolution_payload_json->>'correction_root_id',
+                  ''
+                ) = v_root_id::text
+            )
+        ) then
+          raise exception 'CORRECTION_CHAIN_ACTIVE_FINANCE_RESERVATION'
+            using errcode='P0001',
+                  detail=jsonb_build_object(
+                    'candidate_id', v_candidate_id::text,
+                    'root_timesheet_id', v_root_id::text,
+                    'message', 'A correction-chain reservation is not safely covered by its active frozen Banking Pay batch.'
+                  )::text;
+        end if;
+
+        -- This correction root is already frozen in an active batch.  Remove
+        -- its live members from the pre-draft finance-sync workspace so the
+        -- refresh cannot recreate, amend or clear the frozen authority.
+        delete from pg_temp.tmp_sync_timesheet_case_candidates candidate_row
+        where candidate_row.candidate_id = v_candidate_id
+          and candidate_row.timesheet_id = any(v_member_ids);
+
+        continue;
       end if;
 
       if coalesce((v_residual->>'draftable')::boolean,false) is not true then
