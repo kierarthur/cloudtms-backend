@@ -152,8 +152,12 @@ seed_units as materialized (
 ),
 classified as materialized (
   select a.*,
-    encode(digest(convert_to((a.envelope-'envelope_fingerprint')::text,'UTF8'),
-      'sha256'),'hex') recomputed_fingerprint,
+    case
+      when jsonb_typeof(a.envelope)='object'
+      then encode(digest(convert_to(
+        (a.envelope-'envelope_fingerprint')::text,'UTF8'),
+        'sha256'),'hex')
+    end recomputed_fingerprint,
     cs.is_nhsp,cs.autoprocess_hr,cs.no_timesheet_required,
     (a.adjustment_origin in(
         'IMPORT_CORRECTION','IMPORT_CANCELLATION',
@@ -180,8 +184,12 @@ classified as materialized (
       and nullif(a.envelope#>>'{operation,operation_id}','') is not null
       and nullif(a.envelope->>'correction_chain_id','') is not null
       and a.envelope->>'envelope_fingerprint'=
-        encode(digest(convert_to((a.envelope-'envelope_fingerprint')::text,'UTF8'),
-          'sha256'),'hex')
+        case
+          when jsonb_typeof(a.envelope)='object'
+          then encode(digest(convert_to(
+            (a.envelope-'envelope_fingerprint')::text,'UTF8'),
+            'sha256'),'hex')
+        end
       and(
         (a.correction_kind like 'CHANGED_HOURS_%'
           and a.envelope#>>'{operation,correction_action}'='CHANGED_HOURS')
