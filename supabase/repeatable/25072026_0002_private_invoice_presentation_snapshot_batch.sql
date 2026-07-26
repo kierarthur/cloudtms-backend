@@ -447,7 +447,10 @@ begin
         'invoice_number',i.invoice_no,
         'issue_date',case when vr.purpose='FINAL_ISSUE' then vr.issue_at_utc else i.issued_at_utc end,
         'preview_date',case when vr.purpose='DRAFT_PREVIEW' then v_now end,
-        'tax_point',case when vr.purpose='FINAL_ISSUE' then vr.tax_point_utc else coalesce(i.header_snapshot_json->'tax_point_utc',to_jsonb(i.issued_at_utc)) end,
+        'tax_point',case
+          when vr.purpose='FINAL_ISSUE' then vr.tax_point_utc::text
+          else coalesce(i.header_snapshot_json->>'tax_point_utc',i.issued_at_utc::text)
+        end,
         'due_date',case when vr.purpose='FINAL_ISSUE' then vr.due_at_utc else i.due_at_utc end,
         'currency',coalesce(i.header_snapshot_json->>'currency','GBP'),
         'supplier',jsonb_build_object(
