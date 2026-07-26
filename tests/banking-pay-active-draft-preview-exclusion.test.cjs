@@ -85,6 +85,14 @@ test('paged Ready to Pay count and rows use the same active-batch exclusion', ()
   assert.match(body, /active_batch_item\.finance_component_id::text/);
   assert.match(body, /active_batch_item\.finance_case_id::text/);
   assert.match(body, /'DRAFT'[\s\S]*'EXECUTING'[\s\S]*'AUTHORISED_FOR_PAYMENT'/);
+  assert.match(
+    currentPreviewPageSql,
+    /REVOKE ALL ON FUNCTION public\.pay_workbench_session_get_preview_page\(uuid, text, jsonb, integer\)\s+FROM PUBLIC, anon, authenticated;/
+  );
+  assert.match(
+    currentPreviewPageSql,
+    /GRANT EXECUTE ON FUNCTION public\.pay_workbench_session_get_preview_page\(uuid, text, jsonb, integer\)\s+TO service_role;/
+  );
 });
 
 test('only the current preview-page function body remains in repeatable sources', () => {

@@ -558,3 +558,9 @@ BEGIN
   );
 END;
 $function$;
+
+REVOKE ALL ON FUNCTION public.pay_workbench_session_get_preview_page(uuid, text, jsonb, integer)
+FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.pay_workbench_session_get_preview_page(uuid, text, jsonb, integer)
+TO service_role;
