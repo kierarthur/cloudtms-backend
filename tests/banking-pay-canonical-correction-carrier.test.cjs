@@ -417,3 +417,32 @@ test('selection carry restores explicit unselection and selected-row authority b
     /server_selected_preview_row_ids = v_selected_ids/
   );
 });
+
+test('post-draft freshness selects the correction carrier snapshot before family deduplication', () => {
+  const wrapperStart = sessionSql.lastIndexOf(
+    'CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness('
+  );
+  const wrapper = sessionSql.slice(wrapperStart);
+  const familyFilter = wrapper.indexOf("LIKE 'correction-chain:%'");
+  const snapshotFilter = wrapper.indexOf(
+    "jsonb_typeof(\n          COALESCE(\n            pay_batch_item.frozen_source_basis_json->'correction_chain_residual'"
+  );
+  const distinctResultFilter = wrapper.indexOf(
+    "jsonb_typeof(correction_item.frozen_residual) = 'object'"
+  );
+
+  assert.ok(wrapperStart >= 0, 'active freshness wrapper must exist');
+  assert.ok(familyFilter >= 0, 'correction-chain family filter must exist');
+  assert.ok(
+    snapshotFilter > familyFilter,
+    'frozen chain snapshot must be required in the correction-item source query'
+  );
+  assert.ok(
+    distinctResultFilter > snapshotFilter,
+    'the source-row snapshot filter must run before DISTINCT ON result filtering'
+  );
+  assert.match(
+    wrapper,
+    /pay_correction_chain_residual_v1\([\s\S]*p_pay_batch_id,[\s\S]*100/
+  );
+});

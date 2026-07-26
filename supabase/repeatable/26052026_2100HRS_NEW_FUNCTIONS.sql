@@ -169111,6 +169111,18 @@ BEGIN
           )), ''),
           ''
         ) LIKE 'correction-chain:%'
+        /*
+         * Filter to the row that actually owns the frozen chain snapshot
+         * before DISTINCT ON chooses one row for the family. A recovery item
+         * can share the family key without carrying the snapshot; allowing it
+         * into the ordering can hide the valid correction carrier entirely.
+         */
+        AND jsonb_typeof(
+          COALESCE(
+            pay_batch_item.frozen_source_basis_json->'correction_chain_residual',
+            pay_batch_item.frozen_component_snapshot_json->'correction_chain_residual'
+          )
+        ) = 'object'
         AND NOT EXISTS (
           SELECT 1
           FROM public.pay_payment_correction_items AS correction_item_exclusion
