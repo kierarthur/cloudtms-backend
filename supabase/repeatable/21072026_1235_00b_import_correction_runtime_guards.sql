@@ -1063,12 +1063,17 @@ begin
 
       -- The bounded source builder may expose an unresolved correction member
       -- as one TS_TOTAL row before its saved dated decisions are normalised.
-      -- Use one unretained raw member as the positive dated carrier, then
-      -- rewrite its key below from the server-owned residual.  Negative
-      -- components must still use their exact finance-case row and therefore
-      -- never enter this fallback.
+      -- Use one unretained raw member as the dated carrier, then rewrite its
+      -- key below from the server-owned residual. A negative component may
+      -- use this fallback only while the coupled chain is still pending
+      -- resolution: that row is a locked, non-selectable decision surface and
+      -- cannot enter draft scope. Once the chain is resolved, a negative
+      -- component must use its exact finance-case row.
       if v_carrier_row_id is null
-         and v_component_outstanding > 0 then
+         and (
+           v_component_outstanding > 0
+           or v_resolution_pending
+         ) then
         select l.id into v_carrier_row_id
         from public.banking_pay_workbench_candidate_source_lines l
         where l.session_id=p_session_id
@@ -1121,6 +1126,7 @@ begin
       into v_carrier_has_finance_case;
 
       if v_component_outstanding < 0
+         and coalesce(v_resolution_pending,false) is not true
          and coalesce(v_carrier_has_finance_case,false) is not true then
         raise exception 'CORRECTION_CHAIN_OVERPAYMENT_FINANCE_CASE_CARRIER_REQUIRED'
           using errcode='P0001',

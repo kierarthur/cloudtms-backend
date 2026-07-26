@@ -1241,7 +1241,7 @@ test('positive dated correction residuals can claim one unretained raw TS_TOTAL 
   );
   assert.match(
     body,
-    /Negative[\s\S]*components must still use their exact finance-case row/
+    /negative component may[\s\S]*only while the coupled chain is still pending[\s\S]*Once the chain is resolved[\s\S]*must use its exact finance-case row/i
   );
 });
 
@@ -1292,6 +1292,29 @@ test('resolved correction carriers remain selectable after draft cancellation re
   assert.match(
     body,
     /'preview_contract',[\s\S]*'key_type',v_component->>'component_key_type'[\s\S]*'key_value',v_component->>'component_key_value'[\s\S]*'selection_allowed',not v_resolution_pending and v_component_outstanding>0/
+  );
+  assert.match(
+    body,
+    /'is_excluded_from_allocation',v_resolution_pending or v_component_outstanding<=0/
+  );
+});
+
+test('pending negative correction components use a locked decision carrier before finance sync', () => {
+  const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
+  const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(
+    body,
+    /if v_carrier_row_id is null[\s\S]*v_component_outstanding > 0[\s\S]*or v_resolution_pending[\s\S]*then/
+  );
+  assert.match(
+    body,
+    /if v_component_outstanding < 0[\s\S]*v_resolution_pending,false\) is not true[\s\S]*v_carrier_has_finance_case,false\) is not true[\s\S]*CORRECTION_CHAIN_OVERPAYMENT_FINANCE_CASE_CARRIER_REQUIRED/
+  );
+  assert.match(
+    body,
+    /'selection_allowed',not v_resolution_pending and v_component_outstanding>0/
   );
   assert.match(
     body,
