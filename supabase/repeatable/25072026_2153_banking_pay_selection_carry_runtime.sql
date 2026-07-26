@@ -448,6 +448,21 @@ BEGIN
   SET server_selected_preview_row_ids = v_selected_ids,
       server_selected_preview_row_ids_provided = true,
       selected_row_count = jsonb_array_length(v_selected_ids),
+      progress_json = COALESCE(target_session.progress_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'selection_intent_v1',
+          COALESCE(target_session.progress_json->'selection_intent_v1', '{}'::jsonb)
+          || jsonb_build_object(
+            'canonical_preview_lines',
+            jsonb_build_object(
+              'mode', 'EXPLICIT_INCLUDE',
+              'server_selected_preview_row_ids_provided', true,
+              'selected_preview_row_ids', v_selected_ids,
+              'updated_at_utc', clock_timestamp(),
+              'source', 'SESSION_REPLACEMENT_CARRY'
+            )
+          )
+        ),
       updated_at_utc = clock_timestamp()
   WHERE target_session.id = NEW.session_id
     AND target_session.status = 'OPEN'

@@ -78,6 +78,12 @@ test('authoritative overpayment components are not adjusted by finance movements
 
   assert.match(
     overpaymentSyncSql,
+    /old_has_automatic_reconcilable_clear[\s\S]*?coalesce\(v_target_amount_is_authoritative_outstanding, false\)[\s\S]*?round\(coalesce\(v_target_case_amount_ex, 0\), 2\) > 0[\s\S]*?coalesce\(v_target_amount_is_authoritative_outstanding, false\) is not true[\s\S]*?v_target_case_amount_ex[\s\S]*?v_existing_recovered_amount/i,
+    'a paid-off case must reopen for a positive authoritative outstanding delta without subtracting historic recovery twice'
+  );
+
+  assert.match(
+    overpaymentSyncSql,
     /ELSE[\s\S]*?v_effective_case_amount_ex := GREATEST\([\s\S]*?v_new_outstanding_amount := greatest\(v_effective_case_amount_ex - v_existing_recovered_amount/i,
     'legacy case sync must retain its existing recovered-amount calculation'
   );

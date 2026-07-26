@@ -49,6 +49,7 @@ DECLARE
   v_resolution_origin_count integer := 0;
   v_single_resolution_origin_session_id uuid := NULL::uuid;
   v_single_resolution_origin_pay_date date := NULL::date;
+  v_correction_normalise_result jsonb := '{}'::jsonb;
   v_action text := 'SESSION_CASE_RESOLUTION_APPLIED';
   v_case_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_case_linked_timesheet_ids uuid[] := ARRAY[]::uuid[];
@@ -3142,11 +3143,40 @@ BEGIN
   IF v_resolution_family='BUCKETED'
      AND v_anchor_timesheet_id IS NOT NULL
      AND COALESCE(v_resolved_candidate_id,v_candidate_id) IS NOT NULL THEN
-    PERFORM public._ctms_normalise_correction_case_resolutions_v1(
-      p_session_id,
-      COALESCE(v_resolved_candidate_id,v_candidate_id),
-      v_anchor_timesheet_id
-    );
+    v_correction_normalise_result :=
+      public._ctms_normalise_correction_case_resolutions_v1(
+        p_session_id,
+        COALESCE(v_resolved_candidate_id,v_candidate_id),
+        v_anchor_timesheet_id
+      );
+
+    -- The normaliser may reuse an existing stable canonical resolution and
+    -- remove the temporary per-timesheet aliases created above. From this
+    -- point onwards the surviving canonical rows are the authoritative IDs
+    -- for audit, origin proof and the API response.
+    IF COALESCE(
+         NULLIF(v_correction_normalise_result->>'normalised_count','')::integer,
+         0
+       ) > 0 THEN
+      v_case_resolution_ids :=
+        COALESCE(
+          v_correction_normalise_result->'case_resolution_ids',
+          '[]'::jsonb
+        );
+      v_resolution_identity_keys :=
+        COALESCE(
+          v_correction_normalise_result->'resolution_identity_keys',
+          '[]'::jsonb
+        );
+      v_case_resolution_id_text :=
+        NULLIF(
+          BTRIM(COALESCE(
+            v_correction_normalise_result->>'case_resolution_id',
+            ''
+          )),
+          ''
+        );
+    END IF;
   END IF;
 
   -- A fresh target-session decision is authoritative for its canonical

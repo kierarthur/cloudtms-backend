@@ -146,6 +146,13 @@ test('post-draft recovery identity accepts linked timesheet identity only from f
   );
   assert.match(body, /v_frozen_component_snapshot_json->>'linked_timesheet_id'/);
   assert.match(body, /v_breakdown_meta_json->>'linked_timesheet_id'/);
+  assert.match(body, /v_frozen_source_basis_json->>'carrier_timesheet_id'/);
+  assert.match(
+    body,
+    /v_frozen_component_snapshot_json#>>'\{source_basis_json,carrier_timesheet_id\}'/
+  );
+  assert.match(body, /v_frozen_component_snapshot_json->>'carrier_timesheet_id'/);
+  assert.match(body, /v_breakdown_meta_json->>'carrier_timesheet_id'/);
   assert.match(
     body,
     /COUNT\(DISTINCT frozen_timesheet_candidate\.candidate_value\)/i
@@ -167,6 +174,27 @@ test('finance adjustment draft creation treats signed recovery component amounts
   assert.match(body, /source_amount_ex_vat',''\)[\s\S]*abs\(\(comp\.comp_json->>'source_amount_ex_vat'\)::numeric\)/);
   assert.match(body, /'OVERPAYMENT_RECOVERY' as item_type[\s\S]*\(-fa\.take_target_ex\)::numeric\(12,2\)/);
   assert.match(body, /OPERATION_ALLOCATION_ROWS_NOT_LINKED/);
+});
+
+test('finance adjustment recovery is capped by the selected server preview amount', () => {
+  const body = functionBody('pay_batch_apply_finance_adjustments', null, financeAdjustmentSql);
+  const recoveryStart = body.indexOf("v_stage := 'STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY'");
+  const recoveryEnd = body.indexOf("v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY'", recoveryStart);
+  assert.ok(recoveryStart >= 0 && recoveryEnd > recoveryStart, 'overpayment recovery stage must exist');
+  const recoveryBlock = body.slice(recoveryStart, recoveryEnd);
+
+  assert.match(
+    recoveryBlock,
+    /selected_case_row_caps as \([\s\S]*sum\(scr\.row_due_amount_ex_vat\)[\s\S]*selected_row_due_amount_ex_vat/
+  );
+  assert.match(
+    recoveryBlock,
+    /least\(\s*round\(sum\(scr\.component_due_amount_ex_vat\), 2\),\s*max\(src\.selected_row_due_amount_ex_vat\)\s*\)::numeric\(12,2\) as due_amount_ex_vat/
+  );
+  assert.match(
+    recoveryBlock,
+    /src\.umbrella_id is not distinct from scr\.umbrella_id/
+  );
 });
 
 test('finance adjustment draft creation freezes correction payout authority into a positive destination group', () => {
@@ -351,6 +379,10 @@ test('source build attests pending pay-method resolution but draft gate remains 
   );
   assert.match(
     materialiserBody,
+    /CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*update public\.banking_pay_workbench_candidate_source_lines l[\s\S]*l\.line_key like[\s\S]*'correction-chain:'\|\|v_root_id::text\|\|':%'[\s\S]*canonical_correction_key[\s\S]*status='SUPERSEDED'/
+  );
+  assert.match(
+    materialiserBody,
     /CORRECTION_CHAIN_RESERVATION_OVERRUN[\s\S]*pay_batch_items active_batch_item[\s\S]*active_batch_candidate\.candidate_id = p_candidate_id/
   );
   assert.match(
@@ -360,6 +392,16 @@ test('source build attests pending pay-method resolution but draft gate remains 
   assert.match(
     materialiserBody,
     /active_batch_item\.frozen_component_snapshot_json->>'correction_root_id'[\s\S]*= v_root_id::text[\s\S]*continue;/
+  );
+  assert.match(
+    materialiserBody,
+    /member_timesheet_ids[\s\S]*banking_pay_workbench_candidate_source_lines l[\s\S]*status='SUPERSEDED'[\s\S]*l\.section='cases_resolutions'[\s\S]*economic_key_json->>'key_type'[\s\S]*'TS_TOTAL','TS_DAY'[\s\S]*continue;/,
+    'an active frozen draft must suppress only unresolved raw worked-time aliases without suppressing ordinary pay or independent expense domains'
+  );
+  assert.match(
+    materialiserBody,
+    /jsonb_array_elements\([\s\S]*v_residual->'components'[\s\S]*target_outstanding_ex_vat[\s\S]*<> 0[\s\S]*pay_batch_items active_batch_item/,
+    'active-draft alias suppression must not hide a genuine later correction delta'
   );
 
   const draftGateStart = correctionRuntimeSql.indexOf(
@@ -1090,14 +1132,18 @@ test('central overpayment sync attests the same coupled correction-chain residua
 test('the Supabase pldbgapi2 workaround is scoped to the correction-chain Banking entry points', () => {
   assert.equal(
     (correctionPlpgsqlGuardSql.match(/SET plpgsql_check\.mode TO 'disabled'/g) || []).length,
-    14
+    19
   );
   assert.match(correctionPlpgsqlGuardSql, /pay_correction_chain_residual_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_ctms_correction_policy_leg_read_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_assert_payload_corrections_fresh_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /timesheet_correction_chain_scope_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_pay_batch_item_source_reservation_amount_ex_vat\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_pay_policy_x_resolve_post_draft_economic_key\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_import_correction_classify_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_candidate_correction_residuals_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_ctms_rewrite_source_build_correction_negative_components_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_ctms_rewrite_sync_authoritative_correction_negative_components_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_materialise_candidate_correction_residuals_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_rewrite_sync_correction_cases_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_workbench_candidate_source_build_chunk\s*\(/);
@@ -1106,6 +1152,7 @@ test('the Supabase pldbgapi2 workaround is scoped to the correction-chain Bankin
   assert.match(correctionPlpgsqlGuardSql, /pay_workbench_worker_drain_chunk\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_workbench_worker_drain_chunk_revalidated_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_finance_case_apply_taxable_channel_restructure\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /tsfin_write_snapshots_and_complete\s*\(/);
   assert.doesNotMatch(correctionPlpgsqlGuardSql, /\bUPDATE\b|\bINSERT\b|\bDELETE\b|\bTRUNCATE\b|\bDROP\b/i);
   assert.match(overpaymentSyncSql, /SET plpgsql_check\.mode TO 'disabled'/);
   assert.match(
@@ -1152,7 +1199,7 @@ test('negative correction residuals preserve the finance-case carrier while posi
   assert.match(body, /else jsonb_build_object\([\s\S]*'amount_ex_vat',\(v_component->>'target_outstanding_ex_vat'\)::numeric/);
 });
 
-test('materialised correction chains suppress every non-carrier raw member row', () => {
+test('materialised correction chains suppress every non-carrier unresolved raw member row', () => {
   const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
   const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
   const body = correctionRuntimeSql.slice(start, end);
@@ -1162,7 +1209,7 @@ test('materialised correction chains suppress every non-carrier raw member row',
   assert.match(body, /case when l\.line_key=v_line_key then 0 else 1 end/);
   assert.match(
     body,
-    /and l\.timesheet_id=any\(v_member_ids\)[\s\S]*and not exists \([\s\S]*unnest\(coalesce\(v_carrier_row_ids,array\[\]::uuid\[\]\)\)[\s\S]*carrier_row_id=l\.id/
+    /and l\.timesheet_id=any\(v_member_ids\)[\s\S]*and l\.section in \('cases_resolutions','canonical_preview_lines'\)[\s\S]*and not exists \([\s\S]*unnest\(coalesce\(v_carrier_row_ids,array\[\]::uuid\[\]\)\)[\s\S]*carrier_row_id=l\.id/
   );
   assert.doesNotMatch(body, /not \(l\.id=any\(v_carrier_row_ids\)\)/);
 });
@@ -1174,7 +1221,7 @@ test('positive dated correction residuals can claim one unretained raw TS_TOTAL 
 
   assert.match(
     body,
-    /v_carrier_row_id is null[\s\S]*target_outstanding_ex_vat[\s\S]*> 0[\s\S]*l\.section='cases_resolutions'[\s\S]*economic_key_json->>'key_type',''\)\)='TS_TOTAL'/
+    /v_carrier_row_id is null[\s\S]*target_outstanding_ex_vat[\s\S]*> 0[\s\S]*l\.section in \('cases_resolutions','canonical_preview_lines'\)[\s\S]*economic_key_json->>'key_type',''\)\)='TS_TOTAL'/
   );
   assert.match(
     body,
@@ -1646,5 +1693,68 @@ test('a non-draftable correction pay-method mismatch cannot leave raw recovery a
   assert.match(
     syncRewrite,
     /draftable[\s\S]*delete from pg_temp\.tmp_sync_authoritative_negative_components[\s\S]*timesheet_id = any\(v_member_ids\)/
+  );
+});
+
+test('correction resolution normalisation reuses the stable canonical row and removes only member aliases', () => {
+  const start = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_normalise_correction_case_resolutions_v1'
+  );
+  const end = correctionRuntimeSql.indexOf(
+    'create or replace function public._ctms_clear_correction_chain_snoozes_v1',
+    start
+  );
+  assert.ok(start >= 0 && end > start, 'the correction resolution normaliser must exist');
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(
+    body,
+    /resolution_identity_key=\s*v_component->>'canonical_correction_key'[\s\S]*for update/
+  );
+  assert.match(
+    body,
+    /v_normalised_resolution_id:=coalesce\(\s*v_canonical_resolution_id,\s*v_resolution\.id\s*\)/
+  );
+  assert.match(
+    body,
+    /where id=v_normalised_resolution_id/
+  );
+  assert.match(
+    body,
+    /alias_resolution\.timesheet_id=any\(v_member_ids\)[\s\S]*component_key_type[\s\S]*component_key_value/
+  );
+  assert.match(
+    body,
+    /'case_resolution_ids',v_normalised_resolution_ids/
+  );
+  assert.match(
+    body,
+    /'resolution_identity_keys',v_normalised_resolution_identity_keys/
+  );
+  assert.doesNotMatch(
+    body,
+    /delete from public\.pay_batch_items|update public\.pay_batch_items/,
+    'normalising a pre-draft decision must never alter frozen batch artefacts'
+  );
+});
+
+test('case resolution apply proves origin against the surviving canonical resolution IDs', () => {
+  const applySql = sessionCaseResolutionSql;
+
+  assert.match(
+    applySql,
+    /v_correction_normalise_result\s*:=\s*public\._ctms_normalise_correction_case_resolutions_v1/i
+  );
+  assert.match(
+    applySql,
+    /v_case_resolution_ids\s*:=\s*COALESCE\(\s*v_correction_normalise_result->'case_resolution_ids'/i
+  );
+  assert.match(
+    applySql,
+    /v_resolution_identity_keys\s*:=\s*COALESCE\(\s*v_correction_normalise_result->'resolution_identity_keys'/i
+  );
+  assert.match(
+    applySql,
+    /ON selected_resolution\.resolution_id = origin_row\.id/i
   );
 });

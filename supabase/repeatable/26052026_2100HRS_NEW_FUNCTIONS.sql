@@ -42638,6 +42638,7 @@ BEGIN
   v_next_selection_intent_mode := CASE
     WHEN v_replace_mode THEN 'EXPLICIT_INCLUDE'
     WHEN v_existing_selection_intent_mode = 'EXPLICIT_INCLUDE' THEN 'EXPLICIT_INCLUDE'
+    WHEN jsonb_array_length(COALESCE(v_deselect_ids_source, '[]'::jsonb)) > 0 THEN 'EXPLICIT_INCLUDE'
     ELSE 'IMPLICIT_ALL'
   END;
   v_next_server_selected_ids_provided := (v_next_selection_intent_mode = 'EXPLICIT_INCLUDE');
@@ -158587,6 +158588,34 @@ BEGIN
         ) AS component_element(value)
       ) AS component_counts
     ) AS component_probe
+  ), resolution_anchor_financial_boundaries AS (
+    SELECT DISTINCT boundary_rows.timesheet_id
+    FROM (
+      SELECT batch_item.timesheet_id
+      FROM public.pay_batch_items AS batch_item
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.id = batch_item.pay_batch_candidate_id
+      JOIN public.pay_batches AS batch_row
+        ON batch_row.id = batch_candidate.pay_batch_id
+      WHERE batch_item.timesheet_id IS NOT NULL
+        AND COALESCE(batch_item.is_voided, false) = false
+        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+
+      UNION
+
+      SELECT batch_snapshot.timesheet_id
+      FROM public.pay_batch_timesheet_snapshots AS batch_snapshot
+      JOIN public.pay_batches AS batch_row
+        ON batch_row.id = batch_snapshot.pay_batch_id
+      WHERE batch_snapshot.timesheet_id IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+    ) AS boundary_rows
+    WHERE EXISTS (
+      SELECT 1
+      FROM component_probe_rows AS resolution_row
+      WHERE resolution_row.target_section = 'cases_resolutions'
+        AND resolution_row.timesheet_id = boundary_rows.timesheet_id
+    )
   ), outstanding_timesheet_ids AS (
     SELECT COALESCE(
       array_agg(DISTINCT component_probe_rows.timesheet_id ORDER BY component_probe_rows.timesheet_id),
@@ -158701,6 +158730,10 @@ BEGIN
         AND ROUND(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0), 2) > 0
         AND ROUND(ABS(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0)), 2)
       ) AS clamp_economic_key_to_outstanding,
+      (
+        component_probe_rows.target_section = 'cases_resolutions'
+        AND resolution_anchor_financial_boundary.timesheet_id IS NOT NULL
+      ) AS suppress_resolution_anchor_financial_boundary,
       CASE
         WHEN component_probe_rows.rotation_validation_failed IS NOT TRUE
          AND component_probe_rows.target_section = 'canonical_preview_lines'
@@ -158748,6 +158781,8 @@ BEGIN
       ON economic_outstanding_component_rows.timesheet_id = component_probe_rows.timesheet_id
      AND economic_outstanding_component_rows.key_type = component_probe_rows.economic_key_type
      AND economic_outstanding_component_rows.key_value = component_probe_rows.economic_key_value
+    LEFT JOIN resolution_anchor_financial_boundaries AS resolution_anchor_financial_boundary
+      ON resolution_anchor_financial_boundary.timesheet_id = component_probe_rows.timesheet_id
     LEFT JOIN LATERAL (
       SELECT CASE
         WHEN component_probe_rows.target_section = 'canonical_preview_lines'
@@ -158922,7 +158957,8 @@ BEGIN
     AND materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS NOT TRUE
     AND materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
     AND materialise_rows.suppress_zero_outstanding_economic_key IS NOT TRUE
-    AND materialise_rows.suppress_negative_outstanding_economic_key IS NOT TRUE;
+    AND materialise_rows.suppress_negative_outstanding_economic_key IS NOT TRUE
+    AND materialise_rows.suppress_resolution_anchor_financial_boundary IS NOT TRUE;
 
   SELECT COUNT(*)::integer
   INTO v_suppressed_preview_row_count
@@ -158931,7 +158967,8 @@ BEGIN
     AND (materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE
      OR materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
      OR materialise_rows.suppress_zero_outstanding_economic_key IS TRUE
-     OR materialise_rows.suppress_negative_outstanding_economic_key IS TRUE);
+     OR materialise_rows.suppress_negative_outstanding_economic_key IS TRUE
+     OR materialise_rows.suppress_resolution_anchor_financial_boundary IS TRUE);
 
   SELECT COUNT(*)::integer
   INTO v_materialise_error_count
@@ -158951,6 +158988,7 @@ BEGIN
       AND materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
       AND materialise_rows.suppress_zero_outstanding_economic_key IS NOT TRUE
       AND materialise_rows.suppress_negative_outstanding_economic_key IS NOT TRUE
+      AND materialise_rows.suppress_resolution_anchor_financial_boundary IS NOT TRUE
     GROUP BY materialise_rows.target_section
   ) AS section_delta;
 
@@ -158966,6 +159004,7 @@ BEGIN
       AND selected_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
       AND selected_rows.suppress_zero_outstanding_economic_key IS NOT TRUE
       AND selected_rows.suppress_negative_outstanding_economic_key IS NOT TRUE
+      AND selected_rows.suppress_resolution_anchor_financial_boundary IS NOT TRUE
   ), suppressed_existing_preview AS (
     UPDATE public.banking_pay_workbench_preview_rows AS preview_row
     SET status = 'SUPERSEDED',
@@ -158975,6 +159014,7 @@ BEGIN
           || jsonb_build_object(
             'materialisation_suppressed', true,
             'materialisation_suppressed_reason', CASE
+              WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 'RESOLUTION_ANCHOR_ALREADY_IN_NON_CANCELLED_BATCH'
               WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
                 OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
               WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ZERO_OUTSTANDING_ECONOMIC_KEY'
@@ -158984,11 +159024,13 @@ BEGIN
             'materialised_no_visible_preview_row', true,
             'pay_outstanding_blocked', true,
             'pay_outstanding_available_ex_vat', CASE
+              WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 0::numeric
               WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE
                 OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN selected_rows.economic_outstanding_ex_vat
               ELSE selected_rows.fixed_reimbursement_outstanding_ex_vat
             END,
             'outstanding_block_reason', CASE
+              WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 'TIMESHEET_ALREADY_IN_NON_CANCELLED_BATCH'
               WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
                 OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
               WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ECONOMIC_KEY_OUTSTANDING_NOT_AVAILABLE'
@@ -159021,7 +159063,8 @@ BEGIN
       AND (selected_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE
         OR selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
         OR selected_rows.suppress_zero_outstanding_economic_key IS TRUE
-        OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE)
+        OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE
+        OR selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE)
       AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) <> 'SUPERSEDED'
     RETURNING preview_row.id
   ), upserted_preview AS (
@@ -159242,7 +159285,8 @@ BEGIN
           WHEN selected_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE
             OR selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
             OR selected_rows.suppress_zero_outstanding_economic_key IS TRUE
-            OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN
+            OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE
+            OR selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN
             COALESCE(line_work.result_row_json, '{}'::jsonb)
             || jsonb_build_object(
               'draftable', false,
@@ -159250,11 +159294,13 @@ BEGIN
               'selection_allowed', false,
               'pay_outstanding_blocked', true,
               'pay_outstanding_available_ex_vat', CASE
+                WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 0::numeric
                 WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE
                   OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN selected_rows.economic_outstanding_ex_vat
                 ELSE selected_rows.fixed_reimbursement_outstanding_ex_vat
               END,
               'outstanding_block_reason', CASE
+                WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 'TIMESHEET_ALREADY_IN_NON_CANCELLED_BATCH'
                 WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
                   OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
                 WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ECONOMIC_KEY_OUTSTANDING_NOT_AVAILABLE'
@@ -159264,6 +159310,7 @@ BEGIN
             || jsonb_build_object(
               'materialisation_suppressed', true,
               'materialisation_suppressed_reason', CASE
+                WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 'RESOLUTION_ANCHOR_ALREADY_IN_NON_CANCELLED_BATCH'
                 WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
                   OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
                 WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ZERO_OUTSTANDING_ECONOMIC_KEY'

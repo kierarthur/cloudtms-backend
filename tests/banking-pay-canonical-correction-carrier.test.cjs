@@ -467,6 +467,60 @@ test('selection carry restores explicit unselection and selected-row authority b
     selectionCarryRuntime,
     /server_selected_preview_row_ids = v_selected_ids/
   );
+  assert.match(
+    selectionCarryRuntime,
+    /'selection_intent_v1'[\s\S]*'canonical_preview_lines'[\s\S]*'mode', 'EXPLICIT_INCLUDE'[\s\S]*'source', 'SESSION_REPLACEMENT_CARRY'/
+  );
+});
+
+test('deselecting one row converts implicit-all selection into a durable explicit subset', () => {
+  const setSelectedStart = sessionSql.indexOf(
+    'CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows'
+  );
+  const setSelectedEnd = sessionSql.indexOf(
+    'CREATE OR REPLACE FUNCTION',
+    setSelectedStart + 1
+  );
+  const setSelected = sessionSql.slice(
+    setSelectedStart,
+    setSelectedEnd > setSelectedStart ? setSelectedEnd : undefined
+  );
+
+  assert.ok(setSelectedStart >= 0, 'selected-row RPC must exist');
+  assert.match(
+    setSelected,
+    /WHEN jsonb_array_length\(COALESCE\(v_deselect_ids_source, '\[\]'::jsonb\)\) > 0 THEN 'EXPLICIT_INCLUDE'/
+  );
+});
+
+test('preview materialisation suppresses resolution anchors already frozen in non-cancelled batches', () => {
+  const materialiserStart = sessionSql.indexOf(
+    'CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk('
+  );
+  const materialiserEnd = sessionSql.indexOf(
+    'CREATE OR REPLACE FUNCTION',
+    materialiserStart + 1
+  );
+  const materialiser = sessionSql.slice(
+    materialiserStart,
+    materialiserEnd > materialiserStart ? materialiserEnd : undefined
+  );
+
+  assert.ok(materialiserStart >= 0, 'preview materialiser must exist');
+  assert.match(materialiser, /resolution_anchor_financial_boundaries AS \(/);
+  assert.match(
+    materialiser,
+    /UPPER\(BTRIM\(COALESCE\(batch_row\.status, ''\)\)\) NOT IN \('CANCELLED', 'CANCELED'\)/
+  );
+  assert.match(materialiser, /suppress_resolution_anchor_financial_boundary/);
+  assert.match(
+    materialiser,
+    /RESOLUTION_ANCHOR_ALREADY_IN_NON_CANCELLED_BATCH/
+  );
+  assert.match(
+    materialiser,
+    /TIMESHEET_ALREADY_IN_NON_CANCELLED_BATCH/
+  );
 });
 
 test('post-draft freshness selects the correction carrier snapshot before family deduplication', () => {

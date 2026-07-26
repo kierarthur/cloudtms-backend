@@ -172,6 +172,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path to 'public', 'extensions', 'pg_temp'
+set plpgsql_check.mode to 'disabled'
 as $function$
 declare
   v_residual jsonb;
@@ -308,6 +309,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path to 'public', 'extensions', 'pg_temp'
+set plpgsql_check.mode to 'disabled'
 as $function$
 declare
   v_residual jsonb;
@@ -859,6 +861,16 @@ begin
          = 'CORRECTION_CHAIN_RESERVATION_OVERRUN'
        and coalesce((v_residual->>'reservation_overrun_count')::integer,0) > 0
        and v_root_id is not null
+       and not exists (
+         select 1
+         from jsonb_array_elements(
+           coalesce(v_residual->'components','[]'::jsonb)
+         ) live_component(value)
+         where round(coalesce(
+           nullif(live_component.value->>'target_outstanding_ex_vat','')::numeric,
+           0
+         ),2) <> 0
+       )
        and exists (
          select 1
          from public.pay_batch_items active_batch_item
@@ -882,6 +894,36 @@ begin
        ) then
       -- The correction root is already represented by frozen batch authority.
       -- Do not rebuild a second live carrier while that batch remains active.
+      -- This branch is valid only when no live component has a remaining
+      -- delta. Raw worked-time aliases from the bounded source build must stop
+      -- being current; otherwise the workbench misleadingly asks the user to
+      -- resolve amounts that are already frozen in the active draft. Keep
+      -- independent expense/additional-code domains current. A later changed
+      -- amount cannot enter this branch and remains subject to ordinary
+      -- freshness/draft-conflict handling.
+      select coalesce(
+               array_agg(value::uuid order by value),
+               array[]::uuid[]
+             )
+      into v_member_ids
+      from jsonb_array_elements_text(
+        coalesce(v_residual->'member_timesheet_ids','[]'::jsonb)
+      ) value;
+
+      update public.banking_pay_workbench_candidate_source_lines l
+      set status='SUPERSEDED',
+          updated_at_utc=coalesce(p_now_utc,now())
+      where l.session_id=p_session_id
+        and l.candidate_id=p_candidate_id
+        and l.source_build_run_id=p_source_build_run_id
+        and l.status='CURRENT'
+        and l.timesheet_id=any(v_member_ids)
+        and l.section='cases_resolutions'
+        and upper(coalesce(l.economic_key_json->>'key_type','')) in (
+          'TS_TOTAL','TS_DAY'
+        );
+      get diagnostics v_row_count = row_count;
+      v_superseded:=v_superseded+v_row_count;
       continue;
     end if;
 
@@ -891,6 +933,32 @@ begin
          and coalesce((v_residual->>'unresolved_count')::integer,0) > 0
          and coalesce((v_residual->>'reservation_overrun_count')::integer,0) = 0
          and coalesce((v_residual->>'component_count')::integer,0) > 0 then
+        -- A previously resolved canonical carrier is valid only for the source
+        -- basis against which it was saved.  When current evidence now needs a
+        -- fresh PAYE/umbrella decision, retire those generated carrier rows
+        -- before retaining the ordinary source rows for the resolver.  Without
+        -- this cleanup a settled historical target (for example £43) can remain
+        -- selectable beside the new live delta even though the residual has
+        -- correctly rejected the old source-basis fingerprint.
+        update public.banking_pay_workbench_candidate_source_lines l
+        set status='SUPERSEDED',
+            updated_at_utc=coalesce(p_now_utc,now())
+        where l.session_id=p_session_id
+          and l.candidate_id=p_candidate_id
+          and l.source_build_run_id=p_source_build_run_id
+          and l.status='CURRENT'
+          and l.line_key like
+                'correction-chain:'||v_root_id::text||':%'
+          and nullif(
+                btrim(coalesce(
+                  l.source_row_json->>'canonical_correction_key',
+                  ''
+                )),
+                ''
+              ) is not null;
+        get diagnostics v_row_count = row_count;
+        v_superseded:=v_superseded+v_row_count;
+
         -- Keep the ordinary source rows intact so the existing Workbench
         -- case-resolution renderer can collect and display the coupled
         -- PAYE/umbrella decision. Draft creation remains blocked by
@@ -988,7 +1056,7 @@ begin
           and l.source_build_run_id=p_source_build_run_id
           and l.status='CURRENT'
           and l.timesheet_id=any(v_member_ids)
-          and l.section='cases_resolutions'
+          and l.section in ('cases_resolutions','canonical_preview_lines')
           and upper(coalesce(l.economic_key_json->>'key_type',''))='TS_TOTAL'
           and nullif(
             btrim(coalesce(l.source_row_json->>'finance_case_id','')),
@@ -1322,6 +1390,7 @@ begin
     where l.session_id=p_session_id and l.candidate_id=p_candidate_id
       and l.source_build_run_id=p_source_build_run_id and l.status='CURRENT'
       and l.timesheet_id=any(v_member_ids)
+      and l.section in ('cases_resolutions','canonical_preview_lines')
       and upper(coalesce(l.economic_key_json->>'key_type',''))='TS_TOTAL'
       and not exists (
         select 1
@@ -1461,7 +1530,13 @@ declare
   v_source_rate numeric;
   v_source_units numeric;
   v_component_timesheet_id uuid;
+  v_canonical_resolution_id uuid;
+  v_normalised_resolution_id uuid;
+  v_alias_deleted_count integer:=0;
+  v_alias_deleted_this_component integer:=0;
   v_updated integer:=0;
+  v_normalised_resolution_ids jsonb:='[]'::jsonb;
+  v_normalised_resolution_identity_keys jsonb:='[]'::jsonb;
 begin
   if p_session_id is null
      or p_candidate_id is null
@@ -1513,6 +1588,8 @@ begin
              component.value->>'component_key_value'
   loop
     v_resolution:=null;
+    v_canonical_resolution_id:=null;
+    v_normalised_resolution_id:=null;
     select resolution_row.*
     into v_resolution
     from public.banking_pay_workbench_session_case_resolutions as resolution_row
@@ -1653,6 +1730,23 @@ begin
     end if;
 
     v_bucket:=coalesce(v_resolution.payload_json#>'{bucket_resolutions,0}','{}'::jsonb);
+    select canonical_resolution.id
+    into v_canonical_resolution_id
+    from public.banking_pay_workbench_session_case_resolutions
+      as canonical_resolution
+    where canonical_resolution.session_id=p_session_id
+      and canonical_resolution.candidate_id=p_candidate_id
+      and canonical_resolution.resolution_identity_key=
+        v_component->>'canonical_correction_key'
+    order by canonical_resolution.updated_at_utc desc,
+             canonical_resolution.created_at_utc desc,
+             canonical_resolution.id desc
+    limit 1
+    for update;
+    v_normalised_resolution_id:=coalesce(
+      v_canonical_resolution_id,
+      v_resolution.id
+    );
     v_component_timesheet_id:=coalesce(
       nullif(btrim(coalesce(v_component->>'carrier_timesheet_id','')),'')::uuid,
       case
@@ -1761,6 +1855,12 @@ begin
           v_residual->>'correction_financials_policy_envelope_fingerprint'
       );
 
+    -- A previously frozen batch may have been created from an older decision
+    -- carrying this same stable canonical identity.  The frozen batch retains
+    -- its own immutable payload, while the open workbench session must reuse
+    -- the one canonical pre-draft row for the component.  Updating that row
+    -- avoids a unique-key collision and prevents a second active decision for
+    -- the same economic component.
     update public.banking_pay_workbench_session_case_resolutions
     set timesheet_id=v_component_timesheet_id,
         resolution_identity_key=
@@ -1805,13 +1905,46 @@ begin
             'bucket_resolutions',jsonb_build_array(v_bucket)
           ),
         updated_at_utc=now()
-    where id=v_resolution.id;
+    where id=v_normalised_resolution_id;
+
+    -- Remove only temporary per-member aliases for this exact correction
+    -- component.  Independent timesheets, expenses, additional codes and
+    -- other component dates remain outside this bounded predicate.
+    delete from public.banking_pay_workbench_session_case_resolutions
+      as alias_resolution
+    where alias_resolution.session_id=p_session_id
+      and alias_resolution.candidate_id=p_candidate_id
+      and alias_resolution.resolution_family='BUCKETED'
+      and alias_resolution.id<>v_normalised_resolution_id
+      and alias_resolution.timesheet_id=any(v_member_ids)
+      and upper(btrim(coalesce(alias_resolution.component_key_type,'')))=
+        upper(btrim(coalesce(v_component->>'component_key_type','')))
+      and btrim(coalesce(alias_resolution.component_key_value,''))=
+        btrim(coalesce(v_component->>'component_key_value',''));
+    get diagnostics v_alias_deleted_this_component=row_count;
+    v_alias_deleted_count:=
+      v_alias_deleted_count+v_alias_deleted_this_component;
+    v_normalised_resolution_ids:=
+      v_normalised_resolution_ids
+      ||jsonb_build_array(v_normalised_resolution_id::text);
+    v_normalised_resolution_identity_keys:=
+      v_normalised_resolution_identity_keys
+      ||jsonb_build_array(v_component->>'canonical_correction_key');
     v_updated:=v_updated+1;
   end loop;
 
   return jsonb_build_object(
     'ok',true,
     'normalised_count',v_updated,
+    'alias_deleted_count',v_alias_deleted_count,
+    'case_resolution_id',
+      case
+        when jsonb_array_length(v_normalised_resolution_ids)>0
+          then v_normalised_resolution_ids->>0
+        else null
+      end,
+    'case_resolution_ids',v_normalised_resolution_ids,
+    'resolution_identity_keys',v_normalised_resolution_identity_keys,
     'source_family_key',v_residual->>'source_family_key',
     'root_timesheet_id',v_residual->>'root_timesheet_id'
   );

@@ -6,6 +6,7 @@ CREATE OR REPLACE FUNCTION public.tsfin_write_snapshots_and_complete(p_rows json
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions', 'pg_temp'
+ SET plpgsql_check.mode TO 'disabled'
 AS $function$
 declare
   v_ok int := 0;

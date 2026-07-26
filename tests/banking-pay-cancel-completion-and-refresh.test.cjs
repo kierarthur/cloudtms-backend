@@ -7,7 +7,12 @@ const repeatablePath = path.resolve(
   __dirname,
   '../supabase/repeatable/19072026_1659_cancel_batch_audit_and_full_candidate_refresh.sql'
 );
+const refreshRepeatablePath = path.resolve(
+  __dirname,
+  '../supabase/repeatable/19072026_1816_cancel_refresh_supersede_finance_dirty.sql'
+);
 const repeatableSql = fs.readFileSync(repeatablePath, 'utf8');
+const refreshRepeatableSql = fs.readFileSync(refreshRepeatablePath, 'utf8');
 const workerSource = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
 
 function sliceBetween(source, startMarker, endMarker) {
@@ -20,9 +25,11 @@ function sliceBetween(source, startMarker, endMarker) {
 
 test('repeatable follows the SQL function naming and placement convention', () => {
   assert.match(path.basename(repeatablePath), /^\d{8}_\d{4}_[a-z0-9_]+\.sql$/);
+  assert.match(path.basename(refreshRepeatablePath), /^\d{8}_\d{4}_[a-z0-9_]+\.sql$/);
   assert.match(repeatableSql, /pay_payment_cancel_finalise_metadata_v1/);
   assert.match(repeatableSql, /pay_payment_cancel_not_sent_and_recalculate_complete_v1/);
-  assert.match(repeatableSql, /pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1/);
+  assert.doesNotMatch(repeatableSql, /CREATE OR REPLACE FUNCTION public\.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1/);
+  assert.match(refreshRepeatableSql, /CREATE OR REPLACE FUNCTION public\.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1/);
 });
 
 test('cancellation completes all frozen work before it can report success', () => {
@@ -45,13 +52,13 @@ test('terminal cancellation metadata and actor audit are fail-closed and idempot
 });
 
 test('post-cancel complex candidates receive one full live rebuild with no targeted ids', () => {
-  assert.match(repeatableSql, /WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
-  assert.match(repeatableSql, /'targeted_timesheet_ids', '\[\]'::jsonb/);
-  assert.match(repeatableSql, /'linked_timesheet_ids', '\[\]'::jsonb/);
-  assert.match(repeatableSql, /'refresh_scope_kind', 'CANDIDATE_FULL_LIVE'/);
-  assert.match(repeatableSql, /'full_candidate_recovery_reallocation_required', true/);
-  assert.match(repeatableSql, /'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'/);
-  assert.doesNotMatch(repeatableSql, /selection_state\s*=\s*'READY'/);
+  assert.match(refreshRepeatableSql, /WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
+  assert.match(refreshRepeatableSql, /'targeted_timesheet_ids', '\[\]'::jsonb/);
+  assert.match(refreshRepeatableSql, /'linked_timesheet_ids', '\[\]'::jsonb/);
+  assert.match(refreshRepeatableSql, /'refresh_scope_kind', 'CANDIDATE_FULL_LIVE'/);
+  assert.match(refreshRepeatableSql, /'full_candidate_recovery_reallocation_required', true/);
+  assert.match(refreshRepeatableSql, /'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'/);
+  assert.doesNotMatch(refreshRepeatableSql, /selection_state\s*=\s*'READY'/);
 });
 
 test('Worker cancellation route uses only the completing and cancel-safe RPCs', () => {

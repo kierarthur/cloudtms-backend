@@ -25,6 +25,7 @@ LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
+SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_pay_batch_id uuid := p_pay_batch_id;
@@ -159,12 +160,16 @@ BEGIN
       VALUES
         (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'timesheet_id', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'linked_timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'carrier_timesheet_id', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,timesheet_id}', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,carrier_timesheet_id}', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json->>'timesheet_id', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json->>'linked_timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json->>'carrier_timesheet_id', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'timesheet_id', '')), '')),
-        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'linked_timesheet_id', '')), ''))
+        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'linked_timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'carrier_timesheet_id', '')), ''))
     ) AS frozen_timesheet_candidate(candidate_value)
     WHERE frozen_timesheet_candidate.candidate_value IS NOT NULL;
 

@@ -2714,11 +2714,20 @@ begin
              upper(coalesce(v_existing_case_row.old_status::text, '')) = 'PAID_OFF'
              and coalesce(v_existing_case_row.old_has_automatic_reconcilable_clear, false)
              and coalesce(v_existing_case_row.old_has_manual_or_restructure_event, false) is not true
-             and round(
-               coalesce(v_target_case_amount_ex, 0)
-               - coalesce(v_existing_recovered_amount, 0),
-               2
-             ) > 0
+             and (
+               (
+                 coalesce(v_target_amount_is_authoritative_outstanding, false)
+                 and round(coalesce(v_target_case_amount_ex, 0), 2) > 0
+               )
+               or (
+                 coalesce(v_target_amount_is_authoritative_outstanding, false) is not true
+                 and round(
+                   coalesce(v_target_case_amount_ex, 0)
+                   - coalesce(v_existing_recovered_amount, 0),
+                   2
+                 ) > 0
+               )
+             )
            )
          )
          or upper(coalesce(v_existing_case_row.old_status::text,'')) not in ('ACTIVE','PAID_OFF')

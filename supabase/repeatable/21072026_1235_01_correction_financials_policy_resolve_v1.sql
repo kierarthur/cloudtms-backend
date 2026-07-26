@@ -48,6 +48,7 @@ declare
   v_pay_batch_date_count integer := 0;
   v_pay_batch_date date;
   v_pay_batch_refs jsonb := '[]'::jsonb;
+  v_pay_batch_match_scope text := 'NONE';
   v_root_pay_policy_date date;
   v_root_erni numeric;
   v_root_apply_erni text;
@@ -467,7 +468,19 @@ begin
     );
   end if;
 
-  select count(distinct pb.authoritative_payment_date) filter (where pb.authoritative_payment_date is not null),
+  /*
+   * PAID_DATE belongs to the current dated correction component, not to every
+   * historical payment ever made against the root timesheet.  A repeated
+   * correction can legitimately have an original root settlement and a later
+   * canonical carrier settlement on different pay dates.
+   *
+   * Prefer frozen canonical evidence which proves that the exact current
+   * positive timesheet belongs to this TS_DAY component.  Older frozen member
+   * lists cannot contain a replacement which did not yet exist, so this is a
+   * deterministic Policy X boundary rather than a "latest batch" heuristic.
+   */
+  select count(distinct pb.authoritative_payment_date)
+           filter (where pb.authoritative_payment_date is not null),
          min(pb.authoritative_payment_date),
          coalesce(jsonb_agg(distinct jsonb_build_object(
            'pay_batch_id', pb.id,
@@ -475,6 +488,7 @@ begin
            'authoritative_payment_date', pb.authoritative_payment_date,
            'status', pb.status,
            'source_snapshot_run_id', pb.source_snapshot_run_id,
+           'payment_date_match_scope', 'CURRENT_COMPONENT_LINEAGE',
            'frozen_component_snapshot_fingerprint', case
              when pbi.frozen_component_snapshot_json is null then null
              else encode(digest(convert_to(pbi.frozen_component_snapshot_json::text, 'UTF8'), 'sha256'), 'hex')
@@ -493,13 +507,86 @@ begin
   join public.pay_batch_candidates pbc on pbc.id = pbi.pay_batch_candidate_id
   join public.pay_batches pb on pb.id = pbc.pay_batch_id
   where pbi.timesheet_id = v_root_timesheet_id
-    and coalesce(pbi.is_voided, false) = false;
+    and coalesce(pbi.is_voided, false) = false
+    and coalesce(
+          nullif(pbi.frozen_component_key_type, ''),
+          nullif(pbi.frozen_component_snapshot_json ->> 'component_key_type', '')
+        ) = 'TS_DAY'
+    and coalesce(
+          nullif(pbi.frozen_component_key_value, ''),
+          nullif(pbi.frozen_component_snapshot_json ->> 'component_key_value', '')
+        ) = v_shift.work_date::text
+    and pbi.frozen_component_snapshot_json ->> 'correction_root_id'
+          = v_root_timesheet_id::text
+    and jsonb_typeof(
+          pbi.frozen_component_snapshot_json -> 'ordered_member_timesheet_ids'
+        ) = 'array'
+    and (pbi.frozen_component_snapshot_json -> 'ordered_member_timesheet_ids')
+          ? p_timesheet_id::text;
+
+  if v_pay_batch_date_count > 0 then
+    v_pay_batch_match_scope := 'CURRENT_COMPONENT_LINEAGE';
+  else
+    /*
+     * Legacy/first-correction artefacts may predate canonical member
+     * provenance.  Fall back only to this exact TS_DAY component.  If that
+     * narrower legacy scope still contains multiple payment dates, fail closed
+     * because the current authority cannot be proved safely.
+     */
+    select count(distinct pb.authoritative_payment_date)
+             filter (where pb.authoritative_payment_date is not null),
+           min(pb.authoritative_payment_date),
+           coalesce(jsonb_agg(distinct jsonb_build_object(
+             'pay_batch_id', pb.id,
+             'pay_batch_item_id', pbi.id,
+             'authoritative_payment_date', pb.authoritative_payment_date,
+             'status', pb.status,
+             'source_snapshot_run_id', pb.source_snapshot_run_id,
+             'payment_date_match_scope', 'LEGACY_COMPONENT',
+             'frozen_component_snapshot_fingerprint', case
+               when pbi.frozen_component_snapshot_json is null then null
+               else encode(digest(convert_to(pbi.frozen_component_snapshot_json::text, 'UTF8'), 'sha256'), 'hex')
+             end,
+             'frozen_source_basis_fingerprint', case
+               when pbi.frozen_source_basis_json is null then null
+               else encode(digest(convert_to(pbi.frozen_source_basis_json::text, 'UTF8'), 'sha256'), 'hex')
+             end,
+             'frozen_resolution_result_fingerprint', case
+               when pbi.frozen_resolution_result_json is null then null
+               else encode(digest(convert_to(pbi.frozen_resolution_result_json::text, 'UTF8'), 'sha256'), 'hex')
+             end
+           )) filter (where pbi.id is not null), '[]'::jsonb)
+    into v_pay_batch_date_count, v_pay_batch_date, v_pay_batch_refs
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb on pb.id = pbc.pay_batch_id
+    where pbi.timesheet_id = v_root_timesheet_id
+      and coalesce(pbi.is_voided, false) = false
+      and coalesce(
+            nullif(pbi.frozen_component_key_type, ''),
+            nullif(pbi.frozen_component_snapshot_json ->> 'component_key_type', '')
+          ) = 'TS_DAY'
+      and coalesce(
+            nullif(pbi.frozen_component_key_value, ''),
+            nullif(pbi.frozen_component_snapshot_json ->> 'component_key_value', '')
+          ) = v_shift.work_date::text;
+    if v_pay_batch_date_count > 0 then
+      v_pay_batch_match_scope := 'LEGACY_COMPONENT';
+    end if;
+  end if;
 
   if v_pay_batch_date_count > 1 then
-    raise exception 'CORRECTION_POLICY_ROOT_PAYMENT_DATE_AMBIGUOUS'
-      using errcode = 'P0001';
+    raise exception 'CORRECTION_POLICY_COMPONENT_PAYMENT_DATE_AMBIGUOUS'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'correction_root_id', v_root_timesheet_id,
+              'component_key_type', 'TS_DAY',
+              'component_key_value', v_shift.work_date,
+              'payment_date_match_scope', v_pay_batch_match_scope
+            )::text;
   end if;
-  v_root_paid_date := coalesce(v_root_paid_date, v_pay_batch_date);
+  -- Frozen component evidence is more specific than the root TSFIN paid date.
+  v_root_paid_date := coalesce(v_pay_batch_date, v_root_paid_date);
 
   select count(*)::integer,
          count(distinct il.vat_rate_pct)::integer,

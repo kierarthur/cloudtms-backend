@@ -22,9 +22,14 @@ const cancellationGuard = fs.readFileSync(cancellationGuardPath, 'utf8');
 const correctionGuard = fs.readFileSync(correctionGuardPath, 'utf8');
 
 const correctionEntryPointSources = [
-  ['21072026_1235_00_import_correction_policy_helpers.sql', ['_ctms_import_correction_classify_v1']],
+  ['21072026_1235_00_import_correction_policy_helpers.sql', [
+    '_ctms_import_correction_classify_v1',
+    '_ctms_correction_policy_leg_read_v1'
+  ]],
   ['21072026_1235_00b_import_correction_runtime_guards.sql', [
     '_ctms_candidate_correction_residuals_v1',
+    '_ctms_rewrite_source_build_correction_negative_components_v1',
+    '_ctms_rewrite_sync_authoritative_correction_negative_components_v1',
     '_ctms_rewrite_sync_correction_cases_v1',
     '_ctms_assert_payload_corrections_fresh_v1',
     '_ctms_materialise_candidate_correction_residuals_v1'
@@ -33,7 +38,11 @@ const correctionEntryPointSources = [
   ['21072026_1235_09_pay_correction_chain_residual_v1.sql', ['pay_correction_chain_residual_v1']],
   ['21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql', ['pay_workbench_candidate_source_build_chunk']],
   ['21072026_1235_40_pay_sync_overpayments_from_preview.sql', ['pay_sync_overpayments_from_preview']],
+  ['21072026_1235_38_tsfin_write_snapshots_and_complete.sql', ['tsfin_write_snapshots_and_complete']],
   ['19072026_1405_revalidate_recovery_headroom_after_materialisation.sql', ['pay_workbench_worker_drain_chunk_revalidated_v1']],
+  ['20072026_1133_resolve_frozen_recovery_timesheet_identity.sql', [
+    '_pay_policy_x_resolve_post_draft_economic_key'
+  ]],
   ['26052026_2100HRS_NEW_FUNCTIONS.sql', [
     '_pay_batch_item_source_reservation_amount_ex_vat',
     'pay_preview_candidate_collect_scope',
