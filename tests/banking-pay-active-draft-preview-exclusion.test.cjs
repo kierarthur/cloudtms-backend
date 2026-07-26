@@ -55,6 +55,13 @@ test('candidate preview excludes rows reserved by an active draft or later payme
   assert.match(body, /'DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLE'/);
   assert.match(body, /row_json->>'post_draft_overlay_active'/);
   assert.match(body, /NOT IN \('false', 'f', '0', 'no', 'n', 'off'\)/);
+  assert.match(body, /AND NOT EXISTS \(\s*SELECT 1\s*FROM public\.pay_batch_items AS active_batch_item/);
+  assert.match(body, /active_batch_candidate\.candidate_id = preview_row\.candidate_id/);
+  assert.match(body, /active_batch\.cancelled_at_utc IS NULL/);
+  assert.match(body, /active_batch_item\.finance_component_id::text/);
+  assert.match(body, /active_batch_item\.finance_case_id::text/);
+  assert.match(body, /active_batch_item\.frozen_component_snapshot_json->>'canonical_correction_key'/);
+  assert.match(body, /'DRAFT'[\s\S]*'EXECUTING'[\s\S]*'AUTHORISED_FOR_PAYMENT'/);
 });
 
 test('only the current candidate-preview function body remains in repeatable sources', () => {
