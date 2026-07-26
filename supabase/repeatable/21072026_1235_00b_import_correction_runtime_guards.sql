@@ -1082,6 +1082,10 @@ begin
               nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
               0
             ),2)>0,
+            'is_excluded_from_allocation',round(coalesce(
+              nullif(v_component->>'target_outstanding_ex_vat','')::numeric,
+              0
+            ),2)<=0,
             'case_is_blocked',false,
             'case_needs_resolution_now',false,
             'is_case_resolution_satisfied',true,

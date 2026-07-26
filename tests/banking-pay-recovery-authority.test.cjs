@@ -679,6 +679,10 @@ test('materialised carried correction authority is recategorised after resolutio
   );
   assert.match(
     body,
+    /'is_ready_for_draft',[\s\S]*target_outstanding_ex_vat[\s\S]*'is_excluded_from_allocation',[\s\S]*target_outstanding_ex_vat[\s\S]*<=0/
+  );
+  assert.match(
+    body,
     /'presentation_reason',case[\s\S]*then 'READY_TO_PAY'[\s\S]*else 'NO_PAY_HEADROOM'/
   );
 });
