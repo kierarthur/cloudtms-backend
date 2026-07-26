@@ -853,6 +853,38 @@ begin
     p_session_id,p_candidate_id,null::uuid,'PAY_WORKBENCH_SOURCE_BUILD'
   );
   for v_residual in select value from jsonb_array_elements(v_residuals) loop
+    v_root_id:=nullif(v_residual->>'root_timesheet_id','')::uuid;
+
+    if coalesce(v_residual->>'block_code','')
+         = 'CORRECTION_CHAIN_RESERVATION_OVERRUN'
+       and coalesce((v_residual->>'reservation_overrun_count')::integer,0) > 0
+       and v_root_id is not null
+       and exists (
+         select 1
+         from public.pay_batch_items active_batch_item
+         join public.pay_batch_candidates active_batch_candidate
+           on active_batch_candidate.id = active_batch_item.pay_batch_candidate_id
+         join public.pay_batches active_batch
+           on active_batch.id = active_batch_candidate.pay_batch_id
+         where active_batch_candidate.candidate_id = p_candidate_id
+           and coalesce(active_batch_item.is_voided,false) is not true
+           and active_batch.cancelled_at_utc is null
+           and upper(btrim(coalesce(active_batch.status,''))) in (
+             'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM',
+             'PARTIAL', 'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+             'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+           )
+           and coalesce(
+             active_batch_item.frozen_component_snapshot_json->>'correction_root_id',
+             active_batch_item.frozen_resolution_payload_json->>'correction_root_id',
+             ''
+           ) = v_root_id::text
+       ) then
+      -- The correction root is already represented by frozen batch authority.
+      -- Do not rebuild a second live carrier while that batch remains active.
+      continue;
+    end if;
+
     if coalesce((v_residual->>'draftable')::boolean,false) is not true then
       if coalesce(v_residual->>'block_code','')
            = 'CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED'
@@ -870,7 +902,6 @@ begin
     end if;
     select coalesce(array_agg(value::uuid order by value),array[]::uuid[]) into v_member_ids
     from jsonb_array_elements_text(v_residual->'member_timesheet_ids') value;
-    v_root_id:=nullif(v_residual->>'root_timesheet_id','')::uuid;
     v_carrier_row_ids:=array[]::uuid[];
 
     -- Targeted source builds deliberately contain only the timesheet family

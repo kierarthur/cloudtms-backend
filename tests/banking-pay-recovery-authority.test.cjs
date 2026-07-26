@@ -349,6 +349,18 @@ test('source build attests pending pay-method resolution but draft gate remains 
     materialiserBody,
     /CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED[\s\S]*continue;[\s\S]*CORRECTION_RESIDUAL_NOT_DRAFTABLE/
   );
+  assert.match(
+    materialiserBody,
+    /CORRECTION_CHAIN_RESERVATION_OVERRUN[\s\S]*pay_batch_items active_batch_item[\s\S]*active_batch_candidate\.candidate_id = p_candidate_id/
+  );
+  assert.match(
+    materialiserBody,
+    /active_batch\.cancelled_at_utc is null[\s\S]*'DRAFT'[\s\S]*'EXECUTING'[\s\S]*'AUTHORISED_FOR_PAYMENT'/
+  );
+  assert.match(
+    materialiserBody,
+    /active_batch_item\.frozen_component_snapshot_json->>'correction_root_id'[\s\S]*= v_root_id::text[\s\S]*continue;/
+  );
 
   const draftGateStart = correctionRuntimeSql.indexOf(
     'create or replace function public._ctms_assert_session_correction_residuals_draftable_v1'
