@@ -371,6 +371,14 @@ test('targeted correction refresh expands to the complete correction chain befor
   assert.ok(expansionEnd > expansionStart, 'expanded chain scope must be persisted for collection');
   const expansionBlock = body.slice(expansionStart, expansionEnd);
   assert.match(expansionBlock, /timesheet_correction_chain_scope_v1\([\s\S]*member_timesheet_ids/);
+  assert.match(
+    expansionBlock,
+    /requested_chain\.chain_json->'member_timesheet_ids'[\s\S]*_ctms_import_correction_classify_v1\(chain_member\.value::uuid\)/
+  );
+  assert.doesNotMatch(
+    expansionBlock,
+    /WHERE COALESCE\(\(public\._ctms_import_correction_classify_v1\(requested_scope\.timesheet_id\)/
+  );
   assert.match(expansionBlock, /expanded_target_scope[\s\S]*INTO v_targeted_timesheet_ids/);
   assert.match(expansionBlock, /v_targeted_timesheet_ids_json := to_jsonb/);
   assert.match(expansionBlock, /v_linked_timesheet_ids_json := to_jsonb/);

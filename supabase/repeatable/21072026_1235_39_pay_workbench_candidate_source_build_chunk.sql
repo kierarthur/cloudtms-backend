@@ -615,8 +615,23 @@ BEGIN
          COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])
          || COALESCE(v_linked_timesheet_ids, ARRAY[]::uuid[])
        ) AS requested_correction_scope(timesheet_id)
-       WHERE COALESCE((public._ctms_import_correction_classify_v1(requested_correction_scope.timesheet_id)
-         ->>'is_import_authoritative_correction')::boolean, false)
+       CROSS JOIN LATERAL (
+         SELECT public.timesheet_correction_chain_scope_v1(
+           requested_correction_scope.timesheet_id, false, 32, 100
+         ) AS chain_json
+       ) AS requested_chain
+       WHERE COALESCE((requested_chain.chain_json->>'valid')::boolean, false)
+         AND EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements_text(
+             COALESCE(requested_chain.chain_json->'member_timesheet_ids', '[]'::jsonb)
+           ) AS chain_member(value)
+           WHERE chain_member.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             AND COALESCE((
+               public._ctms_import_correction_classify_v1(chain_member.value::uuid)
+                 ->>'is_import_authoritative_correction'
+             )::boolean, false)
+         )
      ) THEN
     IF EXISTS (
       SELECT 1
@@ -651,12 +666,25 @@ BEGIN
       ) AS requested_values(requested_id)
       WHERE requested_id IS NOT NULL
     ), correction_chains AS (
-      SELECT public.timesheet_correction_chain_scope_v1(
-        requested_scope.timesheet_id, false, 32, 100
-      ) AS chain_json
+      SELECT requested_chain.chain_json
       FROM requested_scope
-      WHERE COALESCE((public._ctms_import_correction_classify_v1(requested_scope.timesheet_id)
-        ->>'is_import_authoritative_correction')::boolean, false)
+      CROSS JOIN LATERAL (
+        SELECT public.timesheet_correction_chain_scope_v1(
+          requested_scope.timesheet_id, false, 32, 100
+        ) AS chain_json
+      ) AS requested_chain
+      WHERE COALESCE((requested_chain.chain_json->>'valid')::boolean, false)
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(
+            COALESCE(requested_chain.chain_json->'member_timesheet_ids', '[]'::jsonb)
+          ) AS chain_member(value)
+          WHERE chain_member.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            AND COALESCE((
+              public._ctms_import_correction_classify_v1(chain_member.value::uuid)
+                ->>'is_import_authoritative_correction'
+            )::boolean, false)
+        )
     ), expanded_member_ids AS (
       SELECT DISTINCT member_id.value::uuid AS timesheet_id
       FROM correction_chains
