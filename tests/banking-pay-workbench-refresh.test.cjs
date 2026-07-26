@@ -63,10 +63,10 @@ test('refresh route is registered before generic workbench reads', () => {
 });
 
 test('explicit session refresh bypasses clone-certified reuse and forces full live source retirement', () => {
-  const manyStart = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh_many');
-  const manyEnd = repeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview_page', manyStart);
-  assert.ok(manyStart >= 0 && manyEnd > manyStart, 'candidate refresh-many function must be present');
-  const manyBody = repeatableSql.slice(manyStart, manyEnd);
+  const manyBody = sqlFunctionBody(
+    repeatableSql,
+    'pay_workbench_enqueue_candidate_refresh_many'
+  );
   assert.match(manyBody, /v_force_refresh boolean := false/);
   assert.match(manyBody, /p_candidate_ids->>'user_requested_refresh'/);
   assert.match(manyBody, /COALESCE\(v_force_refresh, false\) IS NOT TRUE[\s\S]*v_candidate_clone_certified/);

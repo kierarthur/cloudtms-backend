@@ -137,6 +137,44 @@ BEGIN
             NOT IN ('false', 'f', '0', 'no', 'n', 'off')
         )
       )
+    )
+    AND (
+      v_resolved_section <> 'canonical_preview_lines'
+      OR NOT EXISTS (
+        SELECT 1
+        FROM public.pay_batch_items AS active_batch_item
+        JOIN public.pay_batch_candidates AS active_batch_candidate
+          ON active_batch_candidate.id = active_batch_item.pay_batch_candidate_id
+        JOIN public.pay_batches AS active_batch
+          ON active_batch.id = active_batch_candidate.pay_batch_id
+        WHERE active_batch_candidate.candidate_id = preview_count_row.candidate_id
+          AND COALESCE(active_batch_item.is_voided, false) = false
+          AND active_batch.cancelled_at_utc IS NULL
+          AND UPPER(BTRIM(COALESCE(active_batch.status, ''))) IN (
+            'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM',
+            'PARTIAL', 'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+            'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+          )
+          AND (
+            (
+              active_batch_item.timesheet_id IS NOT NULL
+              AND active_batch_item.timesheet_id = preview_count_row.timesheet_id
+              AND UPPER(BTRIM(COALESCE(active_batch_item.frozen_component_key_type, '')))
+                = UPPER(BTRIM(COALESCE(preview_count_row.key_type, preview_count_row.row_json->>'key_type', '')))
+              AND BTRIM(COALESCE(active_batch_item.frozen_component_key_value, ''))
+                = BTRIM(COALESCE(preview_count_row.key_value, preview_count_row.row_json->>'key_value', ''))
+            )
+            OR active_batch_item.finance_component_id::text
+              = NULLIF(BTRIM(COALESCE(preview_count_row.row_json->>'finance_component_id', '')), '')
+            OR active_batch_item.finance_case_id::text
+              = NULLIF(BTRIM(COALESCE(preview_count_row.row_json->>'finance_case_id', '')), '')
+            OR NULLIF(BTRIM(COALESCE(
+              active_batch_item.frozen_component_snapshot_json->>'canonical_correction_key',
+              active_batch_item.frozen_resolution_payload_json->>'canonical_correction_key',
+              ''
+            )), '') = NULLIF(BTRIM(COALESCE(preview_count_row.row_json->>'canonical_correction_key', '')), '')
+          )
+      )
     );
 
   WITH page_rows AS (
@@ -181,6 +219,44 @@ BEGIN
               AND lower(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_active', 'true')))
                 NOT IN ('false', 'f', '0', 'no', 'n', 'off')
             )
+          )
+        )
+        AND (
+          v_resolved_section <> 'canonical_preview_lines'
+          OR NOT EXISTS (
+            SELECT 1
+            FROM public.pay_batch_items AS active_batch_item
+            JOIN public.pay_batch_candidates AS active_batch_candidate
+              ON active_batch_candidate.id = active_batch_item.pay_batch_candidate_id
+            JOIN public.pay_batches AS active_batch
+              ON active_batch.id = active_batch_candidate.pay_batch_id
+            WHERE active_batch_candidate.candidate_id = preview_row.candidate_id
+              AND COALESCE(active_batch_item.is_voided, false) = false
+              AND active_batch.cancelled_at_utc IS NULL
+              AND UPPER(BTRIM(COALESCE(active_batch.status, ''))) IN (
+                'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM',
+                'PARTIAL', 'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+                'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+              )
+              AND (
+                (
+                  active_batch_item.timesheet_id IS NOT NULL
+                  AND active_batch_item.timesheet_id = preview_row.timesheet_id
+                  AND UPPER(BTRIM(COALESCE(active_batch_item.frozen_component_key_type, '')))
+                    = UPPER(BTRIM(COALESCE(preview_row.key_type, preview_row.row_json->>'key_type', '')))
+                  AND BTRIM(COALESCE(active_batch_item.frozen_component_key_value, ''))
+                    = BTRIM(COALESCE(preview_row.key_value, preview_row.row_json->>'key_value', ''))
+                )
+                OR active_batch_item.finance_component_id::text
+                  = NULLIF(BTRIM(COALESCE(preview_row.row_json->>'finance_component_id', '')), '')
+                OR active_batch_item.finance_case_id::text
+                  = NULLIF(BTRIM(COALESCE(preview_row.row_json->>'finance_case_id', '')), '')
+                OR NULLIF(BTRIM(COALESCE(
+                  active_batch_item.frozen_component_snapshot_json->>'canonical_correction_key',
+                  active_batch_item.frozen_resolution_payload_json->>'canonical_correction_key',
+                  ''
+                )), '') = NULLIF(BTRIM(COALESCE(preview_row.row_json->>'canonical_correction_key', '')), '')
+              )
           )
         )
         AND (
