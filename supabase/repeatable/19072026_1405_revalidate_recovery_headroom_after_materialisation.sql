@@ -14,6 +14,8 @@ DECLARE
   v_nonterminal_line_count integer := 0;
   v_retained_positive_headroom numeric(12,2) := 0;
   v_recovery_group_count integer := 0;
+  v_promoted_count integer := 0;
+  v_promoted_selected_count integer := 0;
   v_demoted_count integer := 0;
   v_superseded_count integer := 0;
   v_line_work_revalidated_count integer := 0;
@@ -120,6 +122,7 @@ BEGIN
     AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
     AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
     AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_applied', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
     AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'line_type', preview_row.row_json->>'item_type', ''))) NOT IN (
       'MANUAL_DEBT_RECOVERY',
       'OVERPAYMENT_RECOVERY',
@@ -128,14 +131,419 @@ BEGIN
     );
 
   IF COALESCE(v_retained_positive_headroom, 0) > 0 THEN
+    /*
+     * A recovery line may have been materialised before the candidate's final
+     * positive correction carrier. In that order it is correctly emitted as
+     * NO_PAY_HEADROOM, but the terminal candidate view is then stale once the
+     * positive carrier exists. Reconcile the other direction here as well:
+     * promote only rows whose sole blocker is NO_PAY_HEADROOM, allocate against
+     * retained positive pay in the same pay channel, and leave every financial
+     * amount sourced from the already-materialised pre-draft authority.
+     */
+    DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_positive_headroom_recovery;
+    CREATE TEMP TABLE _tmp_pay_wb_positive_headroom_recovery ON COMMIT DROP AS
+    WITH positive_by_channel AS (
+      SELECT
+        UPPER(BTRIM(COALESCE(
+          preview_row.row_json->>'pay_channel',
+          preview_row.row_json->>'current_pay_method',
+          preview_row.row_json->>'candidate_pay_method',
+          ''
+        ))) AS pay_channel,
+        ROUND(COALESCE(SUM(
+          CASE
+            WHEN COALESCE(preview_row.row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+              THEN GREATEST((preview_row.row_json->>'amount_ex_vat')::numeric, 0)
+            ELSE 0::numeric
+          END
+        ), 0), 2)::numeric(12,2) AS positive_headroom_ex_vat
+      FROM public.banking_pay_workbench_preview_rows AS preview_row
+      WHERE preview_row.session_id = p_session_id
+        AND preview_row.session_version = COALESCE(v_session_row.version, 1)
+        AND preview_row.candidate_id = p_candidate_id
+        AND LOWER(BTRIM(COALESCE(preview_row.section, ''))) = 'canonical_preview_lines'
+        AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+        AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_applied', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'line_type', preview_row.row_json->>'item_type', ''))) NOT IN (
+          'MANUAL_DEBT_RECOVERY',
+          'OVERPAYMENT_RECOVERY',
+          'LOAN_REPAYMENT',
+          'PAYMENT_ADVANCE_REPAYMENT'
+        )
+      GROUP BY UPPER(BTRIM(COALESCE(
+        preview_row.row_json->>'pay_channel',
+        preview_row.row_json->>'current_pay_method',
+        preview_row.row_json->>'candidate_pay_method',
+        ''
+      )))
+    ), blocked_recovery AS (
+      SELECT
+        blocked_row.id AS blocked_preview_row_id,
+        blocked_row.candidate_id,
+        blocked_row.row_key,
+        blocked_row.row_ordinal,
+        blocked_row.timesheet_id,
+        blocked_row.key_type,
+        blocked_row.key_value,
+        blocked_row.row_json AS base_row_json,
+        UPPER(BTRIM(COALESCE(
+          blocked_row.row_json->>'pay_channel',
+          blocked_row.row_json->>'current_pay_method',
+          blocked_row.row_json->>'candidate_pay_method',
+          ''
+        ))) AS pay_channel,
+        ROUND(
+          CASE
+            WHEN COALESCE(blocked_row.row_json->>'nominal_due_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+              THEN ABS((blocked_row.row_json->>'nominal_due_amount_ex_vat')::numeric)
+            WHEN COALESCE(blocked_row.row_json#>>'{case_resolution_summary,due_amount_ex_vat}', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+              THEN ABS((blocked_row.row_json#>>'{case_resolution_summary,due_amount_ex_vat}')::numeric)
+            ELSE ABS(COALESCE((
+              SELECT SUM(
+                CASE
+                  WHEN COALESCE(component_row.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+                    THEN (component_row.value->>'target_pay_ex_vat')::numeric
+                  WHEN COALESCE(component_row.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+                    THEN (component_row.value->>'preview_due_amount_ex_vat')::numeric
+                  ELSE 0::numeric
+                END
+              )
+              FROM jsonb_array_elements(
+                CASE
+                  WHEN jsonb_typeof(blocked_row.row_json->'case_components') = 'array'
+                    THEN blocked_row.row_json->'case_components'
+                  ELSE '[]'::jsonb
+                END
+              ) AS component_row(value)
+            ), 0))
+          END,
+          2
+        )::numeric(12,2) AS nominal_due_amount_ex_vat
+      FROM public.banking_pay_workbench_preview_rows AS blocked_row
+      WHERE blocked_row.session_id = p_session_id
+        AND blocked_row.session_version = COALESCE(v_session_row.version, 1)
+        AND blocked_row.candidate_id = p_candidate_id
+        AND LOWER(BTRIM(COALESCE(blocked_row.section, ''))) = 'blocked_for_pay'
+        AND UPPER(BTRIM(COALESCE(blocked_row.status, ''))) = 'READY'
+        AND UPPER(BTRIM(COALESCE(blocked_row.row_json->>'line_type', blocked_row.row_json->>'item_type', ''))) IN (
+          'MANUAL_DEBT_RECOVERY',
+          'OVERPAYMENT_RECOVERY',
+          'LOAN_REPAYMENT',
+          'PAYMENT_ADVANCE_REPAYMENT'
+        )
+        AND (
+          UPPER(BTRIM(COALESCE(blocked_row.row_json->>'presentation_reason', ''))) = 'NO_PAY_HEADROOM'
+          OR COALESCE(blocked_row.row_json->'blocked_reason_codes', '[]'::jsonb) @> jsonb_build_array('NO_PAY_HEADROOM')
+        )
+        AND LOWER(BTRIM(COALESCE(blocked_row.row_json->>'case_is_blocked', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND LOWER(BTRIM(COALESCE(blocked_row.row_json->>'case_needs_resolution_now', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND (
+          LOWER(BTRIM(COALESCE(blocked_row.row_json->>'case_resolution_satisfied_now', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR UPPER(BTRIM(COALESCE(blocked_row.row_json->>'resolution_state', ''))) = 'RESOLVED'
+          OR LOWER(BTRIM(COALESCE(blocked_row.row_json->>'is_case_resolution_satisfied', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(
+            CASE
+              WHEN jsonb_typeof(blocked_row.row_json->'blocked_reason_codes') = 'array'
+                THEN blocked_row.row_json->'blocked_reason_codes'
+              ELSE '[]'::jsonb
+            END
+          ) AS blocked_code(value)
+          WHERE UPPER(BTRIM(blocked_code.value)) <> 'NO_PAY_HEADROOM'
+        )
+    ), ranked_recovery AS (
+      SELECT
+        blocked_recovery.*,
+        COALESCE(positive_by_channel.positive_headroom_ex_vat, 0)::numeric(12,2) AS positive_headroom_ex_vat,
+        COALESCE(SUM(blocked_recovery.nominal_due_amount_ex_vat) OVER (
+          PARTITION BY blocked_recovery.pay_channel
+          ORDER BY blocked_recovery.row_ordinal, blocked_recovery.blocked_preview_row_id
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ), 0)::numeric(12,2) AS prior_nominal_due_amount_ex_vat
+      FROM blocked_recovery
+      LEFT JOIN positive_by_channel
+        ON positive_by_channel.pay_channel = blocked_recovery.pay_channel
+      WHERE blocked_recovery.pay_channel IN ('PAYE', 'UMBRELLA')
+        AND ROUND(COALESCE(blocked_recovery.nominal_due_amount_ex_vat, 0), 2) > 0
+    ), allocated_recovery AS (
+      SELECT
+        ranked_recovery.*,
+        ROUND(LEAST(
+          ranked_recovery.nominal_due_amount_ex_vat,
+          GREATEST(
+            ranked_recovery.positive_headroom_ex_vat - ranked_recovery.prior_nominal_due_amount_ex_vat,
+            0
+          )
+        ), 2)::numeric(12,2) AS recoverable_amount_ex_vat
+      FROM ranked_recovery
+    )
+    SELECT
+      allocated_recovery.*,
+      COALESCE(existing_ready.id, gen_random_uuid()) AS promoted_preview_row_id,
+      CASE
+        WHEN UPPER(BTRIM(COALESCE(
+          v_session_row.progress_json#>>'{selection_intent_v1,canonical_preview_lines,mode}',
+          ''
+        ))) = 'EXPLICIT_INCLUDE'
+          OR COALESCE(v_session_row.server_selected_preview_row_ids_provided, false) IS TRUE
+        THEN EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(
+            CASE
+              WHEN jsonb_typeof(COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)) = 'array'
+                THEN COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)
+              ELSE '[]'::jsonb
+            END
+          ) AS selected_id(value)
+          WHERE BTRIM(selected_id.value) IN (
+            allocated_recovery.blocked_preview_row_id::text,
+            existing_ready.id::text
+          )
+        )
+        ELSE true
+      END AS promoted_selected
+    FROM allocated_recovery
+    LEFT JOIN public.banking_pay_workbench_preview_rows AS existing_ready
+      ON existing_ready.session_id = p_session_id
+     AND existing_ready.session_version = COALESCE(v_session_row.version, 1)
+     AND existing_ready.candidate_id = p_candidate_id
+     AND LOWER(BTRIM(COALESCE(existing_ready.section, ''))) = 'canonical_preview_lines'
+     AND existing_ready.row_key = allocated_recovery.row_key
+    WHERE allocated_recovery.recoverable_amount_ex_vat > 0;
+
+    SELECT COUNT(*)::integer,
+           COUNT(*) FILTER (WHERE promoted_selected)::integer
+    INTO v_promoted_count,
+         v_promoted_selected_count
+    FROM pg_temp._tmp_pay_wb_positive_headroom_recovery;
+
+    IF COALESCE(v_promoted_count, 0) > 0 THEN
+      WITH promoted_payload AS (
+        SELECT
+          promotion.*,
+          jsonb_strip_nulls(
+            (
+              promotion.base_row_json
+              - 'blocked_reason_codes'
+              - 'superseded_reason'
+              - 'materialisation_recovery_headroom_revalidated'
+              - 'materialisation_recovery_headroom_revalidated_at_utc'
+            )
+            || jsonb_build_object(
+              'preview_row_id', promotion.promoted_preview_row_id::text,
+              'line_id', promotion.promoted_preview_row_id::text,
+              'section', 'canonical_preview_lines',
+              'target_section', 'canonical_preview_lines',
+              'readiness_state', 'READY',
+              'presentation_section', 'READY_TO_PAY',
+              'presentation_reason', NULL,
+              'amount_ex_vat', -promotion.recoverable_amount_ex_vat,
+              'preview_amount_ex_vat', -promotion.recoverable_amount_ex_vat,
+              'amount_display', -promotion.recoverable_amount_ex_vat,
+              'section_amount_ex_vat', -promotion.recoverable_amount_ex_vat,
+              'section_amount_display', -promotion.recoverable_amount_ex_vat,
+              'target_pay_ex_vat', -promotion.recoverable_amount_ex_vat,
+              'ready_preview_amount_ex_vat', -promotion.recoverable_amount_ex_vat,
+              'preview_component_amount_ex_vat', -promotion.recoverable_amount_ex_vat,
+              'recoverable_this_pay_run_ex_vat', promotion.recoverable_amount_ex_vat,
+              'draftable', true,
+              'is_ready_for_draft', true,
+              'selection_allowed', true,
+              'is_excluded_from_allocation', false,
+              'selected', promotion.promoted_selected,
+              'selection_state', CASE WHEN promotion.promoted_selected THEN 'SELECTED' ELSE 'UNSELECTED' END,
+              'materialisation_recovery_headroom_revalidated', true,
+              'materialisation_recovery_headroom_revalidated_at_utc', v_now::text,
+              'retained_positive_headroom_ex_vat', promotion.positive_headroom_ex_vat,
+              'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+            )
+            || jsonb_build_object(
+              'case_resolution_summary', CASE
+                WHEN jsonb_typeof(COALESCE(promotion.base_row_json->'case_resolution_summary', '{}'::jsonb)) = 'object'
+                  THEN COALESCE(promotion.base_row_json->'case_resolution_summary', '{}'::jsonb)
+                    || jsonb_build_object('due_amount_ex_vat', promotion.recoverable_amount_ex_vat)
+                ELSE jsonb_build_object('due_amount_ex_vat', promotion.recoverable_amount_ex_vat)
+              END
+            )
+          ) AS promoted_row_json
+        FROM pg_temp._tmp_pay_wb_positive_headroom_recovery AS promotion
+      ), contracted_payload AS (
+        SELECT
+          promoted_payload.*,
+          public.pay_workbench_preview_line_contract_ok(
+            p_line_json => promoted_payload.promoted_row_json,
+            p_economic_key_json => COALESCE(promoted_payload.promoted_row_json->'economic_key', '{}'::jsonb),
+            p_target_section => 'canonical_preview_lines'
+          ) AS promoted_contract_json
+        FROM promoted_payload
+      )
+      INSERT INTO public.banking_pay_workbench_preview_rows (
+        id,
+        session_id,
+        candidate_id,
+        section,
+        row_key,
+        row_ordinal,
+        row_json,
+        timesheet_id,
+        key_type,
+        key_value,
+        selected,
+        selection_state,
+        status,
+        session_version,
+        created_at_utc,
+        updated_at_utc
+      )
+      SELECT
+        contracted_payload.promoted_preview_row_id,
+        p_session_id,
+        p_candidate_id,
+        'canonical_preview_lines',
+        contracted_payload.row_key,
+        contracted_payload.row_ordinal,
+        contracted_payload.promoted_row_json
+          || jsonb_build_object(
+            'preview_contract', contracted_payload.promoted_contract_json,
+            'selection_allowed', true
+          ),
+        contracted_payload.timesheet_id,
+        contracted_payload.key_type,
+        contracted_payload.key_value,
+        contracted_payload.promoted_selected,
+        CASE WHEN contracted_payload.promoted_selected THEN 'SELECTED' ELSE 'UNSELECTED' END,
+        'READY',
+        COALESCE(v_session_row.version, 1),
+        v_now,
+        v_now
+      FROM contracted_payload
+      WHERE LOWER(BTRIM(COALESCE(contracted_payload.promoted_contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND LOWER(BTRIM(COALESCE(contracted_payload.promoted_contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      ON CONFLICT (session_id, section, candidate_id, row_key)
+      DO UPDATE
+      SET row_ordinal = EXCLUDED.row_ordinal,
+          row_json = EXCLUDED.row_json,
+          timesheet_id = EXCLUDED.timesheet_id,
+          key_type = EXCLUDED.key_type,
+          key_value = EXCLUDED.key_value,
+          selected = EXCLUDED.selected,
+          selection_state = EXCLUDED.selection_state,
+          status = 'READY',
+          session_version = EXCLUDED.session_version,
+          updated_at_utc = v_now;
+
+      UPDATE public.banking_pay_workbench_preview_rows AS blocked_row
+      SET status = 'SUPERSEDED',
+          selected = false,
+          selection_state = 'SUPERSEDED',
+          row_json = COALESCE(blocked_row.row_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'selected', false,
+              'selection_state', 'SUPERSEDED',
+              'superseded_reason', 'POSITIVE_PAY_HEADROOM_AVAILABLE_AFTER_FINAL_MATERIALISATION',
+              'materialisation_recovery_headroom_revalidated', true,
+              'materialisation_recovery_headroom_revalidated_at_utc', v_now::text,
+              'policy_x_authority_scope', 'PRE_DRAFT_LIVE_WORKBENCH_ONLY'
+            ),
+          updated_at_utc = v_now
+      WHERE blocked_row.id IN (
+        SELECT promotion.blocked_preview_row_id
+        FROM pg_temp._tmp_pay_wb_positive_headroom_recovery AS promotion
+      );
+
+      UPDATE public.banking_pay_workbench_candidate_line_work AS line_work
+      SET result_row_json = ready_row.row_json,
+          updated_at_utc = v_now
+      FROM public.banking_pay_workbench_preview_rows AS ready_row
+      WHERE line_work.session_id = p_session_id
+        AND line_work.candidate_id = p_candidate_id
+        AND ready_row.session_id = p_session_id
+        AND ready_row.session_version = COALESCE(v_session_row.version, 1)
+        AND ready_row.candidate_id = p_candidate_id
+        AND LOWER(BTRIM(COALESCE(ready_row.section, ''))) = 'canonical_preview_lines'
+        AND UPPER(BTRIM(COALESCE(ready_row.status, ''))) = 'READY'
+        AND ready_row.row_key = line_work.line_key
+        AND EXISTS (
+          SELECT 1
+          FROM pg_temp._tmp_pay_wb_positive_headroom_recovery AS promotion
+          WHERE promotion.row_key = line_work.line_key
+        );
+
+      v_progress_json := public.pay_workbench_session_recompute_progress_counters(
+        p_session_id,
+        true,
+        'POST_MATERIALISATION_RECOVERY_HEADROOM_PROMOTION',
+        false
+      );
+
+      SELECT COALESCE(jsonb_agg(to_jsonb(selected_row.id::text) ORDER BY selected_row.row_ordinal, selected_row.id), '[]'::jsonb),
+             COUNT(*)::integer
+      INTO v_selected_preview_row_ids,
+           v_selected_row_count
+      FROM public.banking_pay_workbench_preview_rows AS selected_row
+      WHERE selected_row.session_id = p_session_id
+        AND selected_row.session_version = COALESCE(v_session_row.version, 1)
+        AND LOWER(BTRIM(COALESCE(selected_row.section, ''))) = 'canonical_preview_lines'
+        AND UPPER(BTRIM(COALESCE(selected_row.status, ''))) = 'READY'
+        AND COALESCE(selected_row.selected, false) = true
+        AND UPPER(BTRIM(COALESCE(selected_row.selection_state, ''))) = 'SELECTED';
+
+      v_selection_intent_mode := UPPER(BTRIM(COALESCE(
+        v_session_row.progress_json#>>'{selection_intent_v1,canonical_preview_lines,mode}',
+        ''
+      )));
+
+      UPDATE public.banking_pay_workbench_sessions AS session_row
+      SET selected_row_count = COALESCE(v_selected_row_count, 0),
+          server_selected_preview_row_ids = CASE
+            WHEN v_selection_intent_mode = 'EXPLICIT_INCLUDE'
+              OR COALESCE(session_row.server_selected_preview_row_ids_provided, false) IS TRUE
+              THEN COALESCE(v_selected_preview_row_ids, '[]'::jsonb)
+            ELSE session_row.server_selected_preview_row_ids
+          END,
+          progress_json = COALESCE(session_row.progress_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'last_recovery_headroom_revalidation_at_utc', v_now::text,
+              'last_recovery_headroom_revalidation_action', 'PROMOTED_RECOVERY_WITH_RETAINED_POSITIVE_PAY',
+              'last_recovery_headroom_revalidation_candidate_id', p_candidate_id::text,
+              'last_recovery_headroom_revalidation_promoted_count', COALESCE(v_promoted_count, 0),
+              'policy_x_authority_scope', 'PRE_DRAFT_LIVE_WORKBENCH_ONLY'
+            ),
+          updated_at_utc = v_now
+      WHERE session_row.id = p_session_id;
+
+      RETURN jsonb_build_object(
+        'ok', true,
+        'action', 'PROMOTED_RECOVERY_WITH_RETAINED_POSITIVE_PAY',
+        'session_id', p_session_id::text,
+        'candidate_id', p_candidate_id::text,
+        'retained_positive_headroom_ex_vat', v_retained_positive_headroom,
+        'promoted_recovery_count', COALESCE(v_promoted_count, 0),
+        'promoted_selected_count', COALESCE(v_promoted_selected_count, 0),
+        'selected_row_count', COALESCE(v_selected_row_count, 0),
+        'progress_recomputed', COALESCE(v_progress_json, '{}'::jsonb),
+        'demoted_recovery_count', 0,
+        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_WORKBENCH_ONLY',
+        'post_draft_artifacts_touched', false,
+        'payment_execution_started', false
+      );
+    END IF;
+
     RETURN jsonb_build_object(
       'ok', true,
       'action', 'RETAINED_POSITIVE_PAY_PRESENT',
       'session_id', p_session_id::text,
       'candidate_id', p_candidate_id::text,
       'retained_positive_headroom_ex_vat', v_retained_positive_headroom,
+      'promoted_recovery_count', 0,
       'demoted_recovery_count', 0,
-      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_WORKBENCH_ONLY'
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_WORKBENCH_ONLY',
+      'post_draft_artifacts_touched', false,
+      'payment_execution_started', false
     );
   END IF;
 

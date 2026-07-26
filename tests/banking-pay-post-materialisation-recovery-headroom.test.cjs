@@ -29,10 +29,29 @@ test('revalidator is terminal, open-session and candidate scoped', () => {
   assert.match(repeatableSql, /line_work\.status[\s\S]*NOT IN \([\s\S]*'MATERIALISED'[\s\S]*'SKIPPED'/);
 });
 
-test('revalidator preserves genuine retained positive pay', () => {
+test('revalidator uses final retained positive pay to promote stale no-headroom recoveries', () => {
   assert.match(repeatableSql, /v_retained_positive_headroom/);
   assert.match(repeatableSql, /GREATEST\(\(preview_row\.row_json->>'amount_ex_vat'\)::numeric, 0\)/);
   assert.match(repeatableSql, /IF COALESCE\(v_retained_positive_headroom, 0\) > 0 THEN/);
+  assert.match(repeatableSql, /_tmp_pay_wb_positive_headroom_recovery/);
+  assert.match(repeatableSql, /positive_by_channel/);
+  assert.equal(
+    (repeatableSql.match(/post_draft_overlay_applied[\s\S]{0,160}NOT IN \('true', 't', '1', 'yes', 'y', 'on'\)/g) || []).length,
+    2,
+    'both aggregate and channel headroom must exclude frozen/post-draft overlays'
+  );
+  assert.match(repeatableSql, /presentation_reason', NULL/);
+  assert.match(repeatableSql, /'presentation_section', 'READY_TO_PAY'/);
+  assert.match(repeatableSql, /'recoverable_this_pay_run_ex_vat', promotion\.recoverable_amount_ex_vat/);
+  assert.match(repeatableSql, /'draftable', true/);
+  assert.match(repeatableSql, /'selection_allowed', true/);
+  assert.match(
+    repeatableSql,
+    /'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'/,
+    'a promoted ready row must satisfy the canonical draft-seed authority contract'
+  );
+  assert.match(repeatableSql, /pay_workbench_preview_line_contract_ok/);
+  assert.match(repeatableSql, /'action', 'PROMOTED_RECOVERY_WITH_RETAINED_POSITIVE_PAY'/);
   assert.match(repeatableSql, /'action', 'RETAINED_POSITIVE_PAY_PRESENT'/);
 });
 
