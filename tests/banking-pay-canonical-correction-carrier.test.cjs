@@ -243,6 +243,38 @@ test('draft freeze adds provenance only to the four existing frozen JSON authori
     freeze,
     /PAY_BATCH_CANONICAL_CORRECTION_PROVENANCE_INVALID/
   );
+  assert.match(
+    freeze,
+    /'target_pay_method', n\.pay_channel/
+  );
+  assert.match(
+    freeze,
+    /'target_amount_ex_vat', round\(n\.take_target_ex, 2\)/
+  );
+});
+
+test('the approved finance-adjustment freeze has one repeatable definition', () => {
+  const repeatableFiles = listFiles('supabase/repeatable').filter((file) =>
+    /\.(?:sql|txt)$/i.test(file)
+  );
+  const definitions = [];
+
+  for (const file of repeatableFiles) {
+    const source = fs.readFileSync(file, 'utf8');
+    const relativePath = path.relative(root, file).replaceAll('\\', '/');
+    for (const match of source.matchAll(
+      /^CREATE OR REPLACE FUNCTION public\.pay_batch_apply_finance_adjustments\(/gim
+    )) {
+      definitions.push({ relativePath, index: match.index });
+    }
+  }
+
+  assert.deepEqual(
+    definitions.map(({ relativePath }) => relativePath),
+    [
+      'supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql',
+    ]
+  );
 });
 
 test('Banking Pay mutation RPCs remain Worker-only', () => {
