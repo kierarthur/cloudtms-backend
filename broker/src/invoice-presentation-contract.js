@@ -38,7 +38,8 @@ function validateAssetIdentity(identity) {
   if (identity == null) return;
   requireObject(identity, 'RENDER_ASSET_IDENTITY_INVALID');
   if (!identity.r2_key) {
-    if (Object.values(identity).some(value => value != null && value !== '')) {
+    if (['sha256', 'size_bytes', 'media_type', 'data_url']
+      .some(field => identity[field] != null && identity[field] !== '')) {
       throw contractError('RENDER_ASSET_IDENTITY_INVALID');
     }
     return;
@@ -66,75 +67,405 @@ function validateRowKeys(rows) {
 }
 
 export function validateFrozenInvoicePresentationModel(model, options = {}) {
-  requireObject(model);
-  if (model.schema_version !== 'INVOICE_RENDER_MODEL_V1') {
-    throw contractError('RENDER_MODEL_SCHEMA_UNSUPPORTED');
-  }
-  requireText(model.purpose);
-  requireText(model.document_type);
-  requireObject(model.supplier);
-  requireObject(model.customer);
-  requireText(model.supplier.legal_name);
-  requireText(model.customer.legal_name);
-  requireObject(model.references);
-  requireObject(model.totals);
-  requireObject(model.payment);
-  requireObject(model.credit_note);
-  requireObject(model.self_bill);
-  requireArray(model.vat_breakdown);
-  requireArray(model.legal_wording);
-  const lines = requireArray(model.lines);
-  if (lines.length === 0 && Number(model.totals.net || 0) !== 0) {
-    throw contractError('INVOICE_PRESENTATION_MODEL_INVALID');
-  }
-  validateRowKeys(lines);
-  for (const line of lines) {
-    for (const field of ['source_invoice_line_id', 'description', 'unit', 'quantity', 'unit_price', 'net_amount', 'vat_rate', 'vat_amount', 'gross_amount', 'display_order']) {
-      if (line[field] == null || line[field] === '') throw contractError('INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING', field);
+  requireObject(model, 'RENDER_MODEL_INVALID');
+
+  const fail = (code, detail) => { throw contractError(code, detail); };
+  const asNumber = (value, code, detail) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) fail(code, detail);
+    return number;
+  };
+  const assertFiniteMoney = (value, detail) => asNumber(value, 'INVOICE_PRESENTATION_NUMERIC_INVALID', detail);
+  const near = (left, right, tolerance = 0.01) =>
+    Math.abs(Number(left || 0) - Number(right || 0)) <= tolerance;
+  const requireTextArray = (value, code, detail) => {
+    if (!Array.isArray(value)) fail(code, detail);
+    const out = value
+      .map(entry => String(entry ?? '').trim())
+      .filter(Boolean);
+    if (!out.length) fail(code, detail);
+    return out;
+  };
+  const requireOptionalTextArray = (value, code, detail) => {
+    if (value == null) return [];
+    if (!Array.isArray(value)) fail(code, detail);
+    return value.map(entry => String(entry ?? '').trim()).filter(Boolean);
+  };
+  const forbiddenPaySideKeys = new Set([
+    'pay_day',
+    'pay_night',
+    'pay_sat',
+    'pay_sun',
+    'pay_bh',
+    'total_pay_ex_vat',
+    'pay_total_inc_vat_snapshot',
+    'pay_vat_amount_snapshot',
+    'pay_vat_rate_pct_snapshot',
+    'margin_ex_vat',
+    'policy_snapshot_json',
+    'rate_source_refs_json',
+    'candidate_pay_rate',
+    'pay_rate',
+    'pay_method'
+  ]);
+  const assertNoPaySideFields = (value, path = '$') => {
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => assertNoPaySideFields(entry, `${path}[${index}]`));
+      return;
     }
+    if (!value || typeof value !== 'object') return;
+    for (const [key, entry] of Object.entries(value)) {
+      if (forbiddenPaySideKeys.has(key)) fail('INVOICE_PRESENTATION_PAY_SIDE_FIELD_FORBIDDEN', `${path}.${key}`);
+      assertNoPaySideFields(entry, `${path}.${key}`);
+    }
+  };
+
+  if (model.schema_version !== 'INVOICE_RENDER_MODEL_V1') {
+    fail('RENDER_MODEL_SCHEMA_UNSUPPORTED', model.schema_version);
   }
-  if (model.document_type === 'CREDIT_NOTE') {
+
+  const purpose = requireText(model.purpose, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  const documentType = requireText(model.document_type, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  if (!['INVOICE', 'SELF_BILL_INVOICE', 'CREDIT_NOTE'].includes(documentType)) {
+    fail('INVOICE_PRESENTATION_DOCUMENT_TYPE_UNSUPPORTED', documentType);
+  }
+
+  requireObject(model.supplier, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.customer, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.references, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.totals, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.payment, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.credit_note, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.self_bill, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+
+  requireText(model.supplier.legal_name, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireTextArray(model.supplier.registered_address, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING', 'supplier.registered_address');
+  requireText(model.customer.legal_name, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireTextArray(model.customer.billing_address, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING', 'customer.billing_address');
+
+  if (purpose === 'FINAL_ISSUE') {
+    requireText(model.invoice_number, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+    requireText(model.issue_date, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+    requireText(model.tax_point, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+    requireText(model.due_date, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
+  }
+
+  if (options.templateVersion && model.template_version !== options.templateVersion) {
+    fail('RENDER_TEMPLATE_VERSION_MISMATCH', { expected: options.templateVersion, actual: model.template_version });
+  }
+
+  const currency = String(model.currency || 'GBP');
+  if (!currency.trim()) fail('INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING', 'currency');
+
+  const lines = requireArray(model.lines, 'INVOICE_PRESENTATION_MODEL_INVALID');
+  validateRowKeys(lines);
+
+  const seenDisplayOrders = new Set();
+  let lineNetTotal = 0;
+  let lineVatTotal = 0;
+  let lineGrossTotal = 0;
+
+  for (const line of lines) {
+    requireObject(line, 'INVOICE_PRESENTATION_LINE_INVALID');
+
+    for (const field of [
+      'row_key',
+      'source_invoice_line_id',
+      'source_key',
+      'description',
+      'unit',
+      'quantity',
+      'unit_price',
+      'net_amount',
+      'vat_rate',
+      'vat_amount',
+      'gross_amount',
+      'display_order'
+    ]) {
+      if (line[field] == null || line[field] === '') {
+        fail('INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING', `lines[].${field}`);
+      }
+    }
+
+    const displayOrder = Number(line.display_order);
+    if (!Number.isSafeInteger(displayOrder) || displayOrder < 1) {
+      fail('INVOICE_PRESENTATION_DISPLAY_ORDER_INVALID', line.row_key);
+    }
+    if (seenDisplayOrders.has(displayOrder)) {
+      fail('INVOICE_PRESENTATION_DISPLAY_ORDER_DUPLICATE', displayOrder);
+    }
+    seenDisplayOrders.add(displayOrder);
+
+    const quantity = asNumber(line.quantity, 'INVOICE_PRESENTATION_NUMERIC_INVALID', `${line.row_key}.quantity`);
+    const unitPrice = asNumber(line.unit_price, 'INVOICE_PRESENTATION_NUMERIC_INVALID', `${line.row_key}.unit_price`);
+    const net = assertFiniteMoney(line.net_amount, `${line.row_key}.net_amount`);
+    const vat = assertFiniteMoney(line.vat_amount, `${line.row_key}.vat_amount`);
+    const gross = assertFiniteMoney(line.gross_amount, `${line.row_key}.gross_amount`);
+    asNumber(line.vat_rate, 'INVOICE_PRESENTATION_NUMERIC_INVALID', `${line.row_key}.vat_rate`);
+
+    if (!near(net + vat, gross)) {
+      fail('INVOICE_PRESENTATION_LINE_TOTAL_MISMATCH', line.row_key);
+    }
+
+    // A zero quantity/unit price is legitimate for some corrections and descriptive credit rows;
+    // the hard rule is finite numeric identity, not non-zero economics.
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitPrice)) {
+      fail('INVOICE_PRESENTATION_NUMERIC_INVALID', line.row_key);
+    }
+
+    lineNetTotal += net;
+    lineVatTotal += vat;
+    lineGrossTotal += gross;
+  }
+
+  const totals = model.totals;
+  const totalNet = assertFiniteMoney(totals.net, 'totals.net');
+  const totalVat = assertFiniteMoney(totals.vat, 'totals.vat');
+  const totalGross = assertFiniteMoney(totals.gross, 'totals.gross');
+  assertFiniteMoney(totals.amount_paid ?? 0, 'totals.amount_paid');
+  assertFiniteMoney(totals.amount_credited ?? 0, 'totals.amount_credited');
+  assertFiniteMoney(totals.amount_outstanding ?? totalGross, 'totals.amount_outstanding');
+
+  if (lines.length === 0 && !near(totalNet, 0)) {
+    fail('INVOICE_PRESENTATION_MODEL_INVALID', 'non_zero_invoice_has_no_lines');
+  }
+  if (!near(lineNetTotal, totalNet) || !near(lineVatTotal, totalVat) || !near(lineGrossTotal, totalGross)) {
+    fail('INVOICE_PRESENTATION_LINE_TOTAL_MISMATCH', {
+      line_net: lineNetTotal,
+      line_vat: lineVatTotal,
+      line_gross: lineGrossTotal,
+      total_net: totalNet,
+      total_vat: totalVat,
+      total_gross: totalGross
+    });
+  }
+  if (!near(totalNet + totalVat, totalGross)) {
+    fail('INVOICE_PRESENTATION_TOTAL_MISMATCH', 'net_plus_vat_must_equal_gross');
+  }
+
+  const vatBreakdown = requireArray(model.vat_breakdown, 'INVOICE_PRESENTATION_MODEL_INVALID');
+  if (vatBreakdown.length === 0 && (!near(totalNet, 0) || !near(totalVat, 0) || !near(totalGross, 0))) {
+    fail('INVOICE_PRESENTATION_VAT_BREAKDOWN_MISSING', {
+      total_net: totalNet,
+      total_vat: totalVat,
+      total_gross: totalGross
+    });
+  }
+  let vatBreakdownNet = 0;
+  let vatBreakdownVat = 0;
+  let vatBreakdownGross = 0;
+  const vatBreakdownKeys = new Set();
+
+  for (const row of vatBreakdown) {
+    requireObject(row, 'INVOICE_PRESENTATION_VAT_ROW_INVALID');
+    for (const field of ['rate', 'net_amount', 'vat_amount', 'gross_amount']) {
+      if (row[field] == null || row[field] === '') fail('INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING', `vat_breakdown[].${field}`);
+    }
+    const rate = asNumber(row.rate, 'INVOICE_PRESENTATION_NUMERIC_INVALID', 'vat_breakdown.rate');
+    const net = assertFiniteMoney(row.net_amount, 'vat_breakdown.net_amount');
+    const vat = assertFiniteMoney(row.vat_amount, 'vat_breakdown.vat_amount');
+    const gross = assertFiniteMoney(row.gross_amount, 'vat_breakdown.gross_amount');
+    if (!near(net + vat, gross)) fail('INVOICE_PRESENTATION_VAT_TOTAL_MISMATCH', rate);
+    const key = String(rate);
+    if (vatBreakdownKeys.has(key)) fail('INVOICE_PRESENTATION_VAT_RATE_DUPLICATE', rate);
+    vatBreakdownKeys.add(key);
+    vatBreakdownNet += net;
+    vatBreakdownVat += vat;
+    vatBreakdownGross += gross;
+  }
+
+  if (vatBreakdown.length > 0 && (!near(vatBreakdownNet, totalNet) || !near(vatBreakdownVat, totalVat) || !near(vatBreakdownGross, totalGross))) {
+    fail('INVOICE_PRESENTATION_VAT_TOTAL_MISMATCH', {
+      vat_breakdown_net: vatBreakdownNet,
+      vat_breakdown_vat: vatBreakdownVat,
+      vat_breakdown_gross: vatBreakdownGross
+    });
+  }
+
+  if (Math.abs(totalVat) > 0.004 && !String(model.supplier.vat_registration_number || '').trim()) {
+    fail('INVOICE_SUPPLIER_VAT_REGISTRATION_REQUIRED');
+  }
+
+  if (documentType === 'CREDIT_NOTE') {
+    requireText(model.credit_note.original_invoice_id || model.credit_note.original_invoice_number, 'INVOICE_CREDIT_NOTE_RELATIONSHIP_MISSING');
     requireText(model.credit_note.original_invoice_number, 'INVOICE_CREDIT_NOTE_RELATIONSHIP_MISSING');
     requireText(model.credit_note.reason, 'INVOICE_CREDIT_NOTE_REASON_MISSING');
   }
-  if (model.document_type === 'SELF_BILL_INVOICE') {
+
+  if (documentType === 'SELF_BILL_INVOICE') {
     requireText(model.self_bill.legal_wording, 'INVOICE_SELF_BILL_WORDING_MISSING');
   }
-  if (options.templateVersion && model.template_version !== options.templateVersion) {
-    throw contractError('RENDER_TEMPLATE_VERSION_MISMATCH');
+
+  requireOptionalTextArray(model.legal_wording, 'INVOICE_PRESENTATION_MODEL_INVALID', 'legal_wording');
+
+  if (model.payment.hide_bank_footer === true) {
+    const forbiddenPaymentFields = [
+      'account_name',
+      'sort_code',
+      'account_number',
+      'remittance_reference'
+    ];
+    for (const field of forbiddenPaymentFields) {
+      if (String(model.payment[field] || '').trim()) {
+        fail('INVOICE_PAYMENT_DETAILS_FORBIDDEN_BY_POLICY', field);
+      }
+    }
   }
+
   validateAssetIdentity(model.branding?.logo);
   rejectMutableUrls(model);
+  assertNoPaySideFields(model);
+
   return model;
 }
 
 export function validateFrozenTimesheetPresentationModel(model, options = {}) {
-  requireObject(model);
+  requireObject(model, 'RENDER_MODEL_INVALID');
+
+  const fail = (code, detail) => { throw contractError(code, detail); };
+  const requireOptionalArray = (value, code, detail) => {
+    if (value == null) return [];
+    if (!Array.isArray(value)) fail(code, detail);
+    return value;
+  };
+  const finite = (value, code, detail) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) fail(code, detail);
+    return number;
+  };
+  const validateReferenceArray = (value, label) => {
+    const rows = requireOptionalArray(value, 'TIMESHEET_REFERENCE_MODEL_INVALID', label);
+    const seen = new Set();
+    rows.forEach((row, index) => {
+      if (typeof row === 'string') {
+        if (!row.trim()) fail('TIMESHEET_REFERENCE_MODEL_INVALID', `${label}[${index}]`);
+        return;
+      }
+      requireObject(row, 'TIMESHEET_REFERENCE_MODEL_INVALID');
+      const key = String(row.day_key || row.segment_id || row.row_key || `${label}:${index + 1}`);
+      if (seen.has(key)) fail('TIMESHEET_REFERENCE_DUPLICATE', key);
+      seen.add(key);
+      if (!String(row.reference || row.current_reference || '').trim()) {
+        fail('TIMESHEET_REFERENCE_MODEL_INVALID', `${label}[${index}].reference`);
+      }
+      if (row.display_order != null) {
+        const order = Number(row.display_order);
+        if (!Number.isSafeInteger(order) || order < 1) fail('TIMESHEET_REFERENCE_MODEL_INVALID', `${label}[${index}].display_order`);
+      }
+    });
+    return rows;
+  };
+  const validateScheduleRows = (rows, label, requireRows) => {
+    const arr = requireArray(rows, 'TIMESHEET_PRESENTATION_MODEL_INVALID');
+    if (requireRows && arr.length === 0) fail('TIMESHEET_PRESENTATION_MODEL_INVALID', `${label}_missing`);
+    const displayOrders = new Set();
+    for (const row of arr) {
+      requireObject(row, 'TIMESHEET_PRESENTATION_MODEL_INVALID');
+      requireText(row.date, 'TIMESHEET_PRESENTATION_MODEL_INVALID');
+      const order = Number(row.display_order);
+      if (!Number.isSafeInteger(order) || order < 1) fail('TIMESHEET_PRESENTATION_MODEL_INVALID', `${label}.display_order`);
+      if (displayOrders.has(order)) fail('TIMESHEET_PRESENTATION_DISPLAY_ORDER_DUPLICATE', `${label}.${order}`);
+      displayOrders.add(order);
+
+      const units = row.hours ?? row.units;
+      const hasWorkedUnits = units != null && Number(units) > 0;
+      if (hasWorkedUnits && (!String(row.worked_start || '').trim() || !String(row.worked_end || '').trim())) {
+        fail('TIMESHEET_PRESENTATION_WORKED_TIME_MISSING', `${label}.${order}`);
+      }
+      if (units != null) finite(units, 'TIMESHEET_PRESENTATION_NUMERIC_INVALID', `${label}.${order}.units`);
+      if (row.break_minutes != null) {
+        const minutes = finite(row.break_minutes, 'TIMESHEET_PRESENTATION_NUMERIC_INVALID', `${label}.${order}.break_minutes`);
+        if (minutes < 0) fail('TIMESHEET_PRESENTATION_BREAK_INVALID', `${label}.${order}`);
+      }
+    }
+  };
+
   if (model.schema_version !== 'TIMESHEET_RENDER_MODEL_V1') {
-    throw contractError('RENDER_MODEL_SCHEMA_UNSUPPORTED');
+    fail('RENDER_MODEL_SCHEMA_UNSUPPORTED', model.schema_version);
   }
-  requireText(model.timesheet_id);
-  requireObject(model.candidate);
-  requireObject(model.client);
-  requireObject(model.contract);
-  requireObject(model.work);
-  requireObject(model.references);
-  requireObject(model.authorisation);
-  requireObject(model.signatures);
-  requireObject(model.qr);
-  requireArray(model.daily_schedule_rows);
-  requireArray(model.weekly_schedule_rows);
-  for (const row of [...model.daily_schedule_rows, ...model.weekly_schedule_rows]) {
-    requireObject(row);
-    if (!Number.isSafeInteger(Number(row.display_order)) || Number(row.display_order) < 1) {
-      throw contractError('TIMESHEET_PRESENTATION_MODEL_INVALID');
+
+  requireText(model.timesheet_id, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.candidate, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.client, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.contract, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.work, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.references, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.authorisation, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.signatures, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.qr, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+
+  requireText(model.candidate.name, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.client.name, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.week_ending_date, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.submission_mode, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.sheet_scope, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+
+  const scope = String(model.sheet_scope || '').toUpperCase();
+  validateScheduleRows(model.daily_schedule_rows, 'daily_schedule_rows', scope === 'DAILY');
+  validateScheduleRows(model.weekly_schedule_rows, 'weekly_schedule_rows', scope === 'WEEKLY');
+
+  if (scope !== 'DAILY' && scope !== 'WEEKLY') {
+    const totalRows = Number((model.daily_schedule_rows || []).length + (model.weekly_schedule_rows || []).length);
+    if (totalRows < 1) fail('TIMESHEET_PRESENTATION_MODEL_INVALID', 'schedule_rows_missing');
+  }
+
+  if (model.references.whole != null && typeof model.references.whole !== 'string') {
+    fail('TIMESHEET_REFERENCE_MODEL_INVALID', 'references.whole');
+  }
+  validateReferenceArray(model.references.day, 'references.day');
+  validateReferenceArray(model.references.segment, 'references.segment');
+
+  if (model.additional_units != null) {
+    if (Array.isArray(model.additional_units)) {
+      const seenAdditional = new Set();
+      model.additional_units.forEach((entry, index) => {
+        if (entry == null || entry === '') return;
+        if (typeof entry === 'string') {
+          if (!entry.trim()) fail('TIMESHEET_ADDITIONAL_UNITS_INVALID', `additional_units[${index}]`);
+          return;
+        }
+        requireObject(entry, 'TIMESHEET_ADDITIONAL_UNITS_INVALID');
+        const key = String(entry.row_key || entry.type || entry.label || entry.description || index);
+        if (seenAdditional.has(key)) fail('TIMESHEET_ADDITIONAL_UNITS_DUPLICATE', key);
+        seenAdditional.add(key);
+        const numericValue = entry.units ?? entry.hours ?? entry.quantity ?? null;
+        if (numericValue != null && numericValue !== '') {
+          finite(numericValue, 'TIMESHEET_PRESENTATION_NUMERIC_INVALID', `additional_units[${index}]`);
+        }
+      });
+    } else if (typeof model.additional_units === 'object') {
+      const numericValue = model.additional_units.units ?? model.additional_units.hours ?? model.additional_units.quantity ?? null;
+      if (numericValue != null && numericValue !== '') {
+        finite(numericValue, 'TIMESHEET_PRESENTATION_NUMERIC_INVALID', 'additional_units');
+      }
+    } else {
+      finite(model.additional_units, 'TIMESHEET_PRESENTATION_NUMERIC_INVALID', 'additional_units');
     }
   }
+
+  if (typeof model.authorisation.authorised !== 'boolean') {
+    fail('TIMESHEET_AUTHORISATION_STATE_INVALID');
+  }
+  if (model.authorisation.authorised) {
+    requireText(model.authorisation.name, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+    requireText(model.authorisation.authorised_at_utc, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  }
+
   validateAssetIdentity(model.signatures.candidate);
   validateAssetIdentity(model.signatures.authoriser);
-  if (options.templateVersion && model.template_version !== options.templateVersion) {
-    throw contractError('RENDER_TEMPLATE_VERSION_MISMATCH');
+
+  if (typeof model.qr.required !== 'boolean') fail('TIMESHEET_QR_STATE_INVALID', 'required');
+  if (typeof model.qr.signed !== 'boolean') fail('TIMESHEET_QR_STATE_INVALID', 'signed');
+  if (model.qr.signed && !String(model.qr.signed_hash || '').trim()) fail('TIMESHEET_QR_STATE_INVALID', 'signed_hash');
+  if (model.qr.signed && !String(model.qr.signed_at_utc || '').trim()) fail('TIMESHEET_QR_STATE_INVALID', 'signed_at_utc');
+  if (model.qr.required && String(model.qr.status || '').toUpperCase() === 'SIGNED' && model.qr.signed !== true) {
+    fail('TIMESHEET_QR_STATE_INVALID', 'signed_status_mismatch');
   }
+
+  if (options.templateVersion && model.template_version !== options.templateVersion) {
+    fail('RENDER_TEMPLATE_VERSION_MISMATCH');
+  }
+
   rejectMutableUrls(model);
   return model;
 }

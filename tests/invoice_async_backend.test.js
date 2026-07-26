@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import {
   createInvoiceDocumentAccessToken,
@@ -32,7 +33,8 @@ import { handleInvoiceAsyncHttpRequest } from '../broker/src/invoice-async-http.
 import {
   buildMergeReceipt,
   buildPhysicalReceipt,
-  flattenLeafInputReceipts
+  flattenLeafInputReceipts,
+  verifyMergeReceiptTree
 } from '../invoice-document-processor/src/receipt-contract.js';
 
 test('runtime configuration is disabled by default and clamps every limit', () => {
@@ -176,23 +178,28 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
     purpose: 'DRAFT_PREVIEW',
     document_type: 'INVOICE',
     invoice_number: 'INV-1<script>',
-    supplier: { legal_name: 'Supplier & Co' },
-    customer: { legal_name: 'Customer "A"' },
+    supplier: {
+      legal_name: 'Supplier & Co',
+      registered_address: ['1 Supplier Street'],
+      vat_registration_number: 'GB123456789'
+    },
+    customer: { legal_name: 'Customer "A"', billing_address: ['2 Customer Road'] },
     references: {},
     lines: [{
       row_key: 'line-1',
       source_invoice_line_id: '00000000-0000-4000-8000-000000000001',
+      source_key: 'source-1',
       description: '<unsafe>',
       unit: 'HOUR',
-      quantity: 1,
-      unit_price: 10,
-      net_amount: 10,
-      vat_rate: 20,
-      vat_amount: 2,
-      gross_amount: 12,
+      quantity: '1.0000',
+      unit_price: '10.0000',
+      net_amount: '10.00',
+      vat_rate: '20.00',
+      vat_amount: '2.00',
+      gross_amount: '12.00',
       display_order: 1
     }],
-    vat_breakdown: [],
+    vat_breakdown: [{ rate: '20.00', net_amount: '10.00', vat_amount: '2.00', gross_amount: '12.00' }],
     totals: { net: 10, vat: 2, gross: 12 },
     payment: {},
     credit_note: { is_credit_note: false },
@@ -205,6 +212,84 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
   assert.equal(first, second);
   assert.ok(first.includes('INV-1&lt;script&gt;'));
   assert.ok(!first.includes('<unsafe>'));
+});
+
+test('frozen presentation identity is recomputed and pay-side fields are rejected', async () => {
+  const model = {
+    schema_version: 'INVOICE_RENDER_MODEL_V1',
+    purpose: 'DRAFT_PREVIEW',
+    document_type: 'INVOICE',
+    invoice_number: 'INV-HASH-1',
+    currency: 'GBP',
+    supplier: {
+      legal_name: 'Supplier',
+      registered_address: ['1 Supplier Street'],
+      vat_registration_number: 'GB123456789'
+    },
+    customer: { legal_name: 'Customer', billing_address: ['2 Customer Road'] },
+    references: {},
+    branding: { logo: {} },
+    lines: [{
+      row_key: 'line-1',
+      source_invoice_line_id: '00000000-0000-4000-8000-000000000001',
+      source_key: 'source-1',
+      description: 'Day hours',
+      reference: '',
+      unit: 'hours',
+      quantity: '1.0000',
+      unit_price: '10.0000',
+      net_amount: '10.00',
+      vat_rate: '20.00',
+      vat_amount: '2.00',
+      gross_amount: '12.00',
+      display_order: 1
+    }],
+    vat_breakdown: [{ rate: '20.00', net_amount: '10.00', vat_amount: '2.00', gross_amount: '12.00' }],
+    totals: {
+      net: '10.00',
+      vat: '2.00',
+      gross: '12.00',
+      amount_paid: '0',
+      amount_credited: '0',
+      amount_outstanding: '12.00'
+    },
+    payment: {},
+    credit_note: { is_credit_note: false },
+    self_bill: { is_self_bill: false },
+    legal_wording: [],
+    template_version: 'invoice-professional-v1'
+  };
+  const canonical = invoiceQueueRuntimeInternals.postgresJsonbText(model);
+  const expectedHash = createHash('sha256').update(canonical).digest('hex');
+  const verified = await invoiceQueueRuntimeInternals.verifyFrozenPresentationModelHash(
+    'INVOICE_CORE',
+    model,
+    {
+      presentation_model_schema_version: 'INVOICE_RENDER_MODEL_V1',
+      presentation_model_hash: expectedHash,
+      template_version: 'invoice-professional-v1'
+    }
+  );
+  assert.equal(verified.presentation_model_hash, expectedHash);
+  await assert.rejects(
+    () => invoiceQueueRuntimeInternals.verifyFrozenPresentationModelHash(
+      'INVOICE_CORE',
+      { ...model, totals: { ...model.totals, gross: 13 } },
+      {
+        presentation_model_schema_version: 'INVOICE_RENDER_MODEL_V1',
+        presentation_model_hash: expectedHash,
+        template_version: 'invoice-professional-v1'
+      }
+    ),
+    /INVOICE_PRESENTATION_LINE_TOTAL_MISMATCH/
+  );
+  assert.throws(
+    () => buildProfessionalInvoiceHtml({
+      ...model,
+      lines: [{ ...model.lines[0], pay_rate: 8 }]
+    }),
+    /INVOICE_PRESENTATION_PAY_SIDE_FIELD_FORBIDDEN/
+  );
 });
 
 test('attachment index renders one logical row with physical page totals', () => {
@@ -529,8 +614,16 @@ test('professional source templates use explicit allowlisted fields', () => {
     client: { id: 'client-1', name: 'Client' },
     contract: { id: 'contract-1', reference: 'C-1' },
     work: { hospital: 'Hospital', site: 'Hospital', ward: 'Ward' },
+    week_ending_date: '2026-07-26',
+    submission_mode: 'ELECTRONIC',
+    sheet_scope: 'DAILY',
     references: { whole: 'TS-1', day: [], segment: [] },
-    authorisation: { authorised: true },
+    authorisation: {
+      authorised: true,
+      name: 'Authoriser',
+      role: 'Manager',
+      authorised_at_utc: '2026-07-24T16:00:00Z'
+    },
     signatures: { candidate: {}, authoriser: {} },
     qr: { required: false, signed: false },
     daily_schedule_rows: [{ date: '2026-07-24', worked_start: '08:00', worked_end: '16:00', break_minutes: 30, hours: 7.5, display_order: 1 }],
@@ -557,6 +650,56 @@ test('receipt evidence rejects wrong order, omission, and duplicate descriptors'
   ];
   await assert.rejects(() => buildMergeReceipt({}, { processor_policy_version: 'INVOICE_PROCESSOR_LIMITS_V4', plan_generation: 1 }, inputs, { actual_inputs: actual }, { r2_key: 'out.pdf', sha256: 'f'.repeat(64), size_bytes: 200, page_count: 2 }), /INPUT_ORDER_MISMATCH/);
   await assert.rejects(() => buildMergeReceipt({}, { processor_policy_version: 'INVOICE_PROCESSOR_LIMITS_V4', plan_generation: 1 }, inputs, { actual_inputs: actual.slice(0, 1) }, { r2_key: 'out.pdf', sha256: 'f'.repeat(64), size_bytes: 100, page_count: 1 }), /ACTUAL_INPUT_COUNT_MISMATCH/);
+});
+
+test('final receipt verification recomputes the complete merge tree', async () => {
+  const inputs = [1, 2].map(order => ({
+    descriptor: {
+      input_chunk_id: `leaf-${order}`,
+      input_order: order,
+      r2_key: `immutable/${order}.pdf`,
+      sha256: String(order).repeat(64),
+      page_count: 1,
+      size_bytes: 100,
+      logical_source_key: `source:${order}`,
+      logical_manifest_ordinal: order,
+      physical_part_no: 1
+    }
+  }));
+  const actualInputs = inputs.map((input, index) => ({
+    input_order: index + 1,
+    r2_key: input.descriptor.r2_key,
+    sha256: input.descriptor.sha256,
+    page_count: 1,
+    size_bytes: 100
+  }));
+  const receipt = await buildMergeReceipt(
+    {},
+    { processor_policy_version: 'INVOICE_PROCESSOR_LIMITS_V4', plan_generation: 1 },
+    inputs,
+    { actual_inputs: actualInputs, processor_version: 'cloudtms-native-v6' },
+    {
+      r2_key: 'immutable/final.pdf',
+      sha256: 'f'.repeat(64),
+      size_bytes: 200,
+      page_count: 2
+    }
+  );
+  const verified = await verifyMergeReceiptTree(receipt, {
+    maximum_depth: 4,
+    maximum_receipts: 10
+  });
+  assert.equal(verified.leaves.length, 2);
+  assert.equal(verified.output.sha256, 'f'.repeat(64));
+  const tampered = structuredClone(receipt);
+  tampered.input_receipts[0].actual_sha256 = 'e'.repeat(64);
+  await assert.rejects(
+    () => verifyMergeReceiptTree(tampered, {
+      maximum_depth: 4,
+      maximum_receipts: 10
+    }),
+    /INPUT_PHYSICAL_RECEIPT_MISMATCH/
+  );
 });
 test('unrelated API routes bypass async admin and cohort checks', async () => {
   let authCalls = 0;

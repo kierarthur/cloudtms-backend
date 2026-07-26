@@ -13,8 +13,12 @@ declare
   v_result jsonb:='[]'::jsonb;
   v_ignored integer;
 begin
-  if jsonb_typeof(p_results)<>'array'
-     or jsonb_array_length(p_results)<1
+  if p_results is null or jsonb_typeof(p_results)<>'array' then
+    raise exception using errcode='22023',
+      message='p_results must be an array containing 1..100 items';
+  end if;
+
+  if jsonb_array_length(p_results)<1
      or jsonb_array_length(p_results)>100 then
     raise exception using errcode='22023',
       message='p_results must be an array containing 1..100 items';
@@ -69,6 +73,7 @@ begin
       a.original_sha256 registered_original_sha256,
       a.original_size_bytes registered_original_size_bytes,
       dv.source_revision document_source_revision,dv.manifest_hash,dv.manifest_json,
+      dv.snapshot_json,dv.snapshot_hash,
       case
         when s.chunk_id is null or s.lease_token is null
           or s.fence_token is null or s.operation_control_version is null then 'INVALID_COMPLETION'
@@ -126,7 +131,7 @@ begin
       case
         when i.outcome not in('SUCCESS','RETRY','BLOCKED','FAILED','SUPERSEDED','CANCELLED')
           then 'INVALID_OUTCOME'
-        when i.processor_policy->>'version'<>'INVOICE_PROCESSOR_LIMITS_V4'
+        when coalesce(i.processor_policy->>'policy_version',i.processor_policy->>'version')<>'INVOICE_PROCESSOR_LIMITS_V4'
           or i.result_limit_bytes is null
           then 'PROCESSOR_POLICY_INVALID'
         when jsonb_typeof(i.processor_result)<>'object'
@@ -155,7 +160,7 @@ begin
           or coalesce(i.processor_result->>'plan_generation','')<>
             i.plan_generation::text
           or coalesce(i.processor_result->>'processor_policy_version','')<>
-            coalesce(i.processor_policy->>'version','')
+            coalesce(i.processor_policy->>'policy_version',i.processor_policy->>'version','')
           or(i.chunk_type<>'DOCUMENT_VERIFY' and
             coalesce(i.processor_result->>'output_prefix','')<>
               coalesce(i.expected_output_prefix,''))
@@ -174,6 +179,78 @@ begin
             and coalesce(i.processor_result->>'ordered_input_hash','')<>
               coalesce(i.payload_json->>'ordered_input_hash',''))
         ) then 'PROCESSOR_RESULT_IDENTITY_MISMATCH'
+        when i.outcome='SUCCESS'
+          and i.chunk_type in('SOURCE_RENDER','INVOICE_CORE_RENDER')
+          and (
+            /*
+             * Render completion must prove the same frozen presentation model
+             * identity that was planned and handed out by context.  For source
+             * renders the source-model identity must come from the chunk
+             * payload / expected_result_identity; we deliberately do not fall
+             * back to the invoice-root model hash for source chunks.
+             */
+            nullif(coalesce(
+              i.processor_result->>'presentation_model_schema_version',
+              i.processor_result#>>'{render_identity,presentation_model_schema_version}',
+              i.processor_result#>>'{identity,presentation_model_schema_version}',
+              ''),'') is null
+            or nullif(coalesce(
+              i.processor_result->>'presentation_model_hash',
+              i.processor_result#>>'{render_identity,presentation_model_hash}',
+              i.processor_result#>>'{identity,presentation_model_hash}',
+              ''),'') is null
+            or nullif(coalesce(
+              i.processor_result->>'snapshot_hash',
+              i.processor_result#>>'{render_identity,snapshot_hash}',
+              i.processor_result#>>'{identity,snapshot_hash}',
+              ''),'') is null
+            or nullif(coalesce(
+              i.payload_json->>'presentation_model_schema_version',
+              i.payload_json#>>'{expected_result_identity,presentation_model_schema_version}',
+              case when i.chunk_type='INVOICE_CORE_RENDER'
+                then i.snapshot_json#>>'{presentation_model,schema_version}' end,
+              ''),'') is null
+            or nullif(coalesce(
+              i.payload_json->>'presentation_model_hash',
+              i.payload_json#>>'{expected_result_identity,presentation_model_hash}',
+              case when i.chunk_type='INVOICE_CORE_RENDER'
+                then i.snapshot_json->>'presentation_model_hash' end,
+              ''),'') is null
+            or nullif(coalesce(
+              i.payload_json->>'snapshot_hash',
+              i.payload_json#>>'{expected_result_identity,snapshot_hash}',
+              i.snapshot_hash,
+              ''),'') is null
+            or nullif(coalesce(
+              i.processor_result->>'presentation_model_schema_version',
+              i.processor_result#>>'{render_identity,presentation_model_schema_version}',
+              i.processor_result#>>'{identity,presentation_model_schema_version}',
+              ''),'') is distinct from nullif(coalesce(
+              i.payload_json->>'presentation_model_schema_version',
+              i.payload_json#>>'{expected_result_identity,presentation_model_schema_version}',
+              case when i.chunk_type='INVOICE_CORE_RENDER'
+                then i.snapshot_json#>>'{presentation_model,schema_version}' end,
+              ''),'')
+            or nullif(coalesce(
+              i.processor_result->>'presentation_model_hash',
+              i.processor_result#>>'{render_identity,presentation_model_hash}',
+              i.processor_result#>>'{identity,presentation_model_hash}',
+              ''),'') is distinct from nullif(coalesce(
+              i.payload_json->>'presentation_model_hash',
+              i.payload_json#>>'{expected_result_identity,presentation_model_hash}',
+              case when i.chunk_type='INVOICE_CORE_RENDER'
+                then i.snapshot_json->>'presentation_model_hash' end,
+              ''),'')
+            or nullif(coalesce(
+              i.processor_result->>'snapshot_hash',
+              i.processor_result#>>'{render_identity,snapshot_hash}',
+              i.processor_result#>>'{identity,snapshot_hash}',
+              ''),'') is distinct from nullif(coalesce(
+              i.payload_json->>'snapshot_hash',
+              i.payload_json#>>'{expected_result_identity,snapshot_hash}',
+              i.snapshot_hash,
+              ''),'')
+          ) then 'RENDER_MODEL_IDENTITY_MISMATCH'
         when i.outcome='SUCCESS' and i.chunk_type='ASSET_INSPECT'
           and lower(coalesce(i.processor_result->>'detected_media_type',
             i.processor_result->>'detected_kind','')) in('','unknown','application/octet-stream')
@@ -413,7 +490,7 @@ begin
               '{merge_receipt,processor_version}','') is null
             or coalesce(i.processor_result#>>
               '{merge_receipt,processor_policy_version}','')<>
-                coalesce(i.processor_policy->>'version','')
+                coalesce(i.processor_policy->>'policy_version',i.processor_policy->>'version','')
             or coalesce(i.processor_result#>>
               '{merge_receipt,actual_ordered_input_hash}','')<>
                 coalesce(i.payload_json->>'ordered_input_hash','')
@@ -565,7 +642,7 @@ begin
               coalesce(i.processor_result->>'page_count','')
             or nullif(i.processor_result->>'processor_version','') is null
             or coalesce(i.processor_result->>'processor_policy_version','')<>
-              coalesce(i.processor_policy->>'version','')
+              coalesce(i.processor_policy->>'policy_version',i.processor_policy->>'version','')
             or(i.payload_json->>'layout_phase'='FINAL'
               and(
                 coalesce(i.processor_result->>'displayed_start_pages_hash','')<>

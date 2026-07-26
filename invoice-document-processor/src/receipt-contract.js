@@ -163,24 +163,296 @@ export async function buildMergeReceipt(context, identity, inputs, metadata, out
 export function flattenLeafInputReceipts(mergeReceipt, output = [], options = {}, depth = 0) {
   const maximumDepth = Number(options.maximum_depth || 8);
   const maximumReceipts = Number(options.maximum_receipts || 10000);
+  const state = options.__state || {
+    tuples: new Set(),
+    output
+  };
+
+  if (!Number.isSafeInteger(maximumDepth) || maximumDepth < 1) throw new Error('RECEIPT_DEPTH_LIMIT_INVALID');
+  if (!Number.isSafeInteger(maximumReceipts) || maximumReceipts < 1) throw new Error('RECEIPT_COUNT_LIMIT_INVALID');
   if (depth > maximumDepth) throw new Error('RECEIPT_DEPTH_EXCEEDED');
-  if (!mergeReceipt || mergeReceipt.receipt_contract !== 'ACTUAL_BYTES_MERGE_RECEIPT_V3'
-    || !Array.isArray(mergeReceipt.input_receipts)) throw new Error('RECEIPT_STRUCTURE_INVALID');
-  for (const receipt of (mergeReceipt?.input_receipts || [])) {
-    if (receipt?.actual_child_merge_receipt) {
-      flattenLeafInputReceipts(receipt.actual_child_merge_receipt, output, options, depth + 1);
-    } else if (receipt?.actual_r2_key && receipt?.actual_sha256) {
-      output.push({
-        logical_source_key: String(receipt.logical_source_key || ''),
-        logical_ordinal: String(receipt.logical_manifest_ordinal),
-        physical_part_no: String(receipt.physical_part_no),
-        r2_key: receipt.actual_r2_key,
-        sha256: receipt.actual_sha256,
-        page_count: receipt.actual_page_count,
-        size_bytes: receipt.actual_size_bytes
-      });
-    } else throw new Error('RECEIPT_STRUCTURE_INVALID');
+
+  if (!mergeReceipt || mergeReceipt.receipt_contract !== 'ACTUAL_BYTES_MERGE_RECEIPT_V3' || !Array.isArray(mergeReceipt.input_receipts)) {
+    throw new Error('RECEIPT_STRUCTURE_INVALID');
+  }
+
+  for (const receipt of mergeReceipt.input_receipts) {
+    if (!receipt || typeof receipt !== 'object') throw new Error('RECEIPT_STRUCTURE_INVALID');
+
+    if (receipt.actual_child_merge_receipt) {
+      if (!receipt.actual_child_merge_receipt_hash) throw new Error('CHILD_MERGE_RECEIPT_HASH_MISSING');
+      flattenLeafInputReceipts(receipt.actual_child_merge_receipt, output, { ...options, __state: state }, depth + 1);
+      continue;
+    }
+
+    const logicalSourceKey = String(receipt.logical_source_key || '');
+    const logicalOrdinal = Number(receipt.logical_manifest_ordinal);
+    const physicalPartNo = Number(receipt.physical_part_no);
+    const pageCount = Number(receipt.actual_page_count);
+    const sizeBytes = Number(receipt.actual_size_bytes);
+    const r2Key = String(receipt.actual_r2_key || '');
+    const sha256 = String(receipt.actual_sha256 || '').toLowerCase();
+    const physicalReceipt = String(receipt.actual_physical_receipt || '');
+
+    if (!logicalSourceKey) throw new Error('LOGICAL_SOURCE_KEY_MISSING');
+    if (!Number.isSafeInteger(logicalOrdinal) || logicalOrdinal < 1) throw new Error('LOGICAL_MANIFEST_ORDINAL_INVALID');
+    if (!Number.isSafeInteger(physicalPartNo) || physicalPartNo < 1) throw new Error('PHYSICAL_PART_NUMBER_INVALID');
+    if (!r2Key) throw new Error('INPUT_R2_KEY_MISSING');
+    if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error('INPUT_SHA256_INVALID');
+    if (!Number.isSafeInteger(pageCount) || pageCount < 1) throw new Error('INPUT_PAGE_COUNT_INVALID');
+    if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1) throw new Error('INPUT_SIZE_INVALID');
+    if (!/^[0-9a-f]{64}$/.test(physicalReceipt)) throw new Error('INPUT_PHYSICAL_RECEIPT_MISSING');
+
+    const tuple = `${logicalSourceKey}|${logicalOrdinal}|${physicalPartNo}`;
+    if (state.tuples.has(tuple)) throw new Error('RECEIPT_STRUCTURE_INVALID');
+    state.tuples.add(tuple);
+
+    output.push({
+      input_chunk_id: receipt.input_chunk_id || null,
+      logical_source_key: logicalSourceKey,
+      logical_ordinal: String(logicalOrdinal),
+      logical_manifest_ordinal: String(logicalOrdinal),
+      physical_part_no: String(physicalPartNo),
+      r2_key: r2Key,
+      sha256,
+      page_count: String(pageCount),
+      size_bytes: String(sizeBytes),
+      physical_receipt: physicalReceipt
+    });
+
     if (output.length > maximumReceipts) throw new Error('RECEIPT_COUNT_EXCEEDED');
   }
+
+  if (depth === 0) {
+    const byLogical = new Map();
+    for (const leaf of output) {
+      const key = `${leaf.logical_source_key}|${leaf.logical_ordinal}`;
+      if (!byLogical.has(key)) byLogical.set(key, []);
+      byLogical.get(key).push(Number(leaf.physical_part_no));
+    }
+    for (const parts of byLogical.values()) {
+      const ordered = [...parts].sort((a, b) => a - b);
+      for (let index = 0; index < ordered.length; index += 1) {
+        if (ordered[index] !== index + 1) throw new Error('RECEIPT_STRUCTURE_INVALID');
+      }
+    }
+  }
+
   return output;
+}
+
+export async function verifyMergeReceiptTree(mergeReceipt, options = {}) {
+  const maximumDepth = Number(options.maximum_depth || 8);
+  const maximumReceipts = Number(options.maximum_receipts || 10000);
+
+  const assertReceipt = async (receipt, depth = 0) => {
+    if (depth > maximumDepth) throw new Error('RECEIPT_DEPTH_EXCEEDED');
+    if (!receipt || receipt.receipt_contract !== 'ACTUAL_BYTES_MERGE_RECEIPT_V3' || !Array.isArray(receipt.input_receipts)) {
+      throw new Error('RECEIPT_STRUCTURE_INVALID');
+    }
+    if (!receipt.output_r2_key || !/^[0-9a-f]{64}$/i.test(String(receipt.output_sha256 || ''))) {
+      throw new Error('MERGE_OUTPUT_IDENTITY_INVALID');
+    }
+    if (!Number.isSafeInteger(Number(receipt.output_page_count)) || Number(receipt.output_page_count) < 1) {
+      throw new Error('MERGE_OUTPUT_PAGE_COUNT_INVALID');
+    }
+    if (!Number.isSafeInteger(Number(receipt.output_size_bytes)) || Number(receipt.output_size_bytes) < 1) {
+      throw new Error('MERGE_OUTPUT_SIZE_INVALID');
+    }
+
+    const directInputReceipts = [];
+    const physicalReceipts = [];
+
+    for (let index = 0; index < receipt.input_receipts.length; index += 1) {
+      const inputReceipt = receipt.input_receipts[index];
+      if (!inputReceipt || typeof inputReceipt !== 'object') throw new Error('RECEIPT_STRUCTURE_INVALID');
+
+      const inputOrder = Number(inputReceipt.actual_input_order);
+      if (!Number.isSafeInteger(inputOrder) || inputOrder !== index + 1) throw new Error('INPUT_ORDER_MISMATCH');
+
+      if (!inputReceipt.actual_r2_key || !/^[0-9a-f]{64}$/i.test(String(inputReceipt.actual_sha256 || ''))) {
+        throw new Error('INPUT_IDENTITY_INVALID');
+      }
+      if (!Number.isSafeInteger(Number(inputReceipt.actual_page_count)) || Number(inputReceipt.actual_page_count) < 1) {
+        throw new Error('INPUT_PAGE_COUNT_INVALID');
+      }
+      if (!Number.isSafeInteger(Number(inputReceipt.actual_size_bytes)) || Number(inputReceipt.actual_size_bytes) < 1) {
+        throw new Error('INPUT_SIZE_INVALID');
+      }
+
+      if (inputReceipt.actual_child_merge_receipt) {
+        if (!inputReceipt.actual_child_merge_receipt_hash) {
+          throw new Error('CHILD_MERGE_RECEIPT_HASH_MISSING');
+        }
+        const child = await assertReceipt(inputReceipt.actual_child_merge_receipt, depth + 1);
+        const childHash = await hashPostgresJsonb(inputReceipt.actual_child_merge_receipt);
+        if (inputReceipt.actual_child_merge_receipt_hash !== childHash) {
+          throw new Error('CHILD_MERGE_RECEIPT_HASH_MISMATCH');
+        }
+        if (String(inputReceipt.actual_child_merge_receipt.output_r2_key || '') !== String(inputReceipt.actual_r2_key || '')) {
+          throw new Error('CHILD_MERGE_OUTPUT_IDENTITY_MISMATCH');
+        }
+        if (String(inputReceipt.actual_child_merge_receipt.output_sha256 || '') !== String(inputReceipt.actual_sha256 || '')) {
+          throw new Error('CHILD_MERGE_OUTPUT_IDENTITY_MISMATCH');
+        }
+        if (String(inputReceipt.actual_child_merge_receipt.output_page_count || '') !== String(inputReceipt.actual_page_count || '')) {
+          throw new Error('CHILD_MERGE_OUTPUT_IDENTITY_MISMATCH');
+        }
+        if (String(inputReceipt.actual_child_merge_receipt.output_size_bytes || '') !== String(inputReceipt.actual_size_bytes || '')) {
+          throw new Error('CHILD_MERGE_OUTPUT_IDENTITY_MISMATCH');
+        }
+        physicalReceipts.push(...child.physicalReceipts);
+        directInputReceipts.push({
+          receipt: inputReceipt,
+          childHash
+        });
+        continue;
+      }
+
+      const logicalSourceKey = String(inputReceipt.logical_source_key || '');
+      const logicalOrdinal = Number(inputReceipt.logical_manifest_ordinal);
+      const physicalPartNo = Number(inputReceipt.physical_part_no);
+
+      if (!logicalSourceKey) throw new Error('LOGICAL_SOURCE_KEY_MISSING');
+      if (!Number.isSafeInteger(logicalOrdinal) || logicalOrdinal < 1) throw new Error('LOGICAL_MANIFEST_ORDINAL_INVALID');
+      if (!Number.isSafeInteger(physicalPartNo) || physicalPartNo < 1) throw new Error('PHYSICAL_PART_NUMBER_INVALID');
+
+      const recalculatedPhysicalReceipt = await hashPostgresJsonb({
+        receipt_contract: 'ACTUAL_BYTES_OBJECT_RECEIPT_V3',
+        logical_source_key: logicalSourceKey,
+        logical_manifest_ordinal: logicalOrdinal,
+        physical_part_no: physicalPartNo,
+        object_key: inputReceipt.actual_r2_key,
+        stored_sha256: inputReceipt.actual_sha256,
+        expected_page_count: Number(inputReceipt.actual_page_count),
+        expected_byte_count: Number(inputReceipt.actual_size_bytes)
+      });
+
+      if (inputReceipt.actual_physical_receipt !== recalculatedPhysicalReceipt) {
+        throw new Error('INPUT_PHYSICAL_RECEIPT_MISMATCH');
+      }
+
+      physicalReceipts.push({
+        logical_source_key: logicalSourceKey,
+        logical_manifest_ordinal: logicalOrdinal,
+        physical_part_no: physicalPartNo,
+        physical_receipt: recalculatedPhysicalReceipt,
+        input_chunk_id: inputReceipt.input_chunk_id || null,
+        r2_key: inputReceipt.actual_r2_key,
+        sha256: inputReceipt.actual_sha256,
+        page_count: String(inputReceipt.actual_page_count),
+        size_bytes: String(inputReceipt.actual_size_bytes)
+      });
+
+      directInputReceipts.push({
+        receipt: inputReceipt,
+        childHash: ''
+      });
+    }
+
+    if (physicalReceipts.length > maximumReceipts) throw new Error('RECEIPT_COUNT_EXCEEDED');
+
+    const roots = await calculateReceiptRoots(physicalReceipts, { maximum_receipts: maximumReceipts });
+
+    const actualChildReceiptHash = await hashJoined(receipt.input_receipts.map(inputReceipt =>
+      inputReceipt.actual_physical_receipt || inputReceipt.actual_child_merge_receipt_hash
+    ));
+
+    const actualOrderedInputHash = await hashJoined(receipt.input_receipts.map((inputReceipt, index) => [
+      index + 1,
+      inputReceipt.input_chunk_id,
+      inputReceipt.actual_r2_key,
+      inputReceipt.actual_sha256,
+      inputReceipt.actual_page_count,
+      inputReceipt.actual_size_bytes,
+      inputReceipt.actual_child_merge_receipt_hash || ''
+    ].join('|')));
+
+    const outputPageCount = Number(receipt.output_page_count);
+    const childPageSum = receipt.input_receipts.reduce((sum, inputReceipt) =>
+      sum + Number(inputReceipt.actual_page_count || 0), 0
+    );
+
+    if (!Number.isSafeInteger(outputPageCount) || outputPageCount < 1) throw new Error('MERGE_OUTPUT_PAGE_COUNT_INVALID');
+    if (childPageSum !== outputPageCount) throw new Error('MERGE_OUTPUT_PAGE_COUNT_MISMATCH');
+
+    const requiredRootFields = [
+      ['actual_child_receipt_hash', receipt.actual_child_receipt_hash],
+      ['actual_ordered_input_hash', receipt.actual_ordered_input_hash],
+      ['combined_logical_receipt_root', receipt.combined_logical_receipt_root],
+      ['combined_physical_receipt_root', receipt.combined_physical_receipt_root]
+    ];
+    for (const [field, value] of requiredRootFields) {
+      if (!/^[0-9a-f]{64}$/i.test(String(value || ''))) {
+        throw new Error(`MERGE_RECEIPT_ROOT_FIELD_MISSING:${field}`);
+      }
+    }
+
+    const assertions = [
+      [receipt.actual_child_receipt_hash, actualChildReceiptHash, 'CHILD_RECEIPT_ROOT_MISMATCH'],
+      [receipt.actual_ordered_input_hash, actualOrderedInputHash, 'ORDERED_INPUT_ROOT_MISMATCH'],
+      [receipt.combined_logical_receipt_root, roots.logicalRoot, 'LOGICAL_RECEIPT_ROOT_MISMATCH'],
+      [receipt.combined_physical_receipt_root, roots.physicalRoot, 'PHYSICAL_RECEIPT_ROOT_MISMATCH']
+    ];
+
+    for (const [expected, actual, code] of assertions) {
+      if (expected !== actual) throw new Error(code);
+    }
+
+    return {
+      receipt,
+      logicalRoot: roots.logicalRoot,
+      physicalRoot: roots.physicalRoot,
+      orderedInputRoot: actualOrderedInputHash,
+      childReceiptHash: actualChildReceiptHash,
+      physicalReceipts,
+      physicalReceiptCount: roots.physicalReceiptCount,
+      logicalReceiptCount: roots.logicalReceiptCount,
+      pageCount: outputPageCount,
+      output: {
+        r2_key: receipt.output_r2_key,
+        sha256: receipt.output_sha256,
+        size_bytes: receipt.output_size_bytes,
+        page_count: receipt.output_page_count
+      }
+    };
+  };
+
+  const verified = await assertReceipt(mergeReceipt, 0);
+  const leaves = flattenLeafInputReceipts(mergeReceipt, [], {
+    maximum_depth: maximumDepth,
+    maximum_receipts: maximumReceipts
+  }).sort((a, b) =>
+    Number(a.logical_ordinal) - Number(b.logical_ordinal)
+    || Number(a.physical_part_no) - Number(b.physical_part_no)
+    || String(a.logical_source_key).localeCompare(String(b.logical_source_key))
+  );
+
+  // This must match the database completion authority's expected_physical_input_hash
+  // formula: logical ordinal, physical part, object key and object hash only.
+  const physicalInputHash = await hashJoined(leaves.map(row => [
+    row.logical_ordinal,
+    row.physical_part_no,
+    row.r2_key,
+    row.sha256
+  ].join('|')));
+
+  return {
+    ...verified,
+    leaves,
+    physicalInputHash,
+    // The database DOCUMENT_VERIFY payload uses expected_ordered_input_root for the
+    // root child-receipt hash, not the lower-level physical ordered-input hash.
+    // Preserve both values: orderedInputRoot remains the merge receipt's actual
+    // ordered input hash, while childReceiptHash is the root value used for
+    // final document-root identity.
+    rootIdentity: await hashPostgresJsonb({
+      receipt_contract: 'DOCUMENT_ROOT_RECEIPT_V3',
+      logical_root: verified.logicalRoot,
+      physical_root: verified.physicalRoot,
+      ordered_input_root: verified.childReceiptHash,
+      page_count: Number(verified.pageCount),
+      output_sha256: verified.output.sha256
+    })
+  };
 }

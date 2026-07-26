@@ -1,550 +1,723 @@
 create or replace function private._invoice_presentation_snapshot_batch(
-  p_requests jsonb,
-  p_now_utc timestamptz default null
-) returns table(
-  request_key text,
-  snapshot_schema_version text,
-  presentation_model jsonb,
-  timesheet_sources jsonb,
-  supporting_sources jsonb,
-  higher_rate_support jsonb,
-  snapshot_json jsonb,
-  snapshot_hash text,
-  valid boolean,
-  error_code text,
-  error_detail jsonb
+    p_requests jsonb,
+    p_now_utc timestamptz default null
 )
-language sql
+returns table (
+    request_key text,
+    snapshot_schema_version text,
+    presentation_model jsonb,
+    timesheet_sources jsonb,
+    supporting_sources jsonb,
+    higher_rate_support jsonb,
+    snapshot_json jsonb,
+    snapshot_hash text,
+    valid boolean,
+    error_code text,
+    error_detail jsonb
+)
+language plpgsql
 security definer
 set search_path to 'public','private','extensions','pg_temp'
 as $function$
-with
-raw_requests as materialized (
-  select x.ordinality::integer request_no,
-    nullif(btrim(x.value->>'request_key'),'') request_key,
-    upper(coalesce(nullif(btrim(x.value->>'entity_type'),''),'INVOICE')) entity_type,
-    case when pg_input_is_valid(x.value->>'entity_id','uuid')
-      then (x.value->>'entity_id')::uuid end entity_id,
-    upper(coalesce(nullif(btrim(x.value->>'purpose'),''),'DRAFT_PREVIEW')) purpose,
-    coalesce(nullif(btrim(x.value->>'template_version'),''),'invoice-professional-v1') template_version,
-    case when pg_input_is_valid(x.value->>'issue_at_utc','timestamptz')
-      then (x.value->>'issue_at_utc')::timestamptz end issue_at_utc,
-    case when pg_input_is_valid(x.value->>'due_at_utc','timestamptz')
-      then (x.value->>'due_at_utc')::timestamptz end due_at_utc,
-    case when pg_input_is_valid(x.value->>'tax_point_utc','timestamptz')
-      then (x.value->>'tax_point_utc')::timestamptz end tax_point_utc
-  from jsonb_array_elements(
-    case when jsonb_typeof(p_requests)='array' then p_requests else '[]'::jsonb end
-  ) with ordinality x(value,ordinality)
-),
-requests as materialized (
-  select r.*,
-    count(*) over(partition by r.request_key) request_key_count
-  from raw_requests r
-),
-invoice_scope as materialized (
-  select r.request_no,r.request_key,r.entity_type,r.entity_id,r.purpose,
-    r.template_version,r.request_key_count,
-    r.issue_at_utc request_issue_at_utc,
-    r.due_at_utc request_due_at_utc,
-    r.tax_point_utc request_tax_point_utc,
-    i.*,cl.name client_name,cl.invoice_address client_invoice_address,
-    cl.payment_terms_days client_payment_terms_days,
-    sd.agency_name,sd.registered_address,sd.company_reg_number,
-    sd.vat_registration_number,sd.bank_name,sd.bank_sort_code,
-    sd.bank_account_number
-  from requests r
-  join public.invoices i on r.entity_type='INVOICE' and i.id=r.entity_id
-  left join public.clients cl on cl.id=i.client_id
-  cross join (
-    select *
-    from public.settings_defaults
-    where id=1
-  ) sd
-),
-line_base as materialized (
-  select i.request_key,l.*,
-    round(coalesce(l.hours_day,0)::numeric*coalesce(l.charge_day,0)::numeric,2) day_net,
-    round(coalesce(l.hours_night,0)::numeric*coalesce(l.charge_night,0)::numeric,2) night_net,
-    round(coalesce(l.hours_sat,0)::numeric*coalesce(l.charge_sat,0)::numeric,2) sat_net,
-    round(coalesce(l.hours_sun,0)::numeric*coalesce(l.charge_sun,0)::numeric,2) sun_net,
-    round(coalesce(l.hours_bh,0)::numeric*coalesce(l.charge_bh,0)::numeric,2) bh_net
-  from invoice_scope i
-  join public.invoice_lines l on l.invoice_id=i.entity_id
-),
-line_components_unranked as materialized (
-  select l.request_key,l.id source_invoice_line_id,l.source_key,
-    l.created_at,l.vat_rate_pct,l.vat_amount line_vat,
-    c.component_no,
-    coalesce(nullif(l.description,''),c.label) ||
-      case when c.component_no=6 and c.label<>'Adjustment'
-        then ' — '||c.label else '' end description,
-    coalesce(l.meta_json->>'reference',l.meta_json->>'booking_reference',
-      l.meta_json->>'timesheet_reference','') reference,
-    c.unit,c.quantity,c.unit_price,c.net_amount
-  from line_base l
-  cross join lateral (
-    select *
-    from (values
-      (1,'Day hours','HOUR',coalesce(l.hours_day,0)::numeric,
-        coalesce(l.charge_day,0)::numeric,l.day_net),
-      (2,'Night hours','HOUR',coalesce(l.hours_night,0)::numeric,
-        coalesce(l.charge_night,0)::numeric,l.night_net),
-      (3,'Saturday hours','HOUR',coalesce(l.hours_sat,0)::numeric,
-        coalesce(l.charge_sat,0)::numeric,l.sat_net),
-      (4,'Sunday hours','HOUR',coalesce(l.hours_sun,0)::numeric,
-        coalesce(l.charge_sun,0)::numeric,l.sun_net),
-      (5,'Bank-holiday hours','HOUR',coalesce(l.hours_bh,0)::numeric,
-        coalesce(l.charge_bh,0)::numeric,l.bh_net),
-      (6,
-        case
-          when upper(coalesce(l.meta_json->>'line_type','')) like '%MILEAGE%' then 'Mileage'
-          when upper(coalesce(l.meta_json->>'line_type','')) like '%TRAVEL%' then 'Travel'
-          when upper(coalesce(l.meta_json->>'line_type','')) like '%ACCOMMODATION%' then 'Accommodation'
-          when upper(coalesce(l.meta_json->>'line_type','')) like '%HIGHER%' then 'Higher-rate adjustment'
-          when upper(coalesce(l.meta_json->>'line_type','')) like '%REVERS%' then 'Reversal'
-          when upper(coalesce(l.meta_json->>'line_type','')) like '%CREDIT%' then 'Credit'
-          else 'Adjustment'
-        end,
-        coalesce(nullif(l.meta_json->>'unit',''),'ITEM'),
-        1::numeric,
-        (coalesce(l.total_charge_ex_vat,0)::numeric
-          -(l.day_net+l.night_net+l.sat_net+l.sun_net+l.bh_net)),
-        (coalesce(l.total_charge_ex_vat,0)::numeric
-          -(l.day_net+l.night_net+l.sat_net+l.sun_net+l.bh_net))
-      )
-    ) v(component_no,label,unit,quantity,unit_price,net_amount)
-    where (v.component_no<6 and coalesce(v.quantity,0)<>0)
-       or (v.component_no=6 and (
-         coalesce(v.net_amount,0)<>0
-         or not exists (
-           select 1 from (values(l.hours_day),(l.hours_night),(l.hours_sat),
-             (l.hours_sun),(l.hours_bh)) h(hours) where coalesce(h.hours,0)<>0
-         )
-       ))
-  ) c
-),
-line_components as materialized (
-  select c.*,
-    row_number() over(partition by c.source_invoice_line_id
-      order by c.component_no) component_rank,
-    count(*) over(partition by c.source_invoice_line_id) component_count,
-    sum(abs(c.net_amount)) over(partition by c.source_invoice_line_id) weight_total
-  from line_components_unranked c
-),
-line_vat_allocated as materialized (
-  select c.*,
-    row_number() over(
-      partition by c.request_key
-      order by c.created_at,c.source_invoice_line_id,c.component_no) display_order,
-    case when c.component_rank=c.component_count then
-      coalesce(c.line_vat,0)::numeric
-        -coalesce(sum(case when c.component_rank<c.component_count then
-          round(coalesce(c.line_vat,0)::numeric *
-            case when c.weight_total=0 then 0
-              else abs(c.net_amount)/c.weight_total end,2)
-        end) over(partition by c.source_invoice_line_id),0)
-      else round(coalesce(c.line_vat,0)::numeric *
-        case when c.weight_total=0 then 0
-          else abs(c.net_amount)/c.weight_total end,2)
-    end allocated_vat
-  from line_components c
-),
-presentation_lines as materialized (
-  select c.request_key,
-    jsonb_agg(jsonb_build_object(
-      'row_key',c.source_invoice_line_id::text||':'||c.component_no,
-      'source_invoice_line_id',c.source_invoice_line_id,
-      'source_key',c.source_key,
-      'description',c.description,
-      'reference',c.reference,
-      'unit',c.unit,
-      'quantity',c.quantity,
-      'unit_price',c.unit_price,
-      'net_amount',c.net_amount,
-      'vat_rate',c.vat_rate_pct,
-      'vat_amount',c.allocated_vat,
-      'gross_amount',c.net_amount+c.allocated_vat,
-      'display_order',c.display_order
-    ) order by c.created_at,c.source_invoice_line_id,c.component_no) lines,
-    sum(c.net_amount)::numeric line_net,
-    sum(c.allocated_vat)::numeric line_vat,
-    sum(c.net_amount+c.allocated_vat)::numeric line_gross
-  from line_vat_allocated c
-  group by c.request_key
-),
-vat_breakdown_rows as materialized (
-  select c.request_key,c.vat_rate_pct,
-    sum(c.net_amount)::numeric net_amount,
-    sum(c.allocated_vat)::numeric vat_amount,
-    sum(c.net_amount+c.allocated_vat)::numeric gross_amount
-  from line_vat_allocated c
-  group by c.request_key,c.vat_rate_pct
-),
-vat_breakdowns as materialized (
-  select c.request_key,
-    jsonb_agg(jsonb_build_object(
-      'rate',c.vat_rate_pct,
-      'net_amount',c.net_amount,
-      'vat_amount',c.vat_amount,
-      'gross_amount',c.gross_amount
-    ) order by c.vat_rate_pct) vat_breakdown
-  from vat_breakdown_rows c
-  group by c.request_key
-),
-invoice_models as materialized (
-  select i.request_key,
-    jsonb_build_object(
-      'schema_version','INVOICE_RENDER_MODEL_V1',
-      'purpose',i.purpose,
-      'document_type',case
-        when i.type='CREDIT_NOTE' then 'CREDIT_NOTE'
-        when lower(coalesce(i.header_snapshot_json->>'self_bill','false')) in('true','t','1','yes')
-          then 'SELF_BILL_INVOICE'
-        else 'INVOICE' end,
-      'is_draft',i.purpose<>'FINAL_ISSUE',
-      'invoice_number',i.invoice_no,
-      'issue_date',coalesce(i.request_issue_at_utc,i.issued_at_utc),
-      'preview_date',case when i.purpose='DRAFT_PREVIEW'
-        then coalesce(p_now_utc,now()) else null end,
-      'tax_point',coalesce(i.request_tax_point_utc,i.request_issue_at_utc,
-        case when pg_input_is_valid(i.header_snapshot_json->>'tax_point_utc','timestamptz')
-          then (i.header_snapshot_json->>'tax_point_utc')::timestamptz end),
-      'due_date',coalesce(i.request_due_at_utc,i.due_at_utc),
-      'currency',coalesce(nullif(i.header_snapshot_json->>'currency',''),'GBP'),
-      'supplier',jsonb_build_object(
-        'legal_name',coalesce(nullif(i.header_snapshot_json->>'agency_name',''),i.agency_name),
-        'trading_name',i.header_snapshot_json->>'agency_trading_name',
-        'registered_address',coalesce(i.header_snapshot_json->'registered_address',
-          to_jsonb(i.registered_address)),
-        'company_registration_number',coalesce(
-          nullif(i.header_snapshot_json->>'company_reg_number',''),i.company_reg_number),
-        'vat_registration_number',coalesce(
-          nullif(i.header_snapshot_json->>'vat_registration_number',''),i.vat_registration_number),
-        'contact_email',i.header_snapshot_json#>>'{supplier_contact,email}',
-        'contact_phone',i.header_snapshot_json#>>'{supplier_contact,phone}'),
-      'customer',jsonb_build_object(
-        'legal_name',coalesce(nullif(i.header_snapshot_json->>'client_name',''),i.client_name),
-        'billing_address',coalesce(i.header_snapshot_json->'client_invoice_address',
-          to_jsonb(i.client_invoice_address)),
-        'account_reference',i.header_snapshot_json->>'client_account_reference'),
-      'references',jsonb_build_object(
-        'purchase_order',coalesce(i.header_snapshot_json->>'po_reference',
-          i.header_snapshot_json->>'purchase_order'),
-        'client_reference',i.header_snapshot_json->>'client_reference',
-        'work_location',i.header_snapshot_json->>'work_location'),
-      'candidate_summary',i.header_snapshot_json->>'candidate_summary',
-      'branding',jsonb_build_object('logo',jsonb_build_object(
-        'r2_key',coalesce(i.header_snapshot_json#>>'{agency_logo,r2_key}',
-          i.header_snapshot_json#>>'{branding,logo,r2_key}'),
-        'sha256',coalesce(i.header_snapshot_json#>>'{agency_logo,sha256}',
-          i.header_snapshot_json#>>'{branding,logo,sha256}'),
-        'size_bytes',coalesce(i.header_snapshot_json#>'{agency_logo,size_bytes}',
-          i.header_snapshot_json#>'{branding,logo,size_bytes}'),
-        'media_type',coalesce(i.header_snapshot_json#>>'{agency_logo,media_type}',
-          i.header_snapshot_json#>>'{branding,logo,media_type}'))),
-      'lines',coalesce(pl.lines,'[]'::jsonb),
-      'vat_breakdown',coalesce(vb.vat_breakdown,'[]'::jsonb),
-      'totals',jsonb_build_object(
-        'net',i.subtotal_ex_vat,'vat',i.vat_amount,'gross',i.total_inc_vat,
-        'amount_paid',coalesce(i.header_snapshot_json->'amount_paid','0'::jsonb),
-        'amount_credited',coalesce(i.header_snapshot_json->'amount_credited','0'::jsonb),
-        'amount_outstanding',coalesce(i.header_snapshot_json->'amount_outstanding',
-          to_jsonb(i.total_inc_vat))),
-      'payment',jsonb_build_object(
-        'terms_days',coalesce(
-          case when pg_input_is_valid(i.header_snapshot_json->>'payment_terms_days','integer')
-            then (i.header_snapshot_json->>'payment_terms_days')::integer end,
-          i.client_payment_terms_days,30),
-        'terms_text',i.header_snapshot_json->>'payment_terms_text',
-        'due_date_basis',i.header_snapshot_json->>'due_date_basis',
-        'instructions',i.header_snapshot_json->>'payment_instructions',
-        'account_name',coalesce(i.header_snapshot_json->>'bank_account_name',i.bank_name),
-        'sort_code',coalesce(i.header_snapshot_json->>'bank_sort_code',i.bank_sort_code),
-        'account_number',coalesce(i.header_snapshot_json->>'bank_account_number',
-          i.bank_account_number),
-        'remittance_reference',coalesce(i.header_snapshot_json->>'remittance_reference',
-          i.invoice_no),
-        'remittance_email',i.header_snapshot_json->>'remittance_email'),
-      'credit_note',jsonb_build_object(
-        'is_credit_note',i.type='CREDIT_NOTE',
-        'original_invoice_id',i.original_invoice_id,
-        'original_invoice_number',i.header_snapshot_json->>'original_invoice_number',
-        'original_invoice_date',i.header_snapshot_json->'original_invoice_date',
-        'reason',i.header_snapshot_json->>'credit_reason'),
-      'self_bill',jsonb_build_object(
-        'is_self_bill',lower(coalesce(i.header_snapshot_json->>'self_bill','false'))
-          in('true','t','1','yes'),
-        'legal_wording',i.header_snapshot_json->>'self_bill_wording'),
-      'legal_wording',case
-        when jsonb_typeof(i.header_snapshot_json->'legal_wording')='array'
-          then i.header_snapshot_json->'legal_wording'
-        when nullif(i.header_snapshot_json->>'legal_wording','') is not null
-          then jsonb_build_array(i.header_snapshot_json->>'legal_wording')
-        else '[]'::jsonb end,
-      'attachment_policy',coalesce(i.header_snapshot_json->'attachment_policy','{}'::jsonb),
-      'template_version',i.template_version,
-      'locale','en-GB',
-      'page_geometry','A4_PORTRAIT_210X297MM'
-    ) presentation_model,
-    pl.line_net,pl.line_vat,pl.line_gross,
-    i.subtotal_ex_vat expected_net,i.vat_amount expected_vat,
-    i.total_inc_vat expected_gross
-  from invoice_scope i
-  left join presentation_lines pl using(request_key)
-  left join vat_breakdowns vb using(request_key)
-),
-timesheet_scope as materialized (
-  select distinct r.request_key,t.*,
-    summary.candidate_id,summary.candidate_name,
-    summary.client_id,summary.client_name,
-    case when r.entity_type='TIMESHEET' then r.entity_id else l.invoice_id end parent_entity_id
-  from requests r
-  join public.timesheets t on t.is_current and (
-    r.entity_type='TIMESHEET' and t.timesheet_id=r.entity_id
-    or r.entity_type='INVOICE' and exists(
-      select 1 from public.invoice_lines l
-      where l.invoice_id=r.entity_id and l.timesheet_id=t.timesheet_id))
-  left join public.invoice_lines l on l.timesheet_id=t.timesheet_id
-    and r.entity_type='INVOICE' and l.invoice_id=r.entity_id
-  left join public.v_timesheets_summary summary
-    on summary.timesheet_id=t.timesheet_id
-),
-timesheet_models as materialized (
-  select t.request_key,t.timesheet_id,
-    jsonb_build_object(
-      'schema_version','TIMESHEET_RENDER_MODEL_V1',
-      'timesheet_id',t.timesheet_id,
-      'document_revision',t.document_revision,
-      'candidate',jsonb_build_object(
-        'id',coalesce(t.candidate_id::text,t.occupant_key_norm),
-        'name',coalesce(nullif(t.candidate_name,''),t.occupant_key_norm)),
-      'client',jsonb_build_object('id',t.client_id,'name',t.client_name),
-      'contract',jsonb_build_object('id',t.contract_id,'reference',t.contract_id),
-      'work',jsonb_build_object(
-        'hospital',t.hospital_norm,'site',t.hospital_norm,'ward',t.ward_norm,
-        'assignment',t.job_title_norm,'job_title',t.job_title_norm,
-        'band',t.band,'shift_type',t.shift_label_norm),
-      'week_ending_date',t.week_ending_date,
-      'submission_mode',t.submission_mode,
-      'sheet_scope',t.sheet_scope,
-      'daily_schedule_rows',case
-        when jsonb_typeof(t.actual_schedule_json)='array' then coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'date',coalesce(x.value->'date',x.value->'work_date',x.value->'day'),
-            'scheduled_start',coalesce(x.value->'scheduled_start',x.value->'scheduled_start_iso'),
-            'scheduled_end',coalesce(x.value->'scheduled_end',x.value->'scheduled_end_iso'),
-            'worked_start',coalesce(x.value->'worked_start',x.value->'start',x.value->'worked_start_iso'),
-            'worked_end',coalesce(x.value->'worked_end',x.value->'end',x.value->'worked_end_iso'),
-            'break_start',coalesce(x.value->'break_start',x.value->'break_start_iso'),
-            'break_end',coalesce(x.value->'break_end',x.value->'break_end_iso'),
-            'break_minutes',coalesce(x.value->'break_minutes','0'::jsonb),
-            'reference',coalesce(x.value->'reference',x.value->'day_reference'),
-            'hours',coalesce(x.value->'hours',x.value->'worked_hours'),
-            'units',coalesce(x.value->'units',x.value->'additional_units'),
-            'display_order',x.ordinality)
-          order by x.ordinality)
-          from jsonb_array_elements(t.actual_schedule_json)
-            with ordinality x(value,ordinality)),'[]'::jsonb)
-        else jsonb_build_array(jsonb_build_object(
-          'date',t.week_ending_date,'scheduled_start',t.scheduled_start_iso,
-          'scheduled_end',t.scheduled_end_iso,'worked_start',t.worked_start_iso,
-          'worked_end',t.worked_end_iso,'break_start',t.break_start_iso,
-          'break_end',t.break_end_iso,'break_minutes',t.break_minutes,
-          'reference',t.reference_number,
-          'hours',round(coalesce(t.worked_minutes,0)::numeric/60,2),
-          'units',t.additional_units_week,'display_order',1)) end,
-      'weekly_schedule_rows','[]'::jsonb,
-      'references',jsonb_build_object(
-        'whole',t.reference_number,
-        'day',coalesce(t.day_references_json,'[]'::jsonb),
-        'segment','[]'::jsonb),
-      'additional_units',coalesce(t.additional_units_week,'0'::jsonb),
-      'authorisation',jsonb_build_object(
-        'authorised',t.authorised_at_server is not null,
-        'name',t.auth_name,'role',t.auth_job_title,
-        'authorised_at_utc',t.authorised_at_server),
-      'signatures',jsonb_build_object(
-        'candidate',case when nullif(t.r2_nurse_key,'') is null then '{}'::jsonb
-          else jsonb_build_object(
-            'r2_key',t.r2_nurse_key,'sha256',t.img_sha256_nurse,
-            'size_bytes',null,'media_type','image/png',
-            'identity',coalesce(nullif(t.candidate_name,''),t.occupant_key_norm),
-            'role','Candidate / nurse') end,
-        'authoriser',case when nullif(t.r2_auth_key,'') is null then '{}'::jsonb
-          else jsonb_build_object(
-            'r2_key',t.r2_auth_key,'sha256',t.img_sha256_auth,
-            'size_bytes',null,'media_type','image/png',
-            'identity',t.auth_name,'role',t.auth_job_title) end),
-      'qr',jsonb_build_object(
-        'required',t.qr_status is not null,
-        'signed',t.qr_signed_hash is not null,
-        'status',t.qr_status,'signed_hash',t.qr_signed_hash,
-        'signed_at_utc',t.qr_signed_at_utc,
-        'verification_summary',case when t.qr_signed_hash is not null
-          then 'QR signature verified in frozen source' else null end),
-      'template_version','timesheet-professional-v1'
-    ) render_model,
-    t.submission_mode::text submission_mode,t.document_revision,
-    t.manual_document_asset_id
-  from timesheet_scope t
-),
-timesheet_aggregates as materialized (
-  select request_key,
-    jsonb_agg(jsonb_build_object(
-      'timesheet_id',timesheet_id,
-      'submission_mode',submission_mode,
-      'document_revision',document_revision,
-      'manual_document_asset_id',manual_document_asset_id,
-      'render_model',render_model
-    ) order by timesheet_id) timesheet_sources
-  from timesheet_models group by request_key
-),
-support_rows as materialized (
-  select r.request_key,s.source_system,s.import_id,
-    case when upper(s.source_system) like '%NHSP%'
-      then 'NHSP_PRESENTATION_V1' else 'HEALTHROSTER_PRESENTATION_V1' end schema_version,
-    jsonb_agg(
-      case when upper(s.source_system) like '%NHSP%' then jsonb_build_object(
-        'worker',coalesce(x.value->>'worker',x.value->>'candidate',x.value->>'name'),
-        'nhsp_shift_id',coalesce(x.value->>'nhsp_shift_id',x.value->>'shift_id'),
-        'booking_reference',coalesce(x.value->>'booking_reference',x.value->>'booking',x.value->>'reference'),
-        'site_ward',concat_ws(' / ',nullif(x.value->>'site',''),nullif(x.value->>'ward','')),
-        'shift_date',coalesce(x.value->'shift_date',x.value->'date'),
-        'shift_times',coalesce(x.value->>'shift_times',
-          concat_ws(' – ',nullif(x.value->>'start',''),nullif(x.value->>'end',''))),
-        'hours_units',coalesce(x.value->'hours',x.value->'units'),
-        'source_identity',coalesce(x.value->>'source_identity',s.import_id::text),
-        'validation_state',coalesce(x.value->>'validation_state',x.value->>'status'))
-      else jsonb_build_object(
-        'worker',coalesce(x.value->>'worker',x.value->>'candidate',x.value->>'name'),
-        'assignment',coalesce(x.value->>'assignment',x.value->>'job_title'),
-        'shift_date',coalesce(x.value->'shift_date',x.value->'date'),
-        'shift_times',coalesce(x.value->>'shift_times',
-          concat_ws(' – ',nullif(x.value->>'start',''),nullif(x.value->>'end',''))),
-        'site',x.value->>'site','ward',x.value->>'ward',
-        'reference',coalesce(x.value->>'reference',x.value->>'booking_reference'),
-        'units_hours',coalesce(x.value->'units',x.value->'hours'),
-        'validation_state',coalesce(x.value->>'validation_state',x.value->>'status'),
-        'source_identity',coalesce(x.value->>'source_identity',s.import_id::text))
-      end order by x.ordinality) rows
-  from requests r
-  join public.invoice_hr_source_rows s
-    on r.entity_type='INVOICE' and s.invoice_id=r.entity_id
-  cross join lateral jsonb_array_elements(
-    case when jsonb_typeof(s.rows_json)='array' then s.rows_json else '[]'::jsonb end
-  ) with ordinality x(value,ordinality)
-  group by r.request_key,s.source_system,s.import_id
-),
-support_aggregates as materialized (
-  select request_key,
-    jsonb_agg(jsonb_build_object(
-      'source_system',source_system,'import_id',import_id,
-      'render_model',jsonb_build_object('schema_version',schema_version,'rows',rows)
-    ) order by source_system,import_id) supporting_sources
-  from support_rows group by request_key
-),
-higher_rate_aggregates as materialized (
-  select r.request_key,
-    jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1',
-      'rows',coalesce(jsonb_agg(jsonb_build_object(
-        'worker_source',coalesce(l.meta_json->>'worker',l.description),
-        'shift_date',coalesce(l.meta_json->'shift_date',l.meta_json->'date'),
-        'original_rate',l.meta_json->'original_rate',
-        'applied_rate',coalesce(l.meta_json->'applied_rate',to_jsonb(l.charge_day)),
-        'units',coalesce(l.meta_json->'units',to_jsonb(l.hours_day)),
-        'display_amount',to_jsonb(l.total_charge_ex_vat),
-        'reason',l.meta_json->>'reason',
-        'approval_identity',coalesce(l.meta_json->>'approval_identity',
-          l.meta_json->>'approved_by'),
-        'reference',coalesce(l.meta_json->>'reference',l.source_key)
-      ) order by l.created_at,l.id) filter(where l.id is not null),'[]'::jsonb)
-    ) higher_rate_support
-  from requests r
-  left join public.invoice_lines l on r.entity_type='INVOICE'
-    and l.invoice_id=r.entity_id
-    and (upper(coalesce(l.meta_json->>'line_type','')) like '%HIGHER%'
-      or coalesce(l.meta_json,'{}'::jsonb)?'higher_rate')
-  group by r.request_key
-),
-assembled as materialized (
-  select r.request_no,r.request_key,r.entity_type,r.entity_id,r.purpose,
-    case when r.entity_type='TIMESHEET' then 'TIMESHEET_PRESENTATION_SNAPSHOT_V5'
-      when r.purpose='FINAL_ISSUE' then 'FINAL_ISSUE_PRESENTATION_SNAPSHOT_V5'
-      else 'INVOICE_PRESENTATION_SNAPSHOT_V5' end snapshot_schema_version,
-    case when r.entity_type='TIMESHEET' then tm.render_model
-      else im.presentation_model end presentation_model,
-    case when r.entity_type='TIMESHEET' then jsonb_build_array(jsonb_build_object(
-        'timesheet_id',tm.timesheet_id,'submission_mode',tm.submission_mode,
-        'document_revision',tm.document_revision,
-        'manual_document_asset_id',tm.manual_document_asset_id,
-        'render_model',tm.render_model))
-      else coalesce(ta.timesheet_sources,'[]'::jsonb) end timesheet_sources,
-    coalesce(sa.supporting_sources,'[]'::jsonb) supporting_sources,
-    coalesce(hr.higher_rate_support,
-      jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1','rows','[]'::jsonb))
-      higher_rate_support,
-    r.request_key_count,
-    im.line_net,im.line_vat,im.line_gross,
-    im.expected_net,im.expected_vat,im.expected_gross
-  from requests r
-  left join invoice_models im using(request_key)
-  left join timesheet_aggregates ta using(request_key)
-  left join support_aggregates sa using(request_key)
-  left join higher_rate_aggregates hr using(request_key)
-  left join timesheet_models tm on tm.request_key=r.request_key
-    and r.entity_type='TIMESHEET'
-),
-validated as materialized (
-  select a.*,
-    case
-      when a.request_key is null then 'PRESENTATION_REQUEST_KEY_REQUIRED'
-      when a.request_key_count<>1 then 'PRESENTATION_REQUEST_KEY_DUPLICATE'
-      when a.entity_id is null then 'PRESENTATION_ENTITY_ID_INVALID'
-      when a.entity_type not in('INVOICE','TIMESHEET') then 'PRESENTATION_ENTITY_TYPE_INVALID'
-      when a.presentation_model is null then
-        case when a.entity_type='TIMESHEET' then 'TIMESHEET_PRESENTATION_MODEL_INVALID'
-          else 'INVOICE_PRESENTATION_MODEL_INVALID' end
-      when a.entity_type='INVOICE' and (
-        nullif(a.presentation_model#>>'{supplier,legal_name}','') is null
-        or nullif(a.presentation_model#>>'{customer,legal_name}','') is null
-      ) then 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING'
-      when a.entity_type='INVOICE' and
-        jsonb_array_length(coalesce(a.presentation_model->'lines','[]'::jsonb))=0
-        and coalesce(a.expected_net,0)<>0
-        then 'INVOICE_PRESENTATION_MODEL_INVALID'
-      when a.entity_type='INVOICE' and (
-        round(coalesce(a.line_net,0),2)<>round(coalesce(a.expected_net,0),2)
-        or round(coalesce(a.line_vat,0),2)<>round(coalesce(a.expected_vat,0),2)
-        or round(coalesce(a.line_gross,0),2)<>round(coalesce(a.expected_gross,0),2)
-      ) then 'INVOICE_PRESENTATION_LINE_TOTAL_MISMATCH'
-    end error_code
-  from assembled a
-),
-snapshots as materialized (
-  select v.*,
-    jsonb_build_object(
-      'snapshot_schema_version',v.snapshot_schema_version,
-      'presentation_model',v.presentation_model,
-      'timesheet_sources',v.timesheet_sources,
-      'supporting_sources',v.supporting_sources,
-      'higher_rate_support',v.higher_rate_support
-    ) snapshot_json
-  from validated v
-)
-select s.request_key,s.snapshot_schema_version,s.presentation_model,
-  s.timesheet_sources,s.supporting_sources,s.higher_rate_support,
-  s.snapshot_json,
-  encode(digest(s.snapshot_json::text,'sha256'),'hex') snapshot_hash,
-  s.error_code is null valid,s.error_code,
-  case when s.error_code='INVOICE_PRESENTATION_LINE_TOTAL_MISMATCH'
-    then jsonb_build_object(
-      'presentation_net',s.line_net,'expected_net',s.expected_net,
-      'presentation_vat',s.line_vat,'expected_vat',s.expected_vat,
-      'presentation_gross',s.line_gross,'expected_gross',s.expected_gross)
-    else '{}'::jsonb end error_detail
-from snapshots s
-order by s.request_no;
+declare
+  v_now timestamptz := coalesce(p_now_utc, now());
+begin
+  if p_requests is null or jsonb_typeof(p_requests) is distinct from 'array' then
+    raise exception using errcode='22023',
+      message='p_requests must be a JSON array containing 1..100 requests';
+  end if;
+
+  if jsonb_array_length(p_requests) < 1
+     or jsonb_array_length(p_requests) > 100 then
+    raise exception using errcode='22023',
+      message='p_requests must be a JSON array containing 1..100 requests';
+  end if;
+
+  return query
+  with raw_requests as materialized (
+    select x.ordinality::integer request_no,
+           x.value raw_request,
+           nullif(btrim(coalesce(x.value->>'request_key','')),'') req_key,
+           upper(nullif(btrim(coalesce(x.value->>'entity_type','')),'')) entity_type,
+           case when coalesce(x.value->>'entity_id','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             then (x.value->>'entity_id')::uuid end entity_id,
+           upper(nullif(btrim(coalesce(x.value->>'purpose','')),'')) purpose,
+           coalesce(nullif(btrim(x.value->>'template_version'),''),'invoice-professional-v1') template_version,
+           case when pg_input_is_valid(nullif(x.value->>'issue_at_utc',''),'timestamptz') then (x.value->>'issue_at_utc')::timestamptz end issue_at_utc,
+           case when pg_input_is_valid(nullif(x.value->>'tax_point_utc',''),'timestamptz') then (x.value->>'tax_point_utc')::timestamptz end tax_point_utc,
+           case when pg_input_is_valid(nullif(x.value->>'due_at_utc',''),'timestamptz') then (x.value->>'due_at_utc')::timestamptz end due_at_utc
+    from jsonb_array_elements(p_requests) with ordinality x(value,ordinality)
+  ),
+  key_stats as materialized (
+    select req_key,count(*)::integer key_count,min(request_no) first_request_no
+    from raw_requests
+    where req_key is not null
+    group by req_key
+  ),
+  duplicate_key_results as materialized (
+    select r.request_no,
+           r.req_key request_key,
+           'INVALID_PRESENTATION_REQUEST'::text snapshot_schema_version,
+           '{}'::jsonb presentation_model,
+           '[]'::jsonb timesheet_sources,
+           '[]'::jsonb supporting_sources,
+           jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1','rows','[]'::jsonb) higher_rate_support,
+           jsonb_build_object('snapshot_schema_version','INVALID_PRESENTATION_REQUEST','request_no',r.request_no,'request_key',r.req_key) snapshot_json,
+           encode(digest(jsonb_build_object('snapshot_schema_version','INVALID_PRESENTATION_REQUEST','request_no',r.request_no,'request_key',r.req_key)::text,'sha256'),'hex') snapshot_hash,
+           false valid,
+           'DUPLICATE_REQUEST_KEY'::text error_code,
+           jsonb_build_object('request_no',r.request_no,'request_key',r.req_key,'duplicate_count',ks.key_count,'first_request_no',ks.first_request_no) error_detail
+    from raw_requests r
+    join key_stats ks on ks.req_key=r.req_key
+    where ks.key_count > 1
+  ),
+  processable as materialized (
+    select r.*
+    from raw_requests r
+    left join key_stats ks on ks.req_key=r.req_key
+    where coalesce(ks.key_count,0) <= 1
+  ),
+  invalid_request_results as materialized (
+    select p.request_no,
+           coalesce(p.req_key,'__request_'||p.request_no::text) request_key,
+           'INVALID_PRESENTATION_REQUEST'::text snapshot_schema_version,
+           '{}'::jsonb presentation_model,
+           '[]'::jsonb timesheet_sources,
+           '[]'::jsonb supporting_sources,
+           jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1','rows','[]'::jsonb) higher_rate_support,
+           jsonb_build_object('snapshot_schema_version','INVALID_PRESENTATION_REQUEST','request_no',p.request_no,'request_key',p.req_key) snapshot_json,
+           encode(digest(jsonb_build_object('snapshot_schema_version','INVALID_PRESENTATION_REQUEST','request_no',p.request_no,'request_key',p.req_key)::text,'sha256'),'hex') snapshot_hash,
+           false valid,
+           case
+             when p.req_key is null then 'REQUEST_KEY_REQUIRED'
+             when length(p.req_key) > 256 then 'REQUEST_KEY_TOO_LONG'
+             when p.entity_type not in('INVOICE','TIMESHEET') then 'ENTITY_TYPE_UNSUPPORTED'
+             when p.entity_id is null then 'ENTITY_ID_INVALID'
+             when p.purpose not in('DRAFT_PREVIEW','FINAL_ISSUE','TIMESHEET') then 'PURPOSE_UNSUPPORTED'
+             when p.purpose='FINAL_ISSUE' and (p.issue_at_utc is null or p.tax_point_utc is null or p.due_at_utc is null) then 'FINAL_ISSUE_DATES_REQUIRED'
+             else 'PRESENTATION_REQUEST_INVALID' end error_code,
+           jsonb_build_object('request_no',p.request_no,'entity_type',p.entity_type,'purpose',p.purpose) error_detail
+    from processable p
+    where p.req_key is null
+       or length(p.req_key) > 256
+       or p.entity_type not in('INVOICE','TIMESHEET')
+       or p.entity_id is null
+       or p.purpose not in('DRAFT_PREVIEW','FINAL_ISSUE','TIMESHEET')
+       or (p.purpose='FINAL_ISSUE' and (p.issue_at_utc is null or p.tax_point_utc is null or p.due_at_utc is null))
+  ),
+  valid_requests as materialized (
+    select p.*
+    from processable p
+    where p.req_key is not null and length(p.req_key) <= 256
+      and p.entity_type in('INVOICE','TIMESHEET')
+      and p.entity_id is not null
+      and p.purpose in('DRAFT_PREVIEW','FINAL_ISSUE','TIMESHEET')
+      and not (p.purpose='FINAL_ISSUE' and (p.issue_at_utc is null or p.tax_point_utc is null or p.due_at_utc is null))
+  ),
+  requested_invoices as materialized (
+    select entity_id invoice_id from valid_requests where entity_type='INVOICE'
+  ),
+  reference_scope as materialized (
+    select r.*
+    from private._invoice_reference_rows_batch(
+      coalesce((select array_agg(distinct invoice_id) from requested_invoices), array[]::uuid[])
+    ) r
+  ),
+  invoice_line_base as materialized (
+    select il.*,
+           row_number() over(partition by il.invoice_id order by il.created_at,il.id)::integer base_display_order,
+           case when pg_input_is_valid(nullif(il.meta_json->>'quantity',''),'numeric') then nullif(il.meta_json->>'quantity','')::numeric end meta_quantity,
+           case when pg_input_is_valid(nullif(il.meta_json->>'units',''),'numeric') then nullif(il.meta_json->>'units','')::numeric end meta_units
+    from public.invoice_lines il
+    where il.invoice_id in(select invoice_id from requested_invoices)
+  ),
+  invoice_line_component_raw as materialized (
+    select b.invoice_id,b.id,b.created_at,
+           (b.base_display_order*100+v.display_suffix)::integer base_display_order,
+           coalesce(nullif(b.source_key,''),b.id::text)||':'||v.bucket row_key,
+           v.label description,
+           coalesce(b.meta_json->>'reference',b.meta_json->>'po_number') reference,
+           'hours'::text unit,
+           round(coalesce(v.hours,0),4) quantity_raw,
+           round(coalesce(v.hours,0)*coalesce(v.rate,0),4) net_raw,
+           round(coalesce(b.total_charge_ex_vat,0),2) line_net,
+           round(coalesce(b.vat_amount,0),2) line_vat,
+           coalesce(b.vat_rate_pct,0) vat_rate,
+           b.source_key,b.id source_invoice_line_id
+    from invoice_line_base b
+    cross join lateral (values
+      ('DAY','Day',1,coalesce(b.hours_day,0),coalesce(b.charge_day,0)),
+      ('NIGHT','Night',2,coalesce(b.hours_night,0),coalesce(b.charge_night,0)),
+      ('SATURDAY','Saturday',3,coalesce(b.hours_sat,0),coalesce(b.charge_sat,0)),
+      ('SUNDAY','Sunday',4,coalesce(b.hours_sun,0),coalesce(b.charge_sun,0)),
+      ('BANK_HOLIDAY','Bank holiday',5,coalesce(b.hours_bh,0),coalesce(b.charge_bh,0))
+    ) v(bucket,label,display_suffix,hours,rate)
+    where coalesce(v.hours,0)<>0
+    union all
+    select b.invoice_id,b.id,b.created_at,(b.base_display_order*100+90)::integer,
+           coalesce(nullif(b.source_key,''),b.id::text)||':'||lower(coalesce(nullif(b.meta_json->>'line_type',''),'residual')),
+           case
+             when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%MILEAGE%' then 'Mileage'
+             when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%TRAVEL%' then 'Travel'
+             when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%ACCOMMODATION%' then 'Accommodation'
+             when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%HIGHER%' then 'Higher rate'
+             when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%ADDITIONAL%' then 'Additional rate'
+             when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%REVERS%' then 'Reversal'
+             when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%CREDIT%' then 'Credit'
+             when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%ADJUST%' then 'Adjustment'
+             when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%EXPENSE%' then 'Other expenses'
+             else coalesce(nullif(b.description,''),'Invoice line') end,
+           coalesce(b.meta_json->>'reference',b.meta_json->>'po_number'),
+           case when upper(coalesce(b.meta_json->>'line_type',b.source_key,'')) like '%MILEAGE%' then 'miles' else 'item' end,
+           round(coalesce(b.meta_quantity,b.meta_units,1),4),
+           round(coalesce(b.total_charge_ex_vat,0) - (
+             coalesce(b.hours_day,0)*coalesce(b.charge_day,0)
+             + coalesce(b.hours_night,0)*coalesce(b.charge_night,0)
+             + coalesce(b.hours_sat,0)*coalesce(b.charge_sat,0)
+             + coalesce(b.hours_sun,0)*coalesce(b.charge_sun,0)
+             + coalesce(b.hours_bh,0)*coalesce(b.charge_bh,0)
+           ),4),
+           round(coalesce(b.total_charge_ex_vat,0),2),round(coalesce(b.vat_amount,0),2),coalesce(b.vat_rate_pct,0),b.source_key,b.id
+    from invoice_line_base b
+    where abs(coalesce(b.total_charge_ex_vat,0) - (
+      coalesce(b.hours_day,0)*coalesce(b.charge_day,0)
+      + coalesce(b.hours_night,0)*coalesce(b.charge_night,0)
+      + coalesce(b.hours_sat,0)*coalesce(b.charge_sat,0)
+      + coalesce(b.hours_sun,0)*coalesce(b.charge_sun,0)
+      + coalesce(b.hours_bh,0)*coalesce(b.charge_bh,0)
+    )) > 0.004
+       or not exists (
+         select 1 from (values
+           (coalesce(b.hours_day,0),coalesce(b.charge_day,0)),
+           (coalesce(b.hours_night,0),coalesce(b.charge_night,0)),
+           (coalesce(b.hours_sat,0),coalesce(b.charge_sat,0)),
+           (coalesce(b.hours_sun,0),coalesce(b.charge_sun,0)),
+           (coalesce(b.hours_bh,0),coalesce(b.charge_bh,0))
+         ) nonzero(h,a) where coalesce(h,0)<>0 or coalesce(a,0)<>0)
+  ),
+  invoice_line_component_ranked as materialized (
+    select r.*,
+      row_number() over(partition by r.id order by r.base_display_order,r.row_key)::integer component_no,
+      count(*) over(partition by r.id)::integer component_count,
+      case when coalesce(r.line_net,0)<>0 then r.line_vat * r.net_raw / r.line_net
+           else r.line_vat / nullif(count(*) over(partition by r.id),0) end raw_vat
+    from invoice_line_component_raw r
+  ),
+  invoice_line_components as materialized (
+    select q.invoice_id,q.id,q.created_at,q.base_display_order,q.row_key,q.description,q.reference,q.unit,
+           q.quantity_raw quantity,
+           case when q.quantity_raw<>0 then round(q.net_amount/q.quantity_raw,4) else q.net_amount end unit_price,
+           q.net_amount,q.vat_rate,q.vat_amount,round(q.net_amount+q.vat_amount,2) gross_amount,
+           q.source_key,q.source_invoice_line_id
+    from (
+      select r.*,
+        case when r.component_no=r.component_count
+          then round(r.line_net - coalesce(sum(round(r.net_raw,2)) over(partition by r.id order by r.component_no rows between unbounded preceding and 1 preceding),0),2)
+          else round(r.net_raw,2) end net_amount,
+        case when r.component_no=r.component_count
+          then round(r.line_vat - coalesce(sum(round(coalesce(r.raw_vat,0),2)) over(partition by r.id order by r.component_no rows between unbounded preceding and 1 preceding),0),2)
+          else round(coalesce(r.raw_vat,0),2) end vat_amount
+      from invoice_line_component_ranked r
+    ) q
+  ),
+  invoice_line_rows as materialized (
+    select c.invoice_id,
+           jsonb_agg(jsonb_build_object(
+             'row_key',c.row_key,
+             'source_invoice_line_id',c.source_invoice_line_id,
+             'source_key',coalesce(c.source_key,c.source_invoice_line_id::text),
+             'description',c.description,
+             'reference',c.reference,
+             'unit',c.unit,
+             'quantity',c.quantity::text,
+             'unit_price',c.unit_price::text,
+             'net_amount',c.net_amount::text,
+             'vat_rate',c.vat_rate::text,
+             'vat_amount',c.vat_amount::text,
+             'gross_amount',c.gross_amount::text,
+             'display_order',c.base_display_order
+           ) order by c.created_at,c.id) lines,
+           round(sum(c.net_amount),2) line_net,
+           round(sum(c.vat_amount),2) line_vat,
+           round(sum(c.gross_amount),2) line_gross
+    from invoice_line_components c
+    group by c.invoice_id
+  ),
+  invoice_timesheet_rows as materialized (
+    select il.invoice_id,t.timesheet_id,
+      jsonb_build_object(
+        'schema_version','TIMESHEET_RENDER_MODEL_V1',
+        'timesheet_id',t.timesheet_id,
+        'document_revision',t.document_revision,
+        'candidate',jsonb_build_object('id',coalesce(vs.candidate_id::text,null),'name',coalesce(vs.candidate_name,t.occupant_key_norm)),
+        'client',jsonb_build_object('id',coalesce(vs.client_id::text,null),'name',vs.client_name),
+        'contract',jsonb_build_object('id',coalesce(t.contract_id::text,null),'reference',t.booking_id),
+        'work',jsonb_build_object('hospital',t.hospital_norm,'site',t.hospital_norm,'ward',t.ward_norm,'assignment',t.shift_label_norm,'job_title',t.job_title_norm,'band',t.band,'shift_type',t.shift_label_norm),
+        'week_ending_date',t.week_ending_date,
+        'submission_mode',t.submission_mode::text,
+        'sheet_scope',t.sheet_scope::text,
+        'daily_schedule_rows',coalesce((
+           select jsonb_agg(jsonb_build_object(
+             'date',coalesce(s.value->>'date',s.value->>'day',to_char(t.worked_start_iso::date,'YYYY-MM-DD')),
+             'scheduled_start',coalesce(s.value->>'scheduled_start',s.value->>'start',s.value->>'start_utc',t.scheduled_start_iso::text),
+             'scheduled_end',coalesce(s.value->>'scheduled_end',s.value->>'end',s.value->>'end_utc',t.scheduled_end_iso::text),
+             'worked_start',coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc',t.worked_start_iso::text),
+             'worked_end',coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc',t.worked_end_iso::text),
+             'break_start',coalesce(s.value->>'break_start',t.break_start_iso::text),
+             'break_end',coalesce(s.value->>'break_end',t.break_end_iso::text),
+             'break_minutes',case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$' then (coalesce(s.value->>'break_minutes',s.value->>'break_mins'))::integer else coalesce(t.break_minutes,0) end,
+             'reference',coalesce(s.value->>'reference',s.value->>'ref_num',t.reference_number),
+             'hours',coalesce(s.value->>'hours',s.value->>'units',case when t.worked_minutes is not null then round(t.worked_minutes::numeric/60,2)::text end),
+             'units',coalesce(s.value->>'units',s.value->>'hours'),
+             'display_order',s.ordinality)
+             order by s.ordinality)
+           from jsonb_array_elements(case when jsonb_typeof(t.actual_schedule_json)='array' then t.actual_schedule_json else '[]'::jsonb end) with ordinality s(value,ordinality)
+           where upper(coalesce(t.sheet_scope::text,''))='DAILY'
+        ), case when upper(coalesce(t.sheet_scope::text,''))='DAILY' then jsonb_build_array(jsonb_build_object(
+             'date',t.worked_start_iso::date,'scheduled_start',t.scheduled_start_iso,'scheduled_end',t.scheduled_end_iso,
+             'worked_start',t.worked_start_iso,'worked_end',t.worked_end_iso,
+             'break_start',t.break_start_iso,'break_end',t.break_end_iso,'break_minutes',coalesce(t.break_minutes,0),
+             'reference',t.reference_number,'hours',case when t.worked_minutes is not null then round(t.worked_minutes::numeric/60,2)::text end,'units',null,'display_order',1)) else '[]'::jsonb end),
+        'weekly_schedule_rows',coalesce((
+           select jsonb_agg(jsonb_build_object(
+             'date',coalesce(s.value->>'date',s.value->>'day'),
+             'scheduled_start',coalesce(s.value->>'scheduled_start',s.value->>'start',s.value->>'start_utc'),
+             'scheduled_end',coalesce(s.value->>'scheduled_end',s.value->>'end',s.value->>'end_utc'),
+             'worked_start',coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc'),
+             'worked_end',coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc'),
+             'break_start',s.value->>'break_start','break_end',s.value->>'break_end',
+             'break_minutes',case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$' then (coalesce(s.value->>'break_minutes',s.value->>'break_mins'))::integer else 0 end,
+             'reference',coalesce(s.value->>'reference',s.value->>'ref_num'),
+             'hours',coalesce(s.value->>'hours',s.value->>'units'),
+             'units',coalesce(s.value->>'units',s.value->>'hours'),
+             'display_order',s.ordinality)
+             order by s.ordinality)
+           from jsonb_array_elements(case when jsonb_typeof(t.actual_schedule_json)='array' then t.actual_schedule_json else '[]'::jsonb end) with ordinality s(value,ordinality)
+           where upper(coalesce(t.sheet_scope::text,''))='WEEKLY'
+        ),'[]'::jsonb),
+        'references',jsonb_build_object(
+          'whole',coalesce((select rs.current_reference from reference_scope rs where rs.invoice_id=il.invoice_id and rs.timesheet_id=t.timesheet_id and rs.segment_id is null and rs.day_ymd is null and nullif(rs.current_reference,'') is not null order by rs.row_key limit 1),nullif(t.reference_number,'')),
+          'day',coalesce(
+             (select jsonb_agg(jsonb_build_object('day_key',rs.day_ymd,'reference',rs.current_reference,'display_order',rs.row_key) order by rs.day_ymd,rs.row_key) from reference_scope rs where rs.invoice_id=il.invoice_id and rs.timesheet_id=t.timesheet_id and rs.day_ymd is not null and rs.segment_id is null),
+             (select jsonb_agg(jsonb_build_object('day_key',d.key,'reference',case when jsonb_typeof(d.value)='object' then coalesce(d.value->>'reference',d.value->>'ref_num',d.value->>'value') else trim(both '"' from d.value::text) end,'display_order',d.ordinality) order by d.ordinality) from jsonb_each(case when jsonb_typeof(t.day_references_json)='object' then t.day_references_json else '{}'::jsonb end) with ordinality d(key,value,ordinality)),
+             '[]'::jsonb),
+          'segment',coalesce((select jsonb_agg(jsonb_build_object('segment_id',rs.segment_id,'reference',rs.current_reference,'display_order',rs.row_key) order by rs.segment_id,rs.row_key) from reference_scope rs where rs.invoice_id=il.invoice_id and rs.timesheet_id=t.timesheet_id and rs.segment_id is not null),'[]'::jsonb)),
+        'additional_units',coalesce((
+          select jsonb_object_agg(
+            au.key,
+            case
+              when jsonb_typeof(au.value)='number'
+                then to_jsonb(trim_scale((au.value#>>'{}')::numeric)::text)
+              else au.value
+            end
+            order by au.key
+          )
+          from jsonb_each(
+            case when jsonb_typeof(t.additional_units_week)='object'
+              then t.additional_units_week else '{}'::jsonb end
+          ) au
+        ),'{}'::jsonb),
+        'authorisation',jsonb_build_object('authorised',t.auth_name is not null,'name',t.auth_name,'role',t.auth_job_title,'authorised_at_utc',t.authorised_at_server),
+        'signatures',jsonb_build_object(
+          'candidate',case when nullif(t.r2_nurse_key,'') is null
+            then jsonb_build_object('identity',coalesce(vs.candidate_name,t.occupant_key_norm),'role','Candidate / nurse')
+            else jsonb_build_object('r2_key',t.r2_nurse_key,'sha256',t.img_sha256_nurse,'size_bytes',null,'media_type','image/png','identity',coalesce(vs.candidate_name,t.occupant_key_norm),'role','Candidate / nurse') end,
+          'authoriser',case when nullif(t.r2_auth_key,'') is null
+            then jsonb_build_object('identity',t.auth_name,'role',t.auth_job_title)
+            else jsonb_build_object('r2_key',t.r2_auth_key,'sha256',t.img_sha256_auth,'size_bytes',null,'media_type','image/png','identity',t.auth_name,'role',t.auth_job_title) end),
+        'qr',jsonb_build_object('required',t.qr_status is not null,'signed',t.qr_signed_hash is not null,'status',t.qr_status::text,'signed_hash',t.qr_signed_hash,'signed_at_utc',t.qr_signed_at_utc,'verification_summary',case when t.qr_signed_hash is not null then 'QR signature verified in frozen source' when t.qr_status is not null then t.qr_status::text else null end),
+        'template_version','timesheet-professional-v1'
+      ) render_model,
+      t.submission_mode::text submission_mode,t.document_revision,t.manual_document_asset_id,
+      coalesce(vs.client_is_nhsp,false) client_is_nhsp,
+      coalesce(vs.client_no_timesheet_required,false) no_timesheet_required,
+      coalesce(pc.effective_ts_attach_to_invoice,true) attach_timesheet
+    from (
+      select distinct il.invoice_id, il.timesheet_id
+      from public.invoice_lines il
+      where il.invoice_id in(select invoice_id from requested_invoices)
+        and il.timesheet_id is not null
+    ) il
+    join public.timesheets t on t.timesheet_id=il.timesheet_id and t.is_current
+    left join public.v_timesheets_summary_base vs on vs.timesheet_id=t.timesheet_id
+    left join public.v_ts_invoice_precheck pc on pc.timesheet_id=t.timesheet_id
+  ),
+  invoice_timesheets_agg as materialized (
+    select invoice_id,jsonb_agg(jsonb_build_object(
+      'timesheet_id',timesheet_id,'submission_mode',submission_mode,'document_revision',document_revision,
+      'manual_document_asset_id',manual_document_asset_id,'client_is_nhsp',client_is_nhsp,
+      'no_timesheet_required',no_timesheet_required,'attach_timesheet',attach_timesheet,
+      'render_model',render_model) order by timesheet_id) timesheet_sources
+    from invoice_timesheet_rows group by invoice_id
+  ),
+  support_agg as materialized (
+    select s.invoice_id,
+      jsonb_agg(jsonb_build_object(
+        'source_system',s.source_system,'import_id',s.import_id,
+        'render_model',jsonb_build_object(
+          'schema_version',case when upper(s.source_system)='NHSP' then 'NHSP_PRESENTATION_V1' else 'HEALTHROSTER_PRESENTATION_V1' end,
+          'rows',coalesce((select jsonb_agg(
+            case when upper(s.source_system)='NHSP' then jsonb_build_object(
+              'worker',coalesce(r.value->>'worker',r.value->>'candidate',r.value->>'name'),
+              'nhsp_shift_id',coalesce(r.value->>'nhsp_shift_id',r.value->>'shift_id'),
+              'booking_reference',coalesce(r.value->>'booking_reference',r.value->>'reference'),
+              'site_ward',concat_ws(' / ',nullif(coalesce(r.value->>'site',r.value->>'hospital'),''),nullif(r.value->>'ward','')),
+              'shift_date',coalesce(r.value->>'shift_date',r.value->>'date'),
+              'shift_times',coalesce(r.value->>'shift_times',concat_ws(' - ',nullif(r.value->>'start',''),nullif(r.value->>'end',''))),
+              'hours_units',coalesce(r.value->>'hours_units',r.value->>'hours',r.value->>'units'),
+              'source_identity',jsonb_build_object('source_system',s.source_system,'import_id',s.import_id,'row_no',r.ordinality),
+              'validation_state',coalesce(r.value->>'validation_state',r.value->>'status'))
+            else jsonb_build_object(
+              'worker',coalesce(r.value->>'worker',r.value->>'candidate',r.value->>'name'),
+              'assignment',coalesce(r.value->>'assignment',r.value->>'role',r.value->>'job_title'),
+              'shift_date',coalesce(r.value->>'shift_date',r.value->>'date'),
+              'shift_times',coalesce(r.value->>'shift_times',concat_ws(' - ',nullif(r.value->>'start',''),nullif(r.value->>'end',''))),
+              'site',coalesce(r.value->>'site',r.value->>'hospital'),
+              'ward',r.value->>'ward',
+              'reference',coalesce(r.value->>'reference',r.value->>'booking_reference',r.value->>'nhsp_shift_id'),
+              'units_hours',coalesce(r.value->>'units_hours',r.value->>'hours',r.value->>'units'),
+              'validation_state',coalesce(r.value->>'validation_state',r.value->>'status'),
+              'source_identity',jsonb_build_object('source_system',s.source_system,'import_id',s.import_id,'row_no',r.ordinality)) end
+            order by r.ordinality)
+            from jsonb_array_elements(case when jsonb_typeof(s.rows_json)='array' then s.rows_json else '[]'::jsonb end) with ordinality r(value,ordinality)), '[]'::jsonb),
+          'source_identity',jsonb_build_object('source_system',s.source_system,'import_id',s.import_id))
+       ) order by s.source_system,s.import_id) supporting_sources
+    from public.invoice_hr_source_rows s
+    where s.invoice_id in(select invoice_id from requested_invoices)
+    group by s.invoice_id
+  ),
+  supporting_manifest_agg as materialized (
+    select il.invoice_id,
+      jsonb_agg(distinct jsonb_build_object(
+        'timesheet_id',e.timesheet_id,
+        'evidence_id',e.id,
+        'kind',upper(coalesce(e.kind,'OTHER')),
+        'display_name',coalesce(e.display_name,e.kind,'Evidence'),
+        'storage_key',e.storage_key,
+        'asset_id',e.document_asset_id,
+        'source_kind',a.source_kind,
+        'source_revision',coalesce(a.source_revision,e.source_revision,encode(digest(concat_ws('|',e.id::text,e.storage_key,e.created_at::text),'sha256'),'hex')),
+        'original_r2_key',coalesce(a.original_r2_key,e.storage_key),
+        'asset_sha256',a.normalised_sha256,
+        'asset_manifest_hash',a.normalised_manifest_hash,
+        'asset_size_bytes',a.normalised_size_bytes,
+        'asset_page_count',a.normalised_page_count
+      )) supporting_manifest
+    from public.invoice_lines il
+    join public.timesheet_evidence e on e.timesheet_id=il.timesheet_id
+    left join public.invoice_document_assets a on a.id=e.document_asset_id
+    where il.invoice_id in(select invoice_id from requested_invoices)
+      and il.timesheet_id is not null
+      and nullif(coalesce(e.storage_key,''),'') is not null
+      and upper(coalesce(e.kind,''))<>'TIMESHEET'
+    group by il.invoice_id
+  ),
+  higher_rate_agg as materialized (
+    select il.invoice_id,
+      jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1','rows',
+        coalesce(jsonb_agg(jsonb_build_object(
+          'worker_source',coalesce(il.meta_json->>'worker',il.meta_json->>'candidate',il.booking_id),
+          'shift_date',coalesce(il.meta_json->>'shift_date',il.meta_json->>'date'),
+          'original_rate',il.meta_json->>'original_rate',
+          'applied_rate',coalesce(il.meta_json->>'applied_rate',il.charge_day::text,il.charge_night::text,il.charge_sat::text,il.charge_sun::text,il.charge_bh::text),
+          'units',coalesce(il.meta_json->>'units',il.meta_json->>'hours'),
+          'display_amount',round(coalesce(il.total_charge_ex_vat,0),2)::text,
+          'reason',coalesce(il.meta_json->>'reason',il.description),
+          'approval_identity',il.meta_json->'approval_identity',
+          'reference',coalesce(il.meta_json->>'reference',il.source_key)
+        ) order by il.created_at,il.id) filter (where upper(coalesce(il.meta_json->>'line_type','') || ' ' || coalesce(il.description,'') || ' ' || coalesce(il.source_key,'')) like '%HIGHER%'), '[]'::jsonb)) higher_rate_support
+    from public.invoice_lines il
+    where il.invoice_id in(select invoice_id from requested_invoices)
+    group by il.invoice_id
+  ),
+  invoice_models as materialized (
+    select vr.request_no,vr.req_key request_key,
+      case when vr.purpose='FINAL_ISSUE'
+        then 'FINAL_ISSUE_PRESENTATION_SNAPSHOT_V5'
+        else 'INVOICE_PRESENTATION_SNAPSHOT_V5' end::text snapshot_schema_version,
+      i.id invoice_id,
+      jsonb_build_object(
+        'schema_version','INVOICE_RENDER_MODEL_V1',
+        'purpose',vr.purpose,
+        'document_type',case when i.type::text='CREDIT_NOTE' then 'CREDIT_NOTE'
+          when lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}',i.header_snapshot_json->>'self_bill','false')) in('true','t','1','yes') then 'SELF_BILL_INVOICE'
+          else 'INVOICE' end,
+        'is_draft',vr.purpose<>'FINAL_ISSUE',
+        'invoice_id',i.id,
+        'invoice_number',i.invoice_no,
+        'issue_date',case when vr.purpose='FINAL_ISSUE' then vr.issue_at_utc else i.issued_at_utc end,
+        'preview_date',case when vr.purpose='DRAFT_PREVIEW' then v_now end,
+        'tax_point',case when vr.purpose='FINAL_ISSUE' then vr.tax_point_utc else coalesce(i.header_snapshot_json->'tax_point_utc',to_jsonb(i.issued_at_utc)) end,
+        'due_date',case when vr.purpose='FINAL_ISSUE' then vr.due_at_utc else i.due_at_utc end,
+        'currency',coalesce(i.header_snapshot_json->>'currency','GBP'),
+        'supplier',jsonb_build_object(
+          'legal_name',coalesce(nullif(i.header_snapshot_json->>'agency_name',''),sd.agency_name),
+          'trading_name',i.header_snapshot_json->>'agency_trading_name',
+          'registered_address',coalesce((select jsonb_agg(btrim(line) order by ord) from regexp_split_to_table(coalesce(nullif(i.header_snapshot_json->>'registered_address',''),sd.registered_address,''), E'\r?\n') with ordinality a(line,ord) where btrim(line)<>''),'[]'::jsonb),
+          'company_registration_number',coalesce(nullif(i.header_snapshot_json->>'company_reg_number',''),sd.company_reg_number),
+          'vat_registration_number',coalesce(nullif(i.header_snapshot_json->>'vat_registration_number',''),sd.vat_registration_number),
+          'contact_email',coalesce(i.header_snapshot_json->>'supplier_email',sd.finance_email,sd.system_email),
+          'contact_phone',i.header_snapshot_json->>'supplier_phone'),
+        'customer',jsonb_build_object(
+          'legal_name',coalesce(nullif(i.header_snapshot_json->>'client_name',''),cl.name),
+          'billing_address',coalesce((select jsonb_agg(btrim(line) order by ord) from regexp_split_to_table(coalesce(nullif(i.header_snapshot_json->>'client_invoice_address',''),cl.invoice_address,cl.client_address,''), E'\r?\n') with ordinality a(line,ord) where btrim(line)<>''),'[]'::jsonb),
+          'account_reference',coalesce(i.header_snapshot_json->>'client_reference',cl.cli_ref)),
+        'references',jsonb_build_object('purchase_order',coalesce(i.header_snapshot_json->>'po_reference',i.header_snapshot_json->>'po_number'),'client_reference',coalesce(i.header_snapshot_json->>'client_reference',cl.cli_ref),'work_location',i.header_snapshot_json->>'work_location'),
+        'candidate_summary',i.header_snapshot_json->>'candidate_summary',
+        'branding',jsonb_build_object(
+          'logo',case
+            when jsonb_typeof(i.header_snapshot_json->'agency_logo')='object'
+              then jsonb_build_object(
+                'r2_key',i.header_snapshot_json#>>'{agency_logo,r2_key}',
+                'sha256',lower(i.header_snapshot_json#>>'{agency_logo,sha256}'),
+                'size_bytes',case
+                  when coalesce(i.header_snapshot_json#>>'{agency_logo,size_bytes}','') ~ '^[1-9][0-9]{0,18}$'
+                    then (i.header_snapshot_json#>>'{agency_logo,size_bytes}')::bigint
+                  else null end,
+                'media_type',lower(i.header_snapshot_json#>>'{agency_logo,media_type}'))
+            when jsonb_typeof(coalesce(
+              sd.invoice_document_presentation_json#>'{branding,logo}',
+              sd.import_config_json#>'{invoice_document_presentation,branding,logo}'
+            ))='object'
+              then jsonb_build_object(
+                'r2_key',coalesce(
+                  sd.invoice_document_presentation_json#>>'{branding,logo,r2_key}',
+                  sd.import_config_json#>>'{invoice_document_presentation,branding,logo,r2_key}'),
+                'sha256',lower(coalesce(
+                  sd.invoice_document_presentation_json#>>'{branding,logo,sha256}',
+                  sd.import_config_json#>>'{invoice_document_presentation,branding,logo,sha256}')),
+                'size_bytes',case
+                  when coalesce(
+                    sd.invoice_document_presentation_json#>>'{branding,logo,size_bytes}',
+                    sd.import_config_json#>>'{invoice_document_presentation,branding,logo,size_bytes}',
+                    ''
+                  ) ~ '^[1-9][0-9]{0,18}$'
+                    then coalesce(
+                      sd.invoice_document_presentation_json#>>'{branding,logo,size_bytes}',
+                      sd.import_config_json#>>'{invoice_document_presentation,branding,logo,size_bytes}'
+                    )::bigint
+                  else null end,
+                'media_type',lower(coalesce(
+                  sd.invoice_document_presentation_json#>>'{branding,logo,media_type}',
+                  sd.import_config_json#>>'{invoice_document_presentation,branding,logo,media_type}')))
+            else '{}'::jsonb end),
+        'lines',coalesce(l.lines,'[]'::jsonb),
+        'vat_breakdown',coalesce((select jsonb_agg(jsonb_build_object(
+          'rate',vb.vat_rate_pct::text,
+          'net_amount',vb.net::text,
+          'vat_amount',vb.vat::text,
+          'gross_amount',vb.gross::text
+        ) order by vb.vat_rate_pct) from (
+          select coalesce(vat_rate_pct,0) vat_rate_pct,
+            round(sum(coalesce(total_charge_ex_vat,0)),2) net,
+            round(sum(coalesce(vat_amount,0)),2) vat,
+            round(sum(coalesce(total_inc_vat,coalesce(total_charge_ex_vat,0)+coalesce(vat_amount,0))),2) gross
+          from public.invoice_lines
+          where invoice_id=i.id
+          group by coalesce(vat_rate_pct,0)
+        ) vb),'[]'::jsonb),
+        'totals',jsonb_build_object(
+          'net',round(coalesce(i.subtotal_ex_vat,0),2)::text,
+          'vat',round(coalesce(i.vat_amount,0),2)::text,
+          'gross',round(coalesce(i.total_inc_vat,0),2)::text,
+          'amount_paid',coalesce((
+            case when pg_input_is_valid(nullif(i.header_snapshot_json->>'amount_paid',''),'numeric')
+              then (i.header_snapshot_json->>'amount_paid')::numeric end
+          ),0)::text,
+          'amount_credited',coalesce((
+            case when pg_input_is_valid(nullif(i.header_snapshot_json->>'amount_credited',''),'numeric')
+              then (i.header_snapshot_json->>'amount_credited')::numeric end
+          ),0)::text,
+          'amount_outstanding',coalesce((
+            case when pg_input_is_valid(nullif(i.header_snapshot_json->>'amount_outstanding',''),'numeric')
+              then (i.header_snapshot_json->>'amount_outstanding')::numeric end
+          ),coalesce(i.total_inc_vat,0))::text),
+        'payment',jsonb_build_object(
+          'terms_days',coalesce(
+            case when pg_input_is_valid(nullif(i.header_snapshot_json->>'payment_terms_days',''),'integer')
+              then (i.header_snapshot_json->>'payment_terms_days')::integer end,
+            cl.payment_terms_days,30),
+          'terms_text',i.header_snapshot_json->>'payment_terms_text',
+          'due_date_basis','ISSUE_DATE',
+          'instructions',coalesce(
+            i.header_snapshot_json->>'payment_instructions',
+            sd.invoice_document_presentation_json->>'payment_instructions',
+            sd.import_config_json#>>'{invoice_document_presentation,payment_instructions}'),
+          'account_name',case when lower(coalesce(
+            i.header_snapshot_json#>>'{meta,hide_bank_footer}',
+            i.header_snapshot_json->>'hide_bank_footer',
+            sd.invoice_document_presentation_json->>'hide_bank_footer_default',
+            sd.import_config_json#>>'{invoice_document_presentation,hide_bank_footer_default}',
+            'false')) in('true','t','1','yes') then null
+            else coalesce(i.header_snapshot_json#>>'{bank,name}',i.header_snapshot_json->>'bank_name',sd.bank_name) end,
+          'sort_code',case when lower(coalesce(
+            i.header_snapshot_json#>>'{meta,hide_bank_footer}',
+            i.header_snapshot_json->>'hide_bank_footer',
+            sd.invoice_document_presentation_json->>'hide_bank_footer_default',
+            sd.import_config_json#>>'{invoice_document_presentation,hide_bank_footer_default}',
+            'false')) in('true','t','1','yes') then null
+            else coalesce(i.header_snapshot_json#>>'{bank,sort_code}',i.header_snapshot_json->>'bank_sort_code',sd.bank_sort_code) end,
+          'account_number',case when lower(coalesce(
+            i.header_snapshot_json#>>'{meta,hide_bank_footer}',
+            i.header_snapshot_json->>'hide_bank_footer',
+            sd.invoice_document_presentation_json->>'hide_bank_footer_default',
+            sd.import_config_json#>>'{invoice_document_presentation,hide_bank_footer_default}',
+            'false')) in('true','t','1','yes') then null
+            else coalesce(i.header_snapshot_json#>>'{bank,account_number}',i.header_snapshot_json->>'bank_account_number',sd.bank_account_number) end,
+          'remittance_reference',i.invoice_no,
+          'remittance_email',coalesce(i.header_snapshot_json->>'remittance_email',sd.finance_email),
+          'hide_bank_footer',lower(coalesce(
+            i.header_snapshot_json#>>'{meta,hide_bank_footer}',
+            i.header_snapshot_json->>'hide_bank_footer',
+            sd.invoice_document_presentation_json->>'hide_bank_footer_default',
+            sd.import_config_json#>>'{invoice_document_presentation,hide_bank_footer_default}',
+            'false')) in('true','t','1','yes')),
+        'credit_note',jsonb_build_object('is_credit_note',i.type::text='CREDIT_NOTE','original_invoice_id',i.original_invoice_id,'original_invoice_number',coalesce(i.header_snapshot_json->>'original_invoice_number',orig.invoice_no),'original_invoice_date',coalesce(i.header_snapshot_json->>'original_invoice_date',orig.issued_at_utc::text),'reason',coalesce(i.header_snapshot_json->>'credit_reason',i.notes)),
+        'self_bill',jsonb_build_object('is_self_bill',lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}',i.header_snapshot_json->>'self_bill','false')) in('true','t','1','yes'),'legal_wording',coalesce(i.header_snapshot_json->>'self_bill_wording',coalesce(sd.invoice_document_presentation_json->>'self_bill_legal_wording', sd.import_config_json#>>'{invoice_document_presentation,self_bill_legal_wording}'))),
+        'legal_wording',coalesce(i.header_snapshot_json->'legal_wording',coalesce(sd.invoice_document_presentation_json->'legal_wording', sd.import_config_json#>'{invoice_document_presentation,legal_wording}'),'[]'::jsonb),
+        'attachment_policy',coalesce(i.header_snapshot_json->'attach_policy',i.header_snapshot_json->'attachment_policy','{}'::jsonb),
+        'template_version',vr.template_version,
+        'locale',coalesce(i.header_snapshot_json->>'locale',sd.invoice_document_presentation_json->>'locale',sd.import_config_json#>>'{invoice_document_presentation,locale}','en-GB'),
+        'page_geometry',coalesce(i.header_snapshot_json->>'page_geometry',sd.invoice_document_presentation_json->>'page_geometry',sd.import_config_json#>>'{invoice_document_presentation,page_geometry}','A4_PORTRAIT_210X297MM')) presentation_model,
+      coalesce(ts.timesheet_sources,'[]'::jsonb) timesheet_sources,
+      coalesce(sa.supporting_sources,'[]'::jsonb) supporting_sources,
+      coalesce(hra.higher_rate_support,jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1','rows','[]'::jsonb)) higher_rate_support,
+      coalesce(l.line_net,0) line_net,coalesce(l.line_vat,0) line_vat,coalesce(l.line_gross,0) line_gross,
+      round(coalesce(i.subtotal_ex_vat,0),2) invoice_net,round(coalesce(i.vat_amount,0),2) invoice_vat,round(coalesce(i.total_inc_vat,0),2) invoice_gross
+    from valid_requests vr
+    join public.invoices i on vr.entity_type='INVOICE' and i.id=vr.entity_id
+    left join public.invoices orig on orig.id=i.original_invoice_id
+    join public.clients cl on cl.id=i.client_id
+    cross join public.settings_defaults sd
+    left join invoice_line_rows l on l.invoice_id=i.id
+    left join invoice_timesheets_agg ts on ts.invoice_id=i.id
+    left join support_agg sa on sa.invoice_id=i.id
+    left join supporting_manifest_agg sma on sma.invoice_id=i.id
+    left join higher_rate_agg hra on hra.invoice_id=i.id
+    where sd.id=1
+  ),
+  timesheet_models as materialized (
+    select vr.request_no,vr.req_key request_key,'TIMESHEET_PRESENTATION_SNAPSHOT_V5'::text snapshot_schema_version,
+      jsonb_build_object(
+        'schema_version','TIMESHEET_RENDER_MODEL_V1',
+        'timesheet_id',t.timesheet_id,
+        'document_revision',t.document_revision,
+        'candidate',jsonb_build_object('id',coalesce(vs.candidate_id::text,null),'name',coalesce(vs.candidate_name,t.occupant_key_norm)),
+        'client',jsonb_build_object('id',coalesce(vs.client_id::text,null),'name',vs.client_name),
+        'contract',jsonb_build_object('id',coalesce(t.contract_id::text,null),'reference',t.booking_id),
+        'work',jsonb_build_object('hospital',t.hospital_norm,'site',t.hospital_norm,'ward',t.ward_norm,'assignment',t.shift_label_norm,'job_title',t.job_title_norm,'band',t.band,'shift_type',t.shift_label_norm),
+        'week_ending_date',t.week_ending_date,
+        'submission_mode',t.submission_mode::text,
+        'sheet_scope',t.sheet_scope::text,
+        'daily_schedule_rows',coalesce((select jsonb_agg(jsonb_build_object('date',coalesce(s.value->>'date',s.value->>'day',to_char(t.worked_start_iso::date,'YYYY-MM-DD')),'scheduled_start',coalesce(s.value->>'scheduled_start',s.value->>'start',s.value->>'start_utc',t.scheduled_start_iso::text),'scheduled_end',coalesce(s.value->>'scheduled_end',s.value->>'end',s.value->>'end_utc',t.scheduled_end_iso::text),'worked_start',coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc',t.worked_start_iso::text),'worked_end',coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc',t.worked_end_iso::text),'break_start',coalesce(s.value->>'break_start',t.break_start_iso::text),'break_end',coalesce(s.value->>'break_end',t.break_end_iso::text),'break_minutes',case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$' then (coalesce(s.value->>'break_minutes',s.value->>'break_mins'))::integer else coalesce(t.break_minutes,0) end,'reference',coalesce(s.value->>'reference',s.value->>'ref_num',t.reference_number),'hours',coalesce(s.value->>'hours',s.value->>'units',case when t.worked_minutes is not null then round(t.worked_minutes::numeric/60,2)::text end),'units',coalesce(s.value->>'units',s.value->>'hours'),'display_order',s.ordinality) order by s.ordinality) from jsonb_array_elements(case when jsonb_typeof(t.actual_schedule_json)='array' then t.actual_schedule_json else '[]'::jsonb end) with ordinality s(value,ordinality) where upper(coalesce(t.sheet_scope::text,''))='DAILY'),case when upper(coalesce(t.sheet_scope::text,''))='DAILY' then jsonb_build_array(jsonb_build_object('date',t.worked_start_iso::date,'scheduled_start',t.scheduled_start_iso,'scheduled_end',t.scheduled_end_iso,'worked_start',t.worked_start_iso,'worked_end',t.worked_end_iso,'break_start',t.break_start_iso,'break_end',t.break_end_iso,'break_minutes',coalesce(t.break_minutes,0),'reference',t.reference_number,'hours',case when t.worked_minutes is not null then round(t.worked_minutes::numeric/60,2)::text end,'units',null,'display_order',1)) else '[]'::jsonb end),
+        'weekly_schedule_rows',coalesce((select jsonb_agg(jsonb_build_object('date',coalesce(s.value->>'date',s.value->>'day'),'scheduled_start',coalesce(s.value->>'scheduled_start',s.value->>'start',s.value->>'start_utc'),'scheduled_end',coalesce(s.value->>'scheduled_end',s.value->>'end',s.value->>'end_utc'),'worked_start',coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc'),'worked_end',coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc'),'break_start',s.value->>'break_start','break_end',s.value->>'break_end','break_minutes',case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$' then (coalesce(s.value->>'break_minutes',s.value->>'break_mins'))::integer else 0 end,'reference',coalesce(s.value->>'reference',s.value->>'ref_num'),'hours',coalesce(s.value->>'hours',s.value->>'units'),'units',coalesce(s.value->>'units',s.value->>'hours'),'display_order',s.ordinality) order by s.ordinality) from jsonb_array_elements(case when jsonb_typeof(t.actual_schedule_json)='array' then t.actual_schedule_json else '[]'::jsonb end) with ordinality s(value,ordinality) where upper(coalesce(t.sheet_scope::text,''))='WEEKLY'),'[]'::jsonb),
+        'references',jsonb_build_object('whole',nullif(t.reference_number,''),'day',coalesce((select jsonb_agg(jsonb_build_object('day_key',d.key,'reference',case when jsonb_typeof(d.value)='object' then coalesce(d.value->>'reference',d.value->>'ref_num',d.value->>'value') else trim(both '"' from d.value::text) end,'display_order',d.ordinality) order by d.ordinality) from jsonb_each(case when jsonb_typeof(t.day_references_json)='object' then t.day_references_json else '{}'::jsonb end) with ordinality d(key,value,ordinality)), '[]'::jsonb),'segment','[]'::jsonb),
+        'additional_units',coalesce((
+          select jsonb_object_agg(
+            au.key,
+            case
+              when jsonb_typeof(au.value)='number'
+                then to_jsonb(trim_scale((au.value#>>'{}')::numeric)::text)
+              else au.value
+            end
+            order by au.key
+          )
+          from jsonb_each(
+            case when jsonb_typeof(t.additional_units_week)='object'
+              then t.additional_units_week else '{}'::jsonb end
+          ) au
+        ),'{}'::jsonb),
+        'authorisation',jsonb_build_object('authorised',t.auth_name is not null,'name',t.auth_name,'role',t.auth_job_title,'authorised_at_utc',t.authorised_at_server),
+        'signatures',jsonb_build_object(
+          'candidate',case when nullif(t.r2_nurse_key,'') is null
+            then jsonb_build_object('identity',coalesce(vs.candidate_name,t.occupant_key_norm),'role','Candidate / nurse')
+            else jsonb_build_object('r2_key',t.r2_nurse_key,'sha256',t.img_sha256_nurse,'size_bytes',null,'media_type','image/png','identity',coalesce(vs.candidate_name,t.occupant_key_norm),'role','Candidate / nurse') end,
+          'authoriser',case when nullif(t.r2_auth_key,'') is null
+            then jsonb_build_object('identity',t.auth_name,'role',t.auth_job_title)
+            else jsonb_build_object('r2_key',t.r2_auth_key,'sha256',t.img_sha256_auth,'size_bytes',null,'media_type','image/png','identity',t.auth_name,'role',t.auth_job_title) end),
+        'qr',jsonb_build_object('required',t.qr_status is not null,'signed',t.qr_signed_hash is not null,'status',t.qr_status::text,'signed_hash',t.qr_signed_hash,'signed_at_utc',t.qr_signed_at_utc,'verification_summary',case when t.qr_signed_hash is not null then 'QR signature verified in frozen source' when t.qr_status is not null then t.qr_status::text else null end),
+        'template_version','timesheet-professional-v1'
+      ) presentation_model,
+      '[]'::jsonb timesheet_sources,
+      '[]'::jsonb supporting_sources,
+      jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1','rows','[]'::jsonb) higher_rate_support
+    from valid_requests vr
+    join public.timesheets t on vr.entity_type='TIMESHEET' and t.timesheet_id=vr.entity_id and t.is_current
+    left join public.v_timesheets_summary_base vs on vs.timesheet_id=t.timesheet_id
+  ),
+  missing_entity_results as materialized (
+    select vr.request_no,vr.req_key request_key,
+      case when vr.entity_type='INVOICE' then 'INVOICE_PRESENTATION_SNAPSHOT_V5' else 'TIMESHEET_PRESENTATION_SNAPSHOT_V5' end snapshot_schema_version,
+      '{}'::jsonb presentation_model,'[]'::jsonb timesheet_sources,'[]'::jsonb supporting_sources,
+      jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1','rows','[]'::jsonb) higher_rate_support,
+      jsonb_build_object('snapshot_schema_version','PRESENTATION_ENTITY_NOT_FOUND','request_key',vr.req_key,'entity_type',vr.entity_type,'entity_id',vr.entity_id) snapshot_json,
+      encode(digest(jsonb_build_object('snapshot_schema_version','PRESENTATION_ENTITY_NOT_FOUND','request_key',vr.req_key,'entity_type',vr.entity_type,'entity_id',vr.entity_id)::text,'sha256'),'hex') snapshot_hash,
+      false valid,
+      'PRESENTATION_ENTITY_NOT_FOUND'::text error_code,
+      jsonb_build_object('entity_type',vr.entity_type,'entity_id',vr.entity_id) error_detail
+    from valid_requests vr
+    where not exists(select 1 from invoice_models im where im.request_no=vr.request_no)
+      and not exists(select 1 from timesheet_models tm where tm.request_no=vr.request_no)
+  ),
+  all_models as materialized (
+    select request_no,request_key,snapshot_schema_version,presentation_model,timesheet_sources,supporting_sources,higher_rate_support,
+      case
+        when snapshot_schema_version like '%INVOICE%' and nullif(presentation_model->>'document_type','') is null then 'INVOICE_PRESENTATION_DOCUMENT_TYPE_REQUIRED'
+        when snapshot_schema_version like '%INVOICE%' and nullif(presentation_model->>'invoice_number','') is null then 'INVOICE_PRESENTATION_INVOICE_NUMBER_REQUIRED'
+        when snapshot_schema_version like '%INVOICE%' and nullif(presentation_model#>>'{supplier,legal_name}','') is null then 'INVOICE_PRESENTATION_SUPPLIER_REQUIRED'
+        when snapshot_schema_version like '%INVOICE%' and jsonb_array_length(case when jsonb_typeof(presentation_model#>'{supplier,registered_address}')='array' then presentation_model#>'{supplier,registered_address}' else '[]'::jsonb end)=0 then 'INVOICE_PRESENTATION_SUPPLIER_ADDRESS_REQUIRED'
+        when snapshot_schema_version like '%INVOICE%' and nullif(presentation_model#>>'{customer,legal_name}','') is null then 'INVOICE_PRESENTATION_CUSTOMER_REQUIRED'
+        when snapshot_schema_version like '%INVOICE%' and jsonb_array_length(case when jsonb_typeof(presentation_model#>'{customer,billing_address}')='array' then presentation_model#>'{customer,billing_address}' else '[]'::jsonb end)=0 then 'INVOICE_PRESENTATION_CUSTOMER_ADDRESS_REQUIRED'
+        when snapshot_schema_version='FINAL_ISSUE_PRESENTATION_SNAPSHOT_V5' and nullif(presentation_model->>'issue_date','') is null then 'INVOICE_PRESENTATION_ISSUE_DATE_REQUIRED'
+        when snapshot_schema_version='FINAL_ISSUE_PRESENTATION_SNAPSHOT_V5' and nullif(presentation_model->>'tax_point','') is null then 'INVOICE_PRESENTATION_TAX_POINT_REQUIRED'
+        when snapshot_schema_version='FINAL_ISSUE_PRESENTATION_SNAPSHOT_V5' and nullif(presentation_model->>'due_date','') is null then 'INVOICE_PRESENTATION_DUE_DATE_REQUIRED'
+        when jsonb_array_length(coalesce(presentation_model->'lines','[]'::jsonb))=0
+          and snapshot_schema_version like '%INVOICE%'
+          and (coalesce(invoice_net,0)<>0 or coalesce(invoice_vat,0)<>0 or coalesce(invoice_gross,0)<>0)
+          then 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING'
+        when snapshot_schema_version like '%INVOICE%' and (line_net,line_vat,line_gross) is distinct from (invoice_net,invoice_vat,invoice_gross) then 'INVOICE_PRESENTATION_LINE_TOTAL_MISMATCH'
+        when snapshot_schema_version like '%INVOICE%' and invoice_vat<>0 and nullif(presentation_model#>>'{supplier,vat_registration_number}','') is null then 'INVOICE_PRESENTATION_VAT_NUMBER_REQUIRED'
+        when (presentation_model->>'document_type')='CREDIT_NOTE' and nullif(coalesce(presentation_model#>>'{credit_note,original_invoice_number}',presentation_model#>>'{credit_note,original_invoice_id}'),'') is null then 'CREDIT_NOTE_ORIGINAL_REQUIRED'
+        when (presentation_model->>'document_type')='CREDIT_NOTE' and nullif(presentation_model#>>'{credit_note,reason}','') is null then 'CREDIT_NOTE_REASON_REQUIRED'
+        when (presentation_model->>'document_type')='SELF_BILL_INVOICE' and nullif(presentation_model#>>'{self_bill,legal_wording}','') is null then 'SELF_BILL_WORDING_REQUIRED'
+        else null end error_code
+    from invoice_models
+    union all
+    select request_no,request_key,snapshot_schema_version,presentation_model,timesheet_sources,supporting_sources,higher_rate_support,
+      case when jsonb_array_length(coalesce(presentation_model->'daily_schedule_rows','[]'::jsonb))=0 and jsonb_array_length(coalesce(presentation_model->'weekly_schedule_rows','[]'::jsonb))=0 then 'TIMESHEET_PRESENTATION_SCHEDULE_MISSING' else null end error_code
+    from timesheet_models
+  ),
+  assembled as materialized (
+    select m.*,
+      encode(digest(m.presentation_model::text,'sha256'),'hex') presentation_model_hash,
+      jsonb_build_object(
+        'snapshot_schema_version',m.snapshot_schema_version,
+        'request_key',m.request_key,
+        'presentation_model',m.presentation_model,
+        'presentation_model_hash',encode(digest(m.presentation_model::text,'sha256'),'hex'),
+        'timesheet_sources',m.timesheet_sources,
+        'supporting_sources',m.supporting_sources,
+        'supporting_manifest',coalesce((select sma.supporting_manifest from supporting_manifest_agg sma where sma.invoice_id=(m.presentation_model->>'invoice_id')::uuid),'[]'::jsonb),
+        'higher_rate_support',m.higher_rate_support
+      ) snapshot_json
+    from all_models m
+  )
+  select d.request_key,d.snapshot_schema_version,d.presentation_model,d.timesheet_sources,d.supporting_sources,d.higher_rate_support,d.snapshot_json,d.snapshot_hash,d.valid,d.error_code,d.error_detail
+  from duplicate_key_results d
+  union all
+  select i.request_key,i.snapshot_schema_version,i.presentation_model,i.timesheet_sources,i.supporting_sources,i.higher_rate_support,i.snapshot_json,i.snapshot_hash,i.valid,i.error_code,i.error_detail
+  from invalid_request_results i
+  union all
+  select m.request_key,m.snapshot_schema_version,m.presentation_model,m.timesheet_sources,m.supporting_sources,m.higher_rate_support,
+         m.snapshot_json,encode(digest(m.snapshot_json::text,'sha256'),'hex'),m.error_code is null,
+         m.error_code,
+         case when m.error_code is null then '{}'::jsonb else jsonb_build_object('request_key',m.request_key,'code',m.error_code) end
+  from assembled m
+  union all
+  select e.request_key,e.snapshot_schema_version,e.presentation_model,e.timesheet_sources,e.supporting_sources,e.higher_rate_support,e.snapshot_json,e.snapshot_hash,e.valid,e.error_code,e.error_detail
+  from missing_entity_results e
+  ;
+end;
 $function$;
 
 revoke all on function private._invoice_presentation_snapshot_batch(jsonb,timestamptz)

@@ -22,9 +22,40 @@ export function formatFrozenDocumentValue(value, options = {}) {
 }
 
 function renderAddress(address) {
-  if (!address) return '';
-  const lines = Array.isArray(address) ? address : [address.name, address.line1 || address.address_line_1, address.line2 || address.address_line_2, address.line3 || address.address_line_3, address.city || address.town, address.county, address.postcode, address.country];
-  return lines.filter(Boolean).map(line => `<div>${escapeInvoiceHtml(line)}</div>`).join('');
+  if (address == null || address === '') return '';
+
+  const lines = (() => {
+    if (Array.isArray(address)) return address;
+
+    if (typeof address === 'string') {
+      return address
+        .split(/\r?\n|,\s*(?=[A-Za-z0-9])/)
+        .map(line => line.trim())
+        .filter(Boolean);
+    }
+
+    if (address && typeof address === 'object') {
+      return [
+        address.name,
+        address.line1 || address.address_line_1 || address.address1,
+        address.line2 || address.address_line_2 || address.address2,
+        address.line3 || address.address_line_3 || address.address3,
+        address.line4 || address.address_line_4 || address.address4,
+        address.city || address.town,
+        address.county,
+        address.postcode || address.post_code || address.zip,
+        address.country
+      ];
+    }
+
+    return [String(address)];
+  })();
+
+  return lines
+    .map(line => String(line ?? '').trim())
+    .filter(Boolean)
+    .map(line => `<div>${escapeInvoiceHtml(line)}</div>`)
+    .join('');
 }
 
 export function buildInvoiceTemplateCss() {
@@ -65,11 +96,136 @@ export function renderInvoiceLegalFooter(model={}) { const s=model.supplier; con
 export function renderInvoiceAttachmentIndex(entries=[]) { return Array.isArray(entries)&&entries.length?`<section class="attachment-index"><h1>Attachment index</h1><table><thead><tr><th>No.</th><th>Worker / source</th><th>Week / date</th><th>Document type</th><th>Evidence</th><th>Reference</th><th class="number">Start</th><th class="number">Pages</th></tr></thead><tbody>${entries.map((e,i)=>`<tr data-row-id="${escapeInvoiceHtml(e.row_id||'')}"><td>${escapeInvoiceHtml(e.attachment_number??i+1)}</td><td>${escapeInvoiceHtml(e.worker||e.source||'')}</td><td>${escapeInvoiceHtml(formatFrozenDocumentValue(e.week_or_date,{kind:'date'}))}</td><td>${escapeInvoiceHtml(e.document_type||'')}</td><td>${escapeInvoiceHtml(e.evidence_description||'')}</td><td>${escapeInvoiceHtml(e.reference||'')}</td><td class="number">${escapeInvoiceHtml(e.start_page??'')}</td><td class="number">${escapeInvoiceHtml(e.page_count??'')}</td></tr>`).join('')}</tbody></table></section>`:''; }
 export function renderInvoicePageNumbering() { return ''; }
 
-export function buildProfessionalInvoiceHtml(model={}) { const m=validateFrozenPresentationModel('INVOICE_CORE',model); return `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${buildInvoiceTemplateCss()}</style></head><body>${m.is_draft?'<div class="draft-watermark">DRAFT</div>':''}<main class="document">${renderInvoiceBrandHeader(m)}${renderInvoiceIdentityPanel(m)}${renderInvoicePartyBlocks(m)}${renderInvoiceReferencePanel(m)}${renderInvoiceLineTable(m)}<section class="summary-grid"><div>${renderInvoiceVatBreakdown(m)}</div>${renderInvoiceTotalsPanel(m)}</section>${renderInvoicePaymentPanel(m)}${renderInvoiceLegalFooter(m)}</main></body></html>`; }
+export function buildProfessionalInvoiceHtml(model = {}) {
+  const original = validateFrozenPresentationModel('INVOICE_CORE', model);
+  const m = structuredClone(original);
+
+  if (m.payment?.hide_bank_footer === true) {
+    m.payment = {
+      ...m.payment,
+      account_name: '',
+      sort_code: '',
+      account_number: '',
+      remittance_reference: ''
+    };
+  }
+
+  const legalWarnings = [];
+  if (m.document_type === 'SELF_BILL_INVOICE' && !String(m.self_bill?.legal_wording || '').trim()) {
+    legalWarnings.push('Self-bill legal wording is missing.');
+  }
+  if (Number(m.totals?.vat || 0) !== 0 && !String(m.supplier?.vat_registration_number || '').trim()) {
+    legalWarnings.push('Supplier VAT registration number is missing.');
+  }
+  if (legalWarnings.length) {
+    const error = new Error('INVOICE_PRESENTATION_LEGAL_FIELD_MISSING');
+    error.code = 'INVOICE_PRESENTATION_LEGAL_FIELD_MISSING';
+    error.detail = legalWarnings;
+    throw error;
+  }
+
+  const paymentPanel = m.payment?.hide_bank_footer === true
+    ? ''
+    : renderInvoicePaymentPanel(m);
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>${buildInvoiceTemplateCss()}</style>
+</head>
+<body>
+${m.is_draft ? '<div class="draft-watermark">DRAFT</div>' : ''}
+<main class="document">
+  ${renderInvoiceBrandHeader(m)}
+  ${renderInvoiceIdentityPanel(m)}
+  ${renderInvoicePartyBlocks(m)}
+  ${renderInvoiceReferencePanel(m)}
+  ${renderInvoiceLineTable(m)}
+  <section class="summary-grid">
+    <div>${renderInvoiceVatBreakdown(m)}</div>
+    ${renderInvoiceTotalsPanel(m)}
+  </section>
+  ${paymentPanel}
+  ${renderInvoiceLegalFooter(m)}
+</main>
+</body>
+</html>`;
+}
 
 function signatureBlock(label,signature={}) { const src=signature.data_url||''; return `<div class="signature"><div class="party-title">${escapeInvoiceHtml(label)}</div>${src?`<img alt="" src="${escapeInvoiceHtml(src)}">`:''}<div>${escapeInvoiceHtml(signature.name||signature.identity||'')}</div><div>${escapeInvoiceHtml(signature.role||'')}</div></div>`; }
 function scheduleRows(rows=[]) { return `<table><thead><tr><th>Date</th><th>Scheduled</th><th>Worked</th><th>Break</th><th>Reference</th><th class="number">Hours / units</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${escapeInvoiceHtml(formatFrozenDocumentValue(row.date,{kind:'date'}))}</td><td>${escapeInvoiceHtml([row.scheduled_start,row.scheduled_end].filter(Boolean).join(' – '))}</td><td>${escapeInvoiceHtml([row.worked_start||row.start,row.worked_end||row.end].filter(Boolean).join(' – '))}</td><td>${escapeInvoiceHtml(row.break_display||[row.break_start,row.break_end,row.break_minutes!=null?`${row.break_minutes} min`:null].filter(Boolean).join(' / '))}</td><td>${escapeInvoiceHtml(row.reference||row.day_reference||'')}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(row.hours??row.units,{kind:'number'}))}</td></tr>`).join('')}</tbody></table>`; }
-export function buildElectronicTimesheetHtml(model={}) { const m=validateFrozenPresentationModel('ELECTRONIC_TIMESHEET',model); const auth=m.authorisation; return `<section class="source-page"><h1>Electronic timesheet</h1><div class="meta">${field('Candidate',m.candidate.name)}${field('Candidate ID',m.candidate.id)}${field('Client',m.client.name)}${field('Contract',m.contract.reference)}${field('Hospital / site',m.work.hospital||m.work.site)}${field('Ward',m.work.ward)}${field('Assignment / job',m.work.assignment||m.work.job_title)}${field('Band / shift type',[m.work.band,m.work.shift_type].filter(Boolean).join(' / '))}${field('Week ending',m.week_ending_date,'date')}${field('Submission mode',m.submission_mode)}${field('Sheet scope',m.sheet_scope)}${field('Document revision',m.document_revision)}</div>${scheduleRows(m.daily_schedule_rows)}${m.weekly_schedule_rows.length?`<h2 class="subheading">Weekly schedule</h2>${scheduleRows(m.weekly_schedule_rows)}`:''}<section class="verification"><div>Whole reference: ${escapeInvoiceHtml(m.references.whole||'')}</div><div>Day references: ${escapeInvoiceHtml((m.references.day||[]).map(value=>typeof value==='string'?value:JSON.stringify(value)).join(', '))}</div><div>Segment references: ${escapeInvoiceHtml((m.references.segment||[]).map(value=>typeof value==='string'?value:JSON.stringify(value)).join(', '))}</div><div>Additional units: ${escapeInvoiceHtml(formatFrozenDocumentValue(m.additional_units,{kind:'number'}))}</div><div>QR required: ${m.qr.required?'Yes':'No'} · QR signed: ${m.qr.signed?'Yes':'No'}</div><div>${escapeInvoiceHtml(m.qr.verification_summary||'')}</div><div>Authorised: ${auth.authorised?'Yes':'No'} ${escapeInvoiceHtml(auth.authorised_at_utc||'')} by ${escapeInvoiceHtml(auth.name||'')} ${escapeInvoiceHtml(auth.role||'')}</div></section><div class="signature-grid">${signatureBlock('Candidate / nurse signature',m.signatures.candidate)}${signatureBlock('Authoriser signature',m.signatures.authoriser)}</div></section>`; }
+export function buildElectronicTimesheetHtml(model = {}) {
+  const m = validateFrozenPresentationModel('ELECTRONIC_TIMESHEET', model);
+  const auth = m.authorisation || {};
+
+  const referenceText = rows => (Array.isArray(rows) ? rows : [])
+    .map(row => {
+      if (typeof row === 'string') return row;
+      const label = row.day_key || row.segment_id || row.row_key || '';
+      const reference = row.reference || row.current_reference || '';
+      return [label, reference].filter(Boolean).join(': ');
+    })
+    .filter(Boolean)
+    .join(', ');
+
+  const renderScheduleSection = (title, rows) => {
+    if (!Array.isArray(rows) || rows.length === 0) return '';
+    return `${title ? `<h2 class="subheading">${escapeInvoiceHtml(title)}</h2>` : ''}${scheduleRows(rows)}`;
+  };
+
+  const additionalUnits = (() => {
+    const describeEntry = (entry, index = null) => {
+      if (entry == null || entry === '') return '';
+      if (typeof entry === 'string') return entry;
+      if (typeof entry !== 'object') return formatFrozenDocumentValue(entry, { kind: 'number' });
+      return [
+        entry.label || entry.description || entry.type || entry.row_key || (index != null ? `Unit ${index + 1}` : 'Additional units'),
+        entry.units ?? entry.hours ?? entry.quantity,
+        entry.reference
+      ].filter(value => value != null && value !== '').join(' · ');
+    };
+    if (Array.isArray(m.additional_units)) return m.additional_units.map(describeEntry).filter(Boolean).join(', ');
+    return describeEntry(m.additional_units);
+  })();
+
+  return `<section class="source-page">
+<h1>Electronic timesheet</h1>
+<div class="meta">
+  ${field('Candidate', m.candidate.name)}
+  ${field('Candidate ID', m.candidate.id)}
+  ${field('Client', m.client.name)}
+  ${field('Contract', m.contract.reference)}
+  ${field('Hospital / site', m.work.hospital || m.work.site)}
+  ${field('Ward', m.work.ward)}
+  ${field('Assignment / job', m.work.assignment || m.work.job_title)}
+  ${field('Band / shift type', [m.work.band, m.work.shift_type].filter(Boolean).join(' / '))}
+  ${field('Week ending', m.week_ending_date, 'date')}
+  ${field('Submission mode', m.submission_mode)}
+  ${field('Sheet scope', m.sheet_scope)}
+  ${field('Document revision', m.document_revision)}
+</div>
+${renderScheduleSection(m.daily_schedule_rows?.length && m.weekly_schedule_rows?.length ? 'Daily schedule' : '', m.daily_schedule_rows)}
+${renderScheduleSection('Weekly schedule', m.weekly_schedule_rows)}
+<section class="verification">
+  <div>Whole reference: ${escapeInvoiceHtml(m.references.whole || '')}</div>
+  <div>Day references: ${escapeInvoiceHtml(referenceText(m.references.day))}</div>
+  <div>Segment references: ${escapeInvoiceHtml(referenceText(m.references.segment))}</div>
+  <div>Additional units: ${escapeInvoiceHtml(additionalUnits)}</div>
+  <div>QR required: ${m.qr.required ? 'Yes' : 'No'} · QR signed: ${m.qr.signed ? 'Yes' : 'No'}</div>
+  ${m.qr.status ? `<div>QR status: ${escapeInvoiceHtml(m.qr.status)}</div>` : ''}
+  ${m.qr.signed_hash ? `<div>QR signature: ${escapeInvoiceHtml(m.qr.signed_hash)}</div>` : ''}
+  ${m.qr.signed_at_utc ? `<div>QR signed at: ${escapeInvoiceHtml(formatFrozenDocumentValue(m.qr.signed_at_utc, { kind: 'date' }))}</div>` : ''}
+  ${m.qr.verification_summary ? `<div>${escapeInvoiceHtml(m.qr.verification_summary)}</div>` : ''}
+  <div>Authorised: ${auth.authorised ? 'Yes' : 'No'} ${escapeInvoiceHtml(auth.authorised_at_utc || '')} by ${escapeInvoiceHtml(auth.name || '')} ${escapeInvoiceHtml(auth.role || '')}</div>
+</section>
+<div class="signature-grid">
+  ${signatureBlock('Candidate / nurse signature', m.signatures.candidate)}
+  ${signatureBlock('Authoriser signature', m.signatures.authoriser)}
+</div>
+</section>`;
+}
+
 export function buildAttachmentIndexHtml(model={}) { const m=validateFrozenPresentationModel('ATTACHMENT_INDEX',model); return `<section class="source-page">${renderInvoiceAttachmentIndex(m.display_rows)}</section>`; }
 export function buildSectionSeparatorHtml(model={}) { return `<section class="separator"><h1>${escapeInvoiceHtml(model.title||model.label||'Supporting document')}</h1>${model.subtitle?`<p>${escapeInvoiceHtml(model.subtitle)}</p>`:''}${model.reference?`<p>Reference: ${escapeInvoiceHtml(model.reference)}</p>`:''}</section>`; }
 function supportTable(title,model,columns) { const rows=Array.isArray(model.rows)?model.rows:[]; return `<section class="source-page"><h1>${escapeInvoiceHtml(title)}</h1><table><thead><tr>${columns.map(c=>`<th>${escapeInvoiceHtml(c.label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${columns.map(c=>`<td>${escapeInvoiceHtml(formatFrozenDocumentValue(row?.[c.key],{kind:c.kind}))}</td>`).join('')}</tr>`).join('')}</tbody></table></section>`; }

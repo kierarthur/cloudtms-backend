@@ -10,8 +10,11 @@ declare
   v_now timestamptz:=coalesce(p_now_utc,now());
   v_result jsonb;
 begin
-  if jsonb_typeof(p_claims)<>'array'
-     or jsonb_array_length(p_claims)<1
+  if p_claims is null or jsonb_typeof(p_claims) is distinct from 'array' then
+    raise exception using errcode='22023',
+      message='p_claims must be an array containing 1..100 claims';
+  end if;
+  if jsonb_array_length(p_claims)<1
      or jsonb_array_length(p_claims)>100 then
     raise exception using errcode='22023',
       message='p_claims must be an array containing 1..100 claims';
@@ -51,20 +54,7 @@ begin
       c.lease_expires_at_utc,c.status current_status,
       o.control_version operation_current_control_version,o.status operation_status,
       o.config_json operation_config,
-      jsonb_build_object(
-        'chunk_id',v.chunk_id,
-        'fence_token',v.fence_token,
-        'plan_generation',v.plan_generation,
-        'action',v.chunk_type,
-        'document_version_id',v.document_version_id,
-        'document_asset_id',v.document_asset_id,
-        'source_revision',coalesce(v.asset_source_revision,
-          v.document_source_revision,v.payload_json->>'source_revision'),
-        'template_version',v.template_version,
-        'processor_policy_version',v.processor_limits->>'version',
-        'render_kind',v.payload_json->>'render_kind',
-        'ordered_input_hash',v.payload_json->>'ordered_input_hash'
-      ) || case
+      case
         when s.chunk_id is null or s.lease_token is null
           or s.fence_token is null or s.operation_control_version is null then 'INVALID_CLAIM'
         when c.id is null then 'CHUNK_NOT_FOUND'
@@ -96,7 +86,18 @@ begin
       a.orientation_degrees,a.source_page_count,a.normalised_manifest_json,
       dv.id version_exists,dv.entity_type document_entity_type,dv.entity_id document_entity_id,
       dv.purpose,dv.source_revision document_source_revision,dv.template_version,
-      dv.snapshot_json,dv.snapshot_hash,dv.manifest_json,dv.manifest_hash,
+      dv.snapshot_json,dv.snapshot_hash,
+      case when dv.snapshot_json is not null then encode(digest(dv.snapshot_json::text,'sha256'),'hex') end calculated_snapshot_hash,
+      case when dv.snapshot_json ? 'presentation_model' then dv.snapshot_json->'presentation_model'
+           when dv.snapshot_json ? 'timesheet' then dv.snapshot_json
+           else '{}'::jsonb end root_presentation_model,
+      case when dv.snapshot_json ? 'presentation_model' then dv.snapshot_json#>>'{presentation_model,schema_version}'
+           when dv.snapshot_json ? 'timesheet' then coalesce(dv.snapshot_json#>>'{timesheet,schema_version}',dv.snapshot_json->>'snapshot_schema_version')
+           else null end root_presentation_schema_version,
+      case when dv.snapshot_json ? 'presentation_model' then coalesce(dv.snapshot_json->>'presentation_model_hash', dv.snapshot_json#>>'{presentation_model,presentation_model_hash}', encode(digest((dv.snapshot_json->'presentation_model')::text,'sha256'),'hex'))
+           when dv.snapshot_json ? 'timesheet' then encode(digest(dv.snapshot_json::text,'sha256'),'hex')
+           else null end root_presentation_model_hash,
+      dv.manifest_json,dv.manifest_hash,
       input_v.status input_document_status,input_v.r2_key input_document_r2_key,
       input_v.sha256 input_document_sha256,input_v.size_bytes input_document_size_bytes,
       input_v.page_count input_document_page_count,
@@ -119,34 +120,92 @@ begin
            where x.value->>'timesheet_id'=m.value->>'source_entity_id'
            limit 1),
           case when v.document_entity_type='TIMESHEET'
-            then v.snapshot_json->'presentation_model' end)
+            then coalesce(v.snapshot_json->'presentation_model',v.snapshot_json) end)
         when m.value->>'input_type' in('HEALTHROSTER_SUPPORT','NHSP_SUPPORT')
           then coalesce(
-            (select x.value->'render_model'
+            (select coalesce(x.value->'render_model',x.value)
              from jsonb_array_elements(
-               case when jsonb_typeof(v.snapshot_json->'supporting_sources')='array'
+               case when jsonb_typeof(v.snapshot_json->'source_support')='array'
+                 then v.snapshot_json->'source_support'
+                 when jsonb_typeof(v.snapshot_json->'supporting_sources')='array'
                  then v.snapshot_json->'supporting_sources'
                  else '[]'::jsonb end) x(value)
              where x.value->>'import_id'=m.value->>'source_entity_id'
              limit 1),'{}'::jsonb)
-        when m.value->>'input_type'='HIGHER_RATE_SUPPORT' then coalesce(
-          v.snapshot_json->'higher_rate_support',
-          jsonb_build_object(
-            'schema_version','HIGHER_RATE_PRESENTATION_V1','rows','[]'::jsonb))
+        when m.value->>'input_type'='HIGHER_RATE_SUPPORT' then
+          coalesce(
+            case when jsonb_typeof(v.snapshot_json->'higher_rate_support')='object'
+              then v.snapshot_json->'higher_rate_support' end,
+            jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1',
+              'rows',coalesce((
+                select jsonb_agg(x.value order by x.ordinality)
+                from jsonb_array_elements(
+                  case when jsonb_typeof(v.snapshot_json->'lines')='array'
+                    then v.snapshot_json->'lines' else '[]'::jsonb end)
+                  with ordinality x(value,ordinality)
+                where upper(coalesce(x.value#>>'{business_meta,line_type}',''))
+                    like '%HIGHER%'
+                  or coalesce(x.value->'business_meta','{}'::jsonb)?'higher_rate'
+              ),'[]'::jsonb))
+          )
         when m.value->>'input_type' in('ATTACHMENT_INDEX','SECTION_SEPARATOR')
           then jsonb_build_object(
             'display_label',m.value->>'display_label',
             'input_type',m.value->>'input_type',
             'manifest_ordinal',m.value->'ordinal')
         else coalesce(m.value->'frozen_model','{}'::jsonb)
-      end frozen_model
+      end frozen_model,
+      case
+        when m.value->>'input_type'='ELECTRONIC_TIMESHEET' then 'TIMESHEET_RENDER_MODEL_V1'
+        when m.value->>'input_type'='HEALTHROSTER_SUPPORT' then 'HEALTHROSTER_PRESENTATION_V1'
+        when m.value->>'input_type'='NHSP_SUPPORT' then 'NHSP_PRESENTATION_V1'
+        when m.value->>'input_type'='HIGHER_RATE_SUPPORT' then 'HIGHER_RATE_PRESENTATION_V1'
+        when m.value->>'input_type'='ATTACHMENT_INDEX' then 'ATTACHMENT_INDEX_PRESENTATION_V1'
+        else coalesce(m.value#>>'{frozen_model,schema_version}',m.value->>'schema_version')
+      end frozen_model_schema_version,
+      encode(digest((case
+        when m.value->>'input_type'='ELECTRONIC_TIMESHEET' then coalesce(
+          (select x.value->'render_model'
+           from jsonb_array_elements(
+             case when jsonb_typeof(v.snapshot_json->'timesheet_sources')='array'
+               then v.snapshot_json->'timesheet_sources' else '[]'::jsonb end)
+             x(value)
+           where x.value->>'timesheet_id'=m.value->>'source_entity_id'
+           limit 1),
+          case when v.document_entity_type='TIMESHEET' then coalesce(v.snapshot_json->'presentation_model',v.snapshot_json) end)
+        when m.value->>'input_type' in('HEALTHROSTER_SUPPORT','NHSP_SUPPORT') then coalesce(
+          (select coalesce(x.value->'render_model',x.value)
+           from jsonb_array_elements(case when jsonb_typeof(v.snapshot_json->'source_support')='array'
+              then v.snapshot_json->'source_support' when jsonb_typeof(v.snapshot_json->'supporting_sources')='array'
+              then v.snapshot_json->'supporting_sources' else '[]'::jsonb end) x(value)
+           where x.value->>'import_id'=m.value->>'source_entity_id' limit 1),'{}'::jsonb)
+        when m.value->>'input_type'='HIGHER_RATE_SUPPORT' then coalesce(
+          case when jsonb_typeof(v.snapshot_json->'higher_rate_support')='object'
+            then v.snapshot_json->'higher_rate_support' end,
+          jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1',
+            'rows',coalesce((
+              select jsonb_agg(x.value order by x.ordinality)
+              from jsonb_array_elements(
+                case when jsonb_typeof(v.snapshot_json->'lines')='array'
+                  then v.snapshot_json->'lines' else '[]'::jsonb end)
+                with ordinality x(value,ordinality)
+              where upper(coalesce(x.value#>>'{business_meta,line_type}',''))
+                  like '%HIGHER%'
+                or coalesce(x.value->'business_meta','{}'::jsonb)?'higher_rate'
+            ),'[]'::jsonb))
+        )
+        when m.value->>'input_type' in('ATTACHMENT_INDEX','SECTION_SEPARATOR') then jsonb_build_object('display_label',m.value->>'display_label','input_type',m.value->>'input_type','manifest_ordinal',m.value->'ordinal')
+        else coalesce(m.value->'frozen_model','{}'::jsonb)
+      end)::text,'sha256'),'hex') frozen_model_hash
     from valid v
     left join lateral jsonb_array_elements(
       case when jsonb_typeof(v.manifest_json)='array' then v.manifest_json else '[]'::jsonb end
     ) m(value) on
       case when coalesce(v.payload_json->>'manifest_ordinal','') ~ '^[0-9]{1,9}$'
+             and coalesce(m.value->>'ordinal','') ~ '^[0-9]{1,9}$'
         then (m.value->>'ordinal')::integer=(v.payload_json->>'manifest_ordinal')::integer
-        else m.value->>'source_chunk_key'=v.payload_json->>'source_chunk_key' end
+        else nullif(m.value->>'source_chunk_key','') is not null
+             and m.value->>'source_chunk_key'=v.payload_json->>'source_chunk_key' end
     where v.chunk_type='SOURCE_RENDER'
   ),
   projected as materialized (
@@ -155,7 +214,10 @@ begin
       case
         when v.processor_limits is null
           or jsonb_typeof(v.processor_limits)<>'object'
-          or nullif(v.processor_limits->>'policy_version','') is null
+          or nullif(coalesce(
+              v.processor_limits->>'policy_version',
+              v.processor_limits->>'version'
+            ),'') is null
           then 'PROCESSOR_POLICY_MISSING'
         when v.chunk_type in('ASSET_INSPECT','ASSET_NORMALISE') and v.asset_exists is null
           then 'ASSET_NOT_FOUND'
@@ -164,28 +226,37 @@ begin
         when v.chunk_type in('SOURCE_RENDER','INVOICE_CORE_RENDER')
           and(jsonb_typeof(v.snapshot_json)<>'object' or v.snapshot_json='{}'::jsonb)
           then 'FROZEN_SNAPSHOT_MISSING'
+        when v.chunk_type in('SOURCE_RENDER','INVOICE_CORE_RENDER')
+          and (v.snapshot_hash is null
+            or v.calculated_snapshot_hash is distinct from v.snapshot_hash)
+          then 'FROZEN_SNAPSHOT_HASH_MISMATCH'
         when v.chunk_type='SOURCE_RENDER' and sm.manifest_item is null
           then 'SOURCE_MANIFEST_ITEM_MISSING'
         when v.chunk_type='SOURCE_RENDER'
           and coalesce(sm.frozen_model,'{}'::jsonb)='{}'::jsonb
-          then 'RENDER_MODEL_MISSING'
+          then 'SOURCE_FROZEN_MODEL_MISSING'
         when v.chunk_type='INVOICE_CORE_RENDER'
-          and coalesce(v.snapshot_json#>>'{presentation_model,schema_version}','')
-            <>'INVOICE_RENDER_MODEL_V1'
+          and coalesce(v.root_presentation_schema_version,'') <> 'INVOICE_RENDER_MODEL_V1'
           then 'RENDER_MODEL_SCHEMA_UNSUPPORTED'
         when v.chunk_type='SOURCE_RENDER' and (
           case coalesce(sm.manifest_item->>'render_kind',
               sm.manifest_item->>'input_type',v.payload_json->>'render_kind')
-            when 'ELECTRONIC_TIMESHEET' then coalesce(
-              sm.frozen_model->>'schema_version','')<>'TIMESHEET_RENDER_MODEL_V1'
-            when 'HEALTHROSTER_SUPPORT' then coalesce(
-              sm.frozen_model->>'schema_version','')<>'HEALTHROSTER_PRESENTATION_V1'
-            when 'NHSP_SUPPORT' then coalesce(
-              sm.frozen_model->>'schema_version','')<>'NHSP_PRESENTATION_V1'
-            when 'HIGHER_RATE_SUPPORT' then coalesce(
-              sm.frozen_model->>'schema_version','')<>'HIGHER_RATE_PRESENTATION_V1'
+            when 'ELECTRONIC_TIMESHEET' then coalesce(sm.frozen_model->>'schema_version','')<>'TIMESHEET_RENDER_MODEL_V1'
+            when 'HEALTHROSTER_SUPPORT' then coalesce(sm.frozen_model->>'schema_version','')<>'HEALTHROSTER_PRESENTATION_V1'
+            when 'NHSP_SUPPORT' then coalesce(sm.frozen_model->>'schema_version','')<>'NHSP_PRESENTATION_V1'
+            when 'HIGHER_RATE_SUPPORT' then coalesce(sm.frozen_model->>'schema_version','')<>'HIGHER_RATE_PRESENTATION_V1'
+            when 'ATTACHMENT_INDEX' then false
+            when 'SECTION_SEPARATOR' then false
             else false end)
           then 'RENDER_MODEL_KIND_MISMATCH'
+        when v.chunk_type='SOURCE_RENDER'
+          and nullif(v.payload_json->>'presentation_model_hash','') is not null
+          and v.payload_json->>'presentation_model_hash' is distinct from sm.frozen_model_hash
+          then 'RENDER_MODEL_HASH_MISMATCH'
+        when v.chunk_type='SOURCE_RENDER'
+          and nullif(v.payload_json->>'presentation_model_schema_version','') is not null
+          and v.payload_json->>'presentation_model_schema_version' is distinct from sm.frozen_model_schema_version
+          then 'RENDER_MODEL_SCHEMA_MISMATCH'
         when v.chunk_type in('ASSET_INSPECT','ASSET_NORMALISE')
           and nullif(v.payload_json->>'source_revision','') is not null
           and v.payload_json->>'source_revision'<>v.asset_source_revision
@@ -197,6 +268,14 @@ begin
           then 'SOURCE_REVISION_CHANGED'
         when v.input_document_version_id is not null and v.input_document_status<>'READY'
           then 'INPUT_DOCUMENT_NOT_READY'
+        when v.chunk_type='INVOICE_CORE_RENDER'
+          and nullif(v.payload_json->>'presentation_model_hash','') is not null
+          and v.payload_json->>'presentation_model_hash' is distinct from v.root_presentation_model_hash
+          then 'RENDER_MODEL_HASH_MISMATCH'
+        when v.chunk_type='INVOICE_CORE_RENDER'
+          and nullif(v.payload_json->>'presentation_model_schema_version','') is not null
+          and v.payload_json->>'presentation_model_schema_version' is distinct from v.root_presentation_schema_version
+          then 'RENDER_MODEL_SCHEMA_MISMATCH'
         when v.chunk_type='DOCUMENT_VERIFY'
           and(coalesce(v.payload_json->>'candidate_r2_key','')=''
             or coalesce(v.payload_json->>'candidate_sha256','')='')
@@ -204,7 +283,7 @@ begin
       end context_error,
       case
         when v.chunk_type in('ASSET_INSPECT','ASSET_NORMALISE') then jsonb_build_object(
-          'processor_policy_version',v.processor_limits->>'version',
+          'processor_policy_version',coalesce(v.processor_limits->>'policy_version',v.processor_limits->>'version'),
           'original_r2_key',v.original_r2_key,
           'expected_original_r2_key',case when v.chunk_type='ASSET_NORMALISE' then v.original_r2_key end,
           'expected_original_sha256',case when v.chunk_type='ASSET_NORMALISE' then v.original_sha256 end,
@@ -230,7 +309,6 @@ begin
           'immutable_destination_prefix','invoice-assets/'||v.document_asset_id||'/'||
             v.asset_source_revision||'/'||v.chunk_id||'/'||v.fence_token||'/')
         when v.chunk_type='SOURCE_RENDER' then jsonb_build_object(
-          'processor_policy_version',v.processor_limits->>'version',
           'render_kind',coalesce(sm.manifest_item->>'render_kind',
             sm.manifest_item->>'input_type',v.payload_json->>'render_kind'),
           'source_entity_type',sm.manifest_item->>'source_entity_type',
@@ -239,10 +317,9 @@ begin
           'manifest_ordinal',sm.manifest_item->'ordinal',
           'frozen_presentation_model',coalesce(
             sm.frozen_model,'{}'::jsonb),
-          'presentation_model_schema_version',
-            sm.frozen_model->>'schema_version',
-          'presentation_model_hash',encode(digest(
-            coalesce(sm.frozen_model,'{}'::jsonb)::text,'sha256'),'hex'),
+          'presentation_model_schema_version',sm.frozen_model_schema_version,
+          'presentation_model_hash',sm.frozen_model_hash,
+          'snapshot_hash',v.snapshot_hash,
           'asset_dependencies',coalesce(sm.manifest_item->'asset_dependencies','[]'::jsonb),
           'attachment_index_layout',case
             when v.payload_json->>'render_kind'='ATTACHMENT_INDEX'
@@ -265,27 +342,23 @@ begin
               'prior_measurements',
                 v.payload_json->'previous_layout_measurements')
             else null end,
-          'template_version',coalesce(
-            sm.frozen_model->>'template_version',v.template_version),
+          'template_version',v.template_version,
+          'processor_policy_version',coalesce(v.processor_limits->>'policy_version',v.processor_limits->>'version'),
           'immutable_destination_prefix','invoice-documents/'||v.document_version_id||
             '/source/'||v.chunk_id||'/'||v.fence_token||'/')
         when v.chunk_type='INVOICE_CORE_RENDER' then jsonb_build_object(
-          'processor_policy_version',v.processor_limits->>'version',
           'render_kind','INVOICE_CORE',
           'document_entity_type',v.document_entity_type,
           'document_entity_id',v.document_entity_id,
           'purpose',v.purpose,
           'source_revision',v.document_source_revision,
-          'frozen_presentation_model',
-            coalesce(v.snapshot_json->'presentation_model','{}'::jsonb),
-          'presentation_model_schema_version',
-            v.snapshot_json#>>'{presentation_model,schema_version}',
-          'presentation_model_hash',encode(digest(
-            coalesce(v.snapshot_json->'presentation_model','{}'::jsonb)::text,
-            'sha256'),'hex'),
+          'frozen_presentation_model',coalesce(v.root_presentation_model,'{}'::jsonb),
+          'presentation_model_schema_version',v.root_presentation_schema_version,
+          'presentation_model_hash',v.root_presentation_model_hash,
           'snapshot_hash',v.snapshot_hash,
           'attachment_index',coalesce(v.snapshot_json->'attachment_index','[]'::jsonb),
           'template_version',v.template_version,
+          'processor_policy_version',coalesce(v.processor_limits->>'policy_version',v.processor_limits->>'version'),
           'immutable_destination_prefix','invoice-documents/'||v.document_version_id||
             '/core/'||v.chunk_id||'/'||v.fence_token||'/')
         when v.chunk_type='PDF_MERGE' then jsonb_build_object(
@@ -326,14 +399,14 @@ begin
             'report_actual_byte_count',true,
             'preserve_actual_input_order',true,
             'include_processor_and_parser_versions',true),
-          'processor_policy_version',v.processor_limits->>'version',
+          'processor_policy_version',coalesce(v.processor_limits->>'policy_version',v.processor_limits->>'version'),
           'limits',coalesce(v.payload_json->'limits',
             v.processor_limits->'merge','{}'::jsonb),
           'immutable_destination_prefix','invoice-documents/'||v.document_version_id||
             '/merge/'||v.level_no||'/'||v.sequence_no||'/'||v.chunk_id||'/'||
             v.fence_token||'/')
         when v.chunk_type='DOCUMENT_VERIFY' then jsonb_build_object(
-          'processor_policy_version',v.processor_limits->>'version',
+          'processor_policy_version',coalesce(v.processor_limits->>'policy_version',v.processor_limits->>'version'),
           'verification_mode','VERIFY_EXISTING_CANDIDATE',
           'final_candidate_key',v.payload_json->>'candidate_r2_key',
           'final_candidate_sha256',v.payload_json->>'candidate_sha256',
@@ -418,7 +491,10 @@ begin
           'immutable_destination_prefix',
             p.context->>'immutable_destination_prefix',
           'render_kind',p.context->>'render_kind',
-          'ordered_input_hash',p.context->>'ordered_input_hash'),
+          'presentation_model_schema_version',p.context->>'presentation_model_schema_version',
+          'presentation_model_hash',p.context->>'presentation_model_hash',
+          'snapshot_hash',p.context->>'snapshot_hash',
+          'ordered_input_hash',coalesce(p.context->>'ordered_input_hash',p.context->>'expected_ordered_input_hash')),
         'context',p.context)
       else jsonb_build_object(
         'chunk_id',p.chunk_id,'operation_id',p.operation_id,

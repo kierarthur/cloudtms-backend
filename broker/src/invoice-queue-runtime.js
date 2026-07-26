@@ -234,6 +234,99 @@ function postgresJsonbText(value) {
   return JSON.stringify(value);
 }
 
+async function verifyFrozenPresentationModelHash(renderKind, model, expected = {}, options = {}) {
+  const kind = String(renderKind || '').trim().toUpperCase();
+  if (!kind) {
+    throw Object.assign(new Error('RENDER_MODEL_KIND_MISSING'), { code: 'RENDER_MODEL_KIND_MISSING' });
+  }
+  if (!model || typeof model !== 'object' || Array.isArray(model)) {
+    throw Object.assign(new Error('RENDER_MODEL_MISSING'), { code: 'RENDER_MODEL_MISSING' });
+  }
+
+  const expectedSchema = String(
+    expected.presentation_model_schema_version
+      || expected.expected_presentation_model_schema_version
+      || options.presentationModelSchemaVersion
+      || ''
+  ).trim();
+
+  let validated;
+  let schemaVersion;
+
+  /*
+   * ATTACHMENT_INDEX is deliberately two-stage:
+   *   1. context/frozen identity: small deterministic layout seed from SQL
+   *   2. final render model: same seed plus displayed rows derived after page counts
+   *
+   * The DB context hash is over the layout seed, not the final displayed rows.
+   * Therefore this helper verifies the frozen seed hash here; renderBrowserDocument
+   * separately validates the final ATTACHMENT_INDEX render model after rows are derived.
+   */
+  if (kind === 'ATTACHMENT_INDEX' && !Array.isArray(model.display_rows)) {
+    validated = model;
+    schemaVersion = String(model.schema_version || expectedSchema || 'ATTACHMENT_INDEX_PRESENTATION_V1');
+  } else {
+    validated = validateFrozenPresentationModel(kind, model, {
+      templateVersion: options.templateVersion || expected.template_version
+    });
+    schemaVersion = String(validated.schema_version || expectedSchema || '');
+  }
+
+  const calculatedPresentationHash = await sha256Hex(
+    new TextEncoder().encode(postgresJsonbText(validated))
+  );
+
+  const expectedPresentationHash = String(
+    expected.presentation_model_hash
+      || expected.expected_presentation_model_hash
+      || options.presentationModelHash
+      || ''
+  ).trim().toLowerCase();
+
+  if (!/^[0-9a-f]{64}$/.test(expectedPresentationHash)) {
+    throw Object.assign(new Error('RENDER_MODEL_HASH_MISSING'), {
+      code: 'RENDER_MODEL_HASH_MISSING',
+      detail: { render_kind: kind, schema_version: schemaVersion }
+    });
+  }
+
+  if (calculatedPresentationHash !== expectedPresentationHash) {
+    throw Object.assign(new Error('RENDER_MODEL_HASH_MISMATCH'), {
+      code: 'RENDER_MODEL_HASH_MISMATCH',
+      detail: {
+        render_kind: kind,
+        schema_version: schemaVersion,
+        expected: expectedPresentationHash,
+        actual: calculatedPresentationHash
+      }
+    });
+  }
+
+  if (expectedSchema && schemaVersion !== expectedSchema) {
+    throw Object.assign(new Error('RENDER_MODEL_SCHEMA_MISMATCH'), {
+      code: 'RENDER_MODEL_SCHEMA_MISMATCH',
+      detail: { render_kind: kind, expected: expectedSchema, actual: schemaVersion }
+    });
+  }
+
+  const expectedSnapshotHash = String(expected.snapshot_hash || options.snapshotHash || '').trim().toLowerCase();
+  if (expectedSnapshotHash && !/^[0-9a-f]{64}$/.test(expectedSnapshotHash)) {
+    throw Object.assign(new Error('FROZEN_SNAPSHOT_HASH_INVALID'), {
+      code: 'FROZEN_SNAPSHOT_HASH_INVALID',
+      detail: { render_kind: kind, value: expectedSnapshotHash }
+    });
+  }
+
+  return Object.freeze({
+    model: validated,
+    render_kind: kind,
+    presentation_model_schema_version: schemaVersion,
+    presentation_model_hash: calculatedPresentationHash,
+    expected_presentation_model_hash: expectedPresentationHash,
+    snapshot_hash: expectedSnapshotHash || undefined
+  });
+}
+
 async function pdfPageCount(bytes) {
   const document = await PDFDocument.load(bytes, { ignoreEncryption: false, updateMetadata: false });
   return document.getPageCount();
@@ -399,35 +492,73 @@ async function resolveEmbeddedBrandingAssets(env, sourceModel, config) {
 async function renderBrowserDocument(env, contextRow, config, signal) {
   if (!env.BROWSER) throw Object.assign(new Error('INVOICE_BROWSER_BINDING_MISSING'), { code: 'INVOICE_BROWSER_BINDING_MISSING' });
   if (!env.R2) throw Object.assign(new Error('INVOICE_R2_BINDING_MISSING'), { code: 'INVOICE_R2_BINDING_MISSING' });
+
   const context = contextRow.context || {};
   const identity = processorIdentity(contextRow);
   const renderKind = String(identity.render_kind || context.render_kind || '').toUpperCase();
-  const presentationModel = context.frozen_presentation_model;
-  if (!presentationModel || typeof presentationModel !== 'object' || Array.isArray(presentationModel)) {
-    throw Object.assign(new Error('RENDER_MODEL_MISSING'), { code: 'RENDER_MODEL_MISSING' });
-  }
-  const embeddedModel = await resolveEmbeddedBrandingAssets(env, presentationModel, config);
+  const expectedIdentity = contextRow.expected_result_identity || {};
+  const templateVersion = identity.template_version || context.template_version;
+
+  const frozenPresentationModel = context.frozen_presentation_model;
+  const expectedModelIdentity = {
+    presentation_model_schema_version: context.presentation_model_schema_version || expectedIdentity.presentation_model_schema_version,
+    presentation_model_hash: context.presentation_model_hash || expectedIdentity.presentation_model_hash,
+    snapshot_hash: context.snapshot_hash || expectedIdentity.snapshot_hash,
+    template_version: templateVersion
+  };
+
+  const verifiedModel = await verifyFrozenPresentationModelHash(
+    renderKind,
+    frozenPresentationModel,
+    expectedModelIdentity,
+    { templateVersion }
+  );
+
   const layout = context.attachment_index_layout || {};
-  const model = renderKind === 'ATTACHMENT_INDEX'
-    ? { ...embeddedModel, display_rows: deriveAttachmentDisplayMap(layout, Number(layout.expected_index_page_count || 1)) }
-    : embeddedModel;
-  validateFrozenPresentationModel(renderKind, model, {
-    templateVersion: identity.template_version || context.template_version
-  });
+  let model;
+
+  if (renderKind === 'ATTACHMENT_INDEX') {
+    const baseModel = verifiedModel.model && typeof verifiedModel.model === 'object'
+      ? structuredClone(verifiedModel.model)
+      : {};
+    model = {
+      ...baseModel,
+      schema_version: baseModel.schema_version || expectedModelIdentity.presentation_model_schema_version || 'ATTACHMENT_INDEX_PRESENTATION_V1',
+      display_rows: deriveAttachmentDisplayMap(
+        layout,
+        Number(layout.expected_index_page_count || 1)
+      )
+    };
+    validateFrozenPresentationModel('ATTACHMENT_INDEX', model, { templateVersion });
+  } else {
+    const embeddedModel = await resolveEmbeddedBrandingAssets(env, verifiedModel.model, config);
+    validateFrozenPresentationModel(renderKind, embeddedModel, { templateVersion });
+    model = embeddedModel;
+  }
+
   const html = renderKind === 'INVOICE_CORE'
     ? buildProfessionalInvoiceHtml(model)
     : buildInvoiceSourceDocumentHtml(renderKind, model);
+
   const browserTimeout = AbortSignal.timeout(config.browserRenderTimeoutMs);
   const combinedSignal = signal ? AbortSignal.any([signal, browserTimeout]) : browserTimeout;
   const browser = await puppeteer.launch(env.BROWSER);
   let page = null;
+
   const abort = () => {
     void page?.close().catch(() => undefined);
     void browser.close().catch(() => undefined);
   };
   combinedSignal.addEventListener('abort', abort, { once: true });
+
   try {
-    if (combinedSignal.aborted) throw Object.assign(new Error(signal?.aborted ? 'OWNERSHIP_LOST' : 'BROWSER_RENDER_TIMEOUT'), { code: signal?.aborted ? 'OWNERSHIP_LOST' : 'BROWSER_RENDER_TIMEOUT' });
+    if (combinedSignal.aborted) {
+      throw Object.assign(
+        new Error(signal?.aborted ? 'OWNERSHIP_LOST' : 'BROWSER_RENDER_TIMEOUT'),
+        { code: signal?.aborted ? 'OWNERSHIP_LOST' : 'BROWSER_RENDER_TIMEOUT' }
+      );
+    }
+
     page = await browser.newPage();
     await page.setRequestInterception(true);
     page.on('request', request => {
@@ -435,46 +566,83 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
       if (url.startsWith('data:') || url.startsWith('about:')) void request.continue();
       else void request.abort('blockedbyclient');
     });
-    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: config.browserRenderTimeoutMs });
+
+    await page.setContent(html, {
+      waitUntil: 'domcontentloaded',
+      timeout: config.browserRenderTimeoutMs
+    });
     await page.emulateMediaType('print');
+
     const buffer = await page.pdf({
-      format: 'A4', printBackground: true, preferCSSPageSize: true,
+      format: 'A4',
+      printBackground: true,
+      preferCSSPageSize: true,
       displayHeaderFooter: true,
       headerTemplate: '<span></span>',
       footerTemplate: '<div style="font-size:8px;width:100%;text-align:center;color:#667085"><span class="pageNumber"></span> / <span class="totalPages"></span></div>',
       margin: { top: '12mm', right: '12mm', bottom: '16mm', left: '12mm' }
     });
+
     const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+
     if (config.browserRenderOutputMaxBytes > config.browserInMemoryPdfMaxBytes) {
       throw Object.assign(new Error('INVOICE_BROWSER_MEMORY_LIMIT_INVALID'), { code: 'INVOICE_BROWSER_MEMORY_LIMIT_INVALID' });
     }
-    if (bytes.byteLength > config.browserRenderOutputMaxBytes) throw Object.assign(new Error('BROWSER_RENDER_OUTPUT_TOO_LARGE'), { code: 'BROWSER_RENDER_OUTPUT_TOO_LARGE' });
+    if (bytes.byteLength > config.browserRenderOutputMaxBytes) {
+      throw Object.assign(new Error('BROWSER_RENDER_OUTPUT_TOO_LARGE'), { code: 'BROWSER_RENDER_OUTPUT_TOO_LARGE' });
+    }
+
     const sha256 = await sha256Hex(bytes);
     const pageCount = await pdfPageCount(bytes);
-    if (pageCount > config.browserRenderOutputMaxPages) throw Object.assign(new Error('BROWSER_RENDER_PAGE_LIMIT_EXCEEDED'), { code: 'BROWSER_RENDER_PAGE_LIMIT_EXCEEDED' });
+
+    if (pageCount > config.browserRenderOutputMaxPages) {
+      throw Object.assign(new Error('BROWSER_RENDER_PAGE_LIMIT_EXCEEDED'), { code: 'BROWSER_RENDER_PAGE_LIMIT_EXCEEDED' });
+    }
+
     const outputPrefix = String(identity.output_prefix || '');
-    if (!outputPrefix) throw Object.assign(new Error('INVOICE_OUTPUT_PREFIX_MISSING'), { code: 'INVOICE_OUTPUT_PREFIX_MISSING' });
+    if (!outputPrefix) {
+      throw Object.assign(new Error('INVOICE_OUTPUT_PREFIX_MISSING'), { code: 'INVOICE_OUTPUT_PREFIX_MISSING' });
+    }
+
     const r2Key = `${outputPrefix}${renderKind.toLowerCase()}-${sha256}.pdf`;
     const metadata = {
-      sha256, size_bytes: bytes.byteLength, chunk_id: identity.chunk_id,
-      fence_token: identity.fence_token, plan_generation: identity.plan_generation,
-      document_version_id: identity.document_version_id, render_kind: renderKind,
+      sha256,
+      size_bytes: bytes.byteLength,
+      chunk_id: identity.chunk_id,
+      fence_token: identity.fence_token,
+      plan_generation: identity.plan_generation,
+      document_version_id: identity.document_version_id,
+      render_kind: renderKind,
       processor_policy_version: identity.processor_policy_version,
-      template_version: identity.template_version
+      template_version: identity.template_version,
+      presentation_model_schema_version: verifiedModel.presentation_model_schema_version,
+      presentation_model_hash: verifiedModel.presentation_model_hash,
+      snapshot_hash: verifiedModel.snapshot_hash || ''
     };
+
     await putImmutableInvoiceArtifact(env.R2, r2Key, bytes, metadata);
+
     const result = {
-      ...identity, output_prefix: outputPrefix, output_type: 'application/pdf', r2_key: r2Key,
-      sha256, size_bytes: bytes.byteLength, page_count: pageCount, parse_verified: true,
+      ...identity,
+      output_prefix: outputPrefix,
+      output_type: 'application/pdf',
+      r2_key: r2Key,
+      sha256,
+      size_bytes: bytes.byteLength,
+      page_count: pageCount,
+      parse_verified: true,
       processor_version: 'cloudtms-browser-renderer-v4',
-      presentation_model_schema_version: context.presentation_model_schema_version,
-      presentation_model_hash: context.presentation_model_hash
+      presentation_model_schema_version: verifiedModel.presentation_model_schema_version,
+      presentation_model_hash: verifiedModel.presentation_model_hash,
+      snapshot_hash: verifiedModel.snapshot_hash
     };
+
     if (renderKind === 'ATTACHMENT_INDEX') {
       const rows = deriveAttachmentDisplayMap(layout, pageCount);
       const displayedPageMapHash = await sha256Hex(new TextEncoder().encode(postgresJsonbText(rows)));
       const paginationStream = Array.isArray(layout.pagination_stream) ? layout.pagination_stream : [];
       const paginationStreamHash = await sha256Hex(new TextEncoder().encode(postgresJsonbText(paginationStream)));
+
       result.layout_phase = layout.layout_phase;
       result.layout_pass = layout.layout_pass;
       result.layout_page_count = pageCount;
@@ -487,9 +655,12 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
       result.displayed_start_pages_hash = displayedPageMapHash;
       result.displayed_page_map_hash = displayedPageMapHash;
       result.pagination_stream_hash = paginationStreamHash;
-      result.layout_identity_hash = await sha256Hex(new TextEncoder().encode(postgresJsonbText(layout.determinism || {})));
+      result.layout_identity_hash = await sha256Hex(
+        new TextEncoder().encode(postgresJsonbText(layout.determinism || {}))
+      );
       result.displayed_rows_verified = true;
     }
+
     return result;
   } finally {
     combinedSignal.removeEventListener('abort', abort);
@@ -1428,7 +1599,8 @@ export const invoiceQueueRuntimeInternals = Object.freeze({
   parseBoundedInteger,
   postgresJsonbText,
   processorIdentity,
-  compactError
+  compactError,
+  verifyFrozenPresentationModelHash
 });
 
 

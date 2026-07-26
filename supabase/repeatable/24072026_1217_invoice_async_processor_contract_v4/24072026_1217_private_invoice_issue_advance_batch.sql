@@ -11,6 +11,15 @@ declare
   v_result jsonb:='[]'::jsonb;
   v_part jsonb;
 begin
+  if p_claims is null or jsonb_typeof(p_claims) is distinct from 'array' then
+    raise exception using errcode='22023',
+      message='p_claims must be a JSON array containing 1..100 claims';
+  end if;
+  if jsonb_array_length(p_claims) < 1 or jsonb_array_length(p_claims) > 100 then
+    raise exception using errcode='22023',
+      message='p_claims must be a JSON array containing 1..100 claims';
+  end if;
+
   -- VALIDATE preserves stable issue blocker codes and makes no legal transition.
   with ids as materialized (
     select case when coalesce(x->>'chunk_id','')~
@@ -79,15 +88,7 @@ begin
 
   -- FREEZE: immutable legal/render snapshot; invoice deliberately remains DRAFT.
   with ids as materialized (
-    select (x->>'chunk_id')::uuid chunk_id from jsonb_array_elements(p_claims) x where x->>'phase'='FREEZE'
-  ),
-  reference_scope as materialized (
-    select r.*
-    from private._invoice_reference_rows_batch((
-      select coalesce(array_agg(distinct c.entity_id),array[]::uuid[])
-      from ids x
-      join public.invoice_operation_chunks c on c.id=x.chunk_id
-    )) r
+    select case when coalesce(x->>'chunk_id','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then (x->>'chunk_id')::uuid end chunk_id from jsonb_array_elements(p_claims) x where x->>'phase'='FREEZE'
   ),
   freeze_route_requests as materialized (
     select c.id chunk_id,
@@ -122,279 +123,109 @@ begin
     cross join lateral private._invoice_delivery_routes_batch(
       g.request_json,g.evaluation_date) r
   ),
-  legacy_frozen as materialized (
+  freeze_seed as materialized (
     select c.id chunk_id,c.operation_id,c.entity_id invoice_id,c.payload_json,
       i.document_revision,i.invoice_no,i.client_id,
+      frozen_clock.issue_at_utc,
+      frozen_clock.issue_at_utc tax_point_utc,
+      frozen_clock.issue_at_utc+make_interval(days=>coalesce(
+        case when pg_input_is_valid(nullif(i.header_snapshot_json->>'payment_terms_days',''),'integer')
+          then greatest(0,least(3650,(i.header_snapshot_json->>'payment_terms_days')::integer)) end,
+        cl.payment_terms_days,30)) due_at_utc,
+      rr.request_json routing_request,
       jsonb_build_object(
-        'snapshot_schema_version','FINAL_ISSUE_PRESENTATION_SNAPSHOT_V4',
-        'invoice',jsonb_build_object(
-          'id',i.id,'type',i.type,'status',i.status,'invoice_no',i.invoice_no,
-          'client_id',i.client_id,'subtotal_ex_vat',i.subtotal_ex_vat,
-          'vat_amount',i.vat_amount,'total_inc_vat',i.total_inc_vat,
-          'original_invoice_id',i.original_invoice_id,'notes',i.notes,
-          'document_revision',i.document_revision),
-        'issue_date_utc',frozen_clock.issue_at_utc,
-        'tax_point_utc',frozen_clock.issue_at_utc,
-        'due_date_utc',frozen_clock.issue_at_utc+make_interval(days=>coalesce(
-          case when pg_input_is_valid(
-              nullif(i.header_snapshot_json->>'payment_terms_days',''),'integer')
-            then greatest(0,least(3650,
-              (i.header_snapshot_json->>'payment_terms_days')::integer))
-          end,cl.payment_terms_days,30)),
-        'supplier',jsonb_build_object('agency_name',sd.agency_name,'registered_address',sd.registered_address,
-          'company_reg_number',sd.company_reg_number,'vat_registration_number',sd.vat_registration_number,
-          'bank',jsonb_build_object('name',sd.bank_name,'sort_code',sd.bank_sort_code,'account_number',sd.bank_account_number)),
-        'customer',jsonb_build_object('client_id',cl.id,'name',cl.name,'invoice_address',cl.invoice_address,
-          'primary_invoice_email',cl.primary_invoice_email),
-        'payment_terms_days',coalesce(
-          case when pg_input_is_valid(
-              nullif(i.header_snapshot_json->>'payment_terms_days',''),'integer')
-            then greatest(0,least(3650,
-              (i.header_snapshot_json->>'payment_terms_days')::integer)) end,
-          cl.payment_terms_days,30),
-        'legal_wording',coalesce(i.header_snapshot_json->'legal_wording','{}'::jsonb),
-        'presentation',jsonb_build_object(
-          'stationery_key',i.header_snapshot_json->>'stationery_key',
-          'stationery_margins_mm',i.header_snapshot_json->'stationery_margins_mm',
-          'hide_bank_footer',i.header_snapshot_json->'hide_bank_footer'),
-        'lines',coalesce((select jsonb_agg(jsonb_build_object(
-          'id',l.id,'timesheet_id',l.timesheet_id,'booking_id',l.booking_id,
-          'description',l.description,'hours_day',l.hours_day,
-          'hours_night',l.hours_night,'hours_sat',l.hours_sat,
-          'hours_sun',l.hours_sun,'hours_bh',l.hours_bh,
-          'pay_day',l.pay_day,'pay_night',l.pay_night,'pay_sat',l.pay_sat,
-          'pay_sun',l.pay_sun,'pay_bh',l.pay_bh,
-          'charge_day',l.charge_day,'charge_night',l.charge_night,
-          'charge_sat',l.charge_sat,'charge_sun',l.charge_sun,
-          'charge_bh',l.charge_bh,'total_pay_ex_vat',l.total_pay_ex_vat,
-          'total_charge_ex_vat',l.total_charge_ex_vat,
-          'margin_ex_vat',l.margin_ex_vat,'vat_rate_pct',l.vat_rate_pct,
-          'vat_amount',l.vat_amount,'total_inc_vat',l.total_inc_vat,
-          'source_key',l.source_key,'business_meta',l.meta_json)
-          order by l.created_at,l.id)
-          from public.invoice_lines l where l.invoice_id=i.id),'[]'::jsonb),
-        'references',coalesce((select jsonb_agg(jsonb_build_object(
-          'timesheet_id',r.timesheet_id,'ref_target',r.ref_target,
-          'segment_id',r.segment_id,'day_ymd',r.day_ymd,
-          'current_reference',r.current_reference,'is_required',r.is_required,
-          'row_key',r.row_key) order by r.row_key)
-          from reference_scope r where r.invoice_id=i.id),'[]'::jsonb),
-        'timesheet_sources',coalesce((select jsonb_agg(jsonb_build_object(
-          'timesheet_id',src.timesheet_id,
-          'submission_mode',src.submission_mode,
-          'document_revision',src.document_revision,
-          'manual_document_asset_id',src.manual_document_asset_id,
-          'client_is_nhsp',src.client_is_nhsp,
-          'no_timesheet_required',src.no_timesheet_required,
-          'attach_timesheet',src.attach_timesheet,
-          'render_model',src.render_model)
-          order by src.timesheet_id)
-          from (
-            select distinct t.timesheet_id,t.submission_mode::text submission_mode,
-              t.document_revision,t.manual_document_asset_id,
-              coalesce(vs.client_is_nhsp,false) client_is_nhsp,
-              coalesce(vs.client_no_timesheet_required,false)
-                no_timesheet_required,
-              coalesce(pc.effective_ts_attach_to_invoice,true) attach_timesheet,
-              jsonb_build_object(
-                'timesheet_id',t.timesheet_id,
-                'booking_id',t.booking_id,
-                'contract_id',t.contract_id,
-                'candidate_display',t.occupant_key_norm,
-                'hospital',t.hospital_norm,'ward',t.ward_norm,
-                'job_title',t.job_title_norm,'band',t.band,
-                'shift_label',t.shift_label_norm,
-                'week_ending_date',t.week_ending_date,
-                'reference_number',t.reference_number,
-                'sheet_scope',t.sheet_scope,
-                'submission_mode',t.submission_mode,
-                'scheduled_start_iso',t.scheduled_start_iso,
-                'scheduled_end_iso',t.scheduled_end_iso,
-                'worked_start_iso',t.worked_start_iso,
-                'worked_end_iso',t.worked_end_iso,
-                'break_start_iso',t.break_start_iso,
-                'break_end_iso',t.break_end_iso,
-                'break_minutes',t.break_minutes,
-                'worked_minutes',t.worked_minutes,
-                'day_references',t.day_references_json,
-                'actual_schedule',t.actual_schedule_json,
-                'additional_units_week',t.additional_units_week,
-                'additional_units_per_day',t.additional_units_per_day,
-                'authorisation',jsonb_build_object('name',t.auth_name,'job_title',t.auth_job_title,
-                  'authorised_at_utc',t.authorised_at_server),
-                'signatures',jsonb_build_object('nurse_r2_key',t.r2_nurse_key,
-                  'authorisation_r2_key',t.r2_auth_key,'nurse_sha256',t.img_sha256_nurse,
-                  'authorisation_sha256',t.img_sha256_auth),
-                'qr',jsonb_build_object('required',t.qr_status is not null,
-                  'status',t.qr_status,'signed_hash',t.qr_signed_hash,
-                  'signed_at_utc',t.qr_signed_at_utc,'immutable_r2_key',t.qr_r2_key),
-                'template_version','timesheet-professional-v1',
-                'version',t.version,
-                'document_revision',t.document_revision,
-                'financials',jsonb_build_object(
-                  'id',f.id,'timesheet_version',f.timesheet_version,
-                  'basis',f.basis,'hours_day',f.hours_day,
-                  'hours_night',f.hours_night,'hours_sat',f.hours_sat,
-                  'hours_sun',f.hours_sun,'hours_bh',f.hours_bh,
-                  'total_pay_ex_vat',f.total_pay_ex_vat,
-                  'total_charge_ex_vat',f.total_charge_ex_vat,
-                  'invoice_breakdown',f.invoice_breakdown_json))
-                render_model
-            from public.invoice_lines il
-            join public.timesheets t
-              on t.timesheet_id=il.timesheet_id and t.is_current
-            left join public.timesheets_financials f
-              on f.timesheet_id=t.timesheet_id and f.is_current
-            left join public.v_timesheets_summary_base vs
-              on vs.timesheet_id=t.timesheet_id
-            left join public.v_ts_invoice_precheck pc
-              on pc.timesheet_id=t.timesheet_id
-            where il.invoice_id=i.id and il.timesheet_id is not null
-          ) src),'[]'::jsonb),
-        'supporting_manifest',coalesce((select jsonb_agg(jsonb_build_object(
-          'timesheet_id',e.timesheet_id,'evidence_id',e.id,'kind',e.kind,
-          'display_name',e.display_name,'storage_key',e.storage_key,
-          'asset_id',e.document_asset_id,'source_kind',a.source_kind,
-          'source_revision',a.source_revision,
-          'original_r2_key',a.original_r2_key,
-          'asset_sha256',a.normalised_sha256,
-          'asset_manifest_hash',a.normalised_manifest_hash,
-          'asset_size_bytes',a.normalised_size_bytes,
-          'asset_page_count',a.normalised_page_count)
-          order by e.timesheet_id,e.created_at,e.id)
-          from public.timesheet_evidence e
-          left join public.invoice_document_assets a
-            on a.id=e.document_asset_id
-          where e.timesheet_id in(select distinct l.timesheet_id
-            from public.invoice_lines l where l.invoice_id=i.id
-              and l.timesheet_id is not null)
-            and(
-              upper(coalesce(e.kind,''))='TIMESHEET'
-              or upper(coalesce(e.kind,''))='MILEAGE' and exists(
-                select 1 from public.invoice_lines l
-                where l.invoice_id=i.id and l.timesheet_id=e.timesheet_id
-                  and(upper(coalesce(l.meta_json->>'line_type','')) in(
-                    'EXPENSE_MILEAGE','MILEAGE')
-                    or l.source_key like '%:MILEAGE'))
-              or upper(coalesce(e.kind,''))='TRAVEL' and exists(
-                select 1 from public.invoice_lines l
-                where l.invoice_id=i.id and l.timesheet_id=e.timesheet_id
-                  and upper(coalesce(l.meta_json->>'line_type','')) like '%TRAVEL%')
-              or upper(coalesce(e.kind,''))='ACCOMMODATION' and exists(
-                select 1 from public.invoice_lines l
-                where l.invoice_id=i.id and l.timesheet_id=e.timesheet_id
-                  and upper(coalesce(l.meta_json->>'line_type','')) like '%ACCOMMODATION%')
-              or upper(coalesce(e.kind,'')) in('OTHER','EXPENSE','EXPENSES')
-                and exists(
-                  select 1 from public.invoice_lines l
-                  where l.invoice_id=i.id and l.timesheet_id=e.timesheet_id
-                    and upper(coalesce(l.meta_json->>'line_type',''))
-                      like 'EXPENSE_%'))
-          ),'[]'::jsonb),
-        'source_support',coalesce((select jsonb_agg(jsonb_build_object(
-          'source_system',r.source_system,'import_id',r.import_id,
-          'header_rows',r.header_rows,'header_columns',r.header_columns,
-          'rows',r.rows_json) order by r.source_system,r.import_id)
-          from public.invoice_hr_source_rows r where r.invoice_id=i.id),'[]'::jsonb),
-        'delivery_intent',coalesce(c.payload_json->'delivery_intent','{}'::jsonb),
-        'routing_request',rr.request_json,
-        'delivery_route',jsonb_build_object(
-          'request_key',dr.request_key,
-          'to',dr.canonical_to,'cc',dr.canonical_cc,'bcc',dr.canonical_bcc,
-          'recipient_set_hash',dr.recipient_set_hash,
-          'route_policy_hash',dr.route_policy_hash,
-          'route_source',dr.route_source,'do_not_send',dr.do_not_send,
-          'delivery_suppressed',dr.delivery_suppressed,
-          'suppression_reason',dr.suppression_reason,
-          'client_settings_id',dr.client_settings_id,
-          'contract_settings_ids',dr.contract_settings_ids,
-          'effective_date',dr.effective_date,
-          'client_id',dr.client_id,
-          'invoice_group_identity',dr.invoice_group_identity,
-          'self_bill',dr.self_bill,
-          'grouping_identity',dr.grouping_identity,
-          'template_version',coalesce(
-            c.payload_json#>>'{delivery_intent,template_version}',
-            'invoice-delivery-v1'),
-          'delivery_policy',upper(coalesce(
-            c.payload_json#>>'{delivery_intent,delivery_policy}','ATTACH')),
-          'warning_codes',coalesce(dr.warning_codes,'[]'::jsonb),
-          'blocker_codes',coalesce(dr.blocker_codes,'[]'::jsonb),
-          'evaluated_date',dr.effective_date),
-        'delivery_request_token',coalesce(
-          nullif(c.payload_json->>'delivery_request_token',''),
-          'ISSUE:'||coalesce(c.payload_json->>'command_token',c.id::text)),
-        'deliver',coalesce(c.payload_json->'deliver','false'::jsonb)
-      ) snapshot
-    from ids x join public.invoice_operation_chunks c on c.id=x.chunk_id
+        'request_key',dr.request_key,
+        'to',coalesce(dr.canonical_to,'[]'::jsonb),
+        'cc',coalesce(dr.canonical_cc,'[]'::jsonb),
+        'bcc',coalesce(dr.canonical_bcc,'[]'::jsonb),
+        'recipient_set_hash',dr.recipient_set_hash,
+        'route_policy_hash',dr.route_policy_hash,
+        'route_source',dr.route_source,
+        'do_not_send',dr.do_not_send,
+        'delivery_suppressed',dr.delivery_suppressed,
+        'suppression_reason',dr.suppression_reason,
+        'client_settings_id',dr.client_settings_id,
+        'contract_settings_ids',dr.contract_settings_ids,
+        'effective_date',dr.effective_date,
+        'client_id',dr.client_id,
+        'invoice_group_identity',dr.invoice_group_identity,
+        'self_bill',dr.self_bill,
+        'grouping_identity',dr.grouping_identity,
+        'template_version',coalesce(c.payload_json#>>'{delivery_intent,template_version}','invoice-delivery-v1'),
+        'delivery_policy',upper(coalesce(c.payload_json#>>'{delivery_intent,delivery_policy}','ATTACH')),
+        'warning_codes',coalesce(dr.warning_codes,'[]'::jsonb),
+        'blocker_codes',coalesce(dr.blocker_codes,'[]'::jsonb),
+        'evaluated_date',dr.effective_date
+      ) delivery_route,
+      coalesce(nullif(c.payload_json->>'delivery_request_token',''),
+        'ISSUE:'||coalesce(c.payload_json->>'command_token',c.id::text)) delivery_request_token,
+      coalesce(c.payload_json->'deliver','false'::jsonb) deliver
+    from ids x
+    join public.invoice_operation_chunks c on c.id=x.chunk_id
     join public.invoices i on i.id=c.entity_id and i.status='DRAFT'
-    join public.clients cl on cl.id=i.client_id cross join public.settings_defaults sd
+    join public.clients cl on cl.id=i.client_id
     cross join lateral (
-      select case when pg_input_is_valid(
-          nullif(c.payload_json->>'frozen_issue_at_utc',''),'timestamptz')
-        then(c.payload_json->>'frozen_issue_at_utc')::timestamptz
-        else v_now end issue_at_utc
+      select case when pg_input_is_valid(nullif(c.payload_json->>'frozen_issue_at_utc',''),'timestamptz')
+        then (c.payload_json->>'frozen_issue_at_utc')::timestamptz else v_now end issue_at_utc
     ) frozen_clock
-    left join frozen_routes dr
-      on dr.request_key=c.id::text and dr.invoice_id=i.id
+    left join frozen_routes dr on dr.request_key=c.id::text and dr.invoice_id=i.id
     left join freeze_route_requests rr on rr.chunk_id=c.id
-    where sd.id=1
+  ),
+  presentation_requests as materialized (
+    select coalesce(jsonb_agg(jsonb_build_object(
+        'request_key',fs.chunk_id::text,
+        'entity_type','INVOICE',
+        'entity_id',fs.invoice_id,
+        'purpose','FINAL_ISSUE',
+        'template_version','invoice-professional-v1',
+        'issue_at_utc',fs.issue_at_utc,
+        'tax_point_utc',fs.tax_point_utc,
+        'due_at_utc',fs.due_at_utc
+      ) order by fs.chunk_id),'[]'::jsonb) requests
+    from freeze_seed fs
   ),
   presentation_batch as materialized (
     select p.*
-    from private._invoice_presentation_snapshot_batch(
-      (select coalesce(jsonb_agg(jsonb_build_object(
-        'request_key',f.chunk_id::text,
-        'entity_type','INVOICE',
-        'entity_id',f.invoice_id,
-        'purpose','FINAL_ISSUE',
-        'template_version','invoice-professional-v1',
-        'issue_at_utc',f.snapshot->'issue_date_utc',
-        'tax_point_utc',f.snapshot->'tax_point_utc',
-        'due_at_utc',f.snapshot->'due_date_utc'
-      ) order by f.chunk_id),'[]'::jsonb)
-      from legacy_frozen f),
-      v_now
-    ) p
-  ),
-  invalid_presentations as materialized (
-    update public.invoice_operation_chunks c
-    set status='BLOCKED',phase='BLOCKED',failed_at_utc=v_now,
-      lease_owner=null,lease_token=null,lease_expires_at_utc=null,
-      error_json=jsonb_build_object(
-        'code',coalesce(p.error_code,'INVOICE_PRESENTATION_MODEL_INVALID'),
-        'detail',coalesce(p.error_detail,'{}'::jsonb)),
-      progress_json=jsonb_build_object(
-        'status_message','Final legal presentation snapshot is invalid'),
-      updated_at_utc=v_now
-    from legacy_frozen f
-    left join presentation_batch p on p.request_key=f.chunk_id::text
-    where c.id=f.chunk_id and coalesce(p.valid,false)=false
-    returning c.id
+    from (
+      select pr.requests
+      from presentation_requests pr
+      where jsonb_typeof(pr.requests)='array'
+        and jsonb_array_length(pr.requests)>0
+    ) pr
+    cross join lateral private._invoice_presentation_snapshot_batch(
+      pr.requests,v_now) p
   ),
   frozen as materialized (
-    select f.chunk_id,f.operation_id,f.invoice_id,f.payload_json,
-      f.document_revision,f.invoice_no,f.client_id,
-      (f.snapshot - 'lines' - 'timesheet_sources' - 'source_support'
-        - 'presentation_model')
-      || p.snapshot_json || jsonb_build_object(
-        'snapshot_schema_version','FINAL_ISSUE_PRESENTATION_SNAPSHOT_V5',
-        'routing_request',f.snapshot->'routing_request',
-        'frozen_delivery_route',f.snapshot->'delivery_route',
-        'delivery_route',f.snapshot->'delivery_route',
-        'delivery_intent',f.snapshot->'delivery_intent',
-        'delivery_request_token',f.snapshot->'delivery_request_token',
-        'deliver',f.snapshot->'deliver'
-      ) snapshot
-    from legacy_frozen f
-    join presentation_batch p on p.request_key=f.chunk_id::text and p.valid
+    select fs.chunk_id,fs.operation_id,fs.invoice_id,fs.payload_json,
+      fs.document_revision,fs.invoice_no,fs.client_id,
+      (
+        pb.snapshot_json
+        || jsonb_build_object(
+          'snapshot_schema_version','FINAL_ISSUE_PRESENTATION_SNAPSHOT_V5',
+          'issue_date_utc',fs.issue_at_utc,
+          'tax_point_utc',fs.tax_point_utc,
+          'due_date_utc',fs.due_at_utc,
+          'routing_request',coalesce(fs.routing_request,'{}'::jsonb),
+          'delivery_route',coalesce(fs.delivery_route,'{}'::jsonb),
+          'delivery_intent',coalesce(fs.payload_json->'delivery_intent','{}'::jsonb),
+          'delivery_request_token',fs.delivery_request_token,
+          'deliver',fs.deliver,
+          'presentation_model_hash',coalesce(pb.presentation_model->>'presentation_model_hash',pb.snapshot_json->>'presentation_model_hash',encode(digest(coalesce(pb.presentation_model,'{}'::jsonb)::text,'sha256'),'hex'))
+        )
+      ) snapshot,
+      pb.valid presentation_valid,
+      pb.error_code presentation_error_code,
+      pb.error_detail presentation_error_detail
+    from freeze_seed fs
+    left join presentation_batch pb on pb.request_key=fs.chunk_id::text
   ),
   existing_versions as materialized (
     select f.*,v.id existing_document_version_id,v.operation_id doc_operation_id,
       o.control_version doc_control_version,v.status document_status,
       v.snapshot_hash existing_snapshot_hash
     from frozen f join public.invoice_document_versions v
-      on v.entity_type='INVOICE' and v.entity_id=f.invoice_id
+      on coalesce(f.presentation_valid,false) is true
+      and v.entity_type='INVOICE' and v.entity_id=f.invoice_id
       and v.purpose='FINAL_ISSUE'
       and v.snapshot_hash=encode(digest(f.snapshot::text,'sha256'),'hex')
       and v.template_version='invoice-professional-v1'
@@ -416,21 +247,38 @@ begin
       '{}',1,1,1,
       nextval('public.invoice_operation_change_seq'),v_now,v_now
     from frozen f join public.invoice_operations o on o.id=f.operation_id
-    where not exists(select 1 from existing_versions e where e.chunk_id=f.chunk_id)
+    where coalesce(f.presentation_valid,false) is true
+      and not exists(select 1 from existing_versions e where e.chunk_id=f.chunk_id)
     on conflict(idempotency_key) where status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
     do update set priority=greatest(invoice_operations.priority,850),updated_at_utc=v_now
     returning *
   ),
   selected as materialized (
-    select f.*,d.id doc_operation_id,d.control_version doc_control_version,
+    select f.chunk_id,f.operation_id,f.invoice_id,f.payload_json,f.document_revision,
+      f.invoice_no,f.client_id,f.snapshot,d.id doc_operation_id,d.control_version doc_control_version,
       null::uuid existing_document_version_id,null::text document_status,
       null::text existing_snapshot_hash
     from frozen f join doc_ops d on d.entity_id=f.invoice_id
+    where coalesce(f.presentation_valid,false) is true
     union all
     select f.chunk_id,f.operation_id,f.invoice_id,f.payload_json,f.document_revision,
       f.invoice_no,f.client_id,f.snapshot,e.doc_operation_id,e.doc_control_version,
       e.existing_document_version_id,e.document_status,e.existing_snapshot_hash
     from frozen f join existing_versions e on e.chunk_id=f.chunk_id
+    where coalesce(f.presentation_valid,false) is true
+  ),
+  presentation_blocked as (
+    update public.invoice_operation_chunks c set
+      status='BLOCKED',phase='BLOCKED',failed_at_utc=v_now,
+      error_json=jsonb_build_object(
+        'code',coalesce(f.presentation_error_code,'FINAL_ISSUE_PRESENTATION_INVALID'),
+        'detail',coalesce(f.presentation_error_detail,'{}'::jsonb),
+        'invoice_id',f.invoice_id),
+      lease_owner=null,lease_token=null,lease_expires_at_utc=null,
+      updated_at_utc=v_now
+    from frozen f
+    where c.id=f.chunk_id and coalesce(f.presentation_valid,false) is not true
+    returning c.id,c.status,c.phase,c.document_version_id
   ),
   versions as materialized (
     insert into public.invoice_document_versions(entity_type,entity_id,purpose,operation_id,source_revision,
@@ -493,14 +341,19 @@ begin
       updated_at_utc=v_now
     from exact_versions s where c.id=s.chunk_id
     returning c.id,c.status,c.phase,c.document_version_id
+  ),
+  freeze_outcomes as (
+    select id,status,phase,document_version_id from advanced
+    union all
+    select id,status,phase,document_version_id from presentation_blocked
   )
   select coalesce(jsonb_agg(jsonb_build_object('chunk_id',id,'status',status,'phase',phase,
-    'document_version_id',document_version_id)),'[]') into v_part from advanced;
+    'document_version_id',document_version_id)),'[]') into v_part from freeze_outcomes;
   v_result:=v_result||coalesce(v_part,'[]');
 
   -- WAIT_DOCUMENT observes only the exact row and never R2.
   with ids as materialized (
-    select (x->>'chunk_id')::uuid chunk_id from jsonb_array_elements(p_claims) x where x->>'phase'='WAIT_DOCUMENT'
+    select case when coalesce(x->>'chunk_id','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then (x->>'chunk_id')::uuid end chunk_id from jsonb_array_elements(p_claims) x where x->>'phase'='WAIT_DOCUMENT'
   ),
   updated as (
     update public.invoice_operation_chunks c set
@@ -545,11 +398,18 @@ begin
 
   -- FINALISE is the only legal issue transition and demands the exact verified version.
   with ids as materialized (
-    select (x->>'chunk_id')::uuid chunk_id from jsonb_array_elements(p_claims) x where x->>'phase'='FINALISE'
+    select case when coalesce(x->>'chunk_id','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then (x->>'chunk_id')::uuid end chunk_id from jsonb_array_elements(p_claims) x where x->>'phase'='FINALISE'
   ),
   eligible as materialized (
     select c.*,i.document_revision,v.id final_document_version_id,v.r2_key,v.sha256,v.size_bytes,v.page_count,
       v.verified_at_utc,
+      case when pg_input_is_valid(
+        nullif(v.snapshot_json->>'issue_date_utc',''),'timestamptz')
+        then (v.snapshot_json->>'issue_date_utc')::timestamptz
+        else v_now end issue_at,
+      case when pg_input_is_valid(
+        nullif(v.snapshot_json->>'tax_point_utc',''),'timestamptz')
+        then (v.snapshot_json->>'tax_point_utc')::timestamptz end tax_point_at,
       case when pg_input_is_valid(
         nullif(v.snapshot_json->>'due_date_utc',''),'timestamptz')
         then (v.snapshot_json->>'due_date_utc')::timestamptz end due_at,
@@ -570,8 +430,9 @@ begin
       and c.payload_json->>'snapshot_hash'=v.snapshot_hash
   ),
   issued as (
-    update public.invoices i set status='ISSUED',status_date_utc=v_now,issued_at_utc=v_now,
-      due_at_utc=e.due_at,on_hold_reason=null,issued_document_version_id=e.final_document_version_id,
+    update public.invoices i set status='ISSUED',status_date_utc=v_now,
+      issued_at_utc=e.issue_at,due_at_utc=e.due_at,
+      on_hold_reason=null,issued_document_version_id=e.final_document_version_id,
       invoice_pdf_r2_key=e.r2_key,invoice_pdf_generated_at_utc=e.verified_at_utc,
       issue_state='ISSUED',document_state='READY',active_issue_operation_id=null,
       active_document_operation_id=case
@@ -588,6 +449,7 @@ begin
       object_type,object_id_text,action,after_json,reason)
     select v_now,o.actor_user_id,u.display_name,u.role,'invoice',e.entity_id::text,'INVOICE_ISSUED',
       jsonb_build_object('invoice_id',e.entity_id,'document_version_id',e.final_document_version_id,
+        'issue_at_utc',e.issue_at,'tax_point_utc',e.tax_point_at,'due_at_utc',e.due_at,
         'sha256',e.sha256,'size_bytes',e.size_bytes,'page_count',e.page_count),'INVOICE_OPERATION_QUEUE'
     from eligible e join public.invoice_operations o on o.id=e.operation_id
     left join public.tms_users u on u.id=o.actor_user_id returning id
@@ -602,6 +464,7 @@ begin
         c.payload_json->>'deliver','false')) in('true','t','1','yes')
         then null else v_now end,
       result_json=jsonb_build_object('invoice_id',e.entity_id,'document_version_id',e.final_document_version_id,
+        'issue_at_utc',e.issue_at,'tax_point_utc',e.tax_point_at,'due_at_utc',e.due_at,
         'r2_key',e.r2_key,'sha256',e.sha256,'size_bytes',e.size_bytes,'page_count',e.page_count),
       lease_owner=null,lease_token=null,lease_expires_at_utc=null,
       updated_at_utc=v_now
@@ -635,7 +498,10 @@ begin
 
   -- QUEUE_DELIVERY durably delegates to the single delivery-routing authority.
   with ids as materialized (
-    select (x->>'chunk_id')::uuid chunk_id from jsonb_array_elements(p_claims) x
+    select case when coalesce(x->>'chunk_id','') ~*
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      then (x->>'chunk_id')::uuid end chunk_id
+    from jsonb_array_elements(p_claims) x
     where x->>'phase'='QUEUE_DELIVERY'
   ),
   delivery_specs as materialized (
@@ -646,10 +512,8 @@ begin
         routing_request,
       coalesce(c.payload_json->'frozen_delivery_route','{}'::jsonb)
         frozen_delivery_route,
-      encode(digest(concat_ws('|','ISSUE_DELIVERY',
-        c.operation_id::text,c.entity_id::text,
-        i.issued_document_version_id::text,
-        c.payload_json->>'delivery_request_token'),'sha256'),'hex')
+      coalesce(nullif(c.payload_json->>'delivery_request_token',''),
+        'ISSUE:'||coalesce(c.payload_json->>'command_token',c.id::text))
         delivery_request_token,
       nullif(c.payload_json#>>'{frozen_delivery_route,template_version}','')
         template_version,
@@ -682,9 +546,18 @@ begin
         and upper(coalesce(
           c.payload_json#>>'{frozen_delivery_route,delivery_policy}',''))
           in('ATTACH','SPLIT','SECURE_LINK')
-        and jsonb_array_length(coalesce(
-          c.payload_json#>'{frozen_delivery_route,blocker_codes}',
-          '[]'::jsonb))=0
+        and lower(coalesce(
+          c.payload_json#>>'{frozen_delivery_route,do_not_send}','false'))
+          not in('true','t','1','yes')
+        and lower(coalesce(
+          c.payload_json#>>'{frozen_delivery_route,delivery_suppressed}','false'))
+          not in('true','t','1','yes')
+        and (case
+          when jsonb_typeof(c.payload_json#>'{frozen_delivery_route,blocker_codes}')='array'
+            then jsonb_array_length(c.payload_json#>'{frozen_delivery_route,blocker_codes}')
+          when c.payload_json#>'{frozen_delivery_route,blocker_codes}' is null then 0
+          else 1
+        end)=0
         frozen_route_usable,
       coalesce(case when coalesce(c.payload_json#>>'{delivery_intent,part_number}','') ~
         '^[0-9]+$' then(c.payload_json#>>'{delivery_intent,part_number}')::integer end,1)

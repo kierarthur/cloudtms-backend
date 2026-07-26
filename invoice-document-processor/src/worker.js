@@ -1,5 +1,11 @@
 import { Container, getContainer } from '@cloudflare/containers';
-import { buildMergeReceipt, flattenLeafInputReceipts, hashJoined, hashPostgresJsonb } from './receipt-contract.js';
+import {
+  buildMergeReceipt,
+  flattenLeafInputReceipts,
+  hashJoined,
+  hashPostgresJsonb,
+  verifyMergeReceiptTree
+} from './receipt-contract.js';
 import {
   invoiceProcessorFieldsFromHeaders,
   invoiceProcessorSha256Hex,
@@ -221,27 +227,168 @@ async function putImmutableProcessorArtifact(bucket, key, body, identity, metada
 }
 
 async function buildVerificationOnlyResult(identity, context, metadata) {
-  if (context.verification_mode !== 'VERIFY_EXISTING_CANDIDATE') throw Object.assign(new Error('VERIFICATION_MODE_UNSUPPORTED'), { code: 'VERIFICATION_MODE_UNSUPPORTED' });
-  const expected = [[context.final_candidate_key, metadata.verified_candidate_r2_key, 'FINAL_CANDIDATE_KEY_MISMATCH'], [context.final_candidate_sha256, metadata.verified_candidate_sha256, 'FINAL_CANDIDATE_HASH_MISMATCH'], [String(context.final_candidate_size_bytes), String(metadata.verified_candidate_size_bytes), 'FINAL_CANDIDATE_SIZE_MISMATCH'], [String(context.expected_page_count), String(metadata.actual_page_count), 'FINAL_PAGE_COUNT_MISMATCH']];
-  for (const [wanted, actual, code] of expected) if (wanted && wanted !== actual) throw Object.assign(new Error(code), { code });
+  if (context.verification_mode !== 'VERIFY_EXISTING_CANDIDATE') {
+    throw Object.assign(new Error('VERIFICATION_MODE_UNSUPPORTED'), { code: 'VERIFICATION_MODE_UNSUPPORTED' });
+  }
+
+  const expected = [
+    [context.final_candidate_key, metadata.verified_candidate_r2_key, 'FINAL_CANDIDATE_KEY_MISMATCH'],
+    [context.final_candidate_sha256, metadata.verified_candidate_sha256, 'FINAL_CANDIDATE_HASH_MISMATCH'],
+    [context.final_candidate_size_bytes, metadata.verified_candidate_size_bytes, 'FINAL_CANDIDATE_SIZE_MISMATCH'],
+    [context.expected_page_count, metadata.actual_page_count, 'FINAL_PAGE_COUNT_MISMATCH']
+  ];
+
+  for (const [wanted, actual, code] of expected) {
+    if (wanted != null && wanted !== '' && String(wanted) !== String(actual)) {
+      throw Object.assign(new Error(code), { code });
+    }
+  }
+
+  if (identity.processor_policy_version !== POLICY_VERSION) {
+    throw Object.assign(new Error('PROCESSOR_POLICY_UNSUPPORTED'), { code: 'PROCESSOR_POLICY_UNSUPPORTED' });
+  }
+
   const root = context.final_merge_receipt || {};
-  if (root.receipt_contract !== 'ACTUAL_BYTES_MERGE_RECEIPT_V3') throw Object.assign(new Error('RECEIPT_STRUCTURE_INVALID'), { code: 'RECEIPT_STRUCTURE_INVALID' });
-  if (identity.processor_policy_version !== POLICY_VERSION) throw Object.assign(new Error('PROCESSOR_POLICY_UNSUPPORTED'), { code: 'PROCESSOR_POLICY_UNSUPPORTED' });
+  if (root.receipt_contract !== 'ACTUAL_BYTES_MERGE_RECEIPT_V3') {
+    throw Object.assign(new Error('RECEIPT_STRUCTURE_INVALID'), { code: 'RECEIPT_STRUCTURE_INVALID' });
+  }
+
+  const calculatedFinalMergeReceiptHash = await hashPostgresJsonb(root);
+  if (context.final_merge_receipt_hash
+      && calculatedFinalMergeReceiptHash !== context.final_merge_receipt_hash) {
+    throw Object.assign(new Error('FINAL_MERGE_RECEIPT_HASH_MISMATCH'), {
+      code: 'FINAL_MERGE_RECEIPT_HASH_MISMATCH',
+      detail: {
+        expected: context.final_merge_receipt_hash,
+        actual: calculatedFinalMergeReceiptHash
+      }
+    });
+  }
+
   const verificationPolicy = context.verification_policy || {};
-  const leaves = flattenLeafInputReceipts(root, [], {
+  const verifiedTree = await verifyMergeReceiptTree(root, {
     maximum_depth: safePositive(verificationPolicy.max_merge_levels || verificationPolicy.max_depth) || 8,
     maximum_receipts: safePositive(verificationPolicy.max_receipts) || 10000
-  }).sort((a, b) => Number(a.logical_ordinal) - Number(b.logical_ordinal) || Number(a.physical_part_no) - Number(b.physical_part_no));
-  const tupleKeys = leaves.map(row => `${row.logical_source_key || ''}|${row.logical_ordinal}|${row.physical_part_no}`);
-  if (new Set(tupleKeys).size !== tupleKeys.length) throw Object.assign(new Error('RECEIPT_STRUCTURE_INVALID'), { code: 'RECEIPT_STRUCTURE_INVALID' });
-  if (context.expected_physical_input_count != null && leaves.length !== Number(context.expected_physical_input_count)) throw Object.assign(new Error('FINAL_PHYSICAL_INPUT_COUNT_MISMATCH'), { code: 'FINAL_PHYSICAL_INPUT_COUNT_MISMATCH' });
-  if (context.expected_logical_source_count != null && new Set(leaves.map(row => row.logical_ordinal)).size !== Number(context.expected_logical_source_count)) throw Object.assign(new Error('FINAL_LOGICAL_INPUT_COUNT_MISMATCH'), { code: 'FINAL_LOGICAL_INPUT_COUNT_MISMATCH' });
-  const actualPhysicalInputHash = await hashJoined(leaves.map(row => [row.logical_ordinal,row.physical_part_no,row.r2_key,row.sha256,row.page_count,row.size_bytes].join('|')));
-  const actualOrderedRoot = root.actual_ordered_input_hash || root.actual_child_receipt_hash;
-  const actualRootIdentity = await hashPostgresJsonb({ receipt_contract: 'DOCUMENT_ROOT_RECEIPT_V3', logical_root: root.combined_logical_receipt_root, physical_root: root.combined_physical_receipt_root, ordered_input_root: actualOrderedRoot, page_count: Number(metadata.actual_page_count), output_sha256: metadata.verified_candidate_sha256 });
-  const assertions = [[context.expected_logical_root_receipt, root.combined_logical_receipt_root, 'FINAL_LOGICAL_RECEIPT_MISMATCH'], [context.expected_physical_root_receipt, root.combined_physical_receipt_root, 'FINAL_PHYSICAL_RECEIPT_MISMATCH'], [context.expected_ordered_input_root, actualOrderedRoot, 'FINAL_ORDERED_INPUT_RECEIPT_MISMATCH'], [context.root_merge_receipt_identity, actualRootIdentity, 'FINAL_ROOT_IDENTITY_MISMATCH'], [context.expected_physical_input_hash, actualPhysicalInputHash, 'FINAL_PHYSICAL_INPUT_HASH_MISMATCH']];
-  for (const [wanted, actual, code] of assertions) if (wanted && wanted !== actual) throw Object.assign(new Error(code), { code });
-  return { ...identity, ...metadata, manifest_hash: context.expected_manifest_hash, manifest_coverage_verified: true, ordering_verified: true, parse_verified: true, actual_logical_root_receipt: root.combined_logical_receipt_root, actual_physical_root_receipt: root.combined_physical_receipt_root, actual_ordered_input_root: actualOrderedRoot, root_merge_receipt_identity: actualRootIdentity, root_merge_receipt_hash: context.final_merge_receipt_hash, assembled_input_count: new Set(leaves.map(row => row.logical_ordinal)).size, assembled_physical_input_count: leaves.length, assembled_physical_input_hash: actualPhysicalInputHash, actual_input_receipts: leaves };
+  });
+
+  /*
+   * The processor's verified candidate metadata must match the independently
+   * verified root merge output.  The database already checks the legal payload
+   * candidate identity; this check prevents a forged or stale root receipt from
+   * describing a different output object while the container reports a valid
+   * candidate PDF.
+   */
+  const rootOutputAssertions = [
+    [metadata.verified_candidate_r2_key, verifiedTree.output.r2_key, 'FINAL_ROOT_OUTPUT_KEY_MISMATCH'],
+    [metadata.verified_candidate_sha256, verifiedTree.output.sha256, 'FINAL_ROOT_OUTPUT_HASH_MISMATCH'],
+    [metadata.verified_candidate_size_bytes, verifiedTree.output.size_bytes, 'FINAL_ROOT_OUTPUT_SIZE_MISMATCH'],
+    [metadata.actual_page_count, verifiedTree.output.page_count, 'FINAL_ROOT_OUTPUT_PAGE_COUNT_MISMATCH']
+  ];
+  for (const [wanted, actual, code] of rootOutputAssertions) {
+    if (wanted == null || wanted === '' || actual == null || actual === '' || String(wanted) !== String(actual)) {
+      throw Object.assign(new Error(code), { code });
+    }
+  }
+
+  if (context.expected_physical_input_count != null
+      && verifiedTree.leaves.length !== Number(context.expected_physical_input_count)) {
+    throw Object.assign(new Error('FINAL_PHYSICAL_INPUT_COUNT_MISMATCH'), { code: 'FINAL_PHYSICAL_INPUT_COUNT_MISMATCH' });
+  }
+
+  const logicalCoverage = new Map();
+  for (const leaf of verifiedTree.leaves) {
+    const logicalOrdinal = String(leaf.logical_ordinal || leaf.logical_manifest_ordinal || '');
+    const logicalSourceKey = String(leaf.logical_source_key || '');
+    if (!logicalOrdinal || !logicalSourceKey) {
+      throw Object.assign(new Error('FINAL_INPUT_COVERAGE_INVALID'), { code: 'FINAL_INPUT_COVERAGE_INVALID' });
+    }
+    const existing = logicalCoverage.get(logicalOrdinal);
+    if (existing && existing !== logicalSourceKey) {
+      throw Object.assign(new Error('FINAL_LOGICAL_INPUT_ORDINAL_CONFLICT'), { code: 'FINAL_LOGICAL_INPUT_ORDINAL_CONFLICT' });
+    }
+    logicalCoverage.set(logicalOrdinal, logicalSourceKey);
+  }
+
+  const logicalRows = [...logicalCoverage.entries()]
+    .map(([logicalOrdinal, logicalSourceKey]) => ({ logicalOrdinal, logicalSourceKey }))
+    .sort((left, right) => Number(left.logicalOrdinal) - Number(right.logicalOrdinal)
+      || left.logicalSourceKey.localeCompare(right.logicalSourceKey));
+
+  for (let index = 0; index < logicalRows.length; index += 1) {
+    if (Number(logicalRows[index].logicalOrdinal) !== index + 1) {
+      throw Object.assign(new Error('FINAL_LOGICAL_INPUT_ORDER_INVALID'), { code: 'FINAL_LOGICAL_INPUT_ORDER_INVALID' });
+    }
+  }
+
+  const logicalCount = logicalRows.length;
+  if (context.expected_logical_source_count != null
+      && logicalCount !== Number(context.expected_logical_source_count)) {
+    throw Object.assign(new Error('FINAL_LOGICAL_INPUT_COUNT_MISMATCH'), { code: 'FINAL_LOGICAL_INPUT_COUNT_MISMATCH' });
+  }
+
+  const assembledInputCoverageHash = await hashJoined(logicalRows.map(row => [
+    row.logicalOrdinal,
+    row.logicalSourceKey
+  ].join('|')));
+
+  if (context.expected_coverage_hash && assembledInputCoverageHash !== context.expected_coverage_hash) {
+    throw Object.assign(new Error('FINAL_INPUT_COVERAGE_MISMATCH'), {
+      code: 'FINAL_INPUT_COVERAGE_MISMATCH',
+      detail: {
+        expected: context.expected_coverage_hash,
+        actual: assembledInputCoverageHash
+      }
+    });
+  }
+  const resolvedCoverageHash = context.resolved_input_coverage_hash || context.resolved_logical_input_hash || '';
+  if (resolvedCoverageHash && assembledInputCoverageHash !== resolvedCoverageHash) {
+    throw Object.assign(new Error('FINAL_RESOLVED_INPUT_COVERAGE_MISMATCH'), {
+      code: 'FINAL_RESOLVED_INPUT_COVERAGE_MISMATCH',
+      detail: {
+        expected: resolvedCoverageHash,
+        actual: assembledInputCoverageHash
+      }
+    });
+  }
+
+  const assertions = [
+    [context.expected_logical_root_receipt, verifiedTree.logicalRoot, 'FINAL_LOGICAL_RECEIPT_MISMATCH'],
+    [context.expected_physical_root_receipt, verifiedTree.physicalRoot, 'FINAL_PHYSICAL_RECEIPT_MISMATCH'],
+    [context.expected_ordered_input_root, verifiedTree.childReceiptHash, 'FINAL_ORDERED_INPUT_RECEIPT_MISMATCH'],
+    [context.root_merge_receipt_identity, verifiedTree.rootIdentity, 'FINAL_ROOT_IDENTITY_MISMATCH'],
+    [context.expected_physical_input_hash, verifiedTree.physicalInputHash, 'FINAL_PHYSICAL_INPUT_HASH_MISMATCH']
+  ];
+
+  for (const [wanted, actual, code] of assertions) {
+    if (wanted && wanted !== actual) throw Object.assign(new Error(code), { code });
+  }
+
+  return {
+    ...identity,
+    ...metadata,
+    // Generic output aliases are required by invoice_work_complete_batch's
+    // DOCUMENT_VERIFY contract, in addition to the verified_candidate_*
+    // fields returned by the native verifier.
+    r2_key: metadata.verified_candidate_r2_key,
+    sha256: metadata.verified_candidate_sha256,
+    size_bytes: metadata.verified_candidate_size_bytes,
+    page_count: metadata.actual_page_count,
+    manifest_hash: context.expected_manifest_hash,
+    manifest_coverage_verified: true,
+    ordering_verified: true,
+    parse_verified: true,
+    assembled_input_coverage_hash: assembledInputCoverageHash,
+    actual_logical_root_receipt: verifiedTree.logicalRoot,
+    actual_physical_root_receipt: verifiedTree.physicalRoot,
+    actual_ordered_input_root: verifiedTree.childReceiptHash,
+    actual_physical_ordered_input_hash: verifiedTree.orderedInputRoot,
+    root_merge_receipt_identity: verifiedTree.rootIdentity,
+    root_merge_receipt_hash: calculatedFinalMergeReceiptHash,
+    assembled_input_count: logicalCount,
+    assembled_physical_input_count: verifiedTree.leaves.length,
+    assembled_physical_input_hash: verifiedTree.physicalInputHash,
+    actual_input_receipts: verifiedTree.leaves
+  };
 }
 
 async function processWithContainer(env, payload, signal) {
@@ -374,4 +521,17 @@ export async function handleInvoiceDocumentProcessorRequest(request, env) {
 }
 
 export default { fetch(request, env) { return handleInvoiceDocumentProcessorRequest(request, env); } };
-export const invoiceDocumentProcessorInternals = Object.freeze({ findInputDescriptors, resolveR2Inputs, framedBody, resultIdentity, buildMergeReceipt, flattenLeafInputReceipts, putImmutableProcessorArtifact, buildVerificationOnlyResult, processWithContainer, classifyError, authenticateProcessorRequest });
+export const invoiceDocumentProcessorInternals = Object.freeze({
+  findInputDescriptors,
+  resolveR2Inputs,
+  framedBody,
+  resultIdentity,
+  buildMergeReceipt,
+  flattenLeafInputReceipts,
+  verifyMergeReceiptTree,
+  putImmutableProcessorArtifact,
+  buildVerificationOnlyResult,
+  processWithContainer,
+  classifyError,
+  authenticateProcessorRequest
+});
