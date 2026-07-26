@@ -38,7 +38,7 @@ const frozenRecoveryIdentitySql = fs.readFileSync(
   'utf8'
 );
 const laterFreshnessSql = fs.readFileSync(
-  path.resolve(__dirname, '../supabase/repeatable/20072026_1052_preserve_gross_deductions_on_paye_net.sql'),
+  path.resolve(__dirname, '../supabase/repeatable/26072026_1519_pay_batch_validate_freshness_correction_chain_wrapper.sql'),
   'utf8'
 );
 const workerSource = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
@@ -1374,10 +1374,16 @@ test('Umbrella deductions share the coupled Umbrella destination during draft in
 
 test('batch freshness excludes its own correction-chain reservation and compares the live chain source', () => {
   const marker = 'CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness';
-  const start = sql.lastIndexOf(marker);
+  const start = laterFreshnessSql.lastIndexOf(marker);
   assert.ok(start >= 0, 'the active batch freshness function must exist');
-  const end = sql.indexOf('CREATE OR REPLACE FUNCTION public.', start + marker.length);
-  const body = sql.slice(start, end > start ? end : sql.length);
+  const end = laterFreshnessSql.indexOf(
+    'CREATE OR REPLACE FUNCTION public.',
+    start + marker.length
+  );
+  const body = laterFreshnessSql.slice(
+    start,
+    end > start ? end : laterFreshnessSql.length
+  );
 
   assert.match(body, /_pay_batch_validate_freshness_base_v1\(/);
   assert.match(body, /correction_items AS \(/);
@@ -1432,16 +1438,15 @@ test('batch freshness compares resolved deductions and reservations on frozen so
   );
 });
 
-test('the later public freshness repeatable cannot restore target-side recovery comparisons', () => {
-  assert.match(laterFreshnessSql, /coalesce\(par\.reserved_source_amount,\s*par\.reserved_amount,\s*0\)/i);
+test('the sole public freshness wrapper delegates recovery comparisons to the owner-only base', () => {
   assert.match(
     laterFreshnessSql,
-    /when pbi_rt\.frozen_source_amount is not null then abs\(pbi_rt\.frozen_source_amount\)[\s\S]*frozen_remaining_source_amount/i
+    /public\._pay_batch_validate_freshness_base_v1\(\s*p_pay_batch_id,\s*p_actor_user_id,\s*p_allow_large_full_scan\s*\)/i
   );
-  assert.match(laterFreshnessSql, /frozen_resolution_result_json->>'case_source_weekly_due'/i);
-  assert.equal(
-    (laterFreshnessSql.match(/sum\(coalesce\(abs\(pbi(?:_md|_ln)?\.frozen_source_amount\),\s*-pbi(?:_md|_ln)?\.amount_ex_vat/gi) || []).length,
-    3
+  assert.doesNotMatch(
+    laterFreshnessSql,
+    /\bpar\.reserved_amount\b|\bpbi_rt\.amount_ex_vat\b/i,
+    'the public correction wrapper must not reimplement or override base recovery economics'
   );
 });
 

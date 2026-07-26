@@ -6,6 +6,22 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), 'utf8');
+const listFiles = (relativeDirectory) => {
+  const pending = [path.join(root, relativeDirectory)];
+  const files = [];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const absolutePath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(absolutePath);
+      } else {
+        files.push(absolutePath);
+      }
+    }
+  }
+  return files;
+};
 
 const migration = read(
   'supabase/migrations/25072026_1614_banking_pay_case_resolution_carry_registrations.sql'
@@ -452,4 +468,45 @@ test('post-draft freshness selects the correction carrier snapshot before family
     finalFreshnessWrapper,
     /REVOKE ALL ON FUNCTION public\.pay_batch_validate_freshness\([\s\S]*FROM PUBLIC, anon, authenticated;[\s\S]*GRANT EXECUTE[\s\S]*TO service_role;/
   );
+});
+
+test('post-draft freshness has one public repeatable definition and one private base helper', () => {
+  const repeatableFiles = listFiles('supabase/repeatable').filter((file) =>
+    /\.(?:sql|txt)$/i.test(file)
+  );
+  const publicDefinitions = [];
+  const privateBaseDefinitions = [];
+  const publicDrops = [];
+
+  for (const file of repeatableFiles) {
+    const source = fs.readFileSync(file, 'utf8');
+    const relativePath = path.relative(root, file).replaceAll('\\', '/');
+    for (const match of source.matchAll(
+      /^CREATE OR REPLACE FUNCTION public\.pay_batch_validate_freshness\(/gim
+    )) {
+      publicDefinitions.push({ relativePath, index: match.index });
+    }
+    for (const match of source.matchAll(
+      /^CREATE OR REPLACE FUNCTION public\._pay_batch_validate_freshness_base_v1\(/gim
+    )) {
+      privateBaseDefinitions.push({ relativePath, index: match.index });
+    }
+    for (const match of source.matchAll(
+      /^DROP FUNCTION IF EXISTS public\.pay_batch_validate_freshness/gim
+    )) {
+      publicDrops.push({ relativePath, index: match.index });
+    }
+  }
+
+  assert.deepEqual(
+    publicDefinitions.map(({ relativePath }) => relativePath),
+    [
+      'supabase/repeatable/26072026_1519_pay_batch_validate_freshness_correction_chain_wrapper.sql',
+    ]
+  );
+  assert.deepEqual(
+    privateBaseDefinitions.map(({ relativePath }) => relativePath),
+    ['supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql']
+  );
+  assert.deepEqual(publicDrops, []);
 });
