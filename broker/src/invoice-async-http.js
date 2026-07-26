@@ -13,7 +13,7 @@ import {
 } from './invoice-queue-security.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const INVOICE_ASYNC_CONTRACT_VERSION = 'INVOICE_ASYNC_BACKEND_V6';
+const INVOICE_ASYNC_CONTRACT_VERSION = 'INVOICE_ASYNC_BACKEND_V7';
 const JSON_HEADERS = Object.freeze({
   'content-type': 'application/json; charset=utf-8',
   'x-invoice-async-contract-version': INVOICE_ASYNC_CONTRACT_VERSION
@@ -126,24 +126,557 @@ async function sha256Text(value) {
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
+const INVOICE_BATCH_FILTER_KEYS = Object.freeze([
+  'client_ids', 'candidate_ids', 'week_endings', 'week_ending_from', 'week_ending_to',
+  'status_codes', 'blocker_codes', 'search', 'allow_early', 'display_mode'
+]);
+const INVOICE_BATCH_SORT_KEYS = Object.freeze(['group_preset', 'sort_key', 'sort_direction']);
+const INVOICE_BATCH_QUERY_CONTROL_KEYS = Object.freeze([
+  'contract_version', 'action', 'mode', 'snapshot_at_utc', 'page_size', 'limit',
+  'cursor', 'page_cursor', 'pageCursor', 'facets', 'filters', 'sort', 'selection',
+  'after_selection_key', 'filter_hash'
+]);
+const INVOICE_BATCH_GROUP_PRESETS = Object.freeze([
+  'WEEK_CLIENT_CANDIDATE', 'CLIENT_WEEK_CANDIDATE', 'CANDIDATE_WEEK_CLIENT', 'STATUS_WEEK_CLIENT'
+]);
+const INVOICE_BATCH_GENERATE_SORT_KEYS = Object.freeze([
+  'WEEK_ENDING_DATE', 'CLIENT_NAME', 'CANDIDATE_NAME', 'TOTAL_EX_VAT', 'TOTAL_INC_VAT', 'STATUS'
+]);
+const INVOICE_BATCH_ISSUE_SORT_KEYS = Object.freeze([...INVOICE_BATCH_GENERATE_SORT_KEYS, 'INVOICE_NUMBER']);
+const INVOICE_BATCH_GENERATE_STATUS_CODES = Object.freeze(['READY', 'BLOCKED', 'IN_PROGRESS', 'STALE', 'FAILED']);
+const INVOICE_BATCH_ISSUE_STATUS_CODES = Object.freeze(['READY', 'BLOCKED', 'IN_PROGRESS', 'STALE', 'FAILED']);
+const INVOICE_OPERATION_RESULT_CATEGORIES = Object.freeze([
+  'ALL', 'READY', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'FAILED', 'CHANGED',
+  'ISSUED', 'ISSUED_SEND_BLOCKED'
+]);
+
+function invoiceBatchContractError(code) {
+  return Object.assign(new Error(code), { code });
+}
+
+function invoiceBatchSourceValues(source, key) {
+  if (source instanceof URLSearchParams) {
+    return [key, `${key}[]`].flatMap(name => source.getAll(name))
+      .flatMap(value => String(value || '').split(','));
+  }
+  const nested = source?.filters && typeof source.filters === 'object' && !Array.isArray(source.filters)
+    ? source.filters
+    : null;
+  const value = nested && Object.hasOwn(nested, key) ? nested[key] : source?.[key];
+  if (value === undefined || value === null || value === '') return [];
+  return (Array.isArray(value) ? value : String(value).split(','))
+    .flatMap(item => typeof item === 'string' ? item.split(',') : [item]);
+}
+
+function invoiceBatchSourceScalar(source, key) {
+  const values = invoiceBatchSourceValues(source, key);
+  return values.length ? values[values.length - 1] : undefined;
+}
+
+function validateInvoiceBatchSourceFields(source) {
+  const allowed = new Set([
+    ...INVOICE_BATCH_FILTER_KEYS,
+    ...INVOICE_BATCH_FILTER_KEYS.map(key => `${key}[]`),
+    ...INVOICE_BATCH_SORT_KEYS,
+    ...INVOICE_BATCH_QUERY_CONTROL_KEYS
+  ]);
+  const keys = source instanceof URLSearchParams ? [...new Set(source.keys())] : Object.keys(source || {});
+  if (keys.some(key => !allowed.has(key))) throw invoiceBatchContractError('BATCH_FILTER_FIELD_UNSUPPORTED');
+  if (!(source instanceof URLSearchParams)) {
+    for (const [container, allowedKeys, errorCode] of [
+      [source?.filters, INVOICE_BATCH_FILTER_KEYS, 'BATCH_FILTER_FIELD_UNSUPPORTED'],
+      [source?.sort, INVOICE_BATCH_SORT_KEYS, 'INVOICE_BATCH_SORT_FIELD_UNSUPPORTED']
+    ]) {
+      if (container === undefined) continue;
+      if (!container || typeof container !== 'object' || Array.isArray(container)) {
+        throw invoiceBatchContractError(errorCode);
+      }
+      if (Object.keys(container).some(key => !allowedKeys.includes(key))) {
+        throw invoiceBatchContractError(errorCode);
+      }
+    }
+  }
+}
+
+function normaliseInvoiceBatchBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (value === true || value === false) return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  throw invoiceBatchContractError('BATCH_FILTER_BOOLEAN_INVALID');
+}
+
+function normaliseInvoiceBatchDate(value, errorCode) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw invoiceBatchContractError(errorCode);
+  const date = new Date(`${text}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== text) {
+    throw invoiceBatchContractError(errorCode);
+  }
+  return text;
+}
+
+function normaliseInvoiceBatchSnapshotUtc(value, fallback = null) {
+  const timestamp = new Date(value || fallback || '');
+  if (!Number.isFinite(timestamp.getTime())) throw invoiceBatchContractError('BATCH_QUERY_SNAPSHOT_INVALID');
+  return timestamp.toISOString();
+}
+
+function normaliseInvoiceBatchArray(values, options = {}) {
+  const {
+    maximum = 500,
+    normalise = value => String(value || '').trim(),
+    validate = value => !!value,
+    errorCode = 'BATCH_FILTER_VALUE_INVALID'
+  } = options;
+  if (values.length > maximum) throw invoiceBatchContractError('BATCH_FILTER_ARRAY_LIMIT_EXCEEDED');
+  const normalised = values.map(normalise);
+  if (normalised.some(value => !validate(value))) throw invoiceBatchContractError(errorCode);
+  return [...new Set(normalised)].sort();
+}
+
+function normaliseInvoiceBatchFilters(source, action = 'GENERATE') {
+  if (!source || (typeof source !== 'object' && !(source instanceof URLSearchParams))) {
+    throw invoiceBatchContractError('BATCH_QUERY_INVALID');
+  }
+  validateInvoiceBatchSourceFields(source);
+  const normalizedAction = String(action || '').trim().toUpperCase();
+  if (!['GENERATE', 'ISSUE'].includes(normalizedAction)) throw invoiceBatchContractError('BATCH_QUERY_ACTION_MISMATCH');
+  const uuidOptions = {
+    normalise: value => String(value || '').trim().toLowerCase(),
+    validate: value => UUID_PATTERN.test(value),
+    errorCode: 'BATCH_FILTER_UUID_INVALID'
+  };
+  const weekOptions = {
+    normalise: value => normaliseInvoiceBatchDate(value, 'BATCH_FILTER_DATE_INVALID'),
+    validate: value => !!value,
+    errorCode: 'BATCH_FILTER_DATE_INVALID'
+  };
+  const codeOptions = {
+    maximum: 100,
+    normalise: value => String(value || '').trim().toUpperCase(),
+    validate: value => /^[A-Z0-9][A-Z0-9_:-]{0,119}$/.test(value),
+    errorCode: 'BATCH_FILTER_CODE_INVALID'
+  };
+  const statusCodes = normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'status_codes'), codeOptions);
+  const allowedStatuses = normalizedAction === 'ISSUE'
+    ? INVOICE_BATCH_ISSUE_STATUS_CODES
+    : INVOICE_BATCH_GENERATE_STATUS_CODES;
+  if (statusCodes.some(code => !allowedStatuses.includes(code))) {
+    throw invoiceBatchContractError('BATCH_FILTER_STATUS_UNSUPPORTED');
+  }
+  const weekEndingFrom = normaliseInvoiceBatchDate(invoiceBatchSourceScalar(source, 'week_ending_from'), 'BATCH_FILTER_DATE_INVALID');
+  const weekEndingTo = normaliseInvoiceBatchDate(invoiceBatchSourceScalar(source, 'week_ending_to'), 'BATCH_FILTER_DATE_INVALID');
+  if (weekEndingFrom && weekEndingTo && weekEndingFrom > weekEndingTo) {
+    throw invoiceBatchContractError('BATCH_FILTER_DATE_RANGE_INVALID');
+  }
+  const search = String(invoiceBatchSourceScalar(source, 'search') || '').trim();
+  if (search.length > 200) throw invoiceBatchContractError('BATCH_FILTER_SEARCH_TOO_LONG');
+  const displayMode = String(invoiceBatchSourceScalar(source, 'display_mode') || 'ALL').trim().toUpperCase();
+  if (!['ALL', 'READY', 'BLOCKED'].includes(displayMode)) {
+    throw invoiceBatchContractError('INVOICE_BATCH_DISPLAY_MODE_INVALID');
+  }
+  return {
+    client_ids: normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'client_ids'), uuidOptions),
+    candidate_ids: normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'candidate_ids'), uuidOptions),
+    week_endings: normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'week_endings'), weekOptions),
+    week_ending_from: weekEndingFrom,
+    week_ending_to: weekEndingTo,
+    status_codes: statusCodes,
+    blocker_codes: normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'blocker_codes'), codeOptions),
+    search: search || null,
+    allow_early: normaliseInvoiceBatchBoolean(invoiceBatchSourceScalar(source, 'allow_early'), false),
+    display_mode: displayMode
+  };
+}
+
+function normaliseInvoiceBatchSort(source, action = 'GENERATE') {
+  if (!source || (typeof source !== 'object' && !(source instanceof URLSearchParams))) {
+    throw invoiceBatchContractError('BATCH_QUERY_INVALID');
+  }
+  validateInvoiceBatchSourceFields(source);
+  const normalizedAction = String(action || '').trim().toUpperCase();
+  if (!['GENERATE', 'ISSUE'].includes(normalizedAction)) throw invoiceBatchContractError('BATCH_QUERY_ACTION_MISMATCH');
+  const nested = source?.sort && typeof source.sort === 'object' && !Array.isArray(source.sort) ? source.sort : null;
+  const scalar = key => nested && Object.hasOwn(nested, key) ? nested[key] : invoiceBatchSourceScalar(source, key);
+  const groupPreset = String(scalar('group_preset') || 'WEEK_CLIENT_CANDIDATE').trim().toUpperCase();
+  const sortKey = String(scalar('sort_key') || 'WEEK_ENDING_DATE').trim().toUpperCase();
+  const sortDirection = String(scalar('sort_direction') || 'ASC').trim().toUpperCase();
+  if (!INVOICE_BATCH_GROUP_PRESETS.includes(groupPreset)) throw invoiceBatchContractError('INVOICE_BATCH_GROUP_PRESET_INVALID');
+  const allowedSortKeys = normalizedAction === 'ISSUE' ? INVOICE_BATCH_ISSUE_SORT_KEYS : INVOICE_BATCH_GENERATE_SORT_KEYS;
+  if (!allowedSortKeys.includes(sortKey)) throw invoiceBatchContractError('INVOICE_BATCH_SORT_KEY_INVALID');
+  if (!['ASC', 'DESC'].includes(sortDirection)) throw invoiceBatchContractError('INVOICE_BATCH_SORT_DIRECTION_INVALID');
+  return { group_preset: groupPreset, sort_key: sortKey, sort_direction: sortDirection };
+}
+function normaliseInvoiceBatchSelectionRules(source) {
+  const selection = source?.selection ?? source;
+  if (!selection || typeof selection !== 'object' || Array.isArray(selection)) {
+    throw invoiceBatchContractError('BATCH_SELECTION_INVALID');
+  }
+  if (Object.keys(selection).some(key => !['contract_version', 'mode', 'default_selected', 'rules'].includes(key))) {
+    throw invoiceBatchContractError('BATCH_SELECTION_UNKNOWN_FIELD');
+  }
+  if (selection.contract_version !== 'INVOICE_BATCH_SELECTION_V1') {
+    throw invoiceBatchContractError('BATCH_SELECTION_CONTRACT_INVALID');
+  }
+  if (String(selection.mode || '').trim().toUpperCase() !== 'IMPLICIT_ALL') {
+    throw invoiceBatchContractError('BATCH_SELECTION_MODE_UNSUPPORTED');
+  }
+  if (selection.default_selected !== true) throw invoiceBatchContractError('BATCH_SELECTION_DEFAULT_INVALID');
+  if (!Array.isArray(selection.rules)) throw invoiceBatchContractError('BATCH_SELECTION_RULES_INVALID');
+  if (selection.rules.length > 10000) throw invoiceBatchContractError('BATCH_SELECTION_RULE_LIMIT_EXCEEDED');
+  const requiredFieldsByType = {
+    ROW: ['selection_key'],
+    WEEK: ['week_ending_date'],
+    CLIENT: ['client_id'],
+    CANDIDATE: ['candidate_id'],
+    WEEK_CLIENT: ['week_ending_date', 'client_id'],
+    WEEK_CLIENT_CANDIDATE: ['week_ending_date', 'client_id', 'candidate_id']
+  };
+  let previousSequence = 0;
+  const seenSequences = new Set();
+  const rules = selection.rules.map(rule => {
+    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) {
+      throw invoiceBatchContractError('BATCH_SELECTION_RULE_INVALID');
+    }
+    if (Object.keys(rule).some(key => !['sequence', 'action', 'selector'].includes(key))) {
+      throw invoiceBatchContractError('BATCH_SELECTION_RULE_UNKNOWN_FIELD');
+    }
+    const sequence = Number(rule.sequence);
+    if (!Number.isSafeInteger(sequence) || sequence < 1 || sequence > 999999999) {
+      throw invoiceBatchContractError('BATCH_SELECTION_RULE_INVALID');
+    }
+    if (seenSequences.has(sequence)) throw invoiceBatchContractError('BATCH_SELECTION_RULE_SEQUENCE_DUPLICATE');
+    if (sequence <= previousSequence) throw invoiceBatchContractError('BATCH_SELECTION_RULE_SEQUENCE_INVALID');
+    previousSequence = sequence;
+    seenSequences.add(sequence);
+    const action = String(rule.action || '').trim().toUpperCase();
+    if (!['INCLUDE', 'EXCLUDE'].includes(action)) throw invoiceBatchContractError('BATCH_SELECTION_RULE_INVALID');
+    const selector = rule.selector;
+    if (!selector || typeof selector !== 'object' || Array.isArray(selector)) {
+      throw invoiceBatchContractError('BATCH_SELECTION_RULE_INVALID');
+    }
+    if (Object.keys(selector).some(key => !['type', 'selection_key', 'week_ending_date', 'client_id', 'candidate_id'].includes(key))) {
+      throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_UNKNOWN_FIELD');
+    }
+    const type = String(selector.type || '').trim().toUpperCase();
+    const requiredFields = requiredFieldsByType[type];
+    if (!requiredFields) throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
+    const suppliedFields = Object.keys(selector).filter(key => key !== 'type' && selector[key] !== null && selector[key] !== '');
+    if (requiredFields.some(key => !suppliedFields.includes(key)) || suppliedFields.some(key => !requiredFields.includes(key))) {
+      throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
+    }
+    const normalizedSelector = { type };
+    for (const key of requiredFields) {
+      if (key === 'selection_key') {
+        const value = String(selector[key] || '').trim();
+        if (!value || value.length > 512) throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
+        normalizedSelector[key] = value;
+      } else if (key === 'week_ending_date') {
+        normalizedSelector[key] = normaliseInvoiceBatchDate(selector[key], 'BATCH_SELECTION_SELECTOR_INVALID');
+      } else {
+        const value = String(selector[key] || '').trim().toLowerCase();
+        if (!UUID_PATTERN.test(value)) throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
+        normalizedSelector[key] = value;
+      }
+    }
+    return { sequence, action, selector: normalizedSelector };
+  });
+  return {
+    contract_version: 'INVOICE_BATCH_SELECTION_V1',
+    mode: 'IMPLICIT_ALL',
+    default_selected: true,
+    rules
+  };
+}
+
+function postgresJsonbTextForInvoiceBatch(value) {
+  if (Array.isArray(value)) return `[${value.map(postgresJsonbTextForInvoiceBatch).join(', ')}]`;
+  if (value && typeof value === 'object') {
+    const encoder = new TextEncoder();
+    const compareKeys = (left, right) => {
+      const a = encoder.encode(left);
+      const b = encoder.encode(right);
+      if (a.byteLength !== b.byteLength) return a.byteLength - b.byteLength;
+      for (let index = 0; index < a.byteLength; index += 1) {
+        if (a[index] !== b[index]) return a[index] - b[index];
+      }
+      return 0;
+    };
+    return `{${Object.keys(value).sort(compareKeys).map(key => `${JSON.stringify(key)}: ${postgresJsonbTextForInvoiceBatch(value[key])}`).join(', ')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+async function hashInvoiceBatchQuery(action, filters, sort, snapshotAtUtc, options = {}) {
+  const normalizedAction = String(action || '').trim().toUpperCase();
+  if (!['GENERATE', 'ISSUE'].includes(normalizedAction)) throw invoiceBatchContractError('BATCH_QUERY_ACTION_MISMATCH');
+  if (options.db_candidate_filter_hash === true) {
+    return sha256Text(`${postgresJsonbTextForInvoiceBatch(filters)}|${postgresJsonbTextForInvoiceBatch(sort)}|${normalizedAction}`);
+  }
+  const snapshot = new Date(snapshotAtUtc);
+  if (!Number.isFinite(snapshot.getTime())) throw invoiceBatchContractError('BATCH_QUERY_SNAPSHOT_INVALID');
+  return sha256Text(postgresJsonbTextForInvoiceBatch({
+    action: normalizedAction,
+    filters,
+    sort,
+    snapshot_at_utc: snapshot.toISOString()
+  }));
+}
+function normaliseInvoiceBatchCursorValues(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const allowed = ['after_selection_key', 'after_sort_date', 'after_sort_text', 'after_sort_numeric', 'after_chunk_id'];
+  if (Object.keys(value).some(key => !allowed.includes(key))) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const result = {};
+  if (value.after_selection_key !== undefined && value.after_selection_key !== null) {
+    const text = String(value.after_selection_key).trim();
+    if (!text || text.length > 512) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+    result.after_selection_key = text;
+  }
+  if (value.after_sort_date !== undefined && value.after_sort_date !== null) {
+    result.after_sort_date = normaliseInvoiceBatchDate(value.after_sort_date, 'BATCH_CURSOR_INVALID');
+  }
+  if (value.after_sort_text !== undefined && value.after_sort_text !== null) {
+    const text = String(value.after_sort_text);
+    if (text.length > 512) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+    result.after_sort_text = text;
+  }
+  if (value.after_sort_numeric !== undefined && value.after_sort_numeric !== null) {
+    const text = String(value.after_sort_numeric).trim();
+    if (!/^[+-]?\d+(?:\.\d+)?$/.test(text) || text.length > 100) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+    result.after_sort_numeric = text;
+  }
+  if (value.after_chunk_id !== undefined && value.after_chunk_id !== null) {
+    const text = String(value.after_chunk_id).trim().toLowerCase();
+    if (!UUID_PATTERN.test(text)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+    result.after_chunk_id = text;
+  }
+  if (!Object.keys(result).length) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  return result;
+}
+
+async function signInvoiceBatchCursor(secret, encodedPayload) {
+  if (!secret || String(secret).length < 32) throw invoiceBatchContractError('BATCH_CURSOR_SECRET_INVALID');
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(String(secret)),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC', key, new TextEncoder().encode(`invoice-batch-cursor-v1.${encodedPayload}`)
+  );
+  return encodeOutboxCursorPart(new Uint8Array(signature));
+}
+
+async function encodeInvoiceBatchCursor(env, input) {
+  const action = String(input?.action || '').trim().toUpperCase();
+  if (!['GENERATE', 'ISSUE'].includes(action)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const snapshot = new Date(input?.snapshot_at_utc);
+  if (!Number.isFinite(snapshot.getTime())) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const filterHash = String(input?.filter_hash || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(filterHash)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const sort = normaliseInvoiceBatchSort({ sort: input?.sort || {} }, action);
+  const cursor = normaliseInvoiceBatchCursorValues(input?.next_cursor_values || input?.cursor || {});
+  const resultCategory = input?.result_category ? String(input.result_category).trim().toUpperCase().slice(0, 80) : null;
+  const payload = {
+    version: 1,
+    action,
+    snapshot_at_utc: snapshot.toISOString(),
+    filter_hash: filterHash,
+    sort,
+    cursor,
+    ...(resultCategory ? { result_category: resultCategory } : {})
+  };
+  const encodedPayload = encodeOutboxCursorPart(new TextEncoder().encode(JSON.stringify(payload)));
+  const signature = await signInvoiceBatchCursor(env?.SESSION_TOKEN_SECRET, encodedPayload);
+  return `${encodedPayload}.${signature}`;
+}
+
+async function decodeInvoiceBatchCursor(env, token, expected = {}) {
+  const tokenText = String(token || '');
+  if (tokenText.length > 8192) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const parts = tokenText.split('.');
+  if (parts.length !== 2 || parts.some(part => !part)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  let expectedSignature;
+  let actualSignature;
+  try {
+    expectedSignature = decodeOutboxCursorPart(await signInvoiceBatchCursor(env?.SESSION_TOKEN_SECRET, parts[0]));
+    actualSignature = decodeOutboxCursorPart(parts[1]);
+  } catch (error) {
+    if (error?.code === 'BATCH_CURSOR_SECRET_INVALID') throw error;
+    throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  }
+  if (expectedSignature.byteLength !== actualSignature.byteLength) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  let difference = 0;
+  for (let index = 0; index < expectedSignature.byteLength; index += 1) difference |= expectedSignature[index] ^ actualSignature[index];
+  if (difference !== 0) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  let payload;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(decodeOutboxCursorPart(parts[0])));
+  } catch {
+    throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  }
+  if (payload?.version !== 1) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const action = String(payload.action || '').trim().toUpperCase();
+  const expectedAction = String(expected.action || '').trim().toUpperCase();
+  if (!['GENERATE', 'ISSUE'].includes(action) || (expectedAction && action !== expectedAction)) {
+    throw invoiceBatchContractError('BATCH_CURSOR_ACTION_MISMATCH');
+  }
+  const snapshot = new Date(payload.snapshot_at_utc);
+  if (!Number.isFinite(snapshot.getTime())) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const filterHash = String(payload.filter_hash || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(filterHash)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  if (expected.filter_hash && filterHash !== String(expected.filter_hash).trim().toLowerCase()) {
+    throw invoiceBatchContractError('BATCH_CURSOR_FILTER_MISMATCH');
+  }
+  const sort = normaliseInvoiceBatchSort({ sort: payload.sort || {} }, action);
+  if (expected.sort) {
+    const expectedSort = normaliseInvoiceBatchSort({ sort: expected.sort }, action);
+    if (postgresJsonbTextForInvoiceBatch(sort) !== postgresJsonbTextForInvoiceBatch(expectedSort)) {
+      throw invoiceBatchContractError('BATCH_CURSOR_SORT_MISMATCH');
+    }
+  }
+  const resultCategory = payload.result_category ? String(payload.result_category).trim().toUpperCase() : null;
+  if (expected.result_category && resultCategory !== String(expected.result_category).trim().toUpperCase()) {
+    throw invoiceBatchContractError('BATCH_CURSOR_FILTER_MISMATCH');
+  }
+  const cursor = normaliseInvoiceBatchCursorValues(payload.cursor || {});
+  return {
+    version: 1,
+    action,
+    snapshot_at_utc: snapshot.toISOString(),
+    filter_hash: filterHash,
+    sort,
+    cursor,
+    next_cursor_values: cursor,
+    ...(resultCategory ? { result_category: resultCategory } : {})
+  };
+}
 function candidateGroupsFromRpc(value) {
+  const isV1Envelope = candidate => !!(
+    candidate
+    && typeof candidate === 'object'
+    && !Array.isArray(candidate)
+    && candidate.contract_version === 'INVOICE_BATCH_CANDIDATES_V1'
+    && Array.isArray(candidate.rows)
+  );
+
+  const unwrapV1Envelope = candidate => {
+    if (isV1Envelope(candidate)) return candidate;
+
+    if (Array.isArray(candidate)) {
+      if (candidate.length !== 1) return null;
+      if (isV1Envelope(candidate[0])) return candidate[0];
+      if (candidate[0] && typeof candidate[0] === 'object' && !Array.isArray(candidate[0])) {
+        const innerValues = Object.values(candidate[0]);
+        if (innerValues.length === 1) return unwrapV1Envelope(innerValues[0]);
+      }
+      return null;
+    }
+
+    if (candidate && typeof candidate === 'object') {
+      if (Array.isArray(candidate.rows)) {
+        const rowEnvelope = unwrapV1Envelope(candidate.rows);
+        if (rowEnvelope) return rowEnvelope;
+      }
+      if (Array.isArray(candidate.data)) {
+        const dataEnvelope = unwrapV1Envelope(candidate.data);
+        if (dataEnvelope) return dataEnvelope;
+      }
+      const innerValues = Object.values(candidate);
+      if (innerValues.length === 1) return unwrapV1Envelope(innerValues[0]);
+    }
+
+    return null;
+  };
+
+  const rawEnvelope = unwrapV1Envelope(value) || unwrapV1Envelope(rpcValue(value));
+
+  if (rawEnvelope) {
+    return {
+      kind: 'V1',
+      legacy: false,
+      contract_version: rawEnvelope.contract_version,
+      action: String(rawEnvelope.action || '').toUpperCase(),
+      mode: rawEnvelope.mode || null,
+      snapshot_at_utc: rawEnvelope.snapshot_at_utc || null,
+      normalised_filter: rawEnvelope.normalised_filter || rawEnvelope.normalized_filter || {},
+      normalized_filter: rawEnvelope.normalised_filter || rawEnvelope.normalized_filter || {},
+      normalised_sort: rawEnvelope.normalised_sort || rawEnvelope.normalized_sort || {},
+      normalized_sort: rawEnvelope.normalised_sort || rawEnvelope.normalized_sort || {},
+      filter_hash: rawEnvelope.filter_hash || null,
+      rows: rawEnvelope.rows,
+      page: rawEnvelope.page || {},
+      totals: rawEnvelope.totals || {},
+      facets: rawEnvelope.facets || {},
+      selection_seed: rawEnvelope.selection_seed || {
+        mode: 'IMPLICIT_ALL',
+        default_selected: true
+      },
+      raw: rawEnvelope
+    };
+  }
+
   const resolved = rpcValue(value);
-  const clients = Array.isArray(resolved) ? resolved : [];
-  return clients.flatMap(client => {
+  const clients = Array.isArray(resolved)
+    ? resolved
+    : (Array.isArray(resolved?.clients) ? resolved.clients : []);
+
+  const groups = clients.flatMap(client => {
     if (Array.isArray(client?.groups)) {
       return client.groups.map(group => ({
         ...group,
-        client_id: group.client_id || client.client_id
+        client_id: group.client_id || client.client_id,
+        client_name: group.client_name || client.client_name
       }));
     }
-    return client?.group_key ? [client] : [];
+    if (Array.isArray(client?.weeks)) {
+      return client.weeks.flatMap(week => {
+        if (Array.isArray(week?.groups)) {
+          return week.groups.map(group => ({
+            ...group,
+            client_id: group.client_id || client.client_id,
+            client_name: group.client_name || client.client_name,
+            week_ending_date: group.week_ending_date || week.week_ending_date,
+            invoice_week_start: group.invoice_week_start || week.invoice_week_start
+          }));
+        }
+        if (Array.isArray(week?.invoices)) {
+          return week.invoices.map(invoice => ({
+            ...invoice,
+            client_id: invoice.client_id || client.client_id,
+            client_name: invoice.client_name || client.client_name,
+            week_ending_date: invoice.week_ending_date || week.week_ending_date,
+            invoice_week_start: invoice.invoice_week_start || week.invoice_week_start
+          }));
+        }
+        return [];
+      });
+    }
+    return client?.group_key || client?.scope_key || client?.invoice_id ? [client] : [];
   });
+
+  Object.defineProperties(groups, {
+    kind: { value: 'LEGACY', enumerable: false },
+    legacy: { value: true, enumerable: false },
+    clients: { value: clients, enumerable: false },
+    groups: { value: groups, enumerable: false },
+    rows: { value: groups, enumerable: false },
+    raw: { value: resolved, enumerable: false }
+  });
+  return groups;
 }
 
 async function startCommands(env, req, ctx, user, commands, deps, lanes = ['ALL'], options = {}) {
-  const raw = await deps.rpc('invoice_operation_start_batch', { p_commands: commands, p_actor_user_id: user.id, p_now_utc: new Date().toISOString() });
+  const raw = await deps.rpc('invoice_operation_start_batch', {
+    p_commands: commands,
+    p_actor_user_id: user.id,
+    p_now_utc: new Date().toISOString()
+  });
   const value = rpcValue(raw);
   const operations = Array.isArray(value) ? value : (value ? [value] : []);
+
   if (options.commandContextByNo instanceof Map) {
     const returned = operations.map(row => Number(row?.command_no));
     const expected = [...options.commandContextByNo.keys()];
@@ -152,29 +685,102 @@ async function startCommands(env, req, ctx, user, commands, deps, lanes = ['ALL'
       || new Set(returned).size !== returned.length
       || expected.some(value => !returned.includes(value))
     ) {
-      throw Object.assign(new Error('INVOICE_START_RESULT_CORRELATION_INVALID'), { code: 'INVOICE_START_RESULT_CORRELATION_INVALID' });
+      throw Object.assign(new Error('INVOICE_START_RESULT_CORRELATION_INVALID'), {
+        code: 'INVOICE_START_RESULT_CORRELATION_INVALID'
+      });
     }
   }
-  const created = operations.filter(row => row?.accepted !== false && row?.created === true);
-  const reusedActive = operations.filter(row => row?.accepted !== false && row?.reused_active === true);
-  const reusedReady = operations.filter(row => row?.accepted !== false && row?.reused_ready === true);
-  const stableCode = row => String(row?.code || row?.error_code || row?.terminal_error?.code || row?.terminal_error || row?.error || '').trim().toUpperCase();
-  const conflictCode = row => /(?:CONFLICT|SOURCE_CHANGED|STALE|ACTIVE_OPERATION|ALREADY_ACTIVE|NOT_READY|TERMINAL|BLOCKED)/.test(stableCode(row));
+
+  const stableCode = row => String(
+    row?.code
+    || row?.error_code
+    || row?.terminal_error?.code
+    || row?.terminal_error
+    || row?.error?.code
+    || row?.error
+    || ''
+  ).trim().toUpperCase();
+  const conflictCode = row => /(?:CONFLICT|SOURCE_CHANGED|STALE|ACTIVE_OPERATION|ALREADY_ACTIVE|NOT_READY|TERMINAL|BLOCKED|CURRENT_STATE_CHANGED)/.test(stableCode(row));
+  const isSelectionRoot = row => row?.selection_contract_version === 'INVOICE_BATCH_SELECTION_V1'
+    || row?.selection_expansion_pending === true
+    || row?.input_json?.contract_version === 'INVOICE_BATCH_SELECTION_ROOT_V1';
+
+  const accepted = operations.filter(row => row?.accepted === true);
+  const created = accepted.filter(row => row?.created === true);
+  const reusedActive = accepted.filter(row => row?.reused_active === true);
+  const reusedReady = accepted.filter(row => row?.reused_ready === true);
   const blocked = operations.filter(row => row?.blocked === true || !!row?.terminal_error);
-  const conflicted = operations.filter(row => row?.accepted === false && !row?.blocked && !row?.terminal_error && conflictCode(row));
-  const rejected = operations.filter(row => row?.accepted === false && !row?.blocked && !row?.terminal_error && !conflictCode(row));
-  const active = [...created, ...reusedActive].filter((row, index, rows) => rows.findIndex(item => item.operation_id === row.operation_id) === index);
+  const conflicted = operations.filter(row => row?.accepted !== true && !row?.blocked && !row?.terminal_error && conflictCode(row));
+  const rejected = operations.filter(row => row?.accepted !== true && !row?.blocked && !row?.terminal_error && !conflictCode(row));
+  const active = [...created, ...reusedActive]
+    .filter(row => row?.operation_id)
+    .filter((row, index, rows) => rows.findIndex(item => item.operation_id === row.operation_id) === index);
+  const activeSelectionRoots = active.filter(isSelectionRoot);
+  const activeNonSelection = active.filter(row => !isSelectionRoot(row));
   const additionalRejectedCount = Math.max(0, Number(options.additionalRejectedCount || 0));
-  const nudge = active.length ? await nudgeInvoiceOperations(env, active, { ctx, rpc: deps.rpc, lanes, priorityClass: options.priorityClass || 'INTERACTIVE' }) : { scheduled: false, code: 'NO_ACTIVE_WORK' };
+
+  let nudge = { scheduled: false, code: 'NO_ACTIVE_WORK' };
+  if (activeSelectionRoots.length || activeNonSelection.length) {
+    const nudgeParts = [];
+    if (activeSelectionRoots.length) {
+      nudgeParts.push({
+        scope: 'selection_roots',
+        result: await nudgeInvoiceOperations(env, activeSelectionRoots, {
+          ctx,
+          rpc: deps.rpc,
+          lanes: ['DATABASE'],
+          priorityClass: options.priorityClass || 'INTERACTIVE'
+        })
+      });
+    }
+    if (activeNonSelection.length) {
+      nudgeParts.push({
+        scope: 'operations',
+        result: await nudgeInvoiceOperations(env, activeNonSelection, {
+          ctx,
+          rpc: deps.rpc,
+          lanes,
+          priorityClass: options.priorityClass || 'INTERACTIVE'
+        })
+      });
+    }
+    nudge = nudgeParts.length === 1
+      ? nudgeParts[0].result
+      : { scheduled: nudgeParts.some(part => part.result?.scheduled), parts: nudgeParts };
+  }
+
   let status = 202;
   if (!operations.length) status = 502;
   else if (!active.length && reusedReady.length && !blocked.length && !conflicted.length && !rejected.length) status = 200;
   else if (!active.length && rejected.length && !blocked.length && !conflicted.length && !reusedReady.length) status = 400;
   else if (!active.length && (blocked.length || conflicted.length) && !reusedReady.length) status = 409;
   else if ((active.length || reusedReady.length) && (blocked.length || conflicted.length || rejected.length || additionalRejectedCount)) status = 207;
-  const basePayload = { ok: active.length > 0 || reusedReady.length > 0, accepted: active.length > 0, accepted_count: active.length, created_count: created.length, reused_active_count: reusedActive.length, reused_ready_count: reusedReady.length, blocked_count: blocked.length, conflict_count: conflicted.length, rejected_count: rejected.length + conflicted.length + additionalRejectedCount, operation_ids: [...new Set(operations.map(row => row?.operation_id).filter(Boolean))], per_command_results: operations, nudge_state: nudge };
-  const extraPayload = typeof options.extendResult === 'function' ? options.extendResult(basePayload, operations) : {};
-  return jsonResponse({ ...basePayload, ...(extraPayload && typeof extraPayload === 'object' ? extraPayload : {}) }, status);
+
+  const operationIds = [...new Set(operations.map(row => row?.operation_id).filter(Boolean))];
+  const selectionExpansionPending = operations.some(row => row?.selection_expansion_pending === true);
+  const basePayload = {
+    ok: active.length > 0 || reusedReady.length > 0,
+    accepted: active.length > 0,
+    accepted_count: active.length,
+    created_count: created.length,
+    reused_active_count: reusedActive.length,
+    reused_ready_count: reusedReady.length,
+    blocked_count: blocked.length,
+    conflict_count: conflicted.length,
+    rejected_count: rejected.length + conflicted.length + additionalRejectedCount,
+    operation_ids: operationIds,
+    root_operation_id: operationIds.length === 1 ? operationIds[0] : null,
+    selection_expansion_pending: selectionExpansionPending,
+    per_command_results: operations,
+    nudge_state: nudge
+  };
+  const extraPayload = typeof options.extendResult === 'function'
+    ? options.extendResult(basePayload, operations)
+    : {};
+  return jsonResponse({
+    ...basePayload,
+    ...(extraPayload && typeof extraPayload === 'object' ? extraPayload : {})
+  }, status);
 }
 
 async function requireActor(env, req, deps, adminOnly = false) {
@@ -190,22 +796,118 @@ async function parseBody(req) {
   }
 }
 
-async function handleCandidates(req, deps, rpcName) {
+async function handleCandidates(envOrReq, reqOrDeps, depsOrRpcName, maybeRpcName) {
+  const hasExplicitEnv = maybeRpcName !== undefined;
+  const env = hasExplicitEnv ? envOrReq : (reqOrDeps?.env || depsOrRpcName?.env || null);
+  const req = hasExplicitEnv ? reqOrDeps : envOrReq;
+  const deps = hasExplicitEnv ? depsOrRpcName : reqOrDeps;
+  const rpcName = hasExplicitEnv ? maybeRpcName : depsOrRpcName;
+  const action = rpcName === 'invoice_batch_issue_candidates' ? 'ISSUE' : 'GENERATE';
   const url = new URL(req.url);
-  const rawLimit = Number(url.searchParams.get('limit'));
-  const defaultLimit = rpcName === 'invoice_batch_issue_candidates' ? 2000 : 5000;
-  const maximum = rpcName === 'invoice_batch_issue_candidates' ? 2000 : 5000;
-  const limit = Number.isFinite(rawLimit)
-    ? Math.max(1, Math.min(maximum, Math.trunc(rawLimit)))
-    : defaultLimit;
-  const result = await deps.rpc(rpcName, {
-    p_allow_early: boolValue(url.searchParams.get('allow_early'), false),
-    p_limit: limit
+  const normaliseParams = new URLSearchParams(url.searchParams);
+  // These are transport-only controls consumed by this HTTP handler. They are
+  // not DB candidate filters/sorts and must not cause the strict normalisers
+  // to reject an otherwise valid candidate-page request.
+  normaliseParams.delete('facets');
+  normaliseParams.delete('page_cursor');
+  normaliseParams.delete('pageCursor');
+  const filters = normaliseInvoiceBatchFilters(normaliseParams, action);
+  const sort = normaliseInvoiceBatchSort(normaliseParams, action);
+  const modeText = String(url.searchParams.get('mode') || '').trim().toUpperCase();
+  if (modeText && !['PAGE', 'FACETS'].includes(modeText)) {
+    throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_INVALID');
+  }
+  const facetText = String(url.searchParams.get('facets') || '').trim().toUpperCase();
+  if (facetText && !['0', '1', 'FALSE', 'TRUE', 'NO', 'YES', 'OFF', 'ON'].includes(facetText)) {
+    throw invoiceBatchContractError('BATCH_QUERY_INVALID');
+  }
+  const facetRequested = ['1', 'TRUE', 'YES', 'ON'].includes(facetText);
+  const queryMode = facetRequested || modeText === 'FACETS' ? 'FACETS' : 'PAGE';
+  const rawPageSize = Number(url.searchParams.get('page_size') || url.searchParams.get('limit') || 100);
+  const pageSize = Number.isFinite(rawPageSize)
+    ? Math.max(1, Math.min(100, Math.trunc(rawPageSize)))
+    : 100;
+  let snapshotAtUtc = normaliseInvoiceBatchSnapshotUtc(url.searchParams.get('snapshot_at_utc'), new Date().toISOString());
+  let cursor = {};
+  const expectedFilterHash = await hashInvoiceBatchQuery(action, filters, sort, snapshotAtUtc, {
+    db_candidate_filter_hash: true
   });
-  const resolved = rpcValue(result);
-  const candidates = Array.isArray(resolved) ? resolved : (Array.isArray(resolved?.candidates) ? resolved.candidates : []);
-  const groups = Array.isArray(resolved?.groups) ? resolved.groups : candidates;
-  return jsonResponse({ ok: true, candidates, groups, limit });
+  const cursorToken = url.searchParams.get('cursor') || url.searchParams.get('page_cursor') || url.searchParams.get('pageCursor');
+  if (cursorToken) {
+    if (!env) throw Object.assign(new Error('BATCH_CURSOR_ENV_REQUIRED'), { code: 'BATCH_CURSOR_ENV_REQUIRED' });
+    const decoded = await decodeInvoiceBatchCursor(env, cursorToken, {
+      action,
+      filter_hash: expectedFilterHash,
+      sort
+    });
+    cursor = decoded.cursor || decoded.next_cursor_values || {};
+    snapshotAtUtc = decoded.snapshot_at_utc || snapshotAtUtc;
+  }
+
+  const pQuery = {
+    contract_version: 'INVOICE_BATCH_QUERY_V1',
+    action,
+    mode: queryMode,
+    snapshot_at_utc: snapshotAtUtc,
+    allow_early: filters.allow_early,
+    display_mode: filters.display_mode,
+    page_size: pageSize,
+    cursor,
+    filters,
+    sort
+  };
+
+  const result = await deps.rpc(rpcName, {
+    p_allow_early: filters.allow_early,
+    p_limit: pageSize,
+    p_query: pQuery
+  });
+  const parsed = candidateGroupsFromRpc(result);
+  if (parsed?.kind !== 'V1') {
+    const candidates = Array.isArray(parsed) ? parsed : [];
+    return jsonResponse({ ok: true, legacy: true, candidates, groups: candidates, limit: pageSize });
+  }
+
+  if (parsed.filter_hash && parsed.filter_hash !== expectedFilterHash) {
+    throw Object.assign(new Error('BATCH_QUERY_FILTER_HASH_MISMATCH'), {
+      code: 'BATCH_QUERY_FILTER_HASH_MISMATCH'
+    });
+  }
+
+  const page = parsed.page || {};
+  let signedNextCursor = null;
+  if (page.has_more && page.next_cursor_values) {
+    if (!env) throw Object.assign(new Error('BATCH_CURSOR_ENV_REQUIRED'), { code: 'BATCH_CURSOR_ENV_REQUIRED' });
+    signedNextCursor = await encodeInvoiceBatchCursor(env, {
+      action,
+      snapshot_at_utc: parsed.snapshot_at_utc || snapshotAtUtc,
+      filter_hash: parsed.filter_hash || expectedFilterHash,
+      sort: parsed.normalised_sort || sort,
+      next_cursor_values: page.next_cursor_values
+    });
+  }
+
+  return jsonResponse({
+    ok: true,
+    contract_version: parsed.contract_version,
+    action: parsed.action || action,
+    mode: parsed.mode || queryMode,
+    snapshot_at_utc: parsed.snapshot_at_utc || snapshotAtUtc,
+    rows: parsed.rows,
+    candidates: parsed.rows,
+    page: {
+      ...page,
+      next_cursor: signedNextCursor
+    },
+    totals: parsed.totals,
+    facets: parsed.facets,
+    filter_hash: parsed.filter_hash || expectedFilterHash,
+    normalised_filter: parsed.normalised_filter || filters,
+    normalized_filter: parsed.normalised_filter || filters,
+    normalised_sort: parsed.normalised_sort || sort,
+    normalized_sort: parsed.normalised_sort || sort,
+    selection_seed: parsed.selection_seed || { mode: 'IMPLICIT_ALL', default_selected: true }
+  });
 }
 
 async function handleNhspCandidates(req, deps) {
@@ -246,7 +948,63 @@ async function handleNhspCandidates(req, deps) {
 }
 
 async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
-  const body = await parseBody(req);
+  const body = await parseBody(req) || {};
+
+  if (body.selection_contract && typeof body.selection_contract === 'object' && !Array.isArray(body.selection_contract)) {
+    const rawContract = body.selection_contract;
+    if (rawContract.contract_version !== 'INVOICE_BATCH_SELECTION_V1') {
+      return jsonResponse({ error: 'BATCH_SELECTION_CONTRACT_INVALID' }, 400);
+    }
+    if (!rawContract.query || typeof rawContract.query !== 'object' || Array.isArray(rawContract.query)) {
+      return jsonResponse({ error: 'BATCH_QUERY_INVALID' }, 400);
+    }
+    if (String(rawContract.query.action || '').trim().toUpperCase() !== 'GENERATE') {
+      return jsonResponse({ error: 'BATCH_QUERY_ACTION_MISMATCH' }, 400);
+    }
+
+    const filters = normaliseInvoiceBatchFilters(rawContract.query, 'GENERATE');
+    const sort = normaliseInvoiceBatchSort(rawContract.query, 'GENERATE');
+    const selection = normaliseInvoiceBatchSelectionRules(rawContract);
+    const snapshotAtUtc = normaliseInvoiceBatchSnapshotUtc(rawContract.query.snapshot_at_utc, new Date().toISOString());
+    const commandTokenValue = String(body.command_token || commandToken(req, body)).trim().slice(0, 256);
+    if (!commandTokenValue) return jsonResponse({ error: 'GENERATE_COMMAND_TOKEN_REQUIRED' }, 400);
+
+    const selectionContract = {
+      contract_version: 'INVOICE_BATCH_SELECTION_V1',
+      query: {
+        contract_version: 'INVOICE_BATCH_QUERY_V1',
+        action: 'GENERATE',
+        mode: 'PAGE',
+        snapshot_at_utc: snapshotAtUtc,
+        allow_early: filters.allow_early,
+        display_mode: filters.display_mode,
+        filters,
+        sort
+      },
+      selection
+    };
+
+    return startCommands(env, req, ctx, user, [{
+      command_type: 'GENERATE_SELECTED',
+      selection_contract: selectionContract,
+      command_token: commandTokenValue
+    }], deps, ['DATABASE'], {
+      priorityClass: 'INTERACTIVE',
+      extendResult: (summary, operationRows) => {
+        const root = operationRows[0] || {};
+        return {
+          root_operation_id: root.operation_id || summary.root_operation_id || null,
+          status: root.status || null,
+          accepted: root.accepted !== false,
+          selection_contract_version: 'INVOICE_BATCH_SELECTION_V1',
+          selection_expansion_pending: root.selection_expansion_pending === true,
+          estimated_filtered_total: root.estimated_filtered_total ?? null,
+          nudge_state: summary.nudge_state
+        };
+      }
+    });
+  }
+
   const rows = Array.isArray(body?.rows) ? body.rows : [];
   const suppliedScopeKeys = Array.isArray(body?.scope_keys) ? body.scope_keys : [];
   if ((!rows.length && !suppliedScopeKeys.length) || rows.length > 500 || suppliedScopeKeys.length > 500) {
@@ -256,7 +1014,9 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
   const scopeKeys = (suppliedScopeKeys.length ? suppliedScopeKeys : rows.map(row =>
     row.scope_key || row.group_key || row.canonical_command?.scope_key
   )).map(value => String(value || '').trim());
-  if (scopeKeys.some(value => !value) || new Set(scopeKeys).size !== scopeKeys.length) return jsonResponse({ error: 'UNIQUE_SCOPE_KEY_REQUIRED' }, 400);
+  if (scopeKeys.some(value => !value) || new Set(scopeKeys).size !== scopeKeys.length) {
+    return jsonResponse({ error: 'UNIQUE_SCOPE_KEY_REQUIRED' }, 400);
+  }
   const expectedRevisions = new Map();
   for (const row of rows) {
     const key = String(row.scope_key || row.group_key || row.canonical_command?.scope_key || '').trim();
@@ -272,6 +1032,7 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
   if (scopeKeys.some(key => !expectedRevisions.get(key))) {
     return jsonResponse({ error: 'CANDIDATE_SOURCE_REVISION_REQUIRED' }, 400);
   }
+
   const candidatesRaw = await deps.rpc('invoice_batch_generate_candidates', {
     p_allow_early: boolValue(body?.allow_early, false),
     p_limit: scopeKeys.length,
@@ -327,6 +1088,7 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
       hard_blocked_scopes: hardBlockedScopes
     }, 409);
   }
+
   const commandContextByNo = new Map();
   const commands = await Promise.all(selected.map(async (selection, index) => {
     const canonical = selection.candidate.command_payload
@@ -337,15 +1099,14 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
     }
     const commandNo = index + 1;
     commandContextByNo.set(commandNo, selection.scopeKey);
-    const memberHash = await sha256Text(
-      `${selection.scopeKey}|${selection.currentRevision}`
-    );
+    const memberHash = await sha256Text(`${selection.scopeKey}|${selection.currentRevision}`);
     return generationCommandFromBody(req, {
       canonical_command: canonical,
       allow_early: body.allow_early ?? canonical.allow_early,
       command_token: `${rootToken}:${memberHash}`.slice(0, 200)
     }, canonical.command_type || 'GENERATE_SELECTED');
   }));
+
   return startCommands(env, req, ctx, user, commands, deps, ['DATABASE'], {
     additionalRejectedCount: staleScopes.length + hardBlockedScopes.length,
     commandContextByNo,
@@ -371,6 +1132,85 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
 
 async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
   const body = await parseBody(req) || {};
+
+  if (body.selection_contract && typeof body.selection_contract === 'object' && !Array.isArray(body.selection_contract)) {
+    const rawContract = body.selection_contract;
+    if (rawContract.contract_version !== 'INVOICE_BATCH_SELECTION_V1') {
+      return jsonResponse({ error: 'BATCH_SELECTION_CONTRACT_INVALID' }, 400);
+    }
+    if (!rawContract.query || typeof rawContract.query !== 'object' || Array.isArray(rawContract.query)) {
+      return jsonResponse({ error: 'BATCH_QUERY_INVALID' }, 400);
+    }
+    if (String(rawContract.query.action || '').trim().toUpperCase() !== 'ISSUE') {
+      return jsonResponse({ error: 'BATCH_QUERY_ACTION_MISMATCH' }, 400);
+    }
+
+    const filters = normaliseInvoiceBatchFilters(rawContract.query, 'ISSUE');
+    const sort = normaliseInvoiceBatchSort(rawContract.query, 'ISSUE');
+    const selection = normaliseInvoiceBatchSelectionRules(rawContract);
+    const snapshotAtUtc = normaliseInvoiceBatchSnapshotUtc(rawContract.query.snapshot_at_utc, new Date().toISOString());
+    const deliver = boolValue(body.deliver ?? body.send_email, false);
+    const commandTokenValue = String(body.command_token || commandToken(req, body)).trim().slice(0, 256);
+    if (!commandTokenValue) return jsonResponse({ error: 'ISSUE_COMMAND_TOKEN_REQUIRED' }, 400);
+
+    let deliveryRequestToken = null;
+    let deliveryIntent = { deliver: false };
+    if (deliver) {
+      deliveryRequestToken = String(body.delivery_request_token || '').trim();
+      if (!deliveryRequestToken) return jsonResponse({ error: 'DELIVERY_REQUEST_TOKEN_REQUIRED' }, 400);
+      if (deliveryRequestToken.length > 256) return jsonResponse({ error: 'DELIVERY_REQUEST_TOKEN_INVALID' }, 400);
+      const rawIntent = body.delivery_intent && typeof body.delivery_intent === 'object' && !Array.isArray(body.delivery_intent)
+        ? body.delivery_intent
+        : body;
+      deliveryIntent = {
+        recipient_set: canonicalEmailArray(rawIntent.recipient_set || rawIntent.to || []),
+        cc: canonicalEmailArray(rawIntent.cc || []),
+        bcc: canonicalEmailArray(rawIntent.bcc || []),
+        delivery_policy: canonicalDeliveryPolicy(rawIntent.delivery_policy),
+        template_version: rawIntent.template_version || 'INVOICE_EMAIL_V1'
+      };
+    }
+
+    const selectionContract = {
+      contract_version: 'INVOICE_BATCH_SELECTION_V1',
+      query: {
+        contract_version: 'INVOICE_BATCH_QUERY_V1',
+        action: 'ISSUE',
+        mode: 'PAGE',
+        snapshot_at_utc: snapshotAtUtc,
+        allow_early: filters.allow_early,
+        display_mode: filters.display_mode,
+        filters,
+        sort
+      },
+      selection
+    };
+
+    return startCommands(env, req, ctx, user, [{
+      command_type: 'ISSUE_INVOICES',
+      selection_contract: selectionContract,
+      deliver,
+      delivery_intent: deliveryIntent,
+      command_token: commandTokenValue,
+      ...(deliveryRequestToken ? { delivery_request_token: deliveryRequestToken } : {})
+    }], deps, ['DATABASE'], {
+      priorityClass: 'INTERACTIVE',
+      extendResult: (summary, operationRows) => {
+        const root = operationRows[0] || {};
+        return {
+          root_operation_id: root.operation_id || summary.root_operation_id || null,
+          status: root.status || null,
+          accepted: root.accepted !== false,
+          selection_contract_version: 'INVOICE_BATCH_SELECTION_V1',
+          selection_expansion_pending: root.selection_expansion_pending === true,
+          estimated_filtered_total: root.estimated_filtered_total ?? null,
+          delivery_requested: deliver,
+          nudge_state: summary.nudge_state
+        };
+      }
+    });
+  }
+
   const rows = Array.isArray(body.rows) ? body.rows : [];
   const invoiceIds = canonicalUuidArray(body.invoice_ids || rows.map(row => row.invoice_id));
   const deliver = boolValue(body.deliver ?? body.send_email, false);
@@ -394,7 +1234,22 @@ async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
   if (invoiceIds.some(invoiceId => !expectedRevisions[invoiceId])) {
     return jsonResponse({ error: 'EXPECTED_INVOICE_REVISION_REQUIRED' }, 400);
   }
-  const command = { command_type: 'ISSUE_INVOICES', invoice_ids: invoiceIds, expected_revisions: expectedRevisions, allow_early: boolValue(body.allow_early, false), deliver, command_token: requestToken, delivery_intent: deliver ? { recipient_set: canonicalEmailArray(body.recipient_set || body.to || []), cc: canonicalEmailArray(body.cc || []), bcc: canonicalEmailArray(body.bcc || []), delivery_policy: policy, template_version: body.template_version || 'INVOICE_EMAIL_V1', delivery_request_token: deliveryRequestToken } : { deliver: false } };
+  const command = {
+    command_type: 'ISSUE_INVOICES',
+    invoice_ids: invoiceIds,
+    expected_revisions: expectedRevisions,
+    allow_early: boolValue(body.allow_early, false),
+    deliver,
+    command_token: requestToken,
+    delivery_intent: deliver ? {
+      recipient_set: canonicalEmailArray(body.recipient_set || body.to || []),
+      cc: canonicalEmailArray(body.cc || []),
+      bcc: canonicalEmailArray(body.bcc || []),
+      delivery_policy: policy,
+      template_version: body.template_version || 'INVOICE_EMAIL_V1',
+      delivery_request_token: deliveryRequestToken
+    } : { deliver: false }
+  };
   return startCommands(env, req, ctx, user, [command], deps, ['DATABASE','DOCUMENT'], {
     extendResult: (summary, operationRows) => {
       const root = operationRows[0] || {};
@@ -421,7 +1276,15 @@ async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
 async function handleViewDocument(env, req, ctx, user, deps, entityType, entityId) {
   if (!UUID_PATTERN.test(entityId)) return jsonResponse({ error: 'INVALID_ENTITY_ID' }, 400);
   const body = req.method === 'POST' ? (await parseBody(req) || {}) : {};
-  const serviceHeaders = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
+  const serviceHeaders = {
+    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+    authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+  };
+  const redactVersion = version => {
+    if (!version) return null;
+    const { r2_key, ...safeVersion } = version;
+    return safeVersion;
+  };
   const loadReadyVersion = async (versionId, purpose) => {
     const query = new URL(`${env.SUPABASE_URL}/rest/v1/invoice_document_versions`);
     if (versionId) query.searchParams.set('id', `eq.${versionId}`);
@@ -429,29 +1292,60 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
     query.searchParams.set('entity_id', `eq.${entityId}`);
     query.searchParams.set('purpose', `eq.${purpose}`);
     query.searchParams.set('status', 'eq.READY');
-    query.searchParams.set('select', 'id,entity_type,entity_id,purpose,source_revision,template_version,r2_key,sha256,size_bytes,page_count,status');
+    query.searchParams.set('select', 'id,entity_type,entity_id,purpose,source_revision,template_version,r2_key,sha256,size_bytes,page_count,status,ready_at_utc,verified_at_utc');
     query.searchParams.set('order', 'ready_at_utc.desc.nullslast,id.desc');
     query.searchParams.set('limit', '1');
     const response = await fetch(query, { headers: serviceHeaders });
     const rows = await response.json().catch(() => []);
     const version = Array.isArray(rows) ? rows[0] : null;
-    return response.ok && version?.r2_key && version?.sha256 && Number(version?.size_bytes) > 0 && Number(version?.page_count) > 0 ? version : null;
+    return response.ok
+      && version?.r2_key
+      && version?.sha256
+      && Number(version?.size_bytes) > 0
+      && Number(version?.page_count) > 0
+      ? version
+      : null;
   };
+
   if (entityType === 'INVOICE') {
-    const rawDetail = await deps.rpc('invoice_detail_get', { p_invoice_id: entityId, p_actor_user_id: user.id });
+    const rawDetail = await deps.rpc('invoice_detail_get', {
+      p_invoice_id: entityId,
+      p_actor_user_id: user.id
+    });
     const detailValue = rpcValue(rawDetail);
     const detail = Array.isArray(detailValue) ? detailValue[0] : detailValue;
     const header = detail?.invoice || detail?.header || detail || {};
     const status = String(header.status || detail?.invoice_status || '').toUpperCase();
     if (['ISSUED','PAID'].includes(status)) {
       const issuedVersionId = header.issued_document_version_id || detail?.issued_document_version_id;
-      if (!UUID_PATTERN.test(String(issuedVersionId || ''))) return jsonResponse({ error: 'ISSUED_DOCUMENT_POINTER_MISSING' }, 409);
+      if (!UUID_PATTERN.test(String(issuedVersionId || ''))) {
+        return jsonResponse({
+          ok: false,
+          viewer_state: 'BLOCKED',
+          badge_codes: ['ISSUED_DOCUMENT_POINTER_MISSING'],
+          error_code: 'ISSUED_DOCUMENT_POINTER_MISSING'
+        }, 409);
+      }
       const version = await loadReadyVersion(issuedVersionId, 'FINAL_ISSUE');
       return version
-        ? jsonResponse({ ok: true, ready: true, status: 'READY', document_version: version })
-        : jsonResponse({ error: 'ISSUED_DOCUMENT_INTEGRITY_FAILURE', document_version_id: issuedVersionId }, 409);
+        ? jsonResponse({
+          ok: true,
+          ready: true,
+          viewer_state: 'READY',
+          purpose: 'FINAL_ISSUE',
+          document_version_id: version.id,
+          document_version: redactVersion(version)
+        })
+        : jsonResponse({
+          ok: false,
+          viewer_state: 'BLOCKED',
+          badge_codes: ['ISSUED_DOCUMENT_INTEGRITY_FAILURE'],
+          error_code: 'ISSUED_DOCUMENT_INTEGRITY_FAILURE',
+          document_version_id: issuedVersionId
+        }, 409);
     }
   }
+
   const purpose = entityType === 'INVOICE' ? 'DRAFT_PREVIEW' : 'TIMESHEET';
   const command = {
     command_type: entityType === 'INVOICE' ? 'VIEW_INVOICE_DOCUMENT' : 'VIEW_TIMESHEET_DOCUMENT',
@@ -460,21 +1354,70 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
     priority_reason: body.priority_reason || 'VIEW_NOW',
     template_version: body.template_version
   };
-  const operationsValue = rpcValue(await deps.rpc('invoice_operation_start_batch', { p_commands: [command], p_actor_user_id: user.id, p_now_utc: new Date().toISOString() }));
+  const operationsValue = rpcValue(await deps.rpc('invoice_operation_start_batch', {
+    p_commands: [command],
+    p_actor_user_id: user.id,
+    p_now_utc: new Date().toISOString()
+  }));
   const operations = Array.isArray(operationsValue) ? operationsValue : [operationsValue];
-  const result = operations[0];
-  if (result?.accepted === true && result?.reused_ready === true && result?.document_version_id) {
+  const result = operations[0] || {};
+
+  if (result.accepted === true && result.reused_ready === true && result.document_version_id) {
     const version = await loadReadyVersion(result.document_version_id, purpose);
     return version
-      ? jsonResponse({ ok: true, ready: true, status: 'READY', document_version: version })
-      : jsonResponse({ error: 'READY_DOCUMENT_IDENTITY_INVALID', document_version_id: result.document_version_id }, 409);
+      ? jsonResponse({
+        ok: true,
+        ready: true,
+        viewer_state: 'READY',
+        purpose,
+        document_version_id: version.id,
+        document_version: redactVersion(version)
+      })
+      : jsonResponse({
+        ok: false,
+        viewer_state: 'BLOCKED',
+        badge_codes: ['READY_DOCUMENT_IDENTITY_INVALID'],
+        error_code: 'READY_DOCUMENT_IDENTITY_INVALID',
+        document_version_id: result.document_version_id
+      }, 409);
   }
-  if (result?.accepted === false || result?.blocked === true || result?.terminal_error) {
-    return jsonResponse({ ok: false, status: result?.status || 'BLOCKED', operation: result, error: result?.terminal_error || result?.error || 'DOCUMENT_PREPARATION_BLOCKED' }, 409);
+
+  if (result.accepted === false || result.blocked === true || result.terminal_error) {
+    const errorCode = String(result?.terminal_error?.code || result?.error?.code || result?.terminal_error || result?.error || 'DOCUMENT_PREPARATION_BLOCKED').slice(0, 160);
+    return jsonResponse({
+      ok: false,
+      viewer_state: 'BLOCKED',
+      status: result.status || 'BLOCKED',
+      purpose,
+      badge_codes: [errorCode],
+      error_code: errorCode,
+      operation: result
+    }, 409);
   }
-  const nudge = await nudgeInvoiceOperations(env, operations, { ctx, rpc: deps.rpc, lanes: ['DATABASE','DOCUMENT'], priorityClass: 'VIEW_NOW' });
-  return jsonResponse({ ok: true, accepted: true, ready: false, status: result?.status || 'QUEUED', operations, nudge }, 202);
+
+  const activeOperations = operations.filter(row => row?.accepted !== false && row?.operation_id);
+  const nudge = activeOperations.length
+    ? await nudgeInvoiceOperations(env, activeOperations, {
+      ctx,
+      rpc: deps.rpc,
+      lanes: ['DATABASE','DOCUMENT'],
+      priorityClass: 'VIEW_NOW'
+    })
+    : { scheduled: false, code: 'NO_ACTIVE_WORK' };
+  return jsonResponse({
+    ok: true,
+    accepted: true,
+    ready: false,
+    viewer_state: 'PREPARING',
+    status: result.status || 'QUEUED',
+    operation_id: result.operation_id || null,
+    operations,
+    purpose,
+    status_message: entityType === 'INVOICE' ? 'Preparing preview' : 'Preparing timesheet',
+    nudge
+  }, 202);
 }
+
 async function handleIssueOne(env, req, ctx, user, deps, invoiceId) {
   const body = await parseBody(req) || {};
   const expectedRevision = String(body.expected_revision ?? '').trim();
@@ -517,18 +1460,102 @@ async function handleDeliverOne(env, req, ctx, user, deps, invoiceId) {
   }], deps, ['DATABASE']);
 }
 
-async function handleOperationGet(req, user, deps, operationId) {
+async function handleOperationGet(envOrReq, reqOrUser, userOrDeps, depsOrOperationId, maybeOperationId) {
+  const hasExplicitEnv = maybeOperationId !== undefined || !(envOrReq && typeof envOrReq.url === 'string');
+  const env = hasExplicitEnv ? envOrReq : (userOrDeps?.env || null);
+  const req = hasExplicitEnv ? reqOrUser : envOrReq;
+  const user = hasExplicitEnv ? userOrDeps : reqOrUser;
+  const deps = hasExplicitEnv ? depsOrOperationId : userOrDeps;
+  const operationId = hasExplicitEnv ? maybeOperationId : depsOrOperationId;
   const url = new URL(req.url);
   const body = req.method === 'POST' ? (await parseBody(req) || {}) : {};
   const ids = operationId
     ? canonicalUuidArray([operationId])
-    : canonicalUuidArray(body.operation_ids);
+    : canonicalUuidArray(body.operation_ids || String(url.searchParams.get('operation_ids') || '').split(',').filter(Boolean));
+  const mode = String(body.mode || url.searchParams.get('mode') || 'PROGRESS').toUpperCase();
+  const categoryRaw = body.result_category || body.category || url.searchParams.get('result_category') || url.searchParams.get('category');
+  const resultCategory = categoryRaw ? String(categoryRaw).trim().toUpperCase() : null;
+  if (resultCategory && !INVOICE_OPERATION_RESULT_CATEGORIES.includes(resultCategory)) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CATEGORY_INVALID');
+  }
+  const resultCursorToken = body.result_cursor || body.cursor || url.searchParams.get('result_cursor') || url.searchParams.get('cursor');
+  const resultLimitRaw = Number(body.result_limit || body.limit || url.searchParams.get('result_limit') || url.searchParams.get('limit') || 100);
+  const resultLimit = Number.isFinite(resultLimitRaw) ? Math.max(1, Math.min(100, Math.trunc(resultLimitRaw))) : 100;
+
+  let pageRequest = null;
+  let resultAction = String(body.action || url.searchParams.get('action') || '').trim().toUpperCase();
+  if (!resultAction) resultAction = ['ISSUED', 'ISSUED_SEND_BLOCKED'].includes(resultCategory) ? 'ISSUE' : 'GENERATE';
+  if (resultCategory || resultCursorToken || body.after_selection_key || body.after_chunk_id || url.searchParams.get('after_selection_key') || url.searchParams.get('after_chunk_id')) {
+    const category = resultCategory || 'ALL';
+    const resultFilterHash = await sha256Text(JSON.stringify({
+      operation_ids: ids,
+      category
+    }));
+    let cursorValues = {};
+    let cursorSnapshot = new Date().toISOString();
+    if (resultCursorToken) {
+      if (!env) throw Object.assign(new Error('BATCH_CURSOR_ENV_REQUIRED'), { code: 'BATCH_CURSOR_ENV_REQUIRED' });
+      const decoded = await decodeInvoiceBatchCursor(env, resultCursorToken, {
+        action: resultAction,
+        filter_hash: resultFilterHash,
+        result_category: category,
+        sort: { group_preset: 'WEEK_CLIENT_CANDIDATE', sort_key: 'WEEK_ENDING_DATE', sort_direction: 'ASC' }
+      });
+      cursorValues = decoded.cursor || {};
+      cursorSnapshot = decoded.snapshot_at_utc || cursorSnapshot;
+    }
+    pageRequest = {
+      category,
+      limit: resultLimit,
+      after_selection_key: cursorValues.after_selection_key
+        || body.after_selection_key
+        || url.searchParams.get('after_selection_key')
+        || null,
+      after_chunk_id: cursorValues.after_chunk_id
+        || body.after_chunk_id
+        || url.searchParams.get('after_chunk_id')
+        || null,
+      _cursor_snapshot_at_utc: cursorSnapshot,
+      _cursor_filter_hash: resultFilterHash,
+      _cursor_action: resultAction
+    };
+  }
+
   const result = await deps.rpc('invoice_operation_get', {
     p_operation_ids: ids,
     p_actor_user_id: user.id,
-    p_mode: String(body.mode || url.searchParams.get('mode') || 'PROGRESS').toUpperCase()
+    p_mode: mode,
+    p_page_request: pageRequest ? {
+      category: pageRequest.category,
+      limit: pageRequest.limit,
+      after_selection_key: pageRequest.after_selection_key,
+      after_chunk_id: pageRequest.after_chunk_id
+    } : null
   });
-  return jsonResponse({ ok: true, operations: rpcValue(result) });
+  const value = rpcValue(result);
+  const operations = Array.isArray(value) ? value : (Array.isArray(value?.operations) ? value.operations : []);
+  const resultPage = value && !Array.isArray(value) ? value.result_page || null : null;
+  let signedNextResultCursor = null;
+  if (resultPage?.has_more && resultPage?.next_cursor_values && pageRequest) {
+    if (!env) throw Object.assign(new Error('BATCH_CURSOR_ENV_REQUIRED'), { code: 'BATCH_CURSOR_ENV_REQUIRED' });
+    signedNextResultCursor = await encodeInvoiceBatchCursor(env, {
+      action: pageRequest._cursor_action,
+      snapshot_at_utc: pageRequest._cursor_snapshot_at_utc,
+      filter_hash: pageRequest._cursor_filter_hash,
+      sort: { group_preset: 'WEEK_CLIENT_CANDIDATE', sort_key: 'WEEK_ENDING_DATE', sort_direction: 'ASC' },
+      result_category: pageRequest.category,
+      next_cursor_values: resultPage.next_cursor_values
+    });
+  }
+
+  return jsonResponse({
+    ok: true,
+    operations,
+    ...(resultPage ? {
+      result_page: resultPage,
+      signed_next_result_cursor: signedNextResultCursor
+    } : {})
+  });
 }
 
 function normaliseInvoiceOperationControlAction(raw) {
@@ -1331,16 +2358,30 @@ async function handleInvoiceAsyncCapabilities(env, req, deps) {
     active: user.is_active ?? user.active,
     roles: [user.role, user.user_role, user.user_type]
   });
+  const contractVersion = 'INVOICE_ASYNC_BACKEND_V7';
+  const featureFlags = {
+    batch_candidate_paging_v1: true,
+    batch_selection_rules_v1: true,
+    batch_result_paging_v1: true,
+    generate_and_view_v1: true,
+    exact_document_version_access_v1: true,
+    separate_issue_delivery_state_v1: true
+  };
   return jsonResponse({
+    contract_version: contractVersion,
+    backend_contract_version: contractVersion,
     pipeline_enabled: pipelineEnabled,
     processor_enabled: processorEnabled,
     enabled_for_user: pipelineEnabled && processorEnabled && cohort.allowed === true,
+    enabled: pipelineEnabled && processorEnabled && cohort.allowed === true,
     controlled_cohort: parsed.ok && parsed.ids.length > 0,
     scheduled_enabled: String(env.INVOICE_ASYNC_SCHEDULED_ENABLED || '').toLowerCase() === 'true',
     supported_media_types: ['application/pdf','image/jpeg','image/png'],
     document_view_contract_version: 'INVOICE_DOCUMENT_VERSION_ACCESS_V1',
-    heartbeat_supported: true
-  });
+    heartbeat_supported: true,
+    feature_flags: featureFlags,
+    ...featureFlags
+  }, 200, { 'x-invoice-async-contract-version': contractVersion });
 }
 
 function match(pathname, pattern) {
@@ -1357,14 +2398,30 @@ function match(pathname, pattern) {
 
 function invoiceErrorStatus(error) {
   const code = String(error?.code || error?.message || error || '').toUpperCase();
+  if (
+    code.startsWith('BATCH_CURSOR_')
+    || code.startsWith('BATCH_SELECTION_')
+    || code.startsWith('BATCH_QUERY_')
+    || code === 'INVOICE_BATCH_QUERY_INVALID'
+    || code === 'INVOICE_BATCH_QUERY_CONTRACT_INVALID'
+    || code === 'INVOICE_BATCH_QUERY_MODE_INVALID'
+    || code === 'INVOICE_BATCH_DISPLAY_MODE_INVALID'
+    || code === 'INVOICE_BATCH_GROUP_PRESET_INVALID'
+    || code === 'INVOICE_BATCH_SORT_KEY_INVALID'
+    || code === 'INVOICE_BATCH_SORT_DIRECTION_INVALID'
+    || code === 'BATCH_FILTER_FIELD_UNSUPPORTED'
+    || code === 'BATCH_COMMAND_TOKEN_INVALID'
+    || code === 'DELIVERY_REQUEST_TOKEN_INVALID'
+  ) return 400;
   if (/INVALID|MALFORMED|REQUIRED|UUID|JSON/.test(code)) return 400;
   if (/UNAUTHENTICATED|SESSION/.test(code)) return 401;
   if (/FORBIDDEN|ADMIN_REQUIRED|PERMISSION/.test(code)) return 403;
-  if (/CONFLICT|SOURCE_CHANGED|ACTIVE_OPERATION|NOT_READY|BLOCKED|TERMINAL/.test(code)) return 409;
+  if (/CONFLICT|SOURCE_CHANGED|CURRENT_STATE_CHANGED|STALE|ACTIVE_OPERATION|NOT_READY|BLOCKED|TERMINAL|DOCUMENT_REVISION_CHANGED|OWNERSHIP_OR_DOCUMENT_MISMATCH/.test(code)) return 409;
   if (/BACKPRESSURE|RATE_LIMIT/.test(code)) return 429;
-  if (/UNAVAILABLE|BINDING_MISSING|CONFIGURATION/.test(code)) return 503;
+  if (/UNAVAILABLE|BINDING_MISSING|CONFIGURATION|SECRET_MISSING|SECRET_INVALID/.test(code)) return 503;
   return 500;
 }
+
 function isInvoiceAsyncRoute(req, url) {
   const path = url.pathname;
   const method = req.method;
@@ -1436,10 +2493,10 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
 
   try {
     if (req.method === 'GET' && path === '/api/invoices/batch-generate/candidates') {
-      return handleCandidates(req, deps, 'invoice_batch_generate_candidates');
+      return handleCandidates(env, req, deps, 'invoice_batch_generate_candidates');
     }
     if (req.method === 'GET' && path === '/api/invoices/batch-issue/candidates') {
-      return handleCandidates(req, deps, 'invoice_batch_issue_candidates');
+      return handleCandidates(env, req, deps, 'invoice_batch_issue_candidates');
     }
     if (req.method === 'GET' && path === '/api/nhsp/invoices/candidates') {
       return handleNhspCandidates(req, deps);
@@ -1451,7 +2508,7 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
       return handleBatchIssueConfirm(env, req, ctx, user, deps);
     }
     if (req.method === 'POST' && path === '/api/invoice-operations/get') {
-      return handleOperationGet(req, user, deps);
+      return handleOperationGet(env, req, user, deps);
     }
     if (req.method === 'POST' && path === '/api/invoice-operations/control') {
       return handleOperationControl(env, req, ctx, user, deps);
@@ -1465,7 +2522,7 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
 
     let params = match(path, '/api/invoice-operations/:operation_id');
     if (params && req.method === 'GET') {
-      return handleOperationGet(req, user, deps, params.operation_id);
+      return handleOperationGet(env, req, user, deps, params.operation_id);
     }
     params = match(path, '/api/invoice-document-versions/:document_version_id/presign');
     if (params && req.method === 'POST') {
@@ -1487,7 +2544,7 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     params = match(path, '/api/outbox/:channel/:operation_id');
     if (params && String(params.channel).toUpperCase() === 'INVOICE') {
       if (req.method === 'GET') {
-        return handleOperationGet(req, user, deps, params.operation_id);
+        return handleOperationGet(env, req, user, deps, params.operation_id);
       }
       if (req.method === 'DELETE') {
         return handleInvoiceOutboxControl(
@@ -1595,6 +2652,13 @@ export const invoiceAsyncHttpInternals = Object.freeze({
   canonicalEmailArray,
   boolValue,
   generationCommandFromBody,
+  normaliseInvoiceBatchFilters,
+  normaliseInvoiceBatchSort,
+  normaliseInvoiceBatchSelectionRules,
+  hashInvoiceBatchQuery,
+  encodeInvoiceBatchCursor,
+  decodeInvoiceBatchCursor,
+  candidateGroupsFromRpc,
   encodeUnifiedOutboxCursor,
   decodeUnifiedOutboxCursor,
   compareCursorOutboxRows,

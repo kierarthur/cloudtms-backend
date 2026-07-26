@@ -1036,3 +1036,214 @@ test('batch generation re-resolves selected scopes and correlates start results 
   assert.equal(calls.filter(call => call.name === 'invoice_operation_start_batch').length, 1);
   await Promise.all(background);
 });
+
+test('invoice batch filters and sort are strictly allowlisted and canonical', () => {
+  const query = new URLSearchParams([
+    ['client_ids', '00000000-0000-4000-8000-000000000002,00000000-0000-4000-8000-000000000001'],
+    ['client_ids', '00000000-0000-4000-8000-000000000001'],
+    ['week_endings', '2026-07-26'],
+    ['status_codes', 'ready'],
+    ['allow_early', 'true'],
+    ['display_mode', 'ready'],
+    ['group_preset', 'client_week_candidate'],
+    ['sort_key', 'total_inc_vat'],
+    ['sort_direction', 'desc'],
+    ['page_size', '50']
+  ]);
+  assert.deepEqual(invoiceAsyncHttpInternals.normaliseInvoiceBatchFilters(query, 'GENERATE'), {
+    client_ids: [
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000002'
+    ],
+    candidate_ids: [],
+    week_endings: ['2026-07-26'],
+    week_ending_from: null,
+    week_ending_to: null,
+    status_codes: ['READY'],
+    blocker_codes: [],
+    search: null,
+    allow_early: true,
+    display_mode: 'READY'
+  });
+  assert.deepEqual(invoiceAsyncHttpInternals.normaliseInvoiceBatchSort(query, 'GENERATE'), {
+    group_preset: 'CLIENT_WEEK_CANDIDATE',
+    sort_key: 'TOTAL_INC_VAT',
+    sort_direction: 'DESC'
+  });
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchFilters({ filters: { arbitrary_sql: 'x' } }, 'GENERATE'),
+    /BATCH_FILTER_FIELD_UNSUPPORTED/
+  );
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchSort({ sort: { sort_key: 'invoice_number' } }, 'GENERATE'),
+    /INVOICE_BATCH_SORT_KEY_INVALID/
+  );
+});
+
+test('invoice batch selection ledger accepts only ordered V1 selector rules', () => {
+  const contract = invoiceAsyncHttpInternals.normaliseInvoiceBatchSelectionRules({
+    selection: {
+      contract_version: 'INVOICE_BATCH_SELECTION_V1',
+      mode: 'IMPLICIT_ALL',
+      default_selected: true,
+      rules: [
+        {
+          sequence: 1,
+          action: 'exclude',
+          selector: { type: 'row', selection_key: 'group:1' }
+        },
+        {
+          sequence: 2,
+          action: 'include',
+          selector: {
+            type: 'week_client',
+            week_ending_date: '2026-07-26',
+            client_id: '00000000-0000-4000-8000-000000000001'
+          }
+        }
+      ]
+    }
+  });
+  assert.equal(contract.rules[0].action, 'EXCLUDE');
+  assert.equal(contract.rules[1].selector.type, 'WEEK_CLIENT');
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchSelectionRules({
+      contract_version: 'INVOICE_BATCH_SELECTION_V1',
+      mode: 'IMPLICIT_ALL',
+      default_selected: true,
+      rules: [
+        { sequence: 2, action: 'EXCLUDE', selector: { type: 'ROW', selection_key: 'b' } },
+        { sequence: 1, action: 'EXCLUDE', selector: { type: 'ROW', selection_key: 'a' } }
+      ]
+    }),
+    /BATCH_SELECTION_RULE_SEQUENCE_INVALID/
+  );
+});
+
+test('invoice batch cursor is HMAC protected and bound to action, filter and sort', async () => {
+  const env = { SESSION_TOKEN_SECRET: 'test-session-secret-with-more-than-thirty-two-characters' };
+  const sort = {
+    group_preset: 'WEEK_CLIENT_CANDIDATE',
+    sort_key: 'WEEK_ENDING_DATE',
+    sort_direction: 'ASC'
+  };
+  const token = await invoiceAsyncHttpInternals.encodeInvoiceBatchCursor(env, {
+    action: 'GENERATE',
+    snapshot_at_utc: '2026-07-26T12:00:00.000Z',
+    filter_hash: 'a'.repeat(64),
+    sort,
+    next_cursor_values: {
+      after_selection_key: 'group:1',
+      after_sort_date: '2026-07-26'
+    }
+  });
+  const decoded = await invoiceAsyncHttpInternals.decodeInvoiceBatchCursor(env, token, {
+    action: 'GENERATE',
+    filter_hash: 'a'.repeat(64),
+    sort
+  });
+  assert.equal(decoded.cursor.after_selection_key, 'group:1');
+  await assert.rejects(
+    () => invoiceAsyncHttpInternals.decodeInvoiceBatchCursor(env, token, {
+      action: 'GENERATE',
+      filter_hash: 'b'.repeat(64),
+      sort
+    }),
+    /BATCH_CURSOR_FILTER_MISMATCH/
+  );
+  const tampered = `${token.slice(0, -1)}${token.endsWith('a') ? 'b' : 'a'}`;
+  await assert.rejects(
+    () => invoiceAsyncHttpInternals.decodeInvoiceBatchCursor(env, tampered, {
+      action: 'GENERATE',
+      filter_hash: 'a'.repeat(64),
+      sort
+    }),
+    /BATCH_CURSOR_INVALID/
+  );
+});
+
+test('invoice batch DB filter hash matches the installed PostgreSQL jsonb contract', async () => {
+  const filters = invoiceAsyncHttpInternals.normaliseInvoiceBatchFilters(new URLSearchParams(), 'GENERATE');
+  const sort = invoiceAsyncHttpInternals.normaliseInvoiceBatchSort(new URLSearchParams(), 'GENERATE');
+  const first = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
+    'GENERATE', filters, sort, '2026-07-26T12:00:00.000Z', { db_candidate_filter_hash: true }
+  );
+  const second = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
+    'GENERATE', filters, sort, '2026-07-27T12:00:00.000Z', { db_candidate_filter_hash: true }
+  );
+  const cursorBoundFirst = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
+    'GENERATE', filters, sort, '2026-07-26T12:00:00.000Z'
+  );
+  const cursorBoundSecond = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
+    'GENERATE', filters, sort, '2026-07-27T12:00:00.000Z'
+  );
+  assert.match(first, /^[0-9a-f]{64}$/);
+  assert.equal(first, second);
+  assert.notEqual(cursorBoundFirst, cursorBoundSecond);
+});
+
+test('V1 candidate envelopes remain typed and retain paging metadata', () => {
+  const parsed = invoiceAsyncHttpInternals.candidateGroupsFromRpc({
+    contract_version: 'INVOICE_BATCH_CANDIDATES_V1',
+    action: 'GENERATE',
+    rows: [{ selection_key: 'group:1' }],
+    page: { has_more: true },
+    totals: { all: 2 },
+    facets: {},
+    filter_hash: 'a'.repeat(64)
+  });
+  assert.equal(parsed.kind, 'V1');
+  assert.equal(parsed.legacy, false);
+  assert.equal(parsed.rows[0].selection_key, 'group:1');
+  assert.equal(parsed.page.has_more, true);
+});
+test('paged candidate route returns V7 and signs the database keyset cursor', async () => {
+  const actor = '00000000-0000-4000-8000-000000000010';
+  const env = {
+    INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
+    INVOICE_DOCUMENT_PROCESSOR_ENABLED: 'true',
+    INVOICE_ASYNC_ALLOWED_USER_IDS: actor,
+    SESSION_TOKEN_SECRET: 'test-session-secret-with-more-than-thirty-two-characters'
+  };
+  let capturedQuery = null;
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoices/batch-generate/candidates?page_size=25&sort_key=client_name'),
+    env,
+    {},
+    {
+      requireUser: async () => ({ id: actor, role: 'admin', active: true }),
+      rpc: async (name, args) => {
+        assert.equal(name, 'invoice_batch_generate_candidates');
+        capturedQuery = args.p_query;
+        const filterHash = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
+          'GENERATE', args.p_query.filters, args.p_query.sort, args.p_query.snapshot_at_utc,
+          { db_candidate_filter_hash: true }
+        );
+        return {
+          contract_version: 'INVOICE_BATCH_CANDIDATES_V1', action: 'GENERATE', mode: 'PAGE',
+          snapshot_at_utc: args.p_query.snapshot_at_utc,
+          normalised_filter: args.p_query.filters,
+          normalised_sort: args.p_query.sort,
+          filter_hash: filterHash,
+          rows: [{ selection_key: 'group:1' }],
+          page: {
+            page_size: 25, has_more: true,
+            next_cursor_values: { after_selection_key: 'group:1', after_sort_text: 'client one' }
+          },
+          totals: { all: 2 }, facets: {},
+          selection_seed: { mode: 'IMPLICIT_ALL', default_selected: true }
+        };
+      }
+    }
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-invoice-async-contract-version'), 'INVOICE_ASYNC_BACKEND_V7');
+  assert.equal(capturedQuery.page_size, 25);
+  assert.equal(capturedQuery.sort.sort_key, 'CLIENT_NAME');
+  const body = await response.json();
+  assert.ok(body.page.next_cursor);
+  const decoded = await invoiceAsyncHttpInternals.decodeInvoiceBatchCursor(env, body.page.next_cursor, {
+    action: 'GENERATE', filter_hash: body.filter_hash, sort: body.normalised_sort
+  });
+  assert.equal(decoded.cursor.after_selection_key, 'group:1');
+});
