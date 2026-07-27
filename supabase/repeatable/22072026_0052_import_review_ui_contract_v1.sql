@@ -544,6 +544,8 @@ begin
       case a.action_kind
         when 'INCLUDE_SHIFT' then 'TMS to add shift'
         when 'APPLY_AMENDMENT' then case
+          when a.summary_json->>'amendment_route'='AMEND_EXISTING_REPLACEMENT'
+          then 'TMS to amend replacement shift'
           when coalesce((a.protection->>'paid')::boolean,false)
             or coalesce((a.protection->>'invoice_locked')::boolean,false)
           then 'TMS to reverse and replace shift' else 'TMS to amend shift' end
@@ -564,6 +566,8 @@ begin
       case a.action_kind
         when 'INCLUDE_SHIFT' then 'TMS to add shift'
         when 'APPLY_AMENDMENT' then case
+          when a.summary_json->>'amendment_route'='AMEND_EXISTING_REPLACEMENT'
+          then 'TMS to amend replacement shift'
           when coalesce((a.protection->>'paid')::boolean,false)
             or coalesce((a.protection->>'invoice_locked')::boolean,false)
           then 'TMS to reverse and replace shift' else 'TMS to amend shift' end

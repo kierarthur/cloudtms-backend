@@ -91,6 +91,8 @@ test('action paging supports only the approved sizes and deterministic server-si
   assert.match(body, /badges\.badge_code<>'NOT_IN_CLOUDTMS'/);
   assert.match(body, /other\.badge_code<>'NOT_IN_CLOUDTMS'/);
   assert.match(body, /Shift not in CloudTMS/);
+  assert.match(body, /a\.summary_json->>'amendment_route'='AMEND_EXISTING_REPLACEMENT'/);
+  assert.match(body, /TMS to amend replacement shift/);
   assert.doesNotMatch(body, /_timesheet_query_recipient_resolve_core_v1/);
 });
 
