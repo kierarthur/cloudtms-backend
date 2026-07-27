@@ -45,3 +45,24 @@ test('race fix changes orchestration only and preserves the Policy X boundary', 
   assert.doesNotMatch(sql, /UPDATE public\.pay_batch_items/);
   assert.doesNotMatch(sql, /INSERT INTO public\.pay_batch/);
 });
+
+test('cancelled rows are durably returned unselected before refresh jobs run', () => {
+  const unselectAt = sql.indexOf('UPDATE public.banking_pay_workbench_preview_rows AS cancelled_preview_row');
+  const sessionSelectionAt = sql.indexOf('UPDATE public.banking_pay_workbench_sessions AS selection_session');
+  const enqueueAt = sql.indexOf('v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh');
+  assert.ok(unselectAt >= 0);
+  assert.ok(sessionSelectionAt > unselectAt);
+  assert.ok(enqueueAt > sessionSelectionAt);
+  assert.match(sql, /WHEN UPPER\(BTRIM\(COALESCE\(cancelled_preview_row\.status, ''\)\)\) = 'READY' THEN 'UNSELECTED'/);
+  assert.match(sql, /server_selected_preview_row_ids_provided = true/);
+  assert.match(sql, /'mode', 'EXPLICIT_INCLUDE'/);
+  assert.match(sql, /'source_selection_action', 'RETURN_CANCELLED_ROWS_UNSELECTED'/);
+});
+
+test('post-cancel selection reconciliation preserves unrelated selected rows only', () => {
+  assert.match(sql, /jsonb_agg\(to_jsonb\(selected_preview_row\.id::text\)/);
+  assert.match(sql, /selected_preview_row\.selected, false\) IS TRUE/);
+  assert.match(sql, /selected_preview_row\.selection_state, ''\)\)\) = 'SELECTED'/);
+  assert.match(sql, /'server_selected_preview_row_ids', COALESCE\(v_preserved_selected_preview_row_ids, '\[\]'::jsonb\)/);
+  assert.match(sql, /'cancelled_row_unselected_count', COALESCE\(v_cancelled_row_unselected_count, 0\)/);
+});

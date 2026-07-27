@@ -4298,6 +4298,21 @@ BEGIN
       v_source_build_run_id,
       v_now
     );
+
+    -- Canonical correction materialisation can legitimately retire every raw
+    -- row written by a targeted refresh (for example, after the correction is
+    -- frozen and settled).  The continuation decision must use the resulting
+    -- carrier set, not the pre-materialisation count, otherwise line-work
+    -- seeding is queued for a run that has no CURRENT rows.
+    SELECT COUNT(*)::integer
+    INTO v_current_source_row_count
+    FROM public.banking_pay_workbench_candidate_source_lines AS post_materialisation_source_rows
+    WHERE post_materialisation_source_rows.session_id = p_session_id
+      AND post_materialisation_source_rows.candidate_id = p_candidate_id
+      AND post_materialisation_source_rows.session_version = v_session_version
+      AND post_materialisation_source_rows.source_change_seq = v_source_change_seq
+      AND post_materialisation_source_rows.source_build_run_id = v_source_build_run_id
+      AND post_materialisation_source_rows.status = 'CURRENT';
   END IF;
 
   RETURN jsonb_build_object(
@@ -4326,6 +4341,7 @@ BEGIN
   || jsonb_build_object(
     'source_rows_written', COALESCE(v_source_rows_written, 0),
     'current_source_row_count', COALESCE(v_current_source_row_count, 0),
+    'current_source_row_count_authoritative', COALESCE(v_has_more, false) IS NOT TRUE,
     'source_rows_superseded', COALESCE(v_source_rows_superseded, 0),
     'source_rows_superseded_by_reconciliation', COALESCE(v_reconciled_source_rows_superseded, 0),
     'source_build_failed_jobs_superseded', COALESCE(v_reconciled_source_build_jobs_superseded, 0),

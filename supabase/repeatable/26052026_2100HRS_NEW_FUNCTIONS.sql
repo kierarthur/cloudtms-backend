@@ -16727,6 +16727,7 @@ DECLARE
   v_error_count integer := 0;
   v_source_rows_written integer := 0;
   v_current_source_row_count integer := 0;
+  v_current_source_row_count_authoritative boolean := false;
   v_source_build_run_id_text text := NULL::text;
   v_source_change_seq bigint := NULL::bigint;
   v_result_session_version bigint := NULL::bigint;
@@ -16963,6 +16964,10 @@ BEGIN
     WHEN COALESCE(v_result_json->>'source_rows_written', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'source_rows_written')::integer
     ELSE 0
   END;
+  v_current_source_row_count_authoritative := LOWER(BTRIM(COALESCE(
+    v_result_json->>'current_source_row_count_authoritative',
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_source_build_run_id_text := COALESCE(
     NULLIF(BTRIM(COALESCE(v_result_json->>'source_build_run_id', '')), ''),
     NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'source_build_run_id', '')), ''),
@@ -18449,7 +18454,19 @@ BEGIN
         );
         v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
         v_next_recommended_action := 'BUILD_SOURCE_CHUNK';
-      ELSIF COALESCE(v_current_source_row_count, 0) > 0 OR COALESCE(v_source_rows_written, 0) > 0 THEN
+      ELSIF (
+        (
+          v_current_source_row_count_authoritative
+          AND COALESCE(v_current_source_row_count, 0) > 0
+        )
+        OR (
+          v_current_source_row_count_authoritative IS NOT TRUE
+          AND (
+            COALESCE(v_current_source_row_count, 0) > 0
+            OR COALESCE(v_source_rows_written, 0) > 0
+          )
+        )
+      ) THEN
         v_continuation_result := public.pay_workbench_enqueue_stage_continuation(
           p_session_id => v_job_row.session_id,
           p_candidate_id => v_job_row.candidate_id,
@@ -18465,16 +18482,6 @@ BEGIN
         v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
         v_next_recommended_action := 'SEED_LINE_WORK_CHUNK';
       ELSE
-        UPDATE public.banking_pay_workbench_session_scope AS source_empty_scope
-        SET status = 'SOURCE_EMPTY',
-            seeded = true,
-            dirty = false,
-            pending_job_id = NULL::uuid,
-            error_json = NULL::jsonb,
-            updated_at_utc = v_now
-        WHERE source_empty_scope.session_id = v_job_row.session_id
-          AND source_empty_scope.candidate_id = v_job_row.candidate_id;
-
         DROP TABLE IF EXISTS pg_temp._bpay_complete_job_source_empty_timesheets;
         CREATE TEMP TABLE _bpay_complete_job_source_empty_timesheets ON COMMIT DROP AS
         WITH raw_timesheet_ids(timesheet_id_text) AS (
@@ -18502,6 +18509,39 @@ BEGIN
         INTO v_source_empty_targeted_timesheet_count
         FROM pg_temp._bpay_complete_job_source_empty_timesheets;
 
+        v_delta_refresh_scope_kind := UPPER(BTRIM(COALESCE(
+          NULLIF(v_result_json->>'refresh_scope_kind', ''),
+          NULLIF(v_job_row.payload_json->>'refresh_scope_kind', ''),
+          NULLIF(v_job_row.payload_json#>>'{source_build,refresh_scope_kind}', ''),
+          'CANDIDATE_FULL_LIVE'
+        )));
+
+        IF v_delta_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+           AND COALESCE(v_source_empty_targeted_timesheet_count, 0) = 0 THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_SOURCE_EMPTY_TARGET_SCOPE_REQUIRED'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'PAY_WORKBENCH_SOURCE_EMPTY_TARGET_SCOPE_REQUIRED',
+                    'session_id', v_job_row.session_id::text,
+                    'candidate_id', v_job_row.candidate_id::text,
+                    'job_id', p_job_id::text,
+                    'refresh_scope_kind', v_delta_refresh_scope_kind
+                  )::text;
+        END IF;
+
+        UPDATE public.banking_pay_workbench_session_scope AS source_empty_scope
+        SET status = CASE
+              WHEN v_delta_refresh_scope_kind = 'TARGETED_TIMESHEETS' THEN 'READY'
+              ELSE 'SOURCE_EMPTY'
+            END,
+            seeded = true,
+            dirty = false,
+            pending_job_id = NULL::uuid,
+            error_json = NULL::jsonb,
+            updated_at_utc = v_now
+        WHERE source_empty_scope.session_id = v_job_row.session_id
+          AND source_empty_scope.candidate_id = v_job_row.candidate_id;
+
         UPDATE public.banking_pay_workbench_candidate_source_lines AS source_empty_source_line
         SET status = 'SUPERSEDED',
             source_row_json = jsonb_strip_nulls(
@@ -18518,7 +18558,7 @@ BEGIN
           AND source_empty_source_line.candidate_id = v_job_row.candidate_id
           AND UPPER(BTRIM(COALESCE(source_empty_source_line.status, ''))) IN ('CURRENT', 'READY', 'PENDING', 'DIRTY')
           AND (
-            COALESCE(v_source_empty_targeted_timesheet_count, 0) = 0
+            v_delta_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
             OR source_empty_source_line.timesheet_id IN (
               SELECT empty_timesheets.timesheet_id
               FROM pg_temp._bpay_complete_job_source_empty_timesheets AS empty_timesheets
@@ -18544,7 +18584,7 @@ BEGIN
           AND source_empty_line_work.candidate_id = v_job_row.candidate_id
           AND UPPER(BTRIM(COALESCE(source_empty_line_work.status, ''))) IN ('PENDING', 'DIRTY', 'READY')
           AND (
-            COALESCE(v_source_empty_targeted_timesheet_count, 0) = 0
+            v_delta_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
             OR source_empty_line_work.timesheet_id IN (
               SELECT empty_timesheets.timesheet_id
               FROM pg_temp._bpay_complete_job_source_empty_timesheets AS empty_timesheets
@@ -18571,7 +18611,7 @@ BEGIN
           AND source_empty_preview_row.candidate_id = v_job_row.candidate_id
           AND UPPER(BTRIM(COALESCE(source_empty_preview_row.status, ''))) IN ('READY', 'DIRTY', 'PENDING')
           AND (
-            COALESCE(v_source_empty_targeted_timesheet_count, 0) = 0
+            v_delta_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
             OR source_empty_preview_row.timesheet_id IN (
               SELECT empty_timesheets.timesheet_id
               FROM pg_temp._bpay_complete_job_source_empty_timesheets AS empty_timesheets

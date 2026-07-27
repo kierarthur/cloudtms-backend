@@ -33,6 +33,9 @@ DECLARE
   v_superseded_targeted_job_chunk_count integer := 0;
   v_superseded_finance_dirty_job_count integer := 0;
   v_full_refresh_job_ids jsonb := '[]'::jsonb;
+  v_preserved_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_preserved_selected_row_count integer := 0;
+  v_cancelled_row_unselected_count integer := 0;
 BEGIN
   v_result := public.pay_workbench_patch_preview_after_batch_mutation(
     p_session_id,
@@ -64,6 +67,90 @@ BEGIN
               'pay_batch_id', p_pay_batch_id::text
             )::text;
   END IF;
+
+  -- Cancelling a draft returns its rows to the live workbench, but it must not
+  -- silently select those rows again. Persist an explicit selection snapshot
+  -- before the full-candidate refresh is queued so the materialiser preserves
+  -- every unrelated selection while restoring the cancelled rows unselected.
+  UPDATE public.banking_pay_workbench_preview_rows AS cancelled_preview_row
+  SET selected = false,
+      selection_state = CASE
+        WHEN UPPER(BTRIM(COALESCE(cancelled_preview_row.status, ''))) = 'READY' THEN 'UNSELECTED'
+        ELSE 'NOT_SELECTABLE'
+      END,
+      row_json = jsonb_strip_nulls(
+        COALESCE(cancelled_preview_row.row_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'selected', false,
+          'selection_state', CASE
+            WHEN UPPER(BTRIM(COALESCE(cancelled_preview_row.status, ''))) = 'READY' THEN 'UNSELECTED'
+            ELSE 'NOT_SELECTABLE'
+          END,
+          'post_cancel_selection_restored', true,
+          'post_cancel_selection_restored_at_utc', v_now::text,
+          'post_cancel_selection_pay_batch_id', p_pay_batch_id::text
+        )
+      ),
+      updated_at_utc = v_now
+  WHERE cancelled_preview_row.session_id = p_session_id
+    AND cancelled_preview_row.session_version = v_session.version
+    AND EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(COALESCE(v_result->'patched_row_ids', '[]'::jsonb)) = 'array'
+            THEN COALESCE(v_result->'patched_row_ids', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS patched_preview_row_id(value)
+      WHERE patched_preview_row_id.value = cancelled_preview_row.id::text
+    );
+
+  GET DIAGNOSTICS v_cancelled_row_unselected_count = ROW_COUNT;
+
+  SELECT COALESCE(
+           jsonb_agg(to_jsonb(selected_preview_row.id::text) ORDER BY selected_preview_row.row_ordinal, selected_preview_row.id),
+           '[]'::jsonb
+         ),
+         COUNT(*)::integer
+  INTO v_preserved_selected_preview_row_ids,
+       v_preserved_selected_row_count
+  FROM public.banking_pay_workbench_preview_rows AS selected_preview_row
+  WHERE selected_preview_row.session_id = p_session_id
+    AND selected_preview_row.session_version = v_session.version
+    AND LOWER(COALESCE(NULLIF(BTRIM(selected_preview_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+    AND UPPER(BTRIM(COALESCE(selected_preview_row.status, ''))) = 'READY'
+    AND COALESCE(selected_preview_row.selected, false) IS TRUE
+    AND UPPER(BTRIM(COALESCE(selected_preview_row.selection_state, ''))) = 'SELECTED';
+
+  UPDATE public.banking_pay_workbench_sessions AS selection_session
+  SET selected_row_count = COALESCE(v_preserved_selected_row_count, 0),
+      server_selected_preview_row_ids = COALESCE(v_preserved_selected_preview_row_ids, '[]'::jsonb),
+      server_selected_preview_row_ids_provided = true,
+      progress_json = COALESCE(selection_session.progress_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'last_post_cancel_selection_reconcile_at_utc', v_now::text,
+          'last_post_cancel_selection_pay_batch_id', p_pay_batch_id::text,
+          'last_post_cancel_unselected_row_count', COALESCE(v_cancelled_row_unselected_count, 0),
+          'selection_intent_v1', COALESCE(selection_session.progress_json->'selection_intent_v1', '{}'::jsonb)
+            || jsonb_build_object(
+              'canonical_preview_lines', jsonb_build_object(
+                'mode', 'EXPLICIT_INCLUDE',
+                'section', 'canonical_preview_lines',
+                'identity', 'preview_row_id_with_session_section_candidate_row_key_conflict_identity',
+                'updated_at_utc', v_now::text,
+                'updated_by_user_id', COALESCE(p_actor_user_id, v_session.actor_user_id)::text,
+                'source_selection_mode', 'POST_CANCEL_RECONCILE',
+                'source_selection_action', 'RETURN_CANCELLED_ROWS_UNSELECTED',
+                'server_selected_preview_row_ids_provided', true,
+                'selected_row_count', COALESCE(v_preserved_selected_row_count, 0)
+              )
+            )
+        ),
+      progress_counter_version = COALESCE(selection_session.progress_counter_version, 0) + 1,
+      progress_updated_at_utc = v_now,
+      updated_at_utc = v_now
+  WHERE selection_session.id = p_session_id;
 
   -- The Worker may supply these identifiers, but the cancelled frozen batch is
   -- the fail-closed authority. Reading its retained (now voided) items makes the
@@ -264,6 +351,10 @@ BEGIN
     'superseded_targeted_refresh_job_count', v_superseded_targeted_job_count,
     'superseded_finance_dirty_job_count', v_superseded_finance_dirty_job_count,
     'changed_finance_case_count', COALESCE(array_length(v_changed_finance_case_ids, 1), 0),
+    'cancelled_row_unselected_count', COALESCE(v_cancelled_row_unselected_count, 0),
+    'server_selected_preview_row_ids', COALESCE(v_preserved_selected_preview_row_ids, '[]'::jsonb),
+    'server_selected_preview_row_ids_provided', true,
+    'selected_row_count', COALESCE(v_preserved_selected_row_count, 0),
     'refresh_scope_kind', CASE WHEN v_full_refresh_count > 0 THEN 'CANDIDATE_FULL_LIVE' ELSE NULL::text END,
     'source_session_preserved', true,
     'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',

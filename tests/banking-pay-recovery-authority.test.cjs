@@ -601,6 +601,51 @@ test('paged source build materialises coupled correction residuals only after th
   );
 });
 
+test('terminal source build reports the post-materialisation carrier count as authoritative', () => {
+  const body = functionBody('pay_workbench_candidate_source_build_chunk', null, sourceBuildSql);
+  const materialiseIndex = body.indexOf('_ctms_materialise_candidate_correction_residuals_v1');
+  const postMaterialisationCountIndex = body.indexOf(
+    'FROM public.banking_pay_workbench_candidate_source_lines AS post_materialisation_source_rows'
+  );
+
+  assert.ok(materialiseIndex >= 0, 'correction residual materialisation must exist');
+  assert.ok(
+    postMaterialisationCountIndex > materialiseIndex,
+    'CURRENT source rows must be recounted after canonical materialisation retires raw aliases'
+  );
+  assert.match(
+    body,
+    /'current_source_row_count_authoritative', COALESCE\(v_has_more, false\) IS NOT TRUE/
+  );
+});
+
+test('source-build completion handles a proven targeted empty carrier set without broad candidate cleanup', () => {
+  const body = functionBody('pay_workbench_complete_job', 'pay_workbench_fail_job');
+
+  assert.match(
+    body,
+    /v_current_source_row_count_authoritative := LOWER\(BTRIM\(COALESCE\([\s\S]*current_source_row_count_authoritative/
+  );
+  assert.match(
+    body,
+    /v_current_source_row_count_authoritative[\s\S]*COALESCE\(v_current_source_row_count, 0\) > 0[\s\S]*v_current_source_row_count_authoritative IS NOT TRUE/
+  );
+  assert.match(body, /PAY_WORKBENCH_SOURCE_EMPTY_TARGET_SCOPE_REQUIRED/);
+  assert.match(
+    body,
+    /v_delta_refresh_scope_kind = 'TARGETED_TIMESHEETS'[\s\S]*v_source_empty_targeted_timesheet_count, 0\) = 0/
+  );
+  assert.match(
+    body,
+    /WHEN v_delta_refresh_scope_kind = 'TARGETED_TIMESHEETS' THEN 'READY'[\s\S]*ELSE 'SOURCE_EMPTY'/
+  );
+  assert.equal(
+    (body.match(/v_delta_refresh_scope_kind <> 'TARGETED_TIMESHEETS'\s+OR source_empty_/g) || []).length,
+    3,
+    'source-line, line-work and preview cleanup must stay within an explicit targeted timesheet scope'
+  );
+});
+
 test('correction-chain channel resolution uses the candidate current pay method once per chain', () => {
   const start = correctionRuntimeSql.indexOf(
     'create or replace function public._ctms_candidate_correction_residuals_v1'
