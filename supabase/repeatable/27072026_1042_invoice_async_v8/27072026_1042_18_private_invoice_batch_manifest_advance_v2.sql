@@ -657,11 +657,13 @@ begin
             where active.chunk_type='ISSUE_INVOICE'
               and active.entity_type='INVOICE'
               and active.entity_id=(c.payload_json->>'invoice_id')::uuid
-              and active.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT')
+              and active.status in (
+                'QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'
+              )
               and active.id<>c.id
               and active.replaced_by_chunk_id is null
               and active_operation.status
-                in ('QUEUED','RUNNING','WAITING','RETRY_WAIT')
+                in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
           );
 
         update public.invoice_operation_chunks c

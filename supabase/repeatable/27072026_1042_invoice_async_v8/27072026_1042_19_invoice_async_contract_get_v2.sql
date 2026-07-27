@@ -3,7 +3,7 @@ returns jsonb
 language sql
 stable
 security definer
-set search_path to 'public','private','extensions','pg_temp'
+set search_path to 'public','private','extensions','vault','pg_temp'
 as $function$
   with required(identity,procedure_identity) as (
     values
@@ -13,6 +13,8 @@ as $function$
        to_regprocedure('private._invoice_batch_hash_v2(jsonb)')),
       ('private._invoice_candidate_snapshot_get_v2(text,timestamptz)',
        to_regprocedure('private._invoice_candidate_snapshot_get_v2(text,timestamp with time zone)')),
+      ('private._invoice_candidate_snapshot_verify_v2(text,jsonb,timestamptz)',
+       to_regprocedure('private._invoice_candidate_snapshot_verify_v2(text,jsonb,timestamp with time zone)')),
       ('private._invoice_candidate_snapshot_bump_v2(boolean,boolean,text,text,timestamptz)',
        to_regprocedure('private._invoice_candidate_snapshot_bump_v2(boolean,boolean,text,text,timestamp with time zone)')),
       ('private._invoice_jsonb_pick_v2(jsonb,text[])',
@@ -25,6 +27,8 @@ as $function$
        to_regprocedure('private._invoice_current_chunk_ids_v2(uuid[],integer)')),
       ('private._invoice_batch_selection_rules_v2(jsonb)',
        to_regprocedure('private._invoice_batch_selection_rules_v2(jsonb)')),
+      ('private._invoice_batch_query_validate_v2(jsonb,text)',
+       to_regprocedure('private._invoice_batch_query_validate_v2(jsonb,text)')),
       ('private._invoice_batch_generate_group_rows_v2(boolean,integer,text[],timestamptz)',
        to_regprocedure('private._invoice_batch_generate_group_rows_v2(boolean,integer,text[],timestamp with time zone)')),
       ('private._invoice_batch_generate_candidate_rows_v2(jsonb,timestamptz)',
@@ -45,6 +49,8 @@ as $function$
        to_regprocedure('private._invoice_operation_get_core_v8(uuid[],uuid,text)')),
       ('private._invoice_batch_manifest_advance_v2(jsonb,text,timestamptz)',
        to_regprocedure('private._invoice_batch_manifest_advance_v2(jsonb,text,timestamp with time zone)')),
+      ('private._invoice_candidate_triggers_install_v2()',
+       to_regprocedure('private._invoice_candidate_triggers_install_v2()')),
       ('public.invoice_batch_generate_candidates(jsonb)',
        to_regprocedure('public.invoice_batch_generate_candidates(jsonb)')),
       ('public.invoice_batch_issue_candidates(jsonb)',
@@ -99,12 +105,66 @@ as $function$
         'hex'
       ) function_hash_manifest
     from definitions
+  ),
+  key_state as (
+    select exists (
+      select 1
+      from private.invoice_async_snapshot_hmac_keys k
+      join vault.decrypted_secrets s on s.id=k.vault_secret_id
+      where k.is_current
+        and k.active_from_utc<=statement_timestamp()
+        and (k.active_to_utc is null or k.active_to_utc>statement_timestamp())
+        and nullif(s.decrypted_secret,'') is not null
+    ) snapshot_key_ready
+  ),
+  trigger_state as (
+    select
+      count(*) filter (
+        where left(
+                t.tgname,
+                length('trg_invoice_candidate_revision_v2_')
+              ) = 'trg_invoice_candidate_revision_v2_'
+          and p.oid=to_regprocedure(
+            'private._invoice_candidate_revision_trigger_v2()'
+          )::oid
+      ) candidate_trigger_count,
+      count(*) filter (
+        where left(
+                t.tgname,
+                length('trg_invoice_result_page_revision_v2_')
+              ) = 'trg_invoice_result_page_revision_v2_'
+          and p.oid=to_regprocedure(
+            'private._invoice_result_page_revision_trigger_v2()'
+          )::oid
+      ) result_trigger_count
+    from pg_trigger t
+    join pg_proc p on p.oid=t.tgfoid
+    where not t.tgisinternal
+  ),
+  index_state as (
+    select bool_and(coalesce(i.indisvalid,false) and coalesce(i.indisready,false))
+      indexes_ready
+    from (
+      values
+        ('idx_invoice_manifest_carrier_identity_v8'),
+        ('idx_invoice_batch_result_all_v8'),
+        ('idx_invoice_batch_result_category_v8'),
+        ('idx_invoice_operation_chunks_claim_v8')
+    ) required(index_name)
+    left join pg_class c
+      on c.relname=required.index_name
+     and c.relnamespace='public'::regnamespace
+    left join pg_index i on i.indexrelid=c.oid
   )
   select jsonb_build_object(
     'contract_version','INVOICE_ASYNC_DB_V2',
     'ready',
       manifest.missing_count=0
-      and manifest.forbidden_dependency_count=0,
+      and manifest.forbidden_dependency_count=0
+      and key_state.snapshot_key_ready
+      and trigger_state.candidate_trigger_count=54
+      and trigger_state.result_trigger_count=3
+      and coalesce(index_state.indexes_ready,false),
     'candidate_query_contract','INVOICE_BATCH_QUERY_V2',
     'candidate_response_contract','INVOICE_BATCH_CANDIDATES_V2',
     'selection_contract','INVOICE_BATCH_SELECTION_V2',
@@ -112,9 +172,16 @@ as $function$
     'progress_contract','INVOICE_BATCH_PROGRESS_V2',
     'function_hash_manifest',manifest.function_hash_manifest,
     'missing_function_count',manifest.missing_count,
-    'forbidden_dependency_count',manifest.forbidden_dependency_count
+    'forbidden_dependency_count',manifest.forbidden_dependency_count,
+    'snapshot_signing_ready',key_state.snapshot_key_ready,
+    'candidate_trigger_count',trigger_state.candidate_trigger_count,
+    'result_trigger_count',trigger_state.result_trigger_count,
+    'indexes_ready',coalesce(index_state.indexes_ready,false)
   )
-  from manifest;
+  from manifest
+  cross join key_state
+  cross join trigger_state
+  cross join index_state;
 $function$;
 
 alter function public.invoice_async_contract_get_v2() owner to postgres;

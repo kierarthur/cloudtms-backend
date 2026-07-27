@@ -194,6 +194,7 @@ begin
       o.operation_type,
       o.manifest_committed root_manifest_committed,
       o.release_complete,
+      o.progress_json root_progress_json,
       c.id,
       c.status,
       c.phase,
@@ -218,7 +219,17 @@ begin
       min(c.operation_type) operation_type,
       bool_or(c.root_manifest_committed) manifest_committed,
       bool_or(c.release_complete) release_complete,
-      count(c.id)::integer candidate_total,
+      greatest(
+        count(c.id)::integer,
+        coalesce(max(case
+          when c.operation_type='GENERATE_INVOICES'
+           and coalesce(c.root_progress_json->>'candidate_total','')~'^[0-9]+$'
+            then (c.root_progress_json->>'candidate_total')::integer
+          when c.operation_type='ISSUE_INVOICES'
+           and coalesce(c.root_progress_json->>'invoice_total','')~'^[0-9]+$'
+            then (c.root_progress_json->>'invoice_total')::integer
+        end),0)
+      ) candidate_total,
       count(c.id) filter (
         where c.payload_json->>'manifest_outcome'='SELECTED'
       )::integer selected_total,
@@ -236,7 +247,7 @@ begin
         where c.result_category='REGENERATED'
       )::integer regenerated_total,
       count(c.id) filter (
-        where c.result_category='ISSUED'
+        where c.result_category in ('ISSUED','ISSUED_SEND_BLOCKED')
       )::integer issued_total,
       count(c.id) filter (
         where c.result_category='ISSUED_SEND_BLOCKED'
@@ -253,6 +264,10 @@ begin
       count(c.id) filter (
         where c.result_category='FAILED'
       )::integer failed_total,
+      count(c.id) filter (
+        where c.result_category='MISSING'
+           or c.payload_json->>'manifest_outcome'='MISSING'
+      )::integer missing_total,
       count(c.id) filter (
         where c.payload_json->>'manifest_outcome'='EXCLUDED'
       )::integer excluded_total,
@@ -311,7 +326,7 @@ begin
         'changed_total',counts.changed_total,
         'failed_total',counts.failed_total,
         'excluded_total',counts.excluded_total,
-        'missing_total',0,
+        'missing_total',counts.missing_total,
         'in_progress_total',counts.in_progress_total,
         'delivery_pending_total',coalesce(delivery.delivery_pending_total,0),
         'delivery_complete_total',coalesce(delivery.delivery_complete_total,0),

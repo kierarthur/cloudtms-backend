@@ -1,6 +1,6 @@
 create or replace function private._invoice_batch_generate_group_rows_v2(
   p_allow_early boolean default false,
-  p_limit integer default 25001,
+  p_limit integer default null,
   p_scope_keys text[] default null,
   p_now_utc timestamptz default now()
 ) returns table(
@@ -75,7 +75,7 @@ groups as materialized (
   order by r.target_invoice_week nulls last,r.client_id,r.invoice_stream,r.group_key
   limit case
     when v_scope_keys is null
-      then greatest(1,least(coalesce(p_limit,25001),25001))
+      then case when p_limit is null then null else greatest(1,p_limit) end
     else 500
   end
 ),

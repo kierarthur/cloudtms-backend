@@ -13,7 +13,7 @@ SECURITY DEFINER
 SET search_path TO 'public', 'private', 'extensions', 'pg_temp'
 AS $function$
 DECLARE
-  v_now timestamptz := coalesce(p_now_utc, now());
+  v_now timestamptz := statement_timestamp();
   v_jwt_role text := coalesce(
     nullif(current_setting('request.jwt.claim.role', true), ''),
     auth.jwt()->>'role',
@@ -59,6 +59,10 @@ DECLARE
   v_selected_total integer;
   v_previous_statement_timeout text := current_setting('statement_timeout');
 BEGIN
+  IF v_jwt_role = 'service_role' THEN
+    v_now := coalesce(p_now_utc, statement_timestamp());
+  END IF;
+
   IF jsonb_typeof(p_commands) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION USING errcode = '22023',
       message = 'p_commands must be a JSON array containing 1..1000 commands';

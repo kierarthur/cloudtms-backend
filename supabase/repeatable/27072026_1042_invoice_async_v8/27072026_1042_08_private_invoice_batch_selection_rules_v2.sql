@@ -139,7 +139,6 @@ begin
     cross join lateral (
       select case selector.selector_type
         when 'ROW' then array['selection_key']::text[]
-        when 'GROUP_KEY' then array['group_key']::text[]
         when 'WEEK' then array['week_ending_date']::text[]
         when 'CLIENT' then array['client_id']::text[]
         when 'CANDIDATE' then array['candidate_id']::text[]
@@ -153,7 +152,7 @@ begin
       end expected_fields
     ) expected
     where selector.selector_type not in (
-      'ROW','GROUP_KEY','WEEK','CLIENT','CANDIDATE','STATUS','WEEK_CLIENT',
+      'ROW','WEEK','CLIENT','CANDIDATE','STATUS','WEEK_CLIENT',
       'WEEK_CLIENT_CANDIDATE','STATUS_WEEK','STATUS_WEEK_CLIENT'
     )
        or expected.expected_fields is null
@@ -163,7 +162,7 @@ begin
          from jsonb_object_keys(raw.rule->'selector') key_name
          where key_name not in (
            'type','selection_key','week_ending_date',
-           'group_key','client_id','candidate_id','status_code'
+           'client_id','candidate_id','status_code'
          )
        )
        or (
@@ -171,13 +170,6 @@ begin
          and (
            length(btrim(raw.rule#>>'{selector,selection_key}')) > 512
            or btrim(raw.rule#>>'{selector,selection_key}') = ''
-         )
-       )
-       or (
-         selector.selector_type = 'GROUP_KEY'
-         and (
-           length(btrim(raw.rule#>>'{selector,group_key}')) <> 64
-           or btrim(raw.rule#>>'{selector,group_key}') !~ '^[0-9a-f]{64}$'
          )
        )
        or (
@@ -226,7 +218,7 @@ begin
     upper(raw.rule->>'action'),
     upper(raw.rule#>>'{selector,type}'),
     nullif(btrim(raw.rule#>>'{selector,selection_key}'),''),
-    nullif(btrim(raw.rule#>>'{selector,group_key}'),''),
+    null::text,
     case when pg_input_is_valid(
       btrim(coalesce(raw.rule#>>'{selector,week_ending_date}','')),
       'date'

@@ -1,6 +1,6 @@
 create or replace function private._invoice_batch_issue_source_rows_v2(
   p_allow_early boolean default false,
-  p_limit integer default 25001,
+  p_limit integer default null,
   p_now_utc timestamptz default now()
 ) returns table(
   client_id uuid,
@@ -17,7 +17,7 @@ as $function$
 with
 anchor as materialized (
   select (coalesce(p_now_utc,now()) at time zone 'Europe/London')::date today,
-    greatest(1,least(coalesce(p_limit,25001),25001)) row_limit
+    case when p_limit is null then null else greatest(1,p_limit) end row_limit
 ),
 base as materialized (
   select i.*,c.name client_name,c.primary_invoice_email,
@@ -267,6 +267,12 @@ select
     'subtotal_ex_vat',round(e.subtotal_ex_vat,2),
     'vat_amount',round(e.vat_amount,2),
     'total_inc_vat',round(e.total_inc_vat,2),
+    'invoice_stream',upper(coalesce(
+      nullif(e.header_snapshot_json#>>'{meta,invoice_stream}',''),
+      nullif(e.header_snapshot_json->>'invoice_stream',''),
+      case when e.is_self_bill then 'SELF_BILL' end,
+      'NORMAL'
+    )),
     'is_self_bill',e.is_self_bill,
     'do_not_send',e.do_not_send,
     'document_revision',e.document_revision,

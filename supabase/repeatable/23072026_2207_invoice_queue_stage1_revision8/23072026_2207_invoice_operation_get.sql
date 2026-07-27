@@ -18,6 +18,8 @@ declare
   v_service boolean := coalesce(auth.role(),'')='service_role';
   v_role text;
   v_operations jsonb;
+  v_batch_operations jsonb;
+  v_batch_root_count integer;
   v_category text;
   v_after_selection_key text;
   v_after_chunk_id uuid;
@@ -55,7 +57,80 @@ begin
     raise exception using errcode='42501', message='Active actor required';
   end if;
 
+  select
+    count(*)::integer,
+    coalesce(jsonb_agg(jsonb_build_object(
+      'operation_id',root.id,
+      'parent_operation_id',root.parent_operation_id,
+      'operation_type',root.operation_type,
+      'entity_type',root.entity_type,
+      'entity_id',root.entity_id,
+      'status',root.status,
+      'phase',root.phase,
+      'priority',root.priority,
+      'source_revision',root.source_revision,
+      'template_version',root.template_version,
+      'total_units',root.total_units,
+      'completed_units',root.completed_units,
+      'failed_units',root.failed_units,
+      'progress',coalesce(root.progress_json,'{}'::jsonb),
+      'result',case
+        when upper(coalesce(p_mode,'PROGRESS'))='DETAIL'
+          or root.status='COMPLETE'
+        then coalesce(root.result_json,'{}'::jsonb)
+      end,
+      'error_code',root.error_json->>'code',
+      'error_summary',coalesce(
+        root.error_json->>'summary',
+        root.error_json->>'message'
+      ),
+      'requires_user_action',root.requires_user_action,
+      'can_retry',root.status in (
+        'FAILED','DEAD_LETTER','BLOCKED','RETRY_WAIT'
+      ),
+      'can_cancel',root.status in (
+        'QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'
+      ) and not exists (
+        select 1
+        from public.invoice_operation_chunks issue_chunk
+        join public.invoices issued_invoice
+          on issued_invoice.id=issue_chunk.entity_id
+        where issue_chunk.operation_id=root.id
+          and issue_chunk.chunk_type='ISSUE_INVOICE'
+          and issue_chunk.entity_type='INVOICE'
+          and issued_invoice.status in ('ISSUED','PAID')
+      ),
+      'change_seq',root.change_seq,
+      'effective_change_seq',root.change_seq,
+      'result_page_revision',root.result_page_revision,
+      'manifest_generation',root.manifest_generation,
+      'manifest_committed',root.manifest_committed,
+      'release_complete',root.release_complete,
+      'total_chunks',root.chunk_count,
+      'returned_chunks',0,
+      'chunks_truncated',root.chunk_count>0,
+      'children','[]'::jsonb,
+      'chunks','[]'::jsonb,
+      'created_at_utc',root.created_at_utc,
+      'updated_at_utc',root.updated_at_utc,
+      'completed_at_utc',root.completed_at_utc
+    ) order by requested.ordinality),'[]'::jsonb)
+  into v_batch_root_count,v_batch_operations
+  from unnest(p_operation_ids) with ordinality requested(id,ordinality)
+  join public.invoice_operations root on root.id=requested.id
+  where (
+      v_service
+      or v_role='admin'
+      or root.actor_user_id=p_actor_user_id
+    )
+    and root.entity_type='INVOICE_BATCH'
+    and root.input_json->>'contract_version'
+      ='INVOICE_BATCH_SELECTION_ROOT_V2';
+
   if p_page_request is null then
+    if v_batch_root_count=cardinality(p_operation_ids) then
+      return v_batch_operations;
+    end if;
     return private._invoice_operation_get_core_v8(
       p_operation_ids,
       p_actor_user_id,
@@ -193,11 +268,7 @@ begin
     else 100
   end;
 
-  v_operations := private._invoice_operation_get_core_v8(
-    p_operation_ids,
-    p_actor_user_id,
-    p_mode
-  );
+  v_operations := v_batch_operations;
 
   with
   current_carriers as materialized (

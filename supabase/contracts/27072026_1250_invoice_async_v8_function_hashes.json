@@ -1,0 +1,148 @@
+{
+  "contract_version": "INVOICE_ASYNC_DB_V2_FUNCTION_HASH_MANIFEST",
+  "project": "test-cloudtms",
+  "generated_at_utc": "2026-07-27T12:27:29.790Z",
+  "hash_input": "pg_get_functiondef(oid)",
+  "hash_algorithm": "sha256",
+  "aggregate_sha256": "587b3946da1530d044bb1ba17f4d9110576fbc5ee1b94a2c1e77b66e69057895",
+  "security_gate": {
+    "owner": "postgres",
+    "private_public_execute": false,
+    "private_anon_execute": false,
+    "private_authenticated_execute": false,
+    "public_public_execute": false,
+    "public_anon_execute": false,
+    "security_definer_and_search_path_verified": true,
+    "defaults_verified": true
+  },
+  "functions": [
+    {
+      "identity": "private._invoice_batch_canonical_text_v2(jsonb)",
+      "definition_sha256": "4c2432eb3d550d64bbdeab6838926cb6dde6ac3782dbc2f3ec3b9cb39bfda639"
+    },
+    {
+      "identity": "private._invoice_batch_generate_candidate_rows_v2(jsonb,timestamp with time zone)",
+      "definition_sha256": "eebdf157bc02af450b0c1ebc49ad6b92ea17f2db94149a26f89114b0b10f2d5b"
+    },
+    {
+      "identity": "private._invoice_batch_generate_group_rows_v2(boolean,integer,text[],timestamp with time zone)",
+      "definition_sha256": "cac8720b03c7d430282181e7e20d7e107a7f722a63d24d91156cf35fba539d67"
+    },
+    {
+      "identity": "private._invoice_batch_hash_v2(jsonb)",
+      "definition_sha256": "57d44098e7a449f3a5dc1c38bbafb09e1f9248e250c0d932a3998a146baca3cb"
+    },
+    {
+      "identity": "private._invoice_batch_issue_candidate_rows_v2(jsonb,timestamp with time zone)",
+      "definition_sha256": "f1c6907ab1cce8da5735f0366dd8115ef245e1945321a809c4132296d39a99e3"
+    },
+    {
+      "identity": "private._invoice_batch_issue_source_rows_v2(boolean,integer,timestamp with time zone)",
+      "definition_sha256": "5f9c29e143391132d0919a03b7d0bc1b1c667924ffe5d97bf5eca890d3b22a47"
+    },
+    {
+      "identity": "private._invoice_batch_manifest_advance_v2(jsonb,text,timestamp with time zone)",
+      "definition_sha256": "cda730bfabdaf4a90d5987305209b9368acbb6175885877544d9ee4b2b8e9367"
+    },
+    {
+      "identity": "private._invoice_batch_query_validate_v2(jsonb,text)",
+      "definition_sha256": "505933f60726bbc8ca876199890d203bfcafdb9339db6784c6b63e6d2efe9c11"
+    },
+    {
+      "identity": "private._invoice_batch_selection_rules_v2(jsonb)",
+      "definition_sha256": "d2e6175dc3b3a804eead2644478fe8e55064bf268767b30b4858abad44e00f5f"
+    },
+    {
+      "identity": "private._invoice_candidate_revision_trigger_v2()",
+      "definition_sha256": "842dc5bef0d06e056b13fabcebae54aa70a908bcb89ba016307ab3f8a58b6858"
+    },
+    {
+      "identity": "private._invoice_candidate_snapshot_bump_v2(boolean,boolean,text,text,timestamp with time zone)",
+      "definition_sha256": "5d51a9ef2b527ab40232b475f446d9f82c89fabc55a6b11a8bb31705e2a1bae1"
+    },
+    {
+      "identity": "private._invoice_candidate_snapshot_get_v2(text,timestamp with time zone)",
+      "definition_sha256": "634725287a27fb272b358d69edebdcb0bda0a7844a879cbcefacfdbad730551d"
+    },
+    {
+      "identity": "private._invoice_candidate_snapshot_verify_v2(text,jsonb,timestamp with time zone)",
+      "definition_sha256": "7aac51f20519e8bf04bd0c6b0e723dab2f38bd892b18a4b62c26d7cb775c0ac7"
+    },
+    {
+      "identity": "private._invoice_candidate_triggers_install_v2()",
+      "definition_sha256": "6472bf148b73a9888e41558ebfe4f2991de73b05f9f6e9aebb44072138daf2cf"
+    },
+    {
+      "identity": "private._invoice_current_chunk_ids_v2(uuid[],integer)",
+      "definition_sha256": "a36eb6621a90b31d80cbc7ad8730fc7a36994f92f14e9c8c0abe3815d4883370"
+    },
+    {
+      "identity": "private._invoice_generation_advance_batch(jsonb,timestamp with time zone)",
+      "definition_sha256": "1bbcbf823c2b456dbb62c994a7bcf89759d57b5e6b30e44f43a1ef4160e5f0da"
+    },
+    {
+      "identity": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "definition_sha256": "2c6c9766f86db7d671e4ecf8db688f94ed086f512300488877a3820b65ef1eae"
+    },
+    {
+      "identity": "private._invoice_issue_advance_batch(jsonb,timestamp with time zone)",
+      "definition_sha256": "86427ec44488f13ee6dfbacd445d4b6e169062775e6567ea50dfaf77d3b0bb61"
+    },
+    {
+      "identity": "private._invoice_issue_advance_core_v8(jsonb,timestamp with time zone)",
+      "definition_sha256": "3a061fd78b5bf94ebe8f199f1ddc6f25ff7e55efc7ce3b44801136e8b8e14d33"
+    },
+    {
+      "identity": "private._invoice_jsonb_pick_v2(jsonb,text[])",
+      "definition_sha256": "c51b4d70db794053ddccc94ad9cc827d88ccef1d74e273f1eeed243ec81062c4"
+    },
+    {
+      "identity": "private._invoice_operation_get_core_v8(uuid[],uuid,text)",
+      "definition_sha256": "4888e9d91af43c657bdcc003a646bd7a73d65698d75383ccda0fe281bffd235a"
+    },
+    {
+      "identity": "private._invoice_operation_rollup_batch(uuid[],timestamp with time zone,boolean)",
+      "definition_sha256": "17791ea47d8c5e492fd93d4875a740bb9859f74c6dd6163cb718e4943b3b2ee6"
+    },
+    {
+      "identity": "private._invoice_operation_rollup_core_v8(uuid[],timestamp with time zone,boolean)",
+      "definition_sha256": "52e6b4c995d0e48f8e2224c5abda3ae34da6196191a24d6cbcabe3285b7d7699"
+    },
+    {
+      "identity": "private._invoice_operation_start_core_v8(jsonb,uuid,timestamp with time zone)",
+      "definition_sha256": "9047d9da3fb3e7dc9581e03f049264947e3294e23685dda85afff2a55e0b893e"
+    },
+    {
+      "identity": "private._invoice_result_page_revision_trigger_v2()",
+      "definition_sha256": "652f77cf85e8a73a7fa24d60addb35bfd62d996535cf7ab17d01007c2f70c43f"
+    },
+    {
+      "identity": "public.invoice_batch_generate_candidates(jsonb)",
+      "definition_sha256": "de2bb2e914d009049ff56eb097eb5b0d1127a87635f3bebeaad46ea30ac847ac"
+    },
+    {
+      "identity": "public.invoice_batch_issue_candidates(jsonb)",
+      "definition_sha256": "7b5719fe22a0c902863e8cbe4fd4dd5c63302a616b5f2e6bc9f9541520662c48"
+    },
+    {
+      "identity": "public.invoice_operation_advance_batch(jsonb,timestamp with time zone)",
+      "definition_sha256": "68ad1aea64ac7f70e6a46dcab65c526b105d0f1ce34eb712e103337073804dd1"
+    },
+    {
+      "identity": "public.invoice_operation_control_batch(jsonb,uuid,timestamp with time zone)",
+      "definition_sha256": "43607b96a68bd1d348db65602ffd54c8d35f844050f12d1256b2028f40a8a1b1"
+    },
+    {
+      "identity": "public.invoice_operation_get(uuid[],uuid,text,jsonb)",
+      "definition_sha256": "80985ea08bca808073c75123641af64644e9b218b768c25859f41aac8ddfece9"
+    },
+    {
+      "identity": "public.invoice_operation_start_batch(jsonb,uuid,timestamp with time zone)",
+      "definition_sha256": "7dd737b4bfdf836bd27b224f46fca6dc2d63ef0c8230db2a6dde1e374cb8b17a"
+    },
+    {
+      "identity": "public.invoice_work_claim_batch(text[],text,integer,integer,timestamp with time zone)",
+      "definition_sha256": "35b94c41231f7110ac5ad212c52e4fd550c55d7ef04c45228cb42ecf65dec5d2"
+    }
+  ]
+}

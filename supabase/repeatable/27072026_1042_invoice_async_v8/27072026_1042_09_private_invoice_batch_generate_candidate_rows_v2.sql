@@ -28,6 +28,8 @@ declare
   v_selection_hash text;
   v_result jsonb;
 begin
+  perform private._invoice_batch_query_validate_v2(v_query, 'GENERATE');
+
   if jsonb_typeof(v_query) is distinct from 'object' then
     raise exception using errcode='22023', message='INVOICE_BATCH_QUERY_INVALID';
   end if;
@@ -116,38 +118,20 @@ begin
   v_after_key := nullif(coalesce(v_query#>>'{cursor,after_selection_key}',v_query#>>'{cursor,last_selection_key}',v_query->>'after_selection_key'), '');
 
   v_input_snapshot := v_query->'snapshot';
-  v_snapshot := private._invoice_candidate_snapshot_get_v2(
-    'GENERATE',
-    coalesce(p_now_utc,now())
-  );
-
-  if v_input_snapshot is null then
+  if v_input_snapshot is null
+     or jsonb_typeof(v_input_snapshot) = 'null' then
     if v_mode <> 'PAGE' or v_after_key is not null then
       raise exception using errcode='22023', message='BATCH_SNAPSHOT_REQUIRED';
     end if;
+    v_snapshot := private._invoice_candidate_snapshot_get_v2(
+      'GENERATE',
+      coalesce(p_now_utc,now())
+    );
   else
-    if jsonb_typeof(v_input_snapshot) is distinct from 'object'
-       or coalesce(v_input_snapshot->>'revision','') !~ '^[0-9]+$'
-       or not pg_input_is_valid(
-         coalesce(v_input_snapshot->>'at_utc',''),
-         'timestamp with time zone'
-       )
-       or not pg_input_is_valid(
-         coalesce(v_input_snapshot->>'expires_at_utc',''),
-         'timestamp with time zone'
-       ) then
-      raise exception using errcode='22023', message='BATCH_SNAPSHOT_INVALID';
-    end if;
-    if (v_input_snapshot->>'expires_at_utc')::timestamptz <= coalesce(p_now_utc,now()) then
-      raise exception using errcode='40001', message='BATCH_SNAPSHOT_EXPIRED';
-    end if;
-    if v_input_snapshot->>'revision' <> v_snapshot->>'revision' then
-      raise exception using errcode='40001', message='BATCH_SNAPSHOT_CHANGED';
-    end if;
-    v_snapshot := jsonb_build_object(
-      'at_utc',v_input_snapshot->>'at_utc',
-      'revision',v_input_snapshot->>'revision',
-      'expires_at_utc',v_input_snapshot->>'expires_at_utc'
+    v_snapshot := private._invoice_candidate_snapshot_verify_v2(
+      'GENERATE',
+      v_input_snapshot,
+      coalesce(p_now_utc,now())
     );
   end if;
 
@@ -187,6 +171,7 @@ begin
       case when jsonb_typeof(v_filters->'week_endings')='array' then v_filters->'week_endings' else '[]'::jsonb end week_endings,
       case when jsonb_typeof(v_filters->'status_codes')='array' then v_filters->'status_codes' else '[]'::jsonb end status_codes,
       case when jsonb_typeof(v_filters->'blocker_codes')='array' then v_filters->'blocker_codes' else '[]'::jsonb end blocker_codes,
+      case when jsonb_typeof(v_filters->'invoice_streams')='array' then v_filters->'invoice_streams' else '[]'::jsonb end invoice_streams,
       coalesce(nullif(upper(v_sort->>'group_preset'),''),'WEEK_CLIENT_CANDIDATE') group_preset,
       coalesce(nullif(upper(v_sort->>'sort_key'),''),'WEEK_ENDING_DATE') sort_key,
       case when upper(coalesce(v_sort->>'sort_direction','ASC'))='DESC' then 'DESC' else 'ASC' end sort_direction,
@@ -197,7 +182,24 @@ begin
         then coalesce(v_query#>>'{cursor,after_sort_date}',v_query#>>'{cursor,last_sort_date}')::date end after_sort_date,
       nullif(coalesce(v_query#>>'{cursor,after_sort_text}',v_query#>>'{cursor,last_sort_text}',''),'') after_sort_text,
       case when coalesce(v_query#>>'{cursor,after_sort_numeric}',v_query#>>'{cursor,last_sort_numeric}','') ~ '^[+-]?[0-9]+([.][0-9]+)?$'
-        then coalesce(v_query#>>'{cursor,after_sort_numeric}',v_query#>>'{cursor,last_sort_numeric}')::numeric end after_sort_numeric
+        then coalesce(v_query#>>'{cursor,after_sort_numeric}',v_query#>>'{cursor,last_sort_numeric}')::numeric end after_sort_numeric,
+      lower(nullif(btrim(coalesce(v_query#>>'{facet_request,search}','')),'')) facet_search,
+      case when coalesce(v_query#>>'{facet_request,limit_per_kind}','') ~ '^[1-9][0-9]{0,2}$'
+        then least((v_query#>>'{facet_request,limit_per_kind}')::integer,100)
+        else 100 end facet_limit,
+      case when jsonb_typeof(v_query#>'{facet_request,kinds}')='array'
+        then v_query#>'{facet_request,kinds}'
+        else '["CLIENTS","CANDIDATES","WEEK_ENDINGS","STATUSES","BLOCKERS"]'::jsonb end facet_kinds,
+      lower(nullif(v_query#>>'{facet_request,cursors,clients,after_label}','')) facet_client_after_label,
+      nullif(v_query#>>'{facet_request,cursors,clients,after_id}','') facet_client_after_id,
+      lower(nullif(v_query#>>'{facet_request,cursors,candidates,after_label}','')) facet_candidate_after_label,
+      nullif(v_query#>>'{facet_request,cursors,candidates,after_id}','') facet_candidate_after_id,
+      case when pg_input_is_valid(
+        coalesce(v_query#>>'{facet_request,cursors,week_endings,after_value}',''),
+        'date'
+      ) then (v_query#>>'{facet_request,cursors,week_endings,after_value}')::date end facet_week_after_value,
+      nullif(v_query#>>'{facet_request,cursors,statuses,after_code}','') facet_status_after_code,
+      nullif(v_query#>>'{facet_request,cursors,blockers,after_code}','') facet_blocker_after_code
   ),
   selection_rules as materialized (
     select * from private._invoice_batch_selection_rules_v2(v_selection)
@@ -210,7 +212,7 @@ begin
       source.group_json
     from private._invoice_batch_generate_group_rows_v2(
       true,
-      25001,
+      null,
       null::text[],
       coalesce(p_now_utc,now())
     ) source
@@ -292,6 +294,11 @@ begin
       ),'[]'::jsonb) week_ending_dates,
       case when pg_input_is_valid(lg.group_json->>'week_ending_date','date') then (lg.group_json->>'week_ending_date')::date end week_ending_date,
       coalesce(nullif(lg.group_json#>>'{command_payload,currency}',''),'GBP') currency,
+      upper(coalesce(
+        nullif(lg.group_json->>'invoice_stream',''),
+        nullif(lg.group_json->>'stream',''),
+        'NORMAL'
+      )) invoice_stream,
       case when coalesce(lg.group_json->>'subtotal_ex_vat','') ~ '^[+-]?[0-9]+([.][0-9]+)?$'
         then round((lg.group_json->>'subtotal_ex_vat')::numeric,2) else 0 end total_ex_vat,
       coalesce(gv.vat_amount,0) vat_amount,
@@ -371,6 +378,16 @@ begin
       coalesce(sit.week_ending_dates,'[]'::jsonb) week_ending_dates,
       coalesce(sit.min_week_ending, case when pg_input_is_valid(i.header_snapshot_json#>>'{meta,invoice_week_start}','date') then (i.header_snapshot_json#>>'{meta,invoice_week_start}')::date + 6 end) week_ending_date,
       coalesce(nullif(i.header_snapshot_json#>>'{meta,currency}',''), nullif(i.header_snapshot_json->>'currency',''), 'GBP') currency,
+      upper(coalesce(
+        nullif(i.header_snapshot_json#>>'{meta,invoice_stream}',''),
+        nullif(i.header_snapshot_json->>'invoice_stream',''),
+        case when lower(coalesce(
+          i.header_snapshot_json#>>'{meta,self_bill}',
+          i.header_snapshot_json->>'self_bill',
+          'false'
+        )) in ('true','t','1','yes') then 'SELF_BILL' end,
+        'NORMAL'
+      )) invoice_stream,
       round(coalesce(i.subtotal_ex_vat,0),2) total_ex_vat,
       round(coalesce(i.vat_amount,0),2) vat_amount,
       round(coalesce(i.total_inc_vat,coalesce(i.subtotal_ex_vat,0)+coalesce(i.vat_amount,0)),2) total_inc_vat,
@@ -511,6 +528,13 @@ begin
     cross join params p
     where (p.allow_early or not coalesce(r.is_early,false))
       and (
+        jsonb_array_length(p.invoice_streams)=0
+        or r.invoice_stream in (
+          select upper(value)
+          from jsonb_array_elements_text(p.invoice_streams)
+        )
+      )
+      and (
         v_mode <> 'EXPLICIT_KEYS'
         or r.selection_key in (
           select value
@@ -556,6 +580,108 @@ begin
     where r.client_filter_match and r.candidate_filter_match
       and r.week_filter_match and r.status_filter_match
   ),
+  facet_client_values_base as materialized (
+    select
+      client_id,
+      min(coalesce(nullif(client_name,''),client_id::text)) label,
+      count(*)::integer row_count
+    from facet_client_rows
+    where client_id is not null
+    group by client_id
+  ),
+  facet_client_values as materialized (
+    select b.*,
+      row_number() over(order by lower(b.label),b.client_id) facet_ordinal,
+      count(*) over() facet_total
+    from facet_client_values_base b
+    cross join params p
+    where (p.facet_search is null
+        or lower(b.label) like '%'||p.facet_search||'%'
+        or b.client_id::text like p.facet_search||'%')
+      and (p.facet_client_after_label is null
+        or (lower(b.label),b.client_id::text)>
+           (p.facet_client_after_label,coalesce(p.facet_client_after_id,'')))
+  ),
+  facet_candidate_values_base as materialized (
+    select
+      candidate.value candidate_id,
+      min(coalesce(
+        nullif(r.candidate_names->>(candidate.ordinality::integer-1),''),
+        candidate.value
+      )) label,
+      count(distinct r.selection_key)::integer row_count
+    from facet_candidate_rows r
+    cross join lateral jsonb_array_elements_text(
+      coalesce(r.candidate_ids,'[]'::jsonb)
+    ) with ordinality candidate(value,ordinality)
+    group by candidate.value
+  ),
+  facet_candidate_values as materialized (
+    select b.*,
+      row_number() over(order by lower(b.label),b.candidate_id) facet_ordinal,
+      count(*) over() facet_total
+    from facet_candidate_values_base b
+    cross join params p
+    where (p.facet_search is null
+        or lower(b.label) like '%'||p.facet_search||'%'
+        or b.candidate_id like p.facet_search||'%')
+      and (p.facet_candidate_after_label is null
+        or (lower(b.label),b.candidate_id)>
+           (p.facet_candidate_after_label,coalesce(p.facet_candidate_after_id,'')))
+  ),
+  facet_week_values as materialized (
+    select b.*,
+      row_number() over(order by b.week_ending_date desc) facet_ordinal,
+      count(*) over() facet_total
+    from (
+      select week_ending_date,count(*)::integer row_count
+      from facet_week_rows
+      where week_ending_date is not null
+      group by week_ending_date
+    ) b
+    cross join params p
+    where (p.facet_search is null
+        or to_char(b.week_ending_date,'DD/MM/YYYY') like '%'||p.facet_search||'%'
+        or b.week_ending_date::text like '%'||p.facet_search||'%')
+      and (p.facet_week_after_value is null
+        or b.week_ending_date<p.facet_week_after_value)
+  ),
+  facet_status_values as materialized (
+    select b.*,
+      row_number() over(order by b.row_status) facet_ordinal,
+      count(*) over() facet_total
+    from (
+      select row_status,count(*)::integer row_count
+      from facet_status_rows
+      group by row_status
+    ) b
+    cross join params p
+    where (p.facet_search is null
+        or lower(b.row_status) like '%'||p.facet_search||'%'
+        or lower(replace(b.row_status,'_',' ')) like '%'||p.facet_search||'%')
+      and (p.facet_status_after_code is null
+        or b.row_status>p.facet_status_after_code)
+  ),
+  facet_blocker_values as materialized (
+    select b.*,
+      row_number() over(order by b.code) facet_ordinal,
+      count(*) over() facet_total
+    from (
+      select badge.code,count(distinct r.selection_key)::integer row_count
+      from facet_blocker_rows r
+      cross join lateral jsonb_array_elements_text(
+        coalesce(r.action_blocker_codes,'[]'::jsonb)
+        || coalesce(r.informational_codes,'[]'::jsonb)
+      ) badge(code)
+      group by badge.code
+    ) b
+    cross join params p
+    where (p.facet_search is null
+        or lower(b.code) like '%'||p.facet_search||'%'
+        or lower(replace(b.code,'_',' ')) like '%'||p.facet_search||'%')
+      and (p.facet_blocker_after_code is null
+        or b.code>p.facet_blocker_after_code)
+  ),
   grouped_scope_rows as materialized (
     select
       r.*,
@@ -580,7 +706,6 @@ begin
         select sr.action
         from selection_rules sr
         where (sr.selector_type='ROW' and sr.selection_key=fr.selection_key)
-           or (sr.selector_type='GROUP_KEY' and sr.group_key=fr.group_key)
            or (sr.selector_type='WEEK' and sr.week_ending_date=fr.week_ending_date)
            or (sr.selector_type='CLIENT' and sr.client_id=fr.client_id)
            or (sr.selector_type='CANDIDATE' and exists (
@@ -604,7 +729,8 @@ begin
     select r.*
     from selection_scope_rows r
     cross join params p
-    where p.display_mode='ALL'
+    where v_mode='EXPAND_SELECTION'
+       or p.display_mode='ALL'
        or (p.display_mode='READY' and r.selectable)
        or (p.display_mode='BLOCKED' and r.row_status='BLOCKED')
   ),
@@ -613,7 +739,15 @@ begin
       case when p.sort_key='WEEK_ENDING_DATE' then coalesce(fr.week_ending_date, case when p.sort_direction='DESC' then date '0001-01-01' else date '9999-12-31' end) end sort_date_key,
       case when p.sort_key='CLIENT_NAME' then coalesce(lower(fr.client_name), case when p.sort_direction='DESC' then '' else repeat('~',100) end)
            when p.sort_key='CANDIDATE_NAME' then coalesce(lower(fr.candidate_display), case when p.sort_direction='DESC' then '' else repeat('~',100) end)
-           when p.sort_key='STATUS' then coalesce(lower(fr.row_status), case when p.sort_direction='DESC' then '' else repeat('~',100) end) end sort_text_key,
+           when p.sort_key='STATUS' then
+             lpad((case fr.row_status
+               when 'READY' then 10
+               when 'STALE' then 20
+               when 'FAILED' then 30
+               when 'IN_PROGRESS' then 40
+               else 50
+             end)::text,3,'0')||'|'||lower(coalesce(fr.row_status,'BLOCKED'))
+           end sort_text_key,
       case when p.sort_key='TOTAL_EX_VAT' then coalesce(fr.total_ex_vat, case when p.sort_direction='DESC' then -999999999999999999::numeric else 999999999999999999::numeric end)
            when p.sort_key='TOTAL_INC_VAT' then coalesce(fr.total_inc_vat, case when p.sort_direction='DESC' then -999999999999999999::numeric else 999999999999999999::numeric end) end sort_numeric_key
     from filtered_rows fr cross join params p
@@ -702,6 +836,10 @@ begin
   group_rollup as materialized (
     select
       r.group_key,
+      min(r.week_ending_date) week_ending_date,
+      (array_agg(r.client_id order by r.selection_key))[1] client_id,
+      min(r.row_status) row_status,
+      (array_agg(r.candidate_ids order by r.selection_key))[1] candidate_ids,
       count(*)::integer row_total,
       count(*) filter (where r.selectable)::integer eligible_total,
       count(*) filter (
@@ -718,10 +856,26 @@ begin
   group_selection_json as materialized (
     select coalesce(jsonb_agg(jsonb_build_object(
       'group_key',g.group_key,
-      'selector',jsonb_build_object(
-        'type','GROUP_KEY',
-        'group_key',g.group_key
-      ),
+      'selector',case
+        when p.group_preset='STATUS_WEEK_CLIENT' then jsonb_build_object(
+          'type','STATUS_WEEK_CLIENT',
+          'status_code',g.row_status,
+          'week_ending_date',g.week_ending_date,
+          'client_id',g.client_id
+        )
+        when jsonb_array_length(coalesce(g.candidate_ids,'[]'::jsonb))=1
+          then jsonb_build_object(
+            'type','WEEK_CLIENT_CANDIDATE',
+            'week_ending_date',g.week_ending_date,
+            'client_id',g.client_id,
+            'candidate_id',g.candidate_ids->>0
+          )
+        else jsonb_build_object(
+          'type','WEEK_CLIENT',
+          'week_ending_date',g.week_ending_date,
+          'client_id',g.client_id
+        )
+      end,
       'eligible_total',g.eligible_total,
       'selected_total',g.selected_total,
       'state',case
@@ -735,130 +889,79 @@ begin
         and g.selected_total not in (0,g.eligible_total)
     ) order by g.group_key),'[]'::jsonb) groups
     from group_rollup g
+    cross join params p
   ),
   facet_json as materialized (
-    select jsonb_build_object(
-      'clients',jsonb_build_object(
-        'items',coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'id',f.client_id,
-            'label',f.client_name,
-            'count',f.row_count
-          ) order by lower(f.client_name),f.client_id)
-          from (
-            select client_id, min(client_name) client_name, count(*)::integer row_count
-            from facet_client_rows
-            where client_id is not null
-            group by client_id
-            order by lower(min(client_name)),client_id
-            limit 100
-          ) f
-        ),'[]'::jsonb),
-        'has_more',(select count(distinct client_id) from facet_client_rows where client_id is not null) > 100,
-        'next_cursor',null
-      ),
-      'candidates',jsonb_build_object(
-        'items',coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'id',f.candidate_id,
-            'label',f.candidate_name,
-            'count',f.row_count
-          ) order by lower(f.candidate_name),f.candidate_id)
-          from (
-            select
-              candidate.value candidate_id,
-              min(coalesce(
-                nullif(r.candidate_names->>(candidate.ordinality::integer - 1),''),
-                candidate.value
-              )) candidate_name,
-              count(distinct r.selection_key)::integer row_count
-            from facet_candidate_rows r
-            cross join lateral jsonb_array_elements_text(
-              coalesce(r.candidate_ids,'[]'::jsonb)
-            ) with ordinality candidate(value,ordinality)
-            group by candidate.value
-            order by lower(min(coalesce(
-              nullif(r.candidate_names->>(candidate.ordinality::integer - 1),''),
-              candidate.value
-            ))),candidate.value
-            limit 100
-          ) f
-        ),'[]'::jsonb),
-        'has_more',(
-          select count(distinct candidate.value)
-          from facet_candidate_rows r
-          cross join lateral jsonb_array_elements_text(
-            coalesce(r.candidate_ids,'[]'::jsonb)
-          ) candidate(value)
-        ) > 100,
-        'next_cursor',null
-      ),
-      'week_endings',jsonb_build_object(
-        'items',coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'value',f.week_ending_date,
-            'label',to_char(f.week_ending_date,'DD/MM/YYYY'),
-            'count',f.row_count
-          ) order by f.week_ending_date desc)
-          from (
-            select week_ending_date, count(*)::integer row_count
-            from facet_week_rows
-            where week_ending_date is not null
-            group by week_ending_date
-            order by week_ending_date desc
-            limit 100
-          ) f
-        ),'[]'::jsonb),
-        'has_more',(select count(distinct week_ending_date) from facet_week_rows where week_ending_date is not null) > 100,
-        'next_cursor',null
-      ),
-      'statuses',jsonb_build_object(
-        'items',coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'code',f.row_status,
-            'label',initcap(replace(lower(f.row_status),'_',' ')),
-            'count',f.row_count
-          ) order by f.row_status)
-          from (
-            select row_status, count(*)::integer row_count
-            from facet_status_rows
-            group by row_status
-            order by row_status
-            limit 100
-          ) f
-        ),'[]'::jsonb),
-        'has_more',false,
-        'next_cursor',null
-      ),
-      'blockers',jsonb_build_object(
-        'items',coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'code',f.code,
-            'count',f.row_count
-          ) order by f.code)
-          from (
-            select badge.code, count(distinct r.selection_key)::integer row_count
-            from facet_blocker_rows r
-            cross join lateral jsonb_array_elements_text(
-              coalesce(r.action_blocker_codes,'[]'::jsonb)
-              || coalesce(r.informational_codes,'[]'::jsonb)
-            ) badge(code)
-            group by badge.code
-            order by badge.code
-            limit 100
-          ) f
-        ),'[]'::jsonb),
-        'has_more',(
-          select count(distinct badge.code)
-          from facet_blocker_rows r
-          cross join lateral jsonb_array_elements_text(
-            coalesce(r.action_blocker_codes,'[]'::jsonb)
-            || coalesce(r.informational_codes,'[]'::jsonb)
-          ) badge(code)
-        ) > 100,
-        'next_cursor',null
-      )
-    ) facets
+    select jsonb_strip_nulls(jsonb_build_object(
+      'clients',case when p.facet_kinds ? 'CLIENTS' then jsonb_build_object(
+        'items',coalesce((select jsonb_agg(jsonb_build_object(
+          'id',f.client_id,'label',f.label,'count',f.row_count
+        ) order by f.facet_ordinal) from facet_client_values f
+          where f.facet_ordinal<=p.facet_limit),'[]'::jsonb),
+        'has_more',coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_client_values f),false),
+        'next_cursor_values',case when coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_client_values f),false) then (
+          select jsonb_build_object('after_label',lower(f.label),'after_id',f.client_id)
+          from facet_client_values f where f.facet_ordinal=p.facet_limit
+        ) end
+      ) end,
+      'candidates',case when p.facet_kinds ? 'CANDIDATES' then jsonb_build_object(
+        'items',coalesce((select jsonb_agg(jsonb_build_object(
+          'id',f.candidate_id,'label',f.label,'count',f.row_count
+        ) order by f.facet_ordinal) from facet_candidate_values f
+          where f.facet_ordinal<=p.facet_limit),'[]'::jsonb),
+        'has_more',coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_candidate_values f),false),
+        'next_cursor_values',case when coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_candidate_values f),false) then (
+          select jsonb_build_object('after_label',lower(f.label),'after_id',f.candidate_id)
+          from facet_candidate_values f where f.facet_ordinal=p.facet_limit
+        ) end
+      ) end,
+      'week_endings',case when p.facet_kinds ? 'WEEK_ENDINGS' then jsonb_build_object(
+        'items',coalesce((select jsonb_agg(jsonb_build_object(
+          'value',f.week_ending_date,'label',to_char(f.week_ending_date,'DD/MM/YYYY'),
+          'count',f.row_count
+        ) order by f.facet_ordinal) from facet_week_values f
+          where f.facet_ordinal<=p.facet_limit),'[]'::jsonb),
+        'has_more',coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_week_values f),false),
+        'next_cursor_values',case when coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_week_values f),false) then (
+          select jsonb_build_object('after_value',f.week_ending_date)
+          from facet_week_values f where f.facet_ordinal=p.facet_limit
+        ) end
+      ) end,
+      'statuses',case when p.facet_kinds ? 'STATUSES' then jsonb_build_object(
+        'items',coalesce((select jsonb_agg(jsonb_build_object(
+          'code',f.row_status,'label',initcap(replace(lower(f.row_status),'_',' ')),
+          'count',f.row_count
+        ) order by f.facet_ordinal) from facet_status_values f
+          where f.facet_ordinal<=p.facet_limit),'[]'::jsonb),
+        'has_more',coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_status_values f),false),
+        'next_cursor_values',case when coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_status_values f),false) then (
+          select jsonb_build_object('after_code',f.row_status)
+          from facet_status_values f where f.facet_ordinal=p.facet_limit
+        ) end
+      ) end,
+      'blockers',case when p.facet_kinds ? 'BLOCKERS' then jsonb_build_object(
+        'items',coalesce((select jsonb_agg(jsonb_build_object(
+          'code',f.code,'count',f.row_count
+        ) order by f.facet_ordinal) from facet_blocker_values f
+          where f.facet_ordinal<=p.facet_limit),'[]'::jsonb),
+        'has_more',coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_blocker_values f),false),
+        'next_cursor_values',case when coalesce((select max(f.facet_total)>p.facet_limit
+          from facet_blocker_values f),false) then (
+          select jsonb_build_object('after_code',f.code)
+          from facet_blocker_values f where f.facet_ordinal=p.facet_limit
+        ) end
+      ) end
+    )) facets
+    from params p
   ),
   row_json as materialized (
     select coalesce(jsonb_agg(jsonb_build_object(
@@ -876,6 +979,7 @@ begin
       'week_ending_date',week_ending_date,
       'week_ending_display',case when jsonb_array_length(week_ending_dates)>1 then 'Multiple weeks' else to_char(week_ending_date,'DD/MM/YYYY') end,
       'currency',currency,
+      'invoice_stream',invoice_stream,
       'total_ex_vat',total_ex_vat,
       'vat_amount',vat_amount,
       'total_inc_vat',total_inc_vat,
@@ -917,12 +1021,15 @@ begin
       'total_count',(select display_count from display_totals),
       'has_more',(select count(*) from page_rows)>v_page_size,
       'next_cursor_values',case when (select count(*) from page_rows)>v_page_size then (
-        select jsonb_build_object(
-          'after_selection_key',selection_key,
-          'after_sort_date',case when sort_date_key is not null then sort_date_key::text end,
-          'after_sort_text',sort_text_key,
-          'after_sort_numeric',case when sort_numeric_key is not null then sort_numeric_key::text end
-        )
+        select case when v_mode='EXPAND_SELECTION'
+          then jsonb_build_object('after_selection_key',selection_key)
+          else jsonb_build_object(
+            'after_selection_key',selection_key,
+            'after_sort_date',case when sort_date_key is not null then sort_date_key::text end,
+            'after_sort_text',sort_text_key,
+            'after_sort_numeric',case when sort_numeric_key is not null then sort_numeric_key::text end
+          )
+        end
         from visible_rows
         order by page_ordinal desc
         limit 1
@@ -958,6 +1065,13 @@ begin
     'selection_seed',jsonb_build_object('mode','IMPLICIT_ALL','default_selected',true)
   ) into v_result;
 
+  if v_mode='SUMMARY'
+     and coalesce((v_result#>>'{totals,filtered_total}')::integer,0)>25000 then
+    raise exception using
+      errcode='54000',
+      message='BATCH_SUMMARY_SCOPE_TOO_LARGE';
+  end if;
+
   if v_mode='EXPLICIT_KEYS' and (
     jsonb_array_length(coalesce(v_result->'rows','[]'::jsonb))
       <> jsonb_array_length(v_selection_keys)
@@ -976,8 +1090,9 @@ begin
       message='BATCH_SOURCE_CHANGED';
   end if;
 
-  v_snapshot_after := private._invoice_candidate_snapshot_get_v2(
+  v_snapshot_after := private._invoice_candidate_snapshot_verify_v2(
     'GENERATE',
+    v_snapshot,
     coalesce(p_now_utc,now())
   );
   if v_snapshot_after->>'revision' <> v_snapshot->>'revision' then

@@ -1,0 +1,50 @@
+{
+  "contract_version": "INVOICE_BATCH_CANONICAL_HASH_V2",
+  "authority": "private._invoice_batch_canonical_text_v2(jsonb) and private._invoice_batch_hash_v2(jsonb)",
+  "vectors": [
+    {
+      "name": "json_null",
+      "value": null,
+      "canonical_text": "null",
+      "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    {
+      "name": "empty_object",
+      "value": {},
+      "canonical_text": "{}",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "object_key_order",
+      "value": {
+        "b": 2,
+        "a": 1
+      },
+      "canonical_text": "{\"a\": 1, \"b\": 2}",
+      "sha256": "d8497d9d82770a70729261095aa98f7ef5154d7af499f8037b6ca250296785a6"
+    },
+    {
+      "name": "array_and_null",
+      "value": [
+        3,
+        "two",
+        null
+      ],
+      "canonical_text": "[3, \"two\", null]",
+      "sha256": "0ac497eaf7cf91f96b33a27b4bea9a9bd9c6801932e723eab8244e46d679b6c2"
+    },
+    {
+      "name": "nested_and_numeric",
+      "value": {
+        "nested": {
+          "z": false,
+          "a": true
+        },
+        "amount": 12.30,
+        "label": "CloudTMS"
+      },
+      "canonical_text": "{\"label\": \"CloudTMS\", \"amount\": 12.30, \"nested\": {\"a\": true, \"z\": false}}",
+      "sha256": "987bfd670fc79dce2f635c1e50d2fc152bde13540e0fd20b668c9eed7d1d76b5"
+    }
+  ]
+}

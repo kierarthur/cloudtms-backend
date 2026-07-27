@@ -25,10 +25,13 @@ const v8RuntimeFiles = [
 test('invoice V8 SQL files use the required timestamped naming convention', () => {
   const migrationFiles = readdirSync(
     new URL('supabase/migrations/', repoRoot),
-  ).filter(name => name.startsWith('27072026_1042_'));
+  ).filter(name =>
+    name.startsWith('27072026_1042_')
+    || name.startsWith('27072026_1250_')
+  );
   const repeatableFiles = readdirSync(v8RepeatableDirectory);
 
-  assert.equal(migrationFiles.length, 4);
+  assert.equal(migrationFiles.length, 5);
   for (const name of [...migrationFiles, ...repeatableFiles]) {
     assert.match(name, /^\d{8}_\d{4}_[a-z0-9_]+\.sql$/);
   }
@@ -67,7 +70,6 @@ test('selection V2 enforces exact selectors and bounded explicit keys', () => {
 
   for (const selector of [
     'ROW',
-    'GROUP_KEY',
     'WEEK',
     'CLIENT',
     'CANDIDATE',
@@ -79,6 +81,7 @@ test('selection V2 enforces exact selectors and bounded explicit keys', () => {
   ]) {
     assert.match(rules, new RegExp(`'${selector}'`));
   }
+  assert.doesNotMatch(rules, /when 'GROUP_KEY'/);
   assert.match(rules, /jsonb_array_length\(v_rules\) > 10000/);
   assert.match(rules, /BATCH_SELECTION_SELECTOR_INVALID/);
   for (const candidateSql of [generate, issue]) {
@@ -87,7 +90,110 @@ test('selection V2 enforces exact selectors and bounded explicit keys', () => {
     assert.match(candidateSql, /BATCH_SOURCE_CHANGED/);
     assert.match(candidateSql, /facet_client_rows as materialized/i);
     assert.match(candidateSql, /facet_blocker_rows as materialized/i);
+    assert.match(candidateSql, /next_cursor_values/i);
+    assert.match(
+      candidateSql,
+      /jsonb_typeof\(v_input_snapshot\) = 'null'/,
+    );
+    assert.doesNotMatch(candidateSql, /25001/);
   }
+});
+
+test('candidate snapshots are Vault-backed, signed, and verified in DB', () => {
+  const migration = read(
+    'supabase/migrations/27072026_1250_invoice_async_v8_contract_corrections.sql',
+  );
+  const snapshotGet = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_03_private_invoice_candidate_snapshot_get_v2.sql',
+  );
+  const snapshotVerify = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1250_03a_private_invoice_candidate_snapshot_verify_v2.sql',
+  );
+  const bump = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_04_private_invoice_candidate_snapshot_bump_v2.sql',
+  );
+
+  assert.match(migration, /vault\.create_secret/i);
+  assert.doesNotMatch(migration, /secret_bytes/i);
+  assert.match(snapshotGet, /extensions\.hmac/i);
+  assert.match(snapshotGet, /interval '30 minutes'/i);
+  assert.match(snapshotVerify, /BATCH_SNAPSHOT_SIGNATURE_INVALID/);
+  assert.match(snapshotVerify, /BATCH_SNAPSHOT_CHANGED/);
+  assert.match(snapshotVerify, /pg_advisory_xact_lock_shared/i);
+  assert.match(bump, /pg_advisory_xact_lock/i);
+});
+
+test('canonical hashes and candidate trigger projections are locked artifacts', () => {
+  const vectors = JSON.parse(read(
+    'supabase/contracts/27072026_1250_invoice_async_v8_canonical_hash_vectors.json',
+  ));
+  const triggerManifest = JSON.parse(read(
+    'supabase/contracts/27072026_1250_invoice_async_v8_candidate_trigger_manifest.json',
+  ));
+  const functionHashes = JSON.parse(read(
+    'supabase/contracts/27072026_1250_invoice_async_v8_function_hashes.json',
+  ));
+
+  assert.equal(vectors.contract_version, 'INVOICE_BATCH_CANONICAL_HASH_V2');
+  assert.equal(vectors.vectors.length, 5);
+  for (const vector of vectors.vectors) {
+    assert.match(vector.sha256, /^[0-9a-f]{64}$/);
+  }
+
+  assert.equal(
+    triggerManifest.contract_version,
+    'INVOICE_ASYNC_TRIGGER_MANIFEST_V2',
+  );
+  assert.equal(triggerManifest.table_count, 18);
+  assert.equal(triggerManifest.candidate_trigger_count, 54);
+  assert.equal(triggerManifest.result_trigger_count, 3);
+  assert.equal(triggerManifest.tables.length, 18);
+  for (const table of triggerManifest.tables) {
+    assert.ok(table.field_count > 0);
+    assert.match(table.projection_sha256, /^[0-9a-f]{64}$/);
+  }
+
+  assert.equal(
+    functionHashes.contract_version,
+    'INVOICE_ASYNC_DB_V2_FUNCTION_HASH_MANIFEST',
+  );
+  assert.equal(functionHashes.functions.length, 32);
+  assert.match(functionHashes.aggregate_sha256, /^[0-9a-f]{64}$/);
+  for (const fn of functionHashes.functions) {
+    assert.match(fn.definition_sha256, /^[0-9a-f]{64}$/);
+  }
+});
+
+test('strict query validation and post-helper trigger installation are present', () => {
+  const queryValidation = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1250_08a_private_invoice_batch_query_validate_v2.sql',
+  );
+  const triggerInstaller = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1250_20_private_invoice_candidate_triggers_install_v2.sql',
+  );
+  const historicalTriggerMigration = read(
+    'supabase/migrations/27072026_1042_04_invoice_async_v8_candidate_revision_triggers.sql',
+  );
+
+  assert.match(queryValidation, /INVOICE_BATCH_QUERY_UNKNOWN_FIELD/);
+  assert.match(queryValidation, /INVOICE_BATCH_FILTER_UNKNOWN_FIELD/);
+  assert.match(queryValidation, /BATCH_FACET_REQUEST_INVALID/);
+  assert.match(
+    queryValidation,
+    /jsonb_typeof\(v_query->'cursor'\) = 'null'/,
+  );
+  assert.match(
+    queryValidation,
+    /jsonb_typeof\(v_facet_request->'search'\) <> 'null'/,
+  );
+  assert.match(triggerInstaller, /settings_defaults/);
+  assert.match(triggerInstaller, /candidates/);
+  assert.match(triggerInstaller, /bump_generate/);
+  assert.match(triggerInstaller, /bump_issue/);
+  assert.match(
+    historicalTriggerMigration,
+    /deferred to post-helper repeatable/i,
+  );
 });
 
 test('manifest carriers remain hidden until bounded release', () => {
@@ -130,6 +236,16 @@ test('result paging is direct, bounded, and revision-gated', () => {
     resultRevision,
     /nextval\('public\.invoice_operation_change_seq'::regclass\)/,
   );
+});
+
+test('batch operation control does not preload a capped current-chunk graph', () => {
+  const operationControl = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql',
+  );
+
+  assert.doesNotMatch(operationControl, /_invoice_current_chunks_batch\s*\(/);
+  assert.match(operationControl, /chunk_chain\(/);
+  assert.doesNotMatch(operationControl, /null,null,10000/);
 });
 
 test('committed TEST configuration keeps both async entry flags disabled', () => {

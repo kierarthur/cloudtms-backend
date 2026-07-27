@@ -15,6 +15,9 @@ declare
   v_issue_revision bigint;
 begin
   if coalesce(p_generate, false) then
+    perform pg_advisory_xact_lock(
+      hashtextextended('invoice-candidate-snapshot:GENERATE', 0)
+    );
     v_generate_revision :=
       nextval('private.invoice_generate_candidate_change_seq'::regclass);
   else
@@ -24,6 +27,9 @@ begin
   end if;
 
   if coalesce(p_issue, false) then
+    perform pg_advisory_xact_lock(
+      hashtextextended('invoice-candidate-snapshot:ISSUE', 0)
+    );
     v_issue_revision :=
       nextval('private.invoice_issue_candidate_change_seq'::regclass);
   else

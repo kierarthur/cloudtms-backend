@@ -9,9 +9,9 @@ declare
   v_trigger_base text;
 begin
   if to_regprocedure('private._invoice_candidate_revision_trigger_v2()') is null then
-    raise exception using
-      errcode = '55000',
-      message = 'INVOICE_ASYNC_V8_TRIGGER_HELPER_NOT_INSTALLED';
+    raise notice
+      'INVOICE_ASYNC_V8_TRIGGER_HELPER_NOT_INSTALLED: deferred to post-helper repeatable';
+    return;
   end if;
 
   for v_item in

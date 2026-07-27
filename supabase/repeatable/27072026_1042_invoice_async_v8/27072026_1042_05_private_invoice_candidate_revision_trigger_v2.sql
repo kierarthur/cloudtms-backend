@@ -32,6 +32,8 @@ declare
   v_generate boolean := coalesce(tg_argv[0], 'false')::boolean;
   v_issue boolean := coalesce(tg_argv[1], 'false')::boolean;
   v_fields text[] := coalesce(tg_argv[2:array_length(tg_argv, 1)], array[]::text[]);
+  v_identity_fields text[];
+  v_compare_fields text[];
   v_changed boolean := false;
   v_qualifier text := 'true';
   v_sql text;
@@ -54,6 +56,29 @@ begin
         and not (is_manifest_member and not manifest_committed)
         and not (is_manifest_member and coalesce(entity_type,'') = 'OPERATION')$$;
   end if;
+
+  select coalesce(array_agg(a.attname order by key_column.ordinality), array[]::text[])
+  into v_identity_fields
+  from pg_index i
+  cross join lateral unnest(i.indkey) with ordinality key_column(attnum, ordinality)
+  join pg_attribute a
+    on a.attrelid = i.indrelid
+   and a.attnum = key_column.attnum
+  where i.indrelid = tg_relid
+    and i.indisprimary;
+
+  if cardinality(v_identity_fields) = 0 then
+    raise exception using
+      errcode = '55000',
+      message = 'INVOICE_CANDIDATE_REVISION_PRIMARY_KEY_REQUIRED';
+  end if;
+
+  select array_agg(field_name order by field_name)
+  into v_compare_fields
+  from (
+    select distinct field_name
+    from unnest(v_identity_fields || v_fields) field_name
+  ) compared;
 
   if tg_op = 'INSERT' then
     v_sql := format(
@@ -91,7 +116,7 @@ begin
         )
       )
     $sql$, v_qualifier);
-    execute v_sql into v_changed using v_fields;
+    execute v_sql into v_changed using v_compare_fields;
   end if;
 
   if v_changed then

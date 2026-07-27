@@ -1,0 +1,136 @@
+{
+  "contract_version": "INVOICE_ASYNC_TRIGGER_MANIFEST_V2",
+  "definition_source": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1250_20_private_invoice_candidate_triggers_install_v2.sql",
+  "candidate_trigger_count": 54,
+  "result_trigger_count": 3,
+  "table_count": 18,
+  "projection_hash_algorithm": "sha256(JSON.stringify(ordered_field_names))",
+  "tables": [
+    {
+      "table": "contracts",
+      "generate": true,
+      "issue": true,
+      "field_count": 30,
+      "projection_sha256": "48024f51914b60248645d6204ca4613203b8b8498f9fe935e4a191b7f9d3c4e6"
+    },
+    {
+      "table": "contract_weeks",
+      "generate": true,
+      "issue": true,
+      "field_count": 14,
+      "projection_sha256": "3580174ff1457f98f914551029522217aa94c3486f80a9f447134cc4d740a682"
+    },
+    {
+      "table": "client_settings",
+      "generate": true,
+      "issue": true,
+      "field_count": 24,
+      "projection_sha256": "e758f8dadfe9305c4d912efe70f255cd92db8bc3b03a6936a4810139236a83ce"
+    },
+    {
+      "table": "clients",
+      "generate": true,
+      "issue": true,
+      "field_count": 8,
+      "projection_sha256": "33b106a627a0229b367dd79b782706a1c16f02c77fcc7413a3434428bf911c34"
+    },
+    {
+      "table": "settings_defaults",
+      "generate": true,
+      "issue": true,
+      "field_count": 12,
+      "projection_sha256": "6e85b6480fbf7614a08b1dfc0af1e9505e5ab452088f01111c1409d78f41bc5d"
+    },
+    {
+      "table": "settings_finance_windows",
+      "generate": true,
+      "issue": false,
+      "field_count": 4,
+      "projection_sha256": "055cfc97b69d7cc033587b43b088581aa773f861fead26059bf0d8d9bb40ac5b"
+    },
+    {
+      "table": "candidates",
+      "generate": true,
+      "issue": true,
+      "field_count": 5,
+      "projection_sha256": "d3716fb38160cecaea27a80e956de444147f598fdab5644eff75720025c63cff"
+    },
+    {
+      "table": "nhsp_shifts",
+      "generate": true,
+      "issue": false,
+      "field_count": 26,
+      "projection_sha256": "dd900457fc03f131b378e3805458692c4500be24b21625208705c17fc5718887"
+    },
+    {
+      "table": "invoices",
+      "generate": true,
+      "issue": true,
+      "field_count": 23,
+      "projection_sha256": "2878dbda7fa2c6d262c40469facd3eb9ac990cb207b6338cca71bd31533381d2"
+    },
+    {
+      "table": "invoice_lines",
+      "generate": true,
+      "issue": true,
+      "field_count": 27,
+      "projection_sha256": "7d5ea2619a02a676ed4ab2ee8da4273a8f2bc0959910f53c20ca5f1bbb1f1d04"
+    },
+    {
+      "table": "invoice_hr_source_rows",
+      "generate": false,
+      "issue": true,
+      "field_count": 6,
+      "projection_sha256": "9fda4ce3f027221728d886c98bfc384cd9129ff6b488d6a27cf683dbf00d3e01"
+    },
+    {
+      "table": "timesheets",
+      "generate": true,
+      "issue": true,
+      "field_count": 55,
+      "projection_sha256": "5ab76157a57056877a382ee501c9b2d733d892e58e148f10d6eb3120d86d60fe"
+    },
+    {
+      "table": "timesheets_financials",
+      "generate": true,
+      "issue": true,
+      "field_count": 72,
+      "projection_sha256": "226b722117a333894eacdccd38b1fb98ca4e0f25e7f7b2d997382c3b74474557"
+    },
+    {
+      "table": "timesheet_evidence",
+      "generate": true,
+      "issue": true,
+      "field_count": 8,
+      "projection_sha256": "cf4f6e7c246179e9cb440cdc39b147a89cc08c205361891c930d569209355034"
+    },
+    {
+      "table": "invoice_document_versions",
+      "generate": true,
+      "issue": true,
+      "field_count": 15,
+      "projection_sha256": "2a1b64d5bf5027cee27f1d2ee73bafdb77d6b2b4ae9d0682887995b3f3260998"
+    },
+    {
+      "table": "invoice_document_assets",
+      "generate": true,
+      "issue": true,
+      "field_count": 16,
+      "projection_sha256": "9ead7cb7c806f50bdeee25f7ccea0acd64124bfdbc68fd6f914f0a1f9e3893f1"
+    },
+    {
+      "table": "invoice_operations",
+      "generate": true,
+      "issue": true,
+      "field_count": 11,
+      "projection_sha256": "4fa57da60efd67f099849c5b68e71a7f1b615aee7606dc3d04b66c268e80e4e8"
+    },
+    {
+      "table": "invoice_operation_chunks",
+      "generate": true,
+      "issue": true,
+      "field_count": 13,
+      "projection_sha256": "cbe4696630a5f80e59fcd85a4e258aa080eeb013806690a628ec483773a2c3eb"
+    }
+  ]
+}

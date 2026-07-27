@@ -80,13 +80,62 @@ begin
     join public.invoice_operations child on child.parent_operation_id=t.operation_id
     where not child.id=any(t.path)
   ),
+  chunk_chain(request_no,operation_id,requested_chunk_id,current_chunk_id,
+    replaced_by_chunk_id,current_status,path,depth,cycle) as (
+    select
+      tree.request_no,
+      c.operation_id,
+      c.id,
+      c.id,
+      c.replaced_by_chunk_id,
+      c.status,
+      array[c.id]::uuid[],
+      1,
+      false
+    from operation_tree tree
+    join public.invoice_operation_chunks c
+      on c.operation_id=tree.operation_id
+
+    union all
+
+    select
+      chain.request_no,
+      chain.operation_id,
+      chain.requested_chunk_id,
+      replacement.id,
+      replacement.replaced_by_chunk_id,
+      replacement.status,
+      chain.path||replacement.id,
+      chain.depth+1,
+      replacement.id=any(chain.path)
+    from chunk_chain chain
+    join public.invoice_operation_chunks replacement
+      on replacement.id=chain.replaced_by_chunk_id
+    where chain.replaced_by_chunk_id is not null
+      and not chain.cycle
+      and chain.depth<64
+  ),
   current_graph as materialized (
-    select g.*
-    from private._invoice_current_chunks_batch(
-      coalesce((select array_agg(distinct operation_id) from supplied
-       where operation_id is not null),
-       array['00000000-0000-0000-0000-000000000000'::uuid]),
-      null,null,10000) g
+    select distinct on (chain.request_no,chain.requested_chunk_id)
+      chain.request_no,
+      chain.operation_id,
+      chain.requested_chunk_id,
+      case
+        when chain.replaced_by_chunk_id is null
+         and not chain.cycle
+         and chain.depth<64
+          then chain.current_chunk_id
+      end current_chunk_id,
+      case
+        when chain.cycle then 'INVALID'
+        when chain.depth>=64 and chain.replaced_by_chunk_id is not null
+          then 'INVALID'
+        when chain.replaced_by_chunk_id is not null then 'INVALID'
+        else 'VALID'
+      end replacement_chain_status,
+      chain.current_status
+    from chunk_chain chain
+    order by chain.request_no,chain.requested_chunk_id,chain.depth desc
   ),
   inspected as materialized (
     select s.*,o.status current_status,o.operation_type,o.control_version,
