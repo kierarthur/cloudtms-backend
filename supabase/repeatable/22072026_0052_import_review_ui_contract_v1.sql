@@ -679,7 +679,8 @@ begin
   with ready_ids as (
     select r.action_id from public._import_review_ready_action_ids_core_v1(p_import_id) r
   ), selected_actions as (
-    select d.action_kind,coalesce(d.summary_json->'protection','{}'::jsonb) protection
+    select d.action_kind,coalesce(d.summary_json->'protection','{}'::jsonb) protection,
+      d.summary_json->>'amendment_route' amendment_route
     from public.import_review_decisions d
     join ready_ids r on r.action_id=d.action_id
     where d.import_id=p_import_id and d.is_current and d.selected
@@ -689,8 +690,10 @@ begin
     'standard',count(*) filter(where action_kind='INCLUDE_SHIFT'),
     'non_standard',count(*) filter(where action_kind in ('APPLY_AMENDMENT','APPLY_CANCELLATION')),
     'amendment',count(*) filter(where action_kind='APPLY_AMENDMENT'
-      and not (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false))),
+      and (amendment_route='AMEND_EXISTING_REPLACEMENT'
+        or not (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false)))),
     'reversal_replacement',count(*) filter(where action_kind='APPLY_AMENDMENT'
+      and amendment_route is distinct from 'AMEND_EXISTING_REPLACEMENT'
       and (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false))),
     'cancellation',count(*) filter(where action_kind='APPLY_CANCELLATION'
       and not (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false))),
