@@ -156,6 +156,16 @@ begin
       and c.run_after_utc<=v_now
       and c.attempt_count<c.max_attempts
       and o.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT')
+      and (
+        not c.is_manifest_member
+        or c.manifest_committed
+      )
+      and (
+        o.entity_type is distinct from 'INVOICE_BATCH'
+        or o.manifest_committed
+        or coalesce(c.payload_json->>'is_selection_expander','false')
+          in ('true','t','1','yes','on')
+      )
       and(select count(*) from dead_rollup)>=0
     order by (c.priority + least(100,floor(extract(epoch from (v_now-c.created_at_utc))/3600)::integer)) desc,
       c.run_after_utc,c.created_at_utc,c.id
@@ -163,17 +173,18 @@ begin
   ),
   candidate_graph as materialized (
     select g.*
-    from private._invoice_current_chunks_batch(
-      coalesce((select array_agg(distinct candidate.operation_id)
+    from private._invoice_current_chunk_ids_v2(
+      coalesce((select array_agg(distinct candidate.id)
         from candidate_rows candidate),
         array['00000000-0000-0000-0000-000000000000'::uuid]),
-      null,null,10000) g
+      500) g
   ),
   picked as materialized (
     select c.id
     from candidate_rows candidate
-    join candidate_graph g on g.current_chunk_id=candidate.id
-      and g.replacement_chain_status='VALID'
+    join candidate_graph g on g.requested_chunk_id=candidate.id
+      and g.current_chunk_id=candidate.id
+      and g.replacement_chain_status='CURRENT'
     join public.invoice_operation_chunks c on c.id=candidate.id
     order by candidate.effective_priority desc,
       candidate.run_after_utc,candidate.created_at_utc,candidate.id

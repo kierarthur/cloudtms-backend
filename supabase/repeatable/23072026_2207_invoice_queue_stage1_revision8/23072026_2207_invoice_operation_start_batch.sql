@@ -1,41 +1,6 @@
--- CloudTMS invoice batch public RPC replacement
--- Rechecked/amended again 2026-07-26 from live TEST DB signatures plus locked invoice batch implementation plan.
--- Install after the v3 private helper package and modal-query-support migration are installed.
--- The preservation block keeps a private copy of the live legacy implementation so existing callers remain compatible.
-
-DO $preserve_legacy$
-DECLARE
-  v_def text;
-BEGIN
-  IF to_regprocedure('private._invoice_operation_start_batch_legacy_20260726(jsonb, uuid, timestamp with time zone)') IS NULL THEN
-    SELECT pg_get_functiondef(p.oid)
-      INTO v_def
-    FROM pg_proc p
-    JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public'
-      AND p.proname = 'invoice_operation_start_batch'
-      AND pg_get_function_identity_arguments(p.oid) = 'p_commands jsonb, p_actor_user_id uuid, p_now_utc timestamp with time zone';
-
-    IF v_def IS NULL THEN
-      RAISE EXCEPTION 'Cannot preserve legacy public.invoice_operation_start_batch(jsonb, uuid, timestamptz): source function not found and private legacy copy missing';
-    END IF;
-
-    IF position('_invoice_operation_start_batch_legacy_20260726' IN v_def) > 0 THEN
-      RAISE EXCEPTION 'Refusing to clone an already-wrapped public.invoice_operation_start_batch; private legacy copy is missing';
-    END IF;
-
-    v_def := regexp_replace(
-      v_def,
-      '^CREATE OR REPLACE FUNCTION public\.invoice_operation_start_batch',
-      'CREATE OR REPLACE FUNCTION private._invoice_operation_start_batch_legacy_20260726'
-    );
-
-    EXECUTE v_def;
-    EXECUTE 'REVOKE ALL ON FUNCTION private._invoice_operation_start_batch_legacy_20260726(jsonb, uuid, timestamp with time zone) FROM PUBLIC, anon, authenticated';
-    EXECUTE 'GRANT EXECUTE ON FUNCTION private._invoice_operation_start_batch_legacy_20260726(jsonb, uuid, timestamp with time zone) TO service_role';
-  END IF;
-END
-$preserve_legacy$;
+-- CloudTMS Invoice Async V8/V2 public start authority.
+-- Non-selection commands use the promoted current core helper; selection roots
+-- are created here without any dependency on retired compatibility functions.
 
 CREATE OR REPLACE FUNCTION public.invoice_operation_start_batch(
   p_commands jsonb,
@@ -74,6 +39,7 @@ DECLARE
   v_command_token text;
   v_delivery_request_token text;
   v_filter_hash text;
+  v_query_hash text;
   v_selection_hash text;
   v_delivery_hash text;
   v_idempotency_key text;
@@ -86,8 +52,12 @@ DECLARE
   v_change_seq bigint;
   v_created boolean;
   v_reused boolean;
-  v_legacy_result jsonb;
+  v_core_result jsonb;
   v_result_item jsonb;
+  v_summary jsonb;
+  v_filtered_total integer;
+  v_selected_total integer;
+  v_previous_statement_timeout text := current_setting('statement_timeout');
 BEGIN
   IF jsonb_typeof(p_commands) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION USING errcode = '22023',
@@ -126,7 +96,7 @@ BEGIN
   ) INTO v_has_selection;
 
   IF NOT v_has_selection THEN
-    RETURN private._invoice_operation_start_batch_legacy_20260726(p_commands, p_actor_user_id, v_now);
+    RETURN private._invoice_operation_start_core_v8(p_commands, p_actor_user_id, v_now);
   END IF;
 
   FOR v_command, v_command_no IN
@@ -140,21 +110,21 @@ BEGIN
     v_result_item := NULL;
 
     IF jsonb_typeof(v_command->'selection_contract') IS DISTINCT FROM 'object' THEN
-      v_legacy_result := private._invoice_operation_start_batch_legacy_20260726(
+      v_core_result := private._invoice_operation_start_core_v8(
         jsonb_build_array(v_command),
         p_actor_user_id,
         v_now
       );
 
-      IF jsonb_typeof(v_legacy_result) = 'array' AND jsonb_array_length(v_legacy_result) > 0 THEN
-        v_results := v_results || jsonb_build_array((v_legacy_result->0) || jsonb_build_object('command_no', v_command_no));
+      IF jsonb_typeof(v_core_result) = 'array' AND jsonb_array_length(v_core_result) > 0 THEN
+        v_results := v_results || jsonb_build_array((v_core_result->0) || jsonb_build_object('command_no', v_command_no));
       ELSE
         v_results := v_results || jsonb_build_array(jsonb_build_object(
           'command_no', v_command_no,
           'command_type', v_command_type,
           'accepted', false,
-          'terminal_error', jsonb_build_object('code', 'LEGACY_START_RETURNED_NO_RESULT'),
-          'error', jsonb_build_object('code', 'LEGACY_START_RETURNED_NO_RESULT')
+          'terminal_error', jsonb_build_object('code', 'CORE_START_RETURNED_NO_RESULT'),
+          'error', jsonb_build_object('code', 'CORE_START_RETURNED_NO_RESULT')
         ));
       END IF;
 
@@ -178,7 +148,7 @@ BEGIN
     v_selection_contract := v_command->'selection_contract';
 
     IF v_error_code IS NULL
-       AND coalesce(v_selection_contract->>'contract_version', '') <> 'INVOICE_BATCH_SELECTION_V1' THEN
+       AND coalesce(v_selection_contract->>'contract_version', '') <> 'INVOICE_BATCH_SELECTION_ROOT_V2' THEN
       v_error_code := 'BATCH_SELECTION_CONTRACT_INVALID';
     END IF;
 
@@ -198,7 +168,7 @@ BEGIN
       v_query := v_selection_contract->'query';
       v_selection := v_selection_contract->'selection';
 
-      IF coalesce(v_query->>'contract_version', '') <> 'INVOICE_BATCH_QUERY_V1' THEN
+      IF coalesce(v_query->>'contract_version', '') <> 'INVOICE_BATCH_QUERY_V2' THEN
         v_error_code := 'BATCH_QUERY_INVALID';
       ELSIF upper(coalesce(v_query->>'action', '')) <> v_action THEN
         v_error_code := 'BATCH_QUERY_ACTION_MISMATCH';
@@ -208,7 +178,7 @@ BEGIN
     IF v_error_code IS NULL THEN
       BEGIN
         PERFORM 1
-        FROM private._invoice_batch_selection_rules_v1(v_selection)
+        FROM private._invoice_batch_selection_rules_v2(v_selection)
         LIMIT 1;
       EXCEPTION WHEN OTHERS THEN
         v_error_code := CASE
@@ -241,6 +211,12 @@ BEGIN
        AND v_command ? 'deliver'
        AND jsonb_typeof(v_command->'deliver') <> 'boolean' THEN
       v_error_code := 'ISSUE_FLAGS_MUST_BE_BOOLEAN';
+    END IF;
+
+    IF v_error_code IS NULL
+       AND v_action = 'ISSUE'
+       AND NOT (v_command ? 'deliver') THEN
+      v_error_code := 'ISSUE_DELIVERY_MODE_REQUIRED';
     END IF;
 
     IF v_error_code IS NULL
@@ -287,41 +263,18 @@ BEGIN
          AND v_action = 'ISSUE'
          AND v_deliver
          AND (
-           (v_delivery_intent ? 'recipient_set' AND jsonb_typeof(v_delivery_intent->'recipient_set') <> 'array')
-           OR (v_delivery_intent ? 'cc' AND jsonb_typeof(v_delivery_intent->'cc') <> 'array')
-           OR (v_delivery_intent ? 'bcc' AND jsonb_typeof(v_delivery_intent->'bcc') <> 'array')
+           v_delivery_intent ? 'recipient_set'
+           OR v_delivery_intent ? 'cc'
+           OR v_delivery_intent ? 'bcc'
          ) THEN
-        v_error_code := 'ISSUE_DELIVERY_RECIPIENT_SET_MUST_BE_ARRAY';
+        v_error_code := 'ISSUE_BATCH_DELIVERY_RECIPIENT_OVERRIDE_UNSUPPORTED';
       END IF;
 
       IF v_error_code IS NULL
          AND v_action = 'ISSUE'
          AND v_deliver
-         AND EXISTS (
-           SELECT 1
-           FROM (
-             SELECT value
-             FROM jsonb_array_elements_text(
-               CASE WHEN jsonb_typeof(v_delivery_intent->'recipient_set') = 'array'
-                 THEN v_delivery_intent->'recipient_set' ELSE '[]'::jsonb END
-             )
-             UNION ALL
-             SELECT value
-             FROM jsonb_array_elements_text(
-               CASE WHEN jsonb_typeof(v_delivery_intent->'cc') = 'array'
-                 THEN v_delivery_intent->'cc' ELSE '[]'::jsonb END
-             )
-             UNION ALL
-             SELECT value
-             FROM jsonb_array_elements_text(
-               CASE WHEN jsonb_typeof(v_delivery_intent->'bcc') = 'array'
-                 THEN v_delivery_intent->'bcc' ELSE '[]'::jsonb END
-             )
-           ) recipient(value)
-           WHERE nullif(btrim(recipient.value), '') IS NOT NULL
-             AND btrim(recipient.value) !~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$'
-         ) THEN
-        v_error_code := 'ISSUE_DELIVERY_RECIPIENT_SET_INVALID';
+         AND upper(coalesce(v_delivery_intent->>'route_mode','')) <> 'SERVER_RESOLVED' THEN
+        v_error_code := 'ISSUE_DELIVERY_INTENT_INVALID';
       END IF;
 
       IF v_error_code IS NULL
@@ -339,41 +292,113 @@ BEGIN
       IF v_error_code IS NULL THEN
         v_normalised_query := (v_query - 'cursor' - 'after_selection_key' - 'selection' - 'mode' - 'action' - 'page_size')
         || jsonb_build_object(
-          'contract_version', 'INVOICE_BATCH_QUERY_V1',
+          'contract_version', 'INVOICE_BATCH_QUERY_V2',
           'action', v_action,
           'mode', 'EXPAND_SELECTION',
+          'page_size', 250,
           'allow_early', v_allow_early,
           'selection', v_selection
         );
       END IF;
 
       IF v_error_code IS NULL THEN
-        v_filter_hash := encode(digest(
-        v_action || '|' || ((v_normalised_query - 'selection' - 'mode')::text),
-        'sha256'
-      ), 'hex');
-      v_selection_hash := encode(digest(v_selection::text, 'sha256'), 'hex');
-      v_delivery_hash := encode(digest(v_delivery_intent::text, 'sha256'), 'hex');
+        BEGIN
+          perform set_config('statement_timeout','7000',true);
+          v_summary := case when v_action='GENERATE'
+            then private._invoice_batch_generate_candidate_rows_v2(
+              v_normalised_query || jsonb_build_object('mode','SUMMARY'),
+              v_now
+            )
+            else private._invoice_batch_issue_candidate_rows_v2(
+              v_normalised_query || jsonb_build_object('mode','SUMMARY'),
+              v_now
+            )
+          end;
+          perform set_config('statement_timeout',v_previous_statement_timeout,true);
+
+          v_filtered_total := coalesce(
+            (v_summary#>>'{totals,filtered_total}')::integer,
+            0
+          );
+          v_selected_total := coalesce(
+            (v_summary#>>'{selection_summary,selected_total}')::integer,
+            0
+          );
+
+          if v_filtered_total > 25000 then
+            v_error_code := 'BATCH_SUMMARY_SCOPE_TOO_LARGE';
+          elsif v_selected_total = 0 then
+            v_error_code := 'BATCH_SELECTION_EMPTY';
+          end if;
+        exception
+          when query_canceled then
+            perform set_config('statement_timeout',v_previous_statement_timeout,true);
+            v_error_code := 'BATCH_SUMMARY_TIMEOUT';
+          when others then
+            perform set_config('statement_timeout',v_previous_statement_timeout,true);
+            v_error_code := case
+              when sqlerrm in (
+                'BATCH_SNAPSHOT_REQUIRED',
+                'BATCH_SNAPSHOT_INVALID',
+                'BATCH_SNAPSHOT_EXPIRED',
+                'BATCH_SNAPSHOT_CHANGED',
+                'BATCH_SELECTION_INVALID',
+                'BATCH_SELECTION_CONTRACT_INVALID',
+                'BATCH_SELECTION_SELECTOR_INVALID'
+              ) then sqlerrm
+              else 'BATCH_QUERY_INVALID'
+            end;
+            v_error_detail := jsonb_build_object(
+              'sqlstate',sqlstate,
+              'message',sqlerrm
+            );
+        end;
+      END IF;
+
+      IF v_error_code IS NULL THEN
+      v_filter_hash := private._invoice_batch_hash_v2(
+        jsonb_build_object(
+          'action',v_action,
+          'filters',coalesce(v_normalised_query->'filters','{}'::jsonb),
+          'sort',coalesce(v_normalised_query->'sort','{}'::jsonb)
+        )
+      );
+      v_query_hash := private._invoice_batch_hash_v2(
+        jsonb_build_object(
+          'contract_version','INVOICE_BATCH_QUERY_V2',
+          'action',v_action,
+          'filters',coalesce(v_normalised_query->'filters','{}'::jsonb),
+          'sort',coalesce(v_normalised_query->'sort','{}'::jsonb),
+          'snapshot',jsonb_build_object(
+            'at_utc',v_normalised_query#>>'{snapshot,at_utc}',
+            'revision',v_normalised_query#>>'{snapshot,revision}'
+          )
+        )
+      );
+      v_selection_hash := private._invoice_batch_hash_v2(v_selection);
+      v_delivery_hash := private._invoice_batch_hash_v2(v_delivery_intent);
 
       v_idempotency_key := CASE WHEN v_action = 'GENERATE' THEN
-        encode(digest(concat_ws('|',
+        private._invoice_batch_hash_v2(jsonb_build_object(
+          'command_type',
           'GENERATE_SELECTED',
-          v_filter_hash,
-          v_selection_hash,
-          v_allow_early::text,
-          v_command_token
-        ), 'sha256'), 'hex')
+          'query_hash',v_query_hash,
+          'selection_hash',v_selection_hash,
+          'allow_early',v_allow_early,
+          'command_token',v_command_token
+        ))
       ELSE
-        encode(digest(concat_ws('|',
+        private._invoice_batch_hash_v2(jsonb_build_object(
+          'command_type',
           'ISSUE_INVOICES',
-          v_filter_hash,
-          v_selection_hash,
-          v_allow_early::text,
-          v_deliver::text,
-          v_command_token,
-          coalesce(v_delivery_request_token, ''),
-          v_delivery_hash
-        ), 'sha256'), 'hex')
+          'query_hash',v_query_hash,
+          'selection_hash',v_selection_hash,
+          'allow_early',v_allow_early,
+          'deliver',v_deliver,
+          'command_token',v_command_token,
+          'delivery_request_token',v_delivery_request_token,
+          'delivery_hash',v_delivery_hash
+        ))
       END;
 
       PERFORM pg_advisory_xact_lock(hashtextextended('INVOICE_BATCH_SELECTION_ROOT|' || v_idempotency_key, 0));
@@ -410,6 +435,10 @@ BEGIN
           chunk_count,
           control_version,
           change_seq,
+          manifest_generation,
+          manifest_committed,
+          release_complete,
+          result_page_revision,
           created_at_utc,
           updated_at_utc
         ) VALUES (
@@ -419,23 +448,25 @@ BEGIN
           p_actor_user_id,
           v_idempotency_key,
           'QUEUED',
-          'SELECTION_EXPAND',
+          'BUILD_MANIFEST',
           v_priority,
-          v_filter_hash,
+          v_normalised_query#>>'{snapshot,revision}',
           NULL,
           jsonb_build_object(
-            'contract_version', 'INVOICE_BATCH_SELECTION_ROOT_V1',
+            'contract_version', 'INVOICE_BATCH_SELECTION_ROOT_V2',
             'command_type', v_command_type,
             'action', v_action,
             'selection_expansion_pending', true,
             'filter_hash', v_filter_hash,
+            'query_hash', v_query_hash,
             'selection_hash', v_selection_hash,
+            'snapshot',v_normalised_query->'snapshot',
             'command_token', v_command_token,
             'deliver', v_deliver,
             'delivery_request_token', v_delivery_request_token,
             'delivery_intent', v_delivery_intent,
             'selection_contract', jsonb_build_object(
-              'contract_version', 'INVOICE_BATCH_SELECTION_V1',
+              'contract_version', 'INVOICE_BATCH_SELECTION_ROOT_V2',
               'action', v_action,
               'query', v_normalised_query,
               'selection', v_selection
@@ -446,16 +477,27 @@ BEGIN
             'processor_policy', private._invoice_processor_limits()
           ),
           jsonb_build_object(
-            'status_message', 'Selection accepted',
+            'contract_version','INVOICE_BATCH_PROGRESS_V2',
+            'status_message', 'Building selection manifest',
             'selection_expansion_pending', true,
-            'candidate_total', 0,
-            'invoice_total', 0,
-            'selected_total', 0,
+            'manifest_committed',false,
+            'candidate_total', case when v_action='GENERATE' then v_filtered_total else 0 end,
+            'invoice_total', case when v_action='ISSUE' then v_filtered_total else 0 end,
+            'selected_total', v_selected_total,
             'expanded_total', 0,
             'queued_total', 0,
+            'generated_total',0,
+            'regenerated_total',0,
+            'issued_total',0,
+            'issued_send_blocked_total',0,
+            'already_active_total',0,
             'blocked_total', 0,
             'changed_total', 0,
             'failed_total', 0,
+            'in_progress_total',0,
+            'delivery_pending_total',0,
+            'delivery_complete_total',0,
+            'delivery_blocked_total',0,
             'total_units', 1,
             'completed_units', 0,
             'failed_units', 0
@@ -466,6 +508,10 @@ BEGIN
           1,
           1,
           nextval('public.invoice_operation_change_seq'),
+          1,
+          false,
+          false,
+          0,
           v_now,
           v_now
         )
@@ -492,15 +538,24 @@ BEGIN
           payload_json,
           progress_json,
           operation_control_version,
+          manifest_generation,
+          is_manifest_member,
+          manifest_committed,
+          result_visible,
           created_at_utc,
           updated_at_utc
         ) VALUES (
           v_operation_id,
           v_chunk_type,
-          'EXPAND_SELECTION',
+          'BUILD_MANIFEST',
           0,
           0,
-          encode(digest(concat_ws('|', 'EXPAND_SELECTION', v_idempotency_key, v_action, '1'), 'sha256'), 'hex'),
+          private._invoice_batch_hash_v2(jsonb_build_object(
+            'work','BUILD_MANIFEST',
+            'root',v_operation_id,
+            'manifest_generation',1,
+            'action',v_action
+          )),
           'OPERATION',
           v_operation_id,
           'QUEUED',
@@ -511,9 +566,12 @@ BEGIN
             'selection_key', NULL,
             'action', v_action,
             'filter_hash', v_filter_hash,
+            'query_hash',v_query_hash,
             'selection_hash', v_selection_hash,
+            'manifest_generation',1,
+            'manifest_committed',false,
             'selection_contract', jsonb_build_object(
-              'contract_version', 'INVOICE_BATCH_SELECTION_V1',
+              'contract_version', 'INVOICE_BATCH_SELECTION_ROOT_V2',
               'action', v_action,
               'query', v_normalised_query,
               'selection', v_selection
@@ -529,10 +587,18 @@ BEGIN
             'blocked', 0,
             'changed', 0,
             'already_active', 0,
-            'completed', false
+            'completed', false,
+            'release_cursor',null
           ),
-          jsonb_build_object('status_message', 'Expanding selection'),
+          jsonb_build_object(
+            'contract_version','INVOICE_BATCH_PROGRESS_V2',
+            'status_message', 'Building selection manifest'
+          ),
           1,
+          1,
+          false,
+          false,
+          false,
           v_now,
           v_now
         )
@@ -543,8 +609,10 @@ BEGIN
             chunk_count = greatest(o.chunk_count, 1),
             progress_json = coalesce(o.progress_json, '{}'::jsonb)
               || jsonb_build_object(
-                'status_message', 'Selection queued',
+                'contract_version','INVOICE_BATCH_PROGRESS_V2',
+                'status_message', 'Building selection manifest',
                 'selection_expansion_pending', true,
+                'manifest_committed',false,
                 'total_units', greatest(o.total_units, 1)
               ),
             updated_at_utc = v_now,
@@ -583,8 +651,9 @@ BEGIN
         'terminal_error', NULL,
         'chunk_count', 1,
         'selection_expansion_pending', v_operation_status IS DISTINCT FROM 'COMPLETE',
-        'selection_contract_version', 'INVOICE_BATCH_SELECTION_V1',
-        'estimated_filtered_total', NULL,
+        'selection_contract_version', 'INVOICE_BATCH_SELECTION_V2',
+        'estimated_filtered_total', v_filtered_total,
+        'estimated_selected_total',v_selected_total,
         'nudge_state', CASE WHEN v_operation_status = 'COMPLETE' THEN 'REUSED_COMPLETE' ELSE 'DB_QUEUE' END
       );
     END IF;

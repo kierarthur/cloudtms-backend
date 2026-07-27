@@ -48,8 +48,11 @@ begin
       c.status current_status,c.lease_token current_lease_token,
       c.fence_token current_fence_token,
       c.operation_control_version current_control_version,
+      c.is_manifest_member,
+      c.manifest_committed carrier_manifest_committed,
       c.lease_expires_at_utc,o.status operation_status,
       o.control_version operation_current_control_version,
+      o.manifest_committed root_manifest_committed,
       case
         when s.chunk_id is null or s.lease_token is null
           or s.fence_token is null or s.operation_control_version is null then 'INVALID_CLAIM'
@@ -60,6 +63,11 @@ begin
         when c.operation_control_version is distinct from s.operation_control_version
           or o.control_version is distinct from s.operation_control_version then 'CONTROL_VERSION_MISMATCH'
         when c.lease_expires_at_utc is null or c.lease_expires_at_utc<=v_now then 'LEASE_EXPIRED'
+        when c.is_manifest_member
+          and (
+            not c.manifest_committed
+            or not o.manifest_committed
+          ) then 'MANIFEST_MEMBER_NOT_RELEASED'
         when o.status in('COMPLETE','FAILED','DEAD_LETTER','CANCELLED','SUPERSEDED') then 'OPERATION_TERMINAL'
       end rejection_code
     from supplied s

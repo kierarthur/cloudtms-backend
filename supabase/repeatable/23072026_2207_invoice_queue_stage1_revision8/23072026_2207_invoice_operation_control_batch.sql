@@ -90,7 +90,8 @@ begin
   ),
   inspected as materialized (
     select s.*,o.status current_status,o.operation_type,o.control_version,
-      o.priority current_priority,
+      o.priority current_priority,o.input_json,o.source_revision,
+      o.manifest_committed,o.release_complete,
       case
         when s.operation_id is null then 'INVALID_OPERATION_ID'
         when s.action not in('RETRY','CANCEL','RESCHEDULE','RAISE_PRIORITY')
@@ -110,6 +111,33 @@ begin
         when s.action='RETRY'
           and o.status not in('FAILED','DEAD_LETTER','BLOCKED','RETRY_WAIT')
           then 'OPERATION_NOT_RETRYABLE'
+        when s.action='RETRY'
+          and o.input_json->>'contract_version'
+            ='INVOICE_BATCH_SELECTION_ROOT_V2'
+          and o.error_json->>'code'
+            ='BATCH_SNAPSHOT_CHANGED_DURING_EXPANSION'
+          then 'BATCH_FRESH_SELECTION_REQUIRED'
+        when s.action='RETRY'
+          and o.input_json->>'contract_version'
+            ='INVOICE_BATCH_SELECTION_ROOT_V2'
+          and not o.manifest_committed
+          and o.source_revision is distinct from (
+            private._invoice_candidate_snapshot_get_v2(
+              o.input_json->>'action',
+              v_now
+            )->>'revision'
+          )
+          then 'BATCH_FRESH_SELECTION_REQUIRED'
+        when s.action='RETRY'
+          and s.retry_chunk_id is not null
+          and exists (
+            select 1
+            from public.invoice_operation_chunks member
+            where member.id=s.retry_chunk_id
+              and member.is_manifest_member
+              and not member.manifest_committed
+          )
+          then 'UNCOMMITTED_MANIFEST_CARRIER_NOT_RETRYABLE'
         when s.action='RETRY' and s.retry_chunk_supplied
           and s.retry_chunk_id is null then 'INVALID_RETRY_CHUNK_ID'
         when s.replacement_requested and v_jwt_role<>'service_role'
@@ -179,6 +207,10 @@ begin
         else o.status end,
       phase=case
         when l.action='CANCEL' then 'CANCELLED'
+        when l.action='RETRY'
+          and o.input_json->>'contract_version'
+            ='INVOICE_BATCH_SELECTION_ROOT_V2'
+          and not o.manifest_committed then 'BUILD_MANIFEST'
         when l.action='RETRY' then 'RETRY'
         else o.phase end,
       priority=case when l.action='RAISE_PRIORITY'
@@ -295,6 +327,10 @@ begin
             and c.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
             then 'CANCELLED'
           when o.action='RETRY'
+            and c.is_manifest_member
+            and not c.manifest_committed
+            then 'WAITING'
+          when o.action='RETRY'
             and(o.retry_chunk_id is null or c.id=o.retry_chunk_id)
             and c.chunk_type='DOCUMENT_INPUT' then 'WAITING'
           when o.action='RETRY'
@@ -307,6 +343,15 @@ begin
           when o.action='CANCEL'
             and c.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
             then 'CANCELLED'
+          when o.action='RETRY'
+            and c.is_manifest_member
+            and not c.manifest_committed
+            then 'WAITING_MANIFEST_COMMIT'
+          when o.action='RETRY'
+            and coalesce(c.payload_json->>'is_selection_expander','false')
+              in ('true','t','1','yes','on')
+            and not c.manifest_committed
+            then 'BUILD_MANIFEST'
           when o.action='RETRY'
             and(o.retry_chunk_id is null or c.id=o.retry_chunk_id)
             and c.status in('FAILED','DEAD_LETTER','BLOCKED','RETRY_WAIT')
@@ -328,6 +373,10 @@ begin
         run_after_utc=case
           when o.action='RESCHEDULE' and c.status in('QUEUED','RETRY_WAIT')
             then coalesce(o.requested_run_after_utc,v_now)
+          when o.action='RETRY'
+            and c.is_manifest_member
+            and not c.manifest_committed
+            then c.run_after_utc
           when o.action='RETRY'
             and(o.retry_chunk_id is null or c.id=o.retry_chunk_id)
             and c.status in('FAILED','DEAD_LETTER','BLOCKED','RETRY_WAIT')
