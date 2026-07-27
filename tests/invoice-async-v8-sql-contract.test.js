@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 
@@ -17,6 +18,8 @@ const v8RuntimeFiles = [
   'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_advance_batch.sql',
   'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql',
   'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_get.sql',
+  'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_dispatch_advance_batch.sql',
+  'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_resolve_command_groups.sql',
   'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_advance_batch.sql',
   'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_operation_rollup_batch.sql',
   'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_issue_advance_batch.sql',
@@ -135,9 +138,13 @@ test('canonical hashes and candidate trigger projections are locked artifacts', 
   ));
 
   assert.equal(vectors.contract_version, 'INVOICE_BATCH_CANONICAL_HASH_V2');
-  assert.equal(vectors.vectors.length, 5);
+  assert.ok(vectors.vectors.length >= 11);
   for (const vector of vectors.vectors) {
     assert.match(vector.sha256, /^[0-9a-f]{64}$/);
+    assert.equal(
+      createHash('sha256').update(vector.canonical_text).digest('hex'),
+      vector.sha256,
+    );
   }
 
   assert.equal(
@@ -150,6 +157,18 @@ test('canonical hashes and candidate trigger projections are locked artifacts', 
   assert.equal(triggerManifest.tables.length, 18);
   for (const table of triggerManifest.tables) {
     assert.ok(table.field_count > 0);
+    assert.ok(Array.isArray(table.fields));
+    assert.equal(table.fields.length, table.field_count);
+    assert.ok(Array.isArray(table.json_paths));
+    if (['invoice_operations', 'invoice_operation_chunks'].includes(
+      table.table_name,
+    )) {
+      assert.ok(!table.fields.includes('input_json'));
+      assert.ok(!table.fields.includes('progress_json'));
+      assert.ok(!table.fields.includes('result_json'));
+      assert.ok(!table.fields.includes('payload_json'));
+      assert.ok(!table.fields.includes('error_json'));
+    }
     assert.match(table.projection_sha256, /^[0-9a-f]{64}$/);
   }
 
@@ -157,8 +176,23 @@ test('canonical hashes and candidate trigger projections are locked artifacts', 
     functionHashes.contract_version,
     'INVOICE_ASYNC_DB_V2_FUNCTION_HASH_MANIFEST',
   );
-  assert.equal(functionHashes.functions.length, 32);
+  assert.equal(functionHashes.functions.length, 40);
   assert.match(functionHashes.aggregate_sha256, /^[0-9a-f]{64}$/);
+  const hashedIdentities = new Set(
+    functionHashes.functions.map(fn => fn.identity),
+  );
+  for (const identity of [
+    'private._invoice_batch_generate_candidate_keys_v2(jsonb,timestamptz)',
+    'private._invoice_batch_generate_classification_v2(boolean,text[],timestamptz)',
+    'private._invoice_batch_issue_candidate_keys_v2(jsonb,timestamptz)',
+    'private._invoice_batch_issue_classification_v2(boolean,uuid[],timestamptz)',
+    'private._invoice_batch_issue_source_rows_core_v2(boolean,integer,timestamptz,uuid[])',
+    'private._invoice_batch_issue_source_rows_for_ids_v2(uuid[],boolean,timestamptz)',
+    'private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamptz)',
+    'private._invoice_dispatch_advance_batch(jsonb,timestamptz)',
+  ]) {
+    assert.ok(hashedIdentities.has(identity), identity);
+  }
   for (const fn of functionHashes.functions) {
     assert.match(fn.definition_sha256, /^[0-9a-f]{64}$/);
   }
@@ -171,11 +205,20 @@ test('strict query validation and post-helper trigger installation are present',
   const triggerInstaller = read(
     'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1250_20_private_invoice_candidate_triggers_install_v2.sql',
   );
+  const contractProbe = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_19_invoice_async_contract_get_v2.sql',
+  );
   const historicalTriggerMigration = read(
     'supabase/migrations/27072026_1042_04_invoice_async_v8_candidate_revision_triggers.sql',
   );
 
   assert.match(queryValidation, /INVOICE_BATCH_QUERY_UNKNOWN_FIELD/);
+  assert.match(queryValidation, /INVOICE_BATCH_QUERY_ACTION_REQUIRED/);
+  assert.match(queryValidation, /INVOICE_BATCH_QUERY_ACTION_MISMATCH/);
+  assert.match(queryValidation, /INVOICE_BATCH_QUERY_MODE_FIELD_INVALID/);
+  assert.match(queryValidation, /v_mode = 'PAGE'[\s\S]*> 100/);
+  assert.match(queryValidation, /v_mode = 'EXPAND_SELECTION'[\s\S]*> 250/);
+  assert.doesNotMatch(queryValidation, /least\([^)]*page_size/i);
   assert.match(queryValidation, /INVOICE_BATCH_FILTER_UNKNOWN_FIELD/);
   assert.match(queryValidation, /BATCH_FACET_REQUEST_INVALID/);
   assert.match(
@@ -194,6 +237,15 @@ test('strict query validation and post-helper trigger installation are present',
     historicalTriggerMigration,
     /deferred to post-helper repeatable/i,
   );
+  assert.match(contractProbe, /legacy_runtime_exposure_count/);
+  assert.match(
+    contractProbe,
+    /invoice_batch_generate_candidates\(boolean,integer,text\[\],jsonb\)/,
+  );
+  assert.match(
+    contractProbe,
+    /invoice_batch_issue_candidates\(boolean,integer,jsonb\)/,
+  );
 });
 
 test('manifest carriers remain hidden until bounded release', () => {
@@ -208,13 +260,20 @@ test('manifest carriers remain hidden until bounded release', () => {
   );
 
   assert.match(migration, /result_visible boolean not null default false/i);
-  assert.match(manifest, /'WAITING_MANIFEST_COMMIT'/);
+  assert.match(manifest, /'AWAITING_MANIFEST_COMMIT'/);
   assert.match(manifest, /result_visible,\s*created_at_utc/i);
   assert.match(manifest, /true,\s*false,\s*false,\s*v_now,\s*v_now/);
   assert.match(manifest, /limit 250/i);
   assert.match(manifest, /'RELEASE_MANIFEST'/);
+  assert.match(manifest, /'AWAITING_RELEASE'/);
   assert.match(claim, /c\.manifest_committed/);
   assert.match(claim, /o\.manifest_committed/);
+  assert.match(
+    claim,
+    /c\.phase in \('BUILD_MANIFEST','RELEASE_MANIFEST'\)/,
+  );
+  assert.match(claim, /'AWAITING_MANIFEST_COMMIT'/);
+  assert.match(claim, /'AWAITING_RELEASE'/);
 });
 
 test('result paging is direct, bounded, and revision-gated', () => {
@@ -232,9 +291,18 @@ test('result paging is direct, bounded, and revision-gated', () => {
     /least\(\(p_page_request->>'limit'\)::integer,100\)/,
   );
   assert.match(operationGet, /OPERATION_RESULT_CURSOR_STALE/);
+  assert.match(resultRevision, /for update;/i);
   assert.match(
     resultRevision,
-    /nextval\('public\.invoice_operation_change_seq'::regclass\)/,
+    /nextval\(\s*'public\.invoice_operation_change_seq'::regclass\s*\)/,
+  );
+  assert.match(
+    resultRevision,
+    /result_page_revision\s*=\s*greatest\(/i,
+  );
+  assert.match(
+    resultRevision,
+    /change_seq\s*=\s*greatest\(/i,
   );
 });
 
@@ -246,6 +314,288 @@ test('batch operation control does not preload a capped current-chunk graph', ()
   assert.doesNotMatch(operationControl, /_invoice_current_chunks_batch\s*\(/);
   assert.match(operationControl, /chunk_chain\(/);
   assert.doesNotMatch(operationControl, /null,null,10000/);
+  assert.match(operationControl, /BATCH_TARGETED_RETRY_REQUIRED/);
+  assert.match(operationControl, /depth<64/);
+  assert.match(
+    operationControl,
+    /v_now\s+timestamptz\s*:=\s*statement_timestamp\(\)/i,
+  );
+  assert.match(
+    operationControl,
+    /if v_jwt_role='service_role' then[\s\S]*coalesce\(p_now_utc,statement_timestamp\(\)\)/i,
+  );
+  assert.doesNotMatch(
+    operationControl,
+    /v_now\s+timestamptz\s*:=\s*coalesce\(p_now_utc/i,
+  );
+});
+
+test('candidate PAGE selects bounded keys before expensive hydration', () => {
+  const generateKeys = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1501_private_invoice_batch_generate_candidate_keys_v2.sql',
+  );
+  const issueKeys = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1501_private_invoice_batch_issue_candidate_keys_v2.sql',
+  );
+  const generateRows = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
+  );
+  const issueRows = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
+  );
+  const generateResolver = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_resolve_command_groups.sql',
+  );
+  const issueSourcesForIds = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1501_private_invoice_batch_issue_source_rows_for_ids_v2.sql',
+  );
+  const issueSources = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_10a_private_invoice_batch_issue_source_rows_v2.sql',
+  );
+  const generateClassifier = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_generate_classification_v2.sql',
+  );
+  const issueClassifier = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql',
+  );
+
+  assert.doesNotMatch(
+    generateKeys,
+    /_invoice_batch_generate_group_rows_v2\s*\(/,
+  );
+  assert.doesNotMatch(
+    generateKeys,
+    /public\.invoice_batch_generate_candidates\s*\(/,
+  );
+  assert.doesNotMatch(
+    issueKeys,
+    /_invoice_batch_issue_source_rows_core_v2\s*\(/,
+  );
+  assert.doesNotMatch(
+    issueKeys,
+    /public\.invoice_batch_issue_candidates\s*\(/,
+  );
+  assert.match(
+    generateKeys,
+    /_invoice_batch_generate_classification_v2\s*\(/,
+  );
+  assert.match(
+    issueKeys,
+    /_invoice_batch_issue_classification_v2\s*\(/,
+  );
+  assert.match(generateKeys, /scope_count as materialized/i);
+  assert.match(issueKeys, /scope_count as materialized/i);
+  assert.ok(
+    generateKeys.indexOf('scope_count as materialized')
+      < generateKeys.indexOf('cursor_filtered as materialized'),
+  );
+  assert.ok(
+    issueKeys.indexOf('scope_count as materialized')
+      < issueKeys.indexOf('cursor_filtered as materialized'),
+  );
+  assert.doesNotMatch(
+    generateKeys,
+    /client_setting\.vat_rate_pct|finance\.vat_rate_pct/,
+  );
+  assert.match(
+    generateClassifier,
+    /_invoice_generation_vat_policy_batch\s*\(/,
+  );
+  assert.match(
+    generateClassifier,
+    /_invoice_correction_validate_batch\s*\(/,
+  );
+  assert.match(
+    issueClassifier,
+    /_invoice_issue_validate_batch\s*\(/,
+  );
+  assert.doesNotMatch(
+    issueSources,
+    /_invoice_issue_validate_batch\s*\(/,
+  );
+  assert.match(
+    generateRows,
+    /_invoice_batch_generate_candidate_keys_v2\s*\(/,
+  );
+  assert.match(
+    generateRows,
+    /page_ordinal<=v_page_size/,
+  );
+  assert.match(
+    issueRows,
+    /_invoice_batch_issue_candidate_keys_v2\s*\(/,
+  );
+  assert.match(
+    issueRows,
+    /_invoice_batch_issue_source_rows_for_ids_v2\s*\(/,
+  );
+  assert.doesNotMatch(
+    generateRows,
+    /v_requires_exact_scope/,
+  );
+  assert.doesNotMatch(
+    issueRows,
+    /v_requires_exact_scope/,
+  );
+  assert.match(
+    generateRows,
+    /when v_mode in \('FACETS','SUMMARY'\) then '\{\}'::text\[\][\s\S]*_invoice_batch_generate_group_rows_v2\s*\([\s\S]*request\.scope_keys[\s\S]*where v_mode in \('PAGE','EXPAND_SELECTION','EXPLICIT_KEYS'\)[\s\S]*cardinality\(request\.scope_keys\)>0/,
+  );
+  assert.match(
+    issueRows,
+    /when v_mode in \('FACETS','SUMMARY'\) then '\{\}'::uuid\[\][\s\S]*_invoice_batch_issue_source_rows_for_ids_v2\s*\([\s\S]*request\.invoice_ids[\s\S]*where v_mode in \('PAGE','EXPAND_SELECTION','EXPLICIT_KEYS'\)[\s\S]*cardinality\(request\.invoice_ids\)>0/,
+  );
+  assert.doesNotMatch(
+    issueRows,
+    /_invoice_batch_issue_source_rows_v2\s*\(/,
+  );
+  assert.match(
+    generateKeys,
+    /selection_rules as materialized[\s\S]*_invoice_batch_selection_rules_v2\s*\([\s\S]*last_selection_action[\s\S]*params\.mode<>'EXPAND_SELECTION'[\s\S]*classified\.selectable[\s\S]*classified\.last_selection_action<>'EXCLUDE'/,
+  );
+  assert.match(
+    issueKeys,
+    /selection_rules as materialized[\s\S]*_invoice_batch_selection_rules_v2\s*\([\s\S]*last_selection_action[\s\S]*params\.mode<>'EXPAND_SELECTION'[\s\S]*classified\.selectable[\s\S]*classified\.last_selection_action<>'EXCLUDE'/,
+  );
+  assert.match(
+    generateRows,
+    /v_mode<>'EXPAND_SELECTION'[\s\S]*r\.selectable[\s\S]*r\.last_selection_action<>'EXCLUDE'/,
+  );
+  assert.match(
+    issueRows,
+    /v_mode<>'EXPAND_SELECTION'[\s\S]*r\.selectable[\s\S]*r\.last_selection_action<>'EXCLUDE'/,
+  );
+  assert.match(
+    generateRows,
+    /'total_count',case[\s\S]*max\(k\.full_scope_count\)/,
+  );
+  assert.match(
+    issueRows,
+    /'total_count',case[\s\S]*max\(k\.full_scope_count\)/,
+  );
+  assert.match(
+    generateRows,
+    /_invoice_batch_generate_classification_v2\s*\(/,
+  );
+  assert.match(
+    issueRows,
+    /_invoice_batch_issue_classification_v2\s*\(/,
+  );
+  assert.match(
+    generateKeys,
+    /params\.display_mode='READY'[\s\S]*params\.display_mode='BLOCKED'/,
+  );
+  assert.match(
+    issueKeys,
+    /params\.display_mode='READY'[\s\S]*params\.display_mode='BLOCKED'/,
+  );
+  assert.match(
+    generateKeys,
+    /when params\.sort_key='STATUS'[\s\S]*row_status/,
+  );
+  assert.match(
+    issueKeys,
+    /when params\.sort_key='STATUS'[\s\S]*row_status/,
+  );
+  assert.ok(
+    generateResolver.indexOf('source_rows_scoped as materialized')
+      < generateResolver.indexOf('reference_results as materialized'),
+  );
+  assert.match(
+    issueSourcesForIds,
+    /_invoice_batch_issue_source_rows_for_ids_v2/,
+  );
+  assert.match(
+    issueSourcesForIds,
+    /cardinality\(p_invoice_ids\)>250/,
+  );
+  assert.match(
+    issueClassifier,
+    /p_invoice_ids is null[\s\S]*invoice\.id=any\(p_invoice_ids\)/,
+  );
+  assert.match(issueSources, /_invoice_batch_issue_classification_v2\s*\(/);
+});
+
+test('V8 rollup exposes the complete manifest and commercial contract', () => {
+  const rollup = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_operation_rollup_batch.sql',
+  );
+  const operationStart = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_start_batch.sql',
+  );
+  const manifestAdvance = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_18_private_invoice_batch_manifest_advance_v2.sql',
+  );
+  for (const field of [
+    'manifest_generation',
+    'manifest_status',
+    'manifest_committed',
+    'expected_scan_total',
+    'scanned_total',
+    'selection_expansion_pending',
+    'release_pending_total',
+    'released_total',
+    'release_conflict_total',
+    'release_blocked_total',
+    'release_complete',
+    'committed_at_utc',
+    'superseded_manifest_generation',
+    'candidate_total',
+    'invoice_total',
+    'selected_total',
+    'excluded_total',
+    'expanded_total',
+    'queued_total',
+    'generated_total',
+    'regenerated_total',
+    'issued_total',
+    'issued_send_blocked_total',
+    'already_active_total',
+    'blocked_total',
+    'changed_total',
+    'missing_total',
+    'failed_total',
+    'in_progress_total',
+    'delivery_pending_total',
+    'delivery_complete_total',
+    'delivery_blocked_total',
+  ]) {
+    assert.match(rollup, new RegExp(`'${field}'`));
+  }
+  assert.doesNotMatch(
+    rollup,
+    /greatest\(\s*count\(c\.id\)::integer/i,
+  );
+  assert.match(
+    rollup,
+    /payload_json->>'manifest_outcome'='SELECTED'[\s\S]*expanded_total/i,
+  );
+  assert.match(
+    rollup,
+    /manifest_committed[\s\S]*status in\(\s*'QUEUED','RUNNING','WAITING','RETRY_WAIT'\s*\)[\s\S]*queued_total/i,
+  );
+  assert.match(operationStart, /'release_pending_total',0/i);
+  assert.match(
+    operationStart,
+    /'excluded_total',\s*greatest\(v_eligible_total-v_selected_total,0\)/i,
+  );
+  assert.match(operationStart, /'missing_total',0/i);
+  assert.match(
+    manifestAdvance,
+    /when result_row->>'code'='INVOICE_NOT_FOUND'[\s\S]*then 'MISSING'/i,
+  );
+});
+
+test('Issue finalisation locks invoices deterministically and keeps delivery separate', () => {
+  const issueCore = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql',
+  );
+
+  assert.match(issueCore, /locked_invoices as materialized/);
+  assert.match(issueCore, /order by invoice\.id\s*for update of invoice/i);
+  assert.match(issueCore, /active_issue_operation_id=c\.operation_id/);
+  assert.match(issueCore, /not d\.frozen_route_usable/);
+  assert.match(issueCore, /'blocked_for_sending'/);
 });
 
 test('committed TEST configuration keeps both async entry flags disabled', () => {

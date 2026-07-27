@@ -103,5 +103,8 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.invoice_batch_issue_candidates(boolean, integer, jsonb) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.invoice_batch_issue_candidates(boolean, integer, jsonb) TO authenticated, service_role;
+-- TEST V8 hard cutover: the multi-argument candidate authority is retained
+-- temporarily for forensic comparison only. Runtime callers must use the
+-- exact jsonb V2 overload.
+REVOKE ALL ON FUNCTION public.invoice_batch_issue_candidates(boolean, integer, jsonb)
+  FROM PUBLIC, anon, authenticated, service_role;

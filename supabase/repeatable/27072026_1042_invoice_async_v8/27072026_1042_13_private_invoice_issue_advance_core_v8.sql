@@ -400,6 +400,16 @@ begin
   with ids as materialized (
     select case when coalesce(x->>'chunk_id','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then (x->>'chunk_id')::uuid end chunk_id from jsonb_array_elements(p_claims) x where x->>'phase'='FINALISE'
   ),
+  locked_invoices as materialized (
+    select invoice.id
+    from ids supplied
+    join public.invoice_operation_chunks carrier
+      on carrier.id=supplied.chunk_id
+    join public.invoices invoice
+      on invoice.id=carrier.entity_id
+    order by invoice.id
+    for update of invoice
+  ),
   eligible as materialized (
     select c.*,i.document_revision,v.id final_document_version_id,v.r2_key,v.sha256,v.size_bytes,v.page_count,
       v.verified_at_utc,
@@ -415,7 +425,8 @@ begin
         then (v.snapshot_json->>'due_date_utc')::timestamptz end due_at,
       v.snapshot_hash
     from ids x join public.invoice_operation_chunks c on c.id=x.chunk_id
-    join public.invoices i on i.id=c.entity_id and i.status='DRAFT'
+    join locked_invoices locked_invoice on locked_invoice.id=c.entity_id
+    join public.invoices i on i.id=locked_invoice.id and i.status='DRAFT'
       and i.issue_state='PREPARING_DOCUMENT'
       and i.active_issue_operation_id=c.operation_id
     join public.invoice_document_versions v on v.id=c.document_version_id and v.purpose='FINAL_ISSUE'
@@ -710,6 +721,11 @@ begin
     update public.invoice_operation_chunks c set status='COMPLETE',phase='COMPLETE',
       completed_at_utc=v_now,updated_at_utc=v_now,
       lease_owner=null,lease_token=null,lease_expires_at_utc=null,
+      payload_json=coalesce(c.payload_json,'{}'::jsonb)
+        || jsonb_build_object(
+          'blocked_for_sending',
+          not d.frozen_route_usable
+        ),
       result_json=coalesce(c.result_json,'{}')||jsonb_build_object(
         'delivery_operation_id',d.delivery_operation_id,
         'delivery_status',case when d.frozen_route_usable

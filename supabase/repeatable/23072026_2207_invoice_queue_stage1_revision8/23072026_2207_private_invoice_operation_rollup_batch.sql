@@ -219,27 +219,54 @@ begin
       min(c.operation_type) operation_type,
       bool_or(c.root_manifest_committed) manifest_committed,
       bool_or(c.release_complete) release_complete,
-      greatest(
-        count(c.id)::integer,
-        coalesce(max(case
-          when c.operation_type='GENERATE_INVOICES'
-           and coalesce(c.root_progress_json->>'candidate_total','')~'^[0-9]+$'
-            then (c.root_progress_json->>'candidate_total')::integer
-          when c.operation_type='ISSUE_INVOICES'
-           and coalesce(c.root_progress_json->>'invoice_total','')~'^[0-9]+$'
-            then (c.root_progress_json->>'invoice_total')::integer
-        end),0)
-      ) candidate_total,
+      coalesce(max(case
+        when c.operation_type='GENERATE_INVOICES'
+         and coalesce(
+           c.root_progress_json->>'candidate_total',
+           ''
+         )~'^[0-9]+$'
+          then (c.root_progress_json->>'candidate_total')::integer
+        when c.operation_type='ISSUE_INVOICES'
+         and coalesce(
+           c.root_progress_json->>'invoice_total',
+           ''
+         )~'^[0-9]+$'
+          then (c.root_progress_json->>'invoice_total')::integer
+      end),0) candidate_total,
       count(c.id) filter (
         where c.payload_json->>'manifest_outcome'='SELECTED'
       )::integer selected_total,
       count(c.id) filter (
-        where c.manifest_committed
+        where c.payload_json->>'manifest_outcome'='SELECTED'
       )::integer expanded_total,
       count(c.id) filter (
         where c.payload_json->>'manifest_outcome'='SELECTED'
           and c.manifest_committed
+          and c.status in(
+            'QUEUED','RUNNING','WAITING','RETRY_WAIT'
+          )
       )::integer queued_total,
+      count(c.id) filter (
+        where c.payload_json->>'manifest_outcome'='SELECTED'
+          and not c.manifest_committed
+      )::integer release_pending_total,
+      count(c.id) filter (
+        where c.payload_json->>'manifest_outcome'='SELECTED'
+          and c.manifest_committed
+          and coalesce(c.result_category,'') not in(
+            'ALREADY_ACTIVE','BLOCKED','CHANGED','MISSING','FAILED'
+          )
+      )::integer released_total,
+      count(c.id) filter (
+        where c.payload_json->>'manifest_outcome'='SELECTED'
+          and c.result_category='ALREADY_ACTIVE'
+      )::integer release_conflict_total,
+      count(c.id) filter (
+        where c.payload_json->>'manifest_outcome'='SELECTED'
+          and c.result_category in(
+            'BLOCKED','CHANGED','MISSING','FAILED'
+          )
+      )::integer release_blocked_total,
       count(c.id) filter (
         where c.result_category='GENERATED'
       )::integer generated_total,
@@ -304,6 +331,69 @@ begin
       counts.root_operation_id,
       jsonb_build_object(
         'contract_version','INVOICE_BATCH_PROGRESS_V2',
+        'manifest_generation',root.manifest_generation,
+        'manifest_status',coalesce(
+          nullif(root.progress_json->>'manifest_status',''),
+          case
+            when root.release_complete then 'RELEASE_COMPLETE'
+            when root.manifest_committed then 'RELEASE_MANIFEST'
+            else 'BUILDING'
+          end
+        ),
+        'manifest_committed',counts.manifest_committed,
+        'expected_scan_total',case
+          when coalesce(
+            root.progress_json->>'expected_scan_total',
+            ''
+          ) ~ '^[0-9]+$'
+            then (root.progress_json->>'expected_scan_total')::integer
+          else counts.candidate_total
+        end,
+        'scanned_total',case
+          when coalesce(
+            root.progress_json->>'scanned_total',
+            ''
+          ) ~ '^[0-9]+$'
+            then (root.progress_json->>'scanned_total')::integer
+          else counts.expanded_total
+        end,
+        'selection_expansion_pending',not counts.manifest_committed,
+        'release_pending_total',case
+          when coalesce(
+            root.progress_json->>'release_pending_total',
+            ''
+          ) ~ '^[0-9]+$'
+            then (root.progress_json->>'release_pending_total')::integer
+          else counts.release_pending_total
+        end,
+        'released_total',case
+          when coalesce(
+            root.progress_json->>'released_total',
+            ''
+          ) ~ '^[0-9]+$'
+            then (root.progress_json->>'released_total')::integer
+          else counts.released_total
+        end,
+        'release_conflict_total',case
+          when coalesce(
+            root.progress_json->>'release_conflict_total',
+            ''
+          ) ~ '^[0-9]+$'
+            then (root.progress_json->>'release_conflict_total')::integer
+          else counts.release_conflict_total
+        end,
+        'release_blocked_total',case
+          when coalesce(
+            root.progress_json->>'release_blocked_total',
+            ''
+          ) ~ '^[0-9]+$'
+            then (root.progress_json->>'release_blocked_total')::integer
+          else counts.release_blocked_total
+        end,
+        'release_complete',counts.release_complete,
+        'committed_at_utc',root.progress_json->'committed_at_utc',
+        'superseded_manifest_generation',
+          root.progress_json->'superseded_manifest_generation',
         'candidate_total',case
           when counts.operation_type='GENERATE_INVOICES'
             then counts.candidate_total
@@ -331,16 +421,28 @@ begin
         'delivery_pending_total',coalesce(delivery.delivery_pending_total,0),
         'delivery_complete_total',coalesce(delivery.delivery_complete_total,0),
         'delivery_blocked_total',coalesce(delivery.delivery_blocked_total,0),
-        'selection_expansion_pending',not counts.manifest_committed,
-        'manifest_committed',counts.manifest_committed,
-        'release_complete',counts.release_complete,
         'final',counts.manifest_committed
           and counts.release_complete
+          and coalesce(
+            case
+              when coalesce(
+                root.progress_json->>'release_pending_total',
+                ''
+              ) ~ '^[0-9]+$'
+                then (
+                  root.progress_json->>'release_pending_total'
+                )::integer
+              else 0
+            end,
+            0
+          )=0
           and counts.in_progress_total=0
           and coalesce(delivery.delivery_pending_total,0)=0
       ) progress_json,
       counts.*
     from carrier_counts counts
+    join public.invoice_operations root
+      on root.id=counts.root_operation_id
     left join delivery_counts delivery
       on delivery.root_operation_id=counts.root_operation_id
   ),
@@ -355,6 +457,10 @@ begin
           then root.status
         when not p.manifest_committed
           or not p.release_complete then 'QUEUED'
+        when coalesce(
+          (p.progress_json->>'release_pending_total')::integer,
+          0
+        )>0 then 'QUEUED'
         when p.in_progress_total>0
           or coalesce((p.progress_json->>'delivery_pending_total')::integer,0)>0
           then 'RUNNING'
@@ -368,6 +474,10 @@ begin
           then root.phase
         when not p.manifest_committed then 'BUILD_MANIFEST'
         when not p.release_complete then 'RELEASE_MANIFEST'
+        when coalesce(
+          (p.progress_json->>'release_pending_total')::integer,
+          0
+        )>0 then 'RELEASE_MANIFEST'
         when p.in_progress_total>0
           or coalesce((p.progress_json->>'delivery_pending_total')::integer,0)>0
           then 'BUSINESS_WORK'
@@ -389,6 +499,10 @@ begin
       completed_at_utc=case
         when p.manifest_committed
          and p.release_complete
+         and coalesce(
+           (p.progress_json->>'release_pending_total')::integer,
+           0
+         )=0
          and p.in_progress_total=0
          and coalesce(
            (p.progress_json->>'delivery_pending_total')::integer,
@@ -418,6 +532,10 @@ begin
               then root.status
             when not p.manifest_committed
               or not p.release_complete then 'QUEUED'
+            when coalesce(
+              (p.progress_json->>'release_pending_total')::integer,
+              0
+            )>0 then 'QUEUED'
             when p.in_progress_total>0
               or coalesce(
                 (p.progress_json->>'delivery_pending_total')::integer,

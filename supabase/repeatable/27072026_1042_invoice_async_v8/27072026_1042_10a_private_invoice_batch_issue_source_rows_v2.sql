@@ -1,3 +1,446 @@
+create or replace function private._invoice_batch_issue_source_rows_core_v2(
+  p_allow_early boolean default false,
+  p_limit integer default null,
+  p_now_utc timestamptz default now(),
+  p_invoice_ids uuid[] default null
+) returns table(
+  client_id uuid,
+  client_name text,
+  invoice_week_start date,
+  week_ending_date date,
+  invoice_json jsonb
+)
+language sql
+stable
+security definer
+set search_path to 'public','private','extensions','pg_temp'
+as $function$
+with
+classified as materialized (
+  select
+    candidate.candidate_json,
+    (candidate.candidate_json->>'invoice_id')::uuid invoice_id
+  from private._invoice_batch_issue_classification_v2(
+    p_allow_early,
+    p_invoice_ids,
+    p_now_utc
+  ) candidate
+  order by
+    candidate.candidate_json->>'client_name',
+    candidate.candidate_json->>'week_ending_date' desc,
+    candidate.candidate_json->>'invoice_number',
+    candidate.candidate_json->>'invoice_id'
+  limit case
+    when p_invoice_ids is not null then 250
+    when p_limit is null then null
+    else greatest(1,p_limit)
+  end
+),
+base as materialized (
+  select
+    classified.*,
+    invoice.header_snapshot_json,
+    invoice.do_not_send,
+    invoice.on_hold_reason,
+    invoice.active_document_operation_id,
+    invoice.last_document_error_json,
+    case
+      when pg_input_is_valid(
+        coalesce(
+          invoice.header_snapshot_json#>>
+            '{meta,invoice_week_start}',
+          ''
+        ),
+        'date'
+      )
+        then (
+          invoice.header_snapshot_json#>>
+            '{meta,invoice_week_start}'
+        )::date
+    end invoice_week_start
+  from classified
+  join public.invoices invoice on invoice.id=classified.invoice_id
+),
+source_timesheets as materialized (
+  select distinct line.invoice_id,line.timesheet_id
+  from public.invoice_lines line
+  join base invoice on invoice.invoice_id=line.invoice_id
+  where line.timesheet_id is not null
+),
+timesheet_support as materialized (
+  select
+    source.invoice_id,
+    source.timesheet_id,
+    timesheet.submission_mode,
+    coalesce(precheck.effective_ts_attach_to_invoice,true)
+      and not coalesce(summary.client_no_timesheet_required,false)
+      and not coalesce(summary.client_is_nhsp,false) required,
+    manual_asset.status manual_asset_state,
+    coalesce(manual_asset.normalised_page_count,0)
+      manual_asset_pages,
+    version.status timesheet_document_state,
+    coalesce(version.page_count,0) timesheet_document_pages,
+    case
+      when version.status<>'READY' then version.operation_id
+    end active_timesheet_document_operation_id,
+    upper(coalesce(timesheet.submission_mode::text,''))
+      in('MANUAL','QR') is_manual
+  from source_timesheets source
+  left join public.timesheets timesheet
+    on timesheet.timesheet_id=source.timesheet_id
+   and timesheet.is_current
+  left join public.v_ts_invoice_precheck precheck
+    on precheck.timesheet_id=source.timesheet_id
+  left join public.v_timesheets_summary_base summary
+    on summary.timesheet_id=source.timesheet_id
+  left join lateral (
+    select evidence.document_asset_id
+    from public.timesheet_evidence evidence
+    left join public.invoice_document_assets candidate_asset
+      on candidate_asset.id=evidence.document_asset_id
+    where evidence.timesheet_id=timesheet.timesheet_id
+      and upper(coalesce(evidence.kind,''))='TIMESHEET'
+      and coalesce(evidence.processing_state,'')<>'SUPERSEDED'
+    order by
+      (
+        evidence.document_asset_id=
+          timesheet.manual_document_asset_id
+      ) desc,
+      (candidate_asset.status='READY') desc,
+      evidence.created_at desc nulls last,
+      evidence.id desc
+    limit 1
+  ) manual_source on true
+  left join public.invoice_document_assets manual_asset
+    on manual_asset.id=coalesce(
+      timesheet.manual_document_asset_id,
+      manual_source.document_asset_id
+    )
+  left join lateral (
+    select candidate_version.*
+    from public.invoice_document_versions candidate_version
+    where candidate_version.entity_type='TIMESHEET'
+      and candidate_version.entity_id=timesheet.timesheet_id
+      and candidate_version.purpose='TIMESHEET'
+      and candidate_version.source_revision=
+        timesheet.document_revision::text
+      and candidate_version.template_version=
+        'timesheet-professional-v1'
+      and candidate_version.status in(
+        'PLANNING','WAITING_FOR_INPUTS','RENDERING',
+        'ASSEMBLING','VERIFYING','READY','FAILED',
+        'SUPERSEDED','CANCELLED'
+      )
+    order by
+      (candidate_version.status='READY') desc,
+      (
+        candidate_version.status in(
+          'PLANNING','WAITING_FOR_INPUTS','RENDERING',
+          'ASSEMBLING','VERIFYING'
+        )
+      ) desc,
+      candidate_version.created_at_utc desc,
+      candidate_version.id desc
+    limit 1
+  ) version on true
+),
+timesheet_support_agg as materialized (
+  select
+    invoice.invoice_id,
+    count(*) filter(
+      where support.timesheet_id is not null
+        and support.required
+        and support.is_manual
+    )::integer manual_count,
+    count(*) filter(
+      where support.timesheet_id is not null
+        and support.required
+        and not support.is_manual
+    )::integer electronic_count,
+    count(*) filter(
+      where support.timesheet_id is not null
+        and support.required
+        and coalesce(
+          support.timesheet_document_state,
+          'NOT_READY'
+        )<>'READY'
+    )::integer timesheet_not_ready_count,
+    coalesce(sum(support.timesheet_document_pages)
+      filter(where support.required),0)::integer timesheet_pages,
+    coalesce(jsonb_agg(jsonb_build_object(
+      'timesheet_id',support.timesheet_id,
+      'required',support.required,
+      'submission_mode',coalesce(
+        support.submission_mode::text,
+        ''
+      ),
+      'manual_asset_state',support.manual_asset_state,
+      'manual_asset_pages',support.manual_asset_pages,
+      'timesheet_document_state',
+        support.timesheet_document_state,
+      'timesheet_document_pages',
+        support.timesheet_document_pages,
+      'active_timesheet_document_operation_id',
+        support.active_timesheet_document_operation_id
+    ) order by support.timesheet_id)
+      filter(where support.timesheet_id is not null),
+      '[]'::jsonb) timesheet_support_rows
+  from base invoice
+  left join timesheet_support support
+    on support.invoice_id=invoice.invoice_id
+  group by invoice.invoice_id
+),
+evidence_economics as materialized (
+  select
+    line.invoice_id,
+    line.timesheet_id,
+    bool_or(
+      upper(coalesce(line.meta_json->>'line_type','')) in(
+        'EXPENSE_MILEAGE','MILEAGE'
+      )
+      or coalesce(line.source_key,'') like '%:MILEAGE'
+    ) mileage_required,
+    bool_or(
+      upper(coalesce(line.meta_json->>'line_type',''))
+        like '%TRAVEL%'
+    ) travel_required,
+    bool_or(
+      upper(coalesce(line.meta_json->>'line_type',''))
+        like '%ACCOMMODATION%'
+    ) accommodation_required,
+    bool_or(
+      upper(coalesce(line.meta_json->>'line_type',''))
+        like 'EXPENSE_%'
+      and upper(coalesce(line.meta_json->>'line_type',''))
+        not in(
+          'EXPENSE_MILEAGE','EXPENSE_TRAVEL',
+          'EXPENSE_ACCOMMODATION'
+        )
+    ) general_expense_required
+  from public.invoice_lines line
+  join base invoice on invoice.invoice_id=line.invoice_id
+  where line.timesheet_id is not null
+  group by line.invoice_id,line.timesheet_id
+),
+evidence_rows as materialized (
+  select distinct
+    source.invoice_id,
+    evidence.id evidence_id,
+    evidence.timesheet_id,
+    upper(coalesce(evidence.kind,'')) kind,
+    evidence.document_asset_id,
+    asset.status,
+    coalesce(asset.normalised_page_count,0) pages,
+    case
+      when upper(coalesce(evidence.kind,''))='TIMESHEET'
+        then coalesce(precheck.effective_ts_attach_to_invoice,true)
+          and not coalesce(
+            summary.client_no_timesheet_required,
+            false
+          )
+          and not coalesce(summary.client_is_nhsp,false)
+      when upper(coalesce(evidence.kind,''))='MILEAGE'
+        then coalesce(economics.mileage_required,false)
+      when upper(coalesce(evidence.kind,''))='TRAVEL'
+        then coalesce(economics.travel_required,false)
+      when upper(coalesce(evidence.kind,''))='ACCOMMODATION'
+        then coalesce(economics.accommodation_required,false)
+      when upper(coalesce(evidence.kind,'')) in(
+        'OTHER','EXPENSE','EXPENSES'
+      )
+        then coalesce(
+          economics.general_expense_required,
+          false
+        )
+      else false
+    end required
+  from source_timesheets source
+  join public.timesheet_evidence evidence
+    on evidence.timesheet_id=source.timesheet_id
+  left join public.v_ts_invoice_precheck precheck
+    on precheck.timesheet_id=source.timesheet_id
+  left join public.v_timesheets_summary_base summary
+    on summary.timesheet_id=source.timesheet_id
+  left join evidence_economics economics
+    on economics.invoice_id=source.invoice_id
+   and economics.timesheet_id=source.timesheet_id
+  left join public.invoice_document_assets asset
+    on asset.id=evidence.document_asset_id
+),
+evidence_agg as materialized (
+  select
+    invoice.invoice_id,
+    count(evidence.evidence_id)
+      filter(where evidence.required)::integer evidence_count,
+    count(*) filter(
+      where evidence.required
+        and evidence.evidence_id is not null
+        and evidence.document_asset_id is null
+    )::integer unregistered_count,
+    count(*) filter(
+      where evidence.required
+        and evidence.evidence_id is not null
+        and evidence.document_asset_id is not null
+        and coalesce(evidence.status,'DISCOVERED')
+          not in(
+            'READY','UNSUPPORTED','CORRUPT','MISSING','FAILED'
+          )
+    )::integer not_ready_count,
+    count(*) filter(
+      where evidence.required
+        and evidence.status in(
+          'UNSUPPORTED','CORRUPT','MISSING','FAILED'
+        )
+    )::integer failed_count,
+    coalesce(sum(evidence.pages)
+      filter(where evidence.required),0)::integer evidence_pages
+  from base invoice
+  left join evidence_rows evidence
+    on evidence.invoice_id=invoice.invoice_id
+  group by invoice.invoice_id
+),
+hr_support as materialized (
+  select
+    invoice.invoice_id,
+    count(source.source_system) filter(
+      where upper(coalesce(source.source_system,''))
+        ='HEALTHROSTER'
+    )::integer healthroster_count,
+    count(source.source_system) filter(
+      where upper(coalesce(source.source_system,''))='NHSP'
+    )::integer nhsp_count
+  from base invoice
+  left join public.invoice_hr_source_rows source
+    on source.invoice_id=invoice.invoice_id
+  group by invoice.invoice_id
+),
+line_flags as materialized (
+  select
+    invoice.invoice_id,
+    count(line.id)::integer line_count,
+    coalesce(bool_or(
+      upper(coalesce(line.meta_json->>'line_type',''))
+        like '%HIGHER_RATE%'
+    ),false) higher_rate_required
+  from base invoice
+  left join public.invoice_lines line
+    on line.invoice_id=invoice.invoice_id
+  group by invoice.invoice_id
+)
+select
+  (base.candidate_json->>'client_id')::uuid client_id,
+  base.candidate_json->>'client_name' client_name,
+  base.invoice_week_start,
+  (base.candidate_json->>'week_ending_date')::date
+    week_ending_date,
+  jsonb_build_object(
+    'invoice_id',base.invoice_id,
+    'invoice_no',base.candidate_json->>'invoice_number',
+    'status',base.candidate_json->>'invoice_status',
+    'on_hold_reason',base.on_hold_reason,
+    'subtotal_ex_vat',
+      (base.candidate_json->>'total_ex_vat')::numeric,
+    'vat_amount',
+      (base.candidate_json->>'vat_amount')::numeric,
+    'total_inc_vat',
+      (base.candidate_json->>'total_inc_vat')::numeric,
+    'currency',base.candidate_json->>'currency',
+    'invoice_stream',base.candidate_json->>'invoice_stream',
+    'is_self_bill',lower(coalesce(
+      base.header_snapshot_json#>>'{meta,self_bill}',
+      base.header_snapshot_json->>'self_bill',
+      'false'
+    )) in('true','t','1','yes'),
+    'do_not_send',base.do_not_send,
+    'document_revision',
+      (base.candidate_json->>'document_revision')::bigint,
+    'preview_document_state',
+      base.candidate_json->>'preview_document_state',
+    'stable_blocker_codes',
+      base.candidate_json->'hard_blocker_codes',
+    'document_dependency_codes',
+      base.candidate_json->'document_dependency_codes',
+    'delivery_blocker_codes',
+      base.candidate_json->'delivery_blocker_codes',
+    'can_issue_only',
+      (base.candidate_json->>'can_issue_only')::boolean,
+    'can_issue_and_deliver',
+      (base.candidate_json->>'can_issue_and_deliver')::boolean,
+    'validation_detail',
+      base.candidate_json->'validation_detail',
+    'estimated_supporting_page_count',
+      evidence.evidence_pages
+        +timesheet.timesheet_pages
+        +hr.healthroster_count
+        +hr.nhsp_count,
+    'support_readiness',jsonb_build_object(
+      'manual_timesheet_count',timesheet.manual_count,
+      'electronic_timesheet_count',timesheet.electronic_count,
+      'timesheet_not_ready_count',
+        timesheet.timesheet_not_ready_count,
+      'timesheets',timesheet.timesheet_support_rows,
+      'evidence_count',evidence.evidence_count,
+      'unregistered_asset_count',evidence.unregistered_count,
+      'not_ready_asset_count',evidence.not_ready_count,
+      'failed_asset_count',evidence.failed_count,
+      'healthroster_count',hr.healthroster_count,
+      'nhsp_count',hr.nhsp_count,
+      'higher_rate_required',line.higher_rate_required
+    ),
+    'recipient_ready',not exists(
+      select 1
+      from jsonb_array_elements_text(
+        coalesce(
+          base.candidate_json->'delivery_blocker_codes',
+          '[]'::jsonb
+        )
+      ) code(value)
+      where code.value in(
+        'MISSING_RECIPIENT','CONTRACT_MANUAL_EMAIL_MISSING',
+        'CLIENT_MANUAL_EMAIL_MISSING',
+        'CONTRACT_MANUAL_EMAIL_CONFLICT',
+        'INVALID_TO_RECIPIENT','INVALID_CC_RECIPIENT',
+        'INVALID_BCC_RECIPIENT'
+      )
+    ),
+    'recipient',
+      base.candidate_json#>'{_private,recipient}',
+    'recipient_routing_warnings',
+      base.candidate_json->'warning_codes',
+    'active_issue_operation_id',
+      base.candidate_json->>'active_issue_operation_id',
+    'active_issue_operation',
+      base.candidate_json->'active_issue_operation',
+    'active_document_operation_id',
+      base.active_document_operation_id,
+    'last_issue_error',
+      base.candidate_json->'last_issue_error',
+    'last_document_error',
+      base.last_document_error_json
+  ) invoice_json
+from base
+join timesheet_support_agg timesheet
+  on timesheet.invoice_id=base.invoice_id
+join evidence_agg evidence on evidence.invoice_id=base.invoice_id
+join hr_support hr on hr.invoice_id=base.invoice_id
+join line_flags line on line.invoice_id=base.invoice_id
+order by
+  base.candidate_json->>'client_name' nulls last,
+  base.candidate_json->>'week_ending_date' desc nulls last,
+  base.candidate_json->>'invoice_number' nulls last,
+  base.invoice_id;
+$function$;
+
+alter function private._invoice_batch_issue_source_rows_core_v2(
+  boolean,integer,timestamptz,uuid[]
+) owner to postgres;
+revoke all on function private._invoice_batch_issue_source_rows_core_v2(
+  boolean,integer,timestamptz,uuid[]
+) from public,anon,authenticated;
+grant execute on function private._invoice_batch_issue_source_rows_core_v2(
+  boolean,integer,timestamptz,uuid[]
+) to service_role;
+
 create or replace function private._invoice_batch_issue_source_rows_v2(
   p_allow_early boolean default false,
   p_limit integer default null,
@@ -14,322 +457,26 @@ stable
 security definer
 set search_path to 'public','private','extensions','pg_temp'
 as $function$
-with
-anchor as materialized (
-  select (coalesce(p_now_utc,now()) at time zone 'Europe/London')::date today,
-    case when p_limit is null then null else greatest(1,p_limit) end row_limit
-),
-base as materialized (
-  select i.*,c.name client_name,c.primary_invoice_email,
-    case when coalesce(i.header_snapshot_json#>>'{meta,invoice_week_start}','')
-      ~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-      then (i.header_snapshot_json#>>'{meta,invoice_week_start}')::date end
-      invoice_week_start,
-    lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}',
-      i.header_snapshot_json->>'self_bill','false')) in('true','t','1','yes')
-      is_self_bill
-  from public.invoices i
-  join public.clients c on c.id=i.client_id
-  where i.type::text='INVOICE' and i.status::text in('DRAFT','ON_HOLD')
-  order by i.created_at desc nulls last,i.id
-  limit (select row_limit from anchor)
-),
-validation_requests as materialized (
-  select coalesce(jsonb_agg(jsonb_build_object(
-    'request_key','candidate:'||b.id::text,
-    'invoice_id',b.id,'expected_revision',b.document_revision,
-    'allow_early',coalesce(p_allow_early,false),'deliver',true)
-    order by b.id),'[]'::jsonb) commands
-  from base b
-),
-validations as materialized (
-  select v.*
-  from validation_requests r
-  cross join lateral private._invoice_issue_validate_batch(
-    r.commands,(select today from anchor)) v
-),
-source_timesheets as materialized (
-  select distinct l.invoice_id,l.timesheet_id
-  from public.invoice_lines l
-  join base b on b.id=l.invoice_id
-  where l.timesheet_id is not null
-),
-timesheet_support as materialized (
-  select s.invoice_id,s.timesheet_id,t.submission_mode,
-    coalesce(pc.effective_ts_attach_to_invoice,true)
-      and not coalesce(summary.client_no_timesheet_required,false)
-      and not coalesce(summary.client_is_nhsp,false) required,
-    ma.status manual_asset_state,
-    coalesce(ma.normalised_page_count,0) manual_asset_pages,
-    dv.status timesheet_document_state,
-    coalesce(dv.page_count,0) timesheet_document_pages,
-    case when dv.status<>'READY' then dv.operation_id end
-      active_timesheet_document_operation_id,
-    upper(coalesce(t.submission_mode::text,'')) in('MANUAL','QR') is_manual
-  from source_timesheets s
-  left join public.timesheets t
-    on t.timesheet_id=s.timesheet_id and t.is_current
-  left join public.v_ts_invoice_precheck pc on pc.timesheet_id=s.timesheet_id
-  left join public.v_timesheets_summary_base summary
-    on summary.timesheet_id=s.timesheet_id
-  left join lateral (
-    select ev.document_asset_id
-    from public.timesheet_evidence ev
-    left join public.invoice_document_assets candidate_asset
-      on candidate_asset.id=ev.document_asset_id
-    where ev.timesheet_id=t.timesheet_id
-      and upper(coalesce(ev.kind,''))='TIMESHEET'
-      and coalesce(ev.processing_state,'')<>'SUPERSEDED'
-    order by(ev.document_asset_id=t.manual_document_asset_id) desc,
-      (candidate_asset.status='READY') desc,
-      ev.created_at desc nulls last,ev.id desc
-    limit 1
-  ) manual_source on true
-  left join public.invoice_document_assets ma
-    on ma.id=coalesce(t.manual_document_asset_id,
-      manual_source.document_asset_id)
-  left join lateral (
-    select v.*
-    from public.invoice_document_versions v
-    where v.entity_type='TIMESHEET' and v.entity_id=t.timesheet_id
-      and v.purpose='TIMESHEET'
-      and v.source_revision=t.document_revision::text
-      and v.template_version='timesheet-professional-v1'
-      and v.status in(
-        'PLANNING','WAITING_FOR_INPUTS','RENDERING','ASSEMBLING',
-        'VERIFYING','READY','FAILED','SUPERSEDED','CANCELLED')
-    order by
-      (v.status='READY') desc,
-      (v.status in('PLANNING','WAITING_FOR_INPUTS','RENDERING',
-        'ASSEMBLING','VERIFYING')) desc,
-      v.created_at_utc desc,v.id desc
-    limit 1
-  ) dv on true
-),
-timesheet_support_agg as materialized (
-  select b.id invoice_id,
-    count(*) filter(where t.timesheet_id is not null and t.required
-      and t.is_manual)::integer manual_count,
-    count(*) filter(where t.timesheet_id is not null and t.required
-      and not t.is_manual)::integer electronic_count,
-    count(*) filter(where t.timesheet_id is not null and t.required
-      and coalesce(t.timesheet_document_state,'NOT_READY')<>'READY')::integer
-      timesheet_not_ready_count,
-    coalesce(sum(t.timesheet_document_pages)
-      filter(where t.required),0)::integer timesheet_pages,
-    coalesce(jsonb_agg(jsonb_build_object(
-      'timesheet_id',t.timesheet_id,
-      'required',t.required,
-      'submission_mode',coalesce(t.submission_mode::text,''),
-      'manual_asset_state',t.manual_asset_state,
-      'manual_asset_pages',t.manual_asset_pages,
-      'timesheet_document_state',t.timesheet_document_state,
-      'timesheet_document_pages',t.timesheet_document_pages,
-      'active_timesheet_document_operation_id',
-        t.active_timesheet_document_operation_id)
-      order by t.timesheet_id)
-      filter(where t.timesheet_id is not null),'[]'::jsonb)
-      timesheet_support_rows
-  from base b
-  left join timesheet_support t on t.invoice_id=b.id
-  group by b.id
-),
-evidence_economics as materialized (
-  select l.invoice_id,l.timesheet_id,
-    bool_or(
-      upper(coalesce(l.meta_json->>'line_type','')) in(
-        'EXPENSE_MILEAGE','MILEAGE')
-      or coalesce(l.source_key,'') like '%:MILEAGE') mileage_required,
-    bool_or(upper(coalesce(l.meta_json->>'line_type',''))
-      like '%TRAVEL%') travel_required,
-    bool_or(upper(coalesce(l.meta_json->>'line_type',''))
-      like '%ACCOMMODATION%') accommodation_required,
-    bool_or(
-      upper(coalesce(l.meta_json->>'line_type','')) like 'EXPENSE_%'
-      and upper(coalesce(l.meta_json->>'line_type','')) not in(
-        'EXPENSE_MILEAGE','EXPENSE_TRAVEL','EXPENSE_ACCOMMODATION'))
-      general_expense_required
-  from public.invoice_lines l
-  join base b on b.id=l.invoice_id
-  where l.timesheet_id is not null
-  group by l.invoice_id,l.timesheet_id
-),
-evidence_rows as materialized (
-  select distinct s.invoice_id,e.id evidence_id,e.timesheet_id,
-    upper(coalesce(e.kind,'')) kind,e.document_asset_id,a.status,
-    coalesce(a.normalised_page_count,0) pages,
-    case
-      when upper(coalesce(e.kind,''))='TIMESHEET'
-        then coalesce(pc.effective_ts_attach_to_invoice,true)
-          and not coalesce(summary.client_no_timesheet_required,false)
-          and not coalesce(summary.client_is_nhsp,false)
-      when upper(coalesce(e.kind,''))='MILEAGE'
-        then coalesce(econ.mileage_required,false)
-      when upper(coalesce(e.kind,''))='TRAVEL'
-        then coalesce(econ.travel_required,false)
-      when upper(coalesce(e.kind,''))='ACCOMMODATION'
-        then coalesce(econ.accommodation_required,false)
-      when upper(coalesce(e.kind,'')) in('OTHER','EXPENSE','EXPENSES')
-        then coalesce(econ.general_expense_required,false)
-      else false
-    end required
-  from source_timesheets s
-  join public.timesheet_evidence e on e.timesheet_id=s.timesheet_id
-  left join public.v_ts_invoice_precheck pc on pc.timesheet_id=s.timesheet_id
-  left join public.v_timesheets_summary_base summary
-    on summary.timesheet_id=s.timesheet_id
-  left join evidence_economics econ
-    on econ.invoice_id=s.invoice_id and econ.timesheet_id=s.timesheet_id
-  left join public.invoice_document_assets a on a.id=e.document_asset_id
-),
-evidence_agg as materialized (
-  select b.id invoice_id,
-    count(e.evidence_id) filter(where e.required)::integer evidence_count,
-    count(*) filter(where e.required and e.evidence_id is not null
-      and e.document_asset_id is null)::integer unregistered_count,
-    count(*) filter(where e.required and e.evidence_id is not null
-      and e.document_asset_id is not null
-      and coalesce(e.status,'DISCOVERED') not in(
-        'READY','UNSUPPORTED','CORRUPT','MISSING','FAILED'))::integer not_ready_count,
-    count(*) filter(where e.required
-      and e.status in('UNSUPPORTED','CORRUPT','MISSING','FAILED'))::integer failed_count,
-    coalesce(sum(e.pages) filter(where e.required),0)::integer evidence_pages
-  from base b left join evidence_rows e on e.invoice_id=b.id
-  group by b.id
-),
-hr_support as materialized (
-  select b.id invoice_id,
-    count(h.source_system) filter(
-      where upper(coalesce(h.source_system,''))='HEALTHROSTER')::integer
-      healthroster_count,
-    count(h.source_system) filter(
-      where upper(coalesce(h.source_system,''))='NHSP')::integer nhsp_count
-  from base b
-  left join public.invoice_hr_source_rows h on h.invoice_id=b.id
-  group by b.id
-),
-line_flags as materialized (
-  select b.id invoice_id,count(l.id)::integer line_count,
-    coalesce(bool_or(upper(coalesce(l.meta_json->>'line_type',''))
-      like '%HIGHER_RATE%'),false) higher_rate_required
-  from base b left join public.invoice_lines l on l.invoice_id=b.id
-  group by b.id
-),
-active_issue as materialized (
-  select distinct on(c.entity_id) c.entity_id invoice_id,c.operation_id,
-    c.id chunk_id,c.status,c.phase,c.progress_json,c.error_json,o.change_seq
-  from public.invoice_operation_chunks c
-  join public.invoice_operations o on o.id=c.operation_id
-  join base b on b.id=c.entity_id
-  where c.chunk_type='ISSUE_INVOICE' and c.entity_type='INVOICE'
-    and c.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
-    and coalesce(c.payload_json->>'is_selection_expander','false')<>'true'
-    and(not c.is_manifest_member or c.manifest_committed)
-    and(not c.is_manifest_member or coalesce(c.entity_type,'')<>'OPERATION')
-  order by c.entity_id,c.updated_at_utc desc,c.id desc
-),
-evaluated as materialized (
-  select b.*,b.invoice_week_start+6 week_ending_date,
-    coalesce(v.hard_blocker_codes,'[]'::jsonb) blocker_codes,
-    coalesce(v.warning_codes,'[]'::jsonb) routing_warnings,
-    coalesce(v.document_dependency_codes,'[]'::jsonb)
-      document_dependency_codes,
-    coalesce(v.delivery_blocker_codes,'[]'::jsonb)
-      delivery_blocker_codes,
-    coalesce(v.can_issue_only,false) can_issue_only,
-    coalesce(v.can_issue_and_deliver,false) can_issue_and_deliver,
-    v.detail_json validation_detail,
-    v.route_policy_result->'canonical_to' recipient,
-    ts.*,ev.*,hr.*,lf.*,
-    ai.operation_id active_issue_operation_id_resolved,
-    ai.chunk_id active_issue_chunk_id,ai.status active_issue_status,
-    ai.phase active_issue_phase,ai.progress_json active_issue_progress,
-    ai.error_json active_issue_error,ai.change_seq active_issue_change_seq
-  from base b
-  left join validations v
-    on v.request_key='candidate:'||b.id::text and v.invoice_id=b.id
-  join timesheet_support_agg ts on ts.invoice_id=b.id
-  join evidence_agg ev on ev.invoice_id=b.id
-  join hr_support hr on hr.invoice_id=b.id
-  join line_flags lf on lf.invoice_id=b.id
-  left join active_issue ai on ai.invoice_id=b.id
-)
 select
-  e.client_id,
-  e.client_name::text,
-  e.invoice_week_start,
-  e.week_ending_date,
-  jsonb_build_object(
-    'invoice_id',e.id,
-    'invoice_no',e.invoice_no,
-    'status',e.status,
-    'on_hold_reason',e.on_hold_reason,
-    'subtotal_ex_vat',round(e.subtotal_ex_vat,2),
-    'vat_amount',round(e.vat_amount,2),
-    'total_inc_vat',round(e.total_inc_vat,2),
-    'invoice_stream',upper(coalesce(
-      nullif(e.header_snapshot_json#>>'{meta,invoice_stream}',''),
-      nullif(e.header_snapshot_json->>'invoice_stream',''),
-      case when e.is_self_bill then 'SELF_BILL' end,
-      'NORMAL'
-    )),
-    'is_self_bill',e.is_self_bill,
-    'do_not_send',e.do_not_send,
-    'document_revision',e.document_revision,
-    'preview_document_state',e.document_state,
-    'stable_blocker_codes',e.blocker_codes,
-    'document_dependency_codes',e.document_dependency_codes,
-    'delivery_blocker_codes',e.delivery_blocker_codes,
-    'can_issue_only',e.can_issue_only,
-    'can_issue_and_deliver',e.can_issue_and_deliver,
-    'validation_detail',e.validation_detail,
-    'estimated_supporting_page_count',
-      e.evidence_pages+e.timesheet_pages+e.healthroster_count+e.nhsp_count,
-    'support_readiness',jsonb_build_object(
-      'manual_timesheet_count',e.manual_count,
-      'electronic_timesheet_count',e.electronic_count,
-      'timesheet_not_ready_count',e.timesheet_not_ready_count,
-      'timesheets',e.timesheet_support_rows,
-      'evidence_count',e.evidence_count,
-      'unregistered_asset_count',e.unregistered_count,
-      'not_ready_asset_count',e.not_ready_count,
-      'failed_asset_count',e.failed_count,
-      'healthroster_count',e.healthroster_count,
-      'nhsp_count',e.nhsp_count,
-      'higher_rate_required',e.higher_rate_required),
-    'recipient_ready',not exists(
-      select 1
-      from jsonb_array_elements_text(e.delivery_blocker_codes) code(value)
-      where code.value in(
-        'MISSING_RECIPIENT','CONTRACT_MANUAL_EMAIL_MISSING',
-        'CLIENT_MANUAL_EMAIL_MISSING','CONTRACT_MANUAL_EMAIL_CONFLICT',
-        'INVALID_TO_RECIPIENT','INVALID_CC_RECIPIENT','INVALID_BCC_RECIPIENT'
-      )),
-    'recipient',e.recipient,
-    'recipient_routing_warnings',e.routing_warnings,
-    'active_issue_operation_id',e.active_issue_operation_id_resolved,
-    'active_issue_operation',case when e.active_issue_operation_id_resolved is not null
-      then jsonb_build_object(
-        'id',e.active_issue_operation_id_resolved,
-        'chunk_id',e.active_issue_chunk_id,
-        'status',e.active_issue_status,
-        'phase',e.active_issue_phase,
-        'progress',e.active_issue_progress,
-        'error',e.active_issue_error,
-        'change_seq',e.active_issue_change_seq)
-      end,
-    'active_document_operation_id',e.active_document_operation_id,
-    'last_issue_error',e.active_issue_error,
-    'last_document_error',e.last_document_error_json
-  ) invoice_json
-from evaluated e
-order by e.client_name nulls last,e.week_ending_date desc nulls last,
-  e.invoice_no nulls last,e.id;
+  source.client_id,
+  source.client_name,
+  source.invoice_week_start,
+  source.week_ending_date,
+  source.invoice_json
+from private._invoice_batch_issue_source_rows_core_v2(
+  p_allow_early,
+  p_limit,
+  p_now_utc,
+  null::uuid[]
+) source;
 $function$;
 
-alter function private._invoice_batch_issue_source_rows_v2(boolean,integer,timestamptz)
-  owner to postgres;
-revoke all on function private._invoice_batch_issue_source_rows_v2(boolean,integer,timestamptz)
-  from public,anon,authenticated;
-grant execute on function private._invoice_batch_issue_source_rows_v2(boolean,integer,timestamptz)
-  to service_role;
+alter function private._invoice_batch_issue_source_rows_v2(
+  boolean,integer,timestamptz
+) owner to postgres;
+revoke all on function private._invoice_batch_issue_source_rows_v2(
+  boolean,integer,timestamptz
+) from public,anon,authenticated;
+grant execute on function private._invoice_batch_issue_source_rows_v2(
+  boolean,integer,timestamptz
+) to service_role;

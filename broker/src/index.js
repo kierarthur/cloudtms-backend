@@ -121957,27 +121957,12 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   const err = validateEmailPayload(base);
   if (err) throw new Error(err);
 
-  // Pull invpdf effective config (kept from your existing code)
-  let invpdfEffective = null;
-  try {
-    const s = await loadSettingsDefaults(env);
-    invpdfEffective =
-      (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
-        ? s.importConfig.invpdf_effective
-        : null;
-  } catch {}
-
-  const invpdfMode = String(invpdfEffective?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
-  const emailWorkerCanRender = !isInvoiceAsyncPipelineEnabled(env)
-    && (invpdfMode === 'paid')
-    && (invpdfEffective?.email_worker_can_render === true);
-
-
   // Resolve to Apps Script attachmentsV2: [{ Name, ContentBytes }]
   const attachmentsV2 = [];
   const secureDocumentLinks = [];
-  const asyncInvoiceDelivery = isInvoiceAsyncPipelineEnabled(env)
-    && String(outboxRow.type || '').trim().toUpperCase() === 'INVOICE';
+  // V8 hard cutover: every invoice delivery must carry an exact immutable
+  // FINAL_ISSUE descriptor, even while interactive starts are disabled.
+  const asyncInvoiceDelivery = String(outboxRow.type || '').trim().toUpperCase() === 'INVOICE';
   let invoiceDescriptorContract = null;
   if (asyncInvoiceDelivery) {
     for (const descriptor of (base.attachments || [])) {
@@ -122122,56 +122107,12 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
       continue;
     }
 
-    // Invoice placeholder -> fetch invoice_pdf_r2_key -> load from R2 -> base64
+    // Legacy invoice placeholders are retired. Invoice delivery must carry the
+    // exact immutable FINAL_ISSUE descriptor handled above.
     if (a.invoice_id) {
       const invId = String(a.invoice_id).trim();
       if (!invId) throw new Error('Invalid invoice_id attachment');
-      if (isInvoiceAsyncPipelineEnabled(env)) {
-        throw new Error('INVOICE_ATTACHMENT_EXACT_DESCRIPTOR_REQUIRED');
-      }
-
-      let pdfKey = null;
-
-      if (emailWorkerCanRender) {
-        const ensured = await ensureInvoicePdf(env, invId, { req: outboxRow?._req || undefined, user: null });
-        if (!ensured?.ok || !ensured.invoice_pdf_r2_key) throw new Error(`PDF_NOT_READY: invoice ${invId}`);
-        pdfKey = String(ensured.invoice_pdf_r2_key).trim();
-      } else {
-        const { rows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/invoices` +
-            `?id=eq.${enc(invId)}` +
-            `&select=invoice_pdf_r2_key,invoice_pdf_generated_at_utc,updated_at` +
-            `&limit=1`,
-          false
-        );
-
-        const inv = rows && rows.length ? rows[0] : null;
-        const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim() : '';
-        const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
-        const updAt = inv ? inv.updated_at : null;
-
-        const fresh = (() => {
-          if (!key || !genAt || !updAt) return false;
-          const tUpd = new Date(updAt).getTime();
-          const tGen = new Date(genAt).getTime();
-          return (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen);
-        })();
-
-        if (!fresh) throw new Error(`PDF_NOT_READY: invoice ${invId}`);
-        pdfKey = key;
-      }
-
-      if (!pdfKey) throw new Error(`PDF_NOT_READY: invoice ${invId}`);
-
-      const contentBase64 = await fetchAttachmentBase64FromR2(env, pdfKey);
-
-      attachmentsV2.push({
-        Name: String(a.filename || a.name || `Invoice_${invId}.pdf`),
-        ContentBytes: String(contentBase64 || '')
-      });
-
-      continue;
+      throw new Error('INVOICE_ATTACHMENT_EXACT_DESCRIPTOR_REQUIRED');
     }
 
     // r2_key attachment
@@ -191531,12 +191472,8 @@ async scheduled(event, env, ctx) {
     }
 
     if (isInvpdfMinuteCron) {
-      if (invoiceAsyncEnabled) return;
-      try {
-        await drainInvpdfOnce();
-      } catch (e) {
-        console.warn('[scheduled] Minute invpdf drain failed:', e?.message || e);
-      }
+      // Invoice V8 hard cutover: the old invoice-PDF drain is retired even
+      // while the interactive pipeline flag remains disabled.
       return;
     }
 
@@ -191575,104 +191512,9 @@ async scheduled(event, env, ctx) {
       console.warn('[scheduled] TSFIN worker failed:', e?.message || e);
     }
 
-    if (!invoiceAsyncEnabled) {
-      try {
-        for (let i = 0; i < tsPdfMaxBatches; i++) {
-          const res = await runTsPdfWorkerOnce(env, {
-            limit: tsPdfBatchSize,
-            enqueueFirst: (i === 0),
-            enqueueLimit: tsPdfEnqLimit
-          });
-          if (!res || res.picked === 0) break;
-        }
-      } catch (e) {
-        console.warn('[scheduled] TS PDF worker failed:', e?.message || e);
-      }
-    }
-
-    const enqueueAutoInvoiceGroupsOnce = async () => {
-      const groupLimit = _clampInt(invCfg?.autoinvoice?.enqueue_group_limit, 1, 5000, 50);
-
-      const runId = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
-        ? globalThis.crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-      let groups = [];
-      try {
-        const gRes = await sbRpc(env, 'invoice_autoinvoice_candidate_groups', { p_limit: groupLimit });
-        groups = _rowsLocal(gRes);
-      } catch (e) {
-        console.warn('[scheduled] invoice_autoinvoice_candidate_groups failed:', e?.message || e);
-        groups = [];
-      }
-
-      if (!groups.length) return;
-
-      for (const g of groups) {
-        const clientId = g?.client_id ? String(g.client_id) : null;
-        const weekStart = g?.invoice_week_start ? String(g.invoice_week_start) : null;
-        if (!clientId || !weekStart) continue;
-
-        try {
-          await sbRpc(env, 'invoice_outbox_enqueue_by_week', {
-            p_client_id: clientId,
-            p_invoice_week_start: weekStart,
-            p_actor_user_id: invActorUserId,
-            p_allow_early: false,
-            p_meta: {
-              source: 'CRON_AUTO_INVOICE',
-              run_id: runId,
-              cron: cronExpr || null,
-              run_at_utc: new Date().toISOString()
-            },
-            p_timesheet_ids: null,
-            p_auto_invoice_only: true
-          });
-        } catch (e) {
-          console.warn('[scheduled] invoice_outbox_enqueue_by_week failed:', {
-            client_id: clientId,
-            invoice_week_start: weekStart,
-            err: e?.message || String(e)
-          });
-        }
-      }
-    };
-
-    if (!invoiceAsyncEnabled) try {
-      if (invEnqueueFirst) {
-        try {
-          await enqueueAutoInvoiceGroupsOnce();
-        } catch (e) {
-          console.warn('[scheduled] canonical auto-invoice enqueue failed:', e?.message || e);
-        }
-      }
-
-      for (let i = 0; i < invMaxBatches; i++) {
-        const dq = await sbRpc(env, 'invoice_dequeue_batch_ids', { p_limit: invBatchSize });
-        const jobs = _rowsLocal(dq);
-        if (!jobs.length) break;
-
-        const outboxIds = jobs.map(r => r?.outbox_id).filter(Boolean);
-        if (!outboxIds.length) break;
-
-        await sbRpc(env, 'invoice_generate_from_outbox_batch', {
-          p_outbox_ids: outboxIds,
-          p_actor_user_id: invActorUserId
-        });
-
-        if (jobs.length < invBatchSize) break;
-      }
-    } catch (e) {
-      console.warn('[scheduled] Invoice SQL worker failed:', e?.message || e);
-    }
-
-    if (!invoiceAsyncEnabled) {
-      try {
-        await drainInvpdfOnce();
-      } catch (e) {
-        console.warn('[scheduled] Invoice PDF worker failed:', e?.message || e);
-      }
-    }
+    // The V8 cutover intentionally has no scheduled legacy tspdf, invoice SQL
+    // outbox, or invpdf fallback. Scheduled V8 remains independently gated
+    // above by INVOICE_ASYNC_SCHEDULED_ENABLED.
 
     try {
       const emailDrainRes = await drainEmailOutboxOnce(env, { limit: emailBatchLimit });

@@ -177,6 +177,11 @@ begin
               || jsonb_build_object(
                 'selection_expansion_pending',false,
                 'manifest_committed',false,
+                'manifest_status','SUPERSEDED',
+                'release_pending_total',0,
+                'release_complete',false,
+                'superseded_manifest_generation',
+                  v_manifest_generation,
                 'status_message','Candidate data changed; reload the selection'
               ),
             updated_at_utc=v_now,
@@ -235,7 +240,7 @@ begin
       select
         v_expander.operation_id,
         v_chunk_type,
-        'WAITING_MANIFEST_COMMIT',
+        'AWAITING_MANIFEST_COMMIT',
         private._invoice_batch_hash_v2(jsonb_build_object(
           'root_operation_id',v_expander.operation_id,
           'manifest_generation',v_manifest_generation,
@@ -339,7 +344,7 @@ begin
             'false'::jsonb
           ),
           'allow_early',coalesce(
-            v_expander.payload_json#>'{query,allow_early}',
+            v_expander.payload_json#>'{query,filters,allow_early}',
             'false'::jsonb
           ),
           'deliver',coalesce(
@@ -423,6 +428,18 @@ begin
         updated_at_utc=v_now
       where c.id=v_expander.id;
 
+      if not v_has_more then
+        update public.invoice_operation_chunks member
+        set
+          phase='AWAITING_RELEASE',
+          updated_at_utc=v_now
+        where member.operation_id=v_expander.operation_id
+          and member.is_manifest_member
+          and member.manifest_generation=v_manifest_generation
+          and not member.manifest_committed
+          and member.phase='AWAITING_MANIFEST_COMMIT';
+      end if;
+
       update public.invoice_operations o
       set
         status='QUEUED',
@@ -441,12 +458,114 @@ begin
             end,
             'selection_expansion_pending',v_has_more,
             'manifest_committed',not v_has_more,
+            'manifest_generation',v_manifest_generation,
+            'manifest_status',case
+              when v_has_more then 'BUILDING'
+              else 'COMMITTED'
+            end,
+            'expected_scan_total',coalesce(
+              case
+                when coalesce(
+                  o.progress_json->>'expected_scan_total',
+                  ''
+                ) ~ '^[0-9]+$'
+                  then (
+                    o.progress_json->>'expected_scan_total'
+                  )::integer
+              end,
+              (
+                select count(*)::integer
+                from public.invoice_operation_chunks member
+                where member.operation_id=o.id
+                  and member.is_manifest_member
+                  and member.manifest_generation=v_manifest_generation
+              )
+            ),
+            'scanned_total',(
+              select count(*)::integer
+              from public.invoice_operation_chunks member
+              where member.operation_id=o.id
+                and member.is_manifest_member
+                and member.manifest_generation=v_manifest_generation
+            ),
+            'selected_total',(
+              select count(*)::integer
+              from public.invoice_operation_chunks member
+              where member.operation_id=o.id
+                and member.is_manifest_member
+                and member.manifest_generation=v_manifest_generation
+                and member.payload_json->>'manifest_outcome'='SELECTED'
+            ),
+            'excluded_total',(
+              select count(*)::integer
+              from public.invoice_operation_chunks member
+              where member.operation_id=o.id
+                and member.is_manifest_member
+                and member.manifest_generation=v_manifest_generation
+                and member.payload_json->>'manifest_outcome'='EXCLUDED'
+            ),
+            'blocked_total',(
+              select count(*)::integer
+              from public.invoice_operation_chunks member
+              where member.operation_id=o.id
+                and member.is_manifest_member
+                and member.manifest_generation=v_manifest_generation
+                and member.payload_json->>'manifest_outcome'='BLOCKED'
+            ),
+            'already_active_total',(
+              select count(*)::integer
+              from public.invoice_operation_chunks member
+              where member.operation_id=o.id
+                and member.is_manifest_member
+                and member.manifest_generation=v_manifest_generation
+                and member.payload_json->>'manifest_outcome'
+                  ='ALREADY_ACTIVE'
+            ),
+            'changed_total',(
+              select count(*)::integer
+              from public.invoice_operation_chunks member
+              where member.operation_id=o.id
+                and member.is_manifest_member
+                and member.manifest_generation=v_manifest_generation
+                and member.payload_json->>'manifest_outcome'='CHANGED'
+            ),
+            'missing_total',(
+              select count(*)::integer
+              from public.invoice_operation_chunks member
+              where member.operation_id=o.id
+                and member.is_manifest_member
+                and member.manifest_generation=v_manifest_generation
+                and member.payload_json->>'manifest_outcome'='MISSING'
+            ),
+            'release_pending_total',case
+              when v_has_more then 0
+              else (
+                select count(*)::integer
+                from public.invoice_operation_chunks member
+                where member.operation_id=o.id
+                  and member.is_manifest_member
+                  and member.manifest_generation=v_manifest_generation
+                  and member.payload_json->>'manifest_outcome'='SELECTED'
+                  and not member.manifest_committed
+              )
+            end,
+            'released_total',0,
+            'release_conflict_total',0,
+            'release_blocked_total',0,
+            'release_complete',false,
+            'committed_at_utc',case
+              when v_has_more then o.progress_json->'committed_at_utc'
+              else to_jsonb(v_now)
+            end,
+            'superseded_manifest_generation',
+              o.progress_json->'superseded_manifest_generation',
             'expanded_total',(
               select count(*)::integer
               from public.invoice_operation_chunks member
               where member.operation_id=o.id
                 and member.is_manifest_member
                 and member.manifest_generation=v_manifest_generation
+                and member.payload_json->>'manifest_outcome'='SELECTED'
             )
           ),
         chunk_count=(
@@ -579,8 +698,10 @@ begin
               when result_row->>'status'='READY' then 'COMPLETE'
               when coalesce((result_row->>'ok')::boolean,false)
                 then 'WAITING_DOCUMENT'
-              when result_row->>'code' in ('SOURCE_CHANGED','INVOICE_NOT_FOUND')
+              when result_row->>'code'='SOURCE_CHANGED'
                 then 'SOURCE_CHANGED'
+              when result_row->>'code'='INVOICE_NOT_FOUND'
+                then 'SOURCE_MISSING'
               else 'BLOCKED'
             end,
             result_visible=true,
@@ -597,8 +718,10 @@ begin
                   when result_row->>'status'='READY' then 'REGENERATED'
                   when coalesce((result_row->>'ok')::boolean,false)
                     then 'IN_PROGRESS'
-                  when result_row->>'code'
-                    in ('SOURCE_CHANGED','INVOICE_NOT_FOUND') then 'CHANGED'
+                  when result_row->>'code'='SOURCE_CHANGED'
+                    then 'CHANGED'
+                  when result_row->>'code'='INVOICE_NOT_FOUND'
+                    then 'MISSING'
                   else 'BLOCKED'
                 end,
                 'document_operation_id',result_row->>'operation_id',
@@ -734,6 +857,52 @@ begin
           'contract_version','INVOICE_BATCH_PROGRESS_V2',
           'selection_expansion_pending',false,
           'manifest_committed',true,
+          'manifest_generation',v_manifest_generation,
+          'manifest_status',case
+            when v_remaining=0 then 'RELEASE_COMPLETE'
+            else 'RELEASE_MANIFEST'
+          end,
+          'release_pending_total',(
+            select count(*)::integer
+            from public.invoice_operation_chunks member
+            where member.operation_id=o.id
+              and member.is_manifest_member
+              and member.manifest_generation=v_manifest_generation
+              and member.payload_json->>'manifest_outcome'='SELECTED'
+              and not member.manifest_committed
+          ),
+          'released_total',(
+            select count(*)::integer
+            from public.invoice_operation_chunks member
+            where member.operation_id=o.id
+              and member.is_manifest_member
+              and member.manifest_generation=v_manifest_generation
+              and member.payload_json->>'manifest_outcome'='SELECTED'
+              and member.manifest_committed
+              and coalesce(member.result_category,'') not in(
+                'ALREADY_ACTIVE','BLOCKED','CHANGED','MISSING','FAILED'
+              )
+          ),
+          'release_conflict_total',(
+            select count(*)::integer
+            from public.invoice_operation_chunks member
+            where member.operation_id=o.id
+              and member.is_manifest_member
+              and member.manifest_generation=v_manifest_generation
+              and member.payload_json->>'manifest_outcome'='SELECTED'
+              and member.result_category='ALREADY_ACTIVE'
+          ),
+          'release_blocked_total',(
+            select count(*)::integer
+            from public.invoice_operation_chunks member
+            where member.operation_id=o.id
+              and member.is_manifest_member
+              and member.manifest_generation=v_manifest_generation
+              and member.payload_json->>'manifest_outcome'='SELECTED'
+              and member.result_category in(
+                'BLOCKED','CHANGED','MISSING','FAILED'
+              )
+          ),
           'release_complete',v_remaining=0,
           'status_message',case
             when v_remaining=0 then 'Processing selected work'

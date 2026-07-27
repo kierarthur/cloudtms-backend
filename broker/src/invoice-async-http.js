@@ -4,8 +4,10 @@ import {
   verifyInvoiceDocumentAccessToken
 } from './invoice-document-access.js';
 import {
+  checkInvoiceDocumentProcessorReady,
   isInvoiceAsyncPipelineEnabled,
-  nudgeInvoiceOperations
+  nudgeInvoiceOperations,
+  validateQueueRuntimeConfiguration
 } from './invoice-queue-runtime.js';
 import {
   isInvoiceAsyncUserAllowed,
@@ -13,7 +15,38 @@ import {
 } from './invoice-queue-security.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const INVOICE_ASYNC_CONTRACT_VERSION = 'INVOICE_ASYNC_BACKEND_V7';
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const INVOICE_ASYNC_CONTRACT_VERSION = 'INVOICE_ASYNC_BACKEND_V8';
+const INVOICE_ASYNC_DB_CONTRACT_VERSION = 'INVOICE_ASYNC_DB_V2';
+const INVOICE_BATCH_QUERY_CONTRACT = 'INVOICE_BATCH_QUERY_V2';
+const INVOICE_BATCH_CANDIDATE_CONTRACT = 'INVOICE_BATCH_CANDIDATES_V2';
+const INVOICE_BATCH_SELECTION_CONTRACT = 'INVOICE_BATCH_SELECTION_V2';
+const INVOICE_BATCH_SELECTION_ROOT_CONTRACT = 'INVOICE_BATCH_SELECTION_ROOT_V2';
+const INVOICE_BATCH_CURSOR_CONTRACT = 'INVOICE_BATCH_CURSOR_V2';
+const INVOICE_BATCH_RESULT_CURSOR_CONTRACT = 'INVOICE_BATCH_RESULT_CURSOR_V2';
+const INVOICE_BATCH_PROGRESS_CONTRACT = 'INVOICE_BATCH_PROGRESS_V2';
+const INVOICE_VIEWER_CONTRACT = 'INVOICE_VIEWER_V2';
+const INVOICE_DOCUMENT_ACCESS_CONTRACT = 'INVOICE_DOCUMENT_VERSION_ACCESS_V1';
+const INVOICE_BATCH_REQUEST_MAX_BYTES = 4_194_304;
+const INVOICE_BATCH_SELECTION_MAX_BYTES = 3_145_728;
+const INVOICE_BATCH_CURSOR_MAX_BYTES = 8_192;
+const INVOICE_BATCH_CANDIDATE_CURSOR_TTL_SECONDS = 1_800;
+const INVOICE_BATCH_RESULT_CURSOR_TTL_SECONDS = 86_400;
+const INVOICE_BATCH_DATABASE_CONTRACT_CACHE_MS = 30_000;
+const invoiceAsyncDatabaseContractCache = new Map();
+const invoiceAsyncProcessorReadyCache = new WeakMap();
+const INVOICE_BATCH_MANDATORY_FEATURES = Object.freeze([
+  'batch_candidate_paging_v2',
+  'batch_selection_rules_v2',
+  'batch_selection_summary_v2',
+  'batch_facets_v2',
+  'batch_result_paging_v2',
+  'generate_and_view_v2',
+  'exact_document_version_access_v1',
+  'separate_issue_delivery_state_v2',
+  'bounded_viewer_contract_v2',
+  'heartbeat_supported'
+]);
 const JSON_HEADERS = Object.freeze({
   'content-type': 'application/json; charset=utf-8',
   'x-invoice-async-contract-version': INVOICE_ASYNC_CONTRACT_VERSION
@@ -76,14 +109,17 @@ function canonicalDeliveryPolicy(value) {
   return policy;
 }
 
-function commandToken(req, body = {}) {
-  return String(
-    body.command_token
-    || body.delivery_request_token
-    || req.headers.get('idempotency-key')
-    || req.headers.get('x-idempotency-key')
-    || crypto.randomUUID()
-  ).slice(0, 200);
+function commandToken(req, body = {}, options = {}) {
+  const value = body.command_token
+    ?? req.headers.get('idempotency-key')
+    ?? req.headers.get('x-idempotency-key')
+    ?? (options.internal === true ? options.generatedToken : null);
+  const text = String(value ?? '').trim();
+  if (!text) throw invoiceBatchContractError(options.requiredCode || 'BATCH_COMMAND_TOKEN_REQUIRED');
+  if (text.length > 256 || /[\u0000-\u001f\u007f]/.test(text)) {
+    throw invoiceBatchContractError('BATCH_COMMAND_TOKEN_INVALID');
+  }
+  return text;
 }
 
 function generationCommandFromBody(req, body, commandType = 'GENERATE_SELECTED') {
@@ -128,14 +164,27 @@ async function sha256Text(value) {
 
 const INVOICE_BATCH_FILTER_KEYS = Object.freeze([
   'client_ids', 'candidate_ids', 'week_endings', 'week_ending_from', 'week_ending_to',
-  'status_codes', 'blocker_codes', 'search', 'allow_early', 'display_mode'
+  'status_codes', 'blocker_codes', 'search', 'allow_early', 'display_mode', 'invoice_streams'
 ]);
 const INVOICE_BATCH_SORT_KEYS = Object.freeze(['group_preset', 'sort_key', 'sort_direction']);
-const INVOICE_BATCH_QUERY_CONTROL_KEYS = Object.freeze([
-  'contract_version', 'action', 'mode', 'snapshot_at_utc', 'page_size', 'limit',
-  'cursor', 'page_cursor', 'pageCursor', 'facets', 'filters', 'sort', 'selection',
-  'after_selection_key', 'filter_hash'
-]);
+const INVOICE_BATCH_QUERY_MODE_FIELDS = Object.freeze({
+  PAGE: Object.freeze([
+    'contract_version', 'action', 'mode', 'snapshot', 'page_size', 'cursor',
+    'filters', 'sort', 'selection'
+  ]),
+  FACETS: Object.freeze([
+    'contract_version', 'action', 'mode', 'snapshot', 'filters', 'sort',
+    'selection', 'facet_request'
+  ]),
+  SUMMARY: Object.freeze([
+    'contract_version', 'action', 'mode', 'snapshot', 'filters', 'sort',
+    'selection', 'group_selectors'
+  ]),
+  EXPLICIT_KEYS: Object.freeze([
+    'contract_version', 'action', 'mode', 'snapshot', 'filters', 'sort',
+    'selection', 'selection_keys', 'expected_source_revisions'
+  ])
+});
 const INVOICE_BATCH_GROUP_PRESETS = Object.freeze([
   'WEEK_CLIENT_CANDIDATE', 'CLIENT_WEEK_CANDIDATE', 'CANDIDATE_WEEK_CLIENT', 'STATUS_WEEK_CLIENT'
 ]);
@@ -144,58 +193,41 @@ const INVOICE_BATCH_GENERATE_SORT_KEYS = Object.freeze([
 ]);
 const INVOICE_BATCH_ISSUE_SORT_KEYS = Object.freeze([...INVOICE_BATCH_GENERATE_SORT_KEYS, 'INVOICE_NUMBER']);
 const INVOICE_BATCH_GENERATE_STATUS_CODES = Object.freeze(['READY', 'BLOCKED', 'IN_PROGRESS', 'STALE', 'FAILED']);
-const INVOICE_BATCH_ISSUE_STATUS_CODES = Object.freeze(['READY', 'BLOCKED', 'IN_PROGRESS', 'STALE', 'FAILED']);
+const INVOICE_BATCH_ISSUE_STATUS_CODES = Object.freeze([
+  'READY', 'READY_SEND_BLOCKED', 'BLOCKED', 'IN_PROGRESS', 'STALE', 'FAILED'
+]);
 const INVOICE_OPERATION_RESULT_CATEGORIES = Object.freeze([
-  'ALL', 'READY', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'FAILED', 'CHANGED',
-  'ISSUED', 'ISSUED_SEND_BLOCKED'
+  'ALL', 'READY', 'COMPLETED', 'IN_PROGRESS', 'GENERATED', 'REGENERATED',
+  'ISSUED', 'ISSUED_SEND_BLOCKED', 'ALREADY_ACTIVE', 'BLOCKED', 'FAILED', 'CHANGED'
 ]);
 
 function invoiceBatchContractError(code) {
   return Object.assign(new Error(code), { code });
 }
 
+function plainInvoiceBatchObject(value, code = 'BATCH_QUERY_INVALID') {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw invoiceBatchContractError(code);
+  }
+  return value;
+}
+
+function validateInvoiceBatchSourceFields(source, mode) {
+  const request = plainInvoiceBatchObject(source);
+  const normalizedMode = String(mode || request.mode || '').trim().toUpperCase();
+  const allowed = INVOICE_BATCH_QUERY_MODE_FIELDS[normalizedMode];
+  if (!allowed) throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_INVALID');
+  if (Object.keys(request).some(key => !allowed.includes(key))) {
+    throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_FIELD_INVALID');
+  }
+  return normalizedMode;
+}
+
 function invoiceBatchSourceValues(source, key) {
-  if (source instanceof URLSearchParams) {
-    return [key, `${key}[]`].flatMap(name => source.getAll(name))
-      .flatMap(value => String(value || '').split(','));
-  }
-  const nested = source?.filters && typeof source.filters === 'object' && !Array.isArray(source.filters)
-    ? source.filters
-    : null;
-  const value = nested && Object.hasOwn(nested, key) ? nested[key] : source?.[key];
-  if (value === undefined || value === null || value === '') return [];
-  return (Array.isArray(value) ? value : String(value).split(','))
-    .flatMap(item => typeof item === 'string' ? item.split(',') : [item]);
-}
-
-function invoiceBatchSourceScalar(source, key) {
-  const values = invoiceBatchSourceValues(source, key);
-  return values.length ? values[values.length - 1] : undefined;
-}
-
-function validateInvoiceBatchSourceFields(source) {
-  const allowed = new Set([
-    ...INVOICE_BATCH_FILTER_KEYS,
-    ...INVOICE_BATCH_FILTER_KEYS.map(key => `${key}[]`),
-    ...INVOICE_BATCH_SORT_KEYS,
-    ...INVOICE_BATCH_QUERY_CONTROL_KEYS
-  ]);
-  const keys = source instanceof URLSearchParams ? [...new Set(source.keys())] : Object.keys(source || {});
-  if (keys.some(key => !allowed.has(key))) throw invoiceBatchContractError('BATCH_FILTER_FIELD_UNSUPPORTED');
-  if (!(source instanceof URLSearchParams)) {
-    for (const [container, allowedKeys, errorCode] of [
-      [source?.filters, INVOICE_BATCH_FILTER_KEYS, 'BATCH_FILTER_FIELD_UNSUPPORTED'],
-      [source?.sort, INVOICE_BATCH_SORT_KEYS, 'INVOICE_BATCH_SORT_FIELD_UNSUPPORTED']
-    ]) {
-      if (container === undefined) continue;
-      if (!container || typeof container !== 'object' || Array.isArray(container)) {
-        throw invoiceBatchContractError(errorCode);
-      }
-      if (Object.keys(container).some(key => !allowedKeys.includes(key))) {
-        throw invoiceBatchContractError(errorCode);
-      }
-    }
-  }
+  const value = source?.[key];
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw invoiceBatchContractError('INVOICE_BATCH_FILTER_INVALID');
+  return value;
 }
 
 function normaliseInvoiceBatchBoolean(value, fallback = false) {
@@ -218,12 +250,6 @@ function normaliseInvoiceBatchDate(value, errorCode) {
   return text;
 }
 
-function normaliseInvoiceBatchSnapshotUtc(value, fallback = null) {
-  const timestamp = new Date(value || fallback || '');
-  if (!Number.isFinite(timestamp.getTime())) throw invoiceBatchContractError('BATCH_QUERY_SNAPSHOT_INVALID');
-  return timestamp.toISOString();
-}
-
 function normaliseInvoiceBatchArray(values, options = {}) {
   const {
     maximum = 500,
@@ -237,11 +263,15 @@ function normaliseInvoiceBatchArray(values, options = {}) {
   return [...new Set(normalised)].sort();
 }
 
-function normaliseInvoiceBatchFilters(source, action = 'GENERATE') {
-  if (!source || (typeof source !== 'object' && !(source instanceof URLSearchParams))) {
-    throw invoiceBatchContractError('BATCH_QUERY_INVALID');
+function normaliseInvoiceBatchFilters(source, action = 'GENERATE', options = {}) {
+  const request = plainInvoiceBatchObject(source);
+  const filters = request.filters === undefined ? request : plainInvoiceBatchObject(
+    request.filters,
+    'INVOICE_BATCH_FILTER_INVALID'
+  );
+  if (Object.keys(filters).some(key => !INVOICE_BATCH_FILTER_KEYS.includes(key))) {
+    throw invoiceBatchContractError('INVOICE_BATCH_FILTER_UNKNOWN_FIELD');
   }
-  validateInvoiceBatchSourceFields(source);
   const normalizedAction = String(action || '').trim().toUpperCase();
   if (!['GENERATE', 'ISSUE'].includes(normalizedAction)) throw invoiceBatchContractError('BATCH_QUERY_ACTION_MISMATCH');
   const uuidOptions = {
@@ -260,50 +290,75 @@ function normaliseInvoiceBatchFilters(source, action = 'GENERATE') {
     validate: value => /^[A-Z0-9][A-Z0-9_:-]{0,119}$/.test(value),
     errorCode: 'BATCH_FILTER_CODE_INVALID'
   };
-  const statusCodes = normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'status_codes'), codeOptions);
+  const statusCodes = normaliseInvoiceBatchArray(invoiceBatchSourceValues(filters, 'status_codes'), codeOptions);
   const allowedStatuses = normalizedAction === 'ISSUE'
     ? INVOICE_BATCH_ISSUE_STATUS_CODES
     : INVOICE_BATCH_GENERATE_STATUS_CODES;
   if (statusCodes.some(code => !allowedStatuses.includes(code))) {
     throw invoiceBatchContractError('BATCH_FILTER_STATUS_UNSUPPORTED');
   }
-  const weekEndingFrom = normaliseInvoiceBatchDate(invoiceBatchSourceScalar(source, 'week_ending_from'), 'BATCH_FILTER_DATE_INVALID');
-  const weekEndingTo = normaliseInvoiceBatchDate(invoiceBatchSourceScalar(source, 'week_ending_to'), 'BATCH_FILTER_DATE_INVALID');
+  const weekEndingFrom = normaliseInvoiceBatchDate(filters.week_ending_from, 'BATCH_FILTER_DATE_INVALID');
+  const weekEndingTo = normaliseInvoiceBatchDate(filters.week_ending_to, 'BATCH_FILTER_DATE_INVALID');
   if (weekEndingFrom && weekEndingTo && weekEndingFrom > weekEndingTo) {
     throw invoiceBatchContractError('BATCH_FILTER_DATE_RANGE_INVALID');
   }
-  const search = String(invoiceBatchSourceScalar(source, 'search') || '').trim();
+  const search = String(filters.search || '').trim();
   if (search.length > 200) throw invoiceBatchContractError('BATCH_FILTER_SEARCH_TOO_LONG');
-  const displayMode = String(invoiceBatchSourceScalar(source, 'display_mode') || 'ALL').trim().toUpperCase();
+  const displayMode = String(filters.display_mode || 'ALL').trim().toUpperCase();
   if (!['ALL', 'READY', 'BLOCKED'].includes(displayMode)) {
     throw invoiceBatchContractError('INVOICE_BATCH_DISPLAY_MODE_INVALID');
   }
+  let invoiceStreams;
+  if (options.forcedInvoiceStreams) {
+    invoiceStreams = normaliseInvoiceBatchArray(options.forcedInvoiceStreams, {
+      maximum: 20,
+      normalise: value => String(value || '').trim().toUpperCase(),
+      validate: value => /^[A-Z0-9][A-Z0-9_:-]{0,119}$/.test(value),
+      errorCode: 'INVOICE_BATCH_FILTER_INVALID'
+    });
+  } else {
+    if (filters.invoice_streams !== undefined && options.allowInvoiceStreams !== true) {
+      throw invoiceBatchContractError('INVOICE_BATCH_FILTER_UNKNOWN_FIELD');
+    }
+    invoiceStreams = normaliseInvoiceBatchArray(invoiceBatchSourceValues(filters, 'invoice_streams'), {
+      maximum: 20,
+      normalise: value => String(value || '').trim().toUpperCase(),
+      validate: value => /^[A-Z0-9][A-Z0-9_:-]{0,119}$/.test(value),
+      errorCode: 'INVOICE_BATCH_FILTER_INVALID'
+    });
+  }
   return {
-    client_ids: normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'client_ids'), uuidOptions),
-    candidate_ids: normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'candidate_ids'), uuidOptions),
-    week_endings: normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'week_endings'), weekOptions),
+    client_ids: normaliseInvoiceBatchArray(invoiceBatchSourceValues(filters, 'client_ids'), uuidOptions),
+    candidate_ids: normaliseInvoiceBatchArray(invoiceBatchSourceValues(filters, 'candidate_ids'), uuidOptions),
+    week_endings: normaliseInvoiceBatchArray(invoiceBatchSourceValues(filters, 'week_endings'), weekOptions),
     week_ending_from: weekEndingFrom,
     week_ending_to: weekEndingTo,
     status_codes: statusCodes,
-    blocker_codes: normaliseInvoiceBatchArray(invoiceBatchSourceValues(source, 'blocker_codes'), codeOptions),
+    blocker_codes: normaliseInvoiceBatchArray(invoiceBatchSourceValues(filters, 'blocker_codes'), {
+      ...codeOptions,
+      maximum: 250
+    }),
     search: search || null,
-    allow_early: normaliseInvoiceBatchBoolean(invoiceBatchSourceScalar(source, 'allow_early'), false),
-    display_mode: displayMode
+    allow_early: normaliseInvoiceBatchBoolean(filters.allow_early, false),
+    display_mode: displayMode,
+    invoice_streams: invoiceStreams
   };
 }
 
 function normaliseInvoiceBatchSort(source, action = 'GENERATE') {
-  if (!source || (typeof source !== 'object' && !(source instanceof URLSearchParams))) {
-    throw invoiceBatchContractError('BATCH_QUERY_INVALID');
+  const request = plainInvoiceBatchObject(source);
+  const sortSource = request.sort === undefined ? request : plainInvoiceBatchObject(
+    request.sort,
+    'INVOICE_BATCH_SORT_INVALID'
+  );
+  if (Object.keys(sortSource).some(key => !INVOICE_BATCH_SORT_KEYS.includes(key))) {
+    throw invoiceBatchContractError('INVOICE_BATCH_SORT_INVALID');
   }
-  validateInvoiceBatchSourceFields(source);
   const normalizedAction = String(action || '').trim().toUpperCase();
   if (!['GENERATE', 'ISSUE'].includes(normalizedAction)) throw invoiceBatchContractError('BATCH_QUERY_ACTION_MISMATCH');
-  const nested = source?.sort && typeof source.sort === 'object' && !Array.isArray(source.sort) ? source.sort : null;
-  const scalar = key => nested && Object.hasOwn(nested, key) ? nested[key] : invoiceBatchSourceScalar(source, key);
-  const groupPreset = String(scalar('group_preset') || 'WEEK_CLIENT_CANDIDATE').trim().toUpperCase();
-  const sortKey = String(scalar('sort_key') || 'WEEK_ENDING_DATE').trim().toUpperCase();
-  const sortDirection = String(scalar('sort_direction') || 'ASC').trim().toUpperCase();
+  const groupPreset = String(sortSource.group_preset || 'WEEK_CLIENT_CANDIDATE').trim().toUpperCase();
+  const sortKey = String(sortSource.sort_key || 'WEEK_ENDING_DATE').trim().toUpperCase();
+  const sortDirection = String(sortSource.sort_direction || 'ASC').trim().toUpperCase();
   if (!INVOICE_BATCH_GROUP_PRESETS.includes(groupPreset)) throw invoiceBatchContractError('INVOICE_BATCH_GROUP_PRESET_INVALID');
   const allowedSortKeys = normalizedAction === 'ISSUE' ? INVOICE_BATCH_ISSUE_SORT_KEYS : INVOICE_BATCH_GENERATE_SORT_KEYS;
   if (!allowedSortKeys.includes(sortKey)) throw invoiceBatchContractError('INVOICE_BATCH_SORT_KEY_INVALID');
@@ -318,7 +373,7 @@ function normaliseInvoiceBatchSelectionRules(source) {
   if (Object.keys(selection).some(key => !['contract_version', 'mode', 'default_selected', 'rules'].includes(key))) {
     throw invoiceBatchContractError('BATCH_SELECTION_UNKNOWN_FIELD');
   }
-  if (selection.contract_version !== 'INVOICE_BATCH_SELECTION_V1') {
+  if (selection.contract_version !== INVOICE_BATCH_SELECTION_CONTRACT) {
     throw invoiceBatchContractError('BATCH_SELECTION_CONTRACT_INVALID');
   }
   if (String(selection.mode || '').trim().toUpperCase() !== 'IMPLICIT_ALL') {
@@ -332,8 +387,11 @@ function normaliseInvoiceBatchSelectionRules(source) {
     WEEK: ['week_ending_date'],
     CLIENT: ['client_id'],
     CANDIDATE: ['candidate_id'],
+    STATUS: ['status_code'],
     WEEK_CLIENT: ['week_ending_date', 'client_id'],
-    WEEK_CLIENT_CANDIDATE: ['week_ending_date', 'client_id', 'candidate_id']
+    WEEK_CLIENT_CANDIDATE: ['week_ending_date', 'client_id', 'candidate_id'],
+    STATUS_WEEK: ['status_code', 'week_ending_date'],
+    STATUS_WEEK_CLIENT: ['status_code', 'week_ending_date', 'client_id']
   };
   let previousSequence = 0;
   const seenSequences = new Set();
@@ -358,7 +416,9 @@ function normaliseInvoiceBatchSelectionRules(source) {
     if (!selector || typeof selector !== 'object' || Array.isArray(selector)) {
       throw invoiceBatchContractError('BATCH_SELECTION_RULE_INVALID');
     }
-    if (Object.keys(selector).some(key => !['type', 'selection_key', 'week_ending_date', 'client_id', 'candidate_id'].includes(key))) {
+    if (Object.keys(selector).some(key => ![
+      'type', 'selection_key', 'week_ending_date', 'client_id', 'candidate_id', 'status_code'
+    ].includes(key))) {
       throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_UNKNOWN_FIELD');
     }
     const type = String(selector.type || '').trim().toUpperCase();
@@ -376,6 +436,12 @@ function normaliseInvoiceBatchSelectionRules(source) {
         normalizedSelector[key] = value;
       } else if (key === 'week_ending_date') {
         normalizedSelector[key] = normaliseInvoiceBatchDate(selector[key], 'BATCH_SELECTION_SELECTOR_INVALID');
+      } else if (key === 'status_code') {
+        const value = String(selector[key] || '').trim().toUpperCase();
+        if (!/^[A-Z0-9][A-Z0-9_:-]{0,119}$/.test(value)) {
+          throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
+        }
+        normalizedSelector[key] = value;
       } else {
         const value = String(selector[key] || '').trim().toLowerCase();
         if (!UUID_PATTERN.test(value)) throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
@@ -384,12 +450,153 @@ function normaliseInvoiceBatchSelectionRules(source) {
     }
     return { sequence, action, selector: normalizedSelector };
   });
-  return {
-    contract_version: 'INVOICE_BATCH_SELECTION_V1',
+  const normalized = {
+    contract_version: INVOICE_BATCH_SELECTION_CONTRACT,
     mode: 'IMPLICIT_ALL',
     default_selected: true,
     rules
   };
+  if (new TextEncoder().encode(postgresJsonbTextForInvoiceBatch(normalized)).byteLength
+      > INVOICE_BATCH_SELECTION_MAX_BYTES) {
+    throw invoiceBatchContractError('BATCH_SELECTION_PAYLOAD_TOO_LARGE');
+  }
+  return normalized;
+}
+
+function normaliseInvoiceBatchSnapshot(value, action, options = {}) {
+  if (value === null && options.allowNull === true) return null;
+  const snapshot = plainInvoiceBatchObject(value, 'BATCH_SNAPSHOT_INVALID');
+  const allowed = new Set([
+    'contract_version', 'action', 'at_utc', 'revision',
+    'expires_at_utc', 'key_id', 'token'
+  ]);
+  if (Object.keys(snapshot).some(key => !allowed.has(key))) {
+    throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
+  }
+  const normalizedAction = String(action || '').trim().toUpperCase();
+  if (snapshot.contract_version !== 'INVOICE_BATCH_SNAPSHOT_V2'
+      || String(snapshot.action || '').trim().toUpperCase() !== normalizedAction) {
+    throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
+  }
+  const strictTimestamp = (raw, code) => {
+    const text = String(raw || '').trim();
+    const parsed = new Date(text);
+    if (!text || !Number.isFinite(parsed.getTime()) || parsed.toISOString() !== text) {
+      throw invoiceBatchContractError(code);
+    }
+    return text;
+  };
+  const atUtc = strictTimestamp(snapshot.at_utc, 'BATCH_SNAPSHOT_INVALID');
+  const expiresAtUtc = strictTimestamp(snapshot.expires_at_utc, 'BATCH_SNAPSHOT_INVALID');
+  if (expiresAtUtc <= atUtc) throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
+  const revision = String(snapshot.revision || '').trim();
+  if (!/^[0-9]{1,20}$/.test(revision)) throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
+  const token = String(snapshot.token || '').trim();
+  if (!token || token.length > INVOICE_BATCH_CURSOR_MAX_BYTES) {
+    throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
+  }
+  const result = {
+    contract_version: 'INVOICE_BATCH_SNAPSHOT_V2',
+    action: normalizedAction,
+    at_utc: atUtc,
+    revision,
+    expires_at_utc: expiresAtUtc,
+    token
+  };
+  if (snapshot.key_id !== undefined && snapshot.key_id !== null) {
+    const keyId = String(snapshot.key_id).trim();
+    if (!keyId || keyId.length > 160) throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
+    result.key_id = keyId;
+  }
+  return result;
+}
+
+function normaliseInvoiceBatchGroupSelectors(value) {
+  const selectors = value === undefined ? [] : value;
+  if (!Array.isArray(selectors) || selectors.length > 100) {
+    throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_FIELD_INVALID');
+  }
+  return selectors.map(selector => normaliseInvoiceBatchSelectionRules({
+    contract_version: INVOICE_BATCH_SELECTION_CONTRACT,
+    mode: 'IMPLICIT_ALL',
+    default_selected: true,
+    rules: [{ sequence: 1, action: 'INCLUDE', selector }]
+  }).rules[0].selector);
+}
+
+function normaliseInvoiceBatchFacetRequest(value) {
+  const request = plainInvoiceBatchObject(value, 'BATCH_FACET_REQUEST_INVALID');
+  const allowed = new Set(['kinds', 'search', 'limit_per_kind', 'cursors']);
+  if (Object.keys(request).some(key => !allowed.has(key))) {
+    throw invoiceBatchContractError('BATCH_FACET_REQUEST_INVALID');
+  }
+  const allowedKinds = new Set(['CLIENTS', 'CANDIDATES', 'WEEK_ENDINGS', 'STATUSES', 'BLOCKERS']);
+  if (!Array.isArray(request.kinds) || request.kinds.length < 1 || request.kinds.length > 5) {
+    throw invoiceBatchContractError('BATCH_FACET_REQUEST_INVALID');
+  }
+  const kinds = [...new Set(request.kinds.map(kind => String(kind || '').trim().toUpperCase()))];
+  if (kinds.length !== request.kinds.length || kinds.some(kind => !allowedKinds.has(kind))) {
+    throw invoiceBatchContractError('BATCH_FACET_REQUEST_INVALID');
+  }
+  const search = request.search == null ? null : String(request.search).trim();
+  if (search && search.length > 200) throw invoiceBatchContractError('BATCH_FACET_REQUEST_INVALID');
+  const limit = Number(request.limit_per_kind ?? 100);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+    throw invoiceBatchContractError('BATCH_FACET_REQUEST_INVALID');
+  }
+  const cursors = request.cursors === undefined
+    ? {}
+    : plainInvoiceBatchObject(request.cursors, 'BATCH_FACET_REQUEST_INVALID');
+  const kindNames = {
+    CLIENTS: 'clients',
+    CANDIDATES: 'candidates',
+    WEEK_ENDINGS: 'week_endings',
+    STATUSES: 'statuses',
+    BLOCKERS: 'blockers'
+  };
+  if (Object.keys(cursors).some(kind => !Object.values(kindNames).includes(kind))) {
+    throw invoiceBatchContractError('BATCH_FACET_REQUEST_INVALID');
+  }
+  const normalizedCursors = {};
+  for (const kind of kinds) {
+    const name = kindNames[kind];
+    const token = cursors[name];
+    if (token === undefined || token === null || token === '') continue;
+    if (typeof token !== 'string' || token.length > INVOICE_BATCH_CURSOR_MAX_BYTES) {
+      throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+    }
+    normalizedCursors[name] = token;
+  }
+  return {
+    kinds,
+    search: search || null,
+    limit_per_kind: limit,
+    cursors: normalizedCursors
+  };
+}
+
+function normaliseInvoiceBatchExplicitKeys(source) {
+  const keys = source.selection_keys;
+  const revisions = source.expected_source_revisions;
+  if (!Array.isArray(keys) || keys.length < 1 || keys.length > 100
+      || !revisions || typeof revisions !== 'object' || Array.isArray(revisions)) {
+    throw invoiceBatchContractError('BATCH_EXPLICIT_KEYS_INVALID');
+  }
+  const normalizedKeys = keys.map(value => String(value || '').trim());
+  if (normalizedKeys.some(value => !value || value.length > 512)
+      || new Set(normalizedKeys).size !== normalizedKeys.length) {
+    throw invoiceBatchContractError('BATCH_EXPLICIT_KEYS_INVALID');
+  }
+  const normalizedRevisions = {};
+  if (Object.keys(revisions).some(key => !normalizedKeys.includes(key))) {
+    throw invoiceBatchContractError('BATCH_EXPLICIT_KEYS_INVALID');
+  }
+  for (const key of normalizedKeys) {
+    const revision = String(revisions[key] || '').trim();
+    if (!revision || revision.length > 512) throw invoiceBatchContractError('BATCH_EXPLICIT_KEYS_INVALID');
+    normalizedRevisions[key] = revision;
+  }
+  return { selection_keys: normalizedKeys, expected_source_revisions: normalizedRevisions };
 }
 
 function postgresJsonbTextForInvoiceBatch(value) {
@@ -410,61 +617,116 @@ function postgresJsonbTextForInvoiceBatch(value) {
   return JSON.stringify(value);
 }
 
-async function hashInvoiceBatchQuery(action, filters, sort, snapshotAtUtc, options = {}) {
+async function hashInvoiceBatchFilter(action, filters, sort) {
   const normalizedAction = String(action || '').trim().toUpperCase();
   if (!['GENERATE', 'ISSUE'].includes(normalizedAction)) throw invoiceBatchContractError('BATCH_QUERY_ACTION_MISMATCH');
-  if (options.db_candidate_filter_hash === true) {
-    return sha256Text(`${postgresJsonbTextForInvoiceBatch(filters)}|${postgresJsonbTextForInvoiceBatch(sort)}|${normalizedAction}`);
-  }
-  const snapshot = new Date(snapshotAtUtc);
-  if (!Number.isFinite(snapshot.getTime())) throw invoiceBatchContractError('BATCH_QUERY_SNAPSHOT_INVALID');
   return sha256Text(postgresJsonbTextForInvoiceBatch({
     action: normalizedAction,
     filters,
-    sort,
-    snapshot_at_utc: snapshot.toISOString()
+    sort
   }));
 }
-function normaliseInvoiceBatchCursorValues(value) {
+
+async function hashInvoiceBatchQuery(action, filters, sort, snapshotValue) {
+  const normalizedAction = String(action || '').trim().toUpperCase();
+  if (!['GENERATE', 'ISSUE'].includes(normalizedAction)) throw invoiceBatchContractError('BATCH_QUERY_ACTION_MISMATCH');
+  const snapshot = normaliseInvoiceBatchSnapshot(snapshotValue, normalizedAction);
+  return sha256Text(postgresJsonbTextForInvoiceBatch({
+    contract_version: INVOICE_BATCH_QUERY_CONTRACT,
+    action: normalizedAction,
+    filters,
+    sort,
+    snapshot: {
+      contract_version: snapshot.contract_version,
+      action: snapshot.action,
+      at_utc: snapshot.at_utc,
+      revision: snapshot.revision,
+      expires_at_utc: snapshot.expires_at_utc,
+      key_id: snapshot.key_id ?? null
+    }
+  }));
+}
+
+async function hashInvoiceBatchSelection(selection) {
+  return sha256Text(postgresJsonbTextForInvoiceBatch(
+    normaliseInvoiceBatchSelectionRules(selection)
+  ));
+}
+
+function normaliseInvoiceBatchCursorValues(value, options = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
-  const allowed = ['after_selection_key', 'after_sort_date', 'after_sort_text', 'after_sort_numeric', 'after_chunk_id'];
+  const kind = String(options.kind || 'PAGE').trim().toUpperCase();
+  const allowedByKind = {
+    PAGE: ['after_selection_key', 'after_sort_date', 'after_sort_text', 'after_sort_numeric'],
+    CLIENTS: ['after_label', 'after_id'],
+    CANDIDATES: ['after_label', 'after_id'],
+    WEEK_ENDINGS: ['after_value'],
+    STATUSES: ['after_code'],
+    BLOCKERS: ['after_code']
+  };
+  const allowed = allowedByKind[kind];
+  if (!allowed) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
   if (Object.keys(value).some(key => !allowed.includes(key))) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
   const result = {};
-  if (value.after_selection_key !== undefined && value.after_selection_key !== null) {
+  if (kind === 'PAGE' && value.after_selection_key !== undefined && value.after_selection_key !== null) {
     const text = String(value.after_selection_key).trim();
     if (!text || text.length > 512) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
     result.after_selection_key = text;
   }
-  if (value.after_sort_date !== undefined && value.after_sort_date !== null) {
+  if (kind === 'PAGE' && value.after_sort_date !== undefined && value.after_sort_date !== null) {
     result.after_sort_date = normaliseInvoiceBatchDate(value.after_sort_date, 'BATCH_CURSOR_INVALID');
   }
-  if (value.after_sort_text !== undefined && value.after_sort_text !== null) {
+  if (kind === 'PAGE' && value.after_sort_text !== undefined && value.after_sort_text !== null) {
     const text = String(value.after_sort_text);
     if (text.length > 512) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
     result.after_sort_text = text;
   }
-  if (value.after_sort_numeric !== undefined && value.after_sort_numeric !== null) {
+  if (kind === 'PAGE' && value.after_sort_numeric !== undefined && value.after_sort_numeric !== null) {
     const text = String(value.after_sort_numeric).trim();
     if (!/^[+-]?\d+(?:\.\d+)?$/.test(text) || text.length > 100) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
     result.after_sort_numeric = text;
   }
-  if (value.after_chunk_id !== undefined && value.after_chunk_id !== null) {
-    const text = String(value.after_chunk_id).trim().toLowerCase();
-    if (!UUID_PATTERN.test(text)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
-    result.after_chunk_id = text;
+  if (['CLIENTS', 'CANDIDATES'].includes(kind)) {
+    const label = String(value.after_label || '').trim();
+    const id = String(value.after_id || '').trim().toLowerCase();
+    if (!label || label.length > 512 || !UUID_PATTERN.test(id)) {
+      throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+    }
+    result.after_label = label;
+    result.after_id = id;
+  } else if (kind === 'WEEK_ENDINGS') {
+    result.after_value = normaliseInvoiceBatchDate(value.after_value, 'BATCH_CURSOR_INVALID');
+  } else if (['STATUSES', 'BLOCKERS'].includes(kind)) {
+    const code = String(value.after_code || '').trim().toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9_:-]{0,119}$/.test(code)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+    result.after_code = code;
+  }
+  if (kind === 'PAGE') {
+    const sortKeys = ['after_sort_date', 'after_sort_text', 'after_sort_numeric']
+      .filter(key => result[key] !== undefined);
+    if (!result.after_selection_key || sortKeys.length !== 1) {
+      throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+    }
   }
   if (!Object.keys(result).length) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
   return result;
 }
 
-async function signInvoiceBatchCursor(secret, encodedPayload) {
+function cursorSecret(env, kind) {
+  const explicit = kind === 'RESULT'
+    ? env?.INVOICE_BATCH_RESULT_CURSOR_SECRET
+    : env?.INVOICE_BATCH_CANDIDATE_CURSOR_SECRET;
+  return explicit || env?.SESSION_TOKEN_SECRET;
+}
+
+async function signInvoiceBatchCursor(secret, domain, encodedPayload) {
   if (!secret || String(secret).length < 32) throw invoiceBatchContractError('BATCH_CURSOR_SECRET_INVALID');
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(String(secret)),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const signature = await crypto.subtle.sign(
-    'HMAC', key, new TextEncoder().encode(`invoice-batch-cursor-v1.${encodedPayload}`)
+    'HMAC', key, new TextEncoder().encode(`${domain}.${encodedPayload}`)
   );
   return encodeOutboxCursorPart(new Uint8Array(signature));
 }
@@ -472,37 +734,68 @@ async function signInvoiceBatchCursor(secret, encodedPayload) {
 async function encodeInvoiceBatchCursor(env, input) {
   const action = String(input?.action || '').trim().toUpperCase();
   if (!['GENERATE', 'ISSUE'].includes(action)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
-  const snapshot = new Date(input?.snapshot_at_utc);
-  if (!Number.isFinite(snapshot.getTime())) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const snapshot = normaliseInvoiceBatchSnapshot(input?.snapshot, action);
   const filterHash = String(input?.filter_hash || '').trim().toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(filterHash)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const queryHash = String(input?.query_hash || '').trim().toLowerCase();
+  if (!SHA256_PATTERN.test(filterHash) || !SHA256_PATTERN.test(queryHash)) {
+    throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  }
   const sort = normaliseInvoiceBatchSort({ sort: input?.sort || {} }, action);
-  const cursor = normaliseInvoiceBatchCursorValues(input?.next_cursor_values || input?.cursor || {});
-  const resultCategory = input?.result_category ? String(input.result_category).trim().toUpperCase().slice(0, 80) : null;
+  const cursorKind = String(input?.cursor_kind || 'PAGE').trim().toUpperCase();
+  const keyset = normaliseInvoiceBatchCursorValues(
+    input?.next_cursor_values || input?.keyset || {},
+    { kind: cursorKind }
+  );
+  const now = new Date(input?.issued_at_utc || Date.now());
+  if (!Number.isFinite(now.getTime())) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const configuredTtl = Number(env?.INVOICE_BATCH_CANDIDATE_CURSOR_TTL_SECONDS);
+  const ttlSeconds = Number.isSafeInteger(configuredTtl) && configuredTtl > 0
+    ? Math.min(configuredTtl, INVOICE_BATCH_CANDIDATE_CURSOR_TTL_SECONDS)
+    : INVOICE_BATCH_CANDIDATE_CURSOR_TTL_SECONDS;
+  const expiry = new Date(Math.min(
+    now.getTime() + ttlSeconds * 1000,
+    new Date(snapshot.expires_at_utc).getTime()
+  ));
   const payload = {
-    version: 1,
+    version: 2,
+    contract_version: INVOICE_BATCH_CURSOR_CONTRACT,
+    cursor_kind: cursorKind,
     action,
-    snapshot_at_utc: snapshot.toISOString(),
+    snapshot,
+    query_hash: queryHash,
     filter_hash: filterHash,
     sort,
-    cursor,
-    ...(resultCategory ? { result_category: resultCategory } : {})
+    keyset,
+    issued_at_utc: now.toISOString(),
+    expires_at_utc: expiry.toISOString()
   };
-  const encodedPayload = encodeOutboxCursorPart(new TextEncoder().encode(JSON.stringify(payload)));
-  const signature = await signInvoiceBatchCursor(env?.SESSION_TOKEN_SECRET, encodedPayload);
-  return `${encodedPayload}.${signature}`;
+  const encodedPayload = encodeOutboxCursorPart(new TextEncoder().encode(
+    postgresJsonbTextForInvoiceBatch(payload)
+  ));
+  const signature = await signInvoiceBatchCursor(
+    cursorSecret(env, 'CANDIDATE'),
+    'invoice-batch-candidate-cursor-v2',
+    encodedPayload
+  );
+  const token = `${encodedPayload}.${signature}`;
+  if (token.length > INVOICE_BATCH_CURSOR_MAX_BYTES) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  return token;
 }
 
 async function decodeInvoiceBatchCursor(env, token, expected = {}) {
   const tokenText = String(token || '');
-  if (tokenText.length > 8192) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  if (tokenText.length > INVOICE_BATCH_CURSOR_MAX_BYTES) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
   const parts = tokenText.split('.');
   if (parts.length !== 2 || parts.some(part => !part)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
   let expectedSignature;
   let actualSignature;
   try {
-    expectedSignature = decodeOutboxCursorPart(await signInvoiceBatchCursor(env?.SESSION_TOKEN_SECRET, parts[0]));
-    actualSignature = decodeOutboxCursorPart(parts[1]);
+    expectedSignature = decodeCanonicalInvoiceCursorPart(await signInvoiceBatchCursor(
+      cursorSecret(env, 'CANDIDATE'),
+      'invoice-batch-candidate-cursor-v2',
+      parts[0]
+    ), 'BATCH_CURSOR_INVALID');
+    actualSignature = decodeCanonicalInvoiceCursorPart(parts[1], 'BATCH_CURSOR_INVALID');
   } catch (error) {
     if (error?.code === 'BATCH_CURSOR_SECRET_INVALID') throw error;
     throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
@@ -513,22 +806,40 @@ async function decodeInvoiceBatchCursor(env, token, expected = {}) {
   if (difference !== 0) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
   let payload;
   try {
-    payload = JSON.parse(new TextDecoder().decode(decodeOutboxCursorPart(parts[0])));
+    payload = JSON.parse(new TextDecoder().decode(
+      decodeCanonicalInvoiceCursorPart(parts[0], 'BATCH_CURSOR_INVALID')
+    ));
   } catch {
     throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
   }
-  if (payload?.version !== 1) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  if (payload?.version !== 2 || payload?.contract_version !== INVOICE_BATCH_CURSOR_CONTRACT) {
+    throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  }
+  const cursorKind = String(payload.cursor_kind || '').trim().toUpperCase();
+  if (expected.cursor_kind && cursorKind !== String(expected.cursor_kind).trim().toUpperCase()) {
+    throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  }
   const action = String(payload.action || '').trim().toUpperCase();
   const expectedAction = String(expected.action || '').trim().toUpperCase();
   if (!['GENERATE', 'ISSUE'].includes(action) || (expectedAction && action !== expectedAction)) {
     throw invoiceBatchContractError('BATCH_CURSOR_ACTION_MISMATCH');
   }
-  const snapshot = new Date(payload.snapshot_at_utc);
-  if (!Number.isFinite(snapshot.getTime())) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const snapshot = normaliseInvoiceBatchSnapshot(payload.snapshot, action);
+  if (expected.snapshot
+      && postgresJsonbTextForInvoiceBatch(snapshot)
+        !== postgresJsonbTextForInvoiceBatch(normaliseInvoiceBatchSnapshot(expected.snapshot, action))) {
+    throw invoiceBatchContractError('BATCH_CURSOR_SNAPSHOT_MISMATCH');
+  }
   const filterHash = String(payload.filter_hash || '').trim().toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(filterHash)) throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  const queryHash = String(payload.query_hash || '').trim().toLowerCase();
+  if (!SHA256_PATTERN.test(filterHash) || !SHA256_PATTERN.test(queryHash)) {
+    throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+  }
   if (expected.filter_hash && filterHash !== String(expected.filter_hash).trim().toLowerCase()) {
     throw invoiceBatchContractError('BATCH_CURSOR_FILTER_MISMATCH');
+  }
+  if (expected.query_hash && queryHash !== String(expected.query_hash).trim().toLowerCase()) {
+    throw invoiceBatchContractError('BATCH_CURSOR_QUERY_MISMATCH');
   }
   const sort = normaliseInvoiceBatchSort({ sort: payload.sort || {} }, action);
   if (expected.sort) {
@@ -537,142 +848,337 @@ async function decodeInvoiceBatchCursor(env, token, expected = {}) {
       throw invoiceBatchContractError('BATCH_CURSOR_SORT_MISMATCH');
     }
   }
-  const resultCategory = payload.result_category ? String(payload.result_category).trim().toUpperCase() : null;
-  if (expected.result_category && resultCategory !== String(expected.result_category).trim().toUpperCase()) {
-    throw invoiceBatchContractError('BATCH_CURSOR_FILTER_MISMATCH');
+  const issuedAt = new Date(payload.issued_at_utc);
+  const expiresAt = new Date(payload.expires_at_utc);
+  const configuredTtl = Number(env?.INVOICE_BATCH_CANDIDATE_CURSOR_TTL_SECONDS);
+  const maximumTtlSeconds = Number.isSafeInteger(configuredTtl) && configuredTtl > 0
+    ? Math.min(configuredTtl, INVOICE_BATCH_CANDIDATE_CURSOR_TTL_SECONDS)
+    : INVOICE_BATCH_CANDIDATE_CURSOR_TTL_SECONDS;
+  if (!Number.isFinite(issuedAt.getTime()) || !Number.isFinite(expiresAt.getTime())
+      || expiresAt <= issuedAt || expiresAt > new Date(snapshot.expires_at_utc)) {
+    throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
   }
-  const cursor = normaliseInvoiceBatchCursorValues(payload.cursor || {});
+  if (issuedAt.getTime() > Date.now() + 60_000
+      || expiresAt.getTime() - issuedAt.getTime() > maximumTtlSeconds * 1000) {
+    throw invoiceBatchContractError('BATCH_CURSOR_ISSUED_AT_INVALID');
+  }
+  if (Date.now() >= expiresAt.getTime()) throw invoiceBatchContractError('BATCH_CURSOR_EXPIRED');
+  const keyset = normaliseInvoiceBatchCursorValues(payload.keyset || {}, { kind: cursorKind });
   return {
-    version: 1,
+    version: 2,
+    contract_version: INVOICE_BATCH_CURSOR_CONTRACT,
+    cursor_kind: cursorKind,
     action,
-    snapshot_at_utc: snapshot.toISOString(),
+    snapshot,
+    query_hash: queryHash,
     filter_hash: filterHash,
     sort,
-    cursor,
-    next_cursor_values: cursor,
-    ...(resultCategory ? { result_category: resultCategory } : {})
+    keyset,
+    cursor: keyset,
+    next_cursor_values: keyset,
+    issued_at_utc: issuedAt.toISOString(),
+    expires_at_utc: expiresAt.toISOString()
   };
 }
+
+async function encodeInvoiceBatchResultCursorV2(env, input) {
+  const rootOperationId = String(input?.root_operation_id || '').trim().toLowerCase();
+  const action = String(input?.action || '').trim().toUpperCase();
+  const category = String(input?.result_category || 'ALL').trim().toUpperCase();
+  const resultPageRevision = String(input?.result_page_revision ?? '').trim();
+  if (!UUID_PATTERN.test(rootOperationId)
+      || !['GENERATE', 'ISSUE'].includes(action)
+      || !INVOICE_OPERATION_RESULT_CATEGORIES.includes(category)
+      || !/^[0-9]{1,18}$/.test(resultPageRevision)) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  const afterSelectionKey = String(input?.next_cursor_values?.after_selection_key || '').trim();
+  const afterChunkId = String(input?.next_cursor_values?.after_chunk_id || '').trim().toLowerCase();
+  if (!afterSelectionKey || afterSelectionKey.length > 512 || !UUID_PATTERN.test(afterChunkId)) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  const issuedAt = new Date(input?.issued_at_utc || Date.now());
+  if (!Number.isFinite(issuedAt.getTime())) throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  const configuredTtl = Number(env?.INVOICE_BATCH_RESULT_CURSOR_TTL_SECONDS);
+  const ttlSeconds = Number.isSafeInteger(configuredTtl) && configuredTtl > 0
+    ? Math.min(configuredTtl, INVOICE_BATCH_RESULT_CURSOR_TTL_SECONDS)
+    : INVOICE_BATCH_RESULT_CURSOR_TTL_SECONDS;
+  const payload = {
+    version: 2,
+    contract_version: INVOICE_BATCH_RESULT_CURSOR_CONTRACT,
+    root_operation_id: rootOperationId,
+    action,
+    result_category: category,
+    result_page_revision: resultPageRevision,
+    keyset: {
+      after_selection_key: afterSelectionKey,
+      after_chunk_id: afterChunkId
+    },
+    issued_at_utc: issuedAt.toISOString(),
+    expires_at_utc: new Date(issuedAt.getTime() + ttlSeconds * 1000).toISOString()
+  };
+  const encodedPayload = encodeOutboxCursorPart(new TextEncoder().encode(
+    postgresJsonbTextForInvoiceBatch(payload)
+  ));
+  const signature = await signInvoiceBatchCursor(
+    cursorSecret(env, 'RESULT'),
+    'invoice-batch-result-cursor-v2',
+    encodedPayload
+  );
+  const token = `${encodedPayload}.${signature}`;
+  if (token.length > INVOICE_BATCH_CURSOR_MAX_BYTES) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  return token;
+}
+
+async function decodeInvoiceBatchResultCursorV2(env, token, expected = {}) {
+  const tokenText = String(token || '');
+  if (!tokenText || tokenText.length > INVOICE_BATCH_CURSOR_MAX_BYTES) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  const parts = tokenText.split('.');
+  if (parts.length !== 2 || parts.some(part => !part)) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  let expectedSignature;
+  let actualSignature;
+  try {
+    expectedSignature = decodeCanonicalInvoiceCursorPart(await signInvoiceBatchCursor(
+      cursorSecret(env, 'RESULT'),
+      'invoice-batch-result-cursor-v2',
+      parts[0]
+    ), 'OPERATION_RESULT_CURSOR_INVALID');
+    actualSignature = decodeCanonicalInvoiceCursorPart(
+      parts[1],
+      'OPERATION_RESULT_CURSOR_INVALID'
+    );
+  } catch (error) {
+    if (error?.code === 'BATCH_CURSOR_SECRET_INVALID') throw error;
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  if (expectedSignature.byteLength !== actualSignature.byteLength) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  let difference = 0;
+  for (let index = 0; index < expectedSignature.byteLength; index += 1) {
+    difference |= expectedSignature[index] ^ actualSignature[index];
+  }
+  if (difference !== 0) throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  let payload;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(
+      decodeCanonicalInvoiceCursorPart(parts[0], 'OPERATION_RESULT_CURSOR_INVALID')
+    ));
+  } catch {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  if (payload?.version !== 2
+      || payload?.contract_version !== INVOICE_BATCH_RESULT_CURSOR_CONTRACT) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  const rootOperationId = String(payload.root_operation_id || '').trim().toLowerCase();
+  const action = String(payload.action || '').trim().toUpperCase();
+  const category = String(payload.result_category || '').trim().toUpperCase();
+  const resultPageRevision = String(payload.result_page_revision ?? '').trim();
+  if (!UUID_PATTERN.test(rootOperationId)
+      || !['GENERATE', 'ISSUE'].includes(action)
+      || !INVOICE_OPERATION_RESULT_CATEGORIES.includes(category)
+      || !/^[0-9]{1,18}$/.test(resultPageRevision)) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  if (expected.root_operation_id
+      && rootOperationId !== String(expected.root_operation_id).trim().toLowerCase()) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  if (expected.action && action !== String(expected.action).trim().toUpperCase()) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  if (expected.result_category
+      && category !== String(expected.result_category).trim().toUpperCase()) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  if (expected.result_page_revision != null
+      && resultPageRevision !== String(expected.result_page_revision)) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_STALE');
+  }
+  const issuedAt = new Date(payload.issued_at_utc);
+  const expiresAt = new Date(payload.expires_at_utc);
+  const configuredTtl = Number(env?.INVOICE_BATCH_RESULT_CURSOR_TTL_SECONDS);
+  const maximumTtlSeconds = Number.isSafeInteger(configuredTtl) && configuredTtl > 0
+    ? Math.min(configuredTtl, INVOICE_BATCH_RESULT_CURSOR_TTL_SECONDS)
+    : INVOICE_BATCH_RESULT_CURSOR_TTL_SECONDS;
+  if (!Number.isFinite(issuedAt.getTime()) || !Number.isFinite(expiresAt.getTime())
+      || expiresAt <= issuedAt
+      || issuedAt.getTime() > Date.now() + 60_000
+      || expiresAt.getTime() - issuedAt.getTime() > maximumTtlSeconds * 1000) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  if (Date.now() >= expiresAt.getTime()) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_EXPIRED');
+  }
+  const keyset = plainInvoiceBatchObject(payload.keyset, 'OPERATION_RESULT_CURSOR_INVALID');
+  if (Object.keys(keyset).some(key => !['after_selection_key', 'after_chunk_id'].includes(key))) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  const afterSelectionKey = String(keyset.after_selection_key || '').trim();
+  const afterChunkId = String(keyset.after_chunk_id || '').trim().toLowerCase();
+  if (!afterSelectionKey || afterSelectionKey.length > 512 || !UUID_PATTERN.test(afterChunkId)) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
+  return {
+    root_operation_id: rootOperationId,
+    action,
+    result_category: category,
+    result_page_revision: resultPageRevision,
+    keyset: {
+      after_selection_key: afterSelectionKey,
+      after_chunk_id: afterChunkId
+    },
+    issued_at_utc: issuedAt.toISOString(),
+    expires_at_utc: expiresAt.toISOString()
+  };
+}
+
+async function readInvoiceBatchJsonBody(req, options = {}) {
+  const configured = Number(options.maximumBytes);
+  const maximumBytes = Number.isSafeInteger(configured) && configured > 0
+    ? Math.min(configured, INVOICE_BATCH_REQUEST_MAX_BYTES)
+    : INVOICE_BATCH_REQUEST_MAX_BYTES;
+  const contentLength = req.headers.get('content-length');
+  if (contentLength && (!/^[0-9]+$/.test(contentLength) || Number(contentLength) > maximumBytes)) {
+    throw invoiceBatchContractError('BATCH_REQUEST_TOO_LARGE');
+  }
+  const reader = req.body?.getReader();
+  const chunks = [];
+  let length = 0;
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+      length += bytes.byteLength;
+      if (length > maximumBytes) {
+        try { await reader.cancel('BATCH_REQUEST_TOO_LARGE'); } catch {}
+        throw invoiceBatchContractError('BATCH_REQUEST_TOO_LARGE');
+      }
+      chunks.push(bytes);
+    }
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    throw invoiceBatchContractError('BATCH_REQUEST_JSON_INVALID');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw invoiceBatchContractError('BATCH_REQUEST_OBJECT_REQUIRED');
+  }
+  return parsed;
+}
 function candidateGroupsFromRpc(value) {
-  const isV1Envelope = candidate => !!(
+  const isV2Envelope = candidate => !!(
     candidate
     && typeof candidate === 'object'
     && !Array.isArray(candidate)
-    && candidate.contract_version === 'INVOICE_BATCH_CANDIDATES_V1'
+    && candidate.contract_version === INVOICE_BATCH_CANDIDATE_CONTRACT
     && Array.isArray(candidate.rows)
   );
 
-  const unwrapV1Envelope = candidate => {
-    if (isV1Envelope(candidate)) return candidate;
+  const unwrapV2Envelope = candidate => {
+    if (isV2Envelope(candidate)) return candidate;
 
     if (Array.isArray(candidate)) {
       if (candidate.length !== 1) return null;
-      if (isV1Envelope(candidate[0])) return candidate[0];
+      if (isV2Envelope(candidate[0])) return candidate[0];
       if (candidate[0] && typeof candidate[0] === 'object' && !Array.isArray(candidate[0])) {
         const innerValues = Object.values(candidate[0]);
-        if (innerValues.length === 1) return unwrapV1Envelope(innerValues[0]);
+        if (innerValues.length === 1) return unwrapV2Envelope(innerValues[0]);
       }
       return null;
     }
 
     if (candidate && typeof candidate === 'object') {
       if (Array.isArray(candidate.rows)) {
-        const rowEnvelope = unwrapV1Envelope(candidate.rows);
+        const rowEnvelope = unwrapV2Envelope(candidate.rows);
         if (rowEnvelope) return rowEnvelope;
       }
       if (Array.isArray(candidate.data)) {
-        const dataEnvelope = unwrapV1Envelope(candidate.data);
+        const dataEnvelope = unwrapV2Envelope(candidate.data);
         if (dataEnvelope) return dataEnvelope;
       }
       const innerValues = Object.values(candidate);
-      if (innerValues.length === 1) return unwrapV1Envelope(innerValues[0]);
+      if (innerValues.length === 1) return unwrapV2Envelope(innerValues[0]);
     }
 
     return null;
   };
 
-  const rawEnvelope = unwrapV1Envelope(value) || unwrapV1Envelope(rpcValue(value));
-
-  if (rawEnvelope) {
-    return {
-      kind: 'V1',
-      legacy: false,
-      contract_version: rawEnvelope.contract_version,
-      action: String(rawEnvelope.action || '').toUpperCase(),
-      mode: rawEnvelope.mode || null,
-      snapshot_at_utc: rawEnvelope.snapshot_at_utc || null,
-      normalised_filter: rawEnvelope.normalised_filter || rawEnvelope.normalized_filter || {},
-      normalized_filter: rawEnvelope.normalised_filter || rawEnvelope.normalized_filter || {},
-      normalised_sort: rawEnvelope.normalised_sort || rawEnvelope.normalized_sort || {},
-      normalized_sort: rawEnvelope.normalised_sort || rawEnvelope.normalized_sort || {},
-      filter_hash: rawEnvelope.filter_hash || null,
-      rows: rawEnvelope.rows,
-      page: rawEnvelope.page || {},
-      totals: rawEnvelope.totals || {},
-      facets: rawEnvelope.facets || {},
-      selection_seed: rawEnvelope.selection_seed || {
-        mode: 'IMPLICIT_ALL',
-        default_selected: true
-      },
-      raw: rawEnvelope
-    };
+  const envelope = unwrapV2Envelope(value) || unwrapV2Envelope(rpcValue(value));
+  if (!envelope) {
+    throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
   }
-
-  const resolved = rpcValue(value);
-  const clients = Array.isArray(resolved)
-    ? resolved
-    : (Array.isArray(resolved?.clients) ? resolved.clients : []);
-
-  const groups = clients.flatMap(client => {
-    if (Array.isArray(client?.groups)) {
-      return client.groups.map(group => ({
-        ...group,
-        client_id: group.client_id || client.client_id,
-        client_name: group.client_name || client.client_name
-      }));
-    }
-    if (Array.isArray(client?.weeks)) {
-      return client.weeks.flatMap(week => {
-        if (Array.isArray(week?.groups)) {
-          return week.groups.map(group => ({
-            ...group,
-            client_id: group.client_id || client.client_id,
-            client_name: group.client_name || client.client_name,
-            week_ending_date: group.week_ending_date || week.week_ending_date,
-            invoice_week_start: group.invoice_week_start || week.invoice_week_start
-          }));
-        }
-        if (Array.isArray(week?.invoices)) {
-          return week.invoices.map(invoice => ({
-            ...invoice,
-            client_id: invoice.client_id || client.client_id,
-            client_name: invoice.client_name || client.client_name,
-            week_ending_date: invoice.week_ending_date || week.week_ending_date,
-            invoice_week_start: invoice.invoice_week_start || week.invoice_week_start
-          }));
-        }
-        return [];
-      });
-    }
-    return client?.group_key || client?.scope_key || client?.invoice_id ? [client] : [];
-  });
-
-  Object.defineProperties(groups, {
-    kind: { value: 'LEGACY', enumerable: false },
-    legacy: { value: true, enumerable: false },
-    clients: { value: clients, enumerable: false },
-    groups: { value: groups, enumerable: false },
-    rows: { value: groups, enumerable: false },
-    raw: { value: resolved, enumerable: false }
-  });
-  return groups;
+  const action = String(envelope.action || '').trim().toUpperCase();
+  const mode = String(envelope.mode || '').trim().toUpperCase();
+  const nonNegativeInteger = value => Number.isSafeInteger(Number(value)) && Number(value) >= 0;
+  const page = envelope.page;
+  const totals = envelope.totals;
+  const selectionSummary = envelope.selection_summary;
+  if (!['GENERATE', 'ISSUE'].includes(action)
+      || !['PAGE', 'FACETS', 'SUMMARY', 'EXPLICIT_KEYS', 'EXPAND_SELECTION'].includes(mode)
+      || !page || typeof page !== 'object' || Array.isArray(page)
+      || !totals || typeof totals !== 'object' || Array.isArray(totals)
+      || !selectionSummary || typeof selectionSummary !== 'object' || Array.isArray(selectionSummary)
+      || !Array.isArray(envelope.group_selection)
+      || !envelope.facets || typeof envelope.facets !== 'object' || Array.isArray(envelope.facets)
+      || !SHA256_PATTERN.test(String(envelope.filter_hash || '').toLowerCase())
+      || !SHA256_PATTERN.test(String(envelope.query_hash || '').toLowerCase())
+      || !SHA256_PATTERN.test(String(envelope.selection_hash || '').toLowerCase())
+      || !nonNegativeInteger(page.page_size)
+      || !nonNegativeInteger(page.returned_count)
+      || !nonNegativeInteger(page.total_count)
+      || Number(page.returned_count) !== envelope.rows.length
+      || Number(page.returned_count) > Number(page.page_size)
+      || typeof page.has_more !== 'boolean'
+      || !['filtered_total', 'display_total', 'eligible_total', 'selected_total', 'excluded_total', 'blocked_total']
+        .every(field => nonNegativeInteger(totals[field]))
+      || !['eligible_total', 'selected_total', 'excluded_total', 'blocked_total']
+        .every(field => nonNegativeInteger(selectionSummary[field]))
+      || typeof selectionSummary.exact !== 'boolean'
+      || (mode === 'PAGE' && selectionSummary.exact !== false)
+      || (mode === 'SUMMARY' && selectionSummary.exact !== true)
+      || envelope.group_selection.some(group => (
+        !group || typeof group !== 'object' || Array.isArray(group)
+        || typeof group.group_key !== 'string' || !group.group_key
+        || !nonNegativeInteger(group.eligible_total)
+        || !nonNegativeInteger(group.selected_total)
+        || Number(group.selected_total) > Number(group.eligible_total)
+        || !['DISABLED', 'UNCHECKED', 'CHECKED', 'INDETERMINATE'].includes(String(group.state || '').toUpperCase())
+        || typeof group.has_hidden_override !== 'boolean'
+      ))) {
+    throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+  }
+  return {
+    ...envelope,
+    kind: 'V2',
+    legacy: false,
+    action,
+    mode,
+    normalised_filter: envelope.normalised_filter || envelope.normalized_filter || {},
+    normalised_sort: envelope.normalised_sort || envelope.normalized_sort || {}
+  };
 }
 
 async function startCommands(env, req, ctx, user, commands, deps, lanes = ['ALL'], options = {}) {
   const raw = await deps.rpc('invoice_operation_start_batch', {
     p_commands: commands,
-    p_actor_user_id: user.id,
-    p_now_utc: new Date().toISOString()
+    p_actor_user_id: user.id
   });
   const value = rpcValue(raw);
   const operations = Array.isArray(value) ? value : (value ? [value] : []);
@@ -701,9 +1207,9 @@ async function startCommands(env, req, ctx, user, commands, deps, lanes = ['ALL'
     || ''
   ).trim().toUpperCase();
   const conflictCode = row => /(?:CONFLICT|SOURCE_CHANGED|STALE|ACTIVE_OPERATION|ALREADY_ACTIVE|NOT_READY|TERMINAL|BLOCKED|CURRENT_STATE_CHANGED)/.test(stableCode(row));
-  const isSelectionRoot = row => row?.selection_contract_version === 'INVOICE_BATCH_SELECTION_V1'
+  const isSelectionRoot = row => row?.selection_contract_version === INVOICE_BATCH_SELECTION_CONTRACT
     || row?.selection_expansion_pending === true
-    || row?.input_json?.contract_version === 'INVOICE_BATCH_SELECTION_ROOT_V1';
+    || row?.input_json?.contract_version === INVOICE_BATCH_SELECTION_ROOT_CONTRACT;
 
   const accepted = operations.filter(row => row?.accepted === true);
   const created = accepted.filter(row => row?.created === true);
@@ -771,7 +1277,24 @@ async function startCommands(env, req, ctx, user, commands, deps, lanes = ['ALL'
     operation_ids: operationIds,
     root_operation_id: operationIds.length === 1 ? operationIds[0] : null,
     selection_expansion_pending: selectionExpansionPending,
-    per_command_results: operations,
+    per_command_results: options.selectionRoot === true ? operations.map(row => ({
+      command_no: row?.command_no ?? null,
+      command_type: row?.command_type || null,
+      accepted: row?.accepted === true,
+      operation_id: row?.operation_id || null,
+      operation_type: row?.operation_type || null,
+      status: row?.status || null,
+      phase: row?.phase || null,
+      change_seq: row?.change_seq ?? null,
+      created: row?.created === true,
+      reused_active: row?.reused_active === true,
+      reused_ready: row?.reused_ready === true,
+      blocked: row?.blocked === true,
+      selection_expansion_pending: row?.selection_expansion_pending === true,
+      terminal_error: row?.terminal_error?.code
+        ? { code: String(row.terminal_error.code).slice(0, 160) }
+        : null
+    })) : operations,
     nudge_state: nudge
   };
   const extraPayload = typeof options.extendResult === 'function'
@@ -796,478 +1319,396 @@ async function parseBody(req) {
   }
 }
 
-async function handleCandidates(envOrReq, reqOrDeps, depsOrRpcName, maybeRpcName) {
-  const hasExplicitEnv = maybeRpcName !== undefined;
-  const env = hasExplicitEnv ? envOrReq : (reqOrDeps?.env || depsOrRpcName?.env || null);
-  const req = hasExplicitEnv ? reqOrDeps : envOrReq;
-  const deps = hasExplicitEnv ? depsOrRpcName : reqOrDeps;
-  const rpcName = hasExplicitEnv ? maybeRpcName : depsOrRpcName;
-  const action = rpcName === 'invoice_batch_issue_candidates' ? 'ISSUE' : 'GENERATE';
-  const url = new URL(req.url);
-  const normaliseParams = new URLSearchParams(url.searchParams);
-  // These are transport-only controls consumed by this HTTP handler. They are
-  // not DB candidate filters/sorts and must not cause the strict normalisers
-  // to reject an otherwise valid candidate-page request.
-  normaliseParams.delete('facets');
-  normaliseParams.delete('page_cursor');
-  normaliseParams.delete('pageCursor');
-  const filters = normaliseInvoiceBatchFilters(normaliseParams, action);
-  const sort = normaliseInvoiceBatchSort(normaliseParams, action);
-  const modeText = String(url.searchParams.get('mode') || '').trim().toUpperCase();
-  if (modeText && !['PAGE', 'FACETS'].includes(modeText)) {
-    throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_INVALID');
+function normaliseInvoiceBatchQueryBody(body, action, options = {}) {
+  const request = plainInvoiceBatchObject(body);
+  const mode = validateInvoiceBatchSourceFields(request);
+  if (request.contract_version !== INVOICE_BATCH_QUERY_CONTRACT) {
+    throw invoiceBatchContractError('INVOICE_BATCH_QUERY_CONTRACT_INVALID');
   }
-  const facetText = String(url.searchParams.get('facets') || '').trim().toUpperCase();
-  if (facetText && !['0', '1', 'FALSE', 'TRUE', 'NO', 'YES', 'OFF', 'ON'].includes(facetText)) {
-    throw invoiceBatchContractError('BATCH_QUERY_INVALID');
-  }
-  const facetRequested = ['1', 'TRUE', 'YES', 'ON'].includes(facetText);
-  const queryMode = facetRequested || modeText === 'FACETS' ? 'FACETS' : 'PAGE';
-  const rawPageSize = Number(url.searchParams.get('page_size') || url.searchParams.get('limit') || 100);
-  const pageSize = Number.isFinite(rawPageSize)
-    ? Math.max(1, Math.min(100, Math.trunc(rawPageSize)))
-    : 100;
-  let snapshotAtUtc = normaliseInvoiceBatchSnapshotUtc(url.searchParams.get('snapshot_at_utc'), new Date().toISOString());
-  let cursor = {};
-  const expectedFilterHash = await hashInvoiceBatchQuery(action, filters, sort, snapshotAtUtc, {
-    db_candidate_filter_hash: true
+  const normalizedAction = String(request.action || '').trim().toUpperCase();
+  if (normalizedAction !== action) throw invoiceBatchContractError('INVOICE_BATCH_QUERY_ACTION_MISMATCH');
+  const filters = normaliseInvoiceBatchFilters(request, action, options);
+  const sort = normaliseInvoiceBatchSort(request, action);
+  const selection = normaliseInvoiceBatchSelectionRules(request.selection);
+  const snapshot = normaliseInvoiceBatchSnapshot(request.snapshot, action, {
+    allowNull: mode === 'PAGE' && !request.cursor
   });
-  const cursorToken = url.searchParams.get('cursor') || url.searchParams.get('page_cursor') || url.searchParams.get('pageCursor');
-  if (cursorToken) {
-    if (!env) throw Object.assign(new Error('BATCH_CURSOR_ENV_REQUIRED'), { code: 'BATCH_CURSOR_ENV_REQUIRED' });
-    const decoded = await decodeInvoiceBatchCursor(env, cursorToken, {
-      action,
-      filter_hash: expectedFilterHash,
-      sort
-    });
-    cursor = decoded.cursor || decoded.next_cursor_values || {};
-    snapshotAtUtc = decoded.snapshot_at_utc || snapshotAtUtc;
-  }
-
-  const pQuery = {
-    contract_version: 'INVOICE_BATCH_QUERY_V1',
+  const query = {
+    contract_version: INVOICE_BATCH_QUERY_CONTRACT,
     action,
-    mode: queryMode,
-    snapshot_at_utc: snapshotAtUtc,
-    allow_early: filters.allow_early,
-    display_mode: filters.display_mode,
-    page_size: pageSize,
-    cursor,
+    mode,
+    snapshot,
     filters,
-    sort
+    sort,
+    selection
   };
+  if (mode === 'PAGE') {
+    const pageSize = Number(request.page_size ?? 100);
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+      throw invoiceBatchContractError('INVOICE_BATCH_PAGE_SIZE_INVALID');
+    }
+    if (request.cursor != null && typeof request.cursor !== 'string') {
+      throw invoiceBatchContractError('BATCH_CURSOR_INVALID');
+    }
+    if (request.cursor && !snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
+    query.page_size = pageSize;
+    query.cursor = request.cursor || null;
+  } else if (mode === 'FACETS') {
+    if (!snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
+    query.facet_request = normaliseInvoiceBatchFacetRequest(request.facet_request);
+  } else if (mode === 'SUMMARY') {
+    if (!snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
+    query.group_selectors = normaliseInvoiceBatchGroupSelectors(request.group_selectors);
+  } else if (mode === 'EXPLICIT_KEYS') {
+    if (!snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
+    Object.assign(query, normaliseInvoiceBatchExplicitKeys(request));
+  }
+  return query;
+}
 
-  const result = await deps.rpc(rpcName, {
-    p_allow_early: filters.allow_early,
-    p_limit: pageSize,
-    p_query: pQuery
+async function handleCandidates(env, req, deps, rpcName, options = {}) {
+  const action = rpcName === 'invoice_batch_issue_candidates' ? 'ISSUE' : 'GENERATE';
+  if (req.method !== 'POST') {
+    return jsonResponse({ ok: false, error: 'BATCH_QUERY_POST_REQUIRED' }, 405, { allow: 'POST' });
+  }
+  const body = await readInvoiceBatchJsonBody(req, {
+    maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
   });
-  const parsed = candidateGroupsFromRpc(result);
-  if (parsed?.kind !== 'V1') {
-    const candidates = Array.isArray(parsed) ? parsed : [];
-    return jsonResponse({ ok: true, legacy: true, candidates, groups: candidates, limit: pageSize });
-  }
+  const query = normaliseInvoiceBatchQueryBody(body, action, options);
+  const expectedFilterHash = await hashInvoiceBatchFilter(action, query.filters, query.sort);
+  let expectedQueryHash = query.snapshot
+    ? await hashInvoiceBatchQuery(action, query.filters, query.sort, query.snapshot)
+    : null;
 
-  if (parsed.filter_hash && parsed.filter_hash !== expectedFilterHash) {
-    throw Object.assign(new Error('BATCH_QUERY_FILTER_HASH_MISMATCH'), {
-      code: 'BATCH_QUERY_FILTER_HASH_MISMATCH'
-    });
-  }
-
-  const page = parsed.page || {};
-  let signedNextCursor = null;
-  if (page.has_more && page.next_cursor_values) {
-    if (!env) throw Object.assign(new Error('BATCH_CURSOR_ENV_REQUIRED'), { code: 'BATCH_CURSOR_ENV_REQUIRED' });
-    signedNextCursor = await encodeInvoiceBatchCursor(env, {
+  if (query.mode === 'PAGE' && query.cursor) {
+    const decoded = await decodeInvoiceBatchCursor(env, query.cursor, {
+      cursor_kind: 'PAGE',
       action,
-      snapshot_at_utc: parsed.snapshot_at_utc || snapshotAtUtc,
-      filter_hash: parsed.filter_hash || expectedFilterHash,
-      sort: parsed.normalised_sort || sort,
+      snapshot: query.snapshot,
+      filter_hash: expectedFilterHash,
+      query_hash: expectedQueryHash,
+      sort: query.sort
+    });
+    query.cursor = decoded.keyset;
+  } else if (query.mode === 'PAGE') {
+    query.cursor = null;
+  }
+
+  if (query.mode === 'FACETS') {
+    const rawCursors = {};
+    const names = {
+      clients: 'CLIENTS',
+      candidates: 'CANDIDATES',
+      week_endings: 'WEEK_ENDINGS',
+      statuses: 'STATUSES',
+      blockers: 'BLOCKERS'
+    };
+    for (const [name, kind] of Object.entries(names)) {
+      const token = query.facet_request.cursors[name];
+      if (!token) continue;
+      const decoded = await decodeInvoiceBatchCursor(env, token, {
+        cursor_kind: kind,
+        action,
+        snapshot: query.snapshot,
+        filter_hash: expectedFilterHash,
+        query_hash: expectedQueryHash,
+        sort: query.sort
+      });
+      rawCursors[name] = decoded.keyset;
+    }
+    query.facet_request = { ...query.facet_request, cursors: rawCursors };
+  }
+
+  const parsed = candidateGroupsFromRpc(await deps.rpc(rpcName, { p_query: query }));
+  if (parsed.action !== action || parsed.mode !== query.mode) {
+    throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+  }
+  const responseSnapshot = normaliseInvoiceBatchSnapshot(parsed.snapshot, action);
+  if (query.snapshot && postgresJsonbTextForInvoiceBatch(query.snapshot)
+      !== postgresJsonbTextForInvoiceBatch(responseSnapshot)) {
+    throw invoiceBatchContractError('BATCH_SNAPSHOT_QUERY_MISMATCH');
+  }
+  expectedQueryHash ||= await hashInvoiceBatchQuery(action, query.filters, query.sort, responseSnapshot);
+  const expectedSelectionHash = await hashInvoiceBatchSelection(query.selection);
+  if (parsed.filter_hash !== expectedFilterHash
+      || parsed.query_hash !== expectedQueryHash
+      || parsed.selection_hash !== expectedSelectionHash
+      || postgresJsonbTextForInvoiceBatch(parsed.normalised_filter)
+        !== postgresJsonbTextForInvoiceBatch(query.filters)
+      || postgresJsonbTextForInvoiceBatch(parsed.normalised_sort)
+        !== postgresJsonbTextForInvoiceBatch(query.sort)) {
+    throw invoiceBatchContractError('BATCH_QUERY_HASH_MISMATCH');
+  }
+
+  const page = { ...parsed.page, next_cursor: null };
+  if (query.mode === 'PAGE' && page.has_more === true && !page.next_cursor_values) {
+    throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+  }
+  if (page.has_more === true && page.next_cursor_values && query.mode === 'PAGE') {
+    page.next_cursor = await encodeInvoiceBatchCursor(env, {
+      cursor_kind: 'PAGE',
+      action,
+      snapshot: responseSnapshot,
+      filter_hash: expectedFilterHash,
+      query_hash: expectedQueryHash,
+      sort: query.sort,
       next_cursor_values: page.next_cursor_values
     });
   }
+  delete page.next_cursor_values;
+
+  const facets = structuredClone(parsed.facets || {});
+  if (query.mode === 'FACETS') {
+    const names = {
+      clients: 'CLIENTS',
+      candidates: 'CANDIDATES',
+      week_endings: 'WEEK_ENDINGS',
+      statuses: 'STATUSES',
+      blockers: 'BLOCKERS'
+    };
+    const requestedNames = new Set(
+      query.facet_request.kinds.map(kind =>
+        Object.entries(names).find(([, candidateKind]) => candidateKind === kind)?.[0]
+      )
+    );
+    for (const name of requestedNames) {
+      const facet = facets[name];
+      if (!facet || typeof facet !== 'object' || Array.isArray(facet)
+          || !Array.isArray(facet.items)
+          || facet.items.length > query.facet_request.limit_per_kind
+          || typeof facet.has_more !== 'boolean'
+          || (facet.has_more === true && !facet.next_cursor_values)) {
+        throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+      }
+    }
+    for (const [name, kind] of Object.entries(names)) {
+      const facet = facets[name];
+      if (!facet || typeof facet !== 'object' || Array.isArray(facet)) continue;
+      facet.next_cursor = null;
+      if (facet.has_more === true && facet.next_cursor_values) {
+        facet.next_cursor = await encodeInvoiceBatchCursor(env, {
+          cursor_kind: kind,
+          action,
+          snapshot: responseSnapshot,
+          filter_hash: expectedFilterHash,
+          query_hash: expectedQueryHash,
+          sort: query.sort,
+          next_cursor_values: facet.next_cursor_values
+        });
+      }
+      delete facet.next_cursor_values;
+    }
+  }
 
   return jsonResponse({
     ok: true,
-    contract_version: parsed.contract_version,
-    action: parsed.action || action,
-    mode: parsed.mode || queryMode,
-    snapshot_at_utc: parsed.snapshot_at_utc || snapshotAtUtc,
+    contract_version: INVOICE_BATCH_CANDIDATE_CONTRACT,
+    action,
+    mode: query.mode,
+    snapshot: responseSnapshot,
+    query_hash: expectedQueryHash,
+    filter_hash: expectedFilterHash,
+    selection_hash: expectedSelectionHash,
     rows: parsed.rows,
-    candidates: parsed.rows,
-    page: {
-      ...page,
-      next_cursor: signedNextCursor
-    },
+    page,
     totals: parsed.totals,
-    facets: parsed.facets,
-    filter_hash: parsed.filter_hash || expectedFilterHash,
-    normalised_filter: parsed.normalised_filter || filters,
-    normalized_filter: parsed.normalised_filter || filters,
-    normalised_sort: parsed.normalised_sort || sort,
-    normalized_sort: parsed.normalised_sort || sort,
-    selection_seed: parsed.selection_seed || { mode: 'IMPLICIT_ALL', default_selected: true }
+    selection_summary: parsed.selection_summary,
+    group_selection: parsed.group_selection,
+    facets,
+    normalised_filter: query.filters,
+    normalised_sort: query.sort,
+    selection_seed: parsed.selection_seed || {
+      mode: 'IMPLICIT_ALL',
+      default_selected: true
+    }
   });
 }
 
-async function handleNhspCandidates(req, deps) {
-  const url = new URL(req.url);
-  const raw = await deps.rpc('invoice_batch_generate_candidates', {
-    p_allow_early: boolValue(url.searchParams.get('allow_early'), false),
-    p_limit: 5000
+async function handleNhspCandidates(env, req, deps) {
+  return handleCandidates(env, req, deps, 'invoice_batch_generate_candidates', {
+    forcedInvoiceStreams: ['NHSP'],
+    allowInvoiceStreams: true
   });
-  const clientId = String(url.searchParams.get('client_id') || '').trim();
-  const candidates = candidateGroupsFromRpc(raw)
-    .filter(row => {
-      const command = row?.command_payload || {};
-      const members = Array.isArray(command?.canonical_source_members)
-        ? command.canonical_source_members
-        : [];
-      const nhsp = String(command?.command_type || '').toUpperCase() === 'GENERATE_NHSP'
-        || String(command?.invoice_stream || command?.stream || '').toUpperCase().includes('NHSP')
-        || members.some(member =>
-          String(member?.source_type || member?.source_kind || '').toUpperCase().includes('NHSP'));
-      return nhsp && (!clientId || String(row?.client_id || '') === clientId);
-    })
-    .map(row => ({
-      client_id: row.client_id || null,
-      group_key: row.group_key,
-      canonical_source_members: row.canonical_source_members || row.command_payload?.canonical_source_members || [],
-      canonical_source_revision: row.canonical_source_revision || row.command_payload?.source_revision || null,
-      blocker_code: row.blocker_code || null,
-      blocker_detail: row.blocker_detail || null,
-      document_dependencies: Array.isArray(row.document_dependencies) ? row.document_dependencies : [],
-      command_payload: row.command_payload,
-      timesheets: Array.isArray(row.timesheets) ? row.timesheets : []
-    }));
-  return jsonResponse({
-    ok: true,
-    candidate_family: 'NHSP',
-    candidates
-  });
+}
+
+function normaliseInvoiceBatchSelectionRoot(value, action) {
+  const root = plainInvoiceBatchObject(value, 'BATCH_SELECTION_INVALID');
+  if (Object.keys(root).some(key => !['contract_version', 'query', 'selection'].includes(key))
+      || root.contract_version !== INVOICE_BATCH_SELECTION_ROOT_CONTRACT) {
+    throw invoiceBatchContractError('BATCH_SELECTION_CONTRACT_INVALID');
+  }
+  const selection = normaliseInvoiceBatchSelectionRules(root.selection);
+  const rawQuery = plainInvoiceBatchObject(root.query, 'BATCH_QUERY_INVALID');
+  const query = normaliseInvoiceBatchQueryBody({
+    ...rawQuery,
+    selection
+  }, action, { allowInvoiceStreams: true });
+  return {
+    contract_version: INVOICE_BATCH_SELECTION_ROOT_CONTRACT,
+    query,
+    selection
+  };
 }
 
 async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
-  const body = await parseBody(req) || {};
-
-  if (body.selection_contract && typeof body.selection_contract === 'object' && !Array.isArray(body.selection_contract)) {
-    const rawContract = body.selection_contract;
-    if (rawContract.contract_version !== 'INVOICE_BATCH_SELECTION_V1') {
-      return jsonResponse({ error: 'BATCH_SELECTION_CONTRACT_INVALID' }, 400);
+  const body = await readInvoiceBatchJsonBody(req, {
+    maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
+  });
+  if (Object.keys(body).some(key => ![
+    'mode', 'selection_contract', 'command_token'
+  ].includes(key))) {
+    throw invoiceBatchContractError('BATCH_QUERY_UNKNOWN_FIELD');
+  }
+  const token = commandToken(req, body, { requiredCode: 'GENERATE_COMMAND_TOKEN_REQUIRED' });
+  const selectionRoot = normaliseInvoiceBatchSelectionRoot(body.selection_contract, 'GENERATE');
+  if (!selectionRoot.query.snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
+  if (selectionRoot.query.mode === 'EXPLICIT_KEYS') {
+    if (selectionRoot.query.selection_keys.length !== 1) {
+      throw invoiceBatchContractError('BATCH_EXPLICIT_KEYS_INVALID');
     }
-    if (!rawContract.query || typeof rawContract.query !== 'object' || Array.isArray(rawContract.query)) {
-      return jsonResponse({ error: 'BATCH_QUERY_INVALID' }, 400);
+    const parsed = candidateGroupsFromRpc(await deps.rpc('invoice_batch_generate_candidates', {
+      p_query: selectionRoot.query
+    }));
+    if (parsed.action !== 'GENERATE' || parsed.mode !== 'EXPLICIT_KEYS'
+        || parsed.rows.length !== 1 || parsed.rows[0]?.selectable !== true) {
+      throw invoiceBatchContractError('BATCH_SOURCE_CHANGED');
     }
-    if (String(rawContract.query.action || '').trim().toUpperCase() !== 'GENERATE') {
-      return jsonResponse({ error: 'BATCH_QUERY_ACTION_MISMATCH' }, 400);
+    const row = parsed.rows[0];
+    const canonical = row.command_payload;
+    if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
+      throw invoiceBatchContractError('CANONICAL_COMMAND_REQUIRED');
     }
-
-    const filters = normaliseInvoiceBatchFilters(rawContract.query, 'GENERATE');
-    const sort = normaliseInvoiceBatchSort(rawContract.query, 'GENERATE');
-    const selection = normaliseInvoiceBatchSelectionRules(rawContract);
-    const snapshotAtUtc = normaliseInvoiceBatchSnapshotUtc(rawContract.query.snapshot_at_utc, new Date().toISOString());
-    const commandTokenValue = String(body.command_token || commandToken(req, body)).trim().slice(0, 256);
-    if (!commandTokenValue) return jsonResponse({ error: 'GENERATE_COMMAND_TOKEN_REQUIRED' }, 400);
-
-    const selectionContract = {
-      contract_version: 'INVOICE_BATCH_SELECTION_V1',
-      query: {
-        contract_version: 'INVOICE_BATCH_QUERY_V1',
-        action: 'GENERATE',
-        mode: 'PAGE',
-        snapshot_at_utc: snapshotAtUtc,
-        allow_early: filters.allow_early,
-        display_mode: filters.display_mode,
-        filters,
-        sort
-      },
-      selection
-    };
-
-    return startCommands(env, req, ctx, user, [{
-      command_type: 'GENERATE_SELECTED',
-      selection_contract: selectionContract,
-      command_token: commandTokenValue
-    }], deps, ['DATABASE'], {
-      priorityClass: 'INTERACTIVE',
-      extendResult: (summary, operationRows) => {
-        const root = operationRows[0] || {};
-        return {
-          root_operation_id: root.operation_id || summary.root_operation_id || null,
-          status: root.status || null,
-          accepted: root.accepted !== false,
-          selection_contract_version: 'INVOICE_BATCH_SELECTION_V1',
-          selection_expansion_pending: root.selection_expansion_pending === true,
-          estimated_filtered_total: root.estimated_filtered_total ?? null,
-          nudge_state: summary.nudge_state
-        };
-      }
+    return startCommands(env, req, ctx, user, [
+      generationCommandFromBody(req, {
+        canonical_command: canonical,
+        command_token: token,
+        allow_early: selectionRoot.query.filters.allow_early
+      }, canonical.command_type || 'GENERATE_SELECTED')
+    ], deps, ['DATABASE'], {
+      priorityClass: 'VIEW_NOW',
+      extendResult: (summary, rows) => ({
+        mode: 'GENERATE_AND_VIEW',
+        selection_key: row.selection_key,
+        source_revision: row.source_revision,
+        operation_id: rows[0]?.operation_id || summary.root_operation_id || null
+      })
     });
   }
-
-  const rows = Array.isArray(body?.rows) ? body.rows : [];
-  const suppliedScopeKeys = Array.isArray(body?.scope_keys) ? body.scope_keys : [];
-  if ((!rows.length && !suppliedScopeKeys.length) || rows.length > 500 || suppliedScopeKeys.length > 500) {
-    return jsonResponse({ error: 'scope_keys/rows must identify 1..500 candidates' }, 400);
+  if (!['PAGE', 'SUMMARY'].includes(selectionRoot.query.mode)) {
+    throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_INVALID');
   }
-  const rootToken = commandToken(req, body).slice(0, 100);
-  const scopeKeys = (suppliedScopeKeys.length ? suppliedScopeKeys : rows.map(row =>
-    row.scope_key || row.group_key || row.canonical_command?.scope_key
-  )).map(value => String(value || '').trim());
-  if (scopeKeys.some(value => !value) || new Set(scopeKeys).size !== scopeKeys.length) {
-    return jsonResponse({ error: 'UNIQUE_SCOPE_KEY_REQUIRED' }, 400);
-  }
-  const expectedRevisions = new Map();
-  for (const row of rows) {
-    const key = String(row.scope_key || row.group_key || row.canonical_command?.scope_key || '').trim();
-    const revision = row.canonical_source_revision
-      || row.source_revision_hash
-      || row.command_payload?.source_revision
-      || row.canonical_command?.source_revision;
-    if (key && revision) expectedRevisions.set(key, String(revision));
-  }
-  for (const [key, revision] of Object.entries(body?.candidate_revisions || {})) {
-    if (scopeKeys.includes(key) && revision) expectedRevisions.set(key, String(revision));
-  }
-  if (scopeKeys.some(key => !expectedRevisions.get(key))) {
-    return jsonResponse({ error: 'CANDIDATE_SOURCE_REVISION_REQUIRED' }, 400);
-  }
-
-  const candidatesRaw = await deps.rpc('invoice_batch_generate_candidates', {
-    p_allow_early: boolValue(body?.allow_early, false),
-    p_limit: scopeKeys.length,
-    p_scope_keys: scopeKeys
-  });
-  const candidateByScope = new Map(
-    candidateGroupsFromRpc(candidatesRaw)
-      .map(candidate => [String(candidate.group_key || candidate.scope_key || ''), candidate])
-      .filter(([key]) => key)
-  );
-  const staleScopes = [];
-  const hardBlockedScopes = [];
-  const selected = [];
-  for (const scopeKey of scopeKeys) {
-    const candidate = candidateByScope.get(scopeKey);
-    if (!candidate) {
-      staleScopes.push({ scope_key: scopeKey, code: 'CANDIDATE_SCOPE_NO_LONGER_AVAILABLE' });
-      continue;
+  selectionRoot.query = {
+    contract_version: INVOICE_BATCH_QUERY_CONTRACT,
+    action: 'GENERATE',
+    mode: 'PAGE',
+    snapshot: selectionRoot.query.snapshot,
+    page_size: 100,
+    cursor: null,
+    filters: selectionRoot.query.filters,
+    sort: selectionRoot.query.sort,
+    selection: selectionRoot.selection
+  };
+  return startCommands(env, req, ctx, user, [{
+    command_type: 'GENERATE_SELECTED',
+    selection_contract: selectionRoot,
+    command_token: token
+  }], deps, ['DATABASE'], {
+    selectionRoot: true,
+    priorityClass: 'INTERACTIVE',
+    extendResult: (summary, operationRows) => {
+      const root = operationRows[0] || {};
+      return {
+        contract_version: INVOICE_BATCH_SELECTION_ROOT_CONTRACT,
+        progress_contract_version: INVOICE_BATCH_PROGRESS_CONTRACT,
+        root_operation_id: root.operation_id || summary.root_operation_id || null,
+        status: root.status || null,
+        phase: root.phase || null,
+        change_seq: root.change_seq ?? null,
+        selection_expansion_pending: root.selection_expansion_pending === true,
+        estimated_filtered_total: root.estimated_filtered_total ?? null,
+        estimated_selected_total: root.estimated_selected_total ?? null
+      };
     }
-    const currentRevision = String(
-      candidate.canonical_source_revision
-      || candidate.source_revision_hash
-      || candidate.command_payload?.source_revision
-      || ''
-    );
-    if (!currentRevision || currentRevision !== expectedRevisions.get(scopeKey)) {
-      staleScopes.push({ scope_key: scopeKey, code: 'CANDIDATE_SCOPE_CHANGED' });
-      continue;
-    }
-    const blockerCode = String(candidate.blocker_code || '').trim().toUpperCase();
-    if (blockerCode) {
-      hardBlockedScopes.push({
-        scope_key: scopeKey,
-        code: blockerCode,
-        detail: candidate.blocker_detail || null
-      });
-      continue;
-    }
-    const canonical = candidate.command_payload;
-    if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
-      hardBlockedScopes.push({ scope_key: scopeKey, code: 'CANONICAL_COMMAND_REQUIRED' });
-      continue;
-    }
-    selected.push({ scopeKey, candidate, currentRevision });
-  }
-  if (!selected.length) {
-    return jsonResponse({
-      ok: false,
-      accepted: false,
-      accepted_count: 0,
-      rejected_count: staleScopes.length + hardBlockedScopes.length,
-      stale_scopes: staleScopes,
-      hard_blocked_scopes: hardBlockedScopes
-    }, 409);
-  }
-
-  const commandContextByNo = new Map();
-  const commands = await Promise.all(selected.map(async (selection, index) => {
-    const canonical = selection.candidate.command_payload
-      || selection.candidate.command_ready_payload
-      || selection.candidate.canonical_command;
-    if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
-      throw Object.assign(new Error('CANONICAL_COMMAND_REQUIRED'), { code: 'CANONICAL_COMMAND_REQUIRED' });
-    }
-    const commandNo = index + 1;
-    commandContextByNo.set(commandNo, selection.scopeKey);
-    const memberHash = await sha256Text(`${selection.scopeKey}|${selection.currentRevision}`);
-    return generationCommandFromBody(req, {
-      canonical_command: canonical,
-      allow_early: body.allow_early ?? canonical.allow_early,
-      command_token: `${rootToken}:${memberHash}`.slice(0, 200)
-    }, canonical.command_type || 'GENERATE_SELECTED');
-  }));
-
-  return startCommands(env, req, ctx, user, commands, deps, ['DATABASE'], {
-    additionalRejectedCount: staleScopes.length + hardBlockedScopes.length,
-    commandContextByNo,
-    extendResult: (summary, operationRows) => ({
-      enqueued: summary.accepted_count,
-      generated: summary.reused_ready_count,
-      stale_scopes: staleScopes,
-      hard_blocked_scopes: hardBlockedScopes,
-      results_invoices: operationRows.map(operation => ({
-        scope_key: commandContextByNo.get(Number(operation?.command_no)) || null,
-        operation_id: operation?.operation_id || null,
-        status: operation?.reused_ready === true ? 'READY' : (operation?.status || (operation?.accepted === false ? 'REJECTED' : 'QUEUED')),
-        ok: operation?.accepted !== false,
-        error: operation?.error || operation?.terminal_error || null,
-        created: operation?.created === true,
-        reused_active: operation?.reused_active === true,
-        reused_ready: operation?.reused_ready === true
-      })),
-      invoice_ids: [...new Set(operationRows.flatMap(operation => operation?.created_invoice_ids || operation?.invoice_ids || []).filter(id => UUID_PATTERN.test(String(id))))]
-    })
   });
 }
 
 async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
-  const body = await parseBody(req) || {};
-
-  if (body.selection_contract && typeof body.selection_contract === 'object' && !Array.isArray(body.selection_contract)) {
-    const rawContract = body.selection_contract;
-    if (rawContract.contract_version !== 'INVOICE_BATCH_SELECTION_V1') {
-      return jsonResponse({ error: 'BATCH_SELECTION_CONTRACT_INVALID' }, 400);
+  const body = await readInvoiceBatchJsonBody(req, {
+    maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
+  });
+  if (Object.keys(body).some(key => ![
+    'selection_contract', 'deliver', 'command_token',
+    'delivery_request_token', 'delivery_intent'
+  ].includes(key))) {
+    throw invoiceBatchContractError('BATCH_QUERY_UNKNOWN_FIELD');
+  }
+  if (typeof body.deliver !== 'boolean') {
+    throw invoiceBatchContractError('ISSUE_DELIVERY_MODE_REQUIRED');
+  }
+  const token = commandToken(req, body, { requiredCode: 'ISSUE_COMMAND_TOKEN_REQUIRED' });
+  const selectionRoot = normaliseInvoiceBatchSelectionRoot(body.selection_contract, 'ISSUE');
+  if (!selectionRoot.query.snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
+  if (!['PAGE', 'SUMMARY'].includes(selectionRoot.query.mode)) {
+    throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_INVALID');
+  }
+  selectionRoot.query = {
+    contract_version: INVOICE_BATCH_QUERY_CONTRACT,
+    action: 'ISSUE',
+    mode: 'PAGE',
+    snapshot: selectionRoot.query.snapshot,
+    page_size: 100,
+    cursor: null,
+    filters: selectionRoot.query.filters,
+    sort: selectionRoot.query.sort,
+    selection: selectionRoot.selection
+  };
+  let deliveryRequestToken = null;
+  let deliveryIntent = {};
+  if (body.deliver) {
+    deliveryRequestToken = String(body.delivery_request_token || '').trim();
+    if (!deliveryRequestToken) throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_REQUIRED');
+    if (deliveryRequestToken.length > 256 || /[\u0000-\u001f\u007f]/.test(deliveryRequestToken)) {
+      throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_INVALID');
     }
-    if (!rawContract.query || typeof rawContract.query !== 'object' || Array.isArray(rawContract.query)) {
-      return jsonResponse({ error: 'BATCH_QUERY_INVALID' }, 400);
+    const suppliedIntent = plainInvoiceBatchObject(
+      body.delivery_intent,
+      'ISSUE_DELIVERY_INTENT_INVALID'
+    );
+    if (Object.keys(suppliedIntent).some(key => !['route_mode', 'template_version'].includes(key))
+        || String(suppliedIntent.route_mode || '').trim().toUpperCase() !== 'SERVER_RESOLVED'
+        || String(suppliedIntent.template_version || '').trim() !== 'INVOICE_EMAIL_V2') {
+      throw invoiceBatchContractError('ISSUE_DELIVERY_INTENT_INVALID');
     }
-    if (String(rawContract.query.action || '').trim().toUpperCase() !== 'ISSUE') {
-      return jsonResponse({ error: 'BATCH_QUERY_ACTION_MISMATCH' }, 400);
-    }
-
-    const filters = normaliseInvoiceBatchFilters(rawContract.query, 'ISSUE');
-    const sort = normaliseInvoiceBatchSort(rawContract.query, 'ISSUE');
-    const selection = normaliseInvoiceBatchSelectionRules(rawContract);
-    const snapshotAtUtc = normaliseInvoiceBatchSnapshotUtc(rawContract.query.snapshot_at_utc, new Date().toISOString());
-    const deliver = boolValue(body.deliver ?? body.send_email, false);
-    const commandTokenValue = String(body.command_token || commandToken(req, body)).trim().slice(0, 256);
-    if (!commandTokenValue) return jsonResponse({ error: 'ISSUE_COMMAND_TOKEN_REQUIRED' }, 400);
-
-    let deliveryRequestToken = null;
-    let deliveryIntent = { deliver: false };
-    if (deliver) {
-      deliveryRequestToken = String(body.delivery_request_token || '').trim();
-      if (!deliveryRequestToken) return jsonResponse({ error: 'DELIVERY_REQUEST_TOKEN_REQUIRED' }, 400);
-      if (deliveryRequestToken.length > 256) return jsonResponse({ error: 'DELIVERY_REQUEST_TOKEN_INVALID' }, 400);
-      const rawIntent = body.delivery_intent && typeof body.delivery_intent === 'object' && !Array.isArray(body.delivery_intent)
-        ? body.delivery_intent
-        : body;
-      deliveryIntent = {
-        recipient_set: canonicalEmailArray(rawIntent.recipient_set || rawIntent.to || []),
-        cc: canonicalEmailArray(rawIntent.cc || []),
-        bcc: canonicalEmailArray(rawIntent.bcc || []),
-        delivery_policy: canonicalDeliveryPolicy(rawIntent.delivery_policy),
-        template_version: rawIntent.template_version || 'INVOICE_EMAIL_V1'
-      };
-    }
-
-    const selectionContract = {
-      contract_version: 'INVOICE_BATCH_SELECTION_V1',
-      query: {
-        contract_version: 'INVOICE_BATCH_QUERY_V1',
-        action: 'ISSUE',
-        mode: 'PAGE',
-        snapshot_at_utc: snapshotAtUtc,
-        allow_early: filters.allow_early,
-        display_mode: filters.display_mode,
-        filters,
-        sort
-      },
-      selection
+    deliveryIntent = {
+      route_mode: 'SERVER_RESOLVED',
+      template_version: 'INVOICE_EMAIL_V2'
     };
-
-    return startCommands(env, req, ctx, user, [{
-      command_type: 'ISSUE_INVOICES',
-      selection_contract: selectionContract,
-      deliver,
-      delivery_intent: deliveryIntent,
-      command_token: commandTokenValue,
-      ...(deliveryRequestToken ? { delivery_request_token: deliveryRequestToken } : {})
-    }], deps, ['DATABASE'], {
-      priorityClass: 'INTERACTIVE',
-      extendResult: (summary, operationRows) => {
-        const root = operationRows[0] || {};
-        return {
-          root_operation_id: root.operation_id || summary.root_operation_id || null,
-          status: root.status || null,
-          accepted: root.accepted !== false,
-          selection_contract_version: 'INVOICE_BATCH_SELECTION_V1',
-          selection_expansion_pending: root.selection_expansion_pending === true,
-          estimated_filtered_total: root.estimated_filtered_total ?? null,
-          delivery_requested: deliver,
-          nudge_state: summary.nudge_state
-        };
-      }
-    });
+  } else if (body.delivery_request_token != null || body.delivery_intent != null) {
+    throw invoiceBatchContractError('ISSUE_DELIVERY_INTENT_INVALID');
   }
-
-  const rows = Array.isArray(body.rows) ? body.rows : [];
-  const invoiceIds = canonicalUuidArray(body.invoice_ids || rows.map(row => row.invoice_id));
-  const deliver = boolValue(body.deliver ?? body.send_email, false);
-  const policy = deliver ? canonicalDeliveryPolicy(body.delivery_policy) : null;
-  const requestToken = commandToken(req, body);
-  const deliveryRequestToken = deliver
-    ? String(body.delivery_request_token || requestToken).slice(0, 200)
-    : null;
-  const expectedRevisions = {
-    ...Object.fromEntries(
-      Object.entries(body.expected_revisions || {})
-        .filter(([invoiceId, revision]) => UUID_PATTERN.test(invoiceId) && revision != null)
-        .map(([invoiceId, revision]) => [invoiceId.toLowerCase(), String(revision)])
-    ),
-    ...Object.fromEntries(
-      rows
-        .filter(row => row?.invoice_id && row?.document_revision != null)
-        .map(row => [String(row.invoice_id).toLowerCase(), String(row.document_revision)])
-    )
-  };
-  if (invoiceIds.some(invoiceId => !expectedRevisions[invoiceId])) {
-    return jsonResponse({ error: 'EXPECTED_INVOICE_REVISION_REQUIRED' }, 400);
-  }
-  const command = {
+  return startCommands(env, req, ctx, user, [{
     command_type: 'ISSUE_INVOICES',
-    invoice_ids: invoiceIds,
-    expected_revisions: expectedRevisions,
-    allow_early: boolValue(body.allow_early, false),
-    deliver,
-    command_token: requestToken,
-    delivery_intent: deliver ? {
-      recipient_set: canonicalEmailArray(body.recipient_set || body.to || []),
-      cc: canonicalEmailArray(body.cc || []),
-      bcc: canonicalEmailArray(body.bcc || []),
-      delivery_policy: policy,
-      template_version: body.template_version || 'INVOICE_EMAIL_V1',
-      delivery_request_token: deliveryRequestToken
-    } : { deliver: false }
-  };
-  return startCommands(env, req, ctx, user, [command], deps, ['DATABASE','DOCUMENT'], {
+    selection_contract: selectionRoot,
+    deliver: body.deliver,
+    command_token: token,
+    delivery_intent: deliveryIntent,
+    ...(deliveryRequestToken ? { delivery_request_token: deliveryRequestToken } : {})
+  }], deps, ['DATABASE'], {
+    selectionRoot: true,
+    priorityClass: 'INTERACTIVE',
     extendResult: (summary, operationRows) => {
       const root = operationRows[0] || {};
-      const rootStatus = root.reused_ready === true ? 'ISSUED' : (root.status || (root.accepted === false ? 'REJECTED' : 'QUEUED'));
       return {
-        enqueued: summary.accepted_count,
-        invoice_results_enriched: invoiceIds.map(invoiceId => ({
-          invoice_id: invoiceId,
-          operation_id: root.operation_id || null,
-          status: rootStatus,
-          ok: root.accepted !== false,
-          error: root.error || root.terminal_error || null,
-          legal_issue_state: root.result?.legal_issue_state || root.legal_issue_state || (root.reused_ready === true ? 'ISSUED' : 'IN_PROGRESS'),
-          delivery_state: deliver ? (root.result?.delivery_state || root.delivery_state || 'IN_PROGRESS') : 'NOT_REQUESTED'
-        })),
-        invoice_results: [],
-        email_outbox: [],
-        delivery_requested: deliver
+        contract_version: INVOICE_BATCH_SELECTION_ROOT_CONTRACT,
+        progress_contract_version: INVOICE_BATCH_PROGRESS_CONTRACT,
+        root_operation_id: root.operation_id || summary.root_operation_id || null,
+        status: root.status || null,
+        phase: root.phase || null,
+        change_seq: root.change_seq ?? null,
+        selection_expansion_pending: root.selection_expansion_pending === true,
+        estimated_filtered_total: root.estimated_filtered_total ?? null,
+        estimated_selected_total: root.estimated_selected_total ?? null,
+        delivery_requested: body.deliver
       };
     }
   });
@@ -1320,28 +1761,29 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
       const issuedVersionId = header.issued_document_version_id || detail?.issued_document_version_id;
       if (!UUID_PATTERN.test(String(issuedVersionId || ''))) {
         return jsonResponse({
-          ok: false,
+          contract_version: INVOICE_VIEWER_CONTRACT,
           viewer_state: 'BLOCKED',
+          purpose: 'FINAL_ISSUE',
           badge_codes: ['ISSUED_DOCUMENT_POINTER_MISSING'],
-          error_code: 'ISSUED_DOCUMENT_POINTER_MISSING'
+          error_code: 'ISSUED_DOCUMENT_POINTER_MISSING',
+          status_message: 'The issued document is not available.'
         }, 409);
       }
       const version = await loadReadyVersion(issuedVersionId, 'FINAL_ISSUE');
       return version
         ? jsonResponse({
-          ok: true,
-          ready: true,
+          contract_version: INVOICE_VIEWER_CONTRACT,
           viewer_state: 'READY',
           purpose: 'FINAL_ISSUE',
-          document_version_id: version.id,
           document_version: redactVersion(version)
         })
         : jsonResponse({
-          ok: false,
+          contract_version: INVOICE_VIEWER_CONTRACT,
           viewer_state: 'BLOCKED',
+          purpose: 'FINAL_ISSUE',
           badge_codes: ['ISSUED_DOCUMENT_INTEGRITY_FAILURE'],
           error_code: 'ISSUED_DOCUMENT_INTEGRITY_FAILURE',
-          document_version_id: issuedVersionId
+          status_message: 'The issued document could not be verified.'
         }, 409);
     }
   }
@@ -1356,8 +1798,7 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
   };
   const operationsValue = rpcValue(await deps.rpc('invoice_operation_start_batch', {
     p_commands: [command],
-    p_actor_user_id: user.id,
-    p_now_utc: new Date().toISOString()
+    p_actor_user_id: user.id
   }));
   const operations = Array.isArray(operationsValue) ? operationsValue : [operationsValue];
   const result = operations[0] || {};
@@ -1366,32 +1807,32 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
     const version = await loadReadyVersion(result.document_version_id, purpose);
     return version
       ? jsonResponse({
-        ok: true,
-        ready: true,
+        contract_version: INVOICE_VIEWER_CONTRACT,
         viewer_state: 'READY',
         purpose,
-        document_version_id: version.id,
         document_version: redactVersion(version)
       })
       : jsonResponse({
-        ok: false,
+        contract_version: INVOICE_VIEWER_CONTRACT,
         viewer_state: 'BLOCKED',
+        purpose,
         badge_codes: ['READY_DOCUMENT_IDENTITY_INVALID'],
         error_code: 'READY_DOCUMENT_IDENTITY_INVALID',
-        document_version_id: result.document_version_id
+        status_message: 'The document could not be verified.'
       }, 409);
   }
 
   if (result.accepted === false || result.blocked === true || result.terminal_error) {
     const errorCode = String(result?.terminal_error?.code || result?.error?.code || result?.terminal_error || result?.error || 'DOCUMENT_PREPARATION_BLOCKED').slice(0, 160);
     return jsonResponse({
-      ok: false,
+      contract_version: INVOICE_VIEWER_CONTRACT,
       viewer_state: 'BLOCKED',
-      status: result.status || 'BLOCKED',
       purpose,
       badge_codes: [errorCode],
       error_code: errorCode,
-      operation: result
+      status_message: entityType === 'INVOICE'
+        ? 'The preview could not be prepared.'
+        : 'The timesheet document could not be prepared.'
     }, 409);
   }
 
@@ -1405,28 +1846,52 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
     })
     : { scheduled: false, code: 'NO_ACTIVE_WORK' };
   return jsonResponse({
-    ok: true,
-    accepted: true,
-    ready: false,
+    contract_version: INVOICE_VIEWER_CONTRACT,
     viewer_state: 'PREPARING',
-    status: result.status || 'QUEUED',
     operation_id: result.operation_id || null,
-    operations,
     purpose,
-    status_message: entityType === 'INVOICE' ? 'Preparing preview' : 'Preparing timesheet',
-    nudge
+    status_message: entityType === 'INVOICE' ? 'Preparing preview' : 'Preparing timesheet'
   }, 202);
 }
 
 async function handleIssueOne(env, req, ctx, user, deps, invoiceId) {
-  const body = await parseBody(req) || {};
+  const body = await readInvoiceBatchJsonBody(req, {
+    maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
+  });
+  const allowedFields = new Set([
+    'expected_revision', 'deliver', 'allow_early', 'command_token',
+    'delivery_request_token', 'recipient_set', 'to', 'cc', 'bcc',
+    'delivery_policy', 'template_version'
+  ]);
+  if (Object.keys(body).some(key => !allowedFields.has(key))) {
+    throw invoiceBatchContractError('INVOICE_ISSUE_REQUEST_INVALID');
+  }
   const expectedRevision = String(body.expected_revision ?? '').trim();
   if (!/^[1-9][0-9]*$/.test(expectedRevision)) {
     return jsonResponse({ error: 'EXPECTED_INVOICE_REVISION_REQUIRED' }, 400);
   }
   const canonicalInvoiceId = canonicalUuidArray([invoiceId])[0];
-  const deliver = boolValue(body.deliver ?? body.send_email, false);
-  const requestToken = commandToken(req, body);
+  if (typeof body.deliver !== 'boolean') {
+    throw invoiceBatchContractError('ISSUE_DELIVERY_MODE_REQUIRED');
+  }
+  const deliver = body.deliver;
+  const deliveryFields = [
+    'delivery_request_token', 'recipient_set', 'to', 'cc', 'bcc',
+    'delivery_policy', 'template_version'
+  ];
+  if (!deliver && deliveryFields.some(field => body[field] != null)) {
+    throw invoiceBatchContractError('ISSUE_DELIVERY_INTENT_INVALID');
+  }
+  if (deliver && body.template_version != null
+      && String(body.template_version).trim() !== 'INVOICE_EMAIL_V2') {
+    throw invoiceBatchContractError('ISSUE_DELIVERY_INTENT_INVALID');
+  }
+  const requestToken = commandToken(req, body, { requiredCode: 'ISSUE_COMMAND_TOKEN_REQUIRED' });
+  const deliveryRequestToken = deliver ? String(body.delivery_request_token || '').trim() : null;
+  if (deliver && !deliveryRequestToken) throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_REQUIRED');
+  if (deliveryRequestToken && (
+    deliveryRequestToken.length > 256 || /[\u0000-\u001f\u007f]/.test(deliveryRequestToken)
+  )) throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_INVALID');
   return startCommands(env, req, ctx, user, [{
     command_type: 'ISSUE_INVOICES',
     invoice_ids: [canonicalInvoiceId],
@@ -1439,14 +1904,31 @@ async function handleIssueOne(env, req, ctx, user, deps, invoiceId) {
       cc: canonicalEmailArray(body.cc || []),
       bcc: canonicalEmailArray(body.bcc || []),
       delivery_policy: canonicalDeliveryPolicy(body.delivery_policy),
-      template_version: body.template_version || 'INVOICE_EMAIL_V1',
-      delivery_request_token: body.delivery_request_token || requestToken
-    } : { deliver: false }
+      template_version: body.template_version || 'INVOICE_EMAIL_V2'
+    } : {},
+    ...(deliveryRequestToken ? { delivery_request_token: deliveryRequestToken } : {})
   }], deps, ['DATABASE', 'DOCUMENT']);
 }
 
 async function handleDeliverOne(env, req, ctx, user, deps, invoiceId) {
-  const body = await parseBody(req) || {};
+  const body = await readInvoiceBatchJsonBody(req, {
+    maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
+  });
+  const allowedFields = new Set([
+    'command_token', 'delivery_request_token', 'recipient_set', 'to', 'cc',
+    'bcc', 'delivery_policy', 'template_version', 'delivery_part_number'
+  ]);
+  if (Object.keys(body).some(key => !allowedFields.has(key))
+      || (body.template_version != null
+        && String(body.template_version).trim() !== 'INVOICE_EMAIL_V2')) {
+    throw invoiceBatchContractError('DELIVERY_REQUEST_INVALID');
+  }
+  const requestToken = commandToken(req, body, { requiredCode: 'DELIVERY_COMMAND_TOKEN_REQUIRED' });
+  const deliveryRequestToken = String(body.delivery_request_token || '').trim();
+  if (!deliveryRequestToken) throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_REQUIRED');
+  if (deliveryRequestToken.length > 256 || /[\u0000-\u001f\u007f]/.test(deliveryRequestToken)) {
+    throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_INVALID');
+  }
   return startCommands(env, req, ctx, user, [{
     command_type: 'DELIVER_INVOICES',
     invoice_ids: canonicalUuidArray([invoiceId]),
@@ -1454,9 +1936,10 @@ async function handleDeliverOne(env, req, ctx, user, deps, invoiceId) {
     cc: canonicalEmailArray(body.cc || []),
     bcc: canonicalEmailArray(body.bcc || []),
     delivery_policy: canonicalDeliveryPolicy(body.delivery_policy),
-    delivery_template_version: body.template_version || 'INVOICE_EMAIL_V1',
+    delivery_template_version: body.template_version || 'INVOICE_EMAIL_V2',
     delivery_part_number: Number(body.delivery_part_number || 1),
-    delivery_request_token: commandToken(req, body)
+    command_token: requestToken,
+    delivery_request_token: deliveryRequestToken
   }], deps, ['DATABASE']);
 }
 
@@ -1468,10 +1951,15 @@ async function handleOperationGet(envOrReq, reqOrUser, userOrDeps, depsOrOperati
   const deps = hasExplicitEnv ? depsOrOperationId : userOrDeps;
   const operationId = hasExplicitEnv ? maybeOperationId : depsOrOperationId;
   const url = new URL(req.url);
-  const body = req.method === 'POST' ? (await parseBody(req) || {}) : {};
+  const body = req.method === 'POST'
+    ? await readInvoiceBatchJsonBody(req, {
+      maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
+    })
+    : {};
   const ids = operationId
     ? canonicalUuidArray([operationId])
     : canonicalUuidArray(body.operation_ids || String(url.searchParams.get('operation_ids') || '').split(',').filter(Boolean));
+  if (ids.length > 100) throw invoiceBatchContractError('OPERATION_RESULT_ROOT_INVALID');
   const mode = String(body.mode || url.searchParams.get('mode') || 'PROGRESS').toUpperCase();
   const categoryRaw = body.result_category || body.category || url.searchParams.get('result_category') || url.searchParams.get('category');
   const resultCategory = categoryRaw ? String(categoryRaw).trim().toUpperCase() : null;
@@ -1480,44 +1968,40 @@ async function handleOperationGet(envOrReq, reqOrUser, userOrDeps, depsOrOperati
   }
   const resultCursorToken = body.result_cursor || body.cursor || url.searchParams.get('result_cursor') || url.searchParams.get('cursor');
   const resultLimitRaw = Number(body.result_limit || body.limit || url.searchParams.get('result_limit') || url.searchParams.get('limit') || 100);
-  const resultLimit = Number.isFinite(resultLimitRaw) ? Math.max(1, Math.min(100, Math.trunc(resultLimitRaw))) : 100;
+  if (!Number.isSafeInteger(resultLimitRaw) || resultLimitRaw < 1 || resultLimitRaw > 100) {
+    throw invoiceBatchContractError('OPERATION_RESULT_PAGE_REQUEST_INVALID');
+  }
+  const resultLimit = resultLimitRaw;
 
   let pageRequest = null;
   let resultAction = String(body.action || url.searchParams.get('action') || '').trim().toUpperCase();
-  if (!resultAction) resultAction = ['ISSUED', 'ISSUED_SEND_BLOCKED'].includes(resultCategory) ? 'ISSUE' : 'GENERATE';
-  if (resultCategory || resultCursorToken || body.after_selection_key || body.after_chunk_id || url.searchParams.get('after_selection_key') || url.searchParams.get('after_chunk_id')) {
+  const requestedResultPage = !!(resultCategory || resultCursorToken);
+  if (requestedResultPage) {
+    if (ids.length !== 1 || !['GENERATE', 'ISSUE'].includes(resultAction)) {
+      throw invoiceBatchContractError('OPERATION_RESULT_ROOT_INVALID');
+    }
     const category = resultCategory || 'ALL';
-    const resultFilterHash = await sha256Text(JSON.stringify({
-      operation_ids: ids,
-      category
-    }));
     let cursorValues = {};
-    let cursorSnapshot = new Date().toISOString();
+    let resultPageRevision = String(body.result_page_revision ?? url.searchParams.get('result_page_revision') ?? '').trim();
     if (resultCursorToken) {
-      if (!env) throw Object.assign(new Error('BATCH_CURSOR_ENV_REQUIRED'), { code: 'BATCH_CURSOR_ENV_REQUIRED' });
-      const decoded = await decodeInvoiceBatchCursor(env, resultCursorToken, {
+      const decoded = await decodeInvoiceBatchResultCursorV2(env, resultCursorToken, {
+        root_operation_id: ids[0],
         action: resultAction,
-        filter_hash: resultFilterHash,
         result_category: category,
-        sort: { group_preset: 'WEEK_CLIENT_CANDIDATE', sort_key: 'WEEK_ENDING_DATE', sort_direction: 'ASC' }
+        ...(resultPageRevision ? { result_page_revision: resultPageRevision } : {})
       });
-      cursorValues = decoded.cursor || {};
-      cursorSnapshot = decoded.snapshot_at_utc || cursorSnapshot;
+      cursorValues = decoded.keyset;
+      resultPageRevision = decoded.result_page_revision;
+    }
+    if (!/^[0-9]{1,18}$/.test(resultPageRevision)) {
+      throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
     }
     pageRequest = {
       category,
       limit: resultLimit,
-      after_selection_key: cursorValues.after_selection_key
-        || body.after_selection_key
-        || url.searchParams.get('after_selection_key')
-        || null,
-      after_chunk_id: cursorValues.after_chunk_id
-        || body.after_chunk_id
-        || url.searchParams.get('after_chunk_id')
-        || null,
-      _cursor_snapshot_at_utc: cursorSnapshot,
-      _cursor_filter_hash: resultFilterHash,
-      _cursor_action: resultAction
+      result_page_revision: resultPageRevision,
+      after_selection_key: cursorValues.after_selection_key || null,
+      after_chunk_id: cursorValues.after_chunk_id || null
     };
   }
 
@@ -1525,25 +2009,30 @@ async function handleOperationGet(envOrReq, reqOrUser, userOrDeps, depsOrOperati
     p_operation_ids: ids,
     p_actor_user_id: user.id,
     p_mode: mode,
-    p_page_request: pageRequest ? {
-      category: pageRequest.category,
-      limit: pageRequest.limit,
-      after_selection_key: pageRequest.after_selection_key,
-      after_chunk_id: pageRequest.after_chunk_id
-    } : null
+    p_page_request: pageRequest
   });
   const value = rpcValue(result);
   const operations = Array.isArray(value) ? value : (Array.isArray(value?.operations) ? value.operations : []);
   const resultPage = value && !Array.isArray(value) ? value.result_page || null : null;
+  if (pageRequest && (
+    resultPage?.contract_version !== 'INVOICE_BATCH_RESULT_PAGE_V2'
+    || String(resultPage?.root_operation_id || '').toLowerCase() !== ids[0]
+    || String(resultPage?.result_page_revision) !== String(pageRequest.result_page_revision)
+    || String(resultPage?.category || '').toUpperCase() !== pageRequest.category
+    || !Array.isArray(resultPage?.rows)
+  )) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_STALE');
+  }
+  if (pageRequest && resultPage?.has_more === true && !resultPage?.next_cursor_values) {
+    throw invoiceBatchContractError('OPERATION_RESULT_CURSOR_INVALID');
+  }
   let signedNextResultCursor = null;
   if (resultPage?.has_more && resultPage?.next_cursor_values && pageRequest) {
-    if (!env) throw Object.assign(new Error('BATCH_CURSOR_ENV_REQUIRED'), { code: 'BATCH_CURSOR_ENV_REQUIRED' });
-    signedNextResultCursor = await encodeInvoiceBatchCursor(env, {
-      action: pageRequest._cursor_action,
-      snapshot_at_utc: pageRequest._cursor_snapshot_at_utc,
-      filter_hash: pageRequest._cursor_filter_hash,
-      sort: { group_preset: 'WEEK_CLIENT_CANDIDATE', sort_key: 'WEEK_ENDING_DATE', sort_direction: 'ASC' },
+    signedNextResultCursor = await encodeInvoiceBatchResultCursorV2(env, {
+      root_operation_id: ids[0],
+      action: resultAction,
       result_category: pageRequest.category,
+      result_page_revision: pageRequest.result_page_revision,
       next_cursor_values: resultPage.next_cursor_values
     });
   }
@@ -1552,8 +2041,11 @@ async function handleOperationGet(envOrReq, reqOrUser, userOrDeps, depsOrOperati
     ok: true,
     operations,
     ...(resultPage ? {
-      result_page: resultPage,
-      signed_next_result_cursor: signedNextResultCursor
+      result_page: {
+        ...resultPage,
+        next_cursor_values: undefined,
+        next_cursor: signedNextResultCursor
+      }
     } : {})
   });
 }
@@ -1594,7 +2086,10 @@ async function handleOperationControl(env, req, ctx, user, deps) {
   const actions = Array.isArray(body?.actions) ? body.actions : [];
   if (!actions.length || actions.length > 100) return jsonResponse({ error: 'actions[] must contain 1..100 items' }, 400);
   const safeActions = actions.map(normaliseInvoiceOperationControlAction);
-  const operations = rpcValue(await deps.rpc('invoice_operation_control_batch', { p_actions: safeActions, p_actor_user_id: user.id, p_now_utc: new Date().toISOString() }));
+  const operations = rpcValue(await deps.rpc('invoice_operation_control_batch', {
+    p_actions: safeActions,
+    p_actor_user_id: user.id
+  }));
   if (controlResultsReleasedRunnableWork(operations)) {
     await nudgeInvoiceOperations(env, operations, { ctx, rpc: deps.rpc, lanes: ['ALL'] });
   }
@@ -1657,6 +2152,23 @@ function decodeOutboxCursorPart(value) {
   const padded = String(value || '').replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(String(value || '').length / 4) * 4, '=');
   const binary = atob(padded);
   return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
+function decodeCanonicalInvoiceCursorPart(value, errorCode) {
+  const text = String(value || '');
+  if (!text || !/^[A-Za-z0-9_-]+$/.test(text)) {
+    throw invoiceBatchContractError(errorCode);
+  }
+  let bytes;
+  try {
+    bytes = decodeOutboxCursorPart(text);
+  } catch {
+    throw invoiceBatchContractError(errorCode);
+  }
+  if (encodeOutboxCursorPart(bytes) !== text) {
+    throw invoiceBatchContractError(errorCode);
+  }
+  return bytes;
 }
 
 async function sha256Hex(value) {
@@ -2076,8 +2588,7 @@ async function handleInvoiceOutboxControl(env, req, ctx, user, deps, operationId
   });
   const result = await deps.rpc('invoice_operation_control_batch', {
     p_actions: [controlAction],
-    p_actor_user_id: user.id,
-    p_now_utc: new Date().toISOString()
+    p_actor_user_id: user.id
   });
   const operations = rpcValue(result);
   if (controlResultsReleasedRunnableWork(operations)) {
@@ -2347,37 +2858,133 @@ async function handleReadyInvoiceDocumentDownload(env, req, user, documentVersio
   return new Response(object.body, { headers });
 }
 
+async function loadInvoiceAsyncDatabaseContract(env, deps, options = {}) {
+  const cacheKey = [
+    String(env?.SUPABASE_URL || ''),
+    String(env?.INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST || '')
+  ].join('|');
+  const now = Date.now();
+  const cached = invoiceAsyncDatabaseContractCache.get(cacheKey);
+  if (!options.force && cached && cached.expiresAt > now) return cached.value;
+  try {
+    const value = rpcValue(await deps.rpc('invoice_async_contract_get_v2', {}));
+    const contract = Array.isArray(value) ? value[0] : value;
+    if (!contract || typeof contract !== 'object' || Array.isArray(contract)) {
+      throw invoiceBatchContractError('INVOICE_ASYNC_DATABASE_CONTRACT_INVALID');
+    }
+    invoiceAsyncDatabaseContractCache.set(cacheKey, {
+      value: contract,
+      expiresAt: now + INVOICE_BATCH_DATABASE_CONTRACT_CACHE_MS
+    });
+    return contract;
+  } catch {
+    invoiceAsyncDatabaseContractCache.delete(cacheKey);
+    return null;
+  }
+}
+
+function validateInvoiceAsyncDatabaseContract(env, contract) {
+  const expectedManifest = String(env?.INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST || '').trim().toLowerCase();
+  const errors = [];
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) {
+    errors.push('INVOICE_ASYNC_DATABASE_CONTRACT_UNAVAILABLE');
+  } else {
+    if (contract.contract_version !== INVOICE_ASYNC_DB_CONTRACT_VERSION) {
+      errors.push('INVOICE_ASYNC_DATABASE_CONTRACT_MISMATCH');
+    }
+    if (contract.ready !== true) errors.push('INVOICE_ASYNC_DATABASE_NOT_READY');
+    if (contract.candidate_query_contract !== INVOICE_BATCH_QUERY_CONTRACT
+        || contract.candidate_response_contract !== INVOICE_BATCH_CANDIDATE_CONTRACT
+        || contract.selection_contract !== INVOICE_BATCH_SELECTION_CONTRACT
+        || contract.selection_root_contract !== INVOICE_BATCH_SELECTION_ROOT_CONTRACT
+        || contract.progress_contract !== INVOICE_BATCH_PROGRESS_CONTRACT) {
+      errors.push('INVOICE_ASYNC_DATABASE_COMPONENT_CONTRACT_MISMATCH');
+    }
+    if (!SHA256_PATTERN.test(expectedManifest)) {
+      errors.push('INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST_INVALID');
+    } else if (String(contract.function_hash_manifest || '').toLowerCase() !== expectedManifest) {
+      errors.push('INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH');
+    }
+    if (contract.indexes_ready !== true || contract.snapshot_signing_ready !== true) {
+      errors.push('INVOICE_ASYNC_DATABASE_PREREQUISITE_MISSING');
+    }
+    for (const field of [
+      'missing_function_count',
+      'private_exposure_count',
+      'forbidden_dependency_count',
+      'public_candidate_dependency_count',
+      'legacy_runtime_exposure_count'
+    ]) {
+      if (Number(contract[field]) !== 0) errors.push(`INVOICE_ASYNC_${field.toUpperCase()}_INVALID`);
+    }
+  }
+  return { ok: errors.length === 0, errors, contract };
+}
+
+async function invoiceProcessorReady(env, options = {}) {
+  if (String(env?.INVOICE_DOCUMENT_PROCESSOR_ENABLED || '').toLowerCase() !== 'true') return false;
+  const binding = env?.INVOICE_DOCUMENT_PROCESSOR;
+  const now = Date.now();
+  const cached = binding && typeof binding === 'object'
+    ? invoiceAsyncProcessorReadyCache.get(binding)
+    : null;
+  if (!options.force && cached && cached.expiresAt > now) return cached.ready;
+  const result = await checkInvoiceDocumentProcessorReady(env, { timeoutMs: 5_000 });
+  const ready = result.ok === true;
+  if (binding && typeof binding === 'object') {
+    invoiceAsyncProcessorReadyCache.set(binding, {
+      ready,
+      expiresAt: now + (ready ? 15_000 : 5_000)
+    });
+  }
+  return ready;
+}
+
 async function handleInvoiceAsyncCapabilities(env, req, deps) {
   const user = await requireActor(env, req, deps, false);
   if (!user) return jsonResponse({ error: 'UNAUTHENTICATED' }, 401);
   const parsed = parseInvoiceAsyncAllowedUserIds(env.INVOICE_ASYNC_ALLOWED_USER_IDS);
   const pipelineEnabled = isInvoiceAsyncPipelineEnabled(env);
-  const processorEnabled = String(env.INVOICE_DOCUMENT_PROCESSOR_ENABLED || '').toLowerCase() === 'true';
+  const scheduledEnabled = String(env.INVOICE_ASYNC_SCHEDULED_ENABLED || '').toLowerCase() === 'true';
+  const databaseContract = await loadInvoiceAsyncDatabaseContract(env, deps);
+  const databaseValidation = validateInvoiceAsyncDatabaseContract(env, databaseContract);
+  const runtimeValidation = validateQueueRuntimeConfiguration(env);
+  const processorEnabled = await invoiceProcessorReady(env);
+  const buildReady = !!String(env.INVOICE_ASYNC_BUILD_ID || '').trim();
+  const bindingsReady = !!(
+    env.INVOICE_QUEUE_DISPATCHER
+    && env.R2
+    && cursorSecret(env, 'CANDIDATE')
+    && cursorSecret(env, 'RESULT')
+    && env.INVOICE_DOCUMENT_ACCESS_SECRET
+  );
+  const deploymentReady = databaseValidation.ok
+    && runtimeValidation.ok
+    && processorEnabled
+    && buildReady
+    && bindingsReady;
   const cohort = isInvoiceAsyncUserAllowed(env, {
     ...user,
     active: user.is_active ?? user.active,
     roles: [user.role, user.user_role, user.user_type]
   });
-  const contractVersion = 'INVOICE_ASYNC_BACKEND_V7';
-  const featureFlags = {
-    batch_candidate_paging_v1: true,
-    batch_selection_rules_v1: true,
-    batch_result_paging_v1: true,
-    generate_and_view_v1: true,
-    exact_document_version_access_v1: true,
-    separate_issue_delivery_state_v1: true
-  };
+  const contractVersion = INVOICE_ASYNC_CONTRACT_VERSION;
+  const featureFlags = Object.fromEntries(
+    INVOICE_BATCH_MANDATORY_FEATURES.map(flag => [flag, deploymentReady])
+  );
   return jsonResponse({
     contract_version: contractVersion,
     backend_contract_version: contractVersion,
+    database_contract_ready: databaseValidation.ok,
+    deployment_contract_ready: deploymentReady,
     pipeline_enabled: pipelineEnabled,
     processor_enabled: processorEnabled,
-    enabled_for_user: pipelineEnabled && processorEnabled && cohort.allowed === true,
-    enabled: pipelineEnabled && processorEnabled && cohort.allowed === true,
+    enabled_for_user: pipelineEnabled && deploymentReady && cohort.allowed === true,
+    enabled: pipelineEnabled && deploymentReady && cohort.allowed === true,
     controlled_cohort: parsed.ok && parsed.ids.length > 0,
-    scheduled_enabled: String(env.INVOICE_ASYNC_SCHEDULED_ENABLED || '').toLowerCase() === 'true',
+    scheduled_enabled: scheduledEnabled,
     supported_media_types: ['application/pdf','image/jpeg','image/png'],
-    document_view_contract_version: 'INVOICE_DOCUMENT_VERSION_ACCESS_V1',
+    document_view_contract_version: INVOICE_DOCUMENT_ACCESS_CONTRACT,
     heartbeat_supported: true,
     feature_flags: featureFlags,
     ...featureFlags
@@ -2398,22 +3005,44 @@ function match(pathname, pattern) {
 
 function invoiceErrorStatus(error) {
   const code = String(error?.code || error?.message || error || '').toUpperCase();
+  if (['BATCH_REQUEST_TOO_LARGE', 'BATCH_SELECTION_PAYLOAD_TOO_LARGE'].includes(code)) return 413;
+  if (code === 'INVOICE_LEGACY_ROUTE_RETIRED') return 410;
+  if ([
+    'BATCH_SUMMARY_SCOPE_TOO_LARGE',
+    'BATCH_SUMMARY_TIMEOUT',
+    'INVOICE_ASYNC_DATABASE_CONTRACT_UNAVAILABLE',
+    'INVOICE_ASYNC_DATABASE_CONTRACT_MISMATCH',
+    'INVOICE_ASYNC_DATABASE_COMPONENT_CONTRACT_MISMATCH',
+    'INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH'
+  ].includes(code)) return 503;
+  if ([
+    'BATCH_CURSOR_EXPIRED',
+    'BATCH_CURSOR_ACTION_MISMATCH',
+    'BATCH_CURSOR_QUERY_MISMATCH',
+    'BATCH_CURSOR_FILTER_MISMATCH',
+    'BATCH_CURSOR_SORT_MISMATCH',
+    'BATCH_CURSOR_SNAPSHOT_MISMATCH',
+    'BATCH_SNAPSHOT_QUERY_MISMATCH',
+    'BATCH_SNAPSHOT_EXPIRED',
+    'BATCH_SNAPSHOT_CHANGED',
+    'BATCH_SELECTION_EMPTY',
+    'OPERATION_RESULT_CURSOR_EXPIRED',
+    'OPERATION_RESULT_CURSOR_STALE',
+    'BATCH_SOURCE_CHANGED',
+    'BATCH_SNAPSHOT_CHANGED_DURING_EXPANSION'
+  ].includes(code)) return 409;
   if (
     code.startsWith('BATCH_CURSOR_')
     || code.startsWith('BATCH_SELECTION_')
     || code.startsWith('BATCH_QUERY_')
-    || code === 'INVOICE_BATCH_QUERY_INVALID'
-    || code === 'INVOICE_BATCH_QUERY_CONTRACT_INVALID'
-    || code === 'INVOICE_BATCH_QUERY_MODE_INVALID'
-    || code === 'INVOICE_BATCH_DISPLAY_MODE_INVALID'
-    || code === 'INVOICE_BATCH_GROUP_PRESET_INVALID'
-    || code === 'INVOICE_BATCH_SORT_KEY_INVALID'
-    || code === 'INVOICE_BATCH_SORT_DIRECTION_INVALID'
-    || code === 'BATCH_FILTER_FIELD_UNSUPPORTED'
-    || code === 'BATCH_COMMAND_TOKEN_INVALID'
-    || code === 'DELIVERY_REQUEST_TOKEN_INVALID'
+    || code.startsWith('BATCH_FILTER_')
+    || code.startsWith('BATCH_FACET_')
+    || code.startsWith('BATCH_EXPLICIT_')
+    || code.startsWith('OPERATION_RESULT_')
+    || code.startsWith('INVOICE_BATCH_')
+    || code.endsWith('_REQUIRED')
+    || code.endsWith('_INVALID')
   ) return 400;
-  if (/INVALID|MALFORMED|REQUIRED|UUID|JSON/.test(code)) return 400;
   if (/UNAUTHENTICATED|SESSION/.test(code)) return 401;
   if (/FORBIDDEN|ADMIN_REQUIRED|PERMISSION/.test(code)) return 403;
   if (/CONFLICT|SOURCE_CHANGED|CURRENT_STATE_CHANGED|STALE|ACTIVE_OPERATION|NOT_READY|BLOCKED|TERMINAL|DOCUMENT_REVISION_CHANGED|OWNERSHIP_OR_DOCUMENT_MISMATCH/.test(code)) return 409;
@@ -2422,12 +3051,27 @@ function invoiceErrorStatus(error) {
   return 500;
 }
 
+function isRetiredInvoiceLegacyRoute(req, url) {
+  const path = url.pathname;
+  return (
+    (req.method === 'POST' && [
+      '/api/invoices',
+      '/api/invoices/tsfin/by-week',
+      '/api/invoices/create-expenses',
+      '/api/nhsp/invoices/run',
+      '/api/invpdf/queue/drain',
+      '/api/tspdf/queue/drain'
+    ].includes(path))
+    || ['/internal/invpdf-worker', '/api/invpdf/worker'].includes(path)
+  );
+}
+
 function isInvoiceAsyncRoute(req, url) {
   const path = url.pathname;
   const method = req.method;
   if (method === 'GET' && path === '/api/invoice-documents/access') return true;
   if (method === 'GET' && path === '/api/invoice-async/capabilities') return true;
-  if (method === 'GET' && [
+  if (['GET', 'POST'].includes(method) && [
     '/api/invoices/batch-generate/candidates',
     '/api/invoices/batch-issue/candidates',
     '/api/nhsp/invoices/candidates'
@@ -2436,12 +3080,9 @@ function isInvoiceAsyncRoute(req, url) {
     '/api/invoices/batch-generate/confirm',
     '/api/invoices/batch-issue/confirm',
     '/api/invoice-operations/get',
-    '/api/invoice-operations/control',
-    '/api/invoices',
-    '/api/invoices/tsfin/by-week',
-    '/api/invoices/create-expenses',
-    '/api/nhsp/invoices/run'
+    '/api/invoice-operations/control'
   ].includes(path)) return true;
+  if (isRetiredInvoiceLegacyRoute(req, url)) return true;
   if (method === 'GET' && path === '/api/outbox') {
     const channel = String(url.searchParams.get('channel') || '').trim().toUpperCase();
     return !channel || channel === 'INVOICE';
@@ -2466,7 +3107,6 @@ function isInvoiceAsyncRoute(req, url) {
   if (method === 'POST' && match(path, '/api/invoices/:invoice_id/issue')) return true;
   if (method === 'POST' && match(path, '/api/invoices/:invoice_id/email')) return true;
   if (method === 'POST' && match(path, '/api/invoices/:invoice_id/credit-note')) return true;
-  if (method === 'GET' && match(path, '/api/invoices/:invoice_id')) return true;
   return false;
 }
 
@@ -2479,54 +3119,103 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
   if (req.method === 'GET' && path === '/api/invoice-async/capabilities') {
     return handleInvoiceAsyncCapabilities(env, req, deps);
   }
-  if (!isInvoiceAsyncPipelineEnabled(env)) return null;
   if (!isInvoiceAsyncRoute(req, url)) return null;
+  if (isRetiredInvoiceLegacyRoute(req, url)) {
+    return jsonResponse({
+      ok: false,
+      contract_version: INVOICE_ASYNC_CONTRACT_VERSION,
+      error: {
+        code: 'INVOICE_LEGACY_ROUTE_RETIRED',
+        message: 'This invoice action has moved to the asynchronous invoice workflow.',
+        retryable: false
+      }
+    }, 410);
+  }
+  if (req.method === 'GET' && [
+    '/api/invoices/batch-generate/candidates',
+    '/api/invoices/batch-issue/candidates',
+    '/api/nhsp/invoices/candidates'
+  ].includes(path)) {
+    return jsonResponse({ ok: false, error: 'BATCH_QUERY_POST_REQUIRED' }, 405, { allow: 'POST' });
+  }
+  if (!isInvoiceAsyncPipelineEnabled(env)) {
+    return jsonResponse({
+      ok: false,
+      contract_version: INVOICE_ASYNC_CONTRACT_VERSION,
+      error: 'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE'
+    }, 503);
+  }
 
   const user = await requireActor(env, req, deps, false);
   if (!user) return jsonResponse({ error: 'UNAUTHENTICATED' }, 401);
-  const cohort = isInvoiceAsyncUserAllowed(env, { ...user, active: user.is_active ?? user.active, roles: [user.role, user.user_role, user.user_type] });
+  const cohort = isInvoiceAsyncUserAllowed(env, {
+    ...user,
+    active: user.is_active ?? user.active,
+    roles: [user.role, user.user_role, user.user_type]
+  });
   if (!cohort.allowed) {
-    if (cohort.code === 'INVOICE_ASYNC_USER_OUTSIDE_COHORT') return null;
-    if (cohort.code === 'INVOICE_ASYNC_ALLOWLIST_INVALID') return jsonResponse({ error: cohort.code }, 503);
+    if (cohort.code === 'INVOICE_ASYNC_ALLOWLIST_INVALID') {
+      return jsonResponse({ error: cohort.code }, 503);
+    }
     return jsonResponse({ error: cohort.code }, 403);
   }
 
+  const databaseContract = await loadInvoiceAsyncDatabaseContract(env, deps);
+  const databaseValidation = validateInvoiceAsyncDatabaseContract(env, databaseContract);
+  const runtimeValidation = validateQueueRuntimeConfiguration(env);
+  const processorReady = await invoiceProcessorReady(env);
+  if (!databaseValidation.ok
+      || !runtimeValidation.ok
+      || !processorReady
+      || !String(env.INVOICE_ASYNC_BUILD_ID || '').trim()
+      || !env.INVOICE_QUEUE_DISPATCHER
+      || !env.R2
+      || !cursorSecret(env, 'CANDIDATE')
+      || !cursorSecret(env, 'RESULT')
+      || !env.INVOICE_DOCUMENT_ACCESS_SECRET) {
+    return jsonResponse({
+      ok: false,
+      contract_version: INVOICE_ASYNC_CONTRACT_VERSION,
+      error: 'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE'
+    }, 503);
+  }
+
   try {
-    if (req.method === 'GET' && path === '/api/invoices/batch-generate/candidates') {
-      return handleCandidates(env, req, deps, 'invoice_batch_generate_candidates');
+    if (req.method === 'POST' && path === '/api/invoices/batch-generate/candidates') {
+      return await handleCandidates(env, req, deps, 'invoice_batch_generate_candidates');
     }
-    if (req.method === 'GET' && path === '/api/invoices/batch-issue/candidates') {
-      return handleCandidates(env, req, deps, 'invoice_batch_issue_candidates');
+    if (req.method === 'POST' && path === '/api/invoices/batch-issue/candidates') {
+      return await handleCandidates(env, req, deps, 'invoice_batch_issue_candidates');
     }
-    if (req.method === 'GET' && path === '/api/nhsp/invoices/candidates') {
-      return handleNhspCandidates(req, deps);
+    if (req.method === 'POST' && path === '/api/nhsp/invoices/candidates') {
+      return await handleNhspCandidates(env, req, deps);
     }
     if (req.method === 'POST' && path === '/api/invoices/batch-generate/confirm') {
-      return handleBatchGenerateConfirm(env, req, ctx, user, deps);
+      return await handleBatchGenerateConfirm(env, req, ctx, user, deps);
     }
     if (req.method === 'POST' && path === '/api/invoices/batch-issue/confirm') {
-      return handleBatchIssueConfirm(env, req, ctx, user, deps);
+      return await handleBatchIssueConfirm(env, req, ctx, user, deps);
     }
     if (req.method === 'POST' && path === '/api/invoice-operations/get') {
-      return handleOperationGet(env, req, user, deps);
+      return await handleOperationGet(env, req, user, deps);
     }
     if (req.method === 'POST' && path === '/api/invoice-operations/control') {
-      return handleOperationControl(env, req, ctx, user, deps);
+      return await handleOperationControl(env, req, ctx, user, deps);
     }
     if (req.method === 'GET' && path === '/api/outbox') {
       const channel = String(url.searchParams.get('channel') || '').trim().toUpperCase();
       if (!channel || channel === 'INVOICE') {
-        return handleInvoiceOutboxList(env, req, deps);
+        return await handleInvoiceOutboxList(env, req, deps);
       }
     }
 
     let params = match(path, '/api/invoice-operations/:operation_id');
     if (params && req.method === 'GET') {
-      return handleOperationGet(env, req, user, deps, params.operation_id);
+      return await handleOperationGet(env, req, user, deps, params.operation_id);
     }
     params = match(path, '/api/invoice-document-versions/:document_version_id/presign');
     if (params && req.method === 'POST') {
-      return handleReadyInvoiceDocumentPresign(
+      return await handleReadyInvoiceDocumentPresign(
         env,
         user,
         params.document_version_id
@@ -2534,7 +3223,7 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     }
     params = match(path, '/api/invoice-document-versions/:document_version_id/download');
     if (params && req.method === 'GET') {
-      return handleReadyInvoiceDocumentDownload(
+      return await handleReadyInvoiceDocumentDownload(
         env,
         req,
         user,
@@ -2544,10 +3233,10 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     params = match(path, '/api/outbox/:channel/:operation_id');
     if (params && String(params.channel).toUpperCase() === 'INVOICE') {
       if (req.method === 'GET') {
-        return handleOperationGet(env, req, user, deps, params.operation_id);
+        return await handleOperationGet(env, req, user, deps, params.operation_id);
       }
       if (req.method === 'DELETE') {
-        return handleInvoiceOutboxControl(
+        return await handleInvoiceOutboxControl(
           env, req, ctx, user, deps, params.operation_id, 'CANCEL'
         );
       }
@@ -2558,7 +3247,7 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
       && req.method === 'POST'
       && String(params.channel).toUpperCase() === 'INVOICE'
     ) {
-      return handleInvoiceOutboxControl(
+      return await handleInvoiceOutboxControl(
         env, req, ctx, user, deps, params.operation_id, 'RETRY'
       );
     }
@@ -2568,75 +3257,34 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
       && req.method === 'POST'
       && String(params.channel).toUpperCase() === 'INVOICE'
     ) {
-      return handleInvoiceOutboxControl(
+      return await handleInvoiceOutboxControl(
         env, req, ctx, user, deps, params.operation_id, 'RESCHEDULE'
       );
     }
     params = match(path, '/api/invoices/:invoice_id/render');
     if (params && req.method === 'POST') {
-      return handleViewDocument(env, req, ctx, user, deps, 'INVOICE', params.invoice_id);
+      return await handleViewDocument(env, req, ctx, user, deps, 'INVOICE', params.invoice_id);
     }
     params = match(path, '/api/timesheets/:timesheet_id/pdf');
     if (params && ['GET', 'POST'].includes(req.method)) {
-      return handleViewDocument(env, req, ctx, user, deps, 'TIMESHEET', params.timesheet_id);
+      return await handleViewDocument(env, req, ctx, user, deps, 'TIMESHEET', params.timesheet_id);
     }
     params = match(path, '/api/invoices/:invoice_id/issue');
     if (params && req.method === 'POST') {
-      return handleIssueOne(env, req, ctx, user, deps, params.invoice_id);
+      return await handleIssueOne(env, req, ctx, user, deps, params.invoice_id);
     }
     params = match(path, '/api/invoices/:invoice_id/email');
     if (params && req.method === 'POST') {
-      return handleDeliverOne(env, req, ctx, user, deps, params.invoice_id);
+      return await handleDeliverOne(env, req, ctx, user, deps, params.invoice_id);
     }
     params = match(path, '/api/invoices/:invoice_id/credit-note');
     if (params && req.method === 'POST') {
       const body = await parseBody(req) || {};
-      return startCommands(env, req, ctx, user, [{
+      return await startCommands(env, req, ctx, user, [{
         command_type: 'GENERATE_CREDIT_NOTE',
         base_invoice_id: params.invoice_id,
         credit_reason: body.credit_reason || body.reason,
         command_token: commandToken(req, body)
-      }], deps, ['DATABASE']);
-    }
-    params = match(path, '/api/invoices/:invoice_id');
-    if (params && req.method === 'GET') {
-      const detail = await deps.rpc('invoice_detail_get', {
-        p_invoice_id: params.invoice_id,
-        p_actor_user_id: user.id
-      });
-      return jsonResponse(rpcValue(detail));
-    }
-
-    if (req.method === 'POST' && path === '/api/invoices') {
-      const body = await parseBody(req);
-      if (!body) return jsonResponse({ error: 'Invalid JSON' }, 400);
-      return startCommands(env, req, ctx, user, [
-        generationCommandFromBody(req, body, 'GENERATE_SELECTED')
-      ], deps, ['DATABASE']);
-    }
-    if (req.method === 'POST' && path === '/api/invoices/tsfin/by-week') {
-      const body = await parseBody(req);
-      if (!body) return jsonResponse({ error: 'Invalid JSON' }, 400);
-      return startCommands(env, req, ctx, user, [
-        generationCommandFromBody(req, body, 'GENERATE_BY_WEEK')
-      ], deps, ['DATABASE']);
-    }
-    if (req.method === 'POST' && path === '/api/invoices/create-expenses') {
-      const body = await parseBody(req);
-      if (!body) return jsonResponse({ error: 'Invalid JSON' }, 400);
-      return startCommands(env, req, ctx, user, [
-        generationCommandFromBody(req, body, 'GENERATE_EXPENSES')
-      ], deps, ['DATABASE']);
-    }
-    if (req.method === 'POST' && path === '/api/nhsp/invoices/run') {
-      const body = await parseBody(req);
-      if (!body) return jsonResponse({ error: 'Invalid JSON' }, 400);
-      const sourceIds = body.nhsp_shift_ids || body.source_ids || body.timesheet_ids;
-      return startCommands(env, req, ctx, user, [{
-        ...generationCommandFromBody(req, { ...body, source_ids: sourceIds }, 'GENERATE_NHSP'),
-        nhsp_shift_ids: body.nhsp_shift_ids
-          ? canonicalUuidArray(body.nhsp_shift_ids)
-          : undefined
       }], deps, ['DATABASE']);
     }
     return null;
@@ -2651,14 +3299,30 @@ export const invoiceAsyncHttpInternals = Object.freeze({
   canonicalUuidArray,
   canonicalEmailArray,
   boolValue,
+  commandToken,
   generationCommandFromBody,
+  readInvoiceBatchJsonBody,
+  validateInvoiceBatchSourceFields,
   normaliseInvoiceBatchFilters,
   normaliseInvoiceBatchSort,
   normaliseInvoiceBatchSelectionRules,
+  normaliseInvoiceBatchSnapshot,
+  normaliseInvoiceBatchFacetRequest,
+  normaliseInvoiceBatchCursorValues,
+  normaliseInvoiceBatchQueryBody,
+  hashInvoiceBatchFilter,
   hashInvoiceBatchQuery,
+  hashInvoiceBatchSelection,
   encodeInvoiceBatchCursor,
   decodeInvoiceBatchCursor,
+  encodeInvoiceBatchResultCursorV2,
+  decodeInvoiceBatchResultCursorV2,
   candidateGroupsFromRpc,
+  loadInvoiceAsyncDatabaseContract,
+  validateInvoiceAsyncDatabaseContract,
+  invoiceErrorStatus,
+  isInvoiceAsyncRoute,
+  isRetiredInvoiceLegacyRoute,
   encodeUnifiedOutboxCursor,
   decodeUnifiedOutboxCursor,
   compareCursorOutboxRows,

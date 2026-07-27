@@ -28,7 +28,7 @@ declare
   v_selection_hash text;
   v_result jsonb;
 begin
-  perform private._invoice_batch_query_validate_v2(v_query, 'ISSUE');
+  v_query := private._invoice_batch_query_validate_v2(v_query, 'ISSUE');
 
   if jsonb_typeof(v_query) is distinct from 'object' then
     raise exception using errcode='22023', message='INVOICE_BATCH_QUERY_INVALID';
@@ -88,8 +88,11 @@ begin
 
   perform 1 from private._invoice_batch_selection_rules_v2(v_selection) limit 1;
 
-  v_allow_early := lower(coalesce(v_query->>'allow_early',v_filters->>'allow_early','false')) in ('true','t','1','yes','on');
-  v_display_mode := upper(coalesce(nullif(v_query->>'display_mode',''),nullif(v_filters->>'display_mode',''),'ALL'));
+  v_allow_early := coalesce((v_filters->>'allow_early')::boolean,false);
+  v_display_mode := upper(coalesce(
+    nullif(v_filters->>'display_mode',''),
+    'ALL'
+  ));
   if v_display_mode not in ('ALL','READY','BLOCKED') then
     raise exception using errcode='22023', message='INVOICE_BATCH_DISPLAY_MODE_INVALID';
   end if;
@@ -106,15 +109,21 @@ begin
     raise exception using errcode='22023', message='INVOICE_BATCH_SORT_KEY_INVALID';
   end if;
 
+  -- V8 Issue totals, selection summaries, status ordering and cursors always
+  -- use the shared authoritative scalar classifier.
+  -- PAGE, EXPAND_SELECTION and EXPLICIT_KEYS always obtain their bounded
+  -- keyset first. The complete classifier remains the scalar authority for
+  -- exact filtering, totals and group state, but it must never cause the
+  -- rich presentation hydrator to receive an unrestricted invoice set.
+
   v_page_size := case
-    when v_mode = 'EXPAND_SELECTION' then greatest(1,least(
-      case when coalesce(v_query->>'page_size','') ~ '^[1-9][0-9]{0,8}$'
-        then (v_query->>'page_size')::integer else 250 end,250))
-    when coalesce(v_query->>'page_size','') ~ '^[1-9][0-9]{0,8}$'
-      then greatest(1,least((v_query->>'page_size')::integer,100))
+    when v_mode = 'EXPAND_SELECTION'
+      then (v_query->>'page_size')::integer
+    when v_mode = 'PAGE'
+      then (v_query->>'page_size')::integer
     else 100
   end;
-  v_after_key := nullif(coalesce(v_query#>>'{cursor,after_selection_key}',v_query#>>'{cursor,last_selection_key}',v_query->>'after_selection_key'), '');
+  v_after_key := nullif(v_query#>>'{cursor,after_selection_key}', '');
 
   v_input_snapshot := v_query->'snapshot';
   if v_input_snapshot is null
@@ -145,8 +154,12 @@ begin
     'filters',v_filters,
     'sort',v_sort,
     'snapshot',jsonb_build_object(
+      'contract_version',v_snapshot->>'contract_version',
+      'action',v_snapshot->>'action',
       'at_utc',v_snapshot->>'at_utc',
-      'revision',v_snapshot->>'revision'
+      'revision',v_snapshot->>'revision',
+      'expires_at_utc',v_snapshot->>'expires_at_utc',
+      'key_id',v_snapshot->>'key_id'
     )
   ));
   v_selection_hash := private._invoice_batch_hash_v2(v_selection);
@@ -173,13 +186,13 @@ begin
       coalesce(nullif(upper(v_sort->>'sort_key'),''),'WEEK_ENDING_DATE') sort_key,
       case when upper(coalesce(v_sort->>'sort_direction','ASC'))='DESC' then 'DESC' else 'ASC' end sort_direction,
       case when pg_input_is_valid(
-        nullif(coalesce(v_query#>>'{cursor,after_sort_date}',v_query#>>'{cursor,last_sort_date}',''),''),
+        nullif(coalesce(v_query#>>'{cursor,after_sort_date}',''),''),
         'date'
       )
-        then coalesce(v_query#>>'{cursor,after_sort_date}',v_query#>>'{cursor,last_sort_date}')::date end after_sort_date,
-      nullif(coalesce(v_query#>>'{cursor,after_sort_text}',v_query#>>'{cursor,last_sort_text}',''),'') after_sort_text,
-      case when coalesce(v_query#>>'{cursor,after_sort_numeric}',v_query#>>'{cursor,last_sort_numeric}','') ~ '^[+-]?[0-9]+([.][0-9]+)?$'
-        then coalesce(v_query#>>'{cursor,after_sort_numeric}',v_query#>>'{cursor,last_sort_numeric}')::numeric end after_sort_numeric,
+        then (v_query#>>'{cursor,after_sort_date}')::date end after_sort_date,
+      nullif(coalesce(v_query#>>'{cursor,after_sort_text}',''),'') after_sort_text,
+      case when coalesce(v_query#>>'{cursor,after_sort_numeric}','') ~ '^[+-]?[0-9]+([.][0-9]+)?$'
+        then (v_query#>>'{cursor,after_sort_numeric}')::numeric end after_sort_numeric,
       lower(nullif(btrim(coalesce(v_query#>>'{facet_request,search}','')),'')) facet_search,
       case when coalesce(v_query#>>'{facet_request,limit_per_kind}','') ~ '^[1-9][0-9]{0,2}$'
         then least((v_query#>>'{facet_request,limit_per_kind}')::integer,100)
@@ -201,6 +214,26 @@ begin
   selection_rules as materialized (
     select * from private._invoice_batch_selection_rules_v2(v_selection)
   ),
+  candidate_keys as materialized (
+    select key_row.*
+    from (
+      select 1
+      where v_mode in ('PAGE','EXPAND_SELECTION','EXPLICIT_KEYS')
+    ) gate
+    cross join lateral private._invoice_batch_issue_candidate_keys_v2(
+      v_query,
+      coalesce(p_now_utc,now())
+    ) key_row
+  ),
+  issue_scope_request as materialized (
+    select
+      case
+        when v_mode in ('FACETS','SUMMARY') then '{}'::uuid[]
+        else coalesce(array_agg(k.invoice_id order by k.page_ordinal)
+          filter (where k.page_ordinal<=v_page_size),'{}'::uuid[])
+      end invoice_ids
+    from candidate_keys k
+  ),
   source_weeks as materialized (
     select
       '{}'::jsonb client_json,
@@ -209,11 +242,14 @@ begin
       source.invoice_week_start,
       source.week_ending_date,
       source.invoice_json
-    from private._invoice_batch_issue_source_rows_v2(
+    from issue_scope_request request
+    cross join lateral private._invoice_batch_issue_source_rows_for_ids_v2(
+      request.invoice_ids,
       true,
-      null,
       coalesce(p_now_utc,now())
     ) source
+    where v_mode in ('PAGE','EXPAND_SELECTION','EXPLICIT_KEYS')
+      and cardinality(request.invoice_ids)>0
   ),
   invoice_rows_raw as materialized (
     select
@@ -335,6 +371,126 @@ begin
       and r.invoice_status in ('DRAFT','ON_HOLD')
       and nullif(r.invoice_number,'') is not null
   ),
+  authoritative_rows as materialized (
+    select
+      candidate.candidate_json->>'selection_key' selection_key,
+      (candidate.candidate_json->>'invoice_id')::uuid invoice_id,
+      candidate.candidate_json->>'invoice_number' invoice_number,
+      (candidate.candidate_json->>'client_id')::uuid client_id,
+      candidate.candidate_json->>'client_name' client_name,
+      (candidate.candidate_json->>'document_revision')::bigint
+        document_revision,
+      case
+        when pg_input_is_valid(
+          coalesce(candidate.candidate_json->>'week_ending_date',''),
+          'date'
+        )
+          then (candidate.candidate_json->>'week_ending_date')::date
+      end week_ending_date,
+      coalesce(
+        (candidate.candidate_json->>'is_early')::boolean,
+        false
+      ) is_early,
+      coalesce(
+        nullif(candidate.candidate_json->>'currency',''),
+        'GBP'
+      ) currency,
+      upper(coalesce(
+        nullif(candidate.candidate_json->>'invoice_stream',''),
+        'NORMAL'
+      )) invoice_stream,
+      coalesce(
+        (candidate.candidate_json->>'total_ex_vat')::numeric,
+        0
+      ) total_ex_vat,
+      coalesce(
+        (candidate.candidate_json->>'vat_amount')::numeric,
+        0
+      ) vat_amount,
+      coalesce(
+        (candidate.candidate_json->>'total_inc_vat')::numeric,
+        0
+      ) total_inc_vat,
+      candidate.candidate_json->>'preview_document_state'
+        preview_document_state,
+      candidate.candidate_json->>'invoice_status' invoice_status,
+      coalesce(
+        candidate.candidate_json->'hard_blocker_codes',
+        '[]'::jsonb
+      ) hard_blocker_codes,
+      coalesce(
+        candidate.candidate_json->'document_dependency_codes',
+        '[]'::jsonb
+      ) document_dependency_codes,
+      coalesce(
+        candidate.candidate_json->'delivery_blocker_codes',
+        '[]'::jsonb
+      ) delivery_blocker_codes,
+      coalesce(
+        candidate.candidate_json->'warning_codes',
+        '[]'::jsonb
+      ) warning_codes,
+      coalesce(
+        (candidate.candidate_json->>'can_issue_only')::boolean,
+        false
+      ) can_issue_only,
+      coalesce(
+        (candidate.candidate_json->>'can_issue_and_deliver')::boolean,
+        false
+      ) can_issue_and_deliver,
+      candidate.candidate_json->'validation_detail'
+        validation_detail,
+      candidate.candidate_json->'support_readiness'
+        support_readiness,
+      candidate.candidate_json->>'active_issue_operation_id'
+        active_issue_operation_id_text,
+      candidate.candidate_json->'active_issue_operation'
+        active_issue_operation,
+      candidate.candidate_json->>'active_document_operation_id'
+        active_document_operation_id_text,
+      candidate.candidate_json->'last_issue_error'
+        last_issue_error,
+      candidate.candidate_json->'last_document_error'
+        last_document_error,
+      coalesce(
+        candidate.candidate_json->'candidate_ids',
+        '[]'::jsonb
+      ) candidate_ids,
+      coalesce(
+        candidate.candidate_json->'candidate_names',
+        '[]'::jsonb
+      ) candidate_names,
+      candidate.candidate_json->>'candidate_display'
+        candidate_display,
+      coalesce(
+        candidate.candidate_json->'week_ending_dates',
+        '[]'::jsonb
+      ) week_ending_dates,
+      candidate.candidate_json->>'generated_state'
+        generated_state,
+      coalesce(
+        (candidate.candidate_json->>'blocked_for_sending')::boolean,
+        false
+      ) blocked_for_sending,
+      coalesce(
+        candidate.candidate_json->'issue_blocker_codes',
+        '[]'::jsonb
+      ) issue_blocker_codes,
+      coalesce(
+        candidate.candidate_json->'informational_codes',
+        '[]'::jsonb
+      ) informational_codes,
+      coalesce(
+        (candidate.candidate_json->>'selectable')::boolean,
+        false
+      ) selectable,
+      candidate.candidate_json->>'row_status' row_status
+    from private._invoice_batch_issue_classification_v2(
+      true,
+      null,
+      coalesce(p_now_utc,statement_timestamp())
+    ) candidate
+  ),
   filter_match_rows as materialized (
     select
       r.*,
@@ -382,7 +538,7 @@ begin
           )
         )
       ) blocker_filter_match
-    from candidate_rows r
+    from authoritative_rows r
     cross join params p
     where (p.allow_early or not coalesce(r.is_early,false))
       and (
@@ -590,10 +746,25 @@ begin
     select r.*
     from selection_scope_rows r
     cross join params p
-    where v_mode='EXPAND_SELECTION'
-       or p.display_mode='ALL'
-       or (p.display_mode='READY' and r.selectable)
-       or (p.display_mode='BLOCKED' and (r.row_status in ('BLOCKED','STALE','FAILED') or r.blocked_for_sending))
+    where (
+      v_mode='EXPAND_SELECTION'
+      or p.display_mode='ALL'
+      or (p.display_mode='READY' and r.selectable)
+      or (
+        p.display_mode='BLOCKED'
+        and (
+          r.row_status in ('BLOCKED','STALE','FAILED')
+          or r.blocked_for_sending
+        )
+      )
+    )
+      and (
+        v_mode<>'EXPAND_SELECTION'
+        or (
+          r.selectable
+          and r.last_selection_action<>'EXCLUDE'
+        )
+      )
   ),
   sortable_rows as materialized (
     select fr.*,
@@ -673,6 +844,27 @@ begin
   visible_rows as materialized (
     select * from page_rows
     where page_ordinal <= (select page_size from params)
+  ),
+  visible_invoice_request as materialized (
+    select array_agg(invoice_id order by invoice_id) invoice_ids
+    from visible_rows
+    where invoice_id is not null
+  ),
+  nonempty_visible_invoice_request as materialized (
+    select invoice_ids
+    from visible_invoice_request
+    where cardinality(invoice_ids)>0
+  ),
+  visible_support as materialized (
+    select
+      (source.invoice_json->>'invoice_id')::uuid support_invoice_id,
+      source.invoice_json
+    from nonempty_visible_invoice_request request
+    cross join lateral private._invoice_batch_issue_source_rows_for_ids_v2(
+      request.invoice_ids,
+      true,
+      coalesce(p_now_utc,statement_timestamp())
+    ) source
   ),
   totals as materialized (
     select
@@ -863,7 +1055,10 @@ begin
       'active_issue_operation',active_issue_operation,
       'active_document_operation_id',active_document_operation_id_text,
       'validation_detail',validation_detail,
-      'support_readiness',support_readiness,
+      'support_readiness',coalesce(
+        support.invoice_json->'support_readiness',
+        visible_rows.support_readiness
+      ),
       'sort_tuple',jsonb_build_object(
         'sort_date',case when sort_date_key is not null then sort_date_key::text end,
         'sort_text',sort_text_key,
@@ -872,6 +1067,8 @@ begin
       )
     ) order by page_ordinal),'[]'::jsonb) rows
     from visible_rows
+    left join visible_support support
+      on support.support_invoice_id=visible_rows.invoice_id
   )
   select jsonb_build_object(
     'contract_version','INVOICE_BATCH_CANDIDATES_V2',
@@ -887,9 +1084,31 @@ begin
     'page',jsonb_build_object(
       'page_size',v_page_size,
       'returned_count',(select count(*) from visible_rows),
-      'total_count',(select display_count from display_totals),
-      'has_more',(select count(*) from page_rows)>v_page_size,
-      'next_cursor_values',case when (select count(*) from page_rows)>v_page_size then (
+      'total_count',case
+        when v_mode in ('PAGE','EXPAND_SELECTION','EXPLICIT_KEYS')
+          then coalesce((select max(k.full_scope_count) from candidate_keys k),0)
+        else (select display_count from display_totals)
+      end,
+      'has_more',case
+        when v_mode in ('PAGE','EXPAND_SELECTION','EXPLICIT_KEYS')
+          then exists (
+            select 1
+            from candidate_keys k
+            where k.page_ordinal>v_page_size
+          )
+        else (select count(*) from page_rows)>v_page_size
+      end,
+      'next_cursor_values',case when (
+        case
+          when v_mode in ('PAGE','EXPAND_SELECTION','EXPLICIT_KEYS')
+            then exists (
+              select 1
+              from candidate_keys k
+              where k.page_ordinal>v_page_size
+            )
+          else (select count(*) from page_rows)>v_page_size
+        end
+      ) then (
         select case when v_mode='EXPAND_SELECTION'
           then jsonb_build_object('after_selection_key',selection_key)
           else jsonb_build_object(
@@ -899,7 +1118,16 @@ begin
             'after_sort_numeric',case when sort_numeric_key is not null then sort_numeric_key::text end
           )
         end
-        from visible_rows
+        from (
+          select
+            selection_key,
+            sort_date_key,
+            sort_text_key,
+            sort_numeric_key,
+            page_ordinal
+          from candidate_keys
+          where page_ordinal<=v_page_size
+        ) cursor_source
         order by page_ordinal desc
         limit 1
       ) else null end
@@ -923,7 +1151,7 @@ begin
       'selected_total',(select selected_count from totals),
       'excluded_total',(select ready_count-selected_count from totals),
       'blocked_total',(select blocked_count from totals),
-      'exact',true
+      'exact',v_mode in ('FACETS','SUMMARY')
     ),
     'group_selection',(select groups from group_selection_json),
     'facets',case

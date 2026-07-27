@@ -288,6 +288,97 @@ source_rows_base as materialized (
       'sha256'),'hex') row_revision
   from settings_resolved s
 ),
+pre_reference_groups as materialized (
+  select
+    s.command_no,
+    s.client_id,
+    s.invoice_stream,
+    s.consolidation_mode,
+    case
+      when s.consolidation_mode='NONE' then s.timesheet_id::text
+      when s.consolidation_mode='BY_WEEK'
+        then s.economic_target_week::text
+      else 'ANY_WEEK'
+    end grouping_value,
+    encode(digest(concat_ws(
+      '|',
+      s.command_type,
+      s.client_id::text,
+      s.invoice_stream,
+      s.consolidation_mode,
+      case
+        when s.consolidation_mode='NONE' then s.timesheet_id::text
+        when s.consolidation_mode='BY_WEEK'
+          then s.economic_target_week::text
+        else 'ANY_WEEK'
+      end,
+      encode(digest(string_agg(concat_ws(
+        ':',
+        s.timesheet_id::text,
+        coalesce(s.segment_id,'WHOLE'),
+        s.economic_target_week::text
+      ),'|' order by
+        s.timesheet_id,
+        coalesce(s.segment_id,'WHOLE')
+      ),'sha256'),'hex')
+    ),'sha256'),'hex') group_key
+  from source_rows_base s
+  group by
+    s.command_no,
+    s.command_type,
+    s.client_id,
+    s.invoice_stream,
+    s.consolidation_mode,
+    case
+      when s.consolidation_mode='NONE' then s.timesheet_id::text
+      when s.consolidation_mode='BY_WEEK'
+        then s.economic_target_week::text
+      else 'ANY_WEEK'
+    end
+),
+source_rows_scoped as materialized (
+  select source_row.*
+  from source_rows_base source_row
+  join pre_reference_groups candidate_group
+    on candidate_group.command_no=source_row.command_no
+   and candidate_group.client_id=source_row.client_id
+   and candidate_group.invoice_stream=source_row.invoice_stream
+   and candidate_group.consolidation_mode=
+       source_row.consolidation_mode
+   and candidate_group.grouping_value is not distinct from case
+     when source_row.consolidation_mode='NONE'
+       then source_row.timesheet_id::text
+     when source_row.consolidation_mode='BY_WEEK'
+       then source_row.economic_target_week::text
+     else 'ANY_WEEK'
+   end
+  join generation_commands command
+    on command.command_no=source_row.command_no
+  where jsonb_typeof(command.command_json->'scope_keys')
+          is distinct from 'array'
+     or jsonb_array_length(
+          case
+            when jsonb_typeof(
+              command.command_json->'scope_keys'
+            )='array'
+              then command.command_json->'scope_keys'
+            else '[]'::jsonb
+          end
+        )=0
+     or exists (
+       select 1
+       from jsonb_array_elements_text(
+         case
+           when jsonb_typeof(
+             command.command_json->'scope_keys'
+           )='array'
+             then command.command_json->'scope_keys'
+           else '[]'::jsonb
+         end
+       ) requested_scope(scope_key)
+       where requested_scope.scope_key=candidate_group.group_key
+     )
+),
 reference_results as materialized (
   select distinct on (r.source_member_key) r.*
   from private._invoice_source_reference_validate_batch(coalesce((
@@ -302,7 +393,7 @@ reference_results as materialized (
       'consolidation_mode',b.consolidation_mode,
       'row_revision',b.row_revision)
       order by b.command_no,b.timesheet_id,b.segment_ordinal)
-    from source_rows_base b
+    from source_rows_scoped b
   ),'[]'::jsonb)) r
   order by r.source_member_key
 ),
@@ -311,7 +402,7 @@ source_rows as materialized (
     coalesce(b.source_blocker,r.blocker_code) canonical_blocker,
     r.reference_hash,r.current_revision canonical_row_revision,
     r.detail_json reference_detail
-  from source_rows_base b
+  from source_rows_scoped b
   left join reference_results r
     on r.source_member_key=b.source_member_key
 ),

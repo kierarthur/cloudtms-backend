@@ -29,12 +29,26 @@ as $function$
        to_regprocedure('private._invoice_batch_selection_rules_v2(jsonb)')),
       ('private._invoice_batch_query_validate_v2(jsonb,text)',
        to_regprocedure('private._invoice_batch_query_validate_v2(jsonb,text)')),
+      ('private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamptz)',
+       to_regprocedure('private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamp with time zone)')),
+      ('private._invoice_batch_generate_classification_v2(boolean,text[],timestamptz)',
+       to_regprocedure('private._invoice_batch_generate_classification_v2(boolean,text[],timestamp with time zone)')),
+      ('private._invoice_batch_generate_candidate_keys_v2(jsonb,timestamptz)',
+       to_regprocedure('private._invoice_batch_generate_candidate_keys_v2(jsonb,timestamp with time zone)')),
       ('private._invoice_batch_generate_group_rows_v2(boolean,integer,text[],timestamptz)',
        to_regprocedure('private._invoice_batch_generate_group_rows_v2(boolean,integer,text[],timestamp with time zone)')),
       ('private._invoice_batch_generate_candidate_rows_v2(jsonb,timestamptz)',
        to_regprocedure('private._invoice_batch_generate_candidate_rows_v2(jsonb,timestamp with time zone)')),
       ('private._invoice_batch_issue_source_rows_v2(boolean,integer,timestamptz)',
        to_regprocedure('private._invoice_batch_issue_source_rows_v2(boolean,integer,timestamp with time zone)')),
+      ('private._invoice_batch_issue_source_rows_core_v2(boolean,integer,timestamptz,uuid[])',
+       to_regprocedure('private._invoice_batch_issue_source_rows_core_v2(boolean,integer,timestamp with time zone,uuid[])')),
+      ('private._invoice_batch_issue_source_rows_for_ids_v2(uuid[],boolean,timestamptz)',
+       to_regprocedure('private._invoice_batch_issue_source_rows_for_ids_v2(uuid[],boolean,timestamp with time zone)')),
+      ('private._invoice_batch_issue_classification_v2(boolean,uuid[],timestamptz)',
+       to_regprocedure('private._invoice_batch_issue_classification_v2(boolean,uuid[],timestamp with time zone)')),
+      ('private._invoice_batch_issue_candidate_keys_v2(jsonb,timestamptz)',
+       to_regprocedure('private._invoice_batch_issue_candidate_keys_v2(jsonb,timestamp with time zone)')),
       ('private._invoice_batch_issue_candidate_rows_v2(jsonb,timestamptz)',
        to_regprocedure('private._invoice_batch_issue_candidate_rows_v2(jsonb,timestamp with time zone)')),
       ('private._invoice_operation_start_core_v8(jsonb,uuid,timestamptz)',
@@ -49,6 +63,8 @@ as $function$
        to_regprocedure('private._invoice_operation_get_core_v8(uuid[],uuid,text)')),
       ('private._invoice_batch_manifest_advance_v2(jsonb,text,timestamptz)',
        to_regprocedure('private._invoice_batch_manifest_advance_v2(jsonb,text,timestamp with time zone)')),
+      ('private._invoice_dispatch_advance_batch(jsonb,timestamptz)',
+       to_regprocedure('private._invoice_dispatch_advance_batch(jsonb,timestamp with time zone)')),
       ('private._invoice_candidate_triggers_install_v2()',
        to_regprocedure('private._invoice_candidate_triggers_install_v2()')),
       ('public.invoice_batch_generate_candidates(jsonb)',
@@ -90,6 +106,13 @@ as $function$
       count(*) filter (
         where definition like '%_legacy_20260726%'
       ) forbidden_dependency_count,
+      count(*) filter (
+        where identity like 'private._invoice_batch_%candidate%rows_v2(%'
+          and (
+            definition like '%public.invoice_batch_generate_candidates(%'
+            or definition like '%public.invoice_batch_issue_candidates(%'
+          )
+      ) public_candidate_dependency_count,
       encode(
         extensions.digest(
           convert_to(
@@ -105,6 +128,66 @@ as $function$
         'hex'
       ) function_hash_manifest
     from definitions
+  ),
+  security_state as (
+    select count(*) filter (
+      where definitions.identity like 'private.%'
+        and (
+          has_function_privilege(
+            'public',
+            definitions.procedure_identity,
+            'EXECUTE'
+          )
+          or has_function_privilege(
+            'anon',
+            definitions.procedure_identity,
+            'EXECUTE'
+          )
+          or has_function_privilege(
+            'authenticated',
+            definitions.procedure_identity,
+            'EXECUTE'
+          )
+        )
+    ) private_exposure_count
+    from definitions
+    where definitions.procedure_identity is not null
+  ),
+  legacy_surface_state as (
+    select count(*) filter (
+      where legacy.procedure_identity is not null
+        and (
+          has_function_privilege(
+            'public',
+            legacy.procedure_identity,
+            'EXECUTE'
+          )
+          or has_function_privilege(
+            'anon',
+            legacy.procedure_identity,
+            'EXECUTE'
+          )
+          or has_function_privilege(
+            'authenticated',
+            legacy.procedure_identity,
+            'EXECUTE'
+          )
+          or has_function_privilege(
+            'service_role',
+            legacy.procedure_identity,
+            'EXECUTE'
+          )
+        )
+    ) legacy_runtime_exposure_count
+    from (
+      values
+        (to_regprocedure(
+          'public.invoice_batch_generate_candidates(boolean,integer,text[],jsonb)'
+        )),
+        (to_regprocedure(
+          'public.invoice_batch_issue_candidates(boolean,integer,jsonb)'
+        ))
+    ) legacy(procedure_identity)
   ),
   key_state as (
     select exists (
@@ -161,6 +244,9 @@ as $function$
     'ready',
       manifest.missing_count=0
       and manifest.forbidden_dependency_count=0
+      and manifest.public_candidate_dependency_count=0
+      and security_state.private_exposure_count=0
+      and legacy_surface_state.legacy_runtime_exposure_count=0
       and key_state.snapshot_key_ready
       and trigger_state.candidate_trigger_count=54
       and trigger_state.result_trigger_count=3
@@ -173,12 +259,21 @@ as $function$
     'function_hash_manifest',manifest.function_hash_manifest,
     'missing_function_count',manifest.missing_count,
     'forbidden_dependency_count',manifest.forbidden_dependency_count,
+    'public_candidate_dependency_count',
+      manifest.public_candidate_dependency_count,
+    'private_exposure_count',security_state.private_exposure_count,
+    'legacy_runtime_exposure_count',
+      legacy_surface_state.legacy_runtime_exposure_count,
+    'trigger_manifest_digest',
+      '39a4c76d0f0a757a2ee04e25ec05df74b1ccf5531393ecdb2b30b360bf4ba5b0',
     'snapshot_signing_ready',key_state.snapshot_key_ready,
     'candidate_trigger_count',trigger_state.candidate_trigger_count,
     'result_trigger_count',trigger_state.result_trigger_count,
     'indexes_ready',coalesce(index_state.indexes_ready,false)
   )
   from manifest
+  cross join security_state
+  cross join legacy_surface_state
   cross join key_state
   cross join trigger_state
   cross join index_state;

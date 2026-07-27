@@ -157,14 +157,25 @@ begin
       and c.attempt_count<c.max_attempts
       and o.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT')
       and (
-        not c.is_manifest_member
-        or c.manifest_committed
-      )
-      and (
         o.entity_type is distinct from 'INVOICE_BATCH'
-        or o.manifest_committed
-        or coalesce(c.payload_json->>'is_selection_expander','false')
-          in ('true','t','1','yes','on')
+        or (
+          not c.is_manifest_member
+          and coalesce(c.payload_json->>'is_selection_expander','false')
+            in ('true','t','1','yes','on')
+          and c.chunk_type in ('GENERATION_GROUP','ISSUE_INVOICE')
+          and c.phase in ('BUILD_MANIFEST','RELEASE_MANIFEST')
+        )
+        or (
+          c.is_manifest_member
+          and o.manifest_committed
+          and c.manifest_committed
+          and c.phase not in (
+            'AWAITING_MANIFEST_COMMIT',
+            'AWAITING_RELEASE'
+          )
+          and coalesce(c.payload_json->>'is_selection_expander','false')
+            not in ('true','t','1','yes','on')
+        )
       )
       and(select count(*) from dead_rollup)>=0
     order by (c.priority + least(100,floor(extract(epoch from (v_now-c.created_at_utc))/3600)::integer)) desc,

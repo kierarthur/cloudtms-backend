@@ -10,6 +10,7 @@ declare
   v_argument_list text;
   v_trigger_base text;
   v_installed integer := 0;
+  v_manifest_rows jsonb := '[]'::jsonb;
 begin
   if to_regprocedure('private._invoice_candidate_revision_trigger_v2()') is null
      or to_regprocedure('private._invoice_result_page_revision_trigger_v2()') is null then
@@ -20,7 +21,8 @@ begin
 
   for v_item in
     select manifest.table_name, manifest.bump_generate,
-      manifest.bump_issue, manifest.fields
+      manifest.bump_issue, manifest.fields,
+      coalesce(manifest.json_paths,'[]'::jsonb) json_paths
     from jsonb_to_recordset($manifest$
     [
       {"table_name":"contracts","bump_generate":true,"bump_issue":true,"fields":["candidate_id","client_id","start_date","end_date","pay_method_snapshot","rates_json","std_hours_json","default_submission_mode","week_ending_weekday_snapshot","auto_invoice","require_reference_to_invoice","mileage_charge_rate","additional_rates_json","self_bill","weekly_timesheet_source","no_timesheet_required","daily_calc_of_invoices","group_nightsat_sunbh","is_nhsp","autoprocess_hr","requires_hr","hr_attach_to_invoice","ts_attach_to_invoice","overrideclientsettings","reference_number_required_to_issue_invoice","send_manual_invoices_to_different_email","manual_invoices_alt_email_address","is_ad_hoc","healthroster_import_auto_authorise_override","nhsp_import_auto_authorise_override"]},
@@ -39,16 +41,27 @@ begin
       {"table_name":"timesheet_evidence","bump_generate":true,"bump_issue":true,"fields":["timesheet_id","kind","storage_key","source_revision","display_name","document_asset_id","processing_state","processing_error_json"]},
       {"table_name":"invoice_document_versions","bump_generate":true,"bump_issue":true,"fields":["entity_type","entity_id","purpose","operation_id","source_revision","template_version","status","r2_key","sha256","size_bytes","page_count","ready_at_utc","verified_at_utc","superseded_at_utc","error_json"]},
       {"table_name":"invoice_document_assets","bump_generate":true,"bump_issue":true,"fields":["source_kind","source_id","source_revision","declared_media_type","detected_media_type","original_sha256","original_size_bytes","status","normalised_manifest_hash","normalised_r2_key","normalised_sha256","normalised_size_bytes","normalised_page_count","operation_id","error_json","ready_at_utc"]},
-      {"table_name":"invoice_operations","bump_generate":true,"bump_issue":true,"fields":["parent_operation_id","operation_type","entity_type","entity_id","status","phase","source_revision","template_version","control_version","result_json","error_json"]},
-      {"table_name":"invoice_operation_chunks","bump_generate":true,"bump_issue":true,"fields":["operation_id","chunk_type","entity_type","entity_id","document_version_id","document_asset_id","input_document_version_id","status","phase","replaced_by_chunk_id","payload_json","result_json","error_json"]}
+      {"table_name":"invoice_operations","bump_generate":true,"bump_issue":true,"fields":["parent_operation_id","operation_type","entity_type","entity_id","status","phase","source_revision","template_version","control_version","manifest_generation","manifest_committed","release_complete"],"json_paths":["result_json.legal_issue_state","result_json.delivery_state","result_json.document_version_id","result_json.issued_document_version_id","error_json.code"]},
+      {"table_name":"invoice_operation_chunks","bump_generate":true,"bump_issue":true,"fields":["operation_id","chunk_type","entity_type","entity_id","document_version_id","document_asset_id","input_document_version_id","status","phase","replaced_by_chunk_id","manifest_generation","is_manifest_member","manifest_committed","result_visible","selection_key","result_category"],"json_paths":["payload_json.is_selection_expander","payload_json.blocked_for_sending","payload_json.row_kind","payload_json.source_revision","result_json.document_version_id","result_json.issued_document_version_id","result_json.legal_issue_state","result_json.delivery_state","error_json.code"]}
     ]
     $manifest$::jsonb) as manifest(
       table_name text,
       bump_generate boolean,
       bump_issue boolean,
-      fields jsonb
+      fields jsonb,
+      json_paths jsonb
     )
   loop
+    v_manifest_rows := v_manifest_rows || jsonb_build_array(
+      jsonb_build_object(
+        'table_name', v_item.table_name,
+        'bump_generate', v_item.bump_generate,
+        'bump_issue', v_item.bump_issue,
+        'fields', v_item.fields,
+        'json_paths', v_item.json_paths
+      )
+    );
+
     if to_regclass(format('public.%I', v_item.table_name)) is null then
       raise exception using
         errcode = '42P01',
@@ -154,7 +167,8 @@ begin
     'contract_version', 'INVOICE_ASYNC_TRIGGER_MANIFEST_V2',
     'candidate_trigger_count', v_installed,
     'result_trigger_count', 3,
-    'table_count', v_installed / 3
+    'table_count', v_installed / 3,
+    'manifest_digest', private._invoice_batch_hash_v2(v_manifest_rows)
   );
 end;
 $function$;

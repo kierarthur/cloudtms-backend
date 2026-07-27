@@ -51,6 +51,7 @@ begin
       c.is_manifest_member,
       c.manifest_committed carrier_manifest_committed,
       c.lease_expires_at_utc,o.status operation_status,
+      o.entity_type operation_entity_type,
       o.control_version operation_current_control_version,
       o.manifest_committed root_manifest_committed,
       case
@@ -63,11 +64,27 @@ begin
         when c.operation_control_version is distinct from s.operation_control_version
           or o.control_version is distinct from s.operation_control_version then 'CONTROL_VERSION_MISMATCH'
         when c.lease_expires_at_utc is null or c.lease_expires_at_utc<=v_now then 'LEASE_EXPIRED'
-        when c.is_manifest_member
-          and (
-            not c.manifest_committed
-            or not o.manifest_committed
-          ) then 'MANIFEST_MEMBER_NOT_RELEASED'
+        when o.entity_type='INVOICE_BATCH'
+          and not (
+            (
+              not c.is_manifest_member
+              and coalesce(c.payload_json->>'is_selection_expander','false')
+                in ('true','t','1','yes','on')
+              and c.chunk_type in ('GENERATION_GROUP','ISSUE_INVOICE')
+              and c.phase in ('BUILD_MANIFEST','RELEASE_MANIFEST')
+            )
+            or (
+              c.is_manifest_member
+              and c.manifest_committed
+              and o.manifest_committed
+              and c.phase not in (
+                'AWAITING_MANIFEST_COMMIT',
+                'AWAITING_RELEASE'
+              )
+              and coalesce(c.payload_json->>'is_selection_expander','false')
+                not in ('true','t','1','yes','on')
+            )
+          ) then 'MANIFEST_CLAIM_NOT_RELEASED'
         when o.status in('COMPLETE','FAILED','DEAD_LETTER','CANCELLED','SUPERSEDED') then 'OPERATION_TERMINAL'
       end rejection_code
     from supplied s

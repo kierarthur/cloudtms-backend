@@ -8,13 +8,17 @@ security definer
 set search_path to 'public','pg_temp'
 as $function$
 declare
-  v_now timestamptz:=coalesce(p_now_utc,now());
+  v_now timestamptz:=statement_timestamp();
   v_jwt_role text:=coalesce(
     nullif(current_setting('request.jwt.claim.role',true),''),
     auth.jwt()->>'role','');
   v_auth_user uuid:=auth.uid();
   v_result jsonb;
 begin
+  if v_jwt_role='service_role' then
+    v_now:=coalesce(p_now_utc,statement_timestamp());
+  end if;
+
   if jsonb_typeof(p_actions)<>'array'
      or jsonb_array_length(p_actions)<1
      or jsonb_array_length(p_actions)>100 then
@@ -78,7 +82,11 @@ begin
     select t.request_no,t.root_operation_id,child.id,t.depth+1,t.path||child.id
     from operation_tree t
     join public.invoice_operations child on child.parent_operation_id=t.operation_id
+    join supplied requested
+      on requested.request_no=t.request_no
+     and requested.action='CANCEL'
     where not child.id=any(t.path)
+      and t.depth<64
   ),
   chunk_chain(request_no,operation_id,requested_chunk_id,current_chunk_id,
     replaced_by_chunk_id,current_status,path,depth,cycle) as (
@@ -92,9 +100,12 @@ begin
       array[c.id]::uuid[],
       1,
       false
-    from operation_tree tree
+    from supplied requested
     join public.invoice_operation_chunks c
-      on c.operation_id=tree.operation_id
+      on c.id=requested.retry_chunk_id
+     and c.operation_id=requested.operation_id
+    where requested.action='RETRY'
+      and requested.retry_chunk_id is not null
 
     union all
 
@@ -115,7 +126,7 @@ begin
       and not chain.cycle
       and chain.depth<64
   ),
-  current_graph as materialized (
+  targeted_current_graph as materialized (
     select distinct on (chain.request_no,chain.requested_chunk_id)
       chain.request_no,
       chain.operation_id,
@@ -137,6 +148,10 @@ begin
     from chunk_chain chain
     order by chain.request_no,chain.requested_chunk_id,chain.depth desc
   ),
+  current_graph as materialized (
+    select targeted.*
+    from targeted_current_graph targeted
+  ),
   inspected as materialized (
     select s.*,o.status current_status,o.operation_type,o.control_version,
       o.priority current_priority,o.input_json,o.source_revision,
@@ -157,6 +172,15 @@ begin
           where c.chunk_type='ISSUE_INVOICE'
             and c.entity_type='INVOICE' and i.status in('ISSUED','PAID'))
           then 'COMPLETED_LEGAL_ISSUE_CANNOT_BE_CANCELLED'
+        when s.action='CANCEL' and exists(
+          select 1
+          from operation_tree boundary
+          join public.invoice_operations child
+            on child.parent_operation_id=boundary.operation_id
+          where boundary.request_no=s.request_no
+            and boundary.depth=64
+            and not child.id=any(boundary.path))
+          then 'OPERATION_TREE_DEPTH_EXCEEDED'
         when s.action='RETRY'
           and o.status not in('FAILED','DEAD_LETTER','BLOCKED','RETRY_WAIT')
           then 'OPERATION_NOT_RETRYABLE'
@@ -177,6 +201,12 @@ begin
             )->>'revision'
           )
           then 'BATCH_FRESH_SELECTION_REQUIRED'
+        when s.action='RETRY'
+          and o.input_json->>'contract_version'
+            ='INVOICE_BATCH_SELECTION_ROOT_V2'
+          and o.manifest_committed
+          and s.retry_chunk_id is null
+          then 'BATCH_TARGETED_RETRY_REQUIRED'
         when s.action='RETRY'
           and s.retry_chunk_id is not null
           and exists (
@@ -224,7 +254,9 @@ begin
             and retryable.current_status in(
               'FAILED','DEAD_LETTER','BLOCKED','RETRY_WAIT'))
           then 'RETRY_CHUNK_NOT_RETRYABLE'
-        when s.action='RETRY' and exists(
+        when s.action='RETRY'
+          and s.retry_chunk_id is not null
+          and exists(
           select 1 from current_graph invalid
           where invalid.operation_id=o.id
             and invalid.replacement_chain_status='INVALID')
@@ -487,9 +519,28 @@ begin
         updated_at_utc=v_now
     from changed_operations o
     where c.operation_id=o.id
-      and c.id in(select current_chunk_id from current_graph
-        where replacement_chain_status='VALID')
+      and (
+        (
+          o.retry_chunk_id is null
+          and c.replaced_by_chunk_id is null
+        )
+        or c.id in(
+          select current_chunk_id
+          from current_graph
+          where replacement_chain_status='VALID'
+        )
+      )
       and c.id not in(select id from linked_replacements)
+      and not (
+        o.action='RETRY'
+        and o.retry_chunk_id is null
+        and o.input_json->>'contract_version'
+          ='INVOICE_BATCH_SELECTION_ROOT_V2'
+        and coalesce(
+          c.payload_json->>'is_selection_expander',
+          'false'
+        ) not in ('true','t','1','yes','on')
+      )
       and(
         o.action in('RETRY','CANCEL')
         or(o.action='RESCHEDULE' and c.status in('QUEUED','RETRY_WAIT'))

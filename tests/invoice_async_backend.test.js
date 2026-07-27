@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   createInvoiceDocumentAccessToken,
@@ -7,11 +8,13 @@ import {
 } from '../broker/src/invoice-document-access.js';
 import {
   getInvoiceQueueRuntimeConfig,
+  validateQueueRuntimeConfiguration,
   invoiceQueueRuntimeInternals,
   processInvoiceDatabaseChunksBatch,
   processInvoiceDocumentChunksBatch,
   drainInvoiceOperations,
-  runInvoiceReconciliationCycle
+  runInvoiceReconciliationCycle,
+  runAutoInvoiceCycleAsync
 } from '../broker/src/invoice-queue-runtime.js';
 import {
   buildAttachmentIndexHtml,
@@ -36,6 +39,125 @@ import {
   flattenLeafInputReceipts,
   verifyMergeReceiptTree
 } from '../invoice-document-processor/src/receipt-contract.js';
+
+const V8_ACTOR_ID = '00000000-0000-4000-8000-000000000010';
+const V8_FUNCTION_MANIFEST = '2d39e23ca276f5d00f5b957a599b2eefa2ab3821379e6438344c9a70c4b31201';
+const V8_CURSOR_SECRET = 'test-session-secret-with-more-than-thirty-two-characters';
+
+function v8DatabaseContract(overrides = {}) {
+  return {
+    contract_version: 'INVOICE_ASYNC_DB_V2',
+    ready: true,
+    candidate_query_contract: 'INVOICE_BATCH_QUERY_V2',
+    candidate_response_contract: 'INVOICE_BATCH_CANDIDATES_V2',
+    selection_contract: 'INVOICE_BATCH_SELECTION_V2',
+    selection_root_contract: 'INVOICE_BATCH_SELECTION_ROOT_V2',
+    progress_contract: 'INVOICE_BATCH_PROGRESS_V2',
+    function_hash_manifest: V8_FUNCTION_MANIFEST,
+    indexes_ready: true,
+    snapshot_signing_ready: true,
+    missing_function_count: 0,
+    private_exposure_count: 0,
+    forbidden_dependency_count: 0,
+    public_candidate_dependency_count: 0,
+    legacy_runtime_exposure_count: 0,
+    ...overrides
+  };
+}
+
+function v8ProcessorBinding() {
+  return {
+    async fetch() {
+      return new Response(JSON.stringify({
+        ok: true,
+        processor_policy_version: 'INVOICE_PROCESSOR_LIMITS_V4',
+        processor_implementation_version: 'cloudtms-invoice-document-worker-v6',
+        supported_media_types: ['application/pdf', 'image/jpeg', 'image/png'],
+        receipt_contracts: {
+          object: 'ACTUAL_BYTES_OBJECT_RECEIPT_V3',
+          logical: 'LOGICAL_SOURCE_RECEIPT_V3',
+          merge: 'ACTUAL_BYTES_MERGE_RECEIPT_V3',
+          root: 'DOCUMENT_ROOT_RECEIPT_V3',
+          ordered_input: 'ACTUAL_ORDERED_INPUT_V1'
+        },
+        container_ready: true,
+        native_tools_ready: true
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+  };
+}
+
+function v8Environment(overrides = {}) {
+  return {
+    INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
+    INVOICE_ASYNC_SCHEDULED_ENABLED: 'false',
+    INVOICE_DOCUMENT_PROCESSOR_ENABLED: 'true',
+    INVOICE_ASYNC_ALLOWED_USER_IDS: V8_ACTOR_ID,
+    INVOICE_ACTOR_USER_ID: V8_ACTOR_ID,
+    INVOICE_ASYNC_EXPECTED_DB_CONTRACT: 'INVOICE_ASYNC_DB_V2',
+    INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST: V8_FUNCTION_MANIFEST,
+    INVOICE_ASYNC_BUILD_ID: 'invoice-async-v8-test',
+    INVOICE_DOCUMENT_PROCESSOR_SECRET: 'test-processor-secret-with-more-than-thirty-two-characters',
+    INVOICE_DOCUMENT_ACCESS_SECRET: 'test-document-secret-with-more-than-thirty-two-characters',
+    INVOICE_QUEUE_DISPATCH_SECRET: 'test-dispatch-secret-with-more-than-thirty-two-characters',
+    SESSION_TOKEN_SECRET: V8_CURSOR_SECRET,
+    SUPABASE_URL: `https://supabase-${crypto.randomUUID()}.test`,
+    SUPABASE_SERVICE_ROLE_KEY: 'test-only',
+    INVOICE_DOCUMENT_PROCESSOR: v8ProcessorBinding(),
+    INVOICE_QUEUE_DISPATCHER: { fetch: async () => new Response('{}', { status: 202 }) },
+    R2: {},
+    ...overrides
+  };
+}
+
+function v8Rpc(handler = async name => {
+  throw new Error(`Unexpected RPC ${name}`);
+}, contract = v8DatabaseContract()) {
+  return async (name, args) => {
+    if (name === 'invoice_async_contract_get_v2') return contract;
+    return handler(name, args);
+  };
+}
+
+function v8Actor() {
+  return { id: V8_ACTOR_ID, role: 'admin', active: true };
+}
+
+function v8Selection() {
+  return {
+    contract_version: 'INVOICE_BATCH_SELECTION_V2',
+    mode: 'IMPLICIT_ALL',
+    default_selected: true,
+    rules: []
+  };
+}
+
+function v8Snapshot(action = 'GENERATE', overrides = {}) {
+  return {
+    contract_version: 'INVOICE_BATCH_SNAPSHOT_V2',
+    action,
+    at_utc: '2026-07-27T12:00:00.000Z',
+    revision: '1844',
+    expires_at_utc: '2026-07-27T12:30:00.000Z',
+    token: 'signed-database-snapshot-token',
+    ...overrides
+  };
+}
+
+function v8Query(action = 'GENERATE', overrides = {}) {
+  return {
+    contract_version: 'INVOICE_BATCH_QUERY_V2',
+    action,
+    mode: 'PAGE',
+    snapshot: v8Snapshot(action),
+    page_size: 100,
+    cursor: null,
+    filters: {},
+    sort: {},
+    selection: v8Selection(),
+    ...overrides
+  };
+}
 
 test('runtime configuration is disabled by default and clamps every limit', () => {
   const config = getInvoiceQueueRuntimeConfig({
@@ -73,7 +195,8 @@ test('unified outbox cursor is signed, filter-bound and preserves independent so
   };
   const token = await invoiceAsyncHttpInternals.encodeUnifiedOutboxCursor(env, payload);
   assert.deepEqual(await invoiceAsyncHttpInternals.decodeUnifiedOutboxCursor(env, token), payload);
-  const tampered = `${token.slice(0, -1)}${token.endsWith('a') ? 'b' : 'a'}`;
+  const [payloadPart, signaturePart] = token.split('.');
+  const tampered = `${payloadPart}.${signaturePart.startsWith('a') ? 'b' : 'a'}${signaturePart.slice(1)}`;
   await assert.rejects(
     () => invoiceAsyncHttpInternals.decodeUnifiedOutboxCursor(env, tampered),
     /OUTBOX_CURSOR_INVALID/
@@ -307,22 +430,8 @@ test('attachment index renders one logical row with physical page totals', () =>
   assert.ok(html.includes('4'));
 });
 
-test('generation HTTP route submits once and returns before queued work drains', async () => {
-  const calls = [];
-  const background = [];
-  const rpc = async (name, args) => {
-    calls.push({ name, args });
-    if (name === 'invoice_operation_start_batch') {
-      return [{
-        operation_id: '00000000-0000-4000-8000-000000000099',
-        status: 'QUEUED',
-        accepted: true,
-        created: true,
-      }];
-    }
-    if (name === 'invoice_work_claim_batch') return [];
-    throw new Error(`Unexpected RPC ${name}`);
-  };
+test('retired synchronous generation route returns 410 and starts no work', async () => {
+  let rpcCalled = false;
   const request = new Request('https://example.test/api/invoices', {
     method: 'POST',
     headers: {
@@ -333,21 +442,16 @@ test('generation HTTP route submits once and returns before queued work drains',
       timesheet_ids: ['00000000-0000-4000-8000-000000000001']
     })
   });
-  const response = await handleInvoiceAsyncHttpRequest(request, {
-    INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
-    INVOICE_DOCUMENT_PROCESSOR_ENABLED: 'false',
-    INVOICE_QUEUE_CONTINUATION_DELAY_MS: '0',
-    INVOICE_ASYNC_ALLOWED_USER_IDS: '00000000-0000-4000-8000-000000000010'
-  }, {
-    waitUntil(promise) { background.push(promise); }
-  }, {
-    requireUser: async () => ({ id: '00000000-0000-4000-8000-000000000010', role: 'admin', active: true }),
-    rpc
+  const response = await handleInvoiceAsyncHttpRequest(request, v8Environment(), {}, {
+    requireUser: async () => v8Actor(),
+    rpc: async () => {
+      rpcCalled = true;
+      throw new Error('Retired route must not reach the database');
+    }
   });
-  assert.equal(response.status, 202);
-  assert.equal(calls.filter(call => call.name === 'invoice_operation_start_batch').length, 1);
-  assert.equal(background.length, 1);
-  await Promise.all(background);
+  assert.equal(response.status, 410);
+  assert.equal((await response.json()).error.code, 'INVOICE_LEGACY_ROUTE_RETIRED');
+  assert.equal(rpcCalled, false);
 });
 
 test('document view returns 200 only for an exact READY version', async () => {
@@ -379,20 +483,11 @@ test('document view returns 200 only for an exact READY version', async () => {
         'https://example.test/api/invoices/00000000-0000-4000-8000-000000000021/render',
         { method: 'POST', body: '{}' }
       ),
-      {
-        INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
-        SUPABASE_URL: 'https://supabase.test',
-        SUPABASE_SERVICE_ROLE_KEY: 'test-only',
-        INVOICE_ASYNC_ALLOWED_USER_IDS: '00000000-0000-4000-8000-000000000010'
-      },
+      v8Environment(),
       {},
       {
-        requireUser: async () => ({
-          id: '00000000-0000-4000-8000-000000000010',
-          role: 'admin',
-          active: true
-        }),
-        rpc: async name => {
+        requireUser: async () => v8Actor(),
+        rpc: v8Rpc(async name => {
           if (name === 'invoice_detail_get') return { invoice: { id: '00000000-0000-4000-8000-000000000021', status: 'DRAFT' } };
           assert.equal(name, 'invoice_operation_start_batch');
           return [{
@@ -401,13 +496,15 @@ test('document view returns 200 only for an exact READY version', async () => {
             reused_ready: true,
             document_version_id: '00000000-0000-4000-8000-000000000020'
           }];
-        }
+        })
       }
     );
     const body = await response.json();
     assert.equal(response.status, 200, JSON.stringify(body));
-    assert.equal(body.ready, true);
+    assert.equal(body.contract_version, 'INVOICE_VIEWER_V2');
+    assert.equal(body.viewer_state, 'READY');
     assert.equal(body.document_version.sha256, 'a'.repeat(64));
+    assert.equal(body.document_version.r2_key, undefined);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -450,20 +547,13 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
   try {
     const response = await handleInvoiceAsyncHttpRequest(
       new Request('https://example.test/api/outbox?limit=50'),
-      {
-        INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
-        SUPABASE_URL: 'https://supabase.test',
-        SUPABASE_SERVICE_ROLE_KEY: 'test-only',
-        SESSION_TOKEN_SECRET: 'test-session-secret-with-more-than-thirty-two-characters',
-        INVOICE_ASYNC_ALLOWED_USER_IDS: '00000000-0000-4000-8000-000000000010'
-      },
+      v8Environment(),
       {},
       {
-        requireUser: async () => ({
-          id: '00000000-0000-4000-8000-000000000010',
-          role: 'admin'
-        }),
-        rpc: async () => { throw new Error('Unified cursor listing must not use the offset RPC'); }
+        requireUser: async () => v8Actor(),
+        rpc: v8Rpc(async () => {
+          throw new Error('Unified cursor listing must not use the offset RPC');
+        })
       }
     );
     const body = await response.json();
@@ -552,7 +642,7 @@ test('drain request signatures bind lane order, nonce, depth, and timestamp', as
   assert.equal(await verifyInvoiceDrainSignature(secret, { ...payload, depth: 3 }, signature), false);
 });
 
-test('non-admin async candidate GET is forbidden before any service-role read', async () => {
+test('candidate GET is rejected as method-not-allowed before any service-role read', async () => {
   const id = '00000000-0000-4000-8000-000000000010';
   const response = await handleInvoiceAsyncHttpRequest(
     new Request('https://example.test/api/invoices/batch-generate/candidates'),
@@ -560,10 +650,11 @@ test('non-admin async candidate GET is forbidden before any service-role read', 
     {},
     { requireUser: async () => ({ id, role: 'user', active: true }), rpc: async () => assert.fail('RPC must not be called') }
   );
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 405);
+  assert.equal((await response.json()).error, 'BATCH_QUERY_POST_REQUIRED');
 });
 
-test('an all-rejected command batch does not return accepted 202', async () => {
+test('retired legacy batch generation never returns an accepted response', async () => {
   const id = '00000000-0000-4000-8000-000000000010';
   const response = await handleInvoiceAsyncHttpRequest(
     new Request('https://example.test/api/invoices', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ timesheet_ids: ['00000000-0000-4000-8000-000000000011'] }) }),
@@ -571,10 +662,9 @@ test('an all-rejected command batch does not return accepted 202', async () => {
     {},
     { requireUser: async () => ({ id, role: 'admin', active: true }), rpc: async () => [{ accepted: false, error: 'SOURCE_CHANGED' }] }
   );
-  assert.equal(response.status, 409);
+  assert.equal(response.status, 410);
   const body = await response.json();
-  assert.equal(body.accepted_count, 0);
-  assert.equal(body.rejected_count, 1);
+  assert.equal(body.error.code, 'INVOICE_LEGACY_ROUTE_RETIRED');
 });
 
 test('issued document view selects the exact FINAL_ISSUE version and never queues preview', async () => {
@@ -592,16 +682,19 @@ test('issued document view selects the exact FINAL_ISSUE version and never queue
   try {
     const response = await handleInvoiceAsyncHttpRequest(
       new Request(`https://example.test/api/invoices/${invoice}/render`, { method: 'POST', body: '{}' }),
-      { INVOICE_ASYNC_PIPELINE_ENABLED: 'true', INVOICE_ASYNC_ALLOWED_USER_IDS: actor, SUPABASE_URL: 'https://supabase.test', SUPABASE_SERVICE_ROLE_KEY: 'test-only' },
+      v8Environment({ INVOICE_ASYNC_ALLOWED_USER_IDS: actor }),
       {},
-      { requireUser: async () => ({ id: actor, role: 'admin', active: true }), rpc: async name => {
+      { requireUser: async () => ({ id: actor, role: 'admin', active: true }), rpc: v8Rpc(async name => {
         if (name === 'invoice_detail_get') return { invoice: { id: invoice, status: 'ISSUED', issued_document_version_id: version } };
         if (name === 'invoice_operation_start_batch') started = true;
         return [];
-      } }
+      }) }
     );
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).document_version.purpose, 'FINAL_ISSUE');
+    const body = await response.json();
+    assert.equal(body.viewer_state, 'READY');
+    assert.equal(body.document_version.purpose, 'FINAL_ISSUE');
+    assert.equal(body.document_version.r2_key, undefined);
     assert.equal(started, false);
   } finally { globalThis.fetch = originalFetch; }
 });
@@ -941,25 +1034,19 @@ test('single issue requires the revision reviewed by the modal', async () => {
       headers: { 'content-type': 'application/json' },
       body: '{}'
     }),
-    {
-      INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
-      INVOICE_DOCUMENT_PROCESSOR_ENABLED: 'true',
-      INVOICE_ASYNC_ALLOWED_USER_IDS: actor
-    },
+    v8Environment({ INVOICE_ASYNC_ALLOWED_USER_IDS: actor }),
     {},
     {
       requireUser: async () => ({ id: actor, role: 'admin', active: true }),
-      rpc: async () => assert.fail('Issue RPC must not run without expected revision')
+      rpc: v8Rpc(async () => assert.fail('Issue RPC must not run without expected revision'))
     }
   );
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, 'EXPECTED_INVOICE_REVISION_REQUIRED');
 });
 
-test('batch generation re-resolves selected scopes and correlates start results by command_no', async () => {
+test('batch generation submits one V2 selection root and omits caller time authority', async () => {
   const actor = '00000000-0000-4000-8000-000000000010';
-  const timesheet = '00000000-0000-4000-8000-000000000011';
-  const scopeKey = 'scope:client:week';
   const calls = [];
   const background = [];
   const response = await handleInvoiceAsyncHttpRequest(
@@ -970,21 +1057,14 @@ test('batch generation re-resolves selected scopes and correlates start results 
         'idempotency-key': 'batch-root-token'
       },
       body: JSON.stringify({
-        rows: [{
-          scope_key: scopeKey,
-          canonical_source_revision: 'revision-1',
-          canonical_command: {
-            source_ids: ['00000000-0000-4000-8000-999999999999'],
-            actor_user_id: '00000000-0000-4000-8000-999999999998'
-          }
-        }]
+        selection_contract: {
+          contract_version: 'INVOICE_BATCH_SELECTION_ROOT_V2',
+          query: v8Query('GENERATE'),
+          selection: v8Selection()
+        }
       })
     }),
-    {
-      INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
-      INVOICE_DOCUMENT_PROCESSOR_ENABLED: 'true',
-      INVOICE_ASYNC_ALLOWED_USER_IDS: actor
-    },
+    v8Environment({ INVOICE_ASYNC_ALLOWED_USER_IDS: actor }),
     {
       waitUntil(promise) {
         background.push(promise);
@@ -992,64 +1072,56 @@ test('batch generation re-resolves selected scopes and correlates start results 
     },
     {
       requireUser: async () => ({ id: actor, role: 'admin', active: true }),
-      rpc: async (name, args) => {
+      rpc: v8Rpc(async (name, args) => {
         calls.push({ name, args });
-        if (name === 'invoice_batch_generate_candidates') {
-          assert.deepEqual(args.p_scope_keys, [scopeKey]);
-          return [{
-            client_id: '00000000-0000-4000-8000-000000000012',
-            groups: [{
-              group_key: scopeKey,
-              canonical_source_revision: 'revision-1',
-              command_payload: {
-                command_type: 'GENERATE_SELECTED',
-                group_key: scopeKey,
-                canonical_source_ids: [timesheet],
-                canonical_source_members: [{
-                  source_type: 'TIMESHEET',
-                  source_id: timesheet
-                }],
-                source_revision: 'revision-1'
-              }
-            }]
-          }];
-        }
         if (name === 'invoice_operation_start_batch') {
-          assert.deepEqual(args.p_commands[0].source_ids, [timesheet]);
-          assert.equal(args.p_commands[0].actor_user_id, undefined);
+          assert.equal(args.p_commands.length, 1);
+          assert.equal(args.p_commands[0].command_type, 'GENERATE_SELECTED');
+          assert.equal(args.p_commands[0].selection_contract.contract_version, 'INVOICE_BATCH_SELECTION_ROOT_V2');
+          assert.equal(args.p_now_utc, undefined);
           return [{
             command_no: 1,
             accepted: true,
             created: true,
             status: 'QUEUED',
-            operation_id: '00000000-0000-4000-8000-000000000013'
+            operation_id: '00000000-0000-4000-8000-000000000013',
+            selection_contract_version: 'INVOICE_BATCH_SELECTION_V2',
+            selection_expansion_pending: true
           }];
         }
         if (name === 'invoice_work_claim_batch') return [];
         throw new Error(`Unexpected RPC ${name}`);
-      }
+      })
     }
   );
   assert.equal(response.status, 202);
   const result = await response.json();
-  assert.equal(result.results_invoices[0].scope_key, scopeKey);
+  assert.equal(result.contract_version, 'INVOICE_BATCH_SELECTION_ROOT_V2');
+  assert.equal(result.root_operation_id, '00000000-0000-4000-8000-000000000013');
+  assert.equal(result.selection_expansion_pending, true);
   assert.equal(calls.filter(call => call.name === 'invoice_operation_start_batch').length, 1);
   await Promise.all(background);
 });
 
 test('invoice batch filters and sort are strictly allowlisted and canonical', () => {
-  const query = new URLSearchParams([
-    ['client_ids', '00000000-0000-4000-8000-000000000002,00000000-0000-4000-8000-000000000001'],
-    ['client_ids', '00000000-0000-4000-8000-000000000001'],
-    ['week_endings', '2026-07-26'],
-    ['status_codes', 'ready'],
-    ['allow_early', 'true'],
-    ['display_mode', 'ready'],
-    ['group_preset', 'client_week_candidate'],
-    ['sort_key', 'total_inc_vat'],
-    ['sort_direction', 'desc'],
-    ['page_size', '50']
-  ]);
+  const query = {
+    filters: {
+      client_ids: [
+        '00000000-0000-4000-8000-000000000002',
+        '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000001'
+      ],
+      week_endings: ['2026-07-26'],
+      status_codes: ['ready'],
+      allow_early: true,
+      display_mode: 'ready'
+    },
+    sort: {
+      group_preset: 'client_week_candidate',
+      sort_key: 'total_inc_vat',
+      sort_direction: 'desc'
+    }
+  };
   assert.deepEqual(invoiceAsyncHttpInternals.normaliseInvoiceBatchFilters(query, 'GENERATE'), {
     client_ids: [
       '00000000-0000-4000-8000-000000000001',
@@ -1063,7 +1135,8 @@ test('invoice batch filters and sort are strictly allowlisted and canonical', ()
     blocker_codes: [],
     search: null,
     allow_early: true,
-    display_mode: 'READY'
+    display_mode: 'READY',
+    invoice_streams: []
   });
   assert.deepEqual(invoiceAsyncHttpInternals.normaliseInvoiceBatchSort(query, 'GENERATE'), {
     group_preset: 'CLIENT_WEEK_CANDIDATE',
@@ -1072,18 +1145,22 @@ test('invoice batch filters and sort are strictly allowlisted and canonical', ()
   });
   assert.throws(
     () => invoiceAsyncHttpInternals.normaliseInvoiceBatchFilters({ filters: { arbitrary_sql: 'x' } }, 'GENERATE'),
-    /BATCH_FILTER_FIELD_UNSUPPORTED/
+    /INVOICE_BATCH_FILTER_UNKNOWN_FIELD/
   );
   assert.throws(
     () => invoiceAsyncHttpInternals.normaliseInvoiceBatchSort({ sort: { sort_key: 'invoice_number' } }, 'GENERATE'),
     /INVOICE_BATCH_SORT_KEY_INVALID/
   );
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchFilters({ filters: { invoice_streams: ['NHSP'] } }, 'GENERATE'),
+    /INVOICE_BATCH_FILTER_UNKNOWN_FIELD/
+  );
 });
 
-test('invoice batch selection ledger accepts only ordered V1 selector rules', () => {
+test('invoice batch selection ledger accepts only the nine ordered V2 selectors', () => {
   const contract = invoiceAsyncHttpInternals.normaliseInvoiceBatchSelectionRules({
     selection: {
-      contract_version: 'INVOICE_BATCH_SELECTION_V1',
+      contract_version: 'INVOICE_BATCH_SELECTION_V2',
       mode: 'IMPLICIT_ALL',
       default_selected: true,
       rules: [
@@ -1108,7 +1185,7 @@ test('invoice batch selection ledger accepts only ordered V1 selector rules', ()
   assert.equal(contract.rules[1].selector.type, 'WEEK_CLIENT');
   assert.throws(
     () => invoiceAsyncHttpInternals.normaliseInvoiceBatchSelectionRules({
-      contract_version: 'INVOICE_BATCH_SELECTION_V1',
+      contract_version: 'INVOICE_BATCH_SELECTION_V2',
       mode: 'IMPLICIT_ALL',
       default_selected: true,
       rules: [
@@ -1118,35 +1195,76 @@ test('invoice batch selection ledger accepts only ordered V1 selector rules', ()
     }),
     /BATCH_SELECTION_RULE_SEQUENCE_INVALID/
   );
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchSelectionRules({
+      contract_version: 'INVOICE_BATCH_SELECTION_V2',
+      mode: 'IMPLICIT_ALL',
+      default_selected: true,
+      rules: [{
+        sequence: 1,
+        action: 'INCLUDE',
+        selector: { type: 'GROUP_KEY', group_key: 'server-only' }
+      }]
+    }),
+    /BATCH_SELECTION_SELECTOR/
+  );
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchSelectionRules({
+      contract_version: 'INVOICE_BATCH_SELECTION_V2',
+      mode: 'IMPLICIT_ALL',
+      default_selected: true,
+      rules: [{
+        sequence: 1,
+        action: 'INCLUDE',
+        selector: {
+          type: 'ROW',
+          selection_key: 'group:1',
+          client_id: '00000000-0000-4000-8000-000000000001'
+        }
+      }]
+    }),
+    /BATCH_SELECTION_SELECTOR_INVALID/
+  );
 });
 
-test('invoice batch cursor is HMAC protected and bound to action, filter and sort', async () => {
-  const env = { SESSION_TOKEN_SECRET: 'test-session-secret-with-more-than-thirty-two-characters' };
+test('invoice batch cursor is expiring, HMAC protected and query-bound', async () => {
+  const env = { SESSION_TOKEN_SECRET: V8_CURSOR_SECRET };
   const sort = {
     group_preset: 'WEEK_CLIENT_CANDIDATE',
     sort_key: 'WEEK_ENDING_DATE',
     sort_direction: 'ASC'
   };
+  const now = Date.now();
+  const snapshot = v8Snapshot('GENERATE', {
+    at_utc: new Date(now - 1_000).toISOString(),
+    expires_at_utc: new Date(now + 60_000).toISOString()
+  });
   const token = await invoiceAsyncHttpInternals.encodeInvoiceBatchCursor(env, {
     action: 'GENERATE',
-    snapshot_at_utc: '2026-07-26T12:00:00.000Z',
+    snapshot,
     filter_hash: 'a'.repeat(64),
+    query_hash: 'b'.repeat(64),
     sort,
     next_cursor_values: {
       after_selection_key: 'group:1',
       after_sort_date: '2026-07-26'
-    }
+    },
+    issued_at_utc: new Date(now).toISOString()
   });
   const decoded = await invoiceAsyncHttpInternals.decodeInvoiceBatchCursor(env, token, {
     action: 'GENERATE',
+    snapshot,
     filter_hash: 'a'.repeat(64),
+    query_hash: 'b'.repeat(64),
     sort
   });
-  assert.equal(decoded.cursor.after_selection_key, 'group:1');
+  assert.equal(decoded.keyset.after_selection_key, 'group:1');
   await assert.rejects(
     () => invoiceAsyncHttpInternals.decodeInvoiceBatchCursor(env, token, {
       action: 'GENERATE',
+      snapshot,
       filter_hash: 'b'.repeat(64),
+      query_hash: 'b'.repeat(64),
       sort
     }),
     /BATCH_CURSOR_FILTER_MISMATCH/
@@ -1155,95 +1273,548 @@ test('invoice batch cursor is HMAC protected and bound to action, filter and sor
   await assert.rejects(
     () => invoiceAsyncHttpInternals.decodeInvoiceBatchCursor(env, tampered, {
       action: 'GENERATE',
+      snapshot,
       filter_hash: 'a'.repeat(64),
+      query_hash: 'b'.repeat(64),
       sort
     }),
     /BATCH_CURSOR_INVALID/
   );
+  const expiredSnapshot = v8Snapshot('GENERATE', {
+    at_utc: new Date(now - 120_000).toISOString(),
+    expires_at_utc: new Date(now - 60_000).toISOString()
+  });
+  const expired = await invoiceAsyncHttpInternals.encodeInvoiceBatchCursor(env, {
+    action: 'GENERATE',
+    snapshot: expiredSnapshot,
+    filter_hash: 'a'.repeat(64),
+    query_hash: 'b'.repeat(64),
+    sort,
+    next_cursor_values: {
+      after_selection_key: 'group:1',
+      after_sort_date: '2026-07-26'
+    },
+    issued_at_utc: new Date(now - 90_000).toISOString()
+  });
+  await assert.rejects(
+    () => invoiceAsyncHttpInternals.decodeInvoiceBatchCursor(env, expired),
+    /BATCH_CURSOR_EXPIRED/
+  );
 });
 
-test('invoice batch DB filter hash matches the installed PostgreSQL jsonb contract', async () => {
-  const filters = invoiceAsyncHttpInternals.normaliseInvoiceBatchFilters(new URLSearchParams(), 'GENERATE');
-  const sort = invoiceAsyncHttpInternals.normaliseInvoiceBatchSort(new URLSearchParams(), 'GENERATE');
+test('invoice batch query hash includes the complete signed snapshot identity', async () => {
+  const filters = invoiceAsyncHttpInternals.normaliseInvoiceBatchFilters({}, 'GENERATE');
+  const sort = invoiceAsyncHttpInternals.normaliseInvoiceBatchSort({}, 'GENERATE');
   const first = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
-    'GENERATE', filters, sort, '2026-07-26T12:00:00.000Z', { db_candidate_filter_hash: true }
+    'GENERATE', filters, sort, v8Snapshot('GENERATE')
   );
   const second = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
-    'GENERATE', filters, sort, '2026-07-27T12:00:00.000Z', { db_candidate_filter_hash: true }
-  );
-  const cursorBoundFirst = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
-    'GENERATE', filters, sort, '2026-07-26T12:00:00.000Z'
-  );
-  const cursorBoundSecond = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
-    'GENERATE', filters, sort, '2026-07-27T12:00:00.000Z'
+    'GENERATE', filters, sort, v8Snapshot('GENERATE', {
+      at_utc: '2026-07-27T12:00:00.001Z'
+    })
   );
   assert.match(first, /^[0-9a-f]{64}$/);
-  assert.equal(first, second);
-  assert.notEqual(cursorBoundFirst, cursorBoundSecond);
+  assert.notEqual(first, second);
 });
 
-test('V1 candidate envelopes remain typed and retain paging metadata', () => {
+test('V2 candidate envelopes remain typed and legacy envelopes fail closed', () => {
   const parsed = invoiceAsyncHttpInternals.candidateGroupsFromRpc({
-    contract_version: 'INVOICE_BATCH_CANDIDATES_V1',
+    contract_version: 'INVOICE_BATCH_CANDIDATES_V2',
     action: 'GENERATE',
+    mode: 'PAGE',
     rows: [{ selection_key: 'group:1' }],
-    page: { has_more: true },
-    totals: { all: 2 },
+    page: { page_size: 1, returned_count: 1, total_count: 2, has_more: true },
+    totals: {
+      filtered_total: 2,
+      display_total: 2,
+      eligible_total: 2,
+      selected_total: 2,
+      excluded_total: 0,
+      blocked_total: 0
+    },
+    selection_summary: {
+      eligible_total: 2,
+      selected_total: 2,
+      excluded_total: 0,
+      blocked_total: 0,
+      exact: false
+    },
+    group_selection: [],
     facets: {},
-    filter_hash: 'a'.repeat(64)
+    filter_hash: 'a'.repeat(64),
+    query_hash: 'b'.repeat(64),
+    selection_hash: 'c'.repeat(64)
   });
-  assert.equal(parsed.kind, 'V1');
+  assert.equal(parsed.kind, 'V2');
   assert.equal(parsed.legacy, false);
   assert.equal(parsed.rows[0].selection_key, 'group:1');
   assert.equal(parsed.page.has_more, true);
+  assert.throws(() => invoiceAsyncHttpInternals.candidateGroupsFromRpc({
+    contract_version: 'INVOICE_BATCH_CANDIDATES_V1',
+    rows: []
+  }), /INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH/);
 });
-test('paged candidate route returns V7 and signs the database keyset cursor', async () => {
-  const actor = '00000000-0000-4000-8000-000000000010';
-  const env = {
-    INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
-    INVOICE_DOCUMENT_PROCESSOR_ENABLED: 'true',
-    INVOICE_ASYNC_ALLOWED_USER_IDS: actor,
-    SESSION_TOKEN_SECRET: 'test-session-secret-with-more-than-thirty-two-characters'
+
+test('POST candidate route returns V8 and keeps database keysets behind an opaque cursor', async () => {
+  const env = v8Environment();
+  const calls = [];
+  const snapshot = v8Snapshot('GENERATE', {
+    at_utc: new Date(Date.now() - 1_000).toISOString(),
+    expires_at_utc: new Date(Date.now() + 60_000).toISOString()
+  });
+  const candidateRpc = async (name, args) => {
+    assert.equal(name, 'invoice_batch_generate_candidates');
+    calls.push(args.p_query);
+    const query = args.p_query;
+    const responseSnapshot = query.snapshot || snapshot;
+    const filterHash = await invoiceAsyncHttpInternals.hashInvoiceBatchFilter(
+      'GENERATE', query.filters, query.sort
+    );
+    const queryHash = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
+      'GENERATE', query.filters, query.sort, responseSnapshot
+    );
+    const selectionHash = await invoiceAsyncHttpInternals.hashInvoiceBatchSelection(query.selection);
+    return {
+      contract_version: 'INVOICE_BATCH_CANDIDATES_V2',
+      action: 'GENERATE',
+      mode: 'PAGE',
+      snapshot: responseSnapshot,
+      normalised_filter: query.filters,
+      normalised_sort: query.sort,
+      filter_hash: filterHash,
+      query_hash: queryHash,
+      selection_hash: selectionHash,
+      rows: [{ selection_key: calls.length === 1 ? 'group:1' : 'group:2', selectable: true }],
+      page: calls.length === 1
+        ? {
+            page_size: 25,
+            returned_count: 1,
+            total_count: 2,
+            has_more: true,
+            next_cursor_values: {
+              after_selection_key: 'group:1',
+              after_sort_text: 'client one'
+            }
+          }
+        : {
+            page_size: 25,
+            returned_count: 1,
+            total_count: 2,
+            has_more: false,
+            next_cursor_values: null
+          },
+      totals: {
+        filtered_total: 2,
+        display_total: 2,
+        eligible_total: 2,
+        blocked_total: 0,
+        selected_total: 2,
+        excluded_total: 0
+      },
+      selection_summary: {
+        eligible_total: 2,
+        selected_total: 2,
+        excluded_total: 0,
+        blocked_total: 0,
+        exact: false
+      },
+      group_selection: [],
+      facets: {}
+    };
   };
-  let capturedQuery = null;
+  const firstRequest = {
+    contract_version: 'INVOICE_BATCH_QUERY_V2',
+    action: 'GENERATE',
+    mode: 'PAGE',
+    snapshot: null,
+    page_size: 25,
+    cursor: null,
+    filters: {},
+    sort: {
+      group_preset: 'WEEK_CLIENT_CANDIDATE',
+      sort_key: 'CLIENT_NAME',
+      sort_direction: 'ASC'
+    },
+    selection: v8Selection()
+  };
+  const first = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoices/batch-generate/candidates', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(firstRequest)
+    }),
+    env,
+    {},
+    { requireUser: async () => v8Actor(), rpc: v8Rpc(candidateRpc) }
+  );
+  const firstBody = await first.json();
+  assert.equal(first.status, 200, JSON.stringify(firstBody));
+  assert.equal(first.headers.get('x-invoice-async-contract-version'), 'INVOICE_ASYNC_BACKEND_V8');
+  assert.ok(firstBody.page.next_cursor);
+  assert.equal(calls[0].cursor, null);
+
+  const second = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoices/batch-generate/candidates', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...firstRequest,
+        snapshot: firstBody.snapshot,
+        cursor: firstBody.page.next_cursor
+      })
+    }),
+    env,
+    {},
+    { requireUser: async () => v8Actor(), rpc: v8Rpc(candidateRpc) }
+  );
+  const secondBody = await second.json();
+  assert.equal(second.status, 200, JSON.stringify(secondBody));
+  assert.deepEqual(calls[1].cursor, {
+    after_selection_key: 'group:1',
+    after_sort_text: 'client one'
+  });
+  assert.equal(secondBody.page.next_cursor, null);
+});
+
+test('invoice batch JSON reader enforces the byte limit and object-only contract', async () => {
+  const exact = await invoiceAsyncHttpInternals.readInvoiceBatchJsonBody(
+    new Request('https://example.test', {
+      method: 'POST',
+      body: JSON.stringify({ value: '1234' })
+    }),
+    { maximumBytes: 16 }
+  );
+  assert.deepEqual(exact, { value: '1234' });
+  await assert.rejects(
+    () => invoiceAsyncHttpInternals.readInvoiceBatchJsonBody(
+      new Request('https://example.test', {
+        method: 'POST',
+        body: JSON.stringify({ value: '12345' })
+      }),
+      { maximumBytes: 16 }
+    ),
+    /BATCH_REQUEST_TOO_LARGE/
+  );
+  await assert.rejects(
+    () => invoiceAsyncHttpInternals.readInvoiceBatchJsonBody(
+      new Request('https://example.test', { method: 'POST', body: '[]' }),
+      { maximumBytes: 16 }
+    ),
+    /BATCH_REQUEST_OBJECT_REQUIRED/
+  );
+  await assert.rejects(
+    () => invoiceAsyncHttpInternals.readInvoiceBatchJsonBody(
+      new Request('https://example.test', { method: 'POST', body: '{' }),
+      { maximumBytes: 16 }
+    ),
+    /BATCH_REQUEST_JSON_INVALID/
+  );
+});
+
+test('external command identity is caller-stable and never falls back to delivery identity', () => {
+  const withoutCommand = new Request('https://example.test', { method: 'POST' });
+  assert.throws(
+    () => invoiceAsyncHttpInternals.commandToken(withoutCommand, {
+      delivery_request_token: 'delivery-only'
+    }),
+    /BATCH_COMMAND_TOKEN_REQUIRED/
+  );
+  const withHeader = new Request('https://example.test', {
+    method: 'POST',
+    headers: { 'idempotency-key': 'stable-command-token' }
+  });
+  assert.equal(
+    invoiceAsyncHttpInternals.commandToken(withHeader, {
+      delivery_request_token: 'separate-delivery-token'
+    }),
+    'stable-command-token'
+  );
+});
+
+test('Batch Issue supports Issue-and-send and Issue-only with separate identities', async () => {
+  const rootId = '00000000-0000-4000-8000-000000000077';
+  const execute = async deliver => {
+    const env = v8Environment();
+    let submitted = null;
+    const background = [];
+    const body = {
+      selection_contract: {
+        contract_version: 'INVOICE_BATCH_SELECTION_ROOT_V2',
+        query: v8Query('ISSUE'),
+        selection: v8Selection()
+      },
+      deliver,
+      command_token: deliver ? 'issue-send-command' : 'issue-only-command',
+      ...(deliver ? {
+        delivery_request_token: 'delivery-request-token',
+        delivery_intent: {
+          route_mode: 'SERVER_RESOLVED',
+          template_version: 'INVOICE_EMAIL_V2'
+        }
+      } : {})
+    };
+    const response = await handleInvoiceAsyncHttpRequest(
+      new Request('https://example.test/api/invoices/batch-issue/confirm', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      }),
+      env,
+      { waitUntil(promise) { background.push(promise); } },
+      {
+        requireUser: async () => v8Actor(),
+        rpc: v8Rpc(async (name, args) => {
+          if (name === 'invoice_operation_start_batch') {
+            assert.equal(args.p_commands.length, 1);
+            submitted = args.p_commands[0];
+            return [{
+              command_no: 1,
+              command_type: 'ISSUE_INVOICES',
+              accepted: true,
+              created: true,
+              status: 'QUEUED',
+              operation_id: rootId,
+              selection_contract_version: 'INVOICE_BATCH_SELECTION_V2',
+              selection_expansion_pending: true
+            }];
+          }
+          if (name === 'invoice_work_claim_batch') return [];
+          throw new Error(`Unexpected RPC ${name}`);
+        })
+      }
+    );
+    await Promise.all(background);
+    return { response, submitted };
+  };
+
+  const send = await execute(true);
+  assert.equal(send.response.status, 202);
+  assert.equal(send.submitted.deliver, true);
+  assert.equal(send.submitted.command_token, 'issue-send-command');
+  assert.equal(send.submitted.delivery_request_token, 'delivery-request-token');
+  assert.equal(send.submitted.delivery_intent.route_mode, 'SERVER_RESOLVED');
+  assert.notEqual(send.submitted.command_token, send.submitted.delivery_request_token);
+
+  const issueOnly = await execute(false);
+  assert.equal(issueOnly.response.status, 202);
+  assert.equal(issueOnly.submitted.deliver, false);
+  assert.equal(issueOnly.submitted.command_token, 'issue-only-command');
+  assert.equal(issueOnly.submitted.delivery_request_token, undefined);
+  assert.deepEqual(issueOnly.submitted.delivery_intent, {});
+});
+
+test('result cursors bind root, category and atomic result-page revision', async () => {
+  const now = Date.now();
+  const env = { SESSION_TOKEN_SECRET: V8_CURSOR_SECRET };
+  const root = '00000000-0000-4000-8000-000000000080';
+  const chunk = '00000000-0000-4000-8000-000000000081';
+  const token = await invoiceAsyncHttpInternals.encodeInvoiceBatchResultCursorV2(env, {
+    root_operation_id: root,
+    action: 'GENERATE',
+    result_category: 'FAILED',
+    result_page_revision: '51',
+    next_cursor_values: {
+      after_selection_key: 'scope:51',
+      after_chunk_id: chunk
+    },
+    issued_at_utc: new Date(now).toISOString()
+  });
+  const decoded = await invoiceAsyncHttpInternals.decodeInvoiceBatchResultCursorV2(env, token, {
+    root_operation_id: root,
+    action: 'GENERATE',
+    result_category: 'FAILED',
+    result_page_revision: '51'
+  });
+  assert.deepEqual(decoded.keyset, {
+    after_selection_key: 'scope:51',
+    after_chunk_id: chunk
+  });
+  await assert.rejects(
+    () => invoiceAsyncHttpInternals.decodeInvoiceBatchResultCursorV2(env, token, {
+      root_operation_id: root,
+      action: 'GENERATE',
+      result_category: 'BLOCKED',
+      result_page_revision: '51'
+    }),
+    /OPERATION_RESULT_CURSOR_INVALID/
+  );
+  await assert.rejects(
+    () => invoiceAsyncHttpInternals.decodeInvoiceBatchResultCursorV2(env, token, {
+      root_operation_id: root,
+      action: 'GENERATE',
+      result_category: 'FAILED',
+      result_page_revision: '52'
+    }),
+    /OPERATION_RESULT_CURSOR_STALE/
+  );
+});
+
+test('capabilities advertise mandatory V8 features only when every dependency is ready', async () => {
+  const env = v8Environment();
   const response = await handleInvoiceAsyncHttpRequest(
-    new Request('https://example.test/api/invoices/batch-generate/candidates?page_size=25&sort_key=client_name'),
+    new Request('https://example.test/api/invoice-async/capabilities'),
     env,
     {},
     {
-      requireUser: async () => ({ id: actor, role: 'admin', active: true }),
-      rpc: async (name, args) => {
-        assert.equal(name, 'invoice_batch_generate_candidates');
-        capturedQuery = args.p_query;
-        const filterHash = await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
-          'GENERATE', args.p_query.filters, args.p_query.sort, args.p_query.snapshot_at_utc,
-          { db_candidate_filter_hash: true }
-        );
-        return {
-          contract_version: 'INVOICE_BATCH_CANDIDATES_V1', action: 'GENERATE', mode: 'PAGE',
-          snapshot_at_utc: args.p_query.snapshot_at_utc,
-          normalised_filter: args.p_query.filters,
-          normalised_sort: args.p_query.sort,
-          filter_hash: filterHash,
-          rows: [{ selection_key: 'group:1' }],
-          page: {
-            page_size: 25, has_more: true,
-            next_cursor_values: { after_selection_key: 'group:1', after_sort_text: 'client one' }
-          },
-          totals: { all: 2 }, facets: {},
-          selection_seed: { mode: 'IMPLICIT_ALL', default_selected: true }
-        };
-      }
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc()
     }
   );
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get('x-invoice-async-contract-version'), 'INVOICE_ASYNC_BACKEND_V7');
-  assert.equal(capturedQuery.page_size, 25);
-  assert.equal(capturedQuery.sort.sort_key, 'CLIENT_NAME');
   const body = await response.json();
-  assert.ok(body.page.next_cursor);
-  const decoded = await invoiceAsyncHttpInternals.decodeInvoiceBatchCursor(env, body.page.next_cursor, {
-    action: 'GENERATE', filter_hash: body.filter_hash, sort: body.normalised_sort
+  assert.equal(response.status, 200);
+  assert.equal(body.contract_version, 'INVOICE_ASYNC_BACKEND_V8');
+  assert.equal(body.database_contract_ready, true);
+  assert.equal(body.deployment_contract_ready, true);
+  assert.equal(body.enabled_for_user, true);
+  assert.ok(Object.values(body.feature_flags).every(value => value === true));
+
+  const badEnv = v8Environment();
+  const mismatch = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoice-async/capabilities'),
+    badEnv,
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc(undefined, v8DatabaseContract({ function_hash_manifest: 'f'.repeat(64) }))
+    }
+  );
+  const mismatchBody = await mismatch.json();
+  assert.equal(mismatchBody.database_contract_ready, false);
+  assert.equal(mismatchBody.deployment_contract_ready, false);
+  assert.equal(mismatchBody.enabled_for_user, false);
+  assert.ok(Object.values(mismatchBody.feature_flags).every(value => value === false));
+});
+
+test('an unreleased local build identity cannot satisfy deployment readiness', async () => {
+  const env = v8Environment({
+    INVOICE_ASYNC_BUILD_ID: 'invoice-async-v8-local-uncommitted'
   });
-  assert.equal(decoded.cursor.after_selection_key, 'group:1');
+  const result = validateQueueRuntimeConfiguration(env);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.includes('INVOICE_ASYNC_BUILD_ID_UNRELEASED'));
+});
+
+test('automatic Generate creates one V2 selection root rather than enumerating candidates', async () => {
+  const env = v8Environment();
+  const calls = [];
+  const result = await runAutoInvoiceCycleAsync(env, {
+    config: getInvoiceQueueRuntimeConfig(env),
+    actorUserId: V8_ACTOR_ID,
+    validateSystemActor: async () => true,
+    rpc: async (name, args) => {
+      calls.push({ name, args });
+      if (name === 'invoice_batch_generate_candidates') {
+        return {
+          contract_version: 'INVOICE_BATCH_CANDIDATES_V2',
+          action: 'GENERATE',
+          mode: 'PAGE',
+          snapshot: v8Snapshot('GENERATE'),
+          rows: [],
+          selection_summary: { selected_total: 250 }
+        };
+      }
+      if (name === 'invoice_operation_start_batch') {
+        assert.equal(args.p_commands.length, 1);
+        assert.equal(args.p_commands[0].command_type, 'GENERATE_SELECTED');
+        assert.equal(args.p_commands[0].selection_contract.contract_version, 'INVOICE_BATCH_SELECTION_ROOT_V2');
+        return [{
+          command_no: 1,
+          accepted: true,
+          created: true,
+          status: 'QUEUED',
+          operation_id: '00000000-0000-4000-8000-000000000090'
+        }];
+      }
+      if (name === 'invoice_work_claim_batch') return [];
+      throw new Error(`Unexpected RPC ${name}`);
+    }
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.submitted, 250);
+  assert.equal(calls.filter(call => call.name === 'invoice_operation_start_batch').length, 1);
+});
+
+test('Generate and Issue confirmation reject a missing signed snapshot before root creation', async () => {
+  for (const action of ['GENERATE', 'ISSUE']) {
+    const suffix = action === 'GENERATE' ? 'batch-generate' : 'batch-issue';
+    let started = false;
+    const body = {
+      selection_contract: {
+        contract_version: 'INVOICE_BATCH_SELECTION_ROOT_V2',
+        query: v8Query(action, { snapshot: null }),
+        selection: v8Selection()
+      },
+      command_token: `${action.toLowerCase()}-token`,
+      ...(action === 'ISSUE' ? { deliver: false } : {})
+    };
+    const response = await handleInvoiceAsyncHttpRequest(
+      new Request(`https://example.test/api/invoices/${suffix}/confirm`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      }),
+      v8Environment(),
+      {},
+      {
+        requireUser: async () => v8Actor(),
+        rpc: v8Rpc(async name => {
+          if (name === 'invoice_operation_start_batch') started = true;
+          throw new Error(`Unexpected RPC ${name}`);
+        })
+      }
+    );
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error, 'BATCH_SNAPSHOT_REQUIRED');
+    assert.equal(started, false);
+  }
+});
+
+test('V8 routes fail closed when the native document processor is not ready', async () => {
+  const env = v8Environment({
+    INVOICE_DOCUMENT_PROCESSOR: {
+      fetch: async () => new Response(JSON.stringify({ ok: false }), { status: 503 })
+    }
+  });
+  let candidateCalled = false;
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoices/batch-generate/candidates', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contract_version: 'INVOICE_BATCH_QUERY_V2',
+        action: 'GENERATE',
+        mode: 'PAGE',
+        snapshot: null,
+        page_size: 100,
+        cursor: null,
+        filters: {},
+        sort: {},
+        selection: v8Selection()
+      })
+    }),
+    env,
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc(async name => {
+        if (name === 'invoice_batch_generate_candidates') candidateCalled = true;
+        throw new Error(`Unexpected RPC ${name}`);
+      })
+    }
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, 'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE');
+  assert.equal(candidateCalled, false);
+});
+
+test('invoice mail preparation contains no legacy PDF rendering fallback', () => {
+  const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const start = source.indexOf('async function buildEmailPayloadFromOutboxRow');
+  const end = source.indexOf('async function limitOrLinkAttachments', start);
+  assert.ok(start >= 0 && end > start);
+  const emailPreparation = source.slice(start, end);
+  assert.equal(emailPreparation.includes('ensureInvoicePdf('), false);
+  assert.equal(emailPreparation.includes('invoice_pdf_r2_key'), false);
+  assert.ok(emailPreparation.includes('INVOICE_ATTACHMENT_EXACT_DESCRIPTOR_REQUIRED'));
+  assert.ok(emailPreparation.includes('purpose=eq.FINAL_ISSUE&status=eq.READY'));
 });

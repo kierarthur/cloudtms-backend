@@ -33,6 +33,7 @@ DECLARE
   v_selection jsonb;
   v_query jsonb;
   v_normalised_query jsonb;
+  v_summary_query jsonb;
   v_allow_early boolean;
   v_deliver boolean;
   v_delivery_intent jsonb;
@@ -56,6 +57,7 @@ DECLARE
   v_result_item jsonb;
   v_summary jsonb;
   v_filtered_total integer;
+  v_eligible_total integer;
   v_selected_total integer;
   v_previous_statement_timeout text := current_setting('statement_timeout');
 BEGIN
@@ -172,11 +174,19 @@ BEGIN
       v_query := v_selection_contract->'query';
       v_selection := v_selection_contract->'selection';
 
-      IF coalesce(v_query->>'contract_version', '') <> 'INVOICE_BATCH_QUERY_V2' THEN
-        v_error_code := 'BATCH_QUERY_INVALID';
-      ELSIF upper(coalesce(v_query->>'action', '')) <> v_action THEN
-        v_error_code := 'BATCH_QUERY_ACTION_MISMATCH';
-      END IF;
+      BEGIN
+        v_query := private._invoice_batch_query_validate_v2(
+          v_query,
+          v_action
+        );
+      EXCEPTION
+        WHEN OTHERS THEN
+          v_error_code := sqlerrm;
+          v_error_detail := jsonb_build_object(
+            'sqlstate', sqlstate,
+            'message', sqlerrm
+          );
+      END;
     END IF;
 
     IF v_error_code IS NULL THEN
@@ -239,12 +249,10 @@ BEGIN
     END IF;
 
     IF v_error_code IS NULL THEN
-      v_allow_early := lower(coalesce(
-        v_query->>'allow_early',
-        v_query#>>'{filters,allow_early}',
-        v_command->>'allow_early',
-        'false'
-      )) IN ('true','t','1','yes','on');
+      v_allow_early := coalesce(
+        (v_query#>>'{filters,allow_early}')::boolean,
+        false
+      );
 
       v_deliver := CASE
         WHEN jsonb_typeof(v_command->'deliver') = 'boolean'
@@ -294,14 +302,33 @@ BEGIN
       END IF;
 
       IF v_error_code IS NULL THEN
-        v_normalised_query := (v_query - 'cursor' - 'after_selection_key' - 'selection' - 'mode' - 'action' - 'page_size')
-        || jsonb_build_object(
-          'contract_version', 'INVOICE_BATCH_QUERY_V2',
-          'action', v_action,
-          'mode', 'EXPAND_SELECTION',
-          'page_size', 250,
-          'allow_early', v_allow_early,
-          'selection', v_selection
+        v_normalised_query := private._invoice_batch_query_validate_v2(
+          jsonb_build_object(
+            'contract_version', 'INVOICE_BATCH_QUERY_V2',
+            'action', v_action,
+            'mode', 'EXPAND_SELECTION',
+            'snapshot', v_query->'snapshot',
+            'page_size', 250,
+            'cursor', null,
+            'filters', v_query->'filters',
+            'sort', v_query->'sort',
+            'selection', v_selection
+          ),
+          v_action
+        );
+
+        v_summary_query := private._invoice_batch_query_validate_v2(
+          jsonb_build_object(
+            'contract_version', 'INVOICE_BATCH_QUERY_V2',
+            'action', v_action,
+            'mode', 'SUMMARY',
+            'snapshot', v_query->'snapshot',
+            'filters', v_query->'filters',
+            'sort', v_query->'sort',
+            'selection', v_selection,
+            'group_selectors', '[]'::jsonb
+          ),
+          v_action
         );
       END IF;
 
@@ -310,11 +337,11 @@ BEGIN
           perform set_config('statement_timeout','7000',true);
           v_summary := case when v_action='GENERATE'
             then private._invoice_batch_generate_candidate_rows_v2(
-              v_normalised_query || jsonb_build_object('mode','SUMMARY'),
+              v_summary_query,
               v_now
             )
             else private._invoice_batch_issue_candidate_rows_v2(
-              v_normalised_query || jsonb_build_object('mode','SUMMARY'),
+              v_summary_query,
               v_now
             )
           end;
@@ -326,6 +353,10 @@ BEGIN
           );
           v_selected_total := coalesce(
             (v_summary#>>'{selection_summary,selected_total}')::integer,
+            0
+          );
+          v_eligible_total := coalesce(
+            (v_summary#>>'{selection_summary,eligible_total}')::integer,
             0
           );
 
@@ -374,8 +405,14 @@ BEGIN
           'filters',coalesce(v_normalised_query->'filters','{}'::jsonb),
           'sort',coalesce(v_normalised_query->'sort','{}'::jsonb),
           'snapshot',jsonb_build_object(
+            'contract_version',
+              v_normalised_query#>>'{snapshot,contract_version}',
+            'action',v_normalised_query#>>'{snapshot,action}',
             'at_utc',v_normalised_query#>>'{snapshot,at_utc}',
-            'revision',v_normalised_query#>>'{snapshot,revision}'
+            'revision',v_normalised_query#>>'{snapshot,revision}',
+            'expires_at_utc',
+              v_normalised_query#>>'{snapshot,expires_at_utc}',
+            'key_id',v_normalised_query#>>'{snapshot,key_id}'
           )
         )
       );
@@ -483,11 +520,23 @@ BEGIN
           jsonb_build_object(
             'contract_version','INVOICE_BATCH_PROGRESS_V2',
             'status_message', 'Building selection manifest',
+            'manifest_generation',1,
+            'manifest_status','BUILDING',
             'selection_expansion_pending', true,
             'manifest_committed',false,
+            'expected_scan_total',v_filtered_total,
+            'scanned_total',0,
+            'release_pending_total',0,
+            'released_total',0,
+            'release_conflict_total',0,
+            'release_blocked_total',0,
+            'release_complete',false,
+            'committed_at_utc',null,
+            'superseded_manifest_generation',null,
             'candidate_total', case when v_action='GENERATE' then v_filtered_total else 0 end,
             'invoice_total', case when v_action='ISSUE' then v_filtered_total else 0 end,
             'selected_total', v_selected_total,
+            'excluded_total', greatest(v_eligible_total-v_selected_total,0),
             'expanded_total', 0,
             'queued_total', 0,
             'generated_total',0,
@@ -497,6 +546,7 @@ BEGIN
             'already_active_total',0,
             'blocked_total', 0,
             'changed_total', 0,
+            'missing_total',0,
             'failed_total', 0,
             'in_progress_total',0,
             'delivery_pending_total',0,

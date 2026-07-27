@@ -131,6 +131,39 @@ export function getInvoiceQueueRuntimeConfig(env = {}) {
     userNudgeProcessesExternalWork: parseBooleanFlag(env.INVOICE_USER_NUDGE_PROCESSES_EXTERNAL_WORK, false),
     autoStartBatchSize: parseBoundedInteger(env.INVOICE_AUTO_START_BATCH_SIZE, 500, 1, 1000),
     autoMaximumStartBatchesPerInvocation: parseBoundedInteger(env.INVOICE_AUTO_MAX_START_BATCHES, 2, 1, 10),
+    expectedDbContract: String(env.INVOICE_ASYNC_EXPECTED_DB_CONTRACT || '').trim(),
+    expectedFunctionManifest: String(env.INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST || '').trim().toLowerCase(),
+    invoiceAsyncBuildId: String(env.INVOICE_ASYNC_BUILD_ID || '').trim().slice(0, 200),
+    candidateCursorTtlSeconds: parseBoundedInteger(
+      env.INVOICE_BATCH_CANDIDATE_CURSOR_TTL_SECONDS,
+      1800,
+      60,
+      1800
+    ),
+    resultCursorTtlSeconds: parseBoundedInteger(
+      env.INVOICE_BATCH_RESULT_CURSOR_TTL_SECONDS,
+      86400,
+      300,
+      86400
+    ),
+    batchRequestMaxBytes: parseBoundedInteger(
+      env.INVOICE_BATCH_REQUEST_MAX_BYTES,
+      4194304,
+      65536,
+      4194304
+    ),
+    summaryMaximumKeys: parseBoundedInteger(
+      env.INVOICE_BATCH_SUMMARY_MAX_KEYS,
+      25000,
+      100,
+      25000
+    ),
+    summaryTimeoutMs: parseBoundedInteger(
+      env.INVOICE_BATCH_SUMMARY_TIMEOUT_MS,
+      10000,
+      1000,
+      10000
+    ),
     expectedProcessorImplementationVersion: String(
       env.INVOICE_EXPECTED_PROCESSOR_IMPLEMENTATION_VERSION
         || 'cloudtms-invoice-document-worker-v6'
@@ -161,6 +194,25 @@ export function validateQueueRuntimeConfiguration(env = {}) {
   if (config.finalTouchRpcTimeoutMs >= config.heartbeatFailureAbortMarginMs) errors.push('INVOICE_FINAL_TOUCH_RPC_TIMEOUT_INVALID');
   if (config.processorEnabled && !config.expectedProcessorImplementationVersion) errors.push('INVOICE_PROCESSOR_IMPLEMENTATION_VERSION_MISSING');
   if (config.userNudgeProcessesExternalWork) errors.push('INVOICE_USER_NUDGE_EXTERNAL_WORK_UNSAFE');
+  if (config.expectedDbContract !== 'INVOICE_ASYNC_DB_V2') {
+    errors.push('INVOICE_ASYNC_EXPECTED_DB_CONTRACT_INVALID');
+  }
+  if (!/^[0-9a-f]{64}$/.test(config.expectedFunctionManifest)) {
+    errors.push('INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST_INVALID');
+  }
+  if (!config.invoiceAsyncBuildId) {
+    errors.push('INVOICE_ASYNC_BUILD_ID_MISSING');
+  } else if (/^invoice-async-v8-local-uncommitted$/i.test(config.invoiceAsyncBuildId)) {
+    errors.push('INVOICE_ASYNC_BUILD_ID_UNRELEASED');
+  }
+  const candidateCursorSecret = env.INVOICE_BATCH_CANDIDATE_CURSOR_SECRET || env.SESSION_TOKEN_SECRET;
+  const resultCursorSecret = env.INVOICE_BATCH_RESULT_CURSOR_SECRET || env.SESSION_TOKEN_SECRET;
+  if (!candidateCursorSecret || String(candidateCursorSecret).length < 32) {
+    errors.push('INVOICE_BATCH_CANDIDATE_CURSOR_SECRET_MISSING');
+  }
+  if (!resultCursorSecret || String(resultCursorSecret).length < 32) {
+    errors.push('INVOICE_BATCH_RESULT_CURSOR_SECRET_MISSING');
+  }
   return { ok: errors.length === 0, errors, config };
 }
 
@@ -1408,83 +1460,122 @@ export async function runAutoInvoiceCycleAsync(env, options = {}) {
   if (!config.enabled) return { ok: true, skipped: true, code: 'INVOICE_ASYNC_PIPELINE_DISABLED' };
   const rpc = options.rpc;
   const actorUserId = String(options.actorUserId || env.INVOICE_ACTOR_USER_ID || '').trim();
-  if (!actorUserId || !(await validateInvoiceSystemActor(env, actorUserId))) return { ok: false, skipped: true, code: 'INVOICE_SYSTEM_ACTOR_INVALID' };
-  const candidateResponse = await rpc('invoice_autoinvoice_candidate_groups', {
-    p_limit: parseBoundedInteger(env.INVOICE_AUTO_GROUP_LIMIT, 500, 1, 5000)
+  const validateSystemActor = options.validateSystemActor || validateInvoiceSystemActor;
+  if (!actorUserId || !(await validateSystemActor(env, actorUserId))) {
+    return { ok: false, skipped: true, code: 'INVOICE_SYSTEM_ACTOR_INVALID' };
+  }
+  if (typeof rpc !== 'function') {
+    return { ok: false, skipped: true, code: 'INVOICE_RPC_UNAVAILABLE' };
+  }
+  const selection = {
+    contract_version: 'INVOICE_BATCH_SELECTION_V2',
+    mode: 'IMPLICIT_ALL',
+    default_selected: true,
+    rules: []
+  };
+  const filters = {
+    client_ids: [],
+    candidate_ids: [],
+    week_endings: [],
+    week_ending_from: null,
+    week_ending_to: null,
+    status_codes: [],
+    blocker_codes: [],
+    search: null,
+    allow_early: false,
+    display_mode: 'ALL',
+    invoice_streams: []
+  };
+  const sort = {
+    group_preset: 'WEEK_CLIENT_CANDIDATE',
+    sort_key: 'WEEK_ENDING_DATE',
+    sort_direction: 'ASC'
+  };
+  const rawFirstPage = await rpc('invoice_batch_generate_candidates', {
+    p_query: {
+      contract_version: 'INVOICE_BATCH_QUERY_V2',
+      action: 'GENERATE',
+      mode: 'PAGE',
+      snapshot: null,
+      page_size: 1,
+      cursor: null,
+      filters,
+      sort,
+      selection
+    }
   });
-  const candidates = rowsFromRpc(candidateResponse)
-    .filter(row => row?.eligible_for_submission === true)
-    .sort((left, right) => String(
-      left?.group_key || left?.client_id || ''
-    ).localeCompare(String(right?.group_key || right?.client_id || ''))
-      || String(left?.invoice_week_start || '').localeCompare(String(right?.invoice_week_start || ''))
-      || String(left?.source_revision_hash || '').localeCompare(String(right?.source_revision_hash || '')));
-  if (!candidates.length) return { ok: true, candidates: 0, operations: [] };
-  const maximumCommands = config.autoStartBatchSize
-    * config.autoMaximumStartBatchesPerInvocation;
-  const selected = candidates.slice(0, maximumCommands);
-  const operations = [];
-  const perCandidate = [];
-  for (let offset = 0; offset < selected.length; offset += config.autoStartBatchSize) {
-    const batch = selected.slice(offset, offset + config.autoStartBatchSize);
-    const commands = batch.map(row => ({
-      command_type: 'GENERATE_AUTO',
-      source_ids: row.source_ids,
-      canonical_source_members: row.canonical_source_members,
-      target_invoice_week: row.invoice_week_start,
-      consolidation_mode: row.consolidation_mode,
-      source_revision_hash: row.source_revision_hash,
-      invoice_stream: row.stream,
-      allow_early: false,
-      command_token: `AUTO:${row.group_key || row.client_id}:${row.source_revision_hash}`
-    }));
-    const startResponse = await rpc('invoice_operation_start_batch', {
-      p_commands: commands,
-      p_actor_user_id: actorUserId,
-      p_now_utc: new Date().toISOString()
-    });
-    const started = valueFromRpc(startResponse);
-    const byCommandNo = new Map();
-    for (const result of started) {
-      const commandNo = Number(result?.command_no);
-      if (!Number.isSafeInteger(commandNo) || commandNo < 1 || commandNo > batch.length
-        || byCommandNo.has(commandNo)) {
-        throw Object.assign(new Error('INVOICE_AUTO_START_RESULT_CORRELATION_INVALID'), {
-          code: 'INVOICE_AUTO_START_RESULT_CORRELATION_INVALID'
-        });
+  const unwrapCandidateEnvelope = value => {
+    if (value?.contract_version === 'INVOICE_BATCH_CANDIDATES_V2'
+        && value?.action === 'GENERATE'
+        && Array.isArray(value?.rows)) {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.length === 1 ? unwrapCandidateEnvelope(value[0]) : null;
+    }
+    if (value && typeof value === 'object') {
+      for (const key of ['data', 'rows']) {
+        if (Array.isArray(value[key]) && value[key].length === 1) {
+          const nested = unwrapCandidateEnvelope(value[key][0]);
+          if (nested) return nested;
+        }
       }
-      byCommandNo.set(commandNo, result);
+      const values = Object.values(value);
+      if (values.length === 1) return unwrapCandidateEnvelope(values[0]);
     }
-    for (let index = 0; index < batch.length; index += 1) {
-      const result = byCommandNo.get(index + 1);
-      if (!result) throw Object.assign(new Error('INVOICE_AUTO_START_RESULT_MISSING'), {
-        code: 'INVOICE_AUTO_START_RESULT_MISSING'
-      });
-      operations.push(result);
-      perCandidate.push({
-        group_key: batch[index].group_key || null,
-        command_no: index + 1,
-        operation_id: result.operation_id || null,
-        status: result.status || null,
-        created: result.created === true,
-        reused_active: result.reused_active === true,
-        reused_ready: result.reused_ready === true,
-        blocked: result.blocked === true
-      });
-    }
-    await nudgeInvoiceOperations(env, started, {
-      ...options,
-      config,
-      lanes: ['DATABASE']
+    return null;
+  };
+  const firstPage = unwrapCandidateEnvelope(rawFirstPage) || {};
+  if (firstPage.contract_version !== 'INVOICE_BATCH_CANDIDATES_V2'
+      || firstPage.action !== 'GENERATE'
+      || !firstPage.snapshot
+      || typeof firstPage.snapshot !== 'object') {
+    return { ok: false, skipped: true, code: 'INVOICE_AUTO_CANDIDATE_CONTRACT_INVALID' };
+  }
+  const selectedTotal = Number(firstPage?.selection_summary?.selected_total || 0);
+  if (!Number.isSafeInteger(selectedTotal) || selectedTotal < 1) {
+    return { ok: true, candidates: 0, submitted: 0, operations: [] };
+  }
+  const commandToken = `AUTO:GENERATE:${String(firstPage.snapshot.revision || '')}`;
+  const startResponse = await rpc('invoice_operation_start_batch', {
+    p_commands: [{
+      command_type: 'GENERATE_SELECTED',
+      selection_contract: {
+        contract_version: 'INVOICE_BATCH_SELECTION_ROOT_V2',
+        query: {
+          contract_version: 'INVOICE_BATCH_QUERY_V2',
+          action: 'GENERATE',
+          mode: 'PAGE',
+          snapshot: firstPage.snapshot,
+          page_size: 100,
+          cursor: null,
+          filters,
+          sort,
+          selection
+        },
+        selection
+      },
+      command_token: commandToken
+    }],
+    p_actor_user_id: actorUserId
+  });
+  const operations = valueFromRpc(startResponse);
+  if (operations.length !== 1 || Number(operations[0]?.command_no) !== 1) {
+    throw Object.assign(new Error('INVOICE_AUTO_START_RESULT_CORRELATION_INVALID'), {
+      code: 'INVOICE_AUTO_START_RESULT_CORRELATION_INVALID'
     });
   }
+  await nudgeInvoiceOperations(env, operations, {
+    ...options,
+    config,
+    lanes: ['DATABASE']
+  });
   return {
     ok: true,
-    candidates: candidates.length,
-    submitted: selected.length,
-    remaining_eligible: Math.max(0, candidates.length - selected.length),
-    operations,
-    per_candidate: perCandidate
+    candidates: selectedTotal,
+    submitted: selectedTotal,
+    root_operation_id: operations[0]?.operation_id || null,
+    operations
   };
 }
 

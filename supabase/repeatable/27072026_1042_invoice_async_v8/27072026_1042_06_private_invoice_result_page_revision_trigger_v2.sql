@@ -5,45 +5,66 @@ volatile
 security definer
 set search_path to 'public','private','extensions','pg_temp'
 as $function$
+declare
+  v_root_id uuid;
+  v_stamp bigint;
 begin
   if tg_op = 'INSERT' then
-    with roots as materialized (
+    for v_root_id in
       select distinct n.operation_id
       from new_rows n
       where n.chunk_type in ('GENERATION_GROUP','ISSUE_INVOICE')
         and n.result_visible
-    ),
-    stamps as materialized (
-      select r.operation_id,
-        nextval('public.invoice_operation_change_seq'::regclass) stamp
-      from roots r
-    )
-    update public.invoice_operations o
-    set result_page_revision = s.stamp,
-        change_seq = greatest(o.change_seq, s.stamp),
-        updated_at_utc = statement_timestamp()
-    from stamps s
-    where o.id = s.operation_id;
+        and n.operation_id is not null
+      order by n.operation_id
+    loop
+      perform 1
+      from public.invoice_operations o
+      where o.id = v_root_id
+      for update;
+
+      v_stamp := nextval(
+        'public.invoice_operation_change_seq'::regclass
+      );
+
+      update public.invoice_operations o
+      set result_page_revision = greatest(
+            o.result_page_revision,
+            v_stamp
+          ),
+          change_seq = greatest(o.change_seq, v_stamp),
+          updated_at_utc = statement_timestamp()
+      where o.id = v_root_id;
+    end loop;
   elsif tg_op = 'DELETE' then
-    with roots as materialized (
-      select distinct o.operation_id
-      from old_rows o
-      where o.chunk_type in ('GENERATION_GROUP','ISSUE_INVOICE')
-        and o.result_visible
-    ),
-    stamps as materialized (
-      select r.operation_id,
-        nextval('public.invoice_operation_change_seq'::regclass) stamp
-      from roots r
-    )
-    update public.invoice_operations op
-    set result_page_revision = s.stamp,
-        change_seq = greatest(op.change_seq, s.stamp),
-        updated_at_utc = statement_timestamp()
-    from stamps s
-    where op.id = s.operation_id;
+    for v_root_id in
+      select distinct prior.operation_id
+      from old_rows prior
+      where prior.chunk_type in ('GENERATION_GROUP','ISSUE_INVOICE')
+        and prior.result_visible
+        and prior.operation_id is not null
+      order by prior.operation_id
+    loop
+      perform 1
+      from public.invoice_operations o
+      where o.id = v_root_id
+      for update;
+
+      v_stamp := nextval(
+        'public.invoice_operation_change_seq'::regclass
+      );
+
+      update public.invoice_operations o
+      set result_page_revision = greatest(
+            o.result_page_revision,
+            v_stamp
+          ),
+          change_seq = greatest(o.change_seq, v_stamp),
+          updated_at_utc = statement_timestamp()
+      where o.id = v_root_id;
+    end loop;
   else
-    with roots as materialized (
+    for v_root_id in
       select distinct coalesce(n.operation_id, o.operation_id) operation_id
       from old_rows o
       full join new_rows n on n.id = o.id
@@ -57,19 +78,27 @@ begin
           or n.manifest_generation is distinct from o.manifest_generation
         )
         and (coalesce(n.result_visible, false) or coalesce(o.result_visible, false))
-    ),
-    stamps as materialized (
-      select r.operation_id,
-        nextval('public.invoice_operation_change_seq'::regclass) stamp
-      from roots r
-      where r.operation_id is not null
-    )
-    update public.invoice_operations op
-    set result_page_revision = s.stamp,
-        change_seq = greatest(op.change_seq, s.stamp),
-        updated_at_utc = statement_timestamp()
-    from stamps s
-    where op.id = s.operation_id;
+        and coalesce(n.operation_id, o.operation_id) is not null
+      order by coalesce(n.operation_id, o.operation_id)
+    loop
+      perform 1
+      from public.invoice_operations root_operation
+      where root_operation.id = v_root_id
+      for update;
+
+      v_stamp := nextval(
+        'public.invoice_operation_change_seq'::regclass
+      );
+
+      update public.invoice_operations root_operation
+      set result_page_revision = greatest(
+            root_operation.result_page_revision,
+            v_stamp
+          ),
+          change_seq = greatest(root_operation.change_seq, v_stamp),
+          updated_at_utc = statement_timestamp()
+      where root_operation.id = v_root_id;
+    end loop;
   end if;
 
   return null;

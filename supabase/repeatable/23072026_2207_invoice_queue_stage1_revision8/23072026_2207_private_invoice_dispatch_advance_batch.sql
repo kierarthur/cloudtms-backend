@@ -33,10 +33,58 @@ begin
     select jsonb_agg(x.value order by x.ordinality)
     into v_group
     from jsonb_array_elements(p_claims) with ordinality x(value,ordinality)
-    where x.value->>'chunk_type'=v_chunk_type;
+    where x.value->>'chunk_type'=v_chunk_type
+      and exists (
+        select 1
+        from public.invoice_operation_chunks carrier
+        join public.invoice_operations root
+          on root.id=carrier.operation_id
+        where carrier.id=case
+            when pg_input_is_valid(
+              coalesce(x.value->>'chunk_id',''),
+              'uuid'
+            )
+              then (x.value->>'chunk_id')::uuid
+          end
+          and (
+            root.entity_type is distinct from 'INVOICE_BATCH'
+            or (
+              not carrier.is_manifest_member
+              and coalesce(
+                carrier.payload_json->>'is_selection_expander',
+                'false'
+              ) in ('true','t','1','yes','on')
+              and carrier.chunk_type in (
+                'GENERATION_GROUP',
+                'ISSUE_INVOICE'
+              )
+              and carrier.phase in (
+                'BUILD_MANIFEST',
+                'RELEASE_MANIFEST'
+              )
+            )
+            or (
+              carrier.is_manifest_member
+              and root.manifest_committed
+              and carrier.manifest_committed
+              and carrier.phase not in (
+                'AWAITING_MANIFEST_COMMIT',
+                'AWAITING_RELEASE'
+              )
+              and coalesce(
+                carrier.payload_json->>'is_selection_expander',
+                'false'
+              ) not in ('true','t','1','yes','on')
+            )
+          )
+      );
 
     /* One set-based call is made for each chunk type.  Expected business
        invalidity is returned by processors as typed rows. */
+    if v_group is null then
+      continue;
+    end if;
+
     begin
       case v_chunk_type
         when 'GENERATION_GROUP' then
