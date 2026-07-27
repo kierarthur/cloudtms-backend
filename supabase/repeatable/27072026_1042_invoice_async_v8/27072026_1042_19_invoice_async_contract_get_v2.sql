@@ -232,7 +232,8 @@ as $function$
         ('idx_invoice_manifest_carrier_identity_v8'),
         ('idx_invoice_batch_result_all_v8'),
         ('idx_invoice_batch_result_category_v8'),
-        ('idx_invoice_operation_chunks_claim_v8')
+        ('idx_invoice_operation_chunks_claim_v8'),
+        ('idx_invoice_operation_control_receipt_actor_token_v8')
     ) required(index_name)
     left join pg_class c
       on c.relname=required.index_name
@@ -269,6 +270,8 @@ as $function$
     'snapshot_signing_ready',key_state.snapshot_key_ready,
     'candidate_trigger_count',trigger_state.candidate_trigger_count,
     'result_trigger_count',trigger_state.result_trigger_count,
+    'operation_control_idempotency_ready',
+      coalesce(index_state.indexes_ready,false),
     'indexes_ready',coalesce(index_state.indexes_ready,false)
   )
   from manifest

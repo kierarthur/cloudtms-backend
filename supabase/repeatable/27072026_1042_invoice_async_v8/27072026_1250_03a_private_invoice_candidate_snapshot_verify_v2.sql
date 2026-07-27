@@ -43,6 +43,7 @@ begin
          'at_utc',
          'revision',
          'expires_at_utc',
+         'key_id',
          'token'
        )
      )
@@ -50,6 +51,8 @@ begin
         'INVOICE_BATCH_SNAPSHOT_V2'
      or upper(coalesce(p_snapshot->>'action', '')) <> v_action
      or coalesce(p_snapshot->>'revision', '') !~ '^[0-9]+$'
+     or coalesce(p_snapshot->>'key_id', '') !~
+        '^[a-z0-9][a-z0-9._-]{0,63}$'
      or not pg_input_is_valid(
        coalesce(p_snapshot->>'at_utc', ''),
        'timestamp with time zone'
@@ -72,12 +75,14 @@ begin
     (p_snapshot->>'expires_at_utc')::timestamptz
   );
   v_revision := (p_snapshot->>'revision')::bigint;
+  v_key_id := p_snapshot->>'key_id';
   v_token := coalesce(p_snapshot->>'token', '');
   v_parts := string_to_array(v_token, '.');
 
   if cardinality(v_parts) <> 4
      or v_parts[1] <> 'v2'
      or v_parts[2] !~ '^[a-z0-9][a-z0-9._-]{0,63}$'
+     or v_parts[2] is distinct from v_key_id
      or v_parts[3] !~ '^[A-Za-z0-9_-]+$'
      or v_parts[4] !~ '^[0-9a-f]{64}$'
      or v_expires is distinct from v_at + interval '30 minutes' then
@@ -92,7 +97,6 @@ begin
       message = 'BATCH_SNAPSHOT_EXPIRED';
   end if;
 
-  v_key_id := v_parts[2];
   select s.decrypted_secret
   into v_secret
   from private.invoice_async_snapshot_hmac_keys k
@@ -179,7 +183,10 @@ begin
       message = 'BATCH_SNAPSHOT_CHANGED';
   end if;
 
-  return v_payload || jsonb_build_object('token', v_token);
+  return v_payload || jsonb_build_object(
+    'key_id', v_key_id,
+    'token', v_token
+  );
 end;
 $function$;
 

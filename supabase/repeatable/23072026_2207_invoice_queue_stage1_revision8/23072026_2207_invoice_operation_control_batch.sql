@@ -13,17 +13,139 @@ declare
     nullif(current_setting('request.jwt.claim.role',true),''),
     auth.jwt()->>'role','');
   v_auth_user uuid:=auth.uid();
+  v_actions jsonb;
+  v_request_token text;
+  v_supplied_request_hash text;
+  v_request_hash text;
+  v_receipt_identity text;
+  v_existing_result jsonb;
+  v_existing_request_hash text;
+  v_existing_expires_at_utc timestamptz;
   v_result jsonb;
 begin
   if v_jwt_role='service_role' then
     v_now:=coalesce(p_now_utc,statement_timestamp());
   end if;
 
-  if jsonb_typeof(p_actions)<>'array'
-     or jsonb_array_length(p_actions)<1
-     or jsonb_array_length(p_actions)>100 then
+  if jsonb_typeof(coalesce(p_actions,'null'::jsonb))<>'object'
+     or exists(
+       select 1
+       from jsonb_object_keys(p_actions) key_name
+       where key_name not in(
+         'contract_version','request_token','request_hash','actions'
+       )
+     )
+     or coalesce(p_actions->>'contract_version','')
+       <>'INVOICE_OPERATION_CONTROL_V2'
+     or jsonb_typeof(p_actions->'request_token') is distinct from 'string'
+     or jsonb_typeof(p_actions->'request_hash') is distinct from 'string'
+     or jsonb_typeof(p_actions->'actions') is distinct from 'array' then
     raise exception using errcode='22023',
-      message='p_actions must be an array containing 1..100 actions';
+      message='OPERATION_CONTROL_ACTION_SCHEMA_INVALID';
+  end if;
+
+  v_request_token:=btrim(coalesce(p_actions->>'request_token',''));
+  v_supplied_request_hash:=lower(coalesce(p_actions->>'request_hash',''));
+  v_actions:=p_actions->'actions';
+
+  if v_request_token=''
+     or octet_length(v_request_token)>256
+     or v_request_token~'[[:cntrl:]]' then
+    raise exception using errcode='22023',
+      message=case when v_request_token=''
+        then 'OPERATION_CONTROL_REQUEST_TOKEN_REQUIRED'
+        else 'OPERATION_CONTROL_REQUEST_TOKEN_INVALID' end;
+  end if;
+
+  if v_supplied_request_hash!~'^[0-9a-f]{64}$' then
+    raise exception using errcode='22023',
+      message='OPERATION_CONTROL_REQUEST_HASH_MISMATCH';
+  end if;
+
+  if jsonb_array_length(v_actions)<1
+     or jsonb_array_length(v_actions)>100
+     or exists(
+       select 1
+       from jsonb_array_elements(v_actions) supplied(raw_action)
+       where jsonb_typeof(supplied.raw_action) is distinct from 'object'
+          or not(supplied.raw_action?&array['action','operation_id'])
+          or jsonb_typeof(supplied.raw_action->'action') is distinct from
+             'string'
+          or jsonb_typeof(supplied.raw_action->'operation_id') is distinct
+             from 'string'
+          or upper(coalesce(supplied.raw_action->>'action','')) not in(
+             'RETRY','CANCEL','RESCHEDULE','RAISE_PRIORITY'
+          )
+          or coalesce(supplied.raw_action->>'operation_id','')!~*
+             '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          or (
+            upper(supplied.raw_action->>'action')='CANCEL'
+            and exists(
+              select 1 from jsonb_object_keys(supplied.raw_action) key_name
+              where key_name not in('action','operation_id')
+            )
+          )
+          or (
+            upper(supplied.raw_action->>'action')='RETRY'
+            and exists(
+              select 1 from jsonb_object_keys(supplied.raw_action) key_name
+              where key_name not in(
+                'action','operation_id','retry_chunk_id','replacement'
+              )
+            )
+          )
+          or (
+            upper(supplied.raw_action->>'action')='RETRY'
+            and supplied.raw_action?'retry_chunk_id'
+            and (
+              jsonb_typeof(supplied.raw_action->'retry_chunk_id')
+                is distinct from 'string'
+              or coalesce(supplied.raw_action->>'retry_chunk_id','')!~*
+                '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            )
+          )
+          or (
+            upper(supplied.raw_action->>'action')='RETRY'
+            and supplied.raw_action?'replacement'
+            and (
+              v_jwt_role<>'service_role'
+              or jsonb_typeof(supplied.raw_action->'replacement')
+                is distinct from 'object'
+            )
+          )
+          or (
+            upper(supplied.raw_action->>'action')='RESCHEDULE'
+            and (
+              not(supplied.raw_action?'run_after_utc')
+              or jsonb_typeof(supplied.raw_action->'run_after_utc')
+                is distinct from 'string'
+              or exists(
+                select 1 from jsonb_object_keys(supplied.raw_action) key_name
+                where key_name not in('action','operation_id','run_after_utc')
+              )
+            )
+          )
+          or (
+            upper(supplied.raw_action->>'action')='RAISE_PRIORITY'
+            and exists(
+              select 1 from jsonb_object_keys(supplied.raw_action) key_name
+              where key_name not in('action','operation_id','priority')
+            )
+          )
+          or (
+            upper(supplied.raw_action->>'action')='RAISE_PRIORITY'
+            and supplied.raw_action?'priority'
+            and (
+              v_jwt_role<>'service_role'
+              or jsonb_typeof(supplied.raw_action->'priority')
+                is distinct from 'number'
+              or coalesce(supplied.raw_action->>'priority','')!~'^[0-9]{1,4}$'
+              or (supplied.raw_action->>'priority')::integer>2000
+            )
+          )
+     ) then
+    raise exception using errcode='22023',
+      message='OPERATION_CONTROL_ACTION_SCHEMA_INVALID';
   end if;
 
   if not exists(
@@ -31,6 +153,58 @@ begin
        where u.id=p_actor_user_id and u.is_active and lower(u.role)='admin')
      or(v_jwt_role<>'service_role' and v_auth_user is distinct from p_actor_user_id) then
     raise exception using errcode='42501',message='Active administrator required';
+  end if;
+
+  v_request_hash:=private._invoice_batch_hash_v2(jsonb_build_object(
+    'contract_version','INVOICE_OPERATION_CONTROL_V2',
+    'request_token',v_request_token,
+    'actor_user_id',p_actor_user_id,
+    'actions',v_actions
+  ));
+
+  if v_supplied_request_hash is distinct from v_request_hash then
+    raise exception using errcode='22023',
+      message='OPERATION_CONTROL_REQUEST_HASH_MISMATCH';
+  end if;
+
+  v_receipt_identity:=private._invoice_batch_hash_v2(jsonb_build_object(
+    'contract_version','INVOICE_OPERATION_CONTROL_V2',
+    'actor_user_id',p_actor_user_id,
+    'request_token',v_request_token
+  ));
+
+  perform pg_advisory_xact_lock(hashtextextended(
+    'INVOICE_OPERATION_CONTROL_V2|'||p_actor_user_id::text||'|'||
+      v_request_token,
+    0
+  ));
+
+  select
+    o.result_json,
+    o.input_json->>'canonical_request_hash',
+    (o.input_json->>'expires_at_utc')::timestamptz
+  into
+    v_existing_result,
+    v_existing_request_hash,
+    v_existing_expires_at_utc
+  from public.invoice_operations o
+  where o.operation_type='OPERATION_CONTROL_REQUEST'
+    and o.actor_user_id=p_actor_user_id
+    and o.idempotency_key=v_receipt_identity
+  order by o.created_at_utc desc,o.id desc
+  limit 1;
+
+  if v_existing_result is not null then
+    if v_existing_request_hash is distinct from v_request_hash then
+      raise exception using errcode='40001',
+        message='OPERATION_CONTROL_IDEMPOTENCY_CONFLICT';
+    end if;
+    if v_existing_expires_at_utc is null
+       or v_existing_expires_at_utc<=v_now then
+      raise exception using errcode='40001',
+        message='OPERATION_CONTROL_IDEMPOTENCY_EXPIRED';
+    end if;
+    return coalesce(v_existing_result->'logical_result','[]'::jsonb);
   end if;
 
   with recursive raw_supplied as materialized (
@@ -42,7 +216,7 @@ begin
       upper(coalesce(x.value->>'action','')) action,
       coalesce(x.value->>'priority','') priority_text,
       count(*) over(partition by x.value->>'operation_id') duplicate_count
-    from jsonb_array_elements(p_actions) with ordinality x(value,ordinality)
+    from jsonb_array_elements(v_actions) with ordinality x(value,ordinality)
   ),
   supplied as materialized (
     select r.request_no,r.raw_action,
@@ -162,6 +336,8 @@ begin
           then 'UNSUPPORTED_ACTION'
         when s.duplicate_count>1 then 'DUPLICATE_OPERATION_ACTION'
         when o.id is null then 'OPERATION_NOT_FOUND'
+        when o.operation_type='OPERATION_CONTROL_REQUEST'
+          then 'OPERATION_CONTROL_RECEIPT_IMMUTABLE'
         when s.action='RESCHEDULE' and s.run_after_supplied
           and s.requested_run_after_utc is null then 'INVALID_RUN_AFTER_UTC'
         when s.action='CANCEL' and exists(
@@ -792,6 +968,71 @@ begin
   )
   select coalesce(jsonb_agg(result order by request_no),'[]'::jsonb)
   into v_result from results;
+
+  insert into public.invoice_operations(
+    operation_type,
+    entity_type,
+    actor_user_id,
+    idempotency_key,
+    status,
+    phase,
+    priority,
+    source_revision,
+    input_json,
+    config_json,
+    progress_json,
+    result_json,
+    total_units,
+    completed_units,
+    failed_units,
+    chunk_count,
+    completed_at_utc,
+    created_at_utc,
+    updated_at_utc
+  ) values (
+    'OPERATION_CONTROL_REQUEST',
+    'OPERATION_CONTROL',
+    p_actor_user_id,
+    v_receipt_identity,
+    'COMPLETE',
+    'TERMINAL',
+    0,
+    v_request_hash,
+    jsonb_build_object(
+      'contract_version','INVOICE_OPERATION_CONTROL_V2',
+      'request_token',v_request_token,
+      'canonical_request_hash',v_request_hash,
+      'canonical_request_payload',jsonb_build_object(
+        'contract_version','INVOICE_OPERATION_CONTROL_V2',
+        'request_token',v_request_token,
+        'actor_user_id',p_actor_user_id,
+        'actions',v_actions
+      ),
+      'actor_user_id',p_actor_user_id,
+      'request_scope','OPERATION_CONTROL',
+      'created_at_utc',v_now,
+      'expires_at_utc',v_now+interval '30 days'
+    ),
+    jsonb_build_object(
+      'command_type','OPERATION_CONTROL_REQUEST',
+      'processor_policy',private._invoice_processor_limits()
+    ),
+    jsonb_build_object(
+      'contract_version','INVOICE_OPERATION_CONTROL_V2',
+      'status_message','Operation control request completed'
+    ),
+    jsonb_build_object(
+      'contract_version','INVOICE_OPERATION_CONTROL_V2',
+      'logical_result',v_result
+    ),
+    1,
+    1,
+    0,
+    0,
+    v_now,
+    v_now,
+    v_now
+  );
 
   return v_result;
 end;

@@ -41,7 +41,7 @@ import {
 } from '../invoice-document-processor/src/receipt-contract.js';
 
 const V8_ACTOR_ID = '00000000-0000-4000-8000-000000000010';
-const V8_FUNCTION_MANIFEST = '2d39e23ca276f5d00f5b957a599b2eefa2ab3821379e6438344c9a70c4b31201';
+const V8_FUNCTION_MANIFEST = 'ca91b5ef0807120f23a769f5914c8b1cefab31f96e2d60398474268dc05a3c58';
 const V8_CURSOR_SECRET = 'test-session-secret-with-more-than-thirty-two-characters';
 
 function v8DatabaseContract(overrides = {}) {
@@ -56,6 +56,7 @@ function v8DatabaseContract(overrides = {}) {
     function_hash_manifest: V8_FUNCTION_MANIFEST,
     indexes_ready: true,
     snapshot_signing_ready: true,
+    operation_control_idempotency_ready: true,
     missing_function_count: 0,
     private_exposure_count: 0,
     forbidden_dependency_count: 0,
@@ -139,6 +140,7 @@ function v8Snapshot(action = 'GENERATE', overrides = {}) {
     at_utc: '2026-07-27T12:00:00.000Z',
     revision: '1844',
     expires_at_utc: '2026-07-27T12:30:00.000Z',
+    key_id: 'test-v8-key',
     token: 'signed-database-snapshot-token',
     ...overrides
   };
@@ -481,7 +483,11 @@ test('document view returns 200 only for an exact READY version', async () => {
     const response = await handleInvoiceAsyncHttpRequest(
       new Request(
         'https://example.test/api/invoices/00000000-0000-4000-8000-000000000021/render',
-        { method: 'POST', body: '{}' }
+        {
+          method: 'POST',
+          headers: { 'idempotency-key': 'view-ready-command' },
+          body: '{}'
+        }
       ),
       v8Environment(),
       {},
@@ -519,6 +525,9 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
         : (request instanceof URL ? request.href : request.url)
     );
     assert.ok(['/rest/v1/invoice_operations', '/rest/v1/v_outbox_unified'].includes(url.pathname));
+    if (url.pathname === '/rest/v1/invoice_operations') {
+      assert.equal(url.searchParams.get('operation_type'), 'neq.OPERATION_CONTROL_REQUEST');
+    }
     const rows = url.pathname === '/rest/v1/invoice_operations'
       ? [{
           id: '00000000-0000-4000-8000-000000000030',
@@ -681,7 +690,11 @@ test('issued document view selects the exact FINAL_ISSUE version and never queue
   };
   try {
     const response = await handleInvoiceAsyncHttpRequest(
-      new Request(`https://example.test/api/invoices/${invoice}/render`, { method: 'POST', body: '{}' }),
+      new Request(`https://example.test/api/invoices/${invoice}/render`, {
+        method: 'POST',
+        headers: { 'idempotency-key': 'view-final-command' },
+        body: '{}'
+      }),
       v8Environment({ INVOICE_ASYNC_ALLOWED_USER_IDS: actor }),
       {},
       { requireUser: async () => ({ id: actor, role: 'admin', active: true }), rpc: v8Rpc(async name => {
@@ -1529,6 +1542,169 @@ test('external command identity is caller-stable and never falls back to deliver
     }),
     'stable-command-token'
   );
+});
+
+test('V8 snapshot, facet, explicit-key, and delivery token boundaries fail closed', async () => {
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchSnapshot({
+      ...v8Snapshot('GENERATE'),
+      key_id: undefined
+    }, 'GENERATE'),
+    /BATCH_SNAPSHOT_INVALID/
+  );
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchFacetRequest({
+      kinds: ['CLIENTS'],
+      cursors: { candidates: 'opaque-but-unrequested' }
+    }),
+    /BATCH_FACET_REQUEST_INVALID/
+  );
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchExplicitKeys({
+      selection_keys: ['one', 'two'],
+      expected_source_revisions: { one: '1', two: '2' }
+    }, { maximum: 1, exactCount: 1 }),
+    /BATCH_EXPLICIT_KEYS_INVALID/
+  );
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseDeliveryRequestToken(
+      'same-token',
+      'same-token'
+    ),
+    /DELIVERY_REQUEST_TOKEN_INVALID/
+  );
+});
+
+test('operation-control envelope is exact, durable-tokened, and DB-hashed', async () => {
+  const operationId = '00000000-0000-4000-8000-000000000091';
+  let submitted = null;
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoice-operations/control', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contract_version: 'INVOICE_OPERATION_CONTROL_V2',
+        command_token: 'stable-operation-control-token',
+        actions: [{ action: 'CANCEL', operation_id: operationId }]
+      })
+    }),
+    v8Environment(),
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc(async (name, args) => {
+        assert.equal(name, 'invoice_operation_control_batch');
+        submitted = args;
+        return [{
+          operation_id: operationId,
+          action: 'CANCEL',
+          accepted: false,
+          error: { code: 'OPERATION_NOT_FOUND' }
+        }];
+      })
+    }
+  );
+  assert.equal(response.status, 200);
+  assert.equal(submitted.p_now_utc, undefined);
+  assert.equal(
+    submitted.p_actions.contract_version,
+    'INVOICE_OPERATION_CONTROL_V2'
+  );
+  assert.equal(
+    submitted.p_actions.request_token,
+    'stable-operation-control-token'
+  );
+  assert.match(submitted.p_actions.request_hash, /^[0-9a-f]{64}$/);
+  assert.deepEqual(submitted.p_actions.actions, [{
+    operation_id: operationId,
+    action: 'CANCEL'
+  }]);
+
+  const same = await invoiceAsyncHttpInternals.invoiceOperationControlEnvelope(
+    V8_ACTOR_ID,
+    'stable-operation-control-token',
+    submitted.p_actions.actions
+  );
+  assert.equal(same.request_hash, submitted.p_actions.request_hash);
+  const changed = await invoiceAsyncHttpInternals.invoiceOperationControlEnvelope(
+    V8_ACTOR_ID,
+    'stable-operation-control-token',
+    [{ action: 'RAISE_PRIORITY', operation_id: operationId }]
+  );
+  assert.notEqual(changed.request_hash, submitted.p_actions.request_hash);
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceOperationControlAction({
+      action: 'RESCHEDULE',
+      operation_id: operationId,
+      scheduled_for_utc: new Date(Date.now() + 60_000).toISOString()
+    }),
+    /OPERATION_CONTROL_ACTION_SCHEMA_INVALID/
+  );
+});
+
+test('work-starting document GET and loose credit-note inputs are rejected', async () => {
+  const deps = {
+    requireUser: async () => v8Actor(),
+    rpc: v8Rpc(async name => assert.fail(`Unexpected RPC ${name}`))
+  };
+  const getResponse = await handleInvoiceAsyncHttpRequest(
+    new Request(
+      'https://example.test/api/timesheets/00000000-0000-4000-8000-000000000092/pdf',
+      { method: 'GET' }
+    ),
+    v8Environment(),
+    {},
+    deps
+  );
+  assert.equal(getResponse.status, 405);
+  assert.equal(
+    (await getResponse.json()).error,
+    'DOCUMENT_PREPARATION_POST_REQUIRED'
+  );
+
+  const creditResponse = await handleInvoiceAsyncHttpRequest(
+    new Request(
+      'https://example.test/api/invoices/00000000-0000-4000-8000-000000000093/credit-note',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          reason: 'Legacy alias must not be accepted',
+          command_token: 'credit-command'
+        })
+      }
+    ),
+    v8Environment(),
+    {},
+    deps
+  );
+  assert.equal(creditResponse.status, 400);
+  assert.equal((await creditResponse.json()).error, 'CREDIT_NOTE_REQUEST_INVALID');
+});
+
+test('delivery part number is an exact bounded positive integer', async () => {
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request(
+      'https://example.test/api/invoices/00000000-0000-4000-8000-000000000094/email',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          command_token: 'delivery-command',
+          delivery_request_token: 'delivery-request',
+          delivery_part_number: 101
+        })
+      }
+    ),
+    v8Environment(),
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc(async name => assert.fail(`Unexpected RPC ${name}`))
+    }
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, 'DELIVERY_PART_NUMBER_INVALID');
 });
 
 test('Batch Issue supports Issue-and-send and Issue-only with separate identities', async () => {

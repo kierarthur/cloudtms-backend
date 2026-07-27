@@ -98,6 +98,7 @@ begin
   );
 
   return v_payload || jsonb_build_object(
+    'key_id', v_key_id,
     'token', v_signing_input || '.' || v_signature
   );
 end;

@@ -120,8 +120,13 @@ test('candidate snapshots are Vault-backed, signed, and verified in DB', () => {
   assert.doesNotMatch(migration, /secret_bytes/i);
   assert.match(snapshotGet, /extensions\.hmac/i);
   assert.match(snapshotGet, /interval '30 minutes'/i);
+  assert.match(snapshotGet, /'key_id',\s*v_key_id/i);
   assert.match(snapshotVerify, /BATCH_SNAPSHOT_SIGNATURE_INVALID/);
   assert.match(snapshotVerify, /BATCH_SNAPSHOT_CHANGED/);
+  assert.match(
+    snapshotVerify,
+    /v_parts\[2\]\s+is\s+distinct\s+from\s+v_key_id/i,
+  );
   assert.match(snapshotVerify, /pg_advisory_xact_lock_shared/i);
   assert.match(bump, /pg_advisory_xact_lock/i);
 });
@@ -327,6 +332,39 @@ test('batch operation control does not preload a capped current-chunk graph', ()
   assert.doesNotMatch(
     operationControl,
     /v_now\s+timestamptz\s*:=\s*coalesce\(p_now_utc/i,
+  );
+});
+
+test('operation control has durable database idempotency receipts', () => {
+  const operationControl = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql',
+  );
+  const migration = read(
+    'supabase/migrations/27072026_2321_invoice_operation_control_idempotency_receipts.sql',
+  );
+  const contractProbe = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_19_invoice_async_contract_get_v2.sql',
+  );
+
+  assert.match(operationControl, /INVOICE_OPERATION_CONTROL_V2/);
+  assert.match(operationControl, /OPERATION_CONTROL_REQUEST_TOKEN_REQUIRED/);
+  assert.match(operationControl, /OPERATION_CONTROL_REQUEST_HASH_MISMATCH/);
+  assert.match(operationControl, /OPERATION_CONTROL_IDEMPOTENCY_CONFLICT/);
+  assert.match(operationControl, /OPERATION_CONTROL_IDEMPOTENCY_EXPIRED/);
+  assert.match(operationControl, /OPERATION_CONTROL_RECEIPT_IMMUTABLE/);
+  assert.match(operationControl, /pg_advisory_xact_lock\s*\(/i);
+  assert.match(operationControl, /private\._invoice_batch_hash_v2\s*\(/i);
+  assert.match(operationControl, /'logical_result',v_result/i);
+  assert.match(operationControl, /interval '30 days'/i);
+  assert.match(migration, /'OPERATION_CONTROL_REQUEST'/);
+  assert.match(
+    migration,
+    /idx_invoice_operation_control_receipt_actor_token_v8/,
+  );
+  assert.doesNotMatch(migration, /create\s+table/i);
+  assert.match(
+    contractProbe,
+    /idx_invoice_operation_control_receipt_actor_token_v8/,
   );
 });
 

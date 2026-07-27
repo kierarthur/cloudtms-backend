@@ -1,10 +1,10 @@
 {
   "contract_version": "INVOICE_ASYNC_DB_V2_FUNCTION_HASH_MANIFEST",
   "project": "test-cloudtms",
-  "generated_at_utc": "2026-07-27T19:09:28.544Z",
+  "generated_at_utc": "2026-07-27T22:36:37.890Z",
   "hash_input": "pg_get_functiondef(oid)",
   "hash_algorithm": "sha256",
-  "aggregate_sha256": "2d39e23ca276f5d00f5b957a599b2eefa2ab3821379e6438344c9a70c4b31201",
+  "aggregate_sha256": "ca91b5ef0807120f23a769f5914c8b1cefab31f96e2d60398474268dc05a3c58",
   "security_gate": {
     "owner": "postgres",
     "private_public_execute": false,
@@ -70,7 +70,7 @@
     },
     {
       "identity": "private._invoice_batch_query_validate_v2(jsonb,text)",
-      "definition_sha256": "f158b2591c2dd91447757377196958456b1af93d05b6a08e969792174f7d861f"
+      "definition_sha256": "cfe29cc08db45b2c863f74be12f3ffe1c1239b88d5c7a5079ed0ef2d13a9b759"
     },
     {
       "identity": "private._invoice_batch_selection_rules_v2(jsonb)",
@@ -86,11 +86,11 @@
     },
     {
       "identity": "private._invoice_candidate_snapshot_get_v2(text,timestamptz)",
-      "definition_sha256": "634725287a27fb272b358d69edebdcb0bda0a7844a879cbcefacfdbad730551d"
+      "definition_sha256": "1348c5c176285f9bc00da9ca3fabf26c72f5cb20b856606946409076bbadc6a8"
     },
     {
       "identity": "private._invoice_candidate_snapshot_verify_v2(text,jsonb,timestamptz)",
-      "definition_sha256": "7aac51f20519e8bf04bd0c6b0e723dab2f38bd892b18a4b62c26d7cb775c0ac7"
+      "definition_sha256": "634819a4e482e49b2d158f6ae2eb65f490da6fd60b3d380f05c81e772823b722"
     },
     {
       "identity": "private._invoice_candidate_triggers_install_v2()",
@@ -162,7 +162,7 @@
     },
     {
       "identity": "public.invoice_operation_control_batch(jsonb,uuid,timestamptz)",
-      "definition_sha256": "bbf4693e7821e9765ec8f222cdcf076742bc72d266424d98c28acf3ea40dd123"
+      "definition_sha256": "69497683c57cfc9e1f295dc8c419fcc922bfc3073560fc7d13234d26a5d7a6de"
     },
     {
       "identity": "public.invoice_operation_get(uuid[],uuid,text,jsonb)",

@@ -555,6 +555,51 @@ begin
       message = 'BATCH_SNAPSHOT_REQUIRED';
   end if;
 
+  if jsonb_typeof(v_snapshot) = 'object'
+     and (
+       not (v_snapshot ?& array[
+         'contract_version',
+         'action',
+         'at_utc',
+         'revision',
+         'expires_at_utc',
+         'key_id',
+         'token'
+       ])
+       or exists (
+         select 1
+         from jsonb_object_keys(v_snapshot) key_name
+         where key_name not in (
+           'contract_version',
+           'action',
+           'at_utc',
+           'revision',
+           'expires_at_utc',
+           'key_id',
+           'token'
+         )
+       )
+       or coalesce(v_snapshot->>'contract_version', '') <>
+          'INVOICE_BATCH_SNAPSHOT_V2'
+       or upper(coalesce(v_snapshot->>'action', '')) <> v_action
+       or coalesce(v_snapshot->>'revision', '') !~ '^[0-9]+$'
+       or coalesce(v_snapshot->>'key_id', '') !~
+          '^[a-z0-9][a-z0-9._-]{0,63}$'
+       or nullif(v_snapshot->>'token', '') is null
+       or not pg_input_is_valid(
+         coalesce(v_snapshot->>'at_utc', ''),
+         'timestamp with time zone'
+       )
+       or not pg_input_is_valid(
+         coalesce(v_snapshot->>'expires_at_utc', ''),
+         'timestamp with time zone'
+       )
+     ) then
+    raise exception using
+      errcode = '22023',
+      message = 'BATCH_SNAPSHOT_INVALID';
+  end if;
+
   if v_query ? 'group_selectors'
      and (
        jsonb_typeof(v_query->'group_selectors') is distinct from 'array'

@@ -117,7 +117,20 @@ function commandToken(req, body = {}, options = {}) {
   const text = String(value ?? '').trim();
   if (!text) throw invoiceBatchContractError(options.requiredCode || 'BATCH_COMMAND_TOKEN_REQUIRED');
   if (text.length > 256 || /[\u0000-\u001f\u007f]/.test(text)) {
-    throw invoiceBatchContractError('BATCH_COMMAND_TOKEN_INVALID');
+    throw invoiceBatchContractError(options.invalidCode || 'BATCH_COMMAND_TOKEN_INVALID');
+  }
+  return text;
+}
+
+function normaliseDeliveryRequestToken(value, commandTokenValue, options = {}) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    if (options.required === false) return null;
+    throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_REQUIRED');
+  }
+  if (text.length > 256 || /[\u0000-\u001f\u007f]/.test(text)
+      || text === commandTokenValue) {
+    throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_INVALID');
   }
   return text;
 }
@@ -491,6 +504,10 @@ function normaliseInvoiceBatchSnapshot(value, action, options = {}) {
   if (expiresAtUtc <= atUtc) throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
   const revision = String(snapshot.revision || '').trim();
   if (!/^[0-9]{1,20}$/.test(revision)) throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
+  const keyId = String(snapshot.key_id || '').trim();
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(keyId)) {
+    throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
+  }
   const token = String(snapshot.token || '').trim();
   if (!token || token.length > INVOICE_BATCH_CURSOR_MAX_BYTES) {
     throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
@@ -501,13 +518,9 @@ function normaliseInvoiceBatchSnapshot(value, action, options = {}) {
     at_utc: atUtc,
     revision,
     expires_at_utc: expiresAtUtc,
+    key_id: keyId,
     token
   };
-  if (snapshot.key_id !== undefined && snapshot.key_id !== null) {
-    const keyId = String(snapshot.key_id).trim();
-    if (!keyId || keyId.length > 160) throw invoiceBatchContractError('BATCH_SNAPSHOT_INVALID');
-    result.key_id = keyId;
-  }
   return result;
 }
 
@@ -557,6 +570,10 @@ function normaliseInvoiceBatchFacetRequest(value) {
   if (Object.keys(cursors).some(kind => !Object.values(kindNames).includes(kind))) {
     throw invoiceBatchContractError('BATCH_FACET_REQUEST_INVALID');
   }
+  const requestedCursorNames = new Set(kinds.map(kind => kindNames[kind]));
+  if (Object.keys(cursors).some(kind => !requestedCursorNames.has(kind))) {
+    throw invoiceBatchContractError('BATCH_FACET_REQUEST_INVALID');
+  }
   const normalizedCursors = {};
   for (const kind of kinds) {
     const name = kindNames[kind];
@@ -575,10 +592,20 @@ function normaliseInvoiceBatchFacetRequest(value) {
   };
 }
 
-function normaliseInvoiceBatchExplicitKeys(source) {
+function normaliseInvoiceBatchExplicitKeys(source, options = {}) {
   const keys = source.selection_keys;
   const revisions = source.expected_source_revisions;
-  if (!Array.isArray(keys) || keys.length < 1 || keys.length > 100
+  const maximum = Number(options.maximum ?? 100);
+  const exactCount = options.exactCount == null
+    ? null
+    : Number(options.exactCount);
+  if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 100
+      || (exactCount != null
+        && (!Number.isSafeInteger(exactCount)
+          || exactCount < 1
+          || exactCount > maximum))
+      || !Array.isArray(keys) || keys.length < 1 || keys.length > maximum
+      || (exactCount != null && keys.length !== exactCount)
       || !revisions || typeof revisions !== 'object' || Array.isArray(revisions)) {
     throw invoiceBatchContractError('BATCH_EXPLICIT_KEYS_INVALID');
   }
@@ -1361,7 +1388,10 @@ function normaliseInvoiceBatchQueryBody(body, action, options = {}) {
     query.group_selectors = normaliseInvoiceBatchGroupSelectors(request.group_selectors);
   } else if (mode === 'EXPLICIT_KEYS') {
     if (!snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
-    Object.assign(query, normaliseInvoiceBatchExplicitKeys(request));
+    Object.assign(query, normaliseInvoiceBatchExplicitKeys(request, {
+      maximum: options.explicitKeysMaximum ?? 1,
+      exactCount: options.explicitKeysExactCount ?? 1
+    }));
   }
   return query;
 }
@@ -1555,7 +1585,7 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
     maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
   });
   if (Object.keys(body).some(key => ![
-    'mode', 'selection_contract', 'command_token'
+    'selection_contract', 'command_token'
   ].includes(key))) {
     throw invoiceBatchContractError('BATCH_QUERY_UNKNOWN_FIELD');
   }
@@ -1665,11 +1695,10 @@ async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
   let deliveryRequestToken = null;
   let deliveryIntent = {};
   if (body.deliver) {
-    deliveryRequestToken = String(body.delivery_request_token || '').trim();
-    if (!deliveryRequestToken) throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_REQUIRED');
-    if (deliveryRequestToken.length > 256 || /[\u0000-\u001f\u007f]/.test(deliveryRequestToken)) {
-      throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_INVALID');
-    }
+    deliveryRequestToken = normaliseDeliveryRequestToken(
+      body.delivery_request_token,
+      token
+    );
     const suppliedIntent = plainInvoiceBatchObject(
       body.delivery_intent,
       'ISSUE_DELIVERY_INTENT_INVALID'
@@ -1716,7 +1745,35 @@ async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
 
 async function handleViewDocument(env, req, ctx, user, deps, entityType, entityId) {
   if (!UUID_PATTERN.test(entityId)) return jsonResponse({ error: 'INVALID_ENTITY_ID' }, 400);
-  const body = req.method === 'POST' ? (await parseBody(req) || {}) : {};
+  if (req.method !== 'POST') {
+    return jsonResponse({ ok: false, error: 'DOCUMENT_PREPARATION_POST_REQUIRED' }, 405, {
+      allow: 'POST'
+    });
+  }
+  const body = await readInvoiceBatchJsonBody(req, {
+    maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
+  });
+  const allowedFields = new Set([
+    'command_token', 'priority_reason', 'template_version'
+  ]);
+  if (Object.keys(body).some(key => !allowedFields.has(key))) {
+    throw invoiceBatchContractError('DOCUMENT_PREPARATION_REQUEST_INVALID');
+  }
+  const requestToken = commandToken(req, body, {
+    requiredCode: 'DOCUMENT_PREPARATION_COMMAND_TOKEN_REQUIRED'
+  });
+  const priorityReason = String(body.priority_reason || 'VIEW_NOW').trim().toUpperCase();
+  if (priorityReason !== 'VIEW_NOW') {
+    throw invoiceBatchContractError('DOCUMENT_PREPARATION_REQUEST_INVALID');
+  }
+  const templateVersion = body.template_version == null
+    ? undefined
+    : String(body.template_version).trim();
+  if (templateVersion !== undefined
+      && (!templateVersion || templateVersion.length > 160
+        || /[\u0000-\u001f\u007f]/.test(templateVersion))) {
+    throw invoiceBatchContractError('DOCUMENT_PREPARATION_REQUEST_INVALID');
+  }
   const serviceHeaders = {
     apikey: env.SUPABASE_SERVICE_ROLE_KEY,
     authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
@@ -1793,8 +1850,9 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
     command_type: entityType === 'INVOICE' ? 'VIEW_INVOICE_DOCUMENT' : 'VIEW_TIMESHEET_DOCUMENT',
     [entityType === 'INVOICE' ? 'invoice_id' : 'timesheet_id']: entityId,
     purpose,
-    priority_reason: body.priority_reason || 'VIEW_NOW',
-    template_version: body.template_version
+    priority_reason: priorityReason,
+    template_version: templateVersion,
+    command_token: requestToken
   };
   const operationsValue = rpcValue(await deps.rpc('invoice_operation_start_batch', {
     p_commands: [command],
@@ -1887,11 +1945,9 @@ async function handleIssueOne(env, req, ctx, user, deps, invoiceId) {
     throw invoiceBatchContractError('ISSUE_DELIVERY_INTENT_INVALID');
   }
   const requestToken = commandToken(req, body, { requiredCode: 'ISSUE_COMMAND_TOKEN_REQUIRED' });
-  const deliveryRequestToken = deliver ? String(body.delivery_request_token || '').trim() : null;
-  if (deliver && !deliveryRequestToken) throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_REQUIRED');
-  if (deliveryRequestToken && (
-    deliveryRequestToken.length > 256 || /[\u0000-\u001f\u007f]/.test(deliveryRequestToken)
-  )) throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_INVALID');
+  const deliveryRequestToken = deliver
+    ? normaliseDeliveryRequestToken(body.delivery_request_token, requestToken)
+    : null;
   return startCommands(env, req, ctx, user, [{
     command_type: 'ISSUE_INVOICES',
     invoice_ids: [canonicalInvoiceId],
@@ -1924,11 +1980,21 @@ async function handleDeliverOne(env, req, ctx, user, deps, invoiceId) {
     throw invoiceBatchContractError('DELIVERY_REQUEST_INVALID');
   }
   const requestToken = commandToken(req, body, { requiredCode: 'DELIVERY_COMMAND_TOKEN_REQUIRED' });
-  const deliveryRequestToken = String(body.delivery_request_token || '').trim();
-  if (!deliveryRequestToken) throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_REQUIRED');
-  if (deliveryRequestToken.length > 256 || /[\u0000-\u001f\u007f]/.test(deliveryRequestToken)) {
-    throw invoiceBatchContractError('DELIVERY_REQUEST_TOKEN_INVALID');
+  const deliveryRequestToken = normaliseDeliveryRequestToken(
+    body.delivery_request_token,
+    requestToken
+  );
+  const rawDeliveryPartNumber = body.delivery_part_number ?? 1;
+  if (
+    (typeof rawDeliveryPartNumber !== 'number'
+      && !/^[1-9][0-9]*$/.test(String(rawDeliveryPartNumber)))
+    || !Number.isSafeInteger(Number(rawDeliveryPartNumber))
+    || Number(rawDeliveryPartNumber) < 1
+    || Number(rawDeliveryPartNumber) > 100
+  ) {
+    throw invoiceBatchContractError('DELIVERY_PART_NUMBER_INVALID');
   }
+  const deliveryPartNumber = Number(rawDeliveryPartNumber);
   return startCommands(env, req, ctx, user, [{
     command_type: 'DELIVER_INVOICES',
     invoice_ids: canonicalUuidArray([invoiceId]),
@@ -1937,7 +2003,7 @@ async function handleDeliverOne(env, req, ctx, user, deps, invoiceId) {
     bcc: canonicalEmailArray(body.bcc || []),
     delivery_policy: canonicalDeliveryPolicy(body.delivery_policy),
     delivery_template_version: body.template_version || 'INVOICE_EMAIL_V2',
-    delivery_part_number: Number(body.delivery_part_number || 1),
+    delivery_part_number: deliveryPartNumber,
     command_token: requestToken,
     delivery_request_token: deliveryRequestToken
   }], deps, ['DATABASE']);
@@ -2050,27 +2116,94 @@ async function handleOperationGet(envOrReq, reqOrUser, userOrDeps, depsOrOperati
   });
 }
 
-function normaliseInvoiceOperationControlAction(raw) {
+function normaliseInvoiceOperationControlAction(raw, options = {}) {
+  const source = plainInvoiceBatchObject(
+    raw,
+    'OPERATION_CONTROL_ACTION_SCHEMA_INVALID'
+  );
   const allowed = new Set(['RETRY','CANCEL','RESCHEDULE','RAISE_PRIORITY']);
-  const action = String(raw?.action || '').trim().toUpperCase();
-  const operationId = String(raw?.operation_id || '').trim().toLowerCase();
+  const action = String(source.action || '').trim().toUpperCase();
+  const operationId = String(source.operation_id || '').trim().toLowerCase();
   if (!allowed.has(action) || !UUID_PATTERN.test(operationId)) {
-    throw Object.assign(new Error('OPERATION_CONTROL_ACTION_INVALID'), { code: 'OPERATION_CONTROL_ACTION_INVALID' });
+    throw invoiceBatchContractError('OPERATION_CONTROL_ACTION_SCHEMA_INVALID');
+  }
+  const allowedFields = new Set(['action', 'operation_id']);
+  if (action === 'RETRY') {
+    allowedFields.add('retry_chunk_id');
+    if (options.internal === true) allowedFields.add('replacement');
+  } else if (action === 'RESCHEDULE') {
+    allowedFields.add('run_after_utc');
+  } else if (action === 'RAISE_PRIORITY' && options.internal === true) {
+    allowedFields.add('priority');
+  }
+  if (Object.keys(source).some(key => !allowedFields.has(key))) {
+    throw invoiceBatchContractError('OPERATION_CONTROL_ACTION_SCHEMA_INVALID');
   }
   const item = { operation_id: operationId, action };
-  if (action === 'RETRY' && raw.retry_chunk_id != null) {
-    const retryChunkId = String(raw.retry_chunk_id).trim().toLowerCase();
-    if (!UUID_PATTERN.test(retryChunkId)) throw Object.assign(new Error('RETRY_CHUNK_ID_INVALID'), { code: 'RETRY_CHUNK_ID_INVALID' });
+  if (action === 'RETRY' && source.retry_chunk_id != null) {
+    const retryChunkId = String(source.retry_chunk_id).trim().toLowerCase();
+    if (!UUID_PATTERN.test(retryChunkId)) {
+      throw invoiceBatchContractError('OPERATION_CONTROL_ACTION_SCHEMA_INVALID');
+    }
     item.retry_chunk_id = retryChunkId;
   }
+  if (action === 'RETRY' && options.internal === true && source.replacement != null) {
+    item.replacement = structuredClone(plainInvoiceBatchObject(
+      source.replacement,
+      'OPERATION_CONTROL_ACTION_SCHEMA_INVALID'
+    ));
+  }
   if (action === 'RESCHEDULE') {
-    const timestamp = new Date(raw.run_after_utc || raw.scheduled_for_utc || raw.scheduledForUtc || '');
-    if (!Number.isFinite(timestamp.getTime()) || timestamp.getTime() <= Date.now()) {
-      throw Object.assign(new Error('RESCHEDULE_TIMESTAMP_INVALID'), { code: 'RESCHEDULE_TIMESTAMP_INVALID' });
+    const timestamp = new Date(source.run_after_utc || '');
+    const now = Date.now();
+    if (!Number.isFinite(timestamp.getTime())
+        || timestamp.getTime() <= now
+        || timestamp.getTime() > now + 30 * 24 * 60 * 60 * 1000) {
+      throw invoiceBatchContractError('OPERATION_CONTROL_ACTION_SCHEMA_INVALID');
     }
     item.run_after_utc = timestamp.toISOString();
   }
+  if (action === 'RAISE_PRIORITY' && options.internal === true
+      && source.priority != null) {
+    const priority = Number(source.priority);
+    if (!Number.isSafeInteger(priority) || priority < 0 || priority > 2000) {
+      throw invoiceBatchContractError('OPERATION_CONTROL_ACTION_SCHEMA_INVALID');
+    }
+    item.priority = priority;
+  }
   return item;
+}
+
+function operationControlRequestToken(req, body) {
+  const commandValue = body.command_token;
+  const requestValue = body.request_token;
+  if (commandValue != null && requestValue != null
+      && String(commandValue).trim() !== String(requestValue).trim()) {
+    throw invoiceBatchContractError('OPERATION_CONTROL_REQUEST_TOKEN_INVALID');
+  }
+  return commandToken(req, {
+    command_token: commandValue ?? requestValue
+  }, {
+    requiredCode: 'OPERATION_CONTROL_REQUEST_TOKEN_REQUIRED',
+    invalidCode: 'OPERATION_CONTROL_REQUEST_TOKEN_INVALID'
+  });
+}
+
+async function invoiceOperationControlEnvelope(userId, requestToken, actions) {
+  const canonicalPayload = {
+    contract_version: 'INVOICE_OPERATION_CONTROL_V2',
+    request_token: requestToken,
+    actor_user_id: String(userId || '').trim().toLowerCase(),
+    actions
+  };
+  return {
+    contract_version: 'INVOICE_OPERATION_CONTROL_V2',
+    request_token: requestToken,
+    request_hash: await sha256Text(
+      postgresJsonbTextForInvoiceBatch(canonicalPayload)
+    ),
+    actions
+  };
 }
 
 function controlResultsReleasedRunnableWork(value) {
@@ -2082,12 +2215,29 @@ function controlResultsReleasedRunnableWork(value) {
 }
 
 async function handleOperationControl(env, req, ctx, user, deps) {
-  const body = await parseBody(req);
-  const actions = Array.isArray(body?.actions) ? body.actions : [];
-  if (!actions.length || actions.length > 100) return jsonResponse({ error: 'actions[] must contain 1..100 items' }, 400);
+  const body = await readInvoiceBatchJsonBody(req, {
+    maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
+  });
+  const allowedFields = new Set([
+    'contract_version', 'actions', 'command_token', 'request_token'
+  ]);
+  if (Object.keys(body).some(key => !allowedFields.has(key))
+      || body.contract_version !== 'INVOICE_OPERATION_CONTROL_V2'
+      || !Array.isArray(body.actions)
+      || body.actions.length < 1
+      || body.actions.length > 100) {
+    throw invoiceBatchContractError('OPERATION_CONTROL_ACTION_SCHEMA_INVALID');
+  }
+  const requestToken = operationControlRequestToken(req, body);
+  const actions = body.actions;
   const safeActions = actions.map(normaliseInvoiceOperationControlAction);
+  const envelope = await invoiceOperationControlEnvelope(
+    user.id,
+    requestToken,
+    safeActions
+  );
   const operations = rpcValue(await deps.rpc('invoice_operation_control_batch', {
-    p_actions: safeActions,
+    p_actions: envelope,
     p_actor_user_id: user.id
   }));
   if (controlResultsReleasedRunnableWork(operations)) {
@@ -2363,7 +2513,14 @@ async function loadUnifiedOutboxCursorPage(env, {
   invoiceQuery.searchParams.set('select', 'id,operation_type,entity_type,entity_id,status,phase,priority,total_units,completed_units,failed_units,progress_json,result_json,error_json,requires_user_action,change_seq,created_at_utc,updated_at_utc,run_after_utc,parent_operation_id');
   invoiceQuery.searchParams.set('created_at_utc', `lte.${snapshotAt}`);
   if (status && /^[A-Z_]+$/.test(status)) invoiceQuery.searchParams.set('status', `eq.${status}`);
-  if (operationType && /^[A-Z_]+$/.test(operationType)) invoiceQuery.searchParams.set('operation_type', `eq.${operationType}`);
+  if (operationType && /^[A-Z_]+$/.test(operationType)) {
+    invoiceQuery.searchParams.set('operation_type', `eq.${operationType}`);
+  } else {
+    invoiceQuery.searchParams.set(
+      'operation_type',
+      'neq.OPERATION_CONTROL_REQUEST'
+    );
+  }
   if (entityId) invoiceQuery.searchParams.set('entity_id', `eq.${entityId}`);
   const invoiceRequiresAction = invoiceQueue.requiresAction ?? requiresAction;
   if (invoiceRequiresAction === 'true' || invoiceRequiresAction === 'false') invoiceQuery.searchParams.set('requires_user_action', `eq.${invoiceRequiresAction}`);
@@ -2502,7 +2659,14 @@ async function handleInvoiceOutboxList(env, req, deps) {
   }
   if (status && /^[A-Z_]+$/.test(status)) query.searchParams.set('status', `eq.${status}`);
   const operationType = String(url.searchParams.get('operation_type') || '').trim().toUpperCase();
-  if (operationType && /^[A-Z_]+$/.test(operationType)) query.searchParams.set('operation_type', `eq.${operationType}`);
+  if (operationType === 'OPERATION_CONTROL_REQUEST') {
+    return jsonResponse({ error: 'INVALID_OUTBOX_OPERATION_TYPE' }, 400);
+  }
+  if (operationType && /^[A-Z_]+$/.test(operationType)) {
+    query.searchParams.set('operation_type', `eq.${operationType}`);
+  } else {
+    query.searchParams.set('operation_type', 'neq.OPERATION_CONTROL_REQUEST');
+  }
   const entityId = String(url.searchParams.get('entity_id') || '').trim().toLowerCase();
   if (entityId) {
     if (!UUID_PATTERN.test(entityId)) return jsonResponse({ error: 'INVALID_ENTITY_ID' }, 400);
@@ -2579,15 +2743,37 @@ async function handleInvoiceOutboxList(env, req, deps) {
   });
 }
 async function handleInvoiceOutboxControl(env, req, ctx, user, deps, operationId, action) {
-  const body = req.method === 'POST' ? (await parseBody(req) || {}) : {};
+  const body = await readInvoiceBatchJsonBody(req, {
+    maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
+  });
+  const normalizedAction = String(action || '').trim().toUpperCase();
+  const allowedFields = new Set([
+    'contract_version', 'command_token', 'request_token'
+  ]);
+  if (normalizedAction === 'RETRY') allowedFields.add('retry_chunk_id');
+  if (normalizedAction === 'RESCHEDULE') allowedFields.add('run_after_utc');
+  if (Object.keys(body).some(key => !allowedFields.has(key))
+      || body.contract_version !== 'INVOICE_OPERATION_CONTROL_V2') {
+    throw invoiceBatchContractError('OPERATION_CONTROL_ACTION_SCHEMA_INVALID');
+  }
+  const requestToken = operationControlRequestToken(req, body);
   const controlAction = normaliseInvoiceOperationControlAction({
     operation_id: operationId,
-    action,
-    retry_chunk_id: body.retry_chunk_id,
-    scheduled_for_utc: body.scheduled_for_utc || body.scheduledForUtc
+    action: normalizedAction,
+    ...(normalizedAction === 'RETRY' && body.retry_chunk_id != null
+      ? { retry_chunk_id: body.retry_chunk_id }
+      : {}),
+    ...(normalizedAction === 'RESCHEDULE'
+      ? { run_after_utc: body.run_after_utc }
+      : {})
   });
+  const envelope = await invoiceOperationControlEnvelope(
+    user.id,
+    requestToken,
+    [controlAction]
+  );
   const result = await deps.rpc('invoice_operation_control_batch', {
-    p_actions: [controlAction],
+    p_actions: envelope,
     p_actor_user_id: user.id
   });
   const operations = rpcValue(result);
@@ -2905,7 +3091,9 @@ function validateInvoiceAsyncDatabaseContract(env, contract) {
     } else if (String(contract.function_hash_manifest || '').toLowerCase() !== expectedManifest) {
       errors.push('INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH');
     }
-    if (contract.indexes_ready !== true || contract.snapshot_signing_ready !== true) {
+    if (contract.indexes_ready !== true
+        || contract.snapshot_signing_ready !== true
+        || contract.operation_control_idempotency_ready !== true) {
       errors.push('INVOICE_ASYNC_DATABASE_PREREQUISITE_MISSING');
     }
     for (const field of [
@@ -3005,49 +3193,139 @@ function match(pathname, pattern) {
 
 function invoiceErrorStatus(error) {
   const code = String(error?.code || error?.message || error || '').toUpperCase();
-  if (['BATCH_REQUEST_TOO_LARGE', 'BATCH_SELECTION_PAYLOAD_TOO_LARGE'].includes(code)) return 413;
-  if (code === 'INVOICE_LEGACY_ROUTE_RETIRED') return 410;
-  if ([
+  const requestErrors = new Set([
+    'BATCH_COMMAND_TOKEN_INVALID',
+    'BATCH_COMMAND_TOKEN_REQUIRED',
+    'BATCH_CURSOR_INVALID',
+    'BATCH_CURSOR_ISSUED_AT_INVALID',
+    'BATCH_EXPLICIT_KEYS_INVALID',
+    'BATCH_FACET_REQUEST_INVALID',
+    'BATCH_FILTER_ARRAY_LIMIT_EXCEEDED',
+    'BATCH_FILTER_BOOLEAN_INVALID',
+    'BATCH_FILTER_DATE_RANGE_INVALID',
+    'BATCH_FILTER_SEARCH_TOO_LONG',
+    'BATCH_FILTER_STATUS_UNSUPPORTED',
+    'BATCH_QUERY_ACTION_MISMATCH',
+    'BATCH_QUERY_HASH_MISMATCH',
+    'BATCH_QUERY_UNKNOWN_FIELD',
+    'BATCH_REQUEST_JSON_INVALID',
+    'BATCH_REQUEST_OBJECT_REQUIRED',
+    'BATCH_SELECTION_CONTRACT_INVALID',
+    'BATCH_SELECTION_DEFAULT_INVALID',
+    'BATCH_SELECTION_INVALID',
+    'BATCH_SELECTION_MODE_UNSUPPORTED',
+    'BATCH_SELECTION_RULE_INVALID',
+    'BATCH_SELECTION_RULE_LIMIT_EXCEEDED',
+    'BATCH_SELECTION_RULE_SEQUENCE_DUPLICATE',
+    'BATCH_SELECTION_RULE_SEQUENCE_INVALID',
+    'BATCH_SELECTION_RULE_UNKNOWN_FIELD',
+    'BATCH_SELECTION_RULES_INVALID',
+    'BATCH_SELECTION_SELECTOR_INVALID',
+    'BATCH_SELECTION_SELECTOR_UNKNOWN_FIELD',
+    'BATCH_SELECTION_UNKNOWN_FIELD',
+    'BATCH_SNAPSHOT_INVALID',
+    'BATCH_SNAPSHOT_REQUIRED',
+    'CANONICAL_COMMAND_REQUIRED',
+    'CREDIT_NOTE_COMMAND_TOKEN_REQUIRED',
+    'CREDIT_NOTE_REASON_INVALID',
+    'CREDIT_NOTE_REQUEST_INVALID',
+    'DELIVERY_PART_NUMBER_INVALID',
+    'DELIVERY_POLICY_INVALID',
+    'DELIVERY_REQUEST_INVALID',
+    'DELIVERY_REQUEST_TOKEN_INVALID',
+    'DELIVERY_REQUEST_TOKEN_REQUIRED',
+    'DOCUMENT_PREPARATION_COMMAND_TOKEN_REQUIRED',
+    'DOCUMENT_PREPARATION_REQUEST_INVALID',
+    'DOCUMENT_VERSION_ENTITY_TYPE_INVALID',
+    'DOCUMENT_VERSION_ID_INVALID',
+    'DOCUMENT_VERSION_POINTER_MISMATCH',
+    'DOCUMENT_VERSION_PURPOSE_MISMATCH',
+    'GENERATE_COMMAND_TOKEN_REQUIRED',
+    'INVALID_ENTITY_ID',
+    'INVALID_OUTBOX_QUEUE_STATE',
+    'INVALID_OUTBOX_SEARCH',
+    'INVALID_RECIPIENT_EMAIL',
+    'INVOICE_ASYNC_DATABASE_CONTRACT_INVALID',
+    'INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH',
+    'INVOICE_BATCH_DISPLAY_MODE_INVALID',
+    'INVOICE_BATCH_FILTER_INVALID',
+    'INVOICE_BATCH_FILTER_UNKNOWN_FIELD',
+    'INVOICE_BATCH_GROUP_PRESET_INVALID',
+    'INVOICE_BATCH_PAGE_SIZE_INVALID',
+    'INVOICE_BATCH_QUERY_ACTION_MISMATCH',
+    'INVOICE_BATCH_QUERY_CONTRACT_INVALID',
+    'INVOICE_BATCH_QUERY_MODE_FIELD_INVALID',
+    'INVOICE_BATCH_QUERY_MODE_INVALID',
+    'INVOICE_BATCH_SORT_DIRECTION_INVALID',
+    'INVOICE_BATCH_SORT_INVALID',
+    'INVOICE_BATCH_SORT_KEY_INVALID',
+    'INVOICE_ISSUE_REQUEST_INVALID',
+    'INVOICE_START_RESULT_CORRELATION_INVALID',
+    'ISSUE_COMMAND_TOKEN_REQUIRED',
+    'ISSUE_DELIVERY_INTENT_INVALID',
+    'ISSUE_DELIVERY_MODE_REQUIRED',
+    'OPERATION_CONTROL_ACTION_INVALID',
+    'OPERATION_CONTROL_ACTION_SCHEMA_INVALID',
+    'OPERATION_CONTROL_REQUEST_HASH_MISMATCH',
+    'OPERATION_CONTROL_REQUEST_TOKEN_INVALID',
+    'OPERATION_CONTROL_REQUEST_TOKEN_REQUIRED',
+    'OPERATION_RESULT_CATEGORY_INVALID',
+    'OPERATION_RESULT_CURSOR_INVALID',
+    'OPERATION_RESULT_PAGE_REQUEST_INVALID',
+    'OPERATION_RESULT_ROOT_INVALID',
+    'OUTBOX_CURSOR_INVALID',
+    'READY_DOCUMENT_VERSION_NOT_FOUND',
+    'RETRY_CHUNK_ID_INVALID',
+    'VALID_UUID_ARRAY_REQUIRED'
+  ]);
+  const conflictErrors = new Set([
+    'BATCH_CURSOR_ACTION_MISMATCH',
+    'BATCH_CURSOR_EXPIRED',
+    'BATCH_CURSOR_FILTER_MISMATCH',
+    'BATCH_CURSOR_QUERY_MISMATCH',
+    'BATCH_CURSOR_SNAPSHOT_MISMATCH',
+    'BATCH_CURSOR_SORT_MISMATCH',
+    'BATCH_SELECTION_EMPTY',
+    'BATCH_SNAPSHOT_CHANGED',
+    'BATCH_SNAPSHOT_CHANGED_DURING_EXPANSION',
+    'BATCH_SNAPSHOT_EXPIRED',
+    'BATCH_SNAPSHOT_QUERY_MISMATCH',
+    'BATCH_SOURCE_CHANGED',
+    'DOCUMENT_PREPARATION_BLOCKED',
+    'ISSUED_DOCUMENT_INTEGRITY_FAILURE',
+    'ISSUED_DOCUMENT_POINTER_MISSING',
+    'OPERATION_CONTROL_IDEMPOTENCY_CONFLICT',
+    'OPERATION_CONTROL_IDEMPOTENCY_EXPIRED',
+    'OPERATION_CONTROL_RECEIPT_IMMUTABLE',
+    'OPERATION_RESULT_CURSOR_EXPIRED',
+    'OPERATION_RESULT_CURSOR_STALE',
+    'READY_DOCUMENT_IDENTITY_INVALID'
+  ]);
+  const unavailableErrors = new Set([
     'BATCH_SUMMARY_SCOPE_TOO_LARGE',
     'BATCH_SUMMARY_TIMEOUT',
     'INVOICE_ASYNC_DATABASE_CONTRACT_UNAVAILABLE',
     'INVOICE_ASYNC_DATABASE_CONTRACT_MISMATCH',
     'INVOICE_ASYNC_DATABASE_COMPONENT_CONTRACT_MISMATCH',
-    'INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH'
-  ].includes(code)) return 503;
-  if ([
-    'BATCH_CURSOR_EXPIRED',
-    'BATCH_CURSOR_ACTION_MISMATCH',
-    'BATCH_CURSOR_QUERY_MISMATCH',
-    'BATCH_CURSOR_FILTER_MISMATCH',
-    'BATCH_CURSOR_SORT_MISMATCH',
-    'BATCH_CURSOR_SNAPSHOT_MISMATCH',
-    'BATCH_SNAPSHOT_QUERY_MISMATCH',
-    'BATCH_SNAPSHOT_EXPIRED',
-    'BATCH_SNAPSHOT_CHANGED',
-    'BATCH_SELECTION_EMPTY',
-    'OPERATION_RESULT_CURSOR_EXPIRED',
-    'OPERATION_RESULT_CURSOR_STALE',
-    'BATCH_SOURCE_CHANGED',
-    'BATCH_SNAPSHOT_CHANGED_DURING_EXPANSION'
-  ].includes(code)) return 409;
-  if (
-    code.startsWith('BATCH_CURSOR_')
-    || code.startsWith('BATCH_SELECTION_')
-    || code.startsWith('BATCH_QUERY_')
-    || code.startsWith('BATCH_FILTER_')
-    || code.startsWith('BATCH_FACET_')
-    || code.startsWith('BATCH_EXPLICIT_')
-    || code.startsWith('OPERATION_RESULT_')
-    || code.startsWith('INVOICE_BATCH_')
-    || code.endsWith('_REQUIRED')
-    || code.endsWith('_INVALID')
-  ) return 400;
+    'INVOICE_ASYNC_DATABASE_NOT_READY',
+    'INVOICE_ASYNC_DATABASE_PREREQUISITE_MISSING',
+    'INVOICE_ASYNC_EXPECTED_MANIFEST_INVALID',
+    'INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH',
+    'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE',
+    'INVOICE_DOCUMENT_ACCESS_SECRET_MISSING',
+    'BATCH_CURSOR_SECRET_INVALID',
+    'OUTBOX_CURSOR_SECRET_INVALID',
+    'UNIFIED_OUTBOX_LIST_FAILED'
+  ]);
+  if (requestErrors.has(code)) return 400;
+  if (conflictErrors.has(code)) return 409;
+  if (unavailableErrors.has(code)) return 503;
+  if (['BATCH_REQUEST_TOO_LARGE', 'BATCH_SELECTION_PAYLOAD_TOO_LARGE'].includes(code)) return 413;
+  if (code === 'INVOICE_LEGACY_ROUTE_RETIRED') return 410;
+  if (['INVOICE_ASYNC_BACKPRESSURE', 'INVOICE_ASYNC_RATE_LIMITED'].includes(code)) return 429;
+  // Compatibility mapping for non-V8 authentication/authorisation failures only.
   if (/UNAUTHENTICATED|SESSION/.test(code)) return 401;
   if (/FORBIDDEN|ADMIN_REQUIRED|PERMISSION/.test(code)) return 403;
-  if (/CONFLICT|SOURCE_CHANGED|CURRENT_STATE_CHANGED|STALE|ACTIVE_OPERATION|NOT_READY|BLOCKED|TERMINAL|DOCUMENT_REVISION_CHANGED|OWNERSHIP_OR_DOCUMENT_MISMATCH/.test(code)) return 409;
-  if (/BACKPRESSURE|RATE_LIMIT/.test(code)) return 429;
-  if (/UNAVAILABLE|BINDING_MISSING|CONFIGURATION|SECRET_MISSING|SECRET_INVALID/.test(code)) return 503;
   return 500;
 }
 
@@ -3266,7 +3544,13 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
       return await handleViewDocument(env, req, ctx, user, deps, 'INVOICE', params.invoice_id);
     }
     params = match(path, '/api/timesheets/:timesheet_id/pdf');
-    if (params && ['GET', 'POST'].includes(req.method)) {
+    if (params && req.method === 'GET') {
+      return jsonResponse({
+        ok: false,
+        error: 'DOCUMENT_PREPARATION_POST_REQUIRED'
+      }, 405, { allow: 'POST' });
+    }
+    if (params && req.method === 'POST') {
       return await handleViewDocument(env, req, ctx, user, deps, 'TIMESHEET', params.timesheet_id);
     }
     params = match(path, '/api/invoices/:invoice_id/issue');
@@ -3279,12 +3563,26 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     }
     params = match(path, '/api/invoices/:invoice_id/credit-note');
     if (params && req.method === 'POST') {
-      const body = await parseBody(req) || {};
+      const body = await readInvoiceBatchJsonBody(req, {
+        maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES)
+          || INVOICE_BATCH_REQUEST_MAX_BYTES
+      });
+      const allowedFields = new Set(['credit_reason', 'command_token']);
+      if (Object.keys(body).some(key => !allowedFields.has(key))) {
+        throw invoiceBatchContractError('CREDIT_NOTE_REQUEST_INVALID');
+      }
+      const creditReason = String(body.credit_reason || '').trim();
+      if (!creditReason || creditReason.length > 1000
+          || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(creditReason)) {
+        throw invoiceBatchContractError('CREDIT_NOTE_REASON_INVALID');
+      }
       return await startCommands(env, req, ctx, user, [{
         command_type: 'GENERATE_CREDIT_NOTE',
         base_invoice_id: params.invoice_id,
-        credit_reason: body.credit_reason || body.reason,
-        command_token: commandToken(req, body)
+        credit_reason: creditReason,
+        command_token: commandToken(req, body, {
+          requiredCode: 'CREDIT_NOTE_COMMAND_TOKEN_REQUIRED'
+        })
       }], deps, ['DATABASE']);
     }
     return null;
@@ -3300,6 +3598,7 @@ export const invoiceAsyncHttpInternals = Object.freeze({
   canonicalEmailArray,
   boolValue,
   commandToken,
+  normaliseDeliveryRequestToken,
   generationCommandFromBody,
   readInvoiceBatchJsonBody,
   validateInvoiceBatchSourceFields,
@@ -3308,6 +3607,7 @@ export const invoiceAsyncHttpInternals = Object.freeze({
   normaliseInvoiceBatchSelectionRules,
   normaliseInvoiceBatchSnapshot,
   normaliseInvoiceBatchFacetRequest,
+  normaliseInvoiceBatchExplicitKeys,
   normaliseInvoiceBatchCursorValues,
   normaliseInvoiceBatchQueryBody,
   hashInvoiceBatchFilter,
@@ -3318,6 +3618,8 @@ export const invoiceAsyncHttpInternals = Object.freeze({
   encodeInvoiceBatchResultCursorV2,
   decodeInvoiceBatchResultCursorV2,
   candidateGroupsFromRpc,
+  normaliseInvoiceOperationControlAction,
+  invoiceOperationControlEnvelope,
   loadInvoiceAsyncDatabaseContract,
   validateInvoiceAsyncDatabaseContract,
   invoiceErrorStatus,
