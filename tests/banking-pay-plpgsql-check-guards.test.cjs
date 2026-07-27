@@ -39,11 +39,22 @@ const correctionEntryPointSources = [
   ['21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql', ['pay_workbench_candidate_source_build_chunk']],
   ['21072026_1235_40_pay_sync_overpayments_from_preview.sql', ['pay_sync_overpayments_from_preview']],
   ['21072026_1235_38_tsfin_write_snapshots_and_complete.sql', ['tsfin_write_snapshots_and_complete']],
+  ['21072026_1235_41_pay_workbench_session_apply_case_resolution.sql', [
+    'pay_workbench_session_apply_case_resolution'
+  ]],
   ['19072026_1405_revalidate_recovery_headroom_after_materialisation.sql', ['pay_workbench_worker_drain_chunk_revalidated_v1']],
+  ['19072026_1405_revalidate_recovery_headroom_after_materialisation.sql', [
+    'pay_workbench_revalidate_zero_retained_recovery_headroom_v1'
+  ]],
   ['20072026_1133_resolve_frozen_recovery_timesheet_identity.sql', [
     '_pay_policy_x_resolve_post_draft_economic_key'
   ]],
   ['26052026_2100HRS_NEW_FUNCTIONS.sql', [
+    '_pay_week_start_monday',
+    'pay_paye_guardrails',
+    'pay_preview_build_context',
+    'pay_workbench_session_recompute_progress_counters',
+    'pay_workbench_session_compact_progress_json',
     '_pay_batch_item_source_reservation_amount_ex_vat',
     'pay_preview_candidate_collect_scope',
     'pay_workbench_worker_drain_chunk',
@@ -67,6 +78,30 @@ test('instrumentation guards do not redefine Banking Pay economic or mutation bo
   assert.doesNotMatch(combined, /\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/i);
   assert.doesNotMatch(combined, /\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b/i);
   assert.doesNotMatch(combined, /\bpay_batch_items\b|\bpay_advance_reservations\b|\bpay_bank_transfers\b/i);
+});
+
+test('banking-alert polling disables the same faulty passive instrumentation', () => {
+  assert.match(
+    correctionGuard,
+    /'public\.banking_alerts_refresh_for_user\(uuid,text,integer\)'::regprocedure/
+  );
+});
+
+test('case-resolution discovery disables faulty passive instrumentation before validation', () => {
+  assert.match(
+    correctionGuard,
+    /'public\.pay_workbench_session_apply_case_resolution\(uuid,uuid,jsonb\)'::regprocedure/
+  );
+});
+
+test('preview context and its nested PL/pgSQL helpers disable faulty passive instrumentation', () => {
+  for (const signature of [
+    /'public\._pay_week_start_monday\(date\)'::regprocedure/,
+    /'public\.pay_paye_guardrails\(date,uuid,uuid\)'::regprocedure/,
+    /'public\.pay_preview_build_context\(date,date,uuid,uuid,uuid,jsonb\)'::regprocedure/
+  ]) {
+    assert.match(correctionGuard, signature);
+  }
 });
 
 test('correction-chain entry point definitions retain the checker guard when deployed independently', () => {

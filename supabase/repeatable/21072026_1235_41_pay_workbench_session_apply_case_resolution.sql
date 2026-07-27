@@ -6,6 +6,13 @@ CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_case_resolution(p_
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
+ SET plpgsql_check.mode TO 'disabled'
+ SET plpgsql_check.profiler TO 'off'
+ SET plpgsql_check.tracer TO 'off'
+ SET plpgsql_check.constants_tracing TO 'off'
+ SET plpgsql_check.cursors_leaks TO 'off'
+ SET plpgsql_check.strict_cursors_leaks TO 'off'
+ SET plpgsql_check.fatal_errors TO 'off'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -2396,7 +2403,7 @@ BEGIN
           FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
           WHERE target_resolution.timesheet_id = batch_item.timesheet_id
         )
-        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+        AND public._pay_batch_status_is_active_reservation(batch_row.status)
 
       UNION ALL
 
@@ -2413,7 +2420,7 @@ BEGIN
           FROM _tmp_bpay_session_target_bucket_resolution AS target_resolution
           WHERE target_resolution.timesheet_id = batch_snapshot.timesheet_id
         )
-        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+        AND public._pay_batch_status_is_active_reservation(batch_row.status)
     ) AS boundary_rows
     ON CONFLICT (timesheet_id, pay_batch_id) DO UPDATE
       SET batch_status = EXCLUDED.batch_status;

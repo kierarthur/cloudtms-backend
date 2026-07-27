@@ -828,11 +828,15 @@ declare
   v_residuals jsonb;
   v_residual jsonb;
   v_component jsonb;
+  v_suggested_component jsonb;
   v_member_ids uuid[];
   v_carrier_row_ids uuid[];
   v_root_id uuid;
   v_carrier_row_id uuid;
   v_carrier_has_finance_case boolean;
+  v_finance_parent_row_id uuid;
+  v_finance_component_json jsonb;
+  v_finance_component_due numeric := 0;
   v_chain_in_source_build boolean;
   v_source_pay_method text;
   v_line_key text;
@@ -1061,6 +1065,240 @@ begin
         l.id
       limit 1 for update;
 
+      -- The ordinary finance-case projector exposes a multi-component case as
+      -- one TS_TOTAL parent with server-owned component allocations nested in
+      -- case_components.  A resolved negative correction requires one exact
+      -- finance-backed carrier per dated component.  Clone only the matching
+      -- nested component into a provisional child row; the canonical rewrite
+      -- below then owns its final identity.  The component's nominal recovery
+      -- comes from the already-authoritative correction residual; this only
+      -- splits the aggregate presentation and introduces no new calculation.
+      if v_carrier_row_id is null
+         and v_component_outstanding < 0
+         and coalesce(v_resolution_pending,false) is not true then
+        v_finance_parent_row_id:=null::uuid;
+        v_finance_component_json:=null::jsonb;
+
+        select
+          finance_parent.id,
+          nested_component.value
+        into
+          v_finance_parent_row_id,
+          v_finance_component_json
+        from public.banking_pay_workbench_candidate_source_lines
+               finance_parent
+        cross join lateral jsonb_array_elements(
+          case
+            when jsonb_typeof(
+                   finance_parent.source_row_json->'case_components'
+                 )='array'
+              then finance_parent.source_row_json->'case_components'
+            else '[]'::jsonb
+          end
+        ) nested_component(value)
+        where finance_parent.session_id=p_session_id
+          and finance_parent.candidate_id=p_candidate_id
+          and finance_parent.source_build_run_id=p_source_build_run_id
+          and finance_parent.status='CURRENT'
+          and finance_parent.timesheet_id=any(v_member_ids)
+          and upper(coalesce(
+                finance_parent.economic_key_json->>'key_type',
+                ''
+              ))='TS_TOTAL'
+          and nullif(
+                btrim(coalesce(
+                  finance_parent.source_row_json->>'finance_case_id',
+                  ''
+                )),
+                ''
+              ) is not null
+          and nullif(
+                btrim(coalesce(
+                  nested_component.value->>'finance_component_id',
+                  ''
+                )),
+                ''
+              ) is not null
+          and coalesce(
+                nested_component.value->>'source_family_key',
+                ''
+              )=coalesce(v_residual->>'source_family_key','')
+          and upper(coalesce(
+                nested_component.value->>'component_key_type',
+                ''
+              ))=upper(coalesce(
+                v_component->>'component_key_type',
+                ''
+              ))
+          and coalesce(
+                nested_component.value->>'component_key_value',
+                ''
+              )=coalesce(v_component->>'component_key_value','')
+        order by finance_parent.source_ordinal,finance_parent.id
+        limit 1
+        for update of finance_parent;
+
+        if v_finance_parent_row_id is not null
+           and v_finance_component_json is not null then
+          v_finance_component_due:=round(abs(v_component_outstanding),2);
+
+          insert into public.banking_pay_workbench_candidate_source_lines (
+            id,
+            session_id,
+            candidate_id,
+            session_version,
+            source_change_seq,
+            source_build_run_id,
+            source_ordinal,
+            line_key,
+            parent_line_key,
+            split_suffix,
+            timesheet_id,
+            section,
+            source_row_json,
+            economic_key_json,
+            contract_json,
+            pay_channel_scope,
+            refresh_scope_kind,
+            status,
+            created_at_utc,
+            updated_at_utc
+          )
+          select
+            gen_random_uuid(),
+            finance_parent.session_id,
+            finance_parent.candidate_id,
+            finance_parent.session_version,
+            finance_parent.source_change_seq,
+            finance_parent.source_build_run_id,
+            (
+              select coalesce(max(existing_line.source_ordinal),0)+1
+              from public.banking_pay_workbench_candidate_source_lines
+                     existing_line
+              where existing_line.session_id=p_session_id
+                and existing_line.candidate_id=p_candidate_id
+                and existing_line.source_build_run_id=p_source_build_run_id
+            ),
+            finance_parent.line_key
+              ||':component:'
+              ||lower(coalesce(
+                   v_component->>'component_key_type',
+                   ''
+                 ))
+              ||':'
+              ||lower(coalesce(
+                   v_component->>'component_key_value',
+                   ''
+                 )),
+            finance_parent.line_key,
+            lower(coalesce(
+              v_component->>'component_key_type',
+              ''
+            ))
+              ||':'
+              ||lower(coalesce(
+                   v_component->>'component_key_value',
+                   ''
+                 )),
+            finance_parent.timesheet_id,
+            finance_parent.section,
+            coalesce(finance_parent.source_row_json,'{}'::jsonb)
+              || jsonb_build_object(
+                'finance_component_id',
+                  v_finance_component_json->>'finance_component_id',
+                'component_key_type',
+                  v_component->>'component_key_type',
+                'component_key_value',
+                  v_component->>'component_key_value',
+                'case_components',
+                  jsonb_build_array(v_finance_component_json),
+                'economic_key',
+                  coalesce(
+                    finance_parent.source_row_json->'economic_key',
+                    '{}'::jsonb
+                  )
+                  || jsonb_build_object(
+                    'timesheet_id',finance_parent.timesheet_id::text,
+                    'key_type',v_component->>'component_key_type',
+                    'key_value',v_component->>'component_key_value'
+                  ),
+                -- Recovery is initially blocked with zero allocatable value.
+                -- The existing headroom revalidator promotes only the amount
+                -- supported by retained positive pay.  Keep the full dated
+                -- authority separately as the component's nominal due.
+                'amount_ex_vat',0,
+                'amount_display',0,
+                'preview_amount_ex_vat',0,
+                'section_amount_ex_vat',0,
+                'component_amount_ex_vat',0,
+                'preview_component_amount_ex_vat',0,
+                'nominal_due_amount_ex_vat',v_finance_component_due,
+                'recoverable_this_pay_run_ex_vat',0,
+                'preview_contract',
+                  coalesce(
+                    finance_parent.source_row_json->'preview_contract',
+                    '{}'::jsonb
+                  )
+                  || jsonb_build_object(
+                    'amount_ex_vat',0,
+                    'selection_amount_ex_vat',0,
+                    'key_type',v_component->>'component_key_type',
+                    'key_value',v_component->>'component_key_value'
+                  )
+              ),
+            jsonb_build_object(
+              'timesheet_id',finance_parent.timesheet_id::text,
+              'key_type',v_component->>'component_key_type',
+              'key_value',v_component->>'component_key_value'
+            ),
+            coalesce(finance_parent.contract_json,'{}'::jsonb),
+            finance_parent.pay_channel_scope,
+            finance_parent.refresh_scope_kind,
+            'CURRENT',
+            coalesce(p_now_utc,now()),
+            coalesce(p_now_utc,now())
+          from public.banking_pay_workbench_candidate_source_lines
+                 finance_parent
+          where finance_parent.id=v_finance_parent_row_id
+          on conflict do nothing
+          returning id into v_carrier_row_id;
+
+          -- Safe replay can encounter the child after an earlier retry inserted
+          -- it.  Re-read the exact current carrier instead of creating another.
+          if v_carrier_row_id is null then
+            select exact_line.id
+            into v_carrier_row_id
+            from public.banking_pay_workbench_candidate_source_lines exact_line
+            where exact_line.session_id=p_session_id
+              and exact_line.candidate_id=p_candidate_id
+              and exact_line.source_build_run_id=p_source_build_run_id
+              and exact_line.status='CURRENT'
+              and exact_line.timesheet_id=any(v_member_ids)
+              and upper(coalesce(
+                    exact_line.economic_key_json->>'key_type',
+                    ''
+                  ))=upper(coalesce(
+                    v_component->>'component_key_type',
+                    ''
+                  ))
+              and coalesce(
+                    exact_line.economic_key_json->>'key_value',
+                    ''
+                  )=coalesce(v_component->>'component_key_value','')
+              and nullif(
+                    btrim(coalesce(
+                      exact_line.source_row_json->>'finance_case_id',
+                      ''
+                    )),
+                    ''
+                  ) is not null
+            order by exact_line.source_ordinal,exact_line.id
+            limit 1
+            for update;
+          end if;
+        end if;
+      end if;
+
       -- The bounded source builder may expose an unresolved correction member
       -- as one TS_TOTAL row before its saved dated decisions are normalised.
       -- Use one unretained raw member as the dated carrier, then rewrite its
@@ -1166,6 +1404,77 @@ begin
                   )::text;
         end if;
       end if;
+
+      v_suggested_component:=null;
+      if v_component_needs_resolution then
+        -- The canonical residual owns identity and outstanding economics, but
+        -- the bounded source row owns the server-generated PAYE/umbrella rate
+        -- evidence used by Suggested Rates Review. Preserve only those
+        -- suggestion fields while retaining the canonical residual
+        -- fingerprint and component identity. Never ask the browser to invent
+        -- a rate or reuse a suggestion for another date/component.
+        select source_component.value
+        into v_suggested_component
+        from public.banking_pay_workbench_candidate_source_lines source_line
+        cross join lateral jsonb_array_elements(
+          coalesce(source_line.source_row_json->'case_components','[]'::jsonb)
+        ) source_component(value)
+        where source_line.session_id=p_session_id
+          and source_line.candidate_id=p_candidate_id
+          and source_line.source_build_run_id=p_source_build_run_id
+          and source_line.status in ('CURRENT','SUPERSEDED')
+          and source_line.timesheet_id=any(v_member_ids)
+          and upper(coalesce(
+                source_component.value->>'component_key_type',
+                ''
+              ))=upper(coalesce(v_component->>'component_key_type',''))
+          and coalesce(
+                source_component.value->>'component_key_value',
+                ''
+              )=coalesce(v_component->>'component_key_value','')
+          and jsonb_typeof(
+                source_component.value->'suggested_resolution_payload_json'
+              )='object'
+          and jsonb_typeof(
+                source_component.value->'suggested_resolution_result_json'
+              )='object'
+          and upper(coalesce(
+                source_component.value->>'source_pay_method',
+                source_component.value
+                  #>>'{suggested_resolution_result_json,source_pay_method}',
+                ''
+              ))=upper(v_source_pay_method)
+          and upper(coalesce(
+                source_component.value
+                  #>>'{suggested_resolution_payload_json,target_pay_method}',
+                source_component.value
+                  #>>'{suggested_resolution_result_json,target_pay_method}',
+                ''
+              ))=upper(coalesce(v_component->>'target_pay_method',''))
+        order by
+          case when source_line.id=v_carrier_row_id then 0 else 1 end,
+          case when source_line.status='CURRENT' then 0 else 1 end,
+          source_line.source_ordinal,
+          source_line.id
+        limit 1;
+
+        if v_suggested_component is null then
+          raise exception 'CORRECTION_CHAIN_SUGGESTED_RESOLUTION_REQUIRED'
+            using errcode='P0001',
+                  detail=jsonb_build_object(
+                    'canonical_correction_key',
+                      v_component->>'canonical_correction_key',
+                    'component_key_type',
+                      v_component->>'component_key_type',
+                    'component_key_value',
+                      v_component->>'component_key_value',
+                    'source_pay_method',v_source_pay_method,
+                    'target_pay_method',
+                      upper(coalesce(v_component->>'target_pay_method',''))
+                  )::text;
+        end if;
+      end if;
+
       update public.banking_pay_workbench_candidate_source_lines l
       set section=case
             when v_resolution_pending then 'cases_resolutions'
@@ -1214,6 +1523,53 @@ begin
                 'source_pay_method',v_source_pay_method,
                 'current_target_pay_method',
                   upper(v_component->>'target_pay_method'),
+                'requires_resolution',v_component_needs_resolution,
+                'needs_resolution',v_component_needs_resolution,
+                'is_actionable_resolution_row',v_component_needs_resolution,
+                'has_suggested_resolution',v_component_needs_resolution,
+                'source_units',case
+                  when v_component_needs_resolution
+                    then nullif(v_suggested_component->>'source_units','')::numeric
+                  else null
+                end,
+                'source_rate',case
+                  when v_component_needs_resolution
+                    then nullif(v_suggested_component->>'source_rate','')::numeric
+                  else null
+                end,
+                'source_charge_rate',case
+                  when v_component_needs_resolution
+                    then nullif(v_suggested_component->>'source_charge_rate','')::numeric
+                  else null
+                end,
+                'source_basis_json',case
+                  when v_component_needs_resolution
+                    and jsonb_typeof(
+                      v_suggested_component->'source_basis_json'
+                    )='object'
+                    then v_suggested_component->'source_basis_json'
+                  else null
+                end,
+                'suggested_resolution_payload_json',case
+                  when v_component_needs_resolution
+                    then v_suggested_component
+                      ->'suggested_resolution_payload_json'
+                  else null
+                end,
+                'suggested_resolution_result_json',case
+                  when v_component_needs_resolution
+                    then v_suggested_component
+                      ->'suggested_resolution_result_json'
+                  else null
+                end,
+                'suggestion_explanation_text',case
+                  when v_component_needs_resolution
+                    then nullif(
+                      v_suggested_component->>'suggestion_explanation_text',
+                      ''
+                    )
+                  else null
+                end,
                 'target_pay_ex_vat',case
                   when v_component_needs_resolution then null
                   else v_component_outstanding
@@ -1328,7 +1684,31 @@ begin
           )
           || case
             when v_component_outstanding < 0
-              then '{}'::jsonb
+              then jsonb_build_object(
+                'amount_ex_vat',0,
+                'amount_display',0,
+                'preview_amount_ex_vat',0,
+                'ready_preview_amount_ex_vat',0,
+                'section_amount_ex_vat',0,
+                'section_amount_display',0,
+                'component_amount_ex_vat',0,
+                'preview_component_amount_ex_vat',0,
+                'target_pay_ex_vat',0,
+                'nominal_due_amount_ex_vat',
+                  round(abs(v_component_outstanding),2),
+                'recoverable_this_pay_run_ex_vat',0,
+                'preview_contract',
+                  coalesce(
+                    l.source_row_json->'preview_contract',
+                    '{}'::jsonb
+                  )
+                  || jsonb_build_object(
+                    'amount_ex_vat',0,
+                    'selection_amount_ex_vat',0,
+                    'key_type',v_component->>'component_key_type',
+                    'key_value',v_component->>'component_key_value'
+                  )
+              )
             else jsonb_build_object(
               'amount_ex_vat',v_component_outstanding,
               'amount_display',v_component_outstanding,
@@ -1421,6 +1801,80 @@ begin
       get diagnostics v_row_count = row_count;
       v_superseded := v_superseded + v_row_count;
     end loop;
+
+    -- Remove the case-level TS_TOTAL recovery parent only when every nested
+    -- component belongs to this correction chain and now has its own exact
+    -- finance-backed carrier.  Mixed or unrelated finance cases remain intact.
+    update public.banking_pay_workbench_candidate_source_lines aggregate_line
+    set status='SUPERSEDED',
+        updated_at_utc=coalesce(p_now_utc,now())
+    where aggregate_line.session_id=p_session_id
+      and aggregate_line.candidate_id=p_candidate_id
+      and aggregate_line.source_build_run_id=p_source_build_run_id
+      and aggregate_line.status='CURRENT'
+      and aggregate_line.timesheet_id=any(v_member_ids)
+      and upper(coalesce(
+            aggregate_line.economic_key_json->>'key_type',
+            ''
+          ))='TS_TOTAL'
+      and nullif(
+            btrim(coalesce(
+              aggregate_line.source_row_json->>'finance_case_id',
+              ''
+            )),
+            ''
+          ) is not null
+      and jsonb_typeof(
+            aggregate_line.source_row_json->'case_components'
+          )='array'
+      and jsonb_array_length(
+            aggregate_line.source_row_json->'case_components'
+          )>0
+      and not exists (
+        select 1
+        from jsonb_array_elements(
+          aggregate_line.source_row_json->'case_components'
+        ) nested_component(value)
+        where coalesce(
+                nested_component.value->>'source_family_key',
+                ''
+              )<>coalesce(v_residual->>'source_family_key','')
+           or not exists (
+             select 1
+             from public.banking_pay_workbench_candidate_source_lines
+                    exact_component_line
+             where exact_component_line.session_id=p_session_id
+               and exact_component_line.candidate_id=p_candidate_id
+               and exact_component_line.source_build_run_id
+                     =p_source_build_run_id
+               and exact_component_line.status='CURRENT'
+               and exact_component_line.timesheet_id=any(v_member_ids)
+               and upper(coalesce(
+                     exact_component_line.economic_key_json->>'key_type',
+                     ''
+                   ))=upper(coalesce(
+                     nested_component.value->>'component_key_type',
+                     ''
+                   ))
+               and coalesce(
+                     exact_component_line.economic_key_json->>'key_value',
+                     ''
+                   )=coalesce(
+                     nested_component.value->>'component_key_value',
+                     ''
+                   )
+               and nullif(
+                     btrim(coalesce(
+                       exact_component_line.source_row_json
+                         ->>'finance_case_id',
+                       ''
+                     )),
+                     ''
+                   ) is not null
+           )
+      );
+    get diagnostics v_row_count = row_count;
+    v_superseded:=v_superseded+v_row_count;
 
     -- A correction chain is one coupled economic unit. Once its dated
     -- component carriers have been materialised, no raw member row may remain

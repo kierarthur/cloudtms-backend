@@ -340,6 +340,29 @@ test('Worker fails closed before public mutations and background job claims', ()
   );
 });
 
+test('case-resolution financial boundary follows active reservations, not settled history', () => {
+  const applySql = read(
+    'supabase/repeatable/21072026_1235_41_pay_workbench_session_apply_case_resolution.sql'
+  );
+  const boundaryStart = applySql.indexOf(
+    'CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_resolution_batch_boundary'
+  );
+  const boundaryEnd = applySql.indexOf(
+    'SELECT COUNT(*)::integer',
+    boundaryStart
+  );
+  assert.ok(boundaryStart >= 0 && boundaryEnd > boundaryStart);
+  const boundarySql = applySql.slice(boundaryStart, boundaryEnd);
+  assert.equal(
+    (boundarySql.match(/public\._pay_batch_status_is_active_reservation\(batch_row\.status\)/g) || []).length,
+    2
+  );
+  assert.doesNotMatch(
+    boundarySql,
+    /batch_row\.status[\s\S]{0,120}NOT IN \('CANCELLED', 'CANCELED'\)/
+  );
+});
+
 test('import review contract requires the canonical carrier marker', () => {
   assert.match(
     importReview,
@@ -493,7 +516,7 @@ test('deselecting one row converts implicit-all selection into a durable explici
   );
 });
 
-test('preview materialisation suppresses resolution anchors already frozen in non-cancelled batches', () => {
+test('preview materialisation keeps later correction decisions visible without selecting them for draft', () => {
   const materialiserStart = sessionSql.indexOf(
     'CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk('
   );
@@ -507,19 +530,16 @@ test('preview materialisation suppresses resolution anchors already frozen in no
   );
 
   assert.ok(materialiserStart >= 0, 'preview materialiser must exist');
-  assert.match(materialiser, /resolution_anchor_financial_boundaries AS \(/);
+  assert.doesNotMatch(materialiser, /resolution_anchor_financial_boundaries AS \(/);
+  assert.doesNotMatch(materialiser, /suppress_resolution_anchor_financial_boundary/);
+  assert.doesNotMatch(materialiser, /RESOLUTION_ANCHOR_ALREADY_IN_NON_CANCELLED_BATCH/);
   assert.match(
     materialiser,
-    /UPPER\(BTRIM\(COALESCE\(batch_row\.status, ''\)\)\) NOT IN \('CANCELLED', 'CANCELED'\)/
-  );
-  assert.match(materialiser, /suppress_resolution_anchor_financial_boundary/);
-  assert.match(
-    materialiser,
-    /RESOLUTION_ANCHOR_ALREADY_IN_NON_CANCELLED_BATCH/
+    /component_probe_rows\.target_section = 'canonical_preview_lines'[\s\S]*THEN true[\s\S]*ELSE false[\s\S]*END AS target_selected/
   );
   assert.match(
-    materialiser,
-    /TIMESHEET_ALREADY_IN_NON_CANCELLED_BATCH/
+    runtimeGuards,
+    /not exists \([\s\S]*live_component\(value\)[\s\S]*target_outstanding_ex_vat[\s\S]*\) <> 0[\s\S]*and exists \([\s\S]*from public\.pay_batch_items active_batch_item/
   );
 });
 

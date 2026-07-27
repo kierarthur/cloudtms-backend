@@ -546,6 +546,13 @@ create or replace function public._pay_week_start_monday(p_date date)
 returns date
 language plpgsql
 immutable
+set plpgsql_check.mode to 'disabled'
+set plpgsql_check.profiler to 'off'
+set plpgsql_check.tracer to 'off'
+set plpgsql_check.constants_tracing to 'off'
+set plpgsql_check.cursors_leaks to 'off'
+set plpgsql_check.strict_cursors_leaks to 'off'
+set plpgsql_check.fatal_errors to 'off'
 as $$
 declare
   v_dow int;
@@ -20533,6 +20540,13 @@ CREATE OR REPLACE FUNCTION public.pay_preview_build_context(p_pay_date date, p_w
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
+ SET plpgsql_check.mode TO 'disabled'
+ SET plpgsql_check.profiler TO 'off'
+ SET plpgsql_check.tracer TO 'off'
+ SET plpgsql_check.constants_tracing TO 'off'
+ SET plpgsql_check.cursors_leaks TO 'off'
+ SET plpgsql_check.strict_cursors_leaks TO 'off'
+ SET plpgsql_check.fatal_errors TO 'off'
 AS $function$
 DECLARE
   v_today_uk date := (now() AT TIME ZONE 'Europe/London')::date;
@@ -46345,6 +46359,7 @@ BEGIN
            economic_component.key_type,
            economic_component.key_value,
            economic_component.source_amount_ex_vat,
+           economic_component.target_amount_ex_vat,
            CASE
              WHEN COALESCE(resolved_component.component_json->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
                THEN ROUND((resolved_component.component_json->>'source_pay_ex_vat')::numeric, 2)
@@ -46439,6 +46454,7 @@ BEGIN
            scoped_item_component.source_family_key,
            scoped_item_component.source_family_key LIKE 'correction-chain:%' AS is_correction_chain_residual,
            SUM(ROUND(COALESCE(scoped_item_component.source_amount_ex_vat, 0), 2)) AS requested_source_amount_ex_vat,
+           SUM(ROUND(COALESCE(scoped_item_component.target_amount_ex_vat, 0), 2)) AS requested_target_amount_ex_vat,
            SUM(scoped_item_component.resolved_source_amount_ex_vat) AS resolved_source_amount_ex_vat,
            SUM(scoped_item_component.resolved_target_amount_ex_vat) AS resolved_target_amount_ex_vat,
            BOOL_AND(COALESCE(scoped_item_component.resolved_component_is_fresh, false)) AS resolved_component_is_fresh,
@@ -46464,6 +46480,9 @@ BEGIN
     SELECT outstanding_component.timesheet_id,
            UPPER(BTRIM(COALESCE(outstanding_component.key_type, ''))) AS key_type,
            BTRIM(COALESCE(outstanding_component.key_value, '')) AS key_value,
+           ROUND(COALESCE(outstanding_component.truth_ex_vat, 0), 2) AS truth_ex_vat,
+           ROUND(COALESCE(outstanding_component.baseline_ex_vat, 0), 2) AS baseline_ex_vat,
+           ROUND(COALESCE(outstanding_component.reserved_ex_vat, 0), 2) AS reserved_ex_vat,
            ROUND(COALESCE(outstanding_component.outstanding_ex_vat, 0), 2) AS outstanding_ex_vat
     FROM public._pay_outstanding_components(
       p_timesheet_ids => (SELECT timesheet_ids.timesheet_id_array FROM timesheet_ids),
@@ -46476,15 +46495,40 @@ BEGIN
            scoped_component_rows.source_family_key,
            scoped_component_rows.is_correction_chain_residual,
            ROUND(scoped_component_rows.requested_source_amount_ex_vat, 2) AS requested_source_amount_ex_vat,
+           ROUND(scoped_component_rows.requested_target_amount_ex_vat, 2) AS requested_target_amount_ex_vat,
+           CASE
+             WHEN scoped_component_rows.is_correction_chain_residual
+               THEN ROUND(scoped_component_rows.requested_source_amount_ex_vat, 2)
+             WHEN scoped_component_rows.resolved_component_is_fresh
+               THEN ROUND(scoped_component_rows.requested_target_amount_ex_vat, 2)
+             ELSE ROUND(scoped_component_rows.requested_source_amount_ex_vat, 2)
+           END AS reservation_requested_amount_ex_vat,
            CASE
              WHEN scoped_component_rows.is_correction_chain_residual
                THEN ROUND(COALESCE(scoped_component_rows.frozen_chain_outstanding_ex_vat, 0), 2)
              WHEN scoped_component_rows.resolved_component_is_fresh
               AND ROUND(COALESCE(scoped_component_rows.resolved_source_amount_ex_vat, 0), 2)
-                  = ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2)
-              AND ROUND(COALESCE(scoped_component_rows.resolved_target_amount_ex_vat, 0), 2)
-                  = ROUND(COALESCE(scoped_component_rows.requested_source_amount_ex_vat, 0), 2)
-               THEN ROUND(scoped_component_rows.resolved_target_amount_ex_vat, 2)
+                  = ROUND(COALESCE(outstanding_component_rows.truth_ex_vat, 0), 2)
+              AND ROUND(COALESCE(outstanding_component_rows.reserved_ex_vat, 0), 2) = 0
+              AND ROUND(COALESCE(scoped_component_rows.requested_target_amount_ex_vat, 0), 2)
+                  = ROUND(
+                      GREATEST(
+                        COALESCE(scoped_component_rows.resolved_target_amount_ex_vat, 0)
+                          - COALESCE(outstanding_component_rows.baseline_ex_vat, 0),
+                        0
+                      ),
+                      2
+                    )
+               THEN ROUND(
+                      GREATEST(
+                        COALESCE(scoped_component_rows.resolved_target_amount_ex_vat, 0)
+                          - COALESCE(outstanding_component_rows.baseline_ex_vat, 0),
+                        0
+                      ),
+                      2
+                    )
+             WHEN scoped_component_rows.resolved_component_is_fresh
+               THEN 0::numeric
              ELSE ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2)
            END AS outstanding_ex_vat,
            CASE
@@ -46492,10 +46536,20 @@ BEGIN
                THEN 'FROZEN_CORRECTION_CHAIN_RESIDUAL'
              WHEN scoped_component_rows.resolved_component_is_fresh
               AND ROUND(COALESCE(scoped_component_rows.resolved_source_amount_ex_vat, 0), 2)
-                  = ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2)
-              AND ROUND(COALESCE(scoped_component_rows.resolved_target_amount_ex_vat, 0), 2)
-                  = ROUND(COALESCE(scoped_component_rows.requested_source_amount_ex_vat, 0), 2)
-               THEN 'FROZEN_FRESH_PRE_DRAFT_RESOLUTION_TARGET'
+                  = ROUND(COALESCE(outstanding_component_rows.truth_ex_vat, 0), 2)
+              AND ROUND(COALESCE(outstanding_component_rows.reserved_ex_vat, 0), 2) = 0
+              AND ROUND(COALESCE(scoped_component_rows.requested_target_amount_ex_vat, 0), 2)
+                  = ROUND(
+                      GREATEST(
+                        COALESCE(scoped_component_rows.resolved_target_amount_ex_vat, 0)
+                          - COALESCE(outstanding_component_rows.baseline_ex_vat, 0),
+                        0
+                      ),
+                      2
+                    )
+               THEN 'FROZEN_FRESH_PRE_DRAFT_RESOLUTION_TARGET_REMAINDER'
+             WHEN scoped_component_rows.resolved_component_is_fresh
+               THEN 'FROZEN_FRESH_PRE_DRAFT_RESOLUTION_MISMATCH_OR_RESERVED'
              ELSE 'LIVE_PRE_DRAFT_OUTSTANDING'
            END AS outstanding_evidence_source
     FROM scoped_components AS scoped_component_rows
@@ -46510,10 +46564,12 @@ BEGIN
            joined_component_rows.key_value,
            joined_component_rows.source_family_key,
            joined_component_rows.requested_source_amount_ex_vat,
+           joined_component_rows.requested_target_amount_ex_vat,
+           joined_component_rows.reservation_requested_amount_ex_vat,
            joined_component_rows.outstanding_ex_vat,
            joined_component_rows.outstanding_evidence_source
     FROM joined_components AS joined_component_rows
-    WHERE joined_component_rows.requested_source_amount_ex_vat > joined_component_rows.outstanding_ex_vat + 0.01
+    WHERE joined_component_rows.reservation_requested_amount_ex_vat > joined_component_rows.outstanding_ex_vat + 0.01
   )
   SELECT COALESCE(
            (
@@ -46524,6 +46580,8 @@ BEGIN
                         'key_value', overrun_sample_rows.key_value,
                         'source_family_key', overrun_sample_rows.source_family_key,
                         'requested_source_amount_ex_vat', overrun_sample_rows.requested_source_amount_ex_vat,
+                        'requested_target_amount_ex_vat', overrun_sample_rows.requested_target_amount_ex_vat,
+                        'reservation_requested_amount_ex_vat', overrun_sample_rows.reservation_requested_amount_ex_vat,
                         'outstanding_ex_vat', overrun_sample_rows.outstanding_ex_vat,
                         'outstanding_evidence_source', overrun_sample_rows.outstanding_evidence_source
                       )
@@ -46541,7 +46599,7 @@ BEGIN
            '[]'::jsonb
          ),
          COALESCE((SELECT COUNT(*)::integer FROM scoped_components AS scoped_count_rows), 0),
-         ROUND(COALESCE((SELECT SUM(scoped_sum_rows.requested_source_amount_ex_vat) FROM scoped_components AS scoped_sum_rows), 0), 2),
+         ROUND(COALESCE((SELECT SUM(joined_sum_rows.reservation_requested_amount_ex_vat) FROM joined_components AS joined_sum_rows), 0), 2),
          ROUND(COALESCE((SELECT SUM(joined_sum_rows.outstanding_ex_vat) FROM joined_components AS joined_sum_rows), 0), 2)
   INTO v_overrun_sample,
        v_reservation_check_component_count,
@@ -47713,6 +47771,31 @@ BEGIN
       COUNT(*) OVER (PARTITION BY segment_component_amounts.id) AS component_count,
       ROW_NUMBER() OVER (PARTITION BY segment_component_amounts.id ORDER BY segment_component_amounts.component_ordinal, segment_component_amounts.id) AS component_position,
       SUM(ROUND(COALESCE(segment_component_amounts.derived_amount_ex_vat, 0), 2)) OVER (PARTITION BY segment_component_amounts.id) AS component_total_ex_vat,
+      ROUND(COALESCE(
+        segment_component_amounts.frozen_target_amount_ex_vat,
+        segment_component_amounts.amount_ex_vat,
+        0
+      ), 2) AS item_total_ex_vat,
+      ROUND(
+        CASE
+          WHEN SUM(ROUND(COALESCE(segment_component_amounts.derived_amount_ex_vat, 0), 2)) OVER (PARTITION BY segment_component_amounts.id) <> 0 THEN
+            COALESCE(
+              segment_component_amounts.frozen_target_amount_ex_vat,
+              segment_component_amounts.amount_ex_vat,
+              0
+            )
+            * ROUND(COALESCE(segment_component_amounts.derived_amount_ex_vat, 0), 2)
+            / NULLIF(SUM(ROUND(COALESCE(segment_component_amounts.derived_amount_ex_vat, 0), 2)) OVER (PARTITION BY segment_component_amounts.id), 0)
+          WHEN COUNT(*) OVER (PARTITION BY segment_component_amounts.id) > 0 THEN
+            COALESCE(
+              segment_component_amounts.frozen_target_amount_ex_vat,
+              segment_component_amounts.amount_ex_vat,
+              0
+            ) / NULLIF(COUNT(*) OVER (PARTITION BY segment_component_amounts.id), 0)
+          ELSE 0
+        END,
+        2
+      ) AS provisional_component_ex_vat,
       ROUND(
         CASE
           WHEN SUM(ROUND(COALESCE(segment_component_amounts.derived_amount_ex_vat, 0), 2)) OVER (PARTITION BY segment_component_amounts.id) <> 0 THEN
@@ -47729,6 +47812,22 @@ BEGIN
   ), segment_component_allocated AS (
     SELECT
       segment_component_prorated.*,
+      CASE
+        WHEN segment_component_prorated.component_position = segment_component_prorated.component_count THEN
+          ROUND(
+            COALESCE(segment_component_prorated.item_total_ex_vat, 0)
+            - COALESCE(
+                SUM(segment_component_prorated.provisional_component_ex_vat) OVER (
+                  PARTITION BY segment_component_prorated.id
+                  ORDER BY segment_component_prorated.component_ordinal, segment_component_prorated.id
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                ),
+                0
+              ),
+            2
+          )
+        ELSE segment_component_prorated.provisional_component_ex_vat
+      END AS allocated_amount_ex_vat,
       CASE
         WHEN segment_component_prorated.component_position = segment_component_prorated.component_count THEN
           ROUND(
@@ -47754,9 +47853,9 @@ BEGIN
       segment_component_allocated.derived_unit_name AS unit_name,
       segment_component_allocated.derived_units AS units,
       segment_component_allocated.derived_rate AS rate,
-      ROUND(COALESCE(segment_component_allocated.derived_amount_ex_vat, 0), 2) AS amount_ex_vat,
+      ROUND(COALESCE(segment_component_allocated.allocated_amount_ex_vat, 0), 2) AS amount_ex_vat,
       ROUND(COALESCE(segment_component_allocated.derived_amount_vat, 0), 2) AS amount_vat,
-      ROUND(COALESCE(segment_component_allocated.derived_amount_ex_vat, 0) + COALESCE(segment_component_allocated.derived_amount_vat, 0), 2) AS amount_inc_vat,
+      ROUND(COALESCE(segment_component_allocated.allocated_amount_ex_vat, 0) + COALESCE(segment_component_allocated.derived_amount_vat, 0), 2) AS amount_inc_vat,
       jsonb_strip_nulls(
         jsonb_build_object(
           'finance_case_id', CASE WHEN segment_component_allocated.finance_case_id IS NULL THEN NULL ELSE segment_component_allocated.finance_case_id::text END,
@@ -47770,7 +47869,8 @@ BEGIN
           'case_component_json', segment_component_allocated.component_json,
           'case_component_ordinal', segment_component_allocated.component_ordinal,
           'source_reservation_amount_ex_vat', public._pay_batch_item_source_reservation_amount_ex_vat(segment_component_allocated.id),
-          'target_amount_ex_vat', ROUND(COALESCE(segment_component_allocated.derived_amount_ex_vat, 0), 2),
+          'target_amount_ex_vat', ROUND(COALESCE(segment_component_allocated.allocated_amount_ex_vat, 0), 2),
+          'full_resolved_target_amount_ex_vat', ROUND(COALESCE(segment_component_allocated.derived_amount_ex_vat, 0), 2),
           'resolution_mode', CASE WHEN segment_component_allocated.frozen_resolution_mode IS NULL THEN NULL ELSE segment_component_allocated.frozen_resolution_mode::text END,
           'resolution_payload_json', segment_component_allocated.frozen_resolution_payload_json,
           'resolution_result_json', segment_component_allocated.frozen_resolution_result_json
@@ -54529,11 +54629,11 @@ $function$;
 
 
 CREATE OR REPLACE FUNCTION public._pay_batch_item_source_reservation_amount_ex_vat(p_pay_batch_item_id uuid)
- RETURNS numeric
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
- SET plpgsql_check.mode TO 'disabled'
+RETURNS numeric
+LANGUAGE plpgsql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_pay_batch_id uuid;
@@ -54553,8 +54653,6 @@ DECLARE
   v_frozen_source_basis_json jsonb;
   v_single_breakdown_meta_json jsonb := '{}'::jsonb;
   v_breakdown_count integer := 0;
-  v_breakdown_source_amount_ex_vat numeric;
-  v_breakdown_source_component_count integer := 0;
   v_resolved_key_type text;
   v_resolved_key_value text;
   v_key_resolution_failure_reason text;
@@ -54667,190 +54765,30 @@ BEGIN
     RETURN NULL::numeric(12,2);
   END IF;
 
-  v_has_source_target_split :=
-       v_finance_case_id IS NOT NULL
-    OR v_finance_component_id IS NOT NULL
-    OR v_frozen_target_amount_ex_vat IS NOT NULL
-    OR v_frozen_resolution_mode IS NOT NULL
-    OR v_frozen_resolution_payload_json IS NOT NULL
-    OR v_frozen_resolution_result_json IS NOT NULL
-    OR v_frozen_component_snapshot_json ? 'target_amount_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'target_pay_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'target_pay_amount_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'frozen_target_amount_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'target_rate'
-    OR v_frozen_component_snapshot_json ? 'target_units'
-    OR v_frozen_component_snapshot_json ? 'resolution_mode'
-    OR v_frozen_component_snapshot_json ? 'saved_resolution_mode'
-    OR v_frozen_component_snapshot_json ? 'saved_resolution_payload_json'
-    OR v_frozen_component_snapshot_json ? 'saved_resolution_result_json';
+  SELECT frozen_resolution_component.component_json->>'source_pay_ex_vat'
+  INTO v_frozen_resolved_source_text
+  FROM jsonb_array_elements(
+    CASE
+      WHEN jsonb_typeof(v_frozen_resolution_payload_json->'case_components') = 'array'
+        THEN v_frozen_resolution_payload_json->'case_components'
+      ELSE '[]'::jsonb
+    END
+  ) AS frozen_resolution_component(component_json)
+  WHERE UPPER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'component_key_type', ''))) = v_resolved_key_type
+    AND BTRIM(COALESCE(frozen_resolution_component.component_json->>'component_key_value', '')) = v_resolved_key_value
+    AND LOWER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'is_resolution_stale', 'false'))) NOT IN ('true','t','1','yes','y','on')
+    AND LOWER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'is_stale_saved_resolution', 'false'))) NOT IN ('true','t','1','yes','y','on')
+    AND LOWER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'requires_resolution', 'true'))) IN ('false','f','0','no','n','off')
+    AND NULLIF(BTRIM(COALESCE(frozen_resolution_component.component_json->>'resolved_rate_resolution_id', '')), '') IS NOT NULL
+    AND COALESCE(frozen_resolution_component.component_json->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+  LIMIT 1;
 
-  IF v_has_source_target_split THEN
-    WITH breakdown_source_rows AS (
-      SELECT
-        (
-          SELECT source_candidates.source_text_value::numeric
-          FROM (
-            VALUES
-              (breakdown_row.meta_json->>'source_reservation_amount_ex_vat'),
-              (breakdown_row.meta_json->>'source_entitlement_amount_ex_vat'),
-              (breakdown_row.meta_json->>'source_amount_ex_vat'),
-              (breakdown_row.meta_json->>'source_pay_ex_vat'),
-              (breakdown_row.meta_json->>'source_pay_amount_ex_vat'),
-              (breakdown_row.meta_json->>'basis_source_amount_ex_vat'),
-              (breakdown_row.meta_json->>'reserved_source_amount'),
-              (breakdown_row.meta_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{source_basis_json,source_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{source_basis_json,source_pay_ex_vat}'),
-              (breakdown_row.meta_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{source_basis_json,pay_ex_vat}'),
-              (breakdown_row.meta_json#>>'{source_basis_json,pay_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{source_basis_json,amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_reservation_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_entitlement_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_pay_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_pay_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,basis_source_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,reserved_source_amount}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_reservation_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_entitlement_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_pay_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,source_pay_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,basis_source_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,pay_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,pay_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{case_component_json,source_basis_json,amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_payload_json,source_reservation_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_payload_json,source_entitlement_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_payload_json,source_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_payload_json,source_pay_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_payload_json,source_pay_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_result_json,source_reservation_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_result_json,source_entitlement_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_result_json,source_amount_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_result_json,source_pay_ex_vat}'),
-              (breakdown_row.meta_json#>>'{resolution_result_json,source_pay_amount_ex_vat}')
-          ) AS source_candidates(source_text_value)
-          WHERE source_candidates.source_text_value IS NOT NULL
-            AND BTRIM(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
-          LIMIT 1
-        ) AS source_amount_ex_vat
-      FROM public.pay_batch_item_breakdowns AS breakdown_row
-      WHERE breakdown_row.pay_batch_item_id = p_pay_batch_item_id
-    )
-    SELECT
-      COUNT(*)::integer,
-      (COUNT(*) FILTER (WHERE breakdown_source_rows.source_amount_ex_vat IS NOT NULL))::integer,
-      CASE
-        WHEN COUNT(*) > 0
-         AND COUNT(*) FILTER (WHERE breakdown_source_rows.source_amount_ex_vat IS NOT NULL) = COUNT(*)
-          THEN ROUND(ABS(SUM(breakdown_source_rows.source_amount_ex_vat)), 2)::numeric(12,2)
-        ELSE NULL::numeric(12,2)
-      END
-    INTO
-      v_breakdown_count,
-      v_breakdown_source_component_count,
-      v_breakdown_source_amount_ex_vat
-    FROM breakdown_source_rows;
-
-    IF COALESCE(v_breakdown_count, 0) > 0
-       AND COALESCE(v_breakdown_source_component_count, 0) = COALESCE(v_breakdown_count, 0)
-       AND v_breakdown_source_amount_ex_vat IS NOT NULL THEN
-      RETURN v_breakdown_source_amount_ex_vat;
-    END IF;
+  IF v_frozen_resolved_source_text IS NOT NULL THEN
+    RETURN ROUND(ABS(v_frozen_resolved_source_text::numeric), 2)::numeric(12,2);
   END IF;
 
   IF v_frozen_source_amount IS NOT NULL THEN
     RETURN ROUND(ABS(v_frozen_source_amount), 2)::numeric(12,2);
-  END IF;
-
-  IF v_has_source_target_split THEN
-    SELECT source_candidates.source_text_value
-    INTO v_source_text
-    FROM (
-      VALUES
-        (v_frozen_component_snapshot_json->>'source_reservation_amount_ex_vat'),
-        (v_frozen_component_snapshot_json->>'source_entitlement_amount_ex_vat'),
-        (v_frozen_component_snapshot_json->>'source_amount_ex_vat'),
-        (v_frozen_component_snapshot_json->>'source_pay_ex_vat'),
-        (v_frozen_component_snapshot_json->>'source_pay_amount_ex_vat'),
-        (v_frozen_component_snapshot_json->>'basis_source_amount_ex_vat'),
-        (v_frozen_component_snapshot_json->>'reserved_source_amount'),
-        (v_frozen_component_snapshot_json->>'frozen_source_amount'),
-        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
-        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
-        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_amount_ex_vat}'),
-        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_ex_vat}'),
-        (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
-        (v_frozen_component_snapshot_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
-        (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_ex_vat}'),
-        (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_amount_ex_vat}'),
-        (v_frozen_component_snapshot_json#>>'{source_basis_json,amount_ex_vat}'),
-        (v_frozen_source_basis_json->>'source_reservation_amount_ex_vat'),
-        (v_frozen_source_basis_json->>'source_entitlement_amount_ex_vat'),
-        (v_frozen_source_basis_json->>'source_amount_ex_vat'),
-        (v_frozen_source_basis_json->>'source_pay_ex_vat'),
-        (v_frozen_source_basis_json->>'source_pay_amount_ex_vat'),
-        (v_frozen_source_basis_json->>'basis_source_amount_ex_vat'),
-        (v_frozen_source_basis_json->>'reserved_source_amount'),
-        (v_frozen_source_basis_json->>'frozen_source_amount'),
-        (v_frozen_source_basis_json->>'pay_ex_vat'),
-        (v_frozen_source_basis_json->>'pay_amount_ex_vat'),
-        (v_frozen_source_basis_json->>'amount_ex_vat'),
-        (v_frozen_source_basis_json->>'pay_amount'),
-        (v_frozen_resolution_payload_json->>'source_reservation_amount_ex_vat'),
-        (v_frozen_resolution_payload_json->>'source_entitlement_amount_ex_vat'),
-        (v_frozen_resolution_payload_json->>'source_amount_ex_vat'),
-        (v_frozen_resolution_payload_json->>'source_pay_ex_vat'),
-        (v_frozen_resolution_payload_json->>'source_pay_amount_ex_vat'),
-        (v_frozen_resolution_result_json->>'source_reservation_amount_ex_vat'),
-        (v_frozen_resolution_result_json->>'source_entitlement_amount_ex_vat'),
-        (v_frozen_resolution_result_json->>'source_amount_ex_vat'),
-        (v_frozen_resolution_result_json->>'source_pay_ex_vat'),
-        (v_frozen_resolution_result_json->>'source_pay_amount_ex_vat'),
-        (v_single_breakdown_meta_json->>'source_reservation_amount_ex_vat'),
-        (v_single_breakdown_meta_json->>'source_entitlement_amount_ex_vat'),
-        (v_single_breakdown_meta_json->>'source_amount_ex_vat'),
-        (v_single_breakdown_meta_json->>'source_pay_ex_vat'),
-        (v_single_breakdown_meta_json->>'source_pay_amount_ex_vat'),
-        (v_single_breakdown_meta_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{source_basis_json,source_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{source_basis_json,source_pay_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{source_basis_json,pay_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{source_basis_json,pay_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{source_basis_json,amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_reservation_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_entitlement_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_pay_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_pay_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,basis_source_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_reservation_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_entitlement_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_pay_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_pay_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,basis_source_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,pay_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,pay_amount_ex_vat}'),
-        (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,amount_ex_vat}')
-    ) AS source_candidates(source_text_value)
-    WHERE source_candidates.source_text_value IS NOT NULL
-      AND BTRIM(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
-    LIMIT 1;
-
-    IF v_source_text IS NOT NULL THEN
-      RETURN ROUND(ABS(v_source_text::numeric), 2)::numeric(12,2);
-    END IF;
-
-    RETURN NULL::numeric(12,2);
   END IF;
 
   SELECT source_candidates.source_text_value
@@ -54890,41 +54828,14 @@ BEGIN
       (v_frozen_resolution_payload_json->>'source_entitlement_amount_ex_vat'),
       (v_frozen_resolution_payload_json->>'source_amount_ex_vat'),
       (v_frozen_resolution_payload_json->>'source_pay_ex_vat'),
-      (v_frozen_resolution_payload_json->>'source_pay_amount_ex_vat'),
       (v_frozen_resolution_result_json->>'source_reservation_amount_ex_vat'),
       (v_frozen_resolution_result_json->>'source_entitlement_amount_ex_vat'),
       (v_frozen_resolution_result_json->>'source_amount_ex_vat'),
       (v_frozen_resolution_result_json->>'source_pay_ex_vat'),
-      (v_frozen_resolution_result_json->>'source_pay_amount_ex_vat'),
       (v_single_breakdown_meta_json->>'source_reservation_amount_ex_vat'),
       (v_single_breakdown_meta_json->>'source_entitlement_amount_ex_vat'),
       (v_single_breakdown_meta_json->>'source_amount_ex_vat'),
-      (v_single_breakdown_meta_json->>'source_pay_ex_vat'),
-      (v_single_breakdown_meta_json->>'source_pay_amount_ex_vat'),
-      (v_single_breakdown_meta_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{source_basis_json,source_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{source_basis_json,source_pay_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{source_basis_json,pay_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{source_basis_json,pay_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{source_basis_json,amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_reservation_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_entitlement_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_pay_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_pay_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,basis_source_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_reservation_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_entitlement_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_pay_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,source_pay_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,basis_source_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,pay_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,pay_amount_ex_vat}'),
-      (v_single_breakdown_meta_json#>>'{case_component_json,source_basis_json,amount_ex_vat}')
+      (v_single_breakdown_meta_json->>'source_pay_ex_vat')
   ) AS source_candidates(source_text_value)
   WHERE source_candidates.source_text_value IS NOT NULL
     AND BTRIM(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
@@ -54933,6 +54844,24 @@ BEGIN
   IF v_source_text IS NOT NULL THEN
     RETURN ROUND(ABS(v_source_text::numeric), 2)::numeric(12,2);
   END IF;
+
+  v_has_source_target_split :=
+       v_finance_case_id IS NOT NULL
+    OR v_finance_component_id IS NOT NULL
+    OR v_frozen_target_amount_ex_vat IS NOT NULL
+    OR v_frozen_resolution_mode IS NOT NULL
+    OR v_frozen_resolution_payload_json IS NOT NULL
+    OR v_frozen_resolution_result_json IS NOT NULL
+    OR v_frozen_component_snapshot_json ? 'target_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_pay_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_pay_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'frozen_target_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_rate'
+    OR v_frozen_component_snapshot_json ? 'target_units'
+    OR v_frozen_component_snapshot_json ? 'resolution_mode'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_mode'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_payload_json'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_result_json';
 
   IF v_has_source_target_split THEN
     RETURN NULL::numeric(12,2);
@@ -108342,6 +108271,13 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO 'public'
+SET plpgsql_check.mode TO 'disabled'
+SET plpgsql_check.profiler TO 'off'
+SET plpgsql_check.tracer TO 'off'
+SET plpgsql_check.constants_tracing TO 'off'
+SET plpgsql_check.cursors_leaks TO 'off'
+SET plpgsql_check.strict_cursors_leaks TO 'off'
+SET plpgsql_check.fatal_errors TO 'off'
 AS $function$
 declare
   v_pay_date date := p_pay_date;
@@ -154806,252 +154742,7 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public._pay_batch_item_source_reservation_amount_ex_vat(p_pay_batch_item_id uuid)
-RETURNS numeric
-LANGUAGE plpgsql
-STABLE SECURITY DEFINER
-SET search_path TO 'public'
-SET plpgsql_check.mode TO 'disabled'
-AS $function$
-DECLARE
-  v_pay_batch_id uuid;
-  v_timesheet_id uuid;
-  v_item_type text;
-  v_finance_case_id uuid;
-  v_finance_component_id uuid;
-  v_amount_ex_vat numeric;
-  v_frozen_source_amount numeric;
-  v_frozen_target_amount_ex_vat numeric;
-  v_frozen_resolution_mode public.pay_finance_component_resolution_mode_enum;
-  v_frozen_resolution_payload_json jsonb;
-  v_frozen_resolution_result_json jsonb;
-  v_frozen_component_key_type text;
-  v_frozen_component_key_value text;
-  v_frozen_component_snapshot_json jsonb;
-  v_frozen_source_basis_json jsonb;
-  v_single_breakdown_meta_json jsonb := '{}'::jsonb;
-  v_breakdown_count integer := 0;
-  v_resolved_key_type text;
-  v_resolved_key_value text;
-  v_key_resolution_failure_reason text;
-  v_source_text text;
-  v_frozen_resolved_source_text text;
-  v_has_source_target_split boolean;
-BEGIN
-  IF p_pay_batch_item_id IS NULL THEN
-    RETURN NULL::numeric(12,2);
-  END IF;
 
-  SELECT
-    pay_batch_candidate_row.pay_batch_id,
-    pay_batch_item_row.timesheet_id,
-    UPPER(NULLIF(BTRIM(COALESCE(pay_batch_item_row.item_type, '')), '')),
-    pay_batch_item_row.finance_case_id,
-    pay_batch_item_row.finance_component_id,
-    pay_batch_item_row.amount_ex_vat,
-    pay_batch_item_row.frozen_source_amount,
-    pay_batch_item_row.frozen_target_amount_ex_vat,
-    pay_batch_item_row.frozen_resolution_mode,
-    pay_batch_item_row.frozen_resolution_payload_json,
-    pay_batch_item_row.frozen_resolution_result_json,
-    pay_batch_item_row.frozen_component_key_type,
-    pay_batch_item_row.frozen_component_key_value,
-    CASE
-      WHEN jsonb_typeof(COALESCE(pay_batch_item_row.frozen_component_snapshot_json, '{}'::jsonb)) = 'object'
-        THEN COALESCE(pay_batch_item_row.frozen_component_snapshot_json, '{}'::jsonb)
-      ELSE '{}'::jsonb
-    END,
-    CASE
-      WHEN jsonb_typeof(COALESCE(pay_batch_item_row.frozen_source_basis_json, '{}'::jsonb)) = 'object'
-        THEN COALESCE(pay_batch_item_row.frozen_source_basis_json, '{}'::jsonb)
-      ELSE '{}'::jsonb
-    END
-  INTO
-    v_pay_batch_id,
-    v_timesheet_id,
-    v_item_type,
-    v_finance_case_id,
-    v_finance_component_id,
-    v_amount_ex_vat,
-    v_frozen_source_amount,
-    v_frozen_target_amount_ex_vat,
-    v_frozen_resolution_mode,
-    v_frozen_resolution_payload_json,
-    v_frozen_resolution_result_json,
-    v_frozen_component_key_type,
-    v_frozen_component_key_value,
-    v_frozen_component_snapshot_json,
-    v_frozen_source_basis_json
-  FROM public.pay_batch_items AS pay_batch_item_row
-  JOIN public.pay_batch_candidates AS pay_batch_candidate_row
-    ON pay_batch_candidate_row.id = pay_batch_item_row.pay_batch_candidate_id
-  WHERE pay_batch_item_row.id = p_pay_batch_item_id
-  LIMIT 1;
-
-  IF NOT FOUND THEN
-    RETURN NULL::numeric(12,2);
-  END IF;
-
-  IF v_item_type NOT IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA') THEN
-    RETURN NULL::numeric(12,2);
-  END IF;
-
-  SELECT
-    COUNT(*)::integer,
-    CASE
-      WHEN COUNT(*) = 1 THEN (ARRAY_AGG(breakdown_row.meta_json ORDER BY breakdown_row.id))[1]
-      ELSE '{}'::jsonb
-    END
-  INTO
-    v_breakdown_count,
-    v_single_breakdown_meta_json
-  FROM public.pay_batch_item_breakdowns AS breakdown_row
-  WHERE breakdown_row.pay_batch_item_id = p_pay_batch_item_id;
-
-  IF jsonb_typeof(COALESCE(v_single_breakdown_meta_json, '{}'::jsonb)) <> 'object' THEN
-    v_single_breakdown_meta_json := '{}'::jsonb;
-  END IF;
-
-  SELECT
-    resolved_key_row.key_type,
-    resolved_key_row.key_value,
-    resolved_key_row.key_resolution_failure_reason
-  INTO
-    v_resolved_key_type,
-    v_resolved_key_value,
-    v_key_resolution_failure_reason
-  FROM public._pay_policy_x_resolve_post_draft_economic_key(
-    p_pay_batch_item_id => p_pay_batch_item_id,
-    p_pay_batch_id => v_pay_batch_id,
-    p_timesheet_id => v_timesheet_id,
-    p_item_type => v_item_type,
-    p_frozen_key_type => v_frozen_component_key_type,
-    p_frozen_key_value => v_frozen_component_key_value,
-    p_frozen_component_snapshot_json => v_frozen_component_snapshot_json,
-    p_frozen_source_basis_json => v_frozen_source_basis_json,
-    p_breakdown_meta_json => v_single_breakdown_meta_json,
-    p_target_snapshot_json => NULL::jsonb
-  ) AS resolved_key_row
-  LIMIT 1;
-
-  IF v_key_resolution_failure_reason IS NOT NULL
-     OR v_resolved_key_type IS NULL
-     OR BTRIM(COALESCE(v_resolved_key_type, '')) = ''
-     OR v_resolved_key_value IS NULL
-     OR BTRIM(COALESCE(v_resolved_key_value, '')) = ''
-     OR (v_resolved_key_type = 'TS_DAY' AND v_resolved_key_value !~ '^\d{4}-\d{2}-\d{2}$') THEN
-    RETURN NULL::numeric(12,2);
-  END IF;
-
-  SELECT frozen_resolution_component.component_json->>'source_pay_ex_vat'
-  INTO v_frozen_resolved_source_text
-  FROM jsonb_array_elements(
-    CASE
-      WHEN jsonb_typeof(v_frozen_resolution_payload_json->'case_components') = 'array'
-        THEN v_frozen_resolution_payload_json->'case_components'
-      ELSE '[]'::jsonb
-    END
-  ) AS frozen_resolution_component(component_json)
-  WHERE UPPER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'component_key_type', ''))) = v_resolved_key_type
-    AND BTRIM(COALESCE(frozen_resolution_component.component_json->>'component_key_value', '')) = v_resolved_key_value
-    AND LOWER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'is_resolution_stale', 'false'))) NOT IN ('true','t','1','yes','y','on')
-    AND LOWER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'is_stale_saved_resolution', 'false'))) NOT IN ('true','t','1','yes','y','on')
-    AND LOWER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'requires_resolution', 'true'))) IN ('false','f','0','no','n','off')
-    AND NULLIF(BTRIM(COALESCE(frozen_resolution_component.component_json->>'resolved_rate_resolution_id', '')), '') IS NOT NULL
-    AND COALESCE(frozen_resolution_component.component_json->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-  LIMIT 1;
-
-  IF v_frozen_resolved_source_text IS NOT NULL THEN
-    RETURN ROUND(ABS(v_frozen_resolved_source_text::numeric), 2)::numeric(12,2);
-  END IF;
-
-  IF v_frozen_source_amount IS NOT NULL THEN
-    RETURN ROUND(ABS(v_frozen_source_amount), 2)::numeric(12,2);
-  END IF;
-
-  SELECT source_candidates.source_text_value
-  INTO v_source_text
-  FROM (
-    VALUES
-      (v_frozen_component_snapshot_json->>'source_reservation_amount_ex_vat'),
-      (v_frozen_component_snapshot_json->>'source_entitlement_amount_ex_vat'),
-      (v_frozen_component_snapshot_json->>'source_amount_ex_vat'),
-      (v_frozen_component_snapshot_json->>'source_pay_ex_vat'),
-      (v_frozen_component_snapshot_json->>'source_pay_amount_ex_vat'),
-      (v_frozen_component_snapshot_json->>'basis_source_amount_ex_vat'),
-      (v_frozen_component_snapshot_json->>'reserved_source_amount'),
-      (v_frozen_component_snapshot_json->>'frozen_source_amount'),
-      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
-      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
-      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_amount_ex_vat}'),
-      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_ex_vat}'),
-      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
-      (v_frozen_component_snapshot_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
-      (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_ex_vat}'),
-      (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_amount_ex_vat}'),
-      (v_frozen_component_snapshot_json#>>'{source_basis_json,amount_ex_vat}'),
-      (v_frozen_source_basis_json->>'source_reservation_amount_ex_vat'),
-      (v_frozen_source_basis_json->>'source_entitlement_amount_ex_vat'),
-      (v_frozen_source_basis_json->>'source_amount_ex_vat'),
-      (v_frozen_source_basis_json->>'source_pay_ex_vat'),
-      (v_frozen_source_basis_json->>'source_pay_amount_ex_vat'),
-      (v_frozen_source_basis_json->>'basis_source_amount_ex_vat'),
-      (v_frozen_source_basis_json->>'reserved_source_amount'),
-      (v_frozen_source_basis_json->>'frozen_source_amount'),
-      (v_frozen_source_basis_json->>'pay_ex_vat'),
-      (v_frozen_source_basis_json->>'pay_amount_ex_vat'),
-      (v_frozen_source_basis_json->>'amount_ex_vat'),
-      (v_frozen_source_basis_json->>'pay_amount'),
-      (v_frozen_resolution_payload_json->>'source_reservation_amount_ex_vat'),
-      (v_frozen_resolution_payload_json->>'source_entitlement_amount_ex_vat'),
-      (v_frozen_resolution_payload_json->>'source_amount_ex_vat'),
-      (v_frozen_resolution_payload_json->>'source_pay_ex_vat'),
-      (v_frozen_resolution_result_json->>'source_reservation_amount_ex_vat'),
-      (v_frozen_resolution_result_json->>'source_entitlement_amount_ex_vat'),
-      (v_frozen_resolution_result_json->>'source_amount_ex_vat'),
-      (v_frozen_resolution_result_json->>'source_pay_ex_vat'),
-      (v_single_breakdown_meta_json->>'source_reservation_amount_ex_vat'),
-      (v_single_breakdown_meta_json->>'source_entitlement_amount_ex_vat'),
-      (v_single_breakdown_meta_json->>'source_amount_ex_vat'),
-      (v_single_breakdown_meta_json->>'source_pay_ex_vat')
-  ) AS source_candidates(source_text_value)
-  WHERE source_candidates.source_text_value IS NOT NULL
-    AND BTRIM(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
-  LIMIT 1;
-
-  IF v_source_text IS NOT NULL THEN
-    RETURN ROUND(ABS(v_source_text::numeric), 2)::numeric(12,2);
-  END IF;
-
-  v_has_source_target_split :=
-       v_finance_case_id IS NOT NULL
-    OR v_finance_component_id IS NOT NULL
-    OR v_frozen_target_amount_ex_vat IS NOT NULL
-    OR v_frozen_resolution_mode IS NOT NULL
-    OR v_frozen_resolution_payload_json IS NOT NULL
-    OR v_frozen_resolution_result_json IS NOT NULL
-    OR v_frozen_component_snapshot_json ? 'target_amount_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'target_pay_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'target_pay_amount_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'frozen_target_amount_ex_vat'
-    OR v_frozen_component_snapshot_json ? 'target_rate'
-    OR v_frozen_component_snapshot_json ? 'target_units'
-    OR v_frozen_component_snapshot_json ? 'resolution_mode'
-    OR v_frozen_component_snapshot_json ? 'saved_resolution_mode'
-    OR v_frozen_component_snapshot_json ? 'saved_resolution_payload_json'
-    OR v_frozen_component_snapshot_json ? 'saved_resolution_result_json';
-
-  IF v_has_source_target_split THEN
-    RETURN NULL::numeric(12,2);
-  END IF;
-
-  IF v_amount_ex_vat IS NOT NULL THEN
-    RETURN ROUND(ABS(v_amount_ex_vat), 2)::numeric(12,2);
-  END IF;
-
-  RETURN NULL::numeric(12,2);
-END;
-$function$;
 
 
 
@@ -158588,34 +158279,6 @@ BEGIN
         ) AS component_element(value)
       ) AS component_counts
     ) AS component_probe
-  ), resolution_anchor_financial_boundaries AS (
-    SELECT DISTINCT boundary_rows.timesheet_id
-    FROM (
-      SELECT batch_item.timesheet_id
-      FROM public.pay_batch_items AS batch_item
-      JOIN public.pay_batch_candidates AS batch_candidate
-        ON batch_candidate.id = batch_item.pay_batch_candidate_id
-      JOIN public.pay_batches AS batch_row
-        ON batch_row.id = batch_candidate.pay_batch_id
-      WHERE batch_item.timesheet_id IS NOT NULL
-        AND COALESCE(batch_item.is_voided, false) = false
-        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
-
-      UNION
-
-      SELECT batch_snapshot.timesheet_id
-      FROM public.pay_batch_timesheet_snapshots AS batch_snapshot
-      JOIN public.pay_batches AS batch_row
-        ON batch_row.id = batch_snapshot.pay_batch_id
-      WHERE batch_snapshot.timesheet_id IS NOT NULL
-        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
-    ) AS boundary_rows
-    WHERE EXISTS (
-      SELECT 1
-      FROM component_probe_rows AS resolution_row
-      WHERE resolution_row.target_section = 'cases_resolutions'
-        AND resolution_row.timesheet_id = boundary_rows.timesheet_id
-    )
   ), outstanding_timesheet_ids AS (
     SELECT COALESCE(
       array_agg(DISTINCT component_probe_rows.timesheet_id ORDER BY component_probe_rows.timesheet_id),
@@ -158730,10 +158393,6 @@ BEGIN
         AND ROUND(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0), 2) > 0
         AND ROUND(ABS(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(effective_economic_outstanding.outstanding_ex_vat, 0)), 2)
       ) AS clamp_economic_key_to_outstanding,
-      (
-        component_probe_rows.target_section = 'cases_resolutions'
-        AND resolution_anchor_financial_boundary.timesheet_id IS NOT NULL
-      ) AS suppress_resolution_anchor_financial_boundary,
       CASE
         WHEN component_probe_rows.rotation_validation_failed IS NOT TRUE
          AND component_probe_rows.target_section = 'canonical_preview_lines'
@@ -158781,8 +158440,6 @@ BEGIN
       ON economic_outstanding_component_rows.timesheet_id = component_probe_rows.timesheet_id
      AND economic_outstanding_component_rows.key_type = component_probe_rows.economic_key_type
      AND economic_outstanding_component_rows.key_value = component_probe_rows.economic_key_value
-    LEFT JOIN resolution_anchor_financial_boundaries AS resolution_anchor_financial_boundary
-      ON resolution_anchor_financial_boundary.timesheet_id = component_probe_rows.timesheet_id
     LEFT JOIN LATERAL (
       SELECT CASE
         WHEN component_probe_rows.target_section = 'canonical_preview_lines'
@@ -158957,8 +158614,7 @@ BEGIN
     AND materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS NOT TRUE
     AND materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
     AND materialise_rows.suppress_zero_outstanding_economic_key IS NOT TRUE
-    AND materialise_rows.suppress_negative_outstanding_economic_key IS NOT TRUE
-    AND materialise_rows.suppress_resolution_anchor_financial_boundary IS NOT TRUE;
+    AND materialise_rows.suppress_negative_outstanding_economic_key IS NOT TRUE;
 
   SELECT COUNT(*)::integer
   INTO v_suppressed_preview_row_count
@@ -158967,8 +158623,7 @@ BEGIN
     AND (materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE
      OR materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
      OR materialise_rows.suppress_zero_outstanding_economic_key IS TRUE
-     OR materialise_rows.suppress_negative_outstanding_economic_key IS TRUE
-     OR materialise_rows.suppress_resolution_anchor_financial_boundary IS TRUE);
+     OR materialise_rows.suppress_negative_outstanding_economic_key IS TRUE);
 
   SELECT COUNT(*)::integer
   INTO v_materialise_error_count
@@ -158988,7 +158643,6 @@ BEGIN
       AND materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
       AND materialise_rows.suppress_zero_outstanding_economic_key IS NOT TRUE
       AND materialise_rows.suppress_negative_outstanding_economic_key IS NOT TRUE
-      AND materialise_rows.suppress_resolution_anchor_financial_boundary IS NOT TRUE
     GROUP BY materialise_rows.target_section
   ) AS section_delta;
 
@@ -159004,7 +158658,6 @@ BEGIN
       AND selected_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
       AND selected_rows.suppress_zero_outstanding_economic_key IS NOT TRUE
       AND selected_rows.suppress_negative_outstanding_economic_key IS NOT TRUE
-      AND selected_rows.suppress_resolution_anchor_financial_boundary IS NOT TRUE
   ), suppressed_existing_preview AS (
     UPDATE public.banking_pay_workbench_preview_rows AS preview_row
     SET status = 'SUPERSEDED',
@@ -159014,7 +158667,6 @@ BEGIN
           || jsonb_build_object(
             'materialisation_suppressed', true,
             'materialisation_suppressed_reason', CASE
-              WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 'RESOLUTION_ANCHOR_ALREADY_IN_NON_CANCELLED_BATCH'
               WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
                 OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
               WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ZERO_OUTSTANDING_ECONOMIC_KEY'
@@ -159024,13 +158676,11 @@ BEGIN
             'materialised_no_visible_preview_row', true,
             'pay_outstanding_blocked', true,
             'pay_outstanding_available_ex_vat', CASE
-              WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 0::numeric
               WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE
                 OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN selected_rows.economic_outstanding_ex_vat
               ELSE selected_rows.fixed_reimbursement_outstanding_ex_vat
             END,
             'outstanding_block_reason', CASE
-              WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 'TIMESHEET_ALREADY_IN_NON_CANCELLED_BATCH'
               WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
                 OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
               WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ECONOMIC_KEY_OUTSTANDING_NOT_AVAILABLE'
@@ -159063,8 +158713,7 @@ BEGIN
       AND (selected_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE
         OR selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
         OR selected_rows.suppress_zero_outstanding_economic_key IS TRUE
-        OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE
-        OR selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE)
+        OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE)
       AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) <> 'SUPERSEDED'
     RETURNING preview_row.id
   ), upserted_preview AS (
@@ -159285,8 +158934,7 @@ BEGIN
           WHEN selected_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE
             OR selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
             OR selected_rows.suppress_zero_outstanding_economic_key IS TRUE
-            OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE
-            OR selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN
+            OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN
             COALESCE(line_work.result_row_json, '{}'::jsonb)
             || jsonb_build_object(
               'draftable', false,
@@ -159294,13 +158942,11 @@ BEGIN
               'selection_allowed', false,
               'pay_outstanding_blocked', true,
               'pay_outstanding_available_ex_vat', CASE
-                WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 0::numeric
                 WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE
                   OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN selected_rows.economic_outstanding_ex_vat
                 ELSE selected_rows.fixed_reimbursement_outstanding_ex_vat
               END,
               'outstanding_block_reason', CASE
-                WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 'TIMESHEET_ALREADY_IN_NON_CANCELLED_BATCH'
                 WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
                   OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
                 WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ECONOMIC_KEY_OUTSTANDING_NOT_AVAILABLE'
@@ -159310,7 +158956,6 @@ BEGIN
             || jsonb_build_object(
               'materialisation_suppressed', true,
               'materialisation_suppressed_reason', CASE
-                WHEN selected_rows.suppress_resolution_anchor_financial_boundary IS TRUE THEN 'RESOLUTION_ANCHOR_ALREADY_IN_NON_CANCELLED_BATCH'
                 WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
                   OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
                 WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ZERO_OUTSTANDING_ECONOMIC_KEY'
@@ -196323,6 +195968,13 @@ CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_progress_count
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
+ SET plpgsql_check.mode TO 'disabled'
+ SET plpgsql_check.profiler TO 'off'
+ SET plpgsql_check.tracer TO 'off'
+ SET plpgsql_check.constants_tracing TO 'off'
+ SET plpgsql_check.cursors_leaks TO 'off'
+ SET plpgsql_check.strict_cursors_leaks TO 'off'
+ SET plpgsql_check.fatal_errors TO 'off'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -200240,6 +199892,13 @@ CREATE OR REPLACE FUNCTION public.pay_workbench_session_compact_progress_json(p_
  LANGUAGE plpgsql
  IMMUTABLE
  SET search_path TO 'public'
+ SET plpgsql_check.mode TO 'disabled'
+ SET plpgsql_check.profiler TO 'off'
+ SET plpgsql_check.tracer TO 'off'
+ SET plpgsql_check.constants_tracing TO 'off'
+ SET plpgsql_check.cursors_leaks TO 'off'
+ SET plpgsql_check.strict_cursors_leaks TO 'off'
+ SET plpgsql_check.fatal_errors TO 'off'
 AS $function$
 DECLARE
   v_progress_json jsonb := '{}'::jsonb;

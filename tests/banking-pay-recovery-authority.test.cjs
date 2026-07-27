@@ -157,16 +157,39 @@ test('post-draft recovery identity accepts linked timesheet identity only from f
     body,
     /COUNT\(DISTINCT frozen_timesheet_candidate\.candidate_value\)/i
   );
+  assert.match(
+    body,
+    /v_frozen_timesheet_id_text\s*:=\s*COALESCE\(\s*v_frozen_linked_timesheet_id_text,\s*v_frozen_direct_timesheet_id_text,\s*v_frozen_carrier_timesheet_id_text\s*\)/i
+  );
+  assert.match(
+    body,
+    /v_frozen_linked_timesheet_id_count[\s\S]*v_frozen_direct_timesheet_id_count[\s\S]*v_frozen_carrier_timesheet_id_count[\s\S]*CONFLICTING_FROZEN_TIMESHEET_ID/i
+  );
+  assert.match(body, /linked_timesheet_id is the stable correction-root/i);
   assert.match(body, /_pay_policy_x_assert_economic_key/);
   assert.doesNotMatch(body, /FROM public\.timesheets|JOIN public\.timesheets/);
 });
 
 test('finance adjustment draft creation treats signed recovery component amounts as magnitudes', () => {
   const body = functionBody('pay_batch_apply_finance_adjustments', null, financeAdjustmentSql);
-  assert.match(
-    body,
-    /preview_due_amount_ex_vat',''\) ~ '\^-\?\\d\+\(\\\.\\d\+\)\?\$' then abs\(\(comp\.comp_json->>'preview_due_amount_ex_vat'\)::numeric\)/
-  );
+  for (const [stage, nextStage] of [
+    ['STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY', 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY'],
+    ['STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY', 'STAGE_16C_APPLY_PAYMENT_ADVANCE_REPAYMENTS'],
+    ['STAGE_16C_APPLY_PAYMENT_ADVANCE_REPAYMENTS', 'STAGE_16BD_INSERT_DORMANT_RECOVERY_TEMPLATES']
+  ]) {
+    const start = body.indexOf(`v_stage := '${stage}'`);
+    const end = body.indexOf(`v_stage := '${nextStage}'`, start);
+    assert.ok(start >= 0 && end > start, `${stage} must have a bounded materialisation block`);
+    const recoveryBlock = body.slice(start, end);
+    assert.ok(
+      (
+        recoveryBlock.match(
+          /preview_due_amount_ex_vat',''\) ~ '\^-\?\\d\+\(\\\.\\d\+\)\?\$' then abs\(\(comp\.comp_json->>'preview_due_amount_ex_vat'\)::numeric\)/g
+        ) || []
+      ).length >= 3,
+      `${stage} must normalise the parsed amount, component sum and component filter as positive recovery magnitudes`
+    );
+  }
   assert.match(
     body,
     /target_pay_ex_vat',''\) ~ '\^-\?\\d\+\(\\\.\\d\+\)\?\$' then abs\(\(comp\.comp_json->>'target_pay_ex_vat'\)::numeric\)/
@@ -1143,9 +1166,24 @@ test('central overpayment sync attests the same coupled correction-chain residua
 
 test('the Supabase pldbgapi2 workaround is scoped to the correction-chain Banking entry points', () => {
   assert.equal(
-    (correctionPlpgsqlGuardSql.match(/SET plpgsql_check\.mode TO 'disabled'/g) || []).length,
-    19
+    (correctionPlpgsqlGuardSql.match(/::regprocedure/g) || []).length,
+    38,
+    'the workaround must remain limited to the 38 proven call-stack entry points'
   );
+  for (const setting of [
+    ['mode', 'disabled'],
+    ['profiler', 'off'],
+    ['tracer', 'off'],
+    ['constants_tracing', 'off'],
+    ['cursors_leaks', 'off'],
+    ['strict_cursors_leaks', 'off'],
+    ['fatal_errors', 'off']
+  ]) {
+    assert.match(
+      correctionPlpgsqlGuardSql,
+      new RegExp(`plpgsql_check\\.${setting[0]} TO %L[\\s\\S]*?${setting[1]}`)
+    );
+  }
   assert.match(correctionPlpgsqlGuardSql, /pay_correction_chain_residual_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_correction_policy_leg_read_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_assert_payload_corrections_fresh_v1\s*\(/);
@@ -1159,6 +1197,10 @@ test('the Supabase pldbgapi2 workaround is scoped to the correction-chain Bankin
   assert.match(correctionPlpgsqlGuardSql, /_ctms_materialise_candidate_correction_residuals_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /_ctms_rewrite_sync_correction_cases_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_workbench_candidate_source_build_chunk\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /pay_preview_candidate_build_timesheet_snapshots\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /pay_preview_candidate_build_finance_case_baseline\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /pay_preview_candidate_build_canonical_lines\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /pay_workbench_preview_line_economic_key\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_sync_overpayments_from_preview\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_preview_candidate_collect_scope\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_workbench_worker_drain_chunk\s*\(/);
@@ -1207,7 +1249,11 @@ test('negative correction residuals preserve the finance-case carrier while posi
   const body = correctionRuntimeSql.slice(start, end);
   assert.match(body, /CORRECTION_CHAIN_OVERPAYMENT_FINANCE_CASE_CARRIER_REQUIRED/);
   assert.match(body, /v_component_outstanding < 0[\s\S]*source_row_json->>'finance_case_id'/);
-  assert.match(body, /when v_component_outstanding < 0[\s\S]*then '\{\}'::jsonb/);
+  assert.match(
+    body,
+    /when v_component_outstanding < 0[\s\S]*'amount_ex_vat',0[\s\S]*'nominal_due_amount_ex_vat',[\s\S]*round\(abs\(v_component_outstanding\),2\)[\s\S]*'recoverable_this_pay_run_ex_vat',0/,
+    'negative carriers must retain dated finance authority while remaining non-allocatable until headroom is known'
+  );
   assert.match(body, /else jsonb_build_object\([\s\S]*'amount_ex_vat',v_component_outstanding/);
 });
 
@@ -1339,6 +1385,35 @@ test('targeted source builds ignore correction chains wholly outside the dirty t
   assert.match(body, /CORRECTION_RESIDUAL_SOURCE_COMPONENT_MISSING/);
 });
 
+test('multi-component correction recoveries expand the aggregate finance parent before canonical materialisation', () => {
+  const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
+  const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
+  assert.ok(start >= 0 && end > start, 'correction residual materialiser must exist');
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(
+    body,
+    /v_component_outstanding < 0[\s\S]*v_finance_component_json[\s\S]*v_finance_component_due:=round\(abs\(v_component_outstanding\),2\)[\s\S]*insert into public\.banking_pay_workbench_candidate_source_lines/
+  );
+  assert.match(
+    body,
+    /'finance_component_id'[\s\S]*v_finance_component_json[\s\S]*'case_components'[\s\S]*jsonb_build_array\(v_finance_component_json\)/
+  );
+  assert.match(
+    body,
+    /set status='SUPERSEDED'[\s\S]*aggregate_line\.source_row_json->'case_components'[\s\S]*exact_component_line/
+  );
+  assert.match(
+    body,
+    /coalesce\([\s\S]*nested_component\.value->>'source_family_key'[\s\S]*\)<>coalesce\(v_residual->>'source_family_key',''\)/
+  );
+  assert.match(
+    body,
+    /'nominal_due_amount_ex_vat',[\s\S]*round\(abs\(v_component_outstanding\),2\)[\s\S]*'recoverable_this_pay_run_ex_vat',0/,
+    'each split recovery must retain its dated nominal due while remaining non-allocatable until headroom revalidation'
+  );
+});
+
 test('an upstream correction pay-method resolution cannot be applied a second time by finance sync', () => {
   const rewriteStart = correctionRuntimeSql.indexOf('create or replace function public._ctms_rewrite_sync_correction_cases_v1');
   const rewriteEnd = correctionRuntimeSql.indexOf('create or replace function public._ctms_assert_session_correction_residuals_draftable_v1', rewriteStart);
@@ -1367,6 +1442,31 @@ test('zero-value correction residual components do not require a Banking Pay car
   assert.match(
     missingCarrierGuard,
     /v_component_outstanding=0[\s\S]*continue;/
+  );
+});
+
+test('canonical correction carriers preserve server-owned suggested-rate evidence', () => {
+  const start = correctionRuntimeSql.indexOf('create or replace function public._ctms_materialise_candidate_correction_residuals_v1');
+  const end = correctionRuntimeSql.indexOf('create or replace function public._ctms_enrich_correction_resolution_payload_v1', start);
+  assert.ok(start >= 0 && end > start, 'correction residual materialiser must exist');
+  const body = correctionRuntimeSql.slice(start, end);
+
+  assert.match(body, /v_suggested_component jsonb/);
+  assert.match(
+    body,
+    /source_component\.value->'suggested_resolution_payload_json'[\s\S]*source_component\.value->'suggested_resolution_result_json'/
+  );
+  assert.match(body, /CORRECTION_CHAIN_SUGGESTED_RESOLUTION_REQUIRED/);
+  assert.match(body, /'is_actionable_resolution_row',v_component_needs_resolution/);
+  assert.match(body, /'has_suggested_resolution',v_component_needs_resolution/);
+  assert.match(
+    body,
+    /'suggested_resolution_payload_json',case[\s\S]*v_suggested_component[\s\S]*'suggested_resolution_result_json',case/
+  );
+  assert.doesNotMatch(
+    body,
+    /case_components',jsonb_build_array\(\s*v_suggested_component\s*\|\|/,
+    'raw source identity must not replace the canonical residual identity'
   );
 });
 
@@ -1433,6 +1533,31 @@ test('draft items freeze correction-chain residual identity before reservation f
   );
 });
 
+test('resolved segment breakdowns reconcile to the payable batch-item remainder', () => {
+  const body = functionBody('pay_batch_build_item_breakdowns', 'pay_batch_assert_integrity');
+
+  assert.match(
+    body,
+    /frozen_target_amount_ex_vat[\s\S]*amount_ex_vat[\s\S]*AS item_total_ex_vat/,
+    'the frozen payable batch-item total must be the breakdown allocation total'
+  );
+  assert.match(
+    body,
+    /AS provisional_component_ex_vat[\s\S]*AS allocated_amount_ex_vat/,
+    'multiple resolved components must be proportioned and rounding-safe'
+  );
+  assert.match(
+    body,
+    /allocated_amount_ex_vat[\s\S]*AS amount_ex_vat[\s\S]*allocated_amount_ex_vat[\s\S]*derived_amount_vat[\s\S]*AS amount_inc_vat/,
+    'breakdown ex-VAT and gross amounts must reconcile to the actual payable delta'
+  );
+  assert.match(
+    body,
+    /'full_resolved_target_amount_ex_vat'[\s\S]*derived_amount_ex_vat/,
+    'the full resolved target remains frozen as provenance rather than being lost'
+  );
+});
+
 test('final reservation checks use frozen correction-chain residual evidence without Policy X drift', () => {
   const marker = 'CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers';
   const start = sql.indexOf(marker);
@@ -1456,7 +1581,7 @@ test('final reservation checks use frozen correction-chain residual evidence wit
   assert.doesNotMatch(body, /\bNHSP\b|\bHR_WEEKLY\b|\bHR_DAILY\b/);
 });
 
-test('final reservation checks accept only a fresh exact pre-draft resolved target', () => {
+test('final reservation checks accept only a fresh exact pre-draft resolved target remainder', () => {
   const marker = 'CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers';
   const start = sql.indexOf(marker);
   assert.ok(start >= 0, 'pay_batch_finalize_reservations_and_markers must exist');
@@ -1470,13 +1595,33 @@ test('final reservation checks accept only a fresh exact pre-draft resolved targ
   assert.match(body, /resolved_rate_resolution_id/);
   assert.match(
     body,
-    /resolved_source_amount_ex_vat[\s\S]*outstanding_component_rows\.outstanding_ex_vat[\s\S]*resolved_target_amount_ex_vat[\s\S]*requested_source_amount_ex_vat/
+    /resolved_source_amount_ex_vat[\s\S]*outstanding_component_rows\.truth_ex_vat[\s\S]*resolved_target_amount_ex_vat[\s\S]*outstanding_component_rows\.baseline_ex_vat[\s\S]*requested_target_amount_ex_vat/
   );
-  assert.match(body, /FROZEN_FRESH_PRE_DRAFT_RESOLUTION_TARGET/);
+  assert.match(
+    body,
+    /ROUND\(COALESCE\(outstanding_component_rows\.reserved_ex_vat,\s*0\),\s*2\)\s*=\s*0/,
+    'an active reservation for the same economic component must block a second resolved draft'
+  );
+  assert.match(body, /FROZEN_FRESH_PRE_DRAFT_RESOLUTION_TARGET_REMAINDER/);
+  assert.match(body, /FROZEN_FRESH_PRE_DRAFT_RESOLUTION_MISMATCH_OR_RESERVED/);
+  assert.match(
+    body,
+    /reservation_requested_amount_ex_vat[\s\S]*requested_target_amount_ex_vat[\s\S]*requested_source_amount_ex_vat/,
+    'fresh resolved components must validate the target remainder while preserving source authority'
+  );
   assert.match(body, /ELSE 'LIVE_PRE_DRAFT_OUTSTANDING'/);
 });
 
 test('post-draft source reservations use the frozen resolved source before the frozen target amount', () => {
+  assert.equal(
+    (
+      sql.match(
+        /CREATE OR REPLACE FUNCTION public\._pay_batch_item_source_reservation_amount_ex_vat\(/g
+      ) || []
+    ).length,
+    1,
+    'the repeatable must contain one authoritative source-reservation helper body'
+  );
   const body = lastFunctionBody('_pay_batch_item_source_reservation_amount_ex_vat');
   const frozenResolvedSourceIndex = body.indexOf('v_frozen_resolved_source_text');
   const frozenSourceAmountIndex = body.indexOf('IF v_frozen_source_amount IS NOT NULL THEN');
@@ -1541,6 +1686,23 @@ test('batch freshness excludes its own correction-chain reservation and compares
   assert.match(body, /expected_components AS \(/);
   assert.match(body, /live_components AS \(/);
   assert.match(body, /fresh_families AS \(/);
+  assert.match(body, /flat_correction_items AS \(/);
+  assert.match(body, /flat_chain_results AS \(/);
+  assert.match(
+    body,
+    /frozen_chain_fingerprint[\s\S]*chain_fingerprint/,
+    'flat canonical carrier snapshots must retain exact chain-fingerprint parity'
+  );
+  assert.match(
+    body,
+    /frozen_policy_fingerprint[\s\S]*correction_financials_policy_envelope_fingerprint/,
+    'flat canonical carrier snapshots must retain exact Policy X envelope parity'
+  );
+  assert.match(
+    body,
+    /flat_item\.expected_ex[\s\S]*effective_source_outstanding_ex_vat/,
+    'a flat frozen component must still equal the live residual component'
+  );
   assert.match(
     body,
     /v_remaining_key_diff_count = 0[\s\S]*RESERVATION_CHANGED/,
@@ -1552,6 +1714,62 @@ test('batch freshness excludes its own correction-chain reservation and compares
     'the base implementation must remain owner-only'
   );
   assert.doesNotMatch(body, /\bNHSP\b|\bHR_WEEKLY\b|\bHR_DAILY\b/);
+});
+
+test('batch freshness suppresses only a fully proven linked-resolution self-reservation diff', () => {
+  const marker = 'CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness';
+  const start = laterFreshnessSql.lastIndexOf(marker);
+  assert.ok(start >= 0, 'the active batch freshness function must exist');
+  const end = laterFreshnessSql.indexOf(
+    'CREATE OR REPLACE FUNCTION public.',
+    start + marker.length
+  );
+  const body = laterFreshnessSql.slice(
+    start,
+    end > start ? end : laterFreshnessSql.length
+  );
+
+  assert.match(body, /linked_resolution_items AS \(/);
+  assert.match(
+    body,
+    /public\._pay_outstanding_components\([\s\S]*p_pay_batch_id[\s\S]*\) AS outstanding_component/,
+    'linked rows must compare live truth and other reservations while excluding only this batch'
+  );
+  assert.match(body, /case_resolution_satisfied_now/);
+  assert.match(body, /resolved_rate_applied_via_linked_scope/);
+  assert.match(body, /resolved_rate_source_anchor_case_key/);
+  assert.match(body, /resolved_rate_source_anchor_timesheet_id/);
+  assert.match(body, /saved_resolution_result_json,applied_via_linked_scope/);
+  assert.match(
+    body,
+    /jsonb_array_elements\(v_fresh_chain_components\)[\s\S]*fresh_anchor/,
+    'the linked row must be anchored to a correction-chain family already proven fresh'
+  );
+  assert.match(
+    body,
+    /outstanding_component\.truth_ex_vat[\s\S]*resolved_source_ex_vat/,
+    'the current source component must still equal the frozen resolved source'
+  );
+  assert.match(
+    body,
+    /outstanding_component\.other_reserved_ex_vat[\s\S]*<= 0\.01/,
+    'a competing active reservation must prevent suppression'
+  );
+  assert.match(
+    body,
+    /frozen_resolution_result_json[\s\S]*target_amount_ex_vat[\s\S]*amount_ex_vat/,
+    'the frozen result and physical batch amount must agree'
+  );
+  assert.match(
+    body,
+    /GREATEST\([\s\S]*resolved_target_ex_vat[\s\S]*baseline_ex_vat[\s\S]*0[\s\S]*\)/,
+    'the physical item must equal the exact target-side remainder after settled baseline'
+  );
+  assert.doesNotMatch(
+    body,
+    /DELETE\s+FROM|UPDATE\s+public\.pay_|INSERT\s+INTO\s+public\.pay_/i,
+    'freshness validation must remain read-only'
+  );
 });
 
 test('batch freshness compares resolved deductions and reservations on frozen source authority', () => {

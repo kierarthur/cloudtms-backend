@@ -77,6 +77,12 @@ DECLARE
   v_source_json jsonb := '{}'::jsonb;
   v_frozen_timesheet_id_text text := NULL::text;
   v_frozen_timesheet_id_count integer := 0;
+  v_frozen_linked_timesheet_id_text text := NULL::text;
+  v_frozen_linked_timesheet_id_count integer := 0;
+  v_frozen_direct_timesheet_id_text text := NULL::text;
+  v_frozen_direct_timesheet_id_count integer := 0;
+  v_frozen_carrier_timesheet_id_text text := NULL::text;
+  v_frozen_carrier_timesheet_id_count integer := 0;
 BEGIN
   IF v_pay_batch_item_id IS NOT NULL THEN
     SELECT
@@ -146,39 +152,91 @@ BEGIN
     END IF;
   END IF;
 
-  -- Recovery rows freeze their entitlement source identity inside the batch artefact.
-  -- Use only that frozen evidence when the batch item has no direct timesheet_id.
+  -- Recovery rows freeze both the stable correction-root identity and the
+  -- current carrier member inside the batch artefact. Those UUIDs may
+  -- intentionally differ: linked_timesheet_id is the stable correction-root
+  -- namespace, while carrier_timesheet_id identifies the member which carried
+  -- the component when the draft was frozen. Do not treat that valid
+  -- root/carrier pair as contradictory evidence.
+  --
+  -- Resolve each semantic role independently and fail closed only when frozen
+  -- artefacts disagree within the same role. Prefer the stable linked/root
+  -- identity, then a direct frozen timesheet identity, then the carrier.
+  -- Policy X is preserved because every candidate below comes exclusively from
+  -- the frozen batch artefact.
   IF v_timesheet_id IS NULL
      AND v_item_type = 'OVERPAYMENT_RECOVERY' THEN
     SELECT
       COUNT(DISTINCT frozen_timesheet_candidate.candidate_value)::integer,
       MIN(frozen_timesheet_candidate.candidate_value)
     INTO
-      v_frozen_timesheet_id_count,
-      v_frozen_timesheet_id_text
+      v_frozen_linked_timesheet_id_count,
+      v_frozen_linked_timesheet_id_text
+    FROM (
+      VALUES
+        (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'linked_timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json->>'linked_timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'linked_timesheet_id', '')), ''))
+    ) AS frozen_timesheet_candidate(candidate_value)
+    WHERE frozen_timesheet_candidate.candidate_value IS NOT NULL;
+
+    SELECT
+      COUNT(DISTINCT frozen_timesheet_candidate.candidate_value)::integer,
+      MIN(frozen_timesheet_candidate.candidate_value)
+    INTO
+      v_frozen_direct_timesheet_id_count,
+      v_frozen_direct_timesheet_id_text
     FROM (
       VALUES
         (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'timesheet_id', '')), '')),
-        (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'linked_timesheet_id', '')), '')),
-        (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'carrier_timesheet_id', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,timesheet_id}', '')), '')),
-        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}', '')), '')),
-        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,carrier_timesheet_id}', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json->>'timesheet_id', '')), '')),
-        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json->>'linked_timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'timesheet_id', '')), ''))
+    ) AS frozen_timesheet_candidate(candidate_value)
+    WHERE frozen_timesheet_candidate.candidate_value IS NOT NULL;
+
+    SELECT
+      COUNT(DISTINCT frozen_timesheet_candidate.candidate_value)::integer,
+      MIN(frozen_timesheet_candidate.candidate_value)
+    INTO
+      v_frozen_carrier_timesheet_id_count,
+      v_frozen_carrier_timesheet_id_text
+    FROM (
+      VALUES
+        (NULLIF(BTRIM(COALESCE(v_frozen_source_basis_json->>'carrier_timesheet_id', '')), '')),
+        (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json#>>'{source_basis_json,carrier_timesheet_id}', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_frozen_component_snapshot_json->>'carrier_timesheet_id', '')), '')),
-        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'timesheet_id', '')), '')),
-        (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'linked_timesheet_id', '')), '')),
         (NULLIF(BTRIM(COALESCE(v_breakdown_meta_json->>'carrier_timesheet_id', '')), ''))
     ) AS frozen_timesheet_candidate(candidate_value)
     WHERE frozen_timesheet_candidate.candidate_value IS NOT NULL;
 
-    IF COALESCE(v_frozen_timesheet_id_count, 0) = 1
-       AND pg_input_is_valid(v_frozen_timesheet_id_text, 'uuid') THEN
-      v_timesheet_id := v_frozen_timesheet_id_text::uuid;
-    ELSIF COALESCE(v_frozen_timesheet_id_count, 0) > 1 THEN
+    IF COALESCE(v_frozen_linked_timesheet_id_count, 0) > 1
+       OR COALESCE(v_frozen_direct_timesheet_id_count, 0) > 1
+       OR COALESCE(v_frozen_carrier_timesheet_id_count, 0) > 1 THEN
       v_failure_reason := 'CONFLICTING_FROZEN_TIMESHEET_ID';
-    ELSIF COALESCE(v_frozen_timesheet_id_count, 0) = 1 THEN
+    ELSE
+      v_frozen_timesheet_id_count :=
+        COALESCE(v_frozen_linked_timesheet_id_count, 0)
+        + COALESCE(v_frozen_direct_timesheet_id_count, 0)
+        + COALESCE(v_frozen_carrier_timesheet_id_count, 0);
+      v_frozen_timesheet_id_text := COALESCE(
+        v_frozen_linked_timesheet_id_text,
+        v_frozen_direct_timesheet_id_text,
+        v_frozen_carrier_timesheet_id_text
+      );
+
+      IF v_frozen_timesheet_id_text IS NOT NULL
+         AND pg_input_is_valid(v_frozen_timesheet_id_text, 'uuid') THEN
+        v_timesheet_id := v_frozen_timesheet_id_text::uuid;
+      ELSIF v_frozen_timesheet_id_text IS NOT NULL THEN
+        v_failure_reason := 'INVALID_FROZEN_TIMESHEET_ID';
+      END IF;
+    END IF;
+
+    IF v_failure_reason IS NULL
+       AND COALESCE(v_frozen_timesheet_id_count, 0) > 0
+       AND v_timesheet_id IS NULL THEN
       v_failure_reason := 'INVALID_FROZEN_TIMESHEET_ID';
     END IF;
   END IF;
