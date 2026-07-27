@@ -854,6 +854,8 @@ begin
       public._import_review_timesheet_has_calculated_expenses_core_v1(
         coalesce(c.existing_shift_timesheet_id,base_week.timesheet_id)
       ) as authoritative_timesheet_has_calculated_expenses,
+      mutable_replacement.timesheet_id as mutable_replacement_timesheet_id,
+      mutable_replacement.protection as mutable_replacement_protection,
       public._import_review_timesheet_protection_core_v1(coalesce(
         c.resolved_timesheet_id,c.existing_shift_timesheet_id,base_week.timesheet_id
       )) as protection
@@ -874,6 +876,43 @@ begin
       order by cw.id
       limit 1
     ) base_week on true
+    left join lateral (
+      select replacement_candidate.timesheet_id,replacement_candidate.protection
+      from (
+        select
+          replacement_timesheet.timesheet_id,
+          replacement_timesheet.updated_at,
+          replacement_timesheet.created_at,
+          public._import_review_timesheet_protection_core_v1(
+            replacement_timesheet.timesheet_id
+          ) as protection
+        from public.timesheets replacement_timesheet
+        where not c.is_daily
+          and c.existing_shift_id is not null
+          and replacement_timesheet.is_adjustment is true
+          and replacement_timesheet.is_current is true
+          and replacement_timesheet.correction_kind='CHANGED_HOURS_REPLACEMENT'
+          and jsonb_typeof(replacement_timesheet.actual_schedule_json)='array'
+          and replacement_timesheet.actual_schedule_json @> jsonb_build_array(
+            jsonb_build_object(
+              'shift_id',c.existing_shift_id::text,
+              'external_row_key',c.source_row_key
+            )
+          )
+      ) replacement_candidate
+      where coalesce(
+          (replacement_candidate.protection->>'paid')::boolean,
+          false
+        ) is false
+        and coalesce(
+          (replacement_candidate.protection->>'invoice_locked')::boolean,
+          false
+        ) is false
+      order by
+        replacement_candidate.updated_at desc nulls last,
+        replacement_candidate.created_at desc nulls last
+      limit 1
+    ) mutable_replacement on true
   ), evidenced as (
     select c.*,
       public._import_review_hash_v1(concat_ws('|','row-evidence-v1',c.source_row_key,c.staff_key,c.client_key,c.date_local,
@@ -882,6 +921,7 @@ begin
         c.daily_mapping_id,c.daily_mapping_updated_at,c.daily_mapped_role,c.daily_mapped_band,
         c.timesheet_evidence_hash,c.daily_submitted_timesheet_evidence_hash,c.contract_evidence_hash,c.authority_fingerprint,
         c.authoritative_target_timesheet_id,c.authoritative_timesheet_has_calculated_expenses,
+        c.mutable_replacement_timesheet_id,coalesce(c.mutable_replacement_protection::text,''),
         coalesce(c.eligible_contract_ids::text,''),coalesce(c.timesheet_ids::text,''),
         coalesce(c.timesheet_contract_ids::text,''),c.protection::text,
         coalesce(c.payload_json::text,''))) as evidence_hash
@@ -955,6 +995,20 @@ begin
         'authority_mode',coalesce(m.authority_mode,case when m.is_daily or not coalesce(m.import_authoritative,false)
           then 'VALIDATION_ONLY' else 'AUTHORITATIVE' end),
         'authority_fingerprint',m.authority_fingerprint,
+        'amendment_route',case
+          when m.action_kind='APPLY_AMENDMENT'
+            and m.mutable_replacement_timesheet_id is not null
+            then 'AMEND_EXISTING_REPLACEMENT'
+          when m.action_kind='APPLY_AMENDMENT'
+            and (
+              coalesce((m.protection->>'paid')::boolean,false)
+              or coalesce((m.protection->>'invoice_locked')::boolean,false)
+            )
+            then 'CREATE_REVERSAL_REPLACEMENT'
+          when m.action_kind='APPLY_AMENDMENT' then 'AMEND_SOURCE'
+          else null
+        end,
+        'mutable_replacement_timesheet_id',m.mutable_replacement_timesheet_id,
         'candidate_name',m.staff_label,'client_name',m.client_label,'work_date',m.date_local,
         'week_ending_date',m.date_local + ((7-extract(dow from m.date_local)::integer)%7),
         'start_time',m.start_time_local,'end_time',m.end_time_local,
@@ -1005,6 +1059,9 @@ begin
           when not m.is_daily and coalesce(m.authoritative_timesheet_has_calculated_expenses,false)
             then 'Timesheet occupied by expenses'
           when m.action_kind='INCLUDE_SHIFT' then 'TMS will add shift'
+          when m.action_kind='APPLY_AMENDMENT'
+            and m.mutable_replacement_timesheet_id is not null
+            then 'TMS will amend replacement shift'
           when m.action_kind='APPLY_AMENDMENT' then case when coalesce((m.protection->>'paid')::boolean,false)
             or coalesce((m.protection->>'invoice_locked')::boolean,false)
             then 'TMS will reverse shift and create replacement shift' else 'TMS will amend shift' end
