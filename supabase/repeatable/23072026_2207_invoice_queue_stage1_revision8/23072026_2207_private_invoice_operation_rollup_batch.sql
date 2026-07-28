@@ -41,12 +41,12 @@ begin
       and o.input_json->>'contract_version'
         ='INVOICE_BATCH_SELECTION_ROOT_V2'
   ),
-  descendants(root_operation_id,operation_id,depth,path) as (
+  descendants(descendant_root_operation_id,operation_id,depth,path) as (
     select r.operation_id,r.operation_id,0,array[r.operation_id]::uuid[]
     from roots r
     union all
     select
-      d.root_operation_id,
+      d.descendant_root_operation_id,
       child.id,
       d.depth+1,
       d.path||child.id
@@ -108,7 +108,7 @@ begin
         version.id desc
       limit 1
     ) ready_version on true
-    where carrier.operation_id in (select operation_id from roots)
+    where carrier.operation_id in (select root.operation_id from roots root)
       and carrier.is_manifest_member
       and carrier.phase='WAITING_DOCUMENT'
       and carrier.status='WAITING'
@@ -155,7 +155,7 @@ begin
           end
         ),
       updated_at_utc=v_now
-    where carrier.operation_id in (select operation_id from roots)
+    where carrier.operation_id in (select root.operation_id from roots root)
       and carrier.is_manifest_member
       and carrier.manifest_committed
       and carrier.result_visible
@@ -190,7 +190,7 @@ begin
   ),
   carriers as materialized (
     select
-      o.id root_operation_id,
+      o.id batch_root_id,
       o.operation_type,
       o.manifest_committed root_manifest_committed,
       o.release_complete,
@@ -215,7 +215,7 @@ begin
   ),
   carrier_counts as materialized (
     select
-      c.root_operation_id,
+      c.batch_root_id,
       min(c.operation_type) operation_type,
       bool_or(c.root_manifest_committed) manifest_committed,
       bool_or(c.release_complete) release_complete,
@@ -303,11 +303,11 @@ begin
           and c.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT')
       )::integer in_progress_total
     from carriers c
-    group by c.root_operation_id
+    group by c.batch_root_id
   ),
   delivery_counts as materialized (
     select
-      d.root_operation_id,
+      d.descendant_root_operation_id as batch_root_id,
       count(c.id) filter (
         where c.chunk_type='DELIVERY_PREPARE'
           and c.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT')
@@ -324,11 +324,10 @@ begin
     left join public.invoice_operation_chunks c
       on c.operation_id=d.operation_id
      and c.replaced_by_chunk_id is null
-    group by d.root_operation_id
+    group by d.descendant_root_operation_id
   ),
   progress as materialized (
     select
-      counts.root_operation_id,
       jsonb_build_object(
         'contract_version','INVOICE_BATCH_PROGRESS_V2',
         'manifest_generation',root.manifest_generation,
@@ -442,9 +441,9 @@ begin
       counts.*
     from carrier_counts counts
     join public.invoice_operations root
-      on root.id=counts.root_operation_id
+      on root.id=counts.batch_root_id
     left join delivery_counts delivery
-      on delivery.root_operation_id=counts.root_operation_id
+      on delivery.batch_root_id=counts.batch_root_id
   ),
   updated_roots as materialized (
     update public.invoice_operations root
@@ -547,7 +546,7 @@ begin
         else root.change_seq
       end
     from progress p
-    where root.id=p.root_operation_id
+    where root.id=p.batch_root_id
     returning root.id
   )
   select

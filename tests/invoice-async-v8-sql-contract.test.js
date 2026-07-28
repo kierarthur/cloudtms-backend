@@ -416,6 +416,14 @@ test('batch operation control does not preload a capped current-chunk graph', ()
   assert.match(operationControl, /depth<64/);
   assert.match(
     operationControl,
+    /chunk_chain\([\s\S]*?select\s+requested\.request_no,/i,
+  );
+  assert.doesNotMatch(
+    operationControl,
+    /chunk_chain\([\s\S]*?select\s+tree\.request_no,/i,
+  );
+  assert.match(
+    operationControl,
     /v_now\s+timestamptz\s*:=\s*statement_timestamp\(\)/i,
   );
   assert.match(
@@ -425,6 +433,39 @@ test('batch operation control does not preload a capped current-chunk graph', ()
   assert.doesNotMatch(
     operationControl,
     /v_now\s+timestamptz\s*:=\s*coalesce\(p_now_utc/i,
+  );
+});
+
+test('operation control replacement hashing uses the fixed extensions schema', () => {
+  const operationControl = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql',
+  );
+
+  assert.match(operationControl, /extensions\.digest\s*\(/i);
+  assert.doesNotMatch(operationControl, /(?<!\.)\bdigest\s*\(/i);
+});
+
+test('batch rollup qualifies output-column names inside SQL statements', () => {
+  const rollup = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_operation_rollup_batch.sql',
+  );
+
+  assert.doesNotMatch(rollup, /select\s+operation_id\s+from\s+roots/i);
+  assert.match(
+    rollup,
+    /select\s+root\.operation_id\s+from\s+roots\s+root/gi,
+  );
+  assert.doesNotMatch(
+    rollup,
+    /descendants\s*\(\s*root_operation_id\s*,/i,
+  );
+  assert.match(
+    rollup,
+    /descendants\s*\(\s*descendant_root_operation_id\s*,/i,
+  );
+  assert.doesNotMatch(
+    rollup,
+    /progress\s+as\s+materialized\s*\(\s*select\s+counts\.batch_root_id\s*,/i,
   );
 });
 

@@ -265,7 +265,7 @@ begin
   chunk_chain(request_no,operation_id,requested_chunk_id,current_chunk_id,
     replaced_by_chunk_id,current_status,path,depth,cycle) as (
     select
-      tree.request_no,
+      requested.request_no,
       c.operation_id,
       c.id,
       c.id,
@@ -507,7 +507,7 @@ begin
         when 'DELIVERY_PREPARE' then 'PREPARE'
         when 'RECONCILE' then 'RECONCILE'
         else old.phase end,
-      encode(digest(concat_ws('|','REPLACEMENT',old.operation_id::text,
+      encode(extensions.digest(concat_ws('|','REPLACEMENT',old.operation_id::text,
         old.chunk_type,old.level_no::text,old.sequence_no::text,
         coalesce(old.entity_type,'~'),coalesce(old.entity_id::text,'~'),
         coalesce(old.document_version_id::text,'~'),
