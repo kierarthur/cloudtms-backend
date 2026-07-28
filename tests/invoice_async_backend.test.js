@@ -916,6 +916,7 @@ test('professional source templates use explicit allowlisted fields', () => {
   assert.ok(!ts.includes(' · by </div>'));
   const hr = buildHealthRosterSupportHtml({ schema_version: 'HEALTHROSTER_PRESENTATION_V1', rows: [{ worker: 'Worker', assignment: 'Assignment', shift_date: null, shift_times: null, site: null, ward: null, reference: null, units_hours: null, validation_state: null, source_identity: null, secret_future_key: 'must-not-render' }] });
   const nhsp = buildNhspSupportHtml({ schema_version: 'NHSP_PRESENTATION_V1', rows: [{ worker: 'Worker', nhsp_shift_id: 'SHIFT-1', booking_reference: null, site_ward: null, shift_date: null, shift_times: null, hours_units: null, source_identity: null, validation_state: null, secret_future_key: 'must-not-render' }] });
+  assert.match(nhsp, /Assignment \/ shift ID/);
   const higher = buildHigherRateSupportHtml({ schema_version: 'HIGHER_RATE_PRESENTATION_V1', rows: [{ worker_source: 'Worker', shift_date: null, original_rate: null, applied_rate: '25.00', units: null, display_amount: null, reason: null, approval_identity: null, reference: null, secret_future_key: 'must-not-render' }] });
   assert.ok(hr.includes('Assignment'));
   assert.ok(nhsp.includes('SHIFT-1'));
