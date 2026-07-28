@@ -29,6 +29,11 @@ function requiredNumber(value, code) {
   return number;
 }
 
+function requiredNonnegativeNumber(value, code) {
+  if (value == null || String(value).trim() === '') throw new Error(code);
+  return requiredNumber(value, code);
+}
+
 export async function buildPhysicalReceipt(input, actual, index) {
   const descriptor = input.descriptor || {};
   const order = requiredNumber(actual?.input_order, 'INPUT_ORDER_INVALID');
@@ -55,7 +60,10 @@ export async function buildPhysicalReceipt(input, actual, index) {
     return { ...base, actual_child_merge_receipt: descriptor.child_merge_receipt, actual_child_merge_receipt_hash: childHash };
   }
   if (!String(descriptor.logical_source_key || '')) throw new Error('LOGICAL_SOURCE_KEY_MISSING');
-  if (requiredNumber(descriptor.logical_manifest_ordinal, 'LOGICAL_MANIFEST_ORDINAL_INVALID') < 1) throw new Error('LOGICAL_MANIFEST_ORDINAL_INVALID');
+  requiredNonnegativeNumber(
+    descriptor.logical_manifest_ordinal,
+    'LOGICAL_MANIFEST_ORDINAL_INVALID'
+  );
   if (requiredNumber(descriptor.physical_part_no, 'PHYSICAL_PART_NUMBER_INVALID') < 1) throw new Error('PHYSICAL_PART_NUMBER_INVALID');
   const physicalReceipt = await hashPostgresJsonb({
     receipt_contract: 'ACTUAL_BYTES_OBJECT_RECEIPT_V3',
@@ -186,7 +194,10 @@ export function flattenLeafInputReceipts(mergeReceipt, output = [], options = {}
     }
 
     const logicalSourceKey = String(receipt.logical_source_key || '');
-    const logicalOrdinal = Number(receipt.logical_manifest_ordinal);
+    const logicalOrdinal = requiredNonnegativeNumber(
+      receipt.logical_manifest_ordinal,
+      'LOGICAL_MANIFEST_ORDINAL_INVALID'
+    );
     const physicalPartNo = Number(receipt.physical_part_no);
     const pageCount = Number(receipt.actual_page_count);
     const sizeBytes = Number(receipt.actual_size_bytes);
@@ -195,7 +206,6 @@ export function flattenLeafInputReceipts(mergeReceipt, output = [], options = {}
     const physicalReceipt = String(receipt.actual_physical_receipt || '');
 
     if (!logicalSourceKey) throw new Error('LOGICAL_SOURCE_KEY_MISSING');
-    if (!Number.isSafeInteger(logicalOrdinal) || logicalOrdinal < 1) throw new Error('LOGICAL_MANIFEST_ORDINAL_INVALID');
     if (!Number.isSafeInteger(physicalPartNo) || physicalPartNo < 1) throw new Error('PHYSICAL_PART_NUMBER_INVALID');
     if (!r2Key) throw new Error('INPUT_R2_KEY_MISSING');
     if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error('INPUT_SHA256_INVALID');
@@ -310,11 +320,13 @@ export async function verifyMergeReceiptTree(mergeReceipt, options = {}) {
       }
 
       const logicalSourceKey = String(inputReceipt.logical_source_key || '');
-      const logicalOrdinal = Number(inputReceipt.logical_manifest_ordinal);
+      const logicalOrdinal = requiredNonnegativeNumber(
+        inputReceipt.logical_manifest_ordinal,
+        'LOGICAL_MANIFEST_ORDINAL_INVALID'
+      );
       const physicalPartNo = Number(inputReceipt.physical_part_no);
 
       if (!logicalSourceKey) throw new Error('LOGICAL_SOURCE_KEY_MISSING');
-      if (!Number.isSafeInteger(logicalOrdinal) || logicalOrdinal < 1) throw new Error('LOGICAL_MANIFEST_ORDINAL_INVALID');
       if (!Number.isSafeInteger(physicalPartNo) || physicalPartNo < 1) throw new Error('PHYSICAL_PART_NUMBER_INVALID');
 
       const recalculatedPhysicalReceipt = await hashPostgresJsonb({

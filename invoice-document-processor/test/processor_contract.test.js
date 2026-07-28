@@ -10,6 +10,7 @@ import {
 const workerPath = new URL('../src/worker.js', import.meta.url);
 const processorConfigPath = new URL('../wrangler.jsonc', import.meta.url);
 const receiptUrl = new URL('../src/receipt-contract.js', import.meta.url).href;
+const { buildPhysicalReceipt } = await import(receiptUrl);
 const securityUrl = new URL('../../shared/invoice-processor-security.js', import.meta.url).href;
 const workerSource = (await readFile(workerPath, 'utf8'))
   .replace("import { Container, getContainer } from '@cloudflare/containers';", 'class Container {}\nconst getContainer = () => { throw new Error("CONTAINER_NOT_AVAILABLE_IN_UNIT_TEST"); };')
@@ -134,6 +135,40 @@ test('streamed processor outputs retain an exact length for immutable R2 writes'
   await prepared.completion;
   assert.equal(constructedLength, 3);
   assert.deepEqual([...bytes], [4, 5, 6]);
+});
+
+test('merge receipts accept the zero-based manifest ordinal used by document plans', async () => {
+  const input = {
+    descriptor: {
+      input_chunk_id: '00000000-0000-4000-8000-000000000001',
+      input_order: 1,
+      r2_key: 'immutable/input.pdf',
+      logical_source_key: 'source:invoice-core',
+      logical_manifest_ordinal: 0,
+      physical_part_no: 1
+    }
+  };
+  const actual = {
+    input_order: 1,
+    r2_key: 'immutable/input.pdf',
+    sha256: 'a'.repeat(64),
+    page_count: 1,
+    size_bytes: 100
+  };
+  const receipt = await buildPhysicalReceipt(input, actual, 0);
+  assert.equal(receipt.logical_manifest_ordinal, '0');
+  await assert.rejects(
+    () => buildPhysicalReceipt({
+      descriptor: { ...input.descriptor, logical_manifest_ordinal: -1 }
+    }, actual, 0),
+    /LOGICAL_MANIFEST_ORDINAL_INVALID/
+  );
+  await assert.rejects(
+    () => buildPhysicalReceipt({
+      descriptor: { ...input.descriptor, logical_manifest_ordinal: '' }
+    }, actual, 0),
+    /LOGICAL_MANIFEST_ORDINAL_INVALID/
+  );
 });
 
 test('immutable processor writes use full hash and reject conflicting existing objects', async () => {

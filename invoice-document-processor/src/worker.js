@@ -351,7 +351,9 @@ async function buildVerificationOnlyResult(identity, context, metadata) {
 
   const logicalCoverage = new Map();
   for (const leaf of verifiedTree.leaves) {
-    const logicalOrdinal = String(leaf.logical_ordinal || leaf.logical_manifest_ordinal || '');
+    const logicalOrdinal = String(
+      leaf.logical_ordinal ?? leaf.logical_manifest_ordinal ?? ''
+    );
     const logicalSourceKey = String(leaf.logical_source_key || '');
     if (!logicalOrdinal || !logicalSourceKey) {
       throw Object.assign(new Error('FINAL_INPUT_COVERAGE_INVALID'), { code: 'FINAL_INPUT_COVERAGE_INVALID' });
