@@ -154,7 +154,8 @@ as $function$
     where definitions.procedure_identity is not null
   ),
   legacy_surface_state as (
-    select count(*) filter (
+    select
+      count(*) filter (
       where legacy.procedure_identity is not null
         and (
           has_function_privilege(
@@ -178,7 +179,11 @@ as $function$
             'EXECUTE'
           )
         )
-    ) legacy_runtime_exposure_count
+      ) legacy_runtime_exposure_count,
+      count(*) filter (
+        where legacy.procedure_identity is null
+          or coalesce(p.pronargdefaults, 0) <> 0
+      ) legacy_rest_overload_ambiguity_count
     from (
       values
         (to_regprocedure(
@@ -188,6 +193,7 @@ as $function$
           'public.invoice_batch_issue_candidates(boolean,integer,jsonb)'
         ))
     ) legacy(procedure_identity)
+    left join pg_proc p on p.oid = legacy.procedure_identity
   ),
   key_state as (
     select exists (
@@ -248,6 +254,7 @@ as $function$
       and manifest.public_candidate_dependency_count=0
       and security_state.private_exposure_count=0
       and legacy_surface_state.legacy_runtime_exposure_count=0
+      and legacy_surface_state.legacy_rest_overload_ambiguity_count=0
       and key_state.snapshot_key_ready
       and trigger_state.candidate_trigger_count=54
       and trigger_state.result_trigger_count=3
@@ -265,6 +272,8 @@ as $function$
     'private_exposure_count',security_state.private_exposure_count,
     'legacy_runtime_exposure_count',
       legacy_surface_state.legacy_runtime_exposure_count,
+    'legacy_rest_overload_ambiguity_count',
+      legacy_surface_state.legacy_rest_overload_ambiguity_count,
     'trigger_manifest_digest',
       '39a4c76d0f0a757a2ee04e25ec05df74b1ccf5531393ecdb2b30b360bf4ba5b0',
     'snapshot_signing_ready',key_state.snapshot_key_ready,

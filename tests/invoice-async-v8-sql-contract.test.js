@@ -262,6 +262,15 @@ test('strict query validation and post-helper trigger installation are present',
   const historicalTriggerMigration = read(
     'supabase/migrations/27072026_1042_04_invoice_async_v8_candidate_revision_triggers.sql',
   );
+  const legacyGenerateWrapper = read(
+    'supabase/repeatable/24072026_1646_invoice_batch_generate_candidates.sql',
+  );
+  const legacyIssueWrapper = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_batch_issue_candidates.sql',
+  );
+  const legacyOverloadMigration = read(
+    'supabase/migrations/28072026_0958_invoice_candidate_rpc_overload_defaults.sql',
+  );
 
   assert.match(queryValidation, /INVOICE_BATCH_QUERY_UNKNOWN_FIELD/);
   assert.match(queryValidation, /INVOICE_BATCH_QUERY_ACTION_REQUIRED/);
@@ -289,6 +298,12 @@ test('strict query validation and post-helper trigger installation are present',
     /deferred to post-helper repeatable/i,
   );
   assert.match(contractProbe, /legacy_runtime_exposure_count/);
+  assert.match(contractProbe, /legacy_rest_overload_ambiguity_count/);
+  assert.match(contractProbe, /pronargdefaults/);
+  assert.match(
+    contractProbe,
+    /legacy_surface_state\.legacy_rest_overload_ambiguity_count=0/,
+  );
   assert.match(
     contractProbe,
     /invoice_batch_generate_candidates\(boolean,integer,text\[\],jsonb\)/,
@@ -296,6 +311,30 @@ test('strict query validation and post-helper trigger installation are present',
   assert.match(
     contractProbe,
     /invoice_batch_issue_candidates\(boolean,integer,jsonb\)/,
+  );
+  assert.doesNotMatch(
+    legacyGenerateWrapper.match(
+      /CREATE OR REPLACE FUNCTION public\.invoice_batch_generate_candidates\([\s\S]*?\)\s*RETURNS/,
+    )?.[0] || '',
+    /\bDEFAULT\b/i,
+  );
+  assert.doesNotMatch(
+    legacyIssueWrapper.match(
+      /CREATE OR REPLACE FUNCTION public\.invoice_batch_issue_candidates\([\s\S]*?\)\s*RETURNS/,
+    )?.[0] || '',
+    /\bDEFAULT\b/i,
+  );
+  assert.match(
+    legacyOverloadMigration,
+    /drop function if exists public\.invoice_batch_generate_candidates\s*\(\s*boolean,\s*integer,\s*text\[\],\s*jsonb\s*\)/i,
+  );
+  assert.match(
+    legacyOverloadMigration,
+    /drop function if exists public\.invoice_batch_issue_candidates\s*\(\s*boolean,\s*integer,\s*jsonb\s*\)/i,
+  );
+  assert.doesNotMatch(
+    legacyOverloadMigration.replace(/--.*$/gm, ''),
+    /create\s+(?:or\s+replace\s+)?function/i,
   );
 });
 

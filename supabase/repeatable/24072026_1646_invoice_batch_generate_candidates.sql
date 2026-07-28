@@ -40,10 +40,10 @@ $preserve_legacy$;
 DROP FUNCTION IF EXISTS public.invoice_batch_generate_candidates(boolean, integer, text[]);
 
 CREATE OR REPLACE FUNCTION public.invoice_batch_generate_candidates(
-  p_allow_early boolean DEFAULT false,
-  p_limit integer DEFAULT 5000,
-  p_scope_keys text[] DEFAULT NULL::text[],
-  p_query jsonb DEFAULT NULL::jsonb
+  p_allow_early boolean,
+  p_limit integer,
+  p_scope_keys text[],
+  p_query jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql

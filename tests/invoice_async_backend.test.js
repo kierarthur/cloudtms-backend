@@ -1116,6 +1116,123 @@ test('batch generation submits one V2 selection root and omits caller time autho
   await Promise.all(background);
 });
 
+test('Generate-and-view adopts an authoritative existing draft-view command', async () => {
+  const actor = '00000000-0000-4000-8000-000000000010';
+  const invoiceId = '00000000-0000-4000-8000-000000000011';
+  const selectionKey = 'invoice:00000000-0000-4000-8000-000000000011';
+  const query = v8Query('GENERATE', {
+    mode: 'EXPLICIT_KEYS',
+    selection_keys: [selectionKey],
+    expected_source_revisions: { [selectionKey]: '7' }
+  });
+  delete query.page_size;
+  delete query.cursor;
+  let submitted = null;
+  const background = [];
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoices/batch-generate/confirm', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'generate-and-view-token'
+      },
+      body: JSON.stringify({
+        selection_contract: {
+          contract_version: 'INVOICE_BATCH_SELECTION_ROOT_V2',
+          query,
+          selection: v8Selection()
+        }
+      })
+    }),
+    v8Environment({ INVOICE_ASYNC_ALLOWED_USER_IDS: actor }),
+    { waitUntil(promise) { background.push(promise); } },
+    {
+      requireUser: async () => ({ id: actor, role: 'admin', active: true }),
+      rpc: v8Rpc(async (name, args) => {
+        if (name === 'invoice_batch_generate_candidates') {
+          const candidateQuery = args.p_query;
+          return {
+            contract_version: 'INVOICE_BATCH_CANDIDATES_V2',
+            action: 'GENERATE',
+            mode: 'EXPLICIT_KEYS',
+            snapshot: candidateQuery.snapshot,
+            normalised_filter: candidateQuery.filters,
+            normalised_sort: candidateQuery.sort,
+            filter_hash: await invoiceAsyncHttpInternals.hashInvoiceBatchFilter(
+              'GENERATE', candidateQuery.filters, candidateQuery.sort
+            ),
+            query_hash: await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
+              'GENERATE', candidateQuery.filters, candidateQuery.sort,
+              candidateQuery.snapshot
+            ),
+            selection_hash: await invoiceAsyncHttpInternals.hashInvoiceBatchSelection(
+              candidateQuery.selection
+            ),
+            rows: [{
+              selection_key: selectionKey,
+              source_revision: '7',
+              selectable: true,
+              command_payload: {
+                command_type: 'VIEW_INVOICE_DOCUMENT',
+                invoice_id: invoiceId,
+                purpose: 'DRAFT_PREVIEW',
+                expected_revision: 7,
+                source_revision: '7'
+              }
+            }],
+            page: {
+              page_size: 1,
+              returned_count: 1,
+              total_count: 1,
+              has_more: false
+            },
+            totals: {
+              filtered_total: 1,
+              display_total: 1,
+              eligible_total: 1,
+              selected_total: 1,
+              excluded_total: 0,
+              blocked_total: 0
+            },
+            selection_summary: {
+              eligible_total: 1,
+              selected_total: 1,
+              excluded_total: 0,
+              blocked_total: 0,
+              exact: true
+            },
+            group_selection: [],
+            facets: {}
+          };
+        }
+        if (name === 'invoice_operation_start_batch') {
+          submitted = args.p_commands[0];
+          return [{
+            command_no: 1,
+            command_type: 'VIEW_INVOICE_DOCUMENT',
+            accepted: true,
+            created: true,
+            status: 'QUEUED',
+            operation_id: '00000000-0000-4000-8000-000000000012'
+          }];
+        }
+        if (name === 'invoice_work_claim_batch') return [];
+        throw new Error(`Unexpected RPC ${name}`);
+      })
+    }
+  );
+  await Promise.all(background);
+  assert.equal(response.status, 202);
+  assert.equal(submitted.command_type, 'VIEW_INVOICE_DOCUMENT');
+  assert.equal(submitted.invoice_id, invoiceId);
+  assert.equal(submitted.purpose, 'DRAFT_PREVIEW');
+  assert.equal(submitted.expected_revision, '7');
+  assert.equal(submitted.source_revision, '7');
+  assert.equal(submitted.priority_reason, 'VIEW_NOW');
+  assert.equal(submitted.command_token, 'generate-and-view-token');
+  assert.equal(submitted.source_ids, undefined);
+});
+
 test('invoice batch filters and sort are strictly allowlisted and canonical', () => {
   const query = {
     filters: {
@@ -1572,6 +1689,10 @@ test('POST candidate route returns V8 and keeps database keysets behind an opaqu
   assert.equal(first.status, 200, JSON.stringify(firstBody));
   assert.equal(first.headers.get('x-invoice-async-contract-version'), 'INVOICE_ASYNC_BACKEND_V8');
   assert.ok(firstBody.page.next_cursor);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(firstBody.normalised_filter, 'invoice_streams'),
+    false
+  );
   assert.equal(calls[0].cursor, null);
 
   const second = await handleInvoiceAsyncHttpRequest(

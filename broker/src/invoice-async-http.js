@@ -1637,6 +1637,11 @@ async function handleCandidates(env, req, deps, rpcName, options = {}) {
     }
   }
 
+  const {
+    invoice_streams: _internalInvoiceStreams,
+    ...browserNormalisedFilter
+  } = query.filters;
+
   return jsonResponse({
     ok: true,
     contract_version: INVOICE_BATCH_CANDIDATE_CONTRACT,
@@ -1652,7 +1657,7 @@ async function handleCandidates(env, req, deps, rpcName, options = {}) {
     selection_summary: parsed.selection_summary,
     group_selection: groupSelection,
     facets,
-    normalised_filter: query.filters,
+    normalised_filter: browserNormalisedFilter,
     normalised_sort: query.sort,
     selection_seed: parsed.selection_seed || {
       mode: 'IMPLICIT_ALL',
@@ -1718,12 +1723,39 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
     if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
       throw invoiceBatchContractError('CANONICAL_COMMAND_REQUIRED');
     }
-    return startCommands(env, req, ctx, user, [
-      generationCommandFromBody(req, {
+    const canonicalCommandType = String(canonical.command_type || '').trim().toUpperCase();
+    let command;
+    if (canonicalCommandType === 'VIEW_INVOICE_DOCUMENT') {
+      const expectedRevision = String(canonical.expected_revision ?? '').trim();
+      const sourceRevision = String(canonical.source_revision ?? '').trim();
+      if (
+        String(canonical.purpose || '').trim().toUpperCase() !== 'DRAFT_PREVIEW'
+        || !/^[1-9][0-9]*$/.test(expectedRevision)
+        || sourceRevision !== expectedRevision
+      ) {
+        throw invoiceBatchContractError('CANONICAL_COMMAND_REQUIRED');
+      }
+      command = {
+        command_type: 'VIEW_INVOICE_DOCUMENT',
+        invoice_id: canonicalUuidArray([canonical.invoice_id])[0],
+        purpose: 'DRAFT_PREVIEW',
+        expected_revision: expectedRevision,
+        source_revision: sourceRevision,
+        priority_reason: 'VIEW_NOW',
+        command_token: token
+      };
+    } else {
+      if (canonicalCommandType !== 'GENERATE_SELECTED') {
+        throw invoiceBatchContractError('CANONICAL_COMMAND_REQUIRED');
+      }
+      command = generationCommandFromBody(req, {
         canonical_command: canonical,
         command_token: token,
         allow_early: selectionRoot.query.filters.allow_early
-      }, canonical.command_type || 'GENERATE_SELECTED')
+      }, canonicalCommandType);
+    }
+    return startCommands(env, req, ctx, user, [
+      command
     ], deps, ['DATABASE'], {
       priorityClass: 'VIEW_NOW',
       extendResult: (summary, rows) => ({
