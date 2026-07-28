@@ -181,8 +181,8 @@ as $function$
         )
       ) legacy_runtime_exposure_count,
       count(*) filter (
-        where legacy.procedure_identity is null
-          or coalesce(p.pronargdefaults, 0) <> 0
+        where legacy.procedure_identity is not null
+          and coalesce(p.pronargdefaults, 0) <> 0
       ) legacy_rest_overload_ambiguity_count
     from (
       values

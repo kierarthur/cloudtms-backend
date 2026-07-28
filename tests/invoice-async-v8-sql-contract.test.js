@@ -302,6 +302,14 @@ test('strict query validation and post-helper trigger installation are present',
   assert.match(contractProbe, /pronargdefaults/);
   assert.match(
     contractProbe,
+    /legacy\.procedure_identity is not null[\s\S]*coalesce\(p\.pronargdefaults, 0\) <> 0/,
+  );
+  assert.doesNotMatch(
+    contractProbe,
+    /legacy\.procedure_identity is null[\s\S]*coalesce\(p\.pronargdefaults, 0\) <> 0/,
+  );
+  assert.match(
+    contractProbe,
     /legacy_surface_state\.legacy_rest_overload_ambiguity_count=0/,
   );
   assert.match(
