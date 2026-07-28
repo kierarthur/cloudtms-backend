@@ -85,7 +85,17 @@ begin
         'source_member_key',m.source_member_key,
         'source_type',m.source_type,'source_id',m.source_id,
         'timesheet_id',m.timesheet_id,'segment_id',m.segment_id,
-        'effective_date',m.payload_json->>'effective_settings_date')
+        'effective_date',coalesce(
+          case when m.payload_json->>'effective_settings_date'
+              ~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+              and pg_input_is_valid(
+                m.payload_json->>'effective_settings_date','date')
+            then m.payload_json->>'effective_settings_date' end,
+          (select ts_vat.week_ending_date::text
+             from public.timesheets ts_vat
+            where ts_vat.timesheet_id=m.timesheet_id
+              and ts_vat.is_current
+            limit 1)))
         order by m.chunk_id,m.ordinality)
       from members m
     ),'[]'::jsonb)) v
@@ -236,7 +246,13 @@ begin
           then 'HEALTHROSTER_VALIDATION_REQUIRED' end,
         case when coalesce(vs.client_is_nhsp,false)
           and coalesce(vs.nhsp_shift_count,0)>0
-          and coalesce(vs.nhsp_shift_included_count,0)=0
+          and not exists(
+            select 1
+            from public.nhsp_shifts ns_ready
+            where ns_ready.timesheet_id=m.timesheet_id
+              and ns_ready.invoice_status='PENDING'
+              and ns_ready.invoice_id is null
+              and ns_ready.cancelled_at_utc is null)
           then 'NHSP_SOURCE_NOT_READY' end,
         case when exists(select 1 from public.invoice_lines l join public.invoices i on i.id=l.invoice_id
                          where l.timesheet_id=m.timesheet_id and i.status in ('DRAFT','ISSUED','ON_HOLD'))
@@ -599,7 +615,13 @@ begin
             'OK','PASS','PASSED','MATCHED','NOT_REQUIRED'))
         and not(coalesce(vs.client_is_nhsp,false)
           and coalesce(vs.nhsp_shift_count,0)>0
-          and coalesce(vs.nhsp_shift_included_count,0)=0)
+          and not exists(
+            select 1
+            from public.nhsp_shifts ns_ready
+            where ns_ready.timesheet_id=m.timesheet_id
+              and ns_ready.invoice_status='PENDING'
+              and ns_ready.invoice_id is null
+              and ns_ready.cancelled_at_utc is null))
         and not((coalesce(tf.mileage_pay_ex_vat,0)<>0
               or coalesce(tf.mileage_charge_ex_vat,0)<>0)
           and not exists(
@@ -1359,6 +1381,27 @@ begin
                      where nullif(e->>'invoice_locked_invoice_id','') is null)))
     returning cw.id
   ),
+  nhsp_shift_inclusion as (
+    update public.nhsp_shifts ns
+    set invoice_status='INCLUDED',
+      invoice_id=s.planned_invoice_id,
+      updated_at=v_now
+    from source_rows s
+    where ns.timesheet_id=s.timesheet_id
+      and ns.invoice_status='PENDING'
+      and ns.invoice_id is null
+      and ns.cancelled_at_utc is null
+      and exists(
+        select 1
+        from jsonb_array_elements(
+          case when jsonb_typeof(s.invoice_breakdown_json->'segments')='array'
+            then s.invoice_breakdown_json->'segments'
+            else '[]'::jsonb end) segment(value)
+        where coalesce(
+            nullif(segment.value->>'nhsp_shift_id',''),
+            nullif(segment.value->>'shift_id',''))=ns.id::text)
+    returning ns.id
+  ),
   hr_sources as (
     insert into public.invoice_hr_source_rows(invoice_id,source_system,import_id,header_columns,rows_json,header_rows)
     select distinct vc.planned_invoice_id,
@@ -1375,15 +1418,27 @@ begin
   ),
   source_segments as materialized (
     select distinct s.planned_invoice_id,
-      substr(x.value->>'segment_id',6)::uuid shift_id,
+      coalesce(
+        case when coalesce(x.value->>'nhsp_shift_id','')~*
+            '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then(x.value->>'nhsp_shift_id')::uuid end,
+        case when coalesce(x.value->>'shift_id','')~*
+            '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then(x.value->>'shift_id')::uuid end,
+        case when substr(coalesce(x.value->>'segment_id',''),6)~*
+            '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then substr(x.value->>'segment_id',6)::uuid end) shift_id,
       false is_reversal
     from source_rows s
     cross join lateral jsonb_array_elements(
       case when jsonb_typeof(s.invoice_breakdown_json->'segments')='array'
         then s.invoice_breakdown_json->'segments' else '[]'::jsonb end) x(value)
-    where left(x.value->>'segment_id',5)='nhsp:'
-      and substr(x.value->>'segment_id',6) ~*
-        '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    where coalesce(
+        nullif(x.value->>'nhsp_shift_id',''),
+        nullif(x.value->>'shift_id',''),
+        case when left(x.value->>'segment_id',5)='nhsp:'
+          then substr(x.value->>'segment_id',6) end)~*
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       and (
         upper(coalesce(x.value->>'source_system',''))='NHSP'
         or (upper(coalesce(x.value->>'source_system',''))='HEALTHROSTER'

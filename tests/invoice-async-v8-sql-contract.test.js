@@ -1102,6 +1102,50 @@ test('candidate correction validation treats a planned invoice identity as null-
   );
 });
 
+test('generation validation accepts pending NHSP sources and resolves VAT from the source week', () => {
+  const generationCore = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/'
+    + '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
+  );
+
+  assert.match(
+    generationCore,
+    /'effective_date',coalesce\([\s\S]*ts_vat\.week_ending_date::text[\s\S]*where ts_vat\.timesheet_id=m\.timesheet_id[\s\S]*and ts_vat\.is_current/s,
+  );
+  assert.match(
+    generationCore,
+    /ns_ready\.timesheet_id=m\.timesheet_id[\s\S]*ns_ready\.invoice_status='PENDING'[\s\S]*ns_ready\.invoice_id is null[\s\S]*ns_ready\.cancelled_at_utc is null/s,
+  );
+  assert.doesNotMatch(
+    generationCore,
+    /nhsp_shift_included_count,0\)=0/,
+  );
+});
+
+test('generation commits exact NHSP shift ownership and attaches the authoritative import row', () => {
+  const generationCore = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/'
+    + '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
+  );
+
+  assert.match(
+    generationCore,
+    /nhsp_shift_inclusion as \(\s*update public\.nhsp_shifts ns\s*set invoice_status='INCLUDED',\s*invoice_id=s\.planned_invoice_id/s,
+  );
+  assert.match(
+    generationCore,
+    /nullif\(segment\.value->>'nhsp_shift_id',''\),\s*nullif\(segment\.value->>'shift_id',''\)\)=ns\.id::text/s,
+  );
+  assert.match(
+    generationCore,
+    /source_segments as materialized \([\s\S]*x\.value->>'nhsp_shift_id'[\s\S]*x\.value->>'shift_id'[\s\S]*source_imports as materialized/s,
+  );
+  assert.match(
+    generationCore,
+    /r\.external_row_key in\(\s*select jsonb_array_elements_text\(g\.reversal_row_keys\)\)[\s\S]*jsonb_build_object\('reversal_state','REVERSED'\)/s,
+  );
+});
+
 test('root repeatable installs every changed nested Invoice V8 authority', () => {
   const runtimeAuthority = read(
     'supabase/repeatable/28072026_1609_invoice_async_v8_runtime_authority.sql',
