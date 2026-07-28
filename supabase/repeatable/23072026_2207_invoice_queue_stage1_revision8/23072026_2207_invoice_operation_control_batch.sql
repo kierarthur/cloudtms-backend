@@ -880,6 +880,7 @@ begin
     update public.invoice_operation_chunks p
     set status='QUEUED',
         phase=case when scope.reset_inputs then 'WAIT_FOR_INPUTS' else 'WAIT_FOR_MERGE' end,
+        attempt_count=0,
         run_after_utc=v_now,
         failed_at_utc=null,error_json=null,lease_owner=null,lease_token=null,
         lease_expires_at_utc=null,updated_at_utc=v_now

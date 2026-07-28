@@ -828,7 +828,7 @@ test('document merge retry requeues the plan into the implemented wait-for-merge
   assert.doesNotMatch(operationControl, /PLAN_MERGES/);
   assert.match(
     operationControl,
-    /phase=case when scope\.reset_inputs then 'WAIT_FOR_INPUTS' else 'WAIT_FOR_MERGE' end/i,
+    /phase=case when scope\.reset_inputs then 'WAIT_FOR_INPUTS' else 'WAIT_FOR_MERGE' end,[\s\S]*attempt_count=0,[\s\S]*run_after_utc=v_now/i,
   );
   assert.match(documentAdvance, /where x->>'phase'='WAIT_FOR_MERGE'/i);
 });
