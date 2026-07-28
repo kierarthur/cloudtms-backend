@@ -185,7 +185,11 @@ classified as materialized (
   where candidate.candidate_json->>'row_kind'='CREATE_INVOICE'
     and not (
       coalesce(candidate.candidate_json->'action_blocker_codes','[]'::jsonb)
-      ?| array['SEGMENT_ALREADY_LOCKED','SOURCE_ALREADY_INVOICED']
+      ?| array[
+        'SEGMENT_ALREADY_LOCKED',
+        'SOURCE_ALREADY_LOCKED',
+        'SOURCE_ALREADY_INVOICED'
+      ]
     )
 ),
 selection_rules as materialized (

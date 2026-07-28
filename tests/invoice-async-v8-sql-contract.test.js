@@ -175,6 +175,9 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
   const generateKeys = read(
     'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1501_private_invoice_batch_generate_candidate_keys_v2.sql',
   );
+  const generateRows = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
+  );
   const generationAdvance = read(
     'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
   );
@@ -183,7 +186,9 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
   );
   assert.match(generateKeys, /candidate\.candidate_json->>'row_kind'='CREATE_INVOICE'/i);
   assert.match(generateKeys, /SEGMENT_ALREADY_LOCKED/i);
+  assert.match(generateKeys, /SOURCE_ALREADY_LOCKED/i);
   assert.match(generateKeys, /SOURCE_ALREADY_INVOICED/i);
+  assert.match(generateRows, /not in\s*\([\s\S]*'SOURCE_ALREADY_LOCKED'/i);
   assert.match(
     generationAdvance,
     /set status=case[\s\S]*then 'COMPLETE' else 'BLOCKED' end,[\s\S]*phase=case[\s\S]*then 'COMPLETE' else 'BLOCKED' end/i,

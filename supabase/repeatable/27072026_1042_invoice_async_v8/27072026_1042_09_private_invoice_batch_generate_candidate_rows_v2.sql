@@ -365,7 +365,11 @@ begin
             ) with ordinality src(value, ordinality)
           ) raw_codes
           where blocker_code is not null
-            and blocker_code not in ('EARLY_GENERATION_NOT_ALLOWED','SOURCE_ALREADY_INVOICED')
+            and blocker_code not in (
+              'EARLY_GENERATION_NOT_ALLOWED',
+              'SOURCE_ALREADY_LOCKED',
+              'SOURCE_ALREADY_INVOICED'
+            )
           group by blocker_code
         ) blocker_rows
       ),'[]'::jsonb) action_blocker_codes,
@@ -384,7 +388,11 @@ begin
     left join generation_candidate_ids gci on gci.group_key=lg.group_json->>'group_key'
     left join generation_vat gv on gv.group_key=lg.group_json->>'group_key'
     where coalesce(lg.group_json->>'group_key','')<>''
-      and coalesce(lg.group_json->>'blocker_code','') not in ('SOURCE_ALREADY_INVOICED','EARLY_GENERATION_NOT_ALLOWED')
+      and coalesce(lg.group_json->>'blocker_code','') not in (
+        'SOURCE_ALREADY_INVOICED',
+        'SOURCE_ALREADY_LOCKED',
+        'EARLY_GENERATION_NOT_ALLOWED'
+      )
   ),
   stale_invoice_timesheets as materialized (
     select l.invoice_id,
