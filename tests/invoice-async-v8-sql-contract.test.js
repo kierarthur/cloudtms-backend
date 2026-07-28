@@ -849,7 +849,7 @@ test('presentation authority repeatable defers safely instead of failing CI whil
   );
 });
 
-test('committed TEST configuration keeps both async entry flags disabled', () => {
+test('committed TEST configuration keeps interactive enabled and scheduled disabled', () => {
   const wrangler = read('wrangler.toml');
   const pipelineFlags = [
     ...wrangler.matchAll(/INVOICE_ASYNC_PIPELINE_ENABLED\s*=\s*"([^"]+)"/g),
@@ -860,6 +860,8 @@ test('committed TEST configuration keeps both async entry flags disabled', () =>
 
   assert.ok(pipelineFlags.length > 0);
   assert.ok(scheduledFlags.length > 0);
-  assert.ok(pipelineFlags.every(match => match[1] === 'false'));
+  assert.equal(pipelineFlags[0][1], 'false');
+  assert.equal(pipelineFlags[1][1], 'true');
+  assert.ok(pipelineFlags.slice(2).every(match => match[1] === 'false'));
   assert.ok(scheduledFlags.every(match => match[1] === 'false'));
 });
