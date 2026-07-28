@@ -1726,6 +1726,91 @@ v_stage := 'STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY';
     from selected_case_rows_raw scr
     cross join lateral jsonb_array_elements(coalesce(scr.case_components_json, '[]'::jsonb)) as comp(comp_json)
     where jsonb_typeof(comp.comp_json) = 'object'
+  ), selected_case_component_rows_ranked as (
+    select
+      component_row.*,
+      coalesce(
+        sum(component_row.component_due_amount_ex_vat) over (
+          partition by component_row.finance_case_id, component_row.preview_row_id
+          order by component_row.component_identity
+          rows between unbounded preceding and 1 preceding
+        ),
+        0
+      )::numeric(12,2) as prior_component_due_amount_ex_vat
+    from selected_case_component_rows_raw component_row
+    where component_row.component_dedupe_rank = 1
+  ), selected_case_component_rows as (
+    select
+      ranked_row.pay_batch_candidate_id,
+      ranked_row.candidate_id,
+      ranked_row.finance_case_id,
+      ranked_row.pay_channel,
+      ranked_row.paye_treatment,
+      ranked_row.umbrella_id,
+      ranked_row.row_due_amount_ex_vat,
+      ranked_row.preview_row_id,
+      ranked_row.component_identity,
+      greatest(
+        least(
+          ranked_row.component_due_amount_ex_vat,
+          greatest(
+            ranked_row.row_due_amount_ex_vat - ranked_row.prior_component_due_amount_ex_vat,
+            0
+          )
+        ),
+        0
+      )::numeric(12,2) as component_due_amount_ex_vat,
+      jsonb_strip_nulls(
+        ranked_row.comp_json
+        || jsonb_build_object(
+          'uncapped_preview_due_amount_ex_vat', round(ranked_row.component_due_amount_ex_vat, 2),
+          'preview_due_amount_ex_vat', round(
+            greatest(
+              least(
+                ranked_row.component_due_amount_ex_vat,
+                greatest(
+                  ranked_row.row_due_amount_ex_vat - ranked_row.prior_component_due_amount_ex_vat,
+                  0
+                )
+              ),
+              0
+            ),
+            2
+          ),
+          'allocated_source_due_amount_ex_vat', round(
+            case
+              when coalesce(ranked_row.comp_json->>'allocated_source_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+               and coalesce(ranked_row.comp_json->>'preview_due_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+               and abs((ranked_row.comp_json->>'preview_due_amount_ex_vat')::numeric) > 0
+              then
+                abs((ranked_row.comp_json->>'allocated_source_due_amount_ex_vat')::numeric)
+                * greatest(
+                    least(
+                      ranked_row.component_due_amount_ex_vat,
+                      greatest(
+                        ranked_row.row_due_amount_ex_vat - ranked_row.prior_component_due_amount_ex_vat,
+                        0
+                      )
+                    ),
+                    0
+                  )
+                / abs((ranked_row.comp_json->>'preview_due_amount_ex_vat')::numeric)
+              else greatest(
+                least(
+                  ranked_row.component_due_amount_ex_vat,
+                  greatest(
+                    ranked_row.row_due_amount_ex_vat - ranked_row.prior_component_due_amount_ex_vat,
+                    0
+                  )
+                ),
+                0
+              )
+            end,
+            2
+          )
+        )
+      ) as comp_json
+    from selected_case_component_rows_ranked ranked_row
   ), selected_case_rows as (
     select
       scr.pay_batch_candidate_id,
@@ -1739,7 +1824,7 @@ v_stage := 'STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY';
         max(src.selected_row_due_amount_ex_vat)
       )::numeric(12,2) as due_amount_ex_vat,
       coalesce(jsonb_agg(scr.comp_json order by scr.preview_row_id, scr.component_identity), '[]'::jsonb) as case_components_json
-    from selected_case_component_rows_raw scr
+    from selected_case_component_rows scr
     join selected_case_row_caps src
       on src.pay_batch_candidate_id = scr.pay_batch_candidate_id
      and src.candidate_id = scr.candidate_id
@@ -1747,8 +1832,7 @@ v_stage := 'STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY';
      and src.pay_channel = scr.pay_channel
      and src.paye_treatment = scr.paye_treatment
      and src.umbrella_id is not distinct from scr.umbrella_id
-    where scr.component_dedupe_rank = 1
-      and round(coalesce(scr.component_due_amount_ex_vat, 0), 2) > 0
+    where round(coalesce(scr.component_due_amount_ex_vat, 0), 2) > 0
     group by
       scr.pay_batch_candidate_id,
       scr.candidate_id,

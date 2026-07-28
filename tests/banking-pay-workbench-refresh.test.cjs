@@ -44,6 +44,16 @@ test('workbench refresh route recomputes pre-draft live rows without payment exe
   assert.match(body, /pay_workbench_enqueue_session_candidate_refresh/);
   assert.match(body, /refresh_scope_kind: 'SESSION_FULL_LIVE'/);
   assert.match(body, /nudgeBankingPayWorkbenchDrain/);
+  assert.match(
+    body,
+    /if \(candidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function'\)/,
+    'a refresh must wake already-queued candidate work even when the idempotent enqueue inserts no new job'
+  );
+  assert.doesNotMatch(
+    body,
+    /if \(enqueuedCandidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function'\)/,
+    'new-row count must not be the nudge gate because an interrupted continuation can already be queued'
+  );
   assert.match(body, /policy_x_scope: 'PRE_DRAFT_LIVE_WORKBENCH_ONLY'/);
   assert.match(body, /decisions_cleared: false/);
   assert.match(body, /payment_execution_started: false/);

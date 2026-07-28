@@ -753,7 +753,9 @@ DECLARE
   v_source_authority_fingerprint text;
   v_target_authority_fingerprint text;
   v_target_resolution_id uuid;
-  v_existing record;
+  v_existing_id uuid;
+  v_existing_payload_json jsonb;
+  v_existing_updated_at_utc timestamptz;
   v_status text;
   v_reason_code text;
   v_carried integer := 0;
@@ -803,6 +805,9 @@ BEGIN
     v_source_authority_fingerprint := NULL;
     v_target_authority_fingerprint := NULL;
     v_target_resolution_id := NULL;
+    v_existing_id := NULL;
+    v_existing_payload_json := NULL;
+    v_existing_updated_at_utc := NULL;
     v_residual := NULL;
     v_component := NULL;
 
@@ -895,7 +900,9 @@ BEGIN
         SELECT target_resolution.id,
                target_resolution.payload_json,
                target_resolution.updated_at_utc
-        INTO v_existing
+        INTO v_existing_id,
+             v_existing_payload_json,
+             v_existing_updated_at_utc
         FROM public.banking_pay_workbench_session_case_resolutions
           target_resolution
         WHERE target_resolution.session_id = p_target_session_id
@@ -906,14 +913,14 @@ BEGIN
         LIMIT 1
         FOR UPDATE;
 
-        IF v_existing.id IS NOT NULL
+        IF v_existing_id IS NOT NULL
            AND coalesce(
-             v_existing.payload_json ->> 'carry_registration_id',
+             v_existing_payload_json ->> 'carry_registration_id',
              ''
            ) <> v_registration.id::text THEN
           v_status := 'SUPERSEDED';
           v_reason_code := 'TARGET_AUTHORITATIVE_DECISION_EXISTS';
-          v_target_resolution_id := v_existing.id;
+          v_target_resolution_id := v_existing_id;
         ELSE
           INSERT INTO
             public.banking_pay_workbench_session_case_resolutions (
@@ -937,7 +944,7 @@ BEGIN
               updated_at_utc
             )
           VALUES (
-            coalesce(v_existing.id, gen_random_uuid()),
+            coalesce(v_existing_id, gen_random_uuid()),
             p_target_session_id,
             p_candidate_id,
             coalesce(

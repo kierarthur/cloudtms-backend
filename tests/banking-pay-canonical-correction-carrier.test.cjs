@@ -568,6 +568,31 @@ test('import review contract requires the canonical carrier marker', () => {
   assert.match(carrier, /NOTIFY pgrst, 'reload schema'/);
 });
 
+test('the canonical projection contract has one active SQL repeatable definition', () => {
+  const sqlRepeatables = listFiles('supabase/repeatable').filter((file) =>
+    /\.sql$/i.test(file)
+  );
+  const definitions = [];
+
+  for (const file of sqlRepeatables) {
+    const source = fs.readFileSync(file, 'utf8');
+    const relativePath = path.relative(root, file).replaceAll('\\', '/');
+    for (const match of source.matchAll(
+      /^CREATE OR REPLACE FUNCTION public\._pay_workbench_candidate_projection_contract\(\)/gim
+    )) {
+      definitions.push({ relativePath, index: match.index });
+    }
+  }
+
+  assert.deepEqual(
+    definitions.map(({ relativePath }) => relativePath),
+    [
+      'supabase/repeatable/25072026_1615_banking_pay_canonical_correction_carrier.sql',
+    ],
+    'an older repeatable must not be able to restore the pre-canonical projection contract'
+  );
+});
+
 test('canonical contract fails closed until durable selection carry is installed', () => {
   assert.match(
     carrier,

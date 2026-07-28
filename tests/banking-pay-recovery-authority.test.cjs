@@ -218,6 +218,32 @@ test('finance adjustment recovery is capped by the selected server preview amoun
     recoveryBlock,
     /src\.umbrella_id is not distinct from scr\.umbrella_id/
   );
+  assert.match(
+    recoveryBlock,
+    /selected_case_component_rows_ranked as \([\s\S]*partition by component_row\.finance_case_id, component_row\.preview_row_id[\s\S]*prior_component_due_amount_ex_vat/
+  );
+  assert.match(
+    recoveryBlock,
+    /selected_case_component_rows as \([\s\S]*ranked_row\.row_due_amount_ex_vat - ranked_row\.prior_component_due_amount_ex_vat[\s\S]*as component_due_amount_ex_vat/
+  );
+  assert.match(
+    recoveryBlock,
+    /'uncapped_preview_due_amount_ex_vat'[\s\S]*'preview_due_amount_ex_vat'[\s\S]*'allocated_source_due_amount_ex_vat'/
+  );
+  assert.match(
+    recoveryBlock,
+    /abs\(\(ranked_row\.comp_json->>'allocated_source_due_amount_ex_vat'\)::numeric\)[\s\S]*\/ abs\(\(ranked_row\.comp_json->>'preview_due_amount_ex_vat'\)::numeric\)/
+  );
+  assert.match(
+    recoveryBlock,
+    /selected_case_rows as \([\s\S]*from selected_case_component_rows scr[\s\S]*join selected_case_row_caps src/,
+    'the grouped recovery authority must aggregate the capped component rows'
+  );
+  assert.doesNotMatch(
+    recoveryBlock,
+    /selected_case_rows as \([\s\S]*from selected_case_component_rows_raw scr[\s\S]*join selected_case_row_caps src/,
+    'the grouped recovery authority must not bypass the capped component-row hand-off'
+  );
 });
 
 test('finance adjustment draft creation freezes correction payout authority into a positive destination group', () => {

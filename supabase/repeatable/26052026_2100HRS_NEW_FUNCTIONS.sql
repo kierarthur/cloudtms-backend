@@ -41483,6 +41483,8 @@ DECLARE
   v_next_progress_counter_version bigint := NULL::bigint;
   v_session_ready boolean := false;
   v_draft_blocker_codes jsonb := '[]'::jsonb;
+  v_revalidation_candidate_id uuid := NULL::uuid;
+  v_revalidation_result jsonb := '{}'::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -41776,6 +41778,16 @@ BEGIN
       WHEN v_global_selection_action = 'SELECT_ALL_SECTION' THEN 'IMPLICIT_ALL'
       ELSE 'EXPLICIT_INCLUDE'
     END;
+
+    DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_global_selection_candidates;
+    CREATE TEMP TABLE _tmp_pay_wb_global_selection_candidates ON COMMIT DROP AS
+    SELECT DISTINCT preview_row.candidate_id
+    FROM public.banking_pay_workbench_preview_rows AS preview_row
+    WHERE preview_row.session_id = p_session_id
+      AND preview_row.session_version = v_session_row.version
+      AND lower(COALESCE(NULLIF(BTRIM(preview_row.section), ''), 'canonical_preview_lines')) = 'canonical_preview_lines'
+      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+      AND preview_row.candidate_id IS NOT NULL;
 
     IF v_global_selection_action = 'SELECT_ALL_SECTION' THEN
       DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_global_selection_rows;
@@ -42152,6 +42164,35 @@ BEGIN
     WHERE session_row.id = p_session_id
     RETURNING session_row.progress_counter_version
     INTO v_next_progress_counter_version;
+
+    FOR v_revalidation_candidate_id IN
+      SELECT changed_candidate.candidate_id
+      FROM pg_temp._tmp_pay_wb_global_selection_candidates AS changed_candidate
+    LOOP
+      v_revalidation_result := public.pay_workbench_revalidate_zero_retained_recovery_headroom_v1(
+        p_session_id,
+        v_revalidation_candidate_id
+      );
+    END LOOP;
+
+    SELECT session_row.progress_counter_version
+    INTO v_next_progress_counter_version
+    FROM public.banking_pay_workbench_sessions AS session_row
+    WHERE session_row.id = p_session_id;
+
+    SELECT COALESCE(jsonb_agg(to_jsonb(selected_row.id::text) ORDER BY selected_row.row_ordinal, selected_row.id), '[]'::jsonb),
+           COUNT(*)::integer
+    INTO v_selected_ids,
+         v_current_selected_count
+    FROM public.banking_pay_workbench_preview_rows AS selected_row
+    WHERE selected_row.session_id = p_session_id
+      AND selected_row.session_version = v_session_row.version
+      AND LOWER(BTRIM(COALESCE(selected_row.section, ''))) = 'canonical_preview_lines'
+      AND UPPER(BTRIM(COALESCE(selected_row.status, ''))) = 'READY'
+      AND COALESCE(selected_row.selected, false) IS TRUE
+      AND UPPER(BTRIM(COALESCE(selected_row.selection_state, ''))) = 'SELECTED';
+
+    v_server_selected_ids := COALESCE(v_selected_ids, '[]'::jsonb);
 
     v_audit_after_json := jsonb_build_object(
       'id', p_session_id::text,
@@ -42801,6 +42842,43 @@ BEGIN
   WHERE session_row.id = p_session_id
   RETURNING session_row.progress_counter_version
   INTO v_next_progress_counter_version;
+
+  FOR v_revalidation_candidate_id IN
+    SELECT DISTINCT preview_row.candidate_id
+    FROM public.banking_pay_workbench_preview_rows AS preview_row
+    JOIN pg_temp._tmp_pay_wb_update_actions AS changed_row
+      ON changed_row.id = preview_row.id
+    WHERE preview_row.session_id = p_session_id
+      AND preview_row.session_version = v_session_row.version
+      AND preview_row.candidate_id IS NOT NULL
+  LOOP
+    v_revalidation_result := public.pay_workbench_revalidate_zero_retained_recovery_headroom_v1(
+      p_session_id,
+      v_revalidation_candidate_id
+    );
+  END LOOP;
+
+  SELECT session_row.progress_counter_version
+  INTO v_next_progress_counter_version
+  FROM public.banking_pay_workbench_sessions AS session_row
+  WHERE session_row.id = p_session_id;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(selected_row.id::text) ORDER BY selected_row.row_ordinal, selected_row.id), '[]'::jsonb),
+         COUNT(*)::integer
+  INTO v_selected_ids,
+       v_current_selected_count
+  FROM public.banking_pay_workbench_preview_rows AS selected_row
+  WHERE selected_row.session_id = p_session_id
+    AND selected_row.session_version = v_session_row.version
+    AND LOWER(BTRIM(COALESCE(selected_row.section, ''))) = 'canonical_preview_lines'
+    AND UPPER(BTRIM(COALESCE(selected_row.status, ''))) = 'READY'
+    AND COALESCE(selected_row.selected, false) IS TRUE
+    AND UPPER(BTRIM(COALESCE(selected_row.selection_state, ''))) = 'SELECTED';
+
+  v_server_selected_ids := CASE
+    WHEN v_next_server_selected_ids_provided THEN COALESCE(v_selected_ids, '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
 
   v_audit_after_json := jsonb_build_object(
     'id', p_session_id::text,
@@ -54863,26 +54941,6 @@ $function$;
 REVOKE ALL ON FUNCTION public.pay_workbench_mark_candidate_dirty() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.pay_workbench_mark_candidate_dirty() TO service_role;
 
-
-
-CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_projection_contract()
-RETURNS jsonb
-LANGUAGE plpgsql
-IMMUTABLE
-SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_projection_version integer := 4;
-  v_hidden_recovery_template_projection_version integer := 1;
-  v_requires_hidden_recovery_templates boolean := true;
-BEGIN
-  RETURN jsonb_build_object(
-    'projection_version', v_projection_version,
-    'hidden_recovery_template_projection_version', v_hidden_recovery_template_projection_version,
-    'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates
-  );
-END;
-$function$;
 
 
 CREATE OR REPLACE FUNCTION public._pay_batch_item_source_reservation_amount_ex_vat(p_pay_batch_item_id uuid)

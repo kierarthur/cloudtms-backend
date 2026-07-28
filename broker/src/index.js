@@ -14821,7 +14821,11 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
     }
 
     let refreshNudge = null;
-    if (enqueuedCandidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+    // A user refresh must also wake work that was already queued by an earlier
+    // refresh whose browser/Worker continuation was interrupted.  Limiting the
+    // nudge to newly inserted jobs can strand an existing due job indefinitely
+    // because the idempotent enqueue correctly reports zero new rows.
+    if (candidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function') {
       try {
         refreshNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
           origin: 'USER_REQUESTED_FULL_WORKBENCH_REFRESH',

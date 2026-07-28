@@ -12,6 +12,10 @@ const workerSource = fs.readFileSync(
   path.resolve(__dirname, '../broker/src/index.js'),
   'utf8'
 );
+const selectionRepeatableSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql'),
+  'utf8'
+);
 
 test('repeatable follows the required SQL function naming and placement convention', () => {
   assert.match(path.basename(repeatablePath), /^\d{8}_\d{4}_[a-z0-9_]+\.sql$/);
@@ -37,7 +41,7 @@ test('revalidator uses final retained positive pay to promote stale no-headroom 
   assert.match(repeatableSql, /positive_by_channel/);
   assert.equal(
     (repeatableSql.match(/post_draft_overlay_applied[\s\S]{0,160}NOT IN \('true', 't', '1', 'yes', 'y', 'on'\)/g) || []).length,
-    3,
+    5,
     'aggregate, channel and repair paths must exclude frozen/post-draft overlays'
   );
   assert.match(repeatableSql, /v_repaired_authority_scope_count/);
@@ -62,6 +66,33 @@ test('revalidator uses final retained positive pay to promote stale no-headroom 
   assert.match(repeatableSql, /RETAINED_POSITIVE_PAY_PRESENT/);
 });
 
+test('revalidator caps every component recovery to the selected positive-pay headroom', () => {
+  assert.match(repeatableSql, /_tmp_pay_wb_ready_recovery_allocation/);
+  assert.match(repeatableSql, /v_selection_intent_mode[\s\S]*EXPLICIT_INCLUDE[\s\S]*IMPLICIT_ALL/);
+  assert.match(
+    repeatableSql,
+    /v_selection_intent_mode <> 'EXPLICIT_INCLUDE'[\s\S]*positive_row\.selected[\s\S]*selection_state/
+  );
+  assert.match(
+    repeatableSql,
+    /LEAST\([\s\S]*ranked_recovery\.nominal_due_amount_ex_vat[\s\S]*ranked_recovery\.positive_headroom_ex_vat - ranked_recovery\.prior_nominal_due_amount_ex_vat/
+  );
+  assert.match(repeatableSql, /'recoverable_this_pay_run_ex_vat', allocation\.recoverable_amount_ex_vat/);
+  assert.match(repeatableSql, /'recovery_group_recoverable_this_pay_run_ex_vat', allocation\.channel_recoverable_amount_ex_vat/);
+  assert.match(repeatableSql, /'nominal_due_amount_ex_vat', promotion\.nominal_due_amount_ex_vat/);
+  assert.match(repeatableSql, /'superseded_reason', 'RECOVERY_EXCEEDS_SELECTED_POSITIVE_HEADROOM'/);
+  assert.match(repeatableSql, /'nominal_due_amount_ex_vat', allocation\.nominal_due_amount_ex_vat/);
+  assert.equal(
+    (
+      repeatableSql.match(
+        /WHEN COALESCE\(\([\s\S]{0,900}preview_due_amount_ex_vat[\s\S]{0,900}WHEN COALESCE\((?:ready_row|blocked_row)\.row_json->>'amount_ex_vat'/g
+      ) || []
+    ).length,
+    2,
+    'both ready and blocked recovery allocation must prefer component due over a previously capped row amount'
+  );
+});
+
 test('zero retained headroom demotes recovery and clears draft selection', () => {
   assert.match(repeatableSql, /'readiness_state', 'BLOCKED_FOR_PAY'/);
   assert.match(repeatableSql, /'presentation_reason', 'NO_PAY_HEADROOM'/);
@@ -71,6 +102,38 @@ test('zero retained headroom demotes recovery and clears draft selection', () =>
   assert.match(repeatableSql, /'selection_allowed', false/);
   assert.match(repeatableSql, /selection_state = 'SUPERSEDED'/);
   assert.match(repeatableSql, /pay_workbench_session_recompute_progress_counters/);
+  assert.doesNotMatch(
+    repeatableSql,
+    /SELECT DISTINCT ON \([\s\S]{0,240}finance_case_id[\s\S]{0,240}line_type/,
+    'component recoveries must not collapse into one parent row for a finance case'
+  );
+  assert.match(repeatableSql, /ready_row\.id AS ready_preview_row_id/);
+  assert.match(repeatableSql, /ready_row\.row_key AS blocked_row_key/);
+  assert.match(repeatableSql, /recovery_row\.ready_preview_row_id = ready_recovery_row\.id/);
+});
+
+test('selection mutation immediately revalidates recovery headroom for every changed candidate', () => {
+  const functionStart = selectionRepeatableSql.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows');
+  const functionEnd = selectionRepeatableSql.indexOf('\nCREATE OR REPLACE FUNCTION ', functionStart + 1);
+  assert.ok(functionStart >= 0, 'selection RPC definition must exist');
+  const functionBody = selectionRepeatableSql.slice(
+    functionStart,
+    functionEnd > functionStart ? functionEnd : selectionRepeatableSql.length
+  );
+  assert.equal(
+    (functionBody.match(/pay_workbench_revalidate_zero_retained_recovery_headroom_v1\(/g) || []).length,
+    2,
+    'global and ordinary selection paths must both revalidate recovery headroom'
+  );
+  assert.match(functionBody, /_tmp_pay_wb_global_selection_rows/);
+  assert.match(functionBody, /_tmp_pay_wb_global_selection_candidates/);
+  assert.match(functionBody, /_tmp_pay_wb_update_actions/);
+  assert.equal(
+    (functionBody.match(/SELECT session_row\.progress_counter_version[\s\S]{0,180}INTO v_next_progress_counter_version/g) || []).length,
+    2,
+    'both selection paths must return the authoritative progress version produced by revalidation'
+  );
+  assert.match(functionBody, /v_server_selected_ids := COALESCE\(v_selected_ids, '\[\]'::jsonb\)/);
 });
 
 test('materialisation executor invokes revalidation before completing its terminal job', () => {
