@@ -1106,6 +1106,7 @@ test('root repeatable installs every changed nested Invoice V8 authority', () =>
     '27072026_1501_private_invoice_batch_issue_candidate_keys_v2.sql',
     '23072026_2207_private_invoice_generation_resolve_command_groups.sql',
     '23072026_2207_private_invoice_correction_validate_batch.sql',
+    '23072026_2207_private_invoice_operation_rollup_batch.sql',
     '27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
     '27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
     '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
