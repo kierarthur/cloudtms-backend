@@ -171,9 +171,23 @@ test('HealthRoster query emails contain only shifts requiring Temporary Staffing
   assert.match(catalogue, /email_days/);
   assert.match(catalogue, /weekly-query-evidence-v2/);
   assert.match(catalogue, /'days',a\.email_days,'comparisons',a\.email_comparisons/);
+  assert.match(
+    catalogue,
+    /validation-email-v2',\s*p\.timesheet_id,p\.row_json->>'week_ending_date',p\.email_comparisons::text/
+  );
 
   // Daily validation already creates one email action only from a mismatch row.
   assert.match(catalogue, /from mismatch m where m\.reason_code is not null/);
+  assert.match(
+    catalogue,
+    /'HEALTHROSTER_DAILY',m\.reason_code,m\.timesheet_id,m\.hr_request_id,[\s\S]*?m\.date_local,m\.start_time_local,m\.end_time_local,m\.hours_worked,m\.worked_minutes/
+  );
+
+  // The current evidence is part of each issue fingerprint. A changed shift
+  // therefore becomes a new issue; it cannot inherit the old issue's reminder
+  // history merely because the candidate, client or timesheet is unchanged.
+  assert.match(catalogue, /left join public\.hr_issue_emails e on e\.issue_fingerprint=public\._import_review_hash_v1/);
+  assert.match(catalogue, /from issues i left join public\.hr_issue_emails e on e\.issue_fingerprint=i\.issue_fingerprint/);
 
   // The final renderer independently fails closed if an older stored action
   // still contains matched comparison rows.
