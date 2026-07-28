@@ -489,6 +489,52 @@ test('source-build continuation attests correction-chain residual fingerprints w
   );
 });
 
+test('source-build continuation reuses only an exact durable first-page reconciliation attestation', () => {
+  const body = functionBody(
+    'pay_workbench_candidate_source_build_chunk',
+    null,
+    sourceBuildSql
+  );
+  const continuationStart = body.indexOf('IF COALESCE(v_first_source_page, true) IS NOT TRUE THEN');
+  const firstPageStart = body.indexOf('WITH seed_timesheet_ids AS (', continuationStart);
+
+  assert.ok(continuationStart >= 0, 'the continuation branch must be explicit');
+  assert.ok(firstPageStart > continuationStart, 'the first-page reconciliation branch must follow the continuation guard');
+
+  const continuationBlock = body.slice(continuationStart, firstPageStart);
+  assert.match(continuationBlock, /source_build_run_id[\s\S]*source_snapshot_run_id[\s\S]*session_signature/);
+  assert.match(continuationBlock, /source_change_seq[\s\S]*pay_channel_scope[\s\S]*refresh_scope_kind/);
+  assert.match(continuationBlock, /policy_x_authority_scope[\s\S]*PRE_DRAFT_LIVE_TRUTH/);
+  assert.match(continuationBlock, /PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_STALE/);
+  assert.match(continuationBlock, /PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_SCOPE_INVALID/);
+  assert.match(continuationBlock, /SOURCE_BUILD_CONTINUATION_DURABLE_ATTESTATION_REUSED/);
+  assert.match(continuationBlock, /old_marker_accepted_as_authority', true/);
+  assert.doesNotMatch(continuationBlock, /pay_sync_overpayments_from_preview\s*\(/);
+
+  const firstPageBlock = body.slice(firstPageStart);
+  assert.match(firstPageBlock, /pay_sync_overpayments_from_preview\s*\(/);
+  assert.match(firstPageBlock, /'sync_marker_reused', false/);
+});
+
+test('candidate source-build chunk remains service-role-only after repeatable deployment', () => {
+  assert.match(
+    sourceBuildSql,
+    /REVOKE ALL ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid, uuid, jsonb, jsonb, integer\) FROM PUBLIC;/i
+  );
+  assert.match(
+    sourceBuildSql,
+    /REVOKE ALL ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid, uuid, jsonb, jsonb, integer\) FROM anon;/i
+  );
+  assert.match(
+    sourceBuildSql,
+    /REVOKE ALL ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid, uuid, jsonb, jsonb, integer\) FROM authenticated;/i
+  );
+  assert.match(
+    sourceBuildSql,
+    /GRANT EXECUTE ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid, uuid, jsonb, jsonb, integer\) TO service_role;/i
+  );
+});
+
 test('active-reservation protection audit events are idempotent', () => {
   const body = functionBody('pay_sync_overpayments_from_preview', null, overpaymentSyncSql);
 
