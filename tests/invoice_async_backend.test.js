@@ -41,7 +41,7 @@ import {
 } from '../invoice-document-processor/src/receipt-contract.js';
 
 const V8_ACTOR_ID = '00000000-0000-4000-8000-000000000010';
-const V8_FUNCTION_MANIFEST = '0ddb5657e816d5126b44c3c0760acff9ea75e47d263bdf6f9d3af14d12402762';
+const V8_FUNCTION_MANIFEST = '7b6afc07613387a8dec0d1bfa5375344dc017f3369940ee987c5857b85ee7830';
 const V8_CURSOR_SECRET = 'test-session-secret-with-more-than-thirty-two-characters';
 
 function v8DatabaseContract(overrides = {}) {

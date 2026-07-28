@@ -4,7 +4,7 @@
   "generated_at_utc": "2026-07-28T17:32:11.731Z",
   "hash_input": "pg_get_functiondef(oid)",
   "hash_algorithm": "sha256",
-  "aggregate_sha256": "0ddb5657e816d5126b44c3c0760acff9ea75e47d263bdf6f9d3af14d12402762",
+  "aggregate_sha256": "7b6afc07613387a8dec0d1bfa5375344dc017f3369940ee987c5857b85ee7830",
   "security_gate": {
     "owner": "postgres",
     "private_public_execute": false,
@@ -26,7 +26,7 @@
     },
     {
       "identity": "private._invoice_batch_generate_candidate_rows_v2(jsonb,timestamptz)",
-      "definition_sha256": "dbd70bc499f46e55dc4263e065cc0ef0c390c95103366e1a6861e9d6c4dc011e"
+      "definition_sha256": "d00c11c62efb1b371598eabd093bb96c30a87c76b8b4a0fd669e4c3a38f16bbc"
     },
     {
       "identity": "private._invoice_batch_generate_classification_v2(boolean,text[],timestamptz)",
