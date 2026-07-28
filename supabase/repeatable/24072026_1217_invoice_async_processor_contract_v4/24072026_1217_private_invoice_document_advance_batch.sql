@@ -110,16 +110,6 @@ begin
     where c.id=s.id and not s.presentation_valid
     returning c.id,c.operation_id,c.status,c.phase,c.error_json
   ),
-  update_versions as materialized (
-    update public.invoice_document_versions v
-       set snapshot_json=s.snapshot_json_v5,
-           snapshot_hash=s.snapshot_hash_v5,
-           status='PLANNING',
-           error_json=null
-    from version_seed s
-    where v.id=s.version_id and s.presentation_valid
-    returning v.id,v.entity_type,v.entity_id,v.purpose,v.snapshot_json,v.snapshot_hash,v.template_version
-  ),
   linked as materialized (
     select s.*
     from version_seed s
@@ -241,12 +231,17 @@ begin
   ),
   update_manifests as materialized (
     update public.invoice_document_versions v
-       set manifest_json=mb.manifest_json,
+       set snapshot_json=l.snapshot_json_v5,
+           snapshot_hash=l.snapshot_hash_v5,
+           manifest_json=mb.manifest_json,
            manifest_hash=mb.manifest_hash,
            expected_page_count=mb.expected_page_count,
            status='WAITING_FOR_INPUTS',
            error_json=null
     from manifest_build mb
+    join linked l
+      on l.id=mb.chunk_id
+     and l.version_id=mb.document_version_id
     where v.id=mb.document_version_id
     returning v.id
   ),

@@ -797,6 +797,26 @@ test('Issue finalisation locks invoices deterministically and keeps delivery sep
   assert.match(issueCore, /'blocked_for_sending'/);
 });
 
+test('document manifest planning freezes snapshot and manifest in one version update', () => {
+  const documentAdvance = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch.sql',
+  );
+  const versionUpdates = documentAdvance.match(
+    /update public\.invoice_document_versions/gi,
+  ) || [];
+
+  assert.equal(versionUpdates.length, 1);
+  assert.doesNotMatch(documentAdvance, /update_versions as materialized/i);
+  assert.match(
+    documentAdvance,
+    /update_manifests as materialized[\s\S]*set snapshot_json=l\.snapshot_json_v5,[\s\S]*snapshot_hash=l\.snapshot_hash_v5,[\s\S]*manifest_json=mb\.manifest_json,[\s\S]*manifest_hash=mb\.manifest_hash,[\s\S]*status='WAITING_FOR_INPUTS'/i,
+  );
+  assert.match(
+    documentAdvance,
+    /from manifest_build mb[\s\S]*join linked l[\s\S]*l\.version_id=mb\.document_version_id/i,
+  );
+});
+
 test('committed TEST configuration keeps both async entry flags disabled', () => {
   const wrangler = read('wrangler.toml');
   const pipelineFlags = [
