@@ -472,6 +472,12 @@ test('failed-before-commit recovery proves no commit before reopening the review
 
 test('query email enqueue consolidates one outbox message per normalised recipient address', () => {
   const body = functionBody(emailSql, 'timesheet_query_email_enqueue_v1');
+  assert.match(body, /v_operation public\.import_apply_operations%rowtype/);
+  assert.match(body, /v_state\.status not in \('IN_REVIEW','BLOCKED','READY','APPLIED'\)/);
+  assert.match(body, /v_operation\.committed_at_utc is null/);
+  assert.match(body, /v_operation\.response_json->'post_commit_email_action_ids'/);
+  assert.match(body, /public\.import_review_action_outcomes o/);
+  assert.doesNotMatch(body, /v_state\.status<>'APPLIED'/);
   assert.match(body, /group by lower\(route->>'recipient_email'\)/);
   assert.match(body, /RECIPIENT_EMAIL:/);
   assert.match(body, /business_route_count/);

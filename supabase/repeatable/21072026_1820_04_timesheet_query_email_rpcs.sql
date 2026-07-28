@@ -38,7 +38,8 @@ create or replace function public.timesheet_query_email_enqueue_v1(
 )
 returns jsonb language plpgsql security definer set search_path to 'public','extensions','pg_temp' as $function$
 declare
-  v_state public.import_review_states%rowtype; v_ids text[]; v_db_ids text[]; v_group record; v_route jsonb;
+  v_state public.import_review_states%rowtype; v_operation public.import_apply_operations%rowtype;
+  v_ids text[]; v_db_ids text[]; v_group record; v_route jsonb;
   v_issue_ids uuid[]; v_issue_set_hash text; v_outbox_key text; v_delivery_id uuid; v_outbox_id uuid;
   v_html text; v_text text; v_subject text; v_results jsonb:='[]'; v_group_count integer:=0; v_reminder integer;
   v_new_delivery_count integer:=0; v_group_replay boolean; v_recipient_group_key text;
@@ -53,13 +54,29 @@ begin
   select coalesce(array_agg(distinct value order by value),array[]::text[]) into v_ids from jsonb_array_elements_text(coalesce(p_selected_action_ids,'[]'))value;
   if cardinality(v_ids)<>jsonb_array_length(coalesce(p_selected_action_ids,'[]')) then raise exception 'TIMESHEET_QUERY_ACTION_ID_DUPLICATE' using errcode='22023'; end if;
   select * into v_state from public.import_review_states where import_id=p_import_id for update;
-  if not found or v_state.status<>'APPLIED' or v_state.last_operation_id is distinct from p_operation_id then
+  select * into v_operation from public.import_apply_operations
+  where id=p_operation_id and import_id=p_import_id for update;
+  if v_state.import_id is null
+    or v_state.status not in ('IN_REVIEW','BLOCKED','READY','APPLIED')
+    or v_state.last_operation_id is distinct from p_operation_id
+    or v_operation.id is null
+    or v_operation.committed_at_utc is null
+    or v_operation.state not in ('SOURCE_COMMITTED_TSFIN_PENDING','COMPLETE') then
     raise exception 'TIMESHEET_QUERY_REVIEW_NOT_APPLIED' using errcode='55000'; end if;
-  select coalesce(array_agg(action_id order by action_id),array[]::text[]) into v_db_ids from public.import_review_decisions
-  where import_id=p_import_id and is_current and selected and action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER');
+  select coalesce(array_agg(value order by value),array[]::text[]) into v_db_ids
+  from jsonb_array_elements_text(coalesce(v_operation.response_json->'post_commit_email_action_ids','[]'::jsonb)) value;
   if v_ids is distinct from v_db_ids then raise exception 'TIMESHEET_QUERY_SELECTED_ACTION_SET_MISMATCH' using errcode='40001'; end if;
-  if exists(select 1 from unnest(v_ids)x left join public.import_review_decisions d on d.action_id=x and d.import_id=p_import_id
-    where d.action_id is null or not d.is_current or not d.selected or d.action_kind not in ('EMAIL_ISSUE','EMAIL_REMINDER')) then
+  if exists(
+    select 1
+    from unnest(v_ids) x
+    left join public.import_review_decisions d
+      on d.action_id=x and d.import_id=p_import_id
+    left join public.import_review_action_outcomes o
+      on o.action_id=x and o.import_id=p_import_id and o.operation_id=p_operation_id
+    where d.action_id is null or not d.selected
+      or d.action_kind not in ('EMAIL_ISSUE','EMAIL_REMINDER')
+      or o.action_id is null
+  ) then
     raise exception 'TIMESHEET_QUERY_ACTION_STALE' using errcode='40001'; end if;
 
   create temporary table pg_temp.query_email_issues on commit drop as
