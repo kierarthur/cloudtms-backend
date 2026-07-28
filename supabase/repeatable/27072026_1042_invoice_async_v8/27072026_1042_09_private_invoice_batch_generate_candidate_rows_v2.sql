@@ -367,6 +367,7 @@ begin
           where blocker_code is not null
             and blocker_code not in (
               'EARLY_GENERATION_NOT_ALLOWED',
+              'SEGMENT_ALREADY_LOCKED',
               'SOURCE_ALREADY_LOCKED',
               'SOURCE_ALREADY_INVOICED'
             )
@@ -390,8 +391,44 @@ begin
     where coalesce(lg.group_json->>'group_key','')<>''
       and coalesce(lg.group_json->>'blocker_code','') not in (
         'SOURCE_ALREADY_INVOICED',
+        'SEGMENT_ALREADY_LOCKED',
         'SOURCE_ALREADY_LOCKED',
         'EARLY_GENERATION_NOT_ALLOWED'
+      )
+      and coalesce(lg.group_json#>>'{blocker_detail,code}','') not in (
+        'SOURCE_ALREADY_INVOICED',
+        'SEGMENT_ALREADY_LOCKED',
+        'SOURCE_ALREADY_LOCKED'
+      )
+      and not exists (
+        select 1
+        from jsonb_array_elements_text(
+          case
+            when jsonb_typeof(lg.group_json->'blocker_codes')='array'
+              then lg.group_json->'blocker_codes'
+            else '[]'::jsonb
+          end
+        ) blocked_code(value)
+        where blocked_code.value in (
+          'SOURCE_ALREADY_INVOICED',
+          'SEGMENT_ALREADY_LOCKED',
+          'SOURCE_ALREADY_LOCKED'
+        )
+      )
+      and not exists (
+        select 1
+        from jsonb_array_elements(
+          case
+            when jsonb_typeof(lg.group_json#>'{blocker_detail,sources}')='array'
+              then lg.group_json#>'{blocker_detail,sources}'
+            else '[]'::jsonb
+          end
+        ) blocked_source(value)
+        where blocked_source.value->>'code' in (
+          'SOURCE_ALREADY_INVOICED',
+          'SEGMENT_ALREADY_LOCKED',
+          'SOURCE_ALREADY_LOCKED'
+        )
       )
   ),
   stale_invoice_timesheets as materialized (
