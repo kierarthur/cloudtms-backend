@@ -455,7 +455,7 @@ begin
   v_result:=v_result||coalesce(v_part,'[]'::jsonb);
 
   -- COMMIT: revalidate immediately, then headers, lines, locks, documents and audit set-wise.
-  with claim_ids as materialized (
+  with recursive claim_ids as materialized (
     select (x->>'chunk_id')::uuid chunk_id
     from jsonb_array_elements(p_claims) x where x->>'phase'='COMMIT'
   ),
@@ -815,6 +815,45 @@ begin
     select s.*,v.vat_rate
     from source_rows_base s
     join vat_policy v on v.source_member_key=s.source_member_key and v.valid
+  ),
+  source_timesheet_ancestry(
+    planned_invoice_id,
+    root_timesheet_id,
+    source_timesheet_id,
+    ancestry_path,
+    ancestry_depth
+  ) as materialized (
+    select distinct s.planned_invoice_id,s.timesheet_id,s.timesheet_id,
+      array[s.timesheet_id]::uuid[],0
+    from source_rows s
+    union all
+    select a.planned_invoice_id,a.root_timesheet_id,t.parent_timesheet_id,
+      a.ancestry_path||t.parent_timesheet_id,a.ancestry_depth+1
+    from source_timesheet_ancestry a
+    join public.timesheets t
+      on t.timesheet_id=a.source_timesheet_id
+     and t.is_current
+    where t.parent_timesheet_id is not null
+      and not(t.parent_timesheet_id=any(a.ancestry_path))
+      and a.ancestry_depth<32
+  ),
+  adjustment_segment_refs as materialized (
+    select distinct s.planned_invoice_id,s.timesheet_id root_timesheet_id,
+      nullif(btrim(seg.value->>'ref_num'),'') ref_num,
+      case when pg_input_is_valid(
+          seg.value->>'start_utc','timestamp with time zone')
+        then(seg.value->>'start_utc')::timestamptz end start_utc,
+      case when pg_input_is_valid(
+          seg.value->>'end_utc','timestamp with time zone')
+        then(seg.value->>'end_utc')::timestamptz end end_utc,
+      lower(coalesce(seg.value->>'is_reversal','false')) in(
+        'true','t','1','yes') is_reversal
+    from source_rows s
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(s.invoice_breakdown_json->'segments')='array'
+        then s.invoice_breakdown_json->'segments' else '[]'::jsonb end)
+      seg(value)
+    where s.basis::text='NHSP_ADJUSTMENT'
   ),
   segment_lock_targets_pre as materialized (
     select coalesce(jsonb_agg(jsonb_build_object(
@@ -1336,7 +1375,8 @@ begin
   ),
   source_segments as materialized (
     select distinct s.planned_invoice_id,
-      substr(x.value->>'segment_id',6)::uuid shift_id
+      substr(x.value->>'segment_id',6)::uuid shift_id,
+      false is_reversal
     from source_rows s
     cross join lateral jsonb_array_elements(
       case when jsonb_typeof(s.invoice_breakdown_json->'segments')='array'
@@ -1349,10 +1389,35 @@ begin
         or (upper(coalesce(x.value->>'source_system',''))='HEALTHROSTER'
           and coalesce((s.payload_json#>>'{plan,settings_snapshot,attach_policy,requires_hr}')::boolean,false)
           and coalesce((s.payload_json#>>'{plan,settings_snapshot,attach_policy,hr_attach_to_invoice}')::boolean,true)))
+    union
+    select distinct r.planned_invoice_id,n.id shift_id,r.is_reversal
+    from adjustment_segment_refs r
+    join source_timesheet_ancestry a
+      on a.planned_invoice_id=r.planned_invoice_id
+     and a.root_timesheet_id=r.root_timesheet_id
+     and a.ancestry_depth>0
+    join public.nhsp_shifts n
+      on n.timesheet_id=a.source_timesheet_id
+     and n.latest_import_id is not null
+     and n.external_row_key is not null
+     and (
+       (r.ref_num is not null
+         and btrim(coalesce(n.ref_num,''))=r.ref_num)
+       or (
+         r.ref_num is null
+         and r.start_utc is not null
+         and r.end_utc is not null
+         and n.start_utc=r.start_utc
+         and n.end_utc=r.end_utc
+       )
+     )
   ),
   source_imports as materialized (
     select s.planned_invoice_id,upper(coalesce(n.source_system::text,'UNKNOWN')) source_system,
-      n.latest_import_id import_id,jsonb_agg(distinct n.external_row_key) row_keys
+      n.latest_import_id import_id,
+      jsonb_agg(distinct n.external_row_key) row_keys,
+      coalesce(jsonb_agg(distinct n.external_row_key)
+        filter(where s.is_reversal),'[]'::jsonb) reversal_row_keys
     from source_segments s join public.nhsp_shifts n on n.id=s.shift_id
     where n.latest_import_id is not null and n.external_row_key is not null
     group by s.planned_invoice_id,upper(coalesce(n.source_system::text,'UNKNOWN')),n.latest_import_id
@@ -1363,7 +1428,13 @@ begin
     select g.planned_invoice_id,g.source_system,g.import_id,
       case when jsonb_typeof(i.parse_summary_json->'header_columns')='array'
         then i.parse_summary_json->'header_columns' else '[]'::jsonb end,
-      coalesce((select jsonb_agg(r.payload_json order by r.id)
+      coalesce((select jsonb_agg(
+          r.payload_json
+            ||case when r.external_row_key in(
+                select jsonb_array_elements_text(g.reversal_row_keys))
+              then jsonb_build_object('reversal_state','REVERSED')
+              else '{}'::jsonb end
+          order by r.id)
         from public.hr_rows r where r.import_id=g.import_id
           and r.external_row_key in(select jsonb_array_elements_text(g.row_keys))),
         '[]'::jsonb)

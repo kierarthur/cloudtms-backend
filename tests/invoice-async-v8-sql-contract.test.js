@@ -208,6 +208,18 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
     /tf\.basis::text in\('NHSP','NHSP_ADJUSTMENT'\)[\s\S]*then 'NHSP'/i,
   );
   assert.match(
+    generationAdvance,
+    /with recursive claim_ids as materialized[\s\S]*source_timesheet_ancestry[\s\S]*parent_timesheet_id[\s\S]*ancestry_depth<32/i,
+  );
+  assert.match(
+    generationAdvance,
+    /adjustment_segment_refs[\s\S]*basis::text='NHSP_ADJUSTMENT'[\s\S]*btrim\(coalesce\(n\.ref_num,''\)\)=r\.ref_num/i,
+  );
+  assert.match(
+    generationAdvance,
+    /reversal_row_keys[\s\S]*jsonb_build_object\('reversal_state','REVERSED'\)/i,
+  );
+  assert.match(
     issueValidation,
     /import_source_requirements as materialized[\s\S]*invoice_hr_source_rows[\s\S]*jsonb_array_length\(source\.rows_json\)>0/i,
   );
@@ -1025,6 +1037,26 @@ test('presentation authority repeatable defers safely instead of failing CI whil
   );
 });
 
+test('generation resolves NHSP financials to the SELF_BILL invoice stream without losing their source family', () => {
+  const resolver = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+    + '23072026_2207_private_invoice_generation_resolve_command_groups.sql',
+  );
+
+  assert.match(
+    resolver,
+    /when upper\(coalesce\(tf\.basis::text,''\)\) in\(\s*'NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL',\s*'HEALTHROSTER_ADJUSTMENT'\s*\) then 'SELF_BILL'/s,
+  );
+  assert.doesNotMatch(
+    resolver,
+    /when upper\(coalesce\(tf\.basis::text,''\)\) like 'NHSP%' then 'NHSP'\s*when upper\(coalesce\(tf\.basis::text,''\)\) like 'HEALTHROSTER%' then 'HEALTHROSTER'\s*when coalesce\(parent_contract\.self_bill,contract\.self_bill,false\) then 'SELF_BILL'\s*else 'NORMAL'\s*end invoice_stream/s,
+  );
+  assert.match(
+    resolver,
+    /when upper\(coalesce\(tf\.basis::text,''\)\) like 'NHSP%' then 'NHSP'[\s\S]*end resolved_source_type/,
+  );
+});
+
 test('root repeatable installs every changed nested Invoice V8 authority', () => {
   const runtimeAuthority = read(
     'supabase/repeatable/28072026_1609_invoice_async_v8_runtime_authority.sql',
@@ -1035,6 +1067,7 @@ test('root repeatable installs every changed nested Invoice V8 authority', () =>
     '27072026_1806_private_invoice_batch_issue_classification_v2.sql',
     '27072026_1501_private_invoice_batch_generate_candidate_keys_v2.sql',
     '27072026_1501_private_invoice_batch_issue_candidate_keys_v2.sql',
+    '23072026_2207_private_invoice_generation_resolve_command_groups.sql',
     '27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
     '27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
     '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',

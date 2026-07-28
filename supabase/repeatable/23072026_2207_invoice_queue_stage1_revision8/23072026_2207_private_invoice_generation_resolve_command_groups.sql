@@ -120,9 +120,12 @@ base_sources as materialized (
     coalesce(parent_ts.contract_id,parent_cw.contract_id) parent_contract_id,
     coalesce(parent_contract.self_bill,contract.self_bill,false) self_bill,
     case
-      when upper(coalesce(tf.basis::text,'')) like 'NHSP%' then 'NHSP'
-      when upper(coalesce(tf.basis::text,'')) like 'HEALTHROSTER%' then 'HEALTHROSTER'
-      when coalesce(parent_contract.self_bill,contract.self_bill,false) then 'SELF_BILL'
+      when upper(coalesce(tf.basis::text,'')) in(
+        'NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL',
+        'HEALTHROSTER_ADJUSTMENT'
+      ) then 'SELF_BILL'
+      when coalesce(parent_contract.self_bill,contract.self_bill,false)
+        then 'SELF_BILL'
       else 'NORMAL'
     end invoice_stream,
     case
