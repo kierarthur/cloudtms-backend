@@ -149,14 +149,30 @@ begin
         when 'STATUS_WEEK' then array['status_code','week_ending_date']::text[]
         when 'STATUS_WEEK_CLIENT'
           then array['client_id','status_code','week_ending_date']::text[]
+        when 'DIMENSION_GROUP'
+          then selector.supplied_fields
       end expected_fields
     ) expected
     where selector.selector_type not in (
       'ROW','WEEK','CLIENT','CANDIDATE','STATUS','WEEK_CLIENT',
-      'WEEK_CLIENT_CANDIDATE','STATUS_WEEK','STATUS_WEEK_CLIENT'
+      'WEEK_CLIENT_CANDIDATE','STATUS_WEEK','STATUS_WEEK_CLIENT',
+      'DIMENSION_GROUP'
     )
        or expected.expected_fields is null
        or selector.supplied_fields is distinct from expected.expected_fields
+       or (
+         selector.selector_type = 'DIMENSION_GROUP'
+         and (
+           cardinality(selector.supplied_fields) = 0
+           or exists (
+             select 1
+             from unnest(selector.supplied_fields) supplied_field
+             where supplied_field not in (
+               'week_ending_date','client_id','candidate_id','status_code'
+             )
+           )
+         )
+       )
        or exists (
          select 1
          from jsonb_object_keys(raw.rule->'selector') key_name
@@ -183,10 +199,26 @@ begin
          )
        )
        or (
+         selector.selector_type = 'DIMENSION_GROUP'
+         and 'week_ending_date' = any(selector.supplied_fields)
+         and not pg_input_is_valid(
+           btrim(coalesce(raw.rule#>>'{selector,week_ending_date}','')),
+           'date'
+         )
+       )
+       or (
          selector.selector_type in (
            'CLIENT','WEEK_CLIENT','WEEK_CLIENT_CANDIDATE',
            'STATUS_WEEK_CLIENT'
          )
+         and not pg_input_is_valid(
+           btrim(coalesce(raw.rule#>>'{selector,client_id}','')),
+           'uuid'
+         )
+       )
+       or (
+         selector.selector_type = 'DIMENSION_GROUP'
+         and 'client_id' = any(selector.supplied_fields)
          and not pg_input_is_valid(
            btrim(coalesce(raw.rule#>>'{selector,client_id}','')),
            'uuid'
@@ -200,7 +232,23 @@ begin
          )
        )
        or (
+         selector.selector_type = 'DIMENSION_GROUP'
+         and 'candidate_id' = any(selector.supplied_fields)
+         and not pg_input_is_valid(
+           btrim(coalesce(raw.rule#>>'{selector,candidate_id}','')),
+           'uuid'
+         )
+       )
+       or (
          selector.selector_type in ('STATUS','STATUS_WEEK','STATUS_WEEK_CLIENT')
+         and (
+           btrim(coalesce(raw.rule#>>'{selector,status_code}','')) = ''
+           or length(btrim(raw.rule#>>'{selector,status_code}')) > 120
+         )
+       )
+       or (
+         selector.selector_type = 'DIMENSION_GROUP'
+         and 'status_code' = any(selector.supplied_fields)
          and (
            btrim(coalesce(raw.rule#>>'{selector,status_code}','')) = ''
            or length(btrim(raw.rule#>>'{selector,status_code}')) > 120

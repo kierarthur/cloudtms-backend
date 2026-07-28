@@ -604,7 +604,7 @@ begin
 
   if v_query ? 'group_selectors' then
     if jsonb_typeof(v_query->'group_selectors') is distinct from 'array'
-       or jsonb_array_length(v_query->'group_selectors') > 300 then
+       or jsonb_array_length(v_query->'group_selectors') > 400 then
       raise exception using
         errcode = '22023',
         message = 'INVOICE_BATCH_QUERY_MODE_FIELD_INVALID';

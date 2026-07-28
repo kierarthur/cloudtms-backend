@@ -1,3 +1,20 @@
+\set ON_ERROR_STOP on
+
+select exists (
+  select 1
+  from public.invoice_operations
+  where status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+) as invoice_presentation_active_work
+\gset
+
+\if :invoice_presentation_active_work
+do $deferred$
+begin
+  raise notice 'INVOICE_PRESENTATION_SNAPSHOT_DEFERRED_ACTIVE_WORK';
+end;
+$deferred$;
+\else
+
 create or replace function private._invoice_presentation_snapshot_batch(
     p_requests jsonb,
     p_now_utc timestamptz default null
@@ -126,10 +143,13 @@ begin
   ),
   invoice_line_base as materialized (
     select il.*,
+           coalesce(nullif(btrim(vs.candidate_name),''),nullif(btrim(t.occupant_key_norm),'')) worker_name,
            row_number() over(partition by il.invoice_id order by il.created_at,il.id)::integer base_display_order,
            case when pg_input_is_valid(nullif(il.meta_json->>'quantity',''),'numeric') then nullif(il.meta_json->>'quantity','')::numeric end meta_quantity,
            case when pg_input_is_valid(nullif(il.meta_json->>'units',''),'numeric') then nullif(il.meta_json->>'units','')::numeric end meta_units
     from public.invoice_lines il
+    left join public.timesheets t on t.timesheet_id=il.timesheet_id and t.is_current
+    left join public.v_timesheets_summary_base vs on vs.timesheet_id=il.timesheet_id
     where il.invoice_id in(select invoice_id from requested_invoices)
   ),
   invoice_line_component_raw as materialized (
@@ -144,7 +164,7 @@ begin
            round(coalesce(b.total_charge_ex_vat,0),2) line_net,
            round(coalesce(b.vat_amount,0),2) line_vat,
            coalesce(b.vat_rate_pct,0) vat_rate,
-           b.source_key,b.id source_invoice_line_id
+           b.source_key,b.id source_invoice_line_id,b.worker_name
     from invoice_line_base b
     cross join lateral (values
       ('DAY','Day',1,coalesce(b.hours_day,0),coalesce(b.charge_day,0)),
@@ -178,7 +198,7 @@ begin
              + coalesce(b.hours_sun,0)*coalesce(b.charge_sun,0)
              + coalesce(b.hours_bh,0)*coalesce(b.charge_bh,0)
            ),4),
-           round(coalesce(b.total_charge_ex_vat,0),2),round(coalesce(b.vat_amount,0),2),coalesce(b.vat_rate_pct,0),b.source_key,b.id
+           round(coalesce(b.total_charge_ex_vat,0),2),round(coalesce(b.vat_amount,0),2),coalesce(b.vat_rate_pct,0),b.source_key,b.id,b.worker_name
     from invoice_line_base b
     where abs(coalesce(b.total_charge_ex_vat,0) - (
       coalesce(b.hours_day,0)*coalesce(b.charge_day,0)
@@ -209,7 +229,7 @@ begin
            q.quantity_raw quantity,
            case when q.quantity_raw<>0 then round(q.net_amount/q.quantity_raw,4) else q.net_amount end unit_price,
            q.net_amount,q.vat_rate,q.vat_amount,round(q.net_amount+q.vat_amount,2) gross_amount,
-           q.source_key,q.source_invoice_line_id
+           q.source_key,q.source_invoice_line_id,q.worker_name
     from (
       select r.*,
         case when r.component_no=r.component_count
@@ -228,6 +248,7 @@ begin
              'source_invoice_line_id',c.source_invoice_line_id,
              'source_key',coalesce(c.source_key,c.source_invoice_line_id::text),
              'description',c.description,
+             'worker',c.worker_name,
              'reference',c.reference,
              'unit',c.unit,
              'quantity',c.quantity::text,
@@ -237,7 +258,7 @@ begin
              'vat_amount',c.vat_amount::text,
              'gross_amount',c.gross_amount::text,
              'display_order',c.base_display_order
-           ) order by c.created_at,c.id) lines,
+           ) order by c.created_at,c.id,c.base_display_order) lines,
            round(sum(c.net_amount),2) line_net,
            round(sum(c.vat_amount),2) line_vat,
            round(sum(c.gross_amount),2) line_gross
@@ -384,13 +405,21 @@ begin
     from invoice_timesheet_rows group by invoice_id
   ),
   support_agg as materialized (
-    select s.invoice_id,
+    select source_group.invoice_id,
       jsonb_agg(jsonb_build_object(
-        'source_system',s.source_system,'import_id',s.import_id,
+        'source_system',source_group.source_system,
+        'import_id',(
+          select s.import_id
+          from public.invoice_hr_source_rows s
+          where s.invoice_id=source_group.invoice_id
+            and upper(s.source_system)=upper(source_group.source_system)
+          order by s.import_id
+          limit 1
+        ),
         'render_model',jsonb_build_object(
-          'schema_version',case when upper(s.source_system)='NHSP' then 'NHSP_PRESENTATION_V1' else 'HEALTHROSTER_PRESENTATION_V1' end,
+          'schema_version',case when upper(source_group.source_system)='NHSP' then 'NHSP_PRESENTATION_V1' else 'HEALTHROSTER_PRESENTATION_V1' end,
           'rows',coalesce((select jsonb_agg(
-            case when upper(s.source_system)='NHSP' then jsonb_build_object(
+            case when upper(source_group.source_system)='NHSP' then jsonb_build_object(
               'worker',coalesce(r.value->>'worker',r.value->>'candidate',r.value->>'name'),
               'nhsp_shift_id',coalesce(r.value->>'nhsp_shift_id',r.value->>'shift_id'),
               'booking_reference',coalesce(r.value->>'booking_reference',r.value->>'reference'),
@@ -399,7 +428,11 @@ begin
               'shift_times',coalesce(r.value->>'shift_times',concat_ws(' - ',nullif(r.value->>'start',''),nullif(r.value->>'end',''))),
               'hours_units',coalesce(r.value->>'hours_units',r.value->>'hours',r.value->>'units'),
               'source_identity',jsonb_build_object('source_system',s.source_system,'import_id',s.import_id,'row_no',r.ordinality),
-              'validation_state',coalesce(r.value->>'validation_state',r.value->>'status'))
+              'validation_state',coalesce(r.value->>'validation_state',r.value->>'status'),
+              'reversal_state',case
+                when upper(coalesce(r.value->>'reversal_state',r.value->>'status','')) in ('REVERSED','REVERSAL')
+                  or coalesce(r.value->>'hours_units',r.value->>'hours',r.value->>'units','') ~ '^-[0-9]'
+                then 'REVERSED' else null end)
             else jsonb_build_object(
               'worker',coalesce(r.value->>'worker',r.value->>'candidate',r.value->>'name'),
               'assignment',coalesce(r.value->>'assignment',r.value->>'role',r.value->>'job_title'),
@@ -410,14 +443,40 @@ begin
               'reference',coalesce(r.value->>'reference',r.value->>'booking_reference',r.value->>'nhsp_shift_id'),
               'units_hours',coalesce(r.value->>'units_hours',r.value->>'hours',r.value->>'units'),
               'validation_state',coalesce(r.value->>'validation_state',r.value->>'status'),
-              'source_identity',jsonb_build_object('source_system',s.source_system,'import_id',s.import_id,'row_no',r.ordinality)) end
-            order by r.ordinality)
-            from jsonb_array_elements(case when jsonb_typeof(s.rows_json)='array' then s.rows_json else '[]'::jsonb end) with ordinality r(value,ordinality)), '[]'::jsonb),
-          'source_identity',jsonb_build_object('source_system',s.source_system,'import_id',s.import_id))
-       ) order by s.source_system,s.import_id) supporting_sources
-    from public.invoice_hr_source_rows s
-    where s.invoice_id in(select invoice_id from requested_invoices)
-    group by s.invoice_id
+              'source_identity',jsonb_build_object('source_system',s.source_system,'import_id',s.import_id,'row_no',r.ordinality),
+              'reversal_state',case
+                when upper(coalesce(r.value->>'reversal_state',r.value->>'status','')) in ('REVERSED','REVERSAL')
+                  or coalesce(r.value->>'units_hours',r.value->>'hours',r.value->>'units','') ~ '^-[0-9]'
+                then 'REVERSED' else null end) end
+            order by
+              coalesce(r.value->>'shift_date',r.value->>'date',''),
+              coalesce(r.value->>'start',r.value->>'worked_start',''),
+              s.import_id,
+              r.ordinality)
+            from public.invoice_hr_source_rows s
+            cross join lateral jsonb_array_elements(
+              case when jsonb_typeof(s.rows_json)='array' then s.rows_json else '[]'::jsonb end
+            ) with ordinality r(value,ordinality)
+            where s.invoice_id=source_group.invoice_id
+              and upper(s.source_system)=upper(source_group.source_system)), '[]'::jsonb),
+          'source_identity',jsonb_build_object(
+            'source_system',source_group.source_system,
+            'import_ids',coalesce((
+              select jsonb_agg(to_jsonb(import_id) order by import_id)
+              from (
+                select distinct s.import_id
+                from public.invoice_hr_source_rows s
+                where s.invoice_id=source_group.invoice_id
+                  and upper(s.source_system)=upper(source_group.source_system)
+              ) imports
+            ),'[]'::jsonb)))
+       ) order by source_group.source_system) supporting_sources
+    from (
+      select distinct s.invoice_id,upper(s.source_system) source_system
+      from public.invoice_hr_source_rows s
+      where s.invoice_id in(select invoice_id from requested_invoices)
+    ) source_group
+    group by source_group.invoice_id
   ),
   supporting_manifest_agg as materialized (
     select il.invoice_id,
@@ -573,7 +632,15 @@ begin
             case when pg_input_is_valid(nullif(i.header_snapshot_json->>'payment_terms_days',''),'integer')
               then (i.header_snapshot_json->>'payment_terms_days')::integer end,
             cl.payment_terms_days,30),
-          'terms_text',i.header_snapshot_json->>'payment_terms_text',
+          'terms_text',coalesce(
+            nullif(i.header_snapshot_json->>'payment_terms_text',''),
+            coalesce(
+              case when pg_input_is_valid(nullif(i.header_snapshot_json->>'payment_terms_days',''),'integer')
+                then (i.header_snapshot_json->>'payment_terms_days')::integer end,
+              cl.payment_terms_days,
+              30
+            )::text || ' days from invoice date'
+          ),
           'due_date_basis','ISSUE_DATE',
           'instructions',coalesce(
             i.header_snapshot_json->>'payment_instructions',
@@ -805,3 +872,5 @@ revoke all on function private._invoice_presentation_snapshot_batch(jsonb,timest
   from public,anon,authenticated;
 grant execute on function private._invoice_presentation_snapshot_batch(jsonb,timestamptz)
   to service_role;
+
+\endif

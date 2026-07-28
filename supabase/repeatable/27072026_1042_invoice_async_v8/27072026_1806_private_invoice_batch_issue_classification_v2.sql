@@ -214,23 +214,7 @@ candidate_state as materialized (
       false
     ) blocked_for_sending,
     (
-      case
-        when classified.generated_state='STALE'
-          then jsonb_build_array('STALE')
-        else '[]'::jsonb
-      end
-      ||case
-        when classified.generated_state='FAILED'
-          then jsonb_build_array('FAILED_RENDER')
-        else '[]'::jsonb
-      end
-      ||case
-        when classified.generated_state='ACTIVE'
-          then jsonb_build_array('GENERATING')
-        else '[]'::jsonb
-      end
-      ||classified.hard_blocker_codes
-      ||classified.document_dependency_codes
+      classified.hard_blocker_codes
     ) issue_blocker_codes,
     (
       case
@@ -242,6 +226,7 @@ candidate_state as materialized (
           then jsonb_build_array('BLOCKED_FOR_SENDING')
         else '[]'::jsonb
       end
+      ||classified.document_dependency_codes
       ||classified.warning_codes
     ) informational_codes
   from classified
@@ -250,32 +235,20 @@ final_rows as materialized (
   select
     state.*,
     (
-      state.generated_state='FRESH'
-      and state.can_issue_only
+      state.can_issue_only
       and jsonb_array_length(state.hard_blocker_codes)=0
-      and jsonb_array_length(state.document_dependency_codes)=0
       and state.current_issue_operation_id is null
     ) selectable,
     case
       when state.current_issue_operation_id is not null
         then 'IN_PROGRESS'
-      when state.generated_state='STALE'
-        then 'STALE'
-      when state.generated_state='FAILED'
-        then 'FAILED'
-      when state.generated_state='ACTIVE'
-        then 'IN_PROGRESS'
       when not state.can_issue_only
         or jsonb_array_length(state.hard_blocker_codes)>0
-        or jsonb_array_length(
-          state.document_dependency_codes
-        )>0
         then 'BLOCKED'
       else 'READY'
     end row_status
   from candidate_state state
-  where state.generated_state<>'NEVER_GENERATED'
-    and state.status::text in('DRAFT','ON_HOLD')
+  where state.status::text in('DRAFT','ON_HOLD')
     and nullif(state.invoice_no,'') is not null
 )
 select

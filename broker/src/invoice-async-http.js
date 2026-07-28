@@ -423,7 +423,8 @@ function normaliseInvoiceBatchSelectionRules(source) {
     WEEK_CLIENT: ['week_ending_date', 'client_id'],
     WEEK_CLIENT_CANDIDATE: ['week_ending_date', 'client_id', 'candidate_id'],
     STATUS_WEEK: ['status_code', 'week_ending_date'],
-    STATUS_WEEK_CLIENT: ['status_code', 'week_ending_date', 'client_id']
+    STATUS_WEEK_CLIENT: ['status_code', 'week_ending_date', 'client_id'],
+    DIMENSION_GROUP: null
   };
   let previousSequence = 0;
   const seenSequences = new Set();
@@ -454,8 +455,16 @@ function normaliseInvoiceBatchSelectionRules(source) {
       throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_UNKNOWN_FIELD');
     }
     const type = String(selector.type || '').trim().toUpperCase();
-    const requiredFields = requiredFieldsByType[type];
-    if (!requiredFields) throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
+    let requiredFields = requiredFieldsByType[type];
+    if (type === 'DIMENSION_GROUP') {
+      const allowedDimensions = ['week_ending_date', 'client_id', 'candidate_id', 'status_code'];
+      requiredFields = allowedDimensions.filter(key =>
+        selector[key] !== undefined && selector[key] !== null && selector[key] !== ''
+      );
+      if (!requiredFields.length) throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
+    } else if (!requiredFields) {
+      throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
+    }
     const suppliedFields = Object.keys(selector).filter(key => key !== 'type' && selector[key] !== null && selector[key] !== '');
     if (requiredFields.some(key => !suppliedFields.includes(key)) || suppliedFields.some(key => !requiredFields.includes(key))) {
       throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
@@ -545,7 +554,7 @@ function normaliseInvoiceBatchSnapshot(value, action, options = {}) {
 
 function normaliseInvoiceBatchGroupSelectors(value) {
   const selectors = value === undefined ? [] : value;
-  if (!Array.isArray(selectors) || selectors.length > 300) {
+  if (!Array.isArray(selectors) || selectors.length > 400) {
     throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_FIELD_INVALID');
   }
   const normalized = selectors.map(selector => normaliseInvoiceBatchSelectionRules({

@@ -142,6 +142,7 @@ export function validateFrozenInvoicePresentationModel(model, options = {}) {
   requireTextArray(model.supplier.registered_address, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING', 'supplier.registered_address');
   requireText(model.customer.legal_name, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');
   requireTextArray(model.customer.billing_address, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING', 'customer.billing_address');
+  requireText(model.payment.terms_text, 'INVOICE_PRESENTATION_PAYMENT_TERMS_REQUIRED');
 
   if (purpose === 'FINAL_ISSUE') {
     requireText(model.invoice_number, 'INVOICE_PRESENTATION_REQUIRED_FIELD_MISSING');

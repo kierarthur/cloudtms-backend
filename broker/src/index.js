@@ -36614,11 +36614,22 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         || ['PAY_EXECUTE_BANK_TRANSFER_SCOPE_SEED', 'PAY_BATCH_AUTH_START', 'HANDLEBANKINGPAYBATCHEXECUTEPAYMENT'].includes(proofSource);
       const noBankPaymentExecution = readBooleanLike(source.no_bank_payment_execution ?? source.noBankPaymentExecution, false);
       const allowExplicitZeroScopes = readBooleanLike(source.allow_explicit_zero_no_bank_scopes ?? source.allowExplicitZeroNoBankScopes, false);
+      const scopedNoTransferExecution = readBooleanLike(source.scoped_no_transfer_execution ?? source.scopedNoTransferExecution, false);
       const missingCount = nonNegativeIntegerOrNull(
         source.missing_explicit_paye_input_count,
         source.current_missing_explicit_paye_input_count,
         source.authorised_missing_explicit_paye_input_count,
         source.missingExplicitPayeInputCount
+      );
+      const globalMissingCount = nonNegativeIntegerOrNull(
+        source.global_missing_explicit_paye_input_count,
+        source.current_global_missing_explicit_paye_input_count,
+        missingCount
+      );
+      const scopedMissingCount = nonNegativeIntegerOrNull(
+        source.scoped_missing_explicit_paye_input_count,
+        source.current_scoped_missing_explicit_paye_input_count,
+        missingCount
       );
       const scopedZeroCount = nonNegativeIntegerOrNull(
         source.scoped_explicit_zero_count,
@@ -36636,10 +36647,25 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         source.positiveBankPaymentCount
       );
       const globalZeroCount = nonNegativeIntegerOrNull(
+        source.global_explicit_zero_count,
+        source.current_global_explicit_zero_count,
         source.explicit_zero_count,
         source.current_explicit_zero_count,
         source.authorised_explicit_zero_count,
         scopedZeroCount
+      );
+      const globalPositiveCount = nonNegativeIntegerOrNull(
+        source.global_positive_bank_payment_count,
+        source.current_global_positive_bank_payment_count,
+        scopedPositiveCount
+      );
+      const globalInvalidCount = nonNegativeIntegerOrNull(
+        source.global_invalid_payment_row_count,
+        source.current_global_invalid_payment_row_count
+      );
+      const scopedInvalidCount = nonNegativeIntegerOrNull(
+        source.scoped_invalid_payment_row_count,
+        source.current_scoped_invalid_payment_row_count
       );
       const positiveTotalRaw = Number(
         source.scoped_positive_bank_payment_total
@@ -36660,6 +36686,24 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         source.current_bank_payment_projection_hash,
         source.authorised_bank_payment_projection_hash,
         source.bankPaymentProjectionHash
+      );
+      const globalPayeNetStateHash = firstTextValue(
+        source.global_paye_net_state_hash,
+        source.current_global_paye_net_state_hash,
+        payeNetStateHash
+      );
+      const globalBankPaymentProjectionHash = firstTextValue(
+        source.global_bank_payment_projection_hash,
+        source.current_global_bank_payment_projection_hash
+      );
+      const scopedPayeNetStateHash = firstTextValue(
+        source.scoped_paye_net_state_hash,
+        source.current_scoped_paye_net_state_hash
+      );
+      const scopedBankPaymentProjectionHash = firstTextValue(
+        source.scoped_bank_payment_projection_hash,
+        source.current_scoped_bank_payment_projection_hash,
+        bankPaymentProjectionHash
       );
       const proofScopeSource = firstTextValue(source.pay_channel_scope, source.payChannelScope, source.projection_scope, source.projectionScope, source.scope);
       const proofScope = upper(proofScopeSource || payChannelScope);
@@ -36689,6 +36733,18 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         ? proofBatchId === payBatchId
         : (!proofBatchId || proofBatchId === payBatchId);
       const countsPresent = missingCount !== null && scopedZeroCount !== null && scopedPositiveCount !== null;
+      const completeNoBankProofPresent = globalMissingCount !== null
+        && globalZeroCount !== null
+        && globalPositiveCount !== null
+        && globalInvalidCount !== null
+        && scopedMissingCount !== null
+        && scopedZeroCount !== null
+        && scopedPositiveCount !== null
+        && scopedInvalidCount !== null
+        && !!globalPayeNetStateHash
+        && !!globalBankPaymentProjectionHash
+        && !!scopedPayeNetStateHash
+        && !!scopedBankPaymentProjectionHash;
       const zeroMarkerConsistent = scopedZeroCount <= 0 || allowExplicitZeroScopes === true;
       const noBankMarkerConsistent = noBankPaymentExecution !== true
         || (allowExplicitZeroScopes === true && scopedZeroCount > 0 && scopedPositiveCount === 0);
@@ -36710,6 +36766,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         && batchBindingValid
         && authValid
         && noBankValid
+        && (noBankPaymentExecution !== true || completeNoBankProofPresent)
         && retryBlockedFunds !== true;
 
       const proof = jsonbStripNulls({
@@ -36719,15 +36776,26 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         server_owned_payment_projection_proof: serverOwned,
         no_bank_payment_execution: noBankPaymentExecution,
         allow_explicit_zero_no_bank_scopes: allowExplicitZeroScopes,
+        scoped_no_transfer_execution: scopedNoTransferExecution,
         pure_no_bank_payment: noBankPaymentExecution === true && scopedPositiveCount === 0 && scopedZeroCount > 0,
         contains_explicit_zero_no_bank_scopes: allowExplicitZeroScopes === true && scopedZeroCount > 0,
         missing_explicit_paye_input_count: missingCount,
+        global_missing_explicit_paye_input_count: globalMissingCount,
+        scoped_missing_explicit_paye_input_count: scopedMissingCount,
         explicit_zero_count: globalZeroCount,
+        global_explicit_zero_count: globalZeroCount,
         scoped_explicit_zero_count: scopedZeroCount,
+        global_positive_bank_payment_count: globalPositiveCount,
         scoped_positive_bank_payment_count: scopedPositiveCount,
+        global_invalid_payment_row_count: globalInvalidCount,
+        scoped_invalid_payment_row_count: scopedInvalidCount,
         scoped_positive_bank_payment_total: positiveTotal,
         paye_net_state_hash: payeNetStateHash,
+        global_paye_net_state_hash: globalPayeNetStateHash,
+        scoped_paye_net_state_hash: scopedPayeNetStateHash,
         bank_payment_projection_hash: bankPaymentProjectionHash,
+        global_bank_payment_projection_hash: globalBankPaymentProjectionHash,
+        scoped_bank_payment_projection_hash: scopedBankPaymentProjectionHash,
         pay_channel_scope: proofScope,
         operation_id: proofOperationId || operationId,
         execution_operation_id: proofOperationId || operationId,
@@ -36783,13 +36851,24 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       server_owned_payment_projection_proof: proof.server_owned_payment_projection_proof === true,
       no_bank_payment_execution: proof.no_bank_payment_execution === true,
       allow_explicit_zero_no_bank_scopes: proof.allow_explicit_zero_no_bank_scopes === true,
-      missing_explicit_paye_input_count: proof.missing_explicit_paye_input_count,
+        missing_explicit_paye_input_count: proof.missing_explicit_paye_input_count,
+      global_missing_explicit_paye_input_count: proof.global_missing_explicit_paye_input_count,
+      scoped_missing_explicit_paye_input_count: proof.scoped_missing_explicit_paye_input_count,
       explicit_zero_count: proof.explicit_zero_count,
+      global_explicit_zero_count: proof.global_explicit_zero_count,
       scoped_explicit_zero_count: proof.scoped_explicit_zero_count,
+      global_positive_bank_payment_count: proof.global_positive_bank_payment_count,
       scoped_positive_bank_payment_count: proof.scoped_positive_bank_payment_count,
+      global_invalid_payment_row_count: proof.global_invalid_payment_row_count,
+      scoped_invalid_payment_row_count: proof.scoped_invalid_payment_row_count,
       scoped_positive_bank_payment_total: proof.scoped_positive_bank_payment_total,
       paye_net_state_hash: proof.paye_net_state_hash || null,
+      global_paye_net_state_hash: proof.global_paye_net_state_hash || null,
+      scoped_paye_net_state_hash: proof.scoped_paye_net_state_hash || null,
       bank_payment_projection_hash: proof.bank_payment_projection_hash || null,
+      global_bank_payment_projection_hash: proof.global_bank_payment_projection_hash || null,
+      scoped_bank_payment_projection_hash: proof.scoped_bank_payment_projection_hash || null,
+      scoped_no_transfer_execution: proof.scoped_no_transfer_execution === true,
       pay_channel_scope: proof.pay_channel_scope || payChannelScope,
       operation_id: proof.operation_id || operationId,
       execution_operation_id: proof.execution_operation_id || operationId,
@@ -36808,12 +36887,23 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       no_bank_payment_execution: durableProof.no_bank_payment_execution === true,
       allow_explicit_zero_no_bank_scopes: durableProof.allow_explicit_zero_no_bank_scopes === true,
       missing_explicit_paye_input_count: durableProof.missing_explicit_paye_input_count,
+      global_missing_explicit_paye_input_count: durableProof.global_missing_explicit_paye_input_count,
+      scoped_missing_explicit_paye_input_count: durableProof.scoped_missing_explicit_paye_input_count,
       explicit_zero_count: durableProof.explicit_zero_count,
+      global_explicit_zero_count: durableProof.global_explicit_zero_count,
       scoped_explicit_zero_count: durableProof.scoped_explicit_zero_count,
+      global_positive_bank_payment_count: durableProof.global_positive_bank_payment_count,
       scoped_positive_bank_payment_count: durableProof.scoped_positive_bank_payment_count,
+      global_invalid_payment_row_count: durableProof.global_invalid_payment_row_count,
+      scoped_invalid_payment_row_count: durableProof.scoped_invalid_payment_row_count,
       scoped_positive_bank_payment_total: durableProof.scoped_positive_bank_payment_total,
       paye_net_state_hash: durableProof.paye_net_state_hash,
+      global_paye_net_state_hash: durableProof.global_paye_net_state_hash,
+      scoped_paye_net_state_hash: durableProof.scoped_paye_net_state_hash,
       bank_payment_projection_hash: durableProof.bank_payment_projection_hash,
+      global_bank_payment_projection_hash: durableProof.global_bank_payment_projection_hash,
+      scoped_bank_payment_projection_hash: durableProof.scoped_bank_payment_projection_hash,
+      scoped_no_transfer_execution: durableProof.scoped_no_transfer_execution === true,
       pay_channel_scope: durableProof.pay_channel_scope,
       auth_request_id: durableProof.auth_request_id,
       execution_mode: durableProof.execution_mode,
@@ -145835,7 +145925,6 @@ async function handleListInvoices(env, req) {
     'total_inc_vat',
     'paid_at_utc',
     'on_hold_reason',
-    'invoice_pdf_r2_key',
     'document_revision',
     'document_state',
     'preview_document_version_id',
@@ -145843,7 +145932,6 @@ async function handleListInvoices(env, req) {
     'active_document_operation_id',
     'active_issue_operation_id',
     'last_document_error_json',
-    'last_issue_error_json',
     'header_snapshot_json',
     'client:clients(name,primary_invoice_email)'
   ].join(',');

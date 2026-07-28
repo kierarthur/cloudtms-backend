@@ -244,6 +244,15 @@ classified_with_selection as materialized (
           and rule.status_code=classified.row_status
           and rule.week_ending_date=classified.week_ending_date
           and rule.client_id=classified.client_id)
+         or (rule.selector_type='DIMENSION_GROUP'
+          and (rule.week_ending_date is null or rule.week_ending_date=classified.week_ending_date)
+          and (rule.client_id is null or rule.client_id=classified.client_id)
+          and (rule.status_code is null or rule.status_code=classified.row_status)
+          and (rule.candidate_id is null or exists (
+            select 1 from jsonb_array_elements_text(classified.candidate_ids) candidate(value)
+            where pg_input_is_valid(candidate.value,'uuid')
+              and candidate.value::uuid=rule.candidate_id
+          )))
       order by rule.rule_sequence desc
       limit 1
     ),'INCLUDE') last_selection_action

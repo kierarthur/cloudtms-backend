@@ -74,19 +74,37 @@ export function renderInvoiceIdentityPanel(model = {}) {
   return `<section class="identity">${field(model.document_type==='CREDIT_NOTE' ? 'Credit note number' : 'Invoice number',model.invoice_number)}${field('Issue date',model.issue_date,'date')}${field('Tax point',model.tax_point,'date')}${field('Due date',model.due_date,'date')}</section>`;
 }
 export function renderInvoicePartyBlocks(model = {}) {
-  const supplier = model.supplier; const customer = model.customer;
-  const supplierMeta = [supplier.legal_name, supplier.trading_name && supplier.trading_name !== supplier.legal_name ? `Trading as: ${supplier.trading_name}` : null, supplier.company_registration_number ? `Company no: ${supplier.company_registration_number}` : null, supplier.vat_registration_number ? `VAT no: ${supplier.vat_registration_number}` : null, supplier.contact_email, supplier.contact_phone].filter(Boolean);
-  const customerMeta = [customer.legal_name, customer.account_reference ? `Account: ${customer.account_reference}` : null].filter(Boolean);
-  return `<section class="parties"><div class="party"><div class="party-title">Supplier</div>${supplierMeta.map(v=>`<div>${escapeInvoiceHtml(v)}</div>`).join('')}${renderAddress(supplier.registered_address)}</div><div class="party"><div class="party-title">Bill to</div>${customerMeta.map(v=>`<div>${escapeInvoiceHtml(v)}</div>`).join('')}${renderAddress(customer.billing_address)}</div></section>`;
+  const supplier = model.supplier || {};
+  const customer = model.customer || {};
+  return `<section class="parties"><div class="party"><div class="party-title">Supplier</div><div>${escapeInvoiceHtml(supplier.legal_name)}</div>${renderAddress(supplier.registered_address)}</div><div class="party"><div class="party-title">Bill to</div><div>${escapeInvoiceHtml(customer.legal_name)}</div>${renderAddress(customer.billing_address)}</div></section>`;
 }
 export function renderInvoiceReferencePanel(model = {}) {
   const references = model.references || {};
-  const credit = model.credit_note;
-  return `<section class="references">${field('Purchase order',references.purchase_order)}${field('Client reference',references.client_reference)}${field('Work location',references.work_location)}${field('Candidate / worker',model.candidate_summary)}${field('Payment terms',model.payment.terms_text)}${field('Currency',model.currency)}${credit.is_credit_note ? field('Original invoice',credit.original_invoice_number) + field('Original invoice date',credit.original_invoice_date,'date') : ''}</section>${credit.is_credit_note ? `<section class="payment"><strong>Credit reason:</strong> ${escapeInvoiceHtml(credit.reason)}</section>` : ''}`;
+  const credit = model.credit_note || {};
+  const workers = [...new Set((Array.isArray(model.lines) ? model.lines : [])
+    .map(line => String(line?.worker || '').trim())
+    .filter(Boolean))];
+  const candidateSummary = workers.length === 1
+    ? workers[0]
+    : workers.length === 0
+      ? String(model.candidate_summary || '').trim()
+      : '';
+  const cells = [
+    references.purchase_order ? field('Purchase order', references.purchase_order) : '',
+    references.client_reference ? field('Client reference', references.client_reference) : '',
+    references.work_location ? field('Work location', references.work_location) : '',
+    candidateSummary ? field('Candidate / worker', candidateSummary) : '',
+    field('Payment terms', model.payment?.terms_text),
+    field('Currency', model.currency),
+    credit.is_credit_note ? field('Original invoice', credit.original_invoice_number) : '',
+    credit.is_credit_note ? field('Original invoice date', credit.original_invoice_date, 'date') : ''
+  ].join('');
+  return `<section class="references">${cells}</section>${credit.is_credit_note ? `<section class="payment"><strong>Credit reason:</strong> ${escapeInvoiceHtml(credit.reason)}</section>` : ''}`;
 }
 export function renderInvoiceLineTable(model = {}) {
-  const currency=model.currency; const rows=model.lines;
-  return `<table><thead><tr><th>Description</th><th>Reference</th><th>Unit</th><th class="number">Qty</th><th class="number">Rate</th><th class="number">Net</th><th class="number">VAT</th><th class="number">Gross</th></tr></thead><tbody>${rows.map(line=>`<tr><td>${escapeInvoiceHtml(line.description)}</td><td>${escapeInvoiceHtml(line.reference)}</td><td>${escapeInvoiceHtml(line.unit)}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.quantity,{kind:'number',maximumFractionDigits:4}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.unit_price,{kind:'money',currency}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.net_amount,{kind:'money',currency}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.vat_amount,{kind:'money',currency}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.gross_amount,{kind:'money',currency}))}</td></tr>`).join('')}</tbody></table>`;
+  const currency = model.currency;
+  const rows = Array.isArray(model.lines) ? model.lines : [];
+  return `<table class="invoice-lines"><thead><tr><th>Rate / item type</th><th>Worker</th><th>Reference</th><th>Unit</th><th class="number">Units</th><th class="number">Cost per unit</th><th class="number">Net</th><th class="number">VAT</th><th class="number">Total</th></tr></thead><tbody>${rows.map(line=>`<tr><td>${escapeInvoiceHtml(line.description)}</td><td>${escapeInvoiceHtml(line.worker)}</td><td>${escapeInvoiceHtml(line.reference)}</td><td>${escapeInvoiceHtml(line.unit)}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.quantity,{kind:'number',maximumFractionDigits:4}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.unit_price,{kind:'money',currency}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.net_amount,{kind:'money',currency}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.vat_amount,{kind:'money',currency}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(line.gross_amount,{kind:'money',currency}))}</td></tr>`).join('')}</tbody></table>`;
 }
 export function renderInvoiceVatBreakdown(model={}) { const currency=model.currency; const rows=model.vat_breakdown; return rows.length?`<table class="vat-table"><thead><tr><th>VAT rate</th><th class="number">Net</th><th class="number">VAT</th><th class="number">Gross</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${escapeInvoiceHtml(formatFrozenDocumentValue(row.rate,{kind:'number'}))}%</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(row.net_amount,{kind:'money',currency}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(row.vat_amount,{kind:'money',currency}))}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(row.gross_amount,{kind:'money',currency}))}</td></tr>`).join('')}</tbody></table>`:''; }
 export function renderInvoiceTotalsPanel(model={}) { const t=model.totals; const currency=model.currency; const row=(label,value,css='')=>`<div class="total-row ${css}"><span>${escapeInvoiceHtml(label)}</span><span>${escapeInvoiceHtml(formatFrozenDocumentValue(value,{kind:'money',currency}))}</span></div>`; return `<div class="totals">${row('Net',t.net)}${row('VAT',t.vat)}${row('Gross',t.gross)}${row('Amount paid',t.amount_paid)}${row('Amount credited',t.amount_credited)}${row('Amount outstanding',t.amount_outstanding,'grand')}</div>`; }

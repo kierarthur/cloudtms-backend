@@ -347,28 +347,19 @@ begin
   ),
   candidate_rows as materialized (
     select r.*,
-      (case when r.generated_state='STALE' then jsonb_build_array('STALE') else '[]'::jsonb end)
-      || (case when r.generated_state='FAILED' then jsonb_build_array('FAILED_RENDER') else '[]'::jsonb end)
-      || (case when r.generated_state='ACTIVE' then jsonb_build_array('GENERATING') else '[]'::jsonb end)
-      || coalesce(r.hard_blocker_codes,'[]'::jsonb)
-      || coalesce(r.document_dependency_codes,'[]'::jsonb) issue_blocker_codes,
+      coalesce(r.hard_blocker_codes,'[]'::jsonb) issue_blocker_codes,
       case when r.blocked_for_sending then jsonb_build_array('BLOCKED_FOR_SENDING') else '[]'::jsonb end
+        || coalesce(r.document_dependency_codes,'[]'::jsonb)
         || coalesce(r.warning_codes,'[]'::jsonb) informational_codes,
-      (r.generated_state='FRESH'
-        and r.can_issue_only
+      (r.can_issue_only
         and jsonb_array_length(coalesce(r.hard_blocker_codes,'[]'::jsonb))=0
-        and jsonb_array_length(coalesce(r.document_dependency_codes,'[]'::jsonb))=0
         and not r.is_active_issue) selectable,
       case when r.is_active_issue then 'IN_PROGRESS'
-           when r.generated_state='STALE' then 'STALE'
-           when r.generated_state='FAILED' then 'FAILED'
-           when r.generated_state='ACTIVE' then 'IN_PROGRESS'
            when not r.can_issue_only or jsonb_array_length(coalesce(r.hard_blocker_codes,'[]'::jsonb))>0
-             or jsonb_array_length(coalesce(r.document_dependency_codes,'[]'::jsonb))>0 then 'BLOCKED'
+             then 'BLOCKED'
            else 'READY' end row_status
     from rows_with_state r
-    where r.generated_state <> 'NEVER_GENERATED'
-      and r.invoice_status in ('DRAFT','ON_HOLD')
+    where r.invoice_status in ('DRAFT','ON_HOLD')
       and nullif(r.invoice_number,'') is not null
   ),
   authoritative_rows as materialized (
@@ -737,6 +728,14 @@ begin
            ))
            or (sr.selector_type='STATUS_WEEK' and sr.status_code=fr.row_status and sr.week_ending_date=fr.week_ending_date)
            or (sr.selector_type='STATUS_WEEK_CLIENT' and sr.status_code=fr.row_status and sr.week_ending_date=fr.week_ending_date and sr.client_id=fr.client_id)
+           or (sr.selector_type='DIMENSION_GROUP'
+             and (sr.week_ending_date is null or sr.week_ending_date=fr.week_ending_date)
+             and (sr.client_id is null or sr.client_id=fr.client_id)
+             and (sr.status_code is null or sr.status_code=fr.row_status)
+             and (sr.candidate_id is null or exists (
+               select 1 from jsonb_array_elements_text(fr.candidate_ids) cid(value)
+               where pg_input_is_valid(cid.value,'uuid') and cid.value::uuid=sr.candidate_id
+             )))
         order by sr.rule_sequence desc
         limit 1
       ),'INCLUDE') last_selection_action
@@ -1006,6 +1005,15 @@ begin
           and requested.status_code=row_scope.row_status
           and requested.week_ending_date=row_scope.week_ending_date
           and requested.client_id=row_scope.client_id)
+        or (requested.selector_type='DIMENSION_GROUP'
+          and (requested.week_ending_date is null or requested.week_ending_date=row_scope.week_ending_date)
+          and (requested.client_id is null or requested.client_id=row_scope.client_id)
+          and (requested.status_code is null or requested.status_code=row_scope.row_status)
+          and (requested.candidate_id is null or exists (
+            select 1 from jsonb_array_elements_text(row_scope.candidate_ids) candidate(value)
+            where pg_input_is_valid(candidate.value,'uuid')
+              and candidate.value::uuid=requested.candidate_id
+          )))
       )
   ),
   requested_group_base as materialized (
@@ -1061,6 +1069,15 @@ begin
                   and rule.status_code=member.row_status
                   and rule.week_ending_date=member.week_ending_date
                   and rule.client_id=member.client_id)
+                or (rule.selector_type='DIMENSION_GROUP'
+                  and (rule.week_ending_date is null or rule.week_ending_date=member.week_ending_date)
+                  and (rule.client_id is null or rule.client_id=member.client_id)
+                  and (rule.status_code is null or rule.status_code=member.row_status)
+                  and (rule.candidate_id is null or exists (
+                    select 1 from jsonb_array_elements_text(member.candidate_ids) candidate(value)
+                    where pg_input_is_valid(candidate.value,'uuid')
+                      and candidate.value::uuid=rule.candidate_id
+                  )))
               ) is not true
           )
         order by rule.rule_sequence desc

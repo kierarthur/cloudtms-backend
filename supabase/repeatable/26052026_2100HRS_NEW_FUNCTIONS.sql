@@ -155617,6 +155617,13 @@ BEGIN
           WHEN UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'SETTLED'
            AND UPPER(BTRIM(COALESCE(pay_batch_row.execution_commit_state, ''))) = 'COMMITTED'
            AND pay_batch_row.completion_notice_queued_at_utc IS NULL
+           AND UPPER(BTRIM(COALESCE(
+             pay_batch_row.completion_notice_last_result_json->>'completion_notice_skip_reason',
+             pay_batch_row.completion_notice_last_result_json->>'skip_reason',
+             pay_batch_row.completion_notice_last_result_json #>> '{outcome,skip_reason}',
+             pay_batch_row.completion_notice_last_result_json #>> '{completion_notice_result,skip_reason}',
+             ''
+           ))) <> 'NO_MATERIALISED_TRANSFERS'
            AND (
              UPPER(BTRIM(COALESCE(pay_batch_row.completion_notice_last_result_json->>'completion_notice_skipped', ''))) IN ('TRUE', '1', 'YES')
              OR UPPER(BTRIM(COALESCE(pay_batch_row.completion_notice_last_result_json->>'skipped', ''))) IN ('TRUE', '1', 'YES')
@@ -162860,6 +162867,15 @@ begin
       from pg_temp.tmp_fresh_recovery_templates rt
       where rt.item_type = 'OVERPAYMENT_RECOVERY'
         and rt.finance_case_id is not null
+        /*
+         * PAYE gross-side deductions have already been incorporated into the
+         * payroll result before the bank-net figure is entered. Only net-side
+         * deductions may be reallocated from that later net authority.
+         */
+        and (
+          v_scope <> 'PAYE'
+          or upper(coalesce(rt.paye_treatment, 'NET_DEDUCT')) not in ('GROSS_DEDUCT', 'GROSS_DEDUCTION', 'DEDUCT_GROSS')
+        )
       order by
         rt.pay_batch_candidate_id,
         rt.finance_case_id,
@@ -162941,6 +162957,21 @@ begin
       join public.pay_batch_candidates pbc
         on pbc.id = pbi.pay_batch_candidate_id
       where pbc.pay_batch_id = p_pay_batch_id
+        /*
+         * A PAYE candidate awaiting their first net entry has no net-owned
+         * deduction pool yet. Comparing the frozen draft deduction with an
+         * empty pre-entry allocation would make the batch stale solely
+         * because PAYE net has not been entered. pay_set_paye_net_manual
+         * validates freshness before it saves that first net value, then
+         * rebuilds the deductions from the entered net in the same
+         * transaction. Exclude only those awaiting-net candidates here;
+         * all other freshness domains remain active and the deduction is
+         * compared normally as soon as the net input exists.
+         */
+        and (
+          v_scope <> 'PAYE'
+          or coalesce(pbc.awaiting_net_amount, false) = false
+        )
         and coalesce(pbi.is_voided, false) = false
       and not exists (
         select 1
@@ -162950,6 +162981,10 @@ begin
           and ppc_pbi_fresh_exclusion.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
       )
         and pbi.item_type = 'OVERPAYMENT_RECOVERY'
+        and (
+          v_scope <> 'PAYE'
+          or upper(coalesce(pbi.paye_treatment, 'NET_DEDUCT')) not in ('GROSS_DEDUCT', 'GROSS_DEDUCTION', 'DEDUCT_GROSS')
+        )
         and pbi.repayment_week_start = v_week_start
       group by 1
     ),
@@ -163014,6 +163049,10 @@ begin
       from pg_temp.tmp_fresh_recovery_templates rt
       where rt.item_type = 'LOAN_REPAYMENT'
         and rt.finance_case_id is not null
+        and (
+          v_scope <> 'PAYE'
+          or upper(coalesce(rt.paye_treatment, 'NET_DEDUCT')) not in ('GROSS_DEDUCT', 'GROSS_DEDUCTION', 'DEDUCT_GROSS')
+        )
       order by
         rt.pay_batch_candidate_id,
         rt.finance_case_id,
@@ -163139,6 +163178,10 @@ begin
       from pg_temp.tmp_fresh_recovery_templates rt
       where rt.item_type = 'MANUAL_DEBT_RECOVERY'
         and rt.finance_case_id is not null
+        and (
+          v_scope <> 'PAYE'
+          or upper(coalesce(rt.paye_treatment, 'NET_DEDUCT')) not in ('GROSS_DEDUCT', 'GROSS_DEDUCTION', 'DEDUCT_GROSS')
+        )
       order by
         rt.pay_batch_candidate_id,
         rt.finance_case_id,
@@ -163276,6 +163319,10 @@ begin
       join public.pay_batch_candidates pbc_md
         on pbc_md.id = pbi_md.pay_batch_candidate_id
       where pbc_md.pay_batch_id = p_pay_batch_id
+        and (
+          v_scope <> 'PAYE'
+          or coalesce(pbc_md.awaiting_net_amount, false) = false
+        )
         and coalesce(pbi_md.is_voided, false) = false
       and not exists (
         select 1
@@ -163285,6 +163332,10 @@ begin
           and ppc_pbi_md_fresh_exclusion.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
       )
         and pbi_md.item_type = 'MANUAL_DEBT_RECOVERY'
+        and (
+          v_scope <> 'PAYE'
+          or upper(coalesce(pbi_md.paye_treatment, 'NET_DEDUCT')) not in ('GROSS_DEDUCT', 'GROSS_DEDUCTION', 'DEDUCT_GROSS')
+        )
         and pbi_md.repayment_week_start = v_week_start
       group by 1
     ),
@@ -163335,6 +163386,10 @@ begin
       join public.pay_batch_candidates pbc_ln
         on pbc_ln.id = pbi_ln.pay_batch_candidate_id
       where pbc_ln.pay_batch_id = p_pay_batch_id
+        and (
+          v_scope <> 'PAYE'
+          or coalesce(pbc_ln.awaiting_net_amount, false) = false
+        )
         and coalesce(pbi_ln.is_voided, false) = false
       and not exists (
         select 1
@@ -163344,6 +163399,10 @@ begin
           and ppc_pbi_ln_fresh_exclusion.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
       )
         and pbi_ln.item_type = 'LOAN_REPAYMENT'
+        and (
+          v_scope <> 'PAYE'
+          or upper(coalesce(pbi_ln.paye_treatment, 'NET_DEDUCT')) not in ('GROSS_DEDUCT', 'GROSS_DEDUCTION', 'DEDUCT_GROSS')
+        )
         and pbi_ln.repayment_week_start = v_week_start
       group by 1
     ),

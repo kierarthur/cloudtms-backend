@@ -306,15 +306,24 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
     supplier: {
       legal_name: 'Supplier & Co',
       registered_address: ['1 Supplier Street'],
-      vat_registration_number: 'GB123456789'
+      vat_registration_number: 'GB123456789',
+      trading_name: 'Supplier Trading',
+      company_registration_number: '12345678',
+      contact_email: 'accounts@example.test'
     },
-    customer: { legal_name: 'Customer "A"', billing_address: ['2 Customer Road'] },
+    customer: {
+      legal_name: 'Customer "A"',
+      billing_address: ['2 Customer Road'],
+      account_reference: 'CLI-TEST'
+    },
     references: {},
     lines: [{
       row_key: 'line-1',
       source_invoice_line_id: '00000000-0000-4000-8000-000000000001',
       source_key: 'source-1',
       description: '<unsafe>',
+      worker: 'Worker One',
+      reference: 'REF-1',
       unit: 'HOUR',
       quantity: '1.0000',
       unit_price: '10.0000',
@@ -326,7 +335,7 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
     }],
     vat_breakdown: [{ rate: '20.00', net_amount: '10.00', vat_amount: '2.00', gross_amount: '12.00' }],
     totals: { net: 10, vat: 2, gross: 12 },
-    payment: {},
+    payment: { terms_text: '30 days from invoice date' },
     credit_note: { is_credit_note: false },
     self_bill: { is_self_bill: false },
     legal_wording: [],
@@ -337,6 +346,56 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
   assert.equal(first, second);
   assert.ok(first.includes('INV-1&lt;script&gt;'));
   assert.ok(!first.includes('<unsafe>'));
+  assert.ok(first.includes('Rate / item type'));
+  assert.ok(first.includes('Candidate / worker'));
+  assert.ok(first.includes('Worker One'));
+  assert.ok(first.includes('Cost per unit'));
+  assert.ok(first.includes('30 days from invoice date'));
+  assert.ok(!first.includes('Supplier Trading'));
+  assert.ok(!first.includes('Company no:'));
+  assert.ok(!first.includes('Account: CLI-TEST'));
+});
+
+test('consolidated invoice hides the top worker field but keeps workers in line rows', () => {
+  const model = {
+    schema_version: 'INVOICE_RENDER_MODEL_V1',
+    purpose: 'DRAFT_PREVIEW',
+    document_type: 'INVOICE',
+    invoice_number: 'INV-CONSOLIDATED',
+    currency: 'GBP',
+    supplier: { legal_name: 'Supplier', registered_address: ['1 Supplier Street'] },
+    customer: { legal_name: 'Customer', billing_address: ['2 Customer Road'] },
+    references: {},
+    candidate_summary: 'Multiple workers',
+    lines: ['Worker One', 'Worker Two'].map((worker, index) => ({
+      row_key: `line-${index + 1}`,
+      source_invoice_line_id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+      source_key: `source-${index + 1}`,
+      description: index ? 'Additional rate' : 'Day',
+      worker,
+      reference: `REF-${index + 1}`,
+      unit: 'hours',
+      quantity: '1',
+      unit_price: '10',
+      net_amount: '10',
+      vat_rate: '0',
+      vat_amount: '0',
+      gross_amount: '10',
+      display_order: index + 1
+    })),
+    vat_breakdown: [{ rate: '0', net_amount: '20', vat_amount: '0', gross_amount: '20' }],
+    totals: { net: 20, vat: 0, gross: 20 },
+    payment: { terms_text: '30 days from invoice date' },
+    credit_note: { is_credit_note: false },
+    self_bill: { is_self_bill: false },
+    legal_wording: [],
+    template_version: 'invoice-professional-v1'
+  };
+  const html = buildProfessionalInvoiceHtml(model);
+  assert.ok(html.includes('Worker One'));
+  assert.ok(html.includes('Worker Two'));
+  assert.ok(html.includes('Additional rate'));
+  assert.doesNotMatch(html, /<div class="label">Candidate \/ worker<\/div>/);
 });
 
 test('frozen presentation identity is recomputed and pay-side fields are rejected', async () => {
@@ -378,7 +437,7 @@ test('frozen presentation identity is recomputed and pay-side fields are rejecte
       amount_credited: '0',
       amount_outstanding: '12.00'
     },
-    payment: {},
+    payment: { terms_text: '30 days from invoice date' },
     credit_note: { is_credit_note: false },
     self_bill: { is_self_bill: false },
     legal_wording: [],
@@ -494,6 +553,46 @@ test('retired synchronous generation route returns 410 and starts no work', asyn
   assert.equal(response.status, 410);
   assert.equal((await response.json()).error.code, 'INVOICE_LEGACY_ROUTE_RETIRED');
   assert.equal(rpcCalled, false);
+});
+
+test('attachment pagination correlates the DB logical source key', () => {
+  const layout = {
+    expected_logical_attachment_count: 1,
+    expected_physical_page_count: 5,
+    pagination_stream: [
+      { input_type: 'INVOICE_CORE', page_count: 1 },
+      { input_type: 'ATTACHMENT_INDEX' },
+      { input_type: 'SECTION_SEPARATOR', page_count: 1 },
+      {
+        input_type: 'TIMESHEET',
+        logical_source_key: 'timesheet:source-1',
+        physical_part_id: 'timesheet:source-1:1',
+        page_count: 2,
+        document_type: 'TIMESHEET'
+      }
+    ]
+  };
+  const rows = invoiceQueueRuntimeInternals.deriveAttachmentDisplayMap(
+    layout,
+    1
+  );
+  assert.deepEqual(rows, [{
+    row_id: 'timesheet:source-1',
+    attachment_number: undefined,
+    worker: undefined,
+    week_or_date: undefined,
+    document_type: 'TIMESHEET',
+    evidence_description: undefined,
+    reference: undefined,
+    start_page: 4,
+    page_count: 2
+  }]);
+  assert.throws(
+    () => invoiceQueueRuntimeInternals.deriveAttachmentDisplayMap({
+      pagination_stream: [{ input_type: 'TIMESHEET', page_count: 1 }]
+    }, 0),
+    /ATTACHMENT_PAGINATION_LOGICAL_ROW_MISSING/
+  );
 });
 
 test('document view returns 200 only for an exact READY version', async () => {
@@ -1333,7 +1432,7 @@ test('invoice batch filters and sort are strictly allowlisted and canonical', ()
   );
 });
 
-test('invoice batch selection ledger accepts only the nine ordered V2 selectors', () => {
+test('invoice batch selection ledger accepts ordered semantic V2 selectors', () => {
   const contract = invoiceAsyncHttpInternals.normaliseInvoiceBatchSelectionRules({
     selection: {
       contract_version: 'INVOICE_BATCH_SELECTION_V2',
@@ -1353,12 +1452,26 @@ test('invoice batch selection ledger accepts only the nine ordered V2 selectors'
             week_ending_date: '2026-07-26',
             client_id: '00000000-0000-4000-8000-000000000001'
           }
+        },
+        {
+          sequence: 3,
+          action: 'exclude',
+          selector: {
+            type: 'dimension_group',
+            status_code: 'READY',
+            candidate_id: '00000000-0000-4000-8000-000000000002'
+          }
         }
       ]
     }
   });
   assert.equal(contract.rules[0].action, 'EXCLUDE');
   assert.equal(contract.rules[1].selector.type, 'WEEK_CLIENT');
+  assert.deepEqual(contract.rules[2].selector, {
+    type: 'DIMENSION_GROUP',
+    candidate_id: '00000000-0000-4000-8000-000000000002',
+    status_code: 'READY'
+  });
   assert.throws(
     () => invoiceAsyncHttpInternals.normaliseInvoiceBatchSelectionRules({
       contract_version: 'INVOICE_BATCH_SELECTION_V2',
@@ -1601,8 +1714,8 @@ test('SUMMARY group records require canonical selectors and consistent state', (
   );
 });
 
-test('SUMMARY group-selector normalization accepts 300 and rejects duplicates or 301', () => {
-  const selectors = Array.from({ length: 300 }, (_, index) => ({
+test('SUMMARY group-selector normalization accepts 400 and rejects duplicates or 401', () => {
+  const selectors = Array.from({ length: 400 }, (_, index) => ({
     type: 'ROW',
     selection_key: `row:${index + 1}`
   }));
@@ -1616,12 +1729,12 @@ test('SUMMARY group-selector normalization accepts 300 and rejects duplicates or
     summaryQuery,
     'GENERATE'
   );
-  assert.equal(normalized.group_selectors.length, 300);
+  assert.equal(normalized.group_selectors.length, 400);
   assert.throws(
     () => invoiceAsyncHttpInternals.normaliseInvoiceBatchQueryBody(
       {
         ...summaryQuery,
-        group_selectors: [...selectors, { type: 'ROW', selection_key: 'row:301' }]
+        group_selectors: [...selectors, { type: 'ROW', selection_key: 'row:401' }]
       },
       'GENERATE'
     ),
@@ -2451,4 +2564,18 @@ test('invoice mail preparation contains no legacy PDF rendering fallback', () =>
   assert.equal(emailPreparation.includes('invoice_pdf_r2_key'), false);
   assert.ok(emailPreparation.includes('INVOICE_ATTACHMENT_EXACT_DESCRIPTOR_REQUIRED'));
   assert.ok(emailPreparation.includes('purpose=eq.FINAL_ISSUE&status=eq.READY'));
+});
+
+test('invoice summary projection uses only installed document authority and exposes no storage key', () => {
+  const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const start = source.indexOf('async function handleListInvoices');
+  const end = source.indexOf('\nasync function ', start + 1);
+  assert.ok(start >= 0 && end > start);
+  const listHandler = source.slice(start, end);
+  assert.equal(listHandler.includes("'last_issue_error_json'"), false);
+  assert.equal(listHandler.includes("'invoice_pdf_r2_key'"), false);
+  assert.ok(listHandler.includes("'preview_document_version_id'"));
+  assert.ok(listHandler.includes("'issued_document_version_id'"));
+  assert.ok(listHandler.includes("'active_document_operation_id'"));
+  assert.ok(listHandler.includes("'active_issue_operation_id'"));
 });

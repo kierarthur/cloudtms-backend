@@ -81,6 +81,7 @@ test('selection V2 enforces exact selectors and bounded explicit keys', () => {
     'WEEK_CLIENT_CANDIDATE',
     'STATUS_WEEK',
     'STATUS_WEEK_CLIENT',
+    'DIMENSION_GROUP',
   ]) {
     assert.match(rules, new RegExp(`'${selector}'`));
   }
@@ -113,7 +114,7 @@ test('SUMMARY group selectors are canonical, bounded, and authoritative', () => 
     'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
   );
 
-  assert.match(validator, /jsonb_array_length\(v_query->'group_selectors'\) > 300/);
+  assert.match(validator, /jsonb_array_length\(v_query->'group_selectors'\) > 400/);
   assert.match(validator, /_invoice_batch_selection_rules_v2\s*\(/);
   assert.match(validator, /count\(distinct selector\.value\)/);
   assert.match(validator, /BATCH_SELECTION_SELECTOR_INVALID/);
@@ -141,11 +142,73 @@ test('SUMMARY group selectors are canonical, bounded, and authoritative', () => 
       candidateSql,
       /requested\.selector_type='WEEK_CLIENT_CANDIDATE'[\s\S]*candidate\.value::uuid=requested\.candidate_id/i,
     );
+    assert.match(
+      candidateSql,
+      /requested\.selector_type='DIMENSION_GROUP'[\s\S]*requested\.candidate_id is null[\s\S]*candidate\.value::uuid=requested\.candidate_id/i,
+    );
     assert.doesNotMatch(
       candidateSql,
       /summary_group_selection_json[\s\S]*_invoice_batch_(?:generate_group_rows|issue_source_rows_for_ids)_v2\s*\(/i,
     );
   }
+});
+
+test('timesheet presentation uses authoritative schedule and authorisation fields', () => {
+  const presentation = read(
+    'supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql',
+  );
+
+  assert.match(presentation, /'authorised',t\.authorised_at_server is not null/g);
+  assert.match(presentation, /extract\(epoch from \(/g);
+  assert.match(presentation, /s\.value->>'start_utc'/g);
+  assert.match(presentation, /s\.value->>'end_utc'/g);
+  assert.match(presentation, /s\.value->>'break_mins'/g);
+  assert.match(presentation, /t\.shift_label_norm !~\* '\^weekly-correction-'/g);
+  assert.match(presentation, /length\(t\.shift_label_norm\) <= 80/g);
+  assert.doesNotMatch(
+    presentation,
+    /'authorisation',jsonb_build_object\('authorised',t\.auth_name is not null/,
+  );
+});
+
+test('Batch Generate creates invoice records only while Batch Issue accepts document preparation', () => {
+  const generateKeys = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1501_private_invoice_batch_generate_candidate_keys_v2.sql',
+  );
+  const generationAdvance = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
+  );
+  const issueClassification = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql',
+  );
+  assert.match(generateKeys, /candidate\.candidate_json->>'row_kind'='CREATE_INVOICE'/i);
+  assert.match(generateKeys, /SEGMENT_ALREADY_LOCKED/i);
+  assert.match(generateKeys, /SOURCE_ALREADY_INVOICED/i);
+  assert.match(
+    generationAdvance,
+    /set status=case[\s\S]*then 'COMPLETE' else 'BLOCKED' end,[\s\S]*phase=case[\s\S]*then 'COMPLETE' else 'BLOCKED' end/i,
+  );
+  assert.doesNotMatch(issueClassification, /generated_state='FRESH'/i);
+  assert.match(
+    issueClassification,
+    /\(\s*classified\.hard_blocker_codes\s*\)\s+issue_blocker_codes/i,
+  );
+  assert.doesNotMatch(
+    issueClassification,
+    /generated_state\s*(?:=|in)\s*\([^)]*\)[\s\S]{0,240}issue_blocker_codes/i,
+  );
+});
+
+test('invoice presentation consolidates import support and exposes complete commercial line columns', () => {
+  const presentation = read(
+    'supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql',
+  );
+  assert.match(presentation, /select distinct s\.invoice_id,upper\(s\.source_system\) source_system/i);
+  assert.match(presentation, /'import_ids',coalesce/i);
+  assert.match(presentation, /'worker',c\.worker_name/i);
+  assert.match(presentation, /'terms_text',coalesce/i);
+  assert.match(presentation, /'reversal_state',case/i);
+  assert.match(presentation, /order by[\s\S]*shift_date[\s\S]*s\.import_id[\s\S]*r\.ordinality/i);
 });
 
 test('candidate snapshots are Vault-backed, signed, and verified in DB', () => {
@@ -913,8 +976,17 @@ test('merge and verify processor contexts carry frozen document identity', () =>
 });
 
 test('presentation authority repeatable defers safely instead of failing CI while work is active', () => {
+  const presentationSnapshot = read(
+    'supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql',
+  );
   const presentationAuthority = read(
     'supabase/repeatable/25072026_0003_invoice_presentation_runtime_authority.sql',
+  );
+  assert.match(presentationSnapshot, /\\gset/i);
+  assert.match(presentationSnapshot, /\\if :invoice_presentation_active_work/i);
+  assert.match(
+    presentationSnapshot,
+    /INVOICE_PRESENTATION_SNAPSHOT_DEFERRED_ACTIVE_WORK/i,
   );
   assert.match(presentationAuthority, /\\gset/i);
   assert.match(presentationAuthority, /\\if :invoice_presentation_active_work/i);
@@ -926,6 +998,27 @@ test('presentation authority repeatable defers safely instead of failing CI whil
     presentationAuthority,
     /raise exception[\s\S]*INVOICE_PRESENTATION_CUTOVER_ACTIVE_WORK/i,
   );
+});
+
+test('root repeatable installs every changed nested Invoice V8 authority', () => {
+  const runtimeAuthority = read(
+    'supabase/repeatable/28072026_1609_invoice_async_v8_runtime_authority.sql',
+  );
+  for (const filename of [
+    '27072026_1042_08_private_invoice_batch_selection_rules_v2.sql',
+    '27072026_1250_08a_private_invoice_batch_query_validate_v2.sql',
+    '27072026_1806_private_invoice_batch_issue_classification_v2.sql',
+    '27072026_1501_private_invoice_batch_generate_candidate_keys_v2.sql',
+    '27072026_1501_private_invoice_batch_issue_candidate_keys_v2.sql',
+    '27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
+    '27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
+    '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
+  ]) {
+    assert.match(
+      runtimeAuthority,
+      new RegExp(filename.replaceAll('.', '\\.')),
+    );
+  }
 });
 
 test('committed TEST configuration keeps interactive enabled and scheduled disabled', () => {

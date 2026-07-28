@@ -1400,14 +1400,14 @@ begin
             where cf.invoice_id=vc.planned_invoice_id)
           and not exists(select 1 from segment_lock_failures sf
             where sf.invoice_id=vc.planned_invoice_id)
-        then 'QUEUED' else 'BLOCKED' end,
+        then 'COMPLETE' else 'BLOCKED' end,
       phase=case when exists(select 1 from all_line_totals l
                             where l.invoice_id=vc.planned_invoice_id)
           and not exists(select 1 from correction_failures cf
             where cf.invoice_id=vc.planned_invoice_id)
           and not exists(select 1 from segment_lock_failures sf
             where sf.invoice_id=vc.planned_invoice_id)
-        then 'QUEUE_DOCUMENT' else 'BLOCKED' end,
+        then 'COMPLETE' else 'BLOCKED' end,
       result_json=jsonb_build_object('invoice_ids',jsonb_build_array(vc.planned_invoice_id),
         'source_revision',vc.payload_json->>'source_revision'),
       error_json=case
@@ -1426,7 +1426,14 @@ begin
             select cf.blocker_code from correction_failures cf
             where cf.invoice_id=vc.planned_invoice_id))
         else null end,
-      completed_at_utc=null,
+      completed_at_utc=case
+        when exists(select 1 from all_line_totals l
+          where l.invoice_id=vc.planned_invoice_id)
+          and not exists(select 1 from correction_failures cf
+            where cf.invoice_id=vc.planned_invoice_id)
+          and not exists(select 1 from segment_lock_failures sf
+            where sf.invoice_id=vc.planned_invoice_id)
+        then v_now else null end,
       lease_owner=null,lease_token=null,lease_expires_at_utc=null,
       updated_at_utc=v_now
     from valid_chunks vc

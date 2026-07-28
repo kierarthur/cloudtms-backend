@@ -512,8 +512,6 @@ begin
   ),
   all_rows_raw as materialized (
     select * from create_rows
-    union all
-    select * from stale_rows
   ),
   all_rows as materialized (
     select r.*,
@@ -866,6 +864,14 @@ begin
            ))
            or (sr.selector_type='STATUS_WEEK' and sr.status_code=fr.row_status and sr.week_ending_date=fr.week_ending_date)
            or (sr.selector_type='STATUS_WEEK_CLIENT' and sr.status_code=fr.row_status and sr.week_ending_date=fr.week_ending_date and sr.client_id=fr.client_id)
+           or (sr.selector_type='DIMENSION_GROUP'
+             and (sr.week_ending_date is null or sr.week_ending_date=fr.week_ending_date)
+             and (sr.client_id is null or sr.client_id=fr.client_id)
+             and (sr.status_code is null or sr.status_code=fr.row_status)
+             and (sr.candidate_id is null or exists (
+               select 1 from jsonb_array_elements_text(fr.candidate_ids) cid(value)
+               where pg_input_is_valid(cid.value,'uuid') and cid.value::uuid=sr.candidate_id
+             )))
         order by sr.rule_sequence desc
         limit 1
       ),'INCLUDE') last_selection_action
@@ -1108,6 +1114,15 @@ begin
           and requested.status_code=row_scope.row_status
           and requested.week_ending_date=row_scope.week_ending_date
           and requested.client_id=row_scope.client_id)
+        or (requested.selector_type='DIMENSION_GROUP'
+          and (requested.week_ending_date is null or requested.week_ending_date=row_scope.week_ending_date)
+          and (requested.client_id is null or requested.client_id=row_scope.client_id)
+          and (requested.status_code is null or requested.status_code=row_scope.row_status)
+          and (requested.candidate_id is null or exists (
+            select 1 from jsonb_array_elements_text(row_scope.candidate_ids) candidate(value)
+            where pg_input_is_valid(candidate.value,'uuid')
+              and candidate.value::uuid=requested.candidate_id
+          )))
       )
   ),
   requested_group_base as materialized (
@@ -1163,6 +1178,15 @@ begin
                   and rule.status_code=member.row_status
                   and rule.week_ending_date=member.week_ending_date
                   and rule.client_id=member.client_id)
+                or (rule.selector_type='DIMENSION_GROUP'
+                  and (rule.week_ending_date is null or rule.week_ending_date=member.week_ending_date)
+                  and (rule.client_id is null or rule.client_id=member.client_id)
+                  and (rule.status_code is null or rule.status_code=member.row_status)
+                  and (rule.candidate_id is null or exists (
+                    select 1 from jsonb_array_elements_text(member.candidate_ids) candidate(value)
+                    where pg_input_is_valid(candidate.value,'uuid')
+                      and candidate.value::uuid=rule.candidate_id
+                  )))
               ) is not true
           )
         order by rule.rule_sequence desc
