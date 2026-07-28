@@ -797,6 +797,24 @@ test('Issue finalisation locks invoices deterministically and keeps delivery sep
   assert.match(issueCore, /'blocked_for_sending'/);
 });
 
+test('timesheet presentation uses authoritative schedule and authorisation fields', () => {
+  const presentation = read(
+    'supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql',
+  );
+
+  assert.match(presentation, /'authorised',t\.authorised_at_server is not null/g);
+  assert.match(presentation, /extract\(epoch from \(/g);
+  assert.match(presentation, /s\.value->>'start_utc'/g);
+  assert.match(presentation, /s\.value->>'end_utc'/g);
+  assert.match(presentation, /s\.value->>'break_mins'/g);
+  assert.match(presentation, /t\.shift_label_norm !~\* '\^weekly-correction-'/g);
+  assert.match(presentation, /length\(t\.shift_label_norm\) <= 80/g);
+  assert.doesNotMatch(
+    presentation,
+    /'authorisation',jsonb_build_object\('authorised',t\.auth_name is not null/,
+  );
+});
+
 test('document manifest planning freezes snapshot and manifest in one version update', () => {
   const documentAdvance = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch.sql',

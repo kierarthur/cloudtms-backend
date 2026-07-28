@@ -447,8 +447,13 @@ export function validateFrozenTimesheetPresentationModel(model, options = {}) {
     fail('TIMESHEET_AUTHORISATION_STATE_INVALID');
   }
   if (model.authorisation.authorised) {
-    requireText(model.authorisation.name, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
     requireText(model.authorisation.authorised_at_utc, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  }
+  if (model.authorisation.name != null && model.authorisation.name !== '') {
+    requireText(model.authorisation.name, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  }
+  if (model.authorisation.role != null && model.authorisation.role !== '') {
+    requireText(model.authorisation.role, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
   }
 
   validateAssetIdentity(model.signatures.candidate);

@@ -179,6 +179,7 @@ export function buildElectronicTimesheetHtml(model = {}) {
       if (entry == null || entry === '') return '';
       if (typeof entry === 'string') return entry;
       if (typeof entry !== 'object') return formatFrozenDocumentValue(entry, { kind: 'number' });
+      if (Object.keys(entry).length === 0) return '';
       return [
         entry.label || entry.description || entry.type || entry.row_key || (index != null ? `Unit ${index + 1}` : 'Additional units'),
         entry.units ?? entry.hours ?? entry.quantity,
@@ -186,8 +187,23 @@ export function buildElectronicTimesheetHtml(model = {}) {
       ].filter(value => value != null && value !== '').join(' · ');
     };
     if (Array.isArray(m.additional_units)) return m.additional_units.map(describeEntry).filter(Boolean).join(', ');
+    if (m.additional_units && typeof m.additional_units === 'object') {
+      const descriptorKeys = ['label', 'description', 'type', 'row_key', 'units', 'hours', 'quantity', 'reference'];
+      if (descriptorKeys.some(key => Object.hasOwn(m.additional_units, key))) return describeEntry(m.additional_units);
+      return Object.entries(m.additional_units)
+        .map(([label, value], index) => describeEntry(
+          value && typeof value === 'object' ? { label, ...value } : { label, units: value },
+          index
+        ))
+        .filter(Boolean)
+        .join(', ');
+    }
     return describeEntry(m.additional_units);
   })();
+  const authoriser = [auth.name, auth.role].filter(Boolean).join(' ');
+  const authorisedAt = auth.authorised_at_utc
+    ? formatFrozenDocumentValue(auth.authorised_at_utc, { kind: 'date' })
+    : '';
 
   return `<section class="source-page">
 <h1>Electronic timesheet</h1>
@@ -217,7 +233,7 @@ ${renderScheduleSection('Weekly schedule', m.weekly_schedule_rows)}
   ${m.qr.signed_hash ? `<div>QR signature: ${escapeInvoiceHtml(m.qr.signed_hash)}</div>` : ''}
   ${m.qr.signed_at_utc ? `<div>QR signed at: ${escapeInvoiceHtml(formatFrozenDocumentValue(m.qr.signed_at_utc, { kind: 'date' }))}</div>` : ''}
   ${m.qr.verification_summary ? `<div>${escapeInvoiceHtml(m.qr.verification_summary)}</div>` : ''}
-  <div>Authorised: ${auth.authorised ? 'Yes' : 'No'} ${escapeInvoiceHtml(auth.authorised_at_utc || '')} by ${escapeInvoiceHtml(auth.name || '')} ${escapeInvoiceHtml(auth.role || '')}</div>
+  <div>Authorised: ${auth.authorised ? 'Yes' : 'No'}${authorisedAt ? ` · ${escapeInvoiceHtml(authorisedAt)}` : ''}${authoriser ? ` · by ${escapeInvoiceHtml(authoriser)}` : ''}</div>
 </section>
 <div class="signature-grid">
   ${signatureBlock('Candidate / nurse signature', m.signatures.candidate)}

@@ -253,7 +253,24 @@ begin
         'candidate',jsonb_build_object('id',coalesce(vs.candidate_id::text,null),'name',coalesce(vs.candidate_name,t.occupant_key_norm)),
         'client',jsonb_build_object('id',coalesce(vs.client_id::text,null),'name',vs.client_name),
         'contract',jsonb_build_object('id',coalesce(t.contract_id::text,null),'reference',t.booking_id),
-        'work',jsonb_build_object('hospital',t.hospital_norm,'site',t.hospital_norm,'ward',t.ward_norm,'assignment',t.shift_label_norm,'job_title',t.job_title_norm,'band',t.band,'shift_type',t.shift_label_norm),
+        'work',jsonb_build_object(
+          'hospital',t.hospital_norm,
+          'site',t.hospital_norm,
+          'ward',t.ward_norm,
+          'assignment',coalesce(
+            nullif(btrim(t.job_title_norm),''),
+            case when nullif(btrim(t.shift_label_norm),'') is not null
+                   and length(t.shift_label_norm) <= 80
+                   and t.shift_label_norm !~* '^weekly-correction-'
+                   and t.shift_label_norm !~* '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+              then t.shift_label_norm end),
+          'job_title',t.job_title_norm,
+          'band',t.band,
+          'shift_type',case when nullif(btrim(t.shift_label_norm),'') is not null
+                              and length(t.shift_label_norm) <= 80
+                              and t.shift_label_norm !~* '^weekly-correction-'
+                              and t.shift_label_norm !~* '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+                         then t.shift_label_norm end),
         'week_ending_date',t.week_ending_date,
         'submission_mode',t.submission_mode::text,
         'sheet_scope',t.sheet_scope::text,
@@ -289,7 +306,22 @@ begin
              'break_start',s.value->>'break_start','break_end',s.value->>'break_end',
              'break_minutes',case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$' then (coalesce(s.value->>'break_minutes',s.value->>'break_mins'))::integer else 0 end,
              'reference',coalesce(s.value->>'reference',s.value->>'ref_num'),
-             'hours',coalesce(s.value->>'hours',s.value->>'units'),
+             'hours',coalesce(
+               s.value->>'hours',
+               s.value->>'units',
+               case when pg_input_is_valid(nullif(coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc'),''),'timestamptz')
+                          and pg_input_is_valid(nullif(coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc'),''),'timestamptz')
+                    then greatest(
+                      0,
+                      round((
+                        extract(epoch from (
+                          coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc')::timestamptz
+                          - coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc')::timestamptz
+                        )) / 60
+                        - case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$'
+                            then coalesce(s.value->>'break_minutes',s.value->>'break_mins')::numeric else 0 end
+                      ) / 60,2)
+                    )::text end),
              'units',coalesce(s.value->>'units',s.value->>'hours'),
              'display_order',s.ordinality)
              order by s.ordinality)
@@ -318,7 +350,7 @@ begin
               then t.additional_units_week else '{}'::jsonb end
           ) au
         ),'{}'::jsonb),
-        'authorisation',jsonb_build_object('authorised',t.auth_name is not null,'name',t.auth_name,'role',t.auth_job_title,'authorised_at_utc',t.authorised_at_server),
+        'authorisation',jsonb_build_object('authorised',t.authorised_at_server is not null,'name',t.auth_name,'role',t.auth_job_title,'authorised_at_utc',t.authorised_at_server),
         'signatures',jsonb_build_object(
           'candidate',case when nullif(t.r2_nurse_key,'') is null
             then jsonb_build_object('identity',coalesce(vs.candidate_name,t.occupant_key_norm),'role','Candidate / nurse')
@@ -609,12 +641,57 @@ begin
         'candidate',jsonb_build_object('id',coalesce(vs.candidate_id::text,null),'name',coalesce(vs.candidate_name,t.occupant_key_norm)),
         'client',jsonb_build_object('id',coalesce(vs.client_id::text,null),'name',vs.client_name),
         'contract',jsonb_build_object('id',coalesce(t.contract_id::text,null),'reference',t.booking_id),
-        'work',jsonb_build_object('hospital',t.hospital_norm,'site',t.hospital_norm,'ward',t.ward_norm,'assignment',t.shift_label_norm,'job_title',t.job_title_norm,'band',t.band,'shift_type',t.shift_label_norm),
+        'work',jsonb_build_object(
+          'hospital',t.hospital_norm,
+          'site',t.hospital_norm,
+          'ward',t.ward_norm,
+          'assignment',coalesce(
+            nullif(btrim(t.job_title_norm),''),
+            case when nullif(btrim(t.shift_label_norm),'') is not null
+                   and length(t.shift_label_norm) <= 80
+                   and t.shift_label_norm !~* '^weekly-correction-'
+                   and t.shift_label_norm !~* '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+              then t.shift_label_norm end),
+          'job_title',t.job_title_norm,
+          'band',t.band,
+          'shift_type',case when nullif(btrim(t.shift_label_norm),'') is not null
+                              and length(t.shift_label_norm) <= 80
+                              and t.shift_label_norm !~* '^weekly-correction-'
+                              and t.shift_label_norm !~* '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+                         then t.shift_label_norm end),
         'week_ending_date',t.week_ending_date,
         'submission_mode',t.submission_mode::text,
         'sheet_scope',t.sheet_scope::text,
         'daily_schedule_rows',coalesce((select jsonb_agg(jsonb_build_object('date',coalesce(s.value->>'date',s.value->>'day',to_char(t.worked_start_iso::date,'YYYY-MM-DD')),'scheduled_start',coalesce(s.value->>'scheduled_start',s.value->>'start',s.value->>'start_utc',t.scheduled_start_iso::text),'scheduled_end',coalesce(s.value->>'scheduled_end',s.value->>'end',s.value->>'end_utc',t.scheduled_end_iso::text),'worked_start',coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc',t.worked_start_iso::text),'worked_end',coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc',t.worked_end_iso::text),'break_start',coalesce(s.value->>'break_start',t.break_start_iso::text),'break_end',coalesce(s.value->>'break_end',t.break_end_iso::text),'break_minutes',case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$' then (coalesce(s.value->>'break_minutes',s.value->>'break_mins'))::integer else coalesce(t.break_minutes,0) end,'reference',coalesce(s.value->>'reference',s.value->>'ref_num',t.reference_number),'hours',coalesce(s.value->>'hours',s.value->>'units',case when t.worked_minutes is not null then round(t.worked_minutes::numeric/60,2)::text end),'units',coalesce(s.value->>'units',s.value->>'hours'),'display_order',s.ordinality) order by s.ordinality) from jsonb_array_elements(case when jsonb_typeof(t.actual_schedule_json)='array' then t.actual_schedule_json else '[]'::jsonb end) with ordinality s(value,ordinality) where upper(coalesce(t.sheet_scope::text,''))='DAILY'),case when upper(coalesce(t.sheet_scope::text,''))='DAILY' then jsonb_build_array(jsonb_build_object('date',t.worked_start_iso::date,'scheduled_start',t.scheduled_start_iso,'scheduled_end',t.scheduled_end_iso,'worked_start',t.worked_start_iso,'worked_end',t.worked_end_iso,'break_start',t.break_start_iso,'break_end',t.break_end_iso,'break_minutes',coalesce(t.break_minutes,0),'reference',t.reference_number,'hours',case when t.worked_minutes is not null then round(t.worked_minutes::numeric/60,2)::text end,'units',null,'display_order',1)) else '[]'::jsonb end),
-        'weekly_schedule_rows',coalesce((select jsonb_agg(jsonb_build_object('date',coalesce(s.value->>'date',s.value->>'day'),'scheduled_start',coalesce(s.value->>'scheduled_start',s.value->>'start',s.value->>'start_utc'),'scheduled_end',coalesce(s.value->>'scheduled_end',s.value->>'end',s.value->>'end_utc'),'worked_start',coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc'),'worked_end',coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc'),'break_start',s.value->>'break_start','break_end',s.value->>'break_end','break_minutes',case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$' then (coalesce(s.value->>'break_minutes',s.value->>'break_mins'))::integer else 0 end,'reference',coalesce(s.value->>'reference',s.value->>'ref_num'),'hours',coalesce(s.value->>'hours',s.value->>'units'),'units',coalesce(s.value->>'units',s.value->>'hours'),'display_order',s.ordinality) order by s.ordinality) from jsonb_array_elements(case when jsonb_typeof(t.actual_schedule_json)='array' then t.actual_schedule_json else '[]'::jsonb end) with ordinality s(value,ordinality) where upper(coalesce(t.sheet_scope::text,''))='WEEKLY'),'[]'::jsonb),
+        'weekly_schedule_rows',coalesce((select jsonb_agg(jsonb_build_object(
+          'date',coalesce(s.value->>'date',s.value->>'day'),
+          'scheduled_start',coalesce(s.value->>'scheduled_start',s.value->>'start',s.value->>'start_utc'),
+          'scheduled_end',coalesce(s.value->>'scheduled_end',s.value->>'end',s.value->>'end_utc'),
+          'worked_start',coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc'),
+          'worked_end',coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc'),
+          'break_start',s.value->>'break_start',
+          'break_end',s.value->>'break_end',
+          'break_minutes',case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$' then coalesce(s.value->>'break_minutes',s.value->>'break_mins')::integer else 0 end,
+          'reference',coalesce(s.value->>'reference',s.value->>'ref_num'),
+          'hours',coalesce(
+            s.value->>'hours',
+            s.value->>'units',
+            case when pg_input_is_valid(nullif(coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc'),''),'timestamptz')
+                       and pg_input_is_valid(nullif(coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc'),''),'timestamptz')
+                 then greatest(
+                   0,
+                   round((
+                     extract(epoch from (
+                       coalesce(s.value->>'worked_end',s.value->>'end',s.value->>'end_utc')::timestamptz
+                       - coalesce(s.value->>'worked_start',s.value->>'start',s.value->>'start_utc')::timestamptz
+                     )) / 60
+                     - case when coalesce(s.value->>'break_minutes',s.value->>'break_mins','') ~ '^[0-9]{1,5}$'
+                         then coalesce(s.value->>'break_minutes',s.value->>'break_mins')::numeric else 0 end
+                   ) / 60,2)
+                 )::text end),
+          'units',coalesce(s.value->>'units',s.value->>'hours'),
+          'display_order',s.ordinality
+        ) order by s.ordinality) from jsonb_array_elements(case when jsonb_typeof(t.actual_schedule_json)='array' then t.actual_schedule_json else '[]'::jsonb end) with ordinality s(value,ordinality) where upper(coalesce(t.sheet_scope::text,''))='WEEKLY'),'[]'::jsonb),
         'references',jsonb_build_object('whole',nullif(t.reference_number,''),'day',coalesce((select jsonb_agg(jsonb_build_object('day_key',d.key,'reference',case when jsonb_typeof(d.value)='object' then coalesce(d.value->>'reference',d.value->>'ref_num',d.value->>'value') else trim(both '"' from d.value::text) end,'display_order',d.ordinality) order by d.ordinality) from jsonb_each(case when jsonb_typeof(t.day_references_json)='object' then t.day_references_json else '{}'::jsonb end) with ordinality d(key,value,ordinality)), '[]'::jsonb),'segment','[]'::jsonb),
         'additional_units',coalesce((
           select jsonb_object_agg(
@@ -631,7 +708,7 @@ begin
               then t.additional_units_week else '{}'::jsonb end
           ) au
         ),'{}'::jsonb),
-        'authorisation',jsonb_build_object('authorised',t.auth_name is not null,'name',t.auth_name,'role',t.auth_job_title,'authorised_at_utc',t.authorised_at_server),
+        'authorisation',jsonb_build_object('authorised',t.authorised_at_server is not null,'name',t.auth_name,'role',t.auth_job_title,'authorised_at_utc',t.authorised_at_server),
         'signatures',jsonb_build_object(
           'candidate',case when nullif(t.r2_nurse_key,'') is null
             then jsonb_build_object('identity',coalesce(vs.candidate_name,t.occupant_key_norm),'role','Candidate / nurse')

@@ -724,10 +724,11 @@ test('professional source templates use explicit allowlisted fields', () => {
     submission_mode: 'ELECTRONIC',
     sheet_scope: 'DAILY',
     references: { whole: 'TS-1', day: [], segment: [] },
+    additional_units: {},
     authorisation: {
       authorised: true,
-      name: 'Authoriser',
-      role: 'Manager',
+      name: null,
+      role: null,
       authorised_at_utc: '2026-07-24T16:00:00Z'
     },
     signatures: { candidate: {}, authoriser: {} },
@@ -738,6 +739,9 @@ test('professional source templates use explicit allowlisted fields', () => {
   });
   assert.ok(ts.includes('Hospital'));
   assert.ok(ts.includes('7.5'));
+  assert.ok(ts.includes('Authorised: Yes · 24/07/2026'));
+  assert.ok(!ts.includes('Additional units: Additional units'));
+  assert.ok(!ts.includes(' · by </div>'));
   const hr = buildHealthRosterSupportHtml({ schema_version: 'HEALTHROSTER_PRESENTATION_V1', rows: [{ worker: 'Worker', assignment: 'Assignment', shift_date: null, shift_times: null, site: null, ward: null, reference: null, units_hours: null, validation_state: null, source_identity: null, secret_future_key: 'must-not-render' }] });
   const nhsp = buildNhspSupportHtml({ schema_version: 'NHSP_PRESENTATION_V1', rows: [{ worker: 'Worker', nhsp_shift_id: 'SHIFT-1', booking_reference: null, site_ward: null, shift_date: null, shift_times: null, hours_units: null, source_identity: null, validation_state: null, secret_future_key: 'must-not-render' }] });
   const higher = buildHigherRateSupportHtml({ schema_version: 'HIGHER_RATE_PRESENTATION_V1', rows: [{ worker_source: 'Worker', shift_date: null, original_rate: null, applied_rate: '25.00', units: null, display_amount: null, reason: null, approval_identity: null, reference: null, secret_future_key: 'must-not-render' }] });
