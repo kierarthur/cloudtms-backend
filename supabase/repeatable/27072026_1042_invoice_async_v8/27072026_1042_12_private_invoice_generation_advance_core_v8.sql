@@ -1381,6 +1381,8 @@ begin
     update public.timesheets_financials tf
     set locked_by_invoice_id=vc.planned_invoice_id,locked_at_utc=v_now,updated_at=v_now
     from members m join write_eligible_chunks vc on vc.id=m.chunk_id
+    join target_headers h
+      on h.chunk_id=vc.id and h.invoice_id=vc.planned_invoice_id
     cross join (select count(*) applied_count from segment_lock_authority) segment_application
     where tf.timesheet_id=m.timesheet_id and tf.is_current
       and (coalesce(tf.invoice_breakdown_json->>'mode','')<>'SEGMENTS'
@@ -1390,7 +1392,10 @@ begin
   ),
   week_lock as (
     update public.contract_weeks cw set status='INVOICED',updated_at=v_now
-    where cw.timesheet_id in(select timesheet_id from members)
+    where cw.timesheet_id in(
+      select m.timesheet_id
+      from members m
+      join target_headers h on h.chunk_id=m.chunk_id)
       and exists(select 1 from public.timesheets_financials tf where tf.timesheet_id=cw.timesheet_id
         and tf.is_current and (tf.locked_by_invoice_id is not null or
           not exists(select 1 from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) e
@@ -1400,9 +1405,11 @@ begin
   nhsp_shift_inclusion as (
     update public.nhsp_shifts ns
     set invoice_status='INCLUDED',
-      invoice_id=s.planned_invoice_id,
+      invoice_id=h.invoice_id,
       updated_at=v_now
     from source_rows s
+    join target_headers h
+      on h.chunk_id=s.chunk_id and h.invoice_id=s.planned_invoice_id
     where ns.timesheet_id=s.timesheet_id
       and ns.invoice_status='PENDING'
       and ns.invoice_id is null
@@ -1420,20 +1427,21 @@ begin
   ),
   hr_sources as (
     insert into public.invoice_hr_source_rows(invoice_id,source_system,import_id,header_columns,rows_json,header_rows)
-    select distinct vc.planned_invoice_id,
+    select distinct h.invoice_id,
       case when tf.basis::text in('NHSP','NHSP_ADJUSTMENT')
         then 'NHSP' else 'HEALTHROSTER' end,
       tf.nhsp_import_id,'[]'::jsonb,
       case when jsonb_typeof(tf.external_source_rows_json)='array' then tf.external_source_rows_json else '[]'::jsonb end,
       '[]'::jsonb
-    from members m join write_eligible_chunks vc on vc.id=m.chunk_id
+    from members m
+    join target_headers h on h.chunk_id=m.chunk_id
     join public.timesheets_financials tf on tf.timesheet_id=m.timesheet_id and tf.is_current
     where tf.nhsp_import_id is not null
     on conflict(invoice_id,source_system,import_id) do update set rows_json=excluded.rows_json
     returning invoice_id
   ),
   source_segments as materialized (
-    select distinct s.planned_invoice_id,
+    select distinct h.invoice_id planned_invoice_id,
       coalesce(
         case when coalesce(x.value->>'nhsp_shift_id','')~*
             '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -1446,6 +1454,8 @@ begin
           then substr(x.value->>'segment_id',6)::uuid end) shift_id,
       false is_reversal
     from source_rows s
+    join target_headers h
+      on h.chunk_id=s.chunk_id and h.invoice_id=s.planned_invoice_id
     cross join lateral jsonb_array_elements(
       case when jsonb_typeof(s.invoice_breakdown_json->'segments')='array'
         then s.invoice_breakdown_json->'segments' else '[]'::jsonb end) x(value)
@@ -1526,7 +1536,10 @@ begin
           vc.payload_json->'source_ids','[]'::jsonb),
         'source_revision',vc.payload_json->>'source_revision',
         'operation_id',vc.operation_id),'INVOICE_OPERATION_QUEUE'
-    from write_eligible_chunks vc join public.invoice_operations o on o.id=vc.operation_id
+    from write_eligible_chunks vc
+    join target_headers h
+      on h.chunk_id=vc.id and h.invoice_id=vc.planned_invoice_id
+    join public.invoice_operations o on o.id=vc.operation_id
     left join public.tms_users u on u.id=o.actor_user_id
     returning id
   ),

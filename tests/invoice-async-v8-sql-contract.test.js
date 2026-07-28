@@ -1130,7 +1130,7 @@ test('generation commits exact NHSP shift ownership and attaches the authoritati
 
   assert.match(
     generationCore,
-    /nhsp_shift_inclusion as \(\s*update public\.nhsp_shifts ns\s*set invoice_status='INCLUDED',\s*invoice_id=s\.planned_invoice_id/s,
+    /nhsp_shift_inclusion as \(\s*update public\.nhsp_shifts ns\s*set invoice_status='INCLUDED',\s*invoice_id=h\.invoice_id/s,
   );
   assert.match(
     generationCore,
@@ -1164,6 +1164,30 @@ test('generation revalidation correlates the canonical selection identity in eve
     /ts_vat\.week_ending_date::text/g,
   ) || [];
   assert.equal(vatWeekFallbacks.length, 2);
+});
+
+test('generation establishes the invoice header before downstream ownership writes', () => {
+  const generationCore = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/'
+    + '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
+  );
+
+  assert.match(
+    generationCore,
+    /whole_lock as \([\s\S]*join target_headers h\s+on h\.chunk_id=vc\.id and h\.invoice_id=vc\.planned_invoice_id/s,
+  );
+  assert.match(
+    generationCore,
+    /nhsp_shift_inclusion as \([\s\S]*from source_rows s\s+join target_headers h\s+on h\.chunk_id=s\.chunk_id and h\.invoice_id=s\.planned_invoice_id/s,
+  );
+  assert.match(
+    generationCore,
+    /hr_sources as \([\s\S]*from members m\s+join target_headers h on h\.chunk_id=m\.chunk_id/s,
+  );
+  assert.match(
+    generationCore,
+    /source_segments as materialized \([\s\S]*from source_rows s\s+join target_headers h\s+on h\.chunk_id=s\.chunk_id and h\.invoice_id=s\.planned_invoice_id/s,
+  );
 });
 
 test('root repeatable installs every changed nested Invoice V8 authority', () => {
