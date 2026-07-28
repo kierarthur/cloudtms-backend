@@ -498,6 +498,52 @@ test('manifest carriers remain hidden until bounded release', () => {
   assert.match(claim, /'AWAITING_RELEASE'/);
 });
 
+test('direct Issue and Delivery carriers are committed claimable members', () => {
+  const startCore = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_11_private_invoice_operation_start_core_v8.sql',
+  );
+  const claim = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_work_claim_batch.sql',
+  );
+
+  assert.match(
+    startCore,
+    /manifest_generation,\s*is_manifest_member,\s*manifest_committed,\s*result_visible/i,
+  );
+  assert.match(
+    startCore,
+    /change_seq,\s*manifest_generation,\s*manifest_committed,\s*release_complete/i,
+  );
+  assert.equal(
+    (
+      startCore.match(
+        /when [sc]\.command_type in \('ISSUE_INVOICES','DELIVER_INVOICES'\)\s*then 1 else 0 end/g,
+      ) || []
+    ).length,
+    1,
+  );
+  assert.equal(
+    (
+      startCore.match(
+        /when c\.chunk_type in \('ISSUE_INVOICE','DELIVERY_PREPARE'\)\s*then 1 else 0 end/g,
+      ) || []
+    ).length,
+    1,
+  );
+  assert.equal(
+    (
+      startCore.match(
+        /c\.chunk_type in \('ISSUE_INVOICE','DELIVERY_PREPARE'\)/g,
+      ) || []
+    ).length,
+    3,
+  );
+  assert.match(
+    claim,
+    /c\.is_manifest_member[\s\S]*o\.manifest_committed[\s\S]*c\.manifest_committed/i,
+  );
+});
+
 test('result paging is direct, bounded, and revision-gated', () => {
   const operationGet = read(
     'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_get.sql',

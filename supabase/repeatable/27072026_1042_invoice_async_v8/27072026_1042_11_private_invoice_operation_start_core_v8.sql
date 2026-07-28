@@ -749,7 +749,8 @@ begin
       operation_type,entity_type,entity_id,actor_user_id,idempotency_key,
       status,phase,priority,source_revision,template_version,input_json,
       config_json,progress_json,total_units,chunk_count,control_version,
-      change_seq,created_at_utc,updated_at_utc)
+      change_seq,manifest_generation,manifest_committed,release_complete,
+      created_at_utc,updated_at_utc)
     select s.operation_type,s.entity_type,s.entity_id,p_actor_user_id,
       s.idempotency_key,'QUEUED','SUBMITTED',s.priority,s.source_revision,
       s.template_version,s.canonical_input,
@@ -759,6 +760,9 @@ begin
       jsonb_build_object('status_message','Accepted','total_units',s.unit_count,
         'completed_units',0,'failed_units',0),
       s.unit_count,s.unit_count,1,nextval('public.invoice_operation_change_seq'),
+      case when s.command_type in ('ISSUE_INVOICES','DELIVER_INVOICES')
+        then 1 else 0 end,
+      true,true,
       v_now,v_now
     from operation_specs s cross join(select count(*) from locks) lock_barrier
     where not exists(select 1 from existing_before e where e.command_no=s.command_no)
@@ -946,10 +950,18 @@ begin
     insert into public.invoice_operation_chunks(
       operation_id,chunk_type,phase,work_key,sequence_no,entity_type,entity_id,
       document_version_id,document_asset_id,status,priority,run_after_utc,
-      payload_json,operation_control_version,created_at_utc,updated_at_utc)
+      payload_json,operation_control_version,manifest_generation,
+      is_manifest_member,manifest_committed,result_visible,
+      created_at_utc,updated_at_utc)
     select c.operation_id,c.chunk_type,c.phase,c.work_key,c.sequence_no,c.entity_type,c.entity_id,
       c.document_version_id,c.document_asset_id,'QUEUED',c.priority,v_now,
-      c.payload_json,c.control_version,v_now,v_now
+      c.payload_json,c.control_version,
+      case when c.chunk_type in ('ISSUE_INVOICE','DELIVERY_PREPARE')
+        then 1 else 0 end,
+      c.chunk_type in ('ISSUE_INVOICE','DELIVERY_PREPARE'),
+      c.chunk_type in ('ISSUE_INVOICE','DELIVERY_PREPARE'),
+      false,
+      v_now,v_now
     from chunk_specs c
     on conflict do nothing
     returning *
