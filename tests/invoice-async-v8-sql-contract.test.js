@@ -1146,6 +1146,26 @@ test('generation commits exact NHSP shift ownership and attaches the authoritati
   );
 });
 
+test('generation revalidation correlates the canonical selection identity in every phase', () => {
+  const generationCore = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/'
+    + '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
+  );
+
+  const canonicalSelectionJoins = generationCore.match(
+    /when left\(coalesce\(ri\.payload_json->>'selection_key',''\),9\)='generate:'\s*then substr\(ri\.payload_json->>'selection_key',10\)\s*else ri\.payload_json->>'group_key' end/g,
+  ) || [];
+  assert.equal(canonicalSelectionJoins.length, 2);
+  assert.doesNotMatch(
+    generationCore,
+    /where r\.group_key=ri\.payload_json->>'group_key'/,
+  );
+  const vatWeekFallbacks = generationCore.match(
+    /ts_vat\.week_ending_date::text/g,
+  ) || [];
+  assert.equal(vatWeekFallbacks.length, 2);
+});
+
 test('root repeatable installs every changed nested Invoice V8 authority', () => {
   const runtimeAuthority = read(
     'supabase/repeatable/28072026_1609_invoice_async_v8_runtime_authority.sql',

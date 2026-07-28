@@ -283,7 +283,10 @@ begin
       (select coalesce(jsonb_agg(ri.payload_json order by ri.command_no),
         '[]'::jsonb) from resolver_inputs ri),null,v_now) r
     join resolver_inputs ri on ri.command_no=r.command_no
-    where r.group_key=ri.payload_json->>'group_key'
+    where r.group_key=case
+      when left(coalesce(ri.payload_json->>'selection_key',''),9)='generate:'
+        then substr(ri.payload_json->>'selection_key',10)
+      else ri.payload_json->>'group_key' end
   ),
   per_chunk as materialized (
     select c.id chunk_id,
@@ -557,7 +560,17 @@ begin
         'source_id',m.source_id,
         'timesheet_id',m.timesheet_id,
         'segment_id',m.segment_id,
-        'effective_date',m.payload_json->>'effective_settings_date')
+        'effective_date',coalesce(
+          case when m.payload_json->>'effective_settings_date'
+              ~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+              and pg_input_is_valid(
+                m.payload_json->>'effective_settings_date','date')
+            then m.payload_json->>'effective_settings_date' end,
+          (select ts_vat.week_ending_date::text
+             from public.timesheets ts_vat
+            where ts_vat.timesheet_id=m.timesheet_id
+              and ts_vat.is_current
+            limit 1)))
         order by m.chunk_id,m.source_member_key)
       from members m),'[]'::jsonb)) v
     order by v.source_member_key
@@ -733,7 +746,10 @@ begin
       (select coalesce(jsonb_agg(ri.payload_json order by ri.command_no),
         '[]'::jsonb) from commit_resolver_inputs ri),null,v_now) r
     join commit_resolver_inputs ri on ri.command_no=r.command_no
-    where r.group_key=ri.payload_json->>'group_key'
+    where r.group_key=case
+      when left(coalesce(ri.payload_json->>'selection_key',''),9)='generate:'
+        then substr(ri.payload_json->>'selection_key',10)
+      else ri.payload_json->>'group_key' end
   ),
   revision_check as materialized (
     select c.id chunk_id,r.source_revision_hash current_revision,
