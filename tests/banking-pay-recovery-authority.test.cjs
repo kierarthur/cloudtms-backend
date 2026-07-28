@@ -41,6 +41,10 @@ const laterFreshnessSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/26072026_1519_pay_batch_validate_freshness_correction_chain_wrapper.sql'),
   'utf8'
 );
+const transferScopeSeedSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/20072026_1215_align_transfer_scope_with_bank_projection.sql'),
+  'utf8'
+);
 const workerSource = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
 
 function functionBody(name, nextName, source = sql) {
@@ -1810,8 +1814,8 @@ test('post-draft source reservations aggregate every fresh resolved member befor
     'the repeatable must contain one authoritative source-reservation helper body'
   );
   const body = lastFunctionBody('_pay_batch_item_source_reservation_amount_ex_vat');
-  const frozenResolvedSourceIndex = body.indexOf(
-    'SELECT ROUND(\n           SUM((frozen_resolution_component.component_json'
+  const frozenResolvedSourceIndex = body.search(
+    /SELECT ROUND\(\r?\n\s+SUM\(\(frozen_resolution_component\.component_json/
   );
   const frozenSourceAmountIndex = body.indexOf('IF v_frozen_source_amount IS NOT NULL THEN');
 
@@ -2032,6 +2036,24 @@ test('batch freshness compares resolved deductions and reservations on frozen so
     (body.match(/sum\(coalesce\(abs\(pbi(?:_md|_ln)?\.frozen_source_amount\),\s*-pbi(?:_md|_ln)?\.amount_ex_vat/gi) || []).length,
     3,
     'overpayment, manual-debt and loan freshness must all compare source-side amounts'
+  );
+  assert.equal(
+    (
+      body.match(
+        /v_scope\s*<>\s*'PAYE'\s*or\s*coalesce\(pbc(?:_md|_ln)?\.awaiting_net_amount,\s*false\)\s*=\s*false/gi
+      ) || []
+    ).length,
+    3,
+    'PAYE overpayment, manual-debt and loan deductions must not self-stale before the first net input exists'
+  );
+  assert.equal(
+    (
+      body.match(
+        /v_scope\s*<>\s*'PAYE'\s*or\s*upper\(coalesce\((?:rt|pbi|pbi_md|pbi_ln)\.paye_treatment,\s*'NET_DEDUCT'\)\)\s*not in\s*\('GROSS_DEDUCT',\s*'GROSS_DEDUCTION',\s*'DEDUCT_GROSS'\)/gi
+      ) || []
+    ).length,
+    6,
+    'PAYE gross-side deductions must stay outside the three later net-allocation templates and frozen net comparisons'
   );
 });
 
@@ -2273,5 +2295,84 @@ test('failed local settlement invokes the bounded pre-provider cleanup before al
   assert.ok(
     body.indexOf('pay_execute_operation_cleanup_failed_local_artifacts') < body.indexOf('return reviewRequired('),
     'safe local cleanup must complete before the parent operation is marked for review',
+  );
+});
+
+test('explicit-zero execution preserves the complete server-owned seed proof through Worker normalisation', () => {
+  const seedBody = functionBody('pay_execute_bank_transfer_scope_seed', null, transferScopeSeedSql);
+  const resolverStart = workerSource.indexOf('const resolveAuthoritativeProjectionProof =');
+  const resolverEnd = workerSource.indexOf('const projectionProofProgressPatch =', resolverStart);
+  const patchEnd = workerSource.indexOf('const routeNoTransferSeedResult =', resolverEnd);
+  assert.ok(resolverStart >= 0 && resolverEnd > resolverStart && patchEnd > resolverEnd);
+
+  const resolverBody = workerSource.slice(resolverStart, resolverEnd);
+  const progressPatchBody = workerSource.slice(resolverEnd, patchEnd);
+  const requiredProofFields = [
+    'global_missing_explicit_paye_input_count',
+    'global_explicit_zero_count',
+    'global_positive_bank_payment_count',
+    'global_invalid_payment_row_count',
+    'scoped_missing_explicit_paye_input_count',
+    'scoped_explicit_zero_count',
+    'scoped_positive_bank_payment_count',
+    'scoped_invalid_payment_row_count',
+    'global_paye_net_state_hash',
+    'global_bank_payment_projection_hash',
+    'scoped_paye_net_state_hash',
+    'scoped_bank_payment_projection_hash',
+    'scoped_no_transfer_execution',
+  ];
+
+  for (const field of requiredProofFields) {
+    assert.match(seedBody, new RegExp(`'${field}'`), `database seed must emit ${field}`);
+    assert.match(resolverBody, new RegExp(field), `Worker resolver must retain ${field}`);
+    assert.match(progressPatchBody, new RegExp(field), `durable progress proof must retain ${field}`);
+  }
+  assert.match(
+    resolverBody,
+    /noBankPaymentExecution !== true \|\| completeNoBankProofPresent/,
+    'a pure no-bank route must fail closed unless the complete proof survives normalisation'
+  );
+  assert.match(
+    progressPatchBody,
+    /no_bank_payment_proof:\s*\(durableProof\.no_bank_payment_execution === true[\s\S]*\?\s*durableProof\s*:\s*null/,
+    'the complete durable proof must be written as the nested database-authorisation proof'
+  );
+});
+
+test('a zero-transfer settlement does not report a benign completion-notice skip as a communication failure', () => {
+  const body = lastFunctionBody('pay_batch_display_summary_refresh');
+
+  assert.match(
+    body,
+    /completion_notice_skip_reason[\s\S]*skip_reason[\s\S]*NO_MATERIALISED_TRANSFERS/
+  );
+  assert.match(
+    body,
+    /<>\s*'NO_MATERIALISED_TRANSFERS'[\s\S]*completion_notice_skipped_count/
+  );
+});
+
+test('PAYE remittance scope includes a real zero-net payment-and-deduction batch', () => {
+  const body = lastFunctionBody('pay_operation_remittance_scope_seed');
+  const candidateScopeStart = body.indexOf('), candidate_scope AS (');
+  const umbrellaScopeStart = body.indexOf('), umbrella_scope AS (', candidateScopeStart);
+  assert.ok(candidateScopeStart >= 0 && umbrellaScopeStart > candidateScopeStart);
+  const candidateScope = body.slice(candidateScopeStart, umbrellaScopeStart);
+
+  assert.match(
+    candidateScope,
+    /HAVING[\s\S]*SUM\(eligible_item_rows\.item_amount\)[\s\S]*COUNT\(\*\) FILTER \(WHERE eligible_item_rows\.item_amount > 0\) > 0[\s\S]*COUNT\(\*\) FILTER \(WHERE eligible_item_rows\.item_amount < 0\) > 0/
+  );
+  assert.match(
+    candidateScope,
+    /remittance_overrides_enabled[\s\S]*remittance_receive_enabled[\s\S]*paye_remittances_enabled/,
+    'zero-net PAYE remittances must retain the candidate-over-global receive preference'
+  );
+  assert.match(candidateScope, /'CANDIDATE_REMITTANCE'/);
+  assert.doesNotMatch(
+    candidateScope,
+    /INSERT INTO public\.pay_bank_transfers|UPDATE public\.pay_bank_transfers/,
+    'remittance eligibility must never create or alter a bank transfer'
   );
 });

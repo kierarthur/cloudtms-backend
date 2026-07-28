@@ -148,6 +148,69 @@ test('candidate remittance renders the hydrated frozen candidate rather than a b
   assert.equal(rendered.summary_json.render_incomplete, false);
 });
 
+test('candidate remittance explains a genuine zero-net PAYE payment and recovery', () => {
+  const context = createRenderingContext();
+  const rendered = context.buildRemittanceEmailPayload({
+    pay_batch_id: '973a8779-e853-4c1d-96b8-213bbac13508',
+    pay_date: '2026-07-24',
+    job_kind: 'CANDIDATE_REMITTANCE',
+    scope: 'PAYE',
+    recipient: {
+      entity_kind: 'CANDIDATE',
+      candidate_id: '11111111-1111-4111-8111-111111111111',
+      name: 'Test Candidate'
+    },
+    candidates: [{
+      candidate_id: '11111111-1111-4111-8111-111111111111',
+      display_name: 'Test Candidate',
+      tms_ref: 'CCR-00001',
+      non_timesheet_lines: [
+        {
+          pay_batch_item_id: '33333333-3333-4333-8333-333333333333',
+          item_type: 'TIMESHEET_PAYMENT',
+          amount_ex_vat: 310.86,
+          amount_vat: 0,
+          amount_inc_vat: 310.86
+        },
+        {
+          pay_batch_item_id: '44444444-4444-4444-8444-444444444444',
+          item_type: 'OVERPAYMENT_RECOVERY',
+          amount_ex_vat: -310.86,
+          amount_vat: 0,
+          amount_inc_vat: -310.86
+        }
+      ],
+      frozen_totals: {
+        gross_ex_vat: 310.86,
+        vat: 0,
+        gross_inc_vat: 310.86,
+        deductions_recoveries_inc_vat: 310.86,
+        final_payable: 0
+      }
+    }],
+    summary: {
+      candidate_count: 1,
+      timesheet_count: 0,
+      gross_ex_vat: 310.86,
+      vat: 0,
+      gross_inc_vat: 310.86,
+      deductions_recoveries_inc_vat: 310.86,
+      final_payable: 0
+    }
+  }, {
+    jobKind: 'CANDIDATE_REMITTANCE',
+    payBatchId: '973a8779-e853-4c1d-96b8-213bbac13508',
+    payDate: '2026-07-24'
+  });
+
+  assert.match(rendered.body_text, /£310\.86/);
+  assert.match(rendered.body_text, /£0\.00/);
+  assert.equal(rendered.summary_json.gross_ex_vat, 310.86);
+  assert.equal(rendered.summary_json.deductions, 310.86);
+  assert.equal(rendered.summary_json.final_payable, 0);
+  assert.equal(rendered.summary_json.render_incomplete, false);
+});
+
 test('remittance hydration remains limited to frozen pay-batch artifacts', () => {
   const hydration = sliceBetween(
     'const hydrateThinRemittanceJobFromFrozenBatchArtifacts = async (job, row) =>',

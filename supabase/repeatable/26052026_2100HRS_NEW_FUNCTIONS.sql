@@ -71871,12 +71871,33 @@ BEGIN
     FROM eligible_item_rows
     WHERE eligible_item_rows.pay_channel = 'PAYE'
       AND v_scope IN ('ALL', 'CANDIDATE', 'PAYE')
+      AND EXISTS (
+        SELECT 1
+        FROM public.candidates AS remittance_candidate
+        WHERE remittance_candidate.id = eligible_item_rows.candidate_id
+          AND (
+            CASE
+              WHEN COALESCE(remittance_candidate.remittance_overrides_enabled, false)
+                THEN COALESCE(remittance_candidate.remittance_receive_enabled, false)
+              ELSE COALESCE((
+                SELECT settings_row.paye_remittances_enabled
+                FROM public.settings_defaults AS settings_row
+                ORDER BY settings_row.id
+                LIMIT 1
+              ), false)
+            END
+          )
+      )
     GROUP BY eligible_item_rows.pay_batch_candidate_id,
              eligible_item_rows.candidate_id,
              eligible_item_rows.payment_scope_key,
              eligible_item_rows.pay_bank_transfer_id,
              eligible_item_rows.transfer_group_key
     HAVING ROUND(COALESCE(SUM(eligible_item_rows.item_amount), 0), 2) <> 0
+        OR (
+          COUNT(*) FILTER (WHERE eligible_item_rows.item_amount > 0) > 0
+          AND COUNT(*) FILTER (WHERE eligible_item_rows.item_amount < 0) > 0
+        )
   ), umbrella_scope AS (
     SELECT
       eligible_item_rows.pay_batch_candidate_id,
