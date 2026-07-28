@@ -640,7 +640,10 @@ final as materialized (
       )
     ) pair_balanced
   from rollup r
-  left join line_scope ls using(invoice_id,scope_key,timesheet_id)
+  left join line_scope ls
+    on ls.invoice_id is not distinct from r.invoice_id
+   and ls.scope_key=r.scope_key
+   and ls.timesheet_id=r.timesheet_id
   left join public.invoices ti on ti.id=r.invoice_id
 ),
 member_results as materialized (

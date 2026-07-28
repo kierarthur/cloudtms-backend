@@ -1057,6 +1057,22 @@ test('generation resolves NHSP financials to the SELF_BILL invoice stream withou
   );
 });
 
+test('candidate correction validation treats a planned invoice identity as null-safe', () => {
+  const correctionValidation = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+    + '23072026_2207_private_invoice_correction_validate_batch.sql',
+  );
+
+  assert.match(
+    correctionValidation,
+    /left join line_scope ls\s+on ls\.invoice_id is not distinct from r\.invoice_id\s+and ls\.scope_key=r\.scope_key\s+and ls\.timesheet_id=r\.timesheet_id/s,
+  );
+  assert.doesNotMatch(
+    correctionValidation,
+    /left join line_scope ls using\(invoice_id,scope_key,timesheet_id\)/,
+  );
+});
+
 test('root repeatable installs every changed nested Invoice V8 authority', () => {
   const runtimeAuthority = read(
     'supabase/repeatable/28072026_1609_invoice_async_v8_runtime_authority.sql',
@@ -1068,6 +1084,7 @@ test('root repeatable installs every changed nested Invoice V8 authority', () =>
     '27072026_1501_private_invoice_batch_generate_candidate_keys_v2.sql',
     '27072026_1501_private_invoice_batch_issue_candidate_keys_v2.sql',
     '23072026_2207_private_invoice_generation_resolve_command_groups.sql',
+    '23072026_2207_private_invoice_correction_validate_batch.sql',
     '27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
     '27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
     '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
