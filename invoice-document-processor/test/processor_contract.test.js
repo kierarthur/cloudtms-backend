@@ -172,13 +172,28 @@ test('merge receipts accept the zero-based manifest ordinal used by document pla
   );
 });
 
-test('final verification requires contiguous zero-based logical manifest order', () => {
+test('final verification accepts canonical sparse manifest order and rejects invalid order', () => {
   assert.doesNotThrow(() => validateLogicalManifestOrder([
     { logicalOrdinal: '0' },
-    { logicalOrdinal: '1' }
+    { logicalOrdinal: '100' },
+    { logicalOrdinal: '9000' }
   ]));
   assert.throws(
-    () => validateLogicalManifestOrder([{ logicalOrdinal: '1' }]),
+    () => validateLogicalManifestOrder([
+      { logicalOrdinal: '100' },
+      { logicalOrdinal: '0' }
+    ]),
+    /FINAL_LOGICAL_INPUT_ORDER_INVALID/
+  );
+  assert.throws(
+    () => validateLogicalManifestOrder([
+      { logicalOrdinal: '100' },
+      { logicalOrdinal: '100' }
+    ]),
+    /FINAL_LOGICAL_INPUT_ORDER_INVALID/
+  );
+  assert.throws(
+    () => validateLogicalManifestOrder([{ logicalOrdinal: '0100' }]),
     /FINAL_LOGICAL_INPUT_ORDER_INVALID/
   );
 });

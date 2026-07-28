@@ -197,13 +197,22 @@ function resultIdentity(expected) {
 }
 
 function validateLogicalManifestOrder(logicalRows) {
+  let previousOrdinal = -1;
   for (let index = 0; index < logicalRows.length; index += 1) {
-    if (Number(logicalRows[index].logicalOrdinal) !== index) {
+    const rawOrdinal = String(logicalRows[index].logicalOrdinal ?? '').trim();
+    const ordinal = Number(rawOrdinal);
+    if (
+      !Number.isSafeInteger(ordinal)
+      || ordinal < 0
+      || rawOrdinal !== String(ordinal)
+      || ordinal <= previousOrdinal
+    ) {
       throw Object.assign(
         new Error('FINAL_LOGICAL_INPUT_ORDER_INVALID'),
         { code: 'FINAL_LOGICAL_INPUT_ORDER_INVALID' }
       );
     }
+    previousOrdinal = ordinal;
   }
 }
 
