@@ -168,6 +168,30 @@ function fixedLengthFramedBody(header, inputs, signal, FixedLengthStreamConstruc
   };
 }
 
+function fixedLengthReadableBody(body, length, FixedLengthStreamConstructor = globalThis.FixedLengthStream) {
+  if (!body || typeof body.pipeTo !== 'function') {
+    return { body, completion: Promise.resolve() };
+  }
+  if (typeof FixedLengthStreamConstructor !== 'function') {
+    throw Object.assign(new Error('PROCESSOR_FIXED_LENGTH_STREAM_UNAVAILABLE'), {
+      code: 'PROCESSOR_FIXED_LENGTH_STREAM_UNAVAILABLE',
+      category: 'TRANSIENT_INFRASTRUCTURE'
+    });
+  }
+  const expectedLength = Number(length);
+  if (!Number.isSafeInteger(expectedLength) || expectedLength < 1) {
+    throw Object.assign(new Error('PROCESSOR_RESPONSE_LENGTH_INVALID'), {
+      code: 'PROCESSOR_RESPONSE_LENGTH_INVALID',
+      category: 'IDENTITY_MISMATCH'
+    });
+  }
+  const fixed = new FixedLengthStreamConstructor(expectedLength);
+  return {
+    body: fixed.readable,
+    completion: body.pipeTo(fixed.writable)
+  };
+}
+
 function resultIdentity(expected) {
   return { chunk_id: expected.chunk_id, fence_token: expected.fence_token, action: expected.action, document_version_id: expected.document_version_id || undefined, document_asset_id: expected.document_asset_id || undefined, plan_generation: expected.plan_generation, source_revision: expected.source_revision || undefined, template_version: expected.template_version || undefined, processor_policy_version: expected.processor_policy_version, render_kind: expected.render_kind || undefined, ordered_input_hash: expected.ordered_input_hash || undefined, output_prefix: expected.immutable_destination_prefix };
 }
@@ -245,7 +269,11 @@ async function putImmutableProcessorArtifact(bucket, key, body, identity, metada
     try { await body?.cancel?.('immutable-artifact-conflict'); } catch {}
     throw Object.assign(new Error('IMMUTABLE_ARTIFACT_KEY_CONFLICT'), { code: 'IMMUTABLE_ARTIFACT_KEY_CONFLICT' });
   }
-  const result = await bucket.put(key, body, { onlyIf: { etagDoesNotMatch: '*' }, sha256: metadata.sha256, httpMetadata: { contentType: 'application/pdf' }, customMetadata: expected });
+  const prepared = fixedLengthReadableBody(body, metadata.size_bytes);
+  const [result] = await Promise.all([
+    bucket.put(key, prepared.body, { onlyIf: { etagDoesNotMatch: '*' }, sha256: metadata.sha256, httpMetadata: { contentType: 'application/pdf' }, customMetadata: expected }),
+    prepared.completion
+  ]);
   if (result) return { reused: false, object: result };
   const raced = await bucket.head(key);
   if (artifactMatches(raced, expected)) return { reused: true, object: raced };
@@ -556,6 +584,7 @@ export const invoiceDocumentProcessorInternals = Object.freeze({
   resolveR2Inputs,
   framedBody,
   fixedLengthFramedBody,
+  fixedLengthReadableBody,
   resultIdentity,
   buildMergeReceipt,
   flattenLeafInputReceipts,

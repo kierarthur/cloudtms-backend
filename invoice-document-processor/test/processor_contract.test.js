@@ -26,6 +26,7 @@ const {
   resolveR2Inputs,
   framedBody,
   fixedLengthFramedBody,
+  fixedLengthReadableBody,
   resultIdentity,
   putImmutableProcessorArtifact,
   classifyError
@@ -115,6 +116,24 @@ test('container requests retain streaming semantics while exposing an exact fixe
   }
   await framed.completion;
   assert.equal(actualLength, expectedLength);
+});
+
+test('streamed processor outputs retain an exact length for immutable R2 writes', async () => {
+  let constructedLength = null;
+  class TestFixedLengthStream {
+    constructor(length) {
+      constructedLength = length;
+      const stream = new TransformStream();
+      this.readable = stream.readable;
+      this.writable = stream.writable;
+    }
+  }
+  const source = objectFromBytes([4, 5, 6]).body;
+  const prepared = fixedLengthReadableBody(source, 3, TestFixedLengthStream);
+  const bytes = new Uint8Array(await new Response(prepared.body).arrayBuffer());
+  await prepared.completion;
+  assert.equal(constructedLength, 3);
+  assert.deepEqual([...bytes], [4, 5, 6]);
 });
 
 test('immutable processor writes use full hash and reject conflicting existing objects', async () => {

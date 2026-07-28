@@ -833,6 +833,22 @@ test('document merge retry requeues the plan into the implemented wait-for-merge
   assert.match(documentAdvance, /where x->>'phase'='WAIT_FOR_MERGE'/i);
 });
 
+test('presentation authority repeatable defers safely instead of failing CI while work is active', () => {
+  const presentationAuthority = read(
+    'supabase/repeatable/25072026_0003_invoice_presentation_runtime_authority.sql',
+  );
+  assert.match(presentationAuthority, /\\gset/i);
+  assert.match(presentationAuthority, /\\if :invoice_presentation_active_work/i);
+  assert.match(
+    presentationAuthority,
+    /INVOICE_PRESENTATION_CUTOVER_DEFERRED_ACTIVE_WORK/i,
+  );
+  assert.doesNotMatch(
+    presentationAuthority,
+    /raise exception[\s\S]*INVOICE_PRESENTATION_CUTOVER_ACTIVE_WORK/i,
+  );
+});
+
 test('committed TEST configuration keeps both async entry flags disabled', () => {
   const wrangler = read('wrangler.toml');
   const pipelineFlags = [
