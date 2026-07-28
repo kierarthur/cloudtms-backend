@@ -1306,12 +1306,25 @@ begin
     on conflict(id) do nothing returning id
   ),
   target_headers as materialized (
-    select vc.id chunk_id,h.id invoice_id
-    from inserted_headers h
-    join write_eligible_chunks vc on vc.planned_invoice_id=h.id
-    union all
     select e.chunk_id,e.invoice_id
     from existing_target_headers e
+  ),
+  deferred_new_headers as (
+    update public.invoice_operation_chunks c
+    set status='QUEUED',
+      phase='COMMIT',
+      progress_json=coalesce(c.progress_json,'{}'::jsonb)
+        ||jsonb_build_object('status_message',
+          'Invoice header created; applying authoritative source ownership'),
+      error_json=null,
+      lease_owner=null,
+      lease_token=null,
+      lease_expires_at_utc=null,
+      updated_at_utc=v_now
+    from inserted_headers h
+    join write_eligible_chunks vc on vc.planned_invoice_id=h.id
+    where c.id=vc.id
+    returning c.id
   ),
   inserted_lines as (
     insert into public.invoice_lines(
@@ -1593,6 +1606,8 @@ begin
       lease_owner=null,lease_token=null,lease_expires_at_utc=null,
       updated_at_utc=v_now
     from valid_chunks vc
+    join target_headers h
+      on h.chunk_id=vc.id and h.invoice_id=vc.planned_invoice_id
     cross join (select count(*) applied_count from segment_lock_authority) segment_application
     cross join (select count(*) cached_count from authoritative_hr_sources) source_cache_application
     where c.id=vc.id

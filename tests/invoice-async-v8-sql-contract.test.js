@@ -1174,6 +1174,18 @@ test('generation establishes the invoice header before downstream ownership writ
 
   assert.match(
     generationCore,
+    /target_headers as materialized \(\s*select e\.chunk_id,e\.invoice_id\s+from existing_target_headers e\s*\)/s,
+  );
+  assert.match(
+    generationCore,
+    /deferred_new_headers as \([\s\S]*set status='QUEUED',\s*phase='COMMIT'[\s\S]*from inserted_headers h[\s\S]*join write_eligible_chunks vc on vc\.planned_invoice_id=h\.id/s,
+  );
+  assert.match(
+    generationCore,
+    /from valid_chunks vc\s+join target_headers h\s+on h\.chunk_id=vc\.id and h\.invoice_id=vc\.planned_invoice_id/s,
+  );
+  assert.match(
+    generationCore,
     /whole_lock as \([\s\S]*join target_headers h\s+on h\.chunk_id=vc\.id and h\.invoice_id=vc\.planned_invoice_id/s,
   );
   assert.match(
