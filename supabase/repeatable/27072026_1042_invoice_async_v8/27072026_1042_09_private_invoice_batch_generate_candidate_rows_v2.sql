@@ -666,10 +666,19 @@ begin
       null,
       coalesce(p_now_utc,statement_timestamp())
     ) candidate
-    where coalesce(
-      candidate.candidate_json->>'primary_blocker_code',
-      ''
-    ) not in (
+    where candidate.candidate_json->>'row_kind'='CREATE_INVOICE'
+      and (
+        v_mode in ('FACETS','SUMMARY')
+        or candidate.candidate_json->>'selection_key' in (
+          select selected_key.selection_key
+          from candidate_keys selected_key
+          where selected_key.page_ordinal<=v_page_size
+        )
+      )
+      and coalesce(
+        candidate.candidate_json->>'primary_blocker_code',
+        ''
+      ) not in (
       'SOURCE_ALREADY_INVOICED',
       'SEGMENT_ALREADY_LOCKED',
       'SOURCE_ALREADY_LOCKED'
