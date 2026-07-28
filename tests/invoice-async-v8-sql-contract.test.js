@@ -1174,7 +1174,7 @@ test('generation establishes the invoice header before downstream ownership writ
 
   assert.match(
     generationCore,
-    /target_headers as materialized \(\s*select e\.chunk_id,e\.invoice_id\s+from existing_target_headers e\s*\)/s,
+    /target_headers as materialized \(\s*select e\.chunk_id,e\.invoice_id\s+from existing_target_headers e\s+where not exists\(\s*select 1\s+from inserted_headers h\s+where h\.id=e\.invoice_id\)\s*\)/s,
   );
   assert.match(
     generationCore,

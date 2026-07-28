@@ -1308,6 +1308,10 @@ begin
   target_headers as materialized (
     select e.chunk_id,e.invoice_id
     from existing_target_headers e
+    where not exists(
+      select 1
+      from inserted_headers h
+      where h.id=e.invoice_id)
   ),
   deferred_new_headers as (
     update public.invoice_operation_chunks c
