@@ -41,7 +41,7 @@ import {
 } from '../invoice-document-processor/src/receipt-contract.js';
 
 const V8_ACTOR_ID = '00000000-0000-4000-8000-000000000010';
-const V8_FUNCTION_MANIFEST = 'a18822cc8a60823406de8763d97f0a8f744528e50628eb1322edb10526ab18ce';
+const V8_FUNCTION_MANIFEST = 'a57e021d69f36b31d6eed83fc1fccf20bbbc5c127e508d74c6dc77ea2b85bc9d';
 const V8_CURSOR_SECRET = 'test-session-secret-with-more-than-thirty-two-characters';
 
 function v8DatabaseContract(overrides = {}) {
@@ -1368,6 +1368,114 @@ test('V2 candidate envelopes remain typed and legacy envelopes fail closed', () 
   }), /INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH/);
 });
 
+test('SUMMARY group records require canonical selectors and consistent state', () => {
+  const selector = {
+    type: 'WEEK',
+    week_ending_date: '2026-07-26'
+  };
+  const base = {
+    contract_version: 'INVOICE_BATCH_CANDIDATES_V2',
+    action: 'GENERATE',
+    mode: 'SUMMARY',
+    rows: [],
+    page: { page_size: 0, returned_count: 0, total_count: 2, has_more: false },
+    totals: {
+      filtered_total: 2,
+      display_total: 2,
+      eligible_total: 2,
+      selected_total: 2,
+      excluded_total: 0,
+      blocked_total: 0
+    },
+    selection_summary: {
+      eligible_total: 2,
+      selected_total: 2,
+      excluded_total: 0,
+      blocked_total: 0,
+      exact: true
+    },
+    group_selection: [{
+      selector,
+      group_key: null,
+      eligible_total: 2,
+      selected_total: 2,
+      state: 'CHECKED',
+      has_hidden_override: false
+    }],
+    facets: {},
+    filter_hash: 'a'.repeat(64),
+    query_hash: 'b'.repeat(64),
+    selection_hash: 'c'.repeat(64)
+  };
+
+  const parsed = invoiceAsyncHttpInternals.candidateGroupsFromRpc(base);
+  assert.deepEqual(parsed.group_selection[0].selector, selector);
+  assert.equal(parsed.group_selection[0].group_key, null);
+
+  for (const group of [
+    { ...base.group_selection[0], selector: undefined },
+    Object.fromEntries(Object.entries(base.group_selection[0]).filter(([key]) => key !== 'group_key')),
+    { ...base.group_selection[0], unexpected: true },
+    { ...base.group_selection[0], eligible_total: '2' },
+    { ...base.group_selection[0], group_key: {} },
+    { ...base.group_selection[0], state: 'CHECKED', has_hidden_override: true },
+    { ...base.group_selection[0], eligible_total: 0, selected_total: 0, state: 'DISABLED', has_hidden_override: true }
+  ]) {
+    assert.throws(
+      () => invoiceAsyncHttpInternals.candidateGroupsFromRpc({
+        ...base,
+        group_selection: [group]
+      }),
+      /INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH/
+    );
+  }
+  assert.throws(
+    () => invoiceAsyncHttpInternals.candidateGroupsFromRpc({
+      ...base,
+      group_selection: [base.group_selection[0], base.group_selection[0]]
+    }),
+    /INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH/
+  );
+});
+
+test('SUMMARY group-selector normalization accepts 300 and rejects duplicates or 301', () => {
+  const selectors = Array.from({ length: 300 }, (_, index) => ({
+    type: 'ROW',
+    selection_key: `row:${index + 1}`
+  }));
+  const summaryQuery = v8Query('GENERATE', {
+    mode: 'SUMMARY',
+    group_selectors: selectors
+  });
+  delete summaryQuery.page_size;
+  delete summaryQuery.cursor;
+  const normalized = invoiceAsyncHttpInternals.normaliseInvoiceBatchQueryBody(
+    summaryQuery,
+    'GENERATE'
+  );
+  assert.equal(normalized.group_selectors.length, 300);
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchQueryBody(
+      {
+        ...summaryQuery,
+        group_selectors: [...selectors, { type: 'ROW', selection_key: 'row:301' }]
+      },
+      'GENERATE'
+    ),
+    /INVOICE_BATCH_QUERY_MODE_FIELD_INVALID/
+  );
+  assert.throws(
+    () => invoiceAsyncHttpInternals.normaliseInvoiceBatchQueryBody(
+      {
+        ...summaryQuery,
+        group_selectors: [selectors[0], { type: 'row', selection_key: 'row:1' }]
+      },
+      'GENERATE'
+    ),
+    /BATCH_SELECTION_SELECTOR_INVALID/
+  );
+});
+
 test('POST candidate route returns V8 and keeps database keysets behind an opaque cursor', async () => {
   const env = v8Environment();
   const calls = [];
@@ -1487,6 +1595,115 @@ test('POST candidate route returns V8 and keeps database keysets behind an opaqu
     after_sort_text: 'client one'
   });
   assert.equal(secondBody.page.next_cursor, null);
+});
+
+test('SUMMARY candidate route enforces exact group-selector coverage and request order', async () => {
+  const env = v8Environment();
+  const weekSelector = { type: 'WEEK', week_ending_date: '2026-07-26' };
+  const clientSelector = {
+    type: 'CLIENT',
+    client_id: '00000000-0000-4000-8000-000000000020'
+  };
+  const extraSelector = {
+    type: 'STATUS',
+    status_code: 'READY'
+  };
+  const requestBody = v8Query('GENERATE', {
+    mode: 'SUMMARY',
+    group_selectors: [weekSelector, clientSelector]
+  });
+  delete requestBody.page_size;
+  delete requestBody.cursor;
+  const groupRecord = selector => ({
+    selector,
+    group_key: null,
+    eligible_total: 1,
+    selected_total: 1,
+    state: 'CHECKED',
+    has_hidden_override: false
+  });
+  const requestWithGroups = async returnedGroups => handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoices/batch-generate/candidates', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    }),
+    env,
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc(async (name, args) => {
+        assert.equal(name, 'invoice_batch_generate_candidates');
+        const query = args.p_query;
+        return {
+          contract_version: 'INVOICE_BATCH_CANDIDATES_V2',
+          action: 'GENERATE',
+          mode: 'SUMMARY',
+          snapshot: query.snapshot,
+          normalised_filter: query.filters,
+          normalised_sort: query.sort,
+          filter_hash: await invoiceAsyncHttpInternals.hashInvoiceBatchFilter(
+            'GENERATE', query.filters, query.sort
+          ),
+          query_hash: await invoiceAsyncHttpInternals.hashInvoiceBatchQuery(
+            'GENERATE', query.filters, query.sort, query.snapshot
+          ),
+          selection_hash: await invoiceAsyncHttpInternals.hashInvoiceBatchSelection(
+            query.selection
+          ),
+          rows: [],
+          page: {
+            page_size: 0,
+            returned_count: 0,
+            total_count: 1,
+            has_more: false
+          },
+          totals: {
+            filtered_total: 1,
+            display_total: 1,
+            eligible_total: 1,
+            selected_total: 1,
+            excluded_total: 0,
+            blocked_total: 0
+          },
+          selection_summary: {
+            eligible_total: 1,
+            selected_total: 1,
+            excluded_total: 0,
+            blocked_total: 0,
+            exact: true
+          },
+          group_selection: returnedGroups,
+          facets: {}
+        };
+      })
+    }
+  );
+
+  const orderedResponse = await requestWithGroups([
+    groupRecord(clientSelector),
+    groupRecord(weekSelector)
+  ]);
+  const orderedBody = await orderedResponse.json();
+  assert.equal(orderedResponse.status, 200, JSON.stringify(orderedBody));
+  assert.deepEqual(
+    orderedBody.group_selection.map(group => group.selector),
+    [weekSelector, clientSelector]
+  );
+
+  for (const returnedGroups of [
+    [groupRecord(weekSelector)],
+    [
+      groupRecord(weekSelector),
+      groupRecord(clientSelector),
+      groupRecord(extraSelector)
+    ]
+  ]) {
+    const response = await requestWithGroups(returnedGroups);
+    const body = await response.json();
+    assert.equal(response.status, 503, JSON.stringify(body));
+    assert.equal(body.error, 'INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+  }
 });
 
 test('invoice batch JSON reader enforces the byte limit and object-only contract', async () => {

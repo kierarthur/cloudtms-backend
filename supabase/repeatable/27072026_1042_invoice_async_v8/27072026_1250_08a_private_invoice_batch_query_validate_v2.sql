@@ -21,6 +21,8 @@ declare
   v_page_size integer;
   v_normalized_filters jsonb;
   v_normalized_sort jsonb;
+  v_group_selector_rules jsonb;
+  v_normalized_group_selectors jsonb := '[]'::jsonb;
   v_normalized_query jsonb;
 begin
   if v_action not in ('GENERATE', 'ISSUE')
@@ -600,14 +602,60 @@ begin
       message = 'BATCH_SNAPSHOT_INVALID';
   end if;
 
-  if v_query ? 'group_selectors'
-     and (
-       jsonb_typeof(v_query->'group_selectors') is distinct from 'array'
-       or jsonb_array_length(v_query->'group_selectors') > 100
-     ) then
-    raise exception using
-      errcode = '22023',
-      message = 'INVOICE_BATCH_QUERY_MODE_FIELD_INVALID';
+  if v_query ? 'group_selectors' then
+    if jsonb_typeof(v_query->'group_selectors') is distinct from 'array'
+       or jsonb_array_length(v_query->'group_selectors') > 300 then
+      raise exception using
+        errcode = '22023',
+        message = 'INVOICE_BATCH_QUERY_MODE_FIELD_INVALID';
+    end if;
+
+    if exists (
+      select 1
+      from jsonb_array_elements(v_query->'group_selectors') selector(value)
+      where jsonb_typeof(selector.value) is distinct from 'object'
+    ) then
+      raise exception using
+        errcode = '22023',
+        message = 'BATCH_SELECTION_SELECTOR_INVALID';
+    end if;
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'sequence', selector.ordinality,
+      'action', 'INCLUDE',
+      'selector', selector.value
+    ) order by selector.ordinality), '[]'::jsonb)
+    into v_group_selector_rules
+    from jsonb_array_elements(v_query->'group_selectors')
+      with ordinality selector(value, ordinality);
+
+    select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+      'type', normalized.selector_type,
+      'selection_key', normalized.selection_key,
+      'week_ending_date', normalized.week_ending_date,
+      'client_id', normalized.client_id,
+      'candidate_id', normalized.candidate_id,
+      'status_code', normalized.status_code
+    )) order by normalized.rule_sequence), '[]'::jsonb)
+    into v_normalized_group_selectors
+    from private._invoice_batch_selection_rules_v2(jsonb_build_object(
+      'contract_version', 'INVOICE_BATCH_SELECTION_V2',
+      'mode', 'IMPLICIT_ALL',
+      'default_selected', true,
+      'rules', v_group_selector_rules
+    )) normalized;
+
+    if (
+      select count(*)
+      from jsonb_array_elements(v_normalized_group_selectors)
+    ) <> (
+      select count(distinct selector.value)
+      from jsonb_array_elements(v_normalized_group_selectors) selector(value)
+    ) then
+      raise exception using
+        errcode = '22023',
+        message = 'BATCH_SELECTION_SELECTOR_INVALID';
+    end if;
   end if;
 
   if v_mode = 'EXPLICIT_KEYS' and (
@@ -803,10 +851,7 @@ begin
     );
   elsif v_mode = 'SUMMARY' then
     v_normalized_query := v_normalized_query || jsonb_build_object(
-      'group_selectors', coalesce(
-        v_query->'group_selectors',
-        '[]'::jsonb
-      )
+      'group_selectors', v_normalized_group_selectors
     );
   elsif v_mode = 'EXPLICIT_KEYS' then
     v_normalized_query := v_normalized_query || jsonb_build_object(

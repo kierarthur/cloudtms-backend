@@ -545,15 +545,20 @@ function normaliseInvoiceBatchSnapshot(value, action, options = {}) {
 
 function normaliseInvoiceBatchGroupSelectors(value) {
   const selectors = value === undefined ? [] : value;
-  if (!Array.isArray(selectors) || selectors.length > 100) {
+  if (!Array.isArray(selectors) || selectors.length > 300) {
     throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_FIELD_INVALID');
   }
-  return selectors.map(selector => normaliseInvoiceBatchSelectionRules({
+  const normalized = selectors.map(selector => normaliseInvoiceBatchSelectionRules({
     contract_version: INVOICE_BATCH_SELECTION_CONTRACT,
     mode: 'IMPLICIT_ALL',
     default_selected: true,
     rules: [{ sequence: 1, action: 'INCLUDE', selector }]
   }).rules[0].selector);
+  const identities = normalized.map(postgresJsonbTextForInvoiceBatch);
+  if (new Set(identities).size !== identities.length) {
+    throw invoiceBatchContractError('BATCH_SELECTION_SELECTOR_INVALID');
+  }
+  return normalized;
 }
 
 function normaliseInvoiceBatchFacetRequest(value) {
@@ -1198,20 +1203,83 @@ function candidateGroupsFromRpc(value) {
         .every(field => nonNegativeInteger(selectionSummary[field]))
       || typeof selectionSummary.exact !== 'boolean'
       || (mode === 'PAGE' && selectionSummary.exact !== false)
-      || (mode === 'SUMMARY' && selectionSummary.exact !== true)
-      || envelope.group_selection.some(group => (
-        !group || typeof group !== 'object' || Array.isArray(group)
-        || typeof group.group_key !== 'string' || !group.group_key
-        || !nonNegativeInteger(group.eligible_total)
-        || !nonNegativeInteger(group.selected_total)
-        || Number(group.selected_total) > Number(group.eligible_total)
-        || !['DISABLED', 'UNCHECKED', 'CHECKED', 'INDETERMINATE'].includes(String(group.state || '').toUpperCase())
-        || typeof group.has_hidden_override !== 'boolean'
-      ))) {
+      || (mode === 'SUMMARY' && selectionSummary.exact !== true)) {
+    throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+  }
+
+  const allowedGroupFields = new Set([
+    'selector', 'group_key', 'eligible_total', 'selected_total',
+    'state', 'has_hidden_override'
+  ]);
+  const groupIdentities = new Set();
+  const normalizedGroups = [];
+  try {
+    if (!['PAGE', 'SUMMARY'].includes(mode) && envelope.group_selection.length !== 0) {
+      throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+    }
+    for (const group of envelope.group_selection) {
+      if (!group || typeof group !== 'object' || Array.isArray(group)
+          || Object.keys(group).length !== allowedGroupFields.size
+          || [...allowedGroupFields].some(field =>
+            !Object.prototype.hasOwnProperty.call(group, field))
+          || !group.selector || typeof group.selector !== 'object' || Array.isArray(group.selector)
+          || !Number.isSafeInteger(group.eligible_total)
+          || group.eligible_total < 0
+          || !Number.isSafeInteger(group.selected_total)
+          || group.selected_total < 0
+          || group.selected_total > group.eligible_total
+          || typeof group.has_hidden_override !== 'boolean') {
+        throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+      }
+      const selector = normaliseInvoiceBatchGroupSelectors([group.selector])[0];
+      if (postgresJsonbTextForInvoiceBatch(selector)
+          !== postgresJsonbTextForInvoiceBatch(group.selector)) {
+        throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+      }
+      const identity = postgresJsonbTextForInvoiceBatch(selector);
+      if (groupIdentities.has(identity)) {
+        throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+      }
+      groupIdentities.add(identity);
+
+      if (group.group_key !== null && typeof group.group_key !== 'string') {
+        throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+      }
+      const groupKey = group.group_key == null ? null : group.group_key.trim();
+      if ((mode === 'PAGE' && !groupKey)
+          || (groupKey != null && (!groupKey || groupKey.length > 512))) {
+        throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+      }
+      const eligibleTotal = group.eligible_total;
+      const selectedTotal = group.selected_total;
+      const state = String(group.state || '').trim().toUpperCase();
+      const expectedState = eligibleTotal === 0
+        ? 'DISABLED'
+        : selectedTotal === 0
+          ? 'UNCHECKED'
+          : selectedTotal === eligibleTotal && group.has_hidden_override !== true
+            ? 'CHECKED'
+            : 'INDETERMINATE';
+      if (state !== expectedState
+          || (state === 'DISABLED'
+            && (selectedTotal !== 0 || group.has_hidden_override !== false))) {
+        throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+      }
+      normalizedGroups.push({
+        selector,
+        group_key: groupKey,
+        eligible_total: eligibleTotal,
+        selected_total: selectedTotal,
+        state,
+        has_hidden_override: group.has_hidden_override
+      });
+    }
+  } catch {
     throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
   }
   return {
     ...envelope,
+    group_selection: normalizedGroups,
     kind: 'V2',
     legacy: false,
     action,
@@ -1489,6 +1557,26 @@ async function handleCandidates(env, req, deps, rpcName, options = {}) {
     throw invoiceBatchContractError('BATCH_QUERY_HASH_MISMATCH');
   }
 
+  let groupSelection = parsed.group_selection;
+  if (query.mode === 'SUMMARY') {
+    const requestedSelectors = normaliseInvoiceBatchGroupSelectors(query.group_selectors);
+    const returnedByIdentity = new Map(groupSelection.map(group => [
+      postgresJsonbTextForInvoiceBatch(group.selector),
+      group
+    ]));
+    if (returnedByIdentity.size !== groupSelection.length
+        || returnedByIdentity.size !== requestedSelectors.length) {
+      throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+    }
+    groupSelection = requestedSelectors.map(selector => {
+      const group = returnedByIdentity.get(postgresJsonbTextForInvoiceBatch(selector));
+      if (!group) {
+        throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+      }
+      return group;
+    });
+  }
+
   const page = { ...parsed.page, next_cursor: null };
   if (query.mode === 'PAGE' && page.has_more === true && !page.next_cursor_values) {
     throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
@@ -1562,7 +1650,7 @@ async function handleCandidates(env, req, deps, rpcName, options = {}) {
     page,
     totals: parsed.totals,
     selection_summary: parsed.selection_summary,
-    group_selection: parsed.group_selection,
+    group_selection: groupSelection,
     facets,
     normalised_filter: query.filters,
     normalised_sort: query.sort,
@@ -3275,7 +3363,6 @@ function invoiceErrorStatus(error) {
     'INVALID_OUTBOX_SEARCH',
     'INVALID_RECIPIENT_EMAIL',
     'INVOICE_ASYNC_DATABASE_CONTRACT_INVALID',
-    'INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH',
     'INVOICE_BATCH_DISPLAY_MODE_INVALID',
     'INVOICE_BATCH_FILTER_INVALID',
     'INVOICE_BATCH_FILTER_UNKNOWN_FIELD',
@@ -3334,6 +3421,7 @@ function invoiceErrorStatus(error) {
   const unavailableErrors = new Set([
     'BATCH_SUMMARY_SCOPE_TOO_LARGE',
     'BATCH_SUMMARY_TIMEOUT',
+    'INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH',
     'INVOICE_ASYNC_DATABASE_CONTRACT_UNAVAILABLE',
     'INVOICE_ASYNC_DATABASE_CONTRACT_MISMATCH',
     'INVOICE_ASYNC_DATABASE_COMPONENT_CONTRACT_MISMATCH',

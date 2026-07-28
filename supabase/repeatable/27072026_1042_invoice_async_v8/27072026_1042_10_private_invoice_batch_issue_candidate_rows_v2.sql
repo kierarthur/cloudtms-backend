@@ -886,7 +886,7 @@ begin
     from visible_rows
     where v_mode = 'PAGE'
   ),
-  group_rollup as materialized (
+  page_group_rollup as materialized (
     select
       r.group_key,
       min(r.week_ending_date) week_ending_date,
@@ -906,7 +906,7 @@ begin
      and v.selection_key = r.selection_key
     group by r.group_key
   ),
-  group_selection_json as materialized (
+  page_group_selection_json as materialized (
     select coalesce(jsonb_agg(jsonb_build_object(
       'group_key',g.group_key,
       'selector',case
@@ -941,8 +941,179 @@ begin
         g.visible_total < g.row_total
         and g.selected_total not in (0,g.eligible_total)
     ) order by g.group_key),'[]'::jsonb) groups
-    from group_rollup g
+    from page_group_rollup g
     cross join params p
+  ),
+  requested_group_selectors as materialized (
+    select
+      selector.ordinality::integer request_ordinal,
+      selector.value selector,
+      upper(selector.value->>'type') selector_type,
+      nullif(btrim(selector.value->>'selection_key'),'') selection_key,
+      case when selector.value ? 'week_ending_date'
+        then (selector.value->>'week_ending_date')::date end week_ending_date,
+      case when selector.value ? 'client_id'
+        then (selector.value->>'client_id')::uuid end client_id,
+      case when selector.value ? 'candidate_id'
+        then (selector.value->>'candidate_id')::uuid end candidate_id,
+      nullif(upper(btrim(selector.value->>'status_code')),'') status_code
+    from jsonb_array_elements(coalesce(v_query->'group_selectors','[]'::jsonb))
+      with ordinality selector(value, ordinality)
+    where v_mode = 'SUMMARY'
+  ),
+  requested_group_members as materialized (
+    select
+      requested.request_ordinal,
+      requested.selector,
+      row_scope.*
+    from requested_group_selectors requested
+    join selection_scope_rows row_scope on row_scope.selectable
+      and (
+        (requested.selector_type='ROW'
+          and requested.selection_key=row_scope.selection_key)
+        or (requested.selector_type='WEEK'
+          and requested.week_ending_date=row_scope.week_ending_date)
+        or (requested.selector_type='CLIENT'
+          and requested.client_id=row_scope.client_id)
+        or (requested.selector_type='CANDIDATE' and exists (
+          select 1
+          from jsonb_array_elements_text(
+            coalesce(row_scope.candidate_ids,'[]'::jsonb)
+          ) candidate(value)
+          where pg_input_is_valid(candidate.value,'uuid')
+            and candidate.value::uuid=requested.candidate_id
+        ))
+        or (requested.selector_type='STATUS'
+          and requested.status_code=row_scope.row_status)
+        or (requested.selector_type='WEEK_CLIENT'
+          and requested.week_ending_date=row_scope.week_ending_date
+          and requested.client_id=row_scope.client_id)
+        or (requested.selector_type='WEEK_CLIENT_CANDIDATE'
+          and requested.week_ending_date=row_scope.week_ending_date
+          and requested.client_id=row_scope.client_id
+          and exists (
+            select 1
+            from jsonb_array_elements_text(
+              coalesce(row_scope.candidate_ids,'[]'::jsonb)
+            ) candidate(value)
+            where pg_input_is_valid(candidate.value,'uuid')
+              and candidate.value::uuid=requested.candidate_id
+          ))
+        or (requested.selector_type='STATUS_WEEK'
+          and requested.status_code=row_scope.row_status
+          and requested.week_ending_date=row_scope.week_ending_date)
+        or (requested.selector_type='STATUS_WEEK_CLIENT'
+          and requested.status_code=row_scope.row_status
+          and requested.week_ending_date=row_scope.week_ending_date
+          and requested.client_id=row_scope.client_id)
+      )
+  ),
+  requested_group_base as materialized (
+    select
+      requested.*,
+      coalesce((
+        select rule.action
+        from selection_rules rule
+        where exists (
+          select 1
+          from requested_group_members member
+          where member.request_ordinal=requested.request_ordinal
+        )
+          and not exists (
+            select 1
+            from requested_group_members member
+            where member.request_ordinal=requested.request_ordinal
+              and (
+                (rule.selector_type='ROW'
+                  and rule.selection_key=member.selection_key)
+                or (rule.selector_type='WEEK'
+                  and rule.week_ending_date=member.week_ending_date)
+                or (rule.selector_type='CLIENT'
+                  and rule.client_id=member.client_id)
+                or (rule.selector_type='CANDIDATE' and exists (
+                  select 1
+                  from jsonb_array_elements_text(
+                    coalesce(member.candidate_ids,'[]'::jsonb)
+                  ) candidate(value)
+                  where pg_input_is_valid(candidate.value,'uuid')
+                    and candidate.value::uuid=rule.candidate_id
+                ))
+                or (rule.selector_type='STATUS'
+                  and rule.status_code=member.row_status)
+                or (rule.selector_type='WEEK_CLIENT'
+                  and rule.week_ending_date=member.week_ending_date
+                  and rule.client_id=member.client_id)
+                or (rule.selector_type='WEEK_CLIENT_CANDIDATE'
+                  and rule.week_ending_date=member.week_ending_date
+                  and rule.client_id=member.client_id
+                  and exists (
+                    select 1
+                    from jsonb_array_elements_text(
+                      coalesce(member.candidate_ids,'[]'::jsonb)
+                    ) candidate(value)
+                    where pg_input_is_valid(candidate.value,'uuid')
+                      and candidate.value::uuid=rule.candidate_id
+                  ))
+                or (rule.selector_type='STATUS_WEEK'
+                  and rule.status_code=member.row_status
+                  and rule.week_ending_date=member.week_ending_date)
+                or (rule.selector_type='STATUS_WEEK_CLIENT'
+                  and rule.status_code=member.row_status
+                  and rule.week_ending_date=member.week_ending_date
+                  and rule.client_id=member.client_id)
+              ) is not true
+          )
+        order by rule.rule_sequence desc
+        limit 1
+      ),'INCLUDE') base_action
+    from requested_group_selectors requested
+  ),
+  requested_group_rollup as materialized (
+    select
+      requested.request_ordinal,
+      requested.selector,
+      case when count(distinct member.group_key)=1
+        then min(member.group_key) end group_key,
+      count(member.selection_key)::integer eligible_total,
+      count(member.selection_key) filter (
+        where member.last_selection_action <> 'EXCLUDE'
+      )::integer selected_total,
+      coalesce(bool_or(
+        member.last_selection_action is distinct from requested.base_action
+      ) filter (where member.selection_key is not null),false)
+        has_hidden_override
+    from requested_group_base requested
+    left join requested_group_members member
+      on member.request_ordinal=requested.request_ordinal
+    group by
+      requested.request_ordinal,
+      requested.selector,
+      requested.base_action
+  ),
+  summary_group_selection_json as materialized (
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'selector',rollup.selector,
+      'group_key',rollup.group_key,
+      'eligible_total',rollup.eligible_total,
+      'selected_total',rollup.selected_total,
+      'state',case
+        when rollup.eligible_total=0 then 'DISABLED'
+        when rollup.selected_total=0 then 'UNCHECKED'
+        when rollup.selected_total=rollup.eligible_total
+          and not rollup.has_hidden_override then 'CHECKED'
+        else 'INDETERMINATE'
+      end,
+      'has_hidden_override',rollup.has_hidden_override
+    ) order by rollup.request_ordinal),'[]'::jsonb) groups
+    from requested_group_rollup rollup
+  ),
+  group_selection_json as materialized (
+    select case
+      when v_mode='SUMMARY' then summary_groups.groups
+      else page_groups.groups
+    end groups
+    from page_group_selection_json page_groups
+    cross join summary_group_selection_json summary_groups
   ),
   facet_json as materialized (
     select jsonb_strip_nulls(jsonb_build_object(

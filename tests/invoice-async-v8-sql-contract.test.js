@@ -102,6 +102,52 @@ test('selection V2 enforces exact selectors and bounded explicit keys', () => {
   }
 });
 
+test('SUMMARY group selectors are canonical, bounded, and authoritative', () => {
+  const validator = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1250_08a_private_invoice_batch_query_validate_v2.sql',
+  );
+  const generate = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
+  );
+  const issue = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
+  );
+
+  assert.match(validator, /jsonb_array_length\(v_query->'group_selectors'\) > 300/);
+  assert.match(validator, /_invoice_batch_selection_rules_v2\s*\(/);
+  assert.match(validator, /count\(distinct selector\.value\)/);
+  assert.match(validator, /BATCH_SELECTION_SELECTOR_INVALID/);
+  assert.match(validator, /'group_selectors', v_normalized_group_selectors/);
+
+  for (const candidateSql of [generate, issue]) {
+    assert.match(candidateSql, /requested_group_selectors as materialized/i);
+    assert.match(candidateSql, /requested_group_members as materialized/i);
+    assert.match(candidateSql, /requested_group_base as materialized/i);
+    assert.match(candidateSql, /requested_group_rollup as materialized/i);
+    assert.match(candidateSql, /summary_group_selection_json as materialized/i);
+    assert.match(candidateSql, /member\.last_selection_action is distinct from requested\.base_action/i);
+    assert.match(candidateSql, /count\(distinct member\.group_key\)=1/i);
+    assert.match(candidateSql, /when v_mode='SUMMARY' then summary_groups\.groups/i);
+    assert.match(candidateSql, /order by rollup\.request_ordinal/i);
+    assert.match(
+      candidateSql,
+      /rollup\.selected_total=rollup\.eligible_total[\s\S]*not rollup\.has_hidden_override then 'CHECKED'/i,
+    );
+    assert.match(
+      candidateSql,
+      /requested\.selector_type='CANDIDATE'[\s\S]*jsonb_array_elements_text[\s\S]*candidate\.value::uuid=requested\.candidate_id/i,
+    );
+    assert.match(
+      candidateSql,
+      /requested\.selector_type='WEEK_CLIENT_CANDIDATE'[\s\S]*candidate\.value::uuid=requested\.candidate_id/i,
+    );
+    assert.doesNotMatch(
+      candidateSql,
+      /summary_group_selection_json[\s\S]*_invoice_batch_(?:generate_group_rows|issue_source_rows_for_ids)_v2\s*\(/i,
+    );
+  }
+});
+
 test('candidate snapshots are Vault-backed, signed, and verified in DB', () => {
   const migration = read(
     'supabase/migrations/27072026_1250_invoice_async_v8_contract_corrections.sql',
