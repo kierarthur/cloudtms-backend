@@ -142,6 +142,32 @@ function framedBody(header, inputs, signal) {
   });
 }
 
+function fixedLengthFramedBody(header, inputs, signal, FixedLengthStreamConstructor = globalThis.FixedLengthStream) {
+  if (typeof FixedLengthStreamConstructor !== 'function') {
+    throw Object.assign(new Error('PROCESSOR_FIXED_LENGTH_STREAM_UNAVAILABLE'), {
+      code: 'PROCESSOR_FIXED_LENGTH_STREAM_UNAVAILABLE',
+      category: 'TRANSIENT_INFRASTRUCTURE'
+    });
+  }
+  const headerBytes = encoder.encode(JSON.stringify(header));
+  const length = inputs.reduce(
+    (total, input) => total + Number(input.object.size || 0),
+    8 + headerBytes.byteLength
+  );
+  if (!Number.isSafeInteger(length) || length < 1) {
+    throw Object.assign(new Error('PROCESSOR_REQUEST_LENGTH_INVALID'), {
+      code: 'PROCESSOR_REQUEST_LENGTH_INVALID',
+      category: 'IDENTITY_MISMATCH'
+    });
+  }
+  const fixed = new FixedLengthStreamConstructor(length);
+  return {
+    body: fixed.readable,
+    length,
+    completion: framedBody(header, inputs, signal).pipeTo(fixed.writable)
+  };
+}
+
 function resultIdentity(expected) {
   return { chunk_id: expected.chunk_id, fence_token: expected.fence_token, action: expected.action, document_version_id: expected.document_version_id || undefined, document_asset_id: expected.document_asset_id || undefined, plan_generation: expected.plan_generation, source_revision: expected.source_revision || undefined, template_version: expected.template_version || undefined, processor_policy_version: expected.processor_policy_version, render_kind: expected.render_kind || undefined, ordered_input_hash: expected.ordered_input_hash || undefined, output_prefix: expected.immutable_destination_prefix };
 }
@@ -401,7 +427,8 @@ async function processWithContainer(env, payload, signal) {
   const inputs = await resolveR2Inputs(env.R2, descriptors);
   validateNativeInputLimits(action, context, inputs);
   const header = { action, context, processor_policy_version: POLICY_VERSION, action_timeout_ms: Number(context.action_timeout_ms || 120000), inputs: inputs.map(input => input.header) };
-  const request = new Request('http://container/process', { method: 'POST', headers: { 'content-type': 'application/x-cloudtms-framed-files-v1' }, body: framedBody(header, inputs, signal), signal });
+  const framed = fixedLengthFramedBody(header, inputs, signal);
+  const request = new Request('http://container/process', { method: 'POST', headers: { 'content-type': 'application/x-cloudtms-framed-files-v1' }, body: framed.body, signal });
   const containerIdentity = await invoiceProcessorSha256Hex(
     `${identity.chunk_id}|${identity.fence_token}|${action}`
   );
@@ -409,7 +436,10 @@ async function processWithContainer(env, payload, signal) {
     env.INVOICE_DOCUMENT_CONTAINER,
     `invoice-native-${containerIdentity.slice(0, 32)}`
   );
-  const response = await container.fetch(request);
+  const [response] = await Promise.all([
+    container.fetch(request),
+    framed.completion
+  ]);
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw Object.assign(new Error(body.message || body.code || `CONTAINER_HTTP_${response.status}`), { code: body.code || `CONTAINER_HTTP_${response.status}`, category: body.category });
@@ -525,6 +555,7 @@ export const invoiceDocumentProcessorInternals = Object.freeze({
   findInputDescriptors,
   resolveR2Inputs,
   framedBody,
+  fixedLengthFramedBody,
   resultIdentity,
   buildMergeReceipt,
   flattenLeafInputReceipts,

@@ -25,6 +25,7 @@ const {
   findInputDescriptors,
   resolveR2Inputs,
   framedBody,
+  fixedLengthFramedBody,
   resultIdentity,
   putImmutableProcessorArtifact,
   classifyError
@@ -87,6 +88,33 @@ test('framed request streams prefix, header, and body incrementally and detects 
     const r = stream.getReader();
     while (!(await r.read()).done) {}
   }, /INPUT_PREMATURE_EOF/);
+});
+
+test('container requests retain streaming semantics while exposing an exact fixed length', async () => {
+  let constructedLength = null;
+  class TestFixedLengthStream {
+    constructor(length) {
+      constructedLength = length;
+      const stream = new TransformStream();
+      this.readable = stream.readable;
+      this.writable = stream.writable;
+    }
+  }
+  const header = { action: 'PDF_MERGE' };
+  const input = { object: objectFromBytes([1, 2, 3]), header: { r2_key: 'one.pdf' } };
+  const framed = fixedLengthFramedBody(header, [input], null, TestFixedLengthStream);
+  const expectedLength = 8 + new TextEncoder().encode(JSON.stringify(header)).byteLength + 3;
+  assert.equal(framed.length, expectedLength);
+  assert.equal(constructedLength, expectedLength);
+  const reader = framed.body.getReader();
+  let actualLength = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    actualLength += value.byteLength;
+  }
+  await framed.completion;
+  assert.equal(actualLength, expectedLength);
 });
 
 test('immutable processor writes use full hash and reject conflicting existing objects', async () => {
