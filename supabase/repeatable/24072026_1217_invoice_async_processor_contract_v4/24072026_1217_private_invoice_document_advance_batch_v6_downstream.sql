@@ -819,6 +819,7 @@ begin
       index_input.payload_json->>'source_chunk_key' source_chunk_key,
       index_input.payload_json->>'display_label' index_display_label,
       index_input.payload_json->>'input_type' index_input_type,
+      index_input.payload_json->>'source_revision' index_source_revision,
       index_input.payload_json->>'snapshot_hash' snapshot_hash,
       count(other.id)::integer supporting_input_count,
       coalesce(sum(other.actual_page_count),0)::integer supporting_pages,
@@ -917,6 +918,7 @@ begin
             '{attachment_index,max_render_passes}')::integer,
         'template_version',a.template_version,
         'source_chunk_key',a.source_chunk_key,
+        'source_revision',a.index_source_revision,
         'presentation_model_schema_version',
           'ATTACHMENT_INDEX_PRESENTATION_V1',
         'presentation_model_hash',encode(digest(jsonb_build_object(

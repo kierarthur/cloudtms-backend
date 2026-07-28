@@ -858,8 +858,16 @@ test('attachment-index render passes carry their frozen presentation identity', 
     /'snapshot_hash',a\.snapshot_hash/i,
   );
   assert.match(
+    downstreamAdvance,
+    /'source_revision',a\.index_source_revision/i,
+  );
+  assert.match(
     workComplete,
     /f\.payload_json\|\|jsonb_build_object\([\s\S]*'layout_phase','FINAL'/i,
+  );
+  assert.match(
+    workComplete,
+    /case when i\.chunk_type='SOURCE_RENDER'[\s\S]*then i\.payload_json->>'source_revision' end,[\s\S]*i\.asset_source_revision,i\.document_source_revision/i,
   );
 });
 

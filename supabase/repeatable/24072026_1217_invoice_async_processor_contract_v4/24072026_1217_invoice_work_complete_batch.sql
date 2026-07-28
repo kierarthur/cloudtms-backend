@@ -795,10 +795,16 @@ begin
                 is distinct from i.expected_page_count)
           then 'FINAL_VERIFICATION_MISMATCH'
         when i.outcome='SUCCESS'
-          and coalesce(i.asset_source_revision,i.document_source_revision,
+          and coalesce(
+            case when i.chunk_type='SOURCE_RENDER'
+              then i.payload_json->>'source_revision' end,
+            i.asset_source_revision,i.document_source_revision,
             i.payload_json->>'source_revision','')<>''
           and coalesce(i.processor_result->>'source_revision','')<>
-            coalesce(i.asset_source_revision,i.document_source_revision,
+            coalesce(
+              case when i.chunk_type='SOURCE_RENDER'
+                then i.payload_json->>'source_revision' end,
+              i.asset_source_revision,i.document_source_revision,
               i.payload_json->>'source_revision','')
           then 'SOURCE_REVISION_MISMATCH'
       end result_error
