@@ -420,37 +420,108 @@ begin
           'schema_version',case when upper(source_group.source_system)='NHSP' then 'NHSP_PRESENTATION_V1' else 'HEALTHROSTER_PRESENTATION_V1' end,
           'rows',coalesce((select jsonb_agg(
             case when upper(source_group.source_system)='NHSP' then jsonb_build_object(
-              'worker',coalesce(r.value->>'worker',r.value->>'candidate',r.value->>'name'),
-              'nhsp_shift_id',coalesce(r.value->>'nhsp_shift_id',r.value->>'shift_id'),
-              'booking_reference',coalesce(r.value->>'booking_reference',r.value->>'reference'),
-              'site_ward',concat_ws(' / ',nullif(coalesce(r.value->>'site',r.value->>'hospital'),''),nullif(r.value->>'ward','')),
-              'shift_date',coalesce(r.value->>'shift_date',r.value->>'date'),
-              'shift_times',coalesce(r.value->>'shift_times',concat_ws(' - ',nullif(r.value->>'start',''),nullif(r.value->>'end',''))),
-              'hours_units',coalesce(r.value->>'hours_units',r.value->>'hours',r.value->>'units'),
-              'source_identity',jsonb_build_object('source_system',s.source_system,'import_id',s.import_id,'row_no',r.ordinality),
-              'validation_state',coalesce(r.value->>'validation_state',r.value->>'status'),
+              'worker',coalesce(
+                r.value->>'worker',r.value->>'candidate',r.value->>'name',
+                r.value->>'worker_name',r.value->>'staff_name'),
+              'nhsp_shift_id',coalesce(
+                r.value->>'nhsp_shift_id',r.value->>'shift_id',
+                r.value->>'assignment_code',r.value->>'assignment'),
+              'booking_reference',coalesce(
+                r.value->>'booking_reference',r.value->>'reference',
+                r.value->>'ref_num',r.value->>'assignment_code'),
+              'site_ward',concat_ws(' / ',
+                nullif(coalesce(
+                  r.value->>'site',r.value->>'hospital',
+                  r.value->>'trust',r.value->>'client'),''),
+                nullif(r.value->>'ward','')),
+              'shift_date',coalesce(
+                r.value->>'shift_date',r.value->>'date',
+                r.value->>'work_date',r.value->>'date_raw'),
+              'shift_times',coalesce(
+                r.value->>'shift_times',
+                concat_ws(' - ',
+                  nullif(coalesce(r.value->>'start',r.value->>'start_local'),''),
+                  nullif(coalesce(r.value->>'end',r.value->>'end_local'),''))),
+              'hours_units',coalesce(
+                r.value->>'hours_units',r.value->>'hours',
+                r.value->>'units',r.value->>'hours_worked',
+                case
+                  when coalesce(r.value->>'start_local','')
+                         ~ '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$'
+                   and coalesce(r.value->>'end_local','')
+                         ~ '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$'
+                   and coalesce(r.value->>'break_mins','0')
+                         ~ '^[0-9]+([.][0-9]+)?$'
+                  then trim(to_char(round((
+                    extract(epoch from (
+                      case
+                        when (r.value->>'end_local')::time
+                               >= (r.value->>'start_local')::time
+                          then (r.value->>'end_local')::time
+                               - (r.value->>'start_local')::time
+                        else (r.value->>'end_local')::time
+                               + interval '24 hours'
+                               - (r.value->>'start_local')::time
+                      end
+                    )) / 3600
+                    - (coalesce(r.value->>'break_mins','0')::numeric / 60)
+                  )::numeric,2),'FM999999990.00'))
+                end),
+              'source_identity',concat_ws(' · ',
+                upper(coalesce(s.source_system,'NHSP')),
+                'import row '||r.ordinality::text),
+              'validation_state',coalesce(
+                r.value->>'validation_state',r.value->>'status','Included'),
               'reversal_state',case
                 when upper(coalesce(r.value->>'reversal_state',r.value->>'status','')) in ('REVERSED','REVERSAL')
-                  or coalesce(r.value->>'hours_units',r.value->>'hours',r.value->>'units','') ~ '^-[0-9]'
+                  or coalesce(
+                    r.value->>'hours_units',r.value->>'hours',
+                    r.value->>'units',r.value->>'hours_worked','') ~ '^-[0-9]'
                 then 'REVERSED' else null end)
             else jsonb_build_object(
-              'worker',coalesce(r.value->>'worker',r.value->>'candidate',r.value->>'name'),
-              'assignment',coalesce(r.value->>'assignment',r.value->>'role',r.value->>'job_title'),
-              'shift_date',coalesce(r.value->>'shift_date',r.value->>'date'),
-              'shift_times',coalesce(r.value->>'shift_times',concat_ws(' - ',nullif(r.value->>'start',''),nullif(r.value->>'end',''))),
-              'site',coalesce(r.value->>'site',r.value->>'hospital'),
+              'worker',coalesce(
+                r.value->>'worker',r.value->>'candidate',r.value->>'name',
+                r.value->>'worker_name',r.value->>'staff_name'),
+              'assignment',coalesce(
+                r.value->>'assignment',r.value->>'role',
+                r.value->>'job_title',r.value->>'assignment_code'),
+              'shift_date',coalesce(
+                r.value->>'shift_date',r.value->>'date',
+                r.value->>'work_date',r.value->>'date_raw'),
+              'shift_times',coalesce(
+                r.value->>'shift_times',
+                concat_ws(' - ',
+                  nullif(coalesce(r.value->>'start',r.value->>'start_local'),''),
+                  nullif(coalesce(r.value->>'end',r.value->>'end_local'),''))),
+              'site',coalesce(
+                r.value->>'site',r.value->>'hospital',
+                r.value->>'trust',r.value->>'client'),
               'ward',r.value->>'ward',
-              'reference',coalesce(r.value->>'reference',r.value->>'booking_reference',r.value->>'nhsp_shift_id'),
-              'units_hours',coalesce(r.value->>'units_hours',r.value->>'hours',r.value->>'units'),
-              'validation_state',coalesce(r.value->>'validation_state',r.value->>'status'),
-              'source_identity',jsonb_build_object('source_system',s.source_system,'import_id',s.import_id,'row_no',r.ordinality),
+              'reference',coalesce(
+                r.value->>'reference',r.value->>'booking_reference',
+                r.value->>'nhsp_shift_id',r.value->>'ref_num',
+                r.value->>'unique_id'),
+              'units_hours',coalesce(
+                r.value->>'units_hours',r.value->>'hours',
+                r.value->>'units',r.value->>'hours_worked'),
+              'validation_state',coalesce(
+                r.value->>'validation_state',r.value->>'status','Included'),
+              'source_identity',concat_ws(' · ',
+                upper(coalesce(s.source_system,'HEALTHROSTER')),
+                'import row '||r.ordinality::text),
               'reversal_state',case
                 when upper(coalesce(r.value->>'reversal_state',r.value->>'status','')) in ('REVERSED','REVERSAL')
-                  or coalesce(r.value->>'units_hours',r.value->>'hours',r.value->>'units','') ~ '^-[0-9]'
+                  or coalesce(
+                    r.value->>'units_hours',r.value->>'hours',
+                    r.value->>'units',r.value->>'hours_worked','') ~ '^-[0-9]'
                 then 'REVERSED' else null end) end
             order by
-              coalesce(r.value->>'shift_date',r.value->>'date',''),
-              coalesce(r.value->>'start',r.value->>'worked_start',''),
+              coalesce(
+                r.value->>'shift_date',r.value->>'date',
+                r.value->>'work_date',r.value->>'date_raw',''),
+              coalesce(
+                r.value->>'start',r.value->>'worked_start',
+                r.value->>'start_local',''),
               s.import_id,
               r.ordinality)
             from public.invoice_hr_source_rows s

@@ -248,6 +248,30 @@ test('invoice presentation consolidates import support and exposes complete comm
   assert.match(presentation, /order by[\s\S]*shift_date[\s\S]*s\.import_id[\s\S]*r\.ordinality/i);
 });
 
+test('invoice presentation maps authoritative NHSP import fields into readable support rows', () => {
+  const presentation = read(
+    'supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql',
+  );
+  assert.match(presentation, /r\.value->>'worker_name'/i);
+  assert.match(presentation, /r\.value->>'staff_name'/i);
+  assert.match(presentation, /r\.value->>'unique_id'/i);
+  assert.match(presentation, /r\.value->>'ref_num'/i);
+  assert.match(presentation, /r\.value->>'assignment_code'/i);
+  assert.match(presentation, /r\.value->>'work_date'/i);
+  assert.match(presentation, /r\.value->>'date_raw'/i);
+  assert.match(presentation, /r\.value->>'start_local'/i);
+  assert.match(presentation, /r\.value->>'end_local'/i);
+  assert.match(presentation, /r\.value->>'hours_worked'/i);
+  assert.match(
+    presentation,
+    /'source_identity',concat_ws\(' · ',[\s\S]*'import row '\|\|r\.ordinality::text\)/i,
+  );
+  assert.doesNotMatch(
+    presentation,
+    /'source_identity',jsonb_build_object\('source_system'/i,
+  );
+});
+
 test('candidate snapshots are Vault-backed, signed, and verified in DB', () => {
   const migration = read(
     'supabase/migrations/27072026_1250_invoice_async_v8_contract_corrections.sql',
