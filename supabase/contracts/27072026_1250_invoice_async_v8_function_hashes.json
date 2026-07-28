@@ -1,10 +1,10 @@
 {
   "contract_version": "INVOICE_ASYNC_DB_V2_FUNCTION_HASH_MANIFEST",
   "project": "test-cloudtms",
-  "generated_at_utc": "2026-07-28T21:06:09.339Z",
+  "generated_at_utc": "2026-07-28T21:23:14.695Z",
   "hash_input": "pg_get_functiondef(oid)",
   "hash_algorithm": "sha256",
-  "aggregate_sha256": "7e5e9d82e73894bc01fbd12342ad8b1905973877b11e7f2a27a7e92d6592880c",
+  "aggregate_sha256": "41b5205647d26129f323502568518969f152e27287c0272c4325cb9923f9401c",
   "security_gate": {
     "owner": "postgres",
     "private_public_execute": false,
@@ -110,7 +110,7 @@
     },
     {
       "identity": "private._invoice_generation_advance_core_v8(jsonb,timestamptz)",
-      "definition_sha256": "f2b500c708d63b7d2a04f908cbd45eb73f504141f1080e60857e051808387f92"
+      "definition_sha256": "fa39f1385223a9c22b3b8b63f285be24107dea42467b8afc605f8b4f9c01521d"
     },
     {
       "identity": "private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamptz)",
