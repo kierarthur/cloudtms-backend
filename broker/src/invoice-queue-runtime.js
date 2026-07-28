@@ -441,10 +441,15 @@ function deriveAttachmentDisplayMap(layout, finalIndexPageCount) {
   for (const part of stream) {
     const pages = Math.max(0, Number(part.page_count || part.pages || 0));
     if (!Number.isSafeInteger(pages)) throw Object.assign(new Error('ATTACHMENT_PAGINATION_PAGE_COUNT_INVALID'), { code: 'ATTACHMENT_PAGINATION_PAGE_COUNT_INVALID' });
-    const kind = String(part.kind || part.section_type || '').toUpperCase();
-    if (kind === 'CORE') currentPage += pages;
+    const kind = String(
+      part.kind
+      || part.section_type
+      || part.input_type
+      || ''
+    ).toUpperCase();
+    if (kind === 'CORE' || kind === 'INVOICE_CORE') currentPage += pages;
     else if (kind === 'ATTACHMENT_INDEX') currentPage += finalIndexPageCount;
-    else if (kind === 'SEPARATOR') currentPage += pages;
+    else if (kind === 'SEPARATOR' || kind === 'SECTION_SEPARATOR') currentPage += pages;
     else {
       const rowId = String(
         part.display_row_id

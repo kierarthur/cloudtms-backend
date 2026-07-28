@@ -435,12 +435,13 @@ test('attachment index renders one logical row with physical page totals', () =>
 test('attachment pagination correlates the DB logical source key', () => {
   const layout = {
     expected_logical_attachment_count: 1,
-    expected_physical_page_count: 4,
+    expected_physical_page_count: 5,
     pagination_stream: [
-      { kind: 'CORE', page_count: 1 },
-      { kind: 'ATTACHMENT_INDEX' },
+      { input_type: 'INVOICE_CORE', page_count: 1 },
+      { input_type: 'ATTACHMENT_INDEX' },
+      { input_type: 'SECTION_SEPARATOR', page_count: 1 },
       {
-        kind: 'TIMESHEET',
+        input_type: 'TIMESHEET',
         logical_source_key: 'timesheet:source-1',
         physical_part_id: 'timesheet:source-1:1',
         page_count: 2,
@@ -460,12 +461,12 @@ test('attachment pagination correlates the DB logical source key', () => {
     document_type: 'TIMESHEET',
     evidence_description: undefined,
     reference: undefined,
-    start_page: 3,
+    start_page: 4,
     page_count: 2
   }]);
   assert.throws(
     () => invoiceQueueRuntimeInternals.deriveAttachmentDisplayMap({
-      pagination_stream: [{ kind: 'TIMESHEET', page_count: 1 }]
+      pagination_stream: [{ input_type: 'TIMESHEET', page_count: 1 }]
     }, 0),
     /ATTACHMENT_PAGINATION_LOGICAL_ROW_MISSING/
   );
