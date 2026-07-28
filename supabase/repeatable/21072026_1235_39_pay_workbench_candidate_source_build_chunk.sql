@@ -848,6 +848,142 @@ BEGIN
     v_source_change_seq := COALESCE(v_current_source_change_seq, 0);
   END IF;
 
+  IF COALESCE(v_first_source_page, true) IS NOT TRUE THEN
+    /*
+     * The first page establishes and persists the complete candidate-wide
+     * pre-draft reconciliation attestation. A continuation is bound to the
+     * same session version, snapshot, source sequence and source-build run, so
+     * repeating the full entitlement/reservation/settlement scan on every page
+     * adds no authority and can exceed the Worker runtime budget.
+     *
+     * Never accept a bare historic completion marker. Reuse is permitted only
+     * when every immutable run/economic boundary below matches exactly. A
+     * missing or stale marker fails closed so a fresh source-build run can be
+     * queued; it never silently skips reconciliation.
+     */
+    IF COALESCE(v_old_sync_marker, '{}'::jsonb) = '{}'::jsonb
+       OR LOWER(BTRIM(COALESCE(v_old_sync_marker->>'completed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+       OR LOWER(BTRIM(COALESCE(v_old_sync_marker->>'attested', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+       OR LOWER(BTRIM(COALESCE(v_old_sync_marker->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+       OR NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'session_id', '')), '') IS DISTINCT FROM p_session_id::text
+       OR NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'candidate_id', '')), '') IS DISTINCT FROM p_candidate_id::text
+       OR NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'session_version', '')), '') IS DISTINCT FROM v_session_version::text
+       OR NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'source_change_seq', '')), '') IS DISTINCT FROM v_source_change_seq::text
+       OR NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'source_build_run_id', '')), '') IS DISTINCT FROM v_source_build_run_id::text
+       OR NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'source_snapshot_run_id', '')), '')
+            IS DISTINCT FROM (CASE
+              WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL::text
+              ELSE v_session_row.source_snapshot_run_id::text
+            END)
+       OR NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'session_signature', '')), '')
+            IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_session_row.session_signature, '')), '')
+       OR UPPER(BTRIM(COALESCE(v_old_sync_marker->>'pay_channel_scope', ''))) IS DISTINCT FROM v_candidate_pay_channel_scope
+       OR UPPER(BTRIM(COALESCE(v_old_sync_marker->>'refresh_scope_kind', ''))) IS DISTINCT FROM v_requested_refresh_scope_kind
+       OR UPPER(BTRIM(COALESCE(v_old_sync_marker->>'policy_x_authority_scope', ''))) <> 'PRE_DRAFT_LIVE_TRUTH'
+       OR jsonb_typeof(v_old_sync_marker->'scope_timesheet_ids') IS DISTINCT FROM 'array' THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_STALE'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_STALE',
+                'session_id', p_session_id::text,
+                'candidate_id', p_candidate_id::text,
+                'session_version', v_session_version,
+                'source_change_seq', v_source_change_seq,
+                'source_build_run_id', v_source_build_run_id::text,
+                'message', 'The source-build continuation no longer matches its durable first-page reconciliation attestation. Start a fresh candidate source-build run.'
+              )::text;
+    END IF;
+
+    SELECT COALESCE(
+             ARRAY_AGG(scope_member.value::uuid ORDER BY scope_member.value::uuid),
+             ARRAY[]::uuid[]
+           )
+    INTO v_sync_scope_timesheet_ids
+    FROM jsonb_array_elements_text(v_old_sync_marker->'scope_timesheet_ids') AS scope_member(value)
+    WHERE scope_member.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+    IF COALESCE(array_length(v_sync_scope_timesheet_ids, 1), 0)
+         IS DISTINCT FROM COALESCE(
+           CASE
+             WHEN BTRIM(COALESCE(v_old_sync_marker->>'scope_timesheet_count', '')) ~ '^[0-9]{1,9}$'
+               THEN (v_old_sync_marker->>'scope_timesheet_count')::integer
+             ELSE NULL::integer
+           END,
+           0
+         ) THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_SCOPE_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_SCOPE_INVALID',
+                'session_id', p_session_id::text,
+                'candidate_id', p_candidate_id::text,
+                'source_build_run_id', v_source_build_run_id::text
+              )::text;
+    END IF;
+
+    v_sync_scope_timesheet_ids_json := COALESCE(v_old_sync_marker->'scope_timesheet_ids', '[]'::jsonb);
+    v_post_sync_scope_timesheet_ids := COALESCE(v_sync_scope_timesheet_ids, ARRAY[]::uuid[]);
+    v_post_sync_scope_timesheet_ids_json := v_sync_scope_timesheet_ids_json;
+    v_sync_scope_digest := NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'scope_digest', '')), '');
+    v_post_sync_scope_digest := v_sync_scope_digest;
+    v_sync_negative_digest := NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'negative_component_digest', '')), '');
+    v_post_sync_negative_digest := v_sync_negative_digest;
+    v_sync_baseline_digest := NULLIF(BTRIM(COALESCE(v_old_sync_marker->>'settled_baseline_digest', '')), '');
+    v_post_sync_baseline_digest := v_sync_baseline_digest;
+    v_post_sync_candidate_pay_channel_scope := v_candidate_pay_channel_scope;
+    v_post_sync_source_change_seq := v_source_change_seq;
+    v_current_source_change_seq := v_source_change_seq;
+
+    v_sync_negative_component_count := CASE
+      WHEN BTRIM(COALESCE(v_old_sync_marker->>'negative_component_count', '')) ~ '^[0-9]{1,9}$'
+        THEN (v_old_sync_marker->>'negative_component_count')::integer
+      ELSE 0
+    END;
+    v_post_sync_negative_component_count := v_sync_negative_component_count;
+    v_sync_durable_component_count := CASE
+      WHEN BTRIM(COALESCE(v_old_sync_marker->>'durable_component_count', '')) ~ '^[0-9]{1,9}$'
+        THEN (v_old_sync_marker->>'durable_component_count')::integer
+      ELSE 0
+    END;
+    v_sync_protected_component_count := CASE
+      WHEN BTRIM(COALESCE(v_old_sync_marker->>'protected_component_count', '')) ~ '^[0-9]{1,9}$'
+        THEN (v_old_sync_marker->>'protected_component_count')::integer
+      ELSE 0
+    END;
+    v_sync_resolution_pending_component_count := CASE
+      WHEN BTRIM(COALESCE(v_old_sync_marker->>'resolution_pending_component_count', '')) ~ '^[0-9]{1,9}$'
+        THEN (v_old_sync_marker->>'resolution_pending_component_count')::integer
+      ELSE 0
+    END;
+    v_sync_uncovered_component_count := CASE
+      WHEN BTRIM(COALESCE(v_old_sync_marker->>'uncovered_component_count', '')) ~ '^[0-9]{1,9}$'
+        THEN (v_old_sync_marker->>'uncovered_component_count')::integer
+      ELSE 0
+    END;
+    v_sync_result_code := COALESCE(NULLIF(BTRIM(v_old_sync_marker->>'result_code'), ''), 'REUSED_DURABLE_ATTESTATION');
+    v_sync_candidate_covered := COALESCE(v_sync_uncovered_component_count, 0) = 0;
+    v_sync_invoked := false;
+    v_sync_marker_reused := true;
+    v_sync_result := jsonb_build_object(
+      'ok', true,
+      'invoked', false,
+      'reason', 'SOURCE_BUILD_CONTINUATION_DURABLE_ATTESTATION_REUSED',
+      'pay_channel_scope', v_candidate_pay_channel_scope,
+      'authoritative_timesheet_scope', true,
+      'scope_timesheet_ids', v_sync_scope_timesheet_ids_json,
+      'preview_candidate_coverage_complete', true
+    );
+    v_sync_attestation := v_old_sync_marker
+      || jsonb_build_object(
+        'sync_invoked', false,
+        'sync_marker_reused', true,
+        'old_marker_present', true,
+        'old_marker_accepted_as_authority', true,
+        'reused_at_utc', clock_timestamp()
+      );
+    v_sync_completed := true;
+    v_sync_attested := true;
+  ELSE
   WITH seed_timesheet_ids AS (
     SELECT targeted_id AS timesheet_id
     FROM unnest(COALESCE(v_targeted_timesheet_ids, ARRAY[]::uuid[])) AS targeted_values(targeted_id)
@@ -2220,6 +2356,7 @@ BEGIN
 
   v_sync_completed := true;
   v_sync_attested := true;
+  END IF;
 
   v_overpayment_sync_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
   v_diag_phase_started_at := clock_timestamp();
@@ -4425,3 +4562,8 @@ BEGIN
   );
 END;
 $function$;
+
+REVOKE ALL ON FUNCTION public.pay_workbench_candidate_source_build_chunk(uuid, uuid, jsonb, jsonb, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.pay_workbench_candidate_source_build_chunk(uuid, uuid, jsonb, jsonb, integer) FROM anon;
+REVOKE ALL ON FUNCTION public.pay_workbench_candidate_source_build_chunk(uuid, uuid, jsonb, jsonb, integer) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_candidate_source_build_chunk(uuid, uuid, jsonb, jsonb, integer) TO service_role;
