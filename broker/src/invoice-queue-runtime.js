@@ -446,7 +446,12 @@ function deriveAttachmentDisplayMap(layout, finalIndexPageCount) {
     else if (kind === 'ATTACHMENT_INDEX') currentPage += finalIndexPageCount;
     else if (kind === 'SEPARATOR') currentPage += pages;
     else {
-      const rowId = String(part.display_row_id || part.logical_source_id || '');
+      const rowId = String(
+        part.display_row_id
+        || part.logical_source_id
+        || part.logical_source_key
+        || ''
+      );
       if (!rowId) throw Object.assign(new Error('ATTACHMENT_PAGINATION_LOGICAL_ROW_MISSING'), { code: 'ATTACHMENT_PAGINATION_LOGICAL_ROW_MISSING' });
       const physicalPartId = String(part.physical_part_id || part.artifact_id || `${rowId}:${part.physical_part_no || ''}`);
       if (physicalParts.has(physicalPartId)) throw Object.assign(new Error('ATTACHMENT_PAGINATION_PHYSICAL_PART_DUPLICATE'), { code: 'ATTACHMENT_PAGINATION_PHYSICAL_PART_DUPLICATE' });
@@ -1691,6 +1696,7 @@ export const invoiceQueueRuntimeInternals = Object.freeze({
   postgresJsonbText,
   processorIdentity,
   compactError,
+  deriveAttachmentDisplayMap,
   verifyFrozenPresentationModelHash
 });
 

@@ -432,6 +432,45 @@ test('attachment index renders one logical row with physical page totals', () =>
   assert.ok(html.includes('4'));
 });
 
+test('attachment pagination correlates the DB logical source key', () => {
+  const layout = {
+    expected_logical_attachment_count: 1,
+    expected_physical_page_count: 4,
+    pagination_stream: [
+      { kind: 'CORE', page_count: 1 },
+      { kind: 'ATTACHMENT_INDEX' },
+      {
+        kind: 'TIMESHEET',
+        logical_source_key: 'timesheet:source-1',
+        physical_part_id: 'timesheet:source-1:1',
+        page_count: 2,
+        document_type: 'TIMESHEET'
+      }
+    ]
+  };
+  const rows = invoiceQueueRuntimeInternals.deriveAttachmentDisplayMap(
+    layout,
+    1
+  );
+  assert.deepEqual(rows, [{
+    row_id: 'timesheet:source-1',
+    attachment_number: undefined,
+    worker: undefined,
+    week_or_date: undefined,
+    document_type: 'TIMESHEET',
+    evidence_description: undefined,
+    reference: undefined,
+    start_page: 3,
+    page_count: 2
+  }]);
+  assert.throws(
+    () => invoiceQueueRuntimeInternals.deriveAttachmentDisplayMap({
+      pagination_stream: [{ kind: 'TIMESHEET', page_count: 1 }]
+    }, 0),
+    /ATTACHMENT_PAGINATION_LOGICAL_ROW_MISSING/
+  );
+});
+
 test('retired synchronous generation route returns 410 and starts no work', async () => {
   let rpcCalled = false;
   const request = new Request('https://example.test/api/invoices', {
