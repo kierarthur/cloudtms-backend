@@ -544,6 +544,36 @@ test('direct Issue and Delivery carriers are committed claimable members', () =>
   );
 });
 
+test('direct Delivery carriers preserve routing and bind request correlation to the chunk', () => {
+  const startCore = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_11_private_invoice_operation_start_core_v8.sql',
+  );
+  const deliveryAdvance = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_delivery_advance_batch.sql',
+  );
+
+  assert.match(
+    startCore,
+    /'routing_request',jsonb_build_object\([\s\S]*?'recipient_set',rs\.canonical_recipients[\s\S]*?'delivery_policy'[\s\S]*?'template_version'/i,
+  );
+  assert.match(
+    startCore,
+    /correlated_delivery_chunks as \([\s\S]*?'\{request_key\}'[\s\S]*?to_jsonb\(c\.id::text\)[\s\S]*?'\{frozen_delivery_route,request_key\}'[\s\S]*?c\.chunk_type='DELIVERY_PREPARE'/i,
+  );
+  assert.match(
+    startCore,
+    /select count\(\*\) from correlated_delivery_chunks/i,
+  );
+  assert.match(
+    deliveryAdvance,
+    /when f\.request_key is distinct from f\.chunk_id::text\s*then 'REQUEST_CORRELATION_INVALID'/i,
+  );
+  assert.match(
+    deliveryAdvance,
+    /r\.routing_request->'recipient_set'/i,
+  );
+});
+
 test('result paging is direct, bounded, and revision-gated', () => {
   const operationGet = read(
     'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_get.sql',

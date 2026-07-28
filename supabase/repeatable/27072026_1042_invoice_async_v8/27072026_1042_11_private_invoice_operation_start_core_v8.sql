@@ -912,6 +912,17 @@ begin
         'bcc',dr.canonical_bcc,
         'recipient_set_hash',dr.recipient_set_hash,
         'route_policy_hash',dr.route_policy_hash,
+        'routing_request',jsonb_build_object(
+          'request_key',dr.request_key,
+          'invoice_id',i.id,
+          'recipient_set',rs.canonical_recipients,
+          'cc',dr.canonical_cc,
+          'bcc',dr.canonical_bcc,
+          'delivery_policy',upper(coalesce(
+            nullif(c.command_json->>'delivery_policy',''),'ATTACH')),
+          'template_version',coalesce(
+            nullif(c.command_json->>'delivery_template_version',''),
+            'invoice-delivery-v1')),
         'frozen_delivery_route',jsonb_build_object(
           'request_key',dr.request_key,
           'to',dr.canonical_to,'cc',dr.canonical_cc,'bcc',dr.canonical_bcc,
@@ -966,6 +977,23 @@ begin
     on conflict do nothing
     returning *
   ),
+  correlated_delivery_chunks as (
+    update public.invoice_operation_chunks c
+    set payload_json=jsonb_set(
+          jsonb_set(
+            coalesce(c.payload_json,'{}'::jsonb),
+            '{request_key}',
+            to_jsonb(c.id::text),
+            true),
+          '{frozen_delivery_route,request_key}',
+          to_jsonb(c.id::text),
+          true),
+        updated_at_utc=v_now
+    from inserted_chunks inserted
+    where c.id=inserted.id
+      and c.chunk_type='DELIVERY_PREPARE'
+    returning c.id
+  ),
   asset_operation_links as (
     update public.invoice_document_assets a
     set operation_id=c.operation_id,
@@ -1019,6 +1047,9 @@ begin
       cross join(
         select count(*) from inserted_chunks
       ) ensure_chunk_insert
+      cross join(
+        select count(*) from correlated_delivery_chunks
+      ) ensure_delivery_correlation
       group by intended.operation_id
     ) q
     where o.id=q.operation_id and o.status<>'COMPLETE'
