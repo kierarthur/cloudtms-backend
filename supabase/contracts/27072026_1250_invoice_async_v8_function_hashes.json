@@ -1,10 +1,10 @@
 {
   "contract_version": "INVOICE_ASYNC_DB_V2_FUNCTION_HASH_MANIFEST",
   "project": "test-cloudtms",
-  "generated_at_utc": "2026-07-28T12:01:05.596Z",
+  "generated_at_utc": "2026-07-28T15:22:48.479Z",
   "hash_input": "pg_get_functiondef(oid)",
   "hash_algorithm": "sha256",
-  "aggregate_sha256": "0c6f50a1afb67d24600d7c6dadcba8e39ad5e0e5b15b98f0a218ac013fbd958c",
+  "aggregate_sha256": "d816a16b88551e62eebe89f055672a49c89f50f047b20f739cbc1e93397b55de",
   "security_gate": {
     "owner": "postgres",
     "private_public_execute": false,
@@ -22,11 +22,11 @@
     },
     {
       "identity": "private._invoice_batch_generate_candidate_keys_v2(jsonb,timestamptz)",
-      "definition_sha256": "616e3bd017673eee4d42c12b40e344ddb7dda83620ef34665a648c15e1dada42"
+      "definition_sha256": "5c0c612b67e2e1ec01160f2c93b9093336c74f45590445fc6d6ef3e7dac1c7c9"
     },
     {
       "identity": "private._invoice_batch_generate_candidate_rows_v2(jsonb,timestamptz)",
-      "definition_sha256": "f492f7330fd93e4b221c86ae5ccbe955beed1e2f062ac0d3315bd4c3c80e4174"
+      "definition_sha256": "4e074b4c22dfe89186538be205553fb24c17ade765a5e69e72aed5151186f6be"
     },
     {
       "identity": "private._invoice_batch_generate_classification_v2(boolean,text[],timestamptz)",
@@ -42,15 +42,15 @@
     },
     {
       "identity": "private._invoice_batch_issue_candidate_keys_v2(jsonb,timestamptz)",
-      "definition_sha256": "8827f52091912e66d65c0db678edf775a90976d163335316dc99c0e9b892207d"
+      "definition_sha256": "d175793be1c3877fae07effa493157dbebe0a088f1f173794aa92d7ed7bd39fa"
     },
     {
       "identity": "private._invoice_batch_issue_candidate_rows_v2(jsonb,timestamptz)",
-      "definition_sha256": "cdcd4e6b9de33c3861239b666cfb03d52dbd8ff0aca286831ede5ebe428fb1db"
+      "definition_sha256": "a0f00a52774563c653366b93830ed9e485ac79ccaa2f1bca90226f165f373abc"
     },
     {
       "identity": "private._invoice_batch_issue_classification_v2(boolean,uuid[],timestamptz)",
-      "definition_sha256": "f959d9a3641d024423186530b14cc49f5178730062300bdc4fe09411466e1542"
+      "definition_sha256": "76593dd589fd264e9f8d8ed02efd7b526dd1a32daf2dcc6e416d557f3d0956d0"
     },
     {
       "identity": "private._invoice_batch_issue_source_rows_core_v2(boolean,integer,timestamptz,uuid[])",
@@ -70,11 +70,11 @@
     },
     {
       "identity": "private._invoice_batch_query_validate_v2(jsonb,text)",
-      "definition_sha256": "e66a6a76d92ac8e236848647b92aa30a0823d075e62820edc07f847d8967083d"
+      "definition_sha256": "ed4b2c8b1887c78d9aa0de65d3dec1b95a2e9621d4e8d47ce8f05f965220b18e"
     },
     {
       "identity": "private._invoice_batch_selection_rules_v2(jsonb)",
-      "definition_sha256": "d2e6175dc3b3a804eead2644478fe8e55064bf268767b30b4858abad44e00f5f"
+      "definition_sha256": "331c9313f88d8d767cfc4279dd800ea9e3eaf080555042e71ec206ee944fd410"
     },
     {
       "identity": "private._invoice_candidate_revision_trigger_v2()",
@@ -110,7 +110,7 @@
     },
     {
       "identity": "private._invoice_generation_advance_core_v8(jsonb,timestamptz)",
-      "definition_sha256": "2c6c9766f86db7d671e4ecf8db688f94ed086f512300488877a3820b65ef1eae"
+      "definition_sha256": "8219acab5d1881ef39ba7d334df212f9abc1bb9661e87d21f8d6f3ef16172edd"
     },
     {
       "identity": "private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamptz)",
