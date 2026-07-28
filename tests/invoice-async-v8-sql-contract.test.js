@@ -833,6 +833,14 @@ test('document manifest planning freezes snapshot and manifest in one version up
     documentAdvance,
     /from manifest_build mb[\s\S]*join linked l[\s\S]*l\.version_id=mb\.document_version_id/i,
   );
+  assert.match(
+    documentAdvance,
+    /'ATTACHMENT_INDEX'[\s\S]*it\.submission_mode='ELECTRONIC'[\s\S]*it\.manual_document_asset_id is not null[\s\S]*ss\.import_id is not null[\s\S]*ea\.asset_id is not null[\s\S]*higher_rate_support,rows/i,
+  );
+  assert.doesNotMatch(
+    documentAdvance,
+    /where exists\(select 1 from invoice_ts it where it\.chunk_id=l\.id and it\.attach_timesheet and not it\.no_timesheet_required\)/i,
+  );
 });
 
 test('attachment-index render passes carry their frozen presentation identity', () => {

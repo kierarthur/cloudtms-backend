@@ -209,9 +209,44 @@ begin
       null::uuid,null::uuid,'Attachment index',null::integer,'ATTACHMENT_INDEX',
       'ATTACHMENT_INDEX_PRESENTATION_V1',encode(digest(concat_ws('|',l.document_version_id::text,l.snapshot_hash_v5,'ATTACHMENT_INDEX'),'sha256'),'hex')
     from linked l
-    where exists(select 1 from invoice_ts it where it.chunk_id=l.id and it.attach_timesheet and not it.no_timesheet_required)
-       or exists(select 1 from support_sources ss where ss.chunk_id=l.id)
-       or exists(select 1 from evidence_assets ea where ea.chunk_id=l.id)
+    where exists(
+      select 1 from invoice_ts it
+      where it.chunk_id=l.id
+        and (
+          (
+            it.submission_mode='ELECTRONIC'
+            and it.attach_timesheet
+            and not it.client_is_nhsp
+            and not it.no_timesheet_required
+            and it.timesheet_id is not null
+          )
+          or (
+            it.attach_timesheet
+            and it.manual_document_asset_id is not null
+            and (
+              it.submission_mode<>'ELECTRONIC'
+              or it.client_is_nhsp
+              or it.no_timesheet_required
+            )
+          )
+        )
+    )
+       or exists(
+         select 1 from support_sources ss
+         where ss.chunk_id=l.id and ss.import_id is not null
+       )
+       or exists(
+         select 1 from evidence_assets ea
+         where ea.chunk_id=l.id and ea.asset_id is not null
+       )
+       or jsonb_array_length(
+         case
+           when jsonb_typeof(l.snapshot_json_v5#>'{higher_rate_support,rows}')
+               ='array'
+             then l.snapshot_json_v5#>'{higher_rate_support,rows}'
+           else '[]'::jsonb
+         end
+       )>0
   ),
   manifest_build as materialized (
     select m.chunk_id,m.document_version_id,
