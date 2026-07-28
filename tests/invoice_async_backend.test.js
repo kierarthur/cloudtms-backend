@@ -41,7 +41,7 @@ import {
 } from '../invoice-document-processor/src/receipt-contract.js';
 
 const V8_ACTOR_ID = '00000000-0000-4000-8000-000000000010';
-const V8_FUNCTION_MANIFEST = 'ca91b5ef0807120f23a769f5914c8b1cefab31f96e2d60398474268dc05a3c58';
+const V8_FUNCTION_MANIFEST = 'a18822cc8a60823406de8763d97f0a8f744528e50628eb1322edb10526ab18ce';
 const V8_CURSOR_SECRET = 'test-session-secret-with-more-than-thirty-two-characters';
 
 function v8DatabaseContract(overrides = {}) {
@@ -1542,6 +1542,44 @@ test('external command identity is caller-stable and never falls back to deliver
     }),
     'stable-command-token'
   );
+
+  const matchingSources = new Request('https://example.test', {
+    method: 'POST',
+    headers: {
+      'idempotency-key': 'stable-command-token',
+      'x-idempotency-key': 'stable-command-token'
+    }
+  });
+  assert.equal(
+    invoiceAsyncHttpInternals.commandToken(
+      matchingSources,
+      {
+        command_token: ' stable-command-token ',
+        request_token: 'stable-command-token'
+      },
+      {
+        bodyFields: ['command_token', 'request_token'],
+        invalidCode: 'OPERATION_CONTROL_REQUEST_TOKEN_INVALID'
+      }
+    ),
+    'stable-command-token'
+  );
+
+  const conflictingSources = new Request('https://example.test', {
+    method: 'POST',
+    headers: {
+      'idempotency-key': 'header-token',
+      'x-idempotency-key': 'different-header-token'
+    }
+  });
+  assert.throws(
+    () => invoiceAsyncHttpInternals.commandToken(
+      conflictingSources,
+      { command_token: 'body-token' },
+      { invalidCode: 'GENERATE_COMMAND_TOKEN_INVALID' }
+    ),
+    /GENERATE_COMMAND_TOKEN_INVALID/
+  );
 });
 
 test('V8 snapshot, facet, explicit-key, and delivery token boundaries fail closed', async () => {
@@ -1640,6 +1678,42 @@ test('operation-control envelope is exact, durable-tokened, and DB-hashed', asyn
     }),
     /OPERATION_CONTROL_ACTION_SCHEMA_INVALID/
   );
+});
+
+test('operation-control rejects conflicting token sources before any RPC call', async () => {
+  const operationId = '00000000-0000-4000-8000-000000000191';
+  let rpcCalls = 0;
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoice-operations/control', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'header-token',
+        'x-idempotency-key': 'header-token'
+      },
+      body: JSON.stringify({
+        contract_version: 'INVOICE_OPERATION_CONTROL_V2',
+        command_token: 'body-token',
+        request_token: 'body-token',
+        actions: [{ action: 'CANCEL', operation_id: operationId }]
+      })
+    }),
+    v8Environment(),
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc(async () => {
+        rpcCalls += 1;
+        return [];
+      })
+    }
+  );
+  assert.equal(response.status, 400);
+  assert.equal(
+    (await response.json()).error,
+    'OPERATION_CONTROL_REQUEST_TOKEN_INVALID'
+  );
+  assert.equal(rpcCalls, 0);
 });
 
 test('work-starting document GET and loose credit-note inputs are rejected', async () => {

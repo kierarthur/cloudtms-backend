@@ -45,9 +45,11 @@ begin
   end if;
 
   if tg_table_name = 'invoice_operations' then
-    -- Selection roots and their manifest bookkeeping are not candidate work.
+    -- Selection roots, manifest bookkeeping, and durable operation-control
+    -- receipts are not candidate work.
     v_qualifier :=
-      $$coalesce(entity_type, '') <> 'INVOICE_BATCH'$$;
+      $$coalesce(entity_type, '') <> 'INVOICE_BATCH'
+        and coalesce(operation_type, '') <> 'OPERATION_CONTROL_REQUEST'$$;
   elsif tg_table_name = 'invoice_operation_chunks' then
     -- Never let an expander, an uncommitted carrier, or an outcome-only
     -- root-owned carrier invalidate the snapshot that is constructing it.
@@ -97,9 +99,24 @@ begin
       select exists (
         select 1
         from old_rows o
-        join new_rows n on n.id = o.id
-        where coalesce(o.entity_type, '') <> 'INVOICE_BATCH'
+        full join new_rows n on n.id = o.id
+        where (
+          (
+            o.id is not null
+            and coalesce(o.entity_type, '') <> 'INVOICE_BATCH'
+            and coalesce(o.operation_type, '') <> 'OPERATION_CONTROL_REQUEST'
+          ) <> (
+            n.id is not null
+            and coalesce(n.entity_type, '') <> 'INVOICE_BATCH'
+            and coalesce(n.operation_type, '') <> 'OPERATION_CONTROL_REQUEST'
+          )
+        ) or (
+          o.id is not null
+          and n.id is not null
+          and coalesce(o.entity_type, '') <> 'INVOICE_BATCH'
           and coalesce(n.entity_type, '') <> 'INVOICE_BATCH'
+          and coalesce(o.operation_type, '') <> 'OPERATION_CONTROL_REQUEST'
+          and coalesce(n.operation_type, '') <> 'OPERATION_CONTROL_REQUEST'
           and jsonb_build_object(
             'id', o.id,
             'parent_operation_id', o.parent_operation_id,
@@ -145,6 +162,7 @@ begin
               n.result_json->'issued_document_version_id',
             'error_code', n.error_json->'code'
           )
+        )
       ) into v_changed;
     elsif tg_table_name = 'invoice_operation_chunks' then
       select exists (

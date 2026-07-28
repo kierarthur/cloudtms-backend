@@ -110,11 +110,27 @@ function canonicalDeliveryPolicy(value) {
 }
 
 function commandToken(req, body = {}, options = {}) {
-  const value = body.command_token
-    ?? req.headers.get('idempotency-key')
-    ?? req.headers.get('x-idempotency-key')
-    ?? (options.internal === true ? options.generatedToken : null);
-  const text = String(value ?? '').trim();
+  const bodyFields = Array.isArray(options.bodyFields)
+    ? options.bodyFields
+    : ['command_token'];
+  const suppliedValues = [
+    ...bodyFields.map(field => body?.[field]),
+    req?.headers?.get?.('idempotency-key'),
+    req?.headers?.get?.('x-idempotency-key')
+  ]
+    .filter(value => value != null)
+    .map(value => String(value).trim())
+    .filter(Boolean);
+  const distinctValues = [...new Set(suppliedValues)];
+  if (distinctValues.length > 1) {
+    throw invoiceBatchContractError(
+      options.invalidCode || 'BATCH_COMMAND_TOKEN_INVALID'
+    );
+  }
+  const fallbackValue = options.internal === true
+    ? String(options.generatedToken ?? '').trim()
+    : '';
+  const text = distinctValues[0] || fallbackValue;
   if (!text) throw invoiceBatchContractError(options.requiredCode || 'BATCH_COMMAND_TOKEN_REQUIRED');
   if (text.length > 256 || /[\u0000-\u001f\u007f]/.test(text)) {
     throw invoiceBatchContractError(options.invalidCode || 'BATCH_COMMAND_TOKEN_INVALID');
@@ -150,7 +166,10 @@ function generationCommandFromBody(req, body, commandType = 'GENERATE_SELECTED')
     allow_early: boolValue(body.allow_early ?? canonical.allow_early, false),
     target_invoice_week:
       body.target_invoice_week || body.invoice_week_start || canonical.target_invoice_week || undefined,
-    command_token: commandToken(req, body)
+    command_token: commandToken(req, body, {
+      requiredCode: 'GENERATE_COMMAND_TOKEN_REQUIRED',
+      invalidCode: 'GENERATE_COMMAND_TOKEN_INVALID'
+    })
   };
   const optional = {
     scope_key: body.scope_key || canonical.scope_key || canonical.group_key,
@@ -1589,7 +1608,10 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
   ].includes(key))) {
     throw invoiceBatchContractError('BATCH_QUERY_UNKNOWN_FIELD');
   }
-  const token = commandToken(req, body, { requiredCode: 'GENERATE_COMMAND_TOKEN_REQUIRED' });
+  const token = commandToken(req, body, {
+    requiredCode: 'GENERATE_COMMAND_TOKEN_REQUIRED',
+    invalidCode: 'GENERATE_COMMAND_TOKEN_INVALID'
+  });
   const selectionRoot = normaliseInvoiceBatchSelectionRoot(body.selection_contract, 'GENERATE');
   if (!selectionRoot.query.snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
   if (selectionRoot.query.mode === 'EXPLICIT_KEYS') {
@@ -1675,7 +1697,10 @@ async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
   if (typeof body.deliver !== 'boolean') {
     throw invoiceBatchContractError('ISSUE_DELIVERY_MODE_REQUIRED');
   }
-  const token = commandToken(req, body, { requiredCode: 'ISSUE_COMMAND_TOKEN_REQUIRED' });
+  const token = commandToken(req, body, {
+    requiredCode: 'ISSUE_COMMAND_TOKEN_REQUIRED',
+    invalidCode: 'ISSUE_COMMAND_TOKEN_INVALID'
+  });
   const selectionRoot = normaliseInvoiceBatchSelectionRoot(body.selection_contract, 'ISSUE');
   if (!selectionRoot.query.snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
   if (!['PAGE', 'SUMMARY'].includes(selectionRoot.query.mode)) {
@@ -1760,7 +1785,8 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
     throw invoiceBatchContractError('DOCUMENT_PREPARATION_REQUEST_INVALID');
   }
   const requestToken = commandToken(req, body, {
-    requiredCode: 'DOCUMENT_PREPARATION_COMMAND_TOKEN_REQUIRED'
+    requiredCode: 'DOCUMENT_PREPARATION_COMMAND_TOKEN_REQUIRED',
+    invalidCode: 'DOCUMENT_PREPARATION_COMMAND_TOKEN_INVALID'
   });
   const priorityReason = String(body.priority_reason || 'VIEW_NOW').trim().toUpperCase();
   if (priorityReason !== 'VIEW_NOW') {
@@ -1944,7 +1970,10 @@ async function handleIssueOne(env, req, ctx, user, deps, invoiceId) {
       && String(body.template_version).trim() !== 'INVOICE_EMAIL_V2') {
     throw invoiceBatchContractError('ISSUE_DELIVERY_INTENT_INVALID');
   }
-  const requestToken = commandToken(req, body, { requiredCode: 'ISSUE_COMMAND_TOKEN_REQUIRED' });
+  const requestToken = commandToken(req, body, {
+    requiredCode: 'ISSUE_COMMAND_TOKEN_REQUIRED',
+    invalidCode: 'ISSUE_COMMAND_TOKEN_INVALID'
+  });
   const deliveryRequestToken = deliver
     ? normaliseDeliveryRequestToken(body.delivery_request_token, requestToken)
     : null;
@@ -1979,7 +2008,10 @@ async function handleDeliverOne(env, req, ctx, user, deps, invoiceId) {
         && String(body.template_version).trim() !== 'INVOICE_EMAIL_V2')) {
     throw invoiceBatchContractError('DELIVERY_REQUEST_INVALID');
   }
-  const requestToken = commandToken(req, body, { requiredCode: 'DELIVERY_COMMAND_TOKEN_REQUIRED' });
+  const requestToken = commandToken(req, body, {
+    requiredCode: 'DELIVERY_COMMAND_TOKEN_REQUIRED',
+    invalidCode: 'DELIVERY_COMMAND_TOKEN_INVALID'
+  });
   const deliveryRequestToken = normaliseDeliveryRequestToken(
     body.delivery_request_token,
     requestToken
@@ -2175,15 +2207,8 @@ function normaliseInvoiceOperationControlAction(raw, options = {}) {
 }
 
 function operationControlRequestToken(req, body) {
-  const commandValue = body.command_token;
-  const requestValue = body.request_token;
-  if (commandValue != null && requestValue != null
-      && String(commandValue).trim() !== String(requestValue).trim()) {
-    throw invoiceBatchContractError('OPERATION_CONTROL_REQUEST_TOKEN_INVALID');
-  }
-  return commandToken(req, {
-    command_token: commandValue ?? requestValue
-  }, {
+  return commandToken(req, body, {
+    bodyFields: ['command_token', 'request_token'],
     requiredCode: 'OPERATION_CONTROL_REQUEST_TOKEN_REQUIRED',
     invalidCode: 'OPERATION_CONTROL_REQUEST_TOKEN_INVALID'
   });
@@ -3226,20 +3251,24 @@ function invoiceErrorStatus(error) {
     'BATCH_SNAPSHOT_INVALID',
     'BATCH_SNAPSHOT_REQUIRED',
     'CANONICAL_COMMAND_REQUIRED',
+    'CREDIT_NOTE_COMMAND_TOKEN_INVALID',
     'CREDIT_NOTE_COMMAND_TOKEN_REQUIRED',
     'CREDIT_NOTE_REASON_INVALID',
     'CREDIT_NOTE_REQUEST_INVALID',
     'DELIVERY_PART_NUMBER_INVALID',
+    'DELIVERY_COMMAND_TOKEN_INVALID',
     'DELIVERY_POLICY_INVALID',
     'DELIVERY_REQUEST_INVALID',
     'DELIVERY_REQUEST_TOKEN_INVALID',
     'DELIVERY_REQUEST_TOKEN_REQUIRED',
+    'DOCUMENT_PREPARATION_COMMAND_TOKEN_INVALID',
     'DOCUMENT_PREPARATION_COMMAND_TOKEN_REQUIRED',
     'DOCUMENT_PREPARATION_REQUEST_INVALID',
     'DOCUMENT_VERSION_ENTITY_TYPE_INVALID',
     'DOCUMENT_VERSION_ID_INVALID',
     'DOCUMENT_VERSION_POINTER_MISMATCH',
     'DOCUMENT_VERSION_PURPOSE_MISMATCH',
+    'GENERATE_COMMAND_TOKEN_INVALID',
     'GENERATE_COMMAND_TOKEN_REQUIRED',
     'INVALID_ENTITY_ID',
     'INVALID_OUTBOX_QUEUE_STATE',
@@ -3261,6 +3290,7 @@ function invoiceErrorStatus(error) {
     'INVOICE_BATCH_SORT_KEY_INVALID',
     'INVOICE_ISSUE_REQUEST_INVALID',
     'INVOICE_START_RESULT_CORRELATION_INVALID',
+    'ISSUE_COMMAND_TOKEN_INVALID',
     'ISSUE_COMMAND_TOKEN_REQUIRED',
     'ISSUE_DELIVERY_INTENT_INVALID',
     'ISSUE_DELIVERY_MODE_REQUIRED',
@@ -3581,7 +3611,8 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
         base_invoice_id: params.invoice_id,
         credit_reason: creditReason,
         command_token: commandToken(req, body, {
-          requiredCode: 'CREDIT_NOTE_COMMAND_TOKEN_REQUIRED'
+          requiredCode: 'CREDIT_NOTE_COMMAND_TOKEN_REQUIRED',
+          invalidCode: 'CREDIT_NOTE_COMMAND_TOKEN_INVALID'
         })
       }], deps, ['DATABASE']);
     }

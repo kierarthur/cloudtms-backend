@@ -368,6 +368,33 @@ test('operation control has durable database idempotency receipts', () => {
   );
 });
 
+test('operation-control receipts are excluded from candidate revision authority', () => {
+  const trigger = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_05_private_invoice_candidate_revision_trigger_v2.sql',
+  );
+
+  assert.match(
+    trigger,
+    /coalesce\(operation_type,\s*''\)\s*<>\s*'OPERATION_CONTROL_REQUEST'/i,
+  );
+  assert.match(
+    trigger,
+    /full\s+join\s+new_rows\s+n\s+on\s+n\.id\s*=\s*o\.id/i,
+  );
+  assert.match(
+    trigger,
+    /o\.id\s+is\s+not\s+null[\s\S]*OPERATION_CONTROL_REQUEST[\s\S]*<>\s*\([\s\S]*n\.id\s+is\s+not\s+null[\s\S]*OPERATION_CONTROL_REQUEST/i,
+  );
+  assert.match(
+    trigger,
+    /o\.id\s+is\s+not\s+null[\s\S]*n\.id\s+is\s+not\s+null[\s\S]*jsonb_build_object\(/i,
+  );
+  assert.doesNotMatch(
+    trigger,
+    /coalesce\(entity_type,\s*''\)\s*<>\s*'OPERATION_CONTROL'/i,
+  );
+});
+
 test('candidate PAGE selects bounded keys before expensive hydration', () => {
   const generateKeys = read(
     'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1501_private_invoice_batch_generate_candidate_keys_v2.sql',
