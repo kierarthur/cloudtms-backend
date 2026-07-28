@@ -1182,6 +1182,10 @@ test('generation establishes the invoice header before downstream ownership writ
   );
   assert.match(
     generationCore,
+    /segment_lock_targets_pre as materialized \([\s\S]*where cardinality\(coalesce\(p\.segment_ids,array\[\]::text\[\]\)\)>0\s+and exists\(\s*select 1\s+from public\.invoices existing_header\s+where existing_header\.id=s\.planned_invoice_id\)/s,
+  );
+  assert.match(
+    generationCore,
     /from valid_chunks vc\s+join target_headers h\s+on h\.chunk_id=vc\.id and h\.invoice_id=vc\.planned_invoice_id/s,
   );
   assert.match(

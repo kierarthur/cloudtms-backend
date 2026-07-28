@@ -910,6 +910,10 @@ begin
     join selected_segments p
       on p.chunk_id=s.chunk_id and p.timesheet_id=s.timesheet_id
     where cardinality(coalesce(p.segment_ids,array[]::text[]))>0
+      and exists(
+        select 1
+        from public.invoices existing_header
+        where existing_header.id=s.planned_invoice_id)
   ),
   segment_lock_authority_pre as materialized (
     select r.*
