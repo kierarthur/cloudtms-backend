@@ -1323,7 +1323,8 @@ begin
   hr_sources as (
     insert into public.invoice_hr_source_rows(invoice_id,source_system,import_id,header_columns,rows_json,header_rows)
     select distinct vc.planned_invoice_id,
-      case when tf.basis::text='NHSP' then 'NHSP' else 'HEALTHROSTER' end,
+      case when tf.basis::text in('NHSP','NHSP_ADJUSTMENT')
+        then 'NHSP' else 'HEALTHROSTER' end,
       tf.nhsp_import_id,'[]'::jsonb,
       case when jsonb_typeof(tf.external_source_rows_json)='array' then tf.external_source_rows_json else '[]'::jsonb end,
       '[]'::jsonb

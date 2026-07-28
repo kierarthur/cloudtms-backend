@@ -184,6 +184,9 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
   const issueClassification = read(
     'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql',
   );
+  const issueValidation = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_issue_validate_batch.sql',
+  );
   assert.match(generateKeys, /candidate\.candidate_json->>'row_kind'='CREATE_INVOICE'/i);
   assert.match(generateKeys, /SEGMENT_ALREADY_LOCKED/i);
   assert.match(generateKeys, /SOURCE_ALREADY_LOCKED/i);
@@ -200,6 +203,16 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
     generationAdvance,
     /set status=case[\s\S]*then 'COMPLETE' else 'BLOCKED' end,[\s\S]*phase=case[\s\S]*then 'COMPLETE' else 'BLOCKED' end/i,
   );
+  assert.match(
+    generationAdvance,
+    /tf\.basis::text in\('NHSP','NHSP_ADJUSTMENT'\)[\s\S]*then 'NHSP'/i,
+  );
+  assert.match(
+    issueValidation,
+    /import_source_requirements as materialized[\s\S]*invoice_hr_source_rows[\s\S]*jsonb_array_length\(source\.rows_json\)>0/i,
+  );
+  assert.match(issueValidation, /MISSING_IMPORT_SOURCE_EVIDENCE/i);
+  assert.match(issueValidation, /missing_import_source_count/i);
   assert.doesNotMatch(issueClassification, /generated_state='FRESH'/i);
   assert.match(
     issueClassification,
@@ -1025,6 +1038,7 @@ test('root repeatable installs every changed nested Invoice V8 authority', () =>
     '27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
     '27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
     '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
+    '23072026_2207_private_invoice_issue_validate_batch.sql',
   ]) {
     assert.match(
       runtimeAuthority,

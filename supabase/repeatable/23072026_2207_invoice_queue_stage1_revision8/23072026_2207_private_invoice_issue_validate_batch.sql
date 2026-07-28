@@ -338,6 +338,46 @@ timesheet_readiness_json as materialized (
   left join timesheet_readiness t on t.invoice_id=i.invoice_id
   group by i.invoice_id
 ),
+import_source_requirements as materialized (
+  select distinct s.invoice_id,s.timesheet_id,
+    case
+      when coalesce(summary.client_is_nhsp,false)
+        or upper(coalesce(summary.route_type,'')) like '%NHSP%'
+        or upper(coalesce(financial.basis::text,'')) like 'NHSP%'
+        then 'NHSP'
+      when upper(coalesce(summary.route_type,'')) like '%HEALTHROSTER%'
+        or upper(coalesce(financial.basis::text,'')) in(
+          'HEALTHROSTER','HEALTHROSTER_ADJUSTMENT','HR_WEEKLY','HR_DAILY')
+        then 'HEALTHROSTER'
+    end source_system,
+    financial.nhsp_import_id import_id
+  from source_requirements s
+  left join public.v_timesheets_summary_base summary
+    on summary.timesheet_id=s.timesheet_id
+  left join public.timesheets_financials financial
+    on financial.timesheet_id=s.timesheet_id and financial.is_current
+  where coalesce(summary.client_is_nhsp,false)
+    or upper(coalesce(summary.route_type,'')) like '%NHSP%'
+    or upper(coalesce(financial.basis::text,'')) like 'NHSP%'
+    or upper(coalesce(summary.route_type,'')) like '%HEALTHROSTER%'
+    or upper(coalesce(financial.basis::text,'')) in(
+      'HEALTHROSTER','HEALTHROSTER_ADJUSTMENT','HR_WEEKLY','HR_DAILY')
+),
+import_source_checks as materialized (
+  select i.invoice_id,
+    count(*) filter(where r.source_system is not null and not exists(
+      select 1
+      from public.invoice_hr_source_rows source
+      where source.invoice_id=r.invoice_id
+        and upper(coalesce(source.source_system,''))=r.source_system
+        and(r.import_id is null or source.import_id=r.import_id)
+        and jsonb_typeof(source.rows_json)='array'
+        and jsonb_array_length(source.rows_json)>0
+    )) missing_import_source
+  from invoice_scope i
+  left join import_source_requirements r on r.invoice_id=i.invoice_id
+  group by i.invoice_id
+),
 evidence_requirements as materialized (
   select s.invoice_id,s.timesheet_id,'MILEAGE'::text requirement
   from source_requirements s where s.mileage_required
@@ -431,6 +471,7 @@ facts as materialized (
     i.subtotal_ex_vat,i.vat_amount,i.total_inc_vat,i.header_snapshot_json,
     lt.line_count,lt.net,lt.vat,lt.gross,
     ec.missing_mileage,ec.missing_expense,lt.missing_higher_rate,
+    isc.missing_import_source,
     tc.missing_timesheet,tc.missing_manual_source,tc.unsigned_qr_source,
     tc.missing_reference,
     coalesce(tc.missing_asset_registration,0)
@@ -464,6 +505,7 @@ facts as materialized (
   left join public.invoices i on i.id=r.invoice_id
   left join line_totals lt on lt.invoice_id=r.invoice_id
   left join timesheet_checks tc on tc.invoice_id=r.invoice_id
+  left join import_source_checks isc on isc.invoice_id=r.invoice_id
   left join evidence_checks ec on ec.invoice_id=r.invoice_id
   left join reference_checks rc on rc.invoice_id=r.invoice_id
   left join correction_checks cc on cc.invoice_id=r.invoice_id
@@ -517,6 +559,8 @@ classified as materialized (
         then 'MISSING_EXPENSE_EVIDENCE' end,
       case when coalesce(f.missing_higher_rate,0)>0
         then 'MISSING_HIGHER_RATE_SUPPORT' end,
+      case when coalesce(f.missing_import_source,0)>0
+        then 'MISSING_IMPORT_SOURCE_EVIDENCE' end,
       case when coalesce(f.invalid_correction,0)>0
         then coalesce(f.correction_blocker,'CORRECTION_LINES_NOT_UNIT_SAFE') end,
       case when not f.allow_early
@@ -578,6 +622,7 @@ select c.request_key,c.invoice_id,
           then jsonb_build_array('REQUIRED_ASSET_NOT_READY')
         else '[]'::jsonb end),
     'queueable_asset_count',coalesce(c.queueable_required_asset,0),
+    'missing_import_source_count',coalesce(c.missing_import_source,0),
     'missing_asset_workflow_count',coalesce(c.missing_asset_workflow,0),
     'queueable_timesheet_document_count',
       coalesce(c.queueable_timesheet_document,0),
