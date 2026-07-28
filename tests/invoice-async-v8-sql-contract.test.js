@@ -817,6 +817,22 @@ test('document manifest planning freezes snapshot and manifest in one version up
   );
 });
 
+test('document merge retry requeues the plan into the implemented wait-for-merge phase', () => {
+  const operationControl = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql',
+  );
+  const documentAdvance = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql',
+  );
+
+  assert.doesNotMatch(operationControl, /PLAN_MERGES/);
+  assert.match(
+    operationControl,
+    /phase=case when scope\.reset_inputs then 'WAIT_FOR_INPUTS' else 'WAIT_FOR_MERGE' end/i,
+  );
+  assert.match(documentAdvance, /where x->>'phase'='WAIT_FOR_MERGE'/i);
+});
+
 test('committed TEST configuration keeps both async entry flags disabled', () => {
   const wrangler = read('wrangler.toml');
   const pipelineFlags = [

@@ -29,7 +29,7 @@ const RECEIPT_CONTRACTS = Object.freeze({
 export class InvoiceDocumentContainer extends Container {
   defaultPort = 8080;
   requiredPorts = [8080];
-  sleepAfter = '5m';
+  sleepAfter = '10s';
   enableInternet = false;
   pingEndpoint = 'health';
 }

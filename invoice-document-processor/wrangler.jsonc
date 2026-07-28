@@ -9,7 +9,7 @@
     {
       "class_name": "InvoiceDocumentContainer",
       "image": "./container/Dockerfile",
-      "max_instances": 1,
+      "max_instances": 4,
       "instance_type": "basic"
     }
   ],
@@ -39,7 +39,7 @@
         {
           "class_name": "InvoiceDocumentContainer",
           "image": "./container/Dockerfile",
-          "max_instances": 1,
+          "max_instances": 4,
           "instance_type": "basic"
         }
       ],

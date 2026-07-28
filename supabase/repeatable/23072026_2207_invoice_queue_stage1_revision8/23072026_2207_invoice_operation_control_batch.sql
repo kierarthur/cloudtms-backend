@@ -879,7 +879,7 @@ begin
   retried_document_plans as (
     update public.invoice_operation_chunks p
     set status='QUEUED',
-        phase=case when scope.reset_inputs then 'WAIT_FOR_INPUTS' else 'PLAN_MERGES' end,
+        phase=case when scope.reset_inputs then 'WAIT_FOR_INPUTS' else 'WAIT_FOR_MERGE' end,
         run_after_utc=v_now,
         failed_at_utc=null,error_json=null,lease_owner=null,lease_token=null,
         lease_expires_at_utc=null,updated_at_utc=v_now

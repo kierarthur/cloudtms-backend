@@ -8,6 +8,7 @@ import {
 } from '../../shared/invoice-processor-security.js';
 
 const workerPath = new URL('../src/worker.js', import.meta.url);
+const processorConfigPath = new URL('../wrangler.jsonc', import.meta.url);
 const receiptUrl = new URL('../src/receipt-contract.js', import.meta.url).href;
 const securityUrl = new URL('../../shared/invoice-processor-security.js', import.meta.url).href;
 const workerSource = (await readFile(workerPath, 'utf8'))
@@ -28,6 +29,13 @@ const {
   putImmutableProcessorArtifact,
   classifyError
 } = invoiceDocumentProcessorInternals;
+
+test('processor capacity covers readiness plus configured work concurrency and releases idle attempt containers', async () => {
+  const processorConfig = JSON.parse(await readFile(processorConfigPath, 'utf8'));
+  assert.equal(processorConfig.containers[0].max_instances, 4);
+  assert.equal(processorConfig.env.test.containers[0].max_instances, 4);
+  assert.match(workerSource, /sleepAfter = '10s'/);
+});
 
 function objectFromBytes(bytes, metadata = {}) {
   const data = Uint8Array.from(bytes);
