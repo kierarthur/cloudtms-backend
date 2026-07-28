@@ -739,7 +739,9 @@ test('professional source templates use explicit allowlisted fields', () => {
   });
   assert.ok(ts.includes('Hospital'));
   assert.ok(ts.includes('7.5'));
+  assert.ok(ts.includes('08:00 – 16:00'));
   assert.ok(ts.includes('Authorised: Yes · 24/07/2026'));
+  assert.ok(!ts.includes('Additional units: </div>'));
   assert.ok(!ts.includes('Additional units: Additional units'));
   assert.ok(!ts.includes(' · by </div>'));
   const hr = buildHealthRosterSupportHtml({ schema_version: 'HEALTHROSTER_PRESENTATION_V1', rows: [{ worker: 'Worker', assignment: 'Assignment', shift_date: null, shift_times: null, site: null, ward: null, reference: null, units_hours: null, validation_state: null, source_identity: null, secret_future_key: 'must-not-render' }] });

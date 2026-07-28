@@ -154,7 +154,13 @@ ${m.is_draft ? '<div class="draft-watermark">DRAFT</div>' : ''}
 }
 
 function signatureBlock(label,signature={}) { const src=signature.data_url||''; return `<div class="signature"><div class="party-title">${escapeInvoiceHtml(label)}</div>${src?`<img alt="" src="${escapeInvoiceHtml(src)}">`:''}<div>${escapeInvoiceHtml(signature.name||signature.identity||'')}</div><div>${escapeInvoiceHtml(signature.role||'')}</div></div>`; }
-function scheduleRows(rows=[]) { return `<table><thead><tr><th>Date</th><th>Scheduled</th><th>Worked</th><th>Break</th><th>Reference</th><th class="number">Hours / units</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${escapeInvoiceHtml(formatFrozenDocumentValue(row.date,{kind:'date'}))}</td><td>${escapeInvoiceHtml([row.scheduled_start,row.scheduled_end].filter(Boolean).join(' – '))}</td><td>${escapeInvoiceHtml([row.worked_start||row.start,row.worked_end||row.end].filter(Boolean).join(' – '))}</td><td>${escapeInvoiceHtml(row.break_display||[row.break_start,row.break_end,row.break_minutes!=null?`${row.break_minutes} min`:null].filter(Boolean).join(' / '))}</td><td>${escapeInvoiceHtml(row.reference||row.day_reference||'')}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(row.hours??row.units,{kind:'number'}))}</td></tr>`).join('')}</tbody></table>`; }
+function formatFrozenTime(value) {
+  if (value == null || value === '') return '';
+  const text = String(value);
+  const match = /(?:^|[T\s])(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?$/.exec(text);
+  return match ? `${match[1]}:${match[2]}` : text;
+}
+function scheduleRows(rows=[]) { return `<table><thead><tr><th>Date</th><th>Scheduled</th><th>Worked</th><th>Break</th><th>Reference</th><th class="number">Hours / units</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${escapeInvoiceHtml(formatFrozenDocumentValue(row.date,{kind:'date'}))}</td><td>${escapeInvoiceHtml([formatFrozenTime(row.scheduled_start),formatFrozenTime(row.scheduled_end)].filter(Boolean).join(' – '))}</td><td>${escapeInvoiceHtml([formatFrozenTime(row.worked_start||row.start),formatFrozenTime(row.worked_end||row.end)].filter(Boolean).join(' – '))}</td><td>${escapeInvoiceHtml(row.break_display||[formatFrozenTime(row.break_start),formatFrozenTime(row.break_end),row.break_minutes!=null?`${row.break_minutes} min`:null].filter(Boolean).join(' / '))}</td><td>${escapeInvoiceHtml(row.reference||row.day_reference||'')}</td><td class="number">${escapeInvoiceHtml(formatFrozenDocumentValue(row.hours??row.units,{kind:'number'}))}</td></tr>`).join('')}</tbody></table>`; }
 export function buildElectronicTimesheetHtml(model = {}) {
   const m = validateFrozenPresentationModel('ELECTRONIC_TIMESHEET', model);
   const auth = m.authorisation || {};
@@ -227,7 +233,7 @@ ${renderScheduleSection('Weekly schedule', m.weekly_schedule_rows)}
   <div>Whole reference: ${escapeInvoiceHtml(m.references.whole || '')}</div>
   <div>Day references: ${escapeInvoiceHtml(referenceText(m.references.day))}</div>
   <div>Segment references: ${escapeInvoiceHtml(referenceText(m.references.segment))}</div>
-  <div>Additional units: ${escapeInvoiceHtml(additionalUnits)}</div>
+  ${additionalUnits ? `<div>Additional units: ${escapeInvoiceHtml(additionalUnits)}</div>` : ''}
   <div>QR required: ${m.qr.required ? 'Yes' : 'No'} · QR signed: ${m.qr.signed ? 'Yes' : 'No'}</div>
   ${m.qr.status ? `<div>QR status: ${escapeInvoiceHtml(m.qr.status)}</div>` : ''}
   ${m.qr.signed_hash ? `<div>QR signature: ${escapeInvoiceHtml(m.qr.signed_hash)}</div>` : ''}
