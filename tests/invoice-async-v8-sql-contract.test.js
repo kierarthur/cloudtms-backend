@@ -553,7 +553,7 @@ test('batch rollup qualifies output-column names inside SQL statements', () => {
   assert.doesNotMatch(rollup, /select\s+operation_id\s+from\s+roots/i);
   assert.match(
     rollup,
-    /select\s+root\.operation_id\s+from\s+roots\s+root/gi,
+    /from\s+unnest\(v_root_operation_ids\)\s+root_id/gi,
   );
   assert.doesNotMatch(
     rollup,
@@ -1034,6 +1034,27 @@ test('presentation authority repeatable defers safely instead of failing CI whil
   assert.doesNotMatch(
     presentationAuthority,
     /raise exception[\s\S]*INVOICE_PRESENTATION_CUTOVER_ACTIVE_WORK/i,
+  );
+});
+
+test('batch rollup separates carrier trigger writes from the root update', () => {
+  const rollup = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_operation_rollup_batch.sql',
+  );
+  const returnQueryIndex = rollup.toLowerCase().indexOf('return query');
+  assert.ok(returnQueryIndex > 0);
+
+  const carrierWrites = rollup
+    .slice(0, returnQueryIndex)
+    .match(/update\s+public\.invoice_operation_chunks\s+carrier/gi) || [];
+  assert.equal(carrierWrites.length, 2);
+  assert.doesNotMatch(
+    rollup.slice(returnQueryIndex),
+    /\w+\s+as\s+materialized\s*\(\s*update\s+public\.invoice_operation_chunks/i,
+  );
+  assert.match(
+    rollup.slice(returnQueryIndex),
+    /updated_roots\s+as\s+materialized\s*\(\s*update\s+public\.invoice_operations\s+root/i,
   );
 });
 

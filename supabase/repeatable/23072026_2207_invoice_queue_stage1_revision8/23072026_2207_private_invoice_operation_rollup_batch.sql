@@ -21,25 +21,168 @@ set search_path to 'public','private','extensions','pg_temp'
 as $function$
 declare
   v_now timestamptz := coalesce(p_now_utc,now());
+  v_core_operation_ids uuid[] := array[]::uuid[];
+  v_root_operation_ids uuid[] := array[]::uuid[];
 begin
+  /*
+   * Run the generic rollup once and retain its exact operation scope.  Result
+   * carrier statement triggers may update their batch root, so carrier writes
+   * must complete in their own SQL statements before the root update below.
+   * Keeping these writes in one data-modifying CTE causes PostgreSQL 27000
+   * when the result-page trigger and updated_roots touch the same root tuple.
+   */
+  select coalesce(array_agg(core.operation_id order by core.operation_id),
+                  array[]::uuid[])
+  into v_core_operation_ids
+  from private._invoice_operation_rollup_core_v8(
+    p_operation_ids,
+    v_now,
+    p_propagate_ancestors
+  ) core;
+
+  select coalesce(array_agg(distinct operation.id order by operation.id),
+                  array[]::uuid[])
+  into v_root_operation_ids
+  from public.invoice_operations operation
+  where operation.id=any(v_core_operation_ids)
+    and operation.operation_type in ('GENERATE_INVOICES','ISSUE_INVOICES')
+    and operation.entity_type='INVOICE_BATCH'
+    and operation.input_json->>'contract_version'
+      ='INVOICE_BATCH_SELECTION_ROOT_V2';
+
+  update public.invoice_operation_chunks carrier
+  set
+    status=case
+      when child.status='COMPLETE' then 'COMPLETE'
+      when child.status in ('BLOCKED','FAILED','DEAD_LETTER')
+        then child.status
+      else carrier.status
+    end,
+    phase=case
+      when child.status='COMPLETE' then 'COMPLETE'
+      when child.status in ('BLOCKED','FAILED','DEAD_LETTER')
+        then child.status
+      else carrier.phase
+    end,
+    document_version_id=coalesce(
+      ready_version.id,
+      carrier.document_version_id
+    ),
+    result_json=coalesce(carrier.result_json,'{}'::jsonb)
+      || jsonb_build_object(
+        'result_category',case
+          when child.status='COMPLETE' then 'REGENERATED'
+          when child.status='BLOCKED' then 'BLOCKED'
+          when child.status in ('FAILED','DEAD_LETTER') then 'FAILED'
+          else 'IN_PROGRESS'
+        end,
+        'document_operation_id',child.id,
+        'document_version_id',coalesce(
+          ready_version.id,
+          carrier.document_version_id
+        )
+      ),
+    completed_at_utc=case
+      when child.status in ('COMPLETE','BLOCKED','FAILED','DEAD_LETTER')
+        then coalesce(carrier.completed_at_utc,v_now)
+      else carrier.completed_at_utc
+    end,
+    updated_at_utc=v_now
+  from public.invoice_operations child
+  left join lateral (
+    select version.id
+    from public.invoice_document_versions version
+    where version.operation_id=child.id
+      and version.entity_type='INVOICE'
+      and version.purpose='DRAFT_PREVIEW'
+      and version.status='READY'
+    order by version.ready_at_utc desc nulls last,
+      version.created_at_utc desc,
+      version.id desc
+    limit 1
+  ) ready_version on true
+  where carrier.operation_id=any(v_root_operation_ids)
+    and carrier.is_manifest_member
+    and carrier.phase='WAITING_DOCUMENT'
+    and carrier.status='WAITING'
+    and pg_input_is_valid(
+      coalesce(carrier.result_json->>'document_operation_id',''),
+      'uuid'
+    )
+    and child.id=(carrier.result_json->>'document_operation_id')::uuid
+    and child.status in ('COMPLETE','BLOCKED','FAILED','DEAD_LETTER');
+
+  update public.invoice_operation_chunks carrier
+  set
+    result_json=coalesce(carrier.result_json,'{}'::jsonb)
+      || jsonb_build_object(
+        'result_category',case
+          when carrier.status='COMPLETE'
+           and carrier.result_category in (
+             'EXCLUDED','ALREADY_ACTIVE','REGENERATED',
+             'ISSUED','ISSUED_SEND_BLOCKED'
+           ) then carrier.result_category
+          when carrier.status='COMPLETE'
+           and carrier.chunk_type='GENERATION_GROUP'
+           and coalesce(
+             carrier.payload_json->>'row_kind',
+             'CREATE_INVOICE'
+           )='CREATE_INVOICE' then 'GENERATED'
+          when carrier.status='COMPLETE'
+           and carrier.chunk_type='GENERATION_GROUP'
+            then 'REGENERATED'
+          when carrier.status='COMPLETE'
+           and carrier.chunk_type='ISSUE_INVOICE'
+           and coalesce(
+             (carrier.payload_json->>'blocked_for_sending')::boolean,
+             false
+           ) then 'ISSUED_SEND_BLOCKED'
+          when carrier.status='COMPLETE'
+           and carrier.chunk_type='ISSUE_INVOICE' then 'ISSUED'
+          when carrier.status='BLOCKED' then 'BLOCKED'
+          when carrier.status='SUPERSEDED' then 'CHANGED'
+          when carrier.status in ('FAILED','DEAD_LETTER') then 'FAILED'
+          else 'IN_PROGRESS'
+        end
+      ),
+    updated_at_utc=v_now
+  where carrier.operation_id=any(v_root_operation_ids)
+    and carrier.is_manifest_member
+    and carrier.manifest_committed
+    and carrier.result_visible
+    and carrier.result_category is distinct from case
+      when carrier.status='COMPLETE'
+       and carrier.result_category in (
+         'EXCLUDED','ALREADY_ACTIVE','REGENERATED',
+         'ISSUED','ISSUED_SEND_BLOCKED'
+       ) then carrier.result_category
+      when carrier.status='COMPLETE'
+       and carrier.chunk_type='GENERATION_GROUP'
+       and coalesce(
+         carrier.payload_json->>'row_kind',
+         'CREATE_INVOICE'
+       )='CREATE_INVOICE' then 'GENERATED'
+      when carrier.status='COMPLETE'
+       and carrier.chunk_type='GENERATION_GROUP' then 'REGENERATED'
+      when carrier.status='COMPLETE'
+       and carrier.chunk_type='ISSUE_INVOICE'
+       and coalesce(
+         (carrier.payload_json->>'blocked_for_sending')::boolean,
+         false
+       ) then 'ISSUED_SEND_BLOCKED'
+      when carrier.status='COMPLETE'
+       and carrier.chunk_type='ISSUE_INVOICE' then 'ISSUED'
+      when carrier.status='BLOCKED' then 'BLOCKED'
+      when carrier.status='SUPERSEDED' then 'CHANGED'
+      when carrier.status in ('FAILED','DEAD_LETTER') then 'FAILED'
+      else 'IN_PROGRESS'
+    end;
+
   return query
   with recursive
-  core_rows as materialized (
-    select *
-    from private._invoice_operation_rollup_core_v8(
-      p_operation_ids,
-      v_now,
-      p_propagate_ancestors
-    )
-  ),
   roots as materialized (
-    select distinct o.id operation_id
-    from core_rows core
-    join public.invoice_operations o on o.id=core.operation_id
-    where o.operation_type in ('GENERATE_INVOICES','ISSUE_INVOICES')
-      and o.entity_type='INVOICE_BATCH'
-      and o.input_json->>'contract_version'
-        ='INVOICE_BATCH_SELECTION_ROOT_V2'
+    select root_id operation_id
+    from unnest(v_root_operation_ids) root_id
   ),
   descendants(descendant_root_operation_id,operation_id,depth,path) as (
     select r.operation_id,r.operation_id,0,array[r.operation_id]::uuid[]
@@ -55,138 +198,6 @@ begin
       on child.parent_operation_id=d.operation_id
     where d.depth<16
       and not child.id=any(d.path)
-  ),
-  refreshed_documents as materialized (
-    update public.invoice_operation_chunks carrier
-    set
-      status=case
-        when child.status='COMPLETE' then 'COMPLETE'
-        when child.status in ('BLOCKED','FAILED','DEAD_LETTER')
-          then child.status
-        else carrier.status
-      end,
-      phase=case
-        when child.status='COMPLETE' then 'COMPLETE'
-        when child.status in ('BLOCKED','FAILED','DEAD_LETTER')
-          then child.status
-        else carrier.phase
-      end,
-      document_version_id=coalesce(
-        ready_version.id,
-        carrier.document_version_id
-      ),
-      result_json=coalesce(carrier.result_json,'{}'::jsonb)
-        || jsonb_build_object(
-          'result_category',case
-            when child.status='COMPLETE' then 'REGENERATED'
-            when child.status='BLOCKED' then 'BLOCKED'
-            when child.status in ('FAILED','DEAD_LETTER') then 'FAILED'
-            else 'IN_PROGRESS'
-          end,
-          'document_operation_id',child.id,
-          'document_version_id',coalesce(
-            ready_version.id,
-            carrier.document_version_id
-          )
-        ),
-      completed_at_utc=case
-        when child.status in ('COMPLETE','BLOCKED','FAILED','DEAD_LETTER')
-          then coalesce(carrier.completed_at_utc,v_now)
-        else carrier.completed_at_utc
-      end,
-      updated_at_utc=v_now
-    from public.invoice_operations child
-    left join lateral (
-      select version.id
-      from public.invoice_document_versions version
-      where version.operation_id=child.id
-        and version.entity_type='INVOICE'
-        and version.purpose='DRAFT_PREVIEW'
-        and version.status='READY'
-      order by version.ready_at_utc desc nulls last,
-        version.created_at_utc desc,
-        version.id desc
-      limit 1
-    ) ready_version on true
-    where carrier.operation_id in (select root.operation_id from roots root)
-      and carrier.is_manifest_member
-      and carrier.phase='WAITING_DOCUMENT'
-      and carrier.status='WAITING'
-      and pg_input_is_valid(
-        coalesce(carrier.result_json->>'document_operation_id',''),
-        'uuid'
-      )
-      and child.id=(carrier.result_json->>'document_operation_id')::uuid
-      and child.status in ('COMPLETE','BLOCKED','FAILED','DEAD_LETTER')
-    returning carrier.id
-  ),
-  normalised_carriers as materialized (
-    update public.invoice_operation_chunks carrier
-    set
-      result_json=coalesce(carrier.result_json,'{}'::jsonb)
-        || jsonb_build_object(
-          'result_category',case
-            when carrier.status='COMPLETE'
-             and carrier.result_category in (
-               'EXCLUDED','ALREADY_ACTIVE','REGENERATED',
-               'ISSUED','ISSUED_SEND_BLOCKED'
-             ) then carrier.result_category
-            when carrier.status='COMPLETE'
-             and carrier.chunk_type='GENERATION_GROUP'
-             and coalesce(
-               carrier.payload_json->>'row_kind',
-               'CREATE_INVOICE'
-             )='CREATE_INVOICE' then 'GENERATED'
-            when carrier.status='COMPLETE'
-             and carrier.chunk_type='GENERATION_GROUP'
-              then 'REGENERATED'
-            when carrier.status='COMPLETE'
-             and carrier.chunk_type='ISSUE_INVOICE'
-             and coalesce(
-               (carrier.payload_json->>'blocked_for_sending')::boolean,
-               false
-             ) then 'ISSUED_SEND_BLOCKED'
-            when carrier.status='COMPLETE'
-             and carrier.chunk_type='ISSUE_INVOICE' then 'ISSUED'
-            when carrier.status='BLOCKED' then 'BLOCKED'
-            when carrier.status='SUPERSEDED' then 'CHANGED'
-            when carrier.status in ('FAILED','DEAD_LETTER') then 'FAILED'
-            else 'IN_PROGRESS'
-          end
-        ),
-      updated_at_utc=v_now
-    where carrier.operation_id in (select root.operation_id from roots root)
-      and carrier.is_manifest_member
-      and carrier.manifest_committed
-      and carrier.result_visible
-      and carrier.result_category is distinct from case
-        when carrier.status='COMPLETE'
-         and carrier.result_category in (
-           'EXCLUDED','ALREADY_ACTIVE','REGENERATED',
-           'ISSUED','ISSUED_SEND_BLOCKED'
-         ) then carrier.result_category
-        when carrier.status='COMPLETE'
-         and carrier.chunk_type='GENERATION_GROUP'
-         and coalesce(
-           carrier.payload_json->>'row_kind',
-           'CREATE_INVOICE'
-         )='CREATE_INVOICE' then 'GENERATED'
-        when carrier.status='COMPLETE'
-         and carrier.chunk_type='GENERATION_GROUP' then 'REGENERATED'
-        when carrier.status='COMPLETE'
-         and carrier.chunk_type='ISSUE_INVOICE'
-         and coalesce(
-           (carrier.payload_json->>'blocked_for_sending')::boolean,
-           false
-         ) then 'ISSUED_SEND_BLOCKED'
-        when carrier.status='COMPLETE'
-         and carrier.chunk_type='ISSUE_INVOICE' then 'ISSUED'
-        when carrier.status='BLOCKED' then 'BLOCKED'
-        when carrier.status='SUPERSEDED' then 'CHANGED'
-        when carrier.status in ('FAILED','DEAD_LETTER') then 'FAILED'
-        else 'IN_PROGRESS'
-      end
-    returning carrier.id
   ),
   carriers as materialized (
     select
@@ -210,8 +221,6 @@ begin
      and c.is_manifest_member
      and c.manifest_generation=o.manifest_generation
      and c.replaced_by_chunk_id is null
-    where (select count(*) from refreshed_documents)>=0
-      and (select count(*) from normalised_carriers)>=0
   ),
   carrier_counts as materialized (
     select
@@ -566,7 +575,7 @@ begin
     end,
     operation.requires_user_action,
     operation.change_seq
-  from core_rows core
+  from unnest(v_core_operation_ids) core(operation_id)
   join public.invoice_operations operation on operation.id=core.operation_id
   where (select count(*) from updated_roots)>=0
   order by operation.id;
