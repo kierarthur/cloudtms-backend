@@ -193,6 +193,10 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
   assert.match(generateRows, /jsonb_array_elements_text[\s\S]*blocker_codes[\s\S]*SOURCE_ALREADY_INVOICED[\s\S]*SEGMENT_ALREADY_LOCKED[\s\S]*SOURCE_ALREADY_LOCKED/i);
   assert.match(generateRows, /jsonb_array_elements[\s\S]*blocker_detail,sources[\s\S]*SOURCE_ALREADY_INVOICED[\s\S]*SEGMENT_ALREADY_LOCKED[\s\S]*SOURCE_ALREADY_LOCKED/i);
   assert.match(
+    generateRows,
+    /authoritative_rows[\s\S]*_invoice_batch_generate_classification_v2[\s\S]*primary_blocker_code[\s\S]*SOURCE_ALREADY_INVOICED[\s\S]*SEGMENT_ALREADY_LOCKED[\s\S]*SOURCE_ALREADY_LOCKED[\s\S]*action_blocker_codes/i
+  );
+  assert.match(
     generationAdvance,
     /set status=case[\s\S]*then 'COMPLETE' else 'BLOCKED' end,[\s\S]*phase=case[\s\S]*then 'COMPLETE' else 'BLOCKED' end/i,
   );

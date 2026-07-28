@@ -666,6 +666,31 @@ begin
       null,
       coalesce(p_now_utc,statement_timestamp())
     ) candidate
+    where coalesce(
+      candidate.candidate_json->>'primary_blocker_code',
+      ''
+    ) not in (
+      'SOURCE_ALREADY_INVOICED',
+      'SEGMENT_ALREADY_LOCKED',
+      'SOURCE_ALREADY_LOCKED'
+    )
+      and not exists (
+        select 1
+        from jsonb_array_elements_text(
+          case
+            when jsonb_typeof(
+              candidate.candidate_json->'action_blocker_codes'
+            )='array'
+              then candidate.candidate_json->'action_blocker_codes'
+            else '[]'::jsonb
+          end
+        ) blocked_code(value)
+        where blocked_code.value in (
+          'SOURCE_ALREADY_INVOICED',
+          'SEGMENT_ALREADY_LOCKED',
+          'SOURCE_ALREADY_LOCKED'
+        )
+      )
   ),
   filter_match_rows as materialized (
     select
