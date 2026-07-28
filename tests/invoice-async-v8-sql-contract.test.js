@@ -833,6 +833,21 @@ test('document merge retry requeues the plan into the implemented wait-for-merge
   assert.match(documentAdvance, /where x->>'phase'='WAIT_FOR_MERGE'/i);
 });
 
+test('merge and verify processor contexts carry the frozen document template identity', () => {
+  const workContext = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+    + '24072026_1217_invoice_work_context_batch.sql'
+  );
+  const mergeContext = workContext.match(
+    /when v\.chunk_type='PDF_MERGE' then jsonb_build_object\(([\s\S]*?)when v\.chunk_type='DOCUMENT_VERIFY'/
+  )?.[1] || '';
+  const verifyContext = workContext.match(
+    /when v\.chunk_type='DOCUMENT_VERIFY' then jsonb_build_object\(([\s\S]*?)else '\{\}'::jsonb/
+  )?.[1] || '';
+  assert.match(mergeContext, /'template_version',v\.template_version/);
+  assert.match(verifyContext, /'template_version',v\.template_version/);
+});
+
 test('presentation authority repeatable defers safely instead of failing CI while work is active', () => {
   const presentationAuthority = read(
     'supabase/repeatable/25072026_0003_invoice_presentation_runtime_authority.sql',

@@ -391,6 +391,7 @@ begin
             'ACTUAL_BYTES_OBJECT_RECEIPT_V3',
           'required_logical_receipt_contract',
             'LOGICAL_SOURCE_RECEIPT_V3',
+          'template_version',v.template_version,
           'receipt_evidence_requirements',jsonb_build_object(
             'hash_actual_fetched_bytes',true,
             'hash_algorithm','SHA-256',
@@ -438,6 +439,7 @@ begin
           'root_merge_receipt_identity',
             v.payload_json->>'root_merge_receipt_identity',
           'receipt_contract',v.payload_json->>'receipt_contract',
+          'template_version',v.template_version,
           'receipt_evidence_requirements',jsonb_build_object(
             'reopen_final_candidate',true,
             'verify_actual_final_hash',true,
