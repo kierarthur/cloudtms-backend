@@ -15,6 +15,10 @@ const previewRevisionSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/20072026_0117_banking_pay_preview_selection_revision.sql'),
   'utf8'
 );
+const bankingFunctionsSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql'),
+  'utf8'
+);
 
 function sliceBetween(source, startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -124,4 +128,22 @@ test('draft scope lock mismatch retains the selection-review failure contract', 
   const genericCatch = advanceBody.lastIndexOf("code: 'DRAFT_CREATE_OPERATION_FAILED'");
   assert.ok(selectionCatch >= 0);
   assert.ok(genericCatch > selectionCatch, 'selection-review failure must be handled before the generic draft failure');
+});
+
+test('selection updates reconcile draft readiness without rebuilding candidate economics', () => {
+  const setSelectedRowsBody = sliceBetween(
+    bankingFunctionsSql,
+    'CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows',
+    'DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate'
+  );
+
+  assert.match(setSelectedRowsBody, /'selected_eligible_ready_row_count', COALESCE\(v_current_selected_count, 0\)/);
+  assert.match(setSelectedRowsBody, /'selected_rows_available', COALESCE\(v_current_selected_count, 0\) > 0/);
+  assert.match(setSelectedRowsBody, /'ready_for_draft', v_session_ready AND COALESCE\(v_current_selected_count, 0\) > 0/);
+  assert.match(setSelectedRowsBody, /'can_create_draft', v_session_ready AND COALESCE\(v_current_selected_count, 0\) > 0/);
+  assert.match(setSelectedRowsBody, /WHERE UPPER\(BTRIM\(blocker_code\.value\)\) <> 'NO_SELECTED_ROWS'/);
+  assert.match(setSelectedRowsBody, /IF v_session_ready AND COALESCE\(v_current_selected_count, 0\) = 0 THEN/);
+  assert.doesNotMatch(setSelectedRowsBody, /pay_workbench_enqueue_session_candidate_refresh/);
+  assert.doesNotMatch(setSelectedRowsBody, /pay_workbench_candidate_source_build_chunk/);
+  assert.doesNotMatch(setSelectedRowsBody, /pay_batch_apply_finance_adjustments/);
 });

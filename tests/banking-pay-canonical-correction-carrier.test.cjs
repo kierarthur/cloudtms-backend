@@ -38,6 +38,9 @@ const residual = read(
 const applyResolution = read(
   'supabase/repeatable/21072026_1235_41_pay_workbench_session_apply_case_resolution.sql'
 );
+const clearResolution = read(
+  'supabase/repeatable/21072026_1235_42_pay_workbench_session_clear_case_resolution.sql'
+);
 const freeze = read(
   'supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql'
 );
@@ -226,6 +229,180 @@ test('residual and applied resolution use the same canonical component identity'
   assert.match(applyResolution, /'CARRY_SUPERSEDED'/);
 });
 
+test('only the canonical carry body is installable and changed economics fail closed', () => {
+  const repeatableSql = listFiles('supabase/repeatable')
+    .filter((file) => file.toLowerCase().endsWith('.sql'))
+    .map((file) => fs.readFileSync(file, 'utf8'))
+    .join('\n');
+  const carryDefinitions = repeatableSql.match(
+    /CREATE OR REPLACE FUNCTION public\.pay_workbench_session_carry_forward_case_resolutions_v1\s*\(/gi
+  ) || [];
+
+  assert.equal(
+    carryDefinitions.length,
+    1,
+    'an obsolete repeatable must never be able to restore an older carry body'
+  );
+  assert.match(
+    residual,
+    /saved_resolution_economic_fingerprint[\s\S]*current_resolution_economic_fingerprint/
+  );
+  assert.match(
+    residual,
+    /verified_resolution_not_stale[\s\S]*verified_resolution_complete/
+  );
+  assert.match(
+    residual,
+    /saved_resolution_economic_fingerprint[\s\S]*IS DISTINCT FROM[\s\S]*current_resolution_economic_fingerprint/
+  );
+});
+
+test('stale full-shift suggestions are rebased to the current correction residual', () => {
+  const materializerStart = runtimeGuards.indexOf(
+    'create or replace function public._ctms_materialise_candidate_correction_residuals_v1'
+  );
+  const materializerEnd = runtimeGuards.indexOf(
+    '\ncreate or replace function public.',
+    materializerStart + 10
+  );
+  const materializer = runtimeGuards.slice(
+    materializerStart,
+    materializerEnd > materializerStart
+      ? materializerEnd
+      : runtimeGuards.length
+  );
+
+  assert.ok(materializerStart >= 0);
+  assert.match(
+    materializer,
+    /v_suggestion_current_basis:=round\([\s\S]*v_component_source_outstanding/
+  );
+  assert.match(
+    materializer,
+    /v_suggestion_target_per_source:=case[\s\S]*target_amount_ex_vat_per_source_ex_vat/
+  );
+  assert.match(
+    materializer,
+    /v_suggestion_current_target_amount:=case[\s\S]*v_suggestion_current_basis[\s\S]*\* v_suggestion_target_per_source/
+  );
+  assert.match(
+    materializer,
+    /v_suggestion_scale:=[\s\S]*v_suggestion_current_basis\/v_suggestion_original_basis/
+  );
+  assert.match(
+    materializer,
+    /target_amount_ex_vat_per_source_ex_vat[\s\S]*v_suggestion_current_basis/
+  );
+  assert.match(
+    materializer,
+    /'correction_residual_basis_rebased',true/
+  );
+  assert.match(
+    materializer,
+    /'suggested_resolution_payload_json',v_suggestion_payload[\s\S]*'suggested_resolution_result_json',v_suggestion_result/
+  );
+  assert.match(
+    materializer,
+    /'source_pay_ex_vat',case[\s\S]*when v_component_needs_resolution[\s\S]*then v_suggestion_current_basis/
+  );
+  assert.match(
+    materializer,
+    /'source_reservation_amount_ex_vat',case[\s\S]*when v_component_needs_resolution[\s\S]*then v_suggestion_current_basis/
+  );
+  assert.match(
+    materializer,
+    /'source_charge_ex_vat',case[\s\S]*v_suggested_component->>'source_charge_ex_vat'/
+  );
+
+  const sourceResidual = 5.22;
+  const sourceToTargetRatio = 40 / 34.78;
+  assert.equal(
+    Number((sourceResidual * sourceToTargetRatio).toFixed(2)),
+    6.00
+  );
+  assert.notEqual(
+    Number((6.5 * 20).toFixed(2)),
+    Number((sourceResidual * sourceToTargetRatio).toFixed(2))
+  );
+
+  const targetAmount = 40;
+  const targetPerSource = 1.1500353857;
+  const historicalSourceAmount = 113.04;
+  const historicalUnits = 6.5;
+  const currentSourceAmount = Math.round(
+    (targetAmount / targetPerSource) * 100
+  ) / 100;
+  const currentUnits = Math.round(
+    (historicalUnits * currentSourceAmount / historicalSourceAmount) * 1e6
+  ) / 1e6;
+  const recomputedTarget = Math.round(
+    currentSourceAmount * targetPerSource * 100
+  ) / 100;
+
+  assert.equal(currentSourceAmount, 34.78);
+  assert.ok(Math.abs(currentUnits - 1.9999) < 0.0001);
+  assert.equal(recomputedTarget, 40);
+});
+
+test('clearing a live decision ignores frozen history but still blocks active reservations', () => {
+  const boundaryStart = clearResolution.indexOf(
+    'CREATE TEMP TABLE IF NOT EXISTS _tmp_bpay_clear_batch_boundary'
+  );
+  const boundaryEnd = clearResolution.indexOf(
+    "IF v_operation = 'LIST_CLEARABLE'",
+    boundaryStart
+  );
+  const boundary = clearResolution.slice(boundaryStart, boundaryEnd);
+
+  assert.ok(boundaryStart >= 0);
+  assert.ok(boundaryEnd > boundaryStart);
+  assert.match(
+    boundary,
+    /public\._pay_batch_status_is_active_reservation\(batch_row\.status\)/
+  );
+  assert.doesNotMatch(
+    boundary,
+    /batch_row\.status[\s\S]*NOT IN \('CANCELLED', 'CANCELED'\)/
+  );
+  assert.match(
+    clearResolution,
+    /Cleared current live taxable finance case resolution without changing case balance, reservations, settled history, Snooze, fixed components, or frozen Draft items\./
+  );
+});
+
+test('the correction authority fingerprint excludes circular decision results', () => {
+  const fingerprintStart = residual.indexOf(
+    'component_fingerprinted AS ('
+  );
+  const fingerprintEnd = residual.indexOf(
+    'component_verified AS (',
+    fingerprintStart + 10
+  );
+  const fingerprint = residual.slice(fingerprintStart, fingerprintEnd);
+
+  assert.ok(fingerprintStart >= 0);
+  assert.match(
+    fingerprint,
+    /'effective_source_outstanding_ex_vat'/
+  );
+  assert.match(
+    fingerprint,
+    /'resolution_required'/
+  );
+  assert.doesNotMatch(
+    fingerprint,
+    /'target_outstanding_ex_vat'/
+  );
+  assert.doesNotMatch(
+    fingerprint,
+    /'resolution_complete'/
+  );
+  assert.doesNotMatch(
+    fingerprint,
+    /'resolved_target_amount_ex_vat'/
+  );
+});
+
 test('draft freeze adds provenance only to the four existing frozen JSON authorities', () => {
   assert.match(
     freeze,
@@ -250,6 +427,18 @@ test('draft freeze adds provenance only to the four existing frozen JSON authori
   assert.match(
     freeze,
     /'target_amount_ex_vat', round\(n\.take_target_ex, 2\)/
+  );
+  assert.match(
+    freeze,
+    /resolution_row\.source_basis_fingerprint[\s\S]*as current_source_basis_fingerprint/
+  );
+  assert.match(
+    freeze,
+    /'source_basis_fingerprint',coalesce\([\s\S]*frozen\.current_source_basis_fingerprint/
+  );
+  assert.match(
+    freeze,
+    /'source_build_run_id',coalesce\([\s\S]*batch_item\.frozen_resolution_payload_json[\s\S]*->>'source_build_run_id'[\s\S]*frozen\.current_resolution_payload_json/
   );
 });
 
@@ -513,6 +702,11 @@ test('deselecting one row converts implicit-all selection into a durable explici
   assert.match(
     setSelected,
     /WHEN jsonb_array_length\(COALESCE\(v_deselect_ids_source, '\[\]'::jsonb\)\) > 0 THEN 'EXPLICIT_INCLUDE'/
+  );
+  assert.match(
+    setSelected,
+    /WHEN jsonb_array_length\(COALESCE\(v_select_ids_source, '\[\]'::jsonb\)\) > 0 THEN 'EXPLICIT_INCLUDE'/,
+    'an explicit row tick must become durable explicit authority instead of remaining an ambiguous implicit-all selection'
   );
 });
 

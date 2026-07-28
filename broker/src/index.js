@@ -38720,6 +38720,30 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
             next_required_phase: 'QUEUE_REMITTANCES'
           }, 0, 'REDUNDANT_SETTLEMENT_CHILD_IGNORED_QUEUE_REMITTANCES');
         }
+        let failedLocalArtifactCleanup = null;
+        try {
+          failedLocalArtifactCleanup = await rpc('pay_execute_operation_cleanup_failed_local_artifacts', {
+            p_operation_id: operationId,
+            p_actor_user_id: actorUserId,
+            p_failure_phase: 'WAIT_LOCAL_SETTLEMENT',
+            p_failure_error_json: {
+              code: settlementStatus === 'REVIEW_REQUIRED' ? 'PAYMENT_SETTLEMENT_REVIEW_REQUIRED' : 'PAYMENT_SETTLEMENT_FAILED',
+              settlement_operation_id: settlementOperationId,
+              settlement_status: settlementStatus || null,
+              settlement_phase: settlementPhase || null,
+              provider_submission_attempted: false
+            },
+            p_dry_run: false
+          }, 'pay_execute_operation_cleanup_failed_local_artifacts');
+        } catch (cleanupError) {
+          failedLocalArtifactCleanup = {
+            ok: false,
+            safe_to_retry: false,
+            retry_blocked: true,
+            code: 'FAILED_LOCAL_ARTIFACT_CLEANUP_FAILED',
+            message: compactErrorMessage(cleanupError, 300)
+          };
+        }
         return reviewRequired(
           currentPhase,
           settlementStatus === 'REVIEW_REQUIRED' ? 'PAYMENT_SETTLEMENT_REVIEW_REQUIRED' : 'PAYMENT_SETTLEMENT_FAILED',
@@ -38729,7 +38753,10 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
             settlement_status: settlementStatus,
             settlement_phase: settlementPhase || null,
             settlement_operation: compactSettlementAdvanceForProgress(settlementAdvance),
-            settlement_stage_guard: failureStageGuard
+            settlement_stage_guard: failureStageGuard,
+            failed_local_artifact_cleanup: failedLocalArtifactCleanup,
+            safe_to_retry: failedLocalArtifactCleanup && failedLocalArtifactCleanup.safe_to_retry === true,
+            retry_blocked: !(failedLocalArtifactCleanup && failedLocalArtifactCleanup.safe_to_retry === true)
           }
         );
       }
@@ -58103,14 +58130,18 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
 
     const enrichedRows = sourceRows.map((rowLike) => {
       const row = safeObject(rowLike);
-      if (trimText(row.recipient_display_name)) return row;
       const recipientKind = trimText(row.recipient_kind).toLowerCase();
       const recipientId = trimText(row.recipient_id);
       const recipientEmail = trimText(row.mail_to || row.to_address || row.to).toLowerCase();
-      let recipientDisplayName = '';
-      if (recipientKind === 'candidate') recipientDisplayName = candidateNames.get(recipientId) || '';
-      else if (recipientKind === 'umbrella') recipientDisplayName = umbrellaNames.get(recipientId) || '';
-      else recipientDisplayName = userNamesByEmail.get(recipientEmail) || '';
+      const suppliedDisplayName = trimText(row.recipient_display_name);
+      let recipientDisplayName = suppliedDisplayName;
+      if (recipientKind === 'candidate') {
+        recipientDisplayName = candidateNames.get(recipientId) || suppliedDisplayName;
+      } else if (recipientKind === 'umbrella') {
+        recipientDisplayName = umbrellaNames.get(recipientId) || suppliedDisplayName;
+      } else if (!recipientDisplayName) {
+        recipientDisplayName = userNamesByEmail.get(recipientEmail) || '';
+      }
       return recipientDisplayName ? Object.assign({}, row, { recipient_display_name: recipientDisplayName }) : row;
     });
 

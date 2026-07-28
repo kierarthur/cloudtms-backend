@@ -320,13 +320,30 @@ BEGIN
         ''
       )) AS key_value,
       CASE
+        WHEN pay_batch_item.frozen_source_amount IS NOT NULL
+          THEN ROUND(
+            pay_batch_item.frozen_source_amount,
+            2
+          )::numeric(12,2)
         WHEN COALESCE(
+          pay_batch_item.frozen_resolution_result_json
+            ->>'source_amount_ex_vat',
+          pay_batch_item.frozen_component_snapshot_json
+            ->>'source_amount_ex_vat',
+          pay_batch_item.frozen_component_snapshot_json
+            ->>'source_pay_ex_vat',
           pay_batch_item.frozen_component_snapshot_json
             ->>'effective_source_outstanding_ex_vat',
           ''
         ) ~ '^-?[0-9]+(\.[0-9]+)?$'
           THEN ROUND(
-            (
+            COALESCE(
+              pay_batch_item.frozen_resolution_result_json
+                ->>'source_amount_ex_vat',
+              pay_batch_item.frozen_component_snapshot_json
+                ->>'source_amount_ex_vat',
+              pay_batch_item.frozen_component_snapshot_json
+                ->>'source_pay_ex_vat',
               pay_batch_item.frozen_component_snapshot_json
                 ->>'effective_source_outstanding_ex_vat'
             )::numeric,
@@ -334,6 +351,82 @@ BEGIN
           )::numeric(12,2)
         ELSE NULL::numeric(12,2)
       END AS expected_ex,
+      CASE
+        WHEN pay_batch_item.frozen_target_amount_ex_vat IS NOT NULL
+          THEN ROUND(
+            pay_batch_item.frozen_target_amount_ex_vat,
+            2
+          )::numeric(12,2)
+        WHEN COALESCE(
+          pay_batch_item.frozen_resolution_result_json
+            ->>'target_amount_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(
+            (
+              pay_batch_item.frozen_resolution_result_json
+                ->>'target_amount_ex_vat'
+            )::numeric,
+            2
+          )::numeric(12,2)
+        ELSE ROUND(
+          pay_batch_item.amount_ex_vat,
+          2
+        )::numeric(12,2)
+      END AS expected_target_ex,
+      ROUND(
+        pay_batch_item.amount_ex_vat,
+        2
+      )::numeric(12,2) AS physical_target_ex,
+      CASE
+        WHEN COALESCE(
+          pay_batch_item.frozen_resolution_result_json
+            ->>'source_amount_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(
+            (
+              pay_batch_item.frozen_resolution_result_json
+                ->>'source_amount_ex_vat'
+            )::numeric,
+            2
+          )::numeric(12,2)
+        ELSE NULL::numeric(12,2)
+      END AS result_source_ex,
+      CASE
+        WHEN COALESCE(
+          pay_batch_item.frozen_resolution_result_json
+            ->>'target_amount_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(
+            (
+              pay_batch_item.frozen_resolution_result_json
+                ->>'target_amount_ex_vat'
+            )::numeric,
+            2
+          )::numeric(12,2)
+        ELSE NULL::numeric(12,2)
+      END AS result_target_ex,
+      CASE
+        WHEN COALESCE(
+          pay_batch_item.frozen_component_snapshot_json
+            ->>'source_amount_ex_vat',
+          pay_batch_item.frozen_component_snapshot_json
+            ->>'source_pay_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(
+            COALESCE(
+              pay_batch_item.frozen_component_snapshot_json
+                ->>'source_amount_ex_vat',
+              pay_batch_item.frozen_component_snapshot_json
+                ->>'source_pay_ex_vat'
+            )::numeric,
+            2
+          )::numeric(12,2)
+        ELSE NULL::numeric(12,2)
+      END AS snapshot_source_ex,
       NULLIF(BTRIM(COALESCE(
         pay_batch_item.frozen_source_basis_json
           ->>'correction_chain_fingerprint',
@@ -363,11 +456,8 @@ BEGIN
       AND jsonb_typeof(
         pay_batch_item.frozen_component_snapshot_json
       ) = 'object'
-      AND COALESCE(
-        pay_batch_item.frozen_component_snapshot_json
-          ->>'effective_source_outstanding_ex_vat',
-        ''
-      ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+      AND pay_batch_item.frozen_source_amount IS NOT NULL
+      AND pay_batch_item.frozen_target_amount_ex_vat IS NOT NULL
       AND NOT EXISTS (
         SELECT 1
         FROM public.pay_payment_correction_items AS correction_item_exclusion
@@ -445,6 +535,10 @@ BEGIN
       )
       AND flat_item.key_value <> ''
       AND flat_item.expected_ex IS NOT NULL
+      AND flat_item.expected_target_ex IS NOT NULL
+      AND flat_item.result_source_ex IS NOT NULL
+      AND flat_item.result_target_ex IS NOT NULL
+      AND flat_item.snapshot_source_ex IS NOT NULL
       AND flat_item.frozen_chain_fingerprint IS NOT NULL
       AND flat_item.frozen_policy_fingerprint IS NOT NULL
       AND flat_item.frozen_chain_fingerprint
@@ -454,18 +548,38 @@ BEGIN
                 ->>'correction_financials_policy_envelope_fingerprint'
       AND COALESCE(
         matched_live_component.component_json
+          ->>'target_outstanding_ex_vat',
+        matched_live_component.component_json
           ->>'effective_source_outstanding_ex_vat',
         ''
       ) ~ '^-?[0-9]+(\.[0-9]+)?$'
       AND ABS(
-        ROUND(flat_item.expected_ex, 2)
+        ROUND(flat_item.expected_target_ex, 2)
         - ROUND(
-            (
+            COALESCE(
+              matched_live_component.component_json
+                ->>'target_outstanding_ex_vat',
               matched_live_component.component_json
                 ->>'effective_source_outstanding_ex_vat'
             )::numeric,
             2
           )
+      ) <= 0.01
+      AND ABS(
+        ROUND(flat_item.result_source_ex, 2)
+        - ROUND(flat_item.expected_ex, 2)
+      ) <= 0.01
+      AND ABS(
+        ROUND(flat_item.snapshot_source_ex, 2)
+        - ROUND(flat_item.expected_ex, 2)
+      ) <= 0.01
+      AND ABS(
+        ROUND(flat_item.result_target_ex, 2)
+        - ROUND(flat_item.expected_target_ex, 2)
+      ) <= 0.01
+      AND ABS(
+        ROUND(flat_item.physical_target_ex, 2)
+        - ROUND(flat_item.expected_target_ex, 2)
       ) <= 0.01
   )
   SELECT
@@ -489,22 +603,24 @@ BEGIN
   FROM flat_fresh_components AS flat_component;
 
   /*
-   * A linked, resolved ordinary timesheet component can also be a carrier of
-   * the correction-chain decision. Its frozen source entitlement is the full
-   * original component, while the item pays only the target-side remainder
-   * after the already-settled baseline. The ordinary base comparison therefore
-   * reports the expected source entitlement against zero even when:
+   * A resolved ordinary timesheet component can also carry an approved target
+   * rate. Its frozen source entitlement is the full original component, while
+   * the item pays only the target-side remainder after the already-settled
+   * baseline. The ordinary base comparison therefore reports the expected
+   * source entitlement against zero even when:
    *
    *   - the live source component is unchanged;
    *   - no other active batch reserves the component;
    *   - the exact target remainder was frozen into this batch; and
-   *   - the correction-chain anchor remains fresh.
+   *   - its exact local-timesheet anchor remains valid, or its linked
+   *     correction-chain anchor remains fresh.
    *
    * Suppress only that exact self-reservation diff. This is deliberately
    * stricter than trusting the summary flag: frozen component evidence,
-   * physical/result parity, current source truth, settled baseline, absence
-   * of another reservation, and a fresh frozen chain anchor must all agree.
-   * Any missing or contradictory evidence leaves the base stale result intact.
+   * physical/result parity, every frozen member of the economic component,
+   * current source truth, settled baseline, absence of another reservation,
+   * and the applicable frozen anchor must all agree. Any missing, partial or
+   * contradictory evidence leaves the base stale result intact.
    */
   WITH linked_resolution_items AS (
     SELECT
@@ -520,29 +636,26 @@ BEGIN
       pay_batch_item.frozen_resolution_result_json,
       pay_batch_item.frozen_resolution_payload_json
         ->'case_resolution_summary' AS resolution_summary,
-      resolved_component.component_json AS resolved_component_json,
-      CASE
-        WHEN COALESCE(
-          resolved_component.component_json->>'source_pay_ex_vat',
-          ''
-        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
-          THEN ROUND(
-            (resolved_component.component_json->>'source_pay_ex_vat')::numeric,
-            2
-          )::numeric(12,2)
-        ELSE NULL::numeric(12,2)
-      END AS resolved_source_ex_vat,
-      CASE
-        WHEN COALESCE(
-          resolved_component.component_json->>'target_pay_ex_vat',
-          ''
-        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
-          THEN ROUND(
-            (resolved_component.component_json->>'target_pay_ex_vat')::numeric,
-            2
-          )::numeric(12,2)
-        ELSE NULL::numeric(12,2)
-      END AS resolved_target_ex_vat,
+      resolved_component.component_count,
+      resolved_component.source_numeric_count,
+      resolved_component.target_numeric_count,
+      resolved_component.resolved_source_ex_vat,
+      resolved_component.resolved_target_ex_vat,
+      resolved_component.all_components_resolved,
+      resolved_component.all_component_fingerprints_present,
+      resolved_component.all_source_basis_fingerprints_present,
+      resolved_component.all_components_current,
+      resolved_component.all_saved_results_current,
+      resolved_component.all_components_do_not_require_resolution,
+      resolved_component.all_saved_anchor_modes_match,
+      resolved_component.all_saved_anchor_case_keys_match,
+      resolved_component.all_saved_anchor_timesheets_match,
+      LOWER(BTRIM(COALESCE(
+        pay_batch_item.frozen_resolution_payload_json
+          #>> '{case_resolution_summary,resolved_rate_applied_via_linked_scope}',
+        'false'
+      ))) IN ('true','t','1','yes','y','on')
+        AS applied_via_linked_scope,
       CASE
         WHEN COALESCE(
           pay_batch_item.frozen_resolution_payload_json
@@ -564,7 +677,98 @@ BEGIN
     JOIN public.pay_batch_candidates AS pay_batch_candidate
       ON pay_batch_candidate.id = pay_batch_item.pay_batch_candidate_id
     LEFT JOIN LATERAL (
-      SELECT frozen_component.component_json
+      SELECT
+        COUNT(*)::integer AS component_count,
+        COUNT(*) FILTER (
+          WHERE COALESCE(
+            frozen_component.component_json->>'source_pay_ex_vat',
+            ''
+          ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+        )::integer AS source_numeric_count,
+        COUNT(*) FILTER (
+          WHERE COALESCE(
+            frozen_component.component_json->>'target_pay_ex_vat',
+            ''
+          ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+        )::integer AS target_numeric_count,
+        ROUND(SUM(
+          CASE
+            WHEN COALESCE(
+              frozen_component.component_json->>'source_pay_ex_vat',
+              ''
+            ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN (
+                frozen_component.component_json->>'source_pay_ex_vat'
+              )::numeric
+            ELSE 0::numeric
+          END
+        ), 2)::numeric(12,2) AS resolved_source_ex_vat,
+        ROUND(SUM(
+          CASE
+            WHEN COALESCE(
+              frozen_component.component_json->>'target_pay_ex_vat',
+              ''
+            ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN (
+                frozen_component.component_json->>'target_pay_ex_vat'
+              )::numeric
+            ELSE 0::numeric
+          END
+        ), 2)::numeric(12,2) AS resolved_target_ex_vat,
+        BOOL_AND(NULLIF(BTRIM(COALESCE(
+          frozen_component.component_json->>'resolved_rate_resolution_id',
+          ''
+        )), '') IS NOT NULL) AS all_components_resolved,
+        BOOL_AND(NULLIF(BTRIM(COALESCE(
+          frozen_component.component_json->>'component_fingerprint',
+          ''
+        )), '') IS NOT NULL) AS all_component_fingerprints_present,
+        BOOL_AND(NULLIF(BTRIM(COALESCE(
+          frozen_component.component_json->>'source_basis_fingerprint',
+          ''
+        )), '') IS NOT NULL) AS all_source_basis_fingerprints_present,
+        BOOL_AND(LOWER(BTRIM(COALESCE(
+          frozen_component.component_json->>'is_resolution_stale',
+          'false'
+        ))) NOT IN ('true','t','1','yes','y','on'))
+          AS all_components_current,
+        BOOL_AND(LOWER(BTRIM(COALESCE(
+          frozen_component.component_json->>'is_stale_saved_resolution',
+          'false'
+        ))) NOT IN ('true','t','1','yes','y','on'))
+          AS all_saved_results_current,
+        BOOL_AND(LOWER(BTRIM(COALESCE(
+          frozen_component.component_json->>'requires_resolution',
+          'true'
+        ))) IN ('false','f','0','no','n','off'))
+          AS all_components_do_not_require_resolution,
+        BOOL_AND(
+          (
+            LOWER(BTRIM(COALESCE(
+              frozen_component.component_json
+                #>> '{saved_resolution_result_json,applied_via_linked_scope}',
+              'false'
+            ))) IN ('true','t','1','yes','y','on')
+          ) = (
+            LOWER(BTRIM(COALESCE(
+              pay_batch_item.frozen_resolution_payload_json
+                #>> '{case_resolution_summary,resolved_rate_applied_via_linked_scope}',
+              'false'
+            ))) IN ('true','t','1','yes','y','on')
+          )
+        ) AS all_saved_anchor_modes_match,
+        BOOL_AND(
+          frozen_component.component_json
+            #>> '{saved_resolution_result_json,source_anchor_case_key}'
+          = pay_batch_item.frozen_resolution_payload_json
+              #>> '{case_resolution_summary,resolved_rate_source_anchor_case_key}'
+        ) AS all_saved_anchor_case_keys_match,
+        BOOL_AND(
+          frozen_component.component_json
+            #>> '{saved_resolution_result_json,source_anchor_timesheet_id}'
+          = pay_batch_item.frozen_resolution_payload_json
+              #>> '{case_resolution_summary,resolved_rate_source_anchor_timesheet_id}'
+        ) AS all_saved_anchor_timesheets_match
       FROM jsonb_array_elements(
         CASE
           WHEN jsonb_typeof(
@@ -588,7 +792,6 @@ BEGIN
               pay_batch_item.frozen_component_key_value,
               ''
             ))
-      LIMIT 1
     ) AS resolved_component
       ON true
     WHERE pay_batch_candidate.pay_batch_id = p_pay_batch_id
@@ -616,7 +819,7 @@ BEGIN
         pay_batch_item.frozen_resolution_payload_json
           ->'case_resolution_summary'
       ) = 'object'
-      AND jsonb_typeof(resolved_component.component_json) = 'object'
+      AND COALESCE(resolved_component.component_count, 0) > 0
   ),
   linked_timesheet_ids AS (
     SELECT COALESCE(
@@ -674,70 +877,60 @@ BEGIN
           ->>'case_resolution_satisfied_now',
         'false'
       ))) IN ('true','t','1','yes','y','on')
-      AND LOWER(BTRIM(COALESCE(
-        linked_resolution_item.resolution_summary
-          ->>'resolved_rate_applied_via_linked_scope',
-        'false'
-      ))) IN ('true','t','1','yes','y','on')
       AND linked_resolution_item.resolution_summary
             ->>'resolved_rate_timesheet_id'
           = linked_resolution_item.timesheet_id::text
-      AND linked_resolution_item.resolved_component_json
-            ->>'resolved_rate_resolution_id' IS NOT NULL
-      AND NULLIF(BTRIM(COALESCE(
-        linked_resolution_item.resolved_component_json
-          ->>'component_fingerprint',
-        ''
-      )), '') IS NOT NULL
-      AND NULLIF(BTRIM(COALESCE(
-        linked_resolution_item.resolved_component_json
-          ->>'source_basis_fingerprint',
-        ''
-      )), '') IS NOT NULL
-      AND LOWER(BTRIM(COALESCE(
-        linked_resolution_item.resolved_component_json
-          ->>'is_resolution_stale',
-        'false'
-      ))) NOT IN ('true','t','1','yes','y','on')
-      AND LOWER(BTRIM(COALESCE(
-        linked_resolution_item.resolved_component_json
-          ->>'is_stale_saved_resolution',
-        'false'
-      ))) NOT IN ('true','t','1','yes','y','on')
-      AND LOWER(BTRIM(COALESCE(
-        linked_resolution_item.resolved_component_json
-          ->>'requires_resolution',
-        'true'
-      ))) IN ('false','f','0','no','n','off')
-      AND LOWER(BTRIM(COALESCE(
-        linked_resolution_item.resolved_component_json
-          #>> '{saved_resolution_result_json,applied_via_linked_scope}',
-        'false'
-      ))) IN ('true','t','1','yes','y','on')
-      AND linked_resolution_item.resolved_component_json
-            #>> '{saved_resolution_result_json,source_anchor_case_key}'
-          = linked_resolution_item.anchor_case_key
-      AND linked_resolution_item.resolved_component_json
-            #>> '{saved_resolution_result_json,source_anchor_timesheet_id}'
-          = linked_resolution_item.anchor_timesheet_id::text
-      AND EXISTS (
-        SELECT 1
-        FROM jsonb_array_elements(v_fresh_chain_components)
-          AS fresh_anchor(value)
-        WHERE fresh_anchor.value->>'timesheet_id'
-                = linked_resolution_item.anchor_timesheet_id::text
+      AND linked_resolution_item.component_count
+            = linked_resolution_item.source_numeric_count
+      AND linked_resolution_item.component_count
+            = linked_resolution_item.target_numeric_count
+      AND linked_resolution_item.all_components_resolved
+      AND linked_resolution_item.all_component_fingerprints_present
+      AND linked_resolution_item.all_source_basis_fingerprints_present
+      AND linked_resolution_item.all_components_current
+      AND linked_resolution_item.all_saved_results_current
+      AND linked_resolution_item.all_components_do_not_require_resolution
+      AND linked_resolution_item.all_saved_anchor_modes_match
+      AND linked_resolution_item.all_saved_anchor_case_keys_match
+      AND linked_resolution_item.all_saved_anchor_timesheets_match
+      AND (
+        (
+          linked_resolution_item.applied_via_linked_scope
+          AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(v_fresh_chain_components)
+              AS fresh_anchor(value)
+            WHERE fresh_anchor.value->>'timesheet_id'
+                    = linked_resolution_item.anchor_timesheet_id::text
+              AND LOWER(linked_resolution_item.anchor_case_key)
+                    = LOWER(
+                        'correction-chain:'
+                        || linked_resolution_item.anchor_timesheet_id::text
+                        || ':'
+                        || COALESCE(fresh_anchor.value->>'key_type', '')
+                        || ':'
+                        || COALESCE(fresh_anchor.value->>'key_value', '')
+                      )
+          )
+        )
+        OR
+        (
+          NOT linked_resolution_item.applied_via_linked_scope
+          AND linked_resolution_item.anchor_timesheet_id
+                = linked_resolution_item.timesheet_id
           AND LOWER(linked_resolution_item.anchor_case_key)
                 = LOWER(
-                    'correction-chain:'
-                    || linked_resolution_item.anchor_timesheet_id::text
-                    || ':'
-                    || COALESCE(fresh_anchor.value->>'key_type', '')
-                    || ':'
-                    || COALESCE(fresh_anchor.value->>'key_value', '')
+                    'timesheet:'
+                    || linked_resolution_item.timesheet_id::text
                   )
+        )
       )
       AND ABS(
         ROUND(outstanding_component.truth_ex_vat, 2)
+        - ROUND(linked_resolution_item.resolved_source_ex_vat, 2)
+      ) <= 0.01
+      AND ABS(
+        ROUND(outstanding_component.baseline_ex_vat, 2)
         - ROUND(linked_resolution_item.resolved_source_ex_vat, 2)
       ) <= 0.01
       AND ABS(ROUND(outstanding_component.other_reserved_ex_vat, 2)) <= 0.01

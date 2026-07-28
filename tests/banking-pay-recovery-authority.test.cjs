@@ -644,6 +644,11 @@ test('source-build completion handles a proven targeted empty carrier set withou
     3,
     'source-line, line-work and preview cleanup must stay within an explicit targeted timesheet scope'
   );
+  assert.match(
+    body,
+    /source_empty_line_work\.status[\s\S]*'PENDING'[\s\S]*'PROCESSING'[\s\S]*'RUNNING'[\s\S]*'QUEUED'[\s\S]*'DIRTY'[\s\S]*'READY'[\s\S]*'MATERIALISED'[\s\S]*'MATERIALIZED'/,
+    'a targeted empty rebuild must retire already-materialised line work so a later preview pass cannot recreate a stale row'
+  );
 });
 
 test('correction-chain channel resolution uses the candidate current pay method once per chain', () => {
@@ -1046,7 +1051,10 @@ test('correction residual carrier replaces stale root components with the chain-
   const body = correctionRuntimeSql.slice(start, end);
   assert.match(body, /'case_components',jsonb_build_array\([\s\S]*'component_resolution_key',[\s\S]*v_component->>'canonical_correction_key'[\s\S]*'target_pay_ex_vat',case[\s\S]*when v_component_needs_resolution then null[\s\S]*else v_component_outstanding/);
   assert.match(body, /'source_entitlement_amount_ex_vat',abs\(\(v_component->>'truth_ex_vat'\)::numeric\)/);
-  assert.match(body, /'source_reservation_amount_ex_vat',abs\(\(v_component->>'effective_source_outstanding_ex_vat'\)::numeric\)/);
+  assert.match(
+    body,
+    /'source_reservation_amount_ex_vat',case[\s\S]*when v_component_needs_resolution[\s\S]*then v_suggestion_current_basis[\s\S]*else abs\([\s\S]*v_component->>'effective_source_outstanding_ex_vat'/
+  );
   assert.match(body, /'section_amount_ex_vat',v_component_outstanding/);
   assert.match(
     body,
@@ -1212,8 +1220,8 @@ test('central overpayment sync attests the same coupled correction-chain residua
 test('the Supabase pldbgapi2 workaround is scoped to the correction-chain Banking entry points', () => {
   assert.equal(
     (correctionPlpgsqlGuardSql.match(/::regprocedure/g) || []).length,
-    38,
-    'the workaround must remain limited to the 38 proven call-stack entry points'
+    48,
+    'the workaround must remain limited to the 48 proven call-stack entry points'
   );
   for (const setting of [
     ['mode', 'disabled'],
@@ -1252,6 +1260,26 @@ test('the Supabase pldbgapi2 workaround is scoped to the correction-chain Bankin
   assert.match(correctionPlpgsqlGuardSql, /pay_workbench_worker_drain_chunk_revalidated_v1\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /pay_finance_case_apply_taxable_channel_restructure\s*\(/);
   assert.match(correctionPlpgsqlGuardSql, /tsfin_write_snapshots_and_complete\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /pay_export_bank_csv\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_pay_batch_bank_payment_projection_rows\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /_pay_batch_validate_freshness_base_v1\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /pay_batch_validate_freshness\s*\(/);
+  assert.match(correctionPlpgsqlGuardSql, /pay_batch_freshness_scope_seed\s*\(/);
+  assert.equal(
+    (correctionPlpgsqlGuardSql.match(/pay_batch_validate_freshness_chunk\s*\(/g) || []).length,
+    2,
+    'both chunked freshness overloads must disable the faulty runtime debugger instrumentation'
+  );
+  assert.equal(
+    (correctionPlpgsqlGuardSql.match(/pay_batch_freshness_result_get\s*\(/g) || []).length,
+    2,
+    'both freshness-result overloads must disable the faulty runtime debugger instrumentation'
+  );
+  assert.match(
+    correctionPlpgsqlGuardSql,
+    /pay_settle_manual_confirm\s*\(/,
+    'manual CSV settlement must disable the same faulty runtime debugger instrumentation'
+  );
   assert.doesNotMatch(correctionPlpgsqlGuardSql, /\bUPDATE\b|\bINSERT\b|\bDELETE\b|\bTRUNCATE\b|\bDROP\b/i);
   assert.match(overpaymentSyncSql, /SET plpgsql_check\.mode TO 'disabled'/);
   assert.match(
@@ -1349,11 +1377,23 @@ test('positive correction carriers preserve source and target amounts on their s
   );
   assert.match(body, /'source_pay_method',v_source_pay_method/);
   assert.match(body, /'target_pay_method',upper\(v_component->>'target_pay_method'\)/);
-  assert.equal(
-    (body.match(/abs\(\(v_component->>'effective_source_outstanding_ex_vat'\)::numeric\)/g) || []).length,
-    9,
-    'nested and top-level source pay, source amount, reservation projections and remaining source must use source-channel authority'
-  );
+  for (const field of [
+    'source_pay_ex_vat',
+    'source_amount_ex_vat',
+    'source_reservation_amount_ex_vat',
+    'remaining_source_amount'
+  ]) {
+    assert.match(
+      body,
+      new RegExp(
+        String.raw`'${field}',case[\s\S]*?when v_component_needs_resolution` +
+        String.raw`[\s\S]*?then v_suggestion_current_basis` +
+        String.raw`[\s\S]*?else abs[\s\S]*?` +
+        String.raw`v_component->>'effective_source_outstanding_ex_vat'`
+      ),
+      `${field} must project the rebased source basis while channel resolution is pending and the live source authority otherwise`
+    );
+  }
   assert.doesNotMatch(
     body,
     /'source_(?:pay_ex_vat|amount_ex_vat|reservation_amount_ex_vat)',abs\(\(v_component->>'target_outstanding_ex_vat'\)::numeric\)/
@@ -1576,6 +1616,16 @@ test('draft items freeze correction-chain residual identity before reservation f
     body,
     /jsonb_typeof\(normalised_rows\.line_json->'correction_chain_residual'\) = 'object'[\s\S]*normalised_rows\.line_json->'correction_chain_residual'/
   );
+  assert.match(
+    body,
+    /correction_chain_component,resolution_rows[\s\S]*payload_json,bucket_resolutions[\s\S]*component_key_type[\s\S]*prepared_rows\.key_type[\s\S]*component_key_value[\s\S]*prepared_rows\.key_value[\s\S]*source_pay_ex_vat/,
+    'a resolved correction item must freeze its source amount from the matching canonical resolution bucket rather than the target-valued preview total'
+  );
+  assert.match(
+    body,
+    /'source_amount_ex_vat', normalised_rows\.frozen_source_amount[\s\S]*'target_amount_ex_vat', normalised_rows\.amount_ex_vat/,
+    'the frozen resolution result must preserve distinct source and target amounts'
+  );
 });
 
 test('resolved segment breakdowns reconcile to the payable batch-item remainder', () => {
@@ -1595,6 +1645,11 @@ test('resolved segment breakdowns reconcile to the payable batch-item remainder'
     body,
     /allocated_amount_ex_vat[\s\S]*AS amount_ex_vat[\s\S]*allocated_amount_ex_vat[\s\S]*derived_amount_vat[\s\S]*AS amount_inc_vat/,
     'breakdown ex-VAT and gross amounts must reconcile to the actual payable delta'
+  );
+  assert.match(
+    body,
+    /resolved_rate_resolution_id[\s\S]*resolution_state[\s\S]*FIXED[\s\S]*is_actionable_resolution_row[\s\S]*source_pay_ex_vat[\s\S]*EXISTS[\s\S]*explicit_resolved_component/,
+    'an automatic fixed negative member must not be scaled into the operator breakdown when explicit resolved members explain the same economic key'
   );
   assert.match(
     body,
@@ -1651,13 +1706,28 @@ test('final reservation checks accept only a fresh exact pre-draft resolved targ
   assert.match(body, /FROZEN_FRESH_PRE_DRAFT_RESOLUTION_MISMATCH_OR_RESERVED/);
   assert.match(
     body,
+    /SUM\([\s\S]*frozen_resolution_component\.component_json->>'source_pay_ex_vat'[\s\S]*SUM\([\s\S]*ready_preview_amount_ex_vat/,
+    'fresh coupled members sharing one economic key must be validated as one source and target authority'
+  );
+  assert.match(
+    body,
+    /case_resolution_summary,case_resolution_satisfied_now/,
+    'the canonical case-level resolution must be satisfied before member aggregates are accepted'
+  );
+  assert.doesNotMatch(
+    body,
+    /AS frozen_resolution_component\(component_json\)[\s\S]{0,600}LIMIT\s+1/i,
+    'final reservation validation must not choose an arbitrary member from a coupled TS_DAY component'
+  );
+  assert.match(
+    body,
     /reservation_requested_amount_ex_vat[\s\S]*requested_target_amount_ex_vat[\s\S]*requested_source_amount_ex_vat/,
     'fresh resolved components must validate the target remainder while preserving source authority'
   );
   assert.match(body, /ELSE 'LIVE_PRE_DRAFT_OUTSTANDING'/);
 });
 
-test('post-draft source reservations use the frozen resolved source before the frozen target amount', () => {
+test('post-draft source reservations aggregate every fresh resolved member before the frozen target amount', () => {
   assert.equal(
     (
       sql.match(
@@ -1668,7 +1738,9 @@ test('post-draft source reservations use the frozen resolved source before the f
     'the repeatable must contain one authoritative source-reservation helper body'
   );
   const body = lastFunctionBody('_pay_batch_item_source_reservation_amount_ex_vat');
-  const frozenResolvedSourceIndex = body.indexOf('v_frozen_resolved_source_text');
+  const frozenResolvedSourceIndex = body.indexOf(
+    'SELECT ROUND(\n           SUM((frozen_resolution_component.component_json'
+  );
   const frozenSourceAmountIndex = body.indexOf('IF v_frozen_source_amount IS NOT NULL THEN');
 
   assert.ok(
@@ -1682,6 +1754,16 @@ test('post-draft source reservations use the frozen resolved source before the f
   assert.match(body, /component_key_type[\s\S]*v_resolved_key_type/);
   assert.match(body, /component_key_value[\s\S]*v_resolved_key_value/);
   assert.match(body, /source_pay_ex_vat/);
+  assert.match(
+    body,
+    /SUM\(\(frozen_resolution_component\.component_json->>'source_pay_ex_vat'\)::numeric\)/,
+    'coupled members sharing one TS_DAY key must contribute to one frozen source authority'
+  );
+  assert.doesNotMatch(
+    body.slice(frozenResolvedSourceIndex, frozenSourceAmountIndex),
+    /LIMIT\s+1\s*;/i,
+    'the helper must not select an arbitrary member from a coupled component'
+  );
   assert.match(body, /is_resolution_stale/);
   assert.match(body, /is_stale_saved_resolution/);
   assert.match(body, /requires_resolution/);
@@ -1745,8 +1827,23 @@ test('batch freshness excludes its own correction-chain reservation and compares
   );
   assert.match(
     body,
-    /flat_item\.expected_ex[\s\S]*effective_source_outstanding_ex_vat/,
-    'a flat frozen component must still equal the live residual component'
+    /flat_item\.expected_target_ex[\s\S]*target_outstanding_ex_vat/,
+    'a cross-pay-method carrier must compare its frozen target remainder to the live target remainder'
+  );
+  assert.match(
+    body,
+    /flat_item\.result_source_ex[\s\S]*flat_item\.expected_ex/,
+    'the frozen result source amount must agree with the physical frozen source authority'
+  );
+  assert.match(
+    body,
+    /flat_item\.snapshot_source_ex[\s\S]*flat_item\.expected_ex/,
+    'the frozen component snapshot must agree with the physical frozen source authority'
+  );
+  assert.match(
+    body,
+    /flat_item\.result_target_ex[\s\S]*flat_item\.expected_target_ex[\s\S]*flat_item\.physical_target_ex[\s\S]*flat_item\.expected_target_ex/,
+    'the frozen result and physical target amount must agree with the live target remainder'
   );
   assert.match(
     body,
@@ -1761,7 +1858,7 @@ test('batch freshness excludes its own correction-chain reservation and compares
   assert.doesNotMatch(body, /\bNHSP\b|\bHR_WEEKLY\b|\bHR_DAILY\b/);
 });
 
-test('batch freshness suppresses only a fully proven linked-resolution self-reservation diff', () => {
+test('batch freshness suppresses only a fully proven resolved-timesheet self-reservation diff', () => {
   const marker = 'CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness';
   const start = laterFreshnessSql.lastIndexOf(marker);
   assert.ok(start >= 0, 'the active batch freshness function must exist');
@@ -1787,13 +1884,33 @@ test('batch freshness suppresses only a fully proven linked-resolution self-rese
   assert.match(body, /saved_resolution_result_json,applied_via_linked_scope/);
   assert.match(
     body,
+    /COUNT\(\*\)::integer AS component_count[\s\S]*ROUND\(SUM\([\s\S]*source_pay_ex_vat[\s\S]*resolved_source_ex_vat[\s\S]*ROUND\(SUM\([\s\S]*target_pay_ex_vat[\s\S]*resolved_target_ex_vat/,
+    'every frozen member for one economic key must be aggregated rather than accepting a single segment'
+  );
+  assert.match(
+    body,
+    /component_count[\s\S]*= linked_resolution_item\.source_numeric_count[\s\S]*component_count[\s\S]*= linked_resolution_item\.target_numeric_count/,
+    'partial or non-numeric frozen member sets must remain stale'
+  );
+  assert.match(
+    body,
     /jsonb_array_elements\(v_fresh_chain_components\)[\s\S]*fresh_anchor/,
     'the linked row must be anchored to a correction-chain family already proven fresh'
   );
   assert.match(
     body,
+    /NOT linked_resolution_item\.applied_via_linked_scope[\s\S]*anchor_timesheet_id[\s\S]*= linked_resolution_item\.timesheet_id[\s\S]*'timesheet:'[\s\S]*linked_resolution_item\.timesheet_id::text/,
+    'a local approved rate may suppress only an exact self-anchored timesheet component'
+  );
+  assert.match(
+    body,
     /outstanding_component\.truth_ex_vat[\s\S]*resolved_source_ex_vat/,
     'the current source component must still equal the frozen resolved source'
+  );
+  assert.match(
+    body,
+    /outstanding_component\.baseline_ex_vat[\s\S]*resolved_source_ex_vat/,
+    'the settled baseline must still equal the complete frozen source authority'
   );
   assert.match(
     body,
@@ -1924,6 +2041,16 @@ test('paged remittance rows expose server-resolved candidate, umbrella and Cloud
   assert.match(body, /table: 'umbrellas'/);
   assert.match(body, /table: 'tms_users'/);
   assert.match(body, /recipient_display_name: recipientDisplayName/);
+  assert.doesNotMatch(
+    body,
+    /if\s*\(\s*trimText\(row\.recipient_display_name\)\s*\)\s*return\s+row/,
+    'authoritative candidate and umbrella identities must replace stale projected recipient labels',
+  );
+  assert.match(
+    body,
+    /recipientKind\s*===\s*'umbrella'[\s\S]{0,200}umbrellaNames\.get\(recipientId\)\s*\|\|\s*suppliedDisplayName/,
+    'umbrella remittance rows must display the umbrella entity name when the authoritative recipient id resolves',
+  );
   assert.match(body, /const chunkSize = 75/);
   assert.match(workerSource, /const payload = await enrichCommunicationRecipientNames\(section, rawPayload\)/);
 });
@@ -2057,5 +2184,22 @@ test('case resolution apply proves origin against the surviving canonical resolu
   assert.match(
     applySql,
     /ON selected_resolution\.resolution_id = origin_row\.id/i
+  );
+});
+
+test('failed local settlement invokes the bounded pre-provider cleanup before allowing another execution', () => {
+  const start = workerSource.indexOf("if (settlementAdvance.terminal === true && settlementStatus !== 'COMPLETE')");
+  const end = workerSource.indexOf("return moreWork('WAIT_LOCAL_SETTLEMENT'", start);
+  assert.ok(start >= 0 && end > start, 'terminal local settlement failure branch must exist');
+  const body = workerSource.slice(start, end);
+
+  assert.match(body, /pay_execute_operation_cleanup_failed_local_artifacts/);
+  assert.match(body, /p_failure_phase:\s*'WAIT_LOCAL_SETTLEMENT'/);
+  assert.match(body, /provider_submission_attempted:\s*false/);
+  assert.match(body, /safe_to_retry:\s*failedLocalArtifactCleanup\s*&&\s*failedLocalArtifactCleanup\.safe_to_retry\s*===\s*true/);
+  assert.match(body, /retry_blocked:\s*!\(failedLocalArtifactCleanup\s*&&\s*failedLocalArtifactCleanup\.safe_to_retry\s*===\s*true\)/);
+  assert.ok(
+    body.indexOf('pay_execute_operation_cleanup_failed_local_artifacts') < body.indexOf('return reviewRequired('),
+    'safe local cleanup must complete before the parent operation is marked for review',
   );
 });

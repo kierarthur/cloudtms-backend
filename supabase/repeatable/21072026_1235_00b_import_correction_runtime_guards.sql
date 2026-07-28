@@ -829,6 +829,22 @@ declare
   v_residual jsonb;
   v_component jsonb;
   v_suggested_component jsonb;
+  v_suggestion_payload jsonb;
+  v_suggestion_result jsonb;
+  v_suggestion_original_basis numeric;
+  v_suggestion_current_basis numeric;
+  v_suggestion_current_target_amount numeric;
+  v_suggestion_target_per_source numeric;
+  v_suggestion_scale numeric;
+  v_suggestion_original_units numeric;
+  v_suggestion_rebased_units numeric;
+  v_suggestion_source_rate numeric;
+  v_suggestion_charge_rate numeric;
+  v_suggestion_source_charge_ex numeric;
+  v_suggestion_target_rate numeric;
+  v_suggestion_target_ex numeric;
+  v_suggestion_target_vat numeric;
+  v_suggestion_target_inc numeric;
   v_member_ids uuid[];
   v_carrier_row_ids uuid[];
   v_root_id uuid;
@@ -1473,6 +1489,375 @@ begin
                       upper(coalesce(v_component->>'target_pay_method',''))
                   )::text;
         end if;
+
+        -- A source component can describe the full historical shift while the
+        -- canonical correction residual now represents only a smaller unpaid
+        -- remainder. Keep the historical source basis/fingerprint as
+        -- provenance, but proportionally rebase the actionable suggestion to
+        -- the current residual. Copying the old payload unchanged would turn a
+        -- £17.39 residual back into the historical £130 target.
+        v_suggestion_payload:=coalesce(
+          v_suggested_component->'suggested_resolution_payload_json',
+          '{}'::jsonb
+        );
+        v_suggestion_result:=coalesce(
+          v_suggested_component->'suggested_resolution_result_json',
+          '{}'::jsonb
+        );
+        v_suggestion_original_basis:=case
+          when coalesce(
+                 v_suggestion_result
+                   ->>'applied_basis_source_amount_ex_vat',
+                 v_suggestion_result->>'basis_source_amount_ex_vat',
+                 v_suggestion_payload
+                   ->>'applied_basis_source_amount_ex_vat',
+                 v_suggested_component->>'source_pay_ex_vat',
+                 v_suggested_component->>'component_amount_ex_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then abs(coalesce(
+              v_suggestion_result
+                ->>'applied_basis_source_amount_ex_vat',
+              v_suggestion_result->>'basis_source_amount_ex_vat',
+              v_suggestion_payload
+                ->>'applied_basis_source_amount_ex_vat',
+              v_suggested_component->>'source_pay_ex_vat',
+              v_suggested_component->>'component_amount_ex_vat'
+            )::numeric)
+          else null
+        end;
+        v_suggestion_target_per_source:=case
+          when coalesce(
+                 v_suggestion_result
+                   ->>'target_amount_ex_vat_per_source_ex_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+           and abs(
+                 (
+                   v_suggestion_result
+                     ->>'target_amount_ex_vat_per_source_ex_vat'
+                 )::numeric
+               ) > 0
+            then abs(
+              (
+                v_suggestion_result
+                  ->>'target_amount_ex_vat_per_source_ex_vat'
+              )::numeric
+            )
+          when coalesce(v_suggestion_original_basis,0)>0
+           and coalesce(
+                 v_suggestion_result->>'target_amount_ex_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+           and abs(
+                 (v_suggestion_result->>'target_amount_ex_vat')::numeric
+               ) > 0
+            then abs(
+              (v_suggestion_result->>'target_amount_ex_vat')::numeric
+                / v_suggestion_original_basis
+            )
+          else null
+        end;
+        -- The signed correction ledger is source-channel authority. Settled
+        -- and reserved correction movements are reconciled through their
+        -- frozen source reservation amounts, so only the remaining source
+        -- residual may be converted to the target channel. Using the full
+        -- historical shift units here would turn a £5.22 residual back into
+        -- the historical £130 target.
+        v_suggestion_current_basis:=round(
+          abs(coalesce(v_component_source_outstanding,0)),
+          2
+        );
+        v_suggestion_current_target_amount:=case
+          when coalesce(v_suggestion_target_per_source,0)>0
+            then round(
+              v_suggestion_current_basis
+                * v_suggestion_target_per_source,
+              2
+            )
+          else null
+        end;
+        v_suggestion_original_units:=case
+          when coalesce(
+                 v_suggestion_result->>'target_units',
+                 v_suggestion_payload->>'target_units',
+                 v_suggested_component->>'source_units',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then abs(coalesce(
+              v_suggestion_result->>'target_units',
+              v_suggestion_payload->>'target_units',
+              v_suggested_component->>'source_units'
+            )::numeric)
+          else null
+        end;
+        v_suggestion_source_rate:=case
+          when coalesce(
+                 v_suggested_component->>'source_rate',
+                 v_suggested_component#>>'{source_basis_json,source_rate}',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then coalesce(
+              v_suggested_component->>'source_rate',
+              v_suggested_component#>>'{source_basis_json,source_rate}'
+            )::numeric
+          else null
+        end;
+        v_suggestion_charge_rate:=case
+          when coalesce(
+                 v_suggested_component->>'source_charge_rate',
+                 v_suggested_component
+                   #>>'{source_basis_json,source_charge_rate}',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then coalesce(
+              v_suggested_component->>'source_charge_rate',
+              v_suggested_component
+                #>>'{source_basis_json,source_charge_rate}'
+            )::numeric
+          else null
+        end;
+
+        if coalesce(v_suggestion_original_basis,0)<=0
+           or coalesce(v_suggestion_original_units,0)<=0
+           or coalesce(v_suggestion_current_target_amount,0)<=0
+           or coalesce(v_suggestion_target_per_source,0)<=0
+           or coalesce(v_suggestion_current_basis,0)<=0 then
+          raise exception 'CORRECTION_CHAIN_SUGGESTED_RESOLUTION_BASIS_INVALID'
+            using errcode='P0001',
+                  detail=jsonb_build_object(
+                    'canonical_correction_key',
+                      v_component->>'canonical_correction_key',
+                    'historical_basis_source_amount_ex_vat',
+                      v_suggestion_original_basis,
+                    'current_basis_source_amount_ex_vat',
+                      v_suggestion_current_basis,
+                    'current_target_amount_ex_vat',
+                      v_suggestion_current_target_amount,
+                    'target_amount_ex_vat_per_source_ex_vat',
+                      v_suggestion_target_per_source,
+                    'historical_source_units',
+                      v_suggestion_original_units
+                  )::text;
+        end if;
+
+        v_suggestion_scale:=
+          v_suggestion_current_basis/v_suggestion_original_basis;
+        v_suggestion_rebased_units:=round(
+          v_suggestion_original_units*v_suggestion_scale,
+          6
+        );
+        v_suggestion_target_rate:=case
+          when coalesce(
+                 v_suggestion_payload->>'suggested_target_rate',
+                 v_suggestion_result->>'replacement_rate',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then round(coalesce(
+              v_suggestion_payload->>'suggested_target_rate',
+              v_suggestion_result->>'replacement_rate'
+            )::numeric,2)
+          else null
+        end;
+        v_suggestion_target_ex:=case
+          when coalesce(
+                 v_suggestion_result
+                   ->>'target_amount_ex_vat_per_source_ex_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then round(
+              v_suggestion_current_basis
+                * (
+                    v_suggestion_result
+                      ->>'target_amount_ex_vat_per_source_ex_vat'
+                  )::numeric,
+              2
+            )
+          when coalesce(
+                 v_suggestion_result->>'target_amount_ex_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then round(
+              (v_suggestion_result->>'target_amount_ex_vat')::numeric
+                * v_suggestion_scale,
+              2
+            )
+          when v_suggestion_target_rate is not null
+            then round(
+              v_suggestion_rebased_units*v_suggestion_target_rate,
+              2
+            )
+          else null
+        end;
+        v_suggestion_target_vat:=case
+          when coalesce(
+                 v_suggestion_result
+                   ->>'target_amount_vat_per_source_ex_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then round(
+              v_suggestion_current_basis
+                * (
+                    v_suggestion_result
+                      ->>'target_amount_vat_per_source_ex_vat'
+                  )::numeric,
+              2
+            )
+          when coalesce(
+                 v_suggestion_result->>'target_amount_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then round(
+              (v_suggestion_result->>'target_amount_vat')::numeric
+                * v_suggestion_scale,
+              2
+            )
+          else 0
+        end;
+        v_suggestion_target_inc:=case
+          when coalesce(
+                 v_suggestion_result
+                   ->>'target_amount_inc_vat_per_source_ex_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then round(
+              v_suggestion_current_basis
+                * (
+                    v_suggestion_result
+                      ->>'target_amount_inc_vat_per_source_ex_vat'
+                  )::numeric,
+              2
+            )
+          when coalesce(
+                 v_suggestion_result->>'target_amount_inc_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then round(
+              (v_suggestion_result->>'target_amount_inc_vat')::numeric
+                * v_suggestion_scale,
+              2
+            )
+          else round(
+            coalesce(v_suggestion_target_ex,0)
+              + coalesce(v_suggestion_target_vat,0),
+            2
+          )
+        end;
+        if v_suggestion_target_rate is null
+           and coalesce(v_suggestion_rebased_units,0)<>0
+           and v_suggestion_target_ex is not null then
+          v_suggestion_target_rate:=round(
+            v_suggestion_target_ex/v_suggestion_rebased_units,
+            2
+          );
+        end if;
+        if v_suggestion_target_ex is null
+           or v_suggestion_target_rate is null then
+          raise exception 'CORRECTION_CHAIN_SUGGESTED_RESOLUTION_RESULT_INVALID'
+            using errcode='P0001',
+                  detail=jsonb_build_object(
+                    'canonical_correction_key',
+                      v_component->>'canonical_correction_key',
+                    'current_basis_source_amount_ex_vat',
+                      v_suggestion_current_basis,
+                    'rebased_source_units',
+                      v_suggestion_rebased_units
+                  )::text;
+        end if;
+
+        v_suggestion_source_charge_ex:=case
+          when v_suggestion_charge_rate is not null
+            then round(
+              v_suggestion_rebased_units*v_suggestion_charge_rate,
+              2
+            )
+          when coalesce(
+                 v_suggestion_result->>'source_charge_ex_vat',
+                 ''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+            then round(
+              (v_suggestion_result->>'source_charge_ex_vat')::numeric
+                * v_suggestion_scale,
+              2
+            )
+          else null
+        end;
+
+        v_suggestion_payload:=jsonb_strip_nulls(
+          v_suggestion_payload
+          || jsonb_build_object(
+            'applied_basis_source_amount_ex_vat',
+              v_suggestion_current_basis,
+            'source_units',v_suggestion_rebased_units,
+            'target_units',v_suggestion_rebased_units,
+            'suggested_target_rate',v_suggestion_target_rate,
+            'reuse_mode','PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT',
+            'correction_residual_basis_rebased',true,
+            'correction_residual_economic_fingerprint',
+              v_component->>'resolution_economic_fingerprint'
+          )
+        );
+        v_suggestion_result:=jsonb_strip_nulls(
+          v_suggestion_result
+          || jsonb_build_object(
+            'basis_source_amount_ex_vat',v_suggestion_current_basis,
+            'applied_basis_source_amount_ex_vat',
+              v_suggestion_current_basis,
+            'source_units',v_suggestion_rebased_units,
+            'target_units',v_suggestion_rebased_units,
+            'replacement_rate',v_suggestion_target_rate,
+            'target_amount_ex_vat',v_suggestion_target_ex,
+            'target_amount_vat',v_suggestion_target_vat,
+            'target_amount_inc_vat',v_suggestion_target_inc,
+            'source_pay_ex_vat',v_suggestion_current_basis,
+            'source_charge_ex_vat',v_suggestion_source_charge_ex,
+            'source_margin_ex_vat',case
+              when v_suggestion_source_charge_ex is null then null
+              else round(
+                v_suggestion_source_charge_ex
+                  - v_suggestion_current_basis,
+                2
+              )
+            end,
+            'target_pay_ex_vat',v_suggestion_target_ex,
+            'target_charge_ex_vat',v_suggestion_source_charge_ex,
+            'target_margin_ex_vat',case
+              when v_suggestion_source_charge_ex is null then null
+              else round(
+                v_suggestion_source_charge_ex-v_suggestion_target_ex,
+                2
+              )
+            end,
+            'margin_delta_ex_vat',round(
+              v_suggestion_current_basis-v_suggestion_target_ex,
+              2
+            ),
+            'reuse_mode','PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT',
+            'correction_residual_basis_rebased',true,
+            'correction_residual_economic_fingerprint',
+              v_component->>'resolution_economic_fingerprint'
+          )
+        );
+        v_suggested_component:=v_suggested_component
+          || jsonb_build_object(
+            'source_units',v_suggestion_rebased_units,
+            'source_rate',v_suggestion_source_rate,
+            'source_charge_rate',v_suggestion_charge_rate,
+            'source_pay_ex_vat',v_suggestion_current_basis,
+            'source_charge_ex_vat',v_suggestion_source_charge_ex,
+            'source_margin_ex_vat',case
+              when v_suggestion_source_charge_ex is null then null
+              else round(
+                v_suggestion_source_charge_ex
+                  - v_suggestion_current_basis,
+                2
+              )
+            end,
+            'suggested_resolution_payload_json',v_suggestion_payload,
+            'suggested_resolution_result_json',v_suggestion_result,
+            'suggestion_explanation_text',
+              'This suggestion applies the existing PAYE/umbrella conversion to the current correction residual only. Historical full-shift evidence remains unchanged.'
+          );
       end if;
 
       update public.banking_pay_workbench_candidate_source_lines l
@@ -1542,6 +1927,22 @@ begin
                     then nullif(v_suggested_component->>'source_charge_rate','')::numeric
                   else null
                 end,
+                'source_charge_ex_vat',case
+                  when v_component_needs_resolution
+                    then nullif(
+                      v_suggested_component->>'source_charge_ex_vat',
+                      ''
+                    )::numeric
+                  else null
+                end,
+                'source_margin_ex_vat',case
+                  when v_component_needs_resolution
+                    then nullif(
+                      v_suggested_component->>'source_margin_ex_vat',
+                      ''
+                    )::numeric
+                  else null
+                end,
                 'source_basis_json',case
                   when v_component_needs_resolution
                     and jsonb_typeof(
@@ -1576,11 +1977,35 @@ begin
                 end,
                 'component_amount_ex_vat',v_component_outstanding,
                 'preview_due_amount_ex_vat',v_component_outstanding,
-                'source_pay_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
-                'source_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
+                'source_pay_ex_vat',case
+                  when v_component_needs_resolution
+                    then v_suggestion_current_basis
+                  else abs(
+                    (v_component->>'effective_source_outstanding_ex_vat')::numeric
+                  )
+                end,
+                'source_amount_ex_vat',case
+                  when v_component_needs_resolution
+                    then v_suggestion_current_basis
+                  else abs(
+                    (v_component->>'effective_source_outstanding_ex_vat')::numeric
+                  )
+                end,
                 'source_entitlement_amount_ex_vat',abs((v_component->>'truth_ex_vat')::numeric),
-                'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
-                'remaining_source_amount',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric)
+                'source_reservation_amount_ex_vat',case
+                  when v_component_needs_resolution
+                    then v_suggestion_current_basis
+                  else abs(
+                    (v_component->>'effective_source_outstanding_ex_vat')::numeric
+                  )
+                end,
+                'remaining_source_amount',case
+                  when v_component_needs_resolution
+                    then v_suggestion_current_basis
+                  else abs(
+                    (v_component->>'effective_source_outstanding_ex_vat')::numeric
+                  )
+                end
               )
             ),
             'correction_chain_residual_fingerprint',v_residual->>'residual_fingerprint',
@@ -1647,7 +2072,7 @@ begin
                 end,
                 'unresolved_taxable_amount_ex_vat',case
                   when v_component_needs_resolution
-                    then abs(v_component_source_outstanding)
+                    then v_suggestion_current_basis
                   else 0
                 end,
                 'blocked_case_amount_ex_vat',0,
@@ -1723,10 +2148,34 @@ begin
               'preview_component_amount_ex_vat',v_component_outstanding,
               'source_pay_method',v_source_pay_method,
               'target_pay_method',upper(v_component->>'target_pay_method'),
-              'source_pay_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
-              'source_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
-              'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
-              'remaining_source_amount',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
+              'source_pay_ex_vat',case
+                when v_component_needs_resolution
+                  then v_suggestion_current_basis
+                else abs(
+                  (v_component->>'effective_source_outstanding_ex_vat')::numeric
+                )
+              end,
+              'source_amount_ex_vat',case
+                when v_component_needs_resolution
+                  then v_suggestion_current_basis
+                else abs(
+                  (v_component->>'effective_source_outstanding_ex_vat')::numeric
+                )
+              end,
+              'source_reservation_amount_ex_vat',case
+                when v_component_needs_resolution
+                  then v_suggestion_current_basis
+                else abs(
+                  (v_component->>'effective_source_outstanding_ex_vat')::numeric
+                )
+              end,
+              'remaining_source_amount',case
+                when v_component_needs_resolution
+                  then v_suggestion_current_basis
+                else abs(
+                  (v_component->>'effective_source_outstanding_ex_vat')::numeric
+                )
+              end,
               'target_pay_ex_vat',case
                 when v_component_needs_resolution then null
                 else v_component_outstanding
@@ -1738,7 +2187,13 @@ begin
                   else v_component_outstanding
                 end,
                 'source_entitlement_amount_ex_vat',abs((v_component->>'truth_ex_vat')::numeric),
-                'source_reservation_amount_ex_vat',abs((v_component->>'effective_source_outstanding_ex_vat')::numeric),
+                'source_reservation_amount_ex_vat',case
+                  when v_component_needs_resolution
+                    then v_suggestion_current_basis
+                  else abs(
+                    (v_component->>'effective_source_outstanding_ex_vat')::numeric
+                  )
+                end,
                 'key_type',v_component->>'component_key_type',
                 'key_value',v_component->>'component_key_value',
                 'line_key',v_line_key,

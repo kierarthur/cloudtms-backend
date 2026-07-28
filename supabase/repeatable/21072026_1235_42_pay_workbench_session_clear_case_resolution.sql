@@ -803,7 +803,12 @@ BEGIN
           SELECT 1 FROM _tmp_bpay_clear_anchor_family_existing AS family_row
           WHERE family_row.timesheet_id = batch_item.timesheet_id
         )
-        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+        -- A settled/cancelled batch is immutable frozen history, not a live
+        -- pre-draft reservation.  It must never be edited here, but it must
+        -- also not prevent a later, different live decision for the same
+        -- correction root from being cancelled.  Match the apply path and
+        -- protect only batches that still own an active reservation.
+        AND public._pay_batch_status_is_active_reservation(batch_row.status)
 
       UNION ALL
 
@@ -818,7 +823,7 @@ BEGIN
           SELECT 1 FROM _tmp_bpay_clear_anchor_family_existing AS family_row
           WHERE family_row.timesheet_id = batch_snapshot.timesheet_id
         )
-        AND UPPER(BTRIM(COALESCE(batch_row.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+        AND public._pay_batch_status_is_active_reservation(batch_row.status)
     ) AS boundary_rows
     ON CONFLICT (timesheet_id, pay_batch_id) DO UPDATE
       SET batch_status = EXCLUDED.batch_status;

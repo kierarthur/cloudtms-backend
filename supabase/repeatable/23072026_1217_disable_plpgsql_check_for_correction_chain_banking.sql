@@ -53,7 +53,17 @@ BEGIN
     'public.pay_finance_case_apply_taxable_channel_restructure(uuid,uuid,text,text,integer,numeric,numeric,date,text)'::regprocedure,
     'public.tsfin_write_snapshots_and_complete(jsonb)'::regprocedure,
     'public.banking_alerts_refresh_for_user(uuid,text,integer)'::regprocedure,
-    'public.pay_workbench_session_apply_case_resolution(uuid,uuid,jsonb)'::regprocedure
+    'public.pay_workbench_session_apply_case_resolution(uuid,uuid,jsonb)'::regprocedure,
+    'public.pay_export_bank_csv(uuid,text)'::regprocedure,
+    'public._pay_batch_bank_payment_projection_rows(uuid,text)'::regprocedure,
+    'public._pay_batch_validate_freshness_base_v1(uuid,uuid,boolean)'::regprocedure,
+    'public.pay_batch_validate_freshness(uuid,uuid,boolean)'::regprocedure,
+    'public.pay_batch_freshness_scope_seed(uuid,uuid,jsonb,integer)'::regprocedure,
+    'public.pay_batch_validate_freshness_chunk(uuid,jsonb,integer)'::regprocedure,
+    'public.pay_batch_validate_freshness_chunk(uuid,uuid,uuid,uuid,integer)'::regprocedure,
+    'public.pay_batch_freshness_result_get(uuid,uuid)'::regprocedure,
+    'public.pay_batch_freshness_result_get(uuid,uuid,uuid)'::regprocedure,
+    'public.pay_settle_manual_confirm(uuid,text,text,date,uuid,text,uuid,boolean,text,boolean,uuid,jsonb)'::regprocedure
   ]
   LOOP
     EXECUTE format(

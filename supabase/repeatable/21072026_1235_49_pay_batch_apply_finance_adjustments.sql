@@ -3375,6 +3375,8 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
       resolution_row.id as target_resolution_id,
       resolution_row.resolution_origin_session_id,
       resolution_row.resolution_origin_pay_date,
+      resolution_row.source_basis_fingerprint
+        as current_source_basis_fingerprint,
       resolution_row.resolution_origin_source_basis_fingerprint,
       resolution_row.payload_json as current_resolution_payload_json,
       carry_row.id as carry_registration_id,
@@ -3481,7 +3483,8 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
             batch_item.frozen_source_basis_json
               ->>'source_basis_fingerprint',
             batch_item.frozen_component_snapshot_json
-              ->>'source_basis_fingerprint'
+              ->>'source_basis_fingerprint',
+            frozen.current_source_basis_fingerprint
           ),
           'correction_chain_fingerprint',coalesce(
             batch_item.frozen_source_basis_json
@@ -3514,6 +3517,10 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
             batch_item.frozen_source_basis_json
               ->>'source_build_run_id',
             batch_item.frozen_component_snapshot_json
+              ->>'source_build_run_id',
+            batch_item.frozen_resolution_payload_json
+              ->>'source_build_run_id',
+            frozen.current_resolution_payload_json
               ->>'source_build_run_id'
           )
         ),

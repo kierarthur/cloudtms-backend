@@ -698,6 +698,16 @@ BEGIN
             '{component_state_json,correction_financials_policy_envelope_fingerprint}'
         ) IS NOT DISTINCT FROM v_correction_financials_policy_envelope_fingerprint
       ) AS historical_anchor_matches,
+      min(nullif(btrim(coalesce(
+        resolution_row.payload_json ->> 'resolution_economic_fingerprint',
+        resolution_row.payload_json #>>
+          '{saved_resolution_payload_json,resolution_economic_fingerprint}',
+        resolution_row.payload_json #>>
+          '{bucket_resolutions,0,resolution_economic_fingerprint}',
+        resolution_row.payload_json #>>
+          '{bucket_resolutions,0,saved_resolution_payload_json,resolution_economic_fingerprint}',
+        ''
+      )), '')) AS saved_resolution_economic_fingerprint,
       count(*) FILTER (
         WHERE COALESCE(
           resolution_row.payload_json #>>
@@ -856,6 +866,7 @@ BEGIN
         AS source_basis_matches,
       COALESCE(session_resolution.historical_anchor_matches, false)
         AS historical_anchor_matches,
+      session_resolution.saved_resolution_economic_fingerprint,
       COALESCE(session_resolution.valid_target_amount_count, 0)
         AS valid_target_amount_count,
       session_resolution.resolved_target_amount_ex_vat,
@@ -936,6 +947,87 @@ BEGIN
         ELSE component_row.effective_outstanding_ex_vat
       END::numeric(18,2) AS target_outstanding_ex_vat
     FROM component_result AS component_row
+  ),
+  component_fingerprinted AS (
+    SELECT
+      component_row.*,
+      encode(
+        extensions.digest(
+          convert_to(
+            jsonb_build_object(
+              'canonical_correction_key',
+                concat_ws(
+                  '|',
+                  'CORRECTION_CHAIN_V1',
+                  p_candidate_id::text,
+                  v_root_timesheet_id::text,
+                  upper(btrim(component_row.key_type)),
+                  CASE
+                    WHEN upper(btrim(component_row.key_type)) = 'TS_DAY'
+                      THEN (component_row.key_value::date)::text
+                    ELSE btrim(component_row.key_value)
+                  END
+                ),
+              'ordered_member_timesheet_ids', to_jsonb(v_member_ids),
+              'chain_fingerprint', v_chain ->> 'chain_fingerprint',
+              'source_basis_fingerprint',
+                component_row.source_basis_fingerprint,
+              'correction_financials_policy_envelope_fingerprint',
+                v_correction_financials_policy_envelope_fingerprint,
+              'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+              'source_pay_methods', v_source_pay_methods,
+              'target_pay_method', v_target_pay_method,
+              'truth_ex_vat', component_row.truth_ex_vat,
+              'baseline_ex_vat', component_row.baseline_ex_vat,
+              'reserved_ex_vat', component_row.reserved_ex_vat,
+              'raw_outstanding_ex_vat',
+                component_row.raw_outstanding_ex_vat,
+              'effective_source_outstanding_ex_vat',
+                component_row.effective_outstanding_ex_vat,
+              'raw_outstanding_inc_vat',
+                component_row.raw_outstanding_inc_vat,
+              'effective_source_outstanding_inc_vat',
+                component_row.effective_outstanding_inc_vat,
+              'resolution_required', component_row.resolution_required
+            )::text,
+            'UTF8'
+          ),
+          'sha256'
+        ),
+        'hex'
+      ) AS current_resolution_economic_fingerprint
+    FROM component_balanced AS component_row
+  ),
+  component_verified AS (
+    SELECT
+      component_row.*,
+      (
+        component_row.resolution_not_stale
+        AND (
+          NOT component_row.resolution_required
+          OR component_row.saved_resolution_economic_fingerprint
+            IS NOT DISTINCT FROM
+              component_row.current_resolution_economic_fingerprint
+        )
+      ) AS verified_resolution_not_stale,
+      (
+        component_row.resolution_complete
+        AND (
+          NOT component_row.resolution_required
+          OR component_row.saved_resolution_economic_fingerprint
+            IS NOT DISTINCT FROM
+              component_row.current_resolution_economic_fingerprint
+        )
+      ) AS verified_resolution_complete,
+      CASE
+        WHEN component_row.resolution_required
+         AND component_row.saved_resolution_economic_fingerprint
+           IS DISTINCT FROM
+             component_row.current_resolution_economic_fingerprint
+          THEN component_row.effective_outstanding_ex_vat
+        ELSE component_row.target_outstanding_ex_vat
+      END::numeric(18,2) AS verified_target_outstanding_ex_vat
+    FROM component_fingerprinted AS component_row
   )
   SELECT
     count(*)::integer,
@@ -982,56 +1074,7 @@ BEGIN
               'hex'
             ),
           'resolution_economic_fingerprint',
-            encode(
-              extensions.digest(
-                convert_to(
-                  jsonb_build_object(
-                    'canonical_correction_key',
-                      concat_ws(
-                        '|',
-                        'CORRECTION_CHAIN_V1',
-                        p_candidate_id::text,
-                        v_root_timesheet_id::text,
-                        upper(btrim(component_row.key_type)),
-                        CASE
-                          WHEN upper(btrim(component_row.key_type)) = 'TS_DAY'
-                            THEN (component_row.key_value::date)::text
-                          ELSE btrim(component_row.key_value)
-                        END
-                      ),
-                    'ordered_member_timesheet_ids', to_jsonb(v_member_ids),
-                    'chain_fingerprint', v_chain ->> 'chain_fingerprint',
-                    'source_basis_fingerprint',
-                      component_row.source_basis_fingerprint,
-                    'correction_financials_policy_envelope_fingerprint',
-                      v_correction_financials_policy_envelope_fingerprint,
-                    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
-                    'source_pay_methods', v_source_pay_methods,
-                    'target_pay_method', v_target_pay_method,
-                    'truth_ex_vat', component_row.truth_ex_vat,
-                    'baseline_ex_vat', component_row.baseline_ex_vat,
-                    'reserved_ex_vat', component_row.reserved_ex_vat,
-                    'raw_outstanding_ex_vat',
-                      component_row.raw_outstanding_ex_vat,
-                    'effective_source_outstanding_ex_vat',
-                      component_row.effective_outstanding_ex_vat,
-                    'target_outstanding_ex_vat',
-                      component_row.target_outstanding_ex_vat,
-                    'raw_outstanding_inc_vat',
-                      component_row.raw_outstanding_inc_vat,
-                    'effective_source_outstanding_inc_vat',
-                      component_row.effective_outstanding_inc_vat,
-                    'resolution_required', component_row.resolution_required,
-                    'resolution_complete', component_row.resolution_complete,
-                    'resolved_target_amount_ex_vat',
-                      component_row.resolved_target_amount_ex_vat
-                  )::text,
-                  'UTF8'
-                ),
-                'sha256'
-              ),
-              'hex'
-            ),
+            component_row.current_resolution_economic_fingerprint,
           'carrier_timesheet_id',
             v_latest_positive_timesheet_id::text,
           'source_family_key', v_source_family_key,
@@ -1062,7 +1105,7 @@ BEGIN
           'effective_source_outstanding_ex_vat',
             component_row.effective_outstanding_ex_vat,
           'target_outstanding_ex_vat',
-            component_row.target_outstanding_ex_vat,
+            component_row.verified_target_outstanding_ex_vat,
           'raw_outstanding_inc_vat',
             component_row.raw_outstanding_inc_vat,
           'effective_source_outstanding_inc_vat',
@@ -1072,11 +1115,13 @@ BEGIN
           'resolution_required',
             component_row.resolution_required,
           'resolution_complete',
-            component_row.resolution_complete,
+            component_row.verified_resolution_complete,
           'resolution_row_count',
             component_row.resolution_row_count,
           'resolution_not_stale',
-            component_row.resolution_not_stale,
+            component_row.verified_resolution_not_stale,
+          'saved_resolution_economic_fingerprint',
+            component_row.saved_resolution_economic_fingerprint,
           'expected_source_basis_fingerprint',
             component_row.expected_source_basis_fingerprint,
           'source_basis_matches',
@@ -1093,7 +1138,7 @@ BEGIN
       '[]'::jsonb
     ),
     round(COALESCE(sum(component_row.raw_outstanding_ex_vat), 0), 2),
-    round(COALESCE(sum(component_row.target_outstanding_ex_vat), 0), 2),
+    round(COALESCE(sum(component_row.verified_target_outstanding_ex_vat), 0), 2),
     round(COALESCE(sum(component_row.raw_outstanding_inc_vat), 0), 2),
     round(COALESCE(sum(component_row.effective_outstanding_inc_vat), 0), 2),
     count(*) FILTER (
@@ -1101,7 +1146,7 @@ BEGIN
     )::integer,
     count(*) FILTER (
       WHERE component_row.resolution_required
-        AND NOT component_row.resolution_complete
+        AND NOT component_row.verified_resolution_complete
     )::integer,
     count(*) FILTER (
       WHERE component_row.reservation_overrun_detected
@@ -1116,7 +1161,7 @@ BEGIN
     v_resolution_required_count,
     v_unresolved_count,
     v_reservation_overrun_count
-  FROM component_balanced AS component_row;
+  FROM component_verified AS component_row;
 
   IF v_component_count > p_max_components THEN
     RAISE EXCEPTION 'CORRECTION_RESIDUAL_COMPONENT_LIMIT_EXCEEDED'
