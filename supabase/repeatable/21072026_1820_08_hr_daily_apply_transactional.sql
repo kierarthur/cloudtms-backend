@@ -433,10 +433,11 @@ begin
       or exists (
         select 1
         from public.import_review_scope_candidates scoped_candidate
-        join public.contracts scoped_contract
-          on scoped_contract.candidate_id=scoped_candidate.candidate_id
+        join public.timesheets_financials scoped_financial
+          on scoped_financial.timesheet_id=t.timesheet_id
+         and scoped_financial.is_current=true
+         and scoped_financial.candidate_id=scoped_candidate.candidate_id
         where scoped_candidate.import_id=p_import_id
-          and scoped_contract.id=t.contract_id
       )
     )
     and whole_timesheet.segment_count=(

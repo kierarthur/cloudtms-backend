@@ -641,11 +641,11 @@ begin
   ), classified as (
     select m.*,
       case when upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
-        then case when rtsx.contract_id is not null then 1 else dcon.contract_count end
+        then case when rtsx.contract_id is not null then 1 else 0 end
         else con.contract_count end as contract_count,
       case when wp.hr_row_id is not null then wp.contract_id
         when upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
-          then coalesce(rtsx.contract_id,dcon.contract_id)
+          then rtsx.contract_id
         else con.contract_id end as resolved_contract_id,
       wp.action as weekly_resolution_action,wp.reason as weekly_resolution_reason,
       wp.incoming_code as weekly_incoming_code,
@@ -713,7 +713,6 @@ begin
       where t.candidate_id=m.resolved_candidate_id and t.client_id=m.resolved_client_id
         and t.sheet_scope::text='DAILY'
         and (t.worked_start_iso at time zone 'Europe/London')::date=m.date_local
-        and ts.contract_id=any(coalesce(dcon.contract_ids,array[]::uuid[]))
     ) dtsx on upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
     left join lateral (
       with candidates as (
@@ -747,7 +746,6 @@ begin
       where t.candidate_id=m.resolved_candidate_id and t.client_id=m.resolved_client_id
         and t.sheet_scope::text='DAILY'
         and (t.worked_start_iso at time zone 'Europe/London')::date=m.date_local
-        and ts.contract_id=any(coalesce(dcon.contract_ids,array[]::uuid[]))
         and coalesce(dgm.mapping_count,0)=1
         and lower(btrim(coalesce(t.tsfin_role,'')))=lower(btrim(coalesce(dgm.role_code,'')))
         and (nullif(btrim(coalesce(dgm.band_norm,'')),'') is null
@@ -791,7 +789,7 @@ begin
           else 'HR_WEEKLY' end,c.id,c.client_id,coalesce(wp.week_ending_date,m.date_local)) a
       where c.id=case when wp.hr_row_id is not null then wp.contract_id
         when upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
-          then coalesce(rtsx.contract_id,dcon.contract_id)
+          then rtsx.contract_id
         else con.contract_id end
     ) cr on true
     left join lateral (
@@ -836,12 +834,17 @@ begin
         'role_code',o.role,'band_norm',o.band,'selectable',true,
         'display_label',concat_ws(' · ',nullif(o.role,''),coalesce(nullif(o.band,''),'No band'))
       ) order by lower(o.role),lower(coalesce(o.band,''))),'[]'::jsonb) options
-      from (select distinct c.role,c.band from public.contracts c
-        cross join lateral public._import_review_effective_authority_core_v1('HR_DAILY',c.id,c.client_id,m.date_local) a
-        where c.candidate_id=m.resolved_candidate_id and c.client_id=m.resolved_client_id
-          and c.start_date<=m.date_local and (c.end_date is null or c.end_date>=m.date_local)
-          and a.route_eligible
-          and nullif(btrim(c.role),'') is not null order by c.role,c.band limit 25) o
+      from (
+        select distinct t.tsfin_role role,t.tsfin_band band
+        from public.v_timesheets_daily_match t
+        where t.candidate_id=m.resolved_candidate_id
+          and t.client_id=m.resolved_client_id
+          and t.sheet_scope::text='DAILY'
+          and (t.worked_start_iso at time zone 'Europe/London')::date=m.date_local
+          and nullif(btrim(t.tsfin_role),'') is not null
+        order by t.tsfin_role,t.tsfin_band
+        limit 25
+      ) o
     ) dopts on upper(m.source_system)='HEALTHROSTER_DAILY' or m.import_scope like '%DAILY%'
     left join public.nhsp_shifts nss
       on nss.external_row_key=m.source_row_key and nss.source_system::text=m.source_system
@@ -933,8 +936,7 @@ begin
         when f.resolved_client_id is null then 'ADVISORY'
         when f.is_daily and not coalesce(f.has_grade_mapping,false) then 'ADVISORY'
         when not f.is_daily and coalesce(f.weekly_resolution_action,'')<>'OK' then 'ADVISORY'
-        when coalesce(f.contract_count,0)=0 then 'ADVISORY'
-        when f.is_daily and f.contract_count>1 then 'ADVISORY'
+        when not f.is_daily and coalesce(f.contract_count,0)=0 then 'ADVISORY'
         when not f.is_daily and not coalesce(f.contract_route_eligible,false) then 'ADVISORY'
         when f.is_daily and coalesce(f.timesheet_count,0)=0 then 'ADVISORY'
         when f.is_daily and f.resolved_timesheet_id is null then 'DAILY_TIMESHEET_RESOLUTION'
@@ -945,7 +947,9 @@ begin
         when f.existing_shift_id is null then 'INCLUDE_SHIFT'
         when (f.payload_json->>'start_utc')::timestamptz is distinct from (select n.start_utc from public.nhsp_shifts n where n.id=f.existing_shift_id)
           or (f.payload_json->>'end_utc')::timestamptz is distinct from (select n.end_utc from public.nhsp_shifts n where n.id=f.existing_shift_id)
-          or coalesce((f.payload_json->>'break_mins')::integer,0) is distinct from (select n.break_mins from public.nhsp_shifts n where n.id=f.existing_shift_id)
+          or ((f.payload_json->>'break_mins') is not null
+            and (f.payload_json->>'break_mins')::integer is distinct from
+              coalesce((select n.break_mins from public.nhsp_shifts n where n.id=f.existing_shift_id),0))
           then 'APPLY_AMENDMENT'
         else 'NO_ACTION'
       end action_kind,
@@ -977,8 +981,7 @@ begin
           when not m.is_daily and m.weekly_resolution_action='REJECT_NO_CONTRACT_BAND_MISMATCH'
             and not coalesce(m.has_weekly_mapping,false) then 'GRADE_MAPPING_REQUIRED'
           when not m.is_daily and coalesce(m.weekly_resolution_action,'')<>'OK' then 'CONTRACT_OUT_OF_SCOPE'
-          when coalesce(m.contract_count,0)=0 then 'CONTRACT_MISSING'
-          when m.is_daily and m.contract_count>1 then 'CONTRACT_AMBIGUOUS'
+          when not m.is_daily and coalesce(m.contract_count,0)=0 then 'CONTRACT_MISSING'
           when not m.is_daily and not coalesce(m.contract_route_eligible,false) then 'CONTRACT_OUT_OF_SCOPE'
           when not m.is_daily and coalesce(m.import_authoritative,false)
             and not coalesce(m.contract_rate_complete,false) then 'CONTRACT_RATES_INCOMPLETE'
@@ -1023,7 +1026,9 @@ begin
           'reference',m.hr_request_id,'role',coalesce(m.weekly_incoming_code,m.assignment_grade_norm),'grade',m.grade_key)),
         'current_evidence',case when m.is_daily and m.resolved_timesheet_id is not null then jsonb_strip_nulls(jsonb_build_object(
           'work_date',(m.worked_start_iso at time zone 'Europe/London')::date,'start',m.worked_start_iso,'end',m.worked_end_iso,
-          'break_minutes',m.ts_break_minutes,'worked_minutes',m.worked_minutes,'worked_hours',round(m.worked_minutes/60.0,2),
+          'break_minutes',m.ts_break_minutes,'elapsed_minutes',m.worked_minutes,
+          'worked_minutes',greatest(m.worked_minutes-coalesce(m.ts_break_minutes,0),0),
+          'worked_hours',round(greatest(m.worked_minutes-coalesce(m.ts_break_minutes,0),0)/60.0,2),
           'reference',m.reference_number,'role',m.tsfin_role,'band',m.tsfin_band,'timesheet_id',m.resolved_timesheet_id))
           when not m.is_daily and m.existing_shift_id is not null then jsonb_strip_nulls(jsonb_build_object(
           'work_date',m.date_local,'start',m.existing_shift_start_utc,'end',m.existing_shift_end_utc,
@@ -1036,18 +1041,21 @@ begin
             (m.worked_start_iso at time zone 'Europe/London')::time then 'START_TIME'::text end,
           case when m.is_daily and m.resolved_timesheet_id is not null and m.end_time_local is distinct from
             (m.worked_end_iso at time zone 'Europe/London')::time then 'END_TIME'::text end,
-          case when m.is_daily and m.resolved_timesheet_id is not null and coalesce((m.payload_json->>'actual_break_mins')::integer,
-            (m.payload_json->>'actual_break_minutes')::integer,(m.payload_json->>'break_mins')::integer,
-            (m.payload_json->>'break_minutes')::integer,0) is distinct from coalesce(m.ts_break_minutes,0) then 'BREAK_MINUTES'::text end,
+          case when m.is_daily and m.resolved_timesheet_id is not null
+            and coalesce((m.payload_json->>'break_evidence_supplied')::boolean,false)
+            and (m.payload_json->>'break_mins')::integer is distinct from coalesce(m.ts_break_minutes,0)
+            then 'BREAK_MINUTES'::text end,
           case when m.is_daily and m.resolved_timesheet_id is not null and m.hours_worked is not null
-            and abs((m.hours_worked*60)-m.worked_minutes)>1 then 'WORKED_HOURS'::text end,
+            and abs((m.hours_worked*60)-greatest(m.worked_minutes-coalesce(m.ts_break_minutes,0),0))>1
+            then 'WORKED_HOURS'::text end,
           case when not m.is_daily and m.existing_shift_id is not null and m.start_time_local is distinct from
             (m.existing_shift_start_utc at time zone 'Europe/London')::time then 'START_TIME'::text end,
           case when not m.is_daily and m.existing_shift_id is not null and m.end_time_local is distinct from
             (m.existing_shift_end_utc at time zone 'Europe/London')::time then 'END_TIME'::text end,
-          case when not m.is_daily and m.existing_shift_id is not null and coalesce((m.payload_json->>'actual_break_mins')::integer,
-            (m.payload_json->>'actual_break_minutes')::integer,(m.payload_json->>'break_mins')::integer,
-            (m.payload_json->>'break_minutes')::integer,0) is distinct from coalesce(m.existing_shift_break_minutes,0) then 'BREAK_MINUTES'::text end,
+          case when not m.is_daily and m.existing_shift_id is not null
+            and coalesce((m.payload_json->>'break_evidence_supplied')::boolean,false)
+            and (m.payload_json->>'break_mins')::integer is distinct from coalesce(m.existing_shift_break_minutes,0)
+            then 'BREAK_MINUTES'::text end,
           case when not m.is_daily and m.existing_shift_id is not null and m.hours_worked is not null
             and abs((m.hours_worked*60)-m.existing_shift_paid_minutes)>1 then 'WORKED_HOURS'::text end
         ],null)),
@@ -1110,10 +1118,14 @@ begin
   ), mismatch as (
     select r.*,
       case
-        when r.hours_worked is not null and r.worked_minutes is not null and abs((r.hours_worked*60)-r.worked_minutes)>1 then 'ACTUAL_HOURS_MISMATCH'
+        when r.hours_worked is not null and r.worked_minutes is not null
+          and abs((r.hours_worked*60)-greatest(r.worked_minutes-coalesce(r.break_minutes,0),0))>1
+          then 'ACTUAL_HOURS_MISMATCH'
         when r.start_time_local is distinct from (r.worked_start_iso at time zone 'Europe/London')::time then 'START_END_MISMATCH'
         when r.end_time_local is distinct from (r.worked_end_iso at time zone 'Europe/London')::time then 'START_END_MISMATCH'
-        when coalesce((r.payload_json->>'break_mins')::integer,(r.payload_json->>'break_minutes')::integer,0) is distinct from coalesce(r.break_minutes,0) then 'BREAK_MINUTES_MISMATCH'
+        when coalesce((r.payload_json->>'break_evidence_supplied')::boolean,false)
+          and (r.payload_json->>'break_mins')::integer is distinct from coalesce(r.break_minutes,0)
+          then 'BREAK_MINUTES_MISMATCH'
       end reason_code
     from r
   ), issues as (

@@ -107,6 +107,12 @@ test('global/client financial policy writes use the installed atomic CAS RPCs', 
   assert.match(functionBody('handleUpdateClient'), /client_update_with_settings_v1/);
 });
 
+test('HealthRoster authoritative clients receive import financial-date policy controls', () => {
+  const body = functionBody('handleGetClient');
+  assert.match(body, /client_settings\?\.is_nhsp === true[\s\S]*client_settings\?\.autoprocess_hr === true && client_settings\?\.no_timesheet_required === true/);
+  assert.doesNotMatch(body, /client_settings\?\.requires_hr === true && client_settings\?\.no_timesheet_required === true/);
+});
+
 test('HealthRoster client eligibility responses cannot be reused from a browser or shared cache', () => {
   const body = functionBody('handleHrAutoprocessClients');
   assert.match(body, /Cache-Control', 'private, no-store, max-age=0, must-revalidate'/);
@@ -142,4 +148,23 @@ test('TSFIN no-op optimisation preserves complete import-correction units', () =
   const batchWriterBody = functionBody('rpcTsfinWriteSnapshotsAndComplete');
   assert.match(batchWriterBody, /r\?\.is_correction_ts !== true && cur && snapshotMatchesCurrent/);
   assert.match(batchWriterBody, /p_rows: rowsToWrite\.map/);
+});
+
+test('HealthRoster parsers preserve supplied break duration and infer only Weekly authoritative shift data', () => {
+  assert.match(
+    worker,
+    /const\s+bookedBreakColIdx\s*=\s*findColByAliasesFn\([\s\S]*?aliasesByKey\.BOOKED_BREAK[\s\S]*?\n\s*-1,\s*\n\s*h\s*=>\s*h\s*===\s*'break'/
+  );
+  assert.match(
+    worker,
+    /const\s+actualBreakColIdx\s*=\s*findColByAliasesFn\([\s\S]*?aliasesByKey\.ACTUAL_BREAK,[\s\S]*?\n\s*-1,\s*\n\s*h\s*=>\s*h\.includes\('actual'\)/
+  );
+  assert.match(
+    worker,
+    /const\s+inferredBreakMins\s*=\s*explicitBreakMins\s*==\s*null\s*&&\s*hoursNum\s*!=\s*null[\s\S]*?elapsedShiftMinutes\s*-\s*\(hoursNum\s*\*\s*60\)/
+  );
+  assert.match(worker, /break_evidence_supplied:\s*explicitBreakMins\s*!=\s*null/);
+  assert.match(worker, /break_inferred_from_worked_hours:\s*explicitBreakMins\s*==\s*null\s*&&\s*breakMins\s*!=\s*null/);
+  assert.match(worker, /const\s+breakFromWindow\s*=\s*excelBreakWindowToMinutes\(rawBreakStart,\s*rawBreakEnd\)/);
+  assert.match(worker, /const\s+breakMinutes\s*=\s*breakFromWindow\s*!=\s*null\s*\?\s*breakFromWindow\s*:\s*breakFromFile/);
 });

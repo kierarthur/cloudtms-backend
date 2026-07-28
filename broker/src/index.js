@@ -104764,6 +104764,13 @@ async function parseHealthRosterWorkbookIntoHrRows(
     return null;
   }
 
+  function excelBreakWindowToMinutes(startValue, endValue) {
+    const startHhmm = excelTimeToHhmm(startValue);
+    const endHhmm = excelTimeToHhmm(endValue);
+    if (!startHhmm || !endHhmm) return null;
+    return computeShiftMinutes(startHhmm, endHhmm);
+  }
+
   function parseActualHoursToNumber(v) {
     if (v === '' || v == null) return null;
 
@@ -105175,7 +105182,21 @@ async function parseHealthRosterWorkbookIntoHrRows(
       headerRow,
       aliasesByKey.BREAK,
       -1,
-      h => h.includes('break')
+      h => h.includes('break') &&
+        !h.includes('start') && !h.includes('from') &&
+        !h.includes('end') && !h.includes('finish') && !h.includes('to')
+    );
+    const breakStartIdx = findColByAliasesFn(
+      headerRow,
+      [],
+      -1,
+      h => h.includes('break') && (h.includes('start') || h.includes('from'))
+    );
+    const breakEndIdx = findColByAliasesFn(
+      headerRow,
+      [],
+      -1,
+      h => h.includes('break') && (h.includes('end') || h.includes('finish') || h.includes('to'))
     );
 
     const actualHoursIdx = findColByAliasesFn(
@@ -105210,6 +105231,8 @@ async function parseHealthRosterWorkbookIntoHrRows(
         startIdx,
         endIdx,
         breakIdx,
+        breakStartIdx,
+        breakEndIdx,
         actualHoursIdx,
         bookedHoursIdx,
         rateIdx,
@@ -105233,6 +105256,8 @@ async function parseHealthRosterWorkbookIntoHrRows(
       const rawEnd    = endIdx         >= 0 ? row[endIdx]         : null;
 
       const rawBreak  = breakIdx       >= 0 ? row[breakIdx]       : null;
+      const rawBreakStart = breakStartIdx >= 0 ? row[breakStartIdx] : null;
+      const rawBreakEnd = breakEndIdx >= 0 ? row[breakEndIdx] : null;
       const rawActual = actualHoursIdx >= 0 ? row[actualHoursIdx] : null;
 
       const rawBooked = bookedHoursIdx >= 0 ? row[bookedHoursIdx] : null;
@@ -105264,20 +105289,13 @@ async function parseHealthRosterWorkbookIntoHrRows(
         if (s) hoursWorked = s;
       }
 
+      // Break clock times are evidence only of the break duration. If the
+      // source omits break evidence entirely, preserve null: validation then
+      // relies on shift start/end and the source's net worked hours.
+      const breakFromWindow = excelBreakWindowToMinutes(rawBreakStart, rawBreakEnd);
       const breakFromFile = excelBreakToMinutes(rawBreak);
-
-      let breakMinutes = breakFromFile;
-      if (breakMinutes == null) {
-        // Derive break only if we have numeric actual hours
-        const shiftMins = computeShiftMinutes(startHhmm, endHhmm);
-        if (shiftMins != null && actualHoursNum != null) {
-          const paidMins = Math.round(actualHoursNum * 60);
-          const b = shiftMins - paidMins;
-          breakMinutes = Math.max(0, b);
-        } else {
-          breakMinutes = null;
-        }
-      }
+      const breakMinutes = breakFromWindow != null ? breakFromWindow : breakFromFile;
+      const breakEvidenceSupplied = breakMinutes != null;
 
       const staffNorm = staffRaw.toLowerCase();
       const unitNorm  = unitRaw.toLowerCase();
@@ -105314,6 +105332,8 @@ async function parseHealthRosterWorkbookIntoHrRows(
       fullRow.hours_worked      = (typeof hoursWorked === 'number') ? hoursWorked : null;
       fullRow.break_minutes     = (breakMinutes == null ? null : breakMinutes);
       fullRow.break_mins        = (breakMinutes == null ? null : breakMinutes);
+      fullRow.break_evidence_supplied = breakEvidenceSupplied;
+      fullRow.break_inferred_from_worked_hours = false;
 
       fullRow.booked_hours      = rawBooked;
       fullRow.rate              = rawRate;
@@ -105400,15 +105420,43 @@ async function parseHealthRosterWorkbookIntoHrRows(
     const bookedBreakColIdx = findColByAliasesFn(
       headerRow,
       aliasesByKey.BOOKED_BREAK.length ? aliasesByKey.BOOKED_BREAK : aliasesByKey.BREAK,
-      9,
-      h => h === 'break' || (h.includes('break') && !h.includes('actual'))
+      -1,
+      h => h === 'break' || (h.includes('break') && !h.includes('actual') &&
+        !h.includes('start') && !h.includes('from') &&
+        !h.includes('end') && !h.includes('finish') && !h.includes('to'))
     );
 
     const actualBreakColIdx = findColByAliasesFn(
       headerRow,
       aliasesByKey.ACTUAL_BREAK,
-      12,
-      h => h.includes('actual') && h.includes('break')
+      -1,
+      h => h.includes('actual') && h.includes('break') &&
+        !h.includes('start') && !h.includes('from') &&
+        !h.includes('end') && !h.includes('finish') && !h.includes('to')
+    );
+    const bookedBreakStartColIdx = findColByAliasesFn(
+      headerRow,
+      [],
+      -1,
+      h => h.includes('break') && !h.includes('actual') && (h.includes('start') || h.includes('from'))
+    );
+    const bookedBreakEndColIdx = findColByAliasesFn(
+      headerRow,
+      [],
+      -1,
+      h => h.includes('break') && !h.includes('actual') && (h.includes('end') || h.includes('finish') || h.includes('to'))
+    );
+    const actualBreakStartColIdx = findColByAliasesFn(
+      headerRow,
+      [],
+      -1,
+      h => h.includes('actual') && h.includes('break') && (h.includes('start') || h.includes('from'))
+    );
+    const actualBreakEndColIdx = findColByAliasesFn(
+      headerRow,
+      [],
+      -1,
+      h => h.includes('actual') && h.includes('break') && (h.includes('end') || h.includes('finish') || h.includes('to'))
     );
 
     const hoursColIdx = findColByAliasesFn(
@@ -105437,6 +105485,10 @@ async function parseHealthRosterWorkbookIntoHrRows(
         endColIdx,
         bookedBreakColIdx,
         actualBreakColIdx,
+        bookedBreakStartColIdx,
+        bookedBreakEndColIdx,
+        actualBreakStartColIdx,
+        actualBreakEndColIdx,
         hoursColIdx,
         finalisedColIdx,
         aliasSys
@@ -105460,6 +105512,10 @@ async function parseHealthRosterWorkbookIntoHrRows(
 
       const rawBookedBreak = bookedBreakColIdx >= 0 ? row[bookedBreakColIdx] : null;
       const rawActualBreak = actualBreakColIdx >= 0 ? row[actualBreakColIdx] : null;
+      const rawBookedBreakStart = bookedBreakStartColIdx >= 0 ? row[bookedBreakStartColIdx] : null;
+      const rawBookedBreakEnd = bookedBreakEndColIdx >= 0 ? row[bookedBreakEndColIdx] : null;
+      const rawActualBreakStart = actualBreakStartColIdx >= 0 ? row[actualBreakStartColIdx] : null;
+      const rawActualBreakEnd = actualBreakEndColIdx >= 0 ? row[actualBreakEndColIdx] : null;
 
       const rawHours     = hoursColIdx >= 0 ? row[hoursColIdx] : null;
       const rawFinalised = finalisedColIdx >= 0 ? row[finalisedColIdx] : null;
@@ -105475,11 +105531,17 @@ async function parseHealthRosterWorkbookIntoHrRows(
       const startHhmm   = excelTimeToHhmm(rawStart);
       const endHhmm     = excelTimeToHhmm(rawEnd);
 
-      const bookedBreakMins = excelBreakToMinutes(rawBookedBreak);
-      const actualBreakMins = excelBreakToMinutes(rawActualBreak);
-      const breakMins = (actualBreakMins != null)
+      const bookedBreakWindowMins = excelBreakWindowToMinutes(rawBookedBreakStart, rawBookedBreakEnd);
+      const actualBreakWindowMins = excelBreakWindowToMinutes(rawActualBreakStart, rawActualBreakEnd);
+      const bookedBreakMins = bookedBreakWindowMins != null
+        ? bookedBreakWindowMins
+        : excelBreakToMinutes(rawBookedBreak);
+      const actualBreakMins = actualBreakWindowMins != null
+        ? actualBreakWindowMins
+        : excelBreakToMinutes(rawActualBreak);
+      const explicitBreakMins = (actualBreakMins != null)
         ? actualBreakMins
-        : (bookedBreakMins != null ? bookedBreakMins : 0);
+        : (bookedBreakMins != null ? bookedBreakMins : null);
 
       const finalised   = normalizeStr(rawFinalised);
 
@@ -105515,6 +105577,15 @@ async function parseHealthRosterWorkbookIntoHrRows(
         const hs = String(rawHours).trim();
         if (hs) hoursWorked = hs;
       }
+      const elapsedShiftMinutes = computeShiftMinutes(startHhmm, endHhmm);
+      const inferredBreakMins = explicitBreakMins == null && hoursNum != null && elapsedShiftMinutes != null
+        ? Math.round(elapsedShiftMinutes - (hoursNum * 60))
+        : null;
+      const breakMins = explicitBreakMins != null
+        ? explicitBreakMins
+        : (inferredBreakMins != null && inferredBreakMins >= 0 && inferredBreakMins <= elapsedShiftMinutes
+          ? inferredBreakMins
+          : null);
 
       const staffNorm = staffName.toLowerCase();
       const wardNorm  = ward.toLowerCase();
@@ -105536,6 +105607,8 @@ async function parseHealthRosterWorkbookIntoHrRows(
         break_mins: breakMins,
         booked_break_mins: (bookedBreakMins != null ? bookedBreakMins : null),
         actual_break_mins: (actualBreakMins != null ? actualBreakMins : null),
+        break_evidence_supplied: explicitBreakMins != null,
+        break_inferred_from_worked_hours: explicitBreakMins == null && breakMins != null,
         start_utc: startUtcIso,
         end_utc: endUtcIso,
         actual_hours: (typeof hoursWorked === 'number') ? hoursWorked : (hoursNum != null ? hoursNum : null),
@@ -132578,7 +132651,7 @@ async function handleGetClient(env, req, clientId) {
       );
       const defaults = defaultsRows?.[0] || {};
       const eligible = client_settings?.is_nhsp === true
-        || (client_settings?.requires_hr === true && client_settings?.no_timesheet_required === true);
+        || (client_settings?.autoprocess_hr === true && client_settings?.no_timesheet_required === true);
       import_financial_policy = {
         eligible,
         client_settings_updated_at: client_settings?.updated_at || null,

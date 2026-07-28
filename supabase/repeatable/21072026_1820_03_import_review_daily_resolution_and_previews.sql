@@ -9,7 +9,7 @@ returns jsonb language plpgsql security definer set search_path to 'public','ext
 declare
   v_state public.import_review_states%rowtype; v_action public.import_review_decisions%rowtype;
   v_hr public.hr_rows%rowtype; v_ts public.v_timesheets_daily_match%rowtype;
-  v_ts_row public.timesheets%rowtype; v_contract public.contracts%rowtype; v_contract_id uuid;
+  v_ts_row public.timesheets%rowtype;
   v_existing public.import_review_daily_timesheet_resolutions%rowtype;
   v_mapping public.hr_daily_grade_role_mappings%rowtype; v_mapping_count integer; v_timesheet_evidence jsonb;
   v_refresh jsonb; v_hash text; v_prior jsonb;
@@ -92,28 +92,8 @@ begin
     if not found then
       raise exception 'HR_DAILY_RESOLUTION_TIMESHEET_STALE' using errcode='40001';
     end if;
-    v_contract_id:=v_ts_row.contract_id;
-    select * into v_contract from public.contracts c where c.id=v_contract_id for update;
-    if not found
-      or v_contract.candidate_id is distinct from v_action.candidate_id
-      or v_contract.client_id is distinct from v_action.client_id
-      or v_contract.start_date>v_hr.date_local
-      or (v_contract.end_date is not null and v_contract.end_date<v_hr.date_local)
-      or lower(btrim(coalesce(v_contract.role,''))) is distinct from lower(btrim(coalesce(v_mapping.role_code,'')))
-      or (nullif(btrim(coalesce(v_mapping.band_norm,'')),'') is not null
-        and lower(btrim(coalesce(v_contract.band,''))) is distinct from lower(btrim(v_mapping.band_norm)))
-      or not coalesce((select a.route_eligible
-        from public._import_review_effective_authority_core_v1(
-          'HR_DAILY',v_contract.id,v_contract.client_id,v_hr.date_local) a),false) then
-      raise exception 'HR_DAILY_RESOLUTION_CONTRACT_OUT_OF_SCOPE' using errcode='22023';
-    end if;
-    if v_action.contract_id is not null and v_contract_id is distinct from v_action.contract_id then
-      raise exception 'HR_DAILY_RESOLUTION_CONTRACT_MISMATCH' using errcode='22023';
-    end if;
     select jsonb_strip_nulls(jsonb_build_object('timesheet_id',t.timesheet_id,'updated_at',t.updated_at,
-      'contract_id',t.contract_id,'contract_updated_at',v_contract.updated_at,
-      'authority_fingerprint',(select a.authority_fingerprint
-        from public._import_review_effective_authority_core_v1('HR_DAILY',v_contract.id,v_contract.client_id,v_hr.date_local) a),
+      'contract_id',t.contract_id,
       'candidate_id',v_ts.candidate_id,'client_id',v_ts.client_id,
       'worked_start_iso',v_ts.worked_start_iso,'worked_end_iso',v_ts.worked_end_iso,
       'worked_minutes',v_ts.worked_minutes,'break_minutes',v_ts.break_minutes,

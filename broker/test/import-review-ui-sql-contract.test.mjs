@@ -99,6 +99,37 @@ test('action paging supports only the approved sizes and deterministic server-si
   assert.doesNotMatch(body, /_timesheet_query_recipient_resolve_core_v1/);
 });
 
+test('omitted HealthRoster breaks remain unknown while worked hours still validate', () => {
+  const body = functionBody(coreSql, '_import_review_action_catalog_core_v1');
+  const breakComparisons = [...body.matchAll(/and coalesce\(\(m\.payload_json->>'break_evidence_supplied'\)::boolean,false\)[\s\S]*?then 'BREAK_MINUTES'::text end/g)];
+  assert.equal(breakComparisons.length, 2, 'Daily and Weekly comparisons must both ignore an omitted import break');
+  assert.match(body, /coalesce\(\(r\.payload_json->>'break_evidence_supplied'\)::boolean,false\)[\s\S]*?then 'BREAK_MINUTES_MISMATCH'/);
+  assert.match(body, /\(f\.payload_json->>'break_mins'\) is not null[\s\S]*?then 'APPLY_AMENDMENT'/);
+  assert.match(body, /and abs\(\(m\.hours_worked\*60\)-greatest\(m\.worked_minutes-coalesce\(m\.ts_break_minutes,0\),0\)\)>1/);
+  assert.match(body, /and abs\(\(m\.hours_worked\*60\)-m\.existing_shift_paid_minutes\)>1 then 'WORKED_HOURS'/);
+  assert.match(body, /'elapsed_minutes',m\.worked_minutes[\s\S]*?'worked_minutes',greatest\(m\.worked_minutes-coalesce\(m\.ts_break_minutes,0\),0\)/);
+  assert.match(body, /abs\(\(r\.hours_worked\*60\)-greatest\(r\.worked_minutes-coalesce\(r\.break_minutes,0\),0\)\)>1/);
+});
+
+test('Daily HealthRoster validation associates contract-free Daily timesheets', () => {
+  const core = functionBody(coreSql, '_import_review_action_catalog_core_v1');
+  const resolution = functionBody(dailySql, 'hr_daily_timesheet_resolution_save_v1');
+  const apply = functionBody(dailyApplySql, 'hr_daily_apply_transactional');
+
+  assert.doesNotMatch(core, /ts\.contract_id=any\(coalesce\(dcon\.contract_ids/);
+  assert.match(core, /select distinct t\.tsfin_role role,t\.tsfin_band band[\s\S]*?from public\.v_timesheets_daily_match t/);
+  assert.match(core, /when not f\.is_daily and coalesce\(f\.contract_count,0\)=0 then 'ADVISORY'/);
+  assert.doesNotMatch(core, /when f\.is_daily and f\.contract_count>1/);
+  assert.doesNotMatch(core, /when m\.is_daily and m\.contract_count>1 then 'CONTRACT_AMBIGUOUS'/);
+
+  assert.match(resolution, /select \* into v_ts from public\.v_timesheets_daily_match/);
+  assert.doesNotMatch(resolution, /HR_DAILY_RESOLUTION_CONTRACT_OUT_OF_SCOPE|HR_DAILY_RESOLUTION_CONTRACT_MISMATCH/);
+  assert.doesNotMatch(resolution, /select \* into v_contract from public\.contracts/);
+
+  assert.match(apply, /join public\.timesheets_financials scoped_financial[\s\S]*?scoped_financial\.candidate_id=scoped_candidate\.candidate_id/);
+  assert.doesNotMatch(apply, /join public\.contracts scoped_contract/);
+});
+
 test('weekly action classification consumes the established phase2 mapping authority', () => {
   const body = functionBody(coreSql, '_import_review_action_catalog_core_v1');
   assert.match(body, /weekly_phase as materialized/);
@@ -152,17 +183,18 @@ test('Daily automatic and saved resolution both enforce the active mapped role a
   assert.match(catalogue, /lower\(btrim\(coalesce\(t\.tsfin_role,''\)\)\)=lower\(btrim\(coalesce\(dgm\.role_code,''\)\)\)/);
   assert.match(catalogue, /t\.tsfin_band/);
   assert.match(catalogue, /daily_mapping_updated_at/);
-  assert.match(catalogue, /dcon\.contract_ids/);
-  assert.match(catalogue, /ts\.contract_id=any\(coalesce\(dcon\.contract_ids,array\[\]::uuid\[\]\)\)/);
-  assert.match(catalogue, /coalesce\(rtsx\.contract_id,dcon\.contract_id\)/);
+  assert.match(catalogue, /t\.candidate_id=m\.resolved_candidate_id and t\.client_id=m\.resolved_client_id/);
+  assert.match(catalogue, /\(t\.worked_start_iso at time zone 'Europe\/London'\)::date=m\.date_local/);
+  assert.doesNotMatch(catalogue, /ts\.contract_id=any\(coalesce\(dcon\.contract_ids,array\[\]::uuid\[\]\)\)/);
   assert.match(save, /HR_DAILY_RESOLUTION_GRADE_MAPPING_STALE/);
   assert.match(save, /HR_DAILY_RESOLUTION_GRADE_ROLE_MISMATCH/);
   assert.match(save, /v_mapping\.role_code/);
   assert.match(save, /v_mapping\.band_norm/);
   assert.match(save, /mapping_evidence/);
   assert.match(save, /timesheet_evidence/);
-  assert.match(save, /v_action\.contract_id is not null and v_contract_id is distinct from v_action\.contract_id/);
-  assert.match(save, /HR_DAILY_RESOLUTION_CONTRACT_OUT_OF_SCOPE/);
+  assert.match(save, /v_ts\.candidate_id is distinct from v_action\.candidate_id/);
+  assert.match(save, /v_ts\.client_id is distinct from v_action\.client_id/);
+  assert.doesNotMatch(save, /HR_DAILY_RESOLUTION_CONTRACT_OUT_OF_SCOPE/);
 });
 
 test('one owner-only current-setting authority core governs catalogue and Weekly apply', () => {
