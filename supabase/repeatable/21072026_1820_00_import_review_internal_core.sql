@@ -1270,7 +1270,21 @@ begin
       select p.*,
         coalesce((select jsonb_agg(cx.value order by cx.value->>'work_date',cx.value->>'comparison_key')
           from jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
-          where coalesce(cx.value->>'match_status','MATCH')<>'HR_ONLY'),'[]'::jsonb) email_comparisons,
+          where (
+            coalesce(cx.value->>'match_status','MATCH') not in ('MATCH','HR_ONLY')
+            or coalesce((cx.value->>'ref_changed')::boolean,false)
+          )),'[]'::jsonb) email_comparisons,
+        coalesce((select jsonb_agg(day_json.value order by day_json.value->>'date')
+          from jsonb_array_elements(coalesce(p.row_json->'days','[]'::jsonb)) day_json(value)
+          where exists (
+            select 1
+            from jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
+            where cx.value->>'work_date'=day_json.value->>'date'
+              and (
+                coalesce(cx.value->>'match_status','MATCH') not in ('MATCH','HR_ONLY')
+                or coalesce((cx.value->>'ref_changed')::boolean,false)
+              )
+          )),'[]'::jsonb) email_days,
         coalesce((select jsonb_agg(to_jsonb(fr.value))
           from jsonb_array_elements_text(coalesce(p.row_json->'failure_reasons','[]'::jsonb)) fr(value)
           where fr.value<>'HealthRoster has a shift not present on the timesheet.'),'[]'::jsonb) email_failure_reasons
@@ -1315,7 +1329,9 @@ begin
       case when coalesce((a.protection->>'active_pay_draft')::boolean,false) then 'BLOCKED' else 'EMAIL' end,
       'issue:'||a.email_issue_fingerprint,a.email_issue_fingerprint,null::uuid,a.timesheet_id,null::uuid,
       a.client_id,a.candidate_id,a.contract_id,a.issue_id,
-      public._import_review_hash_v1(concat_ws('|','weekly-query-evidence-v1',a.row_json::text,a.protection::text,
+      public._import_review_hash_v1(concat_ws('|','weekly-query-evidence-v2',a.timesheet_id,
+        a.row_json->>'candidate_name',a.row_json->>'week_ending_date',
+        a.email_comparisons::text,a.email_days::text,a.email_failure_reasons::text,a.protection::text,
         a.route_fingerprint,coalesce(a.delivery_history_status,'NEW'),coalesce(a.sent_count,0))),
       a.valid_email and not coalesce((a.protection->>'active_pay_draft')::boolean,false),
       a.issue_id is null and a.valid_email and not coalesce((a.protection->>'active_pay_draft')::boolean,false),
@@ -1323,7 +1339,7 @@ begin
       jsonb_build_object('reason_code','HEALTHROSTER_WEEKLY','issue_fingerprint',a.email_issue_fingerprint,
         'candidate_name',a.row_json->>'candidate_name','week_ending_date',a.row_json->>'week_ending_date',
       'failure_reasons',a.email_failure_reasons,
-        'days',coalesce(a.row_json->'days','[]'::jsonb),'comparisons',a.email_comparisons,
+        'days',a.email_days,'comparisons',a.email_comparisons,
         'evidence_rows',coalesce((
           select jsonb_agg(jsonb_build_object(
             'imported_evidence',jsonb_strip_nulls(jsonb_build_object(

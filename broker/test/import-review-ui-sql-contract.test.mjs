@@ -150,7 +150,7 @@ test('weekly action classification consumes the established phase2 mapping autho
   assert.match(body, /DAILY_TIMESHEET_NOT_SUBMITTED/);
   assert.match(body, /DAILY_SHIFT_ABSENT_FROM_TIMESHEET/);
   assert.match(body, /Candidate timesheet states they did not work this shift/);
-  assert.match(body, /match_status','MATCH'\)<>'HR_ONLY'/);
+  assert.match(body, /match_status','MATCH'\) not in \('MATCH','HR_ONLY'\)/);
   assert.match(body, /validation-email-v2/);
   assert.match(body, /and not coalesce\(m\.contract_rate_complete,false\) then 'CONTRACT_RATES_INCOMPLETE'/);
   assert.match(body, /source_route_eligible',coalesce\(o\.route_eligible,false\)/);
@@ -159,6 +159,26 @@ test('weekly action classification consumes the established phase2 mapping autho
   assert.match(body, /'evidence_rows'/);
   assert.match(body, /healthroster_start/);
   assert.match(body, /timesheet_start/);
+});
+
+test('HealthRoster query emails contain only shifts requiring Temporary Staffing attention', () => {
+  const catalogue = functionBody(coreSql, '_import_review_action_catalog_core_v1');
+  const enqueue = functionBody(emailSql, 'timesheet_query_email_enqueue_v1');
+
+  assert.match(catalogue, /email_comparisons/);
+  assert.match(catalogue, /coalesce\(cx\.value->>'match_status','MATCH'\) not in \('MATCH','HR_ONLY'\)/);
+  assert.match(catalogue, /or coalesce\(\(cx\.value->>'ref_changed'\)::boolean,false\)/);
+  assert.match(catalogue, /email_days/);
+  assert.match(catalogue, /weekly-query-evidence-v2/);
+  assert.match(catalogue, /'days',a\.email_days,'comparisons',a\.email_comparisons/);
+
+  // Daily validation already creates one email action only from a mismatch row.
+  assert.match(catalogue, /from mismatch m where m\.reason_code is not null/);
+
+  // The final renderer independently fails closed if an older stored action
+  // still contains matched comparison rows.
+  assert.match(enqueue, /coalesce\(c\.value->>'match_status',''\)<>'MATCH'/);
+  assert.match(enqueue, /coalesce\(c\.value->>'ref_before',''\)<>coalesce\(c\.value->>'ref_after',''\)/);
 });
 
 test('a missing Weekly timesheet retains one server-owned imported-evidence action per shift', () => {
