@@ -975,6 +975,22 @@ test('attachment-index render passes carry their frozen presentation identity', 
   );
   assert.match(
     workComplete,
+    /'row_id',coalesce\([\s\S]*display_row\.value->>'logical_source_key'[\s\S]*display_row\.value->>'row_id'/i,
+  );
+  assert.match(
+    workComplete,
+    /'attachment_number',coalesce\([\s\S]*display_row\.display_no::integer/i,
+  );
+  assert.match(
+    workComplete,
+    /'document_type',coalesce\([\s\S]*display_row\.value->>'label'[\s\S]*display_row\.value->>'input_type'/i,
+  );
+  assert.match(
+    workComplete,
+    /'expected_start_pages_hash',[\s\S]*encode\(digest\(f\.attachments::text,'sha256'\),'hex'\)/i,
+  );
+  assert.match(
+    workComplete,
     /case when i\.chunk_type='SOURCE_RENDER'[\s\S]*then i\.payload_json->>'source_revision' end,[\s\S]*i\.asset_source_revision,i\.document_source_revision/i,
   );
 });

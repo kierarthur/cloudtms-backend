@@ -435,6 +435,13 @@ async function putImmutableInvoiceArtifact(bucket, key, bytes, metadata) {
 
 function deriveAttachmentDisplayMap(layout, finalIndexPageCount) {
   const stream = Array.isArray(layout.pagination_stream) ? layout.pagination_stream : [];
+  const seedRows = Array.isArray(layout.display_rows)
+    ? layout.display_rows
+    : (Array.isArray(layout.attachments) ? layout.attachments : []);
+  const seedByLogicalSource = new Map(seedRows.map((row, index) => [
+    String(row?.logical_source_key || row?.row_id || ''),
+    { ...row, attachment_number: row?.attachment_number ?? index + 1 }
+  ]).filter(([key]) => key));
   const displayed = new Map();
   const physicalParts = new Set();
   let currentPage = 1;
@@ -462,14 +469,17 @@ function deriveAttachmentDisplayMap(layout, finalIndexPageCount) {
       if (physicalParts.has(physicalPartId)) throw Object.assign(new Error('ATTACHMENT_PAGINATION_PHYSICAL_PART_DUPLICATE'), { code: 'ATTACHMENT_PAGINATION_PHYSICAL_PART_DUPLICATE' });
       physicalParts.add(physicalPartId);
       if (rowId) {
+        const seed = seedByLogicalSource.get(rowId) || {};
         const row = displayed.get(rowId) || {
           row_id: rowId,
-          attachment_number: part.attachment_number,
-          worker: part.worker || part.source,
-          week_or_date: part.week_or_date,
-          document_type: part.document_type || part.input_type,
-          evidence_description: part.evidence_description || part.description,
-          reference: part.reference,
+          attachment_number: seed.attachment_number ?? part.attachment_number ?? displayed.size + 1,
+          worker: seed.worker ?? seed.source ?? part.worker ?? part.source ?? null,
+          week_or_date: seed.week_or_date ?? part.week_or_date ?? null,
+          document_type: seed.document_type ?? seed.label
+            ?? part.document_type ?? part.label ?? part.input_type ?? null,
+          evidence_description: seed.evidence_description ?? seed.label
+            ?? part.evidence_description ?? part.description ?? part.label ?? null,
+          reference: seed.reference ?? part.reference ?? null,
           start_page: currentPage,
           page_count: 0
         };

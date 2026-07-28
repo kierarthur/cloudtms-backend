@@ -514,12 +514,12 @@ test('attachment pagination correlates the DB logical source key', () => {
   );
   assert.deepEqual(rows, [{
     row_id: 'timesheet:source-1',
-    attachment_number: undefined,
-    worker: undefined,
-    week_or_date: undefined,
+    attachment_number: 1,
+    worker: null,
+    week_or_date: null,
     document_type: 'TIMESHEET',
-    evidence_description: undefined,
-    reference: undefined,
+    evidence_description: null,
+    reference: null,
     start_page: 4,
     page_count: 2
   }]);
@@ -529,6 +529,37 @@ test('attachment pagination correlates the DB logical source key', () => {
     }, 0),
     /ATTACHMENT_PAGINATION_LOGICAL_ROW_MISSING/
   );
+});
+
+test('attachment pagination preserves the frozen canonical display row', () => {
+  const frozenRow = {
+    row_id: 'nhsp:source-1',
+    attachment_number: 1,
+    worker: null,
+    week_or_date: null,
+    document_type: 'Nhsp supporting report',
+    evidence_description: 'Nhsp supporting report',
+    reference: null,
+    start_page: 2,
+    page_count: 1
+  };
+  const rows = invoiceQueueRuntimeInternals.deriveAttachmentDisplayMap({
+    display_rows: [frozenRow],
+    attachments: [frozenRow],
+    expected_logical_attachment_count: 1,
+    expected_physical_page_count: 3,
+    pagination_stream: [
+      { input_type: 'INVOICE_CORE', page_count: 1 },
+      {
+        input_type: 'NHSP_SUPPORT',
+        logical_source_key: 'nhsp:source-1',
+        physical_part_id: 'nhsp:source-1:1',
+        page_count: 1
+      },
+      { input_type: 'ATTACHMENT_INDEX', page_count: 0 }
+    ]
+  }, 1);
+  assert.deepEqual(rows, [frozenRow]);
 });
 
 test('retired synchronous generation route returns 410 and starts no work', async () => {
@@ -578,12 +609,12 @@ test('attachment pagination correlates the DB logical source key', () => {
   );
   assert.deepEqual(rows, [{
     row_id: 'timesheet:source-1',
-    attachment_number: undefined,
-    worker: undefined,
-    week_or_date: undefined,
+    attachment_number: 1,
+    worker: null,
+    week_or_date: null,
     document_type: 'TIMESHEET',
-    evidence_description: undefined,
-    reference: undefined,
+    evidence_description: null,
+    reference: null,
     start_page: 4,
     page_count: 2
   }]);

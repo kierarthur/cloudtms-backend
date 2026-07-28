@@ -1061,7 +1061,26 @@ begin
     from next_pass_source n
     cross join lateral (
       select coalesce(jsonb_agg(
-        display_row.value||jsonb_build_object(
+        jsonb_build_object(
+          'row_id',coalesce(
+            nullif(display_row.value->>'logical_source_key',''),
+            nullif(display_row.value->>'row_id','')),
+          'attachment_number',coalesce(
+            (display_row.value->>'attachment_number')::integer,
+            display_row.display_no::integer),
+          'worker',coalesce(
+            nullif(display_row.value->>'worker',''),
+            nullif(display_row.value->>'source','')),
+          'week_or_date',nullif(display_row.value->>'week_or_date',''),
+          'document_type',coalesce(
+            nullif(display_row.value->>'document_type',''),
+            nullif(display_row.value->>'label',''),
+            nullif(display_row.value->>'input_type','')),
+          'evidence_description',coalesce(
+            nullif(display_row.value->>'evidence_description',''),
+            nullif(display_row.value->>'label','')),
+          'reference',nullif(display_row.value->>'reference',''),
+          'page_count',(display_row.value->>'page_count')::integer,
           'start_page',1+coalesce((
             select sum(case
               when preceding.value->>'input_type'='ATTACHMENT_INDEX'
@@ -1087,15 +1106,17 @@ begin
           then n.payload_json->'display_rows'
           when jsonb_typeof(n.payload_json->'attachments')='array'
           then n.payload_json->'attachments'
-          else '[]'::jsonb end) display_row(value)
+          else '[]'::jsonb end) with ordinality
+        display_row(value,display_no)
       join lateral (
         select stream.stream_no
         from jsonb_array_elements(
           case when jsonb_typeof(n.payload_json->'pagination_stream')='array'
             then n.payload_json->'pagination_stream'
             else '[]'::jsonb end) with ordinality stream(value,stream_no)
-        where stream.value->>'logical_source_key'=
-            display_row.value->>'logical_source_key'
+        where stream.value->>'logical_source_key'=coalesce(
+            display_row.value->>'logical_source_key',
+            display_row.value->>'row_id')
           and coalesce(stream.value->>'is_displayed_attachment','false')='true'
         order by stream.stream_no
         limit 1
