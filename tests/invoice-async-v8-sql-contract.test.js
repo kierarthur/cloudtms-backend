@@ -835,6 +835,34 @@ test('document manifest planning freezes snapshot and manifest in one version up
   );
 });
 
+test('attachment-index render passes carry their frozen presentation identity', () => {
+  const downstreamAdvance = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+    + '24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql',
+  );
+  const workComplete = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+    + '24072026_1217_invoice_work_complete_batch.sql',
+  );
+
+  assert.match(
+    downstreamAdvance,
+    /attachment_index_measure[\s\S]*'presentation_model_schema_version',[\s\S]*'ATTACHMENT_INDEX_PRESENTATION_V1'/i,
+  );
+  assert.match(
+    downstreamAdvance,
+    /'presentation_model_hash',encode\(digest\(jsonb_build_object\([\s\S]*'manifest_ordinal',a\.index_ordinal\)::text,'sha256'\),'hex'\)/i,
+  );
+  assert.match(
+    downstreamAdvance,
+    /'snapshot_hash',a\.snapshot_hash/i,
+  );
+  assert.match(
+    workComplete,
+    /f\.payload_json\|\|jsonb_build_object\([\s\S]*'layout_phase','FINAL'/i,
+  );
+});
+
 test('document merge retry requeues the plan into the implemented wait-for-merge phase', () => {
   const operationControl = read(
     'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql',
