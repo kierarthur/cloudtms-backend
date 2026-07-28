@@ -833,7 +833,7 @@ test('document merge retry requeues the plan into the implemented wait-for-merge
   assert.match(documentAdvance, /where x->>'phase'='WAIT_FOR_MERGE'/i);
 });
 
-test('merge and verify processor contexts carry the frozen document template identity', () => {
+test('merge and verify processor contexts carry frozen document identity', () => {
   const workContext = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
     + '24072026_1217_invoice_work_context_batch.sql'
@@ -844,7 +844,9 @@ test('merge and verify processor contexts carry the frozen document template ide
   const verifyContext = workContext.match(
     /when v\.chunk_type='DOCUMENT_VERIFY' then jsonb_build_object\(([\s\S]*?)else '\{\}'::jsonb/
   )?.[1] || '';
+  assert.match(mergeContext, /'source_revision',v\.document_source_revision/);
   assert.match(mergeContext, /'template_version',v\.template_version/);
+  assert.match(verifyContext, /'source_revision',v\.document_source_revision/);
   assert.match(verifyContext, /'template_version',v\.template_version/);
 });
 
