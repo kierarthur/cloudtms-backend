@@ -146143,10 +146143,53 @@ async function handleListInvoices(env, req) {
 
   try {
     const { rows, total } = await sbFetch(env, url, includeCount);
+    const invoiceRows = Array.isArray(rows) ? rows : [];
+    const pageInvoiceIds = Array.from(new Set(
+      invoiceRows
+        .map(row => String(row?.id || '').trim())
+        .filter(id => uuidRe.test(id))
+    ));
+    const invoicesWithAttachments = new Set();
+
+    for (let index = 0; index < pageInvoiceIds.length; index += 100) {
+      const chunk = pageInvoiceIds.slice(index, index + 100);
+      if (!chunk.length) continue;
+      const attachmentUrl =
+        `${env.SUPABASE_URL}/rest/v1/invoice_lines?select=invoice_id` +
+        `&invoice_id=in.(${chunk.map(enc).join(',')})` +
+        `&timesheet_id=not.is.null&limit=20000&offset=0`;
+      const { rows: attachmentRows } = await sbFetch(env, attachmentUrl, false);
+      for (const attachmentRow of (attachmentRows || [])) {
+        const invoiceId = String(attachmentRow?.invoice_id || '').trim();
+        if (uuidRe.test(invoiceId)) invoicesWithAttachments.add(invoiceId);
+      }
+    }
+
+    const enrichedRows = invoiceRows.map(row => {
+      const invoiceId = String(row?.id || '').trim();
+      const attachmentExpected = invoicesWithAttachments.has(invoiceId);
+      const invoiceStatus = String(row?.status || '').trim().toUpperCase();
+      const issuedDocumentAuthority = !!row?.issued_at_utc
+        || ['ISSUED', 'PAID', 'PART_PAID', 'PARTIALLY_PAID'].includes(invoiceStatus);
+      const readyVersionId = issuedDocumentAuthority
+        ? String(row?.issued_document_version_id || '').trim()
+        : String(row?.preview_document_version_id || '').trim();
+      const attachmentReady = attachmentExpected
+        && String(row?.document_state || '').trim().toUpperCase() === 'READY'
+        && uuidRe.test(readyVersionId);
+      return {
+        ...row,
+        attachment_expected: attachmentExpected,
+        attachment_ready: attachmentReady,
+        attachment_state: attachmentExpected
+          ? (attachmentReady ? 'READY' : 'PENDING')
+          : null
+      };
+    });
 
     const resp = includeCount
-      ? { items: rows || [], count: total ?? undefined, page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset }
-      : { items: rows || [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
+      ? { items: enrichedRows, count: total ?? undefined, page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset }
+      : { items: enrichedRows, page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
 
     if (includeTotals) {
       if (!finalIdFilter) {

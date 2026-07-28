@@ -41,7 +41,7 @@ import {
 } from '../invoice-document-processor/src/receipt-contract.js';
 
 const V8_ACTOR_ID = '00000000-0000-4000-8000-000000000010';
-const V8_FUNCTION_MANIFEST = '9bcb583d401c154bfdb597588c8bd5d94ed6ca47688d7c11fc9efbe631c38094';
+const V8_FUNCTION_MANIFEST = '107b7c106a1aa8457d625753e4373f1987742369b2c11ea929d862eeb0dac2f4';
 const V8_CURSOR_SECRET = 'test-session-secret-with-more-than-thirty-two-characters';
 
 function v8DatabaseContract(overrides = {}) {
@@ -2578,4 +2578,8 @@ test('invoice summary projection uses only installed document authority and expo
   assert.ok(listHandler.includes("'issued_document_version_id'"));
   assert.ok(listHandler.includes("'active_document_operation_id'"));
   assert.ok(listHandler.includes("'active_issue_operation_id'"));
+  assert.ok(listHandler.includes('attachment_expected'));
+  assert.ok(listHandler.includes('attachment_ready'));
+  assert.ok(listHandler.includes('attachment_state'));
+  assert.ok(listHandler.includes('&timesheet_id=not.is.null'));
 });
