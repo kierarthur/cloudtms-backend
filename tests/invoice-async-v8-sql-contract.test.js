@@ -1056,6 +1056,14 @@ test('batch rollup separates carrier trigger writes from the root update', () =>
     rollup.slice(returnQueryIndex),
     /updated_roots\s+as\s+materialized\s*\(\s*update\s+public\.invoice_operations\s+root/i,
   );
+  assert.match(
+    rollup,
+    /when root\.status in \('FAILED','DEAD_LETTER'\)\s+and not p\.manifest_committed then root\.status/gi,
+  );
+  assert.match(
+    rollup,
+    /root\.status in \('FAILED','DEAD_LETTER'\)\s+or p\.failed_total\+p\.blocked_total\+p\.changed_total>0/i,
+  );
 });
 
 test('generation resolves NHSP financials to the SELF_BILL invoice stream without losing their source family', () => {

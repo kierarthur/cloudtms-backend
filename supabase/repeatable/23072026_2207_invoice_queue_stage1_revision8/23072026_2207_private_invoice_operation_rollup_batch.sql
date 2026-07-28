@@ -459,6 +459,8 @@ begin
     set
       status=case
         when root.status='CANCELLED' then root.status
+        when root.status in ('FAILED','DEAD_LETTER')
+         and not p.manifest_committed then root.status
         when root.status='BLOCKED'
          and root.error_json->>'code'
           ='BATCH_SNAPSHOT_CHANGED_DURING_EXPANSION'
@@ -476,6 +478,8 @@ begin
       end,
       phase=case
         when root.status='CANCELLED' then root.phase
+        when root.status in ('FAILED','DEAD_LETTER')
+         and not p.manifest_committed then root.phase
         when root.status='BLOCKED'
          and root.error_json->>'code'
           ='BATCH_SNAPSHOT_CHANGED_DURING_EXPANSION'
@@ -502,9 +506,13 @@ begin
       result_json=coalesce(root.result_json,'{}'::jsonb)
         || jsonb_build_object('batch_progress',p.progress_json),
       requires_user_action=(
-        p.failed_total+p.blocked_total+p.changed_total>0
+        root.status in ('FAILED','DEAD_LETTER')
+        or p.failed_total+p.blocked_total+p.changed_total>0
       ),
       completed_at_utc=case
+        when root.status in ('FAILED','DEAD_LETTER')
+         and not p.manifest_committed
+          then coalesce(root.completed_at_utc,v_now)
         when p.manifest_committed
          and p.release_complete
          and coalesce(
@@ -534,6 +542,8 @@ begin
           )
           or root.status is distinct from case
             when root.status='CANCELLED' then root.status
+            when root.status in ('FAILED','DEAD_LETTER')
+             and not p.manifest_committed then root.status
             when root.status='BLOCKED'
              and root.error_json->>'code'
               ='BATCH_SNAPSHOT_CHANGED_DURING_EXPANSION'
