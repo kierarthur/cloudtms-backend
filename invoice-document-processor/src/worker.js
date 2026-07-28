@@ -196,6 +196,17 @@ function resultIdentity(expected) {
   return { chunk_id: expected.chunk_id, fence_token: expected.fence_token, action: expected.action, document_version_id: expected.document_version_id || undefined, document_asset_id: expected.document_asset_id || undefined, plan_generation: expected.plan_generation, source_revision: expected.source_revision || undefined, template_version: expected.template_version || undefined, processor_policy_version: expected.processor_policy_version, render_kind: expected.render_kind || undefined, ordered_input_hash: expected.ordered_input_hash || undefined, output_prefix: expected.immutable_destination_prefix };
 }
 
+function validateLogicalManifestOrder(logicalRows) {
+  for (let index = 0; index < logicalRows.length; index += 1) {
+    if (Number(logicalRows[index].logicalOrdinal) !== index) {
+      throw Object.assign(
+        new Error('FINAL_LOGICAL_INPUT_ORDER_INVALID'),
+        { code: 'FINAL_LOGICAL_INPUT_ORDER_INVALID' }
+      );
+    }
+  }
+}
+
 function decodeProcessorHeader(response) {
   const encoded = response.headers.get('x-cloudtms-result');
   if (!encoded || encoded.length > 65536) throw Object.assign(new Error('PROCESSOR_RESULT_HEADER_INVALID'), { code: 'PROCESSOR_RESULT_HEADER_INVALID' });
@@ -370,11 +381,7 @@ async function buildVerificationOnlyResult(identity, context, metadata) {
     .sort((left, right) => Number(left.logicalOrdinal) - Number(right.logicalOrdinal)
       || left.logicalSourceKey.localeCompare(right.logicalSourceKey));
 
-  for (let index = 0; index < logicalRows.length; index += 1) {
-    if (Number(logicalRows[index].logicalOrdinal) !== index + 1) {
-      throw Object.assign(new Error('FINAL_LOGICAL_INPUT_ORDER_INVALID'), { code: 'FINAL_LOGICAL_INPUT_ORDER_INVALID' });
-    }
-  }
+  validateLogicalManifestOrder(logicalRows);
 
   const logicalCount = logicalRows.length;
   if (context.expected_logical_source_count != null
@@ -588,6 +595,7 @@ export const invoiceDocumentProcessorInternals = Object.freeze({
   fixedLengthFramedBody,
   fixedLengthReadableBody,
   resultIdentity,
+  validateLogicalManifestOrder,
   buildMergeReceipt,
   flattenLeafInputReceipts,
   verifyMergeReceiptTree,

@@ -29,6 +29,7 @@ const {
   fixedLengthFramedBody,
   fixedLengthReadableBody,
   resultIdentity,
+  validateLogicalManifestOrder,
   putImmutableProcessorArtifact,
   classifyError
 } = invoiceDocumentProcessorInternals;
@@ -168,6 +169,17 @@ test('merge receipts accept the zero-based manifest ordinal used by document pla
       descriptor: { ...input.descriptor, logical_manifest_ordinal: '' }
     }, actual, 0),
     /LOGICAL_MANIFEST_ORDINAL_INVALID/
+  );
+});
+
+test('final verification requires contiguous zero-based logical manifest order', () => {
+  assert.doesNotThrow(() => validateLogicalManifestOrder([
+    { logicalOrdinal: '0' },
+    { logicalOrdinal: '1' }
+  ]));
+  assert.throws(
+    () => validateLogicalManifestOrder([{ logicalOrdinal: '1' }]),
+    /FINAL_LOGICAL_INPUT_ORDER_INVALID/
   );
 });
 
