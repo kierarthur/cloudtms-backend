@@ -1478,6 +1478,24 @@ test('repeatable deployment avoids no-op workbench session table locks', () => {
   );
 });
 
+test('contract override defaults work without a client settings row', () => {
+  const extras = read('supabase/repeatable/19012026_extras.sql');
+  const triggerFunction = extras.match(
+    /create or replace function public\.contracts_enforce_overrideclientsettings\(\)[\s\S]*?\n\$\$;/i,
+  )?.[0] || '';
+  assert.ok(triggerFunction);
+  assert.doesNotMatch(triggerFunction, /\bcs record\b/i);
+  assert.match(triggerFunction, /v_no_timesheet_required boolean;/i);
+  assert.match(
+    triggerFunction,
+    /coalesce\(new\.no_timesheet_required,\s*v_no_timesheet_required,\s*false\)/i,
+  );
+  assert.match(
+    triggerFunction,
+    /new\.manual_invoices_alt_email_address := v_manual_invoices_alt_email_address;/i,
+  );
+});
+
 test('normalised timesheet evidence adopts the exact registered asset revision', () => {
   const workComplete = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'

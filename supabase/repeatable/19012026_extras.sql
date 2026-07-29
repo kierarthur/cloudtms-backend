@@ -5023,7 +5023,17 @@ security definer
 set search_path = public
 as $$
 declare
-  cs record;
+  v_no_timesheet_required boolean;
+  v_daily_calc_of_invoices boolean;
+  v_group_nightsat_sunbh boolean;
+  v_is_nhsp boolean;
+  v_autoprocess_hr boolean;
+  v_requires_hr boolean;
+  v_hr_attach_to_invoice boolean;
+  v_ts_attach_to_invoice boolean;
+  v_reference_number_required_to_issue_invoice boolean;
+  v_send_manual_invoices_to_different_email boolean;
+  v_manual_invoices_alt_email_address text;
 begin
   -- Normalise NULL -> false (shouldn't happen because column is NOT NULL, but safe)
   new.overrideclientsettings := coalesce(new.overrideclientsettings, false);
@@ -5069,7 +5079,18 @@ begin
     cs.reference_number_required_to_issue_invoice,
     cs.send_manual_invoices_to_different_email,
     cs.manual_invoices_alt_email_address
-  into cs
+  into
+    v_no_timesheet_required,
+    v_daily_calc_of_invoices,
+    v_group_nightsat_sunbh,
+    v_is_nhsp,
+    v_autoprocess_hr,
+    v_requires_hr,
+    v_hr_attach_to_invoice,
+    v_ts_attach_to_invoice,
+    v_reference_number_required_to_issue_invoice,
+    v_send_manual_invoices_to_different_email,
+    v_manual_invoices_alt_email_address
   from public.client_settings cs
   where cs.client_id = new.client_id
   order by cs.effective_from desc nulls last, cs.updated_at desc
@@ -5077,28 +5098,28 @@ begin
 
   -- For booleans: never leave NULL when override is ON.
   -- If no client_settings row exists, fall back to defaults that match client_settings defaults.
-  new.no_timesheet_required  := coalesce(new.no_timesheet_required,  cs.no_timesheet_required,  false);
-  new.daily_calc_of_invoices := coalesce(new.daily_calc_of_invoices, cs.daily_calc_of_invoices, false);
-  new.group_nightsat_sunbh   := coalesce(new.group_nightsat_sunbh,   cs.group_nightsat_sunbh,   false);
-  new.is_nhsp                := coalesce(new.is_nhsp,                cs.is_nhsp,                false);
-  new.autoprocess_hr         := coalesce(new.autoprocess_hr,         cs.autoprocess_hr,         false);
-  new.requires_hr            := coalesce(new.requires_hr,            cs.requires_hr,            false);
+  new.no_timesheet_required  := coalesce(new.no_timesheet_required,  v_no_timesheet_required,  false);
+  new.daily_calc_of_invoices := coalesce(new.daily_calc_of_invoices, v_daily_calc_of_invoices, false);
+  new.group_nightsat_sunbh   := coalesce(new.group_nightsat_sunbh,   v_group_nightsat_sunbh,   false);
+  new.is_nhsp                := coalesce(new.is_nhsp,                v_is_nhsp,                false);
+  new.autoprocess_hr         := coalesce(new.autoprocess_hr,         v_autoprocess_hr,         false);
+  new.requires_hr            := coalesce(new.requires_hr,            v_requires_hr,            false);
 
   -- These default TRUE in client_settings
-  new.hr_attach_to_invoice   := coalesce(new.hr_attach_to_invoice,   cs.hr_attach_to_invoice,   true);
-  new.ts_attach_to_invoice   := coalesce(new.ts_attach_to_invoice,   cs.ts_attach_to_invoice,   true);
+  new.hr_attach_to_invoice   := coalesce(new.hr_attach_to_invoice,   v_hr_attach_to_invoice,   true);
+  new.ts_attach_to_invoice   := coalesce(new.ts_attach_to_invoice,   v_ts_attach_to_invoice,   true);
 
   -- New governed issue/email flags (default FALSE in client_settings)
   new.reference_number_required_to_issue_invoice :=
-    coalesce(new.reference_number_required_to_issue_invoice, cs.reference_number_required_to_issue_invoice, false);
+    coalesce(new.reference_number_required_to_issue_invoice, v_reference_number_required_to_issue_invoice, false);
 
   new.send_manual_invoices_to_different_email :=
-    coalesce(new.send_manual_invoices_to_different_email, cs.send_manual_invoices_to_different_email, false);
+    coalesce(new.send_manual_invoices_to_different_email, v_send_manual_invoices_to_different_email, false);
 
   -- If send_manual is TRUE, alt email must be present (try fill from client_settings first)
   if new.send_manual_invoices_to_different_email = true then
     if new.manual_invoices_alt_email_address is null or btrim(new.manual_invoices_alt_email_address) = '' then
-      new.manual_invoices_alt_email_address := cs.manual_invoices_alt_email_address;
+      new.manual_invoices_alt_email_address := v_manual_invoices_alt_email_address;
     end if;
 
     if new.manual_invoices_alt_email_address is null or btrim(new.manual_invoices_alt_email_address) = '' then
@@ -7684,5 +7705,4 @@ BEGIN
   RETURN TO_CHAR(v_local_ts, 'FMDD FMMonth YYYY "at" HH24:MI "hrs"') || ' (UK time)';
 END;
 $function$;
-
 
