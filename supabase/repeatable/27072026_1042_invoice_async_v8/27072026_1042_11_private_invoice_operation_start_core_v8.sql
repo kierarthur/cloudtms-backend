@@ -959,14 +959,30 @@ begin
   ),
   inserted_chunks as materialized (
     insert into public.invoice_operation_chunks(
-      operation_id,chunk_type,phase,work_key,sequence_no,entity_type,entity_id,
+      id,operation_id,chunk_type,phase,work_key,sequence_no,entity_type,entity_id,
       document_version_id,document_asset_id,status,priority,run_after_utc,
       payload_json,operation_control_version,manifest_generation,
       is_manifest_member,manifest_committed,result_visible,
       created_at_utc,updated_at_utc)
-    select c.operation_id,c.chunk_type,c.phase,c.work_key,c.sequence_no,c.entity_type,c.entity_id,
+    select generated.id,c.operation_id,c.chunk_type,c.phase,c.work_key,c.sequence_no,
+      c.entity_type,c.entity_id,
       c.document_version_id,c.document_asset_id,'QUEUED',c.priority,v_now,
-      c.payload_json,c.control_version,
+      case when c.chunk_type='DELIVERY_PREPARE'
+        then jsonb_set(
+          jsonb_set(
+            jsonb_set(
+              coalesce(c.payload_json,'{}'::jsonb),
+              '{request_key}',
+              to_jsonb(generated.id::text),
+              true),
+            '{routing_request,request_key}',
+            to_jsonb(generated.id::text),
+            true),
+          '{frozen_delivery_route,request_key}',
+          to_jsonb(generated.id::text),
+          true)
+        else c.payload_json end,
+      c.control_version,
       case when c.chunk_type in ('ISSUE_INVOICE','DELIVERY_PREPARE')
         then 1 else 0 end,
       c.chunk_type in ('ISSUE_INVOICE','DELIVERY_PREPARE'),
@@ -974,25 +990,12 @@ begin
       false,
       v_now,v_now
     from chunk_specs c
+    cross join lateral (
+      select gen_random_uuid() id
+      where c.operation_id is not null
+    ) generated
     on conflict do nothing
     returning *
-  ),
-  correlated_delivery_chunks as (
-    update public.invoice_operation_chunks c
-    set payload_json=jsonb_set(
-          jsonb_set(
-            coalesce(c.payload_json,'{}'::jsonb),
-            '{request_key}',
-            to_jsonb(c.id::text),
-            true),
-          '{frozen_delivery_route,request_key}',
-          to_jsonb(c.id::text),
-          true),
-        updated_at_utc=v_now
-    from inserted_chunks inserted
-    where c.id=inserted.id
-      and c.chunk_type='DELIVERY_PREPARE'
-    returning c.id
   ),
   asset_operation_links as (
     update public.invoice_document_assets a
@@ -1047,9 +1050,6 @@ begin
       cross join(
         select count(*) from inserted_chunks
       ) ensure_chunk_insert
-      cross join(
-        select count(*) from correlated_delivery_chunks
-      ) ensure_delivery_correlation
       group by intended.operation_id
     ) q
     where o.id=q.operation_id and o.status<>'COMPLETE'

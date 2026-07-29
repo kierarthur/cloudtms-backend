@@ -558,11 +558,11 @@ test('direct Delivery carriers preserve routing and bind request correlation to 
   );
   assert.match(
     startCore,
-    /correlated_delivery_chunks as \([\s\S]*?'\{request_key\}'[\s\S]*?to_jsonb\(c\.id::text\)[\s\S]*?'\{frozen_delivery_route,request_key\}'[\s\S]*?c\.chunk_type='DELIVERY_PREPARE'/i,
+    /insert into public\.invoice_operation_chunks\(\s*id,operation_id[\s\S]*?case when c\.chunk_type='DELIVERY_PREPARE'[\s\S]*?'\{request_key\}'[\s\S]*?to_jsonb\(generated\.id::text\)[\s\S]*?'\{routing_request,request_key\}'[\s\S]*?'\{frozen_delivery_route,request_key\}'/i,
   );
   assert.match(
     startCore,
-    /select count\(\*\) from correlated_delivery_chunks/i,
+    /cross join lateral \(\s*select gen_random_uuid\(\) id\s*where c\.operation_id is not null\s*\) generated/i,
   );
   assert.match(
     deliveryAdvance,
