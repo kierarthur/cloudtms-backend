@@ -19,13 +19,15 @@ const end = sql.indexOf('\n$function$;', start);
 assert.ok(end > start);
 const functionBody = sql.slice(start, end + '\n$function$;'.length);
 
-test('candidate finance report casts enum statuses before text fallbacks', () => {
+test('candidate finance report casts enum columns before text fallbacks and unions', () => {
   assert.match(functionBody, /vfc\.status::text as status/);
   assert.match(functionBody, /vfc\.payout_status::text as payout_status/);
+  assert.match(functionBody, /vfc\.reason::text as reason/);
   assert.match(functionBody, /coalesce\(vfc\.status::text,\s*''\)/);
   assert.match(functionBody, /coalesce\(vfc\.payout_status::text,\s*''\)/);
   assert.doesNotMatch(functionBody, /coalesce\(vfc\.status,\s*''\)/);
   assert.doesNotMatch(functionBody, /coalesce\(vfc\.payout_status,\s*''\)/);
+  assert.doesNotMatch(functionBody, /\bvfc\.reason\s*,/);
 });
 
 test('candidate finance report remains read-only and Policy X neutral', () => {

@@ -107945,7 +107945,7 @@ begin
       )::numeric(12,2) as due_this_week,
       vfc.status::text as status,
       vfc.payout_status::text as payout_status,
-      vfc.reason,
+      vfc.reason::text as reason,
       vfc.notes,
       vfc.adjustment_comment,
       vfc.source_original_paid_amount,
