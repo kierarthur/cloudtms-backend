@@ -397,7 +397,7 @@ begin
               ) ordered_reference
             ),
             '[]'::jsonb
-          ),
+          )),
         'additional_units',coalesce((
           select jsonb_object_agg(
             au.key,
