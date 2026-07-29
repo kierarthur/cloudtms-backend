@@ -167,9 +167,12 @@ begin
           or(i.document_version_id is not null
             and nullif(i.document_source_revision,'') is not null
             and coalesce(i.processor_result->>'template_version','')<>
-              coalesce((select v.template_version
-                from public.invoice_document_versions v
-                where v.id=i.document_version_id),''))
+              case when i.chunk_type='SOURCE_RENDER'
+                then coalesce(i.payload_json->>'template_version','')
+                else coalesce((select v.template_version
+                  from public.invoice_document_versions v
+                  where v.id=i.document_version_id),'')
+              end)
           or(i.chunk_type in('SOURCE_RENDER','INVOICE_CORE_RENDER')
             and coalesce(i.processor_result->>'render_kind','')<>
               coalesce(i.payload_json->>'render_kind',

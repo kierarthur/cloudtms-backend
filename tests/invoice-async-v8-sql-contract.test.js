@@ -1080,6 +1080,10 @@ test('invoice source chunks keep the electronic timesheet template identity', ()
   const documentAdvance = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch.sql',
   );
+  const workComplete = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+    + '24072026_1217_invoice_work_complete_batch.sql',
+  );
 
   assert.match(
     documentAdvance,
@@ -1088,6 +1092,10 @@ test('invoice source chunks keep the electronic timesheet template identity', ()
   assert.match(
     documentAdvance,
     /'template_version',case when m\.input_type='ELECTRONIC_TIMESHEET'\s*then 'timesheet-professional-v1'\s*else coalesce\(l\.version_template_version,l\.template_version\)\s*end/i,
+  );
+  assert.match(
+    workComplete,
+    /coalesce\(i\.processor_result->>'template_version',''\)<>\s*case when i\.chunk_type='SOURCE_RENDER'\s*then coalesce\(i\.payload_json->>'template_version',''\)\s*else coalesce\(\(select v\.template_version[\s\S]*where v\.id=i\.document_version_id\),''\)\s*end/i,
   );
 });
 
