@@ -1317,7 +1317,10 @@ begin
   ),
   evidence_ready as (
     update public.timesheet_evidence e
-    set document_asset_id=a.id,processing_state='READY',processing_error_json=null
+    set document_asset_id=a.id,
+        source_revision=a.source_revision,
+        processing_state='READY',
+        processing_error_json=null
     from updated_assets a
     where a.source_kind='TIMESHEET_EVIDENCE' and e.id=a.source_id
     returning e.id,e.timesheet_id,e.kind,e.document_asset_id

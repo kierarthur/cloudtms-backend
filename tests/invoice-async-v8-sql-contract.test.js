@@ -1424,3 +1424,14 @@ test('single-part normalised assets use the direct-key READY representation', ()
     /normalised_manifest_hash=case when jsonb_array_length\(r\.manifest\)>1\s*then r\.manifest_hash else null end/s,
   );
 });
+
+test('normalised timesheet evidence adopts the exact registered asset revision', () => {
+  const workComplete = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+    + '24072026_1217_invoice_work_complete_batch.sql',
+  );
+  assert.match(
+    workComplete,
+    /update public\.timesheet_evidence e\s+set document_asset_id=a\.id,\s*source_revision=a\.source_revision,\s*processing_state='READY',\s*processing_error_json=null\s+from updated_assets a/s,
+  );
+});
