@@ -13710,92 +13710,128 @@ BEGIN
         || ':snapshot:' || COALESCE(v_session_row.source_snapshot_run_id::text, 'none')
         || ':candidate:ALL';
 
-      INSERT INTO public.banking_pay_workbench_jobs AS discovery_job (
-        id,
-        job_type,
-        status,
-        priority,
-        run_at_utc,
-        attempt_count,
-        max_attempts,
-        dedupe_key,
-        snapshot_run_id,
-        session_id,
-        candidate_id,
-        payload_json,
-        created_at_utc,
-        updated_at_utc,
-        started_at_utc,
-        completed_at_utc,
-        failed_at_utc,
-        last_error_json
-      )
-      VALUES (
-        v_scope_discovery_job_id,
-        'WORKBENCH_SESSION_SCOPE_SEED',
-        'QUEUED',
-        40,
-        now(),
-        0,
-        8,
-        v_scope_discovery_job_dedupe_key,
-        v_session_row.source_snapshot_run_id,
-        p_session_id,
-        NULL::uuid,
-        jsonb_build_object(
-          'session_id', p_session_id::text,
-          'session_version', COALESCE(v_session_row.version, 0),
-          'snapshot_run_id', CASE
-            WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL::text
-            ELSE v_session_row.source_snapshot_run_id::text
-          END,
-          'session_signature', v_session_row.session_signature,
-          'candidate_id', NULL::text,
-          'job_type', 'WORKBENCH_SESSION_SCOPE_SEED',
-          'dedupe_key', v_scope_discovery_job_dedupe_key,
-          'continuation', false,
-          'root_job', false,
-          'reason', COALESCE(p_reason, 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY'),
-          'continuation_reason', 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
-          'line_work_action', 'SCOPE_DISCOVERY',
-          'next_recommended_action', 'SEED_SCOPE_DISCOVERY_CHUNK',
-          'limit', v_scope_discovery_limit,
-          'line_limit', v_scope_discovery_limit,
-          'chunk_size', v_scope_discovery_limit,
-          'run_mode', 'BOUNDED_SCOPE_DISCOVERY',
-          'line_work_required', false,
-          'line_work_only', false,
-          'cursor_json', jsonb_build_object(
-            'force_reseed', true,
-            'force_refresh', false,
-            'user_requested_refresh', false,
-            'scope_discovery_only', true
+      /*
+        Do not update an already queued/running discovery job merely because
+        the modal reopened. A worker may hold that row while claiming or
+        completing it; waiting for the row lock would turn a harmless open
+        into an HTTP timeout. A normal MVCC read can reuse the committed job
+        without waiting and preserves its existing retry schedule.
+      */
+      SELECT active_discovery_job.id
+      INTO v_scope_discovery_job_id
+      FROM public.banking_pay_workbench_jobs AS active_discovery_job
+      WHERE active_discovery_job.dedupe_key = v_scope_discovery_job_dedupe_key
+        AND active_discovery_job.status IN ('QUEUED', 'RUNNING')
+      ORDER BY active_discovery_job.created_at_utc, active_discovery_job.id
+      LIMIT 1;
+
+      IF v_scope_discovery_job_id IS NULL THEN
+        v_scope_discovery_job_id := gen_random_uuid();
+        INSERT INTO public.banking_pay_workbench_jobs AS discovery_job (
+          id,
+          job_type,
+          status,
+          priority,
+          run_at_utc,
+          attempt_count,
+          max_attempts,
+          dedupe_key,
+          snapshot_run_id,
+          session_id,
+          candidate_id,
+          payload_json,
+          created_at_utc,
+          updated_at_utc,
+          started_at_utc,
+          completed_at_utc,
+          failed_at_utc,
+          last_error_json
+        )
+        VALUES (
+          v_scope_discovery_job_id,
+          'WORKBENCH_SESSION_SCOPE_SEED',
+          'QUEUED',
+          40,
+          now(),
+          0,
+          8,
+          v_scope_discovery_job_dedupe_key,
+          v_session_row.source_snapshot_run_id,
+          p_session_id,
+          NULL::uuid,
+          jsonb_build_object(
+            'session_id', p_session_id::text,
+            'session_version', COALESCE(v_session_row.version, 0),
+            'snapshot_run_id', CASE
+              WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL::text
+              ELSE v_session_row.source_snapshot_run_id::text
+            END,
+            'session_signature', v_session_row.session_signature,
+            'candidate_id', NULL::text,
+            'job_type', 'WORKBENCH_SESSION_SCOPE_SEED',
+            'dedupe_key', v_scope_discovery_job_dedupe_key,
+            'continuation', false,
+            'root_job', false,
+            'reason', COALESCE(p_reason, 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY'),
+            'continuation_reason', 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
+            'line_work_action', 'SCOPE_DISCOVERY',
+            'next_recommended_action', 'SEED_SCOPE_DISCOVERY_CHUNK',
+            'limit', v_scope_discovery_limit,
+            'line_limit', v_scope_discovery_limit,
+            'chunk_size', v_scope_discovery_limit,
+            'run_mode', 'BOUNDED_SCOPE_DISCOVERY',
+            'line_work_required', false,
+            'line_work_only', false,
+            'cursor_json', jsonb_build_object(
+              'force_reseed', true,
+              'force_refresh', false,
+              'user_requested_refresh', false,
+              'scope_discovery_only', true
+            ),
+            'cursor', jsonb_build_object(
+              'force_reseed', true,
+              'force_refresh', false,
+              'user_requested_refresh', false,
+              'scope_discovery_only', true
+            ),
+            'cursor_token', 'scope-discovery-start',
+            'has_cursor', true,
+            'created_by_helper', 'pay_workbench_enqueue_session_candidate_refresh',
+            'created_at_utc', now()::text
           ),
-          'cursor', jsonb_build_object(
-            'force_reseed', true,
-            'force_refresh', false,
-            'user_requested_refresh', false,
-            'scope_discovery_only', true
-          ),
-          'cursor_token', 'scope-discovery-start',
-          'has_cursor', true,
-          'created_by_helper', 'pay_workbench_enqueue_session_candidate_refresh',
-          'created_at_utc', now()::text
-        ),
-        now(),
-        now(),
-        NULL::timestamptz,
-        NULL::timestamptz,
-        NULL::timestamptz,
-        NULL::jsonb
-      )
-      ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
-      DO UPDATE
-      SET run_at_utc = LEAST(discovery_job.run_at_utc, EXCLUDED.run_at_utc),
-          priority = LEAST(discovery_job.priority, EXCLUDED.priority),
-          updated_at_utc = now()
-      RETURNING discovery_job.id, (xmax = 0)
-      INTO v_scope_discovery_job_id, v_scope_discovery_job_inserted;
+          now(),
+          now(),
+          NULL::timestamptz,
+          NULL::timestamptz,
+          NULL::timestamptz,
+          NULL::jsonb
+        )
+        ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED', 'RUNNING')
+        DO NOTHING
+        RETURNING discovery_job.id
+        INTO v_scope_discovery_job_id;
+
+        v_scope_discovery_job_inserted := v_scope_discovery_job_id IS NOT NULL;
+
+        IF v_scope_discovery_job_id IS NULL THEN
+          SELECT concurrent_discovery_job.id
+          INTO v_scope_discovery_job_id
+          FROM public.banking_pay_workbench_jobs AS concurrent_discovery_job
+          WHERE concurrent_discovery_job.dedupe_key = v_scope_discovery_job_dedupe_key
+            AND concurrent_discovery_job.status IN ('QUEUED', 'RUNNING')
+          ORDER BY concurrent_discovery_job.created_at_utc, concurrent_discovery_job.id
+          LIMIT 1;
+        END IF;
+      END IF;
+
+      IF v_scope_discovery_job_id IS NULL THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_DISCOVERY_JOB_NOT_RESOLVED'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'PAY_WORKBENCH_SCOPE_DISCOVERY_JOB_NOT_RESOLVED',
+                  'session_id', p_session_id::text
+                )::text;
+      END IF;
 
       RETURN jsonb_build_object(
         'ok', true,

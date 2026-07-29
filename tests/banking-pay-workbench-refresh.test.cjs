@@ -124,8 +124,13 @@ test('explicit session refresh bypasses clone-certified reuse and forces full li
   );
   assert.match(
     sessionBody,
-    /ON CONFLICT \(dedupe_key\) WHERE status IN \('QUEUED', 'RUNNING'\)/,
-    'repeated opens must coalesce into one active discovery job'
+    /SELECT active_discovery_job\.id[\s\S]*active_discovery_job\.status IN \('QUEUED', 'RUNNING'\)[\s\S]*IF v_scope_discovery_job_id IS NULL THEN[\s\S]*ON CONFLICT \(dedupe_key\) WHERE status IN \('QUEUED', 'RUNNING'\)[\s\S]*DO NOTHING/,
+    'repeated opens must reuse one active discovery job without updating its possibly locked row'
+  );
+  assert.doesNotMatch(
+    sessionBody,
+    /ON CONFLICT \(dedupe_key\) WHERE status IN \('QUEUED', 'RUNNING'\)[\s\S]*DO UPDATE[\s\S]*run_at_utc = LEAST/,
+    'modal reopen must not wait on a queued or running discovery row merely to move its retry time'
   );
   assert.match(
     sessionBody,
