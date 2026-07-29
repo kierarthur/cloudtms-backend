@@ -15552,6 +15552,55 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
         );
       }
 
+      let scopeDiscoveryCandidateCount = 0;
+      let scopeDiscoveryEnqueuedCount = 0;
+      let scopeDiscoveryPageCount = 0;
+      if (openAction === 'WORKBENCH_SESSION_ATTACHED') {
+        let discoveryCursor = null;
+        let discoveryHasMore = true;
+        while (discoveryHasMore && scopeDiscoveryPageCount < 100) {
+          const discoveryPayload = {
+            limit: 100,
+            refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY',
+            discover_current_scope: true
+          };
+          if (isPlainObject(discoveryCursor)) discoveryPayload.cursor = discoveryCursor;
+          const discoveryRaw = await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
+            p_session_id: sessionId,
+            p_candidate_id: null,
+            p_reason: 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
+            p_actor_user_id: actorUserId,
+            p_payload_json: discoveryPayload
+          }, {
+            routeClass: 'PREVIEW_OPEN',
+            purpose: 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
+            timeoutMs: 15000,
+            bankingPay: true
+          });
+          const discoveryPage = unwrapRpc(discoveryRaw, 'pay_workbench_enqueue_session_candidate_refresh');
+          scopeDiscoveryPageCount += 1;
+          scopeDiscoveryCandidateCount += Math.max(0, Math.trunc(Number(discoveryPage.candidate_count || 0) || 0));
+          scopeDiscoveryEnqueuedCount += Math.max(0, Math.trunc(Number(discoveryPage.enqueued_candidate_count || 0) || 0));
+          discoveryCursor = isPlainObject(discoveryPage.next_cursor) ? discoveryPage.next_cursor : null;
+          discoveryHasMore = discoveryPage.has_more === true && !!discoveryCursor;
+        }
+        if (discoveryHasMore) {
+          throw attachDiagnosticToError(
+            new Error('Banking Pay candidate discovery exceeded the bounded page limit.'),
+            'PAY_WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY_TOO_LARGE',
+            'pay_workbench_enqueue_session_candidate_refresh',
+            { session_id: sessionId, page_count: scopeDiscoveryPageCount }
+          );
+        }
+        openPayload = {
+          ...openPayload,
+          scope_discovery_completed: true,
+          scope_discovery_candidate_count: scopeDiscoveryCandidateCount,
+          scope_discovery_enqueued_count: scopeDiscoveryEnqueuedCount,
+          scope_discovery_page_count: scopeDiscoveryPageCount
+        };
+      }
+
       lastDiagnosticStage = 'PAY_WORKBENCH_CARRY_STATUS_GET_V1_RPC';
       lastDiagnosticRpc =
         'pay_workbench_case_resolution_carry_status_get_v1';
@@ -15619,8 +15668,9 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
       const expiryEnqueuedCount = Math.max(0, Math.trunc(Number(expiryResult.enqueued_count || 0) || 0));
       const expiryProcessedCount = Math.max(0, Math.trunc(Number(expiryResult.processed_snooze_count || 0) || 0));
       const expiryRefreshRequired = expiryEnqueuedCount > 0 || expiryProcessedCount > 0 || expiryResult.more_due === true;
+      const scopeDiscoveryRefreshRequired = scopeDiscoveryEnqueuedCount > 0;
       let rereadProgressPayload = {};
-      if (expiryRefreshRequired) {
+      if (expiryRefreshRequired || scopeDiscoveryRefreshRequired) {
         lastDiagnosticStage = 'PAY_WORKBENCH_SESSION_GET_PROGRESS_LIGHT_AFTER_EXPIRY';
         lastDiagnosticRpc = 'pay_workbench_session_get_progress_light';
         const progressRaw = await sbRpc(env, 'pay_workbench_session_get_progress_light', {
@@ -15662,7 +15712,9 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
         return 0;
       };
       const progressState = trimStr(openPayload.progress_state || openPayload.phase || progressPayload.progress_state || progressPayload.phase || '').toUpperCase();
-      const readyState = expiryRefreshRequired !== true && (progressPayload.ready === true || progressPayload.ready_flag === true || progressPayload.ready_empty === true || ['READY', 'READY_EMPTY'].includes(progressState));
+      const readyState = expiryRefreshRequired !== true
+        && scopeDiscoveryRefreshRequired !== true
+        && (progressPayload.ready === true || progressPayload.ready_flag === true || progressPayload.ready_empty === true || ['READY', 'READY_EMPTY'].includes(progressState));
       const jobCounts = {
         queued: nonNegativeCount(openPayload.job_counts?.queued, openPayload.job_counts?.queued_count, openPayload.queued_jobs, openPayload.queued_job_count, progressPayload.job_counts?.queued, progressPayload.queued_jobs),
         running: nonNegativeCount(openPayload.job_counts?.running, openPayload.job_counts?.running_count, openPayload.running_jobs, openPayload.running_job_count, progressPayload.job_counts?.running, progressPayload.running_jobs),
@@ -15720,6 +15772,7 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
       const cloneLegacyRefreshEnqueuedCount = nonNegativeCount(cloneRebaseState.legacy_refresh_enqueued_count, cloneRebaseState.legacyRefreshEnqueuedCount);
       const nudgeReasons = [];
       if (openAction === 'WORKBENCH_SESSION_CREATED') nudgeReasons.push('SESSION_CREATED');
+      if (scopeDiscoveryRefreshRequired) nudgeReasons.push('NEWLY_ELIGIBLE_CANDIDATES_DISCOVERED');
       if (expiryRefreshRequired) nudgeReasons.push('SNOOZE_EXPIRY_REFRESH_PENDING');
       if (cloneRebaseQueued || cloneRebasePending) nudgeReasons.push('CLONE_REBASE_PENDING');
       if (cloneLegacyRefreshEnqueuedCount > 0) nudgeReasons.push('CLONE_REBASE_LEGACY_REFRESH_ENQUEUED');

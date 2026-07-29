@@ -13561,6 +13561,11 @@ DECLARE
   v_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
   v_direct_result jsonb := '{}'::jsonb;
   v_force_refresh boolean := false;
+  v_discover_current_scope boolean := false;
+  v_scope_seed_cursor_json jsonb := NULL::jsonb;
+  v_scope_seed_result jsonb := '{}'::jsonb;
+  v_scope_seed_enqueue_result jsonb := '{}'::jsonb;
+  v_scope_seed_first_page boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -13590,6 +13595,12 @@ BEGIN
     v_payload_json->>'userRequestedRefresh',
     'false'
   ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_discover_current_scope := p_candidate_id IS NULL
+    AND UPPER(BTRIM(COALESCE(
+      v_payload_json->>'refresh_scope_kind',
+      v_payload_json->>'refreshScopeKind',
+      ''
+    ))) IN ('SESSION_SCOPE_DISCOVERY', 'SESSION_FULL_LIVE', 'BROAD_SESSION_REFRESH');
 
   v_targeted_timesheet_ids_json := CASE
     WHEN jsonb_typeof(v_payload_json->'targeted_timesheet_ids') = 'array' THEN v_payload_json->'targeted_timesheet_ids'
@@ -13666,6 +13677,68 @@ BEGIN
       'next_cursor', NULL::jsonb,
       'has_more', false,
       'enqueue_result', COALESCE(v_page_enqueue_result, '{}'::jsonb)
+    );
+  END IF;
+
+  IF v_discover_current_scope THEN
+    v_scope_seed_cursor_json := CASE
+      WHEN jsonb_typeof(v_payload_json->'cursor') = 'object'
+        THEN COALESCE(v_payload_json->'cursor', '{}'::jsonb)
+      ELSE '{}'::jsonb
+    END;
+    v_scope_seed_first_page := v_scope_seed_cursor_json = '{}'::jsonb;
+    v_scope_seed_cursor_json := v_scope_seed_cursor_json
+      || jsonb_build_object(
+        'force_reseed', v_scope_seed_first_page,
+        'force_refresh', COALESCE(v_force_refresh, false),
+        'user_requested_refresh', COALESCE(v_force_refresh, false),
+        'scope_discovery_only', UPPER(BTRIM(COALESCE(
+          v_payload_json->>'refresh_scope_kind',
+          v_payload_json->>'refreshScopeKind',
+          ''
+        ))) = 'SESSION_SCOPE_DISCOVERY'
+      );
+
+    v_scope_seed_result := public.pay_workbench_session_seed_scope_chunk(
+      p_session_id => p_session_id,
+      p_cursor_json => v_scope_seed_cursor_json,
+      p_limit => CASE
+        WHEN COALESCE(v_payload_json->>'limit', '') ~ '^[0-9]+$'
+          THEN LEAST(GREATEST((v_payload_json->>'limit')::integer, 1), 100)
+        ELSE 100
+      END
+    );
+    v_scope_seed_enqueue_result := CASE
+      WHEN jsonb_typeof(v_scope_seed_result->'enqueue_result') = 'object'
+        THEN COALESCE(v_scope_seed_result->'enqueue_result', '{}'::jsonb)
+      ELSE '{}'::jsonb
+    END;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'session_id', p_session_id::text,
+      'candidate_id', NULL::text,
+      'paged', true,
+      'scope_rediscovered', true,
+      'scope_reseed_started', v_scope_seed_first_page,
+      'candidate_count', COALESCE(jsonb_array_length(
+        CASE
+          WHEN jsonb_typeof(v_scope_seed_result->'candidate_ids') = 'array'
+            THEN v_scope_seed_result->'candidate_ids'
+          ELSE '[]'::jsonb
+        END
+      ), 0),
+      'enqueued_candidate_count', COALESCE(
+        NULLIF(BTRIM(COALESCE(v_scope_seed_enqueue_result->>'enqueued_candidate_count', '')), '')::integer,
+        NULLIF(BTRIM(COALESCE(v_scope_seed_result->>'enqueued_count', '')), '')::integer,
+        0
+      ),
+      'force_refresh', COALESCE(v_force_refresh, false),
+      'next_cursor', COALESCE(v_scope_seed_result->'next_cursor', NULL::jsonb),
+      'has_more', COALESCE(NULLIF(BTRIM(COALESCE(v_scope_seed_result->>'has_more', '')), '')::boolean, false),
+      'delta_queued_count', COALESCE(NULLIF(BTRIM(COALESCE(v_scope_seed_enqueue_result->>'delta_queued_count', '')), '')::integer, 0),
+      'legacy_queued_count', COALESCE(NULLIF(BTRIM(COALESCE(v_scope_seed_enqueue_result->>'legacy_queued_count', '')), '')::integer, 0),
+      'scope_seed_result', COALESCE(v_scope_seed_result, '{}'::jsonb)
     );
   END IF;
 
@@ -157297,6 +157370,11 @@ DECLARE
   v_scope_pending_count integer := 0;
   v_scope_ready_count integer := 0;
   v_scope_failed_count integer := 0;
+  v_force_reseed boolean := false;
+  v_force_candidate_refresh boolean := false;
+  v_scope_discovery_only boolean := false;
+  v_new_scope_candidate_ids jsonb := '[]'::jsonb;
+  v_enqueue_candidate_ids jsonb := '[]'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -157328,6 +157406,50 @@ BEGIN
               'status', v_session_row.status,
               'discarded_at_utc', v_session_row.discarded_at_utc
             )::text;
+  END IF;
+
+  v_force_reseed := LOWER(BTRIM(COALESCE(
+    CASE WHEN jsonb_typeof(p_cursor_json) = 'object' THEN p_cursor_json->>'force_reseed' ELSE NULL::text END,
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_force_candidate_refresh := LOWER(BTRIM(COALESCE(
+    CASE WHEN jsonb_typeof(p_cursor_json) = 'object' THEN p_cursor_json->>'user_requested_refresh' ELSE NULL::text END,
+    CASE WHEN jsonb_typeof(p_cursor_json) = 'object' THEN p_cursor_json->>'force_refresh' ELSE NULL::text END,
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_scope_discovery_only := LOWER(BTRIM(COALESCE(
+    CASE WHEN jsonb_typeof(p_cursor_json) = 'object' THEN p_cursor_json->>'scope_discovery_only' ELSE NULL::text END,
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  IF v_force_reseed THEN
+    UPDATE public.banking_pay_workbench_sessions AS session_reseed
+    SET scope_seed_complete = false,
+        scope_next_cursor_json = '{}'::jsonb,
+        progress_state = CASE
+          WHEN v_scope_discovery_only THEN session_reseed.progress_state
+          ELSE 'REFRESHING_CANDIDATES'
+        END,
+        progress_json = CASE
+          WHEN v_scope_discovery_only THEN COALESCE(session_reseed.progress_json, '{}'::jsonb)
+          ELSE jsonb_strip_nulls(
+            COALESCE(session_reseed.progress_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'phase', 'REFRESHING_CANDIDATES',
+              'status_text', 'Rediscovering current payment candidates.',
+              'scope_seed_complete', false,
+              'scope_reseed_requested', true,
+              'count_unknown', true
+            )
+          )
+        END,
+        progress_counter_version = COALESCE(session_reseed.progress_counter_version, 0) + 1,
+        progress_updated_at_utc = v_now,
+        updated_at_utc = v_now
+    WHERE session_reseed.id = p_session_id;
+
+    v_session_row.scope_seed_complete := false;
+    v_session_row.scope_next_cursor_json := '{}'::jsonb;
   END IF;
 
   IF COALESCE(v_session_row.scope_seed_complete, false)
@@ -157362,7 +157484,8 @@ BEGIN
 
   v_actor_user_id := v_session_row.actor_user_id;
   v_effective_cursor := CASE
-    WHEN p_cursor_json IS NOT NULL AND jsonb_typeof(p_cursor_json) = 'object' THEN p_cursor_json
+    WHEN p_cursor_json IS NOT NULL AND jsonb_typeof(p_cursor_json) = 'object' THEN
+      p_cursor_json - ARRAY['force_reseed', 'force_refresh', 'user_requested_refresh', 'scope_discovery_only']::text[]
     WHEN jsonb_typeof(v_session_row.scope_next_cursor_json) = 'object' THEN v_session_row.scope_next_cursor_json
     ELSE '{}'::jsonb
   END;
@@ -157397,7 +157520,10 @@ BEGIN
   END;
   v_has_more := COALESCE(NULLIF(BTRIM(COALESCE(v_page_context_json->>'has_more', '')), '')::boolean, false);
   v_scope_seed_complete := NOT COALESCE(v_has_more, false);
-  v_base_scope_ordinal := COALESCE(v_session_row.scope_seeded_count, 0);
+  SELECT COALESCE(MAX(existing_scope.scope_ordinal), 0)
+  INTO v_base_scope_ordinal
+  FROM public.banking_pay_workbench_session_scope AS existing_scope
+  WHERE existing_scope.session_id = p_session_id;
 
   IF v_page_count > 0 THEN
     DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_seed_candidate_page;
@@ -157460,28 +157586,82 @@ BEGIN
     SELECT
       COUNT(*)::integer,
       COUNT(*) FILTER (WHERE upserted_scope.inserted_row)::integer,
-      COUNT(*) FILTER (WHERE upserted_scope.inserted_row IS NOT TRUE)::integer
+      COUNT(*) FILTER (WHERE upserted_scope.inserted_row IS NOT TRUE)::integer,
+      COALESCE(
+        jsonb_agg(to_jsonb(upserted_scope.candidate_id::text) ORDER BY upserted_scope.candidate_id)
+          FILTER (WHERE upserted_scope.inserted_row),
+        '[]'::jsonb
+      )
     INTO
       v_seeded_count,
       v_new_scope_count,
-      v_existing_count
+      v_existing_count,
+      v_new_scope_candidate_ids
     FROM upserted_scope;
 
-    v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh_many(
-      p_session_id => p_session_id,
-      p_candidate_ids => v_page_candidate_ids,
-      p_reason => 'WORKBENCH_SCOPE_SEED',
-      p_actor_user_id => v_actor_user_id
-    );
+    v_enqueue_candidate_ids := CASE
+      WHEN v_scope_discovery_only AND COALESCE(v_force_candidate_refresh, false) IS NOT TRUE
+        THEN COALESCE(v_new_scope_candidate_ids, '[]'::jsonb)
+      ELSE v_page_candidate_ids
+    END;
+
+    IF jsonb_array_length(COALESCE(v_enqueue_candidate_ids, '[]'::jsonb)) > 0 THEN
+      v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh_many(
+        p_session_id => p_session_id,
+        p_candidate_ids => CASE
+          WHEN v_force_candidate_refresh THEN jsonb_build_object(
+            'candidate_ids', v_enqueue_candidate_ids,
+            'force_refresh', true,
+            'user_requested_refresh', true
+          )
+          ELSE v_enqueue_candidate_ids
+        END,
+        p_reason => CASE
+          WHEN v_force_candidate_refresh THEN 'USER_REQUESTED_FULL_REFRESH_SCOPE_RESEED'
+          WHEN v_scope_discovery_only THEN 'WORKBENCH_SESSION_OPEN_NEWLY_ELIGIBLE'
+          ELSE 'WORKBENCH_SCOPE_SEED'
+        END,
+        p_actor_user_id => v_actor_user_id
+      );
+    END IF;
 
     v_enqueued_count := COALESCE(NULLIF(BTRIM(COALESCE(v_enqueue_result->>'queued_count', '')), '')::integer, 0);
     v_reused_count := COALESCE(NULLIF(BTRIM(COALESCE(v_enqueue_result->>'reused_count', '')), '')::integer, 0);
   END IF;
 
-  v_scope_seeded_count := COALESCE(v_session_row.scope_seeded_count, 0) + COALESCE(v_new_scope_count, 0);
-  v_scope_pending_count := COALESCE(v_session_row.scope_pending_count, 0) + COALESCE(v_new_scope_count, 0);
-  v_scope_ready_count := COALESCE(v_session_row.scope_ready_count, 0);
-  v_scope_failed_count := COALESCE(v_session_row.scope_failed_count, 0);
+  SELECT
+    COUNT(*)::integer,
+    COUNT(*) FILTER (
+      WHERE UPPER(BTRIM(COALESCE(current_scope.status, ''))) IN (
+        'PENDING',
+        'SOURCE_BUILD_PENDING',
+        'DELTA_REFRESH_PENDING',
+        'LINE_WORK_PENDING',
+        'LINE_WORK_READY'
+      )
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE UPPER(BTRIM(COALESCE(current_scope.status, ''))) IN (
+        'READY',
+        'MATERIALISED',
+        'MATERIALIZED'
+      )
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE UPPER(BTRIM(COALESCE(current_scope.status, ''))) IN (
+        'FAILED',
+        'ERROR',
+        'SOURCE_BUILD_FAILED',
+        'LINE_WORK_FAILED'
+      )
+    )::integer
+  INTO
+    v_scope_seeded_count,
+    v_scope_pending_count,
+    v_scope_ready_count,
+    v_scope_failed_count
+  FROM public.banking_pay_workbench_session_scope AS current_scope
+  WHERE current_scope.session_id = p_session_id;
 
   UPDATE public.banking_pay_workbench_sessions AS session_update
   SET scope_next_cursor_json = CASE
@@ -157494,25 +157674,45 @@ BEGIN
       scope_pending_count = v_scope_pending_count,
       scope_ready_count = v_scope_ready_count,
       scope_failed_count = v_scope_failed_count,
-      progress_state = 'REFRESHING_CANDIDATES',
-      progress_json = jsonb_build_object(
-        'phase', 'REFRESHING_CANDIDATES',
-        'status_text', CASE
-          WHEN v_scope_seed_complete AND v_scope_seeded_count = 0 THEN 'Finalising payment preview.'
-          ELSE 'Preparing payment preview.'
-        END,
-        'scope_seed_complete', v_scope_seed_complete,
-        'count_unknown', NOT v_scope_seed_complete
-      )
-      || CASE
-        WHEN v_scope_seed_complete AND v_scope_seeded_count = 0 THEN jsonb_build_object(
-          'next_recommended_action', 'WAIT_FOR_WORKER',
-          'scope_discovery_complete', true,
-          'finalisation_pending', true,
-          'terminal_readiness_deferred', true,
-          'terminal_readiness_deferred_to', 'pay_workbench_complete_job'
+      progress_state = CASE
+        WHEN v_scope_discovery_only
+         AND COALESCE(v_new_scope_count, 0) = 0
+         AND jsonb_array_length(COALESCE(v_enqueue_candidate_ids, '[]'::jsonb)) = 0
+          THEN v_session_row.progress_state
+        ELSE 'REFRESHING_CANDIDATES'
+      END,
+      progress_json = CASE
+        WHEN v_scope_discovery_only
+         AND COALESCE(v_new_scope_count, 0) = 0
+         AND jsonb_array_length(COALESCE(v_enqueue_candidate_ids, '[]'::jsonb)) = 0
+          THEN COALESCE(v_session_row.progress_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'scope_discovery_complete', v_scope_seed_complete,
+              'scope_discovery_changed', false,
+              'scope_discovery_checked_at_utc', v_now::text,
+              'count_unknown', NOT v_scope_seed_complete
+            )
+        ELSE jsonb_build_object(
+          'phase', 'REFRESHING_CANDIDATES',
+          'status_text', CASE
+            WHEN v_scope_seed_complete AND v_scope_seeded_count = 0 THEN 'Finalising payment preview.'
+            WHEN v_scope_discovery_only THEN 'Adding newly eligible payment candidates.'
+            ELSE 'Preparing payment preview.'
+          END,
+          'scope_seed_complete', v_scope_seed_complete,
+          'scope_discovery_changed', COALESCE(v_new_scope_count, 0) > 0,
+          'count_unknown', NOT v_scope_seed_complete
         )
-        ELSE '{}'::jsonb
+        || CASE
+          WHEN v_scope_seed_complete AND v_scope_seeded_count = 0 THEN jsonb_build_object(
+            'next_recommended_action', 'WAIT_FOR_WORKER',
+            'scope_discovery_complete', true,
+            'finalisation_pending', true,
+            'terminal_readiness_deferred', true,
+            'terminal_readiness_deferred_to', 'pay_workbench_complete_job'
+          )
+          ELSE '{}'::jsonb
+        END
       END,
       progress_counter_version = COALESCE(session_update.progress_counter_version, 0) + 1,
       progress_updated_at_utc = v_now,
@@ -157531,6 +157731,12 @@ BEGIN
     'next_cursor', v_next_cursor,
     'has_more', COALESCE(v_has_more, false),
     'scope_seed_complete', v_scope_seed_complete,
+    'scope_reseed_requested', COALESCE(v_force_reseed, false),
+    'force_candidate_refresh', COALESCE(v_force_candidate_refresh, false),
+    'scope_discovery_only', COALESCE(v_scope_discovery_only, false),
+    'candidate_ids', COALESCE(v_page_candidate_ids, '[]'::jsonb),
+    'new_candidate_ids', COALESCE(v_new_scope_candidate_ids, '[]'::jsonb),
+    'enqueued_candidate_ids', COALESCE(v_enqueue_candidate_ids, '[]'::jsonb),
     'enqueue_result', COALESCE(v_enqueue_result, '{}'::jsonb)
   )
   || jsonb_build_object(

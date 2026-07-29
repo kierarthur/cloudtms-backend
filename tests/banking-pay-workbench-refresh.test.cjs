@@ -64,6 +64,24 @@ test('workbench refresh route recomputes pre-draft live rows without payment exe
   assert.doesNotMatch(body, /pay_workbench_session_clear_all_decisions|pay_workbench_session_discard|pay_batch_execute|pay_batch_settle/);
 });
 
+test('opening an attached shared session rediscovers candidates that became eligible later', () => {
+  const body = functionBody(
+    'handleBankingPayWorkbenchSessionOpen',
+    'handleBankingPayWorkbenchSessionGet'
+  );
+
+  assert.match(body, /openAction === 'WORKBENCH_SESSION_ATTACHED'/);
+  assert.match(body, /refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY'/);
+  assert.match(body, /WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY/);
+  assert.match(body, /scopeDiscoveryEnqueuedCount/);
+  assert.match(body, /NEWLY_ELIGIBLE_CANDIDATES_DISCOVERED/);
+  assert.doesNotMatch(
+    body,
+    /refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY'[\s\S]*force_refresh:\s*true/,
+    'opening must discover newly eligible candidates without forcing every existing candidate through a full rebuild'
+  );
+});
+
 test('refresh route is registered before generic workbench reads', () => {
   const refreshRoute = workerSource.indexOf("matchPath(p, '/api/banking/pay/workbench/session/:id/refresh')");
   const genericReadRoute = workerSource.indexOf("matchPath(p, '/api/banking/pay/workbench/session/:id')", refreshRoute);
@@ -92,6 +110,22 @@ test('explicit session refresh bypasses clone-certified reuse and forces full li
   const sessionBody = repeatableSql.slice(sessionStart, sessionEnd);
   assert.match(sessionBody, /'force_refresh', COALESCE\(v_force_refresh, false\)/);
   assert.match(sessionBody, /'enqueued_candidate_count', COALESCE\(\(v_page_enqueue_result->>'enqueued_candidate_count'\)::integer, 0\)/);
+  assert.match(sessionBody, /SESSION_SCOPE_DISCOVERY/);
+  assert.match(sessionBody, /SESSION_FULL_LIVE/);
+  assert.match(sessionBody, /pay_workbench_session_seed_scope_chunk/);
+
+  const scopeSeedBody = sqlFunctionBody(
+    repeatableSql,
+    'pay_workbench_session_seed_scope_chunk'
+  );
+  assert.match(scopeSeedBody, /v_force_reseed boolean := false/);
+  assert.match(scopeSeedBody, /'Rediscovering current payment candidates\.'/);
+  assert.match(scopeSeedBody, /MAX\(existing_scope\.scope_ordinal\)/);
+  assert.match(scopeSeedBody, /COUNT\(\*\)::integer[\s\S]*FROM public\.banking_pay_workbench_session_scope AS current_scope/);
+  assert.match(scopeSeedBody, /'candidate_ids', COALESCE\(v_page_candidate_ids, '\[\]'::jsonb\)/);
+  assert.match(scopeSeedBody, /WHEN v_scope_discovery_only[\s\S]*THEN COALESCE\(v_new_scope_candidate_ids, '\[\]'::jsonb\)/);
+  assert.match(scopeSeedBody, /scope_discovery_changed', false/);
+  assert.match(scopeSeedBody, /THEN v_session_row\.progress_state[\s\S]*ELSE 'REFRESHING_CANDIDATES'/);
 });
 
 test('full-live source builds retain semantic scope through internally targeted pages', () => {
