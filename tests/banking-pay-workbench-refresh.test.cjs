@@ -19,6 +19,10 @@ const sourceBuildRuntimeFloorMigrationSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/migrations/29072026_0645_align_banking_source_build_runtime_floor.sql'),
   'utf8'
 );
+const scopeDiscoveryWatermarkMigrationSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/migrations/29072026_1209_banking_pay_scope_discovery_watermark.sql'),
+  'utf8'
+);
 
 function functionBody(name, nextName) {
   const start = workerSource.indexOf(`async function ${name}`);
@@ -169,6 +173,26 @@ test('explicit session refresh bypasses clone-certified reuse and forces full li
     'the unfiltered paged scan must remain isolated to the non-discovery/manual-refresh branch'
   );
   assert.match(scopeSeedBody, /'scope_discovery_checked_at_utc', v_discovery_to_utc::text/);
+  assert.match(
+    scopeSeedBody,
+    /v_session_row\.scope_discovery_checked_at_utc/,
+    'session-open discovery must read its watermark from the durable session column'
+  );
+  assert.match(
+    scopeSeedBody,
+    /scope_discovery_checked_at_utc = CASE[\s\S]*WHEN v_scope_discovery_only AND v_scope_seed_complete[\s\S]*THEN v_discovery_to_utc/,
+    'the durable discovery watermark must advance only after the terminal bounded page'
+  );
+  assert.doesNotMatch(
+    scopeSeedBody,
+    /v_session_row\.progress_json->>'scope_discovery_checked_at_utc'/,
+    'later progress rendering must not be able to erase candidate-discovery authority'
+  );
+  assert.match(
+    scopeDiscoveryWatermarkMigrationSql,
+    /ALTER TABLE public\.banking_pay_workbench_sessions[\s\S]*ADD COLUMN IF NOT EXISTS scope_discovery_checked_at_utc timestamptz/,
+    'the discovery watermark migration must remain idempotent'
+  );
   assert.match(scopeSeedBody, /scope_discovery_changed', false/);
   assert.match(scopeSeedBody, /THEN v_session_row\.progress_state[\s\S]*ELSE 'REFRESHING_CANDIDATES'/);
 });

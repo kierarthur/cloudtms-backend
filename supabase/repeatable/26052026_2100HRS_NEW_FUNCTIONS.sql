@@ -157687,7 +157687,7 @@ BEGIN
     BEGIN
       v_discovery_from_utc := COALESCE(
         NULLIF(BTRIM(COALESCE(v_effective_cursor->>'discovery_from_utc', '')), '')::timestamptz,
-        NULLIF(BTRIM(COALESCE(v_session_row.progress_json->>'scope_discovery_checked_at_utc', '')), '')::timestamptz,
+        v_session_row.scope_discovery_checked_at_utc,
         v_session_row.created_at_utc
       );
       v_discovery_to_utc := COALESCE(
@@ -157982,6 +157982,11 @@ BEGIN
       scope_pending_count = v_scope_pending_count,
       scope_ready_count = v_scope_ready_count,
       scope_failed_count = v_scope_failed_count,
+      scope_discovery_checked_at_utc = CASE
+        WHEN v_scope_discovery_only AND v_scope_seed_complete
+          THEN v_discovery_to_utc
+        ELSE session_update.scope_discovery_checked_at_utc
+      END,
       progress_state = CASE
         WHEN v_scope_discovery_only
          AND COALESCE(v_new_scope_count, 0) = 0
