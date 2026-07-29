@@ -29,6 +29,7 @@ DECLARE
   v_items jsonb := '[]'::jsonb;
   v_total bigint := 0;
 BEGIN
+  -- Hash-ledger deployment probe: behaviour intentionally unchanged.
   IF v_sort_by NOT IN ('ts_utc', 'action', 'actor_display', 'object_type', 'object_id_text', 'correlation_id') THEN
     v_sort_by := 'ts_utc';
   END IF;
