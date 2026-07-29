@@ -552,47 +552,111 @@ CREATE TABLE IF NOT EXISTS public.banking_pay_workbench_sessions (
   discarded_at_utc timestamptz
 );
 
-ALTER TABLE public.banking_pay_workbench_sessions
-  ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid(),
-  ADD COLUMN IF NOT EXISTS actor_user_id uuid,
-  ADD COLUMN IF NOT EXISTS pay_date date,
-  ADD COLUMN IF NOT EXISTS week_ending_cutoff date,
-  ADD COLUMN IF NOT EXISTS filters_json jsonb,
-  ADD COLUMN IF NOT EXISTS scope_candidate_ids uuid[],
-  ADD COLUMN IF NOT EXISTS session_signature text,
-  ADD COLUMN IF NOT EXISTS source_snapshot_run_id uuid,
-  ADD COLUMN IF NOT EXISTS status text,
-  ADD COLUMN IF NOT EXISTS version bigint,
-  ADD COLUMN IF NOT EXISTS server_selected_preview_row_ids jsonb,
-  ADD COLUMN IF NOT EXISTS created_at_utc timestamptz,
-  ADD COLUMN IF NOT EXISTS updated_at_utc timestamptz,
-  ADD COLUMN IF NOT EXISTS discarded_at_utc timestamptz;
+DO $$
+BEGIN
+  IF (
+    SELECT count(*)
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'banking_pay_workbench_sessions'
+      AND column_name IN (
+        'id',
+        'actor_user_id',
+        'pay_date',
+        'week_ending_cutoff',
+        'filters_json',
+        'scope_candidate_ids',
+        'session_signature',
+        'source_snapshot_run_id',
+        'status',
+        'version',
+        'server_selected_preview_row_ids',
+        'created_at_utc',
+        'updated_at_utc',
+        'discarded_at_utc'
+      )
+  ) <> 14 THEN
+    ALTER TABLE public.banking_pay_workbench_sessions
+      ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid(),
+      ADD COLUMN IF NOT EXISTS actor_user_id uuid,
+      ADD COLUMN IF NOT EXISTS pay_date date,
+      ADD COLUMN IF NOT EXISTS week_ending_cutoff date,
+      ADD COLUMN IF NOT EXISTS filters_json jsonb,
+      ADD COLUMN IF NOT EXISTS scope_candidate_ids uuid[],
+      ADD COLUMN IF NOT EXISTS session_signature text,
+      ADD COLUMN IF NOT EXISTS source_snapshot_run_id uuid,
+      ADD COLUMN IF NOT EXISTS status text,
+      ADD COLUMN IF NOT EXISTS version bigint,
+      ADD COLUMN IF NOT EXISTS server_selected_preview_row_ids jsonb,
+      ADD COLUMN IF NOT EXISTS created_at_utc timestamptz,
+      ADD COLUMN IF NOT EXISTS updated_at_utc timestamptz,
+      ADD COLUMN IF NOT EXISTS discarded_at_utc timestamptz;
+  END IF;
+END
+$$;
 
-UPDATE public.banking_pay_workbench_sessions
-SET filters_json = COALESCE(filters_json, '{}'::jsonb),
-    scope_candidate_ids = COALESCE(scope_candidate_ids, '{}'::uuid[]),
-    status = COALESCE(status, 'OPEN'),
-    version = COALESCE(version, 1),
-    server_selected_preview_row_ids = COALESCE(server_selected_preview_row_ids, '[]'::jsonb),
-    created_at_utc = COALESCE(created_at_utc, now()),
-    updated_at_utc = COALESCE(updated_at_utc, now())
-WHERE filters_json IS NULL
-   OR scope_candidate_ids IS NULL
-   OR status IS NULL
-   OR version IS NULL
-   OR server_selected_preview_row_ids IS NULL
-   OR created_at_utc IS NULL
-   OR updated_at_utc IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.banking_pay_workbench_sessions
+    WHERE filters_json IS NULL
+       OR scope_candidate_ids IS NULL
+       OR status IS NULL
+       OR version IS NULL
+       OR server_selected_preview_row_ids IS NULL
+       OR created_at_utc IS NULL
+       OR updated_at_utc IS NULL
+  ) THEN
+    UPDATE public.banking_pay_workbench_sessions
+    SET filters_json = COALESCE(filters_json, '{}'::jsonb),
+        scope_candidate_ids = COALESCE(scope_candidate_ids, '{}'::uuid[]),
+        status = COALESCE(status, 'OPEN'),
+        version = COALESCE(version, 1),
+        server_selected_preview_row_ids = COALESCE(server_selected_preview_row_ids, '[]'::jsonb),
+        created_at_utc = COALESCE(created_at_utc, now()),
+        updated_at_utc = COALESCE(updated_at_utc, now())
+    WHERE filters_json IS NULL
+       OR scope_candidate_ids IS NULL
+       OR status IS NULL
+       OR version IS NULL
+       OR server_selected_preview_row_ids IS NULL
+       OR created_at_utc IS NULL
+       OR updated_at_utc IS NULL;
+  END IF;
+END
+$$;
 
-ALTER TABLE public.banking_pay_workbench_sessions
-  ALTER COLUMN id SET DEFAULT gen_random_uuid(),
-  ALTER COLUMN filters_json SET DEFAULT '{}'::jsonb,
-  ALTER COLUMN scope_candidate_ids SET DEFAULT '{}'::uuid[],
-  ALTER COLUMN status SET DEFAULT 'OPEN',
-  ALTER COLUMN version SET DEFAULT 1,
-  ALTER COLUMN server_selected_preview_row_ids SET DEFAULT '[]'::jsonb,
-  ALTER COLUMN created_at_utc SET DEFAULT now(),
-  ALTER COLUMN updated_at_utc SET DEFAULT now();
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'banking_pay_workbench_sessions'
+      AND (
+        (column_name = 'id' AND column_default IS DISTINCT FROM 'gen_random_uuid()')
+        OR (column_name = 'filters_json' AND column_default IS DISTINCT FROM '''{}''::jsonb')
+        OR (column_name = 'scope_candidate_ids' AND column_default IS DISTINCT FROM '''{}''::uuid[]')
+        OR (column_name = 'status' AND column_default IS DISTINCT FROM '''OPEN''::text')
+        OR (column_name = 'version' AND column_default IS DISTINCT FROM '1')
+        OR (column_name = 'server_selected_preview_row_ids' AND column_default IS DISTINCT FROM '''[]''::jsonb')
+        OR (column_name = 'created_at_utc' AND column_default IS DISTINCT FROM 'now()')
+        OR (column_name = 'updated_at_utc' AND column_default IS DISTINCT FROM 'now()')
+      )
+  ) THEN
+    ALTER TABLE public.banking_pay_workbench_sessions
+      ALTER COLUMN id SET DEFAULT gen_random_uuid(),
+      ALTER COLUMN filters_json SET DEFAULT '{}'::jsonb,
+      ALTER COLUMN scope_candidate_ids SET DEFAULT '{}'::uuid[],
+      ALTER COLUMN status SET DEFAULT 'OPEN',
+      ALTER COLUMN version SET DEFAULT 1,
+      ALTER COLUMN server_selected_preview_row_ids SET DEFAULT '[]'::jsonb,
+      ALTER COLUMN created_at_utc SET DEFAULT now(),
+      ALTER COLUMN updated_at_utc SET DEFAULT now();
+  END IF;
+END
+$$;
 
 DO $$
 BEGIN

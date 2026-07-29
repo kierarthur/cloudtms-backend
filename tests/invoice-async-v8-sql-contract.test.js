@@ -1462,6 +1462,22 @@ test('single-part normalised assets use the direct-key READY representation', ()
   );
 });
 
+test('repeatable deployment avoids no-op workbench session table locks', () => {
+  const bankingTables = read('supabase/repeatable/08042026_1151_newtablesbanking.sql');
+  assert.match(
+    bankingTables,
+    /IF \(\s*SELECT count\(\*\)[\s\S]*banking_pay_workbench_sessions[\s\S]*\) <> 14 THEN\s*ALTER TABLE public\.banking_pay_workbench_sessions/s,
+  );
+  assert.match(
+    bankingTables,
+    /IF EXISTS \(\s*SELECT 1\s*FROM public\.banking_pay_workbench_sessions[\s\S]*\) THEN\s*UPDATE public\.banking_pay_workbench_sessions/s,
+  );
+  assert.match(
+    bankingTables,
+    /column_default IS DISTINCT FROM 'gen_random_uuid\(\)'[\s\S]*THEN\s*ALTER TABLE public\.banking_pay_workbench_sessions/s,
+  );
+});
+
 test('normalised timesheet evidence adopts the exact registered asset revision', () => {
   const workComplete = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
