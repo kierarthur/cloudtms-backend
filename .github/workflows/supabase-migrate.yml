@@ -9,6 +9,10 @@ on:
       - ".github/workflows/supabase-migrate.yml"
   workflow_dispatch: {}
 
+concurrency:
+  group: supabase-migrate-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   migrate:
     runs-on: ubuntu-latest
