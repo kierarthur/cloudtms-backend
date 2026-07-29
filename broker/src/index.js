@@ -179727,6 +179727,38 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const passRunningCount = countFrom(aggregate, ['running_count', 'running_due_count']);
     const passStaleRunningCount = countFrom(aggregate, ['stale_running_count']);
     const passClaimResult = isPlainObject(aggregate.claim_result) ? aggregate.claim_result : {};
+    const claimRejectSummarySource = isPlainObject(passClaimResult.claim_reject_summary)
+      ? passClaimResult.claim_reject_summary
+      : {};
+    const claimRejectSummary = Object.fromEntries(
+      Object.entries(claimRejectSummarySource)
+        .filter(([key]) => /_count$/i.test(key))
+        .map(([key, value]) => [key, Math.max(0, Math.trunc(Number(value) || 0))])
+    );
+    const claimableDiagnosticSample = (Array.isArray(passClaimResult.claimable_sample)
+      ? passClaimResult.claimable_sample
+      : [])
+      .filter((sample) => isPlainObject(sample))
+      .slice(0, 5)
+      .map((sample) => {
+        const serialState = isPlainObject(sample.candidate_serial_active_state)
+          ? sample.candidate_serial_active_state
+          : {};
+        return {
+          job_type: upperTrim(sample.job_type || '') || null,
+          claim_reject_reason: upperTrim(sample.claim_reject_reason || '') || null,
+          is_candidate_job: booleanFrom(sample.is_candidate_job),
+          has_candidate_id: Boolean(trimStr(sample.candidate_id || sample.derived_candidate_id || '')),
+          has_candidate_serial_key: Boolean(trimStr(sample.derived_candidate_serial_key || sample.payload_candidate_serial_key || '')),
+          candidate_serial_blocked: booleanFrom(serialState.candidate_serial_blocked ?? serialState.blocked),
+          has_active_candidate_job: Boolean(trimStr(sample.same_candidate_active_job_id || '')),
+          has_active_projection_run: Boolean(trimStr(sample.same_candidate_active_projection_run_id || '')),
+          continuation: booleanFrom(sample.payload_continuation),
+          run_mode: upperTrim(sample.payload_run_mode || '') || null,
+          has_projection_run_id: Boolean(trimStr(sample.payload_projection_run_id || '')),
+          has_source_change_seq: Boolean(trimStr(sample.payload_source_change_seq || sample.payload_latest_source_change_seq || ''))
+        };
+      });
     const passLockContentionDetected = isLockContentionAggregate(aggregate);
     const passLockContentionCount = Math.max(
       countFrom(aggregate, ['claim_lock_contention_count', 'lock_contention_count'], 0),
@@ -179845,6 +179877,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       normal_claim_made_progress: passNormalClaimMadeProgress,
       post_claim_due_work_requires_next_pass: passPostClaimDueRequiresNextPass,
       claim_mismatch_reason: aggregate.claim_mismatch_reason ?? aggregate.claim_mismatch_json?.claim_mismatch_reason ?? null,
+      claim_reject_summary: claimRejectSummary,
+      claimable_diagnostic_sample: claimableDiagnosticSample,
       source_build_only_lane: sourceOnly,
       source_build_only_assertion_passed: !sourceOnly || nonSourceJobsInSourceLane.length === 0,
       source_build_jobs_processed: passJobs.filter((job) => canonicalJobType(job) === 'WORKBENCH_CANDIDATE_SOURCE_BUILD').length,
