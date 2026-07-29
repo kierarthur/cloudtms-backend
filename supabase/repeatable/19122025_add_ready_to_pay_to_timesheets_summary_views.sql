@@ -250,7 +250,11 @@ ts_base AS (
 
     COALESCE(ch.pay_reference_required, false) AS client_pay_reference_required,
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
-    COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
+    COALESCE(
+      CASE WHEN ct.overrideclientsettings THEN ct.requires_hr END,
+      ch.hr_validation_required,
+      false
+    ) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
 
     COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.is_nhsp END, ch.is_nhsp, false) AS client_is_nhsp,
@@ -401,7 +405,11 @@ planned_weeks AS (
 
     COALESCE(ch.pay_reference_required, false) AS client_pay_reference_required,
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
-    COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
+    COALESCE(
+      CASE WHEN ct.overrideclientsettings THEN ct.requires_hr END,
+      ch.hr_validation_required,
+      false
+    ) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
 
     COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.is_nhsp END, ch.is_nhsp, false) AS client_is_nhsp,
@@ -2260,7 +2268,11 @@ ts_base AS (
 
     COALESCE(ch.pay_reference_required, false) AS client_pay_reference_required,
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
-    COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
+    COALESCE(
+      CASE WHEN ct.overrideclientsettings THEN ct.requires_hr END,
+      ch.hr_validation_required,
+      false
+    ) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
 
     COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.is_nhsp END, ch.is_nhsp, false) AS client_is_nhsp,
@@ -2414,7 +2426,11 @@ planned_weeks AS (
 
     COALESCE(ch.pay_reference_required, false) AS client_pay_reference_required,
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
-    COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
+    COALESCE(
+      CASE WHEN ct.overrideclientsettings THEN ct.requires_hr END,
+      ch.hr_validation_required,
+      false
+    ) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
 
     COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.is_nhsp END, ch.is_nhsp, false) AS client_is_nhsp,

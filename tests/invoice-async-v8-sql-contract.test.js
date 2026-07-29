@@ -1498,6 +1498,9 @@ test('contract override defaults work without a client settings row', () => {
 
 test('contract override controls HealthRoster invoice validation', () => {
   const timesheetSummary = read('supabase/repeatable/02052026_1528_fast_timesheet_reading.sql');
+  const canonicalSummaryViews = read(
+    'supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql',
+  );
   const effectiveHrValidation = (
     timesheetSummary.match(
       /CASE WHEN ct0\.overrideclientsettings THEN ct0\.requires_hr ELSE NULL::boolean END,\s*ch0\.hr_validation_required,\s*FALSE\s*\)\s+AS client_hr_validation_required/gi,
@@ -1507,6 +1510,16 @@ test('contract override controls HealthRoster invoice validation', () => {
   assert.doesNotMatch(
     timesheetSummary,
     /COALESCE\(ch0\.hr_validation_required,\s*FALSE\)\s+AS client_hr_validation_required/i,
+  );
+  const canonicalEffectiveHrValidation = (
+    canonicalSummaryViews.match(
+      /CASE WHEN ct\.overrideclientsettings THEN ct\.requires_hr END,\s*ch\.hr_validation_required,\s*false\s*\)\s+AS client_hr_validation_required/gi,
+    ) || []
+  );
+  assert.equal(canonicalEffectiveHrValidation.length, 4);
+  assert.doesNotMatch(
+    canonicalSummaryViews,
+    /COALESCE\(ch\.hr_validation_required,\s*false\)\s+AS client_hr_validation_required/i,
   );
 });
 
