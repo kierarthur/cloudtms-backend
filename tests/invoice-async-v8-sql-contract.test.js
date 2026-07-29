@@ -1059,6 +1059,21 @@ test('document manifest planning freezes snapshot and manifest in one version up
   );
 });
 
+test('invoice source chunks keep the electronic timesheet template identity', () => {
+  const documentAdvance = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch.sql',
+  );
+
+  assert.match(
+    documentAdvance,
+    /source_chunks as materialized[\s\S]*case when m\.input_type='ELECTRONIC_TIMESHEET'\s*then 'timesheet-professional-v1'\s*else coalesce\(l\.version_template_version,l\.template_version,''\)\s*end,'2'/i,
+  );
+  assert.match(
+    documentAdvance,
+    /'template_version',case when m\.input_type='ELECTRONIC_TIMESHEET'\s*then 'timesheet-professional-v1'\s*else coalesce\(l\.version_template_version,l\.template_version\)\s*end/i,
+  );
+});
+
 test('attachment-index render passes carry their frozen presentation identity', () => {
   const downstreamAdvance = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'

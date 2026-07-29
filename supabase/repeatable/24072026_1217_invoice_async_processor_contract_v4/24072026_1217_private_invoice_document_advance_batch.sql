@@ -352,11 +352,18 @@ begin
       entity_type,entity_id,document_version_id,status,priority,run_after_utc,payload_json,
       operation_control_version,created_at_utc,updated_at_utc)
     select l.operation_id,'SOURCE_RENDER','RENDER',
-      encode(digest(concat_ws('|','SOURCE_RENDER',m.document_version_id::text,m.ordinal::text,m.input_type,m.source_revision,m.presentation_hash,coalesce(l.template_version,''),'2'),'sha256'),'hex'),
+      encode(digest(concat_ws('|','SOURCE_RENDER',m.document_version_id::text,m.ordinal::text,m.input_type,m.source_revision,m.presentation_hash,
+        case when m.input_type='ELECTRONIC_TIMESHEET'
+          then 'timesheet-professional-v1'
+          else coalesce(l.version_template_version,l.template_version,'')
+        end,'2'),'sha256'),'hex'),
       m.ordinal,m.source_entity_type,m.source_entity_id,l.document_version_id,'QUEUED',l.priority,v_now,
       jsonb_build_object('render_kind',m.input_type,'source_revision',m.source_revision,
         'source_chunk_key',encode(digest(concat_ws('|',m.document_version_id::text,m.ordinal::text,m.input_type,m.source_entity_type,m.source_entity_id::text,m.source_revision,m.presentation_hash),'sha256'),'hex'),
-        'template_version',coalesce(l.version_template_version,l.template_version),
+        'template_version',case when m.input_type='ELECTRONIC_TIMESHEET'
+          then 'timesheet-professional-v1'
+          else coalesce(l.version_template_version,l.template_version)
+        end,
         'presentation_model_schema_version',m.presentation_schema,
         'presentation_model_hash',m.presentation_hash,
         'snapshot_hash',l.snapshot_hash_v5),
