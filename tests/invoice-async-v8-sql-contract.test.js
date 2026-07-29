@@ -1490,7 +1490,7 @@ test('single-part normalised assets use the direct-key READY representation', ()
   );
 });
 
-test('repeatable deployment avoids no-op workbench session table locks', () => {
+test('repeatable deployment avoids no-op workbench session and job table locks', () => {
   const bankingTables = read('supabase/repeatable/08042026_1151_newtablesbanking.sql');
   assert.match(
     bankingTables,
@@ -1503,6 +1503,18 @@ test('repeatable deployment avoids no-op workbench session table locks', () => {
   assert.match(
     bankingTables,
     /column_default IS DISTINCT FROM 'gen_random_uuid\(\)'[\s\S]*THEN\s*ALTER TABLE public\.banking_pay_workbench_sessions/s,
+  );
+  assert.match(
+    bankingTables,
+    /IF \(\s*SELECT count\(\*\)[\s\S]*banking_pay_workbench_jobs[\s\S]*\) <> 18 THEN\s*ALTER TABLE public\.banking_pay_workbench_jobs/s,
+  );
+  assert.match(
+    bankingTables,
+    /IF EXISTS \(\s*SELECT 1\s*FROM public\.banking_pay_workbench_jobs[\s\S]*\) THEN\s*UPDATE public\.banking_pay_workbench_jobs/s,
+  );
+  assert.match(
+    bankingTables,
+    /column_name = 'status' AND column_default IS DISTINCT FROM '''QUEUED''::text'[\s\S]*THEN\s*ALTER TABLE public\.banking_pay_workbench_jobs/s,
   );
 });
 

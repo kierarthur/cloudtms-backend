@@ -1023,54 +1023,124 @@ CREATE TABLE IF NOT EXISTS public.banking_pay_workbench_jobs (
   last_error_json jsonb
 );
 
-ALTER TABLE public.banking_pay_workbench_jobs
-  ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid(),
-  ADD COLUMN IF NOT EXISTS job_type text,
-  ADD COLUMN IF NOT EXISTS status text,
-  ADD COLUMN IF NOT EXISTS priority integer,
-  ADD COLUMN IF NOT EXISTS run_at_utc timestamptz,
-  ADD COLUMN IF NOT EXISTS attempt_count integer,
-  ADD COLUMN IF NOT EXISTS max_attempts integer,
-  ADD COLUMN IF NOT EXISTS dedupe_key text,
-  ADD COLUMN IF NOT EXISTS snapshot_run_id uuid,
-  ADD COLUMN IF NOT EXISTS session_id uuid,
-  ADD COLUMN IF NOT EXISTS candidate_id uuid,
-  ADD COLUMN IF NOT EXISTS payload_json jsonb,
-  ADD COLUMN IF NOT EXISTS created_at_utc timestamptz,
-  ADD COLUMN IF NOT EXISTS updated_at_utc timestamptz,
-  ADD COLUMN IF NOT EXISTS started_at_utc timestamptz,
-  ADD COLUMN IF NOT EXISTS completed_at_utc timestamptz,
-  ADD COLUMN IF NOT EXISTS failed_at_utc timestamptz,
-  ADD COLUMN IF NOT EXISTS last_error_json jsonb;
+DO $$
+BEGIN
+  IF (
+    SELECT count(*)
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'banking_pay_workbench_jobs'
+      AND column_name IN (
+        'id',
+        'job_type',
+        'status',
+        'priority',
+        'run_at_utc',
+        'attempt_count',
+        'max_attempts',
+        'dedupe_key',
+        'snapshot_run_id',
+        'session_id',
+        'candidate_id',
+        'payload_json',
+        'created_at_utc',
+        'updated_at_utc',
+        'started_at_utc',
+        'completed_at_utc',
+        'failed_at_utc',
+        'last_error_json'
+      )
+  ) <> 18 THEN
+    ALTER TABLE public.banking_pay_workbench_jobs
+      ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid(),
+      ADD COLUMN IF NOT EXISTS job_type text,
+      ADD COLUMN IF NOT EXISTS status text,
+      ADD COLUMN IF NOT EXISTS priority integer,
+      ADD COLUMN IF NOT EXISTS run_at_utc timestamptz,
+      ADD COLUMN IF NOT EXISTS attempt_count integer,
+      ADD COLUMN IF NOT EXISTS max_attempts integer,
+      ADD COLUMN IF NOT EXISTS dedupe_key text,
+      ADD COLUMN IF NOT EXISTS snapshot_run_id uuid,
+      ADD COLUMN IF NOT EXISTS session_id uuid,
+      ADD COLUMN IF NOT EXISTS candidate_id uuid,
+      ADD COLUMN IF NOT EXISTS payload_json jsonb,
+      ADD COLUMN IF NOT EXISTS created_at_utc timestamptz,
+      ADD COLUMN IF NOT EXISTS updated_at_utc timestamptz,
+      ADD COLUMN IF NOT EXISTS started_at_utc timestamptz,
+      ADD COLUMN IF NOT EXISTS completed_at_utc timestamptz,
+      ADD COLUMN IF NOT EXISTS failed_at_utc timestamptz,
+      ADD COLUMN IF NOT EXISTS last_error_json jsonb;
+  END IF;
+END
+$$;
 
-UPDATE public.banking_pay_workbench_jobs
-SET status = COALESCE(status, 'QUEUED'),
-    priority = COALESCE(priority, 100),
-    run_at_utc = COALESCE(run_at_utc, now()),
-    attempt_count = COALESCE(attempt_count, 0),
-    max_attempts = COALESCE(max_attempts, 8),
-    payload_json = COALESCE(payload_json, '{}'::jsonb),
-    created_at_utc = COALESCE(created_at_utc, now()),
-    updated_at_utc = COALESCE(updated_at_utc, now())
-WHERE status IS NULL
-   OR priority IS NULL
-   OR run_at_utc IS NULL
-   OR attempt_count IS NULL
-   OR max_attempts IS NULL
-   OR payload_json IS NULL
-   OR created_at_utc IS NULL
-   OR updated_at_utc IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.banking_pay_workbench_jobs
+    WHERE status IS NULL
+       OR priority IS NULL
+       OR run_at_utc IS NULL
+       OR attempt_count IS NULL
+       OR max_attempts IS NULL
+       OR payload_json IS NULL
+       OR created_at_utc IS NULL
+       OR updated_at_utc IS NULL
+  ) THEN
+    UPDATE public.banking_pay_workbench_jobs
+    SET status = COALESCE(status, 'QUEUED'),
+        priority = COALESCE(priority, 100),
+        run_at_utc = COALESCE(run_at_utc, now()),
+        attempt_count = COALESCE(attempt_count, 0),
+        max_attempts = COALESCE(max_attempts, 8),
+        payload_json = COALESCE(payload_json, '{}'::jsonb),
+        created_at_utc = COALESCE(created_at_utc, now()),
+        updated_at_utc = COALESCE(updated_at_utc, now())
+    WHERE status IS NULL
+       OR priority IS NULL
+       OR run_at_utc IS NULL
+       OR attempt_count IS NULL
+       OR max_attempts IS NULL
+       OR payload_json IS NULL
+       OR created_at_utc IS NULL
+       OR updated_at_utc IS NULL;
+  END IF;
+END
+$$;
 
-ALTER TABLE public.banking_pay_workbench_jobs
-  ALTER COLUMN id SET DEFAULT gen_random_uuid(),
-  ALTER COLUMN status SET DEFAULT 'QUEUED',
-  ALTER COLUMN priority SET DEFAULT 100,
-  ALTER COLUMN run_at_utc SET DEFAULT now(),
-  ALTER COLUMN attempt_count SET DEFAULT 0,
-  ALTER COLUMN max_attempts SET DEFAULT 8,
-  ALTER COLUMN payload_json SET DEFAULT '{}'::jsonb,
-  ALTER COLUMN created_at_utc SET DEFAULT now(),
-  ALTER COLUMN updated_at_utc SET DEFAULT now();
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'banking_pay_workbench_jobs'
+      AND (
+        (column_name = 'id' AND column_default IS DISTINCT FROM 'gen_random_uuid()')
+        OR (column_name = 'status' AND column_default IS DISTINCT FROM '''QUEUED''::text')
+        OR (column_name = 'priority' AND column_default IS DISTINCT FROM '100')
+        OR (column_name = 'run_at_utc' AND column_default IS DISTINCT FROM 'now()')
+        OR (column_name = 'attempt_count' AND column_default IS DISTINCT FROM '0')
+        OR (column_name = 'max_attempts' AND column_default IS DISTINCT FROM '8')
+        OR (column_name = 'payload_json' AND column_default IS DISTINCT FROM '''{}''::jsonb')
+        OR (column_name = 'created_at_utc' AND column_default IS DISTINCT FROM 'now()')
+        OR (column_name = 'updated_at_utc' AND column_default IS DISTINCT FROM 'now()')
+      )
+  ) THEN
+    ALTER TABLE public.banking_pay_workbench_jobs
+      ALTER COLUMN id SET DEFAULT gen_random_uuid(),
+      ALTER COLUMN status SET DEFAULT 'QUEUED',
+      ALTER COLUMN priority SET DEFAULT 100,
+      ALTER COLUMN run_at_utc SET DEFAULT now(),
+      ALTER COLUMN attempt_count SET DEFAULT 0,
+      ALTER COLUMN max_attempts SET DEFAULT 8,
+      ALTER COLUMN payload_json SET DEFAULT '{}'::jsonb,
+      ALTER COLUMN created_at_utc SET DEFAULT now(),
+      ALTER COLUMN updated_at_utc SET DEFAULT now();
+  END IF;
+END
+$$;
 
 DO $$
 BEGIN
