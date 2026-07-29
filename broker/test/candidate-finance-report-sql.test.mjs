@@ -18,6 +18,7 @@ assert.notEqual(start, -1);
 const end = sql.indexOf('\n$function$;', start);
 assert.ok(end > start);
 const functionBody = sql.slice(start, end + '\n$function$;'.length);
+const securityTail = sql.slice(end + '\n$function$;'.length, end + 1200);
 
 test('candidate finance report casts enum columns before text fallbacks and unions', () => {
   assert.match(functionBody, /vfc\.status::text as status/);
@@ -40,5 +41,24 @@ test('candidate finance report remains read-only and Policy X neutral', () => {
   assert.doesNotMatch(
     functionBody,
     /pay_workbench_prepare_draft|pay_batch_execute|provider_submission|settlement_apply/i
+  );
+});
+
+test('candidate finance report is callable only through the Worker service role', () => {
+  assert.match(
+    securityTail,
+    /REVOKE ALL ON FUNCTION public\.pay_candidate_advances_report\(uuid, uuid\) FROM PUBLIC/
+  );
+  assert.match(
+    securityTail,
+    /REVOKE ALL ON FUNCTION public\.pay_candidate_advances_report\(uuid, uuid\) FROM anon/
+  );
+  assert.match(
+    securityTail,
+    /REVOKE ALL ON FUNCTION public\.pay_candidate_advances_report\(uuid, uuid\) FROM authenticated/
+  );
+  assert.match(
+    securityTail,
+    /GRANT EXECUTE ON FUNCTION public\.pay_candidate_advances_report\(uuid, uuid\) TO service_role/
   );
 });

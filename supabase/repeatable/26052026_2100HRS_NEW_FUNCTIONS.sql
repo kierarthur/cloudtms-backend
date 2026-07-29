@@ -108262,6 +108262,10 @@ begin
 end;
 $function$;
 
+REVOKE ALL ON FUNCTION public.pay_candidate_advances_report(uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.pay_candidate_advances_report(uuid, uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.pay_candidate_advances_report(uuid, uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.pay_candidate_advances_report(uuid, uuid) TO service_role;
 
 
 
