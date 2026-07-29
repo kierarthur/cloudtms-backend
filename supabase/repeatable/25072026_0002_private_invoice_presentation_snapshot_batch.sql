@@ -511,7 +511,7 @@ begin
                 end),
               'commission_amount',coalesce(
                 r.value->>'commission_amount',r.value->>'commission',
-                (select r.value->'raw_columns'->>(h.ordinality-1)
+                (select r.value->'raw_columns'->>((h.ordinality-1)::integer)
                  from jsonb_array_elements_text(
                    case when jsonb_typeof(s.header_columns)='array'
                      then s.header_columns else '[]'::jsonb end
@@ -521,7 +521,7 @@ begin
                  limit 1)),
               'total_amount',coalesce(
                 r.value->>'total_amount',r.value->>'total_cost',
-                (select r.value->'raw_columns'->>(h.ordinality-1)
+                (select r.value->'raw_columns'->>((h.ordinality-1)::integer)
                  from jsonb_array_elements_text(
                    case when jsonb_typeof(s.header_columns)='array'
                      then s.header_columns else '[]'::jsonb end

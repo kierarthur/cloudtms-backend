@@ -286,6 +286,11 @@ test('invoice presentation maps authoritative NHSP import fields into readable s
     presentation,
     /'total_amount',coalesce\([\s\S]*lower\(btrim\(h\.header_name\)\) in \('total cost','total amount'\)/i,
   );
+  assert.equal(
+    (presentation.match(/->>\(\(h\.ordinality-1\)::integer\)/gi) || []).length,
+    2,
+    'NHSP raw-column lookups must use an integer JSON array index at runtime',
+  );
   assert.match(
     presentation,
     /'suppress_candidate_header',[\s\S]*upper\(nhsp\.source_system\)='NHSP'[\s\S]*count\(distinct il\.timesheet_id\)[\s\S]*count\(distinct nullif\(btrim\(lb\.worker_name\),''\)\)/i,
