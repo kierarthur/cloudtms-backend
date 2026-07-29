@@ -156,6 +156,21 @@ test('draft seed independently rejects stale authority without rebuilding', () =
   assert.match(draftSql, /CANDIDATE_STATE_SEQUENCE_STALE/);
   assert.match(draftSql, /SOURCE_FAMILY_DUPLICATED/);
   assert.match(draftSql, /LINE_WORK_NOT_TERMINAL/);
+  assert.match(
+    draftSql,
+    /stale_source\.source_change_seq\s*>=\s*COALESCE\(candidate_state\.source_change_seq,\s*-1\)/,
+    'historical source audit rows older than the adopted candidate sequence must not block a draft',
+  );
+  assert.match(
+    draftSql,
+    /incomplete_line\.work_payload_json->>'source_change_seq'[\s\S]{0,260}candidate_state\.source_change_seq/,
+    'line-work freshness must be evaluated against the adopted candidate sequence',
+  );
+  assert.match(
+    draftSql,
+    /dirty_preview\.row_json->>'source_change_seq'[\s\S]{0,260}candidate_state\.source_change_seq/,
+    'preview freshness must be evaluated against the adopted candidate sequence',
+  );
   assert.doesNotMatch(
     draftSql,
     /incomplete_line\.status[\s\S]{0,180}'READY'/,

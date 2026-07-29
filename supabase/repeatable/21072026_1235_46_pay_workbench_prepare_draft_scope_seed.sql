@@ -746,6 +746,8 @@ BEGIN
         WHERE stale_source.session_id = p_workbench_session_id
           AND stale_source.candidate_id = selected_candidates.candidate_id
           AND stale_source.session_version = v_session.version
+          AND stale_source.source_change_seq >=
+              COALESCE(candidate_state.source_change_seq, -1)
           AND UPPER(BTRIM(COALESCE(stale_source.status, ''))) IN (
             'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED'
           )
@@ -768,6 +770,12 @@ BEGIN
         FROM public.banking_pay_workbench_candidate_line_work AS incomplete_line
         WHERE incomplete_line.session_id = p_workbench_session_id
           AND incomplete_line.candidate_id = selected_candidates.candidate_id
+          AND (
+            COALESCE(incomplete_line.work_payload_json->>'source_change_seq', '')
+              !~ '^[0-9]+$'
+            OR (incomplete_line.work_payload_json->>'source_change_seq')::bigint >=
+                 COALESCE(candidate_state.source_change_seq, -1)
+          )
           AND UPPER(BTRIM(COALESCE(incomplete_line.status, ''))) IN (
             'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED'
           )
@@ -778,6 +786,12 @@ BEGIN
         WHERE dirty_preview.session_id = p_workbench_session_id
           AND dirty_preview.candidate_id = selected_candidates.candidate_id
           AND dirty_preview.session_version = v_session.version
+          AND (
+            COALESCE(dirty_preview.row_json->>'source_change_seq', '')
+              !~ '^[0-9]+$'
+            OR (dirty_preview.row_json->>'source_change_seq')::bigint >=
+                 COALESCE(candidate_state.source_change_seq, -1)
+          )
           AND UPPER(BTRIM(COALESCE(dirty_preview.status, ''))) IN (
             'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED'
           )
