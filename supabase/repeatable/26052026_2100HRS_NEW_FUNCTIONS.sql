@@ -107937,14 +107937,14 @@ begin
            and vfc.next_due_week_start <= v_week_start
            and coalesce(vfc.written_off_at_utc, null) is null
            and coalesce(vfc.cleared_at_utc, null) is null
-           and upper(coalesce(vfc.status, '')) not in ('PAID_OFF', 'CLEARED')
+           and upper(coalesce(vfc.status::text, '')) not in ('PAID_OFF', 'CLEARED')
           then least(coalesce(vfc.weekly_due, 0), coalesce(vfc.outstanding_amount, 0))
           else 0
         end,
         2
       )::numeric(12,2) as due_this_week,
-      vfc.status,
-      vfc.payout_status,
+      vfc.status::text as status,
+      vfc.payout_status::text as payout_status,
       vfc.reason,
       vfc.notes,
       vfc.adjustment_comment,
@@ -107963,29 +107963,29 @@ begin
       end as snooze_status,
       case
         when vfc.written_off_at_utc is not null then 'WRITTEN_OFF'
-        when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'CLEARED'
+        when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status::text, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'CLEARED'
         when coalesce(vfc.active_reserved_amount, 0) > 0 then 'RESERVED'
         when coalesce(vfc.committed_amount, 0) > 0 then 'COMMITTED'
         when coalesce(vfc.settled_amount, 0) > 0 then 'SETTLED'
         when vfc.active_snooze_id is not null then 'SNOOZED'
-        else upper(coalesce(vfc.status, 'ACTIVE'))
+        else upper(coalesce(vfc.status::text, 'ACTIVE'))
       end as lifecycle_state,
       case
         when vfc.case_type in ('PAYMENT_ADVANCE', 'MANUAL_CREDIT_ADJUSTMENT') then coalesce(pbp.authoritative_payment_date, pbp.pay_date)
         else coalesce(pbr.authoritative_payment_date, pbr.pay_date)
       end as authoritative_payment_date,
       case
-        when vfc.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then coalesce(vfc.payout_status, 'NOT_PAID')
+        when vfc.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then coalesce(vfc.payout_status::text, 'NOT_PAID')
         when vfc.case_type = 'PAYMENT_ADVANCE' then
           case
-            when coalesce(vfc.payout_status, '') = 'PAID' and coalesce(vfc.outstanding_amount, 0) > 0 then 'RECOVERY_ACTIVE'
-            when coalesce(vfc.payout_status, '') = 'PAID' and coalesce(vfc.outstanding_amount, 0) <= 0 then 'RECOVERY_CLEARED'
-            else coalesce(vfc.payout_status, 'NOT_PAID')
+            when coalesce(vfc.payout_status::text, '') = 'PAID' and coalesce(vfc.outstanding_amount, 0) > 0 then 'RECOVERY_ACTIVE'
+            when coalesce(vfc.payout_status::text, '') = 'PAID' and coalesce(vfc.outstanding_amount, 0) <= 0 then 'RECOVERY_CLEARED'
+            else coalesce(vfc.payout_status::text, 'NOT_PAID')
           end
         when vfc.case_type in ('OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT') then
           case
             when vfc.written_off_at_utc is not null then 'WRITTEN_OFF'
-            when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'RECOVERY_CLEARED'
+            when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status::text, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'RECOVERY_CLEARED'
             when coalesce(vfc.active_reserved_amount, 0) > 0 then 'RECOVERY_RESERVED'
             when coalesce(vfc.committed_amount, 0) > 0 then 'RECOVERY_COMMITTED'
             when coalesce(vfc.settled_amount, 0) > 0 then 'RECOVERY_SETTLED'
@@ -107994,13 +107994,13 @@ begin
         when vfc.case_type = 'UNDERPAYMENT' then
           case
             when vfc.written_off_at_utc is not null then 'WRITTEN_OFF'
-            when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'PAYOUT_CLEARED'
+            when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status::text, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'PAYOUT_CLEARED'
             when coalesce(vfc.active_reserved_amount, 0) > 0 then 'PAYOUT_RESERVED'
             when coalesce(vfc.committed_amount, 0) > 0 then 'PAYOUT_COMMITTED'
             when coalesce(vfc.settled_amount, 0) > 0 then 'PAYOUT_SETTLED'
             else 'PAYOUT_ACTIVE'
           end
-        else coalesce(vfc.status, 'ACTIVE')
+        else coalesce(vfc.status::text, 'ACTIVE')
       end as payout_or_recovery_status,
       coalesce(vfc.is_mixed_case, false) as is_mixed_case,
       coalesce(vfc.open_taxable_count, 0) as open_taxable_count,
