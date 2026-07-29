@@ -145,3 +145,24 @@ test('source-build lanes remain claimable inside the bounded database worker bud
     'the runtime-floor correction must not increase source-build concurrency or lane claim limits'
   );
 });
+
+test('source-build settled history is evaluated once per complete scope, not once per negative row', () => {
+  const sourceBuildBody = sqlFunctionBody(sourceBuildSql, 'pay_workbench_candidate_source_build_chunk');
+
+  assert.match(
+    sourceBuildBody,
+    /active_settled_component_basis AS \([\s\S]*_pay_active_settled_components\(\s*COALESCE\(v_sync_scope_timesheet_ids/
+  );
+  assert.match(
+    sourceBuildBody,
+    /post_active_settled_component_basis AS \([\s\S]*_pay_active_settled_components\(\s*COALESCE\(v_post_sync_scope_timesheet_ids/
+  );
+  assert.doesNotMatch(
+    sourceBuildBody,
+    /_pay_active_settled_components\(\s*ARRAY\[raw_outstanding_component\.timesheet_id\]/
+  );
+  assert.doesNotMatch(
+    sourceBuildBody,
+    /_pay_active_settled_components\(\s*ARRAY\[post_negative\.timesheet_id\]/
+  );
+});

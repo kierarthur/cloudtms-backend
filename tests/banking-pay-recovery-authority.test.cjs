@@ -1233,6 +1233,10 @@ test('post-sync attestation rebuilds rotation and settled-baseline authority fro
   );
   assert.match(
     postSyncBlock,
+    /post_active_settled_component_basis AS \([\s\S]*public\._pay_active_settled_components\(\s*COALESCE\(v_post_sync_scope_timesheet_ids[\s\S]*GROUP BY post_active_settled_component\.timesheet_id/
+  );
+  assert.doesNotMatch(
+    postSyncBlock,
     /public\._pay_active_settled_components\(\s*ARRAY\[post_negative\.timesheet_id\]::uuid\[\]/
   );
   assert.doesNotMatch(

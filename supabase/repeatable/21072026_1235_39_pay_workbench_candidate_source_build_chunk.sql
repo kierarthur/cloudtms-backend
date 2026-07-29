@@ -1356,6 +1356,22 @@ BEGIN
       ON reserved_component.timesheet_id = live_key.timesheet_id
      AND reserved_component.key_type = live_key.key_type
      AND reserved_component.key_value = live_key.key_value
+  ), active_settled_component_basis AS (
+    SELECT
+      active_settled_component.timesheet_id,
+      COUNT(*)::integer AS active_settled_component_count,
+      md5(COALESCE(jsonb_agg(
+        jsonb_build_object(
+          'key_type', active_settled_component.key_type,
+          'key_value', active_settled_component.key_value,
+          'amount_ex_vat', ROUND(COALESCE(active_settled_component.amount_ex_vat, 0), 2),
+          'amount_inc_vat', ROUND(COALESCE(active_settled_component.amount_inc_vat, 0), 2)
+        ) ORDER BY active_settled_component.key_type, active_settled_component.key_value
+      )::text, '[]')) AS active_settled_signature
+    FROM public._pay_active_settled_components(
+      COALESCE(v_sync_scope_timesheet_ids, ARRAY[]::uuid[])
+    ) AS active_settled_component
+    GROUP BY active_settled_component.timesheet_id
   )
   SELECT
     raw_outstanding_component.timesheet_id,
@@ -1376,19 +1392,8 @@ BEGIN
   FROM raw_outstanding_components AS raw_outstanding_component
   LEFT JOIN public.timesheet_pay_state AS timesheet_pay_state
     ON timesheet_pay_state.timesheet_id = raw_outstanding_component.timesheet_id
-  LEFT JOIN LATERAL (
-    SELECT
-      COUNT(*)::integer AS active_settled_component_count,
-      md5(COALESCE(jsonb_agg(
-        jsonb_build_object(
-          'key_type', active_settled_component.key_type,
-          'key_value', active_settled_component.key_value,
-          'amount_ex_vat', ROUND(COALESCE(active_settled_component.amount_ex_vat, 0), 2),
-          'amount_inc_vat', ROUND(COALESCE(active_settled_component.amount_inc_vat, 0), 2)
-        ) ORDER BY active_settled_component.key_type, active_settled_component.key_value
-      )::text, '[]')) AS active_settled_signature
-    FROM public._pay_active_settled_components(ARRAY[raw_outstanding_component.timesheet_id]::uuid[]) AS active_settled_component
-  ) AS active_settled_basis ON true
+  LEFT JOIN active_settled_component_basis AS active_settled_basis
+    ON active_settled_basis.timesheet_id = raw_outstanding_component.timesheet_id
   WHERE raw_outstanding_component.outstanding_ex_vat < 0;
 
   /*
@@ -1860,6 +1865,22 @@ BEGIN
       ON reserved_component.timesheet_id = live_key.timesheet_id
      AND reserved_component.key_type = live_key.key_type
      AND reserved_component.key_value = live_key.key_value
+  ), post_active_settled_component_basis AS (
+    SELECT
+      post_active_settled_component.timesheet_id,
+      COUNT(*)::integer AS active_settled_component_count,
+      md5(COALESCE(jsonb_agg(
+        jsonb_build_object(
+          'key_type', post_active_settled_component.key_type,
+          'key_value', post_active_settled_component.key_value,
+          'amount_ex_vat', ROUND(COALESCE(post_active_settled_component.amount_ex_vat, 0), 2),
+          'amount_inc_vat', ROUND(COALESCE(post_active_settled_component.amount_inc_vat, 0), 2)
+        ) ORDER BY post_active_settled_component.key_type, post_active_settled_component.key_value
+      )::text, '[]')) AS active_settled_signature
+    FROM public._pay_active_settled_components(
+      COALESCE(v_post_sync_scope_timesheet_ids, ARRAY[]::uuid[])
+    ) AS post_active_settled_component
+    GROUP BY post_active_settled_component.timesheet_id
   )
   INSERT INTO pg_temp._tmp_pay_wb_sync_negative_components (
     timesheet_id,
@@ -1890,21 +1911,8 @@ BEGIN
   FROM post_raw_outstanding_components AS post_negative
   LEFT JOIN public.timesheet_pay_state AS post_timesheet_pay_state
     ON post_timesheet_pay_state.timesheet_id = post_negative.timesheet_id
-  LEFT JOIN LATERAL (
-    SELECT
-      COUNT(*)::integer AS active_settled_component_count,
-      md5(COALESCE(jsonb_agg(
-        jsonb_build_object(
-          'key_type', post_active_settled_component.key_type,
-          'key_value', post_active_settled_component.key_value,
-          'amount_ex_vat', ROUND(COALESCE(post_active_settled_component.amount_ex_vat, 0), 2),
-          'amount_inc_vat', ROUND(COALESCE(post_active_settled_component.amount_inc_vat, 0), 2)
-        ) ORDER BY post_active_settled_component.key_type, post_active_settled_component.key_value
-      )::text, '[]')) AS active_settled_signature
-    FROM public._pay_active_settled_components(
-      ARRAY[post_negative.timesheet_id]::uuid[]
-    ) AS post_active_settled_component
-  ) AS post_active_settled_basis ON true
+  LEFT JOIN post_active_settled_component_basis AS post_active_settled_basis
+    ON post_active_settled_basis.timesheet_id = post_negative.timesheet_id
   WHERE post_negative.outstanding_ex_vat < 0;
 
   PERFORM public._ctms_rewrite_source_build_correction_negative_components_v1(
