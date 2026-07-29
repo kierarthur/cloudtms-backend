@@ -352,10 +352,52 @@ begin
         'references',jsonb_build_object(
           'whole',coalesce((select rs.current_reference from reference_scope rs where rs.invoice_id=il.invoice_id and rs.timesheet_id=t.timesheet_id and rs.segment_id is null and rs.day_ymd is null and nullif(rs.current_reference,'') is not null order by rs.row_key limit 1),nullif(t.reference_number,'')),
           'day',coalesce(
-             (select jsonb_agg(jsonb_build_object('day_key',rs.day_ymd,'reference',rs.current_reference,'display_order',rs.row_key) order by rs.day_ymd,rs.row_key) from reference_scope rs where rs.invoice_id=il.invoice_id and rs.timesheet_id=t.timesheet_id and rs.day_ymd is not null and rs.segment_id is null),
+             (
+               select jsonb_agg(
+                 jsonb_build_object(
+                   'day_key',ordered_reference.day_ymd,
+                   'reference',ordered_reference.current_reference,
+                   'display_order',ordered_reference.display_order
+                 )
+                 order by ordered_reference.display_order
+               )
+               from (
+                 select
+                   rs.day_ymd,
+                   rs.current_reference,
+                   row_number() over(order by rs.day_ymd,rs.row_key)::integer as display_order
+                 from reference_scope rs
+                 where rs.invoice_id=il.invoice_id
+                   and rs.timesheet_id=t.timesheet_id
+                   and rs.day_ymd is not null
+                   and rs.segment_id is null
+               ) ordered_reference
+             ),
              (select jsonb_agg(jsonb_build_object('day_key',d.key,'reference',case when jsonb_typeof(d.value)='object' then coalesce(d.value->>'reference',d.value->>'ref_num',d.value->>'value') else trim(both '"' from d.value::text) end,'display_order',d.ordinality) order by d.ordinality) from jsonb_each(case when jsonb_typeof(t.day_references_json)='object' then t.day_references_json else '{}'::jsonb end) with ordinality d(key,value,ordinality)),
              '[]'::jsonb),
-          'segment',coalesce((select jsonb_agg(jsonb_build_object('segment_id',rs.segment_id,'reference',rs.current_reference,'display_order',rs.row_key) order by rs.segment_id,rs.row_key) from reference_scope rs where rs.invoice_id=il.invoice_id and rs.timesheet_id=t.timesheet_id and rs.segment_id is not null),'[]'::jsonb)),
+          'segment',coalesce(
+            (
+              select jsonb_agg(
+                jsonb_build_object(
+                  'segment_id',ordered_reference.segment_id,
+                  'reference',ordered_reference.current_reference,
+                  'display_order',ordered_reference.display_order
+                )
+                order by ordered_reference.display_order
+              )
+              from (
+                select
+                  rs.segment_id,
+                  rs.current_reference,
+                  row_number() over(order by rs.segment_id,rs.row_key)::integer as display_order
+                from reference_scope rs
+                where rs.invoice_id=il.invoice_id
+                  and rs.timesheet_id=t.timesheet_id
+                  and rs.segment_id is not null
+              ) ordered_reference
+            ),
+            '[]'::jsonb
+          ),
         'additional_units',coalesce((
           select jsonb_object_agg(
             au.key,

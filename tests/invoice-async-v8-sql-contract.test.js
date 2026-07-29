@@ -169,6 +169,18 @@ test('timesheet presentation uses authoritative schedule and authorisation field
     presentation,
     /'authorisation',jsonb_build_object\('authorised',t\.auth_name is not null/,
   );
+  assert.match(
+    presentation,
+    /row_number\(\) over\(order by rs\.day_ymd,rs\.row_key\)::integer as display_order/i,
+  );
+  assert.match(
+    presentation,
+    /row_number\(\) over\(order by rs\.segment_id,rs\.row_key\)::integer as display_order/i,
+  );
+  assert.doesNotMatch(
+    presentation,
+    /'display_order',rs\.row_key/i,
+  );
 });
 
 test('Batch Generate creates invoice records only while Batch Issue accepts document preparation', () => {
