@@ -398,6 +398,50 @@ test('consolidated invoice hides the top worker field but keeps workers in line 
   assert.doesNotMatch(html, /<div class="label">Candidate \/ worker<\/div>/);
 });
 
+test('NHSP invoice hides a single worker header but keeps the line worker', () => {
+  const model = {
+    schema_version: 'INVOICE_RENDER_MODEL_V1',
+    purpose: 'DRAFT_PREVIEW',
+    document_type: 'SELF_BILL_INVOICE',
+    invoice_number: 'INV-NHSP',
+    currency: 'GBP',
+    suppress_candidate_header: true,
+    supplier: {
+      legal_name: 'Supplier',
+      registered_address: ['1 Supplier Street'],
+      vat_registration_number: 'GB123456789'
+    },
+    customer: { legal_name: 'Trust', billing_address: ['2 Trust Road'] },
+    references: {},
+    lines: [{
+      row_key: 'line-1',
+      source_invoice_line_id: '00000000-0000-4000-8000-000000000001',
+      source_key: 'source-1',
+      description: 'Day',
+      worker: 'Worker One',
+      reference: 'REF-1',
+      unit: 'hours',
+      quantity: '7.5',
+      unit_price: '40',
+      net_amount: '300',
+      vat_rate: '20',
+      vat_amount: '60',
+      gross_amount: '360',
+      display_order: 1
+    }],
+    vat_breakdown: [{ rate: '20', net_amount: '300', vat_amount: '60', gross_amount: '360' }],
+    totals: { net: 300, vat: 60, gross: 360 },
+    payment: { terms_text: '30 days from invoice date' },
+    credit_note: { is_credit_note: false },
+    self_bill: { is_self_bill: true, legal_wording: 'Self bill wording' },
+    legal_wording: [],
+    template_version: 'invoice-professional-v1'
+  };
+  const html = buildProfessionalInvoiceHtml(model);
+  assert.doesNotMatch(html, /<div class="label">Candidate \/ worker<\/div>/);
+  assert.equal((html.match(/Worker One/g) || []).length, 1);
+});
+
 test('frozen presentation identity is recomputed and pay-side fields are rejected', async () => {
   const model = {
     schema_version: 'INVOICE_RENDER_MODEL_V1',
@@ -918,11 +962,17 @@ test('professional source templates use explicit allowlisted fields', () => {
   assert.ok(!ts.includes('Additional units: Additional units'));
   assert.ok(!ts.includes(' · by </div>'));
   const hr = buildHealthRosterSupportHtml({ schema_version: 'HEALTHROSTER_PRESENTATION_V1', rows: [{ worker: 'Worker', assignment: 'Assignment', shift_date: null, shift_times: null, site: null, ward: null, reference: null, units_hours: null, validation_state: null, source_identity: null, secret_future_key: 'must-not-render' }] });
-  const nhsp = buildNhspSupportHtml({ schema_version: 'NHSP_PRESENTATION_V1', rows: [{ worker: 'Worker', nhsp_shift_id: 'SHIFT-1', booking_reference: null, site_ward: null, shift_date: null, shift_times: null, hours_units: null, source_identity: null, validation_state: null, secret_future_key: 'must-not-render' }] });
+  const nhsp = buildNhspSupportHtml({ schema_version: 'NHSP_PRESENTATION_V1', rows: [{ worker: 'Worker', nhsp_shift_id: 'SHIFT-1', booking_reference: null, site_ward: null, shift_date: null, shift_times: null, hours_units: null, commission_amount: 69.48, total_amount: 502.32, source_identity: 'NHSP · import row 1', validation_state: 'Included', secret_future_key: 'must-not-render' }] });
   assert.match(nhsp, /Assignment \/ shift ID/);
   const higher = buildHigherRateSupportHtml({ schema_version: 'HIGHER_RATE_PRESENTATION_V1', rows: [{ worker_source: 'Worker', shift_date: null, original_rate: null, applied_rate: '25.00', units: null, display_amount: null, reason: null, approval_identity: null, reference: null, secret_future_key: 'must-not-render' }] });
   assert.ok(hr.includes('Assignment'));
   assert.ok(nhsp.includes('SHIFT-1'));
+  assert.ok(nhsp.includes('£69.48'));
+  assert.ok(nhsp.includes('£502.32'));
+  assert.ok(!nhsp.includes('>Source<'));
+  assert.ok(!nhsp.includes('>Validation<'));
+  assert.ok(!nhsp.includes('NHSP · import row 1'));
+  assert.ok(!nhsp.includes('>Included<'));
   assert.ok(higher.includes('25.00'));
   assert.ok(!`${hr}${nhsp}${higher}`.includes('must-not-render'));
 });

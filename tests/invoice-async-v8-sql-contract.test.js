@@ -278,6 +278,18 @@ test('invoice presentation maps authoritative NHSP import fields into readable s
     presentation,
     /'source_identity',concat_ws\(' · ',[\s\S]*'import row '\|\|r\.ordinality::text\)/i,
   );
+  assert.match(
+    presentation,
+    /'commission_amount',coalesce\([\s\S]*lower\(btrim\(h\.header_name\)\)='commission'/i,
+  );
+  assert.match(
+    presentation,
+    /'total_amount',coalesce\([\s\S]*lower\(btrim\(h\.header_name\)\) in \('total cost','total amount'\)/i,
+  );
+  assert.match(
+    presentation,
+    /'suppress_candidate_header',[\s\S]*upper\(nhsp\.source_system\)='NHSP'[\s\S]*count\(distinct il\.timesheet_id\)[\s\S]*count\(distinct nullif\(btrim\(lb\.worker_name\),''\)\)/i,
+  );
   assert.doesNotMatch(
     presentation,
     /'source_identity',jsonb_build_object\('source_system'/i,

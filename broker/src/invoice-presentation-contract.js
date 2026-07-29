@@ -501,7 +501,8 @@ export function validateFrozenHealthRosterModel(model) {
 export function validateFrozenNhspModel(model) {
   return validateSupportModel(model, 'NHSP_PRESENTATION_V1', [
     'worker', 'nhsp_shift_id', 'booking_reference', 'site_ward', 'shift_date',
-    'shift_times', 'hours_units', 'source_identity', 'validation_state'
+    'shift_times', 'hours_units', 'commission_amount', 'total_amount',
+    'source_identity', 'validation_state'
   ]);
 }
 

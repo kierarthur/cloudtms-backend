@@ -509,6 +509,27 @@ begin
                     - (coalesce(r.value->>'break_mins','0')::numeric / 60)
                   )::numeric,2),'FM999999990.00'))
                 end),
+              'commission_amount',coalesce(
+                r.value->>'commission_amount',r.value->>'commission',
+                (select r.value->'raw_columns'->>(h.ordinality-1)
+                 from jsonb_array_elements_text(
+                   case when jsonb_typeof(s.header_columns)='array'
+                     then s.header_columns else '[]'::jsonb end
+                 ) with ordinality h(header_name,ordinality)
+                 where lower(btrim(h.header_name))='commission'
+                 order by h.ordinality
+                 limit 1)),
+              'total_amount',coalesce(
+                r.value->>'total_amount',r.value->>'total_cost',
+                (select r.value->'raw_columns'->>(h.ordinality-1)
+                 from jsonb_array_elements_text(
+                   case when jsonb_typeof(s.header_columns)='array'
+                     then s.header_columns else '[]'::jsonb end
+                 ) with ordinality h(header_name,ordinality)
+                 where lower(btrim(h.header_name)) in ('total cost','total amount')
+                 order by case when lower(btrim(h.header_name))='total cost'
+                   then 0 else 1 end,h.ordinality
+                 limit 1)),
               'source_identity',concat_ws(' · ',
                 upper(coalesce(s.source_system,'NHSP')),
                 'import row '||r.ordinality::text),
@@ -672,6 +693,14 @@ begin
           'account_reference',coalesce(i.header_snapshot_json->>'client_reference',cl.cli_ref)),
         'references',jsonb_build_object('purchase_order',coalesce(i.header_snapshot_json->>'po_reference',i.header_snapshot_json->>'po_number'),'client_reference',coalesce(i.header_snapshot_json->>'client_reference',cl.cli_ref),'work_location',i.header_snapshot_json->>'work_location'),
         'candidate_summary',i.header_snapshot_json->>'candidate_summary',
+        'suppress_candidate_header',
+          exists(select 1 from public.invoice_hr_source_rows nhsp
+            where nhsp.invoice_id=i.id and upper(nhsp.source_system)='NHSP')
+          or (select count(distinct il.timesheet_id)
+              from public.invoice_lines il
+              where il.invoice_id=i.id and il.timesheet_id is not null)>1
+          or (select count(distinct nullif(btrim(lb.worker_name),''))
+              from invoice_line_base lb where lb.invoice_id=i.id)>1,
         'branding',jsonb_build_object(
           'logo',case
             when jsonb_typeof(i.header_snapshot_json->'agency_logo')='object'
