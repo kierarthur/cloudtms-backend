@@ -1174,6 +1174,16 @@ test('presentation authority repeatable defers safely instead of failing CI whil
     )?.length,
     1,
   );
+  const manifestInstall = presentationAuthority.indexOf(
+    '24072026_1217_private_invoice_document_advance_batch.sql',
+  );
+  assert.ok(manifestInstall >= 0 && manifestInstall < activeWorkGuard);
+  assert.equal(
+    presentationAuthority.match(
+      /24072026_1217_private_invoice_document_advance_batch\.sql/g,
+    )?.length,
+    1,
+  );
 });
 
 test('batch rollup separates carrier trigger writes from the root update', () => {
@@ -1403,6 +1413,29 @@ test('manual and QR timesheet document planning fails closed without an immutabl
   assert.doesNotMatch(
     documentAdvance,
     /else 'ELECTRONIC_TIMESHEET' end input_type[\s\S]{0,500}or not exists\(/s,
+  );
+});
+
+test('direct manual and QR timesheet documents use the exact registered asset', () => {
+  const documentAdvance = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+    + '24072026_1217_private_invoice_document_advance_batch.sql',
+  );
+  assert.match(
+    documentAdvance,
+    /direct_timesheet as materialized \([\s\S]*join public\.timesheets t[\s\S]*left join public\.invoice_document_assets a\s+on a\.id=t\.manual_document_asset_id/s,
+  );
+  assert.match(
+    documentAdvance,
+    /blocked_direct_timesheet_source as materialized \([\s\S]*'MANUAL_TIMESHEET_ASSET_REQUIRED'[\s\S]*dt\.submission_mode in\('MANUAL','QR'\)[\s\S]*dt\.asset_id is null/s,
+  );
+  assert.match(
+    documentAdvance,
+    /select dt\.chunk_id,dt\.document_version_id,0::integer,\s*'ASSET',dt\.source_kind,dt\.source_id,dt\.source_revision,\s*dt\.asset_id[\s\S]*dt\.submission_mode in\('MANUAL','QR'\) and dt\.asset_id is not null/s,
+  );
+  assert.match(
+    documentAdvance,
+    /from linked l\s+left join direct_timesheet dt on dt\.chunk_id=l\.id\s+where l\.entity_type='INVOICE' or dt\.submission_mode='ELECTRONIC'\s+on conflict/s,
   );
 });
 

@@ -3,6 +3,7 @@
 begin;
 
 \ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
+\ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch.sql
 
 select exists (
   select 1
@@ -20,7 +21,6 @@ $deferred$;
 \else
 
 \ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql
-\ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch.sql
 \ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_issue_advance_batch.sql
 \ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_context_batch.sql
 \ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_delivery_advance_batch.sql

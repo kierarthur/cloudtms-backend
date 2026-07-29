@@ -115,6 +115,35 @@ begin
     from version_seed s
     where s.presentation_valid
   ),
+  direct_timesheet as materialized (
+    select l.id chunk_id,l.operation_id,l.document_version_id,
+      upper(coalesce(t.submission_mode::text,'')) submission_mode,
+      t.manual_document_asset_id,
+      a.id asset_id,a.source_kind,a.source_id,a.source_revision,
+      a.original_filename,a.normalised_page_count,a.status asset_status
+    from linked l
+    join public.timesheets t
+      on l.entity_type='TIMESHEET'
+      and t.timesheet_id=l.entity_id
+      and t.is_current
+    left join public.invoice_document_assets a
+      on a.id=t.manual_document_asset_id
+  ),
+  blocked_direct_timesheet_source as materialized (
+    update public.invoice_operation_chunks c
+       set status='BLOCKED',phase='BLOCKED',failed_at_utc=v_now,
+           lease_owner=null,lease_token=null,lease_expires_at_utc=null,
+           error_json=jsonb_build_object(
+             'code','MANUAL_TIMESHEET_ASSET_REQUIRED',
+             'timesheet_id',c.entity_id,
+             'submission_mode',dt.submission_mode),
+           updated_at_utc=v_now
+    from direct_timesheet dt
+    where c.id=dt.chunk_id
+      and dt.submission_mode in('MANUAL','QR')
+      and dt.asset_id is null
+    returning c.id,c.operation_id,c.status,c.phase,c.error_json
+  ),
   invoice_ts as materialized (
     select l.id chunk_id,l.operation_id,l.document_version_id,
       x.value timesheet_source,
@@ -160,6 +189,19 @@ begin
       0::integer expected_page_count,'CORE_RENDER'::text inclusion_reason,
       l.presentation_schema,l.presentation_hash
     from linked l
+    left join direct_timesheet dt on dt.chunk_id=l.id
+    where l.entity_type='INVOICE' or dt.submission_mode='ELECTRONIC'
+    union all
+    select dt.chunk_id,dt.document_version_id,0::integer,
+      'ASSET',dt.source_kind,dt.source_id,dt.source_revision,
+      dt.asset_id,null::uuid,
+      coalesce(nullif(dt.original_filename,''),'Manual/evidence timesheet asset'),
+      dt.normalised_page_count,'TIMESHEET_ASSET_POLICY',
+      'ASSET_SOURCE_V1',
+      encode(digest(concat_ws('|',dt.asset_id::text,dt.source_revision,
+        dt.source_kind,dt.source_id::text),'sha256'),'hex')
+    from direct_timesheet dt
+    where dt.submission_mode in('MANUAL','QR') and dt.asset_id is not null
     union all
     select it.chunk_id,it.document_version_id,
       1000+row_number() over(partition by it.chunk_id order by it.timesheet_id)::integer,
@@ -297,6 +339,8 @@ begin
         'snapshot_hash',l.snapshot_hash_v5),
       l.control_version,v_now,v_now
     from linked l
+    left join direct_timesheet dt on dt.chunk_id=l.id
+    where l.entity_type='INVOICE' or dt.submission_mode='ELECTRONIC'
     on conflict(operation_id,chunk_type,level_no,sequence_no,work_key) do update set
       priority=greatest(public.invoice_operation_chunks.priority,excluded.priority),
       payload_json=excluded.payload_json,
@@ -380,6 +424,9 @@ begin
            updated_at_utc=v_now
     from linked l
     where c.id=l.id
+      and not exists(
+        select 1 from blocked_direct_timesheet_source blocked_source
+        where blocked_source.id=l.id)
     returning c.id,c.operation_id,c.document_version_id,c.status,c.phase
   ),
   rollup_ops as materialized (
@@ -387,6 +434,7 @@ begin
     from (
       select operation_id from advanced
       union select operation_id from blocked
+      union select operation_id from blocked_direct_timesheet_source
       union select operation_id from core_chunks
       union select operation_id from source_chunks
       union select operation_id from input_chunks
@@ -394,6 +442,8 @@ begin
   ),
   all_results as materialized (
     select jsonb_build_object('chunk_id',b.id,'operation_id',b.operation_id,'status',b.status,'phase',b.phase,'error',b.error_json) result from blocked b
+    union all
+    select jsonb_build_object('chunk_id',b.id,'operation_id',b.operation_id,'status',b.status,'phase',b.phase,'error',b.error_json) result from blocked_direct_timesheet_source b
     union all
     select jsonb_build_object('chunk_id',p.id,'operation_id',p.operation_id,'status',p.status,'phase',p.phase,'document_version_id',p.document_version_id) result from advanced p
   )
