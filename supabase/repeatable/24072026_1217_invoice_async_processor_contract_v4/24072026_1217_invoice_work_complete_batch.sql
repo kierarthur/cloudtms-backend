@@ -1301,7 +1301,8 @@ begin
   ),
   updated_assets as materialized (
     update public.invoice_document_assets a
-    set normalised_manifest_json=r.manifest,
+    set normalised_manifest_json=case when jsonb_array_length(r.manifest)=1
+          then '[]'::jsonb else r.manifest end,
         normalised_r2_key=case when jsonb_array_length(r.manifest)=1
           then r.manifest->0->>'r2_key' else null end,
         normalised_sha256=case when jsonb_array_length(r.manifest)=1

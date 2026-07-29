@@ -1394,3 +1394,22 @@ test('manual and QR timesheet document planning fails closed without an immutabl
     /else 'ELECTRONIC_TIMESHEET' end input_type[\s\S]{0,500}or not exists\(/s,
   );
 });
+
+test('single-part normalised assets use the direct-key READY representation', () => {
+  const workComplete = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+    + '24072026_1217_invoice_work_complete_batch.sql',
+  );
+  assert.match(
+    workComplete,
+    /normalised_manifest_json=case when jsonb_array_length\(r\.manifest\)=1\s*then '\[\]'::jsonb else r\.manifest end/s,
+  );
+  assert.match(
+    workComplete,
+    /normalised_r2_key=case when jsonb_array_length\(r\.manifest\)=1\s*then r\.manifest->0->>'r2_key' else null end/s,
+  );
+  assert.match(
+    workComplete,
+    /normalised_manifest_hash=case when jsonb_array_length\(r\.manifest\)>1\s*then r\.manifest_hash else null end/s,
+  );
+});
