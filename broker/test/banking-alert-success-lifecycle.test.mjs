@@ -107,7 +107,7 @@ test('routine alert reads reuse the actor summary while explicit refresh bypasse
 
   assert.match(refresh, /v_alert_context IN \('ALERT_PANEL', 'ALERTS_PANEL', 'CACHED', 'CHANGES_PING', 'RPC_CHANGES_PING'\)/);
   assert.match(refresh, /FROM public\.banking_alert_display_summary AS alert_summary/);
-  assert.match(refresh, /v_cached_updated_at_utc >= now\(\) - INTERVAL '5 minutes'/);
+  assert.match(refresh, /v_cached_updated_at_utc >= now\(\) - INTERVAL '10 minutes'/);
   assert.match(refresh, /'cached', true/);
   assert.match(refresh, /PERFORM public\.banking_pay_hot_path_budget_apply/);
   assert.match(refresh, /public\.banking_alerts_active_for_user/);

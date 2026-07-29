@@ -61621,10 +61621,11 @@ BEGIN
   END IF;
 
   -- Routine navigation/heartbeat reads must not rebuild the complete alert set
-  -- on every request. A five-minute actor-scoped cache keeps the global alert
-  -- badge current without repeatedly executing the expensive live projection.
-  -- Explicit alert-management and refresh contexts deliberately bypass this
-  -- branch so user actions still observe current database truth immediately.
+  -- on every request. A ten-minute actor-scoped recovery cache protects
+  -- against an indefinitely stale row when no explicit invalidation path fires,
+  -- without turning the multi-second live projection into background polling.
+  -- Alert-panel opening and explicit alert-management/refresh contexts bypass
+  -- this branch so user actions still observe current database truth promptly.
   IF v_alert_context IN ('ALERT_PANEL', 'ALERTS_PANEL', 'CACHED', 'CHANGES_PING', 'RPC_CHANGES_PING') THEN
     SELECT
       alert_summary.summary_json,
@@ -61636,7 +61637,7 @@ BEGIN
     WHERE alert_summary.actor_user_id = p_actor_user_id;
 
     IF FOUND
-       AND v_cached_updated_at_utc >= now() - INTERVAL '5 minutes'
+       AND v_cached_updated_at_utc >= now() - INTERVAL '10 minutes'
        AND jsonb_typeof(COALESCE(v_cached_json, '{}'::jsonb)) = 'object' THEN
       RETURN COALESCE(v_cached_json, '{}'::jsonb) || jsonb_build_object(
         'cached', true,
