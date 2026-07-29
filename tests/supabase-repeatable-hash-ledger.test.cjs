@@ -17,6 +17,13 @@ test('Supabase deployment applies only new or content-changed repeatables', () =
     'ledger tables must not make a genuinely empty database look pre-populated'
   );
   assert.match(workflow, /sha256sum "\$1"/);
+  assert.match(workflow, /declare -A REPEATABLE_LEDGER_HASHES/);
+  assert.match(workflow, /select filename, content_sha256/);
+  assert.doesNotMatch(
+    workflow,
+    /repeatable_ledger_hash \(\)/,
+    'unchanged files must not cause one database query per repeatable'
+  );
   assert.match(workflow, /SKIP unchanged repeatable/);
   assert.match(workflow, /APPLY new\/changed repeatable/);
   assert.match(
@@ -35,8 +42,14 @@ test('first hash-ledger run is fail-closed and bootstraps only unchanged source'
   assert.match(workflow, /fetch-depth: 0/);
   assert.match(workflow, /BEFORE_SHA: \$\{\{ github\.event\.before \|\| '' \}\}/);
   assert.match(workflow, /BOOTSTRAP_EXISTING_REPEATABLES=false/);
+  assert.match(
+    workflow,
+    /REPEATABLE_BOOTSTRAP_COMPLETE="\$\{REPEATABLE_LEDGER_HASHES\[__BOOTSTRAPPED__\]:-\}"/
+  );
+  assert.match(workflow, /values \('__BOOTSTRAPPED__', 'v1', now\(\)\)/);
   assert.match(workflow, /GITHUB_EVENT_NAME[^]*!= "push"/);
   assert.match(workflow, /Cannot safely bootstrap repeatable hashes/);
   assert.match(workflow, /git diff --quiet "\$\{BEFORE_SHA\}" "\$\{GITHUB_SHA\}"/);
-  assert.match(workflow, /BASELINE repeatable/);
+  assert.match(workflow, /BOOTSTRAP_SQL="\$\(mktemp\)"/);
+  assert.match(workflow, /BASELINE complete for unchanged repeatables/);
 });
