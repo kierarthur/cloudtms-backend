@@ -1437,6 +1437,10 @@ test('direct manual and QR timesheet documents use the exact registered asset', 
     documentAdvance,
     /from linked l\s+left join direct_timesheet dt on dt\.chunk_id=l\.id\s+where l\.entity_type='INVOICE' or dt\.submission_mode='ELECTRONIC'\s+on conflict/s,
   );
+  assert.match(
+    documentAdvance,
+    /status=case when exists\(\s*select 1 from direct_timesheet dt\s*where dt\.chunk_id=l\.id\s*and dt\.submission_mode in\('MANUAL','QR'\)\s*and dt\.asset_status='READY'\)\s*then 'QUEUED' else 'WAITING' end/s,
+  );
 });
 
 test('single-part normalised assets use the direct-key READY representation', () => {

@@ -418,8 +418,25 @@ begin
   ),
   advanced as materialized (
     update public.invoice_operation_chunks c
-       set document_version_id=l.document_version_id,phase='WAIT_FOR_INPUTS',status='WAITING',
-           progress_json=jsonb_build_object('status_message','Waiting for document inputs','manifest_items',(select jsonb_array_length(v.manifest_json) from public.invoice_document_versions v where v.id=l.document_version_id)),
+       set document_version_id=l.document_version_id,
+           phase='WAIT_FOR_INPUTS',
+           status=case when exists(
+             select 1 from direct_timesheet dt
+             where dt.chunk_id=l.id
+               and dt.submission_mode in('MANUAL','QR')
+               and dt.asset_status='READY')
+             then 'QUEUED' else 'WAITING' end,
+           progress_json=jsonb_build_object(
+             'status_message',case when exists(
+               select 1 from direct_timesheet dt
+               where dt.chunk_id=l.id
+                 and dt.submission_mode in('MANUAL','QR')
+                 and dt.asset_status='READY')
+               then 'Document inputs ready'
+               else 'Waiting for document inputs' end,
+             'manifest_items',(select jsonb_array_length(v.manifest_json)
+               from public.invoice_document_versions v
+               where v.id=l.document_version_id)),
            lease_owner=null,lease_token=null,lease_expires_at_utc=null,
            updated_at_utc=v_now
     from linked l
