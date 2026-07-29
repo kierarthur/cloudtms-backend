@@ -219,7 +219,28 @@ async function imageMetadata(path, deadline) {
   const [format, width, height, orientation, frames] = stdout.trim().split('|');
   if (Number(frames || 1) !== 1) throw Object.assign(new Error('ASSET_MEDIA_TYPE_UNSUPPORTED'), { code: 'ASSET_MEDIA_TYPE_UNSUPPORTED', category: 'PERMANENT_INPUT' });
   const orientationMap = { TopLeft: 1, TopRight: 2, BottomRight: 3, BottomLeft: 4, LeftTop: 5, RightTop: 6, RightBottom: 7, LeftBottom: 8, Undefined: 1 };
-  return { format: String(format).toUpperCase(), width_pixels: Number(width), height_pixels: Number(height), exif_orientation: orientationMap[orientation] || 1, orientation_name: orientation || 'Undefined', estimated_decoded_bytes: Number(width) * Number(height) * 4, frame_count: 1, decode_verified: true };
+  const orientationDegrees = {
+    TopLeft: 0,
+    TopRight: 0,
+    BottomRight: 180,
+    BottomLeft: 180,
+    LeftTop: 90,
+    RightTop: 90,
+    RightBottom: 270,
+    LeftBottom: 270,
+    Undefined: 0
+  };
+  return {
+    format: String(format).toUpperCase(),
+    width_pixels: Number(width),
+    height_pixels: Number(height),
+    exif_orientation: orientationMap[orientation] || 1,
+    orientation_name: orientation || 'Undefined',
+    orientation_degrees: orientationDegrees[orientation] ?? 0,
+    estimated_decoded_bytes: Number(width) * Number(height) * 4,
+    frame_count: 1,
+    decode_verified: true
+  };
 }
 
 function detectMediaType(bytes) {

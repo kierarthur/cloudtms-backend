@@ -9,6 +9,7 @@ import {
 
 const workerPath = new URL('../src/worker.js', import.meta.url);
 const processorConfigPath = new URL('../wrangler.jsonc', import.meta.url);
+const containerServerPath = new URL('../container/server.mjs', import.meta.url);
 const receiptUrl = new URL('../src/receipt-contract.js', import.meta.url).href;
 const { buildPhysicalReceipt } = await import(receiptUrl);
 const securityUrl = new URL('../../shared/invoice-processor-security.js', import.meta.url).href;
@@ -39,6 +40,14 @@ test('processor capacity covers readiness plus configured work concurrency and r
   assert.equal(processorConfig.containers[0].max_instances, 4);
   assert.equal(processorConfig.env.test.containers[0].max_instances, 4);
   assert.match(workerSource, /sleepAfter = '10s'/);
+});
+
+test('image inspection returns the bounded orientation contract required by PostgreSQL', async () => {
+  const serverSource = await readFile(containerServerPath, 'utf8');
+  assert.match(serverSource, /orientation_degrees:\s*orientationDegrees\[orientation\]\s*\?\?\s*0/);
+  assert.match(serverSource, /BottomRight:\s*180/);
+  assert.match(serverSource, /RightTop:\s*90/);
+  assert.match(serverSource, /LeftBottom:\s*270/);
 });
 
 function objectFromBytes(bytes, metadata = {}) {
