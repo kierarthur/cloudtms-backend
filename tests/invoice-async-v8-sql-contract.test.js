@@ -1496,6 +1496,20 @@ test('contract override defaults work without a client settings row', () => {
   );
 });
 
+test('contract override controls HealthRoster invoice validation', () => {
+  const timesheetSummary = read('supabase/repeatable/02052026_1528_fast_timesheet_reading.sql');
+  const effectiveHrValidation = (
+    timesheetSummary.match(
+      /CASE WHEN ct0\.overrideclientsettings THEN ct0\.requires_hr ELSE NULL::boolean END,\s*ch0\.hr_validation_required,\s*FALSE\s*\)\s+AS client_hr_validation_required/gi,
+    ) || []
+  );
+  assert.equal(effectiveHrValidation.length, 2);
+  assert.doesNotMatch(
+    timesheetSummary,
+    /COALESCE\(ch0\.hr_validation_required,\s*FALSE\)\s+AS client_hr_validation_required/i,
+  );
+});
+
 test('normalised timesheet evidence adopts the exact registered asset revision', () => {
   const workComplete = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'

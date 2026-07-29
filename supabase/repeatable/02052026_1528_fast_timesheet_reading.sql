@@ -10369,7 +10369,11 @@ BEGIN
       ) AS client_no_timesheet_required,
       COALESCE(ch0.pay_reference_required, FALSE) AS client_pay_reference_required,
       COALESCE(ch0.invoice_reference_required, FALSE) AS client_invoice_reference_required,
-      COALESCE(ch0.hr_validation_required, FALSE) AS client_hr_validation_required,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.requires_hr ELSE NULL::boolean END,
+        ch0.hr_validation_required,
+        FALSE
+      ) AS client_hr_validation_required,
       COALESCE(ch0.ts_reference_required, FALSE) AS client_ts_reference_required,
       COALESCE(
         CASE WHEN ct0.overrideclientsettings THEN ct0.is_nhsp ELSE NULL::boolean END,
@@ -10509,7 +10513,11 @@ BEGIN
       ) AS client_no_timesheet_required,
       COALESCE(ch0.pay_reference_required, FALSE) AS client_pay_reference_required,
       COALESCE(ch0.invoice_reference_required, FALSE) AS client_invoice_reference_required,
-      COALESCE(ch0.hr_validation_required, FALSE) AS client_hr_validation_required,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.requires_hr ELSE NULL::boolean END,
+        ch0.hr_validation_required,
+        FALSE
+      ) AS client_hr_validation_required,
       COALESCE(ch0.ts_reference_required, FALSE) AS client_ts_reference_required,
       COALESCE(
         CASE WHEN ct0.overrideclientsettings THEN ct0.is_nhsp ELSE NULL::boolean END,
