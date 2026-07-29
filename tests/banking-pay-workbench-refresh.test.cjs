@@ -72,7 +72,11 @@ test('opening an attached shared session rediscovers candidates that became elig
 
   assert.match(body, /openAction === 'WORKBENCH_SESSION_ATTACHED'/);
   assert.match(body, /refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY'/);
+  assert.match(body, /limit: 5,[\s\S]*refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY'/);
   assert.match(body, /WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY/);
+  assert.match(body, /scope_discovery_queued: discoveryPage\.scope_discovery_queued === true/);
+  assert.doesNotMatch(body, /while \(discoveryHasMore/);
+  assert.doesNotMatch(body, /PAY_WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY_TOO_LARGE/);
   assert.match(body, /scopeDiscoveryEnqueuedCount/);
   assert.match(body, /NEWLY_ELIGIBLE_CANDIDATES_DISCOVERED/);
   assert.doesNotMatch(
@@ -113,6 +117,21 @@ test('explicit session refresh bypasses clone-certified reuse and forces full li
   assert.match(sessionBody, /SESSION_SCOPE_DISCOVERY/);
   assert.match(sessionBody, /SESSION_FULL_LIVE/);
   assert.match(sessionBody, /pay_workbench_session_seed_scope_chunk/);
+  assert.match(
+    sessionBody,
+    /IF UPPER\(BTRIM\(COALESCE\([\s\S]*= 'SESSION_SCOPE_DISCOVERY' THEN[\s\S]*INSERT INTO public\.banking_pay_workbench_jobs AS discovery_job[\s\S]*'WORKBENCH_SESSION_SCOPE_SEED'[\s\S]*'scope_discovery_only', true[\s\S]*RETURN jsonb_build_object\(/,
+    'opening an attached session must queue bounded discovery through the existing scope-seed worker'
+  );
+  assert.match(
+    sessionBody,
+    /ON CONFLICT \(dedupe_key\) WHERE status IN \('QUEUED', 'RUNNING'\)/,
+    'repeated opens must coalesce into one active discovery job'
+  );
+  assert.match(
+    sessionBody,
+    /THEN LEAST\(GREATEST\(\(v_payload_json->>'limit'\)::integer, 1\), 5\)[\s\S]*ELSE 5/,
+    'each queued discovery page must remain small enough for live per-candidate eligibility checks'
+  );
 
   const scopeSeedBody = sqlFunctionBody(
     repeatableSql,
@@ -124,6 +143,27 @@ test('explicit session refresh bypasses clone-certified reuse and forces full li
   assert.match(scopeSeedBody, /COUNT\(\*\)::integer[\s\S]*FROM public\.banking_pay_workbench_session_scope AS current_scope/);
   assert.match(scopeSeedBody, /'candidate_ids', COALESCE\(v_page_candidate_ids, '\[\]'::jsonb\)/);
   assert.match(scopeSeedBody, /WHEN v_scope_discovery_only[\s\S]*THEN COALESCE\(v_new_scope_candidate_ids, '\[\]'::jsonb\)/);
+  assert.match(
+    scopeSeedBody,
+    /FROM public\.app_change_counters AS change_counter[\s\S]*change_counter\.updated_at > v_discovery_from_utc[\s\S]*change_counter\.updated_at <= v_discovery_to_utc/,
+    'attached-session discovery must shortlist only candidates changed since the last completed discovery'
+  );
+  assert.match(
+    scopeSeedBody,
+    /NOT EXISTS \([\s\S]*FROM public\.banking_pay_workbench_session_scope AS existing_discovery_scope/,
+    'existing session candidates must not be live-revalidated or rebuilt by open-time discovery'
+  );
+  assert.match(
+    scopeSeedBody,
+    /p_candidate_id => v_discovery_candidate_id[\s\S]*'scope_limit', 1/,
+    'each small shortlisted candidate set must be validated through the existing live eligibility authority'
+  );
+  assert.match(
+    scopeSeedBody,
+    /IF v_scope_discovery_only THEN[\s\S]*p_candidate_id => v_discovery_candidate_id[\s\S]*ELSE[\s\S]*p_candidate_id => v_filter_candidate_id[\s\S]*'scope_limit', v_limit/,
+    'the unfiltered paged scan must remain isolated to the non-discovery/manual-refresh branch'
+  );
+  assert.match(scopeSeedBody, /'scope_discovery_checked_at_utc', v_discovery_to_utc::text/);
   assert.match(scopeSeedBody, /scope_discovery_changed', false/);
   assert.match(scopeSeedBody, /THEN v_session_row\.progress_state[\s\S]*ELSE 'REFRESHING_CANDIDATES'/);
 });

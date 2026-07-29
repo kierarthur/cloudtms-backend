@@ -15556,45 +15556,35 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
       let scopeDiscoveryEnqueuedCount = 0;
       let scopeDiscoveryPageCount = 0;
       if (openAction === 'WORKBENCH_SESSION_ATTACHED') {
-        let discoveryCursor = null;
-        let discoveryHasMore = true;
-        while (discoveryHasMore && scopeDiscoveryPageCount < 100) {
-          const discoveryPayload = {
-            limit: 100,
+        lastDiagnosticStage = 'PAY_WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY_RPC';
+        lastDiagnosticRpc = 'pay_workbench_enqueue_session_candidate_refresh';
+        const discoveryRaw = await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
+          p_session_id: sessionId,
+          p_candidate_id: null,
+          p_reason: 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
+          p_actor_user_id: actorUserId,
+          p_payload_json: {
+            limit: 5,
             refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY',
             discover_current_scope: true
-          };
-          if (isPlainObject(discoveryCursor)) discoveryPayload.cursor = discoveryCursor;
-          const discoveryRaw = await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
-            p_session_id: sessionId,
-            p_candidate_id: null,
-            p_reason: 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
-            p_actor_user_id: actorUserId,
-            p_payload_json: discoveryPayload
-          }, {
-            routeClass: 'PREVIEW_OPEN',
-            purpose: 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
-            timeoutMs: 15000,
-            bankingPay: true
-          });
-          const discoveryPage = unwrapRpc(discoveryRaw, 'pay_workbench_enqueue_session_candidate_refresh');
-          scopeDiscoveryPageCount += 1;
-          scopeDiscoveryCandidateCount += Math.max(0, Math.trunc(Number(discoveryPage.candidate_count || 0) || 0));
-          scopeDiscoveryEnqueuedCount += Math.max(0, Math.trunc(Number(discoveryPage.enqueued_candidate_count || 0) || 0));
-          discoveryCursor = isPlainObject(discoveryPage.next_cursor) ? discoveryPage.next_cursor : null;
-          discoveryHasMore = discoveryPage.has_more === true && !!discoveryCursor;
-        }
-        if (discoveryHasMore) {
-          throw attachDiagnosticToError(
-            new Error('Banking Pay candidate discovery exceeded the bounded page limit.'),
-            'PAY_WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY_TOO_LARGE',
-            'pay_workbench_enqueue_session_candidate_refresh',
-            { session_id: sessionId, page_count: scopeDiscoveryPageCount }
-          );
-        }
+          }
+        }, {
+          routeClass: 'PREVIEW_OPEN',
+          purpose: 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
+          timeoutMs: 5000,
+          bankingPay: true
+        });
+        const discoveryPage = unwrapRpc(discoveryRaw, 'pay_workbench_enqueue_session_candidate_refresh');
+        scopeDiscoveryPageCount = 1;
+        scopeDiscoveryCandidateCount = Math.max(0, Math.trunc(Number(discoveryPage.candidate_count || 0) || 0));
+        scopeDiscoveryEnqueuedCount = Math.max(0, Math.trunc(Number(discoveryPage.enqueued_candidate_count || 0) || 0));
         openPayload = {
           ...openPayload,
-          scope_discovery_completed: true,
+          scope_discovery_completed: false,
+          scope_discovery_queued: discoveryPage.scope_discovery_queued === true,
+          scope_discovery_job_id: uuidRe.test(trimStr(discoveryPage.scope_discovery_job_id))
+            ? trimStr(discoveryPage.scope_discovery_job_id)
+            : null,
           scope_discovery_candidate_count: scopeDiscoveryCandidateCount,
           scope_discovery_enqueued_count: scopeDiscoveryEnqueuedCount,
           scope_discovery_page_count: scopeDiscoveryPageCount
