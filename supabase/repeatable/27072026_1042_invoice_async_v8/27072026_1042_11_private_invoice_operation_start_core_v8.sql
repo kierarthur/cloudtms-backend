@@ -929,6 +929,14 @@ begin
           'recipient_set_hash',dr.recipient_set_hash,
           'route_policy_hash',dr.route_policy_hash,
           'route_source',dr.route_source,'do_not_send',dr.do_not_send,
+          'delivery_suppressed',dr.delivery_suppressed,
+          'suppression_reason',dr.suppression_reason,
+          'self_bill',dr.self_bill,
+          'template_version',coalesce(
+            nullif(c.command_json->>'delivery_template_version',''),
+            'invoice-delivery-v1'),
+          'delivery_policy',upper(coalesce(
+            nullif(c.command_json->>'delivery_policy',''),'ATTACH')),
           'warning_codes',dr.warning_codes,'blocker_codes',dr.blocker_codes,
           'evaluated_date',(v_now at time zone 'Europe/London')::date),
         'template_version',coalesce(nullif(c.command_json->>'delivery_template_version',''),
