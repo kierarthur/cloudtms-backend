@@ -1163,6 +1163,17 @@ test('presentation authority repeatable defers safely instead of failing CI whil
     presentationAuthority,
     /raise exception[\s\S]*INVOICE_PRESENTATION_CUTOVER_ACTIVE_WORK/i,
   );
+  const completionInstall = presentationAuthority.indexOf(
+    '24072026_1217_invoice_work_complete_batch.sql',
+  );
+  const activeWorkGuard = presentationAuthority.indexOf('select exists (');
+  assert.ok(completionInstall >= 0 && completionInstall < activeWorkGuard);
+  assert.equal(
+    presentationAuthority.match(
+      /24072026_1217_invoice_work_complete_batch\.sql/g,
+    )?.length,
+    1,
+  );
 });
 
 test('batch rollup separates carrier trigger writes from the root update', () => {
