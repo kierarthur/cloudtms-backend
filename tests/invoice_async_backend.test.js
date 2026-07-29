@@ -42,7 +42,7 @@ import {
 } from '../invoice-document-processor/src/receipt-contract.js';
 
 const V8_ACTOR_ID = '00000000-0000-4000-8000-000000000010';
-const V8_FUNCTION_MANIFEST = '3021910425a6718b14a96c180771211c7a85418e6b27fdbb84502e3f3b06fa52';
+const V8_FUNCTION_MANIFEST = '45741d3e5f0f4b6da6c5dd1e64f6ca034e2198f3043da5fa68d05da1ba639295';
 const V8_CURSOR_SECRET = 'test-session-secret-with-more-than-thirty-two-characters';
 
 function v8DatabaseContract(overrides = {}) {
@@ -2570,6 +2570,46 @@ test('capabilities advertise mandatory V8 features only when every dependency is
   assert.equal(mismatchBody.deployment_contract_ready, false);
   assert.equal(mismatchBody.enabled_for_user, false);
   assert.ok(Object.values(mismatchBody.feature_flags).every(value => value === false));
+
+  const diagnosticEnv = v8Environment({
+    INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED: 'false'
+  });
+  const diagnostic = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoice-async/capabilities'),
+    diagnosticEnv,
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc(undefined, v8DatabaseContract({ function_hash_manifest: 'f'.repeat(64) }))
+    }
+  );
+  const diagnosticBody = await diagnostic.json();
+  assert.equal(diagnosticBody.database_contract_ready, true);
+  assert.equal(diagnosticBody.deployment_contract_ready, true);
+  assert.equal(diagnosticBody.enabled_for_user, true);
+  assert.equal(diagnosticBody.function_manifest_enforced, false);
+  assert.equal(diagnosticBody.function_manifest_matches, false);
+  assert.deepEqual(
+    diagnosticBody.database_contract_warnings,
+    ['INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH']
+  );
+  assert.ok(Object.values(diagnosticBody.feature_flags).every(value => value === true));
+
+  const remainingSafetyGate = invoiceAsyncHttpInternals.validateInvoiceAsyncDatabaseContract(
+    diagnosticEnv,
+    v8DatabaseContract({
+      ready: false,
+      function_hash_manifest: 'f'.repeat(64),
+      missing_function_count: 1
+    })
+  );
+  assert.equal(remainingSafetyGate.ok, false);
+  assert.ok(remainingSafetyGate.errors.includes('INVOICE_ASYNC_DATABASE_NOT_READY'));
+  assert.ok(remainingSafetyGate.errors.includes('INVOICE_ASYNC_MISSING_FUNCTION_COUNT_INVALID'));
+  assert.deepEqual(
+    remainingSafetyGate.warnings,
+    ['INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH']
+  );
 });
 
 test('authenticated access capabilities enable a non-admin without disclosing a cohort', async () => {

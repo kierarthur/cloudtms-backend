@@ -646,6 +646,10 @@ test('batch operation control does not preload a capped current-chunk graph', ()
   assert.match(operationControl, /chunk_chain\(/);
   assert.doesNotMatch(operationControl, /null,null,10000/);
   assert.match(operationControl, /BATCH_TARGETED_RETRY_REQUIRED/);
+  assert.match(
+    operationControl,
+    /o\.status='WAITING'[\s\S]*?o\.requires_user_action[\s\S]*?retryable_chunk\.replaced_by_chunk_id is null[\s\S]*?retryable_chunk\.status in\([\s\S]*?'FAILED','DEAD_LETTER','BLOCKED','RETRY_WAIT'/i,
+  );
   assert.match(operationControl, /depth<64/);
   assert.match(
     operationControl,
@@ -667,6 +671,20 @@ test('batch operation control does not preload a capped current-chunk graph', ()
     operationControl,
     /v_now\s+timestamptz\s*:=\s*coalesce\(p_now_utc/i,
   );
+});
+
+test('operation-control retry installer references the single canonical function authority', () => {
+  const installer = read(
+    'supabase/repeatable/29072026_1523_invoice_operation_control_retry_waiting.sql',
+  );
+  assert.match(installer, /^\\set ON_ERROR_STOP on/m);
+  assert.match(installer, /\bbegin;/i);
+  assert.match(
+    installer,
+    /\\ir 23072026_2207_invoice_queue_stage1_revision8\/23072026_2207_invoice_operation_control_batch\.sql/,
+  );
+  assert.match(installer, /\bcommit;/i);
+  assert.doesNotMatch(installer, /create\s+or\s+replace\s+function/i);
 });
 
 test('operation control replacement hashing uses the fixed extensions schema', () => {
@@ -1464,19 +1482,43 @@ test('root repeatable installs every changed nested Invoice V8 authority', () =>
 
 test('committed TEST configuration keeps interactive enabled and scheduled disabled', () => {
   const wrangler = read('wrangler.toml');
+  const functionHashes = JSON.parse(read(
+    'supabase/contracts/27072026_1250_invoice_async_v8_function_hashes.json',
+  ));
   const pipelineFlags = [
     ...wrangler.matchAll(/INVOICE_ASYNC_PIPELINE_ENABLED\s*=\s*"([^"]+)"/g),
   ];
   const scheduledFlags = [
     ...wrangler.matchAll(/INVOICE_ASYNC_SCHEDULED_ENABLED\s*=\s*"([^"]+)"/g),
   ];
+  const manifestValues = [
+    ...wrangler.matchAll(
+      /INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST\s*=\s*"([^"]+)"/g,
+    ),
+  ];
+  const manifestEnforcementValues = [
+    ...wrangler.matchAll(
+      /INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED\s*=\s*"([^"]+)"/g,
+    ),
+  ];
+  const buildValues = [
+    ...wrangler.matchAll(/INVOICE_ASYNC_BUILD_ID\s*=\s*"([^"]+)"/g),
+  ];
 
   assert.ok(pipelineFlags.length > 0);
   assert.ok(scheduledFlags.length > 0);
+  assert.ok(manifestValues.length >= 2);
+  assert.equal(manifestEnforcementValues.length, 2);
+  assert.ok(buildValues.length >= 2);
   assert.equal(pipelineFlags[0][1], 'false');
   assert.equal(pipelineFlags[1][1], 'true');
   assert.ok(pipelineFlags.slice(2).every(match => match[1] === 'false'));
   assert.ok(scheduledFlags.every(match => match[1] === 'false'));
+  assert.equal(manifestValues[0][1], functionHashes.aggregate_sha256);
+  assert.equal(manifestValues[1][1], functionHashes.aggregate_sha256);
+  assert.equal(manifestEnforcementValues[0][1], 'true');
+  assert.equal(manifestEnforcementValues[1][1], 'false');
+  assert.equal(buildValues[1][1], 'invoice-async-v8-test-20260729-r38');
 });
 
 test('manual and QR timesheet document planning fails closed without an immutable source asset', () => {

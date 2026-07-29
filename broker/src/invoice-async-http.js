@@ -7,6 +7,7 @@ import {
   checkInvoiceDocumentProcessorReady,
   isInvoiceAsyncPipelineEnabled,
   nudgeInvoiceOperations,
+  parseBooleanFlag,
   validateQueueRuntimeConfiguration
 } from './invoice-queue-runtime.js';
 import {
@@ -3366,7 +3367,13 @@ async function loadInvoiceAsyncDatabaseContract(env, deps, options = {}) {
 
 function validateInvoiceAsyncDatabaseContract(env, contract) {
   const expectedManifest = String(env?.INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST || '').trim().toLowerCase();
+  const functionManifestEnforced = parseBooleanFlag(
+    env?.INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED,
+    true
+  );
   const errors = [];
+  const warnings = [];
+  let functionManifestMatches = false;
   if (!contract || typeof contract !== 'object' || Array.isArray(contract)) {
     errors.push('INVOICE_ASYNC_DATABASE_CONTRACT_UNAVAILABLE');
   } else {
@@ -3383,8 +3390,15 @@ function validateInvoiceAsyncDatabaseContract(env, contract) {
     }
     if (!SHA256_PATTERN.test(expectedManifest)) {
       errors.push('INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST_INVALID');
-    } else if (String(contract.function_hash_manifest || '').toLowerCase() !== expectedManifest) {
-      errors.push('INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH');
+    } else {
+      functionManifestMatches = (
+        String(contract.function_hash_manifest || '').toLowerCase()
+        === expectedManifest
+      );
+      if (!functionManifestMatches) {
+        const target = functionManifestEnforced ? errors : warnings;
+        target.push('INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH');
+      }
     }
     if (contract.indexes_ready !== true
         || contract.snapshot_signing_ready !== true
@@ -3401,7 +3415,14 @@ function validateInvoiceAsyncDatabaseContract(env, contract) {
       if (Number(contract[field]) !== 0) errors.push(`INVOICE_ASYNC_${field.toUpperCase()}_INVALID`);
     }
   }
-  return { ok: errors.length === 0, errors, contract };
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    contract,
+    functionManifestEnforced,
+    functionManifestMatches
+  };
 }
 
 async function invoiceProcessorReady(env, options = {}) {
@@ -3465,6 +3486,9 @@ async function handleInvoiceAsyncCapabilities(env, req, deps) {
     contract_version: contractVersion,
     backend_contract_version: contractVersion,
     database_contract_ready: databaseValidation.ok,
+    database_contract_warnings: databaseValidation.warnings,
+    function_manifest_enforced: databaseValidation.functionManifestEnforced,
+    function_manifest_matches: databaseValidation.functionManifestMatches,
     deployment_contract_ready: deploymentReady,
     pipeline_enabled: pipelineEnabled,
     processor_enabled: processorEnabled,

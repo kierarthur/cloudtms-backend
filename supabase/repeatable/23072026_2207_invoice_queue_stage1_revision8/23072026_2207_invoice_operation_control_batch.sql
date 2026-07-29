@@ -359,6 +359,23 @@ begin
           then 'OPERATION_TREE_DEPTH_EXCEEDED'
         when s.action='RETRY'
           and o.status not in('FAILED','DEAD_LETTER','BLOCKED','RETRY_WAIT')
+          and not(
+            o.status='WAITING'
+            and o.requires_user_action
+            and exists(
+              select 1
+              from public.invoice_operation_chunks retryable_chunk
+              where retryable_chunk.operation_id=o.id
+                and retryable_chunk.replaced_by_chunk_id is null
+                and retryable_chunk.status in(
+                  'FAILED','DEAD_LETTER','BLOCKED','RETRY_WAIT'
+                )
+                and(
+                  s.retry_chunk_id is null
+                  or retryable_chunk.id=s.retry_chunk_id
+                )
+            )
+          )
           then 'OPERATION_NOT_RETRYABLE'
         when s.action='RETRY'
           and o.input_json->>'contract_version'
