@@ -158,6 +158,11 @@ test('draft seed independently rejects stale authority without rebuilding', () =
   assert.match(draftSql, /LINE_WORK_NOT_TERMINAL/);
   assert.doesNotMatch(
     draftSql,
+    /incomplete_line\.status[\s\S]{0,180}'READY'/,
+    'materialised READY line-work retained for audit is terminal and must not block draft creation',
+  );
+  assert.doesNotMatch(
+    draftSql,
     /pay_workbench_candidate_source_build_chunk\s*\(/
   );
 });

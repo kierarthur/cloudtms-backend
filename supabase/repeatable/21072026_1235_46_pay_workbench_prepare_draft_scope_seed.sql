@@ -769,7 +769,7 @@ BEGIN
         WHERE incomplete_line.session_id = p_workbench_session_id
           AND incomplete_line.candidate_id = selected_candidates.candidate_id
           AND UPPER(BTRIM(COALESCE(incomplete_line.status, ''))) IN (
-            'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED', 'READY'
+            'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED'
           )
       ) AS has_incomplete_line_work,
       EXISTS (
