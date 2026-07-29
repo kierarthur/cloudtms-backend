@@ -64,6 +64,7 @@ import {
   getInvoiceQueueRuntimeConfig,
   handleInvoiceQueueDrainRequest,
   isInvoiceAsyncPipelineEnabled,
+  nudgeInvoiceOperations,
   runAutoInvoiceCycleAsync,
   runInvoiceReconciliationCycle,
   validateInvoiceSystemActor,
@@ -89705,14 +89706,23 @@ async function handleTimesheetsSubmitWeekly(env, req) {
   // If ELECTRONIC: require signatures uploaded for this version
   let nurseKey = null;
   let authKey = null;
+  let nurseSha256 = null;
+  let authoriserSha256 = null;
 
   if (!wantsQR) {
     nurseKey = `Signatures/we=${weC}/${bookingId}/v${newVersion}/nurse.png`;
     authKey  = `Signatures/we=${weC}/${bookingId}/v${newVersion}/authoriser.png`;
 
     try {
-      await r2Head(env, nurseKey);
-      await r2Head(env, authKey);
+      const [nurseHead, authoriserHead] = await Promise.all([
+        r2Head(env, nurseKey),
+        r2Head(env, authKey)
+      ]);
+      if (!nurseHead || !authoriserHead) throw new Error('SIGNATURE_ASSET_MISSING');
+      [nurseSha256, authoriserSha256] = await Promise.all([
+        r2ObjectSha256Hex(env, nurseKey),
+        r2ObjectSha256Hex(env, authKey)
+      ]);
     } catch {
       return withCORS(env, req, badRequest('Signatures not uploaded (nurse and authoriser required)'));
     }
@@ -89739,6 +89749,8 @@ async function handleTimesheetsSubmitWeekly(env, req) {
 
     r2_nurse_key:      wantsQR ? null : nurseKey,
     r2_auth_key:       wantsQR ? null : authKey,
+    img_sha256_nurse:  wantsQR ? null : nurseSha256,
+    img_sha256_auth:   wantsQR ? null : authoriserSha256,
 
     contract_id:       contract.id,
 
@@ -128894,6 +128906,23 @@ async function r2Get(env, key) {
   }
 }
 
+async function r2ObjectSha256Hex(env, key, maxBytes = 2 * 1024 * 1024) {
+  const object = await r2Get(env, key);
+  if (!object) throw new Error('SIGNATURE_ASSET_MISSING');
+  if (!Number.isSafeInteger(Number(object.size)) || Number(object.size) <= 0
+      || Number(object.size) > maxBytes) {
+    throw new Error('SIGNATURE_ASSET_SIZE_INVALID');
+  }
+  const bytes = await object.arrayBuffer();
+  if (bytes.byteLength !== Number(object.size)) {
+    throw new Error('SIGNATURE_ASSET_SIZE_MISMATCH');
+  }
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 async function handleSignGet(env, req, url) {
   const canon = (s) => String(s || "").trim().replace(/^\/+/, ""); // ✅ canonical key
 
@@ -131997,6 +132026,16 @@ async function handleSubmit(env, req) {
   const nurseHead = await r2Head(env, body.nurse_key);
   const authHead  = await r2Head(env, body.authoriser_key);
   if (!nurseHead || !authHead) return withCORS(env, req, badRequest("Signatures not uploaded"));
+  let nurseSha256;
+  let authoriserSha256;
+  try {
+    [nurseSha256, authoriserSha256] = await Promise.all([
+      r2ObjectSha256Hex(env, body.nurse_key),
+      r2ObjectSha256Hex(env, body.authoriser_key)
+    ]);
+  } catch {
+    return withCORS(env, req, badRequest('Signatures could not be verified'));
+  }
 
   const worked_date_local = londonDate(body.worked_start_iso);
   const week_ending_date  = weekEndingSunday(worked_date_local);
@@ -132052,6 +132091,8 @@ async function handleSubmit(env, req) {
 
     r2_nurse_key: body.nurse_key,
     r2_auth_key: body.authoriser_key,
+    img_sha256_nurse: nurseSha256,
+    img_sha256_auth: authoriserSha256,
 
     // ✅ MUST match timesheet_status_enum (no "SUBMITTED" in your DB enum)
     status: "RECEIVED",
@@ -161653,7 +161694,7 @@ async function handleContractWeekManualAuthorise(env, req, weekId, ctx = null) {
 
 
 
-async function handleTimesheetQrScan(env, req) {
+async function handleTimesheetQrScan(env, req, ctx = null) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -161838,6 +161879,39 @@ async function handleTimesheetQrScan(env, req) {
   // ✅ Canonical deterministic PDF key (the “one PDF only” rule)
   const canonicalPdfKey = cleanKey(`docs-pdf/timesheets/ts_${ts.timesheet_id}.pdf`);
   const manualStoredKey = (scanSourceKind === 'PDF') ? canonicalPdfKey : image_r2_key;
+  const queueSignedSourcePreparation = async (signedHash) => {
+    if (!isInvoiceAsyncPipelineEnabled(env)) return null;
+    const declaredMediaType = scanSourceKind === 'PDF'
+      ? 'application/pdf'
+      : scanSourceKind === 'PNG'
+        ? 'image/png'
+        : 'image/jpeg';
+    const raw = await sbRpc(env, 'invoice_operation_start_batch', {
+      p_commands: [{
+        command_type: 'PREPARE_ASSET',
+        source_kind: 'MANUAL_TIMESHEET',
+        source_id: ts.timesheet_id,
+        source_revision: `QR_SIGNED:${signedHash}`,
+        original_r2_key: manualStoredKey,
+        original_filename: `Signed QR timesheet ${ts.timesheet_id}.${scanSourceKind.toLowerCase()}`,
+        declared_media_type: declaredMediaType,
+        rotation_degrees: 0
+      }],
+      p_actor_user_id: user.id
+    });
+    const value = unwrapRpcJsonb(raw, 'invoice_operation_start_batch');
+    const rows = Array.isArray(value) ? value : (value ? [value] : []);
+    const accepted = rows.filter(row => row?.accepted !== false && row?.operation_id);
+    if (accepted.length) {
+      await nudgeInvoiceOperations(env, accepted, {
+        ctx,
+        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+        lanes: ['DOCUMENT'],
+        priorityClass: 'VIEW_NOW'
+      });
+    }
+    return rows[0] || null;
+  };
 
   // ✅ Step A: Copy the uploaded signed scan OVER the canonical key only for true PDFs.
   // Do NOT patch DB if this fails.
@@ -161991,6 +162065,15 @@ async function handleTimesheetQrScan(env, req) {
       const t = await finRes.text().catch(() => '');
       return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
     }
+    let documentPreparation = null;
+    try {
+      documentPreparation = await queueSignedSourcePreparation(signedHash);
+    } catch (error) {
+      console.warn('[QR_WEEKLY][SCAN] signed source preparation failed', {
+        timesheet_id: ts.timesheet_id,
+        error: error?.code || error?.message || String(error)
+      });
+    }
 
     // ✅ Best-effort delete original uploaded key only for true-PDF inputs copied to canonical.
     try {
@@ -162042,13 +162125,13 @@ async function handleTimesheetQrScan(env, req) {
       sheet_scope: 'WEEKLY',
       processing_status: nextStatus,
       qr_status: 'USED',
-
-      // keep old field for caller compatibility
-      image_r2_key,
-
-      // explicit storage pointers
-      canonical_pdf_r2_key: scanSourceKind === 'PDF' ? canonicalPdfKey : null,
-      manual_pdf_r2_key: manualStoredKey
+      document_preparation: documentPreparation
+        ? {
+            operation_id: documentPreparation.operation_id || null,
+            status: documentPreparation.status || null,
+            accepted: documentPreparation.accepted !== false
+          }
+        : null
     }));
   }
 
@@ -162133,6 +162216,15 @@ async function handleTimesheetQrScan(env, req) {
       const t = await finRes.text().catch(() => '');
       return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
     }
+    let documentPreparation = null;
+    try {
+      documentPreparation = await queueSignedSourcePreparation(signedHash);
+    } catch (error) {
+      console.warn('[QR_DAILY][SCAN] signed source preparation failed', {
+        timesheet_id: ts.timesheet_id,
+        error: error?.code || error?.message || String(error)
+      });
+    }
 
     // ✅ Best-effort delete original uploaded key only for true-PDF inputs copied to canonical.
     try {
@@ -162190,13 +162282,13 @@ async function handleTimesheetQrScan(env, req) {
       sheet_scope: 'DAILY',
       processing_status: nextStatus,
       qr_status: 'USED',
-
-      // keep old field for caller compatibility
-      image_r2_key,
-
-      // explicit storage pointers
-      canonical_pdf_r2_key: scanSourceKind === 'PDF' ? canonicalPdfKey : null,
-      manual_pdf_r2_key: manualStoredKey
+      document_preparation: documentPreparation
+        ? {
+            operation_id: documentPreparation.operation_id || null,
+            status: documentPreparation.status || null,
+            accepted: documentPreparation.accepted !== false
+          }
+        : null
     }));
   }
 
@@ -191043,7 +191135,7 @@ if (req.method === 'POST' && p === '/api/timesheets/manual-daily-create-options'
       // NEW ROUTE — QR Scan (broker → backend)
       // =============================================================================
       if (req.method === 'POST' && p === '/api/timesheets/qr-scan') {
-        return handleTimesheetQrScan(env, req);
+        return handleTimesheetQrScan(env, req, ctx);
       }
 
 // =============================================================================

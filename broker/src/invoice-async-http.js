@@ -1960,6 +1960,131 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
       : null;
   };
 
+  if (entityType === 'TIMESHEET') {
+    const timesheetQuery = new URL(`${env.SUPABASE_URL}/rest/v1/timesheets`);
+    timesheetQuery.searchParams.set('timesheet_id', `eq.${entityId}`);
+    timesheetQuery.searchParams.set('is_current', 'eq.true');
+    timesheetQuery.searchParams.set(
+      'select',
+      'timesheet_id,submission_mode,document_revision,manual_document_asset_id,manual_pdf_r2_key,manual_pdf_rotation_degrees'
+    );
+    timesheetQuery.searchParams.set('limit', '1');
+    const timesheetResponse = await fetch(timesheetQuery, { headers: serviceHeaders });
+    const timesheetRows = await timesheetResponse.json().catch(() => []);
+    const timesheet = Array.isArray(timesheetRows) ? timesheetRows[0] : null;
+    if (!timesheetResponse.ok || !timesheet) {
+      return jsonResponse({ error: 'DOCUMENT_ENTITY_NOT_FOUND' }, 404);
+    }
+
+    const submissionMode = String(timesheet.submission_mode || '').trim().toUpperCase();
+    if (['MANUAL', 'QR'].includes(submissionMode) && !timesheet.manual_document_asset_id) {
+      const evidenceQuery = new URL(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`);
+      evidenceQuery.searchParams.set('timesheet_id', `eq.${entityId}`);
+      evidenceQuery.searchParams.set('kind', 'eq.TIMESHEET');
+      evidenceQuery.searchParams.set('processing_state', 'neq.SUPERSEDED');
+      evidenceQuery.searchParams.set(
+        'select',
+        'id,storage_key,source_revision,display_name,document_asset_id,processing_state,created_at'
+      );
+      evidenceQuery.searchParams.set('order', 'created_at.desc.nullslast,id.desc');
+      evidenceQuery.searchParams.set('limit', '1');
+      const evidenceResponse = await fetch(evidenceQuery, { headers: serviceHeaders });
+      const evidenceRows = await evidenceResponse.json().catch(() => []);
+      const evidence = evidenceResponse.ok && Array.isArray(evidenceRows)
+        ? evidenceRows[0]
+        : null;
+
+      const originalR2Key = String(
+        evidence?.storage_key || timesheet.manual_pdf_r2_key || ''
+      ).trim().replace(/^\/+/, '');
+      if (!originalR2Key) {
+        return jsonResponse({
+          contract_version: INVOICE_VIEWER_CONTRACT,
+          viewer_state: 'BLOCKED',
+          purpose: 'TIMESHEET',
+          badge_codes: ['MANUAL_TIMESHEET_SOURCE_MISSING'],
+          error_code: 'MANUAL_TIMESHEET_SOURCE_MISSING',
+          status_message: 'The signed source timesheet is not available.'
+        }, 409);
+      }
+
+      const originalObject = await env.R2?.head?.(originalR2Key);
+      if (!originalObject) {
+        return jsonResponse({
+          contract_version: INVOICE_VIEWER_CONTRACT,
+          viewer_state: 'BLOCKED',
+          purpose: 'TIMESHEET',
+          badge_codes: ['MANUAL_TIMESHEET_SOURCE_MISSING'],
+          error_code: 'MANUAL_TIMESHEET_SOURCE_MISSING',
+          status_message: 'The signed source timesheet is not available.'
+        }, 409);
+      }
+
+      const sourceKind = evidence?.id ? 'TIMESHEET_EVIDENCE' : 'MANUAL_TIMESHEET';
+      const sourceId = evidence?.id || entityId;
+      const sourceRevision = String(
+        evidence?.source_revision
+          || `${sourceKind}:${sourceId}:${timesheet.document_revision}`
+      ).trim();
+      const assetValues = rpcValue(await deps.rpc('invoice_operation_start_batch', {
+        p_commands: [{
+          command_type: 'PREPARE_ASSET',
+          source_kind: sourceKind,
+          source_id: sourceId,
+          source_revision: sourceRevision,
+          original_r2_key: originalR2Key,
+          original_filename: String(
+            evidence?.display_name || `Signed timesheet ${entityId}`
+          ).slice(0, 240),
+          declared_media_type: String(
+            originalObject.httpMetadata?.contentType || 'application/octet-stream'
+          ).slice(0, 160),
+          rotation_degrees: Number(timesheet.manual_pdf_rotation_degrees || 0)
+        }],
+        p_actor_user_id: user.id
+      }));
+      const assetResults = Array.isArray(assetValues) ? assetValues : [assetValues];
+      const assetResult = assetResults[0] || {};
+      if (assetResult.accepted === false || assetResult.blocked === true
+          || assetResult.terminal_error) {
+        const errorCode = String(
+          assetResult?.terminal_error?.code
+            || assetResult?.error?.code
+            || assetResult?.terminal_error
+            || assetResult?.error
+            || 'MANUAL_TIMESHEET_ASSET_PREPARATION_BLOCKED'
+        ).slice(0, 160);
+        return jsonResponse({
+          contract_version: INVOICE_VIEWER_CONTRACT,
+          viewer_state: 'BLOCKED',
+          purpose: 'TIMESHEET',
+          badge_codes: [errorCode],
+          error_code: errorCode,
+          status_message: 'The signed source timesheet could not be prepared.'
+        }, 409);
+      }
+
+      const activeAssetOperations = assetResults.filter(
+        row => row?.accepted !== false && row?.operation_id
+      );
+      if (activeAssetOperations.length) {
+        await nudgeInvoiceOperations(env, activeAssetOperations, {
+          ctx,
+          rpc: deps.rpc,
+          lanes: ['DOCUMENT'],
+          priorityClass: 'VIEW_NOW'
+        });
+      }
+      return jsonResponse({
+        contract_version: INVOICE_VIEWER_CONTRACT,
+        viewer_state: 'PREPARING',
+        operation_id: assetResult.operation_id || null,
+        purpose: 'TIMESHEET',
+        status_message: 'Preparing signed timesheet'
+      }, 202);
+    }
+  }
+
   if (entityType === 'INVOICE') {
     const rawDetail = await deps.rpc('invoice_detail_get', {
       p_invoice_id: entityId,

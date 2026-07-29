@@ -504,7 +504,10 @@ test('attachment pagination correlates the DB logical source key', () => {
         logical_source_key: 'timesheet:source-1',
         physical_part_id: 'timesheet:source-1:1',
         page_count: 2,
-        document_type: 'TIMESHEET'
+        document_type: 'TIMESHEET',
+        worker: 'Test Worker',
+        week_or_date: '2026-07-12',
+        reference: 'TEST-REFERENCE'
       }
     ]
   };
@@ -515,11 +518,11 @@ test('attachment pagination correlates the DB logical source key', () => {
   assert.deepEqual(rows, [{
     row_id: 'timesheet:source-1',
     attachment_number: 1,
-    worker: null,
-    week_or_date: null,
+    worker: 'Test Worker',
+    week_or_date: '2026-07-12',
     document_type: 'TIMESHEET',
     evidence_description: null,
-    reference: null,
+    reference: 'TEST-REFERENCE',
     start_page: 4,
     page_count: 2
   }]);
@@ -2614,4 +2617,101 @@ test('invoice summary projection uses only installed document authority and expo
   assert.ok(listHandler.includes('attachment_ready'));
   assert.ok(listHandler.includes('attachment_state'));
   assert.ok(listHandler.includes('&timesheet_id=not.is.null'));
+});
+
+test('electronic timesheet submission freezes verified signature hashes', () => {
+  const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const dailyStart = source.indexOf('async function handleSubmit(env, req)');
+  const dailyEnd = source.indexOf('\nasync function ', dailyStart + 1);
+  const dailySubmit = source.slice(dailyStart, dailyEnd);
+  assert.match(dailySubmit, /r2ObjectSha256Hex\(env, body\.nurse_key\)/);
+  assert.match(dailySubmit, /r2ObjectSha256Hex\(env, body\.authoriser_key\)/);
+  assert.match(dailySubmit, /img_sha256_nurse: nurseSha256/);
+  assert.match(dailySubmit, /img_sha256_auth: authoriserSha256/);
+
+  const weeklyStart = source.indexOf('// If ELECTRONIC: require signatures uploaded for this version');
+  const weeklyEnd = source.indexOf('// Create new current timesheet version row', weeklyStart);
+  const weeklySubmit = source.slice(weeklyStart, weeklyEnd + 2500);
+  assert.match(weeklySubmit, /r2ObjectSha256Hex\(env, nurseKey\)/);
+  assert.match(weeklySubmit, /r2ObjectSha256Hex\(env, authKey\)/);
+  assert.match(weeklySubmit, /img_sha256_nurse:\s+wantsQR \? null : nurseSha256/);
+  assert.match(weeklySubmit, /img_sha256_auth:\s+wantsQR \? null : authoriserSha256/);
+});
+
+test('manual and QR timesheet viewing prepares the exact signed source asset before rendering', () => {
+  const source = readFileSync(
+    new URL('../broker/src/invoice-async-http.js', import.meta.url),
+    'utf8'
+  );
+  const start = source.indexOf('async function handleViewDocument');
+  const end = source.indexOf('\nasync function handleIssueOne', start);
+  const handler = source.slice(start, end);
+  assert.match(handler, /\['MANUAL', 'QR'\]\.includes\(submissionMode\)/);
+  assert.match(handler, /command_type: 'PREPARE_ASSET'/);
+  assert.match(handler, /sourceKind = evidence\?\.id \? 'TIMESHEET_EVIDENCE' : 'MANUAL_TIMESHEET'/);
+  assert.match(handler, /MANUAL_TIMESHEET_SOURCE_MISSING/);
+  assert.match(handler, /status_message: 'Preparing signed timesheet'/);
+});
+
+test('QR scan acceptance queues its signed source and exposes no storage key', () => {
+  const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const start = source.indexOf('async function handleTimesheetQrScan');
+  const end = source.indexOf('\nasync function buildWeeklyScheduleSegmentsSnapshot', start);
+  const handler = source.slice(start, end);
+  assert.match(handler, /command_type: 'PREPARE_ASSET'/);
+  assert.match(handler, /source_kind: 'MANUAL_TIMESHEET'/);
+  assert.match(handler, /source_revision: `QR_SIGNED:\$\{signedHash\}`/);
+  assert.match(handler, /document_preparation: documentPreparation/);
+  const responseBodies = [...handler.matchAll(/return withCORS\(env, req, ok\(\{([\s\S]*?)\}\)\);/g)]
+    .map(match => match[1]);
+  assert.equal(responseBodies.length, 2);
+  for (const body of responseBodies) {
+    assert.doesNotMatch(body, /\bimage_r2_key\b/);
+    assert.doesNotMatch(body, /\bmanual_pdf_r2_key\b/);
+    assert.doesNotMatch(body, /\bcanonical_pdf_r2_key\b/);
+  }
+  assert.match(
+    handler,
+    /sheet_scope: 'DAILY'[\s\S]*worked_start_iso: tsRow\.worked_start_iso[\s\S]*worked_end_iso: tsRow\.worked_end_iso[\s\S]*break_start_iso: tsRow\.break_start_iso[\s\S]*break_end_iso: tsRow\.break_end_iso[\s\S]*reference_number: tsRow\.reference_number/,
+  );
+  const dailyPatchStart = handler.indexOf("kind: 'DAILY_QR_TIMESHEET'");
+  const dailyPatchEnd = handler.indexOf('const tsRes = await fetch', dailyPatchStart);
+  const dailyPatch = handler.slice(dailyPatchStart, dailyPatchEnd);
+  assert.ok(dailyPatchStart > 0 && dailyPatchEnd > dailyPatchStart);
+  assert.doesNotMatch(dailyPatch, /\bworked_start_iso\b|\bworked_end_iso\b|\bbreak_start_iso\b|\bbreak_end_iso\b|\bactual_schedule_json\b/);
+});
+
+test('HealthRoster invoice support obeys effective attachment policy and renders frozen source rows', () => {
+  const precheck = readFileSync(
+    new URL('../supabase/repeatable/08012026_v_ts_invoice_precheck.sql', import.meta.url),
+    'utf8'
+  );
+  const sourceCollector = readFileSync(
+    new URL('../supabase/repeatable/21072026_1820_15_invoice_source_rows_collect.sql', import.meta.url),
+    'utf8'
+  );
+  const downstream = readFileSync(
+    new URL(
+      '../supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+      + '24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql',
+      import.meta.url
+    ),
+    'utf8'
+  );
+  assert.match(
+    precheck,
+    /case when c\.overrideclientsettings then c\.hr_attach_to_invoice end[\s\S]*cs\.hr_attach_to_invoice[\s\S]*sd\.hr_attach_to_invoice[\s\S]*as effective_hr_attach_to_invoice/i,
+  );
+  assert.match(
+    sourceCollector,
+    /v_hr_allowed := coalesce\(v_requires_hr,false\) = true[\s\S]*coalesce\(v_hr_attach_to_invoice,false\) = true/i,
+  );
+  assert.match(
+    sourceCollector,
+    /sg\.source_system = 'NHSP'[\s\S]*sg\.source_system = 'HEALTHROSTER' and v_hr_allowed = true/i,
+  );
+  assert.match(
+    downstream,
+    /from linked l join public\.invoice_hr_source_rows r[\s\S]*'HEALTHROSTER_SUPPORT'/i,
+  );
 });

@@ -1074,6 +1074,14 @@ test('attachment-index render passes carry their frozen presentation identity', 
     /'source_revision',a\.index_source_revision/i,
   );
   assert.match(
+    downstreamAdvance,
+    /attachment_metadata as materialized[\s\S]*v_timesheets_summary_base[\s\S]*supporting_sources[\s\S]*invoice_hr_source_rows/i,
+  );
+  assert.match(
+    downstreamAdvance,
+    /'worker',other\.payload_json->>'worker'[\s\S]*'week_or_date',other\.payload_json->>'week_or_date'[\s\S]*'reference',other\.payload_json->>'reference'/i,
+  );
+  assert.match(
     workComplete,
     /f\.payload_json\|\|jsonb_build_object\([\s\S]*'layout_phase','FINAL'/i,
   );
@@ -1366,4 +1374,23 @@ test('committed TEST configuration keeps interactive enabled and scheduled disab
   assert.equal(pipelineFlags[1][1], 'true');
   assert.ok(pipelineFlags.slice(2).every(match => match[1] === 'false'));
   assert.ok(scheduledFlags.every(match => match[1] === 'false'));
+});
+
+test('manual and QR timesheet document planning fails closed without an immutable source asset', () => {
+  const documentAdvance = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+    + '24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql',
+  );
+  assert.match(
+    documentAdvance,
+    /missing_manual_timesheet_source as materialized \([\s\S]*'MANUAL_TIMESHEET_ASSET_REQUIRED'[\s\S]*upper\(coalesce\(it\.submission_mode,''\)\) in\('MANUAL','QR'\)[\s\S]*it\.manual_document_asset_id is null/s,
+  );
+  assert.match(
+    documentAdvance,
+    /l\.entity_type='INVOICE'\s*or exists\([\s\S]*upper\(coalesce\(it\.submission_mode,''\)\)='ELECTRONIC'/s,
+  );
+  assert.doesNotMatch(
+    documentAdvance,
+    /else 'ELECTRONIC_TIMESHEET' end input_type[\s\S]{0,500}or not exists\(/s,
+  );
 });

@@ -353,6 +353,23 @@ begin
         '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       and coalesce(x.value->>'document_revision','')~'^[0-9]+$'
   ),
+  missing_manual_timesheet_source as materialized (
+    update public.invoice_operation_chunks c
+    set status='BLOCKED',phase='BLOCKED',failed_at_utc=v_now,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null,
+        error_json=jsonb_build_object(
+          'code','MANUAL_TIMESHEET_ASSET_REQUIRED',
+          'timesheet_id',it.timesheet_id,
+          'submission_mode',it.submission_mode),
+        updated_at_utc=v_now
+    from linked l
+    join invoice_timesheets it on it.chunk_id=l.id
+    where c.id=l.id
+      and l.entity_type='TIMESHEET'
+      and upper(coalesce(it.submission_mode,'')) in('MANUAL','QR')
+      and it.manual_document_asset_id is null
+    returning c.id
+  ),
   evidence_candidates as materialized (
     select distinct it.chunk_id,it.document_version_id,it.operation_id,
       te.id source_id,'TIMESHEET_EVIDENCE'::text source_kind,te.storage_key original_r2_key,
@@ -578,12 +595,16 @@ begin
       null::uuid asset_id,null::uuid input_document_version_id,'Invoice core' display_label,
       null::integer expected_page_count,'CORE' inclusion_reason
     from linked l
-    where l.entity_type='INVOICE'
-       or not exists(
-         select 1 from invoice_timesheets it
-         where it.chunk_id=l.id
-           and upper(coalesce(it.submission_mode,'')) in('MANUAL','QR')
-           and it.manual_document_asset_id is not null)
+    where not exists(
+        select 1 from missing_manual_timesheet_source missing
+        where missing.id=l.id)
+      and (
+        l.entity_type='INVOICE'
+        or exists(
+          select 1 from invoice_timesheets it
+          where it.chunk_id=l.id
+            and upper(coalesce(it.submission_mode,''))='ELECTRONIC')
+      )
     union all
     select s.chunk_id,s.document_version_id,s.ordinal,s.input_type,
       s.source_entity_type,s.source_entity_id,s.source_revision,s.asset_id,
@@ -694,6 +715,90 @@ begin
     where a.id=c.document_asset_id and a.status='DISCOVERED'
     returning a.id
   ),
+  attachment_metadata as materialized (
+    select m.chunk_id,m.document_version_id,m.ordinal,
+      coalesce(
+        (select ts.candidate_name
+         from public.v_timesheets_summary_base ts
+         where ts.timesheet_id=case
+           when m.source_entity_type in('TIMESHEET','MANUAL_TIMESHEET')
+             then m.source_entity_id
+           when m.source_entity_type='TIMESHEET_EVIDENCE'
+             then(select te.timesheet_id from public.timesheet_evidence te
+                  where te.id=m.source_entity_id limit 1)
+         end limit 1),
+        (select nullif(r.value->>'worker','')
+         from public.invoice_document_versions dv
+         cross join lateral jsonb_array_elements(
+           coalesce(dv.snapshot_json->'supporting_sources','[]'::jsonb)) s(value)
+         cross join lateral jsonb_array_elements(
+           coalesce(s.value#>'{render_model,rows}','[]'::jsonb)) r(value)
+         where dv.id=m.document_version_id
+           and s.value->>'import_id'=m.source_entity_id::text
+           and nullif(r.value->>'worker','') is not null
+         limit 1),
+        (select coalesce(nullif(r.value->>'worker_name',''),
+                         nullif(r.value->>'staff_name',''))
+         from public.invoice_hr_source_rows hr
+         cross join lateral jsonb_array_elements(
+           coalesce(hr.rows_json,'[]'::jsonb)) r(value)
+         where hr.import_id=m.source_entity_id
+         limit 1)
+      ) worker,
+      coalesce(
+        (select ts.week_ending_date::text
+         from public.v_timesheets_summary_base ts
+         where ts.timesheet_id=case
+           when m.source_entity_type in('TIMESHEET','MANUAL_TIMESHEET')
+             then m.source_entity_id
+           when m.source_entity_type='TIMESHEET_EVIDENCE'
+             then(select te.timesheet_id from public.timesheet_evidence te
+                  where te.id=m.source_entity_id limit 1)
+         end limit 1),
+        (select nullif(r.value->>'shift_date','')
+         from public.invoice_document_versions dv
+         cross join lateral jsonb_array_elements(
+           coalesce(dv.snapshot_json->'supporting_sources','[]'::jsonb)) s(value)
+         cross join lateral jsonb_array_elements(
+           coalesce(s.value#>'{render_model,rows}','[]'::jsonb)) r(value)
+         where dv.id=m.document_version_id
+           and s.value->>'import_id'=m.source_entity_id::text
+           and nullif(r.value->>'shift_date','') is not null
+         order by r.value->>'shift_date'
+         limit 1),
+        (select coalesce(nullif(r.value->>'work_date',''),
+                         nullif(r.value->>'date_raw',''))
+         from public.invoice_hr_source_rows hr
+         cross join lateral jsonb_array_elements(
+           coalesce(hr.rows_json,'[]'::jsonb)) r(value)
+         where hr.import_id=m.source_entity_id
+         order by coalesce(r.value->>'work_date',r.value->>'date_raw')
+         limit 1)
+      ) week_or_date,
+      coalesce(
+        (select nullif(r.value->>'booking_reference','')
+         from public.invoice_document_versions dv
+         cross join lateral jsonb_array_elements(
+           coalesce(dv.snapshot_json->'supporting_sources','[]'::jsonb)) s(value)
+         cross join lateral jsonb_array_elements(
+           coalesce(s.value#>'{render_model,rows}','[]'::jsonb)) r(value)
+         where dv.id=m.document_version_id
+           and s.value->>'import_id'=m.source_entity_id::text
+           and nullif(r.value->>'booking_reference','') is not null
+         limit 1),
+        (select coalesce(nullif(r.value->>'reference',''),
+                         nullif(r.value->>'ref_num',''),
+                         nullif(r.value->>'unique_id',''))
+         from public.invoice_hr_source_rows hr
+         cross join lateral jsonb_array_elements(
+           coalesce(hr.rows_json,'[]'::jsonb)) r(value)
+         where hr.import_id=m.source_entity_id
+         limit 1),
+        case when m.source_entity_type='TIMESHEET_EVIDENCE'
+          then m.display_label end
+      ) reference
+    from manifest_items m
+  ),
   input_chunks as (
     insert into public.invoice_operation_chunks(operation_id,chunk_type,phase,work_key,sequence_no,entity_type,entity_id,
       document_version_id,document_asset_id,status,priority,run_after_utc,payload_json,
@@ -716,6 +821,8 @@ begin
       l.priority,v_now,
       jsonb_build_object('ordinal',m.ordinal,'input_type',m.input_type,
         'display_label',m.display_label,
+        'worker',am.worker,'week_or_date',am.week_or_date,
+        'reference',am.reference,
         'source_revision',m.source_revision,'source_entity_type',m.source_entity_type,
         'source_entity_id',m.source_entity_id,
         'source_chunk_key',encode(digest(concat_ws('|',m.document_version_id::text,
@@ -750,6 +857,9 @@ begin
         then a.normalised_size_bytes end,
       o.control_version,v_now,v_now
     from linked l join manifest_items m on m.chunk_id=l.id
+    left join attachment_metadata am on am.chunk_id=m.chunk_id
+      and am.document_version_id=m.document_version_id
+      and am.ordinal=m.ordinal
     left join public.invoice_document_assets a on a.id=m.asset_id
     left join assets ax on ax.chunk_id=l.id and ax.asset_id=m.asset_id
     join public.invoice_operations o on o.id=l.operation_id
@@ -832,6 +942,9 @@ begin
         'logical_source_key',other.payload_json->>'source_chunk_key',
         'label',other.payload_json->>'display_label',
         'input_type',other.payload_json->>'input_type',
+        'worker',other.payload_json->>'worker',
+        'week_or_date',other.payload_json->>'week_or_date',
+        'reference',other.payload_json->>'reference',
         'page_count',other.actual_page_count)
         order by other.sequence_no,other.id)
         filter(where other.id is not null
@@ -852,6 +965,9 @@ begin
                 stream_input.payload_json->>'source_chunk_key',
               'input_type',stream_input.payload_json->>'input_type',
               'label',stream_input.payload_json->>'display_label',
+              'worker',stream_input.payload_json->>'worker',
+              'week_or_date',stream_input.payload_json->>'week_or_date',
+              'reference',stream_input.payload_json->>'reference',
               'page_count',case
                 when stream_input.payload_json->>'input_type'=
                     'ATTACHMENT_INDEX'
