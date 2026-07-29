@@ -49,7 +49,9 @@ import {
 import { normalisePostgresTimestampIso } from './timestamp-normalisation.js';
 import {
   evaluateTestCsvExecutionBypass,
+  evaluateTestSameWeekPayeOverrideBypass,
   isTestCsvExecutionOnlyToken,
+  isTestSameWeekPayeOverrideOnlyToken,
   testCsvExecutionTokenMatchesMode
 } from './test-csv-execution-bypass.js';
 import {
@@ -108,6 +110,8 @@ const dispatchImportReviewRequest = createImportReviewDispatcher({
 const BANKING_PAY_WORKBENCH_DB_CONTRACT = 'BANKING_PAY_WORKBENCH_DB_V1';
 const BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION =
   'BANKING_PAY_CANONICAL_CORRECTION_CARRIER_V1';
+const BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_VERSION =
+  'BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_V1';
 
 async function assertBankingPayWorkbenchContract(env, entryPoint) {
   let contract = null;
@@ -138,8 +142,11 @@ async function assertBankingPayWorkbenchContract(env, entryPoint) {
       expected_contract_version: BANKING_PAY_WORKBENCH_DB_CONTRACT,
       expected_canonical_correction_carrier_version:
         BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION,
+      expected_targeted_family_materialisation_version:
+        BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_VERSION,
       actual_contract_version: null,
       actual_canonical_correction_carrier_version: null,
+      actual_targeted_family_materialisation_version: null,
       upstream_status: Number.isFinite(Number(cause?.status))
         ? Number(cause.status)
         : null,
@@ -162,9 +169,13 @@ async function assertBankingPayWorkbenchContract(env, entryPoint) {
     && contract.contract_version === BANKING_PAY_WORKBENCH_DB_CONTRACT
     && contract.canonical_correction_carrier_version
       === BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION
+    && contract.targeted_family_materialisation_version
+      === BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_VERSION
     && projectionContract
     && projectionContract.canonical_correction_carrier_version
-      === BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION;
+      === BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION
+    && projectionContract.targeted_family_materialisation_version
+      === BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_VERSION;
 
   if (!valid) {
     const error = new Error('BANKING_PAY_WORKBENCH_CONTRACT_MISMATCH');
@@ -177,9 +188,13 @@ async function assertBankingPayWorkbenchContract(env, entryPoint) {
       expected_contract_version: BANKING_PAY_WORKBENCH_DB_CONTRACT,
       expected_canonical_correction_carrier_version:
         BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION,
+      expected_targeted_family_materialisation_version:
+        BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_VERSION,
       actual_contract_version: contract?.contract_version || null,
       actual_canonical_correction_carrier_version:
         contract?.canonical_correction_carrier_version || null,
+      actual_targeted_family_materialisation_version:
+        contract?.targeted_family_materialisation_version || null,
       entry_point: entryPoint,
       mutation_attempted: false,
       workbench_job_claimed: false
@@ -208,10 +223,14 @@ function bankingPayWorkbenchContractFailure(error) {
       expected_contract_version: BANKING_PAY_WORKBENCH_DB_CONTRACT,
       expected_canonical_correction_carrier_version:
         BANKING_PAY_CANONICAL_CORRECTION_CARRIER_VERSION,
+      expected_targeted_family_materialisation_version:
+        BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_VERSION,
       actual_contract_version:
         error?.actualContract?.contract_version || null,
       actual_canonical_correction_carrier_version:
         error?.actualContract?.canonical_correction_carrier_version || null,
+      actual_targeted_family_materialisation_version:
+        error?.actualContract?.targeted_family_materialisation_version || null,
       entry_point: error?.entryPoint || null,
       mutation_attempted: false,
       workbench_job_claimed: false
@@ -13507,7 +13526,8 @@ async function verifyPayeSameWeekOverrideReauth(env, user, reauthToken) {
     verified_by_user_id: currentUserId,
     verified_at_utc: new Date().toISOString(),
     expires_at_utc: new Date(expiresAtUnix * 1000).toISOString(),
-    reauth_purpose: 'PAYE_SAME_WEEK_OVERRIDE'
+    reauth_purpose: 'PAYE_SAME_WEEK_OVERRIDE',
+    test_same_week_paye_override_bypass_used: isTestSameWeekPayeOverrideOnlyToken(payload)
   };
 }
 
@@ -130784,6 +130804,41 @@ async function handleAuthReauthStart(env, req) {
       reauth_token: token,
       expires_in: ttlSec,
       test_csv_execution_bypass: true
+    }), { status: 200, headers: JSON_HEADERS });
+  }
+
+  const testSameWeekPayeBypass = evaluateTestSameWeekPayeOverrideBypass({
+    env,
+    user: userRow,
+    purpose: requestedPurpose
+  });
+  if (testSameWeekPayeBypass.allowed) {
+    const ttlSec = 300;
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const payload = {
+      typ: 'reauth',
+      sub: String(userRow.id),
+      purpose: 'PAYE_SAME_WEEK_OVERRIDE',
+      test_same_week_paye_override_only: true,
+      iat: nowUnix,
+      exp: nowUnix + ttlSec
+    };
+    let token;
+    try {
+      token = await createToken(sessionSecret(env), payload);
+    } catch (e) {
+      return serverError(e?.message || String(e));
+    }
+    try {
+      console.warn('[security] TEST-only same-week PAYE draft 2FA override used after password verification.');
+    } catch {}
+    return new Response(JSON.stringify({
+      ok: true,
+      tfa_required: false,
+      purpose: 'PAYE_SAME_WEEK_OVERRIDE',
+      reauth_token: token,
+      expires_in: ttlSec,
+      test_same_week_paye_override_bypass: true
     }), { status: 200, headers: JSON_HEADERS });
   }
 

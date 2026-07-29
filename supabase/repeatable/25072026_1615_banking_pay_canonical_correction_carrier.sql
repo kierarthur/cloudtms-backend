@@ -157,7 +157,9 @@ BEGIN
     'hidden_recovery_template_projection_version', 1,
     'requires_hidden_recovery_templates', true,
     'canonical_correction_carrier_version',
-      'BANKING_PAY_CANONICAL_CORRECTION_CARRIER_V1'
+      'BANKING_PAY_CANONICAL_CORRECTION_CARRIER_V1',
+    'targeted_family_materialisation_version',
+      'BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_V1'
   );
 END;
 $function$;
@@ -185,6 +187,7 @@ DECLARE
       'public.banking_pay_workbench_selection_carry_registrations'
     );
   v_canonical_contract_version text;
+  v_targeted_family_materialisation_version text;
 BEGIN
   v_canonical_contract_version := CASE
     WHEN v_selection_carry_table_oid IS NOT NULL
@@ -212,11 +215,28 @@ BEGIN
     true
   );
 
+  v_targeted_family_materialisation_version := CASE
+    WHEN to_regprocedure(
+      'public._pay_workbench_refresh_dependency_closure_v1(uuid,uuid[],uuid[],uuid[],integer,integer)'
+    ) IS NOT NULL
+      THEN v_projection_contract ->> 'targeted_family_materialisation_version'
+    ELSE 'BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_INCOMPLETE'
+  END;
+
+  v_projection_contract := jsonb_set(
+    v_projection_contract,
+    '{targeted_family_materialisation_version}',
+    to_jsonb(v_targeted_family_materialisation_version),
+    true
+  );
+
   RETURN jsonb_build_object(
     'ok', true,
     'contract_version', 'BANKING_PAY_WORKBENCH_DB_V1',
     'canonical_correction_carrier_version',
       v_canonical_contract_version,
+    'targeted_family_materialisation_version',
+      v_targeted_family_materialisation_version,
     'candidate_projection_contract', v_projection_contract
   );
 END;
@@ -249,6 +269,7 @@ DECLARE
       'public.banking_pay_workbench_selection_carry_registrations'
     );
   v_canonical_contract_version text;
+  v_targeted_family_materialisation_version text;
 BEGIN
   v_canonical_contract_version := CASE
     WHEN v_selection_carry_table_oid IS NOT NULL
@@ -269,6 +290,14 @@ BEGIN
     ELSE 'BANKING_PAY_CANONICAL_CORRECTION_CARRIER_INCOMPLETE'
   END;
 
+  v_targeted_family_materialisation_version := CASE
+    WHEN to_regprocedure(
+      'public._pay_workbench_refresh_dependency_closure_v1(uuid,uuid[],uuid[],uuid[],integer,integer)'
+    ) IS NOT NULL
+      THEN v_projection_contract ->> 'targeted_family_materialisation_version'
+    ELSE 'BANKING_PAY_TARGETED_FAMILY_MATERIALISATION_INCOMPLETE'
+  END;
+
   RETURN jsonb_build_object(
     'ok', true,
     'schema_contract_version', 'IMPORT_REVIEW_DB_V1',
@@ -282,6 +311,8 @@ BEGIN
     'email_grouping_version', 'TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
     'canonical_correction_carrier_version',
       v_canonical_contract_version,
+    'targeted_family_materialisation_version',
+      v_targeted_family_materialisation_version,
     'legacy_contracts_supported', false
   );
 END;

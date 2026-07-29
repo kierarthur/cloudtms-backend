@@ -28,6 +28,8 @@ DECLARE
   v_resolved_selection_distinct_count integer := 0;
   v_active_workbench_job_count integer := 0;
   v_active_workbench_job_sample jsonb := '[]'::jsonb;
+  v_stale_candidate_authority_count integer := 0;
+  v_stale_candidate_authority_sample jsonb := '[]'::jsonb;
 BEGIN
   perform public._ctms_assert_session_correction_residuals_draftable_v1(p_workbench_session_id,p_selected_preview_row_ids,'PAY_WORKBENCH_PREPARE_DRAFT');
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
@@ -723,6 +725,128 @@ BEGIN
             )::text;
   END IF;
 
+  /*
+   * Final pre-draft defence: selected rows must come from the current adopted
+   * candidate authority. This performs only bounded validation and never
+   * rebuilds or recalculates economics inside draft creation.
+   */
+  WITH selected_candidates AS (
+    SELECT DISTINCT selected_candidate.candidate_id
+    FROM pg_temp.tmp_pay_workbench_draft_scope_selected_candidates
+      AS selected_candidate
+  ), selected_candidate_authority AS (
+    SELECT
+      selected_candidates.candidate_id,
+      COALESCE(candidate_state.status, 'MISSING') AS candidate_state_status,
+      COALESCE(candidate_state.source_change_seq, -1) AS candidate_state_source_change_seq,
+      COALESCE(change_counter.seq, 0) AS live_source_change_seq,
+      EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_candidate_source_lines AS stale_source
+        WHERE stale_source.session_id = p_workbench_session_id
+          AND stale_source.candidate_id = selected_candidates.candidate_id
+          AND stale_source.session_version = v_session.version
+          AND UPPER(BTRIM(COALESCE(stale_source.status, ''))) IN (
+            'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED'
+          )
+      ) AS has_incomplete_source,
+      EXISTS (
+        SELECT 1
+        FROM (
+          SELECT current_source.line_key, current_source.timesheet_id
+          FROM public.banking_pay_workbench_candidate_source_lines AS current_source
+          WHERE current_source.session_id = p_workbench_session_id
+            AND current_source.candidate_id = selected_candidates.candidate_id
+            AND current_source.session_version = v_session.version
+            AND UPPER(BTRIM(COALESCE(current_source.status, ''))) = 'CURRENT'
+          GROUP BY current_source.line_key, current_source.timesheet_id
+          HAVING COUNT(*) > 1
+        ) AS duplicate_source
+      ) AS has_duplicate_current_source,
+      EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_candidate_line_work AS incomplete_line
+        WHERE incomplete_line.session_id = p_workbench_session_id
+          AND incomplete_line.candidate_id = selected_candidates.candidate_id
+          AND UPPER(BTRIM(COALESCE(incomplete_line.status, ''))) IN (
+            'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED', 'READY'
+          )
+      ) AS has_incomplete_line_work,
+      EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_preview_rows AS dirty_preview
+        WHERE dirty_preview.session_id = p_workbench_session_id
+          AND dirty_preview.candidate_id = selected_candidates.candidate_id
+          AND dirty_preview.session_version = v_session.version
+          AND UPPER(BTRIM(COALESCE(dirty_preview.status, ''))) IN (
+            'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED'
+          )
+      ) AS has_dirty_preview
+    FROM selected_candidates
+    LEFT JOIN public.banking_pay_workbench_session_candidate_state AS candidate_state
+      ON candidate_state.session_id = p_workbench_session_id
+     AND candidate_state.candidate_id = selected_candidates.candidate_id
+    LEFT JOIN public.app_change_counters AS change_counter
+      ON change_counter.entity_key =
+           'pay_candidate:' || selected_candidates.candidate_id::text
+  ), invalid_candidates AS (
+    SELECT
+      selected_candidate_authority.*,
+      CASE
+        WHEN UPPER(BTRIM(COALESCE(selected_candidate_authority.candidate_state_status, ''))) <> 'READY'
+          THEN 'CANDIDATE_STATE_NOT_READY'
+        WHEN selected_candidate_authority.candidate_state_source_change_seq
+               IS DISTINCT FROM selected_candidate_authority.live_source_change_seq
+          THEN 'CANDIDATE_STATE_SEQUENCE_STALE'
+        WHEN selected_candidate_authority.has_incomplete_source
+          THEN 'SOURCE_FAMILY_INCOMPLETE'
+        WHEN selected_candidate_authority.has_duplicate_current_source
+          THEN 'SOURCE_FAMILY_DUPLICATED'
+        WHEN selected_candidate_authority.has_incomplete_line_work
+          THEN 'LINE_WORK_NOT_TERMINAL'
+        WHEN selected_candidate_authority.has_dirty_preview
+          THEN 'PREVIEW_ROWS_NOT_CURRENT'
+        ELSE NULL::text
+      END AS stale_reason
+    FROM selected_candidate_authority
+  )
+  SELECT
+    COUNT(*)::integer,
+    COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'candidate_id', invalid_candidates.candidate_id::text,
+          'reason', invalid_candidates.stale_reason,
+          'candidate_state_status', invalid_candidates.candidate_state_status,
+          'candidate_state_source_change_seq',
+            invalid_candidates.candidate_state_source_change_seq,
+          'live_source_change_seq',
+            invalid_candidates.live_source_change_seq
+        )
+        ORDER BY invalid_candidates.candidate_id
+      ) FILTER (WHERE invalid_candidates.stale_reason IS NOT NULL),
+      '[]'::jsonb
+    )
+  INTO
+    v_stale_candidate_authority_count,
+    v_stale_candidate_authority_sample
+  FROM invalid_candidates
+  WHERE invalid_candidates.stale_reason IS NOT NULL;
+
+  IF COALESCE(v_stale_candidate_authority_count, 0) > 0 THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_DRAFT_STALE_CANDIDATE_AUTHORITY'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_DRAFT_STALE_CANDIDATE_AUTHORITY',
+              'operation_id', p_operation_id::text,
+              'workbench_session_id', p_workbench_session_id::text,
+              'affected_candidates',
+                COALESCE(v_stale_candidate_authority_sample, '[]'::jsonb),
+              'message',
+                'Banking Pay changed and is refreshing. No draft was created. Review the current rows and try again.'
+            )::text;
+  END IF;
+
 
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
            'preview_row_id', synthetic_total_rows.preview_row_id::text,
@@ -1041,3 +1165,11 @@ BEGIN
     COALESCE(v_pay_channel_count, 0);
 END;
 $function$;
+
+REVOKE ALL ON FUNCTION public.pay_workbench_prepare_draft_scope_seed(
+  uuid, uuid, uuid, jsonb, text, jsonb
+) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.pay_workbench_prepare_draft_scope_seed(
+  uuid, uuid, uuid, jsonb, text, jsonb
+) TO service_role;

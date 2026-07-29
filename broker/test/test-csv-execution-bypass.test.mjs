@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
   evaluateTestCsvExecutionBypass,
+  evaluateTestSameWeekPayeOverrideBypass,
+  isTestSameWeekPayeOverrideOnlyToken,
   testCsvExecutionTokenMatchesMode
 } from '../src/test-csv-execution-bypass.js';
 
@@ -21,6 +23,38 @@ test('allows only the configured TEST user and CSV settlement action', () => {
     purpose: 'PAYMENT_SCHEDULE',
     executionMode: 'CSV_SETTLEMENT'
   }).allowed, true);
+});
+
+test('allows only the configured TEST user to bypass same-week PAYE draft 2FA after password verification', () => {
+  assert.equal(evaluateTestSameWeekPayeOverrideBypass({
+    env: testEnv,
+    user: { id: userId },
+    purpose: 'PAYE_SAME_WEEK_OVERRIDE'
+  }).allowed, true);
+});
+
+for (const [name, patch] of [
+  ['disabled configuration', { env: { ...testEnv, TEST_CSV_EXECUTION_2FA_BYPASS_ENABLED: '' } }],
+  ['production database', { env: { ...testEnv, SUPABASE_URL: 'https://zojgukxyyklcyjbyyqlz.supabase.co' } }],
+  ['production origin', { env: { ...testEnv, ALLOWED_ORIGINS: 'https://cloudtms.arthur-rai.co.uk' } }],
+  ['different user', { user: { id: '22222222-2222-4222-8222-222222222222' } }],
+  ['different purpose', { purpose: 'PAYMENT_SCHEDULE' }]
+]) {
+  test(`same-week PAYE bypass denies ${name}`, () => {
+    const input = {
+      env: testEnv,
+      user: { id: userId },
+      purpose: 'PAYE_SAME_WEEK_OVERRIDE',
+      ...patch
+    };
+    assert.equal(evaluateTestSameWeekPayeOverrideBypass(input).allowed, false);
+  });
+}
+
+test('same-week PAYE TEST token is explicitly purpose restricted', () => {
+  assert.equal(isTestSameWeekPayeOverrideOnlyToken({ test_same_week_paye_override_only: true }), true);
+  assert.equal(isTestSameWeekPayeOverrideOnlyToken({ test_csv_execution_only: true }), false);
+  assert.equal(isTestSameWeekPayeOverrideOnlyToken({}), false);
 });
 
 for (const [name, patch] of [

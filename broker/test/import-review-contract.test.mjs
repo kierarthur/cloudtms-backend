@@ -33,6 +33,8 @@ const installedContract = Object.freeze({
   email_grouping_version: importReviewContract.emailGrouping,
   canonical_correction_carrier_version:
     importReviewContract.canonicalCorrectionCarrier,
+  targeted_family_materialisation_version:
+    importReviewContract.targetedFamilyMaterialisation,
   legacy_contracts_supported: false
 });
 

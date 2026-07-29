@@ -5,7 +5,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const text = (value) => String(value == null ? '' : value).trim();
 const upper = (value) => text(value).toUpperCase();
 
-export function evaluateTestCsvExecutionBypass({ env, user, purpose, executionMode } = {}) {
+function evaluateConfiguredTestUser({ env, user } = {}) {
   const configuredUserId = text(env?.TEST_CSV_EXECUTION_2FA_BYPASS_USER_ID);
   const userId = text(user?.id);
   const enabled = upper(env?.TEST_CSV_EXECUTION_2FA_BYPASS_ENABLED) === 'ENABLED';
@@ -17,13 +17,18 @@ export function evaluateTestCsvExecutionBypass({ env, user, purpose, executionMo
   const isTestOriginSet = allowedOrigins.includes(TEST_FRONTEND_ORIGIN)
     && !allowedOrigins.includes('https://cloudtms.arthur-rai.co.uk');
   const isConfiguredUser = UUID_RE.test(configuredUserId) && userId === configuredUserId;
+
+  return enabled
+    && isTestProject
+    && isTestOriginSet
+    && isConfiguredUser;
+}
+
+export function evaluateTestCsvExecutionBypass({ env, user, purpose, executionMode } = {}) {
   const isPaymentSchedule = upper(purpose) === 'PAYMENT_SCHEDULE';
   const isCsvSettlement = upper(executionMode) === 'CSV_SETTLEMENT';
 
-  const allowed = enabled
-    && isTestProject
-    && isTestOriginSet
-    && isConfiguredUser
+  const allowed = evaluateConfiguredTestUser({ env, user })
     && isPaymentSchedule
     && isCsvSettlement;
 
@@ -35,8 +40,24 @@ export function evaluateTestCsvExecutionBypass({ env, user, purpose, executionMo
   };
 }
 
+export function evaluateTestSameWeekPayeOverrideBypass({ env, user, purpose } = {}) {
+  const allowed = evaluateConfiguredTestUser({ env, user })
+    && upper(purpose) === 'PAYE_SAME_WEEK_OVERRIDE';
+
+  return {
+    allowed,
+    reason: allowed
+      ? 'TEST_SAME_WEEK_PAYE_OVERRIDE_BYPASS_ALLOWED'
+      : 'TEST_SAME_WEEK_PAYE_OVERRIDE_BYPASS_DENIED'
+  };
+}
+
 export function isTestCsvExecutionOnlyToken(payload) {
   return payload?.test_csv_execution_only === true;
+}
+
+export function isTestSameWeekPayeOverrideOnlyToken(payload) {
+  return payload?.test_same_week_paye_override_only === true;
 }
 
 export function testCsvExecutionTokenMatchesMode(payload, executionMode) {

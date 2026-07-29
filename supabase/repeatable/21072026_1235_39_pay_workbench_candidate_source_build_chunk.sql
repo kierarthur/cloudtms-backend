@@ -47,6 +47,7 @@ DECLARE
   v_actual_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
   v_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
   v_linked_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_finance_case_ids_json jsonb := '[]'::jsonb;
   v_targeted_payload_received boolean := false;
   v_pay_channel_scope text := 'ALL';
   v_candidate_pay_channel_scope text := NULL::text;
@@ -102,6 +103,10 @@ DECLARE
   v_sync_scope_timesheet_ids_json jsonb := '[]'::jsonb;
   v_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_linked_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_finance_case_ids uuid[] := ARRAY[]::uuid[];
+  v_dependency_closure_json jsonb := '{}'::jsonb;
+  v_dependency_closure_requires_full boolean := false;
+  v_dependency_closure_reason text := NULL::text;
   v_sync_scope_digest text := NULL::text;
   v_sync_negative_digest text := NULL::text;
   v_sync_baseline_digest text := NULL::text;
@@ -541,8 +546,28 @@ BEGIN
     WHERE NULLIF(BTRIM(linked_values.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ) AS parsed_linked_ids;
 
+  SELECT COALESCE(
+    jsonb_agg(parsed_finance_case_ids.finance_case_id_text ORDER BY parsed_finance_case_ids.finance_case_id_text),
+    '[]'::jsonb
+  )
+  INTO v_finance_case_ids_json
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(finance_case_values.value), '') AS finance_case_id_text
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(v_payload_json->'finance_case_ids') = 'array' THEN v_payload_json->'finance_case_ids'
+        WHEN jsonb_typeof(v_payload_json#>'{source_build,finance_case_ids}') = 'array' THEN v_payload_json#>'{source_build,finance_case_ids}'
+        WHEN jsonb_typeof(v_payload_json#>'{preview_decisions_json,finance_case_ids}') = 'array' THEN v_payload_json#>'{preview_decisions_json,finance_case_ids}'
+        WHEN jsonb_typeof(v_payload_json->'finance_case_id') = 'string' THEN jsonb_build_array(v_payload_json->>'finance_case_id')
+        ELSE '[]'::jsonb
+      END
+    ) AS finance_case_values(value)
+    WHERE NULLIF(BTRIM(finance_case_values.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) AS parsed_finance_case_ids;
+
   v_targeted_payload_received := jsonb_array_length(COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb)) > 0
-    OR jsonb_array_length(COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)) > 0;
+    OR jsonb_array_length(COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)) > 0
+    OR jsonb_array_length(COALESCE(v_finance_case_ids_json, '[]'::jsonb)) > 0;
 
   IF v_refresh_scope_kind = 'TARGETED_TIMESHEETS'
      AND COALESCE(v_targeted_payload_received, false) IS NOT TRUE
@@ -602,6 +627,94 @@ BEGIN
     FROM jsonb_array_elements_text(COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)) AS linked_id(value)
     WHERE linked_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ) AS parsed_linked_ids;
+
+  SELECT COALESCE(ARRAY_AGG(parsed_finance_case_ids.finance_case_id ORDER BY parsed_finance_case_ids.finance_case_id), ARRAY[]::uuid[])
+  INTO v_finance_case_ids
+  FROM (
+    SELECT DISTINCT finance_case_id.value::uuid AS finance_case_id
+    FROM jsonb_array_elements_text(COALESCE(v_finance_case_ids_json, '[]'::jsonb)) AS finance_case_id(value)
+    WHERE finance_case_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) AS parsed_finance_case_ids;
+
+  IF v_requested_refresh_scope_kind = 'TARGETED_TIMESHEETS' THEN
+    IF to_regprocedure(
+         'public._pay_workbench_refresh_dependency_closure_v1(uuid,uuid[],uuid[],uuid[],integer,integer)'
+       ) IS NULL THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_REFRESH_DEPENDENCY_CLOSURE_UNAVAILABLE'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_REFRESH_DEPENDENCY_CLOSURE_UNAVAILABLE',
+                'session_id', p_session_id::text,
+                'candidate_id', p_candidate_id::text
+              )::text;
+    END IF;
+
+    EXECUTE
+      'SELECT public._pay_workbench_refresh_dependency_closure_v1($1,$2,$3,$4,$5,$6)'
+    INTO v_dependency_closure_json
+    USING
+      p_candidate_id,
+      v_targeted_timesheet_ids,
+      v_linked_timesheet_ids,
+      v_finance_case_ids,
+      250,
+      100;
+
+    v_dependency_closure_requires_full :=
+      LOWER(BTRIM(COALESCE(
+        v_dependency_closure_json->>'requires_full_candidate',
+        'true'
+      ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR LOWER(BTRIM(COALESCE(
+        v_dependency_closure_json->>'coverage_complete',
+        'false'
+      ))) NOT IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_dependency_closure_reason := NULLIF(BTRIM(COALESCE(
+      v_dependency_closure_json->>'fallback_reason',
+      ''
+    )), '');
+
+    IF v_dependency_closure_requires_full THEN
+      v_requested_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
+      v_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
+      v_targeted_timesheet_ids := ARRAY[]::uuid[];
+      v_linked_timesheet_ids := ARRAY[]::uuid[];
+      v_finance_case_ids := ARRAY[]::uuid[];
+      v_targeted_timesheet_ids_json := '[]'::jsonb;
+      v_linked_timesheet_ids_json := '[]'::jsonb;
+      v_finance_case_ids_json := '[]'::jsonb;
+      v_fallback_used := true;
+      v_fallback_reason := COALESCE(
+        v_dependency_closure_reason,
+        'DEPENDENCY_CLOSURE_INCOMPLETE'
+      );
+    ELSE
+      SELECT COALESCE(array_agg(DISTINCT value::uuid ORDER BY value::uuid), ARRAY[]::uuid[])
+      INTO v_targeted_timesheet_ids
+      FROM jsonb_array_elements_text(
+        COALESCE(v_dependency_closure_json->'effective_targeted_timesheet_ids', '[]'::jsonb)
+      ) AS effective_timesheet(value)
+      WHERE value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+      SELECT COALESCE(array_agg(DISTINCT value::uuid ORDER BY value::uuid), ARRAY[]::uuid[])
+      INTO v_linked_timesheet_ids
+      FROM jsonb_array_elements_text(
+        COALESCE(v_dependency_closure_json->'effective_linked_timesheet_ids', '[]'::jsonb)
+      ) AS effective_linked_timesheet(value)
+      WHERE value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+      SELECT COALESCE(array_agg(DISTINCT value::uuid ORDER BY value::uuid), ARRAY[]::uuid[])
+      INTO v_finance_case_ids
+      FROM jsonb_array_elements_text(
+        COALESCE(v_dependency_closure_json->'effective_finance_case_ids', '[]'::jsonb)
+      ) AS effective_finance_case(value)
+      WHERE value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+      v_targeted_timesheet_ids_json := to_jsonb(v_targeted_timesheet_ids);
+      v_linked_timesheet_ids_json := to_jsonb(v_linked_timesheet_ids);
+      v_finance_case_ids_json := to_jsonb(v_finance_case_ids);
+    END IF;
+  END IF;
 
   /* A targeted refresh of one import-authoritative correction leg must rebuild
      the whole correction chain.  The residual materialiser deliberately emits
@@ -2389,6 +2502,7 @@ BEGIN
         'refresh_scope_kind', v_refresh_scope_kind,
         'targeted_timesheet_ids', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
         'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
+        'finance_case_ids', COALESCE(v_finance_case_ids_json, '[]'::jsonb),
         'targeted_timesheet_ids_requested', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
         'linked_timesheet_ids_requested', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
         'source_build_force_include_timesheet_ids', COALESCE(v_post_sync_scope_timesheet_ids_json, '[]'::jsonb),
@@ -2433,6 +2547,7 @@ BEGIN
       'refresh_scope_kind', v_refresh_scope_kind,
       'targeted_timesheet_ids', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
       'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
+      'finance_case_ids', COALESCE(v_finance_case_ids_json, '[]'::jsonb),
       'targeted_timesheet_ids_requested', COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb),
       'linked_timesheet_ids_requested', COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb),
       'source_build_force_include_timesheet_ids', COALESCE(v_post_sync_scope_timesheet_ids_json, '[]'::jsonb),
@@ -3897,12 +4012,24 @@ BEGIN
           FROM pg_temp._tmp_pay_wb_source_build_scope_timesheet_ids AS scope_timesheet_ids
         )
         OR (
-          source_line_retire.timesheet_id IS NULL
-          AND EXISTS (
-            SELECT 1
-            FROM pg_temp._tmp_pay_wb_preview_line_seed_source AS null_scope_source_rows
-            WHERE null_scope_source_rows.timesheet_id IS NULL
-          )
+          NULLIF(BTRIM(COALESCE(source_line_retire.source_row_json->>'finance_case_id', '')), '')
+            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND (source_line_retire.source_row_json->>'finance_case_id')::uuid
+                = ANY(COALESCE(v_finance_case_ids, ARRAY[]::uuid[]))
+        )
+        OR (
+          NULLIF(BTRIM(COALESCE(source_line_retire.source_row_json->>'dependency_family_key', '')), '')
+            IN (
+              SELECT DISTINCT CASE
+                WHEN NULLIF(BTRIM(COALESCE(new_family.seed_line_json->>'finance_case_id', '')), '')
+                     ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                  THEN 'finance:' || (new_family.seed_line_json->>'finance_case_id')
+                WHEN new_family.timesheet_id IS NOT NULL
+                  THEN 'timesheet:' || new_family.timesheet_id::text
+                ELSE 'line-parent:' || new_family.parent_line_key
+              END
+              FROM pg_temp._tmp_pay_wb_preview_line_seed_source AS new_family
+            )
         )
       )
       AND NOT (
@@ -3949,6 +4076,21 @@ BEGIN
           'section', source_rows.target_section,
           'economic_key', source_rows.economic_key_json,
           'preview_contract', source_rows.contract_json,
+          'dependency_family_kind', CASE
+            WHEN NULLIF(BTRIM(COALESCE(source_rows.seed_line_json->>'finance_case_id', '')), '')
+                 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN 'FINANCE_CASE'
+            WHEN source_rows.timesheet_id IS NOT NULL THEN 'TIMESHEET'
+            ELSE 'LINE_PARENT'
+          END,
+          'dependency_family_key', CASE
+            WHEN NULLIF(BTRIM(COALESCE(source_rows.seed_line_json->>'finance_case_id', '')), '')
+                 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN 'finance:' || (source_rows.seed_line_json->>'finance_case_id')
+            WHEN source_rows.timesheet_id IS NOT NULL
+              THEN 'timesheet:' || source_rows.timesheet_id::text
+            ELSE 'line-parent:' || source_rows.parent_line_key
+          END,
           'refresh_scope_kind', v_actual_refresh_scope_kind,
           'requested_refresh_scope_kind', v_requested_refresh_scope_kind,
           'actual_refresh_scope_kind', v_actual_refresh_scope_kind,
@@ -4558,7 +4700,9 @@ BEGIN
         'source_change_seq', v_source_change_seq,
         'source_build_run_id', v_source_build_run_id::text
       )
-    )
+    ),
+    'dependency_closure', COALESCE(v_dependency_closure_json, '{}'::jsonb),
+    'finance_case_ids', COALESCE(v_finance_case_ids_json, '[]'::jsonb)
   );
 END;
 $function$;
