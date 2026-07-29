@@ -2,8 +2,8 @@
 
 select exists (
   select 1
-  from public.invoice_operations
-  where status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+  from public.invoice_operation_chunks
+  where status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT')
 ) as invoice_presentation_active_work
 \gset
 

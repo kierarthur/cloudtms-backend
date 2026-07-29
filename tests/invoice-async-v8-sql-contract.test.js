@@ -1165,11 +1165,27 @@ test('presentation authority repeatable defers safely instead of failing CI whil
     presentationSnapshot,
     /INVOICE_PRESENTATION_SNAPSHOT_DEFERRED_ACTIVE_WORK/i,
   );
+  assert.match(
+    presentationSnapshot,
+    /from public\.invoice_operation_chunks[\s\S]*status in \('QUEUED','RUNNING','WAITING','RETRY_WAIT'\)/i,
+  );
+  assert.doesNotMatch(
+    presentationSnapshot,
+    /invoice_presentation_active_work[\s\S]{0,240}'BLOCKED'/i,
+  );
   assert.match(presentationAuthority, /\\gset/i);
   assert.match(presentationAuthority, /\\if :invoice_presentation_active_work/i);
   assert.match(
     presentationAuthority,
     /INVOICE_PRESENTATION_CUTOVER_DEFERRED_ACTIVE_WORK/i,
+  );
+  assert.match(
+    presentationAuthority,
+    /from public\.invoice_operation_chunks[\s\S]*status in \('QUEUED','RUNNING','WAITING','RETRY_WAIT'\)/i,
+  );
+  assert.doesNotMatch(
+    presentationAuthority,
+    /invoice_presentation_active_work[\s\S]{0,240}'BLOCKED'/i,
   );
   assert.doesNotMatch(
     presentationAuthority,
