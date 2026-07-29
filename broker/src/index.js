@@ -51324,18 +51324,21 @@ async function handleBankingAlertsGet(env, req, user) {
     const url = new URL(req.url);
     const requestedLimit = Number(url.searchParams.get('limit') || 100);
     const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 100, 1), 100);
+    const forceRefresh = ['1', 'true', 'yes'].includes(String(url.searchParams.get('refresh') || '').trim().toLowerCase());
     const alerts = unwrapRpcPayload(await sbRpc(env, 'banking_alerts_refresh_for_user', {
       p_actor_user_id: String(user.id),
-      p_alert_context: 'ALERT_PANEL',
+      p_alert_context: forceRefresh ? 'USER_TRIGGERED_ALERTS' : 'ALERT_PANEL',
       p_limit: limit
     }), 'banking_alerts_refresh_for_user');
 
-    return withCORS(env, req, ok({
+    const response = ok({
       ...alerts,
       ok: alerts.ok !== false,
       banking_alert_summary: alerts,
       alert_summary: alerts
-    }));
+    });
+    response.headers.set('Cache-Control', 'no-store');
+    return withCORS(env, req, response);
   } catch (e) {
     const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
       ? makeBankingFriendlyErrorPayload(e, { action: 'BANKING_ALERTS_GET' })
@@ -179299,7 +179302,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const requestedEffectiveMaxRuntimeMs = sourceBuildParallelEnabled
     ? Math.max(maxRuntimeMs, sourceBuildRuntimeFloorMs)
     : maxRuntimeMs;
-  const effectiveMaxRuntimeMs = Math.min(requestedEffectiveMaxRuntimeMs, dbRpcHardCapMs);
+  // The outer drain may make several bounded database calls. Keep its configured
+  // runtime separate from the per-RPC hard cap so a normal-lane call cannot
+  // consume the source-build lane's transaction budget.
+  const effectiveMaxRuntimeMs = requestedEffectiveMaxRuntimeMs;
   const normalAllowedJobTypes = (() => {
     const base = allowedJobTypes === null ? supportedJobTypes : allowedJobTypes;
     const filtered = sourceBuildParallelEnabled

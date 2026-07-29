@@ -87,14 +87,32 @@ test('clear one, clear many, and clear all read the live alert set in alert-mana
   assert.match(migration, /CREATE OR REPLACE FUNCTION public\.banking_alert_acknowledge_all_current\(/);
 });
 
-test('worker exposes explicit alert loading and keeps generic changes ping lightweight', () => {
+test('worker exposes cache-aware alert loading and keeps generic changes ping lightweight', () => {
   assert.match(worker, /async function handleBankingAlertsGet/);
   assert.match(worker, /banking_alerts_refresh_for_user/);
-  assert.match(worker, /p_alert_context: 'ALERT_PANEL'/);
+  assert.match(worker, /forceRefresh \? 'USER_TRIGGERED_ALERTS' : 'ALERT_PANEL'/);
+  assert.match(worker, /response\.headers\.set\('Cache-Control', 'no-store'\)/);
   assert.match(worker, /req\.method === 'GET' && p === '\/api\/banking\/alerts'/);
   const changesPing = sliceBetween(worker, 'async function handleChangesPing', 'async function handleRolesGlobal');
   assert.doesNotMatch(changesPing, /banking_alerts_active_for_user/);
   assert.match(changesPing, /banking_alert_summary_deferred = count > 0/);
+});
+
+test('routine alert reads reuse the actor summary while explicit refresh bypasses it', () => {
+  const refresh = sliceBetween(
+    repeatable,
+    'CREATE OR REPLACE FUNCTION public.banking_alerts_refresh_for_user(',
+    'CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge('
+  );
+
+  assert.match(refresh, /v_alert_context IN \('ALERT_PANEL', 'ALERTS_PANEL', 'CACHED', 'CHANGES_PING', 'RPC_CHANGES_PING'\)/);
+  assert.match(refresh, /FROM public\.banking_alert_display_summary AS alert_summary/);
+  assert.match(refresh, /v_cached_updated_at_utc >= now\(\) - INTERVAL '5 minutes'/);
+  assert.match(refresh, /'cached', true/);
+  assert.match(refresh, /PERFORM public\.banking_pay_hot_path_budget_apply/);
+  assert.match(refresh, /public\.banking_alerts_active_for_user/);
+  assert.match(refresh, /'cached', false/);
+  assert.doesNotMatch(refresh, /USER_TRIGGERED_ALERTS'[\s\S]*RETURN COALESCE\(v_cached_json/);
 });
 
 test('successful lifecycle alerts are enabled and user-configurable', () => {

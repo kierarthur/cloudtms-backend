@@ -225,6 +225,52 @@ test('latest-state reruns do not mutually deadlock as queued chain continuations
   assert.match(serialStateBody, /v_reason := 'CANDIDATE_SERIAL_BLOCKED_BY_ACTIVE_CONTINUATION'/);
 });
 
+test('job claiming acquires advisory locks only after the final bounded eligibility set and rechecks queue state atomically', () => {
+  const claimBody = sqlFunctionBody(
+    repeatableSql,
+    'pay_workbench_claim_due_jobs'
+  );
+
+  assert.match(claimBody, /claim_source AS MATERIALIZED \(/);
+  assert.doesNotMatch(
+    claimBody.slice(
+      claimBody.indexOf('claim_source AS MATERIALIZED ('),
+      claimBody.indexOf('claim_pool AS MATERIALIZED (')
+    ),
+    /FOR UPDATE SKIP LOCKED/,
+    'the broad candidate sample must not lock jobs that the final claim will not adopt'
+  );
+  assert.match(
+    claimBody,
+    /eligible_claim AS MATERIALIZED \([\s\S]*ORDER BY claim_pool\.priority[\s\S]*LIMIT v_limit/
+  );
+  assert.match(
+    claimBody,
+    /candidate_locked_claim AS MATERIALIZED \([\s\S]*pg_try_advisory_xact_lock\(hashtextextended\(eligible_claim\.candidate_serial_key, 24062027\)\)[\s\S]*FROM eligible_claim/
+  );
+  assert.match(
+    claimBody,
+    /hot_key_locked_claim AS MATERIALIZED \([\s\S]*FROM candidate_locked_claim[\s\S]*candidate_advisory_lock_granted IS TRUE/
+  );
+  assert.match(
+    claimBody,
+    /claim AS MATERIALIZED \([\s\S]*hot_key_advisory_lock_granted IS TRUE/
+  );
+  assert.doesNotMatch(
+    claimBody.slice(
+      claimBody.indexOf('eligible_claim AS MATERIALIZED ('),
+      claimBody.indexOf('candidate_locked_claim AS MATERIALIZED (')
+    ),
+    /pg_try_advisory_xact_lock/,
+    'advisory locks must not be acquired while PostgreSQL is still filtering the broader eligibility pool'
+  );
+  assert.match(
+    claimBody,
+    /WHERE upd_job\.id = claim_row\.id[\s\S]*upd_job\.status = 'QUEUED'[\s\S]*upd_job\.run_at_utc <= v_cutoff/,
+    'the atomic UPDATE must recheck that the bounded job is still due and queued'
+  );
+});
+
 test('source-build lanes remain claimable inside the bounded database worker budget', () => {
   assert.match(
     sourceBuildRuntimeFloorMigrationSql,
@@ -246,6 +292,23 @@ test('source-build lanes remain claimable inside the bounded database worker bud
     sourceBuildRuntimeFloorMigrationSql,
     /source_build_parallelism|source_build_parallel_bursts|source_build_lane_claim_limit/,
     'the runtime-floor correction must not increase source-build concurrency or lane claim limits'
+  );
+});
+
+test('the multi-phase Worker budget is not collapsed to one database RPC timeout', () => {
+  assert.match(
+    workerSource,
+    /const requestedEffectiveMaxRuntimeMs = sourceBuildParallelEnabled[\s\S]*const effectiveMaxRuntimeMs = requestedEffectiveMaxRuntimeMs;/
+  );
+  assert.doesNotMatch(
+    workerSource,
+    /const effectiveMaxRuntimeMs = Math\.min\(requestedEffectiveMaxRuntimeMs, dbRpcHardCapMs\)/,
+    'the outer drain must retain its configured budget while each dispatcher call remains individually capped'
+  );
+  assert.match(
+    workerSource,
+    /const passTimeoutMs = Math\.max\(1000, Math\.min\(dbRpcHardCapMs, remainingRuntimeMs\(\) - rpcSafetyBufferMs\)\)/,
+    'each database call must remain bounded by the existing per-RPC hard cap'
   );
 });
 

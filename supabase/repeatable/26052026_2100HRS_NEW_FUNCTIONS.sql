@@ -16024,7 +16024,7 @@ BEGIN
   END IF;
 
   FOR v_claimed_row IN
-    WITH claim_source AS (
+    WITH claim_source AS MATERIALIZED (
       SELECT
         claim_job.id,
         claim_job.job_type,
@@ -16241,9 +16241,8 @@ BEGIN
         claim_job.created_at_utc ASC,
         claim_job.id ASC
       LIMIT GREATEST(v_limit * 5, v_limit)
-      FOR UPDATE SKIP LOCKED
     ),
-    claim_pool AS (
+    claim_pool AS MATERIALIZED (
       SELECT
         claim_source.*,
         ROW_NUMBER() OVER (
@@ -16264,7 +16263,7 @@ BEGIN
         ) AS candidate_serial_rank
       FROM claim_source
     ),
-    claim AS (
+    eligible_claim AS MATERIALIZED (
       SELECT claim_pool.*
       FROM claim_pool
       CROSS JOIN LATERAL (
@@ -16283,15 +16282,7 @@ BEGIN
         )
         AND (
           claim_pool.candidate_serial_required IS NOT TRUE
-          OR pg_try_advisory_xact_lock(hashtextextended(claim_pool.candidate_serial_key, 24062027))
-        )
-        AND (
-          claim_pool.candidate_serial_required IS NOT TRUE
           OR lower(BTRIM(COALESCE(candidate_serial_state.state_json->>'blocked', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
-        )
-        AND (
-          claim_pool.canonical_job_type <> 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
-          OR pg_try_advisory_xact_lock(hashtextextended(COALESCE(NULLIF(BTRIM(claim_pool.hot_key), ''), claim_pool.id::text), 24062026))
         )
         AND NOT (
           claim_pool.canonical_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
@@ -16511,6 +16502,35 @@ BEGIN
       ORDER BY claim_pool.priority ASC, claim_pool.run_at_utc ASC, claim_pool.created_at_utc ASC, claim_pool.id ASC
       LIMIT v_limit
     ),
+    candidate_locked_claim AS MATERIALIZED (
+      SELECT
+        eligible_claim.*,
+        CASE
+          WHEN eligible_claim.candidate_serial_required IS NOT TRUE THEN true
+          ELSE pg_try_advisory_xact_lock(hashtextextended(eligible_claim.candidate_serial_key, 24062027))
+        END AS candidate_advisory_lock_granted
+      FROM eligible_claim
+    ),
+    hot_key_locked_claim AS MATERIALIZED (
+      SELECT
+        candidate_locked_claim.*,
+        CASE
+          WHEN candidate_locked_claim.canonical_job_type <> 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN true
+          ELSE pg_try_advisory_xact_lock(
+            hashtextextended(
+              COALESCE(NULLIF(BTRIM(candidate_locked_claim.hot_key), ''), candidate_locked_claim.id::text),
+              24062026
+            )
+          )
+        END AS hot_key_advisory_lock_granted
+      FROM candidate_locked_claim
+      WHERE candidate_locked_claim.candidate_advisory_lock_granted IS TRUE
+    ),
+    claim AS MATERIALIZED (
+      SELECT hot_key_locked_claim.*
+      FROM hot_key_locked_claim
+      WHERE hot_key_locked_claim.hot_key_advisory_lock_granted IS TRUE
+    ),
     upd AS (
       UPDATE public.banking_pay_workbench_jobs AS upd_job
       SET status = 'RUNNING',
@@ -16587,6 +16607,8 @@ BEGIN
       LEFT JOIN public.app_change_counters AS live_change
         ON live_change.entity_key = 'pay_candidate:' || COALESCE(claim_row.candidate_serial_candidate_id, claim_row.candidate_id)::text
       WHERE upd_job.id = claim_row.id
+        AND upd_job.status = 'QUEUED'
+        AND upd_job.run_at_utc <= v_cutoff
       RETURNING
         upd_job.id,
         upd_job.job_type,
@@ -61584,6 +61606,8 @@ AS $function$
 DECLARE
   v_alert_context text := UPPER(REPLACE(NULLIF(BTRIM(COALESCE(p_alert_context, 'ALERT_PANEL')), ''), '-', '_'));
   v_active_json jsonb := '{}'::jsonb;
+  v_cached_json jsonb := NULL::jsonb;
+  v_cached_updated_at_utc timestamptz := NULL::timestamptz;
   v_alert_hash text := 'banking_alert_signal:v3:' || MD5('');
   v_summary_hash text := 'banking_alert_summary:v3:' || MD5('');
   v_unacknowledged_count integer := 0;
@@ -61593,7 +61617,34 @@ BEGIN
   IF p_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'BANKING_ALERTS_REFRESH_FOR_USER_ACTOR_REQUIRED'
       USING ERRCODE = 'P0001',
-            DETAIL = jsonb_build_object('code', 'BANKING_ALERTS_REFRESH_FOR_USER_ACTOR_REQUIRED')::text;
+             DETAIL = jsonb_build_object('code', 'BANKING_ALERTS_REFRESH_FOR_USER_ACTOR_REQUIRED')::text;
+  END IF;
+
+  -- Routine navigation/heartbeat reads must not rebuild the complete alert set
+  -- on every request. A five-minute actor-scoped cache keeps the global alert
+  -- badge current without repeatedly executing the expensive live projection.
+  -- Explicit alert-management and refresh contexts deliberately bypass this
+  -- branch so user actions still observe current database truth immediately.
+  IF v_alert_context IN ('ALERT_PANEL', 'ALERTS_PANEL', 'CACHED', 'CHANGES_PING', 'RPC_CHANGES_PING') THEN
+    SELECT
+      alert_summary.summary_json,
+      alert_summary.updated_at_utc
+    INTO
+      v_cached_json,
+      v_cached_updated_at_utc
+    FROM public.banking_alert_display_summary AS alert_summary
+    WHERE alert_summary.actor_user_id = p_actor_user_id;
+
+    IF FOUND
+       AND v_cached_updated_at_utc >= now() - INTERVAL '5 minutes'
+       AND jsonb_typeof(COALESCE(v_cached_json, '{}'::jsonb)) = 'object' THEN
+      RETURN COALESCE(v_cached_json, '{}'::jsonb) || jsonb_build_object(
+        'cached', true,
+        'cache_checked_at_utc', now()::text,
+        'cache_updated_at_utc', v_cached_updated_at_utc::text,
+        'alert_context', v_alert_context
+      );
+    END IF;
   END IF;
 
   PERFORM public.banking_pay_hot_path_budget_apply(
@@ -61649,7 +61700,11 @@ BEGIN
     summary_json = EXCLUDED.summary_json,
     updated_at_utc = now();
 
-  RETURN v_active_json;
+  RETURN v_active_json || jsonb_build_object(
+    'cached', false,
+    'cache_checked_at_utc', now()::text,
+    'alert_context', v_alert_context
+  );
 END;
 $function$;
 
