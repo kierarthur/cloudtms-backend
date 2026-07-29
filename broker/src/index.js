@@ -44944,11 +44944,63 @@ async function handleBankingPayEnsurePayeeMap(env, req, user) {
       return withCORS(env, req, ok({ ok: true, rail_setup: railSetup }));
     }
 
+    const failureReason = String(railSetup?.reason || 'PAYEE_MAP_SETUP_FAILED').trim().toUpperCase();
+    const failureMessage = (() => {
+      if (failureReason === 'NAME_CHECK_REQUIRED') {
+        return 'The bank-name check must be completed or accepted before this bank account can be set up.';
+      }
+      if (failureReason === 'MISSING_BANK_FIELDS' || failureReason === 'PAYEE_TARGET_NOT_FOUND') {
+        return 'The current candidate or umbrella bank details are incomplete or no longer match this Banking Pay row.';
+      }
+      if (failureReason === 'RAIL_NOT_AVAILABLE' || failureReason === 'RAIL_CAPABILITIES_FAILED') {
+        return 'The configured payment provider is not currently available to set up this bank account.';
+      }
+      if (failureReason === 'RAIL_PROVIDER_SETUP_FAILED') {
+        return 'The configured payment provider rejected or could not complete this bank-account setup. No payment or draft was created.';
+      }
+      return 'CloudTMS could not safely set up this bank account with the configured payment provider.';
+    })();
+
+    console.warn('[BANK_PAYEE_MAP_ENSURE] setup not completed', JSON.stringify({
+      reason: failureReason,
+      attempted: railSetup?.attempted === true,
+      skipped: railSetup?.skipped === true,
+      rail_provider: String(railSetup?.rail_provider || provider || '').trim().toUpperCase() || null,
+      rail_env: String(railSetup?.rail_env || railEnv || '').trim().toUpperCase() || null,
+      entity_kind: entityKind
+    }));
+
+    const safeRailSetup = (railSetup && typeof railSetup === 'object')
+      ? {
+          attempted: railSetup.attempted === true,
+          ok: false,
+          skipped: railSetup.skipped === true,
+          reason: failureReason,
+          rail_provider: String(railSetup.rail_provider || provider || '').trim().toUpperCase() || null,
+          rail_env: String(railSetup.rail_env || railEnv || '').trim().toUpperCase() || null,
+          entity_kind: entityKind
+        }
+      : {
+          attempted: false,
+          ok: false,
+          skipped: true,
+          reason: failureReason,
+          rail_provider: provider || null,
+          rail_env: railEnv || null,
+          entity_kind: entityKind
+        };
+
     return withCORS(
       env,
       req,
       new Response(
-        JSON.stringify({ ok: false, rail_setup: railSetup }),
+        JSON.stringify({
+          ok: false,
+          code: failureReason,
+          error_code: failureReason,
+          message: failureMessage,
+          rail_setup: safeRailSetup
+        }),
         { status: 400, headers: JSON_HEADERS }
       )
     );
