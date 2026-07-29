@@ -1246,6 +1246,20 @@ test('presentation authority repeatable defers safely instead of failing CI whil
   );
 });
 
+test('source render processor context carries the frozen source template identity', () => {
+  const workContext = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+    + '24072026_1217_invoice_work_context_batch.sql'
+  );
+  const sourceContext = workContext.match(
+    /when v\.chunk_type='SOURCE_RENDER' then jsonb_build_object\(([\s\S]*?)when v\.chunk_type='INVOICE_CORE_RENDER'/
+  )?.[1] || '';
+  assert.match(
+    sourceContext,
+    /'template_version',coalesce\([\s\S]*v\.payload_json->>'template_version',[\s\S]*sm\.frozen_model->>'template_version',[\s\S]*v\.template_version\)/,
+  );
+});
+
 test('batch rollup separates carrier trigger writes from the root update', () => {
   const rollup = read(
     'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_operation_rollup_batch.sql',

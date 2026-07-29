@@ -342,7 +342,10 @@ begin
               'prior_measurements',
                 v.payload_json->'previous_layout_measurements')
             else null end,
-          'template_version',v.template_version,
+          'template_version',coalesce(
+            v.payload_json->>'template_version',
+            sm.frozen_model->>'template_version',
+            v.template_version),
           'processor_policy_version',coalesce(v.processor_limits->>'policy_version',v.processor_limits->>'version'),
           'immutable_destination_prefix','invoice-documents/'||v.document_version_id||
             '/source/'||v.chunk_id||'/'||v.fence_token||'/')
