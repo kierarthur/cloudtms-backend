@@ -73,12 +73,7 @@ jobs:
               and tablename not in ('schema_migrations', 'schema_repeatables')
           " | tr -d '[:space:]')
 
-          LEDGER_COUNT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc "
-            select count(*) from public.schema_migrations
-          " | tr -d '[:space:]')
-
           echo "Existing public tables (excluding ledger): ${EXISTING_PUBLIC_TABLES}"
-          echo "Ledger rows: ${LEDGER_COUNT}"
 
           apply_file () {
             local f="$1"
@@ -154,13 +149,41 @@ jobs:
           # Gather migration files in UK date order
           mapfile -t MIG_FILES_SORTED < <(sorted_sql_files "$MIG_DIR")
 
+          declare -A MIGRATION_LEDGER_NAMES=()
+          LEDGER_COUNT=0
+          while IFS= read -r migration_filename; do
+            if [[ -n "${migration_filename}" ]]; then
+              MIGRATION_LEDGER_NAMES["${migration_filename}"]="1"
+              ((LEDGER_COUNT += 1))
+            fi
+          done < <(
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tA -c "
+              select filename
+              from public.schema_migrations
+              order by filename
+            "
+          )
+          echo "Migration ledger rows: ${LEDGER_COUNT}"
+
           # 3) Bootstrap mode for migrations ledger only
           if [[ "${LEDGER_COUNT}" == "0" && "${EXISTING_PUBLIC_TABLES}" != "0" ]]; then
             echo "BOOTSTRAP: DB already populated; marking existing migrations as applied (no replay)."
+            MIGRATION_BOOTSTRAP_SQL="$(mktemp)"
+            printf 'begin;\n' > "${MIGRATION_BOOTSTRAP_SQL}"
             for f in "${MIG_FILES_SORTED[@]}"; do
-              record_migration "$f"
+              base="$(basename "$f")"
+              printf \
+                "insert into public.schema_migrations(filename, applied_at) values ('%s', now()) on conflict (filename) do nothing;\n" \
+                "$base" >> "${MIGRATION_BOOTSTRAP_SQL}"
+              MIGRATION_LEDGER_NAMES["${base}"]="1"
             done
-            record_name "__BOOTSTRAPPED__"
+            printf \
+              "insert into public.schema_migrations(filename, applied_at) values ('__BOOTSTRAPPED__', now()) on conflict (filename) do nothing;\n" \
+              >> "${MIGRATION_BOOTSTRAP_SQL}"
+            printf 'commit;\n' >> "${MIGRATION_BOOTSTRAP_SQL}"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -f "${MIGRATION_BOOTSTRAP_SQL}"
+            rm -f "${MIGRATION_BOOTSTRAP_SQL}"
+            MIGRATION_LEDGER_NAMES["__BOOTSTRAPPED__"]="1"
           fi
 
           # 4) Apply only new or content-changed repeatables, in UK date order.
@@ -246,14 +269,14 @@ jobs:
           echo "Applying one-time migrations after repeatables, in UK date order."
           for f in "${MIG_FILES_SORTED[@]}"; do
             base="$(basename "$f")"
-            already=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc \
-              "select 1 from public.schema_migrations where filename = '$base' limit 1;" | tr -d '[:space:]')
+            already="${MIGRATION_LEDGER_NAMES[$base]:-}"
             if [[ "$already" == "1" ]]; then
               echo "SKIP migration: $base"
             else
               echo "APPLY migration: $base"
               apply_file "$f"
               record_migration "$f"
+              MIGRATION_LEDGER_NAMES["${base}"]="1"
             fi
           done
 

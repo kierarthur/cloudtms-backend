@@ -53,3 +53,15 @@ test('first hash-ledger run is fail-closed and bootstraps only unchanged source'
   assert.match(workflow, /BOOTSTRAP_SQL="\$\(mktemp\)"/);
   assert.match(workflow, /BASELINE complete for unchanged repeatables/);
 });
+
+test('unchanged migrations are also checked from one loaded ledger', () => {
+  assert.match(workflow, /declare -A MIGRATION_LEDGER_NAMES/);
+  assert.match(workflow, /select filename\s+from public\.schema_migrations/);
+  assert.match(workflow, /already="\$\{MIGRATION_LEDGER_NAMES\[\$base\]:-\}"/);
+  assert.doesNotMatch(
+    workflow,
+    /select 1 from public\.schema_migrations where filename/,
+    'the workflow must not query PostgreSQL once for every unchanged migration'
+  );
+  assert.match(workflow, /MIGRATION_BOOTSTRAP_SQL="\$\(mktemp\)"/);
+});
