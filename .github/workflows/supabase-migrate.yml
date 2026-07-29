@@ -20,10 +20,13 @@ jobs:
     env:
       # main -> live DB, test -> test DB
       DB_URL: ${{ github.ref_name == 'main' && secrets.SUPABASE_DB_URL || secrets.SUPABASE_DB_URL_TEST }}
+      BEFORE_SHA: ${{ github.event.before || '' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install psql
         run: |
@@ -54,6 +57,12 @@ jobs:
             filename text primary key,
             applied_at timestamptz not null default now()
           );
+
+          create table if not exists public.schema_repeatables (
+            filename text primary key,
+            content_sha256 text not null,
+            applied_at timestamptz not null default now()
+          );
           SQL
 
           # 2) Detect whether DB already has schema (bootstrap guard)
@@ -61,7 +70,7 @@ jobs:
             select count(*)
             from pg_catalog.pg_tables
             where schemaname = 'public'
-              and tablename <> 'schema_migrations'
+              and tablename not in ('schema_migrations', 'schema_repeatables')
           " | tr -d '[:space:]')
 
           LEDGER_COUNT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc "
@@ -87,6 +96,28 @@ jobs:
             local base
             base="$(basename "$f")"
             record_name "$base"
+          }
+
+          repeatable_hash () {
+            sha256sum "$1" | awk '{print $1}'
+          }
+
+          repeatable_ledger_hash () {
+            local base="$1"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc \
+              "select content_sha256 from public.schema_repeatables where filename = '$base' limit 1;" \
+              | tr -d '[:space:]'
+          }
+
+          record_repeatable_hash () {
+            local base="$1"
+            local content_hash="$2"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c \
+              "insert into public.schema_repeatables(filename, content_sha256, applied_at)
+               values ('$base', '$content_hash', now())
+               on conflict (filename) do update
+               set content_sha256 = excluded.content_sha256,
+                   applied_at = excluded.applied_at;"
           }
 
           # Build a sortable key from the filename:
@@ -139,13 +170,48 @@ jobs:
             record_name "__BOOTSTRAPPED__"
           fi
 
-          # 4) Apply repeatables first, always, in UK date order
-          echo "Applying repeatables first (always), in UK date order."
+          # 4) Apply only new or content-changed repeatables, in UK date order.
+          # The hash is recorded only after a successful psql call, so a failed
+          # repeatable remains pending and is retried on the next workflow run.
+          echo "Applying new or changed repeatables first, in UK date order."
           mapfile -t REP_FILES_SORTED < <(sorted_sql_files "$REP_DIR")
 
+          REPEATABLE_LEDGER_COUNT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc "
+            select count(*) from public.schema_repeatables
+          " | tr -d '[:space:]')
+
+          BOOTSTRAP_EXISTING_REPEATABLES=false
+          if [[ "${REPEATABLE_LEDGER_COUNT}" == "0" && "${EXISTING_PUBLIC_TABLES}" != "0" ]]; then
+            if [[ "${GITHUB_EVENT_NAME}" != "push" || -z "${BEFORE_SHA}" || "${BEFORE_SHA}" =~ ^0+$ ]]; then
+              echo "Cannot safely bootstrap repeatable hashes for an existing database without a push base commit."
+              exit 1
+            fi
+            BOOTSTRAP_EXISTING_REPEATABLES=true
+            echo "BOOTSTRAP: recording unchanged existing repeatables and applying only files changed by this push."
+          fi
+
           for f in "${REP_FILES_SORTED[@]}"; do
-            echo "APPLY repeatable: $(basename "$f")"
+            base="$(basename "$f")"
+            content_hash="$(repeatable_hash "$f")"
+            installed_hash="$(repeatable_ledger_hash "$base")"
+
+            if [[ "${BOOTSTRAP_EXISTING_REPEATABLES}" == "true" ]] \
+               && ! git diff --quiet "${BEFORE_SHA}" "${GITHUB_SHA}" -- "$f"; then
+              installed_hash=""
+            elif [[ "${BOOTSTRAP_EXISTING_REPEATABLES}" == "true" ]]; then
+              echo "BASELINE repeatable: $base"
+              record_repeatable_hash "$base" "$content_hash"
+              continue
+            fi
+
+            if [[ "$installed_hash" == "$content_hash" ]]; then
+              echo "SKIP unchanged repeatable: $base"
+              continue
+            fi
+
+            echo "APPLY new/changed repeatable: $base"
             apply_file "$f"
+            record_repeatable_hash "$base" "$content_hash"
           done
 
           # 5) Then apply one-time migrations, in UK date order
