@@ -942,6 +942,29 @@ export function deriveReleasedInvoiceLanes(results) {
   }
   return [...found].filter(type => type === 'DATABASE' || [...INVOICE_DATABASE_CHUNK_TYPES, ...INVOICE_DOCUMENT_CHUNK_TYPES].includes(type)).sort();
 }
+
+export function deriveDocumentContinuationLanes(claims, completionRows) {
+  const released = new Set(deriveReleasedInvoiceLanes(completionRows));
+  const chunkTypeById = new Map(
+    rowsFromRpc(claims)
+      .filter(row => row?.chunk_id && INVOICE_DOCUMENT_CHUNK_TYPES.includes(String(row?.chunk_type || '').toUpperCase()))
+      .map(row => [String(row.chunk_id), String(row.chunk_type).toUpperCase()])
+  );
+  for (const row of rowsFromRpc(completionRows)) {
+    if (row?.accepted === false) continue;
+    const status = String(row?.status || '').toUpperCase();
+    const chunkType = chunkTypeById.get(String(row?.chunk_id || ''));
+    if (!chunkType) continue;
+    if (['COMPLETE','FAILED','DEAD_LETTER','BLOCKED','CANCELLED'].includes(status)) {
+      released.add('DATABASE');
+    }
+    if (['SUPERSEDED','QUEUED','WAITING','RETRY_WAIT'].includes(status)) {
+      released.add(chunkType);
+    }
+  }
+  return [...released].sort();
+}
+
 export async function processInvoiceDatabaseChunksBatch(env, claims, options) {
   if (!claims.length) return { claimed: 0, advanced: 0, rejected: 0, released_lanes: [], results: [] };
   const response = await options.rpc('invoice_operation_advance_batch', {
@@ -1229,7 +1252,7 @@ export async function processInvoiceDocumentChunksBatch(env, claims, options) {
     db_completion_rejected: completion.length - completionAccepted.length,
     context_failed: contextFailureResults.length,
     ownership_lost: ownershipLostIds.size,
-    released_lanes: deriveReleasedInvoiceLanes(completionAccepted),
+    released_lanes: deriveDocumentContinuationLanes(claims, completionAccepted),
     context_rejections: rejected.map(row => ({ chunk_id: row.chunk_id, code: row.code })),
     completion
   };

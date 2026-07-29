@@ -12,6 +12,7 @@ import {
   invoiceQueueRuntimeInternals,
   processInvoiceDatabaseChunksBatch,
   processInvoiceDocumentChunksBatch,
+  deriveDocumentContinuationLanes,
   drainInvoiceOperations,
   runInvoiceReconciliationCycle,
   runAutoInvoiceCycleAsync
@@ -1203,6 +1204,40 @@ test('USER_NUDGE advances database work only and dispatches released document la
   assert.equal(result.document.claimed, 0);
   assert.equal(result.continuation_dispatched, true);
   assert.ok(dispatcherPayloads[0].lanes.includes('PDF_MERGE'));
+});
+
+test('document completion releases the next queue lane without waiting for cron', () => {
+  const sourceClaim = {
+    chunk_id: '00000000-0000-4000-8000-000000000053',
+    chunk_type: 'SOURCE_RENDER'
+  };
+  assert.deepEqual(
+    deriveDocumentContinuationLanes([sourceClaim], [{
+      chunk_id: sourceClaim.chunk_id,
+      accepted: true,
+      status: 'COMPLETE',
+      phase: 'COMPLETE'
+    }]),
+    ['DATABASE']
+  );
+  assert.deepEqual(
+    deriveDocumentContinuationLanes([sourceClaim], [{
+      chunk_id: sourceClaim.chunk_id,
+      accepted: true,
+      status: 'SUPERSEDED',
+      phase: 'SUPERSEDED'
+    }]),
+    ['SOURCE_RENDER']
+  );
+  assert.deepEqual(
+    deriveDocumentContinuationLanes([sourceClaim], [{
+      chunk_id: sourceClaim.chunk_id,
+      accepted: false,
+      status: 'REJECTED',
+      phase: 'OWNERSHIP_REJECTED'
+    }]),
+    []
+  );
 });
 
 test('reconciliation uses bounded keyset pages and emits a signed continuation cursor', async () => {
