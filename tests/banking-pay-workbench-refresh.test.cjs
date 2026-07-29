@@ -15,6 +15,10 @@ const sourceBuildSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql'),
   'utf8'
 );
+const sourceBuildRuntimeFloorMigrationSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/migrations/29072026_0645_align_banking_source_build_runtime_floor.sql'),
+  'utf8'
+);
 
 function functionBody(name, nextName) {
   const start = workerSource.indexOf(`async function ${name}`);
@@ -116,4 +120,28 @@ test('latest-state reruns do not mutually deadlock as queued chain continuations
   assert.ok(ownContinuationPredicate >= 0, 'the current-job continuation predicate must exclude latest-state reruns');
   assert.ok(queuedContinuationPredicate > ownContinuationPredicate, 'queued jobs must use the same latest-state exclusion');
   assert.match(serialStateBody, /v_reason := 'CANDIDATE_SERIAL_BLOCKED_BY_ACTIVE_CONTINUATION'/);
+});
+
+test('source-build lanes remain claimable inside the bounded database worker budget', () => {
+  assert.match(
+    sourceBuildRuntimeFloorMigrationSql,
+    /banking_pay_workbench_nudge_source_build_runtime_floor_ms SET DEFAULT 8000/
+  );
+  assert.match(
+    sourceBuildRuntimeFloorMigrationSql,
+    /banking_pay_workbench_cron_source_build_runtime_floor_ms SET DEFAULT 8000/
+  );
+  assert.match(
+    sourceBuildRuntimeFloorMigrationSql,
+    /banking_pay_workbench_nudge_source_build_runtime_floor_ms = 8000/
+  );
+  assert.match(
+    sourceBuildRuntimeFloorMigrationSql,
+    /banking_pay_workbench_cron_source_build_runtime_floor_ms = 8000/
+  );
+  assert.doesNotMatch(
+    sourceBuildRuntimeFloorMigrationSql,
+    /source_build_parallelism|source_build_parallel_bursts|source_build_lane_claim_limit/,
+    'the runtime-floor correction must not increase source-build concurrency or lane claim limits'
+  );
 });
