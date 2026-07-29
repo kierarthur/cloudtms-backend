@@ -11,6 +11,7 @@ import {
 } from './invoice-queue-runtime.js';
 import {
   isInvoiceAsyncUserAllowed,
+  parseInvoiceAsyncAccessMode,
   parseInvoiceAsyncAllowedUserIds
 } from './invoice-queue-security.js';
 
@@ -1545,7 +1546,22 @@ async function handleCandidates(env, req, deps, rpcName, options = {}) {
     query.facet_request = { ...query.facet_request, cursors: rawCursors };
   }
 
-  const parsed = candidateGroupsFromRpc(await deps.rpc(rpcName, { p_query: query }));
+  let rawCandidateResponse;
+  try {
+    rawCandidateResponse = await deps.rpc(rpcName, { p_query: query });
+  } catch (error) {
+    const status = Number(error?.status || 0);
+    const message = String(error?.message || error || '');
+    if (status === 408 || /(?:statement\s+)?timeout|timed out/i.test(message)) {
+      throw invoiceBatchContractError(
+        query.mode === 'SUMMARY'
+          ? 'BATCH_SUMMARY_TIMEOUT'
+          : 'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE'
+      );
+    }
+    throw error;
+  }
+  const parsed = candidateGroupsFromRpc(rawCandidateResponse);
   if (parsed.action !== action || parsed.mode !== query.mode) {
     throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
   }
@@ -3410,6 +3426,7 @@ async function invoiceProcessorReady(env, options = {}) {
 async function handleInvoiceAsyncCapabilities(env, req, deps) {
   const user = await requireActor(env, req, deps, false);
   if (!user) return jsonResponse({ error: 'UNAUTHENTICATED' }, 401);
+  const access = parseInvoiceAsyncAccessMode(env.INVOICE_ASYNC_ACCESS_MODE);
   const parsed = parseInvoiceAsyncAllowedUserIds(env.INVOICE_ASYNC_ALLOWED_USER_IDS);
   const pipelineEnabled = isInvoiceAsyncPipelineEnabled(env);
   const scheduledEnabled = String(env.INVOICE_ASYNC_SCHEDULED_ENABLED || '').toLowerCase() === 'true';
@@ -3425,11 +3442,16 @@ async function handleInvoiceAsyncCapabilities(env, req, deps) {
     && cursorSecret(env, 'RESULT')
     && env.INVOICE_DOCUMENT_ACCESS_SECRET
   );
+  const accessConfigurationReady = access.ok && (
+    access.mode === 'AUTHENTICATED'
+    || (parsed.ok && parsed.ids.length > 0)
+  );
   const deploymentReady = databaseValidation.ok
     && runtimeValidation.ok
     && processorEnabled
     && buildReady
-    && bindingsReady;
+    && bindingsReady
+    && accessConfigurationReady;
   const cohort = isInvoiceAsyncUserAllowed(env, {
     ...user,
     active: user.is_active ?? user.active,
@@ -3448,7 +3470,8 @@ async function handleInvoiceAsyncCapabilities(env, req, deps) {
     processor_enabled: processorEnabled,
     enabled_for_user: pipelineEnabled && deploymentReady && cohort.allowed === true,
     enabled: pipelineEnabled && deploymentReady && cohort.allowed === true,
-    controlled_cohort: parsed.ok && parsed.ids.length > 0,
+    access_mode: access.mode,
+    controlled_cohort: access.mode === 'COHORT' && parsed.ok && parsed.ids.length > 0,
     scheduled_enabled: scheduledEnabled,
     supported_media_types: ['application/pdf','image/jpeg','image/png'],
     document_view_contract_version: INVOICE_DOCUMENT_ACCESS_CONTRACT,
@@ -3716,7 +3739,8 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     roles: [user.role, user.user_role, user.user_type]
   });
   if (!cohort.allowed) {
-    if (cohort.code === 'INVOICE_ASYNC_ALLOWLIST_INVALID') {
+    if (cohort.code === 'INVOICE_ASYNC_ALLOWLIST_INVALID'
+        || cohort.code === 'INVOICE_ASYNC_ACCESS_MODE_INVALID') {
       return jsonResponse({ error: cohort.code }, 503);
     }
     return jsonResponse({ error: cohort.code }, 403);

@@ -26,6 +26,7 @@ import {
   escapeInvoiceDocumentHtml
 } from '../broker/src/invoice-document-templates.js';
 import {
+  parseInvoiceAsyncAccessMode,
   parseInvoiceAsyncAllowedUserIds,
   isInvoiceAsyncUserAllowed,
   signInvoiceDrainRequest,
@@ -858,6 +859,32 @@ test('controlled cohort parsing is exact, deduplicated, and admin-only', () => {
   assert.equal(parseInvoiceAsyncAllowedUserIds('not-a-uuid').ok, false);
   assert.equal(isInvoiceAsyncUserAllowed({ INVOICE_ASYNC_PIPELINE_ENABLED: 'true', INVOICE_ASYNC_ALLOWED_USER_IDS: id }, { id, role: 'admin', active: true }).allowed, true);
   assert.equal(isInvoiceAsyncUserAllowed({ INVOICE_ASYNC_PIPELINE_ENABLED: 'true', INVOICE_ASYNC_ALLOWED_USER_IDS: id }, { id, role: 'user', active: true }).code, 'INVOICE_ASYNC_ADMIN_REQUIRED');
+});
+
+test('authenticated access mode allows every active authenticated user without a cohort', () => {
+  assert.deepEqual(parseInvoiceAsyncAccessMode('authenticated'), { ok: true, mode: 'AUTHENTICATED' });
+  assert.equal(parseInvoiceAsyncAccessMode('invalid').ok, false);
+  const env = {
+    INVOICE_ASYNC_PIPELINE_ENABLED: 'true',
+    INVOICE_ASYNC_ACCESS_MODE: 'AUTHENTICATED',
+    INVOICE_ASYNC_ALLOWED_USER_IDS: ''
+  };
+  assert.equal(isInvoiceAsyncUserAllowed(env, { id: crypto.randomUUID(), role: 'user', active: true }).allowed, true);
+  assert.equal(isInvoiceAsyncUserAllowed(env, { id: crypto.randomUUID(), role: 'admin', active: false }).code, 'INVOICE_ASYNC_USER_INACTIVE');
+});
+
+test('TEST refresh cookies are partitioned for the cross-site Worker origin', () => {
+  const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const wrangler = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+  assert.match(source, /function pickCookiePartitioned\(env\)/);
+  assert.match(source, /if \(partitioned\) parts\.push\('Partitioned'\)/);
+  assert.equal(
+    (source.match(/partitioned:\s*pickCookiePartitioned\(env\)/g) || []).length,
+    5
+  );
+  const testVars = wrangler.split('[env.test.vars]')[1]?.split('[[env.test.r2_buckets]]')[0] || '';
+  assert.match(testVars, /COOKIE_SAME_SITE\s*=\s*"None"/);
+  assert.match(testVars, /COOKIE_PARTITIONED\s*=\s*"true"/);
 });
 
 test('drain request signatures bind lane order, nonce, depth, and timestamp', async () => {
@@ -1962,6 +1989,34 @@ test('POST candidate route returns V8 and keeps database keysets behind an opaqu
   assert.equal(secondBody.page.next_cursor, null);
 });
 
+test('candidate RPC timeouts fail closed without exposing an internal RPC error', async () => {
+  const env = v8Environment();
+  const requestBody = v8Query('ISSUE', {
+    snapshot: null,
+    page_size: 100,
+    cursor: null
+  });
+  const timedOut = new Error('RPC invoice_batch_issue_candidates failed 408: timeout');
+  timedOut.status = 408;
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoices/batch-issue/candidates', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    }),
+    env,
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc(async () => { throw timedOut; })
+    }
+  );
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    error: 'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE'
+  });
+});
+
 test('SUMMARY candidate route enforces exact group-selector coverage and request order', async () => {
   const env = v8Environment();
   const weekSelector = { type: 'WEEK', week_ending_date: '2026-07-26' };
@@ -2515,6 +2570,27 @@ test('capabilities advertise mandatory V8 features only when every dependency is
   assert.equal(mismatchBody.deployment_contract_ready, false);
   assert.equal(mismatchBody.enabled_for_user, false);
   assert.ok(Object.values(mismatchBody.feature_flags).every(value => value === false));
+});
+
+test('authenticated access capabilities enable a non-admin without disclosing a cohort', async () => {
+  const env = v8Environment({
+    INVOICE_ASYNC_ACCESS_MODE: 'AUTHENTICATED',
+    INVOICE_ASYNC_ALLOWED_USER_IDS: ''
+  });
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoice-async/capabilities'),
+    env,
+    {},
+    {
+      requireUser: async () => ({ id: crypto.randomUUID(), role: 'user', active: true }),
+      rpc: v8Rpc()
+    }
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.access_mode, 'AUTHENTICATED');
+  assert.equal(body.controlled_cohort, false);
+  assert.equal(body.enabled_for_user, true);
 });
 
 test('an unreleased local build identity cannot satisfy deployment readiness', async () => {

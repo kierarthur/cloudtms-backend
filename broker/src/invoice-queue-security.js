@@ -11,12 +11,25 @@ export function parseInvoiceAsyncAllowedUserIds(value) {
   });
 }
 
+export function parseInvoiceAsyncAccessMode(value) {
+  const mode = String(value || 'COHORT').trim().toUpperCase() || 'COHORT';
+  return Object.freeze({
+    ok: mode === 'COHORT' || mode === 'AUTHENTICATED',
+    mode
+  });
+}
+
 export function isInvoiceAsyncUserAllowed(env, user) {
   const enabled = String(env?.INVOICE_ASYNC_PIPELINE_ENABLED || '').toLowerCase() === 'true';
   if (!enabled) return { allowed: false, code: 'INVOICE_ASYNC_PIPELINE_DISABLED' };
+  const access = parseInvoiceAsyncAccessMode(env?.INVOICE_ASYNC_ACCESS_MODE);
+  if (!access.ok) return { allowed: false, code: 'INVOICE_ASYNC_ACCESS_MODE_INVALID' };
+  if (!user?.id || user.active === false) return { allowed: false, code: 'INVOICE_ASYNC_USER_INACTIVE' };
+  if (access.mode === 'AUTHENTICATED') {
+    return { allowed: true, code: 'INVOICE_ASYNC_AUTHENTICATED_USER_ALLOWED' };
+  }
   const parsed = parseInvoiceAsyncAllowedUserIds(env?.INVOICE_ASYNC_ALLOWED_USER_IDS);
   if (!parsed.ok) return { allowed: false, code: 'INVOICE_ASYNC_ALLOWLIST_INVALID' };
-  if (!user?.id || user.active === false) return { allowed: false, code: 'INVOICE_ASYNC_USER_INACTIVE' };
   const roles = Array.isArray(user.roles) ? user.roles : [user.role, user.user_role, user.user_type];
   if (!roles.some(role => String(role || '').toLowerCase() === 'admin')) {
     return { allowed: false, code: 'INVOICE_ASYNC_ADMIN_REQUIRED' };

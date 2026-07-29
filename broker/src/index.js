@@ -70,7 +70,10 @@ import {
   validateInvoiceSystemActor,
   validateQueueRuntimeConfiguration
 } from './invoice-queue-runtime.js';
-import { parseInvoiceAsyncAllowedUserIds } from './invoice-queue-security.js';
+import {
+  parseInvoiceAsyncAccessMode,
+  parseInvoiceAsyncAllowedUserIds
+} from './invoice-queue-security.js';
 
 const textEncoder = new TextEncoder();
 
@@ -2735,6 +2738,7 @@ async function handleAuthLogin(env, req) {
     maxAgeSec: refreshTtl(env),
     domain: env.COOKIE_DOMAIN || undefined,
     sameSite: pickCookieSameSite(env),
+    partitioned: pickCookiePartitioned(env),
     secure: true,
     httpOnly: true,
     path: '/'
@@ -2823,6 +2827,7 @@ async function handleAuthRefresh(env, req) {
       maxAgeSec: refreshTtl(env),
       domain: env.COOKIE_DOMAIN || undefined,
       sameSite: pickCookieSameSite(env),
+      partitioned: pickCookiePartitioned(env),
       secure: true, httpOnly: true, path:'/'
     });
   }
@@ -96569,6 +96574,7 @@ async function handleUserChangePassword(env, req) {
     maxAgeSec: 0,
     domain: env.COOKIE_DOMAIN || undefined,
     sameSite: pickCookieSameSite(env),
+    partitioned: pickCookiePartitioned(env),
     secure: true,
     httpOnly: true,
     path: '/'
@@ -129087,9 +129093,12 @@ function pickCookieSameSite(env) {
   const v = String(env.COOKIE_SAME_SITE || 'Lax');
   return (v === 'None' || v === 'Lax' || v === 'Strict') ? v : 'Lax';
 }
+function pickCookiePartitioned(env) {
+  return String(env.COOKIE_PARTITIONED || '').trim().toLowerCase() === 'true';
+}
 function cookieName(env){ return String(env.COOKIE_NAME || 'ctms_refresh'); }
 
-function setCookie(headers, name, value, { maxAgeSec, domain, sameSite='Lax', secure=true, httpOnly=true, path='/' } = {}) {
+function setCookie(headers, name, value, { maxAgeSec, domain, sameSite='Lax', partitioned=false, secure=true, httpOnly=true, path='/' } = {}) {
   const parts = [`${name}=${value || ''}`];
   if (path) parts.push(`Path=${path}`);
   if (domain) parts.push(`Domain=${domain}`);
@@ -129097,6 +129106,7 @@ function setCookie(headers, name, value, { maxAgeSec, domain, sameSite='Lax', se
   if (sameSite) parts.push(`SameSite=${sameSite}`);
   if (secure) parts.push('Secure');
   if (httpOnly) parts.push('HttpOnly');
+  if (partitioned) parts.push('Partitioned');
   headers.append('Set-Cookie', parts.join('; '));
 }
 function parseCookies(req) {
@@ -131286,6 +131296,7 @@ async function handleAuth2faVerify(env, req) {
     maxAgeSec: refreshTtl(env),
     domain: env.COOKIE_DOMAIN || undefined,
     sameSite: pickCookieSameSite(env),
+    partitioned: pickCookiePartitioned(env),
     secure: true,
     httpOnly: true,
     path: '/'
@@ -131548,7 +131559,13 @@ async function handleAuthLogout(env, req) {
   }
   const headers = new Headers(JSON_HEADERS);
   setCookie(headers, cookieName(env), '', {
-    maxAgeSec: 0, domain: env.COOKIE_DOMAIN || undefined, sameSite: pickCookieSameSite(env), secure:true, httpOnly:true, path:'/'
+    maxAgeSec: 0,
+    domain: env.COOKIE_DOMAIN || undefined,
+    sameSite: pickCookieSameSite(env),
+    partitioned: pickCookiePartitioned(env),
+    secure: true,
+    httpOnly: true,
+    path: '/'
   });
   return new Response(JSON.stringify({ ok:true }), { status:200, headers });
 }
@@ -155932,6 +155949,7 @@ async function handleReady(env) {
   for (const key of ['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY']) if (!env[key]) missing.push(key);
   if (!env.R2) missing.push('R2');
   for (const key of ['SESSION_TOKEN_SECRET','UPLOAD_TOKEN_SECRET']) if (!env[key]) missing.push(key);
+  const access = parseInvoiceAsyncAccessMode(env.INVOICE_ASYNC_ACCESS_MODE);
   const parsed = parseInvoiceAsyncAllowedUserIds(env.INVOICE_ASYNC_ALLOWED_USER_IDS);
   const diagnostics = {
     ready: false,
@@ -155943,6 +155961,9 @@ async function handleReady(env) {
     async_pipeline_enabled: isInvoiceAsyncPipelineEnabled(env),
     scheduled_async_enabled: String(env.INVOICE_ASYNC_SCHEDULED_ENABLED || '').toLowerCase() === 'true',
     processor_enabled: String(env.INVOICE_DOCUMENT_PROCESSOR_ENABLED || '').toLowerCase() === 'true',
+    invoice_access_mode: access.mode,
+    access_configuration_ready: false,
+    authenticated_user_access_enabled: false,
     controlled_cohort_enabled: false,
     allowed_user_count: 0,
     system_actor_valid: false
@@ -155974,10 +155995,19 @@ async function handleReady(env) {
     diagnostics.dispatcher_ready = true;
   }
   if (diagnostics.async_pipeline_enabled) {
-    diagnostics.controlled_cohort_enabled = parsed.ok && parsed.ids.length > 0;
-    diagnostics.allowed_user_count = parsed.ok ? parsed.ids.length : 0;
-    if (!parsed.ok) missing.push('INVOICE_ASYNC_ALLOWED_USER_IDS_INVALID');
-    if (!parsed.ids.length) missing.push('INVOICE_ASYNC_ALLOWED_USER_IDS_EMPTY');
+    diagnostics.authenticated_user_access_enabled = access.ok && access.mode === 'AUTHENTICATED';
+    diagnostics.controlled_cohort_enabled = access.ok
+      && access.mode === 'COHORT'
+      && parsed.ok
+      && parsed.ids.length > 0;
+    diagnostics.access_configuration_ready = diagnostics.authenticated_user_access_enabled
+      || diagnostics.controlled_cohort_enabled;
+    diagnostics.allowed_user_count = diagnostics.controlled_cohort_enabled ? parsed.ids.length : 0;
+    if (!access.ok) missing.push('INVOICE_ASYNC_ACCESS_MODE_INVALID');
+    if (access.mode === 'COHORT') {
+      if (!parsed.ok) missing.push('INVOICE_ASYNC_ALLOWED_USER_IDS_INVALID');
+      if (!parsed.ids.length) missing.push('INVOICE_ASYNC_ALLOWED_USER_IDS_EMPTY');
+    }
     missing.push(...validateQueueRuntimeConfiguration(env).errors);
     if (!env.BROWSER) missing.push('BROWSER');
     if (!env.INVOICE_DOCUMENT_ACCESS_SECRET) missing.push('INVOICE_DOCUMENT_ACCESS_SECRET');
@@ -155993,7 +156023,7 @@ async function handleReady(env) {
   diagnostics.interactive_async_ready = diagnostics.async_pipeline_enabled
     && diagnostics.processor_ready
     && diagnostics.dispatcher_ready
-    && diagnostics.controlled_cohort_enabled
+    && diagnostics.access_configuration_ready
     && diagnostics.system_actor_valid;
   diagnostics.scheduled_async_ready = diagnostics.scheduled_async_enabled
     && diagnostics.processor_ready
