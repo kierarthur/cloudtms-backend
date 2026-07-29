@@ -122,6 +122,11 @@ test('materialisation accepts only current source or completed projection eviden
     functionBody,
     /accepted_projection\.fallback_required, false\) IS NOT TRUE/
   );
+  assert.match(
+    functionBody,
+    /result_row_json->>'source_build_run_id'[\s\S]{0,700}IS NULL[\s\S]{0,900}accepted_projection\.write_phase/,
+    'completed projection evidence must not revive a source-built row from an older run',
+  );
 });
 
 test('READY publication fails closed for stale or incomplete candidate authority', () => {
@@ -138,6 +143,11 @@ test('READY publication fails closed for stale or incomplete candidate authority
     'historical DIRTY audit rows must not block adoption of the accepted source sequence',
   );
   assert.match(functionBody, /LINE_WORK_NOT_TERMINAL/);
+  assert.match(
+    functionBody,
+    /line_guard\.result_row_json->>'source_build_run_id'[\s\S]{0,260}line_guard\.work_payload_json->>'source_build_run_id'/,
+    'READY publication must reject materialised line work whose result predates its current work payload',
+  );
   assert.match(functionBody, /FINANCE_CASE_COMPONENT_DUPLICATED/);
   assert.match(functionBody, /FINANCE_CASE_FAMILY_MISMATCH/);
   assert.match(

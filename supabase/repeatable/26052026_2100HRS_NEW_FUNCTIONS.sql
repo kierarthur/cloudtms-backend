@@ -158408,6 +158408,14 @@ BEGIN
           )
         )
         OR (
+          /*
+           * Projection-only rows are a legacy/current delta fallback.  They
+           * must never make a source-built row from an older accepted run
+           * materialisable after the same line key has moved to a newer
+           * source-build run.
+           */
+          NULLIF(BTRIM(COALESCE(line_work.result_row_json->>'source_build_run_id', '')), '') IS NULL
+          AND
           NULLIF(BTRIM(COALESCE(line_work.result_row_json->>'projection_run_id', '')), '')
             ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           AND EXISTS (
@@ -185477,8 +185485,25 @@ BEGIN
     FROM public.banking_pay_workbench_candidate_line_work AS line_guard
     WHERE line_guard.session_id = p_session_id
       AND line_guard.candidate_id = p_candidate_id
-      AND UPPER(BTRIM(COALESCE(line_guard.status, ''))) IN (
-        'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED', 'READY'
+      AND (
+        UPPER(BTRIM(COALESCE(line_guard.status, ''))) IN (
+          'DIRTY', 'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED', 'READY'
+        )
+        OR (
+          UPPER(BTRIM(COALESCE(line_guard.status, ''))) IN (
+            'MATERIALISED', 'MATERIALIZED'
+          )
+          AND NULLIF(BTRIM(COALESCE(line_guard.work_payload_json->>'source_build_run_id', '')), '')
+                ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND (
+            NULLIF(BTRIM(COALESCE(line_guard.result_row_json->>'source_build_run_id', '')), '')
+              IS DISTINCT FROM
+            NULLIF(BTRIM(COALESCE(line_guard.work_payload_json->>'source_build_run_id', '')), '')
+            OR NULLIF(BTRIM(COALESCE(line_guard.result_row_json->>'source_change_seq', '')), '')
+              IS DISTINCT FROM
+            NULLIF(BTRIM(COALESCE(line_guard.work_payload_json->>'source_change_seq', '')), '')
+          )
+        )
       );
 
     SELECT COUNT(*)::integer
