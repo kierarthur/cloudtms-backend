@@ -174683,6 +174683,8 @@ BEGIN
       owner_job.attempt_count,
       owner_job.max_attempts,
       COALESCE(change_counter.seq, 0) AS live_change_seq,
+      successor_lookup.successor_job_id,
+      successor_lookup.successor_job_status,
       (
         owner_job.id IS NOT NULL
         AND owner_job.session_id = scope_row.session_id
@@ -174710,40 +174712,53 @@ BEGIN
         AND COALESCE(owner_job.payload_json->>'source_build_run_id', '') ~*
             '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       ) AS owner_valid,
-      EXISTS (
-        SELECT 1
-        FROM public.banking_pay_workbench_jobs AS successor_job
-        WHERE successor_job.id IS DISTINCT FROM scope_row.pending_job_id
-          AND successor_job.session_id = scope_row.session_id
-          AND successor_job.candidate_id = scope_row.candidate_id
-          AND UPPER(BTRIM(COALESCE(successor_job.status, ''))) IN ('QUEUED', 'RUNNING')
-          AND UPPER(BTRIM(COALESCE(successor_job.job_type, ''))) IN (
-            'WORKBENCH_CANDIDATE_SOURCE_BUILD',
-            'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
-            'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
-            'CANDIDATE_SOURCE_BUILD',
-            'CANDIDATE_SOURCE_BUILD_CHUNK',
-            'SOURCE_BUILD',
-            'SOURCE_BUILD_PAGE'
-          )
-          AND CASE
-                WHEN COALESCE(successor_job.payload_json->>'session_version', '') ~ '^[0-9]{1,18}$'
-                  THEN (successor_job.payload_json->>'session_version')::bigint
-                ELSE NULL::bigint
-              END = v_session_row.version
-          AND CASE
-                WHEN COALESCE(successor_job.payload_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
-                  THEN (successor_job.payload_json->>'source_change_seq')::bigint
-                ELSE NULL::bigint
-              END >= COALESCE(change_counter.seq, 0)
-          AND COALESCE(successor_job.payload_json->>'source_build_run_id', '') ~*
-              '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-      ) AS successor_valid
+      successor_lookup.successor_job_id IS NOT NULL AS successor_valid
     FROM public.banking_pay_workbench_session_scope AS scope_row
     LEFT JOIN public.banking_pay_workbench_jobs AS owner_job
       ON owner_job.id = scope_row.pending_job_id
     LEFT JOIN public.app_change_counters AS change_counter
       ON change_counter.entity_key = 'pay_candidate:' || scope_row.candidate_id::text
+    LEFT JOIN LATERAL (
+      SELECT
+        successor_job.id AS successor_job_id,
+        UPPER(BTRIM(COALESCE(successor_job.status, ''))) AS successor_job_status
+      FROM public.banking_pay_workbench_jobs AS successor_job
+      WHERE successor_job.id IS DISTINCT FROM scope_row.pending_job_id
+        AND successor_job.session_id = scope_row.session_id
+        AND successor_job.candidate_id = scope_row.candidate_id
+        AND UPPER(BTRIM(COALESCE(successor_job.status, ''))) IN ('QUEUED', 'RUNNING')
+        AND UPPER(BTRIM(COALESCE(successor_job.job_type, ''))) IN (
+          'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+          'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
+          'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
+          'CANDIDATE_SOURCE_BUILD',
+          'CANDIDATE_SOURCE_BUILD_CHUNK',
+          'SOURCE_BUILD',
+          'SOURCE_BUILD_PAGE'
+        )
+        AND CASE
+              WHEN COALESCE(successor_job.payload_json->>'session_version', '') ~ '^[0-9]{1,18}$'
+                THEN (successor_job.payload_json->>'session_version')::bigint
+              ELSE NULL::bigint
+            END = v_session_row.version
+        AND CASE
+              WHEN COALESCE(successor_job.payload_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+                THEN (successor_job.payload_json->>'source_change_seq')::bigint
+              ELSE NULL::bigint
+            END >= COALESCE(change_counter.seq, 0)
+        AND COALESCE(successor_job.payload_json->>'source_build_run_id', '') ~*
+            '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      ORDER BY
+        CASE WHEN UPPER(BTRIM(COALESCE(successor_job.status, ''))) = 'RUNNING' THEN 0 ELSE 1 END,
+        CASE
+          WHEN COALESCE(successor_job.payload_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+            THEN (successor_job.payload_json->>'source_change_seq')::bigint
+          ELSE NULL::bigint
+        END DESC,
+        successor_job.created_at_utc ASC,
+        successor_job.id ASC
+      LIMIT 1
+    ) AS successor_lookup ON TRUE
     WHERE scope_row.session_id = p_session_id
       AND UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SOURCE_BUILD_PENDING'
   ), ownership_failure AS (
@@ -174770,6 +174785,8 @@ BEGIN
           'scope_status', 'SOURCE_BUILD_PENDING',
           'pending_job_id', CASE WHEN ownership_sample.pending_job_id IS NULL THEN NULL ELSE ownership_sample.pending_job_id::text END,
           'pending_job_status', ownership_sample.owner_status,
+          'successor_job_id', CASE WHEN ownership_sample.successor_job_id IS NULL THEN NULL ELSE ownership_sample.successor_job_id::text END,
+          'successor_job_status', ownership_sample.successor_job_status,
           'attempt_count', COALESCE(ownership_sample.attempt_count, 0),
           'max_attempts', COALESCE(ownership_sample.max_attempts, 8),
           'failure_code', 'WORKBENCH_PENDING_SCOPE_WITHOUT_ACTIVE_JOB',
@@ -197492,6 +197509,8 @@ BEGIN
       owner_job.status AS owner_status,
       owner_job.attempt_count,
       owner_job.max_attempts,
+      successor_lookup.successor_job_id,
+      successor_lookup.successor_job_status,
       (
         owner_job.id IS NOT NULL
         AND owner_job.session_id = scope_row.session_id
@@ -197519,40 +197538,53 @@ BEGIN
         AND COALESCE(owner_job.payload_json->>'source_build_run_id', '') ~*
             '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       ) AS owner_valid,
-      EXISTS (
-        SELECT 1
-        FROM public.banking_pay_workbench_jobs AS successor_job
-        WHERE successor_job.id IS DISTINCT FROM scope_row.pending_job_id
-          AND successor_job.session_id = scope_row.session_id
-          AND successor_job.candidate_id = scope_row.candidate_id
-          AND UPPER(BTRIM(COALESCE(successor_job.status, ''))) IN ('QUEUED', 'RUNNING')
-          AND UPPER(BTRIM(COALESCE(successor_job.job_type, ''))) IN (
-            'WORKBENCH_CANDIDATE_SOURCE_BUILD',
-            'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
-            'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
-            'CANDIDATE_SOURCE_BUILD',
-            'CANDIDATE_SOURCE_BUILD_CHUNK',
-            'SOURCE_BUILD',
-            'SOURCE_BUILD_PAGE'
-          )
-          AND CASE
-                WHEN COALESCE(successor_job.payload_json->>'session_version', '') ~ '^[0-9]{1,18}$'
-                  THEN (successor_job.payload_json->>'session_version')::bigint
-                ELSE NULL::bigint
-              END = v_session_row.version
-          AND CASE
-                WHEN COALESCE(successor_job.payload_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
-                  THEN (successor_job.payload_json->>'source_change_seq')::bigint
-                ELSE NULL::bigint
-              END >= COALESCE(change_counter.seq, 0)
-          AND COALESCE(successor_job.payload_json->>'source_build_run_id', '') ~*
-              '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-      ) AS successor_valid
+      successor_lookup.successor_job_id IS NOT NULL AS successor_valid
     FROM public.banking_pay_workbench_session_scope AS scope_row
     LEFT JOIN public.banking_pay_workbench_jobs AS owner_job
       ON owner_job.id = scope_row.pending_job_id
     LEFT JOIN public.app_change_counters AS change_counter
       ON change_counter.entity_key = 'pay_candidate:' || scope_row.candidate_id::text
+    LEFT JOIN LATERAL (
+      SELECT
+        successor_job.id AS successor_job_id,
+        UPPER(BTRIM(COALESCE(successor_job.status, ''))) AS successor_job_status
+      FROM public.banking_pay_workbench_jobs AS successor_job
+      WHERE successor_job.id IS DISTINCT FROM scope_row.pending_job_id
+        AND successor_job.session_id = scope_row.session_id
+        AND successor_job.candidate_id = scope_row.candidate_id
+        AND UPPER(BTRIM(COALESCE(successor_job.status, ''))) IN ('QUEUED', 'RUNNING')
+        AND UPPER(BTRIM(COALESCE(successor_job.job_type, ''))) IN (
+          'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+          'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
+          'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
+          'CANDIDATE_SOURCE_BUILD',
+          'CANDIDATE_SOURCE_BUILD_CHUNK',
+          'SOURCE_BUILD',
+          'SOURCE_BUILD_PAGE'
+        )
+        AND CASE
+              WHEN COALESCE(successor_job.payload_json->>'session_version', '') ~ '^[0-9]{1,18}$'
+                THEN (successor_job.payload_json->>'session_version')::bigint
+              ELSE NULL::bigint
+            END = v_session_row.version
+        AND CASE
+              WHEN COALESCE(successor_job.payload_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+                THEN (successor_job.payload_json->>'source_change_seq')::bigint
+              ELSE NULL::bigint
+            END >= COALESCE(change_counter.seq, 0)
+        AND COALESCE(successor_job.payload_json->>'source_build_run_id', '') ~*
+            '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      ORDER BY
+        CASE WHEN UPPER(BTRIM(COALESCE(successor_job.status, ''))) = 'RUNNING' THEN 0 ELSE 1 END,
+        CASE
+          WHEN COALESCE(successor_job.payload_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+            THEN (successor_job.payload_json->>'source_change_seq')::bigint
+          ELSE NULL::bigint
+        END DESC,
+        successor_job.created_at_utc ASC,
+        successor_job.id ASC
+      LIMIT 1
+    ) AS successor_lookup ON TRUE
     WHERE scope_row.session_id = p_session_id
       AND UPPER(BTRIM(COALESCE(scope_row.status, ''))) = 'SOURCE_BUILD_PENDING'
   ), ownership_failure AS (
@@ -197579,6 +197611,8 @@ BEGIN
           'scope_status', 'SOURCE_BUILD_PENDING',
           'pending_job_id', CASE WHEN ownership_sample.pending_job_id IS NULL THEN NULL ELSE ownership_sample.pending_job_id::text END,
           'pending_job_status', ownership_sample.owner_status,
+          'successor_job_id', CASE WHEN ownership_sample.successor_job_id IS NULL THEN NULL ELSE ownership_sample.successor_job_id::text END,
+          'successor_job_status', ownership_sample.successor_job_status,
           'attempt_count', COALESCE(ownership_sample.attempt_count, 0),
           'max_attempts', COALESCE(ownership_sample.max_attempts, 8),
           'failure_code', 'WORKBENCH_PENDING_SCOPE_WITHOUT_ACTIVE_JOB',
