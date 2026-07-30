@@ -137,20 +137,25 @@ test('material reference and location edits invalidate and queue exact replaceme
       + '23072026_2207_invoice_apply_edits.sql'
   );
   assert.match(sql, /timesheet_location_updates/i);
-  assert.match(sql, /hospital_norm is distinct from v_location_hospital_norm/i);
-  assert.match(sql, /ward_norm is distinct from v_location_ward_norm/i);
+  assert.match(sql, /v_source_updates_map/i);
+  assert.match(sql, /expected_document_revision/i);
+  assert.match(sql, /INVOICE_SOURCE_EDIT_STALE_REVISION/i);
+  assert.match(sql, /select count\(\*\) from jsonb_each\(v_source_updates_map\)/i);
+  assert.doesNotMatch(sql, /jsonb_object_length/i);
+  assert.match(sql, /with desired as materialized/i);
+  assert.match(sql, /t\.timesheet_id=any\(v_source_changed_ts_ids\)/i);
   assert.match(sql, /owned_line\.invoice_id=p_invoice_id/i);
-  assert.match(sql, /coalesce\(v_refupd_applied,0\)\+coalesce\(v_location_applied,0\)>0/i);
-  assert.match(sql, /i\.document_revision=v_inv\.document_revision/i);
-  assert.match(sql, /\{meta,reference_source_change\}/i);
-  assert.match(sql, /v_refupd_ts_ids[\s\S]*v_location_ts_ids/i);
-  assert.match(sql, /v_refupd_invoice_fallback_invalidated:=coalesce\(v_rc,0\)>0/i);
+  assert.match(sql, /v_source_edit_preexisting_preview/i);
+  assert.doesNotMatch(sql, /\{meta,reference_source_change\}/i);
   assert.match(sql, /public\.invoice_operation_start_batch/i);
+  assert.match(sql, /SOURCE_EDIT_REPLACEMENT_RESULT_INVALID/i);
+  assert.match(sql, /SOURCE_EDIT_REPLACEMENT_REJECTED/i);
+  assert.match(sql, /SOURCE_EDIT_REPLACEMENT_BLOCKED/i);
   assert.match(sql, /VIEW_TIMESHEET_DOCUMENT/i);
   assert.match(sql, /VIEW_INVOICE_DOCUMENT/i);
   assert.match(sql, /timesheet-professional-v2/i);
-  assert.match(sql, /document_queue_requested/i);
-  assert.match(sql, /accepted_operations/i);
+  assert.match(sql, /INVOICE_SOURCE_EDIT_QUEUE_V1/i);
+  assert.match(sql, /v_validated_operations/i);
 });
 
 test('invoice detail exposes direct timesheet hospital and ward source values', () => {
@@ -160,7 +165,26 @@ test('invoice detail exposes direct timesheet hospital and ward source values', 
   );
   assert.match(sql, /'hospital_norm',t\.hospital_norm/i);
   assert.match(sql, /'ward_norm',t\.ward_norm/i);
+  assert.match(sql, /'document_revision',t\.document_revision/i);
+  assert.match(sql, /'can_edit_source'/i);
+  assert.match(sql, /'source_edit_blocker_codes'/i);
   assert.match(sql, /'timesheet_reference_sources_by_id'/i);
+});
+
+test('atomic source-edit installer references exactly the four canonical definitions', () => {
+  const installer = read(
+    'supabase/repeatable/30072026_1603_invoice_source_edit_atomic_queue_contract.sql'
+  );
+  assert.match(installer, /\\set ON_ERROR_STOP on/);
+  const included = [...installer.matchAll(/\\ir\s+([^\r\n]+)/g)]
+    .map(match => match[1].trim());
+  assert.deepEqual(included, [
+    '23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql',
+    '23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_invoice_document_invalidate.sql',
+    '23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql',
+    '23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql'
+  ]);
+  assert.equal((installer.match(/create\s+or\s+replace\s+function/gi) || []).length, 0);
 });
 
 test('refs, ward and selective numbering installer references every canonical authority', () => {

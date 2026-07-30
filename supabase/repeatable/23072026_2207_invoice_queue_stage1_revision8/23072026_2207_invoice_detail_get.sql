@@ -82,9 +82,11 @@ begin
       jsonb_build_object(
         'row_key',r.row_key,'timesheet_id',r.timesheet_id,
         'candidate_id',coalesce(ct.candidate_id,tf.candidate_id),
-        'candidate_display',coalesce(nullif(btrim(cc.display_name),''),
-          nullif(btrim(cf.display_name),'')),
-        'sheet_scope',r.sheet_scope,'submission_mode',r.submission_mode,
+         'candidate_display',coalesce(nullif(btrim(cc.display_name),''),
+           nullif(btrim(cf.display_name),'')),
+         'week_ending_date',t.week_ending_date,
+         'document_revision',t.document_revision,
+         'sheet_scope',r.sheet_scope,'submission_mode',r.submission_mode,
         'ref_target',r.ref_target,'segment_id',r.segment_id,
         'day_ymd',r.day_ymd,'start_utc',r.start_utc,'end_utc',r.end_utc,
         'current_reference',r.current_reference,'is_required',r.is_required)
@@ -108,8 +110,13 @@ begin
   ),
   reference_sources as materialized (
     select coalesce(jsonb_object_agg(t.timesheet_id::text,
-      jsonb_build_object(
-        'reference_number',t.reference_number,
+       jsonb_build_object(
+         'candidate_id',coalesce(ct.candidate_id,f.candidate_id),
+         'candidate_display',coalesce(nullif(btrim(cc.display_name),''),
+           nullif(btrim(cf.display_name),'')),
+         'week_ending_date',t.week_ending_date,
+         'document_revision',t.document_revision,
+         'reference_number',t.reference_number,
         'hospital_norm',t.hospital_norm,
         'ward_norm',t.ward_norm,
         'day_references_json',t.day_references_json,
@@ -135,10 +142,13 @@ begin
             then t.actual_schedule_json
           else '[]'::jsonb end)
       order by t.timesheet_id),'{}'::jsonb) rows
-    from source_timesheets s
-    join public.timesheets t on t.timesheet_id=s.timesheet_id and t.is_current
-    left join current_financials f on f.timesheet_id=t.timesheet_id
-  ),
+     from source_timesheets s
+     join public.timesheets t on t.timesheet_id=s.timesheet_id and t.is_current
+     left join current_financials f on f.timesheet_id=t.timesheet_id
+     left join public.contracts ct on ct.id=t.contract_id
+     left join public.candidates cc on cc.id=ct.candidate_id
+     left join public.candidates cf on cf.id=f.candidate_id
+   ),
   line_totals as materialized (
     select count(*)::integer line_count,
       round(coalesce(sum(l.total_charge_ex_vat),0),2) net,
@@ -313,7 +323,82 @@ begin
     where c.chunk_type='ISSUE_INVOICE' and c.entity_type='INVOICE'
       and c.entity_id=p_invoice_id
       and c.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
-    order by c.updated_at_utc desc,c.id desc limit 1
+     order by c.updated_at_utc desc,c.id desc limit 1
+  ),
+  source_edit_authority as materialized (
+    select
+      (
+        i.status in('DRAFT','ON_HOLD')
+        and i.issued_at_utc is null
+        and i.paid_at_utc is null
+        and i.active_issue_operation_id is null
+        and upper(coalesce(i.issue_state,'')) not in(
+          'VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE')
+        and not exists(select 1 from active_issue)
+        and not exists(
+          select 1
+          from source_timesheets s
+          where coalesce((
+            public._ctms_import_correction_classify_v1(s.timesheet_id)
+              ->>'is_import_authoritative_correction')::boolean,false)
+        )
+      ) can_edit_source,
+      coalesce((
+        select jsonb_agg(code order by ordinal)
+        from (
+          values
+            (1,case when i.status not in('DRAFT','ON_HOLD')
+              then 'INVOICE_SOURCE_EDIT_STATUS_FORBIDDEN' end),
+            (2,case when i.issued_at_utc is not null
+              then 'INVOICE_SOURCE_EDIT_ISSUED' end),
+            (3,case when i.paid_at_utc is not null
+              then 'INVOICE_SOURCE_EDIT_PAID' end),
+            (4,case when i.active_issue_operation_id is not null
+              or upper(coalesce(i.issue_state,'')) in(
+                'VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE')
+              or exists(select 1 from active_issue)
+              then 'INVOICE_SOURCE_EDIT_ISSUE_IN_PROGRESS' end),
+            (5,case when exists(
+              select 1
+              from source_timesheets s
+              where coalesce((
+                public._ctms_import_correction_classify_v1(s.timesheet_id)
+                  ->>'is_import_authoritative_correction')::boolean,false))
+              then 'IMPORT_AUTHORITATIVE_CORRECTION_SOURCE_EDIT_FORBIDDEN' end)
+        ) blockers(ordinal,code)
+        where code is not null
+      ),'[]'::jsonb) source_edit_blocker_codes,
+      exists(
+        select 1
+        from public.invoice_document_versions dv
+        left join public.invoice_operations op on op.id=dv.operation_id
+        where dv.entity_type='INVOICE'
+          and dv.entity_id=i.id
+          and dv.purpose='DRAFT_PREVIEW'
+          and dv.source_revision=i.document_revision::text
+          and (
+            (dv.status='READY'
+              and nullif(btrim(coalesce(dv.r2_key,'')),'') is not null
+              and nullif(btrim(coalesce(dv.sha256,'')),'') is not null
+              and coalesce(dv.size_bytes,0)>0
+              and coalesce(dv.page_count,0)>0)
+            or (
+              dv.id=i.preview_document_version_id
+              and dv.status in(
+                'PLANNING','WAITING_FOR_INPUTS','RENDERING',
+                'ASSEMBLING','VERIFYING','READY'))
+            or (
+              dv.operation_id=i.active_document_operation_id
+              and op.operation_type='BUILD_DOCUMENT'
+              and op.entity_type='INVOICE'
+              and op.entity_id=i.id
+              and op.source_revision=i.document_revision::text
+              and coalesce(op.input_json->>'purpose','')='DRAFT_PREVIEW'
+              and op.status in(
+                'QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'))
+          )
+      ) source_edit_will_replace_preview
+    from inv i
   ),
   issue_validation as materialized (
     select v.*
@@ -426,6 +511,8 @@ begin
   assembled as materialized (
     select i.*,lt.*,rr.rows reference_rows,rs.rows reference_sources,
       sp.rows segments,p.*,hp.rows history_rows,ss.*,es.*,
+      sea.can_edit_source,sea.source_edit_blocker_codes,
+      sea.source_edit_will_replace_preview,
       cd.preview,cd.issued,cd.latest,
       ad.operation_id document_operation_id,ad.status document_operation_status,
       ad.phase document_operation_phase,ad.progress_json document_operation_progress,
@@ -440,6 +527,7 @@ begin
     cross join reference_sources rs cross join segment_projection sp
     cross join projections p cross join history_projection hp
     cross join support_summary ss cross join evidence_summary es
+    cross join source_edit_authority sea
     cross join current_documents cd
     left join active_document ad on true left join active_issue ai on true
     left join issue_validation iv on true
@@ -572,8 +660,11 @@ begin
       'route_policy',coalesce(a.route_policy_result,'{}'::jsonb),
       'warnings',coalesce(a.warning_codes,'[]'::jsonb)),
     'blocker_codes',coalesce(a.blocker_codes,'[]'::jsonb),
+    'source_edit_blocker_codes',coalesce(a.source_edit_blocker_codes,'[]'::jsonb),
+    'source_edit_will_replace_preview',coalesce(a.source_edit_will_replace_preview,false),
     'actions',jsonb_build_object(
       'can_edit',a.status='DRAFT' and a.issue_operation_id is null,
+      'can_edit_source',coalesce(a.can_edit_source,false),
       'can_issue',coalesce(a.can_issue_only,false)
         and a.issue_operation_id is null,
       'can_issue_only',coalesce(a.can_issue_only,false)

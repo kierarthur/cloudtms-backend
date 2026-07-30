@@ -77,6 +77,30 @@ v_has_expense_or_mileage boolean;
   v_location_hospital_norm text;
   v_location_ward_norm text;
   v_location_ts_ids uuid[] := array[]::uuid[];
+  -- Source-edit contract state. Reference and location inputs are merged into
+  -- one desired row per timesheet, then written by one statement so the
+  -- statement-level invalidation trigger advances each source exactly once.
+  v_source_updates_map jsonb := '{}'::jsonb;
+  v_source_update jsonb;
+  v_source_edit_key text;
+  v_source_expected_revision bigint;
+  v_source_changed_ts_ids uuid[] := array[]::uuid[];
+  v_source_changed_revisions jsonb := '[]'::jsonb;
+  v_source_edit_requested boolean := false;
+  v_source_edit_preexisting_preview boolean := false;
+  v_source_edit_invoice_replacement_required boolean := false;
+  v_pre_edit_invoice_revision bigint;
+  v_pre_edit_preview_document_version_id uuid;
+  v_pre_edit_active_document_operation_id uuid;
+  v_expected_command_count int := 0;
+  v_operation_result jsonb;
+  v_operation_id uuid;
+  v_document_version_id uuid;
+  v_command_no int;
+  v_command_type text;
+  v_operation_status text;
+  v_operation_input jsonb;
+  v_validated_operations jsonb := '[]'::jsonb;
   v_document_commands jsonb := '[]'::jsonb;
   v_started_operations jsonb := '[]'::jsonb;
 
@@ -94,6 +118,7 @@ v_has_expense_or_mileage boolean;
   v_ref_schedule_refs jsonb := '[]'::jsonb;
   v_ref_schedule_refs_distinct jsonb := '[]'::jsonb;
   v_ref_sched_map jsonb := '{}'::jsonb;
+  v_ref_seen_keys jsonb := '{}'::jsonb;
   v_ref_sched_key text;
   v_ref_sched_ref text;
   v_ref_tsfin_id uuid;
@@ -381,27 +406,154 @@ end if;
 
 
 
--- Parse reference_updates (timesheet reference edits)
+-- Parse and strictly validate source edits. The expected source revision is
+-- mandatory because values displayed by an older modal must never overwrite a
+-- newer timesheet revision.
 v_reference_updates := null;
-if p_payload is not null and jsonb_typeof(p_payload) = 'object' and (p_payload ? 'reference_updates') then
-  v_reference_updates := coalesce(p_payload->'reference_updates','[]'::jsonb);
-  if jsonb_typeof(v_reference_updates) <> 'array' then
-    v_reference_updates := '[]'::jsonb;
+if p_payload is not null and jsonb_typeof(p_payload)='object'
+   and p_payload ? 'reference_updates' then
+  v_reference_updates:=p_payload->'reference_updates';
+  if jsonb_typeof(v_reference_updates)<>'array' then
+    raise exception using errcode='22023',
+      message='INVOICE_SOURCE_EDIT_PAYLOAD_INVALID',
+      detail=jsonb_build_object('field','reference_updates','reason','ARRAY_REQUIRED')::text;
   end if;
-  v_refupd_count := jsonb_array_length(coalesce(v_reference_updates,'[]'::jsonb));
+  v_refupd_count:=jsonb_array_length(v_reference_updates);
+  for v_refupd in select value from jsonb_array_elements(v_reference_updates) value loop
+    if v_refupd is null or jsonb_typeof(v_refupd)<>'object'
+       or nullif(btrim(coalesce(v_refupd->>'timesheet_id','')),'') is null
+       or coalesce(v_refupd->>'timesheet_id','') !~
+          '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+       or coalesce(v_refupd->>'expected_document_revision','') !~ '^[1-9][0-9]*$'
+       or not (
+         v_refupd ? 'reference_number'
+         or v_refupd ? 'day_references_json'
+         or v_refupd ? 'actual_schedule_json'
+       )
+       or (
+         v_refupd ? 'reference_number'
+         and jsonb_typeof(v_refupd->'reference_number') not in('string','null')
+       )
+       or (
+         v_refupd ? 'day_references_json'
+         and jsonb_typeof(v_refupd->'day_references_json') not in('object','null')
+       )
+       or (
+         v_refupd ? 'actual_schedule_json'
+         and jsonb_typeof(v_refupd->'actual_schedule_json') not in('array','null')
+       )
+    then
+      raise exception using errcode='22023',
+        message='INVOICE_SOURCE_EDIT_PAYLOAD_INVALID',
+        detail=jsonb_build_object('field','reference_updates','reason','INVALID_ITEM')::text;
+    end if;
+    v_source_edit_key:=lower(v_refupd->>'timesheet_id');
+    if v_source_updates_map ? v_source_edit_key then
+      raise exception using errcode='22023',
+        message='INVOICE_SOURCE_EDIT_DUPLICATE_TIMESHEET',
+        detail=jsonb_build_object('timesheet_id',v_source_edit_key,'field','reference_updates')::text;
+    end if;
+    v_source_updates_map:=jsonb_set(
+      v_source_updates_map,array[v_source_edit_key],
+      jsonb_build_object(
+        'timesheet_id',v_source_edit_key,
+        'expected_document_revision',(v_refupd->>'expected_document_revision')::bigint,
+        'has_reference_number',v_refupd ? 'reference_number',
+        'reference_number',case when v_refupd ? 'reference_number'
+          then to_jsonb(nullif(btrim(coalesce(v_refupd->>'reference_number','')),''))
+          else 'null'::jsonb end,
+        'has_day_references_json',v_refupd ? 'day_references_json',
+        'day_references_json',case
+          when not (v_refupd ? 'day_references_json') then 'null'::jsonb
+          when jsonb_typeof(v_refupd->'day_references_json')='null' then 'null'::jsonb
+          else v_refupd->'day_references_json' end,
+        'has_actual_schedule_json',v_refupd ? 'actual_schedule_json',
+        'actual_schedule_json',case
+          when not (v_refupd ? 'actual_schedule_json') then 'null'::jsonb
+          when jsonb_typeof(v_refupd->'actual_schedule_json')='null' then 'null'::jsonb
+          else v_refupd->'actual_schedule_json' end,
+        'has_hospital_norm',false,
+        'has_ward_norm',false),
+      true);
+  end loop;
 end if;
 
--- Parse timesheet_location_updates. Values are stored in canonical lower-case
--- form; display casing is applied only by the immutable presentation model.
-v_location_updates := null;
-if p_payload is not null and jsonb_typeof(p_payload) = 'object'
-   and (p_payload ? 'timesheet_location_updates') then
-  v_location_updates := coalesce(p_payload->'timesheet_location_updates','[]'::jsonb);
-  if jsonb_typeof(v_location_updates) <> 'array' then
-    v_location_updates := '[]'::jsonb;
+-- Hospital/ward edits merge into the same desired source row. A source may
+-- appear once in each array, but both items must carry the same revision.
+v_location_updates:=null;
+if p_payload is not null and jsonb_typeof(p_payload)='object'
+   and p_payload ? 'timesheet_location_updates' then
+  v_location_updates:=p_payload->'timesheet_location_updates';
+  if jsonb_typeof(v_location_updates)<>'array' then
+    raise exception using errcode='22023',
+      message='INVOICE_SOURCE_EDIT_PAYLOAD_INVALID',
+      detail=jsonb_build_object('field','timesheet_location_updates','reason','ARRAY_REQUIRED')::text;
   end if;
-  v_location_count := jsonb_array_length(coalesce(v_location_updates,'[]'::jsonb));
+  v_location_count:=jsonb_array_length(v_location_updates);
+  for v_location_update in select value from jsonb_array_elements(v_location_updates) value loop
+    if v_location_update is null or jsonb_typeof(v_location_update)<>'object'
+       or nullif(btrim(coalesce(v_location_update->>'timesheet_id','')),'') is null
+       or coalesce(v_location_update->>'timesheet_id','') !~
+          '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+       or coalesce(v_location_update->>'expected_document_revision','') !~ '^[1-9][0-9]*$'
+       or not (v_location_update ? 'hospital_norm' or v_location_update ? 'ward_norm')
+       or (
+         v_location_update ? 'hospital_norm'
+         and jsonb_typeof(v_location_update->'hospital_norm') not in('string','null')
+       )
+       or (
+         v_location_update ? 'ward_norm'
+         and jsonb_typeof(v_location_update->'ward_norm') not in('string','null')
+       )
+    then
+      raise exception using errcode='22023',
+        message='INVOICE_SOURCE_EDIT_PAYLOAD_INVALID',
+        detail=jsonb_build_object('field','timesheet_location_updates','reason','INVALID_ITEM')::text;
+    end if;
+    v_source_edit_key:=lower(v_location_update->>'timesheet_id');
+    v_source_expected_revision:=(v_location_update->>'expected_document_revision')::bigint;
+    if v_source_updates_map ? v_source_edit_key
+       and (
+         coalesce((v_source_updates_map#>>
+           array[v_source_edit_key,'has_hospital_norm'])::boolean,false)
+         or coalesce((v_source_updates_map#>>
+           array[v_source_edit_key,'has_ward_norm'])::boolean,false)
+       ) then
+      raise exception using errcode='22023',
+        message='INVOICE_SOURCE_EDIT_DUPLICATE_TIMESHEET',
+        detail=jsonb_build_object('timesheet_id',v_source_edit_key,'field','timesheet_location_updates')::text;
+    end if;
+    if v_source_updates_map ? v_source_edit_key
+       and (v_source_updates_map#>>array[v_source_edit_key,'expected_document_revision'])::bigint
+           is distinct from v_source_expected_revision then
+      raise exception using errcode='40001',
+        message='INVOICE_SOURCE_EDIT_STALE_REVISION',
+        detail=jsonb_build_object('timesheet_id',v_source_edit_key,'reason','EXPECTED_REVISION_CONFLICT')::text;
+    end if;
+    v_source_update:=coalesce(v_source_updates_map->v_source_edit_key,
+      jsonb_build_object(
+        'timesheet_id',v_source_edit_key,
+        'expected_document_revision',v_source_expected_revision,
+        'has_reference_number',false,
+        'has_day_references_json',false,
+        'has_actual_schedule_json',false));
+    v_source_update:=v_source_update||jsonb_build_object(
+      'has_hospital_norm',v_location_update ? 'hospital_norm',
+      'hospital_norm',case when v_location_update ? 'hospital_norm'
+        then to_jsonb(nullif(lower(regexp_replace(
+          btrim(coalesce(v_location_update->>'hospital_norm','')),
+          '[[:space:]]+',' ','g')),''))
+        else 'null'::jsonb end,
+      'has_ward_norm',v_location_update ? 'ward_norm',
+      'ward_norm',case when v_location_update ? 'ward_norm'
+        then to_jsonb(nullif(lower(regexp_replace(
+          btrim(coalesce(v_location_update->>'ward_norm','')),
+          '[[:space:]]+',' ','g')),''))
+        else 'null'::jsonb end);
+    v_source_updates_map:=jsonb_set(v_source_updates_map,array[v_source_edit_key],v_source_update,true);
+  end loop;
 end if;
+v_source_edit_requested:=v_source_updates_map<>'{}'::jsonb;
 v_has_seg_ops :=
   (v_remove_seg_refs is not null and jsonb_typeof(v_remove_seg_refs)='array' and jsonb_array_length(v_remove_seg_refs) > 0)
   or (v_add_seg_refs is not null and jsonb_typeof(v_add_seg_refs)='array' and jsonb_array_length(v_add_seg_refs) > 0);
@@ -419,6 +571,270 @@ v_has_seg_ops :=
       'has_segment_ops', v_has_seg_ops
     );
     v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object('step','payload_parsed','stats',v_dbg_stats));
+  end if;
+
+  if v_source_edit_requested then
+    -- Source edits are a narrower authority than ordinary draft edits.
+    if v_inv.issued_at_utc is not null then
+      raise exception using errcode='55000',
+        message='INVOICE_SOURCE_EDIT_ISSUED';
+    end if;
+    if v_inv.paid_at_utc is not null then
+      raise exception using errcode='55000',
+        message='INVOICE_SOURCE_EDIT_PAID';
+    end if;
+    if v_inv.active_issue_operation_id is not null
+       or upper(coalesce(v_inv.issue_state,'')) in
+          ('VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE')
+       or exists(
+         select 1
+         from public.invoice_operation_chunks c
+         where c.chunk_type='ISSUE_INVOICE'
+           and c.entity_type='INVOICE'
+           and c.entity_id=p_invoice_id
+           and c.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+       )
+    then
+      raise exception using errcode='55000',
+        message='INVOICE_SOURCE_EDIT_ISSUE_IN_PROGRESS';
+    end if;
+
+    v_pre_edit_invoice_revision:=v_inv.document_revision;
+    v_pre_edit_preview_document_version_id:=v_inv.preview_document_version_id;
+    v_pre_edit_active_document_operation_id:=v_inv.active_document_operation_id;
+
+    -- Only an exact current-revision V8 preview is authoritative. Legacy PDF
+    -- summary fields do not independently force or suppress replacement.
+    select exists(
+      select 1
+      from public.invoice_document_versions dv
+      left join public.invoice_operations op on op.id=dv.operation_id
+      where dv.entity_type='INVOICE'
+        and dv.entity_id=p_invoice_id
+        and dv.purpose='DRAFT_PREVIEW'
+        and dv.source_revision=v_pre_edit_invoice_revision::text
+        and (
+          (dv.status='READY'
+            and nullif(btrim(coalesce(dv.r2_key,'')),'') is not null
+            and nullif(btrim(coalesce(dv.sha256,'')),'') is not null
+            and coalesce(dv.size_bytes,0)>0
+            and coalesce(dv.page_count,0)>0)
+          or (
+            dv.id=v_pre_edit_preview_document_version_id
+            and dv.status in(
+              'PLANNING','WAITING_FOR_INPUTS','RENDERING',
+              'ASSEMBLING','VERIFYING','READY'))
+          or (
+            dv.operation_id=v_pre_edit_active_document_operation_id
+            and op.operation_type='BUILD_DOCUMENT'
+            and op.entity_type='INVOICE'
+            and op.entity_id=p_invoice_id
+            and op.source_revision=v_pre_edit_invoice_revision::text
+            and coalesce(op.input_json->>'purpose','')='DRAFT_PREVIEW'
+            and op.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'))
+        )
+    ) into v_source_edit_preexisting_preview;
+
+    -- Lock every target in deterministic order before validating ownership and
+    -- revisions. A stale or detached item aborts the whole transaction.
+    for v_ref_ts in
+      select t.*
+      from public.timesheets t
+      join jsonb_each(v_source_updates_map) desired on true
+      where t.timesheet_id=(desired.value->>'timesheet_id')::uuid
+      order by t.timesheet_id
+      for update of t
+    loop
+      null;
+    end loop;
+
+    if (
+      select count(*)
+      from public.timesheets t
+      join jsonb_each(v_source_updates_map) desired
+        on t.timesheet_id=(desired.value->>'timesheet_id')::uuid
+      where t.is_current
+    )<>(select count(*) from jsonb_each(v_source_updates_map)) then
+      raise exception using errcode='55000',
+        message='INVOICE_SOURCE_EDIT_SOURCE_NOT_CURRENT';
+    end if;
+
+    if exists(
+      select 1
+      from jsonb_each(v_source_updates_map) desired
+      join public.timesheets t
+        on t.timesheet_id=(desired.value->>'timesheet_id')::uuid
+      where t.document_revision is distinct from
+        (desired.value->>'expected_document_revision')::bigint
+    ) then
+      raise exception using errcode='40001',
+        message='INVOICE_SOURCE_EDIT_STALE_REVISION';
+    end if;
+
+    if exists(
+      select 1
+      from jsonb_each(v_source_updates_map) desired
+      where not exists(
+        select 1
+        from public.invoice_lines owned_line
+        where owned_line.invoice_id=p_invoice_id
+          and (
+            owned_line.timesheet_id=(desired.value->>'timesheet_id')::uuid
+            or (
+              owned_line.timesheet_id is null
+              and coalesce(owned_line.meta_json->>'timesheet_id','') ~
+                '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+              and (owned_line.meta_json->>'timesheet_id')::uuid=
+                  (desired.value->>'timesheet_id')::uuid
+            )
+          )
+      )
+    ) then
+      raise exception using errcode='55000',
+        message='INVOICE_SOURCE_EDIT_SOURCE_NOT_OWNED';
+    end if;
+
+    -- Preserve the established import-authoritative correction lock across
+    -- both supported source carriers.
+    if exists(
+      select 1
+      from jsonb_each(v_source_updates_map) desired
+      where coalesce((
+        public._ctms_import_correction_classify_v1(
+          (desired.value->>'timesheet_id')::uuid)
+          ->>'is_import_authoritative_correction')::boolean,false)
+    ) then
+      raise exception using errcode='55000',
+        message='IMPORT_AUTHORITATIVE_CORRECTION_SOURCE_EDIT_FORBIDDEN';
+    end if;
+
+    -- Reject a mixed command that edits a source while removing every carrier
+    -- for that source in the same Save.
+    if coalesce(array_length(v_remove_ids,1),0)>0 and exists(
+      select 1
+      from jsonb_each(v_source_updates_map) desired
+      where exists(
+        select 1
+        from public.invoice_lines carrier
+        where carrier.invoice_id=p_invoice_id
+          and (
+            carrier.timesheet_id=(desired.value->>'timesheet_id')::uuid
+            or (
+              carrier.timesheet_id is null
+              and coalesce(carrier.meta_json->>'timesheet_id','') ~
+                '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+              and (carrier.meta_json->>'timesheet_id')::uuid=
+                  (desired.value->>'timesheet_id')::uuid
+            )
+          )
+      )
+      and not exists(
+        select 1
+        from public.invoice_lines retained
+        where retained.invoice_id=p_invoice_id
+          and not (retained.id=any(v_remove_ids))
+          and (
+            retained.timesheet_id=(desired.value->>'timesheet_id')::uuid
+            or (
+              retained.timesheet_id is null
+              and coalesce(retained.meta_json->>'timesheet_id','') ~
+                '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+              and (retained.meta_json->>'timesheet_id')::uuid=
+                  (desired.value->>'timesheet_id')::uuid
+            )
+          )
+      )
+    ) then
+      raise exception using errcode='22023',
+        message='INVOICE_SOURCE_EDIT_CONFLICTING_COMMAND';
+    end if;
+
+    -- Determine material changes before the statement update so reference-only
+    -- follow-up work can remain separate from location-only edits.
+    select coalesce(array_agg(t.timesheet_id order by t.timesheet_id),array[]::uuid[])
+    into v_source_changed_ts_ids
+    from public.timesheets t
+    join jsonb_each(v_source_updates_map) desired
+      on t.timesheet_id=(desired.value->>'timesheet_id')::uuid
+    where (
+      ((desired.value->>'has_reference_number')::boolean
+        and t.reference_number is distinct from
+          nullif(btrim(coalesce(desired.value->>'reference_number','')),''))
+      or ((desired.value->>'has_day_references_json')::boolean
+        and t.day_references_json is distinct from
+          case when jsonb_typeof(desired.value->'day_references_json')='null'
+            then null else desired.value->'day_references_json' end)
+      or ((desired.value->>'has_actual_schedule_json')::boolean
+        and t.actual_schedule_json is distinct from
+          case when jsonb_typeof(desired.value->'actual_schedule_json')='null'
+            then null else desired.value->'actual_schedule_json' end)
+      or ((desired.value->>'has_hospital_norm')::boolean
+        and t.hospital_norm is distinct from
+          nullif(desired.value->>'hospital_norm',''))
+      or ((desired.value->>'has_ward_norm')::boolean
+        and t.ward_norm is distinct from
+          nullif(desired.value->>'ward_norm',''))
+    );
+
+    select coalesce(array_agg(t.timesheet_id order by t.timesheet_id),array[]::uuid[])
+    into v_refupd_ts_ids
+    from public.timesheets t
+    join jsonb_each(v_source_updates_map) desired
+      on t.timesheet_id=(desired.value->>'timesheet_id')::uuid
+    where t.timesheet_id=any(v_source_changed_ts_ids)
+      and (
+        (desired.value->>'has_reference_number')::boolean
+        or (desired.value->>'has_day_references_json')::boolean
+        or (desired.value->>'has_actual_schedule_json')::boolean
+      );
+
+    select coalesce(array_agg(t.timesheet_id order by t.timesheet_id),array[]::uuid[])
+    into v_location_ts_ids
+    from public.timesheets t
+    join jsonb_each(v_source_updates_map) desired
+      on t.timesheet_id=(desired.value->>'timesheet_id')::uuid
+    where t.timesheet_id=any(v_source_changed_ts_ids)
+      and (
+        (desired.value->>'has_hospital_norm')::boolean
+        or (desired.value->>'has_ward_norm')::boolean
+      );
+
+    if cardinality(v_source_changed_ts_ids)>0 then
+      with desired as materialized(
+        select (value->>'timesheet_id')::uuid as timesheet_id,value
+        from jsonb_each(v_source_updates_map)
+      )
+      update public.timesheets t
+      set updated_at=v_now,
+          reference_number=case when (d.value->>'has_reference_number')::boolean
+            then nullif(btrim(coalesce(d.value->>'reference_number','')),'')
+            else t.reference_number end,
+          day_references_json=case when (d.value->>'has_day_references_json')::boolean
+            then case when jsonb_typeof(d.value->'day_references_json')='null'
+              then null else d.value->'day_references_json' end
+            else t.day_references_json end,
+          actual_schedule_json=case when (d.value->>'has_actual_schedule_json')::boolean
+            then case when jsonb_typeof(d.value->'actual_schedule_json')='null'
+              then null else d.value->'actual_schedule_json' end
+            else t.actual_schedule_json end,
+          hospital_norm=case when (d.value->>'has_hospital_norm')::boolean
+            then nullif(d.value->>'hospital_norm','') else t.hospital_norm end,
+          ward_norm=case when (d.value->>'has_ward_norm')::boolean
+            then nullif(d.value->>'ward_norm','') else t.ward_norm end
+      from desired d
+      where t.timesheet_id=d.timesheet_id
+        and t.timesheet_id=any(v_source_changed_ts_ids)
+        and t.is_current;
+    end if;
+
+    v_refupd_applied:=cardinality(v_refupd_ts_ids);
+    v_location_applied:=cardinality(v_location_ts_ids);
+
+    -- The legacy per-array loops below remain structurally compatible for old
+    -- payload code, but the strict merged statement above is now the sole
+    -- execution path for accepted source edits.
+    v_reference_updates:=null;
+    v_location_updates:=null;
   end if;
 
 
@@ -662,7 +1078,23 @@ v_has_seg_ops :=
         'schedule_ref_count', jsonb_array_length(coalesce(v_ref_schedule_refs_distinct, '[]'::jsonb))
       )
       where ilu.invoice_id = p_invoice_id
-        and ilu.timesheet_id = v_ref_ts_id;
+        and (
+          ilu.timesheet_id=v_ref_ts_id
+          or (
+            ilu.timesheet_id is null
+            and coalesce(ilu.meta_json->>'timesheet_id','') ~
+              '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+            and (ilu.meta_json->>'timesheet_id')::uuid=v_ref_ts_id
+          )
+        )
+        and (
+          ilu.meta_json->'ts_reference_number' is distinct from
+            coalesce(to_jsonb(nullif(btrim(coalesce(v_ref_ts.reference_number,'')),'')),'null'::jsonb)
+          or ilu.meta_json->'schedule_ref_nums' is distinct from
+            coalesce(v_ref_schedule_refs_distinct,'[]'::jsonb)
+          or ilu.meta_json->'schedule_ref_count' is distinct from
+            to_jsonb(jsonb_array_length(coalesce(v_ref_schedule_refs_distinct,'[]'::jsonb)))
+        );
 
       get diagnostics v_rc = row_count;
       v_refupd_meta_rows_updated := v_refupd_meta_rows_updated + coalesce(v_rc,0);
@@ -704,6 +1136,13 @@ v_has_seg_ops :=
           v_ref_seg_id := nullif(btrim(coalesce(v_ref_seg_obj->>'segment_id','')), '');
           if v_ref_seg_id is not null then
             v_ref_sched_key := 'SID:' || v_ref_seg_id;
+            if v_ref_sched_map ? v_ref_sched_key then
+              raise exception using errcode='22023',
+                message='INVOICE_SOURCE_EDIT_SEGMENT_REFERENCE_AMBIGUOUS',
+                detail=jsonb_build_object(
+                  'timesheet_id',v_ref_ts_id,'identity',v_ref_sched_key,
+                  'side','TIMESHEET_SCHEDULE')::text;
+            end if;
             v_ref_sched_map := jsonb_set(v_ref_sched_map, array[v_ref_sched_key], case when v_ref_sched_ref is null then 'null'::jsonb else to_jsonb(v_ref_sched_ref) end, true);
             continue;
           end if;
@@ -715,10 +1154,18 @@ v_has_seg_ops :=
           end if;
 
           v_ref_sched_key := 'SE:' || v_ref_seg_start || '|' || v_ref_seg_end;
+          if v_ref_sched_map ? v_ref_sched_key then
+            raise exception using errcode='22023',
+              message='INVOICE_SOURCE_EDIT_SEGMENT_REFERENCE_AMBIGUOUS',
+              detail=jsonb_build_object(
+                'timesheet_id',v_ref_ts_id,'identity',v_ref_sched_key,
+                'side','TIMESHEET_SCHEDULE')::text;
+          end if;
           v_ref_sched_map := jsonb_set(v_ref_sched_map, array[v_ref_sched_key], case when v_ref_sched_ref is null then 'null'::jsonb else to_jsonb(v_ref_sched_ref) end, true);
         end loop;
 
         v_ref_new_segments := '[]'::jsonb;
+        v_ref_seen_keys := '{}'::jsonb;
         for v_ref_seg_obj in
           select value
           from jsonb_array_elements(v_ref_ib->'segments') value
@@ -734,6 +1181,14 @@ v_has_seg_ops :=
           v_ref_seg_id := nullif(btrim(coalesce(v_ref_seg_obj->>'segment_id','')), '');
           if v_ref_seg_id is not null then
             v_ref_sched_key := 'SID:' || v_ref_seg_id;
+            if v_ref_seen_keys ? v_ref_sched_key then
+              raise exception using errcode='22023',
+                message='INVOICE_SOURCE_EDIT_SEGMENT_REFERENCE_AMBIGUOUS',
+                detail=jsonb_build_object(
+                  'timesheet_id',v_ref_ts_id,'identity',v_ref_sched_key,
+                  'side','FINANCIAL_SEGMENTS')::text;
+            end if;
+            v_ref_seen_keys:=jsonb_set(v_ref_seen_keys,array[v_ref_sched_key],'true'::jsonb,true);
             if v_ref_sched_map ? v_ref_sched_key then
               v_ref_seg_new_ref := nullif(btrim(coalesce(v_ref_sched_map->>v_ref_sched_key,'')), '');
               v_ref_seg_has_update := true;
@@ -747,6 +1202,14 @@ v_has_seg_ops :=
 
             if v_ref_seg_start is not null and v_ref_seg_end is not null then
               v_ref_sched_key := 'SE:' || v_ref_seg_start || '|' || v_ref_seg_end;
+              if v_ref_seen_keys ? v_ref_sched_key then
+                raise exception using errcode='22023',
+                  message='INVOICE_SOURCE_EDIT_SEGMENT_REFERENCE_AMBIGUOUS',
+                  detail=jsonb_build_object(
+                    'timesheet_id',v_ref_ts_id,'identity',v_ref_sched_key,
+                    'side','FINANCIAL_SEGMENTS')::text;
+              end if;
+              v_ref_seen_keys:=jsonb_set(v_ref_seen_keys,array[v_ref_sched_key],'true'::jsonb,true);
               if v_ref_sched_map ? v_ref_sched_key then
                 v_ref_seg_new_ref := nullif(btrim(coalesce(v_ref_sched_map->>v_ref_sched_key,'')), '');
                 v_ref_seg_has_update := true;
@@ -2089,46 +2552,6 @@ end if;
     updated_at=now()
   where invu.id=p_invoice_id;
 
-  -- A reference/hospital/ward edit can target a V8 draft whose legacy
-  -- invoice_lines carrier is temporarily absent. In that case the timesheet
-  -- invalidation trigger cannot discover the parent invoice. If no other
-  -- statement in this RPC has already invalidated the exact draft, nudge the
-  -- ordinary invoice invalidation trigger with bounded internal source
-  -- metadata. This keeps one invalidation authority and avoids a second
-  -- revision bump where a normal line/segment carrier already invalidated it.
-  if coalesce(v_refupd_applied,0)+coalesce(v_location_applied,0)>0
-     and exists(
-       select 1 from public.invoices i
-       where i.id=p_invoice_id
-         and i.status='DRAFT'
-         and i.document_revision=v_inv.document_revision
-     )
-  then
-    update public.invoices invu
-    set header_snapshot_json=jsonb_set(
-          coalesce(invu.header_snapshot_json,'{}'::jsonb),
-          '{meta,reference_source_change}',
-          jsonb_build_object(
-            'changed_at_utc',public._inv_iso_utc(v_now),
-            'timesheet_ids',coalesce((
-              select jsonb_agg(distinct changed_id order by changed_id)
-              from unnest(
-                coalesce(v_refupd_ts_ids,array[]::uuid[])
-                ||coalesce(v_location_ts_ids,array[]::uuid[])
-              ) changed_id
-              where changed_id is not null
-            ),'[]'::jsonb)
-          ),
-          true
-        ),
-        updated_at=v_now
-    where invu.id=p_invoice_id
-      and invu.status='DRAFT'
-      and invu.document_revision=v_inv.document_revision;
-
-    get diagnostics v_rc=row_count;
-    v_refupd_invoice_fallback_invalidated:=coalesce(v_rc,0)>0;
-  end if;
 -- Refresh invoice-level NHSP/HR cache after timesheet/segment changes
   if coalesce(v_refresh_hr_cache,false) = true then
     perform 1
@@ -2136,52 +2559,175 @@ end if;
     limit 1;
   end if;
 
-  -- A material reference/hospital/ward edit starts the exact replacement
-  -- timesheet work in the same transaction. If this invoice previously had a
-  -- preview (the caller sets request_preview), start/reuse its exact replacement
-  -- build too. The operation-start authority is content/revision idempotent, so
-  -- an immediate Generate click advances the same operation rather than
-  -- creating duplicate document work.
-  if coalesce(v_refupd_applied,0)+coalesce(v_location_applied,0)>0 then
-    if lower(coalesce(p_payload->>'request_timesheet_documents','false'))
-         in ('true','1','yes','on') then
-      select coalesce(jsonb_agg(jsonb_build_object(
-        'command_type','VIEW_TIMESHEET_DOCUMENT',
-        'timesheet_id',changed_id,
-        'purpose','TIMESHEET',
-        'priority_reason','SOURCE_EDIT_REPLACEMENT',
-        'template_version','timesheet-professional-v2')
-        order by changed_id),'[]'::jsonb)
-      into v_document_commands
-      from (
-        select distinct changed_id
-        from unnest(
-          coalesce(v_refupd_ts_ids,array[]::uuid[])
-          ||coalesce(v_location_ts_ids,array[]::uuid[])
-        ) changed_id
-        where changed_id is not null
-      ) changed;
-    end if;
+  -- A material source edit always starts or reuses the exact replacement
+  -- timesheet work. Replacement of an existing invoice preview is derived from
+  -- the locked pre-edit V8 state; browser flags cannot suppress it.
+  if cardinality(v_source_changed_ts_ids)>0 then
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'command_type','VIEW_TIMESHEET_DOCUMENT',
+      'timesheet_id',changed_id,
+      'purpose','TIMESHEET',
+      'priority_reason','SOURCE_EDIT_REPLACEMENT',
+      'template_version','timesheet-professional-v2')
+      order by changed_id),'[]'::jsonb)
+    into v_document_commands
+    from unnest(v_source_changed_ts_ids) changed_id;
 
-    if lower(coalesce(p_payload->>'request_preview','false'))
-         in ('true','1','yes','on') then
+    v_source_edit_invoice_replacement_required:=
+      v_source_edit_preexisting_preview
+      or lower(coalesce(p_payload->>'request_preview','false'))
+           in('true','1','yes','on');
+    if v_source_edit_invoice_replacement_required then
       v_document_commands:=v_document_commands||jsonb_build_array(
         jsonb_build_object(
           'command_type','VIEW_INVOICE_DOCUMENT',
           'invoice_id',p_invoice_id,
           'purpose','DRAFT_PREVIEW',
-          'priority_reason','SOURCE_EDIT_REPLACEMENT',
+          'priority_reason',case when v_source_edit_preexisting_preview
+            then 'SOURCE_EDIT_REPLACEMENT' else 'VIEW_NOW' end,
           'template_version','invoice-professional-v1'));
     end if;
 
-    if jsonb_array_length(v_document_commands)>0 then
-      if jsonb_array_length(v_document_commands)>1000 then
-        raise exception using errcode='22023',
-          message='Too many document replacements requested in one invoice edit';
-      end if;
-      v_started_operations:=public.invoice_operation_start_batch(
-        v_document_commands,p_actor_user_id,v_now);
+    v_expected_command_count:=jsonb_array_length(v_document_commands);
+    if v_expected_command_count>1000 then
+      raise exception using errcode='22023',
+        message='INVOICE_SOURCE_EDIT_TOO_MANY_REPLACEMENTS';
     end if;
+
+    v_started_operations:=public.invoice_operation_start_batch(
+      v_document_commands,p_actor_user_id,v_now);
+
+    if jsonb_typeof(v_started_operations)<>'array'
+       or jsonb_array_length(v_started_operations)<>v_expected_command_count then
+      raise exception using errcode='55000',
+        message='SOURCE_EDIT_REPLACEMENT_RESULT_INVALID',
+        detail=jsonb_build_object(
+          'reason','RESULT_COUNT',
+          'expected',v_expected_command_count,
+          'actual',case when jsonb_typeof(v_started_operations)='array'
+            then jsonb_array_length(v_started_operations) else null end)::text;
+    end if;
+
+    for v_command_no in 1..v_expected_command_count loop
+      select value into v_operation_result
+      from jsonb_array_elements(v_started_operations) value
+      where coalesce(value->>'command_no','')~'^[1-9][0-9]*$'
+        and (value->>'command_no')::int=v_command_no;
+
+      if not found or (
+        select count(*)
+        from jsonb_array_elements(v_started_operations) value
+        where coalesce(value->>'command_no','')~'^[1-9][0-9]*$'
+          and (value->>'command_no')::int=v_command_no
+      )<>1 then
+        raise exception using errcode='55000',
+          message='SOURCE_EDIT_REPLACEMENT_RESULT_INVALID',
+          detail=jsonb_build_object('reason','COMMAND_NO','command_no',v_command_no)::text;
+      end if;
+
+      v_source_update:=v_document_commands->(v_command_no-1);
+      v_command_type:=v_source_update->>'command_type';
+      if v_operation_result->>'command_type' is distinct from v_command_type
+         or lower(coalesce(v_operation_result->>'accepted','false'))
+              not in('true','1','yes','on')
+         or lower(coalesce(v_operation_result->>'blocked','false'))
+              in('true','1','yes','on') then
+        raise exception using errcode='55000',
+          message=case
+            when lower(coalesce(v_operation_result->>'blocked','false'))
+                   in('true','1','yes','on')
+              then 'SOURCE_EDIT_REPLACEMENT_BLOCKED'
+            else 'SOURCE_EDIT_REPLACEMENT_REJECTED' end,
+          detail=jsonb_build_object(
+            'command_no',v_command_no,
+            'terminal_error',v_operation_result->'terminal_error')::text;
+      end if;
+
+      v_operation_status:=upper(coalesce(v_operation_result->>'status',''));
+      v_operation_id:=case when coalesce(v_operation_result->>'operation_id','')~
+        '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        then (v_operation_result->>'operation_id')::uuid end;
+      v_document_version_id:=case when coalesce(v_operation_result->>'document_version_id','')~
+        '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        then (v_operation_result->>'document_version_id')::uuid end;
+
+      if v_operation_status='READY' then
+        if v_document_version_id is null or v_operation_id is not null
+           or not exists(
+             select 1
+             from public.invoice_document_versions dv
+             where dv.id=v_document_version_id
+               and dv.entity_type=case when v_command_type='VIEW_TIMESHEET_DOCUMENT'
+                 then 'TIMESHEET' else 'INVOICE' end
+               and dv.entity_id=case when v_command_type='VIEW_TIMESHEET_DOCUMENT'
+                 then (v_source_update->>'timesheet_id')::uuid else p_invoice_id end
+               and dv.purpose=case when v_command_type='VIEW_TIMESHEET_DOCUMENT'
+                 then 'TIMESHEET' else 'DRAFT_PREVIEW' end
+               and dv.source_revision=case when v_command_type='VIEW_TIMESHEET_DOCUMENT'
+                 then (
+                   select t.document_revision::text from public.timesheets t
+                   where t.timesheet_id=(v_source_update->>'timesheet_id')::uuid
+                     and t.is_current)
+                 else (
+                   select i.document_revision::text from public.invoices i
+                   where i.id=p_invoice_id)
+                 end
+               and dv.template_version=v_source_update->>'template_version'
+               and dv.status='READY'
+               and nullif(btrim(coalesce(dv.r2_key,'')),'') is not null
+               and nullif(btrim(coalesce(dv.sha256,'')),'') is not null
+               and coalesce(dv.size_bytes,0)>0
+               and coalesce(dv.page_count,0)>0
+           ) then
+          raise exception using errcode='55000',
+            message='SOURCE_EDIT_REPLACEMENT_RESULT_INVALID',
+            detail=jsonb_build_object(
+              'reason','READY_IDENTITY','command_no',v_command_no)::text;
+        end if;
+      else
+        if v_operation_id is null
+           or v_operation_status not in('QUEUED','RUNNING','WAITING','RETRY_WAIT')
+           or not exists(
+             select 1
+             from public.invoice_operations op
+             where op.id=v_operation_id
+               and op.operation_type='BUILD_DOCUMENT'
+               and op.entity_type=case when v_command_type='VIEW_TIMESHEET_DOCUMENT'
+                 then 'TIMESHEET' else 'INVOICE' end
+               and op.entity_id=case when v_command_type='VIEW_TIMESHEET_DOCUMENT'
+                 then (v_source_update->>'timesheet_id')::uuid else p_invoice_id end
+               and op.source_revision=case when v_command_type='VIEW_TIMESHEET_DOCUMENT'
+                 then (
+                   select t.document_revision::text from public.timesheets t
+                   where t.timesheet_id=(v_source_update->>'timesheet_id')::uuid
+                     and t.is_current)
+                 else (
+                   select i.document_revision::text from public.invoices i
+                   where i.id=p_invoice_id)
+                 end
+               and op.template_version=v_source_update->>'template_version'
+               and coalesce(op.input_json->>'purpose','')=
+                 case when v_command_type='VIEW_TIMESHEET_DOCUMENT'
+                   then 'TIMESHEET' else 'DRAFT_PREVIEW' end
+               and op.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT')
+           ) then
+          raise exception using errcode='55000',
+            message='SOURCE_EDIT_REPLACEMENT_RESULT_INVALID',
+            detail=jsonb_build_object(
+              'reason','ACTIVE_IDENTITY','command_no',v_command_no)::text;
+        end if;
+      end if;
+
+      v_validated_operations:=v_validated_operations||jsonb_build_array(v_operation_result);
+    end loop;
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'timesheet_id',t.timesheet_id,
+      'document_revision',t.document_revision)
+      order by t.timesheet_id),'[]'::jsonb)
+    into v_source_changed_revisions
+    from public.timesheets t
+    where t.timesheet_id=any(v_source_changed_ts_ids) and t.is_current;
   end if;
 
 -- Return compact state only; never build a manifest or PDF here.
@@ -2194,16 +2740,14 @@ end if;
     'reference_updates_applied',v_refupd_applied,
     'timesheet_location_updates_applied',v_location_applied,
     'timesheet_source_changed',
-      coalesce(v_refupd_applied,0)+coalesce(v_location_applied,0)>0,
-    'changed_timesheet_ids',coalesce((
-      select jsonb_agg(distinct changed_id order by changed_id)
-      from unnest(
-        coalesce(v_refupd_ts_ids,array[]::uuid[])
-        ||coalesce(v_location_ts_ids,array[]::uuid[])
-      ) changed_id
-      where changed_id is not null
-    ),'[]'::jsonb),
-    'accepted_operations',coalesce(v_started_operations,'[]'::jsonb),
+      cardinality(v_source_changed_ts_ids)>0,
+    'source_edit_queue_contract',case when v_source_edit_requested
+      then 'INVOICE_SOURCE_EDIT_QUEUE_V1' else null end,
+    'changed_timesheet_ids',coalesce(to_jsonb(v_source_changed_ts_ids),'[]'::jsonb),
+    'changed_timesheet_revisions',coalesce(v_source_changed_revisions,'[]'::jsonb),
+    'source_edit_preexisting_preview',v_source_edit_preexisting_preview,
+    'invoice_replacement_required',v_source_edit_invoice_replacement_required,
+    'accepted_operations',coalesce(v_validated_operations,'[]'::jsonb),
     'document_queue_requested',jsonb_array_length(v_document_commands)>0)
   into v_manifest from public.invoices i where i.id=p_invoice_id;
 

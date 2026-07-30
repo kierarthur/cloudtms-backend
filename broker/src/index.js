@@ -101665,7 +101665,7 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
     const st = String(inv.status || '').toUpperCase();
 
     // Issued invoices cannot be edited; user must unissue first (modal save pipeline handles this)
-    if (st === 'ISSUED') {
+    if (st === 'ISSUED' || inv.issued_at_utc) {
       return withCORS(env, req, conflict('Invoice is issued. Unissue it before editing.'));
     }
 
@@ -101803,9 +101803,40 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
       );
     } catch {}
 
+    const sourceEditRequested = (
+      (Array.isArray(payload.reference_updates) && payload.reference_updates.length > 0)
+      || (Array.isArray(payload.timesheet_location_updates)
+        && payload.timesheet_location_updates.length > 0)
+    );
+    const sourceEditQueueContract = String(
+      manifest.source_edit_queue_contract || ''
+    ).trim().toUpperCase();
+    if (sourceEditRequested
+      && sourceEditQueueContract !== 'INVOICE_SOURCE_EDIT_QUEUE_V1') {
+      return withCORS(env, req, serverError(
+        'Invoice source changes were not applied because the database queue contract is unavailable.'
+      ));
+    }
     let accepted_operations = Array.isArray(manifest.accepted_operations)
       ? manifest.accepted_operations
       : [];
+    if (sourceEditQueueContract === 'INVOICE_SOURCE_EDIT_QUEUE_V1') {
+      const invalidAcceptedResult = accepted_operations.find(result => {
+        if (!result || typeof result !== 'object') return true;
+        if (result.accepted !== true || result.blocked === true) return true;
+        const status = String(result.status || '').toUpperCase();
+        if (status === 'READY') {
+          return !!result.operation_id || !result.document_version_id;
+        }
+        return !result.operation_id
+          || !['QUEUED', 'RUNNING', 'WAITING', 'RETRY_WAIT'].includes(status);
+      });
+      if (invalidAcceptedResult) {
+        return withCORS(env, req, serverError(
+          'Invoice source changes were rolled back because replacement work was not accepted.'
+        ));
+      }
+    }
     let operation_submission_error = null;
     if (isInvoiceAsyncPipelineEnabled(env)) {
       const requestPreview = payload.request_preview === true
@@ -101826,7 +101857,8 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
             .map(value => String(value || '').trim().toLowerCase())
             .filter(value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)))]
         : [];
-      const sourceReplacementQueueStarted = manifest.document_queue_requested === true;
+      const sourceReplacementQueueStarted =
+        sourceEditQueueContract === 'INVOICE_SOURCE_EDIT_QUEUE_V1';
       if (requestTimesheetDocuments && !sourceReplacementQueueStarted) {
         for (const timesheetId of changedTimesheetIds) {
           commands.push({
@@ -101891,9 +101923,15 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
           };
         }
       }
-      if (accepted_operations.length) {
+      const activeAcceptedOperations = accepted_operations.filter(result => {
+        if (!result || typeof result !== 'object' || !result.operation_id) return false;
+        return ['QUEUED', 'RUNNING', 'WAITING', 'RETRY_WAIT'].includes(
+          String(result.status || '').toUpperCase()
+        );
+      });
+      if (activeAcceptedOperations.length) {
         try {
-          await nudgeInvoiceOperations(env, accepted_operations, {
+          await nudgeInvoiceOperations(env, activeAcceptedOperations, {
             ctx,
             rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
             lanes: ['DATABASE', 'DOCUMENT'],
@@ -101932,7 +101970,12 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
       tsfin_id_by_timesheet_id,
       reference_rows,
       accepted_operations,
-      async_processing: accepted_operations.length > 0,
+      async_processing: accepted_operations.some(result => (
+        !!result?.operation_id
+        && ['QUEUED', 'RUNNING', 'WAITING', 'RETRY_WAIT'].includes(
+          String(result?.status || '').toUpperCase()
+        )
+      )),
       operation_submission_error,
       changed_timesheet_ids: Array.isArray(manifest.changed_timesheet_ids)
         ? manifest.changed_timesheet_ids
@@ -101943,6 +101986,32 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
     }));
   } catch (e) {
     const msg = String(e?.message || e || '');
+
+    if (/INVOICE_SOURCE_EDIT_STALE_REVISION/i.test(msg)) {
+      return withCORS(env, req, conflict(
+        'This timesheet changed after the invoice was opened. The invoice has been refreshed; review the latest values and try again.'
+      ));
+    }
+    if (/INVOICE_SOURCE_EDIT_ISSUED|INVOICE_SOURCE_EDIT_PAID|INVOICE_SOURCE_EDIT_ISSUE_IN_PROGRESS|IMPORT_AUTHORITATIVE_CORRECTION_SOURCE_EDIT_FORBIDDEN/i.test(msg)) {
+      return withCORS(env, req, conflict(
+        'Reference, hospital and ward values cannot be changed while this invoice is issued, paid, issuing, or controlled by an import correction.'
+      ));
+    }
+    if (/INVOICE_SOURCE_EDIT_CONFLICTING_COMMAND|INVOICE_SOURCE_EDIT_SOURCE_NOT_CURRENT|INVOICE_SOURCE_EDIT_SOURCE_NOT_OWNED/i.test(msg)) {
+      return withCORS(env, req, conflict(
+        'The source timesheet is no longer attached in the expected way. Reload the invoice before making these changes.'
+      ));
+    }
+    if (/SOURCE_EDIT_REPLACEMENT_REJECTED|SOURCE_EDIT_REPLACEMENT_BLOCKED|SOURCE_EDIT_REPLACEMENT_RESULT_INVALID/i.test(msg)) {
+      return withCORS(env, req, conflict(
+        'The changes were not saved because the replacement document work could not be safely queued. No partial source change was committed.'
+      ));
+    }
+    if (/INVOICE_SOURCE_EDIT_PAYLOAD_INVALID|INVOICE_SOURCE_EDIT_DUPLICATE_TIMESHEET|INVOICE_SOURCE_EDIT_SEGMENT_REFERENCE_AMBIGUOUS/i.test(msg)) {
+      return withCORS(env, req, badRequest(
+        'The source edit request was incomplete or ambiguous. Reload the invoice and try again.'
+      ));
+    }
 
     // ✅ Map DB-level "not editable" errors to a clean 409 so UI can guide the user
     if (/Invoice is not editable/i.test(msg)) {

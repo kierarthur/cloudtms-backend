@@ -1525,7 +1525,7 @@ test('committed TEST configuration keeps interactive enabled and scheduled disab
   assert.equal(manifestValues[1][1], functionHashes.aggregate_sha256);
   assert.equal(manifestEnforcementValues[0][1], 'true');
   assert.equal(manifestEnforcementValues[1][1], 'false');
-  assert.equal(buildValues[1][1], 'invoice-async-v8-test-20260730-r48');
+  assert.equal(buildValues[1][1], 'invoice-async-v8-test-20260730-r49');
 });
 
 test('manual and QR timesheet document planning fails closed without an immutable source asset', () => {

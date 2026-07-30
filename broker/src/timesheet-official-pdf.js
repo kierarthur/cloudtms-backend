@@ -10,6 +10,7 @@ const CORPORATE_MIST = rgb(248 / 255, 250 / 255, 253 / 255);
 const CORPORATE_BLUE = rgb(35 / 255, 91 / 255, 158 / 255);
 const CORPORATE_INK = rgb(18 / 255, 27 / 255, 41 / 255);
 const CORPORATE_WHITE = rgb(1, 1, 1);
+const FONT_MINIMUMS = new WeakMap();
 const WEEKDAY_NAMES = Object.freeze([
   'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 ]);
@@ -63,7 +64,7 @@ const LAYOUTS = Object.freeze([
     detailsHeight: 21,
     declarationMinimumHeight: 24,
     signatureLineZoneHeight: 4.6,
-    signatureOverlayHeight: 6.4,
+    signatureOverlayHeight: 7,
     additionalRowHeight: 3.45,
     additionalHeaderHeight: 7,
     lineHeight: 2.75,
@@ -218,7 +219,64 @@ function estimateLayoutHeight(model, layout) {
     + layout.gap * 5;
 }
 
-export function selectOfficialTimesheetOnePageLayout(model) {
+function measureLayoutHeightWithFonts(model, layout, regular) {
+  const width = PAGE_WIDTH_MM - layout.margin * 2;
+  const minimumFontSize = Number(model?.layout?.minimum_font_size || 5.5);
+  const headerStyle = configuredWordingStyle(model?.wording?.header, layout, minimumFontSize);
+  const footerStyle = configuredWordingStyle(model?.wording?.footer, layout, minimumFontSize);
+  const headerCount = wrapText(
+    regular, normaliseLines(model?.wording?.header), headerStyle.fontSize, width
+  ).length;
+  const footerCount = wrapText(
+    regular, normaliseLines(model?.wording?.footer), footerStyle.fontSize, width
+  ).length;
+  const declarationGap = 5;
+  const declarationWidth = (width - declarationGap) / 2;
+  const declarationHeight = Math.max(
+    layout.declarationMinimumHeight,
+    ...[
+      model?.wording?.temporary_worker_declaration,
+      model?.wording?.client_declaration
+    ].map(block => {
+      const style = configuredWordingStyle(block, layout, minimumFontSize);
+      return 5 + wrapText(
+        regular, normaliseLines(block), style.fontSize, declarationWidth - 4
+      ).length * style.lineHeight + layout.signatureLineZoneHeight;
+    })
+  );
+  const additional = model?.additional_units_section || {};
+  const additionalRows = additional.visible === true && Array.isArray(additional.rows)
+    ? additional.rows : [];
+  const minimumBlankRows = additionalRows.length
+    ? Math.max(
+      0,
+      Number(additional.minimum_blank_space_rows || 0),
+      Number(model?.layout?.minimum_additional_blank_rows || 0)
+    )
+    : 0;
+  const required = 12
+    + layout.detailsHeight + layout.gap
+    + (headerCount ? headerCount * headerStyle.lineHeight + layout.gap : 0)
+    + layout.scheduleHeaderHeight
+    + scheduleLineCount(model) * layout.rowHeight
+    + layout.scheduleTotalHeight + layout.gap
+    + (additionalRows.length
+      ? layout.additionalHeaderHeight
+        + (additionalRows.length + minimumBlankRows) * layout.additionalRowHeight
+        + layout.gap
+      : 0)
+    + declarationHeight
+    + (footerCount ? footerCount * footerStyle.lineHeight + layout.gap : 0);
+  return Object.freeze({ required, declarationHeight, minimumBlankRows });
+}
+
+export async function selectOfficialTimesheetOnePageLayout(model, fonts = null) {
+  let regular = fonts?.regular;
+  if (!regular) {
+    const measurementPdf = await PDFDocument.create();
+    regular = await measurementPdf.embedFont(StandardFonts.Helvetica);
+  }
+  FONT_MINIMUMS.set(regular, Number(model?.layout?.minimum_font_size || 5.5));
   const allowed = new Set(
     Array.isArray(model?.layout?.allowed_modes)
       ? model.layout.allowed_modes.map(value => safeText(value).toUpperCase())
@@ -226,13 +284,23 @@ export function selectOfficialTimesheetOnePageLayout(model) {
   );
   const minimumFontSize = Number(model?.layout?.minimum_font_size || 0);
   const minimumRowHeight = Number(model?.layout?.minimum_row_height_mm || 0);
+  const minimumSignatureHeight = Number(model?.layout?.minimum_signature_height_mm || 0);
   for (const layout of LAYOUTS) {
     if (!allowed.has(layout.name)) continue;
     if (minimumFontSize && layout.smallFont < minimumFontSize) continue;
     if (minimumRowHeight && layout.rowHeight < minimumRowHeight) continue;
+    if (minimumSignatureHeight
+      && layout.signatureOverlayHeight < minimumSignatureHeight) continue;
     const available = PAGE_HEIGHT_MM - layout.margin * 2;
-    const required = estimateLayoutHeight(model, layout);
-    if (required <= available) return Object.freeze({ ...layout, requiredHeightMm: required });
+    const measured = measureLayoutHeightWithFonts(model, layout, regular);
+    if (measured.required <= available) {
+      return Object.freeze({
+        ...layout,
+        requiredHeightMm: measured.required,
+        measuredDeclarationHeightMm: measured.declarationHeight,
+        measuredMinimumBlankRows: measured.minimumBlankRows
+      });
+    }
   }
   throw timesheetError('TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED', {
     schedule_lines: scheduleLineCount(model),
@@ -299,13 +367,13 @@ function officialDetailsGeometry(formVariant, margin, width) {
       })
     });
   }
-  const sideWidth = (width - gap) / 2;
+  const sideWidth = width / 2;
   return Object.freeze({
     variant: 'ELECTRONIC_TWO_PANEL',
-    gap,
+    gap: 0,
     workerX: margin,
     workerWidth: sideWidth,
-    clientX: margin + sideWidth + gap,
+    clientX: margin + sideWidth,
     clientWidth: sideWidth,
     centreBox: null
   });
@@ -380,11 +448,24 @@ function drawBox(page, x, top, width, height, thickness = 0.4) {
   });
 }
 
-function fitText(font, value, maxWidthMm, preferredSize, minimumSize = 4.8) {
+function fitText(font, value, maxWidthMm, preferredSize, minimumSize = 5.5) {
   const text = safeText(value);
+  const enforcedMinimum = Math.max(
+    Number(minimumSize || 0),
+    Number(FONT_MINIMUMS.get(font) || 0)
+  );
   let size = preferredSize;
-  while (size > minimumSize && font.widthOfTextAtSize(text, size) > maxWidthMm * MM_TO_PT) {
+  while (size > enforcedMinimum
+    && font.widthOfTextAtSize(text, size) > maxWidthMm * MM_TO_PT) {
     size -= 0.2;
+  }
+  size = Math.max(size, enforcedMinimum);
+  if (font.widthOfTextAtSize(text, size) > maxWidthMm * MM_TO_PT + 0.01) {
+    throw timesheetError('TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED', {
+      section: 'horizontal_text_fit',
+      minimum_font_size: enforcedMinimum,
+      available_width_mm: maxWidthMm
+    });
   }
   return size;
 }
@@ -552,11 +633,14 @@ function drawWordingBlock(page, font, lines, x, top, width, size, lineHeight) {
 }
 
 export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
-  const layout = selectOfficialTimesheetOnePageLayout(model);
   const pdf = await PDFDocument.create();
-  const page = pdf.addPage([PAGE_WIDTH_MM * MM_TO_PT, PAGE_HEIGHT_MM * MM_TO_PT]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const minimumFontSize = Number(model?.layout?.minimum_font_size || 5.5);
+  FONT_MINIMUMS.set(regular, minimumFontSize);
+  FONT_MINIMUMS.set(bold, minimumFontSize);
+  const layout = await selectOfficialTimesheetOnePageLayout(model, { regular, bold });
+  const page = pdf.addPage([PAGE_WIDTH_MM * MM_TO_PT, PAGE_HEIGHT_MM * MM_TO_PT]);
   const logo = await embedImage(pdf, assets.logo || model?.branding?.logo);
   const candidateSignature = await embedImage(pdf, assets.candidate_signature || model?.signatures?.candidate);
   const authoriserSignature = await embedImage(pdf, assets.authoriser_signature || model?.signatures?.authoriser);
@@ -564,7 +648,6 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   const margin = layout.margin;
   const width = PAGE_WIDTH_MM - margin * 2;
   const right = margin + width;
-  const minimumFontSize = Number(model?.layout?.minimum_font_size || 5.5);
   const headerWordingStyle = configuredWordingStyle(
     model?.wording?.header, layout, minimumFontSize
   );
@@ -619,7 +702,11 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     ? additional.rows
     : [];
   const blankRows = additionalRows.length
-    ? Math.max(0, Number(additional.minimum_blank_space_rows || 0))
+    ? Math.max(
+      0,
+      Number(additional.minimum_blank_space_rows || 0),
+      Number(model?.layout?.minimum_additional_blank_rows || 0)
+    )
     : 0;
   const lineCount = scheduleLineCount(model);
   const headerWordingHeight = headerWrappedLines.length
@@ -672,6 +759,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   fillBox(page, margin, top, width, 0.8, CORPORATE_BLUE);
   let logoFit = null;
   const signatureFits = [];
+  const signaturePlacements = [];
   if (logo) logoFit = drawEmbeddedImage(page, logo, { x: margin + 0.5, top: top + 0.8, width: 10.5, height: 10.5 });
   drawText(page, bold, safeText(model?.branding?.agency_name || 'ARMS'),
     margin + 13, top + 2.3, 9, 86, CORPORATE_NAVY);
@@ -894,16 +982,16 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     drawText(page, regular, 'Signature', box.x + 2, top + declarationHeight - 2.5, layout.smallFont);
     drawLine(page, box.x + declarationWidth - 24, signatureLineTop, box.x + declarationWidth - 2, signatureLineTop);
     drawText(page, regular, `Date ${formatDmy(box.date)}`, box.x + declarationWidth - 24, top + declarationHeight - 6.2, layout.smallFont, 22);
-    // The transparent signature is deliberately drawn last. It behaves like ink
-    // placed on a completed paper form: no rule, label, date, or declaration text
-    // can be painted over the signature image.
     if (model.form_variant === 'ELECTRONIC_SIGNED' && box.signature) {
-      signatureFits.push(drawEmbeddedImage(page, box.signature, {
+      signaturePlacements.push({
+        image: box.signature,
+        box: {
         x: box.x + 2,
         top: signatureTop,
         width: declarationWidth - 32,
         height: layout.signatureOverlayHeight
-      }));
+        }
+      });
     }
   }
 
@@ -912,6 +1000,13 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       right, PAGE_HEIGHT_MM - margin - footerHeight + 0.8, 0.45, CORPORATE_NAVY);
     drawWordingBlock(page, regular, footerLines, margin, PAGE_HEIGHT_MM - margin - footerHeight + 2,
       width, footerWordingStyle.fontSize, footerWordingStyle.lineHeight);
+  }
+
+  // Signatures are the final page objects. They behave like ink placed on a
+  // completed form, so no date, label, rule, declaration text or border can be
+  // painted over them.
+  for (const placement of signaturePlacements) {
+    signatureFits.push(drawEmbeddedImage(page, placement.image, placement.box));
   }
 
   const bytes = new Uint8Array(await pdf.save({ useObjectStreams: false }));

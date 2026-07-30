@@ -1,0 +1,10 @@
+\set ON_ERROR_STOP on
+
+begin;
+
+\ir 23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql
+\ir 23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_invoice_document_invalidate.sql
+\ir 23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql
+\ir 23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql
+
+commit;

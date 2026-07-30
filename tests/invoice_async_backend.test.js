@@ -2862,11 +2862,15 @@ test('invoice save edits accepts the compact invoice_apply_edits result contract
   assert.match(handler, /id: manifest\.invoice_id/);
   assert.match(handler, /const invoice = manifest\.invoice \|\| manifest\.invoice_row \|\| compactInvoice/);
   assert.match(handler, /timesheet_location_updates/);
-  assert.match(handler, /manifest\.document_queue_requested === true/);
+  assert.match(handler, /INVOICE_SOURCE_EDIT_QUEUE_V1/);
+  assert.match(handler, /sourceEditQueueContract/);
   assert.match(handler, /manifest\.changed_timesheet_ids/);
   assert.match(handler, /SOURCE_EDIT_REPLACEMENT/);
   assert.match(handler, /timesheet-professional-v2/);
   assert.match(handler, /accepted_operations = \[\.\.\.accepted_operations, \.\.\.newlyAccepted\]/);
+  assert.match(handler, /result\.accepted !== true \|\| result\.blocked === true/);
+  assert.match(handler, /const activeAcceptedOperations = accepted_operations\.filter/);
+  assert.match(handler, /nudgeInvoiceOperations\(env, activeAcceptedOperations/);
   assert.match(handler, /nudgeInvoiceOperations[\s\S]*priorityClass: 'INTERACTIVE'/);
 });
 test('invoice mail preparation contains no legacy PDF rendering fallback', () => {

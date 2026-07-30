@@ -151,6 +151,122 @@ begin
       where n.timesheet_id is distinct from o.timesheet_id
     ) changed
     where timesheet_id is not null;
+
+    -- A source-edit transaction may synchronise only SEGMENTS.ref_num into the
+    -- current financial projection. Suppress that second invalidation solely
+    -- when every changed segment is an exact, unique copy of the authoritative
+    -- current timesheet schedule. Any ambiguity or any other TSFIN change keeps
+    -- the ordinary invalidation path.
+    v_timesheet_ids:=array(
+      select candidate_id
+      from unnest(v_timesheet_ids) candidate_id
+      where exists(
+        select 1
+        from new_rows n
+        join old_rows o on o.id=n.id
+        where (n.timesheet_id=candidate_id or o.timesheet_id=candidate_id)
+          and not (
+            (to_jsonb(n)-'invoice_breakdown_json'-'updated_at')
+              is not distinct from
+            (to_jsonb(o)-'invoice_breakdown_json'-'updated_at')
+            and n.id=o.id
+            and n.timesheet_id=o.timesheet_id
+            and n.is_current and o.is_current
+            and upper(coalesce(n.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+            and upper(coalesce(o.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+            and jsonb_typeof(n.invoice_breakdown_json->'segments')='array'
+            and jsonb_typeof(o.invoice_breakdown_json->'segments')='array'
+            and jsonb_array_length(n.invoice_breakdown_json->'segments')
+                =jsonb_array_length(o.invoice_breakdown_json->'segments')
+            and (
+              select coalesce(jsonb_agg(seg.value-'ref_num' order by seg.ord),'[]'::jsonb)
+              from jsonb_array_elements(n.invoice_breakdown_json->'segments')
+                with ordinality seg(value,ord)
+            ) is not distinct from (
+              select coalesce(jsonb_agg(seg.value-'ref_num' order by seg.ord),'[]'::jsonb)
+              from jsonb_array_elements(o.invoice_breakdown_json->'segments')
+                with ordinality seg(value,ord)
+            )
+            and not exists(
+              select 1
+              from jsonb_array_elements(n.invoice_breakdown_json->'segments')
+                with ordinality ns(value,ord)
+              join jsonb_array_elements(o.invoice_breakdown_json->'segments')
+                with ordinality os(value,ord) using(ord)
+              where nullif(btrim(coalesce(ns.value->>'ref_num','')),'')
+                      is distinct from
+                    nullif(btrim(coalesce(os.value->>'ref_num','')),'')
+                and not exists(
+                  select 1
+                  from public.timesheets ts
+                  where ts.timesheet_id=n.timesheet_id
+                    and ts.is_current
+                    and jsonb_typeof(ts.actual_schedule_json)='array'
+                    and (
+                      (
+                        nullif(btrim(coalesce(ns.value->>'segment_id','')),'') is not null
+                        and (
+                          select count(*)
+                          from jsonb_array_elements(ts.actual_schedule_json) sch(value)
+                          where nullif(btrim(coalesce(sch.value->>'segment_id','')),'')
+                            =nullif(btrim(coalesce(ns.value->>'segment_id','')),'')
+                        )=1
+                        and (
+                          select nullif(btrim(coalesce(sch.value->>'ref_num','')),'')
+                          from jsonb_array_elements(ts.actual_schedule_json) sch(value)
+                          where nullif(btrim(coalesce(sch.value->>'segment_id','')),'')
+                            =nullif(btrim(coalesce(ns.value->>'segment_id','')),'')
+                          limit 1
+                        ) is not distinct from
+                          nullif(btrim(coalesce(ns.value->>'ref_num','')),'')
+                      )
+                      or (
+                        (
+                          nullif(btrim(coalesce(ns.value->>'segment_id','')),'') is null
+                          or (
+                            select count(*)
+                            from jsonb_array_elements(ts.actual_schedule_json) sch(value)
+                            where nullif(btrim(coalesce(sch.value->>'segment_id','')),'')
+                              =nullif(btrim(coalesce(ns.value->>'segment_id','')),'')
+                          )=0
+                        )
+                        and nullif(btrim(coalesce(
+                          ns.value->>'start_utc',ns.value->>'start','')),'') is not null
+                        and nullif(btrim(coalesce(
+                          ns.value->>'end_utc',ns.value->>'end','')),'') is not null
+                        and (
+                          select count(*)
+                          from jsonb_array_elements(ts.actual_schedule_json) sch(value)
+                          where nullif(btrim(coalesce(
+                                  sch.value->>'start_utc',sch.value->>'start','')),'')
+                                =nullif(btrim(coalesce(
+                                  ns.value->>'start_utc',ns.value->>'start','')),'')
+                            and nullif(btrim(coalesce(
+                                  sch.value->>'end_utc',sch.value->>'end','')),'')
+                                =nullif(btrim(coalesce(
+                                  ns.value->>'end_utc',ns.value->>'end','')),'')
+                        )=1
+                        and (
+                          select nullif(btrim(coalesce(sch.value->>'ref_num','')),'')
+                          from jsonb_array_elements(ts.actual_schedule_json) sch(value)
+                          where nullif(btrim(coalesce(
+                                  sch.value->>'start_utc',sch.value->>'start','')),'')
+                                =nullif(btrim(coalesce(
+                                  ns.value->>'start_utc',ns.value->>'start','')),'')
+                            and nullif(btrim(coalesce(
+                                  sch.value->>'end_utc',sch.value->>'end','')),'')
+                                =nullif(btrim(coalesce(
+                                  ns.value->>'end_utc',ns.value->>'end','')),'')
+                          limit 1
+                        ) is not distinct from
+                          nullif(btrim(coalesce(ns.value->>'ref_num','')),'')
+                      )
+                    )
+                )
+            )
+          )
+      )
+    );
   elsif tg_table_name='timesheet_evidence' and tg_op='INSERT' then
     select coalesce(array_agg(distinct timesheet_id),array[]::uuid[])
     into v_timesheet_ids from new_rows;
@@ -226,7 +342,18 @@ begin
   into v_invoice_ids
   from public.invoice_lines l
   join public.invoices i on i.id=l.invoice_id
-  where l.timesheet_id=any(v_timesheet_ids) and i.status='DRAFT';
+  where (
+      l.timesheet_id=any(v_timesheet_ids)
+      or (
+        l.timesheet_id is null
+        and coalesce(l.meta_json->>'timesheet_id','') ~
+          '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        and (l.meta_json->>'timesheet_id')::uuid=any(v_timesheet_ids)
+      )
+    )
+    and i.status in('DRAFT','ON_HOLD')
+    and i.issued_at_utc is null
+    and i.paid_at_utc is null;
 
   if cardinality(v_invoice_ids)>0 then
     update public.invoices i

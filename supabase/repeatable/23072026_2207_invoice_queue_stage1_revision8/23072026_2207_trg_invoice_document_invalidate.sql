@@ -15,7 +15,11 @@ begin
   if tg_table_name='invoices' and tg_op='UPDATE' then
     select coalesce(array_agg(distinct n.id),array[]::uuid[]) into v_invoice_ids
     from new_rows n join old_rows o on o.id=n.id
-    where n.status='DRAFT' and o.status='DRAFT' and(
+    where n.status in('DRAFT','ON_HOLD')
+      and o.status in('DRAFT','ON_HOLD')
+      and n.issued_at_utc is null and o.issued_at_utc is null
+      and n.paid_at_utc is null and o.paid_at_utc is null
+      and(
        n.client_id is distinct from o.client_id
        or n.invoice_no is distinct from o.invoice_no
        or n.type is distinct from o.type
@@ -61,7 +65,47 @@ begin
          or n.vat_amount is distinct from o.vat_amount
          or n.total_inc_vat is distinct from o.total_inc_vat
          or n.margin_ex_vat is distinct from o.margin_ex_vat
-         or n.meta_json is distinct from o.meta_json
+         or (
+           n.meta_json is distinct from o.meta_json
+           and not exists(
+             select 1
+             from public.timesheets ts
+             cross join lateral (
+               select coalesce(jsonb_agg(to_jsonb(ref_value) order by ref_value),'[]'::jsonb) refs
+               from (
+                 select nullif(btrim(coalesce(ts.reference_number,'')),'') ref_value
+                 union
+                 select nullif(btrim(value),'')
+                 from jsonb_each_text(coalesce(ts.day_references_json,'{}'::jsonb))
+                 union
+                 select nullif(btrim(coalesce(seg->>'ref_num','')),'')
+                 from jsonb_array_elements(coalesce(ts.actual_schedule_json,'[]'::jsonb)) seg
+               ) canonical_refs
+               where ref_value is not null
+             ) calculated
+             where ts.is_current
+               and ts.timesheet_id=coalesce(
+                 n.timesheet_id,
+                 case when coalesce(n.meta_json->>'timesheet_id','') ~
+                   '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                   then (n.meta_json->>'timesheet_id')::uuid end)
+               and (
+                 n.timesheet_id is null
+                 or not (coalesce(n.meta_json->>'timesheet_id','') ~
+                   '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+                 or (n.meta_json->>'timesheet_id')::uuid=n.timesheet_id)
+               and (coalesce(n.meta_json,'{}'::jsonb)
+                     -'ts_reference_number'-'schedule_ref_nums'-'schedule_ref_count')
+                   is not distinct from
+                   (coalesce(o.meta_json,'{}'::jsonb)
+                     -'ts_reference_number'-'schedule_ref_nums'-'schedule_ref_count')
+               and n.meta_json->'ts_reference_number' is not distinct from
+                 coalesce(to_jsonb(nullif(btrim(coalesce(ts.reference_number,'')),'')),'null'::jsonb)
+               and n.meta_json->'schedule_ref_nums' is not distinct from calculated.refs
+               and n.meta_json->'schedule_ref_count' is not distinct from
+                 to_jsonb(jsonb_array_length(calculated.refs))
+           )
+         )
       union
       select o.invoice_id from old_rows o join new_rows n on n.id=o.id
       where n.invoice_id is distinct from o.invoice_id
@@ -90,7 +134,47 @@ begin
          or n.vat_amount is distinct from o.vat_amount
          or n.total_inc_vat is distinct from o.total_inc_vat
          or n.margin_ex_vat is distinct from o.margin_ex_vat
-         or n.meta_json is distinct from o.meta_json
+         or (
+           n.meta_json is distinct from o.meta_json
+           and not exists(
+             select 1
+             from public.timesheets ts
+             cross join lateral (
+               select coalesce(jsonb_agg(to_jsonb(ref_value) order by ref_value),'[]'::jsonb) refs
+               from (
+                 select nullif(btrim(coalesce(ts.reference_number,'')),'') ref_value
+                 union
+                 select nullif(btrim(value),'')
+                 from jsonb_each_text(coalesce(ts.day_references_json,'{}'::jsonb))
+                 union
+                 select nullif(btrim(coalesce(seg->>'ref_num','')),'')
+                 from jsonb_array_elements(coalesce(ts.actual_schedule_json,'[]'::jsonb)) seg
+               ) canonical_refs
+               where ref_value is not null
+             ) calculated
+             where ts.is_current
+               and ts.timesheet_id=coalesce(
+                 n.timesheet_id,
+                 case when coalesce(n.meta_json->>'timesheet_id','') ~
+                   '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                   then (n.meta_json->>'timesheet_id')::uuid end)
+               and (
+                 n.timesheet_id is null
+                 or not (coalesce(n.meta_json->>'timesheet_id','') ~
+                   '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+                 or (n.meta_json->>'timesheet_id')::uuid=n.timesheet_id)
+               and (coalesce(n.meta_json,'{}'::jsonb)
+                     -'ts_reference_number'-'schedule_ref_nums'-'schedule_ref_count')
+                   is not distinct from
+                   (coalesce(o.meta_json,'{}'::jsonb)
+                     -'ts_reference_number'-'schedule_ref_nums'-'schedule_ref_count')
+               and n.meta_json->'ts_reference_number' is not distinct from
+                 coalesce(to_jsonb(nullif(btrim(coalesce(ts.reference_number,'')),'')),'null'::jsonb)
+               and n.meta_json->'schedule_ref_nums' is not distinct from calculated.refs
+               and n.meta_json->'schedule_ref_count' is not distinct from
+                 to_jsonb(jsonb_array_length(calculated.refs))
+           )
+         )
     ) s;
   elsif tg_table_name='invoice_hr_source_rows' and tg_op='INSERT' then
     select coalesce(array_agg(distinct invoice_id),array[]::uuid[]) into v_invoice_ids from new_rows;
@@ -113,7 +197,10 @@ begin
 
   select coalesce(array_agg(i.id),array[]::uuid[]) into v_invoice_ids
   from public.invoices i
-  where i.id=any(v_invoice_ids) and i.status='DRAFT';
+  where i.id=any(v_invoice_ids)
+    and i.status in('DRAFT','ON_HOLD')
+    and i.issued_at_utc is null
+    and i.paid_at_utc is null;
   if cardinality(v_invoice_ids)=0 then return null; end if;
 
   update public.invoices i set document_revision=i.document_revision+1,
@@ -121,7 +208,10 @@ begin
     invoice_pdf_r2_key=null,invoice_pdf_generated_at_utc=null,
     issue_state=case when i.issue_state in ('VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE')
       then 'SUPERSEDED' else i.issue_state end,last_document_error_json=null
-  where i.id=any(v_invoice_ids) and i.status='DRAFT';
+  where i.id=any(v_invoice_ids)
+    and i.status in('DRAFT','ON_HOLD')
+    and i.issued_at_utc is null
+    and i.paid_at_utc is null;
 
   with changed as materialized (
     update public.invoice_document_versions v

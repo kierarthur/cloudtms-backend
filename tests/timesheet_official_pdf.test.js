@@ -326,7 +326,7 @@ test('dense supported form selects a readable compact mode without omitting rows
     frequency: index % 2 ? 'WEEKLY' : 'PER_DAY'
   }));
   validateFrozenTimesheetPresentationModel(model);
-  const layout = selectOfficialTimesheetOnePageLayout(model);
+  const layout = await selectOfficialTimesheetOnePageLayout(model);
   assert.ok(['COMPACT', 'ULTRA'].includes(layout.name));
   const rendered = await renderOfficialTimesheetPdfBytes(model);
   assert.equal(rendered.page_count, 1);
@@ -336,7 +336,7 @@ test('dense supported form selects a readable compact mode without omitting rows
   assert.equal(rendered.render_receipt.page_fill_verified, true);
 });
 
-test('impossible one-page fixture fails instead of truncating or spilling', () => {
+test('impossible one-page fixture fails instead of truncating or spilling', async () => {
   const model = fixture();
   model.additional_units_section.visible = true;
   model.additional_units_section.rows = Array.from({ length: 80 }, (_, index) => ({
@@ -349,8 +349,8 @@ test('impossible one-page fixture fails instead of truncating or spilling', () =
     unit: 'unit',
     frequency: 'WEEKLY'
   }));
-  assert.throws(
-    () => selectOfficialTimesheetOnePageLayout(model),
+  await assert.rejects(
+    selectOfficialTimesheetOnePageLayout(model),
     error => error?.code === 'TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED'
   );
 });
