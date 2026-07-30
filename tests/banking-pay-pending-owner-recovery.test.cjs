@@ -8,13 +8,68 @@ const repeatable = (name) => fs.readFileSync(
   'utf8'
 );
 
+const extractFunction = (source, name) => {
+  const startPattern = new RegExp(
+    `^CREATE OR REPLACE FUNCTION public\\.${name}\\s*\\(`,
+    'm'
+  );
+  const match = startPattern.exec(source);
+  assert.ok(match, `${name} must have a canonical definition`);
+  const tail = source.slice(match.index);
+  const endMatch = /\r?\n\$function\$;/.exec(tail);
+  assert.ok(endMatch, `${name} must have a complete function delimiter`);
+  return tail.slice(0, endMatch.index + endMatch[0].length);
+};
+
+const listSqlFiles = (directory) => fs.readdirSync(directory, { withFileTypes: true })
+  .flatMap((entry) => {
+    const fullPath = path.join(directory, entry.name);
+    return entry.isDirectory()
+      ? listSqlFiles(fullPath)
+      : (entry.isFile() && entry.name.endsWith('.sql') ? [fullPath] : []);
+  });
+
+const canonicalBundleSql = repeatable('26052026_2100HRS_NEW_FUNCTIONS.sql');
 const repairSql = repeatable('30072026_1310_pay_workbench_repair_orphaned_pending_source_build.sql');
-const claimSql = repeatable('30072026_1310_pay_workbench_claim_due_orphan_repair.sql');
-const failSql = repeatable('30072026_1310_pay_workbench_fail_job_owner_cleanup.sql');
-const drainSql = repeatable('30072026_1310_pay_workbench_worker_drain_fallback.sql');
-const progressSql = repeatable('30072026_1310_pay_workbench_progress_owner_awareness.sql');
-const recomputeSql = repeatable('30072026_1310_pay_workbench_recompute_owner_awareness.sql');
+const claimSql = extractFunction(canonicalBundleSql, 'pay_workbench_claim_due_jobs');
+const failSql = extractFunction(canonicalBundleSql, 'pay_workbench_fail_job');
+const drainSql = extractFunction(canonicalBundleSql, 'pay_workbench_worker_drain_chunk');
+const progressSql = extractFunction(canonicalBundleSql, 'pay_workbench_session_get_progress_light');
+const recomputeSql = extractFunction(canonicalBundleSql, 'pay_workbench_session_recompute_progress_counters');
 const workerSource = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
+const affectedFunctions = [
+  'pay_workbench_repair_orphaned_pending_source_build',
+  'pay_workbench_claim_due_jobs',
+  'pay_workbench_fail_job',
+  'pay_workbench_worker_drain_chunk',
+  'pay_workbench_session_get_progress_light',
+  'pay_workbench_session_recompute_progress_counters'
+];
+
+test('each affected function has exactly one latest definition across migrations and repeatables', () => {
+  const sqlFiles = [
+    ...listSqlFiles(path.resolve(__dirname, '../supabase/migrations')),
+    ...listSqlFiles(path.resolve(__dirname, '../supabase/repeatable'))
+  ];
+  for (const functionName of affectedFunctions) {
+    const pattern = new RegExp(
+      `CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${functionName}\\s*\\(`,
+      'gi'
+    );
+    const definitions = sqlFiles.flatMap((file) => {
+      const source = fs.readFileSync(file, 'utf8');
+      return [...source.matchAll(pattern)].map(() => path.relative(
+        path.resolve(__dirname, '..'),
+        file
+      ));
+    });
+    assert.deepEqual(
+      definitions.length,
+      1,
+      `${functionName} must have exactly one definition, found: ${definitions.join(', ')}`
+    );
+  }
+});
 
 test('claiming invokes the bounded owner repair without changing canonical enqueue authority', () => {
   assert.match(claimSql, /pay_workbench_repair_orphaned_pending_source_build/);
