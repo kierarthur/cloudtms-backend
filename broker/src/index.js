@@ -12817,6 +12817,10 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     WORKBENCH_RESOLUTION_ANCHOR_FINANCIAL_BOUNDARY: {
       title: 'Payment details changed',
       message: 'This timesheet is now included in a payment batch, so its resolved rate cannot be changed. Refresh Banking Pay to review the latest payment details.'
+    },
+    WORKBENCH_SESSION_PROGRESS_CHANGED: {
+      title: 'Payment preview updated',
+      message: 'The payment preview changed while this decision was open. Close this window, refresh Banking Pay, and review the latest values before trying again.'
     }
   });
   const extractKnownCaseResolutionConflictCode = (errorInput) => {
@@ -13330,11 +13334,26 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
         current_session_version: Number(sessionRow.version) || null
       });
     }
-    if (Number(sessionRow.progress_counter_version ?? 0) !== expectedProgressCounterVersion) {
-      return buildFriendlyFailure(409, { code: 'WORKBENCH_SESSION_PROGRESS_CHANGED' }, {}, {
-        expected_progress_counter_version: expectedProgressCounterVersion,
-        current_progress_counter_version: Number(sessionRow.progress_counter_version ?? 0)
-      });
+    const currentProgressCounterVersion = Number(
+      sessionRow.progress_counter_version ?? 0
+    );
+    if (currentProgressCounterVersion !== expectedProgressCounterVersion) {
+      if (operation === 'DISCOVER') {
+        /*
+         * DISCOVER is read-only. Rebind it to the current progress fence and
+         * let the row-backed source fingerprint checks below decide whether
+         * the displayed component is still current. APPLY remains strictly
+         * fenced to the version the user reviewed.
+         */
+        resolutionPayloadJson = {
+          ...resolutionPayloadJson,
+          expected_progress_counter_version: currentProgressCounterVersion
+        };
+      } else {
+        return buildKnownCaseResolutionConflict(
+          'WORKBENCH_SESSION_PROGRESS_CHANGED'
+        );
+      }
     }
 
     const rpcRes = await sbRpc(env, 'pay_workbench_session_apply_case_resolution', {
@@ -14060,6 +14079,18 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
 
     return withCORS(env, req, ok(responsePayload));
   } catch (e) {
+    const clearErrorText = String(
+      e?.message ||
+      e?.details ||
+      e ||
+      ''
+    ).toUpperCase();
+    if (clearErrorText.includes('CORRECTION_COMPONENT_REQUIRED_FOR_CASE_RESOLUTION')) {
+      return buildFriendlyFailure(409, {
+        code: 'WORKBENCH_RESOLUTION_SCOPE_CHANGED',
+        message: 'The resolved-rate details changed after this window opened.'
+      });
+    }
     return buildFriendlyFailure(500, e);
   }
 }
