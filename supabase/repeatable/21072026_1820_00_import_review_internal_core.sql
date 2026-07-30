@@ -361,10 +361,40 @@ declare
   v_paid boolean:=false;
   v_invoice_locked boolean:=false;
   v_processing_status text;
+  v_correction_root_id uuid;
+  v_correction_family_ids uuid[];
 begin
   if p_timesheet_id is null then
     return jsonb_build_object('active_pay_draft',false,'paid',false,'invoice_locked',false,'protected',false);
   end if;
+
+  with recursive correction_ancestry as (
+    select
+      t.timesheet_id,
+      t.parent_timesheet_id,
+      array[t.timesheet_id]::uuid[] as visited_ids,
+      0 as depth
+    from public.timesheets t
+    where t.timesheet_id=p_timesheet_id
+    union all
+    select
+      parent_timesheet.timesheet_id,
+      parent_timesheet.parent_timesheet_id,
+      correction_ancestry.visited_ids||parent_timesheet.timesheet_id,
+      correction_ancestry.depth+1
+    from correction_ancestry
+    join public.timesheets parent_timesheet
+      on parent_timesheet.timesheet_id=correction_ancestry.parent_timesheet_id
+    where correction_ancestry.depth<64
+      and not parent_timesheet.timesheet_id=any(correction_ancestry.visited_ids)
+  )
+  select
+    coalesce(array_agg(correction_ancestry.timesheet_id order by correction_ancestry.depth),array[p_timesheet_id]::uuid[]),
+    (array_agg(correction_ancestry.timesheet_id order by correction_ancestry.depth desc))[1]
+  into v_correction_family_ids,v_correction_root_id
+  from correction_ancestry;
+  v_correction_family_ids:=coalesce(v_correction_family_ids,array[p_timesheet_id]::uuid[]);
+  v_correction_root_id:=coalesce(v_correction_root_id,p_timesheet_id);
 
   select coalesce(tf.paid_at_utc is not null,false),
          coalesce(tf.locked_by_invoice_id is not null,false),
@@ -374,6 +404,29 @@ begin
   where tf.timesheet_id=p_timesheet_id and tf.is_current=true
   order by tf.updated_at desc nulls last
   limit 1;
+
+  -- Banking Pay settlement is recorded in frozen batch artifacts and the
+  -- canonical pay-state cache; it does not rewrite the legacy TSFIN paid marker.
+  -- Treat a settled, non-voided batch item anywhere in the correction family
+  -- as paid evidence so imports cannot amend a CSV/provider-settled replacement
+  -- in place. Frozen delta items are intentionally rooted at the original
+  -- timesheet, not at the replacement member that contributed the delta.
+  v_paid := coalesce(v_paid,false) or exists (
+    select 1
+    from public.pay_batch_items settled_item
+    join public.pay_batch_candidates settled_candidate
+      on settled_candidate.id=settled_item.pay_batch_candidate_id
+    where (
+        settled_item.timesheet_id=any(v_correction_family_ids)
+        or settled_item.frozen_component_snapshot_json->>'correction_root_id'=any(v_correction_family_ids::text[])
+        or settled_item.frozen_resolution_payload_json->>'correction_root_id'=any(v_correction_family_ids::text[])
+      )
+      and coalesce(settled_item.is_voided,false)=false
+      and (
+        upper(btrim(coalesce(settled_candidate.settlement_status,'')))='SETTLED'
+        or settled_candidate.settled_at_utc is not null
+      )
+  );
 
   -- Once any invoice line exists, the timesheet must not be amended in place.
   -- This applies equally to draft, unissued, issued and paid invoices: every

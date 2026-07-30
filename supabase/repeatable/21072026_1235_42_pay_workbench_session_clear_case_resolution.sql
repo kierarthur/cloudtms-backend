@@ -79,7 +79,6 @@ DECLARE
   v_stale_batch_item_ids jsonb := '[]'::jsonb;
   v_stale_batch_touch_json jsonb := '{}'::jsonb;
 BEGIN
-  p_resolution_payload_json:=public._ctms_enrich_correction_resolution_payload_v1(p_session_id,p_resolution_payload_json);
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
   END IF;

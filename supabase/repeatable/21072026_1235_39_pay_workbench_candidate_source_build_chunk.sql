@@ -971,8 +971,9 @@ BEGIN
      *
      * Never accept a bare historic completion marker. Reuse is permitted only
      * when every immutable run/economic boundary below matches exactly. A
-     * missing or stale marker fails closed so a fresh source-build run can be
-     * queued; it never silently skips reconciliation.
+     * missing or stale marker fails closed to the continuation and restarts
+     * the same bounded run at its first page; it never silently skips
+     * reconciliation.
      */
     IF COALESCE(v_old_sync_marker, '{}'::jsonb) = '{}'::jsonb
        OR LOWER(BTRIM(COALESCE(v_old_sync_marker->>'completed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -994,17 +995,26 @@ BEGIN
        OR UPPER(BTRIM(COALESCE(v_old_sync_marker->>'refresh_scope_kind', ''))) IS DISTINCT FROM v_requested_refresh_scope_kind
        OR UPPER(BTRIM(COALESCE(v_old_sync_marker->>'policy_x_authority_scope', ''))) <> 'PRE_DRAFT_LIVE_TRUTH'
        OR jsonb_typeof(v_old_sync_marker->'scope_timesheet_ids') IS DISTINCT FROM 'array' THEN
-      RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_STALE'
-        USING ERRCODE = 'P0001',
-              DETAIL = jsonb_build_object(
-                'code', 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_STALE',
-                'session_id', p_session_id::text,
-                'candidate_id', p_candidate_id::text,
-                'session_version', v_session_version,
-                'source_change_seq', v_source_change_seq,
-                'source_build_run_id', v_source_build_run_id::text,
-                'message', 'The source-build continuation no longer matches its durable first-page reconciliation attestation. Start a fresh candidate source-build run.'
-              )::text;
+      /*
+       * The marker can be absent when the first page completed its economic
+       * work while the optional NOWAIT session-progress write was contended.
+       * Re-enter with an empty cursor so this same stable run re-attests from
+       * live pre-draft truth. The first-page persistence fence below will roll
+       * the transaction back for the normal durable retry if contention
+       * remains.
+       */
+      RETURN public.pay_workbench_candidate_source_build_chunk(
+        p_session_id,
+        p_candidate_id,
+        '{}'::jsonb,
+        v_payload_json
+          || jsonb_build_object(
+            'continuation_attestation_restart', true,
+            'continuation_attestation_restart_at_utc',
+              clock_timestamp()::text
+          ),
+        v_limit
+      );
     END IF;
 
     SELECT COALESCE(
@@ -4498,6 +4508,34 @@ BEGIN
   END;
 
   v_session_progress_update_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_diag_phase_started_at)) * 1000.0)::numeric, 3);
+
+  /*
+   * A continuation is authorised only by the first page's durable
+   * reconciliation attestation.  If the optional NOWAIT progress update could
+   * not persist that marker, returning has_more=true would enqueue a
+   * continuation that can never pass its attestation fence.  Roll the page
+   * back and let the normal job retry rerun the first page after contention.
+   */
+  IF COALESCE(v_first_source_page, true)
+     AND COALESCE(v_has_more, false)
+     AND COALESCE(v_sync_completed, false)
+     AND COALESCE(v_session_progress_update_applied, false) IS NOT TRUE THEN
+    RAISE EXCEPTION
+      'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_ATTESTATION_PERSIST_DEFERRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code',
+                'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_ATTESTATION_PERSIST_DEFERRED',
+              'session_id', p_session_id::text,
+              'candidate_id', p_candidate_id::text,
+              'session_version', v_session_version,
+              'source_change_seq', v_source_change_seq,
+              'source_build_run_id', v_source_build_run_id::text,
+              'retry_safe', true,
+              'message',
+                'The first source page could not persist its continuation attestation because the session progress row was busy. The page was rolled back for a safe retry.'
+            )::text;
+  END IF;
 
   v_total_elapsed_ms := round((extract(epoch from (clock_timestamp() - v_started_at_utc)) * 1000.0)::numeric, 3);
   v_residual_elapsed_ms := round(GREATEST(COALESCE(v_total_elapsed_ms, 0) - COALESCE(v_collect_elapsed_ms, 0) - COALESCE(v_canonical_elapsed_ms, 0), 0), 3);

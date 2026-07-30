@@ -417,13 +417,23 @@ begin
     raise exception 'CORRECTION_POLICY_CLIENT_SETTINGS_MISSING' using errcode = 'P0001';
   end if;
 
-  if not (
-    coalesce(v_settings.is_nhsp, false)
-    or (
-      coalesce(v_settings.requires_hr, false)
-      and coalesce(v_settings.no_timesheet_required, false)
-    )
-  ) then
+  -- Use the same contract-aware authority resolver as staging, review and
+  -- final apply.  A contract override must not preview as authoritative and
+  -- then be rejected here by a client-settings-only predicate.
+  if not coalesce((
+    select authority.import_authoritative
+    from public._import_review_effective_authority_core_v1(
+      case
+        when upper(btrim(coalesce(v_shift.source_system::text,'')))='NHSP'
+          then 'NHSP'
+        else 'HEALTHROSTER'
+      end,
+      v_root_contract_id,
+      v_client.id,
+      v_shift.work_date
+    ) authority
+    limit 1
+  ),false) then
     raise exception 'CORRECTION_POLICY_CLIENT_NOT_IMPORT_AUTHORITATIVE'
       using errcode = '22023',
             detail = jsonb_build_object('client_id', v_client.id)::text;

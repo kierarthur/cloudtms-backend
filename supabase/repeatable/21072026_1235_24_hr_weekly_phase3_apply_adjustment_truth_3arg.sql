@@ -722,7 +722,11 @@ begin
 
       v_existing_pos_is_invoiced :=
         (v_existing_pos_tf_locked_by_invoice_id is not null)
-        or (v_existing_pos_seg_invoice_id is not null);
+        or (v_existing_pos_seg_invoice_id is not null)
+        or coalesce((
+          public._import_review_timesheet_protection_core_v1(v_existing_pos_ts_id)
+            ->>'paid'
+        )::boolean,false);
 
       v_existing_pos_seg := null;
       if v_existing_pos_schedule is not null and jsonb_typeof(v_existing_pos_schedule) = 'array' then
@@ -813,7 +817,11 @@ begin
 
       v_existing_neg_is_invoiced :=
         (v_existing_neg_tf_locked_by_invoice_id is not null)
-        or (v_existing_neg_seg_invoice_id is not null);
+        or (v_existing_neg_seg_invoice_id is not null)
+        or coalesce((
+          public._import_review_timesheet_protection_core_v1(v_existing_neg_ts_id)
+            ->>'paid'
+        )::boolean,false);
     end if;
 
     -- Policy X retained-history rule: never delete an existing correction pair.
@@ -897,6 +905,10 @@ begin
             pair_ts.authorised_at_server is not null
             or pair_tf.authorised_at_utc is not null
             or pair_tf.paid_at_utc is not null
+            or coalesce((
+              public._import_review_timesheet_protection_core_v1(pair_ts.timesheet_id)
+                ->>'paid'
+            )::boolean,false)
             or pair_tf.locked_by_invoice_id is not null
             or exists (select 1 from public.invoice_lines il where il.timesheet_id=pair_ts.timesheet_id)
           )

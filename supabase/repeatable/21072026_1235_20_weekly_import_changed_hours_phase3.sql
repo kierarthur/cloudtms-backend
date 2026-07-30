@@ -125,6 +125,21 @@ begin
       tf.policy_snapshot_json,
       tf.pay_day, tf.pay_night, tf.pay_sat, tf.pay_sun, tf.pay_bh,
       tf.charge_day, tf.charge_night, tf.charge_sat, tf.charge_sun, tf.charge_bh,
+      (
+        tf.paid_at_utc is not null
+        or exists (
+          select 1
+          from public.pay_batch_items settled_item
+          join public.pay_batch_candidates settled_candidate
+            on settled_candidate.id = settled_item.pay_batch_candidate_id
+          where settled_item.timesheet_id = m.timesheet_id
+            and coalesce(settled_item.is_voided, false) = false
+            and (
+              upper(btrim(coalesce(settled_candidate.settlement_status, ''))) = 'SETTLED'
+              or settled_candidate.settled_at_utc is not null
+            )
+        )
+      ) as has_paid_evidence,
       invoice_line.invoice_id as invoice_line_invoice_id,
       chain_scope.chain_json as correction_chain_json
     from matched m
@@ -268,7 +283,7 @@ begin
         )
       ) as is_changed_hours,
 
-      (a.paid_at_utc is not null) as is_paid,
+      a.has_paid_evidence as is_paid,
 
       (
         a.seg_invoice_id is not null
@@ -294,7 +309,7 @@ begin
       case when a.new_charge_ex is null or a.old_charge_ex is null then null else round(a.new_charge_ex - a.old_charge_ex, 2) end as delta_charge_ex,
 
       (
-        (a.paid_at_utc is not null)
+        a.has_paid_evidence
         and (
           a.shift_id is not null
           and (
@@ -325,7 +340,7 @@ begin
       (
         (
           (
-            (a.paid_at_utc is not null)
+            a.has_paid_evidence
             or
             (
               a.seg_invoice_id is not null

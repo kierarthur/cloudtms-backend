@@ -267,6 +267,15 @@ BEGIN
             )::text;
   END IF;
 
+  -- DISCOVER is read-only and revalidates the row-backed component identity
+  -- below. Bind it to the progress version read in this same statement so
+  -- unrelated background materialisation cannot create a check/use race.
+  -- APPLY retains the caller's reviewed progress fence unchanged.
+  IF v_operation = 'DISCOVER' THEN
+    v_expected_progress_counter_version :=
+      COALESCE(v_session_row.progress_counter_version, 0);
+  END IF;
+
   IF COALESCE(v_session_row.progress_counter_version, 0) IS DISTINCT FROM v_expected_progress_counter_version THEN
     RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CHANGED'
       USING ERRCODE = 'P0001',
@@ -2216,17 +2225,7 @@ BEGIN
       source_bucket_ordinal
     )
     SELECT
-      concat_ws(
-        '|',
-        'BUCKETED',
-        COALESCE(NULLIF(component_evidence.case_key, ''), '~'),
-        component_evidence.timesheet_id::text,
-        COALESCE(NULLIF(component_evidence.source_basis_fingerprint, ''), '~'),
-        COALESCE(NULLIF(component_evidence.source_family_key, ''), '~'),
-        COALESCE(NULLIF(component_evidence.bucket_code, ''), '~'),
-        COALESCE(NULLIF(component_evidence.component_key_type, ''), '~'),
-        COALESCE(NULLIF(component_evidence.component_key_value, ''), '~')
-      ),
+      input_bucket.resolution_identity_key,
       component_evidence.candidate_id,
       component_evidence.case_key,
       component_evidence.timesheet_id,
@@ -2304,17 +2303,32 @@ BEGIN
         source_bucket_ordinal
       )
       SELECT
-        concat_ws(
-          '|',
-          'BUCKETED',
-          COALESCE(NULLIF(component_evidence.case_key, ''), '~'),
-          component_evidence.timesheet_id::text,
-          COALESCE(NULLIF(component_evidence.source_basis_fingerprint, ''), '~'),
-          COALESCE(NULLIF(component_evidence.source_family_key, ''), '~'),
-          COALESCE(NULLIF(component_evidence.bucket_code, ''), '~'),
-          COALESCE(NULLIF(component_evidence.component_key_type, ''), '~'),
-          COALESCE(NULLIF(component_evidence.component_key_value, ''), '~')
-        ),
+        CASE
+          WHEN component_evidence.source_family_key LIKE 'correction-chain:%'
+          THEN public._ctms_correction_carrier_identity_v1(
+            component_evidence.candidate_id,
+            NULLIF(
+              BTRIM(COALESCE(
+                component_evidence.component_state_json->>'correction_root_id',
+                ''
+              )),
+              ''
+            )::uuid,
+            component_evidence.component_key_type,
+            component_evidence.component_key_value
+          )
+          ELSE concat_ws(
+            '|',
+            'BUCKETED',
+            COALESCE(NULLIF(component_evidence.case_key, ''), '~'),
+            component_evidence.timesheet_id::text,
+            COALESCE(NULLIF(component_evidence.source_basis_fingerprint, ''), '~'),
+            COALESCE(NULLIF(component_evidence.source_family_key, ''), '~'),
+            COALESCE(NULLIF(component_evidence.bucket_code, ''), '~'),
+            COALESCE(NULLIF(component_evidence.component_key_type, ''), '~'),
+            COALESCE(NULLIF(component_evidence.component_key_value, ''), '~')
+          )
+        END,
         component_evidence.candidate_id,
         component_evidence.case_key,
         component_evidence.timesheet_id,

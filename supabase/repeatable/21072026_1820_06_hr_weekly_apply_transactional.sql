@@ -42,6 +42,7 @@ declare
   -- changed-hours partition (selected keys only, MODE_B)
   v_invoiced_changed_keys text[] := array[]::text[];
   v_not_invoiced_changed_keys text[] := array[]::text[];
+  v_protected_source_timesheet_ids uuid[] := array[]::uuid[];
   v_force_keys_non_invoiced text[] := array[]::text[];
 
   v_phase3_result jsonb := null;
@@ -600,12 +601,14 @@ begin
     select coalesce(array_agg(cs.external_row_key order by cs.external_row_key), array[]::text[])
     into v_invoiced_changed_keys
     from tmp_changed_sel cs
-    where cs.is_invoiced is true;
+    where cs.is_invoiced is true
+       or cs.is_paid is true;
 
     select coalesce(array_agg(cs.external_row_key order by cs.external_row_key), array[]::text[])
     into v_not_invoiced_changed_keys
     from tmp_changed_sel cs
-    where cs.is_invoiced is false;
+    where cs.is_invoiced is false
+      and cs.is_paid is false;
 
     v_invoiced_changed_keys_count := coalesce(array_length(v_invoiced_changed_keys, 1), 0);
     v_not_invoiced_changed_keys_count := coalesce(array_length(v_not_invoiced_changed_keys, 1), 0);
@@ -614,6 +617,12 @@ begin
       into v_changed_timesheet_ids
     from tmp_changed_sel cs
     where cs.timesheet_id is not null;
+
+    select coalesce(array_agg(distinct cs.timesheet_id order by cs.timesheet_id),array[]::uuid[])
+      into v_protected_source_timesheet_ids
+    from tmp_changed_sel cs
+    where cs.timesheet_id is not null
+      and (cs.is_invoiced is true or cs.is_paid is true);
 
     if coalesce(array_length(v_changed_timesheet_ids, 1), 0) > 0 then
       select public.import_timesheet_financial_preflight_v1(
@@ -2276,6 +2285,16 @@ begin
       and ns.client_id=v_import_client_id
       and ns.cancelled_at_utc is null
       and ns.external_row_key=any(coalesce(v_force_keys_final,array[]::text[]))
+      -- Protected changed-hours rows are represented financially by their
+      -- immutable reversal/replacement pair.  The source shift remains linked
+      -- to the root for import identity, but refreshing that settled root as
+      -- well would count the same delta twice in the correction-chain
+      -- residual (live root truth plus the signed pair).
+      and not (
+        ns.external_row_key=any(
+          coalesce(v_invoiced_changed_keys,array[]::text[])
+        )
+      )
       and ns.timesheet_id is not null
     union all
     select phase3_created.value::uuid
@@ -2326,7 +2345,17 @@ begin
   select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
   into v_affected_timesheet_ids
   from tmp_aff_ts a
-  where a.timesheet_id is not null;
+  where a.timesheet_id is not null
+    -- A protected source is immutable financial history. It can enter the
+    -- generic affected set through MODE_A validation/reference bookkeeping
+    -- even though the authoritative MODE_B scope above correctly selected
+    -- only the new correction pair. Never let that bookkeeping requeue the
+    -- settled root for TSFIN recalculation.
+    and not (
+      a.timesheet_id=any(
+        coalesce(v_protected_source_timesheet_ids,array[]::uuid[])
+      )
+    );
 
   -- Restore every previously-authorised mutable source and authorise every
   -- financial correction member regardless of the ordinary setting.  A

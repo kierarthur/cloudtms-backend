@@ -845,6 +845,8 @@ declare
   v_suggestion_target_ex numeric;
   v_suggestion_target_vat numeric;
   v_suggestion_target_inc numeric;
+  v_suggestion_matching_bucket_count integer := 0;
+  v_has_suggested_resolution boolean := false;
   v_member_ids uuid[];
   v_carrier_row_ids uuid[];
   v_root_id uuid;
@@ -1021,6 +1023,11 @@ begin
     end if;
 
     for v_component in select value from jsonb_array_elements(v_residual->'components') loop
+      v_suggested_component:=null;
+      v_suggestion_payload:=null;
+      v_suggestion_result:=null;
+      v_suggestion_current_basis:=null;
+      v_has_suggested_resolution:=false;
       v_component_needs_resolution:=v_resolution_pending
         and coalesce((v_component->>'resolution_required')::boolean,false)
         and coalesce((v_component->>'resolution_complete')::boolean,false) is not true;
@@ -1429,50 +1436,135 @@ begin
         -- suggestion fields while retaining the canonical residual
         -- fingerprint and component identity. Never ask the browser to invent
         -- a rate or reuse a suggestion for another date/component.
-        select source_component.value
-        into v_suggested_component
-        from public.banking_pay_workbench_candidate_source_lines source_line
-        cross join lateral jsonb_array_elements(
-          coalesce(source_line.source_row_json->'case_components','[]'::jsonb)
-        ) source_component(value)
-        where source_line.session_id=p_session_id
-          and source_line.candidate_id=p_candidate_id
-          and source_line.source_build_run_id=p_source_build_run_id
-          and source_line.status in ('CURRENT','SUPERSEDED')
-          and source_line.timesheet_id=any(v_member_ids)
-          and upper(coalesce(
-                source_component.value->>'component_key_type',
-                ''
-              ))=upper(coalesce(v_component->>'component_key_type',''))
-          and coalesce(
-                source_component.value->>'component_key_value',
-                ''
-              )=coalesce(v_component->>'component_key_value','')
-          and jsonb_typeof(
-                source_component.value->'suggested_resolution_payload_json'
-              )='object'
-          and jsonb_typeof(
-                source_component.value->'suggested_resolution_result_json'
-              )='object'
-          and upper(coalesce(
-                source_component.value->>'source_pay_method',
-                source_component.value
-                  #>>'{suggested_resolution_result_json,source_pay_method}',
-                ''
-              ))=upper(v_source_pay_method)
-          and upper(coalesce(
-                source_component.value
-                  #>>'{suggested_resolution_payload_json,target_pay_method}',
-                source_component.value
-                  #>>'{suggested_resolution_result_json,target_pay_method}',
-                ''
-              ))=upper(coalesce(v_component->>'target_pay_method',''))
-        order by
-          case when source_line.id=v_carrier_row_id then 0 else 1 end,
-          case when source_line.status='CURRENT' then 0 else 1 end,
-          source_line.source_ordinal,
-          source_line.id
-        limit 1;
+        with signed_source_buckets as (
+          select
+            upper(coalesce(
+              delta_component.value->>'bucket_code',
+              delta_component.value#>>'{source_basis_json,bucket_code}',
+              ''
+            )) as bucket_code,
+            round(coalesce(sum(
+              case
+                when coalesce(
+                       delta_component.value->>'source_pay_ex_vat',
+                       ''
+                     ) ~ '^-?[0-9]+([.][0-9]+)?$'
+                  then (
+                    delta_component.value->>'source_pay_ex_vat'
+                  )::numeric
+                else 0
+              end
+            ),0),2) as signed_bucket_source_pay
+          from public.banking_pay_workbench_candidate_source_lines
+            delta_line
+          cross join lateral jsonb_array_elements(
+            coalesce(
+              delta_line.source_row_json->'case_components',
+              '[]'::jsonb
+            )
+          ) delta_component(value)
+          where delta_line.session_id=p_session_id
+            and delta_line.candidate_id=p_candidate_id
+            and delta_line.source_build_run_id=p_source_build_run_id
+            and delta_line.status in ('CURRENT','SUPERSEDED')
+            and delta_line.timesheet_id=any(v_member_ids)
+            and upper(coalesce(
+                  delta_component.value->>'component_key_type',
+                  ''
+                ))=upper(coalesce(
+                  v_component->>'component_key_type',
+                  ''
+                ))
+            and coalesce(
+                  delta_component.value->>'component_key_value',
+                  ''
+                )=coalesce(
+                  v_component->>'component_key_value',
+                  ''
+                )
+          group by 1
+        ), suggestion_candidates as (
+          select
+            source_component.value as component_json,
+            case when source_line.id=v_carrier_row_id then 0 else 1 end
+              as carrier_ordinal,
+            case when source_line.status='CURRENT' then 0 else 1 end
+              as status_ordinal,
+            source_line.source_ordinal,
+            source_line.id as source_line_id,
+            source_bucket.bucket_code,
+            source_bucket.signed_bucket_source_pay
+          from public.banking_pay_workbench_candidate_source_lines
+            source_line
+          cross join lateral jsonb_array_elements(
+            coalesce(
+              source_line.source_row_json->'case_components',
+              '[]'::jsonb
+            )
+          ) source_component(value)
+          join signed_source_buckets source_bucket
+            on source_bucket.bucket_code=upper(coalesce(
+              source_component.value->>'bucket_code',
+              source_component.value#>>'{source_basis_json,bucket_code}',
+              ''
+            ))
+          where source_line.session_id=p_session_id
+            and source_line.candidate_id=p_candidate_id
+            and source_line.source_build_run_id=p_source_build_run_id
+            and source_line.status in ('CURRENT','SUPERSEDED')
+            and source_line.timesheet_id=any(v_member_ids)
+            and upper(coalesce(
+                  source_component.value->>'component_key_type',
+                  ''
+                ))=upper(coalesce(v_component->>'component_key_type',''))
+            and coalesce(
+                  source_component.value->>'component_key_value',
+                  ''
+                )=coalesce(v_component->>'component_key_value','')
+            and jsonb_typeof(
+                  source_component.value
+                    ->'suggested_resolution_payload_json'
+                )='object'
+            and jsonb_typeof(
+                  source_component.value
+                    ->'suggested_resolution_result_json'
+                )='object'
+            and upper(coalesce(
+                  source_component.value->>'source_pay_method',
+                  source_component.value
+                    #>>'{suggested_resolution_result_json,source_pay_method}',
+                  ''
+                ))=upper(v_source_pay_method)
+            and upper(coalesce(
+                  source_component.value
+                    #>>'{suggested_resolution_payload_json,target_pay_method}',
+                  source_component.value
+                    #>>'{suggested_resolution_result_json,target_pay_method}',
+                  ''
+                ))=upper(coalesce(v_component->>'target_pay_method',''))
+        ), eligible_suggestion_candidates as (
+          select suggestion_candidate.*
+          from suggestion_candidates suggestion_candidate
+          where abs(suggestion_candidate.signed_bucket_source_pay)>0.005
+            and sign(suggestion_candidate.signed_bucket_source_pay)
+                =sign(v_component_source_outstanding)
+        )
+        select
+          count(distinct eligible.bucket_code)::integer,
+          (
+            jsonb_agg(
+              eligible.component_json
+              order by
+                eligible.carrier_ordinal,
+                eligible.status_ordinal,
+                eligible.source_ordinal,
+                eligible.source_line_id
+            )->0
+          )
+        into
+          v_suggestion_matching_bucket_count,
+          v_suggested_component
+        from eligible_suggestion_candidates eligible;
 
         if v_suggested_component is null then
           raise exception 'CORRECTION_CHAIN_SUGGESTED_RESOLUTION_REQUIRED'
@@ -1489,6 +1581,61 @@ begin
                       upper(coalesce(v_component->>'target_pay_method',''))
                   )::text;
         end if;
+        if v_suggestion_matching_bucket_count<>1 then
+          -- A dated correction component can span more than one pay bucket
+          -- (for example DAY plus NIGHT). No single historical rate is then
+          -- an honest Suggested Rate. Keep the canonical resolution case
+          -- available for the established custom-resolution pathway. Preserve
+          -- one deterministic row-backed source basis solely so the operator
+          -- can enter a replacement rate; do not expose its target suggestion,
+          -- guess, average, or let an optional suggestion abort the whole
+          -- Workbench source build.
+          v_suggestion_current_basis:=round(
+            abs(coalesce(v_component_source_outstanding,0)),
+            2
+          );
+          v_suggestion_source_rate:=nullif(
+            v_suggested_component->>'source_rate',
+            ''
+          )::numeric;
+          v_suggestion_charge_rate:=nullif(
+            v_suggested_component->>'source_charge_rate',
+            ''
+          )::numeric;
+          v_suggestion_rebased_units:=case
+            when coalesce(v_suggestion_source_rate,0)>0
+              then round(
+                v_suggestion_current_basis/v_suggestion_source_rate,
+                6
+              )
+            else null
+          end;
+          v_suggestion_source_charge_ex:=case
+            when v_suggestion_rebased_units is not null
+             and v_suggestion_charge_rate is not null
+              then round(
+                v_suggestion_rebased_units*v_suggestion_charge_rate,
+                2
+              )
+            else null
+          end;
+          v_suggested_component:=v_suggested_component
+            ||jsonb_build_object(
+              'source_units',v_suggestion_rebased_units,
+              'source_rate',v_suggestion_source_rate,
+              'source_charge_rate',v_suggestion_charge_rate,
+              'source_pay_ex_vat',v_suggestion_current_basis,
+              'source_charge_ex_vat',v_suggestion_source_charge_ex,
+              'source_margin_ex_vat',case
+                when v_suggestion_source_charge_ex is null then null
+                else round(
+                  v_suggestion_source_charge_ex
+                    -v_suggestion_current_basis,
+                  2
+                )
+              end
+            );
+        else
 
         -- A source component can describe the full historical shift while the
         -- canonical correction residual now represents only a smaller unpaid
@@ -1714,35 +1861,14 @@ begin
             )
           else 0
         end;
-        v_suggestion_target_inc:=case
-          when coalesce(
-                 v_suggestion_result
-                   ->>'target_amount_inc_vat_per_source_ex_vat',
-                 ''
-               ) ~ '^-?[0-9]+([.][0-9]+)?$'
-            then round(
-              v_suggestion_current_basis
-                * (
-                    v_suggestion_result
-                      ->>'target_amount_inc_vat_per_source_ex_vat'
-                  )::numeric,
-              2
-            )
-          when coalesce(
-                 v_suggestion_result->>'target_amount_inc_vat',
-                 ''
-               ) ~ '^-?[0-9]+([.][0-9]+)?$'
-            then round(
-              (v_suggestion_result->>'target_amount_inc_vat')::numeric
-                * v_suggestion_scale,
-              2
-            )
-          else round(
-            coalesce(v_suggestion_target_ex,0)
-              + coalesce(v_suggestion_target_vat,0),
-            2
-          )
-        end;
+        -- Inclusive VAT is a derived total.  Re-scaling a historical inclusive
+        -- ratio independently can differ by a penny from the separately rounded
+        -- ex-VAT and VAT authorities, so always add those two final amounts.
+        v_suggestion_target_inc:=round(
+          coalesce(v_suggestion_target_ex,0)
+            + coalesce(v_suggestion_target_vat,0),
+          2
+        );
         if v_suggestion_target_rate is null
            and coalesce(v_suggestion_rebased_units,0)<>0
            and v_suggestion_target_ex is not null then
@@ -1858,6 +1984,8 @@ begin
             'suggestion_explanation_text',
               'This suggestion applies the existing PAYE/umbrella conversion to the current correction residual only. Historical full-shift evidence remains unchanged.'
           );
+        v_has_suggested_resolution:=true;
+        end if;
       end if;
 
       update public.banking_pay_workbench_candidate_source_lines l
@@ -1911,24 +2039,34 @@ begin
                 'requires_resolution',v_component_needs_resolution,
                 'needs_resolution',v_component_needs_resolution,
                 'is_actionable_resolution_row',v_component_needs_resolution,
-                'has_suggested_resolution',v_component_needs_resolution,
+                'has_suggested_resolution',v_has_suggested_resolution,
+                'bucket_code',case
+                  when v_suggested_component is not null
+                    then upper(coalesce(
+                      v_suggested_component->>'bucket_code',
+                      v_suggested_component
+                        #>>'{source_basis_json,bucket_code}',
+                      ''
+                    ))
+                  else null
+                end,
                 'source_units',case
-                  when v_component_needs_resolution
+                  when v_suggested_component is not null
                     then nullif(v_suggested_component->>'source_units','')::numeric
                   else null
                 end,
                 'source_rate',case
-                  when v_component_needs_resolution
+                  when v_suggested_component is not null
                     then nullif(v_suggested_component->>'source_rate','')::numeric
                   else null
                 end,
                 'source_charge_rate',case
-                  when v_component_needs_resolution
+                  when v_suggested_component is not null
                     then nullif(v_suggested_component->>'source_charge_rate','')::numeric
                   else null
                 end,
                 'source_charge_ex_vat',case
-                  when v_component_needs_resolution
+                  when v_suggested_component is not null
                     then nullif(
                       v_suggested_component->>'source_charge_ex_vat',
                       ''
@@ -1936,7 +2074,7 @@ begin
                   else null
                 end,
                 'source_margin_ex_vat',case
-                  when v_component_needs_resolution
+                  when v_suggested_component is not null
                     then nullif(
                       v_suggested_component->>'source_margin_ex_vat',
                       ''
@@ -1944,7 +2082,7 @@ begin
                   else null
                 end,
                 'source_basis_json',case
-                  when v_component_needs_resolution
+                  when v_suggested_component is not null
                     and jsonb_typeof(
                       v_suggested_component->'source_basis_json'
                     )='object'
@@ -1952,19 +2090,19 @@ begin
                   else null
                 end,
                 'suggested_resolution_payload_json',case
-                  when v_component_needs_resolution
+                  when v_has_suggested_resolution
                     then v_suggested_component
                       ->'suggested_resolution_payload_json'
                   else null
                 end,
                 'suggested_resolution_result_json',case
-                  when v_component_needs_resolution
+                  when v_has_suggested_resolution
                     then v_suggested_component
                       ->'suggested_resolution_result_json'
                   else null
                 end,
                 'suggestion_explanation_text',case
-                  when v_component_needs_resolution
+                  when v_has_suggested_resolution
                     then nullif(
                       v_suggested_component->>'suggestion_explanation_text',
                       ''
@@ -2042,7 +2180,10 @@ begin
             'has_resolved_rate',not v_component_needs_resolution,
             'resolved_rate_family','BUCKETED',
             'resolution_family','BUCKETED',
-            'resolution_action_label','Suggested Rate',
+            'resolution_action_label',case
+              when v_has_suggested_resolution then 'Suggested Rate'
+              else 'Custom Rate'
+            end,
             'selection_allowed',not v_resolution_pending and v_component_outstanding>0,
             'blocked_reason_codes',case
               when v_component_needs_resolution
@@ -2061,7 +2202,10 @@ begin
                 'case_resolution_satisfied_now',not v_component_needs_resolution,
                 'resolved_rate_family','BUCKETED',
                 'resolution_family','BUCKETED',
-                'resolution_action_label','Suggested Rate',
+                'resolution_action_label',case
+                  when v_has_suggested_resolution then 'Suggested Rate'
+                  else 'Custom Rate'
+                end,
                 'resolved_rate_component_count',case
                   when v_component_needs_resolution then 0
                   else 1
@@ -2376,9 +2520,7 @@ begin
   perform public._ctms_assert_payload_corrections_fresh_v1(v_payload,'PAY_CASE_RESOLUTION');
   v_candidate:=nullif(v_payload->>'candidate_id','')::uuid;
   select id into v_timesheet from unnest(public._ctms_payload_timesheet_ids_v1(v_payload,100)) x(id) limit 1;
-  if v_candidate is null or v_timesheet is null
-     or coalesce((public._ctms_import_correction_classify_v1(v_timesheet)
-       ->>'is_import_authoritative_correction')::boolean,false) is not true then
+  if v_candidate is null or v_timesheet is null then
     return v_payload;
   end if;
   v_residuals:=public._ctms_candidate_correction_residuals_v1(
@@ -2396,7 +2538,19 @@ begin
   )
   limit 1;
   if v_residual is null or jsonb_typeof(v_residual)<>'object' then
-    raise exception 'CORRECTION_RESIDUAL_REQUIRED_FOR_CASE_RESOLUTION' using errcode='P0001';
+    -- A correction root is not itself labelled as a replacement/reversal, but
+    -- it is still an authoritative member of its residual chain.  Membership
+    -- above is therefore the primary gate.  Preserve ordinary timesheets
+    -- unchanged; only a row explicitly classified as an import correction
+    -- must fail closed when its residual cannot be found.
+    if coalesce((
+         public._ctms_import_correction_classify_v1(v_timesheet)
+           ->>'is_import_authoritative_correction'
+       )::boolean,false) then
+      raise exception 'CORRECTION_RESIDUAL_REQUIRED_FOR_CASE_RESOLUTION'
+        using errcode='P0001';
+    end if;
+    return v_payload;
   end if;
 
   select component.value

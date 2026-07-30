@@ -15,6 +15,10 @@ const nhspPhase3Sql = readFileSync(new URL('../../supabase/repeatable/21072026_1
 const weeklyPhase3Sql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql', import.meta.url), 'utf8');
 const correctionPolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_01_correction_financials_policy_resolve_v1.sql', import.meta.url), 'utf8');
 const correctionGuardSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql', import.meta.url), 'utf8');
+const correctionRuntimeGuardsSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql', import.meta.url), 'utf8');
+const candidateSourceBuildSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql', import.meta.url), 'utf8');
+const caseResolutionSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_41_pay_workbench_session_apply_case_resolution.sql', import.meta.url), 'utf8');
+const clearCaseResolutionSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_42_pay_workbench_session_clear_case_resolution.sql', import.meta.url), 'utf8');
 const correctionTransitionSql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql', import.meta.url), 'utf8');
 const autoAuthorisePolicySql = readFileSync(new URL('../../supabase/repeatable/21072026_1235_02_import_auto_authorise_policy_resolve_v1.sql', import.meta.url), 'utf8');
 const priorityEnqueueSql = readFileSync(new URL('../../supabase/repeatable/04012026_enqueue_ts_financials_priority.sql', import.meta.url), 'utf8');
@@ -264,6 +268,45 @@ test('every generated invoice line is protected correction evidence in preview a
   assert.match(weeklyApplySql, /weekly_import_changed_hours_phase3\(p_import_id := p_import_id, p_system_type := 'HEALTHROSTER'\)/);
 });
 
+test('settled Banking Pay artifacts force the protected weekly correction pathway', () => {
+  const protection = functionBody(coreSql, '_import_review_timesheet_protection_core_v1');
+  assert.match(protection, /from public\.pay_batch_items settled_item/);
+  assert.match(protection, /join public\.pay_batch_candidates settled_candidate/);
+  assert.match(protection, /settled_candidate\.settlement_status[\s\S]*?'SETTLED'/);
+  assert.match(
+    protection,
+    /with recursive correction_ancestry as[\s\S]*?into v_correction_family_ids,v_correction_root_id/,
+  );
+  assert.match(protection, /not parent_timesheet\.timesheet_id=any\(correction_ancestry\.visited_ids\)/);
+  assert.match(protection, /settled_item\.timesheet_id=any\(v_correction_family_ids\)/);
+  assert.match(
+    protection,
+    /settled_item\.frozen_component_snapshot_json->>'correction_root_id'=any\(v_correction_family_ids::text\[\]\)/,
+  );
+  assert.match(
+    protection,
+    /settled_item\.frozen_resolution_payload_json->>'correction_root_id'=any\(v_correction_family_ids::text\[\]\)/,
+  );
+  assert.match(changedHoursSql, /as has_paid_evidence/);
+  assert.match(changedHoursSql, /a\.has_paid_evidence as is_paid/);
+  assert.match(
+    weeklyApplySql,
+    /where cs\.is_invoiced is true\s+or cs\.is_paid is true/,
+  );
+  assert.match(
+    weeklyApplySql,
+    /where cs\.is_invoiced is false\s+and cs\.is_paid is false/,
+  );
+  assert.match(
+    weeklyPhase3Sql,
+    /_import_review_timesheet_protection_core_v1\(v_existing_pos_ts_id\)[\s\S]*?->>'paid'/,
+  );
+  assert.match(
+    weeklyPhase3Sql,
+    /_import_review_timesheet_protection_core_v1\(v_existing_neg_ts_id\)[\s\S]*?->>'paid'/,
+  );
+});
+
 test('TSFIN correction-unit payload extraction accepts JSON whitespace without double escaping', () => {
   const extractor = functionBody(correctionGuardSql, '_ctms_payload_timesheet_ids_v1');
   assert.match(extractor, /"\[\[:space:\]\]\*:\[\[:space:\]\]\*"/);
@@ -288,6 +331,12 @@ test('protected amendments prove the new immutable import row before either Week
   assert.doesNotMatch(resolver, /v_source_shift\.latest_import_id\s+is\s+distinct\s+from\s*v_operation\.import_id/);
   assert.match(nhspApplySql, /import_review_apply_guard_v1/);
   assert.match(weeklyApplySql, /import_review_apply_guard_v1/);
+  assert.match(policy, /_import_review_effective_authority_core_v1\(/);
+  assert.match(policy, /authority\.import_authoritative/);
+  assert.doesNotMatch(
+    policy,
+    /coalesce\(v_settings\.requires_hr,\s*false\)[\s\S]*?coalesce\(v_settings\.no_timesheet_required,\s*false\)/,
+  );
 });
 
 test('one complete contract-client-global hierarchy governs HealthRoster and NHSP auto-authorisation', () => {
@@ -331,6 +380,155 @@ test('configured auto-authorisation keeps mandatory corrections separate and adm
   assert.match(dailyApplySql, /not exists \([\s\S]*?tmp_val_raw raw_row[\s\S]*?VALIDATION_OK/);
   assert.match(dailyApplySql, /t\.reference_number=u\.new_hr_request_id/);
   assert.match(dailyApplySql, /'HEALTHROSTER_DAILY'::public\.hr_source_enum,true/);
+});
+
+test('weekly protected amendments refresh only the correction pair and keep the settled root frozen', () => {
+  assert.match(
+    weeklyApplySql,
+    /ns\.external_row_key=any\(\s*coalesce\(v_force_keys_final,array\[\]::text\[\]\)\s*\)[\s\S]*?and not \(\s*ns\.external_row_key=any\(\s*coalesce\(v_invoiced_changed_keys,array\[\]::text\[\]\)\s*\)\s*\)/,
+  );
+  assert.match(
+    weeklyApplySql,
+    /jsonb_array_elements_text\(coalesce\(v_phase3_result->'created_timesheet_ids','\[\]'::jsonb\)\)/,
+  );
+  assert.match(
+    weeklyApplySql,
+    /jsonb_array_elements_text\(coalesce\(v_phase3_result->'updated_timesheet_ids','\[\]'::jsonb\)\)/,
+  );
+  assert.match(
+    weeklyApplySql,
+    /into v_protected_source_timesheet_ids[\s\S]*?cs\.is_invoiced is true or cs\.is_paid is true/,
+  );
+  assert.match(
+    weeklyApplySql,
+    /v_affected_timesheet_ids[\s\S]*?not \(\s*a\.timesheet_id=any\(\s*coalesce\(v_protected_source_timesheet_ids,array\[\]::uuid\[\]\)/,
+  );
+});
+
+test('correction Suggested Rate uses one changed pay bucket and leaves mixed buckets to custom resolution', () => {
+  const materialiser = functionBody(
+    correctionRuntimeGuardsSql,
+    '_ctms_materialise_candidate_correction_residuals_v1',
+  );
+  assert.match(materialiser, /with signed_source_buckets as/);
+  assert.match(materialiser, /signed_bucket_source_pay/);
+  assert.match(materialiser, /delta_component\.value->>'bucket_code'/);
+  assert.match(materialiser, /sign\(suggestion_candidate\.signed_bucket_source_pay\)\s*=sign\(v_component_source_outstanding\)/);
+  assert.match(materialiser, /count\(distinct eligible\.bucket_code\)::integer/);
+  assert.match(materialiser, /v_suggestion_matching_bucket_count<>1/);
+  assert.doesNotMatch(materialiser, /CORRECTION_CHAIN_SUGGESTED_RESOLUTION_BASIS_AMBIGUOUS/);
+  assert.match(
+    materialiser,
+    /do not expose its target suggestion,[\s\S]*guess, average, or let an optional suggestion abort the whole/,
+  );
+  assert.match(
+    materialiser,
+    /v_suggestion_matching_bucket_count<>1[\s\S]*v_suggestion_rebased_units:=case[\s\S]*v_suggested_component:=v_suggested_component/,
+  );
+  assert.match(
+    materialiser,
+    /'resolution_action_label',case[\s\S]*when v_has_suggested_resolution then 'Suggested Rate'[\s\S]*else 'Custom Rate'/,
+  );
+  assert.match(
+    materialiser,
+    /'has_suggested_resolution',v_has_suggested_resolution/,
+  );
+  assert.match(
+    materialiser,
+    /v_suggestion_target_inc:=round\(\s*coalesce\(v_suggestion_target_ex,0\)\s*\+\s*coalesce\(v_suggestion_target_vat,0\)/,
+  );
+
+  const payloadEnricher = functionBody(
+    correctionRuntimeGuardsSql,
+    '_ctms_enrich_correction_resolution_payload_v1',
+  );
+  const residualLookup = payloadEnricher.indexOf(
+    'v_residuals:=public._ctms_candidate_correction_residuals_v1',
+  );
+  const correctionClassification = payloadEnricher.indexOf(
+    'public._ctms_import_correction_classify_v1(v_timesheet)',
+  );
+  assert.ok(residualLookup >= 0);
+  assert.ok(correctionClassification > residualLookup);
+  assert.match(payloadEnricher, /if v_residual is null[\s\S]*return v_payload;/i);
+  assert.match(
+    payloadEnricher,
+    /'correction_root_id',v_residual->>'root_timesheet_id'/,
+  );
+});
+
+test('a paged source build retries its first page when the continuation attestation cannot be persisted', () => {
+  const sourceBuild = functionBody(
+    candidateSourceBuildSql,
+    'pay_workbench_candidate_source_build_chunk',
+  );
+  assert.match(
+    sourceBuild,
+    /v_first_source_page[\s\S]*v_has_more[\s\S]*v_sync_completed[\s\S]*v_session_progress_update_applied/,
+  );
+  assert.match(
+    sourceBuild,
+    /PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_ATTESTATION_PERSIST_DEFERRED/,
+  );
+  assert.match(sourceBuild, /'retry_safe', true/);
+  assert.match(
+    sourceBuild,
+    /RETURN public\.pay_workbench_candidate_source_build_chunk\(\s*p_session_id,\s*p_candidate_id,\s*'\{\}'::jsonb/,
+  );
+  assert.match(sourceBuild, /'continuation_attestation_restart', true/);
+  assert.doesNotMatch(
+    sourceBuild,
+    /RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_STALE'/,
+  );
+});
+
+test('read-only correction discovery binds its database freshness check without weakening Apply', () => {
+  const body = functionBody(
+    caseResolutionSql,
+    'pay_workbench_session_apply_case_resolution',
+  );
+  assert.match(
+    body,
+    /IF v_operation = 'DISCOVER' THEN\s*v_expected_progress_counter_version :=\s*COALESCE\(v_session_row\.progress_counter_version, 0\);/,
+  );
+  assert.match(
+    body,
+    /IF COALESCE\(v_session_row\.progress_counter_version, 0\) IS DISTINCT FROM v_expected_progress_counter_version THEN\s*RAISE EXCEPTION 'WORKBENCH_SESSION_PROGRESS_CHANGED'/,
+  );
+  assert.match(
+    body,
+    /APPLY retains the caller's reviewed progress fence unchanged/,
+  );
+});
+
+test('correction resolutions keep the canonical carrier identity through target materialisation', () => {
+  const body = functionBody(
+    caseResolutionSql,
+    'pay_workbench_session_apply_case_resolution',
+  );
+  assert.match(
+    body,
+    /SELECT\s+input_bucket\.resolution_identity_key,\s+component_evidence\.candidate_id/i,
+  );
+  assert.match(
+    body,
+    /WHEN component_evidence\.source_family_key LIKE 'correction-chain:%'\s+THEN public\._ctms_correction_carrier_identity_v1\(/i,
+  );
+  assert.match(
+    body,
+    /component_evidence\.component_state_json->>'correction_root_id'/,
+  );
+});
+
+test('case-resolution clear does not apply the resolution-only correction enricher', () => {
+  const body = functionBody(
+    clearCaseResolutionSql,
+    'pay_workbench_session_clear_case_resolution',
+  );
+  assert.doesNotMatch(
+    body,
+    /_ctms_enrich_correction_resolution_payload_v1/,
+  );
 });
 
 test('import-authoritative NHSP and HealthRoster block expense-occupied timesheets before mutation', () => {
