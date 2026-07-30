@@ -34,7 +34,12 @@ test('new invoice plans omit attachment indexes and use official timesheet V2', 
   );
   assert.match(downstream, /TIMESHEET_RENDER_MODEL_V2[\s\S]*QR_UNSIGNED/i);
   assert.match(downstream, /TIMESHEET_SIGNED_EVIDENCE_REQUIRED/i);
-  assert.match(downstream, /FINAL_MERGE_GLOBAL_V1/i);
+  assert.match(downstream, /FINAL_MERGE_SELECTIVE_V2/i);
+  assert.match(downstream, /page_numbering_excluded_pages/i);
+  assert.match(
+    downstream,
+    /input_type\s*=\s*'ELECTRONIC_TIMESHEET'[\s\S]*actual_page_count/i
+  );
 });
 
 test('QR enqueue creates V8 document work and never creates legacy PDF-outbox work', () => {
@@ -58,6 +63,8 @@ test('timesheet invalidation includes QR printable identity', () => {
   );
   assert.match(sql, /n\.qr_token is distinct from o\.qr_token/i);
   assert.match(sql, /n\.qr_payload_json is distinct from o\.qr_payload_json/i);
+  assert.match(sql, /n\.hospital_norm is distinct from o\.hospital_norm/i);
+  assert.match(sql, /n\.ward_norm is distinct from o\.ward_norm/i);
 });
 
 test('snapshot freezes dynamic week, canonical references, complete units and HealthRoster V2', () => {
@@ -78,6 +85,13 @@ test('snapshot freezes dynamic week, canonical references, complete units and He
   assert.match(sql, /CONTROLLED_UNIQUE_FALLBACK/i);
   assert.match(sql, /'booking_reference',case[\s\S]*hr_match\.ref_num/i);
   assert.match(sql, /in\('BY_WEEK','ANY_WEEK'\)/i);
+  assert.match(sql, /nullif\(lower\(btrim\(t\.hospital_norm\)\),'?'\)? hospital_norm/i);
+  assert.match(sql, /nullif\(lower\(btrim\(t\.ward_norm\)\),'?'\)? ward_norm/i);
+  assert.match(sql, /\\mSt Richards\\M','St Richard''s'/i);
+  assert.match(sql, /concat_ws\(' - '/i);
+  assert.match(sql, /'hospital_display',b\.hospital/i);
+  assert.match(sql, /'ward_display',b\.ward_display/i);
+  assert.match(sql, /'hospital_ward_display',b\.site_ward/i);
 });
 
 test('settings wording changes participate in invoice candidate revision', () => {
@@ -117,16 +131,53 @@ test('planner V2 installer references both canonical planner definitions', () =>
     /24072026_1217_private_invoice_document_advance_batch\.sql/
   );
 });
-test('reference-only invoice edits invalidate the exact V8 draft once when no legacy line carrier exists', () => {
+test('material reference and location edits invalidate and queue exact replacements once', () => {
   const sql = read(
     'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
       + '23072026_2207_invoice_apply_edits.sql'
   );
-  assert.match(sql, /coalesce\(v_refupd_applied,0\)>0/i);
+  assert.match(sql, /timesheet_location_updates/i);
+  assert.match(sql, /hospital_norm is distinct from v_location_hospital_norm/i);
+  assert.match(sql, /ward_norm is distinct from v_location_ward_norm/i);
+  assert.match(sql, /owned_line\.invoice_id=p_invoice_id/i);
+  assert.match(sql, /coalesce\(v_refupd_applied,0\)\+coalesce\(v_location_applied,0\)>0/i);
   assert.match(sql, /i\.document_revision=v_inv\.document_revision/i);
   assert.match(sql, /\{meta,reference_source_change\}/i);
-  assert.match(sql, /timesheet_ids',coalesce\(to_jsonb\(v_refupd_ts_ids_distinct\)/i);
+  assert.match(sql, /v_refupd_ts_ids[\s\S]*v_location_ts_ids/i);
   assert.match(sql, /v_refupd_invoice_fallback_invalidated:=coalesce\(v_rc,0\)>0/i);
+  assert.match(sql, /public\.invoice_operation_start_batch/i);
+  assert.match(sql, /VIEW_TIMESHEET_DOCUMENT/i);
+  assert.match(sql, /VIEW_INVOICE_DOCUMENT/i);
+  assert.match(sql, /timesheet-professional-v2/i);
+  assert.match(sql, /document_queue_requested/i);
+  assert.match(sql, /accepted_operations/i);
+});
+
+test('invoice detail exposes direct timesheet hospital and ward source values', () => {
+  const sql = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+      + '23072026_2207_invoice_detail_get.sql'
+  );
+  assert.match(sql, /'hospital_norm',t\.hospital_norm/i);
+  assert.match(sql, /'ward_norm',t\.ward_norm/i);
+  assert.match(sql, /'timesheet_reference_sources_by_id'/i);
+});
+
+test('refs, ward and selective numbering installer references every canonical authority', () => {
+  const installer = read(
+    'supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql'
+  );
+  assert.match(installer, /\\set ON_ERROR_STOP on/i);
+  assert.match(installer, /\bbegin;/i);
+  assert.match(installer, /\bcommit;/i);
+  for (const authority of [
+    '25072026_0002_private_invoice_presentation_snapshot_batch.sql',
+    '23072026_2207_invoice_detail_get.sql',
+    '23072026_2207_invoice_apply_edits.sql',
+    '24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql',
+    '24072026_1217_invoice_work_context_batch.sql',
+    '24072026_1217_invoice_work_complete_batch.sql'
+  ]) assert.match(installer, new RegExp(authority.replaceAll('.', '\\.')));
 });
 
 test('reference invalidation installer references the canonical invoice edit definition', () => {

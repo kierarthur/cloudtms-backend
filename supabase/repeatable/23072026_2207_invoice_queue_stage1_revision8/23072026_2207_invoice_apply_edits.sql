@@ -66,6 +66,20 @@ v_has_expense_or_mileage boolean;
   v_refupd_sched jsonb;
   v_refupd_refnum text;
 
+  -- timesheet hospital / ward source edits
+  v_location_updates jsonb;
+  v_location_update jsonb;
+  v_location_ts_id uuid;
+  v_location_count int := 0;
+  v_location_applied int := 0;
+  v_location_set_hospital boolean;
+  v_location_set_ward boolean;
+  v_location_hospital_norm text;
+  v_location_ward_norm text;
+  v_location_ts_ids uuid[] := array[]::uuid[];
+  v_document_commands jsonb := '[]'::jsonb;
+  v_started_operations jsonb := '[]'::jsonb;
+
   -- reference update side-effects (meta refresh / segment ref sync)
   v_refupd_ts_ids uuid[] := array[]::uuid[];
   v_refupd_ts_ids_distinct uuid[] := array[]::uuid[];
@@ -376,6 +390,18 @@ if p_payload is not null and jsonb_typeof(p_payload) = 'object' and (p_payload ?
   end if;
   v_refupd_count := jsonb_array_length(coalesce(v_reference_updates,'[]'::jsonb));
 end if;
+
+-- Parse timesheet_location_updates. Values are stored in canonical lower-case
+-- form; display casing is applied only by the immutable presentation model.
+v_location_updates := null;
+if p_payload is not null and jsonb_typeof(p_payload) = 'object'
+   and (p_payload ? 'timesheet_location_updates') then
+  v_location_updates := coalesce(p_payload->'timesheet_location_updates','[]'::jsonb);
+  if jsonb_typeof(v_location_updates) <> 'array' then
+    v_location_updates := '[]'::jsonb;
+  end if;
+  v_location_count := jsonb_array_length(coalesce(v_location_updates,'[]'::jsonb));
+end if;
 v_has_seg_ops :=
   (v_remove_seg_refs is not null and jsonb_typeof(v_remove_seg_refs)='array' and jsonb_array_length(v_remove_seg_refs) > 0)
   or (v_add_seg_refs is not null and jsonb_typeof(v_add_seg_refs)='array' and jsonb_array_length(v_add_seg_refs) > 0);
@@ -389,6 +415,7 @@ v_has_seg_ops :=
       'add_adjustments_count', case when p_payload is not null and jsonb_typeof(p_payload)='object' and (p_payload ? 'add_adjustments') and jsonb_typeof(p_payload->'add_adjustments')='array' then jsonb_array_length(p_payload->'add_adjustments') else 0 end,
       'remove_segment_refs_count', case when v_remove_seg_refs is null then 0 else jsonb_array_length(coalesce(v_remove_seg_refs,'[]'::jsonb)) end,
       'add_segment_refs_count', case when v_add_seg_refs is null then 0 else jsonb_array_length(coalesce(v_add_seg_refs,'[]'::jsonb)) end,
+      'timesheet_location_updates_count',v_location_count,
       'has_segment_ops', v_has_seg_ops
     );
     v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object('step','payload_parsed','stats',v_dbg_stats));
@@ -445,7 +472,26 @@ v_has_seg_ops :=
         day_references_json = case when v_refupd_set_dayrefs then v_refupd_dayrefs else tsu.day_references_json end,
         actual_schedule_json = case when v_refupd_set_sched then v_refupd_sched else tsu.actual_schedule_json end
       where tsu.timesheet_id = v_refupd_ts_id
-        and tsu.is_current = true;
+        and tsu.is_current = true
+        and exists(
+          select 1
+          from public.invoice_lines owned_line
+          where owned_line.invoice_id=p_invoice_id
+            and (
+              owned_line.timesheet_id=tsu.timesheet_id
+              or (
+                owned_line.timesheet_id is null
+                and coalesce(owned_line.meta_json->>'timesheet_id','')
+                  ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                and (owned_line.meta_json->>'timesheet_id')::uuid=tsu.timesheet_id
+              )
+            )
+        )
+        and (
+          (v_refupd_set_refnum and tsu.reference_number is distinct from v_refupd_refnum)
+          or (v_refupd_set_dayrefs and tsu.day_references_json is distinct from v_refupd_dayrefs)
+          or (v_refupd_set_sched and tsu.actual_schedule_json is distinct from v_refupd_sched)
+        );
 
       get diagnostics v_rc = row_count;
       if coalesce(v_rc,0) > 0 then
@@ -459,6 +505,85 @@ v_has_seg_ops :=
       v_dbg_steps := v_dbg_steps || jsonb_build_array(
         jsonb_build_object('step','reference_updates_applied','count_requested',v_refupd_count,'count_applied',v_refupd_applied)
       );
+    end if;
+  end if;
+
+  -- 0a) Apply only material hospital/ward changes to current timesheets that
+  -- are owned by this invoice. Identical canonical values perform no UPDATE,
+  -- so they cannot dirty documents or queue replacement work.
+  if v_location_updates is not null
+     and jsonb_typeof(v_location_updates)='array'
+     and jsonb_array_length(v_location_updates)>0 then
+    for v_location_update in
+      select value from jsonb_array_elements(v_location_updates) value
+    loop
+      if v_location_update is null
+         or jsonb_typeof(v_location_update)<>'object'
+         or nullif(btrim(coalesce(v_location_update->>'timesheet_id','')),'') is null then
+        continue;
+      end if;
+
+      v_location_ts_id := (v_location_update->>'timesheet_id')::uuid;
+      v_location_set_hospital := v_location_update ? 'hospital_norm';
+      v_location_set_ward := v_location_update ? 'ward_norm';
+      if not v_location_set_hospital and not v_location_set_ward then
+        continue;
+      end if;
+
+      v_location_hospital_norm := null;
+      if v_location_set_hospital then
+        v_location_hospital_norm := nullif(lower(regexp_replace(
+          btrim(coalesce(v_location_update->>'hospital_norm','')),
+          '[[:space:]]+',' ','g')), '');
+      end if;
+      v_location_ward_norm := null;
+      if v_location_set_ward then
+        v_location_ward_norm := nullif(lower(regexp_replace(
+          btrim(coalesce(v_location_update->>'ward_norm','')),
+          '[[:space:]]+',' ','g')), '');
+      end if;
+
+      update public.timesheets tsu
+      set updated_at=v_now,
+          hospital_norm=case when v_location_set_hospital
+            then v_location_hospital_norm else tsu.hospital_norm end,
+          ward_norm=case when v_location_set_ward
+            then v_location_ward_norm else tsu.ward_norm end
+      where tsu.timesheet_id=v_location_ts_id
+        and tsu.is_current=true
+        and exists(
+          select 1
+          from public.invoice_lines owned_line
+          where owned_line.invoice_id=p_invoice_id
+            and (
+              owned_line.timesheet_id=tsu.timesheet_id
+              or (
+                owned_line.timesheet_id is null
+                and coalesce(owned_line.meta_json->>'timesheet_id','')
+                  ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                and (owned_line.meta_json->>'timesheet_id')::uuid=tsu.timesheet_id
+              )
+            )
+        )
+        and (
+          (v_location_set_hospital
+            and tsu.hospital_norm is distinct from v_location_hospital_norm)
+          or (v_location_set_ward
+            and tsu.ward_norm is distinct from v_location_ward_norm)
+        );
+
+      get diagnostics v_rc=row_count;
+      if coalesce(v_rc,0)>0 then
+        v_location_applied:=v_location_applied+1;
+        v_location_ts_ids:=v_location_ts_ids||v_location_ts_id;
+      end if;
+    end loop;
+
+    if v_invoice_debug then
+      v_dbg_steps:=v_dbg_steps||jsonb_build_array(jsonb_build_object(
+        'step','timesheet_location_updates_applied',
+        'count_requested',v_location_count,
+        'count_applied',v_location_applied));
     end if;
   end if;
   -- 0b) After reference updates: refresh invoice_lines meta (ts_reference_number / schedule_ref_nums) and
@@ -1964,14 +2089,14 @@ end if;
     updated_at=now()
   where invu.id=p_invoice_id;
 
-  -- A reference-only edit can target a V8 draft whose legacy invoice_lines
-  -- carrier is temporarily absent.  In that case the timesheet invalidation
-  -- trigger cannot discover the parent invoice.  If no other statement in
-  -- this RPC has already invalidated the exact draft, nudge the ordinary
-  -- invoice invalidation trigger with bounded internal source metadata.
-  -- This keeps one invalidation authority and avoids a second revision bump
-  -- where a normal line/segment carrier already invalidated the invoice.
-  if coalesce(v_refupd_applied,0)>0
+  -- A reference/hospital/ward edit can target a V8 draft whose legacy
+  -- invoice_lines carrier is temporarily absent. In that case the timesheet
+  -- invalidation trigger cannot discover the parent invoice. If no other
+  -- statement in this RPC has already invalidated the exact draft, nudge the
+  -- ordinary invoice invalidation trigger with bounded internal source
+  -- metadata. This keeps one invalidation authority and avoids a second
+  -- revision bump where a normal line/segment carrier already invalidated it.
+  if coalesce(v_refupd_applied,0)+coalesce(v_location_applied,0)>0
      and exists(
        select 1 from public.invoices i
        where i.id=p_invoice_id
@@ -1985,7 +2110,14 @@ end if;
           '{meta,reference_source_change}',
           jsonb_build_object(
             'changed_at_utc',public._inv_iso_utc(v_now),
-            'timesheet_ids',coalesce(to_jsonb(v_refupd_ts_ids_distinct),'[]'::jsonb)
+            'timesheet_ids',coalesce((
+              select jsonb_agg(distinct changed_id order by changed_id)
+              from unnest(
+                coalesce(v_refupd_ts_ids,array[]::uuid[])
+                ||coalesce(v_location_ts_ids,array[]::uuid[])
+              ) changed_id
+              where changed_id is not null
+            ),'[]'::jsonb)
           ),
           true
         ),
@@ -2004,13 +2136,75 @@ end if;
     limit 1;
   end if;
 
+  -- A material reference/hospital/ward edit starts the exact replacement
+  -- timesheet work in the same transaction. If this invoice previously had a
+  -- preview (the caller sets request_preview), start/reuse its exact replacement
+  -- build too. The operation-start authority is content/revision idempotent, so
+  -- an immediate Generate click advances the same operation rather than
+  -- creating duplicate document work.
+  if coalesce(v_refupd_applied,0)+coalesce(v_location_applied,0)>0 then
+    if lower(coalesce(p_payload->>'request_timesheet_documents','false'))
+         in ('true','1','yes','on') then
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'command_type','VIEW_TIMESHEET_DOCUMENT',
+        'timesheet_id',changed_id,
+        'purpose','TIMESHEET',
+        'priority_reason','SOURCE_EDIT_REPLACEMENT',
+        'template_version','timesheet-professional-v2')
+        order by changed_id),'[]'::jsonb)
+      into v_document_commands
+      from (
+        select distinct changed_id
+        from unnest(
+          coalesce(v_refupd_ts_ids,array[]::uuid[])
+          ||coalesce(v_location_ts_ids,array[]::uuid[])
+        ) changed_id
+        where changed_id is not null
+      ) changed;
+    end if;
+
+    if lower(coalesce(p_payload->>'request_preview','false'))
+         in ('true','1','yes','on') then
+      v_document_commands:=v_document_commands||jsonb_build_array(
+        jsonb_build_object(
+          'command_type','VIEW_INVOICE_DOCUMENT',
+          'invoice_id',p_invoice_id,
+          'purpose','DRAFT_PREVIEW',
+          'priority_reason','SOURCE_EDIT_REPLACEMENT',
+          'template_version','invoice-professional-v1'));
+    end if;
+
+    if jsonb_array_length(v_document_commands)>0 then
+      if jsonb_array_length(v_document_commands)>1000 then
+        raise exception using errcode='22023',
+          message='Too many document replacements requested in one invoice edit';
+      end if;
+      v_started_operations:=public.invoice_operation_start_batch(
+        v_document_commands,p_actor_user_id,v_now);
+    end if;
+  end if;
+
 -- Return compact state only; never build a manifest or PDF here.
   select jsonb_build_object('invoice_id',i.id,'status',i.status,
     'subtotal_ex_vat',i.subtotal_ex_vat,'vat_amount',i.vat_amount,'total_inc_vat',i.total_inc_vat,
     'document_revision',i.document_revision,'document_state',i.document_state,
     'preview_document_version_id',i.preview_document_version_id,
     'active_document_operation_id',i.active_document_operation_id,
-    'issue_state',i.issue_state,'active_issue_operation_id',i.active_issue_operation_id)
+    'issue_state',i.issue_state,'active_issue_operation_id',i.active_issue_operation_id,
+    'reference_updates_applied',v_refupd_applied,
+    'timesheet_location_updates_applied',v_location_applied,
+    'timesheet_source_changed',
+      coalesce(v_refupd_applied,0)+coalesce(v_location_applied,0)>0,
+    'changed_timesheet_ids',coalesce((
+      select jsonb_agg(distinct changed_id order by changed_id)
+      from unnest(
+        coalesce(v_refupd_ts_ids,array[]::uuid[])
+        ||coalesce(v_location_ts_ids,array[]::uuid[])
+      ) changed_id
+      where changed_id is not null
+    ),'[]'::jsonb),
+    'accepted_operations',coalesce(v_started_operations,'[]'::jsonb),
+    'document_queue_requested',jsonb_array_length(v_document_commands)>0)
   into v_manifest from public.invoices i where i.id=p_invoice_id;
 
   if v_invoice_debug then

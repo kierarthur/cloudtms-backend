@@ -16,7 +16,7 @@ import {
 const encoder = new TextEncoder();
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 const POLICY_VERSION = 'INVOICE_PROCESSOR_LIMITS_V4';
-const IMPLEMENTATION_VERSION = 'cloudtms-invoice-document-worker-v9-pooled-native';
+const IMPLEMENTATION_VERSION = 'cloudtms-invoice-document-worker-v10-selective-numbering';
 const SUPPORTED_MEDIA_TYPES = Object.freeze(['application/pdf','image/jpeg','image/png']);
 const RECEIPT_CONTRACTS = Object.freeze({
   object: 'ACTUAL_BYTES_OBJECT_RECEIPT_V3',
@@ -193,7 +193,7 @@ function fixedLengthReadableBody(body, length, FixedLengthStreamConstructor = gl
 }
 
 function resultIdentity(expected) {
-  return { chunk_id: expected.chunk_id, fence_token: expected.fence_token, action: expected.action, document_version_id: expected.document_version_id || undefined, document_asset_id: expected.document_asset_id || undefined, plan_generation: expected.plan_generation, source_revision: expected.source_revision || undefined, template_version: expected.template_version || undefined, processor_policy_version: expected.processor_policy_version, render_kind: expected.render_kind || undefined, ordered_input_hash: expected.ordered_input_hash || undefined, apply_final_page_numbers: expected.apply_final_page_numbers ?? undefined, page_numbering_contract: expected.page_numbering_contract || undefined, output_prefix: expected.immutable_destination_prefix };
+  return { chunk_id: expected.chunk_id, fence_token: expected.fence_token, action: expected.action, document_version_id: expected.document_version_id || undefined, document_asset_id: expected.document_asset_id || undefined, plan_generation: expected.plan_generation, source_revision: expected.source_revision || undefined, template_version: expected.template_version || undefined, processor_policy_version: expected.processor_policy_version, render_kind: expected.render_kind || undefined, ordered_input_hash: expected.ordered_input_hash || undefined, apply_final_page_numbers: expected.apply_final_page_numbers ?? undefined, page_numbering_contract: expected.page_numbering_contract || undefined, page_numbering_excluded_pages: expected.page_numbering_excluded_pages || undefined, output_prefix: expected.immutable_destination_prefix };
 }
 
 function validateLogicalManifestOrder(logicalRows) {
@@ -247,6 +247,19 @@ function validateProcessorMetadata(metadata, response, action, context) {
     if (expectedNumbering
       && String(metadata.page_numbering_contract || '')
         !== String(context.page_numbering_contract || '')) {
+      throw Object.assign(new Error('PAGE_NUMBERING_RECEIPT_MISMATCH'), {
+        code: 'PAGE_NUMBERING_RECEIPT_MISMATCH'
+      });
+    }
+    const expectedExclusions = expectedNumbering
+      ? (Array.isArray(context.page_numbering_excluded_pages)
+          ? context.page_numbering_excluded_pages.map(Number)
+          : [])
+      : [];
+    const actualExclusions = Array.isArray(metadata.page_numbering_excluded_pages)
+      ? metadata.page_numbering_excluded_pages.map(Number)
+      : [];
+    if (JSON.stringify(actualExclusions) !== JSON.stringify(expectedExclusions)) {
       throw Object.assign(new Error('PAGE_NUMBERING_RECEIPT_MISMATCH'), {
         code: 'PAGE_NUMBERING_RECEIPT_MISMATCH'
       });
@@ -540,6 +553,10 @@ async function processWithContainer(env, payload, signal) {
   if (action === 'PDF_MERGE') {
     result.page_numbering_applied = metadata.page_numbering_applied === true;
     result.page_numbering_contract = metadata.page_numbering_contract || null;
+    result.page_numbering_excluded_pages =
+      Array.isArray(metadata.page_numbering_excluded_pages)
+        ? metadata.page_numbering_excluded_pages
+        : [];
     const receipt = await buildMergeReceipt(context, identity, inputs, metadata, result);
     result.input_count = inputs.length; result.input_receipts = receipt.input_receipts; result.merge_receipt = receipt;
   }

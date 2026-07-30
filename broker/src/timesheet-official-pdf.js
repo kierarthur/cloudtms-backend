@@ -26,7 +26,8 @@ const LAYOUTS = Object.freeze([
     scheduleTotalHeight: 6.5,
     detailsHeight: 26,
     declarationMinimumHeight: 31,
-    signatureMinimumHeight: 9,
+    signatureLineZoneHeight: 5.5,
+    signatureOverlayHeight: 8,
     additionalRowHeight: 4.8,
     additionalHeaderHeight: 9,
     lineHeight: 3.8,
@@ -43,7 +44,8 @@ const LAYOUTS = Object.freeze([
     scheduleTotalHeight: 5.8,
     detailsHeight: 23,
     declarationMinimumHeight: 27,
-    signatureMinimumHeight: 8,
+    signatureLineZoneHeight: 5,
+    signatureOverlayHeight: 7,
     additionalRowHeight: 4.0,
     additionalHeaderHeight: 8,
     lineHeight: 3.2,
@@ -60,7 +62,8 @@ const LAYOUTS = Object.freeze([
     scheduleTotalHeight: 5.2,
     detailsHeight: 21,
     declarationMinimumHeight: 24,
-    signatureMinimumHeight: 7,
+    signatureLineZoneHeight: 4.6,
+    signatureOverlayHeight: 6.4,
     additionalRowHeight: 3.45,
     additionalHeaderHeight: 7,
     lineHeight: 2.75,
@@ -194,7 +197,7 @@ function estimateLayoutHeight(model, layout) {
   const declarationHeight = Math.max(
     layout.declarationMinimumHeight,
     5 + Math.max(workerDeclarationHeight, clientDeclarationHeight)
-      + layout.signatureMinimumHeight
+      + layout.signatureLineZoneHeight
   );
   const headerBlock = 12 + layout.detailsHeight
     + (headerWrappedLineCount
@@ -240,9 +243,9 @@ export function selectOfficialTimesheetOnePageLayout(model) {
 }
 
 function twoDigitWords(number) {
-  const ones = ['ZERO','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE'];
-  const teens = ['TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
-  const tens = ['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
+  const ones = ['zero','one','two','three','four','five','six','seven','eight','nine'];
+  const teens = ['ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+  const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
   const value = Math.max(0, Math.trunc(number));
   if (value < 10) return ones[value];
   if (value < 20) return teens[value - 10];
@@ -255,8 +258,8 @@ function wholeNumberWords(number) {
   if (value < 100) return twoDigitWords(value);
   if (value < 1000) {
     const remainder = value % 100;
-    return `${twoDigitWords(Math.floor(value / 100))} HUNDRED${
-      remainder ? ` AND ${twoDigitWords(remainder)}` : ''
+    return `${twoDigitWords(Math.floor(value / 100))} hundred${
+      remainder ? ` and ${twoDigitWords(remainder)}` : ''
     }`;
   }
   throw timesheetError('TIMESHEET_HOURS_WORDING_CAPACITY_EXCEEDED', { hours: value });
@@ -267,18 +270,45 @@ export function formatOfficialTimesheetHoursWords(totalMinutes) {
   if (!Number.isFinite(minutes) || minutes <= 0) return '';
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
-  const hourWords = wholeNumberWords(hours);
-  if (!hours) return `${twoDigitWords(remainder)} ${remainder === 1 ? 'MINUTE' : 'MINS'}`;
-  if (!remainder) {
-    if (hours === 1) return 'ONE HOUR';
-    if (hours === 2) return 'TWO HOURS';
-    return `${hourWords} HRS`;
+  const parts = [];
+  if (hours) {
+    parts.push(`${wholeNumberWords(hours)} ${hours === 1 ? 'hour' : 'hours'}`);
   }
-  if (remainder === 30 && hours < 10) return `${hourWords} AND A HALF HRS`;
-  const minuteWords = twoDigitWords(remainder);
-  if (hours === 1) return `ONE HOUR ${minuteWords} ${remainder === 1 ? 'MINUTE' : 'MINS'}`;
-  if (hours === 2) return `TWO HOURS ${minuteWords} ${remainder === 1 ? 'MINUTE' : 'MINS'}`;
-  return `${hourWords} HRS ${minuteWords} ${remainder === 1 ? 'MINUTE' : 'MINS'}`;
+  if (remainder) {
+    parts.push(`${twoDigitWords(remainder)} ${remainder === 1 ? 'minute' : 'minutes'}`);
+  }
+  const wording = parts.join(' and ');
+  return wording ? `${wording.charAt(0).toUpperCase()}${wording.slice(1)}` : '';
+}
+
+function officialDetailsGeometry(formVariant, margin, width) {
+  const gap = 3;
+  if (safeText(formVariant).toUpperCase() === 'QR_UNSIGNED') {
+    const centreWidth = 28;
+    const sideWidth = (width - centreWidth - gap * 2) / 2;
+    return Object.freeze({
+      variant: 'QR_THREE_PANEL',
+      gap,
+      workerX: margin,
+      workerWidth: sideWidth,
+      clientX: margin + sideWidth + gap + centreWidth + gap,
+      clientWidth: sideWidth,
+      centreBox: Object.freeze({
+        x: margin + sideWidth + gap,
+        width: centreWidth
+      })
+    });
+  }
+  const sideWidth = (width - gap) / 2;
+  return Object.freeze({
+    variant: 'ELECTRONIC_TWO_PANEL',
+    gap,
+    workerX: margin,
+    workerWidth: sideWidth,
+    clientX: margin + sideWidth + gap,
+    clientWidth: sideWidth,
+    centreBox: null
+  });
 }
 
 export function officialTimesheetNumber(timesheetId) {
@@ -582,7 +612,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     layout.declarationMinimumHeight,
     ...declarationBoxes.map(box =>
       5 + box.bodyLines.length * box.wordingStyle.lineHeight
-        + layout.signatureMinimumHeight)
+        + layout.signatureLineZoneHeight)
   );
   const additional = model.additional_units_section || {};
   const additionalRows = additional.visible === true && Array.isArray(additional.rows)
@@ -653,38 +683,46 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   drawText(page, bold, heading, right - headingWidth, top + 2.5, headingSize, null, CORPORATE_NAVY);
   top += 12;
 
-  const gap = 3;
-  const qrWidth = 28;
-  const sideWidth = (width - qrWidth - gap * 2) / 2;
+  const detailsGeometry = officialDetailsGeometry(model.form_variant, margin, width);
   const detailsTop = top;
-  const clientDetailsX = margin + sideWidth + gap + qrWidth + gap;
-  fillBox(page, margin, detailsTop, sideWidth, 6, CORPORATE_NAVY);
-  fillBox(page, clientDetailsX, detailsTop, sideWidth, 6, CORPORATE_NAVY);
-  fillBox(page, margin, detailsTop + 6, sideWidth, detailsHeight - 6, CORPORATE_MIST);
-  fillBox(page, clientDetailsX, detailsTop + 6, sideWidth, detailsHeight - 6, CORPORATE_MIST);
-  drawBox(page, margin, detailsTop, sideWidth, detailsHeight);
-  drawBox(page, clientDetailsX, detailsTop, sideWidth, detailsHeight);
+  fillBox(page, detailsGeometry.workerX, detailsTop, detailsGeometry.workerWidth, 6, CORPORATE_NAVY);
+  fillBox(page, detailsGeometry.clientX, detailsTop, detailsGeometry.clientWidth, 6, CORPORATE_NAVY);
+  fillBox(page, detailsGeometry.workerX, detailsTop + 6, detailsGeometry.workerWidth, detailsHeight - 6, CORPORATE_MIST);
+  fillBox(page, detailsGeometry.clientX, detailsTop + 6, detailsGeometry.clientWidth, detailsHeight - 6, CORPORATE_MIST);
+  drawBox(page, detailsGeometry.workerX, detailsTop, detailsGeometry.workerWidth, detailsHeight);
+  drawBox(page, detailsGeometry.clientX, detailsTop, detailsGeometry.clientWidth, detailsHeight);
   drawCenteredText(page, bold, 'Temporary Worker Details',
-    margin, detailsTop + 2, sideWidth, layout.headerFont, CORPORATE_WHITE);
+    detailsGeometry.workerX, detailsTop + 2, detailsGeometry.workerWidth, layout.headerFont, CORPORATE_WHITE);
   drawCenteredText(page, bold, 'Client Details',
-    clientDetailsX, detailsTop + 2, sideWidth, layout.headerFont, CORPORATE_WHITE);
+    detailsGeometry.clientX, detailsTop + 2, detailsGeometry.clientWidth, layout.headerFont, CORPORATE_WHITE);
   const worker = model.worker || model.candidate || {};
   const client = model.client || {};
-  drawText(page, bold, 'Surname:', margin + 2, detailsTop + 8, layout.smallFont);
-  drawText(page, regular, safeText(worker.surname), margin + 20, detailsTop + 8, layout.baseFont, sideWidth - 22);
-  drawText(page, bold, 'First name:', margin + 2, detailsTop + 14, layout.smallFont);
-  drawText(page, regular, safeText(worker.first_name), margin + 22, detailsTop + 14, layout.baseFont, sideWidth - 24);
-  drawText(page, bold, 'Job Profile Title:', margin + 2, detailsTop + 20, layout.smallFont);
-  drawText(page, regular, safeText(worker.job_profile_title), margin + 31, detailsTop + 20, layout.baseFont, sideWidth - 33);
-  const clientX = margin + sideWidth + gap + qrWidth + gap;
-  drawText(page, bold, 'Client Name / Hospital:', clientX + 2, detailsTop + 9, layout.smallFont);
-  drawText(page, regular, safeText(client.name || client.hospital), clientX + 39, detailsTop + 9, layout.baseFont, sideWidth - 41);
-  drawText(page, bold, 'Site / Ward:', clientX + 2, detailsTop + 17, layout.smallFont);
-  drawText(page, regular, safeText(client.site_ward || client.site || client.ward), clientX + 22, detailsTop + 17, layout.baseFont, sideWidth - 24);
+  const workerValueX = detailsGeometry.workerX + 31;
+  drawText(page, bold, 'Surname:', detailsGeometry.workerX + 2, detailsTop + 8, layout.smallFont);
+  drawText(page, regular, safeText(worker.surname), workerValueX, detailsTop + 8,
+    layout.baseFont, detailsGeometry.workerWidth - 33);
+  drawText(page, bold, 'First name:', detailsGeometry.workerX + 2, detailsTop + 14, layout.smallFont);
+  drawText(page, regular, safeText(worker.first_name), workerValueX, detailsTop + 14,
+    layout.baseFont, detailsGeometry.workerWidth - 33);
+  drawText(page, bold, 'Job Profile Title:', detailsGeometry.workerX + 2, detailsTop + 20, layout.smallFont);
+  drawText(page, regular, safeText(worker.job_profile_title), workerValueX, detailsTop + 20,
+    layout.baseFont, detailsGeometry.workerWidth - 33);
+  const clientValueX = detailsGeometry.clientX + 39;
+  drawText(page, bold, 'Client Name / Hospital:', detailsGeometry.clientX + 2, detailsTop + 9, layout.smallFont);
+  drawText(page, regular, safeText(client.name || client.hospital_display || client.hospital),
+    clientValueX, detailsTop + 9, layout.baseFont, detailsGeometry.clientWidth - 41);
+  drawText(page, bold, 'Site / Ward:', detailsGeometry.clientX + 2, detailsTop + 17, layout.smallFont);
+  drawText(page, regular, safeText(client.site_ward || client.hospital_ward_display || client.ward_display),
+    clientValueX, detailsTop + 17, layout.baseFont, detailsGeometry.clientWidth - 41);
 
-  const qrBox = { x: margin + sideWidth + gap, top: detailsTop, width: qrWidth, height: detailsHeight };
-  drawBox(page, qrBox.x, qrBox.top, qrBox.width, qrBox.height);
-  if (model.form_variant === 'QR_UNSIGNED') {
+  if (detailsGeometry.centreBox) {
+    const qrBox = {
+      x: detailsGeometry.centreBox.x,
+      top: detailsTop,
+      width: detailsGeometry.centreBox.width,
+      height: detailsHeight
+    };
+    drawBox(page, qrBox.x, qrBox.top, qrBox.width, qrBox.height);
     await drawQrModules(page, assets.qr_text, qrBox);
   }
   top += detailsHeight + layout.gap;
@@ -836,7 +874,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       layout.headerFont, wordingBlock?.title_align || 'center', CORPORATE_WHITE);
     const bodyLines = box.bodyLines;
     const maximumBodyLines = Math.floor(
-      ((declarationHeight - 5 - layout.signatureMinimumHeight) + 1e-9)
+      ((declarationHeight - 5 - layout.signatureLineZoneHeight) + 1e-9)
         / wordingStyle.lineHeight
     );
     if (bodyLines.length > maximumBodyLines) {
@@ -850,19 +888,23 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       drawText(page, regular, line, box.x + 2,
         top + 5 + index * wordingStyle.lineHeight,
         wordingStyle.fontSize, declarationWidth - 4));
-    const signatureTop = top + declarationHeight - layout.signatureMinimumHeight + 0.8;
+    const signatureLineTop = top + declarationHeight - 3;
+    const signatureTop = signatureLineTop - layout.signatureOverlayHeight + 1.1;
+    drawLine(page, box.x + 2, signatureLineTop, box.x + declarationWidth - 28, signatureLineTop);
+    drawText(page, regular, 'Signature', box.x + 2, top + declarationHeight - 2.5, layout.smallFont);
+    drawLine(page, box.x + declarationWidth - 24, signatureLineTop, box.x + declarationWidth - 2, signatureLineTop);
+    drawText(page, regular, `Date ${formatDmy(box.date)}`, box.x + declarationWidth - 24, top + declarationHeight - 6.2, layout.smallFont, 22);
+    // The transparent signature is deliberately drawn last. It behaves like ink
+    // placed on a completed paper form: no rule, label, date, or declaration text
+    // can be painted over the signature image.
     if (model.form_variant === 'ELECTRONIC_SIGNED' && box.signature) {
       signatureFits.push(drawEmbeddedImage(page, box.signature, {
         x: box.x + 2,
-        top: signatureTop - 4,
+        top: signatureTop,
         width: declarationWidth - 32,
-        height: layout.signatureMinimumHeight - 1
+        height: layout.signatureOverlayHeight
       }));
     }
-    drawLine(page, box.x + 2, top + declarationHeight - 3, box.x + declarationWidth - 28, top + declarationHeight - 3);
-    drawText(page, regular, 'Signature', box.x + 2, top + declarationHeight - 2.5, layout.smallFont);
-    drawLine(page, box.x + declarationWidth - 24, top + declarationHeight - 3, box.x + declarationWidth - 2, top + declarationHeight - 3);
-    drawText(page, regular, `Date ${formatDmy(box.date)}`, box.x + declarationWidth - 24, top + declarationHeight - 6.2, layout.smallFont, 22);
   }
 
   if (footerLines.length) {
@@ -903,6 +945,13 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       unused_vertical_gap_mm: unusedVerticalGap,
       page_fill_verified: unusedVerticalGap <= 0.01,
       additional_units_above_declarations: true,
+      detail_layout_variant: detailsGeometry.variant,
+      centre_box_rendered: Boolean(detailsGeometry.centreBox),
+      worker_value_columns_aligned: true,
+      client_value_columns_aligned: true,
+      signature_overlay_independent_of_text_flow: true,
+      signature_images_drawn_last: true,
+      signature_line_zone_height_mm: layout.signatureLineZoneHeight,
       one_page_verified: true
     })
   });

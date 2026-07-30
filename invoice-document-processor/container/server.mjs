@@ -15,7 +15,7 @@ const MAX_SINGLE_INPUT_BYTES = 512 * 1024 * 1024;
 const MAX_AGGREGATE_BYTES = 1024 * 1024 * 1024;
 const MAX_CAPTURE_BYTES = 64 * 1024;
 const MAX_OUTPUT_BYTES = 512 * 1024 * 1024;
-const PROCESSOR_VERSION = 'cloudtms-native-qpdf-poppler-v5-global-numbering';
+const PROCESSOR_VERSION = 'cloudtms-native-qpdf-poppler-v6-selective-numbering';
 let nativeReadinessCache = null;
 
 function json(res, status, body) {
@@ -402,13 +402,15 @@ async function mergePdfs(files, outputPath, deadline, context = {}) {
   if (safePositive(limits.max_input_bytes) && inputBytes > Number(limits.max_input_bytes)) throw Object.assign(new Error('MERGE_INPUT_BYTES_EXCEED_POLICY'), { code: 'MERGE_INPUT_BYTES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
   if (safePositive(limits.max_pages) && inputPages > Number(limits.max_pages)) throw Object.assign(new Error('MERGE_INPUT_PAGES_EXCEED_POLICY'), { code: 'MERGE_INPUT_PAGES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
   const applyFinalPageNumbers = context.apply_final_page_numbers === true;
+  let pageNumberingResult = null;
   const mergedPath = applyFinalPageNumbers ? `${outputPath}.merged.pdf` : outputPath;
   const args = ['--empty','--pages']; for (const file of files) args.push(file.path,'1-z'); args.push('--',mergedPath);
   await run('qpdf', args, { deadline });
   if (applyFinalPageNumbers) {
     deadline.throwIfExpired();
-    await applyGlobalPageNumbers(mergedPath, outputPath, {
+    pageNumberingResult = await applyGlobalPageNumbers(mergedPath, outputPath, {
       page_numbering_contract: context.page_numbering_contract,
+      page_numbering_excluded_pages: context.page_numbering_excluded_pages,
       document_entity_type: context.document_entity_type,
       document_version_id: context.document_version_id
     });
@@ -427,7 +429,10 @@ async function mergePdfs(files, outputPath, deadline, context = {}) {
     page_numbering_applied: applyFinalPageNumbers,
     page_numbering_contract: applyFinalPageNumbers
       ? String(context.page_numbering_contract || '')
-      : null
+      : null,
+    page_numbering_excluded_pages: applyFinalPageNumbers
+      ? (pageNumberingResult?.page_numbering_excluded_pages || [])
+      : []
   };
 }
 

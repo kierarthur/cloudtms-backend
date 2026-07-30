@@ -74,7 +74,7 @@ function v8ProcessorBinding() {
       return new Response(JSON.stringify({
         ok: true,
         processor_policy_version: 'INVOICE_PROCESSOR_LIMITS_V4',
-        processor_implementation_version: 'cloudtms-invoice-document-worker-v9-pooled-native',
+        processor_implementation_version: 'cloudtms-invoice-document-worker-v10-selective-numbering',
         supported_media_types: ['application/pdf', 'image/jpeg', 'image/png'],
         receipt_contracts: {
           object: 'ACTUAL_BYTES_OBJECT_RECEIPT_V3',
@@ -100,7 +100,7 @@ function v8Environment(overrides = {}) {
     INVOICE_ASYNC_EXPECTED_DB_CONTRACT: 'INVOICE_ASYNC_DB_V2',
     INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST: V8_FUNCTION_MANIFEST,
     INVOICE_ASYNC_BUILD_ID: 'invoice-async-v8-test',
-    INVOICE_EXPECTED_PROCESSOR_IMPLEMENTATION_VERSION: 'cloudtms-invoice-document-worker-v9-pooled-native',
+    INVOICE_EXPECTED_PROCESSOR_IMPLEMENTATION_VERSION: 'cloudtms-invoice-document-worker-v10-selective-numbering',
     INVOICE_DOCUMENT_PROCESSOR_SECRET: 'test-processor-secret-with-more-than-thirty-two-characters',
     INVOICE_DOCUMENT_ACCESS_SECRET: 'test-document-secret-with-more-than-thirty-two-characters',
     INVOICE_QUEUE_DISPATCH_SECRET: 'test-dispatch-secret-with-more-than-thirty-two-characters',
@@ -2861,6 +2861,13 @@ test('invoice save edits accepts the compact invoice_apply_edits result contract
   assert.match(handler, /const compactInvoice = manifest\.invoice_id/);
   assert.match(handler, /id: manifest\.invoice_id/);
   assert.match(handler, /const invoice = manifest\.invoice \|\| manifest\.invoice_row \|\| compactInvoice/);
+  assert.match(handler, /timesheet_location_updates/);
+  assert.match(handler, /manifest\.document_queue_requested === true/);
+  assert.match(handler, /manifest\.changed_timesheet_ids/);
+  assert.match(handler, /SOURCE_EDIT_REPLACEMENT/);
+  assert.match(handler, /timesheet-professional-v2/);
+  assert.match(handler, /accepted_operations = \[\.\.\.accepted_operations, \.\.\.newlyAccepted\]/);
+  assert.match(handler, /nudgeInvoiceOperations[\s\S]*priorityClass: 'INTERACTIVE'/);
 });
 test('invoice mail preparation contains no legacy PDF rendering fallback', () => {
   const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');

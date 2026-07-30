@@ -1297,6 +1297,30 @@ begin
       where bad.operation_id=r.operation_id
         and bad.document_version_id=r.document_version_id)
   ),
+  page_numbered_inputs as materialized (
+    select r.operation_id,r.document_version_id,r.input_no,
+      r.actual_page_count,r.payload_json->>'input_type' input_type,
+      coalesce(sum(r.actual_page_count) over(
+        partition by r.operation_id,r.document_version_id
+        order by r.input_no
+        rows between unbounded preceding and 1 preceding),0)::integer
+        preceding_page_count
+    from packable_inputs r
+  ),
+  page_numbering_policies as materialized (
+    select numbered.operation_id,numbered.document_version_id,
+      coalesce(jsonb_agg(
+        numbered.preceding_page_count+page_offset
+        order by numbered.preceding_page_count+page_offset)
+        filter(where page_offset is not null),'[]'::jsonb)
+        excluded_pages
+    from page_numbered_inputs numbered
+    left join lateral generate_series(
+      1,case when numbered.input_type='ELECTRONIC_TIMESHEET'
+        then numbered.actual_page_count else 0 end
+    ) page_offset on true
+    group by numbered.operation_id,numbered.document_version_id
+  ),
   leaf_pack(
     operation_id,document_version_id,input_no,group_no,group_input_count,
     group_pages,group_bytes,group_decoded_bytes
@@ -1455,7 +1479,8 @@ begin
             and all_groups.document_version_id=g.document_version_id)=1
           and (select entity_type from public.invoice_document_versions
             where id=g.document_version_id)='INVOICE'
-          then 'FINAL_MERGE_GLOBAL_V1' else 'NONE' end),
+          then 'FINAL_MERGE_SELECTIVE_V2' else 'NONE' end,
+        coalesce(numbering.excluded_pages,'[]'::jsonb)::text),
         'sha256'),'hex'),
       pg.plan_generation,g.group_no,0,'DOCUMENT',
       g.document_version_id,g.document_version_id,'QUEUED',550,v_now,
@@ -1480,13 +1505,24 @@ begin
                and all_groups.document_version_id=g.document_version_id)=1
             and (select entity_type from public.invoice_document_versions
               where id=g.document_version_id)='INVOICE'
-          then 'FINAL_MERGE_GLOBAL_V1' else null end,
+          then 'FINAL_MERGE_SELECTIVE_V2' else null end,
+        'page_numbering_excluded_pages',case
+          when (select count(*) from leaf_groups all_groups
+             where all_groups.operation_id=g.operation_id
+               and all_groups.document_version_id=g.document_version_id)=1
+            and (select entity_type from public.invoice_document_versions
+              where id=g.document_version_id)='INVOICE'
+          then coalesce(numbering.excluded_pages,'[]'::jsonb)
+          else '[]'::jsonb end,
         'document_entity_type',(select entity_type
           from public.invoice_document_versions where id=g.document_version_id),
         'document_version_id',g.document_version_id),
       g.expected_pages,g.expected_bytes,o.control_version,v_now,v_now
     from leaf_groups g
     join public.invoice_operations o on o.id=g.operation_id
+    left join page_numbering_policies numbering
+      on numbering.operation_id=g.operation_id
+     and numbering.document_version_id=g.document_version_id
     cross join lateral (
       select coalesce((
         select prior.plan_generation
@@ -1575,6 +1611,31 @@ begin
     from current_graph g
     join public.invoice_operation_chunks d on d.id=g.current_chunk_id
     where d.chunk_type='DOCUMENT_INPUT'
+  ),
+  page_numbered_inputs as materialized (
+    select d.operation_id,d.document_version_id,d.sequence_no,
+      d.actual_page_count,d.payload_json->>'input_type' input_type,
+      coalesce(sum(d.actual_page_count) over(
+        partition by d.operation_id,d.document_version_id
+        order by d.sequence_no,d.id
+        rows between unbounded preceding and 1 preceding),0)::integer
+        preceding_page_count
+    from current_inputs d
+    where d.status='COMPLETE'
+  ),
+  page_numbering_policies as materialized (
+    select numbered.operation_id,numbered.document_version_id,
+      coalesce(jsonb_agg(
+        numbered.preceding_page_count+page_offset
+        order by numbered.preceding_page_count+page_offset)
+        filter(where page_offset is not null),'[]'::jsonb)
+        excluded_pages
+    from page_numbered_inputs numbered
+    left join lateral generate_series(
+      1,case when numbered.input_type='ELECTRONIC_TIMESHEET'
+        then numbered.actual_page_count else 0 end
+    ) page_offset on true
+    group by numbered.operation_id,numbered.document_version_id
   ),
   plan_state as materialized (
     select c.id chunk_id,c.operation_id,c.document_version_id,
@@ -1782,7 +1843,8 @@ begin
             and all_groups.document_version_id=g.document_version_id)=1
           and (select entity_type from public.invoice_document_versions
             where id=g.document_version_id)='INVOICE'
-          then 'FINAL_MERGE_GLOBAL_V1' else 'NONE' end),
+          then 'FINAL_MERGE_SELECTIVE_V2' else 'NONE' end,
+        coalesce(numbering.excluded_pages,'[]'::jsonb)::text),
         'sha256'),'hex'),
       pg.plan_generation,g.group_no,g.next_level,'DOCUMENT',g.document_version_id,
       g.document_version_id,'QUEUED',550,v_now,
@@ -1807,12 +1869,23 @@ begin
                and all_groups.document_version_id=g.document_version_id)=1
             and (select entity_type from public.invoice_document_versions
               where id=g.document_version_id)='INVOICE'
-          then 'FINAL_MERGE_GLOBAL_V1' else null end,
+          then 'FINAL_MERGE_SELECTIVE_V2' else null end,
+        'page_numbering_excluded_pages',case
+          when (select count(*) from next_groups all_groups
+             where all_groups.operation_id=g.operation_id
+               and all_groups.document_version_id=g.document_version_id)=1
+            and (select entity_type from public.invoice_document_versions
+              where id=g.document_version_id)='INVOICE'
+          then coalesce(numbering.excluded_pages,'[]'::jsonb)
+          else '[]'::jsonb end,
         'document_entity_type',(select entity_type
           from public.invoice_document_versions where id=g.document_version_id),
         'document_version_id',g.document_version_id),
       g.expected_pages,g.expected_bytes,o.control_version,v_now,v_now
     from next_groups g join public.invoice_operations o on o.id=g.operation_id
+    left join page_numbering_policies numbering
+      on numbering.operation_id=g.operation_id
+     and numbering.document_version_id=g.document_version_id
     cross join lateral (
       select coalesce((
         select prior.plan_generation

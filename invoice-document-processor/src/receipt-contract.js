@@ -165,6 +165,10 @@ export async function buildMergeReceipt(context, identity, inputs, metadata, out
     output_size_bytes: output.size_bytes, output_page_count: output.page_count,
     page_numbering_applied: output.page_numbering_applied === true,
     page_numbering_contract: output.page_numbering_contract || null,
+    page_numbering_excluded_pages:
+      Array.isArray(output.page_numbering_excluded_pages)
+        ? output.page_numbering_excluded_pages
+        : [],
     physical_receipt_count: roots.physicalReceiptCount,
     logical_receipt_count: roots.logicalReceiptCount
   };

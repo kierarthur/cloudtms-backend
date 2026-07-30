@@ -131,12 +131,15 @@ test('official week period supports every configured ending weekday', () => {
   }
 });
 
-test('official hours wording preserves established behaviour', () => {
-  assert.equal(formatOfficialTimesheetHoursWords(60), 'ONE HOUR');
-  assert.equal(formatOfficialTimesheetHoursWords(120), 'TWO HOURS');
-  assert.equal(formatOfficialTimesheetHoursWords(450), 'SEVEN AND A HALF HRS');
-  assert.equal(formatOfficialTimesheetHoursWords(750), 'TWELVE HRS THIRTY MINS');
-  assert.equal(formatOfficialTimesheetHoursWords(6720), 'ONE HUNDRED AND TWELVE HRS');
+test('official hours wording uses complete grammatical sentence-case English', () => {
+  assert.equal(formatOfficialTimesheetHoursWords(1), 'One minute');
+  assert.equal(formatOfficialTimesheetHoursWords(30), 'Thirty minutes');
+  assert.equal(formatOfficialTimesheetHoursWords(60), 'One hour');
+  assert.equal(formatOfficialTimesheetHoursWords(65), 'One hour and five minutes');
+  assert.equal(formatOfficialTimesheetHoursWords(121), 'Two hours and one minute');
+  assert.equal(formatOfficialTimesheetHoursWords(735), 'Twelve hours and fifteen minutes');
+  assert.equal(formatOfficialTimesheetHoursWords(750), 'Twelve hours and thirty minutes');
+  assert.equal(formatOfficialTimesheetHoursWords(6720), 'One hundred and twelve hours');
 });
 
 test('logos and signatures are fitted without changing their aspect ratio', () => {
@@ -218,6 +221,12 @@ test('official renderer emits exactly one A4 landscape page with additional unit
   assert.ok(rendered.render_receipt.unused_vertical_gap_mm <= 0.01);
   assert.equal(rendered.render_receipt.page_fill_verified, true);
   assert.equal(rendered.render_receipt.additional_units_above_declarations, true);
+  assert.equal(rendered.render_receipt.detail_layout_variant, 'ELECTRONIC_TWO_PANEL');
+  assert.equal(rendered.render_receipt.centre_box_rendered, false);
+  assert.equal(rendered.render_receipt.worker_value_columns_aligned, true);
+  assert.equal(rendered.render_receipt.client_value_columns_aligned, true);
+  assert.equal(rendered.render_receipt.signature_overlay_independent_of_text_flow, true);
+  assert.equal(rendered.render_receipt.signature_images_drawn_last, true);
   const pdf = await PDFDocument.load(rendered.pdf_bytes);
   assert.equal(pdf.getPageCount(), 1);
   const page = pdf.getPage(0);
@@ -241,14 +250,44 @@ test('declaration capacity accepts an exact nine-line readable fit', async () =>
   const rendered = await renderOfficialTimesheetPdfBytes(model);
   assert.equal(rendered.page_count, 1);
   assert.equal(rendered.layout_mode, 'NORMAL');
-  assert.ok(rendered.render_receipt.declaration_height_mm >= 44.5);
+  assert.ok(rendered.render_receipt.declaration_height_mm >= 41);
+  assert.equal(rendered.render_receipt.signature_line_zone_height_mm, 5.5);
 });
 test('signature dates are drawn above their date lines', () => {
   const source = readFileSync(
     new URL('../broker/src/timesheet-official-pdf.js', import.meta.url), 'utf8'
   );
-  assert.match(source, /drawLine\(page, box\.x \+ declarationWidth - 24, top \+ declarationHeight - 3,/);
+  assert.match(source, /drawLine\(page, box\.x \+ declarationWidth - 24, signatureLineTop,/);
   assert.match(source, /`Date \$\{formatDmy\(box\.date\)\}`[^\n]+top \+ declarationHeight - 6\.2/);
+});
+
+test('signature images are the final visual layer inside each declaration box', () => {
+  const source = readFileSync(
+    new URL('../broker/src/timesheet-official-pdf.js', import.meta.url), 'utf8'
+  );
+  assert.match(
+    source,
+    /drawText\(page, regular, `Date \$\{formatDmy\(box\.date\)\}`[\s\S]*if \(model\.form_variant === 'ELECTRONIC_SIGNED' && box\.signature\) \{[\s\S]*signatureFits\.push\(drawEmbeddedImage/
+  );
+  assert.doesNotMatch(
+    source,
+    /signatureFits\.push\(drawEmbeddedImage[\s\S]*\}\)\);[\s\S]*draw(?:Line|Text)\(page,[^\n]+signatureLineTop/
+  );
+});
+
+test('QR forms retain the centre QR panel while electronic forms expand both detail boxes', async () => {
+  const electronic = await renderOfficialTimesheetPdfBytes(fixture());
+  assert.equal(electronic.render_receipt.detail_layout_variant, 'ELECTRONIC_TWO_PANEL');
+  assert.equal(electronic.render_receipt.centre_box_rendered, false);
+
+  const qr = await renderOfficialTimesheetPdfBytes(fixture({
+    form_variant: 'QR_UNSIGNED',
+    submission_mode: 'MANUAL'
+  }), {
+    qr_text: 'TSQ1.eyJ2IjoxLCJ0b2siOiJ0ZXN0In0.signature'
+  });
+  assert.equal(qr.render_receipt.detail_layout_variant, 'QR_THREE_PANEL');
+  assert.equal(qr.render_receipt.centre_box_rendered, true);
 });
 
 test('dense supported form selects a readable compact mode without omitting rows', async () => {

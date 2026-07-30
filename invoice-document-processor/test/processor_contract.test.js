@@ -41,7 +41,7 @@ test('processor capacity covers readiness plus configured work concurrency and r
   assert.equal(processorConfig.containers[0].max_instances, 4);
   assert.equal(processorConfig.env.test.containers[0].max_instances, 4);
   assert.match(workerSource, /sleepAfter = '10s'/);
-  assert.match(workerSource, /const IMPLEMENTATION_VERSION = 'cloudtms-invoice-document-worker-v9-pooled-native'/);
+  assert.match(workerSource, /const IMPLEMENTATION_VERSION = 'cloudtms-invoice-document-worker-v10-selective-numbering'/);
 });
 
 test('native actions use bounded reusable pools instead of per-attempt container identities', () => {

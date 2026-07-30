@@ -6,7 +6,7 @@ function pageNumberingError(code, category) {
 }
 export async function applyGlobalPageNumbers(inputPath, outputPath, options = {}) {
   const contract = String(options.page_numbering_contract || '');
-  if (contract !== 'FINAL_MERGE_GLOBAL_V1') {
+  if (!['FINAL_MERGE_GLOBAL_V1', 'FINAL_MERGE_SELECTIVE_V2'].includes(contract)) {
     throw pageNumberingError('PAGE_NUMBERING_CONTRACT_UNSUPPORTED', 'POLICY_VIOLATION');
   }
   if (String(options.document_entity_type || '').toUpperCase() !== 'INVOICE') {
@@ -23,7 +23,24 @@ export async function applyGlobalPageNumbers(inputPath, outputPath, options = {}
   if (total < 1) {
     throw pageNumberingError('PAGE_NUMBERING_INPUT_EMPTY', 'PERMANENT_INPUT');
   }
+  const rawExcluded = options.page_numbering_excluded_pages ?? [];
+  if (!Array.isArray(rawExcluded)) {
+    throw pageNumberingError('PAGE_NUMBERING_EXCLUSIONS_INVALID', 'POLICY_VIOLATION');
+  }
+  const excludedPages = rawExcluded.map(value => Number(value));
+  if (
+    excludedPages.some(value => !Number.isSafeInteger(value) || value < 1 || value > total)
+    || new Set(excludedPages).size !== excludedPages.length
+  ) {
+    throw pageNumberingError('PAGE_NUMBERING_EXCLUSIONS_INVALID', 'POLICY_VIOLATION');
+  }
+  excludedPages.sort((left, right) => left - right);
+  if (contract === 'FINAL_MERGE_GLOBAL_V1' && excludedPages.length) {
+    throw pageNumberingError('PAGE_NUMBERING_EXCLUSIONS_UNSUPPORTED', 'POLICY_VIOLATION');
+  }
+  const excluded = new Set(excludedPages);
   for (let index = 0; index < total; index += 1) {
+    if (excluded.has(index + 1)) continue;
     const page = pages[index];
     const label = `${index + 1} / ${total}`;
     const size = 8;
@@ -50,6 +67,8 @@ export async function applyGlobalPageNumbers(inputPath, outputPath, options = {}
   }
   return {
     page_count: total,
-    page_numbering_contract: contract
+    numbered_page_count: total - excludedPages.length,
+    page_numbering_contract: contract,
+    page_numbering_excluded_pages: excludedPages
   };
 }

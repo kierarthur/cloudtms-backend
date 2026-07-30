@@ -110,6 +110,8 @@ begin
     select coalesce(jsonb_object_agg(t.timesheet_id::text,
       jsonb_build_object(
         'reference_number',t.reference_number,
+        'hospital_norm',t.hospital_norm,
+        'ward_norm',t.ward_norm,
         'day_references_json',t.day_references_json,
         'actual_schedule_json',case
           when upper(coalesce(f.invoice_breakdown_json->>'mode',''))='SEGMENTS'

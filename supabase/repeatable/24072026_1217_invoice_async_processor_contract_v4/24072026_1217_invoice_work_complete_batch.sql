@@ -189,6 +189,11 @@ begin
             and coalesce(i.processor_result->>'page_numbering_contract','')
               is distinct from coalesce(
                 i.payload_json->>'page_numbering_contract',''))
+          or(i.chunk_type='PDF_MERGE'
+            and coalesce(i.processor_result->'page_numbering_excluded_pages',
+                  '[]'::jsonb)
+              is distinct from coalesce(
+                i.payload_json->'page_numbering_excluded_pages','[]'::jsonb))
         ) then 'PROCESSOR_RESULT_IDENTITY_MISMATCH'
         when i.outcome='SUCCESS'
           and i.chunk_type in('SOURCE_RENDER','INVOICE_CORE_RENDER')
@@ -616,6 +621,10 @@ begin
             or coalesce(i.processor_result#>>
               '{merge_receipt,page_numbering_contract}','')<>
                 coalesce(i.payload_json->>'page_numbering_contract','')
+            or coalesce(i.processor_result#>
+              '{merge_receipt,page_numbering_excluded_pages}','[]'::jsonb)<>
+                coalesce(i.payload_json->'page_numbering_excluded_pages',
+                  '[]'::jsonb)
           ) then 'MERGE_RECEIPT_CHAIN_MISMATCH'
         when i.outcome='SUCCESS' and i.chunk_type='PDF_MERGE'
           and(i.expected_page_count is null
@@ -1736,7 +1745,13 @@ begin
         or (
           c.payload_json#>>'{final_merge_receipt,page_numbering_applied}'='true'
           and c.payload_json#>>'{final_merge_receipt,page_numbering_contract}'
-            ='FINAL_MERGE_GLOBAL_V1'
+            in('FINAL_MERGE_GLOBAL_V1','FINAL_MERGE_SELECTIVE_V2')
+          and (
+            c.payload_json#>>'{final_merge_receipt,page_numbering_contract}'
+              <>'FINAL_MERGE_SELECTIVE_V2'
+            or jsonb_typeof(c.payload_json#>
+              '{final_merge_receipt,page_numbering_excluded_pages}')='array'
+          )
         )
       )
       and coalesce(x#>>'{result,actual_page_count}','')~'^[0-9]{1,9}$'

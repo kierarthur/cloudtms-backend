@@ -1,0 +1,12 @@
+\set ON_ERROR_STOP on
+
+begin;
+
+\ir 25072026_0002_private_invoice_presentation_snapshot_batch.sql
+\ir 23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql
+\ir 23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql
+\ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql
+\ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_context_batch.sql
+\ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
+
+commit;

@@ -347,10 +347,32 @@ begin
         nullif(btrim(ct.role),'')) job_profile_title,
       coalesce(nullif(btrim(cl.name),''),nullif(btrim(vs.client_name),''),
         nullif(btrim(t.hospital_norm),'')) client_name,
-      coalesce(nullif(btrim(t.hospital_norm),''),
-        nullif(btrim(cl.name),''),nullif(btrim(vs.client_name),'')) hospital,
-      concat_ws(' / ',nullif(btrim(t.hospital_norm),''),
-        nullif(btrim(t.ward_norm),'')) site_ward,
+      nullif(lower(btrim(t.hospital_norm)),'') hospital_norm,
+      nullif(lower(btrim(t.ward_norm)),'') ward_norm,
+      coalesce(
+        regexp_replace(
+          regexp_replace(
+            initcap(lower(nullif(btrim(t.hospital_norm),''))),
+            '\mSt Richards\M','St Richard''s','g'),
+          '\mNhs\M','NHS','g'),
+        nullif(btrim(cl.name),''),
+        nullif(btrim(vs.client_name),'')) hospital,
+      regexp_replace(
+        regexp_replace(
+          initcap(lower(nullif(btrim(t.ward_norm),''))),
+          '\mNhs\M','NHS','g'),
+        '\mIcu\M','ICU','g') ward_display,
+      concat_ws(' - ',
+        regexp_replace(
+          regexp_replace(
+            initcap(lower(nullif(btrim(t.hospital_norm),''))),
+            '\mSt Richards\M','St Richard''s','g'),
+          '\mNhs\M','NHS','g'),
+        regexp_replace(
+          regexp_replace(
+            initcap(lower(nullif(btrim(t.ward_norm),''))),
+            '\mNhs\M','NHS','g'),
+          '\mIcu\M','ICU','g')) site_ward,
       coalesce(nullif(btrim(tf.band),''),nullif(btrim(t.band),'')) band,
       coalesce(tf.invoice_breakdown_json,'{}'::jsonb) invoice_breakdown_json,
       coalesce(tf.additional_units_json,
@@ -790,7 +812,14 @@ begin
           'surname',b.candidate_surname,
           'job_profile_title',b.job_profile_title),
         'client',jsonb_build_object(
-          'name',b.client_name,'hospital',b.hospital,'site_ward',b.site_ward),
+          'name',b.client_name,
+          'hospital_norm',b.hospital_norm,
+          'ward_norm',b.ward_norm,
+          'hospital',b.hospital,
+          'hospital_display',b.hospital,
+          'ward_display',b.ward_display,
+          'site_ward',b.site_ward,
+          'hospital_ward_display',b.site_ward),
         'band',b.band,
         'branding',jsonb_build_object(
           'agency_name',coalesce(nullif(b.agency_name,''),'ARMS'),

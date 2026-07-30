@@ -101644,6 +101644,7 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
     // - remove_segment_refs
     // - add_segment_refs
     // - reference_updates
+    // - timesheet_location_updates
   const manRes = await sbRpc(
   env,
   'invoice_apply_edits',
@@ -101755,12 +101756,15 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
       );
     } catch {}
 
-    let accepted_operations = [];
+    let accepted_operations = Array.isArray(manifest.accepted_operations)
+      ? manifest.accepted_operations
+      : [];
     let operation_submission_error = null;
     if (isInvoiceAsyncPipelineEnabled(env)) {
       const requestPreview = payload.request_preview === true
         || payload.prepare_preview === true
         || payload.render_pdf === true;
+      const requestTimesheetDocuments = payload.request_timesheet_documents === true;
       const requestIssue = payload.issue === true
         || payload.issue_invoice === true
         || payload.issue_after_save === true;
@@ -101770,7 +101774,24 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
         || payload.email_after_issue === true
       );
       const commands = [];
-      if (requestPreview) {
+      const changedTimesheetIds = Array.isArray(manifest.changed_timesheet_ids)
+        ? [...new Set(manifest.changed_timesheet_ids
+            .map(value => String(value || '').trim().toLowerCase())
+            .filter(value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)))]
+        : [];
+      const sourceReplacementQueueStarted = manifest.document_queue_requested === true;
+      if (requestTimesheetDocuments && !sourceReplacementQueueStarted) {
+        for (const timesheetId of changedTimesheetIds) {
+          commands.push({
+            command_type: 'VIEW_TIMESHEET_DOCUMENT',
+            timesheet_id: timesheetId,
+            purpose: 'TIMESHEET',
+            priority_reason: 'SOURCE_EDIT_REPLACEMENT',
+            template_version: 'timesheet-professional-v2'
+          });
+        }
+      }
+      if (requestPreview && !sourceReplacementQueueStarted) {
         commands.push({
           command_type: 'VIEW_INVOICE_DOCUMENT',
           invoice_id: invoiceId,
@@ -101812,17 +101833,28 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
             p_actor_user_id: user.id,
             p_now_utc: new Date().toISOString()
           });
-          accepted_operations = Array.isArray(started)
+          const newlyAccepted = Array.isArray(started)
             ? started
             : (Array.isArray(started?.data) ? started.data : [started].filter(Boolean));
-          await nudgeInvoiceOperations(env, accepted_operations, {
-            ctx,
-            rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
-            lanes: ['DATABASE', 'DOCUMENT']
-          });
+          accepted_operations = [...accepted_operations, ...newlyAccepted];
         } catch (operationError) {
           operation_submission_error = {
             code: 'INVOICE_OPERATION_SUBMISSION_FAILED',
+            message: String(operationError?.message || operationError).slice(0, 500)
+          };
+        }
+      }
+      if (accepted_operations.length) {
+        try {
+          await nudgeInvoiceOperations(env, accepted_operations, {
+            ctx,
+            rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+            lanes: ['DATABASE', 'DOCUMENT'],
+            priorityClass: 'INTERACTIVE'
+          });
+        } catch (operationError) {
+          operation_submission_error = operation_submission_error || {
+            code: 'INVOICE_OPERATION_CONTINUATION_FAILED',
             message: String(operationError?.message || operationError).slice(0, 500)
           };
         }
@@ -101855,6 +101887,9 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
       accepted_operations,
       async_processing: accepted_operations.length > 0,
       operation_submission_error,
+      changed_timesheet_ids: Array.isArray(manifest.changed_timesheet_ids)
+        ? manifest.changed_timesheet_ids
+        : [],
 
       // also return the raw manifest for any future UI needs
       manifest

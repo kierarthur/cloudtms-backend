@@ -406,6 +406,8 @@ begin
             (v.payload_json->>'apply_final_page_numbers')::boolean,false),
           'page_numbering_contract',
             v.payload_json->>'page_numbering_contract',
+          'page_numbering_excluded_pages',coalesce(
+            v.payload_json->'page_numbering_excluded_pages','[]'::jsonb),
           'document_entity_type',v.document_entity_type,
           'document_version_id',v.document_version_id,
           'expected_page_count',v.expected_page_count,
@@ -543,7 +545,9 @@ begin
           'snapshot_hash',p.context->>'snapshot_hash',
           'ordered_input_hash',coalesce(p.context->>'ordered_input_hash',p.context->>'expected_ordered_input_hash'),
           'apply_final_page_numbers',p.context->'apply_final_page_numbers',
-          'page_numbering_contract',p.context->>'page_numbering_contract'),
+          'page_numbering_contract',p.context->>'page_numbering_contract',
+          'page_numbering_excluded_pages',
+            p.context->'page_numbering_excluded_pages'),
         'context',p.context)
       else jsonb_build_object(
         'chunk_id',p.chunk_id,'operation_id',p.operation_id,
