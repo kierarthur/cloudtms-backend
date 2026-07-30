@@ -368,6 +368,44 @@ begin
       and l.entity_type='TIMESHEET'
       and upper(coalesce(it.submission_mode,'')) in('MANUAL','QR')
       and it.manual_document_asset_id is null
+      and not exists(
+        select 1
+        from public.invoice_document_versions v
+        where v.id=l.resolved_document_version_id
+          and v.snapshot_json#>>'{presentation_model,schema_version}'=
+            'TIMESHEET_RENDER_MODEL_V2'
+          and v.snapshot_json#>>'{presentation_model,form_variant}'=
+            'QR_UNSIGNED')
+    returning c.id
+  ),
+  unsigned_electronic_timesheet_source as materialized (
+    update public.invoice_operation_chunks c
+    set status='BLOCKED',phase='BLOCKED',failed_at_utc=v_now,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null,
+        error_json=jsonb_build_object(
+          'code','TIMESHEET_SIGNED_EVIDENCE_REQUIRED',
+          'timesheet_id',src.timesheet_id),
+        updated_at_utc=v_now
+    from linked l
+    join public.invoice_document_versions v
+      on v.id=l.resolved_document_version_id
+    cross join lateral (
+      select (x.value->>'timesheet_id')::uuid timesheet_id
+      from jsonb_array_elements(case
+        when jsonb_typeof(v.snapshot_json->'timesheet_sources')='array'
+          then v.snapshot_json->'timesheet_sources'
+        else '[]'::jsonb end) x(value)
+      where coalesce(x.value->>'timesheet_id','')~*
+          '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        and x.value#>>'{render_model,schema_version}'=
+          'TIMESHEET_RENDER_MODEL_V2'
+        and x.value#>>'{render_model,form_variant}'=
+          'ELECTRONIC_UNSIGNED'
+        and lower(coalesce(x.value->>'attach_timesheet','true'))
+          in('true','t','1','yes')
+      limit 1
+    ) src
+    where c.id=l.id and l.entity_type='INVOICE'
     returning c.id
   ),
   evidence_candidates as materialized (
@@ -536,34 +574,14 @@ begin
   ),
   section_pages as materialized (
     select l.id chunk_id,l.resolved_document_version_id document_version_id,
-      100::integer ordinal,'ATTACHMENT_INDEX'::text input_type,
-      'DOCUMENT'::text source_entity_type,l.resolved_document_version_id source_entity_id,
-      encode(digest(concat_ws('|',l.resolved_document_version_id::text,
-        count(a.asset_id)::text,count(r.source_entity_id)::text),'sha256'),'hex') source_revision,
+      1900 ordinal,'SECTION_SEPARATOR' input_type,
+      'DOCUMENT' source_entity_type,
+      l.resolved_document_version_id source_entity_id,
+      encode(digest(l.resolved_document_version_id::text||
+        '|EVIDENCE','sha256'),'hex') source_revision,
       null::uuid asset_id,null::uuid input_document_version_id,
-      'Attachment index'::text display_label,null::integer expected_page_count,
-      'ATTACHMENT_INDEX'::text inclusion_reason
-    from linked l
-    left join assets a on a.chunk_id=l.id
-    left join render_items r on r.chunk_id=l.id
-    where l.entity_type='INVOICE'
-    group by l.id,l.resolved_document_version_id
-    having count(a.asset_id)>0 or count(r.source_entity_id)>0
-    union all
-    select l.id,l.resolved_document_version_id,900,'SECTION_SEPARATOR',
-      'DOCUMENT',l.resolved_document_version_id,
-      encode(digest(l.resolved_document_version_id::text||
-        '|ELECTRONIC_TIMESHEETS','sha256'),'hex'),
-      null,null,'Timesheets',1,'SECTION_SEPARATOR'
-    from linked l
-    where exists(select 1 from render_items r
-      where r.chunk_id=l.id and r.input_type='ELECTRONIC_TIMESHEET')
-    union all
-    select l.id,l.resolved_document_version_id,1900,'SECTION_SEPARATOR',
-      'DOCUMENT',l.resolved_document_version_id,
-      encode(digest(l.resolved_document_version_id::text||
-        '|EVIDENCE','sha256'),'hex'),
-      null,null,'Timesheet and evidence attachments',1,'SECTION_SEPARATOR'
+      'Timesheet and evidence attachments' display_label,
+      1 expected_page_count,'SECTION_SEPARATOR' inclusion_reason
     from linked l
     where exists(select 1 from assets a where a.chunk_id=l.id)
     union all
@@ -598,12 +616,25 @@ begin
     where not exists(
         select 1 from missing_manual_timesheet_source missing
         where missing.id=l.id)
+      and not exists(
+        select 1 from unsigned_electronic_timesheet_source unsigned_source
+        where unsigned_source.id=l.id)
       and (
         l.entity_type='INVOICE'
         or exists(
           select 1 from invoice_timesheets it
           where it.chunk_id=l.id
             and upper(coalesce(it.submission_mode,''))='ELECTRONIC')
+        or (
+          l.entity_type='TIMESHEET'
+          and exists(
+            select 1
+            from public.invoice_document_versions v
+            where v.id=l.resolved_document_version_id
+              and v.snapshot_json#>>'{presentation_model,schema_version}'=
+                'TIMESHEET_RENDER_MODEL_V2'
+              and v.snapshot_json#>>'{presentation_model,form_variant}'=
+                'QR_UNSIGNED'))
       )
     union all
     select s.chunk_id,s.document_version_id,s.ordinal,s.input_type,
@@ -660,11 +691,15 @@ begin
         case when l.entity_type='INVOICE' then 'INVOICE_CORE_RENDER'
           else 'SOURCE_RENDER' end,l.resolved_document_version_id::text,
         '0',mi.input_type,mi.source_revision,
-        (select template_version from public.invoice_document_versions v
-          where v.id=l.resolved_document_version_id),'1'),'sha256'),'hex'),
+        case when l.entity_type='TIMESHEET' then 'timesheet-professional-v2'
+          else (select template_version from public.invoice_document_versions v
+            where v.id=l.resolved_document_version_id) end,'1'),'sha256'),'hex'),
       0,l.entity_type,l.entity_id,l.resolved_document_version_id,'QUEUED',l.priority,v_now,
       jsonb_build_object('render_kind',case when l.entity_type='INVOICE' then 'INVOICE_CORE' else 'ELECTRONIC_TIMESHEET' end,
-        'template_version',(select template_version from public.invoice_document_versions v where v.id=l.resolved_document_version_id),
+        'template_version',case when l.entity_type='TIMESHEET'
+          then 'timesheet-professional-v2'
+          else (select template_version from public.invoice_document_versions v
+            where v.id=l.resolved_document_version_id) end,
         'source_chunk_key',encode(digest(concat_ws('|',l.resolved_document_version_id::text,
           '0',case when l.entity_type='INVOICE' then 'INVOICE_CORE' else 'ELECTRONIC_TIMESHEET' end,
           l.entity_type,l.entity_id::text,
@@ -683,16 +718,20 @@ begin
     select l.operation_id,'SOURCE_RENDER','RENDER',
       encode(digest(concat_ws('|','SOURCE_RENDER',m.document_version_id::text,
         m.ordinal::text,m.input_type,m.source_revision,
-        (select template_version from public.invoice_document_versions v
-          where v.id=l.resolved_document_version_id),'1'),'sha256'),'hex'),
+        case when m.input_type='ELECTRONIC_TIMESHEET'
+          then 'timesheet-professional-v2'
+          else (select template_version from public.invoice_document_versions v
+            where v.id=l.resolved_document_version_id) end,'1'),'sha256'),'hex'),
       m.ordinal,m.source_entity_type,
       m.source_entity_id,l.resolved_document_version_id,'QUEUED',l.priority,v_now,
       jsonb_build_object('render_kind',m.input_type,'source_revision',m.source_revision,
         'source_chunk_key',encode(digest(concat_ws('|',m.document_version_id::text,
           m.ordinal::text,m.input_type,m.source_entity_type,m.source_entity_id::text,
           m.source_revision),'sha256'),'hex'),
-        'template_version',(select template_version from public.invoice_document_versions v
-          where v.id=l.resolved_document_version_id)),
+        'template_version',case when m.input_type='ELECTRONIC_TIMESHEET'
+          then 'timesheet-professional-v2'
+          else (select template_version from public.invoice_document_versions v
+            where v.id=l.resolved_document_version_id) end),
       o.control_version,v_now,v_now
     from linked l join manifest_items m on m.chunk_id=l.id
     join public.invoice_operations o on o.id=l.operation_id
@@ -1410,7 +1449,13 @@ begin
       expected_page_count,expected_byte_count,operation_control_version,created_at_utc,updated_at_utc)
     select g.operation_id,'PDF_MERGE','MERGE',
       encode(digest(concat_ws('|','PDF_MERGE',g.document_version_id::text,
-        '0',g.group_no::text,g.ordered_input_hash,pg.plan_generation::text),
+        '0',g.group_no::text,g.ordered_input_hash,pg.plan_generation::text,
+        case when (select count(*) from leaf_groups all_groups
+          where all_groups.operation_id=g.operation_id
+            and all_groups.document_version_id=g.document_version_id)=1
+          and (select entity_type from public.invoice_document_versions
+            where id=g.document_version_id)='INVOICE'
+          then 'FINAL_MERGE_GLOBAL_V1' else 'NONE' end),
         'sha256'),'hex'),
       pg.plan_generation,g.group_no,0,'DOCUMENT',
       g.document_version_id,g.document_version_id,'QUEUED',550,v_now,
@@ -1422,7 +1467,23 @@ begin
         'expected_physical_receipt_root',g.expected_physical_receipt_root,
         'expected_physical_receipts',g.expected_physical_receipts,
         'receipt_contract','ACTUAL_BYTES_MERGE_RECEIPT_V3',
-        'plan_generation',pg.plan_generation),
+        'plan_generation',pg.plan_generation,
+        'apply_final_page_numbers',
+          (select count(*) from leaf_groups all_groups
+             where all_groups.operation_id=g.operation_id
+               and all_groups.document_version_id=g.document_version_id)=1
+          and (select entity_type from public.invoice_document_versions
+            where id=g.document_version_id)='INVOICE',
+        'page_numbering_contract',case
+          when (select count(*) from leaf_groups all_groups
+             where all_groups.operation_id=g.operation_id
+               and all_groups.document_version_id=g.document_version_id)=1
+            and (select entity_type from public.invoice_document_versions
+              where id=g.document_version_id)='INVOICE'
+          then 'FINAL_MERGE_GLOBAL_V1' else null end,
+        'document_entity_type',(select entity_type
+          from public.invoice_document_versions where id=g.document_version_id),
+        'document_version_id',g.document_version_id),
       g.expected_pages,g.expected_bytes,o.control_version,v_now,v_now
     from leaf_groups g
     join public.invoice_operations o on o.id=g.operation_id
@@ -1715,7 +1776,13 @@ begin
     select g.operation_id,'PDF_MERGE','MERGE',
       encode(digest(concat_ws('|','PDF_MERGE',g.document_version_id::text,
         g.next_level::text,g.group_no::text,g.ordered_input_hash,
-        pg.plan_generation::text),
+        pg.plan_generation::text,
+        case when (select count(*) from next_groups all_groups
+          where all_groups.operation_id=g.operation_id
+            and all_groups.document_version_id=g.document_version_id)=1
+          and (select entity_type from public.invoice_document_versions
+            where id=g.document_version_id)='INVOICE'
+          then 'FINAL_MERGE_GLOBAL_V1' else 'NONE' end),
         'sha256'),'hex'),
       pg.plan_generation,g.group_no,g.next_level,'DOCUMENT',g.document_version_id,
       g.document_version_id,'QUEUED',550,v_now,
@@ -1727,7 +1794,23 @@ begin
         'expected_physical_receipt_root',g.expected_physical_receipt_root,
         'expected_physical_receipts',g.physical_receipts,
         'receipt_contract','ACTUAL_BYTES_MERGE_RECEIPT_V3',
-        'plan_generation',pg.plan_generation),
+        'plan_generation',pg.plan_generation,
+        'apply_final_page_numbers',
+          (select count(*) from next_groups all_groups
+             where all_groups.operation_id=g.operation_id
+               and all_groups.document_version_id=g.document_version_id)=1
+          and (select entity_type from public.invoice_document_versions
+            where id=g.document_version_id)='INVOICE',
+        'page_numbering_contract',case
+          when (select count(*) from next_groups all_groups
+             where all_groups.operation_id=g.operation_id
+               and all_groups.document_version_id=g.document_version_id)=1
+            and (select entity_type from public.invoice_document_versions
+              where id=g.document_version_id)='INVOICE'
+          then 'FINAL_MERGE_GLOBAL_V1' else null end,
+        'document_entity_type',(select entity_type
+          from public.invoice_document_versions where id=g.document_version_id),
+        'document_version_id',g.document_version_id),
       g.expected_pages,g.expected_bytes,o.control_version,v_now,v_now
     from next_groups g join public.invoice_operations o on o.id=g.operation_id
     cross join lateral (

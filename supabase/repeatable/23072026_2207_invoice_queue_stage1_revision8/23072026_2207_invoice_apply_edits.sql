@@ -72,6 +72,7 @@ v_has_expense_or_mileage boolean;
   v_refupd_meta_rows_updated int := 0;
   v_refupd_tsfin_rows_updated int := 0;
   v_refupd_tsfin_segments_updated int := 0;
+  v_refupd_invoice_fallback_invalidated boolean := false;
 
   -- temp vars for reference-derived meta and optional tsfin segment ref sync
   v_ref_ts_id uuid;
@@ -105,7 +106,7 @@ v_ref_seg_cur_ref text;
   v_cw_ts_ids uuid[] := array[]::uuid[];
 
   v_ts_ids_touched uuid[] := array[]::uuid[];
-  -- ✅ FIX: timesheets fully removed from this invoice (no remaining invoice_lines) should be unlocked
+  -- FIX: timesheets fully removed from this invoice (no remaining invoice_lines) should be unlocked
   v_ts_ids_fully_removed uuid[] := array[]::uuid[];
 
   v_vat_chargeable boolean := true;
@@ -732,7 +733,7 @@ delete from public.invoice_lines
       );
     end if;
 
-    -- ✅ FIX: if a touched timesheet now has NO remaining invoice_lines on this invoice,
+    -- FIX: if a touched timesheet now has NO remaining invoice_lines on this invoice,
     -- unlock it even if the removed lines were expenses/mileage/additional (expense-only/SEGMENTS-empty case).
     v_ts_ids_fully_removed := array[]::uuid[];
     select array_agg(distinct x)
@@ -1487,9 +1488,354 @@ end if;
         v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object('step','add_timesheet_loaded','timesheet_id',coalesce(tsid::text,''),'tsfin_id',coalesce(snap.id::text,'')));
       end if;
 
-      -- (rest of function unchanged)
-      -- ...
+      select v.r2_key
+      into v_exact_timesheet_document_r2_key
+      from public.timesheets t
+      join public.invoice_document_versions v
+        on v.entity_type='TIMESHEET'
+       and v.entity_id=t.timesheet_id
+       and v.purpose='TIMESHEET'
+       and v.source_revision=t.document_revision::text
+       and v.status='READY'
+       and nullif(v.r2_key,'') is not null
+       and nullif(v.sha256,'') is not null
+       and coalesce(v.size_bytes,0)>0
+       and coalesce(v.page_count,0)>0
+      where t.timesheet_id=tsid and t.is_current
+      order by v.ready_at_utc desc nulls last,v.id desc
+      limit 1;
+      contract_id := snap.contract_id;
+      c_daily_calc := false;
+      c_bucket_labels := null;
+      c_role := null;
+      c_display_site := null;
+      c_ward_hint := null;
+
+      if contract_id is not null then
+        select
+          coalesce(overrideclientsettings,false),
+          daily_calc_of_invoices,
+          bucket_labels_json,
+          nullif(btrim(coalesce(role,'')), ''),
+          nullif(btrim(coalesce(display_site,'')), ''),
+          nullif(btrim(coalesce(ward_hint,'')), '')
+        into
+          v_contract_override, v_contract_daily_calc, v_contract_bucket_labels, c_role, c_display_site, c_ward_hint
+        from public.contracts
+        where id = contract_id
+        limit 1;
+
+        c_daily_calc := case when v_contract_override then coalesce(v_contract_daily_calc,false) else v_client_daily_calc end;
+        c_bucket_labels := case when v_contract_override then v_contract_bucket_labels else null end;
+      end if;
+
+      if c_bucket_labels is null then
+        c_bucket_labels := jsonb_build_object('day','Day','night','Night','sat','Sat','sun','Sun','bh','BH');
+      end if;
+
+      natural_start := (snap.week_ending_date::date - 6);
+
+      segments := '[]'::jsonb;
+
+      -- Build invoiceable segment set for THIS invoice week_start
+      if snap.invoice_breakdown_json is not null
+         and jsonb_typeof(snap.invoice_breakdown_json)='object'
+         and coalesce(snap.invoice_breakdown_json->>'mode','')='SEGMENTS'
+         and jsonb_typeof(snap.invoice_breakdown_json->'segments')='array'
+      then
+        for v_seg in
+          select value from jsonb_array_elements(snap.invoice_breakdown_json->'segments') value
+        loop
+          if v_seg is null or jsonb_typeof(v_seg) <> 'object' then
+            continue;
+          end if;
+
+          seg_locked := nullif(btrim(coalesce(v_seg->>'invoice_locked_invoice_id','')), '');
+          if seg_locked is not null then
+            continue; -- already invoiced
+          end if;
+
+          seg_target := nullif(btrim(coalesce(v_seg->>'invoice_target_week_start','')), '')::date;
+          seg_ref := btrim(coalesce(v_seg->>'ref_num',''));
+
+          -- segment-level ref gating if required
+          select * into pc from public.v_ts_invoice_precheck where timesheet_id = tsid limit 1;
+          if pc.require_reference_to_invoice is true and seg_ref = '' then
+            continue;
+          end if;
+
+          -- delayed detection
+          if seg_target is null or seg_target = natural_start then
+            -- not delayed: belongs to natural week only
+            if v_week_start <> natural_start then
+              continue;
+            end if;
+            -- allow early is implicit for invoice edits (invoice is already being edited)
+            segments := segments || jsonb_build_array(v_seg);
+          else
+            -- delayed: only if this invoice week matches target AND target has arrived (no early invoicing for delayed)
+            if v_week_start = seg_target and seg_target <= v_anchor_ymd then
+              segments := segments || jsonb_build_array(v_seg);
+            end if;
+          end if;
+        end loop;
+      else
+        -- Non-segments: include only when invoice week matches natural week
+        if v_week_start = natural_start then
+          segments := jsonb_build_array(
+            jsonb_build_object(
+              'segment_id', null,
+              'date', coalesce(snap.week_ending_date::text, v_week_start::text),
+              'hours_day', public._inv_round2(coalesce(snap.hours_day,0)),
+              'hours_night', public._inv_round2(coalesce(snap.hours_night,0)),
+              'hours_sat', public._inv_round2(coalesce(snap.hours_sat,0)),
+              'hours_sun', public._inv_round2(coalesce(snap.hours_sun,0)),
+              'hours_bh', public._inv_round2(coalesce(snap.hours_bh,0)),
+              'pay_amount', public._inv_round2(
+                coalesce(snap.total_pay_ex_vat,0)
+                - coalesce(snap.additional_pay_ex_vat,0)
+                - coalesce(snap.expenses_pay_ex_vat,0)
+                - coalesce(snap.mileage_pay_ex_vat,0)
+              ),
+              'charge_amount', public._inv_round2(
+                coalesce(snap.total_charge_ex_vat,0)
+                - coalesce(snap.additional_charge_ex_vat,0)
+                - coalesce(snap.expenses_charge_ex_vat,0)
+                - coalesce(snap.mileage_charge_ex_vat,0)
+              ),
+              'ref_num', coalesce(snap.reference_number,'')
+            )
+          );
+        end if;
+      end if;
+
+      if jsonb_array_length(coalesce(segments,'[]'::jsonb)) = 0 then
+        continue;
+      end if;
+
+      -- Build the exact invoice-line economics from the frozen current financial snapshot.
+      -- This mirrors Invoice Async V8 generation and never derives economics from mutable live rows.
+      select p.vat_rate
+      into v_vat_rate
+      from private._invoice_generation_vat_policy_batch(jsonb_build_array(jsonb_build_object(
+        'source_member_key','invoice-edit:'||tsid::text,
+        'source_type','TIMESHEET',
+        'source_id',tsid,
+        'timesheet_id',tsid,
+        'effective_date',snap.week_ending_date
+      ))) p
+      where p.source_member_key='invoice-edit:'||tsid::text
+        and p.valid
+        and p.vat_rate is not null
+      limit 1;
+
+      if not found then
+        raise exception 'INVOICE_EDIT_VAT_POLICY_UNRESOLVED'
+          using errcode='P0001',detail=jsonb_build_object(
+            'invoice_id',p_invoice_id,'timesheet_id',tsid)::text;
+      end if;
+
+      insert into public.invoice_lines(
+        invoice_id,timesheet_id,booking_id,description,
+        hours_day,hours_night,hours_sat,hours_sun,hours_bh,
+        pay_day,pay_night,pay_sat,pay_sun,pay_bh,
+        charge_day,charge_night,charge_sat,charge_sun,charge_bh,
+        total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat,
+        vat_rate_pct,vat_amount,total_inc_vat,
+        paper_ts_r2_key,meta_json,source_key
+      )
+      with base as materialized (
+        select coalesce(
+          (select nullif(btrim(coalesce(cd.display_name,'')),'')
+             from public.candidates cd where cd.id=snap.candidate_id limit 1),
+          'TS '||tsid::text
+        ) candidate_display
+      ),
+      segment_rows as materialized (
+        select
+          case when left(coalesce(s.value->>'date',''),10) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+            then left(s.value->>'date',10) end work_date,
+          case when pg_input_is_valid(s.value->>'hours_day','numeric') then (s.value->>'hours_day')::numeric else 0 end h_day,
+          case when pg_input_is_valid(s.value->>'hours_night','numeric') then (s.value->>'hours_night')::numeric else 0 end h_night,
+          case when pg_input_is_valid(s.value->>'hours_sat','numeric') then (s.value->>'hours_sat')::numeric else 0 end h_sat,
+          case when pg_input_is_valid(s.value->>'hours_sun','numeric') then (s.value->>'hours_sun')::numeric else 0 end h_sun,
+          case when pg_input_is_valid(s.value->>'hours_bh','numeric') then (s.value->>'hours_bh')::numeric else 0 end h_bh,
+          case
+            when pg_input_is_valid(s.value->>'pay_amount','numeric') then (s.value->>'pay_amount')::numeric
+            when pg_input_is_valid(s.value->>'pay_ex_vat','numeric') then (s.value->>'pay_ex_vat')::numeric
+            else 0 end pay_ex,
+          case
+            when pg_input_is_valid(s.value->>'charge_amount','numeric') then (s.value->>'charge_amount')::numeric
+            when pg_input_is_valid(s.value->>'charge_ex_vat','numeric') then (s.value->>'charge_ex_vat')::numeric
+            else 0 end charge_ex
+        from jsonb_array_elements(segments) s(value)
+      ),
+      hour_daily as materialized (
+        select s.work_date,sum(s.h_day) h_day,sum(s.h_night) h_night,sum(s.h_sat) h_sat,
+          sum(s.h_sun) h_sun,sum(s.h_bh) h_bh,sum(s.pay_ex) pay_ex,sum(s.charge_ex) charge_ex
+        from segment_rows s
+        where c_daily_calc and s.work_date is not null
+        group by s.work_date
+      ),
+      hour_weekly as materialized (
+        select sum(s.h_day) h_day,sum(s.h_night) h_night,sum(s.h_sat) h_sat,
+          sum(s.h_sun) h_sun,sum(s.h_bh) h_bh,sum(s.pay_ex) pay_ex,sum(s.charge_ex) charge_ex
+        from segment_rows s
+        having not c_daily_calc or not exists(select 1 from segment_rows d where d.work_date is not null)
+      ),
+      additional_source as materialized (
+        select upper(a.key) code,a.value unit
+        from jsonb_each(case when jsonb_typeof(snap.additional_units_json)='object'
+          then snap.additional_units_json else '{}'::jsonb end) a
+        where jsonb_typeof(a.value)='object' and btrim(a.key)<>''
+      ),
+      additional_daily as materialized (
+        select a.code,left(d.key,10) work_date,
+          case when pg_input_is_valid(d.value,'numeric') then d.value::numeric else 0 end units,
+          case when pg_input_is_valid(a.unit->>'pay_rate','numeric') then (a.unit->>'pay_rate')::numeric else 0 end pay_rate,
+          case when pg_input_is_valid(a.unit->>'charge_rate','numeric') then (a.unit->>'charge_rate')::numeric else 0 end charge_rate,
+          coalesce(nullif(a.unit->>'bucket_name',''),a.code) bucket_name,
+          coalesce(nullif(a.unit->>'unit_name',''),'units') unit_name,
+          a.unit->'frequency' frequency
+        from additional_source a
+        cross join lateral jsonb_each_text(case when jsonb_typeof(a.unit->'days')='object'
+          then a.unit->'days' else '{}'::jsonb end) d
+        where c_daily_calc
+          and left(d.key,10) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          and pg_input_is_valid(d.value,'numeric')
+          and d.value::numeric<>0
+          and exists(select 1 from segment_rows where work_date is not null)
+      ),
+      additional_weekly as materialized (
+        select a.code,
+          case when pg_input_is_valid(a.unit->>'unit_count','numeric') then (a.unit->>'unit_count')::numeric else 0 end units,
+          case when pg_input_is_valid(a.unit->>'pay_rate','numeric') then (a.unit->>'pay_rate')::numeric else 0 end pay_rate,
+          case when pg_input_is_valid(a.unit->>'charge_rate','numeric') then (a.unit->>'charge_rate')::numeric else 0 end charge_rate,
+          case when pg_input_is_valid(a.unit->>'pay_ex_vat','numeric') then (a.unit->>'pay_ex_vat')::numeric else 0 end pay_ex,
+          case when pg_input_is_valid(a.unit->>'charge_ex_vat','numeric') then (a.unit->>'charge_ex_vat')::numeric else 0 end charge_ex,
+          coalesce(nullif(a.unit->>'bucket_name',''),a.code) bucket_name,
+          coalesce(nullif(a.unit->>'unit_name',''),'units') unit_name,
+          a.unit->'frequency' frequency
+        from additional_source a
+        where not(c_daily_calc
+          and exists(select 1 from jsonb_each_text(case when jsonb_typeof(a.unit->'days')='object'
+            then a.unit->'days' else '{}'::jsonb end) d
+            where left(d.key,10) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+              and pg_input_is_valid(d.value,'numeric') and d.value::numeric<>0))
+          and (
+            (case when pg_input_is_valid(a.unit->>'pay_ex_vat','numeric') then (a.unit->>'pay_ex_vat')::numeric else 0 end)<>0
+            or (case when pg_input_is_valid(a.unit->>'charge_ex_vat','numeric') then (a.unit->>'charge_ex_vat')::numeric else 0 end)<>0
+          )
+      ),
+      expense_lines as materialized (
+        select e.code,e.pay_ex,e.charge_ex
+        from (values
+          ('TRAVEL',coalesce(snap.travel_pay_ex_vat,0),coalesce(snap.travel_charge_ex_vat,0)),
+          ('ACCOMMODATION',coalesce(snap.accommodation_pay_ex_vat,0),coalesce(snap.accommodation_charge_ex_vat,0)),
+          ('OTHER',coalesce(snap.other_pay_ex_vat,0),coalesce(snap.other_charge_ex_vat,0)),
+          ('EXPENSES_FALLBACK',
+            case when coalesce(snap.travel_pay_ex_vat,0)+coalesce(snap.accommodation_pay_ex_vat,0)+coalesce(snap.other_pay_ex_vat,0)=0
+              then coalesce(snap.expenses_pay_ex_vat,0) else 0 end,
+            case when coalesce(snap.travel_charge_ex_vat,0)+coalesce(snap.accommodation_charge_ex_vat,0)+coalesce(snap.other_charge_ex_vat,0)=0
+              then coalesce(snap.expenses_charge_ex_vat,0) else 0 end),
+          ('MILEAGE',coalesce(snap.mileage_pay_ex_vat,0),coalesce(snap.mileage_charge_ex_vat,0))
+        ) e(code,pay_ex,charge_ex)
+        where e.pay_ex<>0 or e.charge_ex<>0
+      ),
+      line_union as materialized (
+        select b.candidate_display||' - '||h.work_date||' - W/E '||coalesce(snap.week_ending_date::text,'' ) description,
+          h.h_day,h.h_night,h.h_sat,h.h_sun,h.h_bh,h.pay_ex,h.charge_ex,
+          'HOURS_DAILY' line_type,'TS:'||tsid::text||':HOURS:'||h.work_date source_key,
+          jsonb_build_object('date',h.work_date) detail
+        from hour_daily h cross join base b
+        union all
+        select b.candidate_display||' - W/E '||coalesce(snap.week_ending_date::text,''),
+          h.h_day,h.h_night,h.h_sat,h.h_sun,h.h_bh,h.pay_ex,h.charge_ex,
+          'HOURS_WEEKLY','TS:'||tsid::text||':HOURS:WEEK','{}'::jsonb
+        from hour_weekly h cross join base b
+        union all
+        select b.candidate_display||' - '||a.bucket_name||' - '||a.work_date||' - '||a.units||' '||a.unit_name,
+          0,0,0,0,0,round(a.units*a.pay_rate,2),round(a.units*a.charge_rate,2),
+          'ADDITIONAL_RATE_DAILY','TS:'||tsid::text||':ADD:'||a.code||':'||a.work_date,
+          jsonb_build_object('date',a.work_date,'bucket',jsonb_build_object(
+            'code',a.code,'bucket_name',a.bucket_name,'unit_name',a.unit_name,'frequency',a.frequency),
+            'units',jsonb_build_object('unit_count',a.units,'pay_rate',a.pay_rate,'charge_rate',a.charge_rate))
+        from additional_daily a cross join base b
+        union all
+        select b.candidate_display||' - '||a.bucket_name||' - '||a.units||' '||a.unit_name,
+          0,0,0,0,0,a.pay_ex,a.charge_ex,
+          'ADDITIONAL_RATE','TS:'||tsid::text||':ADD:'||a.code||':WEEK',
+          jsonb_build_object('bucket',jsonb_build_object(
+            'code',a.code,'bucket_name',a.bucket_name,'unit_name',a.unit_name,'frequency',a.frequency),
+            'units',jsonb_build_object('unit_count',a.units,'pay_rate',a.pay_rate,'charge_rate',a.charge_rate))
+        from additional_weekly a cross join base b
+        union all
+        select case when e.code='MILEAGE' then 'Mileage - '||coalesce(snap.mileage_units,0)||' miles (W/E '||coalesce(snap.week_ending_date::text,'')||')'
+          when e.code='EXPENSES_FALLBACK' then 'Expenses (W/E '||coalesce(snap.week_ending_date::text,'')||')'
+          else initcap(replace(e.code,'_',' '))||' expenses (W/E '||coalesce(snap.week_ending_date::text,'')||')' end,
+          0,0,0,0,0,e.pay_ex,e.charge_ex,
+          case when e.code='MILEAGE' then 'MILEAGE'
+            when e.code='EXPENSES_FALLBACK' then 'EXPENSES_TOTAL'
+            else 'EXPENSE_'||e.code end,
+          case when e.code='MILEAGE' then 'TS:'||tsid::text||':MILEAGE'
+            when e.code='EXPENSES_FALLBACK' then 'TS:'||tsid::text||':EXP:TOTAL'
+            else 'TS:'||tsid::text||':EXP:'||e.code end,
+          jsonb_build_object('expense',case when e.code='MILEAGE' then jsonb_build_object(
+            'category','MILEAGE','mileage_units',snap.mileage_units,
+            'pay_rate',snap.mileage_pay_rate,'charge_rate',snap.mileage_charge_rate,
+            'evidence_r2_key',snap.mileage_evidence_r2_key,'evidence_manifest',snap.mileage_evidence_manifest)
+            else jsonb_build_object('category',e.code,'note',snap.expenses_description,
+              'evidence_r2_key',snap.expenses_evidence_r2_key,'evidence_manifest',snap.expenses_evidence_manifest) end)
+        from expense_lines e
+      )
+      select p_invoice_id,tsid,snap.booking_id,l.description,
+        round(l.h_day,2),round(l.h_night,2),round(l.h_sat,2),round(l.h_sun,2),round(l.h_bh,2),
+        null,null,null,null,null,
+        snap.charge_day,snap.charge_night,snap.charge_sat,snap.charge_sun,snap.charge_bh,
+        round(l.pay_ex,2),round(l.charge_ex,2),round(l.charge_ex-l.pay_ex,2),v_vat_rate,
+        round(l.charge_ex*v_vat_rate/100,2),round(l.charge_ex+(l.charge_ex*v_vat_rate/100),2),
+        v_exact_timesheet_document_r2_key,
+        jsonb_build_object('line_type',l.line_type,'timesheet_id',tsid,'tsfin_id',snap.id,
+          'candidate_display',l.description,'week_ending_date',snap.week_ending_date,
+          'role',c_role,'hospital',c_display_site,'ward',c_ward_hint,'bucket_labels',c_bucket_labels,
+          'totals',jsonb_build_object('line_pay_ex_vat',round(l.pay_ex,2),
+            'line_charge_ex_vat',round(l.charge_ex,2),'margin_ex_vat',round(l.charge_ex-l.pay_ex,2),
+            'vat_rate_pct',v_vat_rate,'vat_amount',round(l.charge_ex*v_vat_rate/100,2),
+            'total_inc_vat',round(l.charge_ex+(l.charge_ex*v_vat_rate/100),2)))||l.detail,
+        l.source_key
+      from line_union l
+      on conflict(invoice_id,source_key) do nothing;
+      -- Build segment refs to lock
+      if snap.invoice_breakdown_json is not null
+         and jsonb_typeof(snap.invoice_breakdown_json)='object'
+         and coalesce(snap.invoice_breakdown_json->>'mode','')='SEGMENTS'
+      then
+        for v_seg in
+          select value from jsonb_array_elements(segments) value
+        loop
+          if v_seg is null or jsonb_typeof(v_seg) <> 'object' then
+            continue;
+          end if;
+
+          seg_refs := seg_refs || jsonb_build_array(
+            jsonb_build_object(
+              'tsfin_id', snap.id::text,
+              'segment_id', nullif(btrim(coalesce(v_seg->>'segment_id','')), '')
+            )
+          );
+        end loop;
+      else
+        -- lock whole for non-segments
+        seg_refs := seg_refs || jsonb_build_array(
+          jsonb_build_object('tsfin_id', snap.id::text, 'segment_id', null)
+        );
+      end if;
     end loop;
+
+    -- Apply segment locks for the exact selected source rows.
+    if jsonb_typeof(seg_refs) = 'array' and jsonb_array_length(seg_refs) > 0 then
+      perform public._inv_lock_segments_for_invoice(p_invoice_id, seg_refs);
+    end if;
 
     -- History: timesheets added (always; includes requested ids)
     perform public._audit_insert(
@@ -1617,6 +1963,40 @@ end if;
       '{meta,segment_count}',to_jsonb(v_hdr_meta_segment_count),true),
     updated_at=now()
   where invu.id=p_invoice_id;
+
+  -- A reference-only edit can target a V8 draft whose legacy invoice_lines
+  -- carrier is temporarily absent.  In that case the timesheet invalidation
+  -- trigger cannot discover the parent invoice.  If no other statement in
+  -- this RPC has already invalidated the exact draft, nudge the ordinary
+  -- invoice invalidation trigger with bounded internal source metadata.
+  -- This keeps one invalidation authority and avoids a second revision bump
+  -- where a normal line/segment carrier already invalidated the invoice.
+  if coalesce(v_refupd_applied,0)>0
+     and exists(
+       select 1 from public.invoices i
+       where i.id=p_invoice_id
+         and i.status='DRAFT'
+         and i.document_revision=v_inv.document_revision
+     )
+  then
+    update public.invoices invu
+    set header_snapshot_json=jsonb_set(
+          coalesce(invu.header_snapshot_json,'{}'::jsonb),
+          '{meta,reference_source_change}',
+          jsonb_build_object(
+            'changed_at_utc',public._inv_iso_utc(v_now),
+            'timesheet_ids',coalesce(to_jsonb(v_refupd_ts_ids_distinct),'[]'::jsonb)
+          ),
+          true
+        ),
+        updated_at=v_now
+    where invu.id=p_invoice_id
+      and invu.status='DRAFT'
+      and invu.document_revision=v_inv.document_revision;
+
+    get diagnostics v_rc=row_count;
+    v_refupd_invoice_fallback_invalidated:=coalesce(v_rc,0)>0;
+  end if;
 -- Refresh invoice-level NHSP/HR cache after timesheet/segment changes
   if coalesce(v_refresh_hr_cache,false) = true then
     perform 1

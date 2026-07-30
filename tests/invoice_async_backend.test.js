@@ -74,7 +74,7 @@ function v8ProcessorBinding() {
       return new Response(JSON.stringify({
         ok: true,
         processor_policy_version: 'INVOICE_PROCESSOR_LIMITS_V4',
-        processor_implementation_version: 'cloudtms-invoice-document-worker-v6',
+        processor_implementation_version: 'cloudtms-invoice-document-worker-v9-pooled-native',
         supported_media_types: ['application/pdf', 'image/jpeg', 'image/png'],
         receipt_contracts: {
           object: 'ACTUAL_BYTES_OBJECT_RECEIPT_V3',
@@ -100,6 +100,7 @@ function v8Environment(overrides = {}) {
     INVOICE_ASYNC_EXPECTED_DB_CONTRACT: 'INVOICE_ASYNC_DB_V2',
     INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST: V8_FUNCTION_MANIFEST,
     INVOICE_ASYNC_BUILD_ID: 'invoice-async-v8-test',
+    INVOICE_EXPECTED_PROCESSOR_IMPLEMENTATION_VERSION: 'cloudtms-invoice-document-worker-v9-pooled-native',
     INVOICE_DOCUMENT_PROCESSOR_SECRET: 'test-processor-secret-with-more-than-thirty-two-characters',
     INVOICE_DOCUMENT_ACCESS_SECRET: 'test-document-secret-with-more-than-thirty-two-characters',
     INVOICE_QUEUE_DISPATCH_SECRET: 'test-dispatch-secret-with-more-than-thirty-two-characters',
@@ -940,7 +941,11 @@ test('issued document view selects the exact FINAL_ISSUE version and never queue
         headers: { 'idempotency-key': 'view-final-command' },
         body: '{}'
       }),
-      v8Environment({ INVOICE_ASYNC_ALLOWED_USER_IDS: actor }),
+      v8Environment({
+        INVOICE_ASYNC_ALLOWED_USER_IDS: actor,
+        INVOICE_EXPECTED_PROCESSOR_IMPLEMENTATION_VERSION:
+          'cloudtms-invoice-document-worker-v6-native'
+      }),
       {},
       { requireUser: async () => ({ id: actor, role: 'admin', active: true }), rpc: v8Rpc(async name => {
         if (name === 'invoice_detail_get') return { invoice: { id: invoice, status: 'ISSUED', issued_document_version_id: version } };
@@ -955,6 +960,38 @@ test('issued document view selects the exact FINAL_ISSUE version and never queue
     assert.equal(body.document_version.r2_key, undefined);
     assert.equal(started, false);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('generation mismatch blocks new preview work without blocking document-read routes', async () => {
+  const invoice = '00000000-0000-4000-8000-000000000014';
+  let started = false;
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request(`https://example.test/api/invoices/${invoice}/render`, {
+      method: 'POST',
+      headers: { 'idempotency-key': 'view-blocked-generation-command' },
+      body: '{}'
+    }),
+    v8Environment({
+      INVOICE_EXPECTED_PROCESSOR_IMPLEMENTATION_VERSION:
+        'cloudtms-invoice-document-worker-v6-native'
+    }),
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc(async name => {
+        if (name === 'invoice_detail_get') {
+          return { invoice: { id: invoice, status: 'DRAFT' } };
+        }
+        if (name === 'invoice_operation_start_batch') started = true;
+        return [];
+      })
+    }
+  );
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(body.viewer_state, 'BLOCKED');
+  assert.equal(body.error_code, 'DOCUMENT_GENERATION_UNAVAILABLE');
+  assert.equal(started, false);
 });
 
 test('professional source templates use explicit allowlisted fields', () => {
@@ -2587,6 +2624,8 @@ test('capabilities advertise mandatory V8 features only when every dependency is
   assert.equal(body.contract_version, 'INVOICE_ASYNC_BACKEND_V8');
   assert.equal(body.database_contract_ready, true);
   assert.equal(body.deployment_contract_ready, true);
+  assert.equal(body.document_read_ready, true);
+  assert.equal(body.document_generation_ready, true);
   assert.equal(body.enabled_for_user, true);
   assert.ok(Object.values(body.feature_flags).every(value => value === true));
 
@@ -2603,8 +2642,29 @@ test('capabilities advertise mandatory V8 features only when every dependency is
   const mismatchBody = await mismatch.json();
   assert.equal(mismatchBody.database_contract_ready, false);
   assert.equal(mismatchBody.deployment_contract_ready, false);
+  assert.equal(mismatchBody.document_read_ready, true);
+  assert.equal(mismatchBody.document_generation_ready, false);
   assert.equal(mismatchBody.enabled_for_user, false);
   assert.ok(Object.values(mismatchBody.feature_flags).every(value => value === false));
+
+  const processorMismatch = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/invoice-async/capabilities'),
+    v8Environment({
+      INVOICE_EXPECTED_PROCESSOR_IMPLEMENTATION_VERSION:
+        'cloudtms-invoice-document-worker-v6-native'
+    }),
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: v8Rpc()
+    }
+  );
+  const processorMismatchBody = await processorMismatch.json();
+  assert.equal(processorMismatchBody.document_read_ready, true);
+  assert.equal(processorMismatchBody.document_generation_ready, false);
+  assert.equal(processorMismatchBody.deployment_contract_ready, false);
+  assert.equal(processorMismatchBody.enabled_for_user, false);
+  assert.ok(Object.values(processorMismatchBody.feature_flags).every(value => value === false));
 
   const diagnosticEnv = v8Environment({
     INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED: 'false'
@@ -2621,6 +2681,8 @@ test('capabilities advertise mandatory V8 features only when every dependency is
   const diagnosticBody = await diagnostic.json();
   assert.equal(diagnosticBody.database_contract_ready, true);
   assert.equal(diagnosticBody.deployment_contract_ready, true);
+  assert.equal(diagnosticBody.document_read_ready, true);
+  assert.equal(diagnosticBody.document_generation_ready, true);
   assert.equal(diagnosticBody.enabled_for_user, true);
   assert.equal(diagnosticBody.function_manifest_enforced, false);
   assert.equal(diagnosticBody.function_manifest_matches, false);
@@ -2790,6 +2852,16 @@ test('V8 routes fail closed when the native document processor is not ready', as
   assert.equal(candidateCalled, false);
 });
 
+test('invoice save edits accepts the compact invoice_apply_edits result contract', () => {
+  const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const start = source.indexOf('async function handleInvoiceSaveEdits');
+  const end = source.indexOf('\nasync function handleInvoiceEligibleTimesheets', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = source.slice(start, end);
+  assert.match(handler, /const compactInvoice = manifest\.invoice_id/);
+  assert.match(handler, /id: manifest\.invoice_id/);
+  assert.match(handler, /const invoice = manifest\.invoice \|\| manifest\.invoice_row \|\| compactInvoice/);
+});
 test('invoice mail preparation contains no legacy PDF rendering fallback', () => {
   const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
   const start = source.indexOf('async function buildEmailPayloadFromOutboxRow');

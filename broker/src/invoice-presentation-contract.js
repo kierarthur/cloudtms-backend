@@ -204,6 +204,22 @@ export function validateFrozenInvoicePresentationModel(model, options = {}) {
     const gross = assertFiniteMoney(line.gross_amount, `${line.row_key}.gross_amount`);
     asNumber(line.vat_rate, 'INVOICE_PRESENTATION_NUMERIC_INVALID', `${line.row_key}.vat_rate`);
 
+    if (line.reference_required === true && !String(line.reference || '').trim()) {
+      fail('INVOICE_PRESENTATION_REFERENCE_REQUIRED', line.row_key);
+    }
+    if (line.reference_scope != null && !String(line.reference_scope).trim()) {
+      fail('INVOICE_PRESENTATION_REFERENCE_IDENTITY_INVALID', `${line.row_key}.reference_scope`);
+    }
+    if (line.reference_source != null && !String(line.reference_source).trim()) {
+      fail('INVOICE_PRESENTATION_REFERENCE_IDENTITY_INVALID', `${line.row_key}.reference_source`);
+    }
+    if (line.reference_source_row_keys != null) {
+      if (!Array.isArray(line.reference_source_row_keys)
+        || line.reference_source_row_keys.some(value => !String(value || '').trim())) {
+        fail('INVOICE_PRESENTATION_REFERENCE_IDENTITY_INVALID', `${line.row_key}.reference_source_row_keys`);
+      }
+    }
+
     if (!near(net + vat, gross)) {
       fail('INVOICE_PRESENTATION_LINE_TOTAL_MISMATCH', line.row_key);
     }
@@ -381,6 +397,10 @@ export function validateFrozenTimesheetPresentationModel(model, options = {}) {
     }
   };
 
+  if (model.schema_version === 'TIMESHEET_RENDER_MODEL_V2') {
+    return validateFrozenTimesheetPresentationModelV2(model, options);
+  }
+
   if (model.schema_version !== 'TIMESHEET_RENDER_MODEL_V1') {
     fail('RENDER_MODEL_SCHEMA_UNSUPPORTED', model.schema_version);
   }
@@ -476,6 +496,277 @@ export function validateFrozenTimesheetPresentationModel(model, options = {}) {
   return model;
 }
 
+function parseYmd(value, code, detail) {
+  const text = String(value || '').slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) throw contractError(code, detail);
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  if (Number.isNaN(date.getTime())
+    || date.getUTCFullYear() !== Number(match[1])
+    || date.getUTCMonth() !== Number(match[2]) - 1
+    || date.getUTCDate() !== Number(match[3])) {
+    throw contractError(code, detail);
+  }
+  return { text, date };
+}
+
+function validateFrozenTimesheetPresentationModelV2(model, options = {}) {
+  const fail = (code, detail) => { throw contractError(code, detail); };
+  const finite = (value, code, detail) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) fail(code, detail);
+    return number;
+  };
+  const forbiddenFinancialKeys = new Set([
+    'pay_rate', 'charge_rate', 'pay_amount', 'charge_amount', 'margin',
+    'vat', 'vat_rate', 'pay_method', 'total_pay_ex_vat',
+    'total_charge_ex_vat', 'additional_pay_ex_vat',
+    'additional_charge_ex_vat', 'additional_margin_ex_vat'
+  ]);
+  const rejectFinancialFields = (value, path = '$') => {
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => rejectFinancialFields(entry, `${path}[${index}]`));
+      return;
+    }
+    if (!OBJECT(value)) return;
+    for (const [key, entry] of Object.entries(value)) {
+      if (forbiddenFinancialKeys.has(key)) {
+        fail('TIMESHEET_ADDITIONAL_UNITS_FINANCIAL_FIELD_FORBIDDEN', `${path}.${key}`);
+      }
+      rejectFinancialFields(entry, `${path}.${key}`);
+    }
+  };
+
+  requireText(model.timesheet_id, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.template_version, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.layout_contract_version, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.timesheet_number, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.sheet_scope, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.form_variant, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.submission_mode, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  if (String(model.locale || '') !== 'en-GB') fail('TIMESHEET_LOCALE_UNSUPPORTED');
+  if (String(model.time_zone || '') !== 'Europe/London') fail('TIMESHEET_TIME_ZONE_UNSUPPORTED');
+  if (!Number.isSafeInteger(Number(model.document_revision)) || Number(model.document_revision) < 1) {
+    fail('TIMESHEET_DOCUMENT_REVISION_INVALID');
+  }
+  if (options.templateVersion && model.template_version !== options.templateVersion) {
+    fail('RENDER_TEMPLATE_VERSION_MISMATCH', {
+      expected: options.templateVersion,
+      actual: model.template_version
+    });
+  }
+
+  const worker = requireObject(model.worker, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  const client = requireObject(model.client, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(
+    `${String(worker.first_name || '').trim()} ${String(worker.surname || '').trim()}`.trim(),
+    'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING'
+  );
+  requireText(client.name || client.hospital, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireObject(model.branding, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  requireText(model.branding.agency_name, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  validateAssetIdentity(model.branding.logo);
+  requireObject(model.wording, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+
+  const period = requireObject(model.week_period, 'TIMESHEET_WEEK_PERIOD_INVALID');
+  const start = parseYmd(period.start_date, 'TIMESHEET_WEEK_PERIOD_INVALID', 'start_date');
+  const end = parseYmd(period.end_date, 'TIMESHEET_WEEK_PERIOD_INVALID', 'end_date');
+  if ((end.date.getTime() - start.date.getTime()) / 86400000 !== 6) {
+    fail('TIMESHEET_WEEK_PERIOD_INVALID', 'period_must_span_seven_calendar_dates');
+  }
+  if (Number(period.end_weekday_index) !== end.date.getUTCDay()) {
+    fail('TIMESHEET_WEEK_ENDING_WEEKDAY_MISMATCH');
+  }
+  const weekdayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  if (String(period.end_weekday_name) !== weekdayNames[end.date.getUTCDay()]) {
+    fail('TIMESHEET_WEEK_ENDING_WEEKDAY_MISMATCH');
+  }
+  if (period.configured_week_ending_weekday != null
+    && Number(period.configured_week_ending_weekday) !== end.date.getUTCDay()) {
+    fail('TIMESHEET_WEEK_ENDING_WEEKDAY_MISMATCH');
+  }
+
+  const days = requireArray(period.days, 'TIMESHEET_WEEK_PERIOD_INVALID');
+  if (days.length !== 7) fail('TIMESHEET_WEEK_PERIOD_INVALID', 'exactly_seven_days_required');
+  const dayKeys = new Set();
+  const shiftKeys = new Set();
+  let paidMinuteSum = 0;
+  let previousShiftSortKey = '';
+  for (let index = 0; index < days.length; index += 1) {
+    const day = requireObject(days[index], 'TIMESHEET_WEEK_PERIOD_INVALID');
+    const parsed = parseYmd(day.date, 'TIMESHEET_WEEK_PERIOD_INVALID', `days[${index}].date`);
+    const expectedDate = new Date(start.date);
+    expectedDate.setUTCDate(start.date.getUTCDate() + index);
+    if (parsed.date.getTime() !== expectedDate.getTime()) {
+      fail('TIMESHEET_WEEK_PERIOD_INVALID', `days[${index}].date_not_contiguous`);
+    }
+    const rowKey = requireText(day.row_key, 'TIMESHEET_WEEK_PERIOD_INVALID');
+    if (dayKeys.has(rowKey)) fail('TIMESHEET_SCHEDULE_DUPLICATE_IDENTITY', rowKey);
+    dayKeys.add(rowKey);
+    if (Number(day.display_order) !== index + 1) {
+      fail('TIMESHEET_PRESENTATION_DISPLAY_ORDER_INVALID', rowKey);
+    }
+    if (Number(day.weekday_index) !== parsed.date.getUTCDay()
+      || String(day.weekday_name) !== weekdayNames[parsed.date.getUTCDay()]) {
+      fail('TIMESHEET_WEEK_PERIOD_INVALID', `${rowKey}.weekday`);
+    }
+    const shifts = requireArray(day.shift_lines, 'TIMESHEET_PRESENTATION_MODEL_INVALID');
+    previousShiftSortKey = '';
+    for (let shiftIndex = 0; shiftIndex < shifts.length; shiftIndex += 1) {
+      const shift = requireObject(shifts[shiftIndex], 'TIMESHEET_PRESENTATION_MODEL_INVALID');
+      const shiftKey = requireText(shift.row_key, 'TIMESHEET_SCHEDULE_DUPLICATE_IDENTITY');
+      if (shiftKeys.has(shiftKey)) fail('TIMESHEET_SCHEDULE_DUPLICATE_IDENTITY', shiftKey);
+      shiftKeys.add(shiftKey);
+      if (Number(shift.display_order) !== shiftIndex + 1) {
+        fail('TIMESHEET_PRESENTATION_DISPLAY_ORDER_INVALID', shiftKey);
+      }
+      if (shift.date != null && String(shift.date).slice(0, 10) !== parsed.text) {
+        fail('TIMESHEET_SCHEDULE_DATE_OUTSIDE_PERIOD', shiftKey);
+      }
+      const paidMinutes = finite(
+        shift.paid_minutes,
+        'TIMESHEET_PRESENTATION_NUMERIC_INVALID',
+        `${shiftKey}.paid_minutes`
+      );
+      if (paidMinutes < 0) fail('TIMESHEET_PRESENTATION_NUMERIC_INVALID', shiftKey);
+      if (paidMinutes > 0
+        && (!String(shift.display_start_local || '').trim()
+          || !String(shift.display_end_local || '').trim())) {
+        fail('TIMESHEET_PRESENTATION_WORKED_TIME_MISSING', shiftKey);
+      }
+      const breakMinutes = finite(
+        shift.break_minutes ?? 0,
+        'TIMESHEET_PRESENTATION_NUMERIC_INVALID',
+        `${shiftKey}.break_minutes`
+      );
+      if (breakMinutes < 0) fail('TIMESHEET_PRESENTATION_BREAK_INVALID', shiftKey);
+      const breakMode = String(shift.break_display_mode || 'NONE');
+      if (!['EXPLICIT_INTERVAL','MINUTES_ONLY','NONE'].includes(breakMode)) {
+        fail('TIMESHEET_PRESENTATION_BREAK_INVALID', shiftKey);
+      }
+      if (breakMode === 'EXPLICIT_INTERVAL'
+        && (!String(shift.break_start_local || '').trim()
+          || !String(shift.break_end_local || '').trim())) {
+        fail('TIMESHEET_PRESENTATION_BREAK_INVALID', shiftKey);
+      }
+      if (shift.reference_required === true && !String(shift.booking_reference || '').trim()) {
+        fail('TIMESHEET_REFERENCE_MODEL_INVALID', shiftKey);
+      }
+      if (shift.booking_reference && !String(shift.reference_source || '').trim()) {
+        fail('TIMESHEET_REFERENCE_MODEL_INVALID', `${shiftKey}.reference_source`);
+      }
+      const sortKey = `${String(shift.display_start_local || '')}|${String(shift.segment_id || shiftKey)}`;
+      if (previousShiftSortKey && sortKey < previousShiftSortKey) {
+        fail('TIMESHEET_PRESENTATION_DISPLAY_ORDER_INVALID', shiftKey);
+      }
+      previousShiftSortKey = sortKey;
+      paidMinuteSum += paidMinutes;
+    }
+  }
+  const totals = requireObject(model.totals, 'TIMESHEET_PRESENTATION_REQUIRED_FIELD_MISSING');
+  const totalPaidMinutes = finite(
+    totals.paid_minutes,
+    'TIMESHEET_PRESENTATION_NUMERIC_INVALID',
+    'totals.paid_minutes'
+  );
+  if (Math.abs(totalPaidMinutes - paidMinuteSum) > 0.001) {
+    fail('TIMESHEET_PRESENTATION_TOTAL_MISMATCH', {
+      expected: paidMinuteSum,
+      actual: totalPaidMinutes
+    });
+  }
+
+  const additional = requireObject(
+    model.additional_units_section,
+    'TIMESHEET_ADDITIONAL_UNITS_INVALID'
+  );
+  if (additional.schema_version !== 'TIMESHEET_ADDITIONAL_UNITS_V1') {
+    fail('TIMESHEET_ADDITIONAL_UNITS_INVALID', 'schema_version');
+  }
+  const additionalRows = requireArray(additional.rows, 'TIMESHEET_ADDITIONAL_UNITS_INVALID');
+  if (additional.visible !== (additionalRows.length > 0)) {
+    fail('TIMESHEET_ADDITIONAL_UNITS_INVALID', 'visibility');
+  }
+  const additionalKeys = new Set();
+  const additionalOrders = new Set();
+  for (const row of additionalRows) {
+    requireObject(row, 'TIMESHEET_ADDITIONAL_UNITS_INVALID');
+    const rowKey = requireText(row.row_key, 'TIMESHEET_ADDITIONAL_UNITS_INVALID');
+    if (additionalKeys.has(rowKey)) fail('TIMESHEET_ADDITIONAL_UNIT_IDENTITY_DUPLICATE', rowKey);
+    additionalKeys.add(rowKey);
+    const displayOrder = Number(row.display_order);
+    if (!Number.isSafeInteger(displayOrder) || displayOrder < 1 || additionalOrders.has(displayOrder)) {
+      fail('TIMESHEET_ADDITIONAL_UNIT_IDENTITY_DUPLICATE', displayOrder);
+    }
+    additionalOrders.add(displayOrder);
+    requireText(row.code, 'TIMESHEET_ADDITIONAL_UNITS_INVALID');
+    requireText(row.rate_type, 'TIMESHEET_ADDITIONAL_UNITS_INVALID');
+    requireText(row.unit, 'TIMESHEET_ADDITIONAL_UNITS_INVALID');
+    const quantity = finite(row.quantity, 'TIMESHEET_ADDITIONAL_UNITS_INVALID', `${rowKey}.quantity`);
+    if (quantity === 0) fail('TIMESHEET_ADDITIONAL_UNITS_INVALID', `${rowKey}.quantity_zero`);
+    if (!['WEEKLY','PER_DAY'].includes(String(row.frequency || '').toUpperCase())) {
+      fail('TIMESHEET_ADDITIONAL_UNITS_INVALID', `${rowKey}.frequency`);
+    }
+    if (row.date != null) {
+      const date = parseYmd(
+        row.date,
+        'TIMESHEET_ADDITIONAL_UNIT_DATE_OUTSIDE_PERIOD',
+        `${rowKey}.date`
+      );
+      if (date.date < start.date || date.date > end.date) {
+        fail('TIMESHEET_ADDITIONAL_UNIT_DATE_OUTSIDE_PERIOD', rowKey);
+      }
+    }
+  }
+  rejectFinancialFields(additional);
+
+  const layout = requireObject(model.layout, 'TIMESHEET_ONE_PAGE_CONTRACT_INVALID');
+  if (layout.one_page_required !== true || layout.second_page_allowed !== false) {
+    fail('TIMESHEET_ONE_PAGE_CONTRACT_INVALID');
+  }
+  const modes = requireArray(layout.allowed_modes, 'TIMESHEET_ONE_PAGE_CONTRACT_INVALID');
+  if (!modes.length || modes.some(mode => !['NORMAL','COMPACT','ULTRA'].includes(String(mode)))) {
+    fail('TIMESHEET_ONE_PAGE_CONTRACT_INVALID', 'allowed_modes');
+  }
+  for (const field of [
+    'minimum_font_size',
+    'minimum_row_height_mm',
+    'minimum_signature_height_mm',
+    'minimum_additional_blank_rows'
+  ]) {
+    if (finite(layout[field], 'TIMESHEET_ONE_PAGE_CONTRACT_INVALID', field) < 0) {
+      fail('TIMESHEET_ONE_PAGE_CONTRACT_INVALID', field);
+    }
+  }
+
+  const signatures = requireObject(model.signatures, 'TIMESHEET_SIGNATURE_ASSET_INVALID');
+  const qr = requireObject(model.qr, 'TIMESHEET_QR_STATE_INVALID');
+  const variant = String(model.form_variant || '');
+  if (!['ELECTRONIC_SIGNED','ELECTRONIC_UNSIGNED','QR_UNSIGNED'].includes(variant)) {
+    fail('TIMESHEET_FORM_VARIANT_INVALID', variant);
+  }
+  validateAssetIdentity(signatures.candidate);
+  validateAssetIdentity(signatures.authoriser);
+  if (variant === 'ELECTRONIC_SIGNED') {
+    requireText(model.authorisation?.authorised_at_utc, 'TIMESHEET_AUTHORISATION_STATE_INVALID');
+    if (!signatures.candidate?.r2_key || !signatures.authoriser?.r2_key) {
+      fail('TIMESHEET_SIGNATURE_ASSET_INVALID');
+    }
+    if (qr.required === true) fail('TIMESHEET_QR_STATE_INVALID', 'electronic_signed_has_qr');
+  } else if (variant === 'ELECTRONIC_UNSIGNED') {
+    if (qr.required === true) fail('TIMESHEET_QR_STATE_INVALID', 'electronic_unsigned_has_qr');
+  } else {
+    requireText(qr.token, 'TIMESHEET_QR_STATE_INVALID');
+    requireObject(qr.payload, 'TIMESHEET_QR_STATE_INVALID');
+    if (qr.required !== true || signatures.candidate?.r2_key || signatures.authoriser?.r2_key) {
+      fail('TIMESHEET_QR_STATE_INVALID');
+    }
+  }
+
+  rejectMutableUrls(model);
+  return model;
+}
+
 function validateSupportModel(model, schemaVersion, fields) {
   requireObject(model);
   if (model.schema_version !== schemaVersion) throw contractError('RENDER_MODEL_SCHEMA_UNSUPPORTED');
@@ -492,6 +783,27 @@ function validateSupportModel(model, schemaVersion, fields) {
 }
 
 export function validateFrozenHealthRosterModel(model) {
+  if (model?.schema_version === 'HEALTHROSTER_PRESENTATION_V2') {
+    const validated = validateSupportModel(model, 'HEALTHROSTER_PRESENTATION_V2', [
+      'worker', 'assignment', 'shift_date', 'shift_times', 'site', 'ward',
+      'booking_reference', 'units_hours', 'validation_state', 'source_identity',
+      'reference_match_state', 'reference_match_count'
+    ]);
+    for (const row of validated.rows) {
+      const matchCount = Number(row.reference_match_count);
+      if (!Number.isSafeInteger(matchCount) || matchCount < 0) {
+        throw contractError('HEALTHROSTER_REFERENCE_MATCH_INVALID');
+      }
+      if (String(row.reference_match_state || '').toUpperCase() === 'AMBIGUOUS'
+        || matchCount > 1) {
+        throw contractError('HEALTHROSTER_REFERENCE_MATCH_AMBIGUOUS');
+      }
+      if (matchCount === 1 && !String(row.booking_reference || '').trim()) {
+        throw contractError('HEALTHROSTER_REFERENCE_MATCH_INVALID');
+      }
+    }
+    return validated;
+  }
   return validateSupportModel(model, 'HEALTHROSTER_PRESENTATION_V1', [
     'worker', 'assignment', 'shift_date', 'shift_times', 'site', 'ward',
     'reference', 'units_hours', 'validation_state', 'source_identity'

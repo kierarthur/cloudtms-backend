@@ -5,7 +5,7 @@
   "result_trigger_count": 3,
   "table_count": 18,
   "projection_hash_algorithm": "sha256(JSON.stringify({fields,json_paths}))",
-  "manifest_digest": "39a4c76d0f0a757a2ee04e25ec05df74b1ccf5531393ecdb2b30b360bf4ba5b0",
+  "manifest_digest": "6777e9b09109c11ff7de3227658d43d876b50a9d3403cfc1809e23696923c973",
   "tables": [
     {
       "table": "contracts",
@@ -143,12 +143,16 @@
         "finance_email",
         "hr_attach_to_invoice",
         "ts_attach_to_invoice",
-        "invoice_document_presentation_json"
+        "invoice_document_presentation_json",
+        "timesheet_header_json",
+        "timesheet_footer_json",
+        "temporary_worker_declaration_json",
+        "client_declaration_json"
       ],
       "json_paths": [],
-      "field_count": 12,
+      "field_count": 16,
       "json_path_count": 0,
-      "projection_sha256": "171d09875298595d83cdb3791abacb8fbd06401622847ff4e910e6d916a8bf82"
+      "projection_sha256": "ac8c0959924b0bcc225aebfa946130183407c344863da4779e50c1484e4a9a48"
     },
     {
       "table": "settings_finance_windows",

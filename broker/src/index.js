@@ -74,6 +74,11 @@ import {
   parseInvoiceAsyncAccessMode,
   parseInvoiceAsyncAllowedUserIds
 } from './invoice-queue-security.js';
+import {
+  buildTsq1Payload as buildTsq1PayloadShared,
+  buildTsq1String as buildTsq1StringShared,
+  signTsq1 as signTsq1Shared
+} from './timesheet-qr-payload.js';
 
 const textEncoder = new TextEncoder();
 
@@ -6191,9 +6196,8 @@ const isoToLocalHHMM = (iso) => {
     const workedEndHHMM   = isDaily ? isoToLocalHHMM(ts.worked_end_iso)   : "";
 
     let weekEndingYmd = safeStr(ts.week_ending_date).slice(0, 10);
-    if (isDaily) {
-      const computed = nextSundayYmd(workedYmd);
-      weekEndingYmd = computed || weekEndingYmd || "";
+    if (!weekEndingYmd) {
+      throw new Error('TIMESHEET_WEEK_ENDING_DATE_MISSING');
     }
 
     if (isDaily && (!Array.isArray(schedule) || schedule.length === 0)) {
@@ -6502,7 +6506,13 @@ const isoToLocalHHMM = (iso) => {
 
       const reservedBottom =
         (hasAddl ? LAY.addlGap : LAY.blockGap) +
-        (hasAddl ? (LAY.addlH + LAY.addlGap) : 0) +
+        (hasAddl ? (
+          Math.max(
+            LAY.addlH,
+            LAY.addlHeaderH +
+              ((additionalRows.length + 1) * LAY.addlRowH)
+          ) + LAY.addlGap
+        ) : 0) +
         (LAY.declH + LAY.blockGap) +
         (14 + 8);
 
@@ -6713,7 +6723,12 @@ const isoToLocalHHMM = (iso) => {
     // Reserve bottom blocks (decl + footer + optional addl)
     const DECL_H = LAY.declH;
     const FOOT_H = 14;
-    const ADDL_H = (additionalRows.length > 0) ? LAY.addlH : 0;
+    const ADDL_H = (additionalRows.length > 0)
+      ? Math.max(
+          LAY.addlH,
+          LAY.addlHeaderH + ((additionalRows.length + 1) * LAY.addlRowH)
+        )
+      : 0;
 
     const reservedBottom =
       (additionalRows.length > 0 ? LAY.addlGap : LAY.blockGap) +
@@ -6896,7 +6911,10 @@ const isoToLocalHHMM = (iso) => {
       }
 
       const maxRows = Math.max(0, Math.floor((addlBox.h - LAY.addlHeaderH) / LAY.addlRowH));
-      const rowsToShow = additionalRows.slice(0, maxRows);
+      if (maxRows < additionalRows.length + 1) {
+        throw new Error('TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED');
+      }
+      const rowsToShow = additionalRows;
 
       let ry = aHeaderY + Math.min(3.8, LAY.addlRowH - 0.2);
       for (const r of rowsToShow) {
@@ -6965,15 +6983,7 @@ const isoToLocalHHMM = (iso) => {
         lineH = Math.max(2.4, lineH - 0.15);
       }
 
-      // last resort: clip silently (no "+N more")
-      const lines = wrapText(font, baseText, 5.8, maxW);
-      const maxLines = Math.max(1, Math.floor(maxBodyH / 2.4));
-      let yT = box.y + declBodyTopPad;
-      for (const ln of lines.slice(0, maxLines)) {
-        drawText(page, font, ln, box.x + 2, yT, 5.8, { maxWidth: maxW });
-        yT += 2.4;
-      }
-      return (yT > (box.y + declBodyTopPad)) ? (yT - 2.4) : (box.y + declBodyTopPad);
+      throw new Error('TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED');
     };
 
     // ✅ capture where the declaration text ended (so signatures can use unused whitespace)
@@ -7076,11 +7086,15 @@ const isoToLocalHHMM = (iso) => {
 
     let fy = footerTop + 3.2;
     for (const raw of footerLines) {
-      if (fy > PAGE_H - M - 1) break;
+      if (fy > PAGE_H - M - 1) {
+        throw new Error('TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED');
+      }
 
       const wrapped = wrapText(font, raw, fSize, contentW);
       for (const ln of wrapped) {
-        if (fy > PAGE_H - M - 1) break;
+        if (fy > PAGE_H - M - 1) {
+          throw new Error('TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED');
+        }
         drawText(page, font, ln, contentX, fy, fSize, { maxWidth: contentW });
         fy += fLineH;
       }
@@ -79301,7 +79315,7 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   return { ok: true, mode: 'AGGREGATE_FALLBACK' };
 }
 
-async function handleTimesheetQrResendEmail(env, req, timesheetId) {
+async function handleTimesheetQrResendEmail(env, req, timesheetId, ctx = null) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -79348,7 +79362,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     return 500;
   };
 
-  if (queueMode) {
+  {
     try {
       const rpcRes = await sbRpc(env, 'timesheet_qr_send_enqueue_v1', {
         p_timesheet_id: timesheetId,
@@ -79366,10 +79380,28 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
           ...payload
         }), { status, headers: { 'Content-Type': 'application/json' } }));
       }
+      const operationId = String(payload?.document_operation_id || '').trim();
+      if (operationId) {
+        await nudgeInvoiceOperations(env, [{
+          accepted: true,
+          operation_id: operationId,
+          status: 'QUEUED',
+          operation_type: 'BUILD_DOCUMENT',
+          entity_type: 'TIMESHEET',
+          entity_id: payload?.current_timesheet_id || timesheetId
+        }], {
+          ctx,
+          rpc: (functionName, args, options) =>
+            sbRpc(env, functionName, args, options),
+          lanes: ['DATABASE', 'DOCUMENT'],
+          priorityClass: 'INTERACTIVE'
+        });
+      }
       return withCORS(env, req, ok({
         ...payload,
         queued: payload.queued !== false,
-        bulk_mode: true
+        bulk_mode: queueMode,
+        continuation_requested: !!operationId
       }));
     } catch (err) {
       return withCORS(env, req, serverError(String(err?.message || err || 'Failed to queue QR send')));
@@ -101630,7 +101662,22 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
       return withCORS(env, req, serverError('Failed to apply invoice edits (no manifest returned)'));
     }
 
-    const invoice = manifest.invoice || manifest.invoice_row || null;
+    const compactInvoice = manifest.invoice_id
+      ? {
+          id: manifest.invoice_id,
+          status: manifest.status ?? null,
+          subtotal_ex_vat: manifest.subtotal_ex_vat ?? null,
+          vat_amount: manifest.vat_amount ?? null,
+          total_inc_vat: manifest.total_inc_vat ?? null,
+          document_revision: manifest.document_revision ?? null,
+          document_state: manifest.document_state ?? null,
+          preview_document_version_id: manifest.preview_document_version_id ?? null,
+          active_document_operation_id: manifest.active_document_operation_id ?? null,
+          issue_state: manifest.issue_state ?? null,
+          active_issue_operation_id: manifest.active_issue_operation_id ?? null
+        }
+      : null;
+    const invoice = manifest.invoice || manifest.invoice_row || compactInvoice;
     if (!invoice || !invoice.id) {
       return withCORS(env, req, serverError('Failed to apply invoice edits (malformed manifest)'));
     }
@@ -184861,10 +184908,7 @@ function nowIso() {
  * @param {string} args.week_ending_ymd  // 'YYYY-MM-DD'
  */
 function buildTsq1Payload({ qr_token }) {
-  const tok = String(qr_token || '').trim();
-  if (!tok) throw new Error('buildTsq1Payload requires qr_token');
-
-  return { v: 1, tok };
+  return buildTsq1PayloadShared({ qr_token });
 }
 
 
@@ -184878,21 +184922,7 @@ function buildTsq1Payload({ qr_token }) {
  * @returns {Promise<string>} sig_b64url
  */
 async function signTsq1(payloadB64url, env) {
-  const secret = env.QR_SIGNING_SECRET || '';
-  if (!secret) throw new Error('QR_SIGNING_SECRET is not configured');
-
-  const keyData = textEncoder.encode(secret);
-  const key = await crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-
-  const data = textEncoder.encode(`TSQ1.${payloadB64url}`);
-  const sigBuf = await crypto.subtle.sign('HMAC', key, data);
-  return base64UrlEncode(new Uint8Array(sigBuf));
+  return signTsq1Shared(payloadB64url, env);
 }
 
 /**
@@ -184904,20 +184934,7 @@ async function signTsq1(payloadB64url, env) {
  * @returns {Promise<string>} qrText
  */
 async function buildTsq1String(payloadObj, env) {
-  if (!payloadObj || typeof payloadObj !== 'object') {
-    throw new Error('TSQ1 payload missing');
-  }
-
-  // Critical: all issued QR codes must include tok so reissue can invalidate old prints.
-  if (!payloadObj.tok || typeof payloadObj.tok !== 'string' || !payloadObj.tok.trim()) {
-    throw new Error('TSQ1 payload missing tok (qr_token). Generate token first, then build TSQ1.');
-  }
-
-  // JSON.stringify preserves insertion order of non-integer keys
-  const json = JSON.stringify(payloadObj); // compact, no spaces
-  const payloadB64url = base64UrlEncode(json);
-  const sigB64url = await signTsq1(payloadB64url, env);
-  return `TSQ1.${payloadB64url}.${sigB64url}`;
+  return buildTsq1StringShared(payloadObj, env);
 }
 /**
  * (Option A) PNG generation is disabled.
@@ -191339,7 +191356,7 @@ if (req.method === 'POST' && p === '/api/timesheets/manual-daily-create-options'
 // =============================================================================
 {
   const m = matchPath(p, '/api/timesheets/:id/qr-resend');
-  if (m && req.method === 'POST') return handleTimesheetQrResendEmail(env, req, m.id);
+  if (m && req.method === 'POST') return handleTimesheetQrResendEmail(env, req, m.id, ctx);
 }
 {
   const m = matchPath(p, '/api/timesheets/:id/qr-refuse');

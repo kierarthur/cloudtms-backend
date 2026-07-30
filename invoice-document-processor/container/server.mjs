@@ -6,6 +6,7 @@ import { pipeline } from 'node:stream/promises';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { applyGlobalPageNumbers } from './page-numbering.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 const MAX_HEADER_BYTES = 2 * 1024 * 1024;
@@ -14,7 +15,7 @@ const MAX_SINGLE_INPUT_BYTES = 512 * 1024 * 1024;
 const MAX_AGGREGATE_BYTES = 1024 * 1024 * 1024;
 const MAX_CAPTURE_BYTES = 64 * 1024;
 const MAX_OUTPUT_BYTES = 512 * 1024 * 1024;
-const PROCESSOR_VERSION = 'cloudtms-native-qpdf-poppler-v4';
+const PROCESSOR_VERSION = 'cloudtms-native-qpdf-poppler-v5-global-numbering';
 let nativeReadinessCache = null;
 
 function json(res, status, body) {
@@ -400,8 +401,18 @@ async function mergePdfs(files, outputPath, deadline, context = {}) {
   const inputPages = actualInputs.reduce((sum, input) => sum + input.page_count, 0);
   if (safePositive(limits.max_input_bytes) && inputBytes > Number(limits.max_input_bytes)) throw Object.assign(new Error('MERGE_INPUT_BYTES_EXCEED_POLICY'), { code: 'MERGE_INPUT_BYTES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
   if (safePositive(limits.max_pages) && inputPages > Number(limits.max_pages)) throw Object.assign(new Error('MERGE_INPUT_PAGES_EXCEED_POLICY'), { code: 'MERGE_INPUT_PAGES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
-  const args = ['--empty','--pages']; for (const file of files) args.push(file.path,'1-z'); args.push('--',outputPath);
+  const applyFinalPageNumbers = context.apply_final_page_numbers === true;
+  const mergedPath = applyFinalPageNumbers ? `${outputPath}.merged.pdf` : outputPath;
+  const args = ['--empty','--pages']; for (const file of files) args.push(file.path,'1-z'); args.push('--',mergedPath);
   await run('qpdf', args, { deadline });
+  if (applyFinalPageNumbers) {
+    deadline.throwIfExpired();
+    await applyGlobalPageNumbers(mergedPath, outputPath, {
+      page_numbering_contract: context.page_numbering_contract,
+      document_entity_type: context.document_entity_type,
+      document_version_id: context.document_version_id
+    });
+  }
   const output = await pdfMetadata(outputPath, deadline);
   const expectedPages = actualInputs.reduce((sum, input) => sum + input.page_count, 0);
   if (output.page_count !== expectedPages) throw Object.assign(new Error('MERGE_OUTPUT_PAGE_COUNT_MISMATCH'), { code: 'MERGE_OUTPUT_PAGE_COUNT_MISMATCH' });
@@ -410,7 +421,14 @@ async function mergePdfs(files, outputPath, deadline, context = {}) {
     MAX_OUTPUT_BYTES
   );
   if ((await stat(outputPath)).size > maximumOutputBytes) throw Object.assign(new Error('PROCESSOR_OUTPUT_BYTES_EXCEED_POLICY'), { code: 'PROCESSOR_OUTPUT_BYTES_EXCEED_POLICY', category: 'POLICY_VIOLATION' });
-  return { ...output, actual_inputs: actualInputs };
+  return {
+    ...output,
+    actual_inputs: actualInputs,
+    page_numbering_applied: applyFinalPageNumbers,
+    page_numbering_contract: applyFinalPageNumbers
+      ? String(context.page_numbering_contract || '')
+      : null
+  };
 }
 
 async function verifyPdf(file, deadline) {

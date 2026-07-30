@@ -4,6 +4,8 @@ import {
   buildInvoiceSourceDocumentHtml,
   buildProfessionalInvoiceHtml
 } from './invoice-document-templates.js';
+import { buildTsq1String } from './timesheet-qr-payload.js';
+import { renderOfficialTimesheetPdfBytes } from './timesheet-official-pdf.js';
 import { signInvoiceDrainRequest, verifyInvoiceDrainSignature } from './invoice-queue-security.js';
 import {
   invoiceProcessorIdentityHeaders,
@@ -166,7 +168,7 @@ export function getInvoiceQueueRuntimeConfig(env = {}) {
     ),
     expectedProcessorImplementationVersion: String(
       env.INVOICE_EXPECTED_PROCESSOR_IMPLEMENTATION_VERSION
-        || 'cloudtms-invoice-document-worker-v6'
+        || 'cloudtms-invoice-document-worker-v7-global-numbering'
     ).trim(),
     nativeToolReadinessRequired: parseBooleanFlag(
       env.INVOICE_NATIVE_TOOL_READINESS_REQUIRED,
@@ -398,6 +400,12 @@ function processorIdentity(contextRow) {
     processor_policy_version: expected.processor_policy_version,
     render_kind: expected.render_kind || contextRow.context?.render_kind || undefined,
     ordered_input_hash: expected.ordered_input_hash || undefined,
+    apply_final_page_numbers: expected.apply_final_page_numbers
+      ?? contextRow.context?.apply_final_page_numbers
+      ?? undefined,
+    page_numbering_contract: expected.page_numbering_contract
+      || contextRow.context?.page_numbering_contract
+      || undefined,
     output_prefix: expected.immutable_destination_prefix
       || contextRow.context?.immutable_destination_prefix
   };
@@ -562,7 +570,6 @@ async function resolveEmbeddedBrandingAssets(env, sourceModel, config) {
   return model;
 }
 async function renderBrowserDocument(env, contextRow, config, signal) {
-  if (!env.BROWSER) throw Object.assign(new Error('INVOICE_BROWSER_BINDING_MISSING'), { code: 'INVOICE_BROWSER_BINDING_MISSING' });
   if (!env.R2) throw Object.assign(new Error('INVOICE_R2_BINDING_MISSING'), { code: 'INVOICE_R2_BINDING_MISSING' });
 
   const context = contextRow.context || {};
@@ -585,6 +592,84 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
     expectedModelIdentity,
     { templateVersion }
   );
+
+  if (renderKind === 'ELECTRONIC_TIMESHEET'
+    && verifiedModel.presentation_model_schema_version === 'TIMESHEET_RENDER_MODEL_V2') {
+    const embeddedModel = await resolveEmbeddedBrandingAssets(
+      env,
+      verifiedModel.model,
+      config
+    );
+    validateFrozenPresentationModel(renderKind, embeddedModel, { templateVersion });
+    const qrText = embeddedModel.form_variant === 'QR_UNSIGNED'
+      ? await buildTsq1String(embeddedModel.qr.payload, env)
+      : null;
+    const rendered = await renderOfficialTimesheetPdfBytes(embeddedModel, {
+      logo: embeddedModel.branding?.logo,
+      candidate_signature: embeddedModel.signatures?.candidate,
+      authoriser_signature: embeddedModel.signatures?.authoriser,
+      qr_text: qrText
+    });
+    const bytes = rendered.pdf_bytes;
+    if (bytes.byteLength > config.browserRenderOutputMaxBytes) {
+      throw Object.assign(new Error('BROWSER_RENDER_OUTPUT_TOO_LARGE'), {
+        code: 'BROWSER_RENDER_OUTPUT_TOO_LARGE'
+      });
+    }
+    if (rendered.page_count !== 1) {
+      throw Object.assign(new Error('TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED'), {
+        code: 'TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED'
+      });
+    }
+    const sha256 = await sha256Hex(bytes);
+    const outputPrefix = String(identity.output_prefix || '');
+    if (!outputPrefix) {
+      throw Object.assign(new Error('INVOICE_OUTPUT_PREFIX_MISSING'), {
+        code: 'INVOICE_OUTPUT_PREFIX_MISSING'
+      });
+    }
+    const r2Key = `${outputPrefix}${renderKind.toLowerCase()}-${sha256}.pdf`;
+    const metadata = {
+      sha256,
+      size_bytes: bytes.byteLength,
+      chunk_id: identity.chunk_id,
+      fence_token: identity.fence_token,
+      plan_generation: identity.plan_generation,
+      document_version_id: identity.document_version_id,
+      render_kind: renderKind,
+      processor_policy_version: identity.processor_policy_version,
+      template_version: identity.template_version,
+      presentation_model_schema_version: verifiedModel.presentation_model_schema_version,
+      presentation_model_hash: verifiedModel.presentation_model_hash,
+      snapshot_hash: verifiedModel.snapshot_hash || '',
+      layout_contract_version: embeddedModel.layout_contract_version,
+      layout_mode: rendered.layout_mode
+    };
+    await putImmutableInvoiceArtifact(env.R2, r2Key, bytes, metadata);
+    return {
+      ...identity,
+      output_prefix: outputPrefix,
+      output_type: 'application/pdf',
+      r2_key: r2Key,
+      sha256,
+      size_bytes: bytes.byteLength,
+      page_count: 1,
+      parse_verified: true,
+      processor_version: 'cloudtms-official-timesheet-renderer-v2',
+      presentation_model_schema_version: verifiedModel.presentation_model_schema_version,
+      presentation_model_hash: verifiedModel.presentation_model_hash,
+      snapshot_hash: verifiedModel.snapshot_hash,
+      layout_contract_version: embeddedModel.layout_contract_version,
+      layout_mode: rendered.layout_mode,
+      render_receipt: rendered.render_receipt
+    };
+  }
+
+  if (!env.BROWSER) {
+    throw Object.assign(new Error('INVOICE_BROWSER_BINDING_MISSING'), {
+      code: 'INVOICE_BROWSER_BINDING_MISSING'
+    });
+  }
 
   const layout = context.attachment_index_layout || {};
   let model;
@@ -645,14 +730,25 @@ async function renderBrowserDocument(env, contextRow, config, signal) {
     });
     await page.emulateMediaType('print');
 
+    const componentPageNumbering = String(
+      context.component_page_numbering || 'LOCAL'
+    ).toUpperCase();
+    const displayComponentPageNumbers = componentPageNumbering !== 'NONE';
     const buffer = await page.pdf({
       format: 'A4',
       printBackground: true,
       preferCSSPageSize: true,
-      displayHeaderFooter: true,
+      displayHeaderFooter: displayComponentPageNumbers,
       headerTemplate: '<span></span>',
-      footerTemplate: '<div style="font-size:8px;width:100%;text-align:center;color:#667085"><span class="pageNumber"></span> / <span class="totalPages"></span></div>',
-      margin: { top: '12mm', right: '12mm', bottom: '16mm', left: '12mm' }
+      footerTemplate: displayComponentPageNumbers
+        ? '<div style="font-size:8px;width:100%;text-align:center;color:#667085"><span class="pageNumber"></span> / <span class="totalPages"></span></div>'
+        : '<span></span>',
+      margin: {
+        top: '12mm',
+        right: '12mm',
+        bottom: displayComponentPageNumbers ? '16mm' : '12mm',
+        left: '12mm'
+      }
     });
 
     const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);

@@ -275,7 +275,7 @@ as $function$
     'legacy_rest_overload_ambiguity_count',
       legacy_surface_state.legacy_rest_overload_ambiguity_count,
     'trigger_manifest_digest',
-      '39a4c76d0f0a757a2ee04e25ec05df74b1ccf5531393ecdb2b30b360bf4ba5b0',
+      '6777e9b09109c11ff7de3227658d43d876b50a9d3403cfc1809e23696923c973',
     'snapshot_signing_ready',key_state.snapshot_key_ready,
     'candidate_trigger_count',trigger_state.candidate_trigger_count,
     'result_trigger_count',trigger_state.result_trigger_count,

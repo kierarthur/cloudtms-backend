@@ -208,7 +208,8 @@ begin
       'ELECTRONIC_TIMESHEET','TIMESHEET',it.timesheet_id,
       coalesce(it.document_revision,encode(digest(it.timesheet_source::text,'sha256'),'hex')),
       null::uuid,null::uuid,'Electronic timesheet',null::integer,'TIMESHEET_POLICY',
-      'TIMESHEET_RENDER_MODEL_V1',encode(digest((it.timesheet_source->'render_model')::text,'sha256'),'hex')
+      'TIMESHEET_RENDER_MODEL_V2',
+      encode(digest((it.timesheet_source->'render_model')::text,'sha256'),'hex')
     from invoice_ts it
     where it.submission_mode='ELECTRONIC' and it.attach_timesheet and not it.client_is_nhsp and not it.no_timesheet_required and it.timesheet_id is not null
     union all
@@ -233,7 +234,8 @@ begin
       ss.source_system,ss.import_id,
       encode(digest(ss.support_source::text,'sha256'),'hex'),
       null::uuid,null::uuid,initcap(lower(ss.source_system))||' supporting report',null::integer,'FROZEN_SOURCE_SUPPORT',
-      case when ss.source_system='NHSP' then 'NHSP_PRESENTATION_V1' else 'HEALTHROSTER_PRESENTATION_V1' end,
+      case when ss.source_system='NHSP' then 'NHSP_PRESENTATION_V1'
+        else 'HEALTHROSTER_PRESENTATION_V2' end,
       encode(digest((ss.support_source->'render_model')::text,'sha256'),'hex')
     from support_sources ss where ss.import_id is not null
     union all
@@ -244,51 +246,7 @@ begin
       'HIGHER_RATE_PRESENTATION_V1',encode(digest(coalesce(l.snapshot_json_v5->'higher_rate_support','{}'::jsonb)::text,'sha256'),'hex')
     from linked l
     where jsonb_array_length(case when jsonb_typeof(l.snapshot_json_v5#>'{higher_rate_support,rows}')='array' then l.snapshot_json_v5#>'{higher_rate_support,rows}' else '[]'::jsonb end)>0
-    union all
-    select l.id,l.document_version_id,9000,
-      'ATTACHMENT_INDEX','DOCUMENT',l.document_version_id,
-      encode(digest(concat_ws('|',l.document_version_id::text,l.snapshot_hash_v5,'ATTACHMENT_INDEX'),'sha256'),'hex'),
-      null::uuid,null::uuid,'Attachment index',null::integer,'ATTACHMENT_INDEX',
-      'ATTACHMENT_INDEX_PRESENTATION_V1',encode(digest(concat_ws('|',l.document_version_id::text,l.snapshot_hash_v5,'ATTACHMENT_INDEX'),'sha256'),'hex')
-    from linked l
-    where exists(
-      select 1 from invoice_ts it
-      where it.chunk_id=l.id
-        and (
-          (
-            it.submission_mode='ELECTRONIC'
-            and it.attach_timesheet
-            and not it.client_is_nhsp
-            and not it.no_timesheet_required
-            and it.timesheet_id is not null
-          )
-          or (
-            it.attach_timesheet
-            and it.manual_document_asset_id is not null
-            and (
-              it.submission_mode<>'ELECTRONIC'
-              or it.client_is_nhsp
-              or it.no_timesheet_required
-            )
-          )
-        )
-    )
-       or exists(
-         select 1 from support_sources ss
-         where ss.chunk_id=l.id and ss.import_id is not null
-       )
-       or exists(
-         select 1 from evidence_assets ea
-         where ea.chunk_id=l.id and ea.asset_id is not null
-       )
-       or jsonb_array_length(
-         case
-           when jsonb_typeof(l.snapshot_json_v5#>'{higher_rate_support,rows}')
-               ='array'
-             then l.snapshot_json_v5#>'{higher_rate_support,rows}'
-           else '[]'::jsonb
-         end
-       )>0
+
   ),
   manifest_build as materialized (
     select m.chunk_id,m.document_version_id,
@@ -354,14 +312,14 @@ begin
     select l.operation_id,'SOURCE_RENDER','RENDER',
       encode(digest(concat_ws('|','SOURCE_RENDER',m.document_version_id::text,m.ordinal::text,m.input_type,m.source_revision,m.presentation_hash,
         case when m.input_type='ELECTRONIC_TIMESHEET'
-          then 'timesheet-professional-v1'
+          then 'timesheet-professional-v2'
           else coalesce(l.version_template_version,l.template_version,'')
         end,'2'),'sha256'),'hex'),
       m.ordinal,m.source_entity_type,m.source_entity_id,l.document_version_id,'QUEUED',l.priority,v_now,
       jsonb_build_object('render_kind',m.input_type,'source_revision',m.source_revision,
         'source_chunk_key',encode(digest(concat_ws('|',m.document_version_id::text,m.ordinal::text,m.input_type,m.source_entity_type,m.source_entity_id::text,m.source_revision,m.presentation_hash),'sha256'),'hex'),
         'template_version',case when m.input_type='ELECTRONIC_TIMESHEET'
-          then 'timesheet-professional-v1'
+          then 'timesheet-professional-v2'
           else coalesce(l.version_template_version,l.template_version)
         end,
         'presentation_model_schema_version',m.presentation_schema,

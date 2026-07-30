@@ -359,6 +359,13 @@ test('canonical hashes and candidate trigger projections are locked artifacts', 
   assert.equal(triggerManifest.candidate_trigger_count, 54);
   assert.equal(triggerManifest.result_trigger_count, 3);
   assert.equal(triggerManifest.tables.length, 18);
+  assert.match(
+    read(
+      'supabase/repeatable/27072026_1042_invoice_async_v8/'
+        + '27072026_1042_19_invoice_async_contract_get_v2.sql',
+    ),
+    new RegExp(triggerManifest.manifest_digest),
+  );
   for (const table of triggerManifest.tables) {
     assert.ok(table.field_count > 0);
     assert.ok(Array.isArray(table.fields));
@@ -1084,10 +1091,10 @@ test('document manifest planning freezes snapshot and manifest in one version up
     documentAdvance,
     /from manifest_build mb[\s\S]*join linked l[\s\S]*l\.version_id=mb\.document_version_id/i,
   );
-  assert.match(
-    documentAdvance,
-    /'ATTACHMENT_INDEX'[\s\S]*it\.submission_mode='ELECTRONIC'[\s\S]*it\.manual_document_asset_id is not null[\s\S]*ss\.import_id is not null[\s\S]*ea\.asset_id is not null[\s\S]*higher_rate_support,rows/i,
-  );
+  assert.doesNotMatch(documentAdvance, /'ATTACHMENT_INDEX','DOCUMENT'/i);
+  assert.doesNotMatch(documentAdvance, /'Attachment index'/i);
+  assert.match(documentAdvance, /'TIMESHEET_RENDER_MODEL_V2'/i);
+  assert.match(documentAdvance, /'HEALTHROSTER_PRESENTATION_V2'/i);
   assert.doesNotMatch(
     documentAdvance,
     /where exists\(select 1 from invoice_ts it where it\.chunk_id=l\.id and it\.attach_timesheet and not it\.no_timesheet_required\)/i,
@@ -1105,11 +1112,11 @@ test('invoice source chunks keep the electronic timesheet template identity', ()
 
   assert.match(
     documentAdvance,
-    /source_chunks as materialized[\s\S]*case when m\.input_type='ELECTRONIC_TIMESHEET'\s*then 'timesheet-professional-v1'\s*else coalesce\(l\.version_template_version,l\.template_version,''\)\s*end,'2'/i,
+    /source_chunks as materialized[\s\S]*case when m\.input_type='ELECTRONIC_TIMESHEET'\s*then 'timesheet-professional-v2'\s*else coalesce\(l\.version_template_version,l\.template_version,''\)\s*end,'2'/i,
   );
   assert.match(
     documentAdvance,
-    /'template_version',case when m\.input_type='ELECTRONIC_TIMESHEET'\s*then 'timesheet-professional-v1'\s*else coalesce\(l\.version_template_version,l\.template_version\)\s*end/i,
+    /'template_version',case when m\.input_type='ELECTRONIC_TIMESHEET'\s*then 'timesheet-professional-v2'\s*else coalesce\(l\.version_template_version,l\.template_version\)\s*end/i,
   );
   assert.match(
     workComplete,
@@ -1518,7 +1525,7 @@ test('committed TEST configuration keeps interactive enabled and scheduled disab
   assert.equal(manifestValues[1][1], functionHashes.aggregate_sha256);
   assert.equal(manifestEnforcementValues[0][1], 'true');
   assert.equal(manifestEnforcementValues[1][1], 'false');
-  assert.equal(buildValues[1][1], 'invoice-async-v8-test-20260729-r39');
+  assert.equal(buildValues[1][1], 'invoice-async-v8-test-20260730-r47');
 });
 
 test('manual and QR timesheet document planning fails closed without an immutable source asset', () => {

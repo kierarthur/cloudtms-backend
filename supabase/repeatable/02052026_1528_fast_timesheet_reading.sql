@@ -8457,6 +8457,8 @@ DECLARE
   v_qr_scanned_at timestamp with time zone := NULL;
   v_qr_signed_hash text := NULL;
   v_qr_signed_at_utc timestamp with time zone := NULL;
+  v_document_revision bigint := NULL;
+  v_document_state text := NULL;
   v_updated_at timestamp with time zone := NULL;
   v_tsfin_id uuid := NULL;
   v_tsfin_processing_status text := NULL;
@@ -8485,6 +8487,24 @@ DECLARE
   v_job_id uuid := NULL;
   v_send_state text := NULL;
   v_pdf_key text := NULL;
+  v_document_idempotency text := NULL;
+  v_document_operation_id uuid := NULL;
+  v_document_version_id uuid := NULL;
+  v_document_version_status text := NULL;
+  v_snapshot_json jsonb := '{}'::jsonb;
+  v_snapshot_model jsonb := '{}'::jsonb;
+  v_snapshot_hash text := NULL;
+  v_snapshot_valid boolean := FALSE;
+  v_snapshot_error_code text := NULL;
+  v_week_period_hash text := NULL;
+  v_schedule_hash text := NULL;
+  v_reference_signature text := NULL;
+  v_additional_units_hash text := NULL;
+  v_presentation_settings_hash text := NULL;
+  v_qr_payload_hash text := NULL;
+  v_complete_printable_content_hash text := NULL;
+  v_issue_type text := NULL;
+  v_rotate_token boolean := FALSE;
   v_mail_subject text := NULL;
   v_mail_body_text text := NULL;
   v_mail_body_html text := NULL;
@@ -8590,6 +8610,8 @@ BEGIN
          ts_current.qr_scanned_at,
          ts_current.qr_signed_hash,
          ts_current.qr_signed_at_utc,
+         ts_current.document_revision,
+         ts_current.document_state::text,
          ts_current.version,
          ts_current.updated_at
     INTO v_sheet_scope,
@@ -8606,6 +8628,8 @@ BEGIN
          v_qr_scanned_at,
          v_qr_signed_hash,
          v_qr_signed_at_utc,
+         v_document_revision,
+         v_document_state,
          v_current_version,
          v_updated_at
   FROM public.timesheets AS ts_current
@@ -8842,9 +8866,20 @@ BEGIN
     WHEN jsonb_typeof(v_qr_payload_json) = 'object' THEN NULLIF(BTRIM(COALESCE(v_qr_payload_json->>'tok', '')), '')
     ELSE NULL
   END;
-  v_effective_qr_token := COALESCE(NULLIF(BTRIM(COALESCE(v_qr_token, '')), ''), v_payload_qr_token, gen_random_uuid()::text);
-  v_qr_payload_json := COALESCE(CASE WHEN jsonb_typeof(v_qr_payload_json) = 'object' THEN v_qr_payload_json ELSE '{}'::jsonb END, '{}'::jsonb)
-    || jsonb_build_object('v', 1, 'tok', v_effective_qr_token);
+  v_rotate_token :=
+    NULLIF(BTRIM(COALESCE(v_qr_token, '')), '') IS NULL
+    OR UPPER(COALESCE(v_document_state, 'STALE')) IN ('STALE', 'FAILED');
+  v_effective_qr_token := CASE
+    WHEN v_rotate_token THEN gen_random_uuid()::text
+    ELSE COALESCE(NULLIF(BTRIM(COALESCE(v_qr_token, '')), ''),
+      v_payload_qr_token, gen_random_uuid()::text)
+  END;
+  v_qr_payload_json := jsonb_build_object('v', 1, 'tok', v_effective_qr_token);
+  v_issue_type := CASE
+    WHEN NULLIF(BTRIM(COALESCE(v_qr_token, '')), '') IS NULL THEN 'NEW_ISSUE'
+    WHEN v_rotate_token THEN 'REISSUED_CHANGED'
+    ELSE 'RESENT_UNCHANGED'
+  END;
 
   UPDATE public.timesheets AS ts_qr_update
      SET qr_token = v_effective_qr_token,
@@ -8857,9 +8892,17 @@ BEGIN
    WHERE ts_qr_update.timesheet_id = v_current_timesheet_id
      AND ts_qr_update.is_current = TRUE
   RETURNING ts_qr_update.qr_generated_at,
-            ts_qr_update.updated_at
+            ts_qr_update.updated_at,
+            ts_qr_update.document_revision
        INTO v_qr_generated_at,
-            v_updated_at;
+            v_updated_at,
+            v_document_revision;
+
+  SELECT t.document_revision
+    INTO v_document_revision
+  FROM public.timesheets t
+  WHERE t.timesheet_id=v_current_timesheet_id AND t.is_current
+  LIMIT 1;
 
   IF UPPER(COALESCE(v_tsfin_processing_status, '')) <> 'AWAITING_MANUAL_SIGNATURE' THEN
     UPDATE public.timesheets_financials AS tf_update
@@ -8922,47 +8965,189 @@ BEGIN
     || CASE WHEN UPPER(COALESCE(v_sheet_scope, '')) = 'WEEKLY' THEN 'Week ending: ' || COALESCE(v_week_ending_date::text, '(unknown)') ELSE 'Date: ' || COALESCE((v_worked_start_iso AT TIME ZONE 'Europe/London')::date::text, '(unknown date)') END
     || '<br/>Timesheet ID: ' || v_current_timesheet_id::text || '</p>';
 
-  SELECT existing_pdf.id
-    INTO v_existing_pdf_job_id
-  FROM public.ts_pdfs_outbox AS existing_pdf
-  WHERE existing_pdf.timesheet_id = v_current_timesheet_id
-    AND existing_pdf.reason = 'FORCE_REGEN'::public.ts_pdf_reason_enum
-  ORDER BY existing_pdf.created_at DESC,
-           existing_pdf.id DESC
-  LIMIT 1
-  FOR UPDATE;
+  SELECT p.presentation_model,p.snapshot_json,p.snapshot_hash,p.valid,p.error_code
+    INTO v_snapshot_model,v_snapshot_json,v_snapshot_hash,
+      v_snapshot_valid,v_snapshot_error_code
+  FROM private._invoice_presentation_snapshot_batch(
+    jsonb_build_array(jsonb_build_object(
+      'request_key','timesheet-qr:'||v_current_timesheet_id::text,
+      'entity_type','TIMESHEET',
+      'entity_id',v_current_timesheet_id,
+      'purpose','TIMESHEET',
+      'template_version','timesheet-professional-v2')),
+    v_now
+  ) p
+  LIMIT 1;
 
-  IF v_existing_pdf_job_id IS NOT NULL THEN
-    UPDATE public.ts_pdfs_outbox AS pdf_update
-       SET attempt_count = 0,
-           next_attempt_at = NULL,
-           last_error = NULL,
-           prefer_generated = TRUE,
-           force_regen = TRUE
-     WHERE pdf_update.id = v_existing_pdf_job_id
-    RETURNING pdf_update.id INTO v_pdf_job_id;
-  ELSE
-    INSERT INTO public.ts_pdfs_outbox AS pdf_insert (
-      timesheet_id,
-      reason,
-      attempt_count,
-      next_attempt_at,
-      last_error,
-      prefer_generated,
-      force_regen,
-      created_at
-    ) VALUES (
-      v_current_timesheet_id,
-      'FORCE_REGEN'::public.ts_pdf_reason_enum,
-      0,
-      NULL,
-      NULL,
-      TRUE,
-      TRUE,
-      v_now
-    )
-    RETURNING pdf_insert.id INTO v_pdf_job_id;
+  IF NOT COALESCE(v_snapshot_valid,FALSE)
+     OR v_snapshot_model->>'schema_version'<>'TIMESHEET_RENDER_MODEL_V2'
+     OR v_snapshot_model->>'form_variant'<>'QR_UNSIGNED' THEN
+    RETURN jsonb_build_object(
+      'ok',FALSE,'queued',FALSE,
+      'operation','timesheet_qr_send_enqueue',
+      'error_code',coalesce(v_snapshot_error_code,
+        'TIMESHEET_PRESENTATION_SNAPSHOT_INVALID'),
+      'message','The official QR timesheet could not be frozen safely.',
+      'current_timesheet_id',v_current_timesheet_id,
+      'recipient_available',TRUE,'send_state','REJECTED');
   END IF;
+
+  v_week_period_hash := coalesce(
+    nullif(v_snapshot_model->>'week_period_hash',''),
+    encode(digest(coalesce(
+      v_snapshot_model->'week_period','{}'::jsonb)::text,'sha256'),'hex'));
+  v_schedule_hash := encode(digest(
+    coalesce(v_snapshot_model#>'{week_period,days}','[]'::jsonb)::text,
+    'sha256'),'hex');
+  v_reference_signature := coalesce(
+    nullif(v_snapshot_model->>'reference_signature',''),
+    encode(digest(coalesce(v_snapshot_model#>'{week_period,days}',
+      '[]'::jsonb)::text,'sha256'),'hex'));
+  v_additional_units_hash := coalesce(
+    nullif(v_snapshot_model->>'additional_units_hash',''),
+    encode(digest(coalesce(v_snapshot_model#>'{additional_units_section,rows}',
+      '[]'::jsonb)::text,'sha256'),'hex'));
+  v_presentation_settings_hash := coalesce(
+    nullif(v_snapshot_model->>'presentation_settings_hash',''),
+    encode(digest(jsonb_build_object(
+      'branding',v_snapshot_model->'branding',
+      'wording',v_snapshot_model->'wording')::text,'sha256'),'hex'));
+  v_qr_payload_hash := encode(digest(v_qr_payload_json::text,'sha256'),'hex');
+  v_complete_printable_content_hash := encode(digest(
+    concat_ws('|',v_snapshot_hash,v_week_period_hash,v_schedule_hash,
+      v_reference_signature,v_additional_units_hash,
+      v_presentation_settings_hash,v_qr_payload_hash,
+      'timesheet-professional-v2'),'sha256'),'hex');
+  v_document_idempotency := encode(digest(concat_ws('|',
+    'BUILD_DOCUMENT','TIMESHEET',v_current_timesheet_id::text,'TIMESHEET',
+    v_document_revision::text,'timesheet-professional-v2',
+    v_qr_payload_hash,v_complete_printable_content_hash),'sha256'),'hex');
+
+  SELECT v.id,v.operation_id,v.status::text,v.r2_key
+    INTO v_document_version_id,v_document_operation_id,
+      v_document_version_status,v_pdf_key
+  FROM public.invoice_document_versions v
+  WHERE v.entity_type='TIMESHEET' AND v.entity_id=v_current_timesheet_id
+    AND v.purpose='TIMESHEET'
+    AND v.source_revision=v_document_revision::text
+    AND v.template_version='timesheet-professional-v2'
+    AND v.status IN(
+      'PLANNING','WAITING_FOR_INPUTS','RENDERING',
+      'ASSEMBLING','VERIFYING','READY')
+  ORDER BY (v.status='READY') DESC,v.created_at_utc DESC,v.id DESC
+  LIMIT 1;
+
+  IF v_document_version_id IS NULL THEN
+    INSERT INTO public.invoice_operations(
+      operation_type,entity_type,entity_id,actor_user_id,idempotency_key,
+      status,phase,priority,source_revision,template_version,input_json,
+      config_json,progress_json,total_units,chunk_count,control_version,
+      change_seq,created_at_utc,updated_at_utc
+    ) VALUES(
+      'BUILD_DOCUMENT','TIMESHEET',v_current_timesheet_id,p_actor_user_id,
+      v_document_idempotency,'QUEUED','BUILD_MANIFEST',550,
+      v_document_revision::text,'timesheet-professional-v2',
+      jsonb_build_object(
+        'entity_type','TIMESHEET','entity_id',v_current_timesheet_id,
+        'purpose','TIMESHEET','source_revision',v_document_revision,
+        'template_version','timesheet-professional-v2',
+        'qr_payload_hash',v_qr_payload_hash,
+        'printable_content_hash',v_complete_printable_content_hash),
+      jsonb_build_object('processor_policy',private._invoice_processor_limits()),
+      jsonb_build_object('status_message','Official QR timesheet queued'),
+      1,1,1,nextval('public.invoice_operation_change_seq'),v_now,v_now
+    )
+    ON CONFLICT DO NOTHING
+    RETURNING id INTO v_document_operation_id;
+
+    IF v_document_operation_id IS NULL THEN
+      SELECT o.id INTO v_document_operation_id
+      FROM public.invoice_operations o
+      WHERE o.idempotency_key=v_document_idempotency
+        AND o.status IN('QUEUED','RUNNING','WAITING','RETRY_WAIT')
+      ORDER BY o.created_at_utc DESC,o.id DESC
+      LIMIT 1;
+    END IF;
+
+    INSERT INTO public.invoice_document_versions(
+      entity_type,entity_id,purpose,operation_id,source_revision,
+      template_version,status,snapshot_json,snapshot_hash,
+      manifest_json,manifest_hash,created_at_utc
+    ) VALUES(
+      'TIMESHEET',v_current_timesheet_id,'TIMESHEET',
+      v_document_operation_id,v_document_revision::text,
+      'timesheet-professional-v2','PLANNING',
+      v_snapshot_json,v_snapshot_hash,'[]'::jsonb,
+      encode(digest('[]','sha256'),'hex'),v_now
+    )
+    ON CONFLICT(entity_type,entity_id,purpose,source_revision,template_version)
+      WHERE purpose IN('DRAFT_PREVIEW','TIMESHEET')
+        AND status IN(
+          'PLANNING','WAITING_FOR_INPUTS','RENDERING',
+          'ASSEMBLING','VERIFYING','READY')
+    DO NOTHING
+    RETURNING id,status::text,r2_key
+      INTO v_document_version_id,v_document_version_status,v_pdf_key;
+
+    IF v_document_version_id IS NULL THEN
+      SELECT v.id,v.operation_id,v.status::text,v.r2_key
+        INTO v_document_version_id,v_document_operation_id,
+          v_document_version_status,v_pdf_key
+      FROM public.invoice_document_versions v
+      WHERE v.entity_type='TIMESHEET' AND v.entity_id=v_current_timesheet_id
+        AND v.purpose='TIMESHEET'
+        AND v.source_revision=v_document_revision::text
+        AND v.template_version='timesheet-professional-v2'
+        AND v.status IN(
+          'PLANNING','WAITING_FOR_INPUTS','RENDERING',
+          'ASSEMBLING','VERIFYING','READY')
+      ORDER BY (v.status='READY') DESC,v.created_at_utc DESC,v.id DESC
+      LIMIT 1;
+    END IF;
+
+    INSERT INTO public.invoice_operation_chunks(
+      operation_id,chunk_type,phase,work_key,sequence_no,entity_type,entity_id,
+      document_version_id,status,priority,run_after_utc,payload_json,
+      operation_control_version,created_at_utc,updated_at_utc
+    )
+    SELECT v_document_operation_id,'DOCUMENT_PLAN','BUILD_MANIFEST',
+      encode(digest(concat_ws('|','DOCUMENT_PLAN',
+        v_document_version_id::text,v_document_revision::text,
+        'timesheet-professional-v2','1'),'sha256'),'hex'),
+      0,'TIMESHEET',v_current_timesheet_id,v_document_version_id,
+      'QUEUED',550,v_now,
+      jsonb_build_object(
+        'purpose','TIMESHEET','source_revision',v_document_revision,
+        'template_version','timesheet-professional-v2',
+        'qr_payload_hash',v_qr_payload_hash,
+        'printable_content_hash',v_complete_printable_content_hash),
+      o.control_version,v_now,v_now
+    FROM public.invoice_operations o
+    WHERE o.id=v_document_operation_id
+    ON CONFLICT(operation_id,chunk_type,level_no,sequence_no,work_key)
+      DO NOTHING;
+  END IF;
+
+  UPDATE public.timesheets t
+  SET current_document_version_id=v_document_version_id,
+      active_document_operation_id=case
+        when v_document_version_status='READY' then null
+        else v_document_operation_id end,
+      document_state=case
+        when v_document_version_status='READY' then 'READY'
+        else 'QUEUED' end,
+      last_document_error_json=null,updated_at=v_now
+  WHERE t.timesheet_id=v_current_timesheet_id AND t.is_current
+    AND t.document_revision=v_document_revision;
+
+  v_pdf_job_id := v_document_operation_id;
+  v_mail_held_until_pdf_rendered :=
+    COALESCE(v_document_version_status,'')<>'READY';
+  v_mail_scheduled_for_utc := CASE
+    WHEN v_mail_held_until_pdf_rendered THEN
+      TIMESTAMPTZ '9999-12-31 00:00:00+00'
+    ELSE v_now
+  END;
 
   SELECT mail_existing.id,
          mail_existing.status::text
@@ -8989,7 +9174,13 @@ BEGIN
              subject = v_mail_subject,
              body_html = v_mail_body_html,
              body_text = v_mail_body_text,
-             attachments = jsonb_build_array(jsonb_build_object('r2_key', v_pdf_key, 'filename', 'Timesheet_' || COALESCE(v_week_ending_date::text, v_current_timesheet_id::text) || '.pdf')),
+             attachments = CASE
+               WHEN v_mail_held_until_pdf_rendered THEN '[]'::jsonb
+               ELSE jsonb_build_array(jsonb_build_object(
+                 'r2_key',v_pdf_key,
+                 'filename','Timesheet_'||COALESCE(
+                   v_week_ending_date::text,v_current_timesheet_id::text)||'.pdf'))
+             END,
              last_error = NULL,
              failed_at = NULL,
              scheduled_for_utc = v_mail_scheduled_for_utc,
@@ -9001,23 +9192,38 @@ BEGIN
              attempt_lease_expires_at_utc = NULL,
              payment_scope_json = jsonb_build_object(
                'job_kind', 'TIMESHEET_QR_SEND',
-               'pdf_job_id', v_pdf_job_id::text,
+               'document_operation_id',v_document_operation_id,
+               'document_version_id',v_document_version_id,
+               'document_revision',v_document_revision,
+               'template_version','timesheet-professional-v2',
                'idempotency_key', v_idempotency_key,
                'client_idempotency_key', v_client_idempotency_key,
                'requires_pdf_render', TRUE,
                'release_mail_after_pdf_render', TRUE,
-               'mail_delayed_for_pdf_render', TRUE,
-        'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
-        'mail_hold_reason', 'PDF_RENDER_PENDING',
-               'pdf_render_delay_minutes', 10,
+               'mail_delayed_for_pdf_render',v_mail_held_until_pdf_rendered,
+               'mail_held_until_pdf_rendered',v_mail_held_until_pdf_rendered,
+               'mail_hold_reason',case when v_mail_held_until_pdf_rendered
+                 then 'PDF_RENDER_PENDING' else null end,
                'pdf_storage_key', v_pdf_key,
                'current_timesheet_id', v_current_timesheet_id::text,
                'current_version', v_current_version,
+               'qr_token_hash',encode(digest(v_effective_qr_token,'sha256'),'hex'),
+               'qr_payload_hash',v_qr_payload_hash,
+               'week_period_hash',v_week_period_hash,
+               'schedule_hash',v_schedule_hash,
+               'reference_signature',v_reference_signature,
+               'additional_units_hash',v_additional_units_hash,
+               'presentation_settings_hash',v_presentation_settings_hash,
+               'printable_content_hash',v_complete_printable_content_hash,
                'recipient_email', v_candidate_email
              )
        WHERE mail_update.id = v_existing_mail_id;
 
-      v_send_state := CASE WHEN UPPER(COALESCE(v_existing_mail_status, '')) = 'FAILED' THEN 'PDF_REQUEUED_MAIL_HELD' ELSE 'PDF_ALREADY_QUEUED_MAIL_HELD' END;
+      v_send_state := CASE
+        WHEN NOT v_mail_held_until_pdf_rendered THEN 'DOCUMENT_READY_MAIL_QUEUED'
+        WHEN UPPER(COALESCE(v_existing_mail_status,''))='FAILED'
+          THEN 'DOCUMENT_REQUEUED_MAIL_HELD'
+        ELSE 'ALREADY_QUEUED' END;
     END IF;
   ELSE
     INSERT INTO public.mail_outbox AS mail_insert (
@@ -9061,7 +9267,13 @@ BEGIN
       v_mail_subject,
       v_mail_body_html,
       v_mail_body_text,
-      jsonb_build_array(jsonb_build_object('r2_key', v_pdf_key, 'filename', 'Timesheet_' || COALESCE(v_week_ending_date::text, v_current_timesheet_id::text) || '.pdf')),
+      CASE
+        WHEN v_mail_held_until_pdf_rendered THEN '[]'::jsonb
+        ELSE jsonb_build_array(jsonb_build_object(
+          'r2_key',v_pdf_key,
+          'filename','Timesheet_'||COALESCE(
+            v_week_ending_date::text,v_current_timesheet_id::text)||'.pdf'))
+      END,
       'QUEUED'::public.mail_status_enum,
       NULL,
       v_now,
@@ -9081,24 +9293,37 @@ BEGIN
       v_mail_scheduled_for_utc,
       jsonb_build_object(
         'job_kind', 'TIMESHEET_QR_SEND',
-        'pdf_job_id', v_pdf_job_id::text,
+        'document_operation_id',v_document_operation_id,
+        'document_version_id',v_document_version_id,
+        'document_revision',v_document_revision,
+        'template_version','timesheet-professional-v2',
         'idempotency_key', v_idempotency_key,
         'client_idempotency_key', v_client_idempotency_key,
         'requires_pdf_render', TRUE,
         'release_mail_after_pdf_render', TRUE,
-        'mail_delayed_for_pdf_render', TRUE,
+        'mail_delayed_for_pdf_render',v_mail_held_until_pdf_rendered,
         'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
-        'mail_hold_reason', 'PDF_RENDER_PENDING',
-        'pdf_render_delay_minutes', 10,
+        'mail_hold_reason',case when v_mail_held_until_pdf_rendered
+          then 'PDF_RENDER_PENDING' else null end,
         'pdf_storage_key', v_pdf_key,
         'current_timesheet_id', v_current_timesheet_id::text,
         'current_version', v_current_version,
+        'qr_token_hash',encode(digest(v_effective_qr_token,'sha256'),'hex'),
+        'qr_payload_hash',v_qr_payload_hash,
+        'week_period_hash',v_week_period_hash,
+        'schedule_hash',v_schedule_hash,
+        'reference_signature',v_reference_signature,
+        'additional_units_hash',v_additional_units_hash,
+        'presentation_settings_hash',v_presentation_settings_hash,
+        'printable_content_hash',v_complete_printable_content_hash,
         'recipient_email', v_candidate_email
       )
     )
     RETURNING id INTO v_mail_job_id;
 
-    v_send_state := 'PDF_QUEUED_MAIL_HELD';
+    v_send_state := CASE
+      WHEN v_mail_held_until_pdf_rendered THEN 'DOCUMENT_QUEUED_MAIL_HELD'
+      ELSE 'DOCUMENT_READY_MAIL_QUEUED' END;
   END IF;
 
   v_job_id := v_mail_job_id;
@@ -9141,10 +9366,13 @@ BEGIN
       'recipient_email', v_candidate_email,
       'scheduled_for_utc', v_mail_scheduled_for_utc,
       'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
-      'mail_delayed_for_pdf_render', TRUE,
-      'mail_hold_reason', 'PDF_RENDER_PENDING',
-      'pdf_render_delay_minutes', 10,
+      'mail_delayed_for_pdf_render',v_mail_held_until_pdf_rendered,
+      'mail_hold_reason',case when v_mail_held_until_pdf_rendered
+        then 'PDF_RENDER_PENDING' else null end,
       'pdf_storage_key', v_pdf_key,
+      'document_operation_id',v_document_operation_id,
+      'document_version_id',v_document_version_id,
+      'issue_type',v_issue_type,
       'client_idempotency_key', v_client_idempotency_key,
       'recipient_namespace', v_recipient_namespace
     ),
@@ -9169,10 +9397,15 @@ BEGIN
     'send_state', v_send_state,
     'scheduled_for_utc', v_mail_scheduled_for_utc,
     'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
-    'mail_delayed_for_pdf_render', TRUE,
-    'mail_hold_reason', 'PDF_RENDER_PENDING',
-    'pdf_render_delay_minutes', 10,
+    'mail_delayed_for_pdf_render',v_mail_held_until_pdf_rendered,
+    'mail_hold_reason',case when v_mail_held_until_pdf_rendered
+      then 'PDF_RENDER_PENDING' else null end,
     'pdf_storage_key', v_pdf_key,
+    'document_operation_id',v_document_operation_id,
+    'document_version_id',v_document_version_id,
+    'document_revision',v_document_revision,
+    'template_version','timesheet-professional-v2',
+    'issue_type',v_issue_type,
     'client_idempotency_key', v_client_idempotency_key,
     'recipient_namespace', v_recipient_namespace,
     'row_patch', COALESCE(v_post_row->'row_patch', jsonb_build_object()),

@@ -10,7 +10,10 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY package.json package-lock.json /app/
+RUN npm ci --omit=dev
 COPY server.mjs /app/server.mjs
+COPY page-numbering.mjs /app/page-numbering.mjs
 COPY policy.xml /etc/ImageMagick-6/policy.xml
 
 ENV PORT=8080

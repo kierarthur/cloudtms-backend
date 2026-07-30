@@ -1,0 +1,166 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import test from 'node:test';
+
+const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+
+function functionBody(source, qualifiedName) {
+  const lower = source.toLowerCase();
+  const start = lower.indexOf(`create or replace function ${qualifiedName.toLowerCase()}`);
+  assert.notEqual(start, -1, `${qualifiedName} missing`);
+  const bodyStart = lower.indexOf('as $function$', start);
+  const bodyEnd = lower.indexOf('$function$;', bodyStart);
+  assert.ok(bodyStart > start && bodyEnd > bodyStart, `${qualifiedName} body invalid`);
+  return source.slice(start, bodyEnd + '$function$;'.length);
+}
+
+test('new invoice plans omit attachment indexes and use official timesheet V2', () => {
+  const planner = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+      + '24072026_1217_private_invoice_document_advance_batch.sql'
+  );
+  const downstream = read(
+    'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
+      + '24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql'
+  );
+  assert.doesNotMatch(planner, /'ATTACHMENT_INDEX','DOCUMENT'/i);
+  assert.doesNotMatch(planner, /'Attachment index'/i);
+  assert.match(planner, /'TIMESHEET_RENDER_MODEL_V2'/i);
+  assert.match(planner, /'timesheet-professional-v2'/i);
+  assert.doesNotMatch(planner, /timesheet-professional-v1/i);
+  assert.match(
+    downstream,
+    /select l\.id chunk_id,l\.resolved_document_version_id document_version_id/i
+  );
+  assert.match(downstream, /TIMESHEET_RENDER_MODEL_V2[\s\S]*QR_UNSIGNED/i);
+  assert.match(downstream, /TIMESHEET_SIGNED_EVIDENCE_REQUIRED/i);
+  assert.match(downstream, /FINAL_MERGE_GLOBAL_V1/i);
+});
+
+test('QR enqueue creates V8 document work and never creates legacy PDF-outbox work', () => {
+  const source = read('supabase/repeatable/02052026_1528_fast_timesheet_reading.sql');
+  const sql = functionBody(source, 'public.timesheet_qr_send_enqueue_v1');
+  assert.match(sql, /insert into public\.invoice_operations/i);
+  assert.match(sql, /insert into public\.invoice_document_versions/i);
+  assert.match(sql, /insert into public\.invoice_operation_chunks/i);
+  assert.match(sql, /timesheet-professional-v2/i);
+  assert.match(sql, /DOCUMENT_QUEUED_MAIL_HELD/i);
+  assert.match(sql, /DOCUMENT_READY_MAIL_QUEUED/i);
+  assert.doesNotMatch(sql, /insert into public\.ts_pdfs_outbox/i);
+  assert.doesNotMatch(sql, /update public\.ts_pdfs_outbox/i);
+  assert.match(sql, /attachments\s*=\s*CASE[\s\S]*'\[\]'::jsonb/i);
+});
+
+test('timesheet invalidation includes QR printable identity', () => {
+  const sql = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+      + '23072026_2207_trg_timesheet_document_invalidate.sql'
+  );
+  assert.match(sql, /n\.qr_token is distinct from o\.qr_token/i);
+  assert.match(sql, /n\.qr_payload_json is distinct from o\.qr_payload_json/i);
+});
+
+test('snapshot freezes dynamic week, canonical references, complete units and HealthRoster V2', () => {
+  const sql = read(
+    'supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql'
+  );
+  assert.match(sql, /TIMESHEET_RENDER_MODEL_V2/i);
+  assert.match(sql, /resolved_week_ending_date-6/i);
+  assert.match(sql, /reference_source_row_keys/i);
+  assert.match(sql, /TIMESHEET_ADDITIONAL_UNITS_V1/i);
+  assert.match(sql, /minimum_blank_space_rows',1/i);
+  assert.match(sql, /timesheet_additional_staleness/i);
+  assert.match(sql, /TIMESHEET_ADDITIONAL_UNITS_SNAPSHOT_STALE/i);
+  assert.match(sql, /HEALTHROSTER_PRESENTATION_V2/i);
+  assert.match(sql, /public\.nhsp_shifts ns/i);
+  assert.match(sql, /ns\.latest_import_id=s\.import_id/i);
+  assert.match(sql, /ns\.hr_request_id=coalesce/i);
+  assert.match(sql, /CONTROLLED_UNIQUE_FALLBACK/i);
+  assert.match(sql, /'booking_reference',case[\s\S]*hr_match\.ref_num/i);
+  assert.match(sql, /in\('BY_WEEK','ANY_WEEK'\)/i);
+});
+
+test('settings wording changes participate in invoice candidate revision', () => {
+  const sql = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/'
+      + '27072026_1250_20_private_invoice_candidate_triggers_install_v2.sql'
+  );
+  for (const field of [
+    'timesheet_header_json',
+    'timesheet_footer_json',
+    'temporary_worker_declaration_json',
+    'client_declaration_json'
+  ]) {
+    assert.match(sql, new RegExp(`"${field}"`));
+  }
+});
+
+test('TEST keeps function-manifest enforcement off while the default remains on', () => {
+  const wrangler = read('wrangler.toml');
+  const values = [...wrangler.matchAll(
+    /INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED\s*=\s*"([^"]+)"/g
+  )].map(match => match[1]);
+  assert.deepEqual(values, ['true', 'false']);
+});
+
+test('planner V2 installer references both canonical planner definitions', () => {
+  const installer = read(
+    'supabase/repeatable/30072026_0046_invoice_document_planner_v2.sql'
+  );
+  assert.match(installer, /\\set ON_ERROR_STOP on/);
+  assert.match(
+    installer,
+    /24072026_1217_private_invoice_document_advance_batch_v6_downstream\.sql/
+  );
+  assert.match(
+    installer,
+    /24072026_1217_private_invoice_document_advance_batch\.sql/
+  );
+});
+test('reference-only invoice edits invalidate the exact V8 draft once when no legacy line carrier exists', () => {
+  const sql = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+      + '23072026_2207_invoice_apply_edits.sql'
+  );
+  assert.match(sql, /coalesce\(v_refupd_applied,0\)>0/i);
+  assert.match(sql, /i\.document_revision=v_inv\.document_revision/i);
+  assert.match(sql, /\{meta,reference_source_change\}/i);
+  assert.match(sql, /timesheet_ids',coalesce\(to_jsonb\(v_refupd_ts_ids_distinct\)/i);
+  assert.match(sql, /v_refupd_invoice_fallback_invalidated:=coalesce\(v_rc,0\)>0/i);
+});
+
+test('reference invalidation installer references the canonical invoice edit definition', () => {
+  const installer = read(
+    'supabase/repeatable/30072026_0203_invoice_apply_edits_reference_invalidation.sql'
+  );
+  assert.match(installer, /\\set ON_ERROR_STOP on/);
+  assert.match(
+    installer,
+    /23072026_2207_invoice_apply_edits\.sql/
+  );
+});
+test('invoice edits contain the complete supported add-timesheet implementation', () => {
+  const sql = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+      + '23072026_2207_invoice_apply_edits.sql'
+  );
+  assert.doesNotMatch(sql, /rest of function unchanged/i);
+  assert.doesNotMatch(sql, /^\s*--\s*\.\.\.\s*$/m);
+  assert.match(sql, /-- 3\) Add timesheets \(full parity: hours \+ additional \+ expenses \+ mileage\)/i);
+  assert.match(sql, /'HOURS_DAILY'/i);
+  assert.match(sql, /'HOURS_WEEKLY'/i);
+  assert.match(sql, /'ADDITIONAL_RATE'/i);
+  assert.match(sql, /'ADDITIONAL_RATE_DAILY'/i);
+  assert.match(sql, /'EXPENSES_TOTAL'/i);
+  assert.match(sql, /never derives economics from mutable live rows/i);
+  assert.match(sql, /private\._invoice_generation_vat_policy_batch/i);
+  assert.match(sql, /INVOICE_EDIT_VAT_POLICY_UNRESOLVED/i);
+  assert.match(sql, /\('TRAVEL',coalesce\(snap\.travel_pay_ex_vat/i);
+  assert.match(sql, /\('ACCOMMODATION',coalesce\(snap\.accommodation_pay_ex_vat/i);
+  assert.match(sql, /\('OTHER',coalesce\(snap\.other_pay_ex_vat/i);
+  assert.match(sql, /else 'EXPENSE_'\|\|e\.code end/i);
+  assert.match(sql, /'MILEAGE'/i);
+  assert.match(sql, /perform public\._inv_lock_segments_for_invoice\(p_invoice_id, seg_refs\)/i);
+  assert.match(sql, /v_exact_timesheet_document_r2_key/i);
+  assert.doesNotMatch(sql, /docs-pdf\/timesheets\/ts_/i);
+});

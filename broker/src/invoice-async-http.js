@@ -1914,7 +1914,16 @@ async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
   });
 }
 
-async function handleViewDocument(env, req, ctx, user, deps, entityType, entityId) {
+async function handleViewDocument(
+  env,
+  req,
+  ctx,
+  user,
+  deps,
+  entityType,
+  entityId,
+  options = {}
+) {
   if (!UUID_PATTERN.test(entityId)) return jsonResponse({ error: 'INVALID_ENTITY_ID' }, 400);
   if (req.method !== 'POST') {
     return jsonResponse({ ok: false, error: 'DOCUMENT_PREPARATION_POST_REQUIRED' }, 405, {
@@ -1976,6 +1985,18 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
       ? version
       : null;
   };
+  const requireGenerationReady = async () => {
+    if (typeof options.ensureGenerationReady !== 'function') return true;
+    return options.ensureGenerationReady();
+  };
+  const generationUnavailable = purpose => jsonResponse({
+    contract_version: INVOICE_VIEWER_CONTRACT,
+    viewer_state: 'BLOCKED',
+    purpose,
+    badge_codes: ['DOCUMENT_GENERATION_UNAVAILABLE'],
+    error_code: 'DOCUMENT_GENERATION_UNAVAILABLE',
+    status_message: 'Document generation is temporarily unavailable. Existing documents remain available.'
+  }, 503);
 
   if (entityType === 'TIMESHEET') {
     const timesheetQuery = new URL(`${env.SUPABASE_URL}/rest/v1/timesheets`);
@@ -1983,7 +2004,7 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
     timesheetQuery.searchParams.set('is_current', 'eq.true');
     timesheetQuery.searchParams.set(
       'select',
-      'timesheet_id,submission_mode,document_revision,manual_document_asset_id,manual_pdf_r2_key,manual_pdf_rotation_degrees'
+      'timesheet_id,submission_mode,document_revision,current_document_version_id,document_state,manual_document_asset_id,manual_pdf_r2_key,manual_pdf_rotation_degrees'
     );
     timesheetQuery.searchParams.set('limit', '1');
     const timesheetResponse = await fetch(timesheetQuery, { headers: serviceHeaders });
@@ -1991,6 +2012,20 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
     const timesheet = Array.isArray(timesheetRows) ? timesheetRows[0] : null;
     if (!timesheetResponse.ok || !timesheet) {
       return jsonResponse({ error: 'DOCUMENT_ENTITY_NOT_FOUND' }, 404);
+    }
+
+    const currentVersionId = String(timesheet.current_document_version_id || '');
+    if (UUID_PATTERN.test(currentVersionId)
+        && String(timesheet.document_state || '').toUpperCase() === 'READY') {
+      const version = await loadReadyVersion(currentVersionId, 'TIMESHEET');
+      if (version) {
+        return jsonResponse({
+          contract_version: INVOICE_VIEWER_CONTRACT,
+          viewer_state: 'READY',
+          purpose: 'TIMESHEET',
+          document_version: redactVersion(version)
+        });
+      }
     }
 
     const submissionMode = String(timesheet.submission_mode || '').trim().toUpperCase();
@@ -2043,6 +2078,9 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
         evidence?.source_revision
           || `${sourceKind}:${sourceId}:${timesheet.document_revision}`
       ).trim();
+      if (!(await requireGenerationReady())) {
+        return generationUnavailable('TIMESHEET');
+      }
       const assetValues = rpcValue(await deps.rpc('invoice_operation_start_batch', {
         p_commands: [{
           command_type: 'PREPARE_ASSET',
@@ -2140,9 +2178,28 @@ async function handleViewDocument(env, req, ctx, user, deps, entityType, entityI
           status_message: 'The issued document could not be verified.'
         }, 409);
     }
+
+    const previewVersionId = String(
+      header.preview_document_version_id || detail?.preview_document_version_id || ''
+    );
+    if (UUID_PATTERN.test(previewVersionId)
+        && String(header.document_state || detail?.document_state || '').toUpperCase() === 'READY') {
+      const version = await loadReadyVersion(previewVersionId, 'DRAFT_PREVIEW');
+      if (version) {
+        return jsonResponse({
+          contract_version: INVOICE_VIEWER_CONTRACT,
+          viewer_state: 'READY',
+          purpose: 'DRAFT_PREVIEW',
+          document_version: redactVersion(version)
+        });
+      }
+    }
   }
 
   const purpose = entityType === 'INVOICE' ? 'DRAFT_PREVIEW' : 'TIMESHEET';
+  if (!(await requireGenerationReady())) {
+    return generationUnavailable(purpose);
+  }
   const command = {
     command_type: entityType === 'INVOICE' ? 'VIEW_INVOICE_DOCUMENT' : 'VIEW_TIMESHEET_DOCUMENT',
     [entityType === 'INVOICE' ? 'invoice_id' : 'timesheet_id']: entityId,
@@ -3444,13 +3501,29 @@ async function invoiceProcessorReady(env, options = {}) {
   return ready;
 }
 
-async function handleInvoiceAsyncCapabilities(env, req, deps) {
-  const user = await requireActor(env, req, deps, false);
-  if (!user) return jsonResponse({ error: 'UNAUTHENTICATED' }, 401);
+function invoiceAsyncAccessConfigurationReady(env) {
   const access = parseInvoiceAsyncAccessMode(env.INVOICE_ASYNC_ACCESS_MODE);
   const parsed = parseInvoiceAsyncAllowedUserIds(env.INVOICE_ASYNC_ALLOWED_USER_IDS);
-  const pipelineEnabled = isInvoiceAsyncPipelineEnabled(env);
-  const scheduledEnabled = String(env.INVOICE_ASYNC_SCHEDULED_ENABLED || '').toLowerCase() === 'true';
+  return {
+    access,
+    parsed,
+    ready: access.ok && (
+      access.mode === 'AUTHENTICATED'
+      || (parsed.ok && parsed.ids.length > 0)
+    )
+  };
+}
+
+function invoiceDocumentReadBindingsReady(env) {
+  return !!(
+    env.SUPABASE_URL
+    && env.SUPABASE_SERVICE_ROLE_KEY
+    && env.R2
+    && env.INVOICE_DOCUMENT_ACCESS_SECRET
+  );
+}
+
+async function evaluateInvoiceGenerationReadiness(env, deps) {
   const databaseContract = await loadInvoiceAsyncDatabaseContract(env, deps);
   const databaseValidation = validateInvoiceAsyncDatabaseContract(env, databaseContract);
   const runtimeValidation = validateQueueRuntimeConfiguration(env);
@@ -3463,16 +3536,38 @@ async function handleInvoiceAsyncCapabilities(env, req, deps) {
     && cursorSecret(env, 'RESULT')
     && env.INVOICE_DOCUMENT_ACCESS_SECRET
   );
-  const accessConfigurationReady = access.ok && (
-    access.mode === 'AUTHENTICATED'
-    || (parsed.ok && parsed.ids.length > 0)
-  );
-  const deploymentReady = databaseValidation.ok
-    && runtimeValidation.ok
-    && processorEnabled
-    && buildReady
-    && bindingsReady
-    && accessConfigurationReady;
+  const accessConfiguration = invoiceAsyncAccessConfigurationReady(env);
+  return {
+    databaseValidation,
+    runtimeValidation,
+    processorEnabled,
+    buildReady,
+    bindingsReady,
+    accessConfiguration,
+    ready: databaseValidation.ok
+      && runtimeValidation.ok
+      && processorEnabled
+      && buildReady
+      && bindingsReady
+      && accessConfiguration.ready
+  };
+}
+
+async function handleInvoiceAsyncCapabilities(env, req, deps) {
+  const user = await requireActor(env, req, deps, false);
+  if (!user) return jsonResponse({ error: 'UNAUTHENTICATED' }, 401);
+  const pipelineEnabled = isInvoiceAsyncPipelineEnabled(env);
+  const scheduledEnabled = String(env.INVOICE_ASYNC_SCHEDULED_ENABLED || '').toLowerCase() === 'true';
+  const generation = await evaluateInvoiceGenerationReadiness(env, deps);
+  const {
+    databaseValidation,
+    processorEnabled,
+    accessConfiguration
+  } = generation;
+  const { access, parsed } = accessConfiguration;
+  const documentReadReady = invoiceDocumentReadBindingsReady(env)
+    && accessConfiguration.ready;
+  const deploymentReady = generation.ready;
   const cohort = isInvoiceAsyncUserAllowed(env, {
     ...user,
     active: user.is_active ?? user.active,
@@ -3489,6 +3584,8 @@ async function handleInvoiceAsyncCapabilities(env, req, deps) {
     database_contract_warnings: databaseValidation.warnings,
     function_manifest_enforced: databaseValidation.functionManifestEnforced,
     function_manifest_matches: databaseValidation.functionManifestMatches,
+    document_read_ready: documentReadReady,
+    document_generation_ready: pipelineEnabled && deploymentReady,
     deployment_contract_ready: deploymentReady,
     pipeline_enabled: pipelineEnabled,
     processor_enabled: processorEnabled,
@@ -3644,6 +3741,8 @@ function invoiceErrorStatus(error) {
     'INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH',
     'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE',
     'INVOICE_DOCUMENT_ACCESS_SECRET_MISSING',
+    'INVOICE_DOCUMENT_READ_UNAVAILABLE',
+    'DOCUMENT_GENERATION_UNAVAILABLE',
     'BATCH_CURSOR_SECRET_INVALID',
     'OUTBOX_CURSOR_SECRET_INVALID',
     'UNIFIED_OUTBOX_LIST_FAILED'
@@ -3747,6 +3846,103 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
   ].includes(path)) {
     return jsonResponse({ ok: false, error: 'BATCH_QUERY_POST_REQUIRED' }, 405, { allow: 'POST' });
   }
+
+  const documentPresignParams = match(
+    path,
+    '/api/invoice-document-versions/:document_version_id/presign'
+  );
+  const documentDownloadParams = match(
+    path,
+    '/api/invoice-document-versions/:document_version_id/download'
+  );
+  const invoiceViewParams = match(path, '/api/invoices/:invoice_id/render');
+  const timesheetViewParams = match(path, '/api/timesheets/:timesheet_id/pdf');
+  const isApplicationDocumentRoute = (
+    (documentPresignParams && req.method === 'POST')
+    || (documentDownloadParams && req.method === 'GET')
+    || (invoiceViewParams && req.method === 'POST')
+    || (timesheetViewParams && ['GET', 'POST'].includes(req.method))
+  );
+  if (isApplicationDocumentRoute) {
+    const user = await requireActor(env, req, deps, false);
+    if (!user) return jsonResponse({ error: 'UNAUTHENTICATED' }, 401);
+    const cohort = isInvoiceAsyncUserAllowed(env, {
+      ...user,
+      active: user.is_active ?? user.active,
+      roles: [user.role, user.user_role, user.user_type]
+    });
+    if (!cohort.allowed) {
+      if (cohort.code === 'INVOICE_ASYNC_ALLOWLIST_INVALID'
+          || cohort.code === 'INVOICE_ASYNC_ACCESS_MODE_INVALID') {
+        return jsonResponse({ error: cohort.code }, 503);
+      }
+      return jsonResponse({ error: cohort.code }, 403);
+    }
+    const accessConfiguration = invoiceAsyncAccessConfigurationReady(env);
+    if (!invoiceDocumentReadBindingsReady(env) || !accessConfiguration.ready) {
+      return jsonResponse({
+        ok: false,
+        contract_version: INVOICE_ASYNC_CONTRACT_VERSION,
+        error: 'INVOICE_DOCUMENT_READ_UNAVAILABLE'
+      }, 503);
+    }
+    try {
+      if (documentPresignParams && req.method === 'POST') {
+        return await handleReadyInvoiceDocumentPresign(
+          env,
+          user,
+          documentPresignParams.document_version_id
+        );
+      }
+      if (documentDownloadParams && req.method === 'GET') {
+        return await handleReadyInvoiceDocumentDownload(
+          env,
+          req,
+          user,
+          documentDownloadParams.document_version_id
+        );
+      }
+      if (timesheetViewParams && req.method === 'GET') {
+        return jsonResponse({
+          ok: false,
+          error: 'DOCUMENT_PREPARATION_POST_REQUIRED'
+        }, 405, { allow: 'POST' });
+      }
+      const ensureGenerationReady = async () => {
+        if (!isInvoiceAsyncPipelineEnabled(env)) return false;
+        const generation = await evaluateInvoiceGenerationReadiness(env, deps);
+        return generation.ready;
+      };
+      if (invoiceViewParams && req.method === 'POST') {
+        return await handleViewDocument(
+          env,
+          req,
+          ctx,
+          user,
+          deps,
+          'INVOICE',
+          invoiceViewParams.invoice_id,
+          { ensureGenerationReady }
+        );
+      }
+      return await handleViewDocument(
+        env,
+        req,
+        ctx,
+        user,
+        deps,
+        'TIMESHEET',
+        timesheetViewParams.timesheet_id,
+        { ensureGenerationReady }
+      );
+    } catch (error) {
+      const code = String(
+        error?.code || error?.message || error || 'INVOICE_PIPELINE_UNEXPECTED'
+      ).slice(0, 160);
+      return jsonResponse({ error: code }, invoiceErrorStatus(error));
+    }
+  }
+
   if (!isInvoiceAsyncPipelineEnabled(env)) {
     return jsonResponse({
       ok: false,
@@ -3770,19 +3966,8 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     return jsonResponse({ error: cohort.code }, 403);
   }
 
-  const databaseContract = await loadInvoiceAsyncDatabaseContract(env, deps);
-  const databaseValidation = validateInvoiceAsyncDatabaseContract(env, databaseContract);
-  const runtimeValidation = validateQueueRuntimeConfiguration(env);
-  const processorReady = await invoiceProcessorReady(env);
-  if (!databaseValidation.ok
-      || !runtimeValidation.ok
-      || !processorReady
-      || !String(env.INVOICE_ASYNC_BUILD_ID || '').trim()
-      || !env.INVOICE_QUEUE_DISPATCHER
-      || !env.R2
-      || !cursorSecret(env, 'CANDIDATE')
-      || !cursorSecret(env, 'RESULT')
-      || !env.INVOICE_DOCUMENT_ACCESS_SECRET) {
+  const generation = await evaluateInvoiceGenerationReadiness(env, deps);
+  if (!generation.ready) {
     return jsonResponse({
       ok: false,
       contract_version: INVOICE_ASYNC_CONTRACT_VERSION,
@@ -3823,23 +4008,6 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     if (params && req.method === 'GET') {
       return await handleOperationGet(env, req, user, deps, params.operation_id);
     }
-    params = match(path, '/api/invoice-document-versions/:document_version_id/presign');
-    if (params && req.method === 'POST') {
-      return await handleReadyInvoiceDocumentPresign(
-        env,
-        user,
-        params.document_version_id
-      );
-    }
-    params = match(path, '/api/invoice-document-versions/:document_version_id/download');
-    if (params && req.method === 'GET') {
-      return await handleReadyInvoiceDocumentDownload(
-        env,
-        req,
-        user,
-        params.document_version_id
-      );
-    }
     params = match(path, '/api/outbox/:channel/:operation_id');
     if (params && String(params.channel).toUpperCase() === 'INVOICE') {
       if (req.method === 'GET') {
@@ -3870,20 +4038,6 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
       return await handleInvoiceOutboxControl(
         env, req, ctx, user, deps, params.operation_id, 'RESCHEDULE'
       );
-    }
-    params = match(path, '/api/invoices/:invoice_id/render');
-    if (params && req.method === 'POST') {
-      return await handleViewDocument(env, req, ctx, user, deps, 'INVOICE', params.invoice_id);
-    }
-    params = match(path, '/api/timesheets/:timesheet_id/pdf');
-    if (params && req.method === 'GET') {
-      return jsonResponse({
-        ok: false,
-        error: 'DOCUMENT_PREPARATION_POST_REQUIRED'
-      }, 405, { allow: 'POST' });
-    }
-    if (params && req.method === 'POST') {
-      return await handleViewDocument(env, req, ctx, user, deps, 'TIMESHEET', params.timesheet_id);
     }
     params = match(path, '/api/invoices/:invoice_id/issue');
     if (params && req.method === 'POST') {

@@ -156,8 +156,29 @@ begin
         else coalesce(m.value->'frozen_model','{}'::jsonb)
       end frozen_model,
       case
-        when m.value->>'input_type'='ELECTRONIC_TIMESHEET' then 'TIMESHEET_RENDER_MODEL_V1'
-        when m.value->>'input_type'='HEALTHROSTER_SUPPORT' then 'HEALTHROSTER_PRESENTATION_V1'
+        when m.value->>'input_type'='ELECTRONIC_TIMESHEET' then coalesce(
+          (select x.value#>>'{render_model,schema_version}'
+           from jsonb_array_elements(
+             case when jsonb_typeof(v.snapshot_json->'timesheet_sources')='array'
+               then v.snapshot_json->'timesheet_sources' else '[]'::jsonb end)
+             x(value)
+           where x.value->>'timesheet_id'=m.value->>'source_entity_id'
+           limit 1),
+          case when v.document_entity_type='TIMESHEET'
+            then coalesce(v.snapshot_json#>>'{presentation_model,schema_version}',
+              v.snapshot_json->>'schema_version') end)
+        when m.value->>'input_type'='HEALTHROSTER_SUPPORT' then coalesce(
+          (select coalesce(x.value#>>'{render_model,schema_version}',
+            x.value->>'schema_version')
+           from jsonb_array_elements(
+             case when jsonb_typeof(v.snapshot_json->'source_support')='array'
+               then v.snapshot_json->'source_support'
+               when jsonb_typeof(v.snapshot_json->'supporting_sources')='array'
+               then v.snapshot_json->'supporting_sources'
+               else '[]'::jsonb end) x(value)
+           where x.value->>'import_id'=m.value->>'source_entity_id'
+           limit 1),
+          'HEALTHROSTER_PRESENTATION_V1')
         when m.value->>'input_type'='NHSP_SUPPORT' then 'NHSP_PRESENTATION_V1'
         when m.value->>'input_type'='HIGHER_RATE_SUPPORT' then 'HIGHER_RATE_PRESENTATION_V1'
         when m.value->>'input_type'='ATTACHMENT_INDEX' then 'ATTACHMENT_INDEX_PRESENTATION_V1'
@@ -241,8 +262,10 @@ begin
         when v.chunk_type='SOURCE_RENDER' and (
           case coalesce(sm.manifest_item->>'render_kind',
               sm.manifest_item->>'input_type',v.payload_json->>'render_kind')
-            when 'ELECTRONIC_TIMESHEET' then coalesce(sm.frozen_model->>'schema_version','')<>'TIMESHEET_RENDER_MODEL_V1'
-            when 'HEALTHROSTER_SUPPORT' then coalesce(sm.frozen_model->>'schema_version','')<>'HEALTHROSTER_PRESENTATION_V1'
+            when 'ELECTRONIC_TIMESHEET' then coalesce(sm.frozen_model->>'schema_version','')
+              not in('TIMESHEET_RENDER_MODEL_V1','TIMESHEET_RENDER_MODEL_V2')
+            when 'HEALTHROSTER_SUPPORT' then coalesce(sm.frozen_model->>'schema_version','')
+              not in('HEALTHROSTER_PRESENTATION_V1','HEALTHROSTER_PRESENTATION_V2')
             when 'NHSP_SUPPORT' then coalesce(sm.frozen_model->>'schema_version','')<>'NHSP_PRESENTATION_V1'
             when 'HIGHER_RATE_SUPPORT' then coalesce(sm.frozen_model->>'schema_version','')<>'HIGHER_RATE_PRESENTATION_V1'
             when 'ATTACHMENT_INDEX' then false
@@ -320,6 +343,14 @@ begin
           'presentation_model_schema_version',sm.frozen_model_schema_version,
           'presentation_model_hash',sm.frozen_model_hash,
           'snapshot_hash',v.snapshot_hash,
+          'render_variant',sm.frozen_model->>'form_variant',
+          'source_template_version',sm.frozen_model->>'template_version',
+          'layout_contract_version',sm.frozen_model->>'layout_contract_version',
+          'one_page_required',sm.frozen_model#>'{layout,one_page_required}',
+          'additional_units_hash',sm.frozen_model->>'additional_units_hash',
+          'reference_signature',sm.frozen_model->>'reference_signature',
+          'component_page_numbering',coalesce(
+            sm.manifest_item->>'component_page_numbering','NONE'),
           'asset_dependencies',coalesce(sm.manifest_item->'asset_dependencies','[]'::jsonb),
           'attachment_index_layout',case
             when v.payload_json->>'render_kind'='ATTACHMENT_INDEX'
@@ -360,6 +391,9 @@ begin
           'presentation_model_hash',v.root_presentation_model_hash,
           'snapshot_hash',v.snapshot_hash,
           'attachment_index',coalesce(v.snapshot_json->'attachment_index','[]'::jsonb),
+          'component_page_numbering',case
+            when v.document_entity_type='INVOICE' then 'NONE'
+            else 'LOCAL' end,
           'template_version',v.template_version,
           'processor_policy_version',coalesce(v.processor_limits->>'policy_version',v.processor_limits->>'version'),
           'immutable_destination_prefix','invoice-documents/'||v.document_version_id||
@@ -368,6 +402,12 @@ begin
           'ordered_inputs',v.payload_json->'inputs',
           'merge_level',v.level_no,'sequence_no',v.sequence_no,
           'plan_generation',v.plan_generation,
+          'apply_final_page_numbers',coalesce(
+            (v.payload_json->>'apply_final_page_numbers')::boolean,false),
+          'page_numbering_contract',
+            v.payload_json->>'page_numbering_contract',
+          'document_entity_type',v.document_entity_type,
+          'document_version_id',v.document_version_id,
           'expected_page_count',v.expected_page_count,
           'expected_byte_count',v.expected_byte_count,
           'expected_ordered_input_hash',
@@ -501,7 +541,9 @@ begin
           'presentation_model_schema_version',p.context->>'presentation_model_schema_version',
           'presentation_model_hash',p.context->>'presentation_model_hash',
           'snapshot_hash',p.context->>'snapshot_hash',
-          'ordered_input_hash',coalesce(p.context->>'ordered_input_hash',p.context->>'expected_ordered_input_hash')),
+          'ordered_input_hash',coalesce(p.context->>'ordered_input_hash',p.context->>'expected_ordered_input_hash'),
+          'apply_final_page_numbers',p.context->'apply_final_page_numbers',
+          'page_numbering_contract',p.context->>'page_numbering_contract'),
         'context',p.context)
       else jsonb_build_object(
         'chunk_id',p.chunk_id,'operation_id',p.operation_id,

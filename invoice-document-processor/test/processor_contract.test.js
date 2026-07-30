@@ -32,14 +32,24 @@ const {
   resultIdentity,
   validateLogicalManifestOrder,
   putImmutableProcessorArtifact,
+  nativeContainerName,
   classifyError
 } = invoiceDocumentProcessorInternals;
 
-test('processor capacity covers readiness plus configured work concurrency and releases idle attempt containers', async () => {
+test('processor capacity covers readiness plus configured work concurrency and releases idle attempt containers promptly', async () => {
   const processorConfig = JSON.parse(await readFile(processorConfigPath, 'utf8'));
   assert.equal(processorConfig.containers[0].max_instances, 4);
   assert.equal(processorConfig.env.test.containers[0].max_instances, 4);
   assert.match(workerSource, /sleepAfter = '10s'/);
+  assert.match(workerSource, /const IMPLEMENTATION_VERSION = 'cloudtms-invoice-document-worker-v9-pooled-native'/);
+});
+
+test('native actions use bounded reusable pools instead of per-attempt container identities', () => {
+  assert.equal(nativeContainerName('ASSET_INSPECT'), 'invoice-native-assets-v9');
+  assert.equal(nativeContainerName('ASSET_NORMALISE'), 'invoice-native-assets-v9');
+  assert.equal(nativeContainerName('PDF_MERGE'), 'invoice-native-merge-v9');
+  assert.equal(nativeContainerName('DOCUMENT_VERIFY'), 'invoice-native-verify-v9');
+  assert.throws(() => nativeContainerName('SOURCE_RENDER'), /UNSUPPORTED_NATIVE_ACTION/);
 });
 
 test('image inspection returns the bounded orientation contract required by PostgreSQL', async () => {

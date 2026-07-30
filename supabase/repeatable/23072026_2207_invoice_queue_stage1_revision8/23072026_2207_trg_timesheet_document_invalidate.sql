@@ -55,6 +55,8 @@ begin
       or n.additional_units_week is distinct from o.additional_units_week
       or n.additional_units_per_day is distinct from o.additional_units_per_day
       or n.day_references_json is distinct from o.day_references_json
+      or n.qr_token is distinct from o.qr_token
+      or n.qr_payload_json is distinct from o.qr_payload_json
       or n.qr_signed_hash is distinct from o.qr_signed_hash
       or n.qr_signed_at_utc is distinct from o.qr_signed_at_utc
       or n.qr_status is distinct from o.qr_status

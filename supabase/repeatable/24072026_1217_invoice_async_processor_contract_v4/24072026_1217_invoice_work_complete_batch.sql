@@ -181,6 +181,14 @@ begin
           or(i.chunk_type='PDF_MERGE'
             and coalesce(i.processor_result->>'ordered_input_hash','')<>
               coalesce(i.payload_json->>'ordered_input_hash',''))
+          or(i.chunk_type='PDF_MERGE'
+            and coalesce(i.processor_result->>'apply_final_page_numbers','false')
+              is distinct from coalesce(
+                i.payload_json->>'apply_final_page_numbers','false'))
+          or(i.chunk_type='PDF_MERGE'
+            and coalesce(i.processor_result->>'page_numbering_contract','')
+              is distinct from coalesce(
+                i.payload_json->>'page_numbering_contract',''))
         ) then 'PROCESSOR_RESULT_IDENTITY_MISMATCH'
         when i.outcome='SUCCESS'
           and i.chunk_type in('SOURCE_RENDER','INVOICE_CORE_RENDER')
@@ -602,6 +610,12 @@ begin
             or coalesce(i.processor_result#>>
               '{merge_receipt,plan_generation}','')<>
                 i.plan_generation::text
+            or coalesce(i.processor_result#>>
+              '{merge_receipt,page_numbering_applied}','false')<>
+                coalesce(i.payload_json->>'apply_final_page_numbers','false')
+            or coalesce(i.processor_result#>>
+              '{merge_receipt,page_numbering_contract}','')<>
+                coalesce(i.payload_json->>'page_numbering_contract','')
           ) then 'MERGE_RECEIPT_CHAIN_MISMATCH'
         when i.outcome='SUCCESS' and i.chunk_type='PDF_MERGE'
           and(i.expected_page_count is null
@@ -1717,6 +1731,14 @@ begin
       and x#>>'{result,verified_candidate_r2_key}'=
         c.payload_json->>'candidate_r2_key'
       and x#>>'{result,verified_candidate_size_bytes}'=c.payload_json->>'candidate_size_bytes'
+      and (
+        v.entity_type<>'INVOICE'
+        or (
+          c.payload_json#>>'{final_merge_receipt,page_numbering_applied}'='true'
+          and c.payload_json#>>'{final_merge_receipt,page_numbering_contract}'
+            ='FINAL_MERGE_GLOBAL_V1'
+        )
+      )
       and coalesce(x#>>'{result,actual_page_count}','')~'^[0-9]{1,9}$'
       and(x#>>'{result,actual_page_count}')::integer=c.expected_page_count
   ),
@@ -1750,8 +1772,41 @@ begin
   timesheet_document_ready as (
     update public.timesheets t
     set current_document_version_id=v.id,document_state='READY',
-        manual_pdf_r2_key=case when t.manual_document_asset_id is not null
+        manual_pdf_r2_key=case
+          when v.snapshot_json#>>'{presentation_model,schema_version}'
+              ='TIMESHEET_RENDER_MODEL_V1'
+            and t.manual_document_asset_id is not null
           then v.r2_key else t.manual_pdf_r2_key end,
+        generated_pdf_refs_snapshot_json=case
+          when v.snapshot_json#>>'{presentation_model,schema_version}'
+              ='TIMESHEET_RENDER_MODEL_V2'
+          then coalesce((
+            select jsonb_agg(jsonb_build_object(
+              'row_key',shift.value->>'reference_row_key',
+              'current_reference',shift.value->>'booking_reference')
+              order by (day.value->>'display_order')::integer,
+                (shift.value->>'display_order')::integer)
+            from jsonb_array_elements(coalesce(
+              v.snapshot_json#>'{presentation_model,week_period,days}',
+              '[]'::jsonb)) day(value)
+            cross join lateral jsonb_array_elements(coalesce(
+              day.value->'shift_lines','[]'::jsonb)) shift(value)
+            where nullif(shift.value->>'booking_reference','') is not null
+          ),'[]'::jsonb)
+          else t.generated_pdf_refs_snapshot_json end,
+        generated_pdf_refs_sig=case
+          when v.snapshot_json#>>'{presentation_model,schema_version}'
+              ='TIMESHEET_RENDER_MODEL_V2'
+          then v.snapshot_json#>>'{presentation_model,reference_signature}'
+          else t.generated_pdf_refs_sig end,
+        generated_pdf_refs_captured_at_utc=case
+          when v.snapshot_json#>>'{presentation_model,schema_version}'
+              ='TIMESHEET_RENDER_MODEL_V2'
+          then v_now else t.generated_pdf_refs_captured_at_utc end,
+        generated_pdf_at_utc=case
+          when v.snapshot_json#>>'{presentation_model,schema_version}'
+              ='TIMESHEET_RENDER_MODEL_V2'
+          then v_now else t.generated_pdf_at_utc end,
         active_document_operation_id=case when t.active_document_operation_id=v.operation_id
           then null else t.active_document_operation_id end,
         last_document_error_json=null,updated_at=v_now
@@ -1759,6 +1814,66 @@ begin
     where v.entity_type='TIMESHEET' and v.purpose='TIMESHEET'
       and t.timesheet_id=v.entity_id and t.document_revision::text=v.source_revision
     returning t.timesheet_id
+  ),
+  qr_mail_release as (
+    update public.mail_outbox m
+    set attachments=jsonb_build_array(jsonb_build_object(
+          'r2_key',v.r2_key,
+          'filename','Timesheet_'||
+            coalesce(t.week_ending_date::text,t.timesheet_id::text)||'.pdf',
+          'sha256',v.sha256,
+          'size_bytes',v.size_bytes,
+          'document_version_id',v.id)),
+        status='QUEUED'::public.mail_status_enum,
+        scheduled_for_utc=v_now,
+        next_attempt_at_utc=v_now,
+        last_error=null,
+        failed_at=null,
+        payment_scope_json=coalesce(m.payment_scope_json,'{}'::jsonb)
+          ||jsonb_build_object(
+            'mail_held_until_pdf_rendered',false,
+            'mail_hold_reason',null,
+            'mail_delayed_for_pdf_render',false,
+            'requires_pdf_render',false,
+            'release_mail_after_pdf_render',false,
+            'pdf_storage_key',v.r2_key,
+            'pdf_sha256',v.sha256,
+            'pdf_size_bytes',v.size_bytes,
+            'document_version_id',v.id,
+            'pdf_ready_at_utc',v_now)
+    from ready_versions v
+    join public.timesheets t on t.timesheet_id=v.entity_id and t.is_current
+    where v.entity_type='TIMESHEET' and v.purpose='TIMESHEET'
+      and v.snapshot_json#>>'{presentation_model,schema_version}'
+        ='TIMESHEET_RENDER_MODEL_V2'
+      and v.snapshot_json#>>'{presentation_model,form_variant}'='QR_UNSIGNED'
+      and t.document_revision::text=v.source_revision
+      and upper(coalesce(t.qr_status::text,''))='PENDING'
+      and nullif(t.qr_scanned_at::text,'') is null
+      and nullif(t.qr_signed_hash,'') is null
+      and nullif(t.qr_signed_at_utc::text,'') is null
+      and m.type='TIMESHEET_QR'
+      and m.context_kind='timesheets'
+      and m.context_id=t.timesheet_id
+      and m.status<>'SENT'::public.mail_status_enum
+      and m."to"=m.payment_scope_json->>'recipient_email'
+      and m.payment_scope_json->>'current_timesheet_id'=t.timesheet_id::text
+      and m.payment_scope_json->>'document_version_id'=v.id::text
+      and m.payment_scope_json->>'document_revision'=v.source_revision
+      and m.payment_scope_json->>'template_version'=v.template_version
+      and m.payment_scope_json->>'qr_token_hash'=encode(
+        digest(coalesce(t.qr_token,''),'sha256'),'hex')
+      and m.payment_scope_json->>'qr_payload_hash'=encode(
+        digest(coalesce(t.qr_payload_json,'{}'::jsonb)::text,'sha256'),'hex')
+      and m.payment_scope_json->>'week_period_hash'=
+        v.snapshot_json#>>'{presentation_model,week_period_hash}'
+      and m.payment_scope_json->>'reference_signature'=
+        v.snapshot_json#>>'{presentation_model,reference_signature}'
+      and m.payment_scope_json->>'additional_units_hash'=
+        v.snapshot_json#>>'{presentation_model,additional_units_hash}'
+      and m.payment_scope_json->>'presentation_settings_hash'=
+        v.snapshot_json#>>'{presentation_model,presentation_settings_hash}'
+    returning m.id
   ),
   issue_wake as (
     update public.invoice_operation_chunks i

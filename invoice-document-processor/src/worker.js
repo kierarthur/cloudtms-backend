@@ -16,7 +16,7 @@ import {
 const encoder = new TextEncoder();
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 const POLICY_VERSION = 'INVOICE_PROCESSOR_LIMITS_V4';
-const IMPLEMENTATION_VERSION = 'cloudtms-invoice-document-worker-v6';
+const IMPLEMENTATION_VERSION = 'cloudtms-invoice-document-worker-v9-pooled-native';
 const SUPPORTED_MEDIA_TYPES = Object.freeze(['application/pdf','image/jpeg','image/png']);
 const RECEIPT_CONTRACTS = Object.freeze({
   object: 'ACTUAL_BYTES_OBJECT_RECEIPT_V3',
@@ -193,7 +193,7 @@ function fixedLengthReadableBody(body, length, FixedLengthStreamConstructor = gl
 }
 
 function resultIdentity(expected) {
-  return { chunk_id: expected.chunk_id, fence_token: expected.fence_token, action: expected.action, document_version_id: expected.document_version_id || undefined, document_asset_id: expected.document_asset_id || undefined, plan_generation: expected.plan_generation, source_revision: expected.source_revision || undefined, template_version: expected.template_version || undefined, processor_policy_version: expected.processor_policy_version, render_kind: expected.render_kind || undefined, ordered_input_hash: expected.ordered_input_hash || undefined, output_prefix: expected.immutable_destination_prefix };
+  return { chunk_id: expected.chunk_id, fence_token: expected.fence_token, action: expected.action, document_version_id: expected.document_version_id || undefined, document_asset_id: expected.document_asset_id || undefined, plan_generation: expected.plan_generation, source_revision: expected.source_revision || undefined, template_version: expected.template_version || undefined, processor_policy_version: expected.processor_policy_version, render_kind: expected.render_kind || undefined, ordered_input_hash: expected.ordered_input_hash || undefined, apply_final_page_numbers: expected.apply_final_page_numbers ?? undefined, page_numbering_contract: expected.page_numbering_contract || undefined, output_prefix: expected.immutable_destination_prefix };
 }
 
 function validateLogicalManifestOrder(logicalRows) {
@@ -237,6 +237,21 @@ function validateProcessorMetadata(metadata, response, action, context) {
     || metadata.actual_inputs.reduce((sum, input) => sum + Number(input.page_count || 0), 0)
       !== Number(metadata.page_count)
   )) throw Object.assign(new Error('PROCESSOR_INPUT_RECEIPTS_MISSING'), { code: 'PROCESSOR_INPUT_RECEIPTS_MISSING' });
+  if (action === 'PDF_MERGE') {
+    const expectedNumbering = context.apply_final_page_numbers === true;
+    if (metadata.page_numbering_applied !== expectedNumbering) {
+      throw Object.assign(new Error('PAGE_NUMBERING_RECEIPT_MISMATCH'), {
+        code: 'PAGE_NUMBERING_RECEIPT_MISMATCH'
+      });
+    }
+    if (expectedNumbering
+      && String(metadata.page_numbering_contract || '')
+        !== String(context.page_numbering_contract || '')) {
+      throw Object.assign(new Error('PAGE_NUMBERING_RECEIPT_MISMATCH'), {
+        code: 'PAGE_NUMBERING_RECEIPT_MISMATCH'
+      });
+    }
+  }
   if (action === 'ASSET_NORMALISE') {
     const actual = Array.isArray(metadata.actual_inputs) ? metadata.actual_inputs : [];
     const expectedKey = String(context.expected_original_r2_key || context.original_r2_key || '');
@@ -463,6 +478,17 @@ async function buildVerificationOnlyResult(identity, context, metadata) {
   };
 }
 
+function nativeContainerName(action) {
+  const lane = {
+    ASSET_INSPECT: 'assets',
+    ASSET_NORMALISE: 'assets',
+    PDF_MERGE: 'merge',
+    DOCUMENT_VERIFY: 'verify'
+  }[String(action || '').toUpperCase()];
+  if (!lane) throw Object.assign(new Error('UNSUPPORTED_NATIVE_ACTION'), { code: 'UNSUPPORTED_NATIVE_ACTION' });
+  return `invoice-native-${lane}-v9`;
+}
+
 async function processWithContainer(env, payload, signal) {
   const context = payload.context || {};
   const identity = resultIdentity(payload.expected_result_identity || {});
@@ -475,12 +501,9 @@ async function processWithContainer(env, payload, signal) {
   const header = { action, context, processor_policy_version: POLICY_VERSION, action_timeout_ms: Number(context.action_timeout_ms || 120000), inputs: inputs.map(input => input.header) };
   const framed = fixedLengthFramedBody(header, inputs, signal);
   const request = new Request('http://container/process', { method: 'POST', headers: { 'content-type': 'application/x-cloudtms-framed-files-v1' }, body: framed.body, signal });
-  const containerIdentity = await invoiceProcessorSha256Hex(
-    `${identity.chunk_id}|${identity.fence_token}|${action}`
-  );
   const container = getContainer(
     env.INVOICE_DOCUMENT_CONTAINER,
-    `invoice-native-${containerIdentity.slice(0, 32)}`
+    nativeContainerName(action)
   );
   const [response] = await Promise.all([
     container.fetch(request),
@@ -515,6 +538,8 @@ async function processWithContainer(env, payload, signal) {
     result.consumed_original_size_bytes = consumed.size_bytes;
   }
   if (action === 'PDF_MERGE') {
+    result.page_numbering_applied = metadata.page_numbering_applied === true;
+    result.page_numbering_contract = metadata.page_numbering_contract || null;
     const receipt = await buildMergeReceipt(context, identity, inputs, metadata, result);
     result.input_count = inputs.length; result.input_receipts = receipt.input_receipts; result.merge_receipt = receipt;
   }
@@ -552,7 +577,10 @@ export async function handleInvoiceDocumentProcessorRequest(request, env) {
       if (text !== '{}' || authentication.fields.action !== 'READY' || authentication.fields.processor_policy_version !== POLICY_VERSION) {
         return json({ ok: false, code: 'PROCESSOR_READY_REQUEST_INVALID', category: 'IDENTITY_MISMATCH', retryable: false }, 403);
       }
-      const container = getContainer(env.INVOICE_DOCUMENT_CONTAINER, 'invoice-native-readiness-v4');
+      const container = getContainer(
+        env.INVOICE_DOCUMENT_CONTAINER,
+        nativeContainerName('DOCUMENT_VERIFY')
+      );
       const response = await container.fetch(new Request('http://container/health', {
         method: 'GET',
         signal: AbortSignal.timeout(3000)
@@ -611,6 +639,7 @@ export const invoiceDocumentProcessorInternals = Object.freeze({
   putImmutableProcessorArtifact,
   buildVerificationOnlyResult,
   processWithContainer,
+  nativeContainerName,
   classifyError,
   authenticateProcessorRequest
 });
