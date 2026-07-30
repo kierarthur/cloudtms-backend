@@ -355,6 +355,30 @@ test('impossible one-page fixture fails instead of truncating or spilling', asyn
   );
 });
 
+test('layout selection preflights horizontal cells and retries a smaller readable mode', async () => {
+  const model = fixture();
+  model.week_period.days[1].shift_lines[0].booking_reference = 'R'.repeat(64);
+  const layout = await selectOfficialTimesheetOnePageLayout(model);
+  assert.ok(['COMPACT', 'ULTRA'].includes(layout.name));
+  const rendered = await renderOfficialTimesheetPdfBytes(model);
+  assert.equal(rendered.page_count, 1);
+  assert.equal(rendered.layout_mode, layout.name);
+});
+
+test('wrapped wording preserves an unbroken long token without overflow or truncation', async () => {
+  const model = fixture({
+    wording: {
+      ...fixture().wording,
+      header: {
+        lines: [`POLICY-${'ABCDEFGHIJ'.repeat(35)}`]
+      }
+    }
+  });
+  const rendered = await renderOfficialTimesheetPdfBytes(model);
+  assert.equal(rendered.page_count, 1);
+  assert.equal(rendered.render_receipt.page_fill_verified, true);
+});
+
 test('HealthRoster V2 rejects ambiguous references and accepts one exact match', () => {
   const model = {
     schema_version: 'HEALTHROSTER_PRESENTATION_V2',

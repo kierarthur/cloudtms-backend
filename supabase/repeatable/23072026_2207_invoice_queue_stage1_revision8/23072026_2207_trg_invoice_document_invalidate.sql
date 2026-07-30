@@ -75,11 +75,30 @@ begin
                from (
                  select nullif(btrim(coalesce(ts.reference_number,'')),'') ref_value
                  union
-                 select nullif(btrim(value),'')
-                 from jsonb_each_text(coalesce(ts.day_references_json,'{}'::jsonb))
-                 union
-                 select nullif(btrim(coalesce(seg->>'ref_num','')),'')
-                 from jsonb_array_elements(coalesce(ts.actual_schedule_json,'[]'::jsonb)) seg
+                  select nullif(btrim(value),'')
+                  from jsonb_each_text(coalesce(ts.day_references_json,'{}'::jsonb))
+                  union
+                  select nullif(btrim(coalesce(seg->>'ref_num','')),'')
+                  from jsonb_array_elements(
+                    coalesce(ts.actual_schedule_json,'[]'::jsonb)) seg
+                  where not exists(
+                    select 1
+                    from public.timesheets_financials mode_tf
+                    where mode_tf.timesheet_id=ts.timesheet_id
+                      and mode_tf.is_current
+                      and upper(coalesce(
+                        mode_tf.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+                  )
+                  union
+                  select nullif(btrim(coalesce(seg.value->>'ref_num','')),'')
+                  from public.timesheets_financials tf
+                  cross join lateral jsonb_array_elements(
+                    coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg(value)
+                  where tf.timesheet_id=ts.timesheet_id
+                    and tf.is_current
+                    and upper(coalesce(tf.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+                    and nullif(btrim(coalesce(
+                      seg.value->>'invoice_locked_invoice_id','')),'')=n.invoice_id::text
                ) canonical_refs
                where ref_value is not null
              ) calculated
@@ -144,11 +163,30 @@ begin
                from (
                  select nullif(btrim(coalesce(ts.reference_number,'')),'') ref_value
                  union
-                 select nullif(btrim(value),'')
-                 from jsonb_each_text(coalesce(ts.day_references_json,'{}'::jsonb))
-                 union
-                 select nullif(btrim(coalesce(seg->>'ref_num','')),'')
-                 from jsonb_array_elements(coalesce(ts.actual_schedule_json,'[]'::jsonb)) seg
+                  select nullif(btrim(value),'')
+                  from jsonb_each_text(coalesce(ts.day_references_json,'{}'::jsonb))
+                  union
+                  select nullif(btrim(coalesce(seg->>'ref_num','')),'')
+                  from jsonb_array_elements(
+                    coalesce(ts.actual_schedule_json,'[]'::jsonb)) seg
+                  where not exists(
+                    select 1
+                    from public.timesheets_financials mode_tf
+                    where mode_tf.timesheet_id=ts.timesheet_id
+                      and mode_tf.is_current
+                      and upper(coalesce(
+                        mode_tf.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+                  )
+                  union
+                  select nullif(btrim(coalesce(seg.value->>'ref_num','')),'')
+                  from public.timesheets_financials tf
+                  cross join lateral jsonb_array_elements(
+                    coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg(value)
+                  where tf.timesheet_id=ts.timesheet_id
+                    and tf.is_current
+                    and upper(coalesce(tf.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+                    and nullif(btrim(coalesce(
+                      seg.value->>'invoice_locked_invoice_id','')),'')=o.invoice_id::text
                ) canonical_refs
                where ref_value is not null
              ) calculated

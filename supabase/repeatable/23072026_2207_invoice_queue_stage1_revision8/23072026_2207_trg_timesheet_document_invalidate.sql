@@ -14,7 +14,15 @@ declare
   v_issue_operation_ids uuid[]:=array[]::uuid[];
   v_delivery_operation_ids uuid[]:=array[]::uuid[];
   v_operation_ids uuid[]:=array[]::uuid[];
+  v_source_marker jsonb:='{}'::jsonb;
 begin
+  begin
+    v_source_marker:=coalesce(
+      nullif(current_setting('cloudtms.invoice_source_edit_marker',true),'')::jsonb,
+      '{}'::jsonb);
+  exception when others then
+    v_source_marker:='{}'::jsonb;
+  end;
   if tg_table_name='timesheets' and tg_op='UPDATE' then
     select coalesce(array_agg(distinct n.timesheet_id),array[]::uuid[])
     into v_timesheet_ids
@@ -154,17 +162,18 @@ begin
 
     -- A source-edit transaction may synchronise only SEGMENTS.ref_num into the
     -- current financial projection. Suppress that second invalidation solely
-    -- when every changed segment is an exact, unique copy of the authoritative
-    -- current timesheet schedule. Any ambiguity or any other TSFIN change keeps
-    -- the ordinary invalidation path.
+    -- when the row shape is ref-only and the transaction-local marker proves
+    -- this exact timesheet revision already advanced. Any other TSFIN change
+    -- keeps the ordinary invalidation path.
     v_timesheet_ids:=array(
-      select candidate_id
-      from unnest(v_timesheet_ids) candidate_id
+      select changed_id.candidate_id
+      from unnest(v_timesheet_ids) changed_id(candidate_id)
       where exists(
         select 1
         from new_rows n
         join old_rows o on o.id=n.id
-        where (n.timesheet_id=candidate_id or o.timesheet_id=candidate_id)
+        where (n.timesheet_id=changed_id.candidate_id
+          or o.timesheet_id=changed_id.candidate_id)
           and not (
             (to_jsonb(n)-'invoice_breakdown_json'-'updated_at')
               is not distinct from
@@ -178,6 +187,21 @@ begin
             and jsonb_typeof(o.invoice_breakdown_json->'segments')='array'
             and jsonb_array_length(n.invoice_breakdown_json->'segments')
                 =jsonb_array_length(o.invoice_breakdown_json->'segments')
+            and v_source_marker->>'txid'=txid_current()::text
+            and jsonb_typeof(v_source_marker->'rows')='object'
+            and (v_source_marker->'rows') ? changed_id.candidate_id::text
+            and coalesce(v_source_marker#>>
+                  array['rows',changed_id.candidate_id::text,'expected_revision'],'')
+                  ~'^[1-9][0-9]*$'
+            and exists(
+              select 1
+              from public.timesheets marker_ts
+              where marker_ts.timesheet_id=changed_id.candidate_id
+                and marker_ts.is_current
+                and marker_ts.document_revision=(
+                  v_source_marker#>>
+                    array['rows',changed_id.candidate_id::text,'expected_revision'])::bigint
+            )
             and (
               select coalesce(jsonb_agg(seg.value-'ref_num' order by seg.ord),'[]'::jsonb)
               from jsonb_array_elements(n.invoice_breakdown_json->'segments')
@@ -201,8 +225,10 @@ begin
                   from public.timesheets ts
                   where ts.timesheet_id=n.timesheet_id
                     and ts.is_current
-                    and jsonb_typeof(ts.actual_schedule_json)='array'
                     and (
+                      (
+                        jsonb_typeof(ts.actual_schedule_json)='array'
+                        and (
                       (
                         nullif(btrim(coalesce(ns.value->>'segment_id','')),'') is not null
                         and (
@@ -260,6 +286,12 @@ begin
                           limit 1
                         ) is not distinct from
                           nullif(btrim(coalesce(ns.value->>'ref_num','')),'')
+                      )
+                        )
+                      )
+                      or (
+                        v_source_marker->>'txid'=txid_current()::text
+                        and (v_source_marker->'rows') ? changed_id.candidate_id::text
                       )
                     )
                 )

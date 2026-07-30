@@ -158,6 +158,53 @@ test('material reference and location edits invalidate and queue exact replaceme
   assert.match(sql, /v_validated_operations/i);
 });
 
+test('source-edit payloads are allowlisted and never replace SEGMENTS schedules', () => {
+  const sql = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+      + '23072026_2207_invoice_apply_edits.sql'
+  );
+  assert.match(sql, /UNSUPPORTED_FIELD/i);
+  assert.match(sql, /allowed_reference_fields/i);
+  assert.match(sql, /allowed_location_fields/i);
+  assert.match(sql, /source_mode/i);
+  assert.match(sql, /SEGMENTS/i);
+  assert.match(sql, /canonical_actual_schedule_json/i);
+  assert.match(sql, /segment_reference_changed/i);
+  assert.match(sql, /invoice_locked_invoice_id/i);
+  assert.match(sql, /set_config\('cloudtms\.invoice_source_edit_marker'/i);
+  assert.match(sql, /txid_current\(\)/i);
+  assert.doesNotMatch(
+    sql,
+    /actual_schedule_json=case when \(d\.value->>'has_actual_schedule_json'\)::boolean\s+then case when jsonb_typeof\(d\.value->'actual_schedule_json'\)='null'/i
+  );
+});
+
+test('source-edit invalidation uses a transaction-local exact-once marker', () => {
+  const timesheetTrigger = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+      + '23072026_2207_trg_timesheet_document_invalidate.sql'
+  );
+  assert.match(timesheetTrigger, /cloudtms\.invoice_source_edit_marker/i);
+  assert.match(timesheetTrigger, /current_setting/i);
+  assert.match(timesheetTrigger, /txid_current\(\)/i);
+  assert.match(timesheetTrigger, /expected_revision/i);
+  assert.match(timesheetTrigger, /invoice_breakdown_json/i);
+  assert.doesNotMatch(
+    timesheetTrigger,
+    /jsonb_array_elements\(ts\.actual_schedule_json\)[\s\S]*authoritative current timesheet schedule/i
+  );
+});
+
+test('invoice line reference cache uses invoice-owned financial segments', () => {
+  const sql = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+      + '23072026_2207_trg_invoice_document_invalidate.sql'
+  );
+  assert.match(sql, /timesheets_financials/i);
+  assert.match(sql, /invoice_locked_invoice_id/i);
+  assert.match(sql, /invoice_id::text/i);
+});
+
 test('invoice detail exposes direct timesheet hospital and ward source values', () => {
   const sql = read(
     'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
@@ -169,6 +216,8 @@ test('invoice detail exposes direct timesheet hospital and ward source values', 
   assert.match(sql, /'can_edit_source'/i);
   assert.match(sql, /'source_edit_blocker_codes'/i);
   assert.match(sql, /'timesheet_reference_sources_by_id'/i);
+  assert.match(sql, /'source_edit_queue_contract','INVOICE_SOURCE_EDIT_QUEUE_V1'/i);
+  assert.match(sql, /invoice_locked_invoice_id/i);
 });
 
 test('atomic source-edit installer references exactly the four canonical definitions', () => {
@@ -238,4 +287,22 @@ test('invoice edits contain the complete supported add-timesheet implementation'
   assert.match(sql, /perform public\._inv_lock_segments_for_invoice\(p_invoice_id, seg_refs\)/i);
   assert.match(sql, /v_exact_timesheet_document_r2_key/i);
   assert.doesNotMatch(sql, /docs-pdf\/timesheets\/ts_/i);
+});
+
+test('residual source-edit installer references exactly the four canonical definitions', () => {
+  const installer = read(
+    'supabase/repeatable/30072026_1745_invoice_source_edit_residual_fix.sql'
+  );
+  assert.match(installer, /\\set ON_ERROR_STOP on/);
+  assert.match(installer, /\bbegin;/i);
+  assert.match(installer, /\bcommit;/i);
+  const included = [...installer.matchAll(/\\ir\s+([^\r\n]+)/g)]
+    .map(match => match[1].trim());
+  assert.deepEqual(included, [
+    '23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql',
+    '23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_invoice_document_invalidate.sql',
+    '23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql',
+    '23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql'
+  ]);
+  assert.equal((installer.match(/create\s+or\s+replace\s+function/gi) || []).length, 0);
 });

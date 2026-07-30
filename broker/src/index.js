@@ -89492,6 +89492,10 @@ async function runTimesheetUnauthoriseDecision(env, req, selection, row, factsMa
   };
 }
 
+function normaliseWeeklyDisplaySite(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 async function handleTimesheetsSubmitWeekly(env, req) {
   // Public / broker: submit weekly timesheet (ELECTRONIC or QR intent)
   const enc = encodeURIComponent;
@@ -89833,10 +89837,7 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     env,
     `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name,email`
   );
-  const clientRec = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`
-  );
+  const weeklyDisplaySite = normaliseWeeklyDisplaySite(contract.display_site);
 
   // Actor for audit (public route): show candidate name in audit tab
   const auditActor = {
@@ -89954,8 +89955,11 @@ async function handleTimesheetsSubmitWeekly(env, req) {
 
     sheet_scope: 'WEEKLY',
     occupant_key_norm: (candidateRec?.display_name || String(candidateRec?.id)).toLowerCase(),
-    hospital_norm:     (contract.display_site || clientRec?.name || String(contract.client_id)).toLowerCase(),
-    ward_norm:         (contract.ward_hint || 'contract').toLowerCase(),
+    // Non-import weekly forms use only the contract's deliberate display-site
+    // value. A blank setting stays blank; imported and daily authorities are
+    // intentionally unaffected.
+    hospital_norm:     weeklyDisplaySite,
+    ward_norm:         '',
     job_title_norm:    (contract.role || 'weekly').toLowerCase(),
     shift_label_norm:  'weekly',
     week_ending_date:  cw.week_ending_date,
@@ -101649,6 +101653,11 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
   if (!payload || typeof payload !== 'object') {
     return withCORS(env, req, badRequest('Invalid JSON payload'));
   }
+  const sourceEditRequested = (
+    (Array.isArray(payload.reference_updates) && payload.reference_updates.length > 0)
+    || (Array.isArray(payload.timesheet_location_updates)
+      && payload.timesheet_location_updates.length > 0)
+  );
 
   // ✅ Pre-check invoice status to return a clean 409 (and avoid wasted RPC call)
   try {
@@ -101680,6 +101689,40 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
     }
   } catch (e) {
     // If pre-check fails for any reason, fall back to the DB RPC enforcement below.
+  }
+
+  if (sourceEditRequested) {
+    let sourceEditPreflight;
+    try {
+      const detailRes = await sbRpc(
+        env,
+        'invoice_detail_get',
+        {
+          p_invoice_id: invoiceId,
+          p_actor_user_id: user?.id || null
+        },
+        { timeoutMs: 10000 }
+      );
+      const detailRows = Array.isArray(detailRes) ? detailRes : (detailRes?.data || []);
+      sourceEditPreflight = (detailRows && detailRows.length) ? detailRows[0] : detailRes;
+    } catch {
+      sourceEditPreflight = null;
+    }
+
+    const queueContract = String(
+      sourceEditPreflight?.source_edit_queue_contract || ''
+    ).trim().toUpperCase();
+    if (queueContract !== 'INVOICE_SOURCE_EDIT_QUEUE_V1') {
+      return withCORS(env, req, new Response(JSON.stringify({
+        error: 'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE',
+        message: 'Invoice source editing is temporarily unavailable while its database contract is being updated.'
+      }), { status: 503, headers: JSON_HEADERS }));
+    }
+    if (sourceEditPreflight?.actions?.can_edit_source !== true) {
+      return withCORS(env, req, conflict(
+        'Reference, hospital and ward values cannot be changed in the current invoice state. Reload the invoice to see the latest status.'
+      ));
+    }
   }
 
   try {
@@ -101803,18 +101846,13 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
       );
     } catch {}
 
-    const sourceEditRequested = (
-      (Array.isArray(payload.reference_updates) && payload.reference_updates.length > 0)
-      || (Array.isArray(payload.timesheet_location_updates)
-        && payload.timesheet_location_updates.length > 0)
-    );
     const sourceEditQueueContract = String(
       manifest.source_edit_queue_contract || ''
     ).trim().toUpperCase();
     if (sourceEditRequested
       && sourceEditQueueContract !== 'INVOICE_SOURCE_EDIT_QUEUE_V1') {
       return withCORS(env, req, serverError(
-        'Invoice source changes were not applied because the database queue contract is unavailable.'
+        'Invoice source changes were saved, but the database did not return the required replacement-work receipt. Reload the invoice before continuing.'
       ));
     }
     let accepted_operations = Array.isArray(manifest.accepted_operations)
@@ -101992,7 +102030,7 @@ async function handleInvoiceSaveEdits(env, req, invoiceId, ctx) {
         'This timesheet changed after the invoice was opened. The invoice has been refreshed; review the latest values and try again.'
       ));
     }
-    if (/INVOICE_SOURCE_EDIT_ISSUED|INVOICE_SOURCE_EDIT_PAID|INVOICE_SOURCE_EDIT_ISSUE_IN_PROGRESS|IMPORT_AUTHORITATIVE_CORRECTION_SOURCE_EDIT_FORBIDDEN/i.test(msg)) {
+    if (/INVOICE_SOURCE_EDIT_ISSUED|INVOICE_SOURCE_EDIT_PAID|INVOICE_SOURCE_EDIT_ISSUE_IN_PROGRESS|IMPORT_AUTHORITATIVE_CORRECTION_SOURCE_EDIT_FORBIDDEN|IMPORT_CORRECTION_INVOICE_FINANCIAL_EDIT_FORBIDDEN|POLICY_X_FROZEN_INVOICE_NOT_EDITABLE/i.test(msg)) {
       return withCORS(env, req, conflict(
         'Reference, hospital and ward values cannot be changed while this invoice is issued, paid, issuing, or controlled by an import correction.'
       ));
@@ -168303,15 +168341,11 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const candidate = contract.candidate_id
     ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name,email`)
     : null;
-  const client = contract.client_id
-    ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`)
-    : null;
-
   const now = nowIso();
 
   const occupant_norm  = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
-  const hospital_norm  = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
-  const ward_norm      = (contract.ward_hint || 'contract').toLowerCase();
+  const hospital_norm  = normaliseWeeklyDisplaySite(contract.display_site);
+  const ward_norm      = '';
   const job_title_norm = (contract.role || 'weekly').toLowerCase();
   const booking_id     = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
 
@@ -168335,7 +168369,14 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       return withCORS(env, req, badRequest('Cannot generate QR printable: timesheet already invoiced or paid'));
     }
 
-    const tsPatch = { sheet_scope: 'WEEKLY', submission_mode: 'MANUAL', line_type: 'HOURS', updated_at: now };
+    const tsPatch = {
+      sheet_scope: 'WEEKLY',
+      submission_mode: 'MANUAL',
+      line_type: 'HOURS',
+      hospital_norm,
+      ward_norm,
+      updated_at: now
+    };
     if (Array.isArray(actual_schedule_json)) tsPatch.actual_schedule_json = actual_schedule_json;
 
     await fetch(

@@ -2873,6 +2873,42 @@ test('invoice save edits accepts the compact invoice_apply_edits result contract
   assert.match(handler, /nudgeInvoiceOperations\(env, activeAcceptedOperations/);
   assert.match(handler, /nudgeInvoiceOperations[\s\S]*priorityClass: 'INTERACTIVE'/);
 });
+
+test('invoice source edits fail closed before mutation when the queue contract is unavailable', () => {
+  const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const start = source.indexOf('async function handleInvoiceSaveEdits');
+  const end = source.indexOf('\nasync function handleInvoiceEligibleTimesheets', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = source.slice(start, end);
+  const preflight = handler.indexOf("'invoice_detail_get'");
+  const mutation = handler.indexOf("'invoice_apply_edits'");
+  assert.ok(preflight > 0, 'invoice_detail_get preflight missing');
+  assert.ok(mutation > preflight, 'mutating RPC must occur after the read-only preflight');
+  assert.match(handler, /source_edit_queue_contract/);
+  assert.match(handler, /actions\?\.can_edit_source/);
+  assert.match(handler, /INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE/);
+  assert.match(handler, /IMPORT_CORRECTION_INVOICE_FINANCIAL_EDIT_FORBIDDEN/);
+  assert.match(handler, /POLICY_X_FROZEN_INVOICE_NOT_EDITABLE/);
+});
+
+test('weekly electronic and QR paths use only contract display_site for Site / Ward', () => {
+  const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const electronicStart = source.indexOf('async function handleTimesheetsSubmitWeekly');
+  const electronicEnd = source.indexOf('\nasync function ', electronicStart + 1);
+  const qrStart = source.indexOf('async function handleContractWeekGeneratePrintable');
+  const qrEnd = source.indexOf('\nasync function ', qrStart + 1);
+  assert.ok(electronicStart >= 0 && electronicEnd > electronicStart);
+  assert.ok(qrStart >= 0 && qrEnd > qrStart);
+  for (const handler of [
+    source.slice(electronicStart, electronicEnd),
+    source.slice(qrStart, qrEnd)
+  ]) {
+    assert.match(handler, /contract\.display_site/);
+    assert.match(handler, /normaliseWeeklyDisplaySite/);
+    assert.doesNotMatch(handler, /contract\.display_site\s*\|\|\s*client/i);
+    assert.doesNotMatch(handler, /contract\.ward_hint\s*\|\|\s*['"]contract['"]/i);
+  }
+});
 test('invoice mail preparation contains no legacy PDF rendering fallback', () => {
   const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
   const start = source.indexOf('async function buildEmailPayloadFromOutboxRow');

@@ -270,13 +270,137 @@ function measureLayoutHeightWithFonts(model, layout, regular) {
   return Object.freeze({ required, declarationHeight, minimumBlankRows });
 }
 
+function preflightLayoutHorizontalCapacity(model, layout, fonts) {
+  const regular = fonts.regular;
+  const bold = fonts.bold || regular;
+  const margin = layout.margin;
+  const width = PAGE_WIDTH_MM - margin * 2;
+  const details = officialDetailsGeometry(model.form_variant, margin, width);
+  const ending = model.week_period || {};
+  const timesheetNumber = safeText(
+    model.timesheet_number || officialTimesheetNumber(model.timesheet_id)
+  );
+  const heading = `TIMESHEET   Time Sheet No. ${timesheetNumber}   Week ending (${
+    safeText(ending.end_weekday_name)
+  }): ${formatDmy(ending.end_date)}`;
+
+  fitText(bold, safeText(model?.branding?.agency_name || 'ARMS'), 86, 9);
+  fitText(bold, heading, 155, 8.5, 6);
+  fitText(bold, 'Temporary Worker Details', details.workerWidth - 2, layout.headerFont);
+  fitText(bold, 'Client Details', details.clientWidth - 2, layout.headerFont);
+
+  const worker = model.worker || model.candidate || {};
+  for (const value of [worker.surname, worker.first_name, worker.job_profile_title]) {
+    fitText(regular, safeText(value), details.workerWidth - 33, layout.baseFont);
+  }
+  const client = model.client || {};
+  for (const value of [
+    client.name || client.hospital_display || client.hospital,
+    client.site_ward || client.hospital_ward_display || client.ward_display
+  ]) {
+    fitText(regular, safeText(value), details.clientWidth - 41, layout.baseFont);
+  }
+
+  const columns = [
+    ['Day', 14], ['Date', 22], ['Shift Start', 18], ['Shift End', 18],
+    ['Break Start', 18], ['Break End', 18], ['Paid hrs', 18],
+    ['Paid hrs (words)', 52], ['Band', 14], ['Booking Ref', 0]
+  ];
+  columns[columns.length - 1][1] = width
+    - columns.slice(0, -1).reduce((sum, column) => sum + column[1], 0);
+  for (const [label, columnWidth] of columns) {
+    fitText(bold, label, columnWidth - 1.6, layout.smallFont);
+  }
+  for (const day of model?.week_period?.days || []) {
+    fitText(
+      bold,
+      safeText(day.weekday_abbreviation || day.weekday_name).slice(0, 3),
+      columns[0][1] - 1.6,
+      layout.baseFont
+    );
+    fitText(regular, formatDmy(day.date), columns[1][1] - 1.6, layout.baseFont);
+    for (const shift of day.shift_lines || []) {
+      const [breakStart, breakEnd] = shiftBreakDisplay(shift);
+      const paidMinutes = Number(shift.paid_minutes || 0);
+      const values = [
+        safeText(shift.display_start_local),
+        safeText(shift.display_end_local),
+        breakStart,
+        breakEnd,
+        decimalHours(paidMinutes),
+        formatOfficialTimesheetHoursWords(paidMinutes),
+        safeText(shift.band || model.band),
+        safeText(shift.booking_reference)
+      ];
+      values.forEach((value, index) => fitText(
+        regular,
+        value,
+        columns[index + 2][1] - 1.6,
+        index === 5 ? layout.smallFont : layout.baseFont
+      ));
+    }
+  }
+  fitText(
+    bold,
+    'Total overall hours claimed (excluding breaks):',
+    150,
+    layout.baseFont
+  );
+  const totalMinutes = Number(model?.totals?.paid_minutes || 0);
+  fitText(
+    bold,
+    `${decimalHours(totalMinutes)}  (${formatOfficialTimesheetHoursWords(totalMinutes)})`,
+    86,
+    layout.baseFont
+  );
+
+  const additional = model?.additional_units_section || {};
+  const additionalRows = additional.visible === true && Array.isArray(additional.rows)
+    ? additional.rows : [];
+  if (additionalRows.length) {
+    fitText(
+      bold,
+      safeText(additional.title || 'Additional rates / units'),
+      width - 4,
+      layout.baseFont
+    );
+    const widths = [95, 34, 30, width - 159];
+    ['Rate Type', 'Date', 'Quantity', 'Unit'].forEach((value, index) =>
+      fitText(bold, value, widths[index] - 2, layout.smallFont));
+    additionalRows.forEach(row => {
+      [row.rate_type, row.date ? formatDmy(row.date) : '', row.quantity, row.unit]
+        .forEach((value, index) =>
+          fitText(regular, safeText(value), widths[index] - 2, layout.baseFont));
+    });
+  }
+
+  const declarationWidth = (width - 5) / 2;
+  for (const block of [
+    model?.wording?.temporary_worker_declaration,
+    model?.wording?.client_declaration
+  ]) {
+    const titleFont = block?.title_bold === false ? regular : bold;
+    fitText(
+      titleFont,
+      safeText(block?.title || 'Declaration'),
+      declarationWidth - 2,
+      layout.headerFont
+    );
+  }
+  fitText(regular, 'Signature', declarationWidth - 32, layout.smallFont);
+  fitText(regular, 'Date 30/12/2099', 22, layout.smallFont);
+}
+
 export async function selectOfficialTimesheetOnePageLayout(model, fonts = null) {
   let regular = fonts?.regular;
-  if (!regular) {
+  let bold = fonts?.bold;
+  if (!regular || !bold) {
     const measurementPdf = await PDFDocument.create();
-    regular = await measurementPdf.embedFont(StandardFonts.Helvetica);
+    if (!regular) regular = await measurementPdf.embedFont(StandardFonts.Helvetica);
+    if (!bold) bold = await measurementPdf.embedFont(StandardFonts.HelveticaBold);
   }
   FONT_MINIMUMS.set(regular, Number(model?.layout?.minimum_font_size || 5.5));
+  FONT_MINIMUMS.set(bold, Number(model?.layout?.minimum_font_size || 5.5));
   const allowed = new Set(
     Array.isArray(model?.layout?.allowed_modes)
       ? model.layout.allowed_modes.map(value => safeText(value).toUpperCase())
@@ -294,12 +418,17 @@ export async function selectOfficialTimesheetOnePageLayout(model, fonts = null) 
     const available = PAGE_HEIGHT_MM - layout.margin * 2;
     const measured = measureLayoutHeightWithFonts(model, layout, regular);
     if (measured.required <= available) {
-      return Object.freeze({
-        ...layout,
-        requiredHeightMm: measured.required,
-        measuredDeclarationHeightMm: measured.declarationHeight,
-        measuredMinimumBlankRows: measured.minimumBlankRows
-      });
+      try {
+        preflightLayoutHorizontalCapacity(model, layout, { regular, bold });
+        return Object.freeze({
+          ...layout,
+          requiredHeightMm: measured.required,
+          measuredDeclarationHeightMm: measured.declarationHeight,
+          measuredMinimumBlankRows: measured.minimumBlankRows
+        });
+      } catch (error) {
+        if (error?.code !== 'TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED') throw error;
+      }
     }
   }
   throw timesheetError('TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED', {
@@ -510,12 +639,45 @@ function drawAlignedText(
 function wrapText(font, value, size, maxWidthMm) {
   const paragraphs = Array.isArray(value) ? value : normaliseLines(value);
   const output = [];
+  const maximumWidth = maxWidthMm * MM_TO_PT;
+  const splitOversizedToken = token => {
+    const chunks = [];
+    let chunk = '';
+    for (const character of Array.from(token)) {
+      const candidate = `${chunk}${character}`;
+      if (chunk && font.widthOfTextAtSize(candidate, size) > maximumWidth) {
+        chunks.push(chunk);
+        chunk = character;
+      } else {
+        chunk = candidate;
+      }
+      if (font.widthOfTextAtSize(chunk, size) > maximumWidth + 0.01) {
+        throw timesheetError('TIMESHEET_ONE_PAGE_CAPACITY_EXCEEDED', {
+          section: 'wrapped_text_horizontal_fit',
+          minimum_font_size: Number(FONT_MINIMUMS.get(font) || 0),
+          available_width_mm: maxWidthMm
+        });
+      }
+    }
+    if (chunk) chunks.push(chunk);
+    return chunks;
+  };
   for (const paragraph of paragraphs) {
     const words = safeText(paragraph).split(/\s+/).filter(Boolean);
     let current = '';
     for (const word of words) {
+      if (font.widthOfTextAtSize(word, size) > maximumWidth) {
+        if (current) {
+          output.push(current);
+          current = '';
+        }
+        const chunks = splitOversizedToken(word);
+        output.push(...chunks.slice(0, -1));
+        current = chunks[chunks.length - 1] || '';
+        continue;
+      }
       const candidate = current ? `${current} ${word}` : word;
-      if (current && font.widthOfTextAtSize(candidate, size) > maxWidthMm * MM_TO_PT) {
+      if (current && font.widthOfTextAtSize(candidate, size) > maximumWidth) {
         output.push(current);
         current = word;
       } else {
@@ -915,7 +1077,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     });
     drawBox(page, margin, top, width, additionalHeight);
     drawText(page, bold, safeText(additional.title || 'Additional rates / units'),
-      margin + 2, top + 1, layout.baseFont, null, CORPORATE_WHITE);
+      margin + 2, top + 1, layout.baseFont, width - 4, CORPORATE_WHITE);
     drawLine(page, margin, titleDivider, right, titleDivider, 0.25, CORPORATE_NAVY);
     drawLine(page, margin, headerDivider, right, headerDivider, 0.35);
     const addWidths = [95, 34, 30, width - 159];

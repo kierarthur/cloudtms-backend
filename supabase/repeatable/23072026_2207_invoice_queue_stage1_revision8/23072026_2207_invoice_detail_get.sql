@@ -117,9 +117,10 @@ begin
          'week_ending_date',t.week_ending_date,
          'document_revision',t.document_revision,
          'reference_number',t.reference_number,
-        'hospital_norm',t.hospital_norm,
-        'ward_norm',t.ward_norm,
-        'day_references_json',t.day_references_json,
+         'hospital_norm',t.hospital_norm,
+         'ward_norm',t.ward_norm,
+         'source_mode',upper(coalesce(f.invoice_breakdown_json->>'mode','')),
+         'day_references_json',t.day_references_json,
         'actual_schedule_json',case
           when upper(coalesce(f.invoice_breakdown_json->>'mode',''))='SEGMENTS'
             and jsonb_typeof(f.invoice_breakdown_json->'segments')='array'
@@ -137,6 +138,8 @@ begin
                 coalesce(seg.value->>'start_utc',''),
                 coalesce(seg.value->>'segment_id',''))
             from jsonb_array_elements(f.invoice_breakdown_json->'segments') seg(value)
+            where nullif(btrim(coalesce(
+              seg.value->>'invoice_locked_invoice_id','')),'')=p_invoice_id::text
           ),'[]'::jsonb)
           when jsonb_typeof(t.actual_schedule_json)='array'
             then t.actual_schedule_json
@@ -586,6 +589,7 @@ begin
   )
   select jsonb_build_object(
     'ok',true,
+    'source_edit_queue_contract','INVOICE_SOURCE_EDIT_QUEUE_V1',
     'invoice',jsonb_build_object(
       'id',a.id,'type',a.type,'invoice_no',a.invoice_no,'client_id',a.client_id,
       'issued_at_utc',a.issued_at_utc,'due_at_utc',a.due_at_utc,
