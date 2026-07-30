@@ -27269,6 +27269,10 @@ async function handleBankingPayPreview(env, req, user) {
     const failed = Number(src.failed_count ?? src.failed_candidates ?? 0);
     const obsolete = src.session_obsolete === true || src.obsolete === true;
     const ready = !obsolete && (src.ready === true || src.ready_flag === true || String(src.status || '').trim().toUpperCase() === 'READY');
+    const recoveryRequiredCount = Math.max(0, Math.trunc(Number(src.recovery_required_count || 0) || 0));
+    const recoveryScheduledCount = Math.max(0, Math.trunc(Number(src.recovery_scheduled_count || 0) || 0));
+    const recoveryRequired = src.recovery_required === true || recoveryRequiredCount > 0;
+    const recoveryScheduled = src.recovery_scheduled === true || recoveryScheduledCount > 0;
     return {
       ...src,
       session_id: trimStr(src.session_id || fallback.session_id || ''),
@@ -27283,6 +27287,12 @@ async function handleBankingPayPreview(env, req, user) {
       pending_count: Number.isFinite(pending) ? Math.max(0, pending) : 0,
       failed_candidates: Number.isFinite(failed) ? failed : 0,
       failed_count: Number.isFinite(failed) ? failed : 0,
+      terminal_failure: src.terminal_failure === true || recoveryRequired,
+      recovery_required: recoveryRequired,
+      recovery_required_count: recoveryRequiredCount,
+      recovery_scheduled: recoveryScheduled,
+      recovery_scheduled_count: recoveryScheduledCount,
+      pending_owner_failures: Array.isArray(src.pending_owner_failures) ? src.pending_owner_failures.slice(0, 10) : [],
       phase: trimStr(src.phase || src.current_phase || fallback.phase || (ready ? 'READY' : 'REFRESHING')),
       status_text: trimStr(src.status_text || src.message || fallback.status_text || (ready ? 'Payment preview is ready.' : 'Payment preview is still refreshing.'))
     };
@@ -27362,6 +27372,18 @@ async function handleBankingPayPreview(env, req, user) {
         session_id: sessionId,
         phase: 'REFRESHING'
       });
+      if (progressPayload.recovery_required === true) {
+        log('BANKING_PAY_WORKBENCH_RECOVERY_REQUIRED', {
+          session_id: sessionId,
+          recovery_required_count: progressPayload.recovery_required_count,
+          blocker_codes: Array.isArray(progressPayload.blocker_codes) ? progressPayload.blocker_codes.slice(0, 10) : []
+        }, 'warn');
+      } else if (progressPayload.recovery_scheduled === true) {
+        log('BANKING_PAY_WORKBENCH_AUTOMATIC_RECOVERY', {
+          session_id: sessionId,
+          recovery_scheduled_count: progressPayload.recovery_scheduled_count
+        }, 'info');
+      }
       const sectionCounts = progressPayload.section_counts
         || progressPayload.section_counts_json
         || progressPayload.per_section_counts
@@ -29702,6 +29724,9 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     if (!hasOwn(progress, 'replacement_required')) malformedFields.push('replacement_required');
     if (!hasOwn(progress, 'replacement_session_id')) malformedFields.push('replacement_session_id');
     if (!hasOwn(progress, 'stored_ready_mismatch')) malformedFields.push('stored_ready_mismatch');
+    if (!hasOwn(progress, 'recovery_required')) malformedFields.push('recovery_required');
+    if (!hasOwn(progress, 'recovery_scheduled')) malformedFields.push('recovery_scheduled');
+    if (!Array.isArray(progress.pending_owner_failures)) malformedFields.push('pending_owner_failures');
     malformedFields.push(...missingNumericContractFields(
       progress.candidate_counts,
       ['pending', 'processing', 'materialisation_pending', 'dirty', 'failed', 'unknown', 'unseeded'],
@@ -29754,6 +29779,10 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     const jobsRunning = numberFrom(jobCounts, ['running'], 0);
     const jobsUnresolvedFailed = numberFrom(jobCounts, ['unresolved_failed'], 0);
     const jobsUnresolvedDead = numberFrom(jobCounts, ['unresolved_dead'], 0);
+    const recoveryRequiredCount = numberFrom(progress, ['recovery_required_count'], numberFrom(progress.blocker_counts, ['pending_scope_without_active_job'], 0));
+    const recoveryScheduledCount = numberFrom(progress, ['recovery_scheduled_count'], numberFrom(progress.blocker_counts, ['automatic_recovery_pending'], 0));
+    const recoveryRequired = booleanFrom(progress.recovery_required) || recoveryRequiredCount > 0;
+    const recoveryScheduled = booleanFrom(progress.recovery_scheduled) || recoveryScheduledCount > 0;
     const selectedEligibleReadyRowCount = numberFrom(progress, ['selected_eligible_ready_row_count'], numberFrom(progress.blocker_counts, ['selected_eligible_ready_rows'], 0));
     const scopeCursorRemaining = booleanFrom(progress.scope_cursor_remaining)
       || jsonObjectHasValues(progress.scope_next_cursor_json)
@@ -29785,6 +29814,8 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     if (lineUnknown > 0) derivedBlockers.push('LINE_WORK_UNKNOWN_STATE');
     if (jobsQueued > 0 || jobsRunning > 0) derivedBlockers.push('WORKBENCH_JOBS_ACTIVE');
     if (jobsUnresolvedFailed > 0 || jobsUnresolvedDead > 0) derivedBlockers.push('WORKBENCH_JOBS_FAILED');
+    if (recoveryRequired) derivedBlockers.push('WORKBENCH_PENDING_SCOPE_WITHOUT_ACTIVE_JOB');
+    if (recoveryScheduled) derivedBlockers.push('WORKBENCH_AUTOMATIC_RECOVERY_PENDING');
     if (selectedEligibleReadyRowCount <= 0) derivedBlockers.push('NO_SELECTED_READY_ROWS');
     if (storedReadyMismatch) derivedBlockers.push('STORED_READY_MISMATCH');
     if (!sessionReady) derivedBlockers.push('SESSION_NOT_READY');
@@ -29867,6 +29898,14 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
         unresolved_failed: jobsUnresolvedFailed,
         unresolved_dead: jobsUnresolvedDead
       },
+      terminal_failure: booleanFrom(progress.terminal_failure) || recoveryRequired,
+      recovery_required: recoveryRequired,
+      recovery_required_count: recoveryRequiredCount,
+      recovery_scheduled: recoveryScheduled,
+      recovery_scheduled_count: recoveryScheduledCount,
+      pending_owner_failures: Array.isArray(progress.pending_owner_failures)
+        ? progress.pending_owner_failures.slice(0, 10)
+        : [],
       session_blocker_codes: sessionBlockerCodes,
       draft_blocker_codes: draftBlockerCodes,
       blocker_codes: draftBlockerCodes,
@@ -29891,6 +29930,14 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       candidate_counts: isPlainObject(readiness.candidate_counts) ? readiness.candidate_counts : {},
       line_counts: isPlainObject(readiness.line_counts) ? readiness.line_counts : {},
       job_counts: isPlainObject(readiness.job_counts) ? readiness.job_counts : {},
+      terminal_failure: readiness.terminal_failure === true,
+      recovery_required: readiness.recovery_required === true,
+      recovery_required_count: Number(readiness.recovery_required_count || 0),
+      recovery_scheduled: readiness.recovery_scheduled === true,
+      recovery_scheduled_count: Number(readiness.recovery_scheduled_count || 0),
+      pending_owner_failures: Array.isArray(readiness.pending_owner_failures)
+        ? readiness.pending_owner_failures.slice(0, 10)
+        : [],
       ...extraDetails
     });
   };
