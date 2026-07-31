@@ -1217,40 +1217,39 @@ BEGIN
     IF LOWER(BTRIM(COALESCE(v_transition->>'state_changed', 'false')))
          IN ('true', 't', '1', 'yes', 'y', 'on') THEN
       v_changed := v_changed + 1;
-    END IF;
-
-    v_enqueue := public.pay_workbench_dirty_event_enqueue(
-      p_job_type => 'WORKBENCH_CANDIDATE_DIRTY_APPLY',
-      p_scope_kind => 'CANDIDATE',
-      p_scope_id => v_due.candidate_id::text,
-      p_candidate_id => v_due.candidate_id,
-      p_targeted_timesheet_ids => CASE
-        WHEN v_due.timesheet_id IS NULL THEN ARRAY[]::uuid[]
-        ELSE ARRAY[v_due.timesheet_id]::uuid[]
-      END,
-      p_linked_timesheet_ids => ARRAY[]::uuid[],
-      p_payload_json => jsonb_build_object(
-        'refresh_scope_kind', CASE
-          WHEN v_due.timesheet_id IS NULL THEN 'CANDIDATE_FULL_LIVE'
-          ELSE 'TARGETED_TIMESHEETS'
+      v_enqueue := public.pay_workbench_dirty_event_enqueue(
+        p_job_type => 'WORKBENCH_CANDIDATE_DIRTY_APPLY',
+        p_scope_kind => 'CANDIDATE',
+        p_scope_id => v_due.candidate_id::text,
+        p_candidate_id => v_due.candidate_id,
+        p_targeted_timesheet_ids => CASE
+          WHEN v_due.timesheet_id IS NULL THEN ARRAY[]::uuid[]
+          ELSE ARRAY[v_due.timesheet_id]::uuid[]
         END,
-        'snooze_id', v_due.id::text,
-        'london_current_date', v_today_uk::text,
-        'current_official_pay_date', v_current_official_pay_date::text,
-        'reason', 'SNOOZE_EXPIRED_LONDON_DATE',
-        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
-      ),
-      p_reason => 'SNOOZE_EXPIRED_LONDON_DATE',
-      p_priority => -1000,
-      p_run_at_utc => v_now
-    );
+        p_linked_timesheet_ids => ARRAY[]::uuid[],
+        p_payload_json => jsonb_build_object(
+          'refresh_scope_kind', CASE
+            WHEN v_due.timesheet_id IS NULL THEN 'CANDIDATE_FULL_LIVE'
+            ELSE 'TARGETED_TIMESHEETS'
+          END,
+          'snooze_id', v_due.id::text,
+          'london_current_date', v_today_uk::text,
+          'current_official_pay_date', v_current_official_pay_date::text,
+          'reason', 'SNOOZE_EXPIRED_LONDON_DATE',
+          'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+        ),
+        p_reason => 'SNOOZE_EXPIRED_LONDON_DATE',
+        p_priority => -1000,
+        p_run_at_utc => v_now
+      );
 
-    v_enqueued := v_enqueued + 1;
-    v_results := v_results || jsonb_build_array(jsonb_build_object(
-      'candidate_id', v_due.candidate_id::text,
-      'snooze_id', v_due.id::text,
-      'job_id', v_enqueue->>'job_id'
-    ));
+      v_enqueued := v_enqueued + 1;
+      v_results := v_results || jsonb_build_array(jsonb_build_object(
+        'candidate_id', v_due.candidate_id::text,
+        'snooze_id', v_due.id::text,
+        'job_id', v_enqueue->>'job_id'
+      ));
+    END IF;
   END LOOP;
 
   RETURN jsonb_build_object(
@@ -1259,6 +1258,7 @@ BEGIN
     'processed_session_count', 1,
     'processed_snooze_count', v_processed,
     'transition_changed_count', v_changed,
+    'unchanged_due_count', GREATEST(v_processed - v_changed, 0),
     'enqueued_count', v_enqueued,
     'more_due', v_more_due,
     'work_limit', v_limit,
