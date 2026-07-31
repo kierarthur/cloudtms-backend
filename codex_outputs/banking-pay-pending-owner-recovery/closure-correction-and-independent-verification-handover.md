@@ -2,10 +2,10 @@
 
 ## Closure correction and independent-verification handover
 
-Date: 31 July 2026  
-Environment: TEST only  
-Repository: `cloudtms-backend`  
-Branch: `test`
+- Date: 31 July 2026
+- Environment: TEST only
+- Repository: `cloudtms-backend`
+- Branch: `test`
 
 ## 1. Final implementation verdict
 
