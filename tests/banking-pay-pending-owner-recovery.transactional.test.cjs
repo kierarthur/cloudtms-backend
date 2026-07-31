@@ -8,6 +8,86 @@ const test = require('node:test');
 const enabled = process.env.BANKING_PAY_OWNER_RECOVERY_TRANSACTIONAL === '1';
 const containerName = `cloudtms-owner-recovery-${process.pid}`;
 const repoRoot = path.resolve(__dirname, '..');
+const postgresImage = 'postgres:17.6-alpine';
+
+const completionHashes = {
+  pay_workbench_repair_orphaned_pending_source_build:
+    '78d2a4ac9dd7b8309ed5c77112d981f0',
+  pay_workbench_session_get_progress_light:
+    '9f7489d1242697dea393fab3a1d748e3',
+  pay_workbench_session_recompute_progress_counters:
+    '46b1686a98b3baeb7cbbadbcdc456f75'
+};
+
+const preDeltaHashes = {
+  pay_workbench_repair_orphaned_pending_source_build:
+    '977f2aa68b33a10649c69e308cf86e16',
+  pay_workbench_session_get_progress_light:
+    '64a227e561acf1be8bf434b13dd253c7',
+  pay_workbench_session_recompute_progress_counters:
+    '0830bcf4a7895de0cfee6960120580df'
+};
+
+const commonFunctionMetadata = {
+  pay_workbench_repair_orphaned_pending_source_build: {
+    identity_args:
+      'p_session_id uuid, p_candidate_id uuid, p_limit integer, ' +
+      'p_now_utc timestamp with time zone, p_reason text',
+    full_args:
+      'p_session_id uuid DEFAULT NULL::uuid, ' +
+      'p_candidate_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 10, ' +
+      'p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone, ' +
+      "p_reason text DEFAULT 'PENDING_SCOPE_OWNER_REPAIR'::text",
+    owner: 'postgres',
+    security_definer: true,
+    proconfig: ['search_path=public'],
+    acl: '{postgres=X/postgres,service_role=X/postgres}',
+    comment: null
+  },
+  pay_workbench_session_get_progress_light: {
+    identity_args: 'p_session_id uuid',
+    full_args: 'p_session_id uuid',
+    owner: 'postgres',
+    security_definer: true,
+    proconfig: ['search_path=public'],
+    acl: '{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}',
+    comment: null
+  },
+  pay_workbench_session_recompute_progress_counters: {
+    identity_args:
+      'p_session_id uuid, p_apply boolean, p_reason text, ' +
+      'p_write_progress_json boolean',
+    full_args:
+      'p_session_id uuid, p_apply boolean DEFAULT true, ' +
+      "p_reason text DEFAULT 'AUTHORITATIVE_COUNTER_RECOMPUTE'::text, " +
+      'p_write_progress_json boolean DEFAULT true',
+    owner: 'postgres',
+    security_definer: true,
+    proconfig: [
+      'search_path=public',
+      'plpgsql_check.mode=disabled',
+      'plpgsql_check.profiler=off',
+      'plpgsql_check.tracer=off',
+      'plpgsql_check.constants_tracing=off',
+      'plpgsql_check.cursors_leaks=off',
+      'plpgsql_check.strict_cursors_leaks=off',
+      'plpgsql_check.fatal_errors=off'
+    ],
+    acl: '{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}',
+    comment: null
+  }
+};
+
+const expectedManifest = (hashes) => Object.fromEntries(
+  Object.entries(commonFunctionMetadata).map(([name, metadata]) => [
+    name,
+    { ...metadata, definition_md5: hashes[name] }
+  ])
+);
+
+const sleepSync = (milliseconds) => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+};
 
 const readSql = (name) => fs.readFileSync(
   path.resolve(repoRoot, 'supabase/repeatable', name),
@@ -24,7 +104,11 @@ const extractFunction = (source, name) => {
   const tail = source.slice(match.index);
   const endMatch = /\r?\n\$function\$;/.exec(tail);
   assert.ok(endMatch, `${name} must have a complete function delimiter`);
-  return tail.slice(0, endMatch.index + endMatch[0].length);
+  // pg_get_functiondef MD5 includes stored function-body line endings. TEST
+  // stores LF, so normalise the Windows checkout before reproducibility checks.
+  return tail
+    .slice(0, endMatch.index + endMatch[0].length)
+    .replaceAll('\r\n', '\n');
 };
 
 const canonicalSql = readSql('26052026_2100HRS_NEW_FUNCTIONS.sql');
@@ -48,9 +132,27 @@ const rollbackSql = fs.readFileSync(
     repoRoot,
     'codex_outputs',
     'banking-pay-pending-owner-recovery',
-    '30072026_1754_banking_pay_source_build_owner_recovery_completion_rollback.sql'
+    '31072026_1122_banking_pay_source_build_owner_recovery_completion_rollback.sql'
   ),
   'utf8'
+);
+
+const rollbackFailureMarker =
+  'CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_progress_counters';
+const rollbackFailureSql = rollbackSql.replace(
+  rollbackFailureMarker,
+  `DO $forced_failure$
+  BEGIN
+    RAISE EXCEPTION 'FORCED_MID_ROLLBACK_FAILURE' USING ERRCODE = 'P0001';
+  END
+  $forced_failure$;
+
+  ${rollbackFailureMarker}`
+);
+assert.notEqual(
+  rollbackFailureSql,
+  rollbackSql,
+  'replacement rollback must expose the deterministic failure injection point'
 );
 
 const run = (command, args, options = {}) => {
@@ -85,6 +187,29 @@ const psql = (sql) => run(
   ],
   { input: sql }
 );
+
+const psqlExpectFailure = (sql) => {
+  const result = spawnSync(
+    'docker',
+    [
+      'exec',
+      '-i',
+      containerName,
+      'psql',
+      '-X',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-qAt',
+      '-U',
+      'postgres',
+      '-d',
+      'postgres'
+    ],
+    { input: sql, encoding: 'utf8', timeout: 120000 }
+  );
+  assert.notEqual(result.status, 0, 'SQL was expected to fail');
+  return String(result.stderr || '');
+};
 
 const psqlAsync = (sql) => new Promise((resolve, reject) => {
   const child = spawn(
@@ -123,6 +248,85 @@ const parseLastJson = (output) => {
   const lines = output.trim().split(/\r?\n/).filter(Boolean);
   assert.ok(lines.length > 0, 'expected a JSON result');
   return JSON.parse(lines.at(-1));
+};
+
+const completionMetadataSql = `
+  ALTER FUNCTION public.pay_workbench_session_get_progress_light(uuid)
+    OWNER TO postgres;
+  REVOKE ALL ON FUNCTION public.pay_workbench_session_get_progress_light(uuid)
+    FROM PUBLIC, anon, authenticated, service_role;
+  GRANT EXECUTE ON FUNCTION public.pay_workbench_session_get_progress_light(uuid)
+    TO postgres, authenticated, service_role;
+  COMMENT ON FUNCTION public.pay_workbench_session_get_progress_light(uuid)
+    IS NULL;
+
+  ALTER FUNCTION public.pay_workbench_session_recompute_progress_counters(uuid, boolean, text, boolean)
+    OWNER TO postgres;
+  REVOKE ALL ON FUNCTION public.pay_workbench_session_recompute_progress_counters(uuid, boolean, text, boolean)
+    FROM PUBLIC, anon, authenticated, service_role;
+  GRANT EXECUTE ON FUNCTION public.pay_workbench_session_recompute_progress_counters(uuid, boolean, text, boolean)
+    TO postgres, authenticated, service_role;
+  COMMENT ON FUNCTION public.pay_workbench_session_recompute_progress_counters(uuid, boolean, text, boolean)
+    IS NULL;
+
+  ALTER FUNCTION public.pay_workbench_repair_orphaned_pending_source_build(uuid, uuid, integer, timestamp with time zone, text)
+    OWNER TO postgres;
+  REVOKE ALL ON FUNCTION public.pay_workbench_repair_orphaned_pending_source_build(uuid, uuid, integer, timestamp with time zone, text)
+    FROM PUBLIC, anon, authenticated, service_role;
+  GRANT EXECUTE ON FUNCTION public.pay_workbench_repair_orphaned_pending_source_build(uuid, uuid, integer, timestamp with time zone, text)
+    TO postgres, service_role;
+  COMMENT ON FUNCTION public.pay_workbench_repair_orphaned_pending_source_build(uuid, uuid, integer, timestamp with time zone, text)
+    IS NULL;
+`;
+
+const installCompletionFunctions = () => {
+  psql(progressSql);
+  psql(recomputeSql);
+  psql(helperSql);
+  psql(completionMetadataSql);
+};
+
+const getFunctionManifest = () => parseLastJson(psql(`
+  SELECT jsonb_object_agg(manifest.function_name, manifest.details)::text
+  FROM (
+    SELECT
+      p.proname AS function_name,
+      jsonb_build_object(
+        'identity_args', pg_get_function_identity_arguments(p.oid),
+        'full_args', pg_get_function_arguments(p.oid),
+        'owner', pg_get_userbyid(p.proowner),
+        'security_definer', p.prosecdef,
+        'proconfig', to_jsonb(p.proconfig),
+        'acl', p.proacl::text,
+        'comment', obj_description(p.oid, 'pg_proc'),
+        'definition_md5', md5(pg_get_functiondef(p.oid))
+      ) AS details
+    FROM pg_proc AS p
+    JOIN pg_namespace AS n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND (
+        (
+          p.proname = 'pay_workbench_repair_orphaned_pending_source_build'
+          AND pg_get_function_identity_arguments(p.oid) =
+            'p_session_id uuid, p_candidate_id uuid, p_limit integer, ' ||
+            'p_now_utc timestamp with time zone, p_reason text'
+        )
+        OR (
+          p.proname = 'pay_workbench_session_get_progress_light'
+          AND pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid'
+        )
+        OR (
+          p.proname = 'pay_workbench_session_recompute_progress_counters'
+          AND pg_get_function_identity_arguments(p.oid) =
+            'p_session_id uuid, p_apply boolean, p_reason text, ' ||
+            'p_write_progress_json boolean'
+        )
+      )
+  ) AS manifest;
+`));
+
+const assertFunctionManifest = (hashes) => {
+  assert.deepEqual(getFunctionManifest(), expectedManifest(hashes));
 };
 
 const sqlString = (value) => `'${String(value).replaceAll("'", "''")}'`;
@@ -632,27 +836,35 @@ if (enabled) test.before(() => {
     containerName,
     '-e',
     'POSTGRES_HOST_AUTH_METHOD=trust',
-    'postgres:17-alpine'
+    postgresImage
   ]);
 
   let ready = false;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const logs = spawnSync(
+      'docker',
+      ['logs', containerName],
+      { encoding: 'utf8', timeout: 5000 }
+    );
+    const logText = `${String(logs.stdout || '')}\n${String(logs.stderr || '')}`;
     const check = spawnSync(
       'docker',
       ['exec', containerName, 'pg_isready', '-U', 'postgres', '-d', 'postgres'],
       { encoding: 'utf8', timeout: 5000 }
     );
-    if (check.status === 0) {
+    if (
+      logText.includes('PostgreSQL init process complete; ready for start up.')
+      && check.status === 0
+    ) {
       ready = true;
       break;
     }
+    sleepSync(250);
   }
   assert.ok(ready, 'disposable PostgreSQL did not become ready');
 
   psql(setupSql);
-  psql(progressSql);
-  psql(recomputeSql);
-  psql(helperSql);
+  installCompletionFunctions();
 });
 
 if (enabled) test.after(() => {
@@ -660,6 +872,30 @@ if (enabled) test.after(() => {
     encoding: 'utf8',
     timeout: 30000
   });
+});
+
+test('M00 exact PostgreSQL 17.6 compilation reproduces the verified completion manifest', { skip: !enabled }, () => {
+  assert.equal(
+    run('docker', ['inspect', '--format', '{{.Config.Image}}', containerName]).trim(),
+    postgresImage
+  );
+  assert.equal(psql('SHOW server_version;').trim(), '17.6');
+  assert.equal(psql("SELECT current_setting('server_version_num');").trim(), '170006');
+  assertFunctionManifest(completionHashes);
+});
+
+test('R01 a forced mid-rollback failure is atomic and preserves the completion manifest', { skip: !enabled }, () => {
+  const errorText = psqlExpectFailure(rollbackFailureSql);
+  assert.match(errorText, /FORCED_MID_ROLLBACK_FAILURE/);
+  assertFunctionManifest(completionHashes);
+});
+
+test('R02 replacement rollback is exact and completion definitions reinstall cleanly', { skip: !enabled }, () => {
+  psql(rollbackSql);
+  assertFunctionManifest(preDeltaHashes);
+
+  installCompletionFunctions();
+  assertFunctionManifest(completionHashes);
 });
 
 test('T01 numeric stale active owner is selected and replaced by one current successor', { skip: !enabled }, () => {
@@ -1124,24 +1360,4 @@ test('T14 concurrent repair converges without duplicate authority or false count
       AND job_row.candidate_id = '${candidateId}'
       AND job_row.status IN ('QUEUED', 'RUNNING');
   `).trim(), '1');
-});
-
-test('rollback restores only the three exact pre-delta definitions in the disposable database', { skip: !enabled }, () => {
-  psql(rollbackSql);
-  const hashes = parseLastJson(psql(`
-    SELECT jsonb_object_agg(p.proname, md5(pg_get_functiondef(p.oid)))::text
-    FROM pg_proc AS p
-    JOIN pg_namespace AS n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public'
-      AND p.proname IN (
-        'pay_workbench_repair_orphaned_pending_source_build',
-        'pay_workbench_session_get_progress_light',
-        'pay_workbench_session_recompute_progress_counters'
-      );
-  `));
-  assert.deepEqual(hashes, {
-    pay_workbench_repair_orphaned_pending_source_build: '977f2aa68b33a10649c69e308cf86e16',
-    pay_workbench_session_get_progress_light: '64a227e561acf1be8bf434b13dd253c7',
-    pay_workbench_session_recompute_progress_counters: '0830bcf4a7895de0cfee6960120580df'
-  });
 });

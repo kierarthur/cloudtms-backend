@@ -1,6 +1,6 @@
--- SUPERSEDED — INCORRECT POST-DELTA HASH MANIFEST. DO NOT USE.
--- Retained as historical evidence. Use the dated replacement rollback in this folder.
--- TEST-only rollback for the Banking Pay Source-Build Owner Recovery Completion Plan.
+-- REPLACEMENT TEST-only rollback for the Banking Pay Source-Build Owner Recovery Completion Plan.
+-- Supersedes 30072026_1754_banking_pay_source_build_owner_recovery_completion_rollback.sql,
+-- whose progress-function post-delta hash guards were recorded incorrectly.
 -- Restores only the three pre-delta function definitions that were installed
 -- immediately before this completion delta. It does not remove the helper and
 -- does not restore the original vulnerable pre-recovery implementation.
@@ -25,14 +25,14 @@ BEGIN
   SELECT md5(pg_get_functiondef(
     'public.pay_workbench_session_get_progress_light(uuid)'::regprocedure
   )) INTO v_actual;
-  IF v_actual IS DISTINCT FROM '497a7be67673cae16b2d95e47290fd3c' THEN
+  IF v_actual IS DISTINCT FROM '9f7489d1242697dea393fab3a1d748e3' THEN
     RAISE EXCEPTION 'POST_DELTA_PROGRESS_LIGHT_HASH_MISMATCH' USING ERRCODE = 'P0001';
   END IF;
 
   SELECT md5(pg_get_functiondef(
     'public.pay_workbench_session_recompute_progress_counters(uuid,boolean,text,boolean)'::regprocedure
   )) INTO v_actual;
-  IF v_actual IS DISTINCT FROM 'acc358aa65a14b4466cc47919d7132e5' THEN
+  IF v_actual IS DISTINCT FROM '46b1686a98b3baeb7cbbadbcdc456f75' THEN
     RAISE EXCEPTION 'POST_DELTA_RECOMPUTE_HASH_MISMATCH' USING ERRCODE = 'P0001';
   END IF;
 END
