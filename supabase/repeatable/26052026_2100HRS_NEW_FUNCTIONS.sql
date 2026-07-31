@@ -160891,6 +160891,15 @@ BEGIN
   IF TG_OP <> 'DELETE' THEN v_new_row := to_jsonb(NEW); END IF;
   IF TG_OP <> 'INSERT' THEN v_old_row := to_jsonb(OLD); END IF;
 
+  -- A protected preview synchronisation deliberately records SYNC_SKIPPED as
+  -- audit evidence.  That informational event must not dirty Banking Pay and
+  -- enqueue the same protected synchronisation again.
+  IF v_trigger_table = 'pay_finance_case_events'
+     AND TG_OP <> 'DELETE'
+     AND UPPER(BTRIM(COALESCE(v_new_row->>'event_type', ''))) = 'SYNC_SKIPPED' THEN
+    RETURN NEW;
+  END IF;
+
   IF NULLIF(BTRIM(COALESCE(v_old_row->>'finance_case_id', v_old_row->>'id', '')), '') ~* v_uuid_re THEN
     v_old_finance_case_id := NULLIF(BTRIM(COALESCE(v_old_row->>'finance_case_id', v_old_row->>'id', '')), '')::uuid;
   END IF;
