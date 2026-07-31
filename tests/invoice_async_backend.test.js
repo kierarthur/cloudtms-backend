@@ -19,12 +19,14 @@ import {
 } from '../broker/src/invoice-queue-runtime.js';
 import {
   buildAttachmentIndexHtml,
+  buildInvoiceTemplateCss,
   buildProfessionalInvoiceHtml,
   buildElectronicTimesheetHtml,
   buildHealthRosterSupportHtml,
   buildNhspSupportHtml,
   buildHigherRateSupportHtml,
-  escapeInvoiceDocumentHtml
+  escapeInvoiceDocumentHtml,
+  renderInvoiceLineTable
 } from '../broker/src/invoice-document-templates.js';
 import {
   parseInvoiceAsyncAccessMode,
@@ -357,6 +359,28 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
   assert.ok(!first.includes('Supplier Trading'));
   assert.ok(!first.includes('Company no:'));
   assert.ok(!first.includes('Account: CLI-TEST'));
+});
+
+test('invoice line item descriptions keep Accommodation whole in a wider first column', () => {
+  const css = buildInvoiceTemplateCss();
+  const table = renderInvoiceLineTable({
+    currency: 'GBP',
+    lines: [{
+      description: 'Accommodation',
+      worker: 'Worker One',
+      reference: 'REF-1',
+      unit: 'item',
+      quantity: 1,
+      unit_price: 10,
+      net_amount: 10,
+      vat_amount: 2,
+      gross_amount: 12
+    }]
+  });
+  assert.match(css, /\.invoice-lines \.item-type\{overflow-wrap:normal;word-break:normal;hyphens:none\}/);
+  assert.match(table, /<col style="width:15%">/);
+  assert.match(table, /<td class="item-type">Accommodation<\/td>/);
+  assert.doesNotMatch(table, /Accommodatio<[^>]*>n/);
 });
 
 test('consolidated invoice hides the top worker field but keeps workers in line rows', () => {
@@ -731,6 +755,165 @@ test('document view returns 200 only for an exact READY version', async () => {
     assert.equal(body.viewer_state, 'READY');
     assert.equal(body.document_version.sha256, 'a'.repeat(64));
     assert.equal(body.document_version.r2_key, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('draft invoice view prepares required legacy accommodation evidence before reusing a preview', async () => {
+  const originalFetch = globalThis.fetch;
+  const invoice = '00000000-0000-4000-8000-000000000041';
+  const timesheet = '00000000-0000-4000-8000-000000000042';
+  const evidence = '00000000-0000-4000-8000-000000000043';
+  const operation = '00000000-0000-4000-8000-000000000044';
+  const started = [];
+  const background = [];
+  globalThis.fetch = async request => {
+    const url = new URL(
+      typeof request === 'string'
+        ? request
+        : (request instanceof URL ? request.href : request.url)
+    );
+    assert.equal(url.pathname, '/rest/v1/timesheet_evidence');
+    assert.equal(url.searchParams.get('id'), `in.(${evidence})`);
+    return new Response(JSON.stringify([{
+      id: evidence,
+      timesheet_id: timesheet,
+      kind: 'ACCOMMODATION',
+      storage_key: 'evidence/accommodation.png',
+      source_revision: null,
+      display_name: 'Accommodation receipt.png',
+      document_asset_id: null,
+      processing_state: null,
+      created_at: '2026-06-11T12:00:00.000Z'
+    }]), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const response = await handleInvoiceAsyncHttpRequest(
+      new Request(`https://example.test/api/invoices/${invoice}/render`, {
+        method: 'POST',
+        headers: { 'idempotency-key': 'view-invoice-evidence-command' },
+        body: '{}'
+      }),
+      v8Environment({
+        R2: {
+          head: async key => key === 'evidence/accommodation.png'
+            ? { httpMetadata: { contentType: 'image/png' } }
+            : null
+        }
+      }),
+      { waitUntil: promise => background.push(promise) },
+      {
+        requireUser: async () => v8Actor(),
+        rpc: v8Rpc(async (name, args) => {
+          if (name === 'invoice_detail_get') {
+            return {
+              invoice: {
+                id: invoice,
+                status: 'DRAFT',
+                document_state: 'READY',
+                preview_document_version_id: '00000000-0000-4000-8000-000000000045'
+              },
+              lines: [{
+                timesheet_id: timesheet,
+                line_type_norm: 'EXPENSE_ACCOMMODATION'
+              }],
+              evidence: [{
+                id: evidence,
+                timesheet_id: timesheet,
+                kind: 'ACCOMMODATION',
+                storage_key: 'evidence/accommodation.png',
+                readiness: 'NOT_REGISTERED',
+                document_asset_id: null
+              }]
+            };
+          }
+          if (name === 'invoice_operation_start_batch') {
+            started.push(...args.p_commands);
+            return [{ accepted: true, operation_id: operation, status: 'RUNNING' }];
+          }
+          return [];
+        })
+      }
+    );
+    const body = await response.json();
+    assert.equal(response.status, 202, JSON.stringify(body));
+    assert.equal(body.viewer_state, 'PREPARING');
+    assert.equal(body.status_message, 'Preparing invoice attachments');
+    assert.equal(started.length, 1);
+    assert.equal(started[0].command_type, 'PREPARE_ASSET');
+    assert.equal(started[0].source_kind, 'TIMESHEET_EVIDENCE');
+    assert.equal(started[0].source_id, evidence);
+    assert.match(started[0].source_revision, /^LEGACY_TIMESHEET_EVIDENCE:[0-9a-f]{64}$/);
+    assert.equal(started[0].declared_media_type, 'image/png');
+    assert.equal(started.some(command => command.command_type === 'VIEW_INVOICE_DOCUMENT'), false);
+    await Promise.all(background);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('draft invoice view fails closed when required expense evidence bytes are missing', async () => {
+  const originalFetch = globalThis.fetch;
+  const invoice = '00000000-0000-4000-8000-000000000051';
+  const timesheet = '00000000-0000-4000-8000-000000000052';
+  const evidence = '00000000-0000-4000-8000-000000000053';
+  let started = false;
+  globalThis.fetch = async request => {
+    const url = new URL(
+      typeof request === 'string'
+        ? request
+        : (request instanceof URL ? request.href : request.url)
+    );
+    assert.equal(url.pathname, '/rest/v1/timesheet_evidence');
+    return new Response(JSON.stringify([{
+      id: evidence,
+      timesheet_id: timesheet,
+      kind: 'ACCOMMODATION',
+      storage_key: 'evidence/missing.png',
+      source_revision: 'legacy-revision',
+      display_name: 'Missing receipt.png',
+      created_at: '2026-06-11T12:00:00.000Z'
+    }]), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const response = await handleInvoiceAsyncHttpRequest(
+      new Request(`https://example.test/api/invoices/${invoice}/render`, {
+        method: 'POST',
+        headers: { 'idempotency-key': 'view-missing-evidence-command' },
+        body: '{}'
+      }),
+      v8Environment({ R2: { head: async () => null } }),
+      {},
+      {
+        requireUser: async () => v8Actor(),
+        rpc: v8Rpc(async name => {
+          if (name === 'invoice_detail_get') {
+            return {
+              invoice: { id: invoice, status: 'DRAFT' },
+              lines: [{
+                timesheet_id: timesheet,
+                line_type_norm: 'EXPENSE_ACCOMMODATION'
+              }],
+              evidence: [{
+                id: evidence,
+                timesheet_id: timesheet,
+                kind: 'ACCOMMODATION',
+                storage_key: 'evidence/missing.png',
+                readiness: 'NOT_REGISTERED'
+              }]
+            };
+          }
+          if (name === 'invoice_operation_start_batch') started = true;
+          return [];
+        })
+      }
+    );
+    const body = await response.json();
+    assert.equal(response.status, 409, JSON.stringify(body));
+    assert.equal(body.viewer_state, 'BLOCKED');
+    assert.equal(body.error_code, 'INVOICE_EVIDENCE_SOURCE_MISSING');
+    assert.equal(started, false);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2889,6 +3072,19 @@ test('invoice source edits fail closed before mutation when the queue contract i
   assert.match(handler, /INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE/);
   assert.match(handler, /IMPORT_CORRECTION_INVOICE_FINANCIAL_EDIT_FORBIDDEN/);
   assert.match(handler, /POLICY_X_FROZEN_INVOICE_NOT_EDITABLE/);
+});
+
+test('invoice detail enriches legacy evidence with V8 asset readiness', () => {
+  const source = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const start = source.indexOf('async function handleGetInvoice');
+  const end = source.indexOf('\nasync function ', start + 1);
+  assert.ok(start >= 0 && end > start);
+  const handler = source.slice(start, end);
+  assert.match(handler, /invoice_detail_get/);
+  assert.match(handler, /invoiceAsyncDetail\?\.evidence/);
+  assert.match(handler, /invoiceAsyncDetail\?\.timesheet_evidence/);
+  assert.match(handler, /invoiceAsyncDetail\?\.evidence_other/);
+  assert.match(handler, /evidence_readiness: evidenceReadiness/);
 });
 
 test('weekly electronic and QR paths use only contract display_site for Site / Ward', () => {

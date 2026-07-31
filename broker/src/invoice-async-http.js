@@ -1914,6 +1914,59 @@ async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
   });
 }
 
+function invoiceEvidenceLineType(line = {}) {
+  return String(
+    line.line_type_norm
+      || line?.meta_json?.line_type
+      || line?.business_meta?.line_type
+      || ''
+  ).trim().toUpperCase();
+}
+
+function invoiceEvidenceRequiredByLine(evidence = {}, line = {}) {
+  if (String(evidence.timesheet_id || '') !== String(line.timesheet_id || '')) return false;
+  const kind = String(evidence.kind || 'OTHER').trim().toUpperCase();
+  const lineType = invoiceEvidenceLineType(line);
+  if (kind === 'TIMESHEET') return false;
+  if (kind === 'MILEAGE') return lineType === 'MILEAGE';
+  if (kind === 'TRAVEL') return lineType.includes('TRAVEL');
+  if (kind === 'ACCOMMODATION') return lineType.includes('ACCOMMODATION');
+  return lineType.includes('EXPENSE');
+}
+
+function requiredInvoiceEvidence(detail = {}) {
+  const lines = Array.isArray(detail.lines) ? detail.lines : [];
+  const evidence = Array.isArray(detail.evidence)
+    ? detail.evidence
+    : (Array.isArray(detail.evidence_other) ? detail.evidence_other : []);
+  const byId = new Map();
+  for (const row of evidence) {
+    if (!row?.id || !lines.some(line => invoiceEvidenceRequiredByLine(row, line))) continue;
+    byId.set(String(row.id), row);
+  }
+  return [...byId.values()];
+}
+
+function invoiceEvidenceIsReady(evidence = {}) {
+  return UUID_PATTERN.test(String(evidence.document_asset_id || ''))
+    && String(evidence.readiness || '').toUpperCase() === 'READY'
+    && String(evidence.asset_status || '').toUpperCase() === 'READY'
+    && String(evidence.normalised_r2_key || '').trim() !== ''
+    && SHA256_PATTERN.test(String(evidence.normalised_sha256 || '').trim().toLowerCase())
+    && Number(evidence.normalised_size_bytes) > 0
+    && Number(evidence.normalised_page_count) > 0;
+}
+
+function inferredInvoiceEvidenceMediaType(evidence = {}, object = {}) {
+  const declared = String(object?.httpMetadata?.contentType || '').trim().toLowerCase();
+  if (declared) return declared.slice(0, 160);
+  const name = String(evidence.display_name || evidence.storage_key || '').trim().toLowerCase();
+  if (name.endsWith('.pdf')) return 'application/pdf';
+  if (name.endsWith('.png')) return 'image/png';
+  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+  return 'application/octet-stream';
+}
+
 async function handleViewDocument(
   env,
   req,
@@ -2177,6 +2230,134 @@ async function handleViewDocument(
           error_code: 'ISSUED_DOCUMENT_INTEGRITY_FAILURE',
           status_message: 'The issued document could not be verified.'
         }, 409);
+    }
+
+    const requiredEvidence = requiredInvoiceEvidence(detail);
+    if (requiredEvidence.length > 100) {
+      return jsonResponse({
+        contract_version: INVOICE_VIEWER_CONTRACT,
+        viewer_state: 'BLOCKED',
+        purpose: 'DRAFT_PREVIEW',
+        badge_codes: ['INVOICE_EVIDENCE_SCOPE_TOO_LARGE'],
+        error_code: 'INVOICE_EVIDENCE_SCOPE_TOO_LARGE',
+        status_message: 'The invoice has too many evidence attachments to prepare safely.'
+      }, 409);
+    }
+    const evidenceToPrepare = requiredEvidence.filter(row => !invoiceEvidenceIsReady(row));
+    if (evidenceToPrepare.length) {
+      if (!(await requireGenerationReady())) {
+        return generationUnavailable('DRAFT_PREVIEW');
+      }
+      const ids = canonicalUuidArray(evidenceToPrepare.map(row => row.id));
+      const evidenceQuery = new URL(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`);
+      evidenceQuery.searchParams.set('id', `in.(${ids.join(',')})`);
+      evidenceQuery.searchParams.set(
+        'select',
+        'id,timesheet_id,kind,storage_key,source_revision,display_name,document_asset_id,processing_state,created_at'
+      );
+      evidenceQuery.searchParams.set('limit', String(ids.length));
+      const evidenceResponse = await fetch(evidenceQuery, { headers: serviceHeaders });
+      const evidenceRows = await evidenceResponse.json().catch(() => []);
+      const currentEvidenceById = new Map(
+        (evidenceResponse.ok && Array.isArray(evidenceRows) ? evidenceRows : [])
+          .map(row => [String(row?.id || ''), row])
+      );
+      if (currentEvidenceById.size !== ids.length) {
+        return jsonResponse({
+          contract_version: INVOICE_VIEWER_CONTRACT,
+          viewer_state: 'BLOCKED',
+          purpose: 'DRAFT_PREVIEW',
+          badge_codes: ['INVOICE_EVIDENCE_SOURCE_MISSING'],
+          error_code: 'INVOICE_EVIDENCE_SOURCE_MISSING',
+          status_message: 'A required invoice attachment is no longer available.'
+        }, 409);
+      }
+
+      const evidenceSources = await Promise.all(ids.map(async id => {
+        const evidence = currentEvidenceById.get(id);
+        const originalR2Key = String(evidence?.storage_key || '').trim().replace(/^\/+/, '');
+        if (!originalR2Key) return { evidence, originalR2Key, originalObject: null };
+        const originalObject = await env.R2?.head?.(originalR2Key);
+        return { evidence, originalR2Key, originalObject };
+      }));
+      if (evidenceSources.some(source => !source.originalR2Key || !source.originalObject)) {
+        return jsonResponse({
+          contract_version: INVOICE_VIEWER_CONTRACT,
+          viewer_state: 'BLOCKED',
+          purpose: 'DRAFT_PREVIEW',
+          badge_codes: ['INVOICE_EVIDENCE_SOURCE_MISSING'],
+          error_code: 'INVOICE_EVIDENCE_SOURCE_MISSING',
+          status_message: 'A required invoice attachment is no longer available.'
+        }, 409);
+      }
+
+      const assetCommands = await Promise.all(evidenceSources.map(async source => {
+        const evidence = source.evidence;
+        const sourceRevision = String(evidence.source_revision || '').trim()
+          || `LEGACY_TIMESHEET_EVIDENCE:${await sha256Text([
+            evidence.id,
+            source.originalR2Key,
+            evidence.created_at || ''
+          ].join('|'))}`;
+        return {
+          command_type: 'PREPARE_ASSET',
+          source_kind: 'TIMESHEET_EVIDENCE',
+          source_id: evidence.id,
+          source_revision: sourceRevision,
+          original_r2_key: source.originalR2Key,
+          original_filename: String(
+            evidence.display_name || `Invoice evidence ${evidence.id}`
+          ).slice(0, 240),
+          declared_media_type: inferredInvoiceEvidenceMediaType(
+            evidence,
+            source.originalObject
+          ),
+          rotation_degrees: 0
+        };
+      }));
+      const assetValues = rpcValue(await deps.rpc('invoice_operation_start_batch', {
+        p_commands: assetCommands,
+        p_actor_user_id: user.id
+      }));
+      const assetResults = Array.isArray(assetValues) ? assetValues : [assetValues];
+      const rejectedAsset = assetResults.find(result => (
+        result?.accepted === false || result?.blocked === true || result?.terminal_error
+      ));
+      if (rejectedAsset) {
+        const errorCode = String(
+          rejectedAsset?.terminal_error?.code
+            || rejectedAsset?.error?.code
+            || rejectedAsset?.terminal_error
+            || rejectedAsset?.error
+            || 'INVOICE_EVIDENCE_PREPARATION_BLOCKED'
+        ).slice(0, 160);
+        return jsonResponse({
+          contract_version: INVOICE_VIEWER_CONTRACT,
+          viewer_state: 'BLOCKED',
+          purpose: 'DRAFT_PREVIEW',
+          badge_codes: [errorCode],
+          error_code: errorCode,
+          status_message: 'A required invoice attachment could not be prepared.'
+        }, 409);
+      }
+      const activeAssetOperations = assetResults.filter(
+        row => row?.accepted !== false && row?.operation_id
+      );
+      if (activeAssetOperations.length) {
+        await nudgeInvoiceOperations(env, activeAssetOperations, {
+          ctx,
+          rpc: deps.rpc,
+          lanes: ['DOCUMENT'],
+          priorityClass: 'VIEW_NOW'
+        });
+      }
+      return jsonResponse({
+        contract_version: INVOICE_VIEWER_CONTRACT,
+        viewer_state: 'PREPARING',
+        operation_id: activeAssetOperations[0]?.operation_id || null,
+        purpose: 'DRAFT_PREVIEW',
+        status_message: 'Preparing invoice attachments'
+      }, 202);
     }
 
     const previewVersionId = String(

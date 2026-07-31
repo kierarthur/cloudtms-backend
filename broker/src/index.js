@@ -146894,6 +146894,31 @@ async function handleGetInvoice(env, req, invoiceId) {
     const invoice = manifest.invoice || manifest.invoice_row || null;
     if (!invoice || !invoice.id) return withCORS(env, req, notFound('Invoice not found'));
 
+    let invoiceAsyncDetail = null;
+    if (isInvoiceAsyncPipelineEnabled(env)) {
+      try {
+        invoiceAsyncDetail = unwrapRpcJsonb(await sbRpc(env, 'invoice_detail_get', {
+          p_invoice_id: invoiceId,
+          p_actor_user_id: user.id
+        }), 'invoice_detail_get');
+      } catch {
+        invoiceAsyncDetail = null;
+      }
+    }
+    const evidence = Array.isArray(invoiceAsyncDetail?.evidence)
+      ? invoiceAsyncDetail.evidence
+      : (Array.isArray(manifest.evidence) ? manifest.evidence : []);
+    const timesheetEvidence = Array.isArray(invoiceAsyncDetail?.timesheet_evidence)
+      ? invoiceAsyncDetail.timesheet_evidence
+      : (Array.isArray(manifest.timesheet_evidence) ? manifest.timesheet_evidence : []);
+    const evidenceOther = Array.isArray(invoiceAsyncDetail?.evidence_other)
+      ? invoiceAsyncDetail.evidence_other
+      : (Array.isArray(manifest.evidence_other) ? manifest.evidence_other : []);
+    const evidenceReadiness = (
+      invoiceAsyncDetail?.document_readiness
+      && typeof invoiceAsyncDetail.document_readiness === 'object'
+    ) ? invoiceAsyncDetail.document_readiness : null;
+
     const header_snapshot_json =
       (manifest.header_snapshot_json && typeof manifest.header_snapshot_json === 'object')
         ? manifest.header_snapshot_json
@@ -147100,9 +147125,10 @@ async function handleGetInvoice(env, req, invoiceId) {
 
         attach_policy: manifest.attach_policy ?? null,
 
-        evidence: Array.isArray(manifest.evidence) ? manifest.evidence : [],
-        timesheet_evidence: Array.isArray(manifest.timesheet_evidence) ? manifest.timesheet_evidence : [],
-        evidence_other: Array.isArray(manifest.evidence_other) ? manifest.evidence_other : [],
+        evidence,
+        timesheet_evidence: timesheetEvidence,
+        evidence_other: evidenceOther,
+        evidence_readiness: evidenceReadiness,
 
         hr_source_rows_cache: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [],
         tsfin_external_source_rows: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [],
@@ -147130,9 +147156,10 @@ async function handleGetInvoice(env, req, invoiceId) {
 
       attach_policy: manifest.attach_policy ?? null,
 
-      evidence: Array.isArray(manifest.evidence) ? manifest.evidence : [],
-      timesheet_evidence: Array.isArray(manifest.timesheet_evidence) ? manifest.timesheet_evidence : [],
-      evidence_other: Array.isArray(manifest.evidence_other) ? manifest.evidence_other : [],
+      evidence,
+      timesheet_evidence: timesheetEvidence,
+      evidence_other: evidenceOther,
+      evidence_readiness: evidenceReadiness,
 
       hr_source_rows_cache: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [],
       tsfin_external_source_rows: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [],
