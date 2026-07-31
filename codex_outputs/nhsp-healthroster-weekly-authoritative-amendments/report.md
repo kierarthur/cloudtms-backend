@@ -2,8 +2,9 @@
 
 ## Independent-verification handover
 
-Date: 31/07/2026  
-Environment: TEST only  
+Date: 31/07/2026
+
+Environment: TEST only
 Implementation status: committed, pushed, installed and deployed
 
 ## Required verifier response
