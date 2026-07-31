@@ -2017,13 +2017,19 @@ async function handleViewDocument(
     const { r2_key, ...safeVersion } = version;
     return safeVersion;
   };
-  const loadReadyVersion = async (versionId, purpose) => {
+  const invoiceDraftTemplateVersion = entityType === 'INVOICE'
+    ? (templateVersion || 'invoice-professional-v2')
+    : templateVersion;
+  const loadReadyVersion = async (versionId, purpose, expectedTemplateVersion) => {
     const query = new URL(`${env.SUPABASE_URL}/rest/v1/invoice_document_versions`);
     if (versionId) query.searchParams.set('id', `eq.${versionId}`);
     query.searchParams.set('entity_type', `eq.${entityType}`);
     query.searchParams.set('entity_id', `eq.${entityId}`);
     query.searchParams.set('purpose', `eq.${purpose}`);
     query.searchParams.set('status', 'eq.READY');
+    if (expectedTemplateVersion) {
+      query.searchParams.set('template_version', `eq.${expectedTemplateVersion}`);
+    }
     query.searchParams.set('select', 'id,entity_type,entity_id,purpose,source_revision,template_version,r2_key,sha256,size_bytes,page_count,status,ready_at_utc,verified_at_utc');
     query.searchParams.set('order', 'ready_at_utc.desc.nullslast,id.desc');
     query.searchParams.set('limit', '1');
@@ -2365,7 +2371,11 @@ async function handleViewDocument(
     );
     if (UUID_PATTERN.test(previewVersionId)
         && String(header.document_state || detail?.document_state || '').toUpperCase() === 'READY') {
-      const version = await loadReadyVersion(previewVersionId, 'DRAFT_PREVIEW');
+      const version = await loadReadyVersion(
+        previewVersionId,
+        'DRAFT_PREVIEW',
+        invoiceDraftTemplateVersion
+      );
       if (version) {
         return jsonResponse({
           contract_version: INVOICE_VIEWER_CONTRACT,
@@ -2386,7 +2396,7 @@ async function handleViewDocument(
     [entityType === 'INVOICE' ? 'invoice_id' : 'timesheet_id']: entityId,
     purpose,
     priority_reason: priorityReason,
-    template_version: templateVersion,
+    template_version: invoiceDraftTemplateVersion,
     command_token: requestToken
   };
   const operationsValue = rpcValue(await deps.rpc('invoice_operation_start_batch', {
@@ -2397,7 +2407,11 @@ async function handleViewDocument(
   const result = operations[0] || {};
 
   if (result.accepted === true && result.reused_ready === true && result.document_version_id) {
-    const version = await loadReadyVersion(result.document_version_id, purpose);
+    const version = await loadReadyVersion(
+      result.document_version_id,
+      purpose,
+      purpose === 'DRAFT_PREVIEW' ? invoiceDraftTemplateVersion : undefined
+    );
     return version
       ? jsonResponse({
         contract_version: INVOICE_VIEWER_CONTRACT,

@@ -748,6 +748,7 @@ test('document view returns 200 only for an exact READY version', async () => {
     assert.equal(url.pathname, '/rest/v1/invoice_document_versions');
     assert.equal(url.searchParams.get('entity_type'), 'eq.INVOICE');
     assert.equal(url.searchParams.get('purpose'), 'eq.DRAFT_PREVIEW');
+    assert.equal(url.searchParams.get('template_version'), 'eq.invoice-professional-v2');
     return new Response(JSON.stringify([{
       id: '00000000-0000-4000-8000-000000000020',
       entity_type: 'INVOICE',
@@ -792,6 +793,73 @@ test('document view returns 200 only for an exact READY version', async () => {
     assert.equal(body.viewer_state, 'READY');
     assert.equal(body.document_version.sha256, 'a'.repeat(64));
     assert.equal(body.document_version.r2_key, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('draft invoice view does not reuse a READY preview from an older template', async () => {
+  const originalFetch = globalThis.fetch;
+  const invoiceId = '00000000-0000-4000-8000-000000000061';
+  const staleVersionId = '00000000-0000-4000-8000-000000000062';
+  const operationId = '00000000-0000-4000-8000-000000000063';
+  let startedCommand = null;
+  const background = [];
+  globalThis.fetch = async request => {
+    const url = new URL(
+      typeof request === 'string'
+        ? request
+        : (request instanceof URL ? request.href : request.url)
+    );
+    assert.equal(url.pathname, '/rest/v1/invoice_document_versions');
+    assert.equal(url.searchParams.get('id'), `eq.${staleVersionId}`);
+    assert.equal(url.searchParams.get('purpose'), 'eq.DRAFT_PREVIEW');
+    assert.equal(url.searchParams.get('template_version'), 'eq.invoice-professional-v2');
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+  try {
+    const response = await handleInvoiceAsyncHttpRequest(
+      new Request(`https://example.test/api/invoices/${invoiceId}/render`, {
+        method: 'POST',
+        headers: { 'idempotency-key': 'view-stale-template-command' },
+        body: '{}'
+      }),
+      v8Environment(),
+      { waitUntil(promise) { background.push(promise); } },
+      {
+        requireUser: async () => v8Actor(),
+        rpc: v8Rpc(async (name, args) => {
+          if (name === 'invoice_detail_get') {
+            return {
+              invoice: {
+                id: invoiceId,
+                status: 'DRAFT',
+                document_state: 'READY',
+                preview_document_version_id: staleVersionId
+              }
+            };
+          }
+          if (name === 'invoice_work_claim_batch') return [];
+          assert.equal(name, 'invoice_operation_start_batch');
+          startedCommand = args.p_commands[0];
+          return [{
+            accepted: true,
+            status: 'QUEUED',
+            operation_id: operationId
+          }];
+        })
+      }
+    );
+    const body = await response.json();
+    assert.equal(response.status, 202, JSON.stringify(body));
+    assert.equal(body.viewer_state, 'PREPARING');
+    assert.equal(body.operation_id, operationId);
+    assert.equal(startedCommand.command_type, 'VIEW_INVOICE_DOCUMENT');
+    assert.equal(startedCommand.template_version, 'invoice-professional-v2');
+    await Promise.all(background);
   } finally {
     globalThis.fetch = originalFetch;
   }
