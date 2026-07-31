@@ -672,6 +672,9 @@ declare
   v_operation public.import_apply_operations%rowtype;
   v_action text:=upper(btrim(coalesce(p_action,'')));
   v_units jsonb:='[]'::jsonb;
+  v_request_units jsonb:='[]'::jsonb;
+  v_applied_units jsonb:='[]'::jsonb;
+  v_policy_units jsonb:='[]'::jsonb;
   v_unit jsonb;
   v_balance jsonb;
   v_capability_token text;
@@ -721,12 +724,47 @@ begin
     from pg_temp.import_review_reconciliation_units_v1 u
     where cardinality(coalesce(p_action_ids,array[]::text[]))=0 or u.action_id=any(p_action_ids);
   else
-    v_units:=coalesce(v_operation.response_json#>'{request_envelope,reconciliation_units}',
-      v_operation.response_json->'reconciliation_units','[]'::jsonb);
+    v_request_units:=coalesce(v_operation.response_json#>'{request_envelope,reconciliation_units}','[]'::jsonb);
+    v_applied_units:=coalesce(v_operation.response_json->'reconciliation_units','[]'::jsonb);
+    v_policy_units:=coalesce(v_operation.response_json#>'{correction_operation_contract,correction_units}','[]'::jsonb);
     if cardinality(coalesce(p_action_ids,array[]::text[]))>0 then
-      select coalesce(jsonb_agg(u order by u->>'action_id'),'[]'::jsonb) into v_units
-      from jsonb_array_elements(v_units) u where u->>'action_id'=any(p_action_ids);
+      select coalesce(jsonb_agg(u order by u->>'action_id'),'[]'::jsonb) into v_request_units
+      from jsonb_array_elements(v_request_units) u where u->>'action_id'=any(p_action_ids);
+      select coalesce(jsonb_agg(u order by u->>'action_id'),'[]'::jsonb) into v_applied_units
+      from jsonb_array_elements(v_applied_units) u where u->>'action_id'=any(p_action_ids);
+      select coalesce(jsonb_agg(u order by u->>'action_id'),'[]'::jsonb) into v_policy_units
+      from jsonb_array_elements(v_policy_units) u where u->>'action_id'=any(p_action_ids);
     end if;
+    if exists(
+      select 1 from jsonb_array_elements(v_request_units) request
+      where request->>'route' in ('AMEND_PAID_UNINVOICED_SOURCE','AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')
+        and ((select count(*) from jsonb_array_elements(v_applied_units) applied where applied->>'action_id'=request->>'action_id')<>1
+          or (select count(*) from jsonb_array_elements(v_policy_units) policy where policy->>'action_id'=request->>'action_id')<>1)
+    ) then
+      raise exception 'IMPORT_REVIEW_RECONCILIATION_EVIDENCE_CONTRACT_INVALID' using errcode='40001';
+    end if;
+    select coalesce(jsonb_agg(
+      request
+      || case when applied is null then '{}'::jsonb else jsonb_build_object(
+          'correction_id',applied->>'correction_id','applied_member_ids',applied->'applied_member_ids',
+          'reversal_timesheet_id',applied->>'reversal_timesheet_id','replacement_timesheet_id',applied->>'replacement_timesheet_id',
+          'parent_timesheet_id',applied->>'parent_timesheet_id','repair_identity_mode',applied->>'repair_identity_mode',
+          'applied_result_fingerprint',applied->>'applied_result_fingerprint',
+          'reviewed_unit_fingerprint',applied->>'reviewed_unit_fingerprint','applied_reconciliation_fingerprint',applied->>'reconciliation_fingerprint',
+          'applied_timesheet_id',applied->>'applied_timesheet_id','rollover_mode',applied->>'rollover_mode',
+          'historical_paid_tsfin_id',applied->>'historical_paid_tsfin_id','current_shell_tsfin_id',applied->>'current_shell_tsfin_id',
+          'applied_intended_authorisation_action',applied->>'intended_authorisation_action') end
+      || case when policy is null then '{}'::jsonb else jsonb_build_object(
+          'operation_policy_envelope',policy->'policy_envelope',
+          'operation_policy_fingerprint',policy->>'policy_envelope_fingerprint',
+          'operation_policy_root_timesheet_id',policy->>'root_timesheet_id',
+          'operation_policy_source_row_key',policy->>'source_row_key',
+          'operation_policy_source_shift_id',policy->>'source_shift_id') end
+      order by request->>'action_id'),'[]'::jsonb)
+    into v_units
+    from jsonb_array_elements(v_request_units) request
+    left join lateral (select u applied from jsonb_array_elements(v_applied_units) u where u->>'action_id'=request->>'action_id' limit 1) a on true
+    left join lateral (select u policy from jsonb_array_elements(v_policy_units) u where u->>'action_id'=request->>'action_id' limit 1) p on true;
   end if;
   if jsonb_array_length(v_units)=0 then
     return jsonb_build_object('ok',true,'action',v_action,'idempotent',true,'unit_count',0,'timesheet_ids','[]'::jsonb);
@@ -746,10 +784,76 @@ begin
     left join public.import_review_action_outcomes outcome
       on outcome.operation_id=p_operation_id and outcome.action_id=u->>'action_id'
     where outcome.action_id is null
-       or u->>'unit_fingerprint' is distinct from public._import_review_hash_v1(concat_ws('|','unit-v1',
-         u->>'action_id',u->>'source_identity',u->>'route',u->>'reconciliation_fingerprint',outcome.evidence_fingerprint))
+       or u->>'unit_fingerprint' is distinct from public._import_review_hash_v1(concat_ws('|','unit-v2',
+         u->>'action_id',u->>'source_identity',u->>'source_shift_id',u->>'route',u->>'reconciliation_mode',
+         u->>'reconciliation_fingerprint',u->>'review_policy_basis_kind',u->>'review_policy_basis_fingerprint',
+         outcome.evidence_fingerprint))
   ) then
     raise exception 'IMPORT_REVIEW_RECONCILIATION_FINGERPRINT_MISMATCH' using errcode='40001';
+  end if;
+  if v_action<>'PREPARE' and exists(
+    select 1 from jsonb_array_elements(v_units) u
+    where u->>'route' in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT') and (
+      nullif(u->>'correction_id','') is null
+      or nullif(u->>'reviewed_unit_fingerprint','') is distinct from nullif(u->>'unit_fingerprint','')
+      or nullif(u->>'applied_reconciliation_fingerprint','') is distinct from nullif(u->>'reconciliation_fingerprint','')
+      or nullif(u->>'operation_policy_source_row_key','') is distinct from nullif(u->>'source_identity','')
+      or nullif(u->>'operation_policy_source_shift_id','') is distinct from nullif(u->>'source_shift_id','')
+      or nullif(u->>'operation_policy_root_timesheet_id','') is distinct from nullif(u->>'source_timesheet_id','')
+      or jsonb_typeof(u->'applied_member_ids')<>'array' or jsonb_array_length(u->'applied_member_ids')<>2
+      or coalesce(u->>'reversal_timesheet_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      or coalesce(u->>'replacement_timesheet_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      or u->>'reversal_timesheet_id'=u->>'replacement_timesheet_id'
+      or not (u->'applied_member_ids' @> jsonb_build_array(u->>'reversal_timesheet_id')
+        and u->'applied_member_ids' @> jsonb_build_array(u->>'replacement_timesheet_id'))
+      or u->>'applied_result_fingerprint' is distinct from encode(digest(convert_to(jsonb_build_object(
+        'correction_id',u->>'correction_id',
+        'reversal_timesheet_id',(u->>'reversal_timesheet_id')::uuid,
+        'replacement_timesheet_id',(u->>'replacement_timesheet_id')::uuid,
+        'M_active_member_ids',u->'applied_member_ids',
+        'applied_member_ids',u->'applied_member_ids',
+        'parent_timesheet_id',(u->>'parent_timesheet_id')::uuid,
+        'repair_identity_mode',u->>'repair_identity_mode',
+        'reviewed_unit_fingerprint',u->>'reviewed_unit_fingerprint',
+        'reconciliation_fingerprint',u->>'applied_reconciliation_fingerprint')::text,'UTF8'),'sha256'),'hex')
+      or jsonb_typeof(u->'operation_policy_envelope')<>'object'
+      or nullif(u->>'operation_policy_fingerprint','') is null
+      or u#>>'{operation_policy_envelope,envelope_fingerprint}' is distinct from u->>'operation_policy_fingerprint'
+      or encode(digest(convert_to((u->'operation_policy_envelope'-'envelope_fingerprint')::text,'UTF8'),'sha256'),'hex')
+        is distinct from u->>'operation_policy_fingerprint'
+    )
+  ) then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_EVIDENCE_CONTRACT_INVALID' using errcode='40001';
+  end if;
+  if v_action<>'PREPARE' and exists(
+    select 1 from jsonb_array_elements(v_units) u
+    where u->>'route'='AMEND_PAID_UNINVOICED_SOURCE' and (
+      nullif(u->>'reviewed_unit_fingerprint','') is distinct from nullif(u->>'unit_fingerprint','')
+      or nullif(u->>'applied_reconciliation_fingerprint','') is distinct from nullif(u->>'reconciliation_fingerprint','')
+      or nullif(u->>'applied_timesheet_id','') is distinct from nullif(u->>'source_timesheet_id','')
+      or nullif(u->>'applied_intended_authorisation_action','') is distinct from nullif(u->>'intended_authorisation_action','')
+      or coalesce(u->>'rollover_mode','') not in ('CREATED_CURRENT_OPERATION_SHELL','REUSED_COMPLETED_OPERATION_SHELL')
+      or coalesce(u->>'historical_paid_tsfin_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      or coalesce(u->>'current_shell_tsfin_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      or nullif(u->>'operation_policy_source_row_key','') is distinct from nullif(u->>'source_identity','')
+      or nullif(u->>'operation_policy_source_shift_id','') is distinct from nullif(u->>'source_shift_id','')
+      or nullif(u->>'operation_policy_root_timesheet_id','') is distinct from nullif(u->>'source_timesheet_id','')
+      or jsonb_typeof(u->'operation_policy_envelope')<>'object'
+      or nullif(u->>'operation_policy_fingerprint','') is null
+      or u#>>'{operation_policy_envelope,envelope_fingerprint}' is distinct from u->>'operation_policy_fingerprint'
+      or encode(digest(convert_to((u->'operation_policy_envelope'-'envelope_fingerprint')::text,'UTF8'),'sha256'),'hex')
+        is distinct from u->>'operation_policy_fingerprint'
+      or u->>'applied_result_fingerprint' is distinct from encode(digest(convert_to(jsonb_build_object(
+        'applied_timesheet_id',(u->>'applied_timesheet_id')::uuid,
+        'rollover_mode',u->>'rollover_mode',
+        'historical_paid_tsfin_id',(u->>'historical_paid_tsfin_id')::uuid,
+        'current_shell_tsfin_id',(u->>'current_shell_tsfin_id')::uuid,
+        'intended_authorisation_action',u->>'intended_authorisation_action',
+        'reviewed_unit_fingerprint',u->>'reviewed_unit_fingerprint',
+        'reconciliation_fingerprint',u->>'reconciliation_fingerprint')::text,'UTF8'),'sha256'),'hex')
+    )
+  ) then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_EVIDENCE_CONTRACT_INVALID' using errcode='40001';
   end if;
 
   if v_action='PREPARE' then
@@ -764,7 +868,7 @@ begin
     if exists(select 1 from jsonb_array_elements(v_units) u
       cross join lateral jsonb_array_elements_text(coalesce(u->'M_active_member_ids','[]'::jsonb)) x(value)
       join public.timesheets t on t.timesheet_id=x.value::uuid where t.archived_at_utc is not null) then
-      raise exception 'IMPORT_REVIEW_RECONCILIATION_ARCHIVED_MEMBER_EXCLUDED' using errcode='55000';
+      raise exception 'IMPORT_REVIEW_SELECTED_ACTION_STALE' using errcode='40001';
     end if;
     if cardinality(v_target_ids)>0 then
       v_capability_token:=encode(gen_random_bytes(32),'hex');
@@ -859,7 +963,14 @@ begin
       if v_member_count<>2 or not exists(select 1 from public.timesheets t where t.correction_id=v_unit->>'correction_id'
           and t.is_current and t.archived_at_utc is null and t.correction_kind='CHANGED_HOURS_REVERSAL')
         or not exists(select 1 from public.timesheets t where t.correction_id=v_unit->>'correction_id'
-          and t.is_current and t.archived_at_utc is null and t.correction_kind='CHANGED_HOURS_REPLACEMENT') then
+          and t.is_current and t.archived_at_utc is null and t.correction_kind='CHANGED_HOURS_REPLACEMENT')
+        or exists(select 1 from public.timesheets t where t.correction_id=v_unit->>'correction_id'
+          and t.is_current and t.archived_at_utc is null
+          and not (v_unit->'applied_member_ids' @> jsonb_build_array(t.timesheet_id::text)))
+        or not exists(select 1 from public.timesheets t where t.timesheet_id=(v_unit->>'reversal_timesheet_id')::uuid
+          and t.correction_id=v_unit->>'correction_id' and t.correction_kind='CHANGED_HOURS_REVERSAL' and t.is_current and t.archived_at_utc is null)
+        or not exists(select 1 from public.timesheets t where t.timesheet_id=(v_unit->>'replacement_timesheet_id')::uuid
+          and t.correction_id=v_unit->>'correction_id' and t.correction_kind='CHANGED_HOURS_REPLACEMENT' and t.is_current and t.archived_at_utc is null) then
         raise exception 'IMPORT_REVIEW_RECONCILIATION_MEMBER_SET_MISMATCH' using errcode='55000';
       end if;
       if exists(select 1 from public.timesheets t
@@ -896,9 +1007,11 @@ begin
       if exists(select 1 from public.timesheets t
         where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
           and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
-          and coalesce(t.candidate_hint_text#>>'{correction_financials_policy_envelope,envelope_fingerprint}','')
-            is distinct from coalesce(public._ctms_correction_policy_envelope_read_v1(t.timesheet_id)->>'envelope_fingerprint',''))
-        or (select count(distinct t.candidate_hint_text#>>'{correction_financials_policy_envelope,envelope_fingerprint}')
+          and (coalesce(public._ctms_correction_policy_envelope_read_v1(t.timesheet_id)->>'envelope_fingerprint','')
+            is distinct from coalesce(v_unit->>'operation_policy_fingerprint','')
+            or public._ctms_correction_policy_envelope_read_v1(t.timesheet_id)
+              is distinct from v_unit->'operation_policy_envelope'))
+        or (select count(distinct public._ctms_correction_policy_envelope_read_v1(t.timesheet_id)->>'envelope_fingerprint')
             from public.timesheets t where t.correction_id=v_unit->>'correction_id'
               and t.is_current and t.archived_at_utc is null
               and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'))<>1 then
@@ -973,8 +1086,10 @@ begin
           and coalesce((t.actual_schedule_json#>>'{0,break_mins}')::integer,0)=coalesce((v_unit#>>'{A_schedule_json,0,break_mins}')::integer,0)
           and t.actual_schedule_json @> jsonb_build_array(jsonb_build_object(
             'shift_id',v_unit->>'source_shift_id','external_row_key',v_unit->>'source_identity'))
-          and encode(digest(convert_to(coalesce(tf.policy_snapshot_json,'{}'::jsonb)::text,'UTF8'),'sha256'),'hex')
-            =v_unit->>'frozen_policy_fingerprint'
+          and (v_unit->>'route'<>'AMEND_PAID_UNINVOICED_SOURCE'
+            or coalesce(tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',
+              tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}')
+              =v_unit->>'operation_policy_fingerprint')
           and not coalesce(tf.is_stale,true) and not coalesce(tf.has_rate_issue,false) and not coalesce(tf.has_pay_channel_issue,false)
           and tf.processing_status in ('PENDING_AUTH'::public.ts_fin_processing_status_enum,
             'READY_FOR_HR'::public.ts_fin_processing_status_enum,'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum)

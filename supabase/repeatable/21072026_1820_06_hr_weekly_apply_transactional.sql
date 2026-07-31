@@ -58,6 +58,30 @@ declare
   v_general_authorise_timesheet_ids uuid[] := array[]::uuid[];
   v_reconciliation_transition jsonb := null;
   v_reconciliation_units jsonb := '[]'::jsonb;
+  v_paid_unit jsonb;
+  v_paid_timesheet_id uuid;
+  v_paid_intent text;
+  v_paid_current_count integer := 0;
+  v_paid_current_tf public.timesheets_financials%rowtype;
+  v_paid_preflight jsonb;
+  v_paid_rollover jsonb;
+  v_paid_mode text;
+  v_paid_historical_id uuid;
+  v_paid_shell_id uuid;
+  v_paid_applied jsonb;
+  v_paid_applied_timesheet_ids uuid[] := array[]::uuid[];
+  v_paid_current_contract jsonb;
+  v_paid_current_contract_fingerprint text;
+  v_paid_current_policy_unit jsonb;
+  v_paid_current_policy_count integer := 0;
+  v_paid_current_policy jsonb;
+  v_paid_origin_operation public.import_apply_operations%rowtype;
+  v_paid_origin_contract jsonb;
+  v_paid_origin_contract_fingerprint text;
+  v_paid_origin_policy_unit jsonb;
+  v_paid_origin_policy_count integer := 0;
+  v_paid_historical_tf public.timesheets_financials%rowtype;
+  v_paid_digest text;
 
   -- Phase 1 / 1.5 (MODE_B)
   v_phase1_result jsonb := null;
@@ -613,7 +637,7 @@ begin
         raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
       end if;
       select coalesce(array_agg(u.action_id order by u.action_id),array[]::text[]),
-        coalesce(array_agg(u.action_id order by u.action_id) filter(where u.route in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')),array[]::text[]),
+        coalesce(array_agg(u.action_id order by u.action_id) filter(where u.route in ('AMEND_PAID_UNINVOICED_SOURCE','AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')),array[]::text[]),
         coalesce(array_agg(u.source_identity order by u.source_identity) filter(where u.route in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')),array[]::text[])
       into v_reconciliation_action_ids,v_operation_bound_correction_action_ids,v_operation_bound_correction_keys
       from pg_temp.import_review_reconciliation_units_v1 u;
@@ -676,36 +700,6 @@ begin
           detail = v_changed_preflight::text;
       end if;
 
-      if exists (
-        select 1
-        from tmp_changed_sel cs
-        where cs.is_invoiced is false
-          and exists (
-            select 1 from public.timesheets_financials paid_tf
-            where paid_tf.timesheet_id = cs.timesheet_id
-              and paid_tf.paid_at_utc is not null
-          )
-          and not exists (
-            select 1 from public.timesheets_financials current_tf
-            where current_tf.timesheet_id = cs.timesheet_id
-              and current_tf.is_current = true
-              and current_tf.stale_reason = 'IMPORT_PAID_TSFIN_ROLLOVER_PENDING_CALCULATION'
-              and coalesce((current_tf.policy_snapshot_json->>'requires_frozen_correction_policy')::boolean,false) = true
-          )
-      ) then
-        raise exception using
-          message = 'PAID_UNINVOICED_ROLLOVER_REQUIRED',
-          errcode = 'P0001',
-          detail = jsonb_build_object(
-            'code','PAID_UNINVOICED_ROLLOVER_REQUIRED',
-            'required_path',jsonb_build_array(
-              'UNAUTHORISE','PAID_UNINVOICED_ROLLOVER',
-              'AMEND','RECALCULATE','REAUTHORISE'
-            ),
-            'invoice_policy_without_history','NOW',
-            'timesheet_ids',to_jsonb(v_changed_timesheet_ids)
-          )::text;
-      end if;
     end if;
 
     -- Mode B only: preserve the lifecycle state of authorised, mutable source
@@ -722,7 +716,10 @@ begin
       where cs.timesheet_id is not null
         and not (cs.external_row_key=any(coalesce(v_operation_bound_correction_keys,array[]::text[])))
         and cs.is_invoiced is false
-        and cs.is_paid is false
+        and (cs.is_paid is false or exists(select 1 from pg_temp.import_review_reconciliation_units_v1 paid_unit
+          where paid_unit.source_identity=cs.external_row_key
+            and paid_unit.route='AMEND_PAID_UNINVOICED_SOURCE'
+            and paid_unit.unit_json->>'intended_authorisation_action'='REAUTHORISE'))
         and (ts.authorised_at_server is not null or tf.authorised_at_utc is not null
           or cw.status='AUTHORISED'::public.contract_week_status_enum)
       union
@@ -766,6 +763,180 @@ begin
         'reauthorise_timesheet_count',cardinality(v_reauthorise_timesheet_ids)
       ));
     end if;
+
+    -- Execute the reviewed ordinary paid-but-uninvoiced route before source
+    -- truth is amended. Paid status alone never routes a source through phase 3.
+    for v_paid_unit in
+      select u.unit_json from pg_temp.import_review_reconciliation_units_v1 u
+      where u.route='AMEND_PAID_UNINVOICED_SOURCE'
+      order by u.source_timesheet_id
+    loop
+      v_paid_timesheet_id:=nullif(v_paid_unit->>'source_timesheet_id','')::uuid;
+      v_paid_intent:=v_paid_unit->>'intended_authorisation_action';
+      if v_paid_timesheet_id is null
+         or v_paid_intent not in ('REAUTHORISE','AUTHORISE','LEAVE_UNAUTHORISED') then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+      end if;
+
+      select operation_row.response_json#>'{correction_operation_contract}'
+      into v_paid_current_contract from public.import_apply_operations operation_row
+      where operation_row.id=v_review_operation_id;
+      v_paid_current_contract_fingerprint:=encode(extensions.digest(convert_to(
+        (v_paid_current_contract-'operation_contract_fingerprint')::text,'UTF8'),'sha256'),'hex');
+      if jsonb_typeof(v_paid_current_contract)<>'object'
+         or v_paid_current_contract->>'operation_contract_fingerprint' is distinct from v_paid_current_contract_fingerprint then
+        raise exception 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_POLICY_INVALID' using errcode='P0001';
+      end if;
+      select count(*)::integer,min(policy_unit::text)::jsonb
+      into v_paid_current_policy_count,v_paid_current_policy_unit
+      from jsonb_array_elements(coalesce(v_paid_current_contract->'correction_units','[]'::jsonb)) policy_unit
+      where policy_unit->>'action_id'=v_paid_unit->>'action_id'
+        and policy_unit->>'root_timesheet_id'=v_paid_timesheet_id::text
+        and policy_unit->>'source_row_key'=v_paid_unit->>'source_identity';
+      if v_paid_current_policy_count<>1
+         or jsonb_typeof(v_paid_current_policy_unit->'policy_envelope')<>'object' then
+        raise exception 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_POLICY_INVALID' using errcode='P0001';
+      end if;
+      v_paid_current_policy:=v_paid_current_policy_unit->'policy_envelope';
+
+      perform 1 from public.timesheets exact_source
+      where exact_source.timesheet_id=v_paid_timesheet_id
+        and exact_source.is_current and exact_source.archived_at_utc is null for update;
+      if not found then
+        raise exception 'IMPORT_REVIEW_SELECTED_ACTION_STALE' using errcode='40001';
+      end if;
+      perform 1 from public.timesheets_financials current_lock
+      where current_lock.timesheet_id=v_paid_timesheet_id and current_lock.is_current
+      order by current_lock.id for update;
+      select count(*)::integer into v_paid_current_count from public.timesheets_financials current_tf
+      where current_tf.timesheet_id=v_paid_timesheet_id and current_tf.is_current;
+      if v_paid_current_count<>1 then
+        raise exception 'IMPORT_REVIEW_SELECTED_ACTION_STALE' using errcode='40001';
+      end if;
+      select current_tf.* into v_paid_current_tf from public.timesheets_financials current_tf
+      where current_tf.timesheet_id=v_paid_timesheet_id and current_tf.is_current;
+
+      if v_paid_current_tf.paid_at_utc is not null then
+        v_paid_preflight:=public.import_timesheet_financial_preflight_v1(
+          array[v_paid_timesheet_id]::uuid[],'PAID_UNINVOICED_ROLLOVER',p_actor_user_id,
+          '{}'::jsonb,false,100);
+        if coalesce((v_paid_preflight->>'allowed')::boolean,false) is not true
+           or v_paid_preflight->>'required_path' is distinct from 'PAID_UNINVOICED_ROLLOVER'
+           or coalesce((v_paid_preflight->>'input_count')::integer,0)<>1
+           or coalesce((v_paid_preflight->>'member_count')::integer,0)<>1
+           or coalesce((v_paid_preflight->>'paid_count')::integer,0)<>1
+           or coalesce((v_paid_preflight->>'invoice_lined_count')::integer,0)<>0
+           or coalesce((v_paid_preflight->>'blocking_batch_count')::integer,0)<>0
+           or coalesce((v_paid_preflight->>'stale_tsfin_count')::integer,0)<>0
+           or jsonb_array_length(coalesce(v_paid_preflight->'errors','[]'::jsonb))<>0 then
+          raise exception 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_PREFLIGHT_INVALID' using errcode='P0001';
+        end if;
+        v_paid_rollover:=public.timesheet_paid_uninvoiced_rollover_v1(
+          v_paid_timesheet_id,p_actor_user_id,v_review_operation_id,v_paid_current_tf.id,
+          v_paid_preflight->>'preflight_fingerprint',v_now);
+        v_paid_historical_id:=nullif(v_paid_rollover->>'historical_paid_tsfin_id','')::uuid;
+        v_paid_shell_id:=nullif(v_paid_rollover->>'new_current_tsfin_id','')::uuid;
+        v_paid_mode:='CREATED_CURRENT_OPERATION_SHELL';
+        if coalesce((v_paid_rollover->>'ok')::boolean,false) is not true
+           or v_paid_historical_id is distinct from v_paid_current_tf.id
+           or v_paid_shell_id is null
+           or not exists(select 1 from public.timesheets_financials shell
+             where shell.id=v_paid_shell_id and shell.timesheet_id=v_paid_timesheet_id and shell.is_current
+               and shell.paid_at_utc is null and shell.processing_status='PENDING_AUTH'::public.ts_fin_processing_status_enum
+               and shell.stale_reason='IMPORT_PAID_TSFIN_ROLLOVER_PENDING_CALCULATION'
+               and coalesce((shell.policy_snapshot_json->>'requires_frozen_correction_policy')::boolean,false)
+               and shell.policy_snapshot_json->>'import_apply_operation_id'=v_review_operation_id::text
+               and shell.policy_snapshot_json->>'rollover_source_tsfin_id'=v_paid_historical_id::text)
+           or (select count(*) from public.timesheets_financials shell
+             where shell.timesheet_id=v_paid_timesheet_id and shell.is_current)<>1 then
+          raise exception 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_PREFLIGHT_INVALID' using errcode='P0001';
+        end if;
+      else
+        -- Reuse only a settled shell from a completed prior operation whose own
+        -- frozen contract and paid lineage prove it, then compare only stable
+        -- policy facts with this operation.
+        if v_paid_current_tf.locked_by_invoice_id is not null
+           or exists(select 1 from public.invoice_lines il where il.timesheet_id=v_paid_timesheet_id)
+           or v_paid_current_tf.authorised_at_utc is not null
+           or v_paid_current_tf.processing_status<>'PENDING_AUTH'::public.ts_fin_processing_status_enum
+           or coalesce(v_paid_current_tf.is_stale,false)
+           or v_paid_current_tf.stale_reason is not null
+           or not coalesce((v_paid_current_tf.policy_snapshot_json->>'requires_frozen_correction_policy')::boolean,false)
+         or coalesce(v_paid_current_tf.policy_snapshot_json->>'import_apply_operation_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+         or coalesce(v_paid_current_tf.policy_snapshot_json->>'rollover_source_tsfin_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           or nullif(v_paid_current_tf.policy_snapshot_json->>'rollover_source_paid_digest','') is null then
+          raise exception 'IMPORT_REVIEW_PAID_ROLLOVER_SHELL_INVALID' using errcode='P0001';
+        end if;
+        select origin.* into v_paid_origin_operation from public.import_apply_operations origin
+        where origin.id=(v_paid_current_tf.policy_snapshot_json->>'import_apply_operation_id')::uuid for update;
+        if not found or v_paid_origin_operation.state<>'COMPLETE' then
+          raise exception 'IMPORT_REVIEW_PAID_ROLLOVER_SHELL_ORIGIN_INCOMPLETE' using errcode='P0001';
+        end if;
+        v_paid_origin_contract:=v_paid_origin_operation.response_json#>'{correction_operation_contract}';
+        v_paid_origin_contract_fingerprint:=encode(extensions.digest(convert_to(
+          (v_paid_origin_contract-'operation_contract_fingerprint')::text,'UTF8'),'sha256'),'hex');
+        if jsonb_typeof(v_paid_origin_contract)<>'object'
+           or v_paid_origin_contract->>'operation_contract_fingerprint' is distinct from v_paid_origin_contract_fingerprint then
+          raise exception 'IMPORT_REVIEW_PAID_ROLLOVER_SHELL_INVALID' using errcode='P0001';
+        end if;
+        select count(*)::integer,min(origin_unit::text)::jsonb
+        into v_paid_origin_policy_count,v_paid_origin_policy_unit
+        from jsonb_array_elements(coalesce(v_paid_origin_contract->'correction_units','[]'::jsonb)) origin_unit
+        where origin_unit->>'root_timesheet_id'=v_paid_timesheet_id::text
+          and origin_unit->>'source_row_key'=v_paid_unit->>'source_identity';
+        if v_paid_origin_policy_count<>1
+           or v_paid_origin_policy_unit->'policy_envelope' is distinct from
+             v_paid_current_tf.policy_snapshot_json->'correction_financials_policy_envelope'
+           or v_paid_origin_policy_unit->>'policy_envelope_fingerprint' is distinct from
+             v_paid_current_tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint' then
+          raise exception 'IMPORT_REVIEW_PAID_ROLLOVER_SHELL_INVALID' using errcode='P0001';
+        end if;
+        select historical.* into v_paid_historical_tf from public.timesheets_financials historical
+        where historical.id=(v_paid_current_tf.policy_snapshot_json->>'rollover_source_tsfin_id')::uuid
+          and historical.timesheet_id=v_paid_timesheet_id and not historical.is_current
+          and historical.paid_at_utc is not null and historical.locked_by_invoice_id is null;
+        if not found then raise exception 'IMPORT_REVIEW_PAID_ROLLOVER_SHELL_INVALID' using errcode='P0001'; end if;
+        v_paid_digest:=encode(extensions.digest(convert_to(jsonb_build_object(
+          'id',v_paid_historical_tf.id::text,'timesheet_id',v_paid_historical_tf.timesheet_id::text,
+          'timesheet_version',v_paid_historical_tf.timesheet_version,'paid_at_utc',v_paid_historical_tf.paid_at_utc,
+          'paid_by_user_id',case when v_paid_historical_tf.paid_by_user_id is null then null else v_paid_historical_tf.paid_by_user_id::text end,
+          'payment_reference',v_paid_historical_tf.payment_reference,'total_hours',v_paid_historical_tf.total_hours,
+          'total_pay_ex_vat',v_paid_historical_tf.total_pay_ex_vat,'total_charge_ex_vat',v_paid_historical_tf.total_charge_ex_vat,
+          'pay_vat_rate_pct_snapshot',v_paid_historical_tf.pay_vat_rate_pct_snapshot,
+          'pay_vat_amount_snapshot',v_paid_historical_tf.pay_vat_amount_snapshot,
+          'pay_total_inc_vat_snapshot',v_paid_historical_tf.pay_total_inc_vat_snapshot,
+          'policy_snapshot_json',v_paid_historical_tf.policy_snapshot_json,'rate_source_refs_json',v_paid_historical_tf.rate_source_refs_json,
+          'actual_schedule_json',v_paid_historical_tf.actual_schedule_json)::text,'UTF8'),'sha256'),'hex');
+        if v_paid_digest is distinct from v_paid_current_tf.policy_snapshot_json->>'rollover_source_paid_digest' then
+          raise exception 'IMPORT_REVIEW_PAID_ROLLOVER_SHELL_INVALID' using errcode='P0001';
+        end if;
+        if v_paid_origin_contract->>'source_system' is distinct from v_paid_current_contract->>'source_system'
+           or v_paid_origin_policy_unit#>>'{policy_envelope,classification,source_shift_id}' is distinct from v_paid_current_policy#>>'{classification,source_shift_id}'
+           or v_paid_origin_policy_unit#>>'{policy_envelope,classification,source_row_key}' is distinct from v_paid_current_policy#>>'{classification,source_row_key}'
+           or v_paid_origin_policy_unit#>>'{policy_envelope,root_timesheet_id}' is distinct from v_paid_current_policy->>'root_timesheet_id'
+           or v_paid_origin_policy_unit#>>'{policy_envelope,replacement,leg_fingerprint}' is distinct from v_paid_current_policy#>>'{replacement,leg_fingerprint}'
+           or v_paid_origin_policy_unit#>>'{policy_envelope,replacement,tsfin_policy,tsfin_policy_fingerprint}' is distinct from v_paid_current_policy#>>'{replacement,tsfin_policy,tsfin_policy_fingerprint}'
+           or v_paid_origin_policy_unit#>>'{policy_envelope,replacement,invoice_policy,invoice_policy_fingerprint}' is distinct from v_paid_current_policy#>>'{replacement,invoice_policy,invoice_policy_fingerprint}'
+           or v_paid_origin_policy_unit#>>'{policy_envelope,replacement,invoice_policy,invoice_stream}' is distinct from v_paid_current_policy#>>'{replacement,invoice_policy,invoice_stream}' then
+          raise exception 'IMPORT_REVIEW_PAID_ROLLOVER_SHELL_POLICY_CHANGED' using errcode='P0001';
+        end if;
+        v_paid_historical_id:=v_paid_historical_tf.id;
+        v_paid_shell_id:=v_paid_current_tf.id;
+        v_paid_mode:='REUSED_COMPLETED_OPERATION_SHELL';
+      end if;
+
+      v_paid_applied:=jsonb_build_object(
+        'applied_timesheet_id',v_paid_timesheet_id,'rollover_mode',v_paid_mode,
+        'historical_paid_tsfin_id',v_paid_historical_id,'current_shell_tsfin_id',v_paid_shell_id,
+        'intended_authorisation_action',v_paid_intent,
+        'reviewed_unit_fingerprint',v_paid_unit->>'unit_fingerprint',
+        'reconciliation_fingerprint',v_paid_unit->>'reconciliation_fingerprint');
+      update pg_temp.import_review_reconciliation_units_v1 applied_unit
+      set unit_json=applied_unit.unit_json||v_paid_applied||jsonb_build_object(
+        'applied_result_fingerprint',encode(extensions.digest(convert_to(v_paid_applied::text,'UTF8'),'sha256'),'hex'))
+      where applied_unit.action_id=v_paid_unit->>'action_id';
+      v_paid_applied_timesheet_ids:=array_append(v_paid_applied_timesheet_ids,v_paid_timesheet_id);
+    end loop;
 
     v_mode_b_should_run_phase3 := (v_invoiced_changed_keys_count > 0);
 
@@ -2391,6 +2562,7 @@ begin
       a.timesheet_id=any(
         coalesce(v_protected_source_timesheet_ids,array[]::uuid[])
       )
+      and not (a.timesheet_id=any(coalesce(v_paid_applied_timesheet_ids,array[]::uuid[])))
     );
 
   -- Restore every previously-authorised mutable source and authorise every
@@ -2434,6 +2606,33 @@ begin
       raise exception 'IMPORT_REVIEW_APPLY_POSTCONDITION_FAILED' using errcode='55000',
         detail=jsonb_build_object('reason_code','CORRECTION_MEMBER_SET_INCOMPLETE')::text;
     end if;
+    if exists(select 1 from pg_temp.import_review_reconciliation_units_v1 u
+      where u.route='AMEND_PAID_UNINVOICED_SOURCE' and (
+        nullif(u.unit_json->>'applied_timesheet_id','')::uuid is distinct from u.source_timesheet_id
+        or nullif(u.unit_json->>'reviewed_unit_fingerprint','') is distinct from u.unit_fingerprint
+        or coalesce(u.unit_json->>'rollover_mode','') not in ('CREATED_CURRENT_OPERATION_SHELL','REUSED_COMPLETED_OPERATION_SHELL')
+        or coalesce(u.unit_json->>'historical_paid_tsfin_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        or coalesce(u.unit_json->>'current_shell_tsfin_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        or u.unit_json->>'applied_result_fingerprint' is distinct from encode(extensions.digest(convert_to(
+          jsonb_build_object(
+            'applied_timesheet_id',(u.unit_json->>'applied_timesheet_id')::uuid,
+            'rollover_mode',u.unit_json->>'rollover_mode',
+            'historical_paid_tsfin_id',(u.unit_json->>'historical_paid_tsfin_id')::uuid,
+            'current_shell_tsfin_id',(u.unit_json->>'current_shell_tsfin_id')::uuid,
+            'intended_authorisation_action',u.unit_json->>'intended_authorisation_action',
+            'reviewed_unit_fingerprint',u.unit_json->>'reviewed_unit_fingerprint',
+            'reconciliation_fingerprint',u.unit_json->>'reconciliation_fingerprint')::text,'UTF8'),'sha256'),'hex')
+        or not exists(select 1 from public.timesheets_financials historical
+          where historical.id=(u.unit_json->>'historical_paid_tsfin_id')::uuid
+            and historical.timesheet_id=u.source_timesheet_id and not historical.is_current
+            and historical.paid_at_utc is not null and historical.locked_by_invoice_id is null)
+        or not exists(select 1 from public.timesheets_financials shell
+          where shell.id=(u.unit_json->>'current_shell_tsfin_id')::uuid
+            and shell.timesheet_id=u.source_timesheet_id and shell.is_current and shell.paid_at_utc is null)
+      )) then
+      raise exception 'IMPORT_REVIEW_APPLY_POSTCONDITION_FAILED' using errcode='55000',
+        detail=jsonb_build_object('reason_code','PAID_SOURCE_ROLLOVER_RESULT_INVALID')::text;
+    end if;
     select coalesce(array_agg(distinct x.value::uuid order by x.value::uuid) filter (where x.value is not null),array[]::uuid[])
     into v_operation_bound_correction_timesheet_ids
     from pg_temp.import_review_reconciliation_units_v1 u
@@ -2460,6 +2659,24 @@ begin
     )) as timesheet_id
   ) eligible
   where eligible.timesheet_id is not null;
+  select coalesce(array_agg(distinct target_id order by target_id),array[]::uuid[])
+  into v_auto_authorise_timesheet_ids from (
+    select target_id from unnest(coalesce(v_auto_authorise_timesheet_ids,array[]::uuid[])) x(target_id)
+    where not (target_id=any(coalesce(v_paid_applied_timesheet_ids,array[]::uuid[])))
+    union all
+    select u.source_timesheet_id from pg_temp.import_review_reconciliation_units_v1 u
+    where u.route='AMEND_PAID_UNINVOICED_SOURCE'
+      and u.unit_json->>'intended_authorisation_action'='AUTHORISE'
+  ) reviewed_auto;
+  select coalesce(array_agg(distinct target_id order by target_id),array[]::uuid[])
+  into v_reauthorise_timesheet_ids from (
+    select target_id from unnest(coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])) x(target_id)
+    where not (target_id=any(coalesce(v_paid_applied_timesheet_ids,array[]::uuid[])))
+    union all
+    select u.source_timesheet_id from pg_temp.import_review_reconciliation_units_v1 u
+    where u.route='AMEND_PAID_UNINVOICED_SOURCE'
+      and u.unit_json->>'intended_authorisation_action'='REAUTHORISE'
+  ) reviewed_reauthorise;
   select coalesce(array_agg(x order by x),array[]::uuid[]) into v_general_authorise_timesheet_ids
   from unnest(coalesce(v_auto_authorise_timesheet_ids,array[]::uuid[])||coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])) x
   where not (x=any(coalesce(v_operation_bound_correction_timesheet_ids,array[]::uuid[])));

@@ -59,6 +59,10 @@ DECLARE
   v_operation_contract jsonb;
   v_operation_contract_fingerprint text;
   v_operation_unit jsonb;
+  v_request_unit jsonb;
+  v_request_unit_count integer := 0;
+  v_route text;
+  v_is_ordinary_source boolean := false;
   v_replay boolean := false;
   v_old_paid_digest text;
 BEGIN
@@ -151,24 +155,53 @@ BEGIN
             )::text;
   END IF;
 
-  v_chain := public.timesheet_correction_chain_scope_v1(
-    p_timesheet_id,
-    true,
-    32,
-    100
-  );
+  select count(*)::integer,min(request_unit::text)::jsonb
+  into v_request_unit_count,v_request_unit
+  from jsonb_array_elements(coalesce(
+    v_operation.response_json#>'{request_envelope,reconciliation_units}','[]'::jsonb
+  )) request_unit
+  where request_unit->>'source_timesheet_id'=p_timesheet_id::text
+     or coalesce(request_unit->'M_active_member_ids','[]'::jsonb) @> jsonb_build_array(p_timesheet_id);
+  if v_request_unit_count<>1
+     or v_request_unit->>'source_system' not in ('NHSP','HEALTHROSTER')
+     or nullif(v_request_unit->>'action_id','') is null
+     or nullif(v_request_unit->>'source_identity','') is null then
+    raise exception 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_OPERATION_UNIT_INVALID'
+      using errcode='P0001',detail=jsonb_build_object(
+        'operation_id',p_operation_id,'timesheet_id',p_timesheet_id,
+        'matching_unit_count',v_request_unit_count
+      )::text;
+  end if;
+  v_route:=v_request_unit->>'route';
+  v_is_ordinary_source:=v_route='AMEND_PAID_UNINVOICED_SOURCE';
 
-  IF COALESCE((v_chain ->> 'valid')::boolean, false) IS NOT TRUE THEN
-    RAISE EXCEPTION 'PAID_TSFIN_ROLLOVER_CHAIN_INVALID'
-      USING ERRCODE = 'P0001',
-            DETAIL = jsonb_build_object(
-              'chain', v_chain
-            )::text;
-  END IF;
+  if v_is_ordinary_source then
+    if jsonb_array_length(coalesce(v_request_unit->'B_effective_invoice_ids','[]'::jsonb))<>0
+       or jsonb_array_length(coalesce(v_request_unit->'B_effective_invoice_line_ids','[]'::jsonb))<>0
+       or coalesce((v_request_unit#>>'{B_hours,total_hours}')::numeric,0)<>0 then
+      raise exception 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_OPERATION_UNIT_INVALID'
+        using errcode='P0001';
+    end if;
+    v_root_timesheet_id:=p_timesheet_id;
+    v_chain:=jsonb_build_object('valid',true,'root_timesheet_id',p_timesheet_id,
+      'ordinary_source',true);
+  else
+    v_chain := public.timesheet_correction_chain_scope_v1(
+      p_timesheet_id,
+      true,
+      32,
+      100
+    );
 
-
-  v_root_timesheet_id :=
-    NULLIF(v_chain ->> 'root_timesheet_id', '')::uuid;
+    IF COALESCE((v_chain ->> 'valid')::boolean, false) IS NOT TRUE THEN
+      RAISE EXCEPTION 'PAID_TSFIN_ROLLOVER_CHAIN_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'chain', v_chain
+              )::text;
+    END IF;
+    v_root_timesheet_id :=NULLIF(v_chain ->> 'root_timesheet_id', '')::uuid;
+  end if;
   v_operation_contract:=v_operation.response_json#>'{correction_operation_contract}';
   if jsonb_typeof(v_operation_contract)<>'object'
      or v_operation_contract->>'schema_version'<>'IMPORT_CORRECTION_OPERATION_V2'
@@ -194,13 +227,20 @@ BEGIN
       then v_operation_contract->'correction_units'
       else '[]'::jsonb end
   ) unit
-  where unit->>'root_timesheet_id'=v_root_timesheet_id::text;
+  where unit->>'action_id'=v_request_unit->>'action_id'
+    and unit->>'root_timesheet_id'=v_root_timesheet_id::text;
   if v_operation_unit_count<>1 then
     raise exception 'PAID_TSFIN_ROLLOVER_OPERATION_UNIT_NOT_UNIQUE'
       using errcode='P0001',detail=jsonb_build_object(
         'operation_id',p_operation_id,'root_timesheet_id',v_root_timesheet_id,
         'matching_unit_count',v_operation_unit_count
       )::text;
+  end if;
+  if v_operation_unit->>'source_row_key' is distinct from v_request_unit->>'source_identity'
+     or nullif(v_operation_unit->>'source_shift_id','') is distinct from nullif(v_request_unit->>'source_shift_id','')
+     or v_operation_contract->>'source_system' is distinct from v_request_unit->>'source_system'
+     or v_operation_unit#>>'{policy_envelope,classification,source_system}' is distinct from v_request_unit->>'source_system' then
+    raise exception 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_POLICY_INVALID' using errcode='P0001';
   end if;
   v_correction_financials_policy_envelope:=v_operation_unit->'policy_envelope';
   v_correction_financials_policy_envelope_fingerprint := NULLIF(
@@ -218,7 +258,9 @@ BEGIN
      OR v_operation_unit->>'policy_envelope_fingerprint'
         IS DISTINCT FROM v_correction_financials_policy_envelope_fingerprint
      OR coalesce((v_replacement_policy->>'applicable')::boolean,false) IS NOT TRUE THEN
-    RAISE EXCEPTION 'PAID_TSFIN_ROLLOVER_POLICY_ENVELOPE_REQUIRED'
+    RAISE EXCEPTION '%',case when v_is_ordinary_source
+        then 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_POLICY_INVALID'
+        else 'PAID_TSFIN_ROLLOVER_POLICY_ENVELOPE_REQUIRED' end
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
               'root_timesheet_id', v_root_timesheet_id::text,
@@ -349,7 +391,7 @@ BEGIN
     ARRAY[p_timesheet_id]::uuid[],
     'PAID_UNINVOICED_ROLLOVER',
     p_actor_user_id,
-    jsonb_build_object(
+    case when v_is_ordinary_source then '{}'::jsonb else jsonb_build_object(
       'chain_fingerprints', jsonb_build_object(
         v_root_timesheet_id::text,
         v_chain ->> 'chain_fingerprint'
@@ -358,13 +400,15 @@ BEGIN
         v_root_timesheet_id::text,
         v_correction_financials_policy_envelope_fingerprint
       )
-    ),
+    ) end,
     false,
     100
   );
 
   IF COALESCE((v_preflight ->> 'allowed')::boolean, false) IS NOT TRUE THEN
-    RAISE EXCEPTION 'PAID_TSFIN_ROLLOVER_PREFLIGHT_BLOCKED'
+    RAISE EXCEPTION '%',case when v_is_ordinary_source
+        then 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_PREFLIGHT_INVALID'
+        else 'PAID_TSFIN_ROLLOVER_PREFLIGHT_BLOCKED' end
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
               'preflight', v_preflight
@@ -382,6 +426,24 @@ BEGIN
                 v_preflight ->> 'preflight_fingerprint'
             )::text;
   END IF;
+
+  if v_is_ordinary_source and (
+       v_preflight->>'required_path' is distinct from 'PAID_UNINVOICED_ROLLOVER'
+       or coalesce((v_preflight->>'input_count')::integer,0)<>1
+       or coalesce((v_preflight->>'member_count')::integer,0)<>1
+       or coalesce((v_preflight->>'paid_count')::integer,0)<>1
+       or coalesce((v_preflight->>'invoice_lined_count')::integer,0)<>0
+       or coalesce((v_preflight->>'blocking_batch_count')::integer,0)<>0
+       or coalesce((v_preflight->>'stale_tsfin_count')::integer,0)<>0
+       or jsonb_array_length(coalesce(v_preflight->'errors','[]'::jsonb))<>0
+       or (select count(*) from jsonb_array_elements(coalesce(v_preflight->'members','[]'::jsonb)) member
+           where member->>'timesheet_id'=p_timesheet_id::text
+             and member->>'current_tsfin_id'=p_expected_current_tsfin_id::text
+             and coalesce((member->>'paid')::boolean,false)
+             and not coalesce((member->>'invoice_lined')::boolean,false))<>1
+     ) then
+    raise exception 'PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_PREFLIGHT_INVALID' using errcode='P0001';
+  end if;
 
   v_old_paid_digest := encode(
     extensions.digest(
@@ -494,6 +556,10 @@ BEGIN
     v_old_tsfin.pay_method,
     jsonb_build_object(
       'import_apply_operation_id', p_operation_id::text,
+      'import_authoritative_route',v_route,
+      'import_authoritative_source_system',v_request_unit->>'source_system',
+      'import_authoritative_source_identity',v_request_unit->>'source_identity',
+      'import_authoritative_unit_fingerprint',v_request_unit->>'unit_fingerprint',
       'rollover_source_tsfin_id', v_old_tsfin.id::text,
       'rollover_source_paid_digest', v_old_paid_digest,
       'correction_financials_policy_envelope', v_correction_financials_policy_envelope,
@@ -596,7 +662,8 @@ BEGIN
       'new_current_processing_status',
         v_new_tsfin.processing_status::text,
       'correction_financials_policy_envelope_fingerprint',
-        v_correction_financials_policy_envelope_fingerprint
+        v_correction_financials_policy_envelope_fingerprint,
+      'import_authoritative_route',v_route
     ),
     'timesheet_financials',
     v_new_tsfin.id::text,
@@ -629,6 +696,8 @@ BEGIN
     'requires_frozen_correction_policy', true,
     'requires_calculation', true,
     'requires_reauthorisation', true
+    ,'import_authoritative_route',v_route
+    ,'ordinary_source',v_is_ordinary_source
   );
 END;
 $function$;

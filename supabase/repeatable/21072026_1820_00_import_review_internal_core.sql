@@ -320,25 +320,33 @@ begin
         'B_standard_schedule_json',coalesce(d.summary_json->'B_standard_schedule_json','[]'::jsonb),
         'B_invoice_fingerprint',d.summary_json->>'effective_invoice_fingerprint',
         'M_active_member_ids',coalesce(d.summary_json->'active_mutable_member_ids','[]'::jsonb),
-        'M_missing_roles',coalesce(d.summary_json->'missing_mutable_roles','[]'::jsonb),
+        'M_missing_roles',coalesce(d.summary_json->'physically_missing_mutable_roles',d.summary_json->'missing_mutable_roles','[]'::jsonb),
         'M_hours',d.summary_json->'M_hours','M_fingerprint',d.summary_json->>'mutable_generation_fingerprint',
         'A_schedule_json',d.summary_json->'A_schedule_json','A_hours',d.summary_json->'A_hours',
         'A_evidence_fingerprint',d.summary_json->>'authoritative_evidence_fingerprint',
-        'archived_timesheet_ids',coalesce(d.summary_json->'archived_timesheet_ids','[]'::jsonb),
+        'archived_timesheet_ids',coalesce(d.summary_json->'archived_history_timesheet_ids',d.summary_json->'archived_timesheet_ids','[]'::jsonb),
+        'archived_history_roles',coalesce(d.summary_json->'archived_history_roles','[]'::jsonb),
         'historical_missing_timesheet_ids',coalesce(d.summary_json->'historical_missing_timesheet_ids','[]'::jsonb),
-        'correction_id',d.summary_json->>'correction_id',
+        'reviewed_existing_correction_id',coalesce(d.summary_json->>'reviewed_existing_correction_id',d.summary_json->>'correction_id'),
+        'reviewed_existing_member_ids',coalesce(d.summary_json->'active_mutable_member_ids','[]'::jsonb),
+        'repair_identity_mode',d.summary_json->>'repair_identity_mode',
+        'reversal_repair_required',coalesce((d.summary_json->>'reversal_repair_required')::boolean,false),
+        'replacement_repair_required',coalesce((d.summary_json->>'replacement_repair_required')::boolean,false),
         'expected_roles',case when d.summary_json->>'amendment_route' in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')
           then jsonb_build_array('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT') else '[]'::jsonb end,
         'parent_timesheet_id',coalesce(
           nullif(d.summary_json->>'active_mutable_parent_timesheet_id','')::uuid,
           d.timesheet_id
         ),
-        'frozen_policy_fingerprint',coalesce(d.summary_json->>'B_policy_fingerprint',d.summary_json->>'authoritative_evidence_fingerprint'),
+        'review_policy_basis_kind',d.summary_json->>'review_policy_basis_kind',
+        'review_policy_basis_fingerprint',d.summary_json->>'review_policy_basis_fingerprint',
         'intended_authorisation_action',d.summary_json->>'intended_authorisation_action',
         'financial_validation_mode',d.summary_json->>'financial_validation_mode',
         'reconciliation_fingerprint',d.summary_json->>'reconciliation_fingerprint',
-        'unit_fingerprint',public._import_review_hash_v1(concat_ws('|','unit-v1',d.action_id,d.source_identity,
-          d.summary_json->>'amendment_route',d.summary_json->>'reconciliation_fingerprint',d.evidence_fingerprint))
+        'unit_fingerprint',public._import_review_hash_v1(concat_ws('|','unit-v2',d.action_id,d.source_identity,
+          d.summary_json->>'existing_shift_id',d.summary_json->>'amendment_route',d.summary_json->>'reconciliation_mode',
+          d.summary_json->>'reconciliation_fingerprint',d.summary_json->>'review_policy_basis_kind',
+          d.summary_json->>'review_policy_basis_fingerprint',d.evidence_fingerprint))
       ) unit_json
     from public.import_review_decisions d
     where d.import_id=p_import_id and d.is_current and d.selected and d.selectable
@@ -717,9 +725,28 @@ declare
   v_b_policy_fingerprint text;
   v_effective_fingerprint text;
   v_line_evidence jsonb:='[]'::jsonb;
+  v_ignored_nonhours_line_ids uuid[]:=array[]::uuid[];
+  v_generation_role_evidence jsonb:='[]'::jsonb;
+  v_fully_invoiced_generation_ids text[]:=array[]::text[];
+  v_partial_generation_ids text[]:=array[]::text[];
+  v_mutable_generation_ids text[]:=array[]::text[];
+  v_archived_history_roles jsonb:='[]'::jsonb;
+  v_role_evidence_conflicts jsonb:='[]'::jsonb;
+  v_role_evidence_fingerprint text;
+  v_repair_identity_mode text;
+  v_reversal_repair_required boolean:=false;
+  v_replacement_repair_required boolean:=false;
   v_line record;
-  v_tf record;
+  v_original_line public.invoice_lines%rowtype;
+  v_tf public.timesheets_financials%rowtype;
+  v_original_tf public.timesheets_financials%rowtype;
   v_seg jsonb;
+  v_original_seg jsonb;
+  v_line_type text;
+  v_original_line_type text;
+  v_is_weekly_hours boolean:=false;
+  v_is_separable_nonhours boolean:=false;
+  v_original_line_id uuid;
   v_seg_count integer:=0;
   v_matching_seg_count integer:=0;
   v_single_source boolean:=false;
@@ -727,10 +754,12 @@ declare
   v_scope_unprovable boolean:=false;
   v_credit_ambiguous boolean:=false;
   v_stream_conflict boolean:=false;
-  v_archived_active_conflict boolean:=false;
   v_archived_invoice_conflict boolean:=false;
   v_partial_invoice_state boolean:=false;
   v_active_invoice_activity boolean:=false;
+  v_role_partial_invoice_state boolean:=false;
+  v_role_active_invoice_activity boolean:=false;
+  v_role_scope_unprovable boolean:=false;
   v_paid_mutable_state boolean:=false;
   v_mutable_correction_id text;
   v_mutable_member_ids uuid[]:=array[]::uuid[];
@@ -915,6 +944,19 @@ begin
     where tf.timesheet_id=v_source_timesheet_id and tf.is_current
     order by tf.computed_at_utc desc nulls last,tf.id desc limit 1;
     v_line_evidence:='[]'::jsonb;
+    v_ignored_nonhours_line_ids:=array[]::uuid[];
+    v_generation_role_evidence:='[]'::jsonb;
+    v_fully_invoiced_generation_ids:=array[]::text[];
+    v_partial_generation_ids:=array[]::text[];
+    v_mutable_generation_ids:=array[]::text[];
+    v_archived_history_roles:='[]'::jsonb;
+    v_role_evidence_conflicts:='[]'::jsonb;
+    v_repair_identity_mode:=null;
+    v_reversal_repair_required:=false;
+    v_replacement_repair_required:=false;
+    v_role_partial_invoice_state:=false;
+    v_role_active_invoice_activity:=false;
+    v_role_scope_unprovable:=false;
     v_scope_unprovable:=false; v_credit_ambiguous:=false; v_stream_conflict:=false;
     v_archived_invoice_conflict:=false; v_active_invoice_activity:=false;
 
@@ -957,27 +999,12 @@ begin
       from scoped s join public.invoice_lines il on il.id=s.id join public.invoices i on i.id=il.invoice_id
       order by i.issued_at_utc nulls last,il.id
     loop
-      if v_line.invoice_status='DRAFT' or v_line.issued_at_utc is null
-         or v_line.active_document_operation_id is not null or v_line.active_issue_operation_id is not null
-         or upper(coalesce(v_line.issue_state,'')) not in ('','IDLE','COMPLETE','COMPLETED','ISSUED') then
-        v_active_invoice_activity:=true;
-      end if;
-      if v_line.invoice_status not in ('ISSUED','PAID','ON_HOLD') or v_line.issued_at_utc is null then
-        continue;
-      end if;
-      if v_line.invoice_type='CREDIT_NOTE' and (
-        select count(*) from public.invoice_lines other_credit
-        join public.invoices other_credit_invoice on other_credit_invoice.id=other_credit.invoice_id
-        where coalesce(other_credit.meta_json->>'original_invoice_line_id',other_credit.meta_json->>'credit_of_line_id','')
-          =coalesce(v_line.meta_json->>'original_invoice_line_id',v_line.meta_json->>'credit_of_line_id','')
-          and other_credit_invoice.type='CREDIT_NOTE' and other_credit_invoice.status in ('ISSUED','PAID','ON_HOLD')
-          and other_credit_invoice.issued_at_utc is not null
-      )>1 then
-        v_credit_ambiguous:=true;
-      end if;
+      -- Archived rows are audit-only.  They cannot contribute to the current
+      -- source balance or make an otherwise repairable generation block.
       if v_line.timesheet_id=any(v_archived_ids)
-         or (coalesce(v_line.meta_json->>'timesheet_id','')~*v_uuid_re and (v_line.meta_json->>'timesheet_id')::uuid=any(v_archived_ids)) then
-        v_archived_invoice_conflict:=true;
+         or (coalesce(v_line.meta_json->>'timesheet_id','')~*v_uuid_re
+           and (v_line.meta_json->>'timesheet_id')::uuid=any(v_archived_ids)) then
+        continue;
       end if;
 
       v_tf:=null; v_seg:=null; v_seg_count:=0; v_matching_seg_count:=0;
@@ -996,6 +1023,75 @@ begin
         into v_seg_count,v_matching_seg_count,v_seg
         from jsonb_array_elements(case when jsonb_typeof(v_tf.invoice_breakdown_json->'segments')='array' then v_tf.invoice_breakdown_json->'segments' else '[]'::jsonb end) seg;
       end if;
+
+      v_original_line:=null;
+      v_original_tf:=null;
+      v_original_seg:=null;
+      v_original_line_id:=null;
+      if v_line.invoice_type='CREDIT_NOTE' then
+        if coalesce(v_line.meta_json->>'original_invoice_line_id',v_line.meta_json->>'credit_of_line_id','')~*v_uuid_re then
+          v_original_line_id:=coalesce(v_line.meta_json->>'original_invoice_line_id',v_line.meta_json->>'credit_of_line_id')::uuid;
+          select original.* into v_original_line from public.invoice_lines original where original.id=v_original_line_id;
+        end if;
+        if v_original_line.id is null then
+          v_scope_unprovable:=true;
+          continue;
+        end if;
+        if coalesce(v_original_line.meta_json->>'tsfin_id','')~*v_uuid_re then
+          select tf.* into v_original_tf from public.timesheets_financials tf where tf.id=(v_original_line.meta_json->>'tsfin_id')::uuid;
+        elsif v_original_line.timesheet_id is not null then
+          select tf.* into v_original_tf from public.timesheets_financials tf
+          where tf.timesheet_id=v_original_line.timesheet_id
+          order by case when tf.is_current then 0 else 1 end,tf.computed_at_utc desc nulls last,tf.id desc limit 1;
+        end if;
+        if v_original_tf.id is not null then
+          select seg into v_original_seg
+          from jsonb_array_elements(case when jsonb_typeof(v_original_tf.invoice_breakdown_json->'segments')='array'
+            then v_original_tf.invoice_breakdown_json->'segments' else '[]'::jsonb end) seg
+          where seg->>'nhsp_shift_id'=v_source_shift_id::text or seg->>'shift_id'=v_source_shift_id::text or seg->>'external_row_key'=v_external_row_key
+          order by seg::text limit 1;
+        end if;
+      end if;
+
+      v_line_type:=upper(nullif(btrim(coalesce(v_line.meta_json->>'line_type','')),''));
+      v_original_line_type:=upper(nullif(btrim(coalesce(v_original_line.meta_json->>'line_type','')),''));
+      v_is_separable_nonhours:=coalesce(case when v_line.invoice_type='CREDIT_NOTE' then v_original_line_type else v_line_type end,'')
+        ~ '^(EXPENSE(_.*)?|MILEAGE|TRAVEL|ACCOMMODATION|REIMBURSEMENT|ADDITION)$';
+      if v_is_separable_nonhours then
+        v_ignored_nonhours_line_ids:=array_append(v_ignored_nonhours_line_ids,v_line.id);
+        continue;
+      end if;
+      v_is_weekly_hours:=coalesce(case when v_line.invoice_type='CREDIT_NOTE' then v_original_line_type else v_line_type end,'')='HOURS_WEEKLY';
+      if not v_is_weekly_hours then
+        -- Legacy lines are acceptable only when a single frozen source segment
+        -- proves the exact Weekly component for this shift.
+        v_is_weekly_hours:=case when v_line.invoice_type='CREDIT_NOTE'
+          then v_original_seg is not null
+          else v_matching_seg_count=1 end;
+      end if;
+      if not v_is_weekly_hours then
+        v_scope_unprovable:=true;
+        continue;
+      end if;
+
+      if v_line.invoice_status='DRAFT' or v_line.issued_at_utc is null
+         or v_line.active_document_operation_id is not null or v_line.active_issue_operation_id is not null
+         or upper(coalesce(v_line.issue_state,'')) not in ('','IDLE','COMPLETE','COMPLETED','ISSUED') then
+        v_active_invoice_activity:=true;
+      end if;
+      if v_line.invoice_status not in ('ISSUED','PAID','ON_HOLD') or v_line.issued_at_utc is null then
+        continue;
+      end if;
+      if v_line.invoice_type='CREDIT_NOTE' and (
+        select count(*) from public.invoice_lines other_credit
+        join public.invoices other_credit_invoice on other_credit_invoice.id=other_credit.invoice_id
+        where coalesce(other_credit.meta_json->>'original_invoice_line_id',other_credit.meta_json->>'credit_of_line_id','')
+          =coalesce(v_line.meta_json->>'original_invoice_line_id',v_line.meta_json->>'credit_of_line_id','')
+          and other_credit_invoice.type='CREDIT_NOTE' and other_credit_invoice.status in ('ISSUED','PAID','ON_HOLD')
+          and other_credit_invoice.issued_at_utc is not null
+      )>1 then
+        v_credit_ambiguous:=true;
+      end if;
       v_single_source:=v_matching_seg_count=1 and v_seg_count=1;
       if not v_single_source and v_line.timesheet_id is not null then
         select jsonb_typeof(t.actual_schedule_json)='array' and jsonb_array_length(t.actual_schedule_json)=1
@@ -1003,17 +1099,42 @@ begin
         into v_single_source from public.timesheets t where t.timesheet_id=v_line.timesheet_id;
         v_single_source:=coalesce(v_single_source,false);
       end if;
-      v_line_scope_proven:=v_single_source or v_matching_seg_count=1;
-      if not v_line_scope_proven or (v_line.invoice_type='CREDIT_NOTE' and not v_single_source) then
+      v_line_scope_proven:=case when v_line.invoice_type='CREDIT_NOTE'
+        then v_original_seg is not null or coalesce(v_original_line.timesheet_id=any(v_hist_ids),false)
+        else v_single_source or v_matching_seg_count=1 end;
+      if not v_line_scope_proven or (v_line.invoice_type='CREDIT_NOTE' and v_original_seg is null
+          and not coalesce(v_original_line.timesheet_id=any(v_hist_ids),false)) then
         v_scope_unprovable:=true;
         continue;
       end if;
-      if v_tf.id is not null and (case when upper(coalesce(v_tf.basis::text,'')) in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT') then 'SELF_BILL' else 'NORMAL' end)<>v_invoice_stream then
+      if (v_line.invoice_type<>'CREDIT_NOTE' and v_tf.id is not null
+            and (case when upper(coalesce(v_tf.basis::text,'')) in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT') then 'SELF_BILL' else 'NORMAL' end)<>v_invoice_stream)
+         or (v_line.invoice_type='CREDIT_NOTE' and v_original_tf.id is not null
+            and (case when upper(coalesce(v_original_tf.basis::text,'')) in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT') then 'SELF_BILL' else 'NORMAL' end)<>v_invoice_stream) then
         v_stream_conflict:=true;
         continue;
       end if;
 
-      if v_single_source then
+      if v_line.invoice_type='CREDIT_NOTE' then
+        -- Credit financials are already signed.  Hours are reconstructed from
+        -- the exact original frozen Weekly component and negated once.
+        if v_original_seg is not null then
+          v_component_day:=-coalesce((v_original_seg->>'hours_day')::numeric,0);
+          v_component_night:=-coalesce((v_original_seg->>'hours_night')::numeric,0);
+          v_component_sat:=-coalesce((v_original_seg->>'hours_sat')::numeric,0);
+          v_component_sun:=-coalesce((v_original_seg->>'hours_sun')::numeric,0);
+          v_component_bh:=-coalesce((v_original_seg->>'hours_bh')::numeric,0);
+        else
+          v_component_day:=-coalesce(v_original_line.hours_day,0);
+          v_component_night:=-coalesce(v_original_line.hours_night,0);
+          v_component_sat:=-coalesce(v_original_line.hours_sat,0);
+          v_component_sun:=-coalesce(v_original_line.hours_sun,0);
+          v_component_bh:=-coalesce(v_original_line.hours_bh,0);
+        end if;
+        v_component_pay:=coalesce(v_line.total_pay_ex_vat,0);
+        v_component_charge:=coalesce(v_line.total_charge_ex_vat,0);
+        v_component_margin:=coalesce(v_line.margin_ex_vat,v_component_charge-v_component_pay);
+      elsif v_single_source then
         v_component_day:=coalesce(v_line.hours_day,0); v_component_night:=coalesce(v_line.hours_night,0);
         v_component_sat:=coalesce(v_line.hours_sat,0); v_component_sun:=coalesce(v_line.hours_sun,0); v_component_bh:=coalesce(v_line.hours_bh,0);
         v_component_pay:=coalesce(v_line.total_pay_ex_vat,0); v_component_charge:=coalesce(v_line.total_charge_ex_vat,0); v_component_margin:=coalesce(v_line.margin_ex_vat,v_component_charge-v_component_pay);
@@ -1051,58 +1172,150 @@ begin
     select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_credit_line_ids from unnest(v_credit_line_ids) x;
     v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v1',v_source_identity,v_line_evidence::text,v_b_day,v_b_night,v_b_sat,v_b_sun,v_b_bh,v_b_pay,v_b_charge,v_b_margin),'UTF8'),'sha256'),'hex');
 
-    v_archived_active_conflict:=exists(
-      select 1 from public.timesheets a join public.timesheets b on b.correction_id=a.correction_id
-      where a.timesheet_id=any(v_hist_ids) and b.timesheet_id=any(v_hist_ids)
-        and a.correction_id is not null and a.archived_at_utc is not null
-        and b.is_current and b.archived_at_utc is null
-    );
-    v_partial_invoice_state:=exists(
-      with units as (
-        select t.correction_id,
-          count(*) filter(where t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')) roles,
-          count(*) filter(where exists(select 1 from public.invoice_lines il join public.invoices i on i.id=il.invoice_id
-            where (il.timesheet_id=t.timesheet_id or il.meta_json->>'timesheet_id'=t.timesheet_id::text)
-              and i.status in ('ISSUED','PAID','ON_HOLD') and i.issued_at_utc is not null)) effective_roles,
-          count(*) filter(where exists(select 1 from public.invoice_lines il join public.invoices i on i.id=il.invoice_id
-            where (il.timesheet_id=t.timesheet_id or il.meta_json->>'timesheet_id'=t.timesheet_id::text)
-              and (i.status='DRAFT' or i.issued_at_utc is null))) draft_roles,
-          count(*) filter(where tf.locked_by_invoice_id is not null or upper(coalesce(cw.status::text,''))='INVOICED'
-            or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(tf.invoice_breakdown_json->'segments')='array' then tf.invoice_breakdown_json->'segments' else '[]'::jsonb end) seg
-              where nullif(seg->>'invoice_locked_invoice_id','') is not null)) locked_roles
-        from public.timesheets t
-        left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
-        left join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id
-        where t.timesheet_id=any(v_hist_ids) and t.correction_id is not null
+    -- Reconstruct correction roles from durable applied/audit identity first,
+    -- then classify invoice state independently from surviving live rows.  A
+    -- deleted live row therefore cannot turn a fully invoiced generation into
+    -- a false partial, and an archived row is audit-only.
+    with operation_units as (
+      select op.id operation_id,coalesce(op.committed_at_utc,op.updated_at_utc,op.created_at_utc) evidence_at,u
+      from public.import_apply_operations op
+      cross join lateral jsonb_array_elements(coalesce(op.response_json->'reconciliation_units','[]'::jsonb)) u
+      where op.import_id=any(v_import_ids)
+        and (u->>'source_identity'=v_source_identity or u->>'source_shift_id'=v_source_shift_id::text)
+    ), correction_seed as (
+      select correction_id,max(evidence_at) evidence_at
+      from (
+        select t.correction_id,coalesce(t.updated_at,t.created_at) evidence_at
+        from public.timesheets t where t.timesheet_id=any(v_hist_ids)
+          and nullif(t.correction_id,'') is not null
           and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
-        group by t.correction_id
-      ) select 1 from units where effective_roles=1 or draft_roles=1 or locked_roles=1
-        or (effective_roles>0 and effective_roles<roles) or (draft_roles>0 and draft_roles<roles) or (locked_roles>0 and locked_roles<roles)
-    );
-
-    select q.correction_id into v_mutable_correction_id
-    from (
-      select t.correction_id,max(coalesce(t.updated_at,t.created_at)) changed_at
-      from public.timesheets t
-      left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
-      left join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id
-      where t.timesheet_id=any(v_hist_ids) and t.correction_id is not null and t.is_current and t.archived_at_utc is null
+        union all
+        select ae.after_json->>'correction_id',ae.ts_utc
+        from public.audit_events ae
+        where ae.action in ('NHSP_IMPORT_CORRECTION_APPLIED','HR_IMPORT_CORRECTION_APPLIED')
+          and (ae.after_json->>'shift_id'=v_source_shift_id::text or ae.after_json->>'external_row_key'=v_external_row_key)
+          and nullif(ae.after_json->>'correction_id','') is not null
+        union all
+        select u->>'correction_id',evidence_at from operation_units where nullif(u->>'correction_id','') is not null
+      ) seeded where correction_id is not null group by correction_id
+    ), roles as (
+      select seed.correction_id,seed.evidence_at,role
+      from correction_seed seed cross join lateral unnest(array['CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT']) role
+    ), member_evidence as (
+      select t.correction_id,t.correction_kind role,t.timesheet_id,'LIVE_ROW'::text evidence_source
+      from public.timesheets t where t.timesheet_id=any(v_hist_ids) and t.correction_id is not null
         and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
-        and not exists(select 1 from public.invoice_lines il where il.timesheet_id=t.timesheet_id or il.meta_json->>'timesheet_id'=t.timesheet_id::text)
-        and tf.locked_by_invoice_id is null and upper(coalesce(cw.status::text,''))<>'INVOICED'
-        and not exists(select 1 from jsonb_array_elements(case when jsonb_typeof(tf.invoice_breakdown_json->'segments')='array' then tf.invoice_breakdown_json->'segments' else '[]'::jsonb end) seg where nullif(seg->>'invoice_locked_invoice_id','') is not null)
-      group by t.correction_id
-    ) q order by q.changed_at desc,q.correction_id limit 1;
-    if v_mutable_correction_id is null then
-      select ae.after_json->>'correction_id' into v_mutable_correction_id
+      union
+      select ae.after_json->>'correction_id','CHANGED_HOURS_REVERSAL',raw.member_id,'AUDIT_REVERSAL'
       from public.audit_events ae
+      cross join lateral (select case when ae.after_json->>'reversal_timesheet_id'~*v_uuid_re then (ae.after_json->>'reversal_timesheet_id')::uuid end member_id) raw
       where ae.action in ('NHSP_IMPORT_CORRECTION_APPLIED','HR_IMPORT_CORRECTION_APPLIED')
         and (ae.after_json->>'shift_id'=v_source_shift_id::text or ae.after_json->>'external_row_key'=v_external_row_key)
-        and nullif(ae.after_json->>'correction_id','') is not null
-        and not exists(select 1 from public.timesheets t where t.correction_id=ae.after_json->>'correction_id')
-        and not exists(select 1 from public.invoice_lines il where il.meta_json->>'correction_id'=ae.after_json->>'correction_id')
-      order by ae.ts_utc desc,ae.id desc limit 1;
+        and nullif(ae.after_json->>'correction_id','') is not null and raw.member_id is not null
+      union
+      select ae.after_json->>'correction_id','CHANGED_HOURS_REPLACEMENT',raw.member_id,'AUDIT_REPLACEMENT'
+      from public.audit_events ae
+      cross join lateral (select case when ae.after_json->>'replacement_timesheet_id'~*v_uuid_re then (ae.after_json->>'replacement_timesheet_id')::uuid end member_id) raw
+      where ae.action in ('NHSP_IMPORT_CORRECTION_APPLIED','HR_IMPORT_CORRECTION_APPLIED')
+        and (ae.after_json->>'shift_id'=v_source_shift_id::text or ae.after_json->>'external_row_key'=v_external_row_key)
+        and nullif(ae.after_json->>'correction_id','') is not null and raw.member_id is not null
+      union
+      select ae.after_json->>'correction_id',ae.after_json->>'correction_kind',raw.member_id,'AUDIT_MEMBER'
+      from public.audit_events ae
+      cross join lateral (select case when ae.after_json->>'timesheet_id'~*v_uuid_re then (ae.after_json->>'timesheet_id')::uuid end member_id) raw
+      where ae.action in ('NHSP_IMPORT_CORRECTION_APPLIED','HR_IMPORT_CORRECTION_APPLIED')
+        and (ae.after_json->>'shift_id'=v_source_shift_id::text or ae.after_json->>'external_row_key'=v_external_row_key)
+        and ae.after_json->>'correction_kind' in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+        and nullif(ae.after_json->>'correction_id','') is not null and raw.member_id is not null
+      union
+      select u->>'correction_id','CHANGED_HOURS_REVERSAL',(u->>'reversal_timesheet_id')::uuid,'APPLIED_RESULT'
+      from operation_units where nullif(u->>'correction_id','') is not null and coalesce(u->>'reversal_timesheet_id','')~*v_uuid_re
+      union
+      select u->>'correction_id','CHANGED_HOURS_REPLACEMENT',(u->>'replacement_timesheet_id')::uuid,'APPLIED_RESULT'
+      from operation_units where nullif(u->>'correction_id','') is not null and coalesce(u->>'replacement_timesheet_id','')~*v_uuid_re
+    ), role_state as (
+      select r.correction_id,r.evidence_at,r.role,
+        coalesce((select array_agg(distinct e.timesheet_id order by e.timesheet_id) from member_evidence e
+          where e.correction_id=r.correction_id and e.role=r.role),array[]::uuid[]) member_ids,
+        coalesce((select array_agg(distinct t.timesheet_id order by t.timesheet_id) from public.timesheets t
+          where t.correction_id=r.correction_id and t.correction_kind=r.role and t.is_current and t.archived_at_utc is null),array[]::uuid[]) active_ids,
+        coalesce((select array_agg(distinct t.timesheet_id order by t.timesheet_id) from public.timesheets t
+          where t.correction_id=r.correction_id and t.correction_kind=r.role and t.archived_at_utc is not null),array[]::uuid[]) archived_ids,
+        exists(select 1 from member_evidence e join public.invoice_lines il
+          on il.timesheet_id=e.timesheet_id or il.meta_json->>'timesheet_id'=e.timesheet_id::text
+          join public.invoices i on i.id=il.invoice_id
+          where e.correction_id=r.correction_id and e.role=r.role
+            and i.status in ('ISSUED','PAID','ON_HOLD') and i.issued_at_utc is not null
+            and not exists(select 1 from public.timesheets archived where archived.timesheet_id=e.timesheet_id and archived.archived_at_utc is not null)) effective_invoiced,
+        (exists(select 1 from member_evidence e join public.invoice_lines il
+          on il.timesheet_id=e.timesheet_id or il.meta_json->>'timesheet_id'=e.timesheet_id::text
+          join public.invoices i on i.id=il.invoice_id
+          where e.correction_id=r.correction_id and e.role=r.role
+            and (i.status='DRAFT' or i.issued_at_utc is null or i.active_document_operation_id is not null or i.active_issue_operation_id is not null))
+         or exists(select 1 from public.timesheets t
+          left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+          left join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id
+          where t.correction_id=r.correction_id and t.correction_kind=r.role and t.is_current and t.archived_at_utc is null
+            and (tf.locked_by_invoice_id is not null or upper(coalesce(cw.status::text,''))='INVOICED'
+              or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(tf.invoice_breakdown_json->'segments')='array'
+                then tf.invoice_breakdown_json->'segments' else '[]'::jsonb end) seg
+                where nullif(seg->>'invoice_locked_invoice_id','') is not null)))) pending_invoice,
+        exists(select 1 from public.timesheets t join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id
+          where t.correction_id=r.correction_id and t.correction_kind=r.role and t.is_current and t.archived_at_utc is null
+            and tf.paid_at_utc is not null) paid,
+        (select count(*) from public.timesheets t where t.correction_id=r.correction_id and t.correction_kind=r.role
+          and t.is_current and t.archived_at_utc is null)>1 active_duplicate
+      from roles r
+    ), generation_state as (
+      select correction_id,max(evidence_at) evidence_at,
+        count(*) filter(where cardinality(member_ids)>0) proven_roles,
+        count(*) filter(where effective_invoiced) effective_roles,
+        count(*) filter(where pending_invoice) pending_roles,
+        bool_or(paid) paid,
+        bool_or(active_duplicate) active_duplicate,
+        count(*) filter(where cardinality(archived_ids)>0) archived_role_count,
+        jsonb_agg(jsonb_build_object('role',role,'member_ids',to_jsonb(member_ids),'active_member_ids',to_jsonb(active_ids),
+          'archived_member_ids',to_jsonb(archived_ids),'effective_invoiced',effective_invoiced,
+          'pending_invoice',pending_invoice,'paid',paid) order by role) role_evidence
+      from role_state group by correction_id
+    )
+    select
+      coalesce((select jsonb_agg(jsonb_build_object('correction_id',g.correction_id,'state',case
+          when g.effective_roles=2 then 'FULLY_INVOICED' when g.effective_roles=1 and g.proven_roles=2 then 'PARTIALLY_INVOICED'
+          when g.effective_roles=0 and g.pending_roles=0 and g.proven_roles=2 and not g.paid then 'MUTABLE' else 'UNPROVABLE' end,
+          'roles',g.role_evidence) order by g.evidence_at,g.correction_id) from generation_state g),'[]'::jsonb),
+      coalesce((select array_agg(g.correction_id order by g.evidence_at,g.correction_id) from generation_state g where g.effective_roles=2),array[]::text[]),
+      coalesce((select array_agg(g.correction_id order by g.evidence_at,g.correction_id) from generation_state g where g.effective_roles=1 and g.proven_roles=2),array[]::text[]),
+      coalesce((select array_agg(g.correction_id order by g.evidence_at,g.correction_id) from generation_state g
+        where g.effective_roles=0 and g.pending_roles=0 and g.proven_roles=2 and not g.paid and not g.active_duplicate),array[]::text[]),
+      (select g.correction_id from generation_state g where g.effective_roles=0 and g.pending_roles=0 and g.proven_roles=2
+        and not g.paid and not g.active_duplicate order by g.evidence_at desc,g.correction_id desc limit 1),
+      coalesce((select jsonb_agg(jsonb_build_object('correction_id',r.correction_id,'role',r.role,'timesheet_ids',to_jsonb(r.archived_ids))
+        order by r.correction_id,r.role) from role_state r where cardinality(r.archived_ids)>0),'[]'::jsonb),
+      coalesce((select jsonb_agg(jsonb_build_object('correction_id',g.correction_id,'reason',case when g.active_duplicate then 'ACTIVE_ROLE_DUPLICATE' else 'ROLE_IDENTITY_UNPROVABLE' end)
+        order by g.evidence_at,g.correction_id) from generation_state g where g.active_duplicate or (g.proven_roles<2 and (g.effective_roles>0 or g.pending_roles>0))),'[]'::jsonb),
+      exists(select 1 from generation_state g where g.effective_roles=1 and g.proven_roles=2),
+      exists(select 1 from generation_state g where g.pending_roles>0),
+      exists(select 1 from generation_state g where g.proven_roles<2 and (g.effective_roles>0 or g.pending_roles>0))
+    into v_generation_role_evidence,v_fully_invoiced_generation_ids,v_partial_generation_ids,v_mutable_generation_ids,
+      v_mutable_correction_id,v_archived_history_roles,v_role_evidence_conflicts,v_role_partial_invoice_state,
+      v_role_active_invoice_activity,v_role_scope_unprovable;
+
+    v_partial_invoice_state:=v_role_partial_invoice_state;
+    v_active_invoice_activity:=v_active_invoice_activity or v_role_active_invoice_activity;
+    v_scope_unprovable:=v_scope_unprovable or v_role_scope_unprovable;
+
+    if v_mutable_correction_id is not null then
+      v_repair_identity_mode:=case when exists(select 1 from public.timesheets archived
+        where archived.correction_id=v_mutable_correction_id and archived.archived_at_utc is not null
+          and archived.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'))
+        then 'FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED' else 'RETAIN_EXISTING_CORRECTION_ID' end;
     end if;
+    v_role_evidence_fingerprint:=encode(digest(convert_to(concat_ws('|','role-evidence-v1',
+      v_generation_role_evidence::text,v_archived_history_roles::text,v_role_evidence_conflicts::text),'UTF8'),'sha256'),'hex');
+    v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v2',v_source_identity,
+      v_line_evidence::text,v_ignored_nonhours_line_ids::text,v_role_evidence_fingerprint,
+      v_b_day,v_b_night,v_b_sat,v_b_sun,v_b_bh,v_b_pay,v_b_charge,v_b_margin),'UTF8'),'sha256'),'hex');
 
     v_mutable_member_ids:=array[]::uuid[]; v_mutable_missing_roles:=array[]::text[];
     v_mutable_parent_id:=null; v_m_day:=0; v_m_night:=0; v_m_sat:=0; v_m_sun:=0; v_m_bh:=0;
@@ -1137,15 +1350,24 @@ begin
         and jsonb_array_length(v_candidate_schedule)=1);
     if v_b_standard_representable and (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0 then v_b_schedule:=v_candidate_schedule; end if;
 
+    if v_mutable_correction_id is not null then
+      v_reversal_repair_required:=not exists(select 1 from public.timesheets t
+        where t.correction_id=v_mutable_correction_id and t.correction_kind='CHANGED_HOURS_REVERSAL'
+          and t.is_current and t.archived_at_utc is null
+          and t.actual_schedule_json is not distinct from v_b_schedule);
+      v_replacement_repair_required:=not exists(select 1 from public.timesheets t
+        where t.correction_id=v_mutable_correction_id and t.correction_kind='CHANGED_HOURS_REPLACEMENT'
+          and t.is_current and t.archived_at_utc is null
+          and t.actual_schedule_json is not distinct from v_a_schedule);
+    end if;
+
     v_blocking_code:=case
-      when v_archived_invoice_conflict then 'IMPORT_REVIEW_ARCHIVED_INVOICE_STATE_CONFLICT'
-      when v_archived_active_conflict then 'IMPORT_REVIEW_ARCHIVED_GENERATION_ACTIVE_MEMBER_CONFLICT'
       when v_partial_invoice_state then 'IMPORT_REVIEW_CORRECTION_GENERATION_PARTIALLY_INVOICED'
       when v_active_invoice_activity then 'IMPORT_REVIEW_INVOICE_ACTIVITY_IN_PROGRESS'
       when v_credit_ambiguous then 'IMPORT_REVIEW_EFFECTIVE_CREDIT_AMBIGUOUS'
       when v_scope_unprovable or v_stream_conflict then 'IMPORT_REVIEW_INVOICE_COMPONENT_SCOPE_UNPROVABLE'
       when v_paid_mutable_state then 'IMPORT_REVIEW_PAID_MUTABLE_GENERATION_ROLLOVER_UNAVAILABLE'
-      when (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)=0 and v_mutable_correction_id is not null then 'IMPORT_REVIEW_ZERO_EFFECTIVE_POSITION_HAS_ACTIVE_CORRECTION_GENERATION'
+      when (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)<0 then 'IMPORT_REVIEW_INVOICE_STATE_UNSUPPORTED'
       when (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0 and not v_b_standard_representable then 'IMPORT_REVIEW_EFFECTIVE_POSITION_NOT_STANDARD_REPRESENTABLE'
       else null end;
     v_reconciliation_fingerprint:=encode(digest(convert_to(concat_ws('|','reconciliation-v1',v_scope_fingerprint,v_effective_fingerprint,v_mutable_fingerprint,v_a_fingerprint,v_blocking_code,v_b_policy_fingerprint),'UTF8'),'sha256'),'hex');
@@ -1158,22 +1380,39 @@ begin
       'candidate_id',v_candidate_id,'client_id',v_client_id,'contract_id',v_contract_id,
       'week_ending_date',v_week_ending_date,'invoice_stream',v_invoice_stream,
       'source_scope_fingerprint',v_scope_fingerprint,
-      'archived_timesheet_ids',to_jsonb(v_archived_ids),'active_timesheet_ids',to_jsonb(v_active_ids),
+      'archived_timesheet_ids',to_jsonb(v_archived_ids),'archived_history_timesheet_ids',to_jsonb(v_archived_ids),
+      'archived_history_roles',v_archived_history_roles,'active_timesheet_ids',to_jsonb(v_active_ids),
       'historical_missing_timesheet_ids',to_jsonb(v_missing_ids),
       'effective_invoice_ids',to_jsonb(v_effective_invoice_ids),'effective_invoice_line_ids',to_jsonb(v_effective_line_ids),
       'effective_credit_line_ids',to_jsonb(v_credit_line_ids),'effective_invoice_component_count',v_effective_component_count,
+      'effective_hours_component_count',v_effective_component_count,
+      'ignored_nonhours_invoice_line_ids',to_jsonb(v_ignored_nonhours_line_ids)
+    ) || jsonb_build_object(
+      'generation_role_evidence',v_generation_role_evidence,
+      'fully_invoiced_generation_ids',to_jsonb(v_fully_invoiced_generation_ids),
+      'partial_generation_ids',to_jsonb(v_partial_generation_ids),
+      'mutable_generation_ids',to_jsonb(v_mutable_generation_ids),
+      'role_evidence_conflicts',v_role_evidence_conflicts,
+      'role_evidence_fingerprint',v_role_evidence_fingerprint,
       'effective_invoice_fingerprint',v_effective_fingerprint,
       'B_hours',jsonb_build_object('hours_day',v_b_day,'hours_night',v_b_night,'hours_sat',v_b_sat,'hours_sun',v_b_sun,'hours_bh',v_b_bh,'total_hours',v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh),
+      'effective_hours_net_is_zero',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)=0,
+      'effective_hours_net_is_positive',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0,
+      'effective_hours_net_is_negative',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)<0,
       'B_financials',jsonb_build_object('pay_ex_vat',v_b_pay,'charge_ex_vat',v_b_charge,'margin_ex_vat',v_b_margin),
       'B_standard_schedule_json',v_b_schedule,'B_policy_fingerprint',v_b_policy_fingerprint,'B_standard_representable',v_b_standard_representable,
       'active_mutable_generation',v_mutable_correction_id is not null,'active_mutable_member_ids',to_jsonb(v_mutable_member_ids),
       'active_mutable_missing_roles',to_jsonb(v_mutable_missing_roles),'active_mutable_correction_id',v_mutable_correction_id,
+      'physically_missing_mutable_roles',to_jsonb(v_mutable_missing_roles),
+      'reviewed_existing_correction_id',v_mutable_correction_id,'repair_identity_mode',v_repair_identity_mode,
+      'reversal_repair_required',v_reversal_repair_required,'replacement_repair_required',v_replacement_repair_required
+    ) || jsonb_build_object(
       'active_mutable_parent_timesheet_id',v_mutable_parent_id,'active_mutable_fingerprint',v_mutable_fingerprint,
       'M_hours',jsonb_build_object('hours_day',v_m_day,'hours_night',v_m_night,'hours_sat',v_m_sat,'hours_sun',v_m_sun,'hours_bh',v_m_bh,'total_hours',v_m_day+v_m_night+v_m_sat+v_m_sun+v_m_bh),
       'M_existing_financials',jsonb_build_object('pay_ex_vat',v_m_pay,'charge_ex_vat',v_m_charge,'margin_ex_vat',v_m_margin),'M_financials_complete',v_m_financials_complete,
       'A_schedule_json',v_a_schedule,'A_hours',v_a_hours,'A_evidence_fingerprint',v_a_fingerprint,
       'partial_invoice_state',v_partial_invoice_state,'active_invoice_activity',v_active_invoice_activity,
-      'archived_active_conflict',v_archived_active_conflict,'archived_invoice_conflict',v_archived_invoice_conflict,
+      'archived_active_conflict',false,'archived_invoice_conflict',false,
       'paid_mutable_state',v_paid_mutable_state,
       'recommended_route_inputs',jsonb_build_object('B_positive',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0,'has_mutable_generation',v_mutable_correction_id is not null,'source_timesheet_active',v_source_timesheet_id=any(v_active_ids)),
       'blocking_code',v_blocking_code,'reconciliation_fingerprint',v_reconciliation_fingerprint
@@ -1744,7 +1983,8 @@ begin
             and coalesce((m.reconciliation_balance->>'active_mutable_generation')::boolean,false)
             then 'AMEND_EXISTING_REPLACEMENT'
           when m.action_kind='APPLY_AMENDMENT'
-            and coalesce((m.reconciliation_balance#>>'{B_hours,total_hours}')::numeric,0)>0
+            and coalesce((m.reconciliation_balance->>'effective_hours_net_is_positive')::boolean,false)
+            and coalesce((m.reconciliation_balance->>'B_standard_representable')::boolean,false)
             then 'CREATE_REVERSAL_REPLACEMENT'
           when m.action_kind='APPLY_AMENDMENT'
             and coalesce((m.protection->>'paid')::boolean,false)
@@ -1762,12 +2002,23 @@ begin
             join public.timesheets mutable_ts on mutable_ts.timesheet_id=x.value::uuid and mutable_ts.correction_kind='CHANGED_HOURS_REPLACEMENT' limit 1),
           m.mutable_replacement_timesheet_id),
         'correction_id',m.reconciliation_balance->>'active_mutable_correction_id',
+        'reviewed_existing_correction_id',m.reconciliation_balance->>'reviewed_existing_correction_id',
+        'repair_identity_mode',m.reconciliation_balance->>'repair_identity_mode',
+        'physically_missing_mutable_roles',coalesce(m.reconciliation_balance->'physically_missing_mutable_roles','[]'::jsonb),
+        'archived_ignored_roles',coalesce(m.reconciliation_balance->'archived_history_roles','[]'::jsonb),
+        'reversal_repair_required',coalesce((m.reconciliation_balance->>'reversal_repair_required')::boolean,false),
+        'replacement_repair_required',coalesce((m.reconciliation_balance->>'replacement_repair_required')::boolean,false),
         'correction_generation_required',coalesce((m.reconciliation_balance#>>'{B_hours,total_hours}')::numeric,0)>0
           and not coalesce((m.reconciliation_balance->>'active_mutable_generation')::boolean,false),
         'standard_representable',coalesce((m.reconciliation_balance->>'B_standard_representable')::boolean,true),
         'B_hours',m.reconciliation_balance->'B_hours','B_financials',m.reconciliation_balance->'B_financials',
         'B_standard_schedule_json',m.reconciliation_balance->'B_standard_schedule_json',
         'B_policy_fingerprint',m.reconciliation_balance->>'B_policy_fingerprint',
+        'review_policy_basis_kind','IMPORT_AUTHORITATIVE_WEEKLY_V1',
+        'review_policy_basis_fingerprint',public._import_review_hash_v1(concat_ws('|','review-policy-basis-v1',
+          m.reconciliation_balance->>'source_scope_fingerprint',m.reconciliation_balance->>'effective_invoice_fingerprint',
+          m.reconciliation_balance->>'role_evidence_fingerprint',m.authority_fingerprint,
+          m.reconciliation_balance->>'B_policy_fingerprint',m.reconciliation_balance->>'invoice_stream')),
         'effective_invoice_ids',m.reconciliation_balance->'effective_invoice_ids',
         'effective_invoice_line_ids',m.reconciliation_balance->'effective_invoice_line_ids',
         'M_hours',m.reconciliation_balance->'M_hours','M_existing_financials',m.reconciliation_balance->'M_existing_financials',
@@ -1779,6 +2030,8 @@ begin
         'source_scope_fingerprint',m.reconciliation_balance->>'source_scope_fingerprint'
       ) || jsonb_build_object(
         'archived_timesheet_ids',m.reconciliation_balance->'archived_timesheet_ids',
+        'archived_history_timesheet_ids',m.reconciliation_balance->'archived_history_timesheet_ids',
+        'archived_history_roles',m.reconciliation_balance->'archived_history_roles',
         'historical_missing_timesheet_ids',m.reconciliation_balance->'historical_missing_timesheet_ids',
         'active_mutable_member_ids',m.reconciliation_balance->'active_mutable_member_ids',
         'missing_mutable_roles',m.reconciliation_balance->'active_mutable_missing_roles',

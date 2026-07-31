@@ -9,6 +9,7 @@ const hrApply = read('../../supabase/repeatable/21072026_1820_06_hr_weekly_apply
 const nhspApply = read('../../supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql');
 const hrPhase3 = read('../../supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql');
 const nhspPhase3 = read('../../supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql');
+const paidRollover = read('../../supabase/repeatable/21072026_1235_07_timesheet_paid_uninvoiced_rollover_v1.sql');
 const authorise = read('../../supabase/repeatable/21072026_1235_32_timesheet_authorise_bulk_atomic.sql');
 const unauthorise = read('../../supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql');
 const bulk = read('../../supabase/repeatable/13062026_1544_process_authorise_unprocess_unauthorise.sql');
@@ -36,6 +37,13 @@ test('effective invoice balance is source-scoped, bounded and signed across issu
   assert.match(body, /case when ae\.object_type='timesheets' then ae\.object_id_text end/);
   assert.match(body, /effective_invoice_fingerprint/);
   assert.match(body, /B_standard_representable/);
+  assert.match(body, /ignored_nonhours_invoice_line_ids/);
+  assert.match(body, /generation_role_evidence/);
+  assert.match(body, /effective_hours_net_is_zero/);
+  assert.match(body, /effective_hours_net_is_positive/);
+  assert.match(body, /effective_hours_net_is_negative/);
+  assert.match(body, /physically_missing_mutable_roles/);
+  assert.match(body, /FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED/);
 });
 
 test('catalogue evaluates every source in deterministic batches without limiting the import to 100 shifts', () => {
@@ -54,7 +62,17 @@ test('catalogue evaluates every source in deterministic batches without limiting
 test('apply envelope and guard freeze and re-attest exact reconciliation units', () => {
   const envelope = functionBody(core, '_import_review_apply_envelope_core_v1');
   const guard = functionBody(lifecycle, 'import_review_apply_guard_v1');
-  for (const field of ['B_effective_invoice_ids', 'B_invoice_fingerprint', 'M_active_member_ids', 'A_schedule_json', 'unit_fingerprint']) {
+  for (const field of [
+    'B_effective_invoice_ids',
+    'B_invoice_fingerprint',
+    'M_active_member_ids',
+    'A_schedule_json',
+    'reviewed_existing_correction_id',
+    'repair_identity_mode',
+    'review_policy_basis_kind',
+    'review_policy_basis_fingerprint',
+    'unit_fingerprint',
+  ]) {
     assert.match(envelope, new RegExp(`'${field}'`));
   }
   assert.match(guard, /pg_temp\.import_review_reconciliation_units_v1/);
@@ -73,6 +91,11 @@ test('lifecycle transition prepares, validates and authorises exact members idem
   assert.match(body, /IMPORT_REVIEW_RECONCILIATION_LIFECYCLE_STATE_INVALID/);
   assert.match(body, /unit_fingerprints/);
   assert.match(body, /IMPORT_REVIEW_RECONCILIATION_BALANCE_MISMATCH/);
+  assert.match(body, /correction_operation_contract,correction_units/);
+  assert.match(body, /applied_result_fingerprint/);
+  assert.match(body, /applied_timesheet_id/);
+  assert.match(body, /historical_paid_tsfin_id/);
+  assert.match(body, /current_shell_tsfin_id/);
 });
 
 test('bulk lifecycle RPCs accept only the transaction-bound temporary capability', () => {
@@ -91,8 +114,29 @@ test('NHSP and HealthRoster Weekly callers use the same four reconciliation rout
     assert.match(source, /AMEND_EXISTING_REPLACEMENT/);
     assert.match(source, /CREATE_REVERSAL_REPLACEMENT/);
     assert.match(source, /import_review_correction_generation_transition_v1/);
+    assert.match(source, /timesheet_paid_uninvoiced_rollover_v1/);
+    assert.match(source, /v_paid_origin_operation\.state<>'COMPLETE'/);
+    assert.match(source, /applied_result_fingerprint/);
+    assert.match(source, /IMPORT_REVIEW_PAID_ROLLOVER_SHELL_ORIGIN_INCOMPLETE/);
+    assert.match(source, /IMPORT_REVIEW_PAID_ROLLOVER_SHELL_POLICY_CHANGED/);
+    assert.match(source, /order by u\.source_timesheet_id/);
     assert.match(source, /IMPORT_AUTHORITATIVE_RECONCILIATION_V1/);
   }
+});
+
+test('paid-uninvoiced rollover supports an ordinary authoritative source without inventing a correction chain', () => {
+  const body = functionBody(paidRollover, 'timesheet_paid_uninvoiced_rollover_v1');
+  assert.match(body, /v_is_ordinary_source:=v_route='AMEND_PAID_UNINVOICED_SOURCE'/);
+  assert.match(body, /B_effective_invoice_ids/);
+  assert.match(body, /B_effective_invoice_line_ids/);
+  assert.match(body, /\{B_hours,total_hours\}/);
+  assert.match(body, /PAID_TSFIN_ROLLOVER_OPERATION_UNIT_NOT_UNIQUE/);
+  assert.match(body, /PAID_TSFIN_ROLLOVER_PREFLIGHT_STALE/);
+  assert.match(body, /PAID_TSFIN_ROLLOVER_ORDINARY_SOURCE_PREFLIGHT_INVALID/);
+  assert.match(body, /import_apply_operation_id/);
+  assert.match(body, /import_authoritative_unit_fingerprint/);
+  assert.match(body, /historical_paid_tsfin_id/);
+  assert.match(body, /new_current_tsfin_id/);
 });
 
 test('both Weekly phase-3 functions repair missing roles and preserve source-specific basis', () => {
@@ -105,6 +149,12 @@ test('both Weekly phase-3 functions repair missing roles and preserve source-spe
     assert.match(body, /A_schedule_json/);
     assert.match(body, /import_authoritative_reconciliation/);
     assert.match(body, /archived_at_utc is null/);
+    assert.match(body, /repair_identity_mode/);
+    assert.match(body, /FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED/);
+    assert.match(body, /IMPORT_REVIEW_MUTABLE_GENERATION_CONTRACT_WEEK_AMBIGUOUS/);
+    assert.match(body, /reversal_timesheet_id/);
+    assert.match(body, /replacement_timesheet_id/);
+    assert.match(body, /applied_result_fingerprint/);
   }
   assert.match(hr, /HEALTHROSTER/);
   assert.match(nhsp, /NHSP/);
@@ -141,5 +191,6 @@ test('HealthRoster Daily remains validation-only and has no reconciliation-gener
   const body = functionBody(dailyApply, 'hr_daily_apply_transactional');
   assert.doesNotMatch(body, /IMPORT_AUTHORITATIVE_RECONCILIATION_V1/);
   assert.doesNotMatch(body, /import_review_correction_generation_transition_v1/);
+  assert.doesNotMatch(body, /timesheet_paid_uninvoiced_rollover_v1/);
   assert.doesNotMatch(body, /CREATE_REVERSAL_REPLACEMENT/);
 });

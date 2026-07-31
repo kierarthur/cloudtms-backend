@@ -41,6 +41,9 @@ declare
   v_we_delta int := 0;
 
   v_correction_id text;
+  v_reviewed_correction_id text;
+  v_repair_identity_mode text;
+  v_repair_operation_id text;
   v_kind text;
 
   v_old_start_utc timestamptz;
@@ -175,6 +178,7 @@ declare
   v_reconciliation_unit jsonb := null;
   v_reconciliation_route text := null;
   v_reconciliation_b_schedule jsonb := null;
+  v_reconciliation_a_schedule jsonb := null;
   -- Historical correction finance authority (Policy X pre-draft only)
   v_chain_scope jsonb := null;
   v_financial_preflight jsonb := null;
@@ -280,6 +284,7 @@ begin
     v_reconciliation_unit := null;
     v_reconciliation_route := null;
     v_reconciliation_b_schedule := null;
+    v_reconciliation_a_schedule := null;
 
     if to_regclass('pg_temp.import_review_reconciliation_units_v1') is not null then
       select u.unit_json into v_reconciliation_unit
@@ -292,6 +297,7 @@ begin
         end if;
         v_reconciliation_route:=v_reconciliation_unit->>'route';
         v_reconciliation_b_schedule:=coalesce(v_reconciliation_unit->'B_standard_schedule_json','[]'::jsonb);
+        v_reconciliation_a_schedule:=coalesce(v_reconciliation_unit->'A_schedule_json','[]'::jsonb);
       end if;
     end if;
 
@@ -886,6 +892,9 @@ begin
       if jsonb_typeof(v_reconciliation_b_schedule)<>'array' or jsonb_array_length(v_reconciliation_b_schedule)<>1 then
         raise exception 'IMPORT_REVIEW_EFFECTIVE_POSITION_NOT_STANDARD_REPRESENTABLE' using errcode='55000';
       end if;
+      if jsonb_typeof(v_reconciliation_a_schedule)<>'array' or jsonb_array_length(v_reconciliation_a_schedule)<>1 then
+        raise exception 'IMPORT_REVIEW_MUTABLE_GENERATION_EVIDENCE_UNPROVABLE' using errcode='55000';
+      end if;
       v_existing_pos_old_start_str:=v_reconciliation_b_schedule#>>'{0,start_utc}';
       v_existing_pos_old_end_str:=v_reconciliation_b_schedule#>>'{0,end_utc}';
       v_existing_pos_old_break_str:=coalesce(v_reconciliation_b_schedule#>>'{0,break_mins}','0');
@@ -896,9 +905,39 @@ begin
       v_old_end_str:=v_existing_pos_old_end_str;
       v_old_break_str:=v_existing_pos_old_break_str;
       if v_reconciliation_route='AMEND_EXISTING_REPLACEMENT' then
-        v_correction_id:=v_reconciliation_unit->>'correction_id';
+        v_reviewed_correction_id:=coalesce(v_reconciliation_unit->>'reviewed_existing_correction_id',v_reconciliation_unit->>'correction_id');
+        v_correction_id:=v_reviewed_correction_id;
         if nullif(v_correction_id,'') is null then
           raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+        end if;
+        v_repair_identity_mode:=coalesce(v_reconciliation_unit->>'repair_identity_mode','RETAIN_EXISTING_CORRECTION_ID');
+        if v_repair_identity_mode not in ('RETAIN_EXISTING_CORRECTION_ID','FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED') then
+          raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+        end if;
+        perform 1 from public.timesheets repair_scope
+        where repair_scope.correction_id=v_reviewed_correction_id
+          and repair_scope.is_current and repair_scope.archived_at_utc is null
+          and repair_scope.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+        order by repair_scope.timesheet_id for update;
+        if v_repair_identity_mode='FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED' then
+          v_repair_operation_id:=current_setting('cloudtms.import_reconciliation_operation_id',true);
+          if coalesce(v_repair_operation_id,'')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+            raise exception 'IMPORT_REVIEW_RECONCILIATION_GUARD_REQUIRED' using errcode='55000';
+          end if;
+          v_correction_id:='chg:repair:'||encode(extensions.digest(convert_to(concat_ws('|','archived-role-repair-v1',
+            v_repair_operation_id,v_key,v_reviewed_correction_id,v_reconciliation_unit->>'reconciliation_fingerprint',
+            coalesce(v_reconciliation_unit->'archived_history_roles','[]'::jsonb)::text),'UTF8'),'sha256'),'hex');
+          perform 1 from public.timesheets repair_lock
+          where repair_lock.timesheet_id in (select x.value::uuid from jsonb_array_elements_text(coalesce(v_reconciliation_unit->'M_active_member_ids','[]'::jsonb)) x(value))
+          order by repair_lock.timesheet_id for update;
+          update public.timesheets repair_member
+          set correction_id=v_correction_id,updated_at=v_now
+          where repair_member.timesheet_id in (select x.value::uuid from jsonb_array_elements_text(coalesce(v_reconciliation_unit->'M_active_member_ids','[]'::jsonb)) x(value))
+            and repair_member.correction_id=v_reviewed_correction_id and repair_member.is_current and repair_member.archived_at_utc is null;
+          if exists(select 1 from public.timesheets remaining where remaining.correction_id=v_reviewed_correction_id
+            and remaining.is_current and remaining.archived_at_utc is null) then
+            raise exception 'IMPORT_REVIEW_MUTABLE_GENERATION_REPAIR_POSTCONDITION_FAILED' using errcode='55000';
+          end if;
         end if;
       end if;
       if v_reconciliation_route='CREATE_REVERSAL_REPLACEMENT'
@@ -912,6 +951,8 @@ begin
         where parent_ts.timesheet_id=v_base_timesheet_id and parent_ts.is_current and parent_ts.archived_at_utc is null) then
         raise exception 'IMPORT_REVIEW_RECONCILIATION_PARENT_INVALID' using errcode='55000';
       end if;
+      perform 1 from public.timesheets parent_lock
+      where parent_lock.timesheet_id=v_base_timesheet_id for update;
       -- Route through the existing role upsert loop.  It reuses any surviving
       -- current role and creates only a physically missing role.
       v_existing_pos_ts_id:=null;
@@ -1229,19 +1270,24 @@ begin
           );
 
         -- ✅ Schedule carries ref_num + evidence linkage (external_row_key/shift_id/import_id)
-        v_schedule := jsonb_build_array(
-          jsonb_build_object(
-            'date', v_shift_date_ymd,
-            'ward', nullif(btrim(coalesce(v_contract_ward_hint,'contract')), ''),
-            'start_utc', v_seg_start_utc::text,
-            'end_utc', v_seg_end_utc::text,
-            'break_mins', v_seg_break_mins,
-            'ref_num', v_ref_num,
-            'external_row_key', v_key,
-            'shift_id', v_shift_id::text,
-            'import_id', case when v_schedule_import_id is null then null else v_schedule_import_id::text end
-          )
-        );
+        if v_reconciliation_unit is not null then
+          v_schedule:=case when v_kind='CHANGED_HOURS_REVERSAL'
+            then v_reconciliation_b_schedule else v_reconciliation_a_schedule end;
+        else
+          v_schedule := jsonb_build_array(
+            jsonb_build_object(
+              'date', v_shift_date_ymd,
+              'ward', nullif(btrim(coalesce(v_contract_ward_hint,'contract')), ''),
+              'start_utc', v_seg_start_utc::text,
+              'end_utc', v_seg_end_utc::text,
+              'break_mins', v_seg_break_mins,
+              'ref_num', v_ref_num,
+              'external_row_key', v_key,
+              'shift_id', v_shift_id::text,
+              'import_id', case when v_schedule_import_id is null then null else v_schedule_import_id::text end
+            )
+          );
+        end if;
 
         -- Idempotency: reuse existing correction timesheet (unique on correction_id+kind)
         v_existing_ts_id := null;
@@ -1276,6 +1322,12 @@ begin
             and cw.week_ending_date = v_week_ending_date
           limit 1
           for update;
+
+          if v_reconciliation_unit is not null and (select count(*) from public.contract_weeks cw
+            where cw.timesheet_id=v_existing_ts_id and cw.contract_id=v_contract_id
+              and cw.week_ending_date=v_week_ending_date)>1 then
+            raise exception 'IMPORT_REVIEW_MUTABLE_GENERATION_CONTRACT_WEEK_AMBIGUOUS' using errcode='55000';
+          end if;
 
           if v_existing_cw_id is not null then
             if v_existing_cw_is_adjustment is not true or coalesce(v_existing_cw_seq,0) <= 0 then
@@ -1361,6 +1413,7 @@ begin
             shift_label_norm = v_shift_label_norm,
             manual_pdf_r2_key = null,
             actual_schedule_json = v_schedule,
+            qr_payload_json = v_hint,
             additional_units_week = '{}'::jsonb,
             additional_units_per_day = '{}'::jsonb,
             day_references_json = null,
@@ -1521,7 +1574,7 @@ values (
   null,
   null,
   null,
-  '{}'::jsonb,
+  v_hint,
   v_now,
   v_now,
   true,
@@ -1566,6 +1619,7 @@ returning timesheet_id into v_ts_id;
               shift_label_norm = v_shift_label_norm,
               manual_pdf_r2_key = null,
               actual_schedule_json = v_schedule,
+              qr_payload_json = v_hint,
               additional_units_week = '{}'::jsonb,
               additional_units_per_day = '{}'::jsonb,
               day_references_json = null,
@@ -1615,13 +1669,49 @@ returning timesheet_id into v_ts_id;
         raise exception 'IMPORT_REVIEW_APPLY_POSTCONDITION_FAILED' using errcode='55000',
           detail=jsonb_build_object('reason_code','CORRECTION_MEMBER_SET_INCOMPLETE','source_identity',v_key)::text;
       end if;
+      if (select count(*)=2
+            and count(*) filter(where t.correction_kind='CHANGED_HOURS_REVERSAL')=1
+            and count(*) filter(where t.correction_kind='CHANGED_HOURS_REPLACEMENT')=1
+            and count(distinct t.parent_timesheet_id)=1
+            and bool_and(t.parent_timesheet_id=v_base_timesheet_id)
+            and bool_and(t.contract_id=v_contract_id and t.week_ending_date=v_week_ending_date)
+            and bool_and(t.adjustment_origin='IMPORT_CORRECTION' and coalesce(t.is_adjustment,false))
+            and bool_and(t.candidate_hint_text#>>'{import_authoritative_reconciliation,operation_id}'=
+              current_setting('cloudtms.import_reconciliation_operation_id',true))
+            and bool_and(t.candidate_hint_text#>>'{import_authoritative_reconciliation,unit_fingerprint}'=
+              v_reconciliation_unit->>'unit_fingerprint')
+            and bool_and(case when t.correction_kind='CHANGED_HOURS_REVERSAL'
+              then t.actual_schedule_json is not distinct from v_reconciliation_b_schedule
+              else t.actual_schedule_json is not distinct from v_reconciliation_a_schedule end)
+          from public.timesheets t
+          where t.correction_id=v_correction_id and t.is_current and t.archived_at_utc is null
+            and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')) is not true
+         or exists(select 1 from public.timesheets t
+           where t.timesheet_id in (v_rev_ts_id,v_rep_ts_id)
+             and (select count(*) from public.contract_weeks cw where cw.timesheet_id=t.timesheet_id
+               and cw.contract_id=v_contract_id and cw.week_ending_date=v_week_ending_date)<>1)
+         or (v_repair_identity_mode='FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED' and exists(
+           select 1 from public.timesheets t where t.correction_id=v_reviewed_correction_id
+             and t.is_current and t.archived_at_utc is null)) then
+        raise exception 'IMPORT_REVIEW_MUTABLE_GENERATION_REPAIR_POSTCONDITION_FAILED' using errcode='55000';
+      end if;
+      with applied as (
+        select jsonb_build_object(
+          'correction_id',v_correction_id,
+          'reversal_timesheet_id',v_rev_ts_id,
+          'replacement_timesheet_id',v_rep_ts_id,
+          'M_active_member_ids',jsonb_build_array(v_rev_ts_id,v_rep_ts_id),
+          'applied_member_ids',jsonb_build_array(v_rev_ts_id,v_rep_ts_id),
+          'parent_timesheet_id',v_base_timesheet_id,
+          'repair_identity_mode',coalesce(v_repair_identity_mode,'CREATE_NEW_GENERATION'),
+          'reviewed_unit_fingerprint',v_reconciliation_unit->>'unit_fingerprint',
+          'reconciliation_fingerprint',v_reconciliation_unit->>'reconciliation_fingerprint'
+        ) value
+      )
       update pg_temp.import_review_reconciliation_units_v1 u
-      set unit_json=u.unit_json||jsonb_build_object(
-        'correction_id',v_correction_id,
-        'M_active_member_ids',jsonb_build_array(v_rev_ts_id,v_rep_ts_id),
-        'parent_timesheet_id',v_base_timesheet_id,
-        'applied_member_ids',jsonb_build_array(v_rev_ts_id,v_rep_ts_id))
-      where u.source_identity=v_key;
+      set unit_json=u.unit_json||applied.value||jsonb_build_object(
+        'applied_result_fingerprint',encode(extensions.digest(convert_to(applied.value::text,'UTF8'),'sha256'),'hex'))
+      from applied where u.source_identity=v_key;
     end if;
 
     -- ─────────────────────────────────────────────
