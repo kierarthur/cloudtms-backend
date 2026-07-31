@@ -1316,6 +1316,33 @@ test('invoice-professional-v2 identity is propagated through every invoice docum
   }
 });
 
+test('week-ending document identity installer references each changed nested authority once', () => {
+  const installer = read(
+    'supabase/repeatable/31072026_1450_invoice_week_ending_document_identity.sql',
+  );
+  const authorities = [
+    '23072026_2207_invoice_apply_edits.sql',
+    '27072026_1806_private_invoice_batch_generate_classification_v2.sql',
+    '27072026_1806_private_invoice_batch_issue_classification_v2.sql',
+    '27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
+    '27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
+    '27072026_1042_11_private_invoice_operation_start_core_v8.sql',
+    '27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
+    '27072026_1042_13_private_invoice_issue_advance_core_v8.sql',
+    '27072026_1042_18_private_invoice_batch_manifest_advance_v2.sql',
+  ];
+  assert.match(installer, /\\set ON_ERROR_STOP on/i);
+  assert.match(installer, /begin;[\s\S]*commit;/i);
+  for (const authority of authorities) {
+    assert.equal(
+      installer.match(new RegExp(authority.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))?.length,
+      1,
+      `${authority} must be installed exactly once`,
+    );
+  }
+  assert.doesNotMatch(installer, /create\s+(?:or\s+replace\s+)?function/i);
+});
+
 test('source render processor context carries the frozen source template identity', () => {
   const workContext = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
