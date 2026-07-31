@@ -1,4 +1,6 @@
 -- Banking finance audit actors and refresh-loop guard.
+-- Reinstalled with continuous candidate-scope maintenance so TEST cannot retain
+-- the previously observed stale trigger body that re-dirtied SYNC_SKIPPED.
 --
 -- Policy X: these functions affect pre-draft refresh orchestration and audit
 -- presentation only. They do not alter post-draft frozen batch authority,
