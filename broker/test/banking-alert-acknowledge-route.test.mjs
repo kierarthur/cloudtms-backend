@@ -28,3 +28,10 @@ test('Banking alert acknowledgement failure remains user friendly and payment-sa
   assert.match(handlerSource, /No payment status was changed/);
   assert.doesNotMatch(handlerSource, /return withCORS\(env, req, jsonResponse\(500, \{[^}]*stack/);
 });
+
+test('Banking alert acknowledgement returns the detailed grouped summary nested by the signal RPC', () => {
+  assert.match(handlerSource, /const nestedSummary = safeObject\(signal\.summary_json \|\| signal\.summaryJson\)/);
+  assert.match(handlerSource, /return \{[\s\S]*\.\.\.nestedSummary,[\s\S]*banking_unacknowledged_alert_count:[\s\S]*banking_alert_hash:/);
+  assert.match(handlerSource, /alert_summary: alertSummary/);
+  assert.match(handlerSource, /remaining_alert_summary: alertSummary/);
+});

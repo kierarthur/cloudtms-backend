@@ -24774,7 +24774,34 @@ async function handleBankingAlertAcknowledge(env, req, user) {
         p_actor_user_id: actorUserId,
         p_last_alert_hash: null
       }), 'banking_alert_signal_for_user');
-      return Object.keys(signal).length ? signal : null;
+      if (!Object.keys(signal).length) return null;
+      const nestedSummary = safeObject(signal.summary_json || signal.summaryJson);
+      if (!Object.keys(nestedSummary).length) return signal;
+      const count = Number(
+        signal.banking_unacknowledged_alert_count
+        ?? signal.unacknowledged_count
+        ?? nestedSummary.banking_unacknowledged_alert_count
+        ?? nestedSummary.unacknowledged_count
+        ?? 0
+      ) || 0;
+      const hash = trimText(
+        signal.banking_alert_hash
+        || signal.banking_alert_summary_signature
+        || nestedSummary.banking_alert_hash
+        || nestedSummary.banking_alert_summary_signature
+        || ''
+      );
+      return {
+        ...nestedSummary,
+        unacknowledged_count: Math.max(0, Math.trunc(count)),
+        banking_unacknowledged_alert_count: Math.max(0, Math.trunc(count)),
+        banking_alert_hash: hash || null,
+        banking_alert_summary_signature: hash || null,
+        highest_label: signal.banking_highest_alert_label || signal.highest_label || nestedSummary.highest_label || nestedSummary.banking_highest_alert_label || null,
+        banking_highest_alert_label: signal.banking_highest_alert_label || signal.highest_label || nestedSummary.banking_highest_alert_label || nestedSummary.highest_label || null,
+        highest_severity: signal.banking_highest_alert_severity || signal.highest_severity || nestedSummary.highest_severity || nestedSummary.banking_highest_alert_severity || null,
+        banking_highest_alert_severity: signal.banking_highest_alert_severity || signal.highest_severity || nestedSummary.banking_highest_alert_severity || nestedSummary.highest_severity || null
+      };
     } catch { return null; }
   };
   const extractCarryForwardCounts = (payload) => {
