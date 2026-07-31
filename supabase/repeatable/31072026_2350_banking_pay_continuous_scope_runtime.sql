@@ -474,7 +474,8 @@ BEGIN
   WITH repair_page AS (
     SELECT candidate_counter.entity_key
     FROM public.app_change_counters AS candidate_counter
-    WHERE candidate_counter.entity_key
+    WHERE candidate_counter.entity_key LIKE 'pay_candidate:%'
+      AND candidate_counter.entity_key
             ~* '^pay_candidate:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       AND candidate_counter.scope_change_generation IS NULL
     ORDER BY candidate_counter.updated_at, candidate_counter.entity_key
@@ -775,7 +776,8 @@ BEGIN
              ORDER BY candidate_change.scope_change_generation, candidate_change.entity_key
            ) AS page_ordinal
     FROM public.app_change_counters AS candidate_change
-    WHERE candidate_change.entity_key
+    WHERE candidate_change.entity_key LIKE 'pay_candidate:%'
+      AND candidate_change.entity_key
             ~* '^pay_candidate:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       AND candidate_change.scope_change_generation > v_base_generation
       AND candidate_change.scope_change_generation <= v_target
