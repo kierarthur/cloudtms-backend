@@ -20983,6 +20983,8 @@ DECLARE
   v_signed_finance_reconciliation boolean := false;
   v_exclude_lifecycle_ineligible_current_payability boolean := false;
   v_authoritative_timesheet_scope boolean := false;
+  v_scope_admission_authorised boolean := false;
+  v_scope_admission_candidate_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('PREVIEW_PROGRESS');
 
@@ -21055,6 +21057,38 @@ BEGIN
     WHEN jsonb_typeof(COALESCE(p_preview_decisions_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_preview_decisions_json, '{}'::jsonb)
     ELSE '{}'::jsonb
   END;
+
+  -- Internal continuous-scope admission is a bounded shortlist applied as an
+  -- additional predicate to the normal broad-session eligibility authority.
+  -- It deliberately does not use p_candidate_id, whose existing semantics are
+  -- a hard explicit-filter boundary.
+  v_scope_admission_authorised := LOWER(BTRIM(COALESCE(
+    current_setting('cloudtms.banking_pay_scope_admission', true),
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  IF v_scope_admission_authorised
+     AND jsonb_typeof(v_preview_decisions_root->'scope_admission_candidate_ids') = 'array' THEN
+    IF jsonb_array_length(v_preview_decisions_root->'scope_admission_candidate_ids') > 50 THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_ADMISSION_INPUT_TOO_LARGE'
+        USING ERRCODE = '22023';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(v_preview_decisions_root->'scope_admission_candidate_ids') AS admission_value(value)
+      WHERE NULLIF(BTRIM(admission_value.value), '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ) THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_ADMISSION_CANDIDATE_ID_INVALID'
+        USING ERRCODE = '22023';
+    END IF;
+
+    SELECT COALESCE(array_agg(DISTINCT admission_value.value::uuid ORDER BY admission_value.value::uuid), ARRAY[]::uuid[])
+    INTO v_scope_admission_candidate_ids
+    FROM jsonb_array_elements_text(v_preview_decisions_root->'scope_admission_candidate_ids') AS admission_value(value);
+  END IF;
+
+  v_preview_decisions_root := v_preview_decisions_root - 'scope_admission_candidate_ids';
 
   IF v_effective_candidate_id IS NULL
      AND NULLIF(BTRIM(COALESCE(v_preview_decisions_root->>'candidate_id', v_preview_decisions_root->>'candidateId', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
@@ -21403,6 +21437,10 @@ BEGIN
         ROW_NUMBER() OVER (ORDER BY candidate_scope_row.id) AS page_ordinal
       FROM public.candidates AS candidate_scope_row
       WHERE (v_last_candidate_id IS NULL OR candidate_scope_row.id > v_last_candidate_id)
+        AND (
+          COALESCE(array_length(v_scope_admission_candidate_ids, 1), 0) = 0
+          OR candidate_scope_row.id = ANY(v_scope_admission_candidate_ids)
+        )
         -- A selected candidate is a hard scope boundary, not merely another
         -- way for a candidate to qualify.  Without this outer predicate an
         -- unrelated candidate with an eligible finance case could enter a
@@ -66435,6 +66473,11 @@ DECLARE
     v_runner_state text := NULL::text;
     v_requires_user_action boolean := false;
     v_resume_reason text := NULL::text;
+    v_finish_scope_generation bigint := 0;
+    v_finish_relevant_generation bigint := NULL::bigint;
+    v_finish_unresolved_root_count integer := 0;
+    v_finish_scope_status text := 'NONE';
+    v_finish_freshness_status text := 'VALID_AT_SCOPE_FREEZE';
 BEGIN
     PERFORM set_config('lock_timeout', '3s', true);
 
@@ -66494,6 +66537,73 @@ BEGIN
       ELSE v_operation.resume_reason
     END;
 
+    -- DRAFT_CREATE completion records post-freeze evidence without aborting the
+    -- frozen operation. Existing central freshness gates remain authoritative
+    -- for every consequential post-draft action.
+    IF UPPER(BTRIM(COALESCE(v_operation.operation_type, ''))) = 'DRAFT_CREATE'
+       AND v_status = 'COMPLETE'
+       AND v_operation.scope_freeze_status = 'FROZEN'
+       AND v_operation.frozen_scope_change_generation IS NOT NULL THEN
+      SELECT COALESCE(change_counter.seq, 0)
+      INTO v_finish_scope_generation
+      FROM public.app_change_counters AS change_counter
+      WHERE change_counter.entity_key = 'pay_candidate_scope_generation';
+
+      SELECT MAX(candidate_counter.scope_change_generation)
+      INTO v_finish_relevant_generation
+      FROM public.banking_pay_operation_candidate_scope AS frozen_scope
+      JOIN public.app_change_counters AS candidate_counter
+        ON candidate_counter.entity_key = 'pay_candidate:' || frozen_scope.candidate_id::text
+      WHERE frozen_scope.operation_id = v_operation.id
+        AND candidate_counter.scope_change_generation > v_operation.frozen_scope_change_generation
+        AND candidate_counter.scope_change_generation <= v_finish_scope_generation;
+
+      SELECT COUNT(*)::integer
+      INTO v_finish_unresolved_root_count
+      FROM public.banking_pay_workbench_jobs AS broad_root
+      WHERE broad_root.job_type = 'CONTRACT_CLIENT_DIRTY_FANOUT'
+        AND broad_root.scope_change_generation > v_operation.frozen_scope_change_generation
+        AND broad_root.scope_change_generation <= v_finish_scope_generation
+        AND broad_root.status IN ('QUEUED', 'RUNNING', 'FAILED');
+
+      IF v_finish_scope_generation = v_operation.frozen_scope_change_generation THEN
+        v_finish_scope_status := 'NONE';
+        v_finish_freshness_status := 'VALID_AT_SCOPE_FREEZE';
+      ELSIF v_finish_relevant_generation IS NOT NULL THEN
+        v_finish_scope_status := 'RELEVANT';
+        v_finish_freshness_status := 'STALE_POST_SCOPE_FREEZE';
+      ELSIF v_finish_unresolved_root_count > 0 THEN
+        v_finish_scope_status := 'PENDING_RELEVANCE';
+        v_finish_freshness_status := 'PENDING_SCOPE_CHANGE_RELEVANCE';
+      ELSE
+        v_finish_scope_status := 'IRRELEVANT';
+        v_finish_freshness_status := 'VALID_AT_SCOPE_FREEZE';
+      END IF;
+
+      UPDATE public.pay_batches AS operation_batch
+      SET freshness_validation_status = v_finish_freshness_status,
+          freshness_checked_at_utc = v_now,
+          scope_generation_observed_at_shell = GREATEST(
+            COALESCE(operation_batch.scope_generation_observed_at_shell, 0),
+            v_finish_scope_generation
+          ),
+          freshness_result_json = COALESCE(operation_batch.freshness_result_json, '{}'::jsonb)
+            || jsonb_strip_nulls(jsonb_build_object(
+              'post_freeze_scope_status', v_finish_scope_status,
+              'scope_generation_observed_at_operation_finish', v_finish_scope_generation,
+              'post_freeze_relevant_generation', v_finish_relevant_generation,
+              'unresolved_broad_root_count', v_finish_unresolved_root_count,
+              'checked_at_utc', v_now::text,
+              'policy_x_authority', 'FROZEN_OPERATION_SCOPE'
+            ))
+      WHERE operation_batch.id IN (
+        SELECT DISTINCT candidate_scope.pay_batch_id
+        FROM public.banking_pay_operation_candidate_scope AS candidate_scope
+        WHERE candidate_scope.operation_id = v_operation.id
+          AND candidate_scope.pay_batch_id IS NOT NULL
+      );
+    END IF;
+
     UPDATE public.banking_pay_operations AS operation_update
     SET status = v_status,
         runner_state = v_runner_state,
@@ -66517,6 +66627,34 @@ BEGIN
           'requires_user_action', v_requires_user_action,
           'resume_reason', v_resume_reason
         )),
+        post_freeze_scope_status = CASE
+          WHEN UPPER(BTRIM(COALESCE(operation_update.operation_type, ''))) = 'DRAFT_CREATE'
+           AND v_status = 'COMPLETE'
+           AND operation_update.scope_freeze_status = 'FROZEN'
+            THEN v_finish_scope_status
+          ELSE operation_update.post_freeze_scope_status
+        END,
+        post_freeze_observed_generation = CASE
+          WHEN UPPER(BTRIM(COALESCE(operation_update.operation_type, ''))) = 'DRAFT_CREATE'
+           AND v_status = 'COMPLETE'
+           AND operation_update.scope_freeze_status = 'FROZEN'
+            THEN v_finish_scope_generation
+          ELSE operation_update.post_freeze_observed_generation
+        END,
+        post_freeze_relevant_generation = CASE
+          WHEN UPPER(BTRIM(COALESCE(operation_update.operation_type, ''))) = 'DRAFT_CREATE'
+           AND v_status = 'COMPLETE'
+           AND operation_update.scope_freeze_status = 'FROZEN'
+            THEN v_finish_relevant_generation
+          ELSE operation_update.post_freeze_relevant_generation
+        END,
+        post_freeze_scope_checked_at_utc = CASE
+          WHEN UPPER(BTRIM(COALESCE(operation_update.operation_type, ''))) = 'DRAFT_CREATE'
+           AND v_status = 'COMPLETE'
+           AND operation_update.scope_freeze_status = 'FROZEN'
+            THEN v_now
+          ELSE operation_update.post_freeze_scope_checked_at_utc
+        END,
         updated_at_utc = v_now
     WHERE operation_update.id = v_operation.id
     RETURNING operation_update.* INTO v_operation;
@@ -68691,6 +68829,13 @@ DECLARE
     v_top_text text;
     v_top_bool boolean;
     v_top_ts timestamptz;
+    v_frozen_generation bigint := 0;
+    v_prechecked_generation bigint := 0;
+    v_locked_generation bigint := 0;
+    v_highest_relevant_generation bigint := NULL::bigint;
+    v_unresolved_broad_root_count integer := 0;
+    v_post_freeze_scope_status text := 'NONE';
+    v_batch_freshness_status text := 'VALID_AT_SCOPE_FREEZE';
 BEGIN
     IF p_operation_id IS NULL THEN
         RAISE EXCEPTION 'pay_batch_shell_ensure_from_operation requires p_operation_id';
@@ -68752,6 +68897,20 @@ BEGIN
         RAISE EXCEPTION 'pay_batch_shell_ensure_from_operation operation % belongs to a different workbench session', p_operation_id;
     END IF;
 
+    IF v_operation.scope_freeze_status <> 'FROZEN'
+       OR COALESCE(v_operation.source_scope_seed_complete, false) IS NOT TRUE
+       OR v_operation.frozen_scope_change_generation IS NULL THEN
+        RAISE EXCEPTION 'PAY_BATCH_SHELL_SCOPE_NOT_FROZEN'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'PAY_BATCH_SHELL_SCOPE_NOT_FROZEN',
+                  'operation_id', p_operation_id::text,
+                  'scope_freeze_status', v_operation.scope_freeze_status
+                )::text;
+    END IF;
+
+    v_frozen_generation := v_operation.frozen_scope_change_generation;
+
     SELECT session_row.*
     INTO v_session
     FROM public.banking_pay_workbench_sessions AS session_row
@@ -68768,6 +68927,12 @@ BEGIN
 
     IF v_session.discarded_at_utc IS NOT NULL THEN
         RAISE EXCEPTION 'pay_batch_shell_ensure_from_operation workbench session % has been discarded', p_workbench_session_id;
+    END IF;
+
+    IF v_operation.frozen_source_session_version IS DISTINCT FROM v_session.version
+       OR v_operation.frozen_source_snapshot_run_id IS DISTINCT FROM v_session.source_snapshot_run_id THEN
+        RAISE EXCEPTION 'PAY_BATCH_SHELL_FROZEN_SESSION_PROVENANCE_MISMATCH'
+          USING ERRCODE = 'P0001';
     END IF;
 
     WITH raw_scope AS (
@@ -69260,6 +69425,32 @@ BEGIN
         RETURN;
     END IF;
 
+    -- Bounded relevance precheck over operation-owned candidates and unresolved
+    -- broad roots. No source trigger scans operations or batches.
+    SELECT COALESCE(change_counter.seq, 0)
+    INTO v_prechecked_generation
+    FROM public.app_change_counters AS change_counter
+    WHERE change_counter.entity_key = 'pay_candidate_scope_generation';
+
+    SELECT MAX(candidate_counter.scope_change_generation)
+    INTO v_highest_relevant_generation
+    FROM public.banking_pay_operation_candidate_scope AS frozen_scope
+    JOIN public.app_change_counters AS candidate_counter
+      ON candidate_counter.entity_key = 'pay_candidate:' || frozen_scope.candidate_id::text
+    WHERE frozen_scope.operation_id = p_operation_id
+      AND frozen_scope.workbench_session_id = p_workbench_session_id
+      AND UPPER(BTRIM(COALESCE(frozen_scope.pay_channel, ''))) = v_pay_channel
+      AND candidate_counter.scope_change_generation > v_frozen_generation
+      AND candidate_counter.scope_change_generation <= v_prechecked_generation;
+
+    SELECT COUNT(*)::integer
+    INTO v_unresolved_broad_root_count
+    FROM public.banking_pay_workbench_jobs AS broad_root
+    WHERE broad_root.job_type = 'CONTRACT_CLIENT_DIRTY_FANOUT'
+      AND broad_root.scope_change_generation > v_frozen_generation
+      AND broad_root.scope_change_generation <= v_prechecked_generation
+      AND broad_root.status IN ('QUEUED', 'RUNNING', 'FAILED');
+
     SELECT settings_row.banking_system,
            settings_row.external_paye_system,
            settings_row.rail_provider_default,
@@ -69282,6 +69473,41 @@ BEGIN
 
     v_same_week_override_persisted := v_pay_channel = 'PAYE' AND v_same_week_override_required AND v_same_week_override_proof_valid;
 
+    SELECT change_counter.seq
+    INTO v_locked_generation
+    FROM public.app_change_counters AS change_counter
+    WHERE change_counter.entity_key = 'pay_candidate_scope_generation'
+    FOR UPDATE;
+
+    IF v_locked_generation = v_frozen_generation THEN
+        v_post_freeze_scope_status := 'NONE';
+        v_batch_freshness_status := 'VALID_AT_SCOPE_FREEZE';
+    ELSIF v_highest_relevant_generation IS NOT NULL THEN
+        v_post_freeze_scope_status := 'RELEVANT';
+        v_batch_freshness_status := 'STALE_POST_SCOPE_FREEZE';
+    ELSIF v_locked_generation > v_prechecked_generation
+       OR v_unresolved_broad_root_count > 0 THEN
+        v_post_freeze_scope_status := 'PENDING_RELEVANCE';
+        v_batch_freshness_status := 'PENDING_SCOPE_CHANGE_RELEVANCE';
+    ELSE
+        v_post_freeze_scope_status := 'IRRELEVANT';
+        v_batch_freshness_status := 'VALID_AT_SCOPE_FREEZE';
+    END IF;
+
+    UPDATE public.banking_pay_operations AS frozen_operation
+    SET post_freeze_scope_status = v_post_freeze_scope_status,
+        post_freeze_observed_generation = CASE
+          WHEN v_locked_generation > v_frozen_generation THEN v_locked_generation
+          ELSE NULL::bigint
+        END,
+        post_freeze_relevant_generation = CASE
+          WHEN v_post_freeze_scope_status = 'RELEVANT' THEN v_highest_relevant_generation
+          ELSE NULL::bigint
+        END,
+        post_freeze_scope_checked_at_utc = now(),
+        updated_at_utc = now()
+    WHERE frozen_operation.id = p_operation_id;
+
     INSERT INTO public.pay_batches (
         pay_date,
         created_at_utc,
@@ -69299,7 +69525,12 @@ BEGIN
         same_week_paye_override_used,
         same_week_paye_override_reason,
         same_week_paye_override_verified_at_utc,
-        same_week_paye_override_verified_by_user_id
+        same_week_paye_override_verified_by_user_id,
+        source_scope_change_generation,
+        scope_generation_observed_at_shell,
+        freshness_validation_status,
+        freshness_checked_at_utc,
+        freshness_result_json
     )
     VALUES (
         v_session.pay_date,
@@ -69318,7 +69549,20 @@ BEGIN
         CASE WHEN v_same_week_override_persisted THEN true ELSE false END,
         CASE WHEN v_same_week_override_persisted THEN v_same_week_override_reason ELSE NULL::text END,
         CASE WHEN v_same_week_override_persisted THEN v_same_week_override_verified_at_utc ELSE NULL::timestamptz END,
-        CASE WHEN v_same_week_override_persisted THEN v_same_week_override_verified_by_user_id ELSE NULL::uuid END
+        CASE WHEN v_same_week_override_persisted THEN v_same_week_override_verified_by_user_id ELSE NULL::uuid END,
+        v_frozen_generation,
+        v_locked_generation,
+        v_batch_freshness_status,
+        now(),
+        jsonb_strip_nulls(jsonb_build_object(
+          'scope_freeze_status', 'FROZEN',
+          'source_scope_change_generation', v_frozen_generation,
+          'scope_generation_observed_at_shell', v_locked_generation,
+          'post_freeze_scope_status', v_post_freeze_scope_status,
+          'post_freeze_relevant_generation', v_highest_relevant_generation,
+          'unresolved_broad_root_count', v_unresolved_broad_root_count,
+          'policy_x_authority', 'FROZEN_OPERATION_SCOPE'
+        ))
     )
     RETURNING public.pay_batches.id INTO v_new_pay_batch_id;
 
@@ -173673,6 +173917,14 @@ BEGIN
             )::text;
   END IF;
 
+  IF v_job_row.scope_change_generation IS NOT NULL THEN
+    PERFORM set_config(
+      'cloudtms.banking_pay_inherited_scope_generation',
+      v_job_row.scope_change_generation::text,
+      true
+    );
+  END IF;
+
   v_payload_json := CASE
     WHEN jsonb_typeof(COALESCE(v_job_row.payload_json, '{}'::jsonb)) = 'object'
       THEN COALESCE(v_job_row.payload_json, '{}'::jsonb)
@@ -175291,7 +175543,8 @@ BEGIN
     ),
     'stored_ready_mismatch', false,
     'read_only', v_replacement_required OR COALESCE(v_terminal_failure, false)
-  );
+  )
+  || public.pay_workbench_scope_progress_v1(p_session_id);
 END;
 $function$;
 
@@ -198655,6 +198908,14 @@ BEGIN
   IF UPPER(BTRIM(COALESCE(v_job.status, ''))) <> 'RUNNING' THEN
     RAISE EXCEPTION 'Job % must be RUNNING before processing; status=%', p_job_id, v_job.status
       USING ERRCODE = '55000';
+  END IF;
+
+  IF v_job.scope_change_generation IS NOT NULL THEN
+    PERFORM set_config(
+      'cloudtms.banking_pay_inherited_scope_generation',
+      v_job.scope_change_generation::text,
+      true
+    );
   END IF;
 
   v_payload := CASE

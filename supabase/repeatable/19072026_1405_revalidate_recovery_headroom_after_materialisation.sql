@@ -1485,7 +1485,18 @@ DECLARE
   v_target record;
   v_target_count integer := 0;
   v_demoted_count integer := 0;
+  v_scope_ensure_result jsonb := '{}'::jsonb;
+  v_scope_reconcile_result jsonb := '{}'::jsonb;
 BEGIN
+  -- Continuous candidate-scope maintenance shares this aggregate drain RPC.
+  -- Ensure never locks the global generation row and the bounded coordinator
+  -- page runs before the established queue claim, so there is no RPC fan-out.
+  v_scope_ensure_result := public.pay_workbench_scope_reconcile_ensure_v1();
+  v_scope_reconcile_result := public.pay_workbench_scope_reconcile_drain_one_v1(
+    25,
+    COALESCE(NULLIF(BTRIM(p_worker_id), ''), 'WORKBENCH_REVALIDATED') || ':SCOPE'
+  );
+
   -- Preserve the existing aggregate workbench worker unchanged, then apply the
   -- candidate-level invariant only to terminal materialisation jobs returned by
   -- this drain. Both functions run in the same transaction, so a revalidation
@@ -1559,6 +1570,8 @@ BEGIN
     'recovery_headroom_revalidation_target_count', v_target_count,
     'recovery_headroom_revalidation_demoted_count', v_demoted_count,
     'recovery_headroom_revalidation_results', v_revalidation_results,
+    'scope_reconcile_ensure', COALESCE(v_scope_ensure_result, '{}'::jsonb),
+    'scope_reconcile_page', COALESCE(v_scope_reconcile_result, '{}'::jsonb),
     'policy_x_authority_scope', 'PRE_DRAFT_LIVE_WORKBENCH_ONLY',
     'post_draft_artifacts_touched', false,
     'payment_execution_started', false

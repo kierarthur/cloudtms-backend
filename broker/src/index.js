@@ -15606,38 +15606,15 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
       let scopeDiscoveryEnqueuedCount = 0;
       let scopeDiscoveryPageCount = 0;
       if (openAction === 'WORKBENCH_SESSION_ATTACHED') {
-        lastDiagnosticStage = 'PAY_WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY_RPC';
-        lastDiagnosticRpc = 'pay_workbench_enqueue_session_candidate_refresh';
-        const discoveryRaw = await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
-          p_session_id: sessionId,
-          p_candidate_id: null,
-          p_reason: 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
-          p_actor_user_id: actorUserId,
-          p_payload_json: {
-            limit: 5,
-            refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY',
-            discover_current_scope: true
-          }
-        }, {
-          routeClass: 'PREVIEW_OPEN',
-          purpose: 'WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY',
-          timeoutMs: 5000,
-          bankingPay: true
-        });
-        const discoveryPage = unwrapRpc(discoveryRaw, 'pay_workbench_enqueue_session_candidate_refresh');
-        scopeDiscoveryPageCount = 1;
-        scopeDiscoveryCandidateCount = Math.max(0, Math.trunc(Number(discoveryPage.candidate_count || 0) || 0));
-        scopeDiscoveryEnqueuedCount = Math.max(0, Math.trunc(Number(discoveryPage.enqueued_candidate_count || 0) || 0));
         openPayload = {
           ...openPayload,
-          scope_discovery_completed: false,
-          scope_discovery_queued: discoveryPage.scope_discovery_queued === true,
-          scope_discovery_job_id: uuidRe.test(trimStr(discoveryPage.scope_discovery_job_id))
-            ? trimStr(discoveryPage.scope_discovery_job_id)
-            : null,
-          scope_discovery_candidate_count: scopeDiscoveryCandidateCount,
-          scope_discovery_enqueued_count: scopeDiscoveryEnqueuedCount,
-          scope_discovery_page_count: scopeDiscoveryPageCount
+          scope_discovery_completed: true,
+          scope_discovery_queued: false,
+          scope_discovery_job_id: null,
+          scope_discovery_candidate_count: 0,
+          scope_discovery_enqueued_count: 0,
+          scope_discovery_page_count: 0,
+          continuous_scope_maintenance: true
         };
       }
 
@@ -15682,28 +15659,9 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
         transition_changed_count: 0,
         more_due: false
       };
-      lastDiagnosticStage = 'PAY_WORKBENCH_ENQUEUE_EXPIRED_SNOOZE_REFRESHES_V1_RPC';
-      lastDiagnosticRpc = 'pay_workbench_enqueue_expired_snooze_refreshes_v1';
-      try {
-        const expiryRaw = await sbRpc(env, 'pay_workbench_enqueue_expired_snooze_refreshes_v1', {
-          p_session_id: sessionId,
-          p_session_limit: 1,
-          p_candidate_limit: 100
-        }, {
-          routeClass: 'PREVIEW_OPEN',
-          purpose: 'WORKBENCH_SESSION_OPEN_EXPIRY_DISCOVERY',
-          timeoutMs: 10000,
-          bankingPay: true
-        });
-        expiryResult = unwrapRpc(expiryRaw, 'pay_workbench_enqueue_expired_snooze_refreshes_v1');
-      } catch (expiryError) {
-        throw attachDiagnosticToError(
-          expiryError,
-          'PAY_WORKBENCH_ENQUEUE_EXPIRED_SNOOZE_REFRESHES_V1_RPC',
-          'pay_workbench_enqueue_expired_snooze_refreshes_v1',
-          { session_id: sessionId }
-        );
-      }
+      // Snooze expiry and candidate-scope discovery are maintained by the
+      // existing scheduled Banking Pay drain. Modal open is now read-only with
+      // respect to candidate discovery and returns materialised rows directly.
 
       const expiryEnqueuedCount = Math.max(0, Math.trunc(Number(expiryResult.enqueued_count || 0) || 0));
       const expiryProcessedCount = Math.max(0, Math.trunc(Number(expiryResult.processed_snooze_count || 0) || 0));

@@ -30,6 +30,11 @@ DECLARE
   v_active_workbench_job_sample jsonb := '[]'::jsonb;
   v_stale_candidate_authority_count integer := 0;
   v_stale_candidate_authority_sample jsonb := '[]'::jsonb;
+  v_scope_generation_start bigint := 0;
+  v_scope_generation_final bigint := 0;
+  v_scope_upstream_active_count integer := 0;
+  v_scope_upstream_failed_count integer := 0;
+  v_operation_scope_hash text := NULL::text;
 BEGIN
   perform public._ctms_assert_session_correction_residuals_draftable_v1(p_workbench_session_id,p_selected_preview_row_ids,'PAY_WORKBENCH_PREPARE_DRAFT');
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
@@ -115,6 +120,47 @@ BEGIN
     )::text;
   END IF;
 
+  SELECT COALESCE(change_counter.seq, 0)
+  INTO v_scope_generation_start
+  FROM public.app_change_counters AS change_counter
+  WHERE change_counter.entity_key = 'pay_candidate_scope_generation';
+
+  IF COALESCE(v_session.scope_change_generation_applied, 0) <> v_scope_generation_start THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_RECONCILIATION_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_SCOPE_RECONCILIATION_REQUIRED',
+              'session_id', p_workbench_session_id::text,
+              'scope_change_generation_current', v_scope_generation_start,
+              'scope_change_generation_applied', COALESCE(v_session.scope_change_generation_applied, 0),
+              'message', 'Banking Pay is checking for recent candidate changes. Wait for the update to finish before creating a draft.'
+            )::text;
+  END IF;
+
+  SELECT
+    COUNT(*) FILTER (WHERE upstream_job.status IN ('QUEUED', 'RUNNING'))::integer,
+    COUNT(*) FILTER (WHERE upstream_job.status = 'FAILED')::integer
+  INTO v_scope_upstream_active_count, v_scope_upstream_failed_count
+  FROM public.banking_pay_workbench_jobs AS upstream_job
+  WHERE upstream_job.job_type IN (
+      'WORKBENCH_CANDIDATE_DIRTY_APPLY',
+      'WORKBENCH_FINANCE_CASE_DIRTY_APPLY',
+      'CONTRACT_CLIENT_DIRTY_FANOUT'
+    )
+    AND upstream_job.scope_change_generation IS NOT NULL
+    AND upstream_job.scope_change_generation <= v_scope_generation_start
+    AND upstream_job.status IN ('QUEUED', 'RUNNING', 'FAILED');
+
+  IF v_scope_upstream_failed_count > 0 THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_RECONCILIATION_FAILED'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF v_scope_upstream_active_count > 0 THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_RECONCILIATION_REQUIRED'
+      USING ERRCODE = 'P0001';
+  END IF;
+
   WITH active_workbench_jobs AS (
     SELECT job_row.id,
            job_row.job_type,
@@ -171,6 +217,8 @@ BEGIN
   UPDATE public.banking_pay_operations AS operation_update
   SET workbench_session_id = COALESCE(operation_update.workbench_session_id, p_workbench_session_id),
       actor_user_id = COALESCE(operation_update.actor_user_id, p_actor_user_id),
+      scope_freeze_status = 'SEEDING',
+      source_scope_seed_complete = false,
       updated_at_utc = v_now
   WHERE operation_update.id = p_operation_id;
 
@@ -954,6 +1002,11 @@ BEGIN
                 'message', 'Selected preview rows did not produce any valid row-backed candidate scope rows.'
               )::text;
     END IF;
+    UPDATE public.banking_pay_operations
+    SET scope_freeze_status = 'NONE',
+        source_scope_seed_complete = false,
+        updated_at_utc = v_now
+    WHERE id = p_operation_id;
     RETURN QUERY SELECT 0::integer, 0::integer, 0::integer, 0::integer, 0::integer;
     RETURN;
   END IF;
@@ -1156,6 +1209,74 @@ BEGIN
             )::text;
   END IF;
 
+  SELECT md5(COALESCE(string_agg(
+           scope_row.candidate_id::text || ':' || scope_row.pay_channel || ':' || scope_row.scope_hash,
+           '|' ORDER BY scope_row.pay_channel, scope_row.candidate_id
+         ), ''))
+  INTO v_operation_scope_hash
+  FROM public.banking_pay_operation_candidate_scope AS scope_row
+  WHERE scope_row.operation_id = p_operation_id
+    AND scope_row.workbench_session_id = p_workbench_session_id;
+
+  -- Finish every potentially large scope/JSON operation before taking the
+  -- scalar generation lock. Only the final recheck and FROZEN seal follow it.
+  SELECT COUNT(*)::integer
+  INTO v_active_workbench_job_count
+  FROM public.banking_pay_workbench_jobs AS blocking_job
+  WHERE blocking_job.session_id = p_workbench_session_id
+    AND blocking_job.status IN ('QUEUED', 'RUNNING')
+    AND blocking_job.job_type IN (
+      'WORKBENCH_SESSION_SCOPE_SEED',
+      'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+      'WORKBENCH_CANDIDATE_DELTA_REFRESH',
+      'WORKBENCH_SESSION_CLONE_REBASE',
+      'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+      'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+      'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+    );
+
+  SELECT
+    COUNT(*) FILTER (WHERE upstream_job.status IN ('QUEUED', 'RUNNING'))::integer,
+    COUNT(*) FILTER (WHERE upstream_job.status = 'FAILED')::integer
+  INTO v_scope_upstream_active_count, v_scope_upstream_failed_count
+  FROM public.banking_pay_workbench_jobs AS upstream_job
+  WHERE upstream_job.job_type IN (
+      'WORKBENCH_CANDIDATE_DIRTY_APPLY',
+      'WORKBENCH_FINANCE_CASE_DIRTY_APPLY',
+      'CONTRACT_CLIENT_DIRTY_FANOUT'
+    )
+    AND upstream_job.scope_change_generation IS NOT NULL
+    AND upstream_job.scope_change_generation <= v_scope_generation_start
+    AND upstream_job.status IN ('QUEUED', 'RUNNING', 'FAILED');
+
+  IF v_active_workbench_job_count > 0 OR v_scope_upstream_active_count > 0 THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_REFRESH_IN_PROGRESS'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF v_scope_upstream_failed_count > 0 THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_RECONCILIATION_FAILED'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT change_counter.seq
+  INTO v_scope_generation_final
+  FROM public.app_change_counters AS change_counter
+  WHERE change_counter.entity_key = 'pay_candidate_scope_generation'
+  FOR UPDATE;
+
+  IF COALESCE(v_scope_generation_final, 0) <> v_scope_generation_start
+     OR COALESCE(v_session.scope_change_generation_applied, 0) <> COALESCE(v_scope_generation_final, 0) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_CHANGED_BEFORE_FREEZE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_WORKBENCH_SCOPE_CHANGED_BEFORE_FREEZE',
+              'scope_change_generation_start', v_scope_generation_start,
+              'scope_change_generation_final', COALESCE(v_scope_generation_final, 0),
+              'message', 'Banking Pay changed while the draft scope was being prepared. Review the refreshed rows and try again.'
+            )::text;
+  END IF;
+
   UPDATE public.banking_pay_operations AS operation_update
   SET progress_json = jsonb_strip_nulls(
         COALESCE(operation_update.progress_json, '{}'::jsonb)
@@ -1167,6 +1288,19 @@ BEGIN
           'draft_scope_resolved_current_selected_preview_row_ids', COALESCE(v_resolved_current_selection_ids, '[]'::jsonb)
         )
       ),
+      scope_freeze_status = 'FROZEN',
+      frozen_scope_change_generation = v_scope_generation_final,
+      scope_frozen_at_utc = v_now,
+      source_scope_seed_complete = true,
+      frozen_candidate_scope_count = COALESCE(v_candidate_scope_count, 0),
+      frozen_selected_row_count = COALESCE(v_selected_count, 0),
+      frozen_operation_scope_hash = v_operation_scope_hash,
+      frozen_source_session_version = v_session.version,
+      frozen_source_snapshot_run_id = v_session.source_snapshot_run_id,
+      post_freeze_scope_status = 'NONE',
+      post_freeze_observed_generation = NULL::bigint,
+      post_freeze_relevant_generation = NULL::bigint,
+      post_freeze_scope_checked_at_utc = NULL::timestamptz,
       updated_at_utc = v_now
   WHERE operation_update.id = p_operation_id;
 
