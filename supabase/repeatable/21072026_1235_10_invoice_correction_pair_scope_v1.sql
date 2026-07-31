@@ -33,6 +33,25 @@ declare
   v_current_stream text;
   v_target_stream text;
   v_line_policy_mismatch_count integer:=0;
+  v_compatibility_mode text;
+  v_operation public.import_apply_operations%rowtype;
+  v_operation_unit jsonb;
+  v_operation_unit_count integer:=0;
+  v_balance jsonb;
+  v_balance_row_count integer:=0;
+  v_timesheet public.timesheets%rowtype;
+  v_pair_correction_id text;
+  v_pair_parent_id uuid;
+  v_pair_operation_id uuid;
+  v_pair_unit_fingerprint text;
+  v_pair_source_identity text;
+  v_pair_envelope_count integer:=0;
+  v_pair_parent_count integer:=0;
+  v_pair_member_count integer:=0;
+  v_pair_reversal_count integer:=0;
+  v_pair_replacement_count integer:=0;
+  v_missing_ids uuid[]:=array[]::uuid[];
+  v_recomputed_unit_fingerprint text;
 begin
   if p_timesheet_id is null then raise exception 'INVOICE_CORRECTION_TIMESHEET_ID_REQUIRED' using errcode='22023'; end if;
   if p_max_members<1 or p_max_members>100 then raise exception 'INVOICE_CORRECTION_MEMBER_LIMIT_INVALID' using errcode='22023'; end if;
@@ -43,9 +62,169 @@ begin
 
   v_chain:=public.timesheet_correction_chain_scope_v1(p_timesheet_id,p_lock_rows,32,p_max_members);
   if coalesce((v_chain->>'valid')::boolean,false) is not true then
-    raise exception 'INVOICE_CORRECTION_CHAIN_INVALID' using errcode='P0001',detail=v_chain::text;
+    -- The ordinary whole-chain validator remains authoritative.  This narrowly
+    -- gated fallback exists only for a current pair committed by the reviewed
+    -- authoritative-import reconciliation path when an older issued row was
+    -- physically removed but its frozen invoice evidence remains provable.
+    select * into v_timesheet from public.timesheets
+    where timesheet_id=p_timesheet_id and is_current and archived_at_utc is null;
+    if v_timesheet.timesheet_id is null
+       or not coalesce(v_timesheet.is_adjustment,false)
+       or upper(coalesce(v_timesheet.adjustment_origin,''))<>'IMPORT_CORRECTION'
+       or v_timesheet.correction_kind not in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+       or v_timesheet.correction_id is null
+       or coalesce(v_timesheet.candidate_hint_text#>>'{import_authoritative_reconciliation,operation_id}','')
+          !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+      raise exception 'INVOICE_CORRECTION_CHAIN_INVALID' using errcode='P0001',detail=v_chain::text;
+    end if;
+    v_pair_correction_id:=v_timesheet.correction_id;
+    v_pair_operation_id:=(v_timesheet.candidate_hint_text#>>'{import_authoritative_reconciliation,operation_id}')::uuid;
+    v_pair_unit_fingerprint:=nullif(v_timesheet.candidate_hint_text#>>'{import_authoritative_reconciliation,unit_fingerprint}','');
+    v_pair_source_identity:=nullif(v_timesheet.candidate_hint_text#>>'{import_authoritative_reconciliation,source_identity}','');
+
+    select * into v_operation from public.import_apply_operations o
+    where o.id=v_pair_operation_id and o.state='COMPLETE' and o.committed_at_utc is not null;
+    if v_operation.id is null then
+      raise exception 'INVOICE_CORRECTION_CHAIN_INVALID' using errcode='P0001',detail=v_chain::text;
+    end if;
+    select count(*)::integer,min(u::text)::jsonb into v_operation_unit_count,v_operation_unit
+    from jsonb_array_elements(case when jsonb_typeof(v_operation.response_json->'reconciliation_units')='array'
+      then v_operation.response_json->'reconciliation_units' else '[]'::jsonb end) u
+    where u->>'schema_version'='IMPORT_AUTHORITATIVE_RECONCILIATION_V1'
+      and u->>'correction_id'=v_pair_correction_id
+      and u->>'source_identity'=v_pair_source_identity
+      and u->>'unit_fingerprint'=v_pair_unit_fingerprint
+      and u->>'route' in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT');
+    if v_operation_unit_count<>1 then
+      raise exception 'INVOICE_CORRECTION_CHAIN_INVALID' using errcode='P0001',detail=v_chain::text;
+    end if;
+
+    select public._import_review_hash_v1(concat_ws('|','unit-v1',
+      v_operation_unit->>'action_id',v_operation_unit->>'source_identity',v_operation_unit->>'route',
+      v_operation_unit->>'reconciliation_fingerprint',outcome.evidence_fingerprint))
+    into v_recomputed_unit_fingerprint
+    from public.import_review_action_outcomes outcome
+    where outcome.operation_id=v_operation.id and outcome.action_id=v_operation_unit->>'action_id';
+    if v_recomputed_unit_fingerprint is distinct from v_operation_unit->>'unit_fingerprint' then
+      raise exception 'INVOICE_CORRECTION_RECONCILIATION_STALE' using errcode='40001';
+    end if;
+
+    select count(*)::integer,
+      count(*) filter(where t.correction_kind='CHANGED_HOURS_REVERSAL')::integer,
+      count(*) filter(where t.correction_kind='CHANGED_HOURS_REPLACEMENT')::integer,
+      count(distinct t.parent_timesheet_id)::integer,
+      min(t.parent_timesheet_id),
+      count(distinct coalesce(
+        t.candidate_hint_text#>>'{correction_financials_policy_envelope,envelope_fingerprint}',
+        tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}'
+      ))::integer,
+      coalesce(array_agg(t.timesheet_id order by t.correction_kind,t.timesheet_id),array[]::uuid[])
+    into v_pair_member_count,v_pair_reversal_count,v_pair_replacement_count,
+      v_pair_parent_count,v_pair_parent_id,v_pair_envelope_count,v_ids
+    from public.timesheets t
+    left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+    where t.correction_id=v_pair_correction_id and t.is_current and t.archived_at_utc is null
+      and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+      and t.adjustment_origin='IMPORT_CORRECTION'
+      and t.candidate_hint_text#>>'{import_authoritative_reconciliation,operation_id}'=v_operation.id::text
+      and t.candidate_hint_text#>>'{import_authoritative_reconciliation,unit_fingerprint}'=v_pair_unit_fingerprint
+      and t.candidate_hint_text#>>'{import_authoritative_reconciliation,source_identity}'=v_pair_source_identity;
+    if v_pair_member_count<>2 or v_pair_reversal_count<>1 or v_pair_replacement_count<>1
+       or v_pair_parent_count<>1 or v_pair_parent_id is null or v_pair_envelope_count<>1
+       or v_pair_parent_id is distinct from (v_operation_unit->>'parent_timesheet_id')::uuid
+       or not exists(select 1 from public.timesheets parent_ts where parent_ts.timesheet_id=v_pair_parent_id
+          and parent_ts.is_current and parent_ts.archived_at_utc is null) then
+      raise exception 'INVOICE_CORRECTION_CHAIN_INVALID' using errcode='P0001',detail=v_chain::text;
+    end if;
+    if exists(select 1 from public.timesheets t left join public.timesheets_financials tf
+        on tf.timesheet_id=t.timesheet_id and tf.is_current
+      where t.timesheet_id=any(v_ids) and (
+        t.contract_id is distinct from (v_operation_unit->>'contract_id')::uuid
+        or t.week_ending_date is distinct from (v_operation_unit->>'week_ending_date')::date
+        or tf.candidate_id is distinct from (v_operation_unit->>'candidate_id')::uuid
+        or tf.client_id is distinct from (v_operation_unit->>'client_id')::uuid
+        or jsonb_typeof(t.actual_schedule_json)<>'array'
+        or jsonb_array_length(t.actual_schedule_json)<>1
+        or not t.actual_schedule_json @> jsonb_build_array(jsonb_build_object(
+          'shift_id',v_operation_unit->>'source_shift_id','external_row_key',v_operation_unit->>'source_identity'))
+        or (t.correction_kind='CHANGED_HOURS_REVERSAL' and (
+          (t.actual_schedule_json#>>'{0,start_utc}')::timestamptz is distinct from (v_operation_unit#>>'{B_standard_schedule_json,0,start_utc}')::timestamptz
+          or (t.actual_schedule_json#>>'{0,end_utc}')::timestamptz is distinct from (v_operation_unit#>>'{B_standard_schedule_json,0,end_utc}')::timestamptz
+          or coalesce((t.actual_schedule_json#>>'{0,break_mins}')::integer,0) is distinct from coalesce((v_operation_unit#>>'{B_standard_schedule_json,0,break_mins}')::integer,0)))
+        or (t.correction_kind='CHANGED_HOURS_REPLACEMENT' and (
+          (t.actual_schedule_json#>>'{0,start_utc}')::timestamptz is distinct from (v_operation_unit#>>'{A_schedule_json,0,start_utc}')::timestamptz
+          or (t.actual_schedule_json#>>'{0,end_utc}')::timestamptz is distinct from (v_operation_unit#>>'{A_schedule_json,0,end_utc}')::timestamptz
+          or coalesce((t.actual_schedule_json#>>'{0,break_mins}')::integer,0) is distinct from coalesce((v_operation_unit#>>'{A_schedule_json,0,break_mins}')::integer,0)))
+      )) then
+      raise exception 'INVOICE_CORRECTION_RECONCILIATION_STALE' using errcode='40001';
+    end if;
+
+    select coalesce(array_agg(x.value::uuid order by x.value::uuid),array[]::uuid[]) into v_missing_ids
+    from jsonb_array_elements_text(coalesce(v_operation_unit->'historical_missing_timesheet_ids','[]'::jsonb)) x(value);
+    if cardinality(v_missing_ids)=0
+       or exists(select 1 from unnest(v_missing_ids) missing_id
+          where exists(select 1 from public.timesheets t where t.timesheet_id=missing_id)
+             or not exists(select 1 from public.invoice_lines il join public.invoices i on i.id=il.invoice_id
+               where (il.timesheet_id=missing_id or il.meta_json->>'timesheet_id'=missing_id::text)
+                 and i.status in ('ISSUED','PAID','ON_HOLD') and i.issued_at_utc is not null)
+             or not exists(select 1 from public.audit_events ae where ae.object_type='timesheets'
+               and ae.object_id_text=missing_id::text
+               and ae.action in ('NHSP_IMPORT_CORRECTION_APPLIED','HR_IMPORT_CORRECTION_APPLIED')))
+       or exists(select 1 from jsonb_array_elements(coalesce(v_chain->'errors','[]'::jsonb)) e
+          where e->>'code'<>'CORRECTION_UNIT_INVALID') then
+      raise exception 'INVOICE_CORRECTION_CHAIN_INVALID' using errcode='P0001',detail=v_chain::text;
+    end if;
+
+    select count(*)::integer,min(b.balance_json::text)::jsonb into v_balance_row_count,v_balance
+    from public._import_review_effective_invoice_balance_core_v1(
+      v_operation.import_id,
+      jsonb_build_array(jsonb_build_object(
+        'source_identity',v_operation_unit->>'source_identity','source_system',v_operation_unit->>'source_system',
+        'source_shift_id',v_operation_unit->>'source_shift_id','external_row_key',v_operation_unit->>'source_identity',
+        'hr_row_id',v_operation_unit->>'hr_row_id','source_timesheet_id',v_operation_unit->>'source_timesheet_id',
+        'candidate_id',v_operation_unit->>'candidate_id','client_id',v_operation_unit->>'client_id',
+        'contract_id',v_operation_unit->>'contract_id','week_ending_date',v_operation_unit->>'week_ending_date',
+        'invoice_stream',v_operation_unit->>'invoice_stream','authoritative_import_id',v_operation.import_id,
+        'authoritative_schedule_json',v_operation_unit->'A_schedule_json','authoritative_hours',v_operation_unit->'A_hours'
+      )),1,512,256,128
+    ) b;
+    if v_balance_row_count<>1 or nullif(v_balance->>'blocking_code','') is not null
+       or v_balance->>'effective_invoice_fingerprint' is distinct from v_operation_unit->>'B_invoice_fingerprint'
+       or v_balance->'historical_missing_timesheet_ids' is distinct from to_jsonb(v_missing_ids) then
+      raise exception 'INVOICE_CORRECTION_RECONCILIATION_STALE' using errcode='40001';
+    end if;
+    if exists(select 1 from public.timesheets t join public.timesheets_financials tf
+        on tf.timesheet_id=t.timesheet_id and tf.is_current
+      where t.timesheet_id=any(v_ids) and (
+        coalesce(tf.is_stale,true) or coalesce(tf.has_rate_issue,false) or coalesce(tf.has_pay_channel_issue,false)
+        or (t.correction_kind='CHANGED_HOURS_REVERSAL' and (
+          tf.hours_day<>-coalesce((v_operation_unit#>>'{B_hours,hours_day}')::numeric,0)
+          or tf.hours_night<>-coalesce((v_operation_unit#>>'{B_hours,hours_night}')::numeric,0)
+          or tf.hours_sat<>-coalesce((v_operation_unit#>>'{B_hours,hours_sat}')::numeric,0)
+          or tf.hours_sun<>-coalesce((v_operation_unit#>>'{B_hours,hours_sun}')::numeric,0)
+          or tf.hours_bh<>-coalesce((v_operation_unit#>>'{B_hours,hours_bh}')::numeric,0)
+          or tf.total_pay_ex_vat<>-coalesce((v_operation_unit#>>'{B_financials,pay_ex_vat}')::numeric,0)
+          or tf.total_charge_ex_vat<>-coalesce((v_operation_unit#>>'{B_financials,charge_ex_vat}')::numeric,0)
+          or tf.margin_ex_vat<>-coalesce((v_operation_unit#>>'{B_financials,margin_ex_vat}')::numeric,0)))
+        or (t.correction_kind='CHANGED_HOURS_REPLACEMENT' and (
+          tf.hours_day<>coalesce((v_operation_unit#>>'{A_hours,hours_day}')::numeric,0)
+          or tf.hours_night<>coalesce((v_operation_unit#>>'{A_hours,hours_night}')::numeric,0)
+          or tf.hours_sat<>coalesce((v_operation_unit#>>'{A_hours,hours_sat}')::numeric,0)
+          or tf.hours_sun<>coalesce((v_operation_unit#>>'{A_hours,hours_sun}')::numeric,0)
+          or tf.hours_bh<>coalesce((v_operation_unit#>>'{A_hours,hours_bh}')::numeric,0)))
+      )) then
+      raise exception 'INVOICE_CORRECTION_RECONCILIATION_STALE' using errcode='40001';
+    end if;
+
+    v_envelope:=public._ctms_correction_policy_envelope_read_v1(p_timesheet_id);
+    v_unit:=jsonb_build_object('valid',true,'correction_id',v_pair_correction_id,
+      'correction_shape','REVERSAL_REPLACEMENT','expected_member_count',2,
+      'member_ids',to_jsonb(v_ids),'policy_envelope',v_envelope);
+    v_chain:=jsonb_build_object('root_timesheet_id',v_envelope->>'root_timesheet_id');
+    v_compatibility_mode:='IMPORT_AUTHORITATIVE_RECONCILIATION_V1';
+  else
+    v_unit:=v_chain->'requested_correction_unit';
   end if;
-  v_unit:=v_chain->'requested_correction_unit';
   if jsonb_typeof(v_unit)<>'object' or coalesce((v_unit->>'valid')::boolean,false) is not true then
     raise exception 'INVOICE_CORRECTION_UNIT_INVALID' using errcode='P0001';
   end if;
@@ -211,7 +390,8 @@ begin
     'invoice_stream',v_expected_stream,
     'pair_rows',v_rows,'ready_count',v_ready_count,'existing_line_member_count',v_line_member_count,
     'existing_line_invoice_count',v_line_invoice_count,
-    'line_policy_mismatch_count',v_line_policy_mismatch_count,'errors',v_errors);
+    'line_policy_mismatch_count',v_line_policy_mismatch_count,'errors',v_errors,
+    'compatibility_mode',v_compatibility_mode);
 end;
 $function$;
 

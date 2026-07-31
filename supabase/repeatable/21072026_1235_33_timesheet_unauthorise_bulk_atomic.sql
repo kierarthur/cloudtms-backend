@@ -16,6 +16,7 @@ DECLARE
   v_uuid_re text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$';
   v_out jsonb := '{}'::jsonb;
   v_error_state text := NULL;
+  v_capability_items jsonb := NULL;
 BEGIN
   PERFORM set_config('lock_timeout', '300ms', true);
 
@@ -36,7 +37,31 @@ BEGIN
     WHEN jsonb_typeof(p_items) = 'object' THEN jsonb_build_array(p_items)
     ELSE '[]'::jsonb
   END;
-  v_items_array := public._ctms_expand_lifecycle_items_v1(v_items_array, 'UNAUTHORISE', p_actor_user_id, 100);
+  IF to_regclass('pg_temp.import_review_lifecycle_capability_v1') IS NOT NULL
+     AND nullif(current_setting('cloudtms.import_reconciliation_capability_token',true),'') IS NOT NULL THEN
+    IF coalesce(current_setting('request.jwt.claim.role',true),
+         nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','') <> 'service_role' THEN
+      RAISE EXCEPTION 'IMPORT_REVIEW_LIFECYCLE_CAPABILITY_INVALID' USING ERRCODE='42501';
+    END IF;
+    SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'timesheet_id',c.timesheet_id,'expected_timesheet_id',c.expected_timesheet_id,
+      'expected_row_signature',c.expected_row_signature) ORDER BY c.timesheet_id),'[]'::jsonb)
+    INTO v_capability_items
+    FROM pg_temp.import_review_lifecycle_capability_v1 c
+    WHERE c.capability_token=current_setting('cloudtms.import_reconciliation_capability_token',true)
+      AND c.txid=txid_current() AND c.actor_user_id=p_actor_user_id AND c.action='UNAUTHORISE';
+    IF jsonb_array_length(v_capability_items)=0 OR
+       (SELECT array_agg(distinct nullif(x->>'timesheet_id','')::uuid ORDER BY nullif(x->>'timesheet_id','')::uuid)
+          FROM jsonb_array_elements(v_items_array) x)
+       IS DISTINCT FROM
+       (SELECT array_agg(distinct nullif(x->>'timesheet_id','')::uuid ORDER BY nullif(x->>'timesheet_id','')::uuid)
+          FROM jsonb_array_elements(v_capability_items) x) THEN
+      RAISE EXCEPTION 'IMPORT_REVIEW_LIFECYCLE_CAPABILITY_ITEM_SET_MISMATCH' USING ERRCODE='22023';
+    END IF;
+    v_items_array:=v_capability_items;
+  ELSE
+    v_items_array := public._ctms_expand_lifecycle_items_v1(v_items_array, 'UNAUTHORISE', p_actor_user_id, 100);
+  END IF;
   v_requested_count := jsonb_array_length(v_items_array);
   IF v_requested_count > 100 THEN
     RETURN jsonb_build_object('ok', false, 'batch_completed', false, 'all_success', false, 'action', 'UNAUTHORISE', 'error_code', 'TOO_MANY_ITEMS', 'requested_count', v_requested_count, 'success_count', 0, 'failure_count', v_requested_count, 'results', '[]'::jsonb);

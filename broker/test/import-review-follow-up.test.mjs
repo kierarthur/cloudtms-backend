@@ -364,6 +364,43 @@ test('configured auto-authorise targets and lifecycle restoration targets share 
   assert.equal(current.calls.some((call) => call.name.endsWith('_apply_transactional')), false);
 });
 
+test('operation-bound correction members use the frozen validate-authorise-validate transition only', async () => {
+  const current = createScenario({
+    post_commit_email_action_ids: [],
+    affected_timesheet_ids: [TIMESHEET_ID],
+    general_authorise_timesheet_ids: [],
+    operation_bound_correction_action_ids: [ACTION_ID],
+    operation_bound_correction_timesheet_ids: [TIMESHEET_ID],
+    review_email_follow_up_status: 'NOT_REQUIRED',
+    review_tsfin_follow_up_status: 'PENDING'
+  }, {
+    tsfinTargetSummaries: [
+      { settled: true, pendingTotal: 0 },
+      { settled: true, pendingTotal: 0 }
+    ]
+  });
+
+  await current.runner({}, details());
+
+  const transitions = current.calls.filter(
+    (call) => call.name === 'import_review_correction_generation_transition_v1'
+  );
+  assert.deepEqual(transitions.map((call) => call.args.p_action), [
+    'VALIDATE',
+    'AUTHORISE',
+    'VALIDATE'
+  ]);
+  for (const transition of transitions) {
+    assert.equal(transition.args.p_import_id, IMPORT_ID);
+    assert.equal(transition.args.p_operation_id, OPERATION_ID);
+    assert.equal(transition.args.p_request_hash, HASH);
+    assert.equal(transition.args.p_actor_user_id, ACTOR_ID);
+    assert.deepEqual(transition.args.p_action_ids, [ACTION_ID]);
+  }
+  assert.equal(current.calls.some((call) => call.name === 'timesheet_authorise_bulk_atomic'), false);
+  assert.equal(current.calls.some((call) => call.name.endsWith('_apply_transactional')), false);
+});
+
 test('reauthorisation failure is retryable and never repeats source apply', async () => {
   const current = createScenario({
     post_commit_email_action_ids: [],

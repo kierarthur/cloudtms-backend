@@ -544,11 +544,10 @@ begin
       case a.action_kind
         when 'INCLUDE_SHIFT' then 'TMS to add shift'
         when 'APPLY_AMENDMENT' then case
-          when a.summary_json->>'amendment_route'='AMEND_EXISTING_REPLACEMENT'
-          then 'TMS to amend replacement shift'
-          when coalesce((a.protection->>'paid')::boolean,false)
-            or coalesce((a.protection->>'invoice_locked')::boolean,false)
-          then 'TMS to reverse and replace shift' else 'TMS to amend shift' end
+          when a.summary_json->>'amendment_route'='AMEND_PAID_UNINVOICED_SOURCE' then 'TMS to amend paid uninvoiced shift'
+          when a.summary_json->>'amendment_route'='AMEND_EXISTING_REPLACEMENT' then 'TMS to repair current correction generation'
+          when a.summary_json->>'amendment_route'='CREATE_REVERSAL_REPLACEMENT' then 'TMS to create correction generation'
+          else 'TMS to amend shift' end
         when 'APPLY_CANCELLATION' then case
           when coalesce((a.protection->>'paid')::boolean,false)
             or coalesce((a.protection->>'invoice_locked')::boolean,false)
@@ -566,11 +565,10 @@ begin
       case a.action_kind
         when 'INCLUDE_SHIFT' then 'TMS to add shift'
         when 'APPLY_AMENDMENT' then case
-          when a.summary_json->>'amendment_route'='AMEND_EXISTING_REPLACEMENT'
-          then 'TMS to amend replacement shift'
-          when coalesce((a.protection->>'paid')::boolean,false)
-            or coalesce((a.protection->>'invoice_locked')::boolean,false)
-          then 'TMS to reverse and replace shift' else 'TMS to amend shift' end
+          when a.summary_json->>'amendment_route'='AMEND_PAID_UNINVOICED_SOURCE' then 'TMS to amend paid uninvoiced shift'
+          when a.summary_json->>'amendment_route'='AMEND_EXISTING_REPLACEMENT' then 'TMS to repair current correction generation'
+          when a.summary_json->>'amendment_route'='CREATE_REVERSAL_REPLACEMENT' then 'TMS to create correction generation'
+          else 'TMS to amend shift' end
         when 'APPLY_CANCELLATION' then case
           when coalesce((a.protection->>'paid')::boolean,false)
             or coalesce((a.protection->>'invoice_locked')::boolean,false)
@@ -690,11 +688,9 @@ begin
     'standard',count(*) filter(where action_kind='INCLUDE_SHIFT'),
     'non_standard',count(*) filter(where action_kind in ('APPLY_AMENDMENT','APPLY_CANCELLATION')),
     'amendment',count(*) filter(where action_kind='APPLY_AMENDMENT'
-      and (amendment_route='AMEND_EXISTING_REPLACEMENT'
-        or not (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false)))),
+      and amendment_route is distinct from 'CREATE_REVERSAL_REPLACEMENT'),
     'reversal_replacement',count(*) filter(where action_kind='APPLY_AMENDMENT'
-      and amendment_route is distinct from 'AMEND_EXISTING_REPLACEMENT'
-      and (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false))),
+      and amendment_route='CREATE_REVERSAL_REPLACEMENT'),
     'cancellation',count(*) filter(where action_kind='APPLY_CANCELLATION'
       and not (coalesce((protection->>'paid')::boolean,false) or coalesce((protection->>'invoice_locked')::boolean,false))),
     'reversal_only',count(*) filter(where action_kind='APPLY_CANCELLATION'

@@ -132,6 +132,15 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
 
     let storedResponse = objectValue(status.stored_response);
     if (!Object.keys(storedResponse).length) storedResponse = objectValue(details.applyResult);
+    const committedRequestHash = String(
+      details.requestHash ||
+      status.request_hash ||
+      storedResponse.server_request_hash ||
+      storedResponse.request_hash ||
+      ''
+    ).trim();
+    if (!committedRequestHash) throw new Error('IMPORT_REVIEW_FOLLOW_UP_REQUEST_HASH_MISSING');
+    details = { ...details, requestHash: committedRequestHash };
 
     const emailActionIds = uniqueBoundedStrings(storedResponse.post_commit_email_action_ids);
     const affectedTimesheetIds = uniqueBoundedStrings(storedResponse.affected_timesheet_ids);
@@ -141,16 +150,43 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
     const autoAuthoriseTargets = Array.isArray(storedResponse.auto_authorise_timesheet_ids)
       ? storedResponse.auto_authorise_timesheet_ids
       : [];
+    const operationBoundActionIds = uniqueBoundedStrings(
+      storedResponse.operation_bound_correction_action_ids,
+      MAX_FOLLOW_UP_ITEMS
+    );
+    const operationBoundTimesheetIds = uniqueBoundedStrings(
+      storedResponse.operation_bound_correction_timesheet_ids,
+      MAX_REAUTHORISE_ITEMS
+    ).map((value) => value.toLowerCase());
+    const explicitGeneralTargets = Array.isArray(storedResponse.general_authorise_timesheet_ids)
+      ? storedResponse.general_authorise_timesheet_ids
+      : null;
     const authoriseTimesheetIds = uniqueBoundedStrings(
-      [...reauthoriseTargets, ...autoAuthoriseTargets],
+      explicitGeneralTargets || [...reauthoriseTargets, ...autoAuthoriseTargets],
       MAX_REAUTHORISE_ITEMS + 1
     ).map((value) => value.toLowerCase());
     if (reauthoriseTargets.length > MAX_REAUTHORISE_ITEMS
       || autoAuthoriseTargets.length > MAX_REAUTHORISE_ITEMS
       || authoriseTimesheetIds.length > MAX_REAUTHORISE_ITEMS
-      || authoriseTimesheetIds.some((value) => !UUID_PATTERN.test(value))) {
+      || authoriseTimesheetIds.some((value) => !UUID_PATTERN.test(value))
+      || operationBoundTimesheetIds.some((value) => !UUID_PATTERN.test(value))) {
       throw new Error('IMPORT_REVIEW_AUTHORISE_TARGET_SET_INVALID');
     }
+    const reconciliationTransition = async (action) => {
+      if (!operationBoundActionIds.length) return { ok: true, unit_count: 0, idempotent: true };
+      const raw = await sbRpc(env, 'import_review_correction_generation_transition_v1', {
+        p_import_id: details.importId,
+        p_operation_id: details.operationId,
+        p_request_hash: details.requestHash,
+        p_action: action,
+        p_actor_user_id: details.actorUserId,
+        p_action_ids: operationBoundActionIds,
+        p_now_utc: null
+      }, { timeoutMs: 30000 });
+      const result = unwrapRpcJsonb(raw, 'import_review_correction_generation_transition_v1') || {};
+      if (result.ok !== true) throw new Error(`IMPORT_REVIEW_RECONCILIATION_${action}_INCOMPLETE`);
+      return result;
+    };
     const componentStates = {
       EMAIL: componentStatus(storedResponse, 'EMAIL'),
       TSFIN: componentStatus(storedResponse, 'TSFIN')
@@ -278,6 +314,7 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
           }
 
           if (targetsSettled) {
+            await reconciliationTransition('VALIDATE');
             if (authoriseTimesheetIds.length) {
               for (let offset = 0; offset < authoriseTimesheetIds.length; offset += AUTHORISE_CHUNK_SIZE) {
                 const chunk = authoriseTimesheetIds.slice(offset, offset + AUTHORISE_CHUNK_SIZE);
@@ -305,13 +342,19 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
               }
             }
 
-            if (authoriseTimesheetIds.length) {
+            await reconciliationTransition('AUTHORISE');
+
+            const postAuthoriseTargetIds = uniqueBoundedStrings(
+              [...authoriseTimesheetIds, ...operationBoundTimesheetIds],
+              MAX_REAUTHORISE_ITEMS
+            );
+            if (postAuthoriseTargetIds.length) {
               let postAuthoriseSummary = await loadTargetSummary();
               let postAuthoriseSettled = postAuthoriseSummary.completeEvidence;
               for (let loop = 0; !postAuthoriseSettled && loop < 10; loop += 1) {
                 const run = await runTsfinWorkerOnce(env, {
                   limit: 50,
-                  onlyTimesheetIds: authoriseTimesheetIds
+                  onlyTimesheetIds: postAuthoriseTargetIds
                 });
                 postAuthoriseSummary = await loadTargetSummary();
                 postAuthoriseSettled = postAuthoriseSummary.completeEvidence;
@@ -326,6 +369,8 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
                 throw new Error('IMPORT_REVIEW_POST_AUTHORISE_TSFIN_INCOMPLETE');
               }
             }
+
+            await reconciliationTransition('VALIDATE');
 
             await updateComponent(env, details, {
               component: 'TSFIN', expectedStatus: 'PENDING', newStatus: 'COMPLETE'

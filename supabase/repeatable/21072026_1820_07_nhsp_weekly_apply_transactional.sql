@@ -45,6 +45,13 @@ declare
   v_auto_authorise_timesheet_ids uuid[] := array[]::uuid[];
   v_lifecycle_items jsonb := '[]'::jsonb;
   v_unauthorise_result jsonb := null;
+  v_reconciliation_action_ids text[] := array[]::text[];
+  v_operation_bound_correction_action_ids text[] := array[]::text[];
+  v_operation_bound_correction_keys text[] := array[]::text[];
+  v_operation_bound_correction_timesheet_ids uuid[] := array[]::uuid[];
+  v_general_authorise_timesheet_ids uuid[] := array[]::uuid[];
+  v_reconciliation_transition jsonb := null;
+  v_reconciliation_units jsonb := '[]'::jsonb;
   v_phase1_result jsonb := null;
   v_phase15_ok int := 0;
   v_phase15_updated int := 0;
@@ -516,6 +523,20 @@ begin
   from public.weekly_import_changed_hours_phase3(p_import_id := p_import_id, p_system_type := 'NHSP') as ch
   where ch.external_row_key = any(coalesce(v_force_keys_final, array[]::text[]));
 
+  if to_regclass('pg_temp.import_review_reconciliation_units_v1') is not null then
+    if exists(select 1 from pg_temp.import_review_reconciliation_units_v1 u
+      where u.unit_json->>'source_system'<>'NHSP'
+         or u.unit_json->>'schema_version'<>'IMPORT_AUTHORITATIVE_RECONCILIATION_V1'
+         or u.route not in ('AMEND_SOURCE','AMEND_PAID_UNINVOICED_SOURCE','AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')) then
+      raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+    end if;
+    select coalesce(array_agg(u.action_id order by u.action_id),array[]::text[]),
+      coalesce(array_agg(u.action_id order by u.action_id) filter(where u.route in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')),array[]::text[]),
+      coalesce(array_agg(u.source_identity order by u.source_identity) filter(where u.route in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')),array[]::text[])
+    into v_reconciliation_action_ids,v_operation_bound_correction_action_ids,v_operation_bound_correction_keys
+    from pg_temp.import_review_reconciliation_units_v1 u;
+  end if;
+
   select coalesce(array_agg(cs.external_row_key order by cs.external_row_key), array[]::text[])
   into v_invoiced_changed_keys
   from tmp_changed_sel cs
@@ -525,6 +546,20 @@ begin
   into v_not_invoiced_changed_keys
   from tmp_changed_sel cs
   where cs.is_invoiced is false;
+
+  if cardinality(v_reconciliation_action_ids)>0 then
+    select coalesce(array_agg(u.source_identity order by u.source_identity)
+      filter(where u.route in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')),array[]::text[]),
+      coalesce(array_agg(u.source_identity order by u.source_identity)
+      filter(where u.route in ('AMEND_SOURCE','AMEND_PAID_UNINVOICED_SOURCE')),array[]::text[])
+    into v_invoiced_changed_keys,v_not_invoiced_changed_keys
+    from pg_temp.import_review_reconciliation_units_v1 u;
+    if cardinality(v_operation_bound_correction_action_ids)>0 then
+      v_reconciliation_transition:=public.import_review_correction_generation_transition_v1(
+        p_import_id,v_review_operation_id,v_review_contract->>'request_hash','PREPARE',p_actor_user_id,
+        v_operation_bound_correction_action_ids,v_now);
+    end if;
+  end if;
 
   v_invoiced_changed_keys_count := coalesce(array_length(v_invoiced_changed_keys, 1), 0);
   v_not_invoiced_changed_keys_count := coalesce(array_length(v_not_invoiced_changed_keys, 1), 0);
@@ -584,6 +619,7 @@ begin
     left join public.timesheets_financials tf on tf.timesheet_id=ts.timesheet_id and tf.is_current=true
     left join public.contract_weeks cw on cw.timesheet_id=ts.timesheet_id
     where cs.timesheet_id is not null
+      and not (cs.external_row_key=any(coalesce(v_operation_bound_correction_keys,array[]::text[])))
       and cs.is_invoiced is false
       and cs.is_paid is false
       and (ts.authorised_at_server is not null or tf.authorised_at_utc is not null
@@ -624,6 +660,7 @@ begin
       on pair_tf.timesheet_id=pair_pos.timesheet_id and pair_tf.is_current=true
     left join public.contract_weeks pair_cw on pair_cw.timesheet_id=pair_pos.timesheet_id
     where cs.is_invoiced is true
+      and not (cs.external_row_key=any(coalesce(v_operation_bound_correction_keys,array[]::text[])))
       and coalesce((public._import_review_timesheet_protection_core_v1(existing_replacement.timesheet_id)->>'paid')::boolean,false)=false
       and coalesce((public._import_review_timesheet_protection_core_v1(existing_replacement.timesheet_id)->>'invoice_locked')::boolean,false)=false
       and (pair_pos.authorised_at_server is not null or pair_tf.authorised_at_utc is not null
@@ -1550,9 +1587,45 @@ begin
   ) required
   where required.timesheet_id is not null;
 
+  if to_regclass('pg_temp.import_review_reconciliation_units_v1') is not null then
+    if exists(
+      select 1 from pg_temp.import_review_reconciliation_units_v1 u
+      where u.route in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT') and (
+        nullif(u.unit_json->>'correction_id','') is null
+        or jsonb_typeof(u.unit_json->'applied_member_ids')<>'array'
+        or jsonb_array_length(u.unit_json->'applied_member_ids')<>2
+        or (select count(*)=2
+              and count(*) filter(where t.correction_kind='CHANGED_HOURS_REVERSAL')=1
+              and count(*) filter(where t.correction_kind='CHANGED_HOURS_REPLACEMENT')=1
+              and count(distinct t.parent_timesheet_id)=1
+              and count(t.parent_timesheet_id)=2
+            from public.timesheets t
+            where t.correction_id=u.unit_json->>'correction_id' and t.is_current and t.archived_at_utc is null
+              and t.adjustment_origin='IMPORT_CORRECTION'
+              and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')) is not true
+      )
+    ) then
+      raise exception 'IMPORT_REVIEW_APPLY_POSTCONDITION_FAILED' using errcode='55000',
+        detail=jsonb_build_object('reason_code','CORRECTION_MEMBER_SET_INCOMPLETE')::text;
+    end if;
+    select coalesce(array_agg(distinct x.value::uuid order by x.value::uuid) filter (where x.value is not null),array[]::uuid[])
+    into v_operation_bound_correction_timesheet_ids
+    from pg_temp.import_review_reconciliation_units_v1 u
+    left join lateral jsonb_array_elements_text(coalesce(u.unit_json->'applied_member_ids','[]'::jsonb)) x(value) on true
+    where u.route in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT');
+    select coalesce(jsonb_agg(u.unit_json order by u.action_id),'[]'::jsonb) into v_reconciliation_units
+    from pg_temp.import_review_reconciliation_units_v1 u;
+    select coalesce(array_agg(x order by x),array[]::uuid[]) into v_reauthorise_timesheet_ids
+    from unnest(coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])) x
+    where not (x=any(coalesce(v_operation_bound_correction_timesheet_ids,array[]::uuid[])));
+  end if;
+
   v_auto_authorise_timesheet_ids:=public._import_review_auto_authorise_targets_core_v1(
     v_affected_timesheet_ids,'NHSP'::public.hr_source_enum,false
   );
+  select coalesce(array_agg(x order by x),array[]::uuid[]) into v_general_authorise_timesheet_ids
+  from unnest(coalesce(v_auto_authorise_timesheet_ids,array[]::uuid[])||coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])) x
+  where not (x=any(coalesce(v_operation_bound_correction_timesheet_ids,array[]::uuid[])));
 
   if array_length(v_affected_timesheet_ids, 1) is not null then
     perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
@@ -1677,6 +1750,11 @@ begin
     'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
     'auto_authorise_timesheet_ids',to_jsonb(coalesce(v_auto_authorise_timesheet_ids,array[]::uuid[])),
     'post_commit_reauthorise_timesheet_ids',to_jsonb(coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])),
+    'reconciliation_action_ids',to_jsonb(coalesce(v_reconciliation_action_ids,array[]::text[])),
+    'operation_bound_correction_action_ids',to_jsonb(coalesce(v_operation_bound_correction_action_ids,array[]::text[])),
+    'general_authorise_timesheet_ids',to_jsonb(coalesce(v_general_authorise_timesheet_ids,array[]::uuid[])),
+    'operation_bound_correction_timesheet_ids',to_jsonb(coalesce(v_operation_bound_correction_timesheet_ids,array[]::uuid[])),
+    'reconciliation_units',coalesce(v_reconciliation_units,'[]'::jsonb),
     'post_commit_email_action_ids','[]'::jsonb,
     'review_operation_id',v_review_operation_id
   );

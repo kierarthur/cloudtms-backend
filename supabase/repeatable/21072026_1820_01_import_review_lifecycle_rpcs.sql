@@ -479,7 +479,9 @@ returns jsonb language plpgsql security definer set search_path to 'public','ext
 declare v_s public.import_review_states%rowtype; v_i public.hr_imports%rowtype; v_o public.import_apply_operations%rowtype;
   v_ids text[]; v_db_ids text[]; v_invalidation_ids text[]; v_db_invalidation_ids text[];
   v_op_result jsonb; v_envelope jsonb; v_server_hash text; v_fresh_fingerprint text;
+  v_guard_token text;
 begin perform public._import_review_assert_actor_v1(p_actor_user_id);
+  perform set_config('lock_timeout','1500ms',true);
   if p_operation_id is null or length(btrim(coalesce(p_request_hash,''))) not between 16 and 256
     or jsonb_typeof(coalesce(p_selected_action_ids,'[]'))<>'array'
     or jsonb_typeof(coalesce(p_reference_invalidation_action_ids,'[]'))<>'array'
@@ -519,17 +521,70 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id);
   if v_invalidation_ids is distinct from v_db_invalidation_ids then
     raise exception 'IMPORT_REVIEW_INVALIDATION_ACTION_SET_MISMATCH' using errcode='40001'; end if;
 
-  -- Deterministically lock the selected timesheet scope before the final
-  -- protection read. Banking Pay keeps its own central freshness checks; these
-  -- locks only ensure that a concurrent draft/import race has one winner.
+  -- Freeze the reviewed reconciliation units first, then lock only their exact
+  -- source/invoice/current-member scope before the final catalog re-attestation.
+  v_envelope:=public._import_review_apply_envelope_core_v1(p_import_id);
+  create temporary table if not exists pg_temp.import_review_reconciliation_units_v1(
+    action_id text primary key,
+    source_identity text not null,
+    source_shift_id uuid,
+    source_timesheet_id uuid,
+    route text not null,
+    unit_fingerprint text not null,
+    unit_json jsonb not null
+  ) on commit drop;
+  truncate pg_temp.import_review_reconciliation_units_v1;
+  insert into pg_temp.import_review_reconciliation_units_v1(action_id,source_identity,source_shift_id,source_timesheet_id,route,unit_fingerprint,unit_json)
+  select u->>'action_id',u->>'source_identity',nullif(u->>'source_shift_id','')::uuid,
+    nullif(u->>'source_timesheet_id','')::uuid,u->>'route',u->>'unit_fingerprint',u
+  from jsonb_array_elements(coalesce(v_envelope->'reconciliation_units','[]'::jsonb)) u;
+  if (select count(*) from pg_temp.import_review_reconciliation_units_v1)<>
+     jsonb_array_length(coalesce(v_envelope->'reconciliation_units','[]'::jsonb)) then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+  end if;
+  perform 1 from public.invoices i where i.id in (
+    select distinct x.value::uuid from pg_temp.import_review_reconciliation_units_v1 u
+    cross join lateral jsonb_array_elements_text(coalesce(u.unit_json->'B_effective_invoice_ids','[]'::jsonb)) x(value)
+  ) order by i.id for update;
+  perform 1 from public.invoice_lines il where il.id in (
+    select distinct x.value::uuid from pg_temp.import_review_reconciliation_units_v1 u
+    cross join lateral jsonb_array_elements_text(coalesce(u.unit_json->'B_effective_invoice_line_ids','[]'::jsonb)) x(value)
+  ) order by il.id for update;
+  perform 1 from public.invoice_operations io where io.entity_id in (
+    select distinct x.value::uuid from pg_temp.import_review_reconciliation_units_v1 u
+    cross join lateral jsonb_array_elements_text(coalesce(u.unit_json->'B_effective_invoice_ids','[]'::jsonb)) x(value)
+  ) and io.status not in ('COMPLETE','FAILED','CANCELLED') order by io.id for update;
+  perform 1 from public.invoice_operation_chunks c where c.operation_id in (
+    select io.id from public.invoice_operations io where io.entity_id in (
+      select distinct x.value::uuid from pg_temp.import_review_reconciliation_units_v1 u
+      cross join lateral jsonb_array_elements_text(coalesce(u.unit_json->'B_effective_invoice_ids','[]'::jsonb)) x(value)
+    ) and io.status not in ('COMPLETE','FAILED','CANCELLED')
+  ) and c.status not in ('COMPLETE','FAILED','CANCELLED') order by c.id for update;
+  perform 1 from public.nhsp_shifts s where s.id in (
+    select source_shift_id from pg_temp.import_review_reconciliation_units_v1 where source_shift_id is not null
+  ) order by s.id for update;
   perform 1 from public.timesheets t
-  where t.timesheet_id in (select d.timesheet_id from public.import_review_decisions d
-    where d.import_id=p_import_id and d.is_current and d.action_id=any(v_ids) and d.timesheet_id is not null)
+  where t.timesheet_id in (
+    select source_timesheet_id from pg_temp.import_review_reconciliation_units_v1 where source_timesheet_id is not null
+    union
+    select x.value::uuid from pg_temp.import_review_reconciliation_units_v1 u
+      cross join lateral jsonb_array_elements_text(coalesce(u.unit_json->'M_active_member_ids','[]'::jsonb)) x(value)
+  ) and t.archived_at_utc is null
   order by t.timesheet_id for update;
   perform 1 from public.timesheets_financials tf
-  where tf.is_current and tf.timesheet_id in (select d.timesheet_id from public.import_review_decisions d
-    where d.import_id=p_import_id and d.is_current and d.action_id=any(v_ids) and d.timesheet_id is not null)
+  where tf.is_current and tf.timesheet_id in (
+    select source_timesheet_id from pg_temp.import_review_reconciliation_units_v1 where source_timesheet_id is not null
+    union
+    select x.value::uuid from pg_temp.import_review_reconciliation_units_v1 u
+      cross join lateral jsonb_array_elements_text(coalesce(u.unit_json->'M_active_member_ids','[]'::jsonb)) x(value)
+  )
   order by tf.timesheet_id,tf.id for update;
+  perform 1 from public.contract_weeks cw where cw.timesheet_id in (
+    select source_timesheet_id from pg_temp.import_review_reconciliation_units_v1 where source_timesheet_id is not null
+    union
+    select x.value::uuid from pg_temp.import_review_reconciliation_units_v1 u
+      cross join lateral jsonb_array_elements_text(coalesce(u.unit_json->'M_active_member_ids','[]'::jsonb)) x(value)
+  ) order by cw.id for update;
 
   create temporary table if not exists pg_temp.review_apply_fresh_actions on commit drop as
     select * from public._import_review_action_catalog_core_v1(p_import_id,v_s.preview_generation,500) with no data;
@@ -571,15 +626,478 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id);
       and coalesce((public._import_review_timesheet_protection_core_v1(d.timesheet_id)->>'protected')::boolean,false)) then
     raise exception 'IMPORT_REVIEW_REFERENCE_INVALIDATION_PROTECTED' using errcode='55000'; end if;
   v_envelope:=public._import_review_apply_envelope_core_v1(p_import_id);
+  if exists(
+    select 1 from pg_temp.import_review_reconciliation_units_v1 frozen
+    full join lateral (
+      select u from jsonb_array_elements(coalesce(v_envelope->'reconciliation_units','[]'::jsonb)) u
+      where u->>'action_id'=frozen.action_id
+    ) current_unit on true
+    where current_unit.u is null or current_unit.u->>'unit_fingerprint' is distinct from frozen.unit_fingerprint
+  ) or (select count(*) from pg_temp.import_review_reconciliation_units_v1)<>
+      jsonb_array_length(coalesce(v_envelope->'reconciliation_units','[]'::jsonb)) then
+    raise exception 'IMPORT_REVIEW_SELECTED_ACTION_STALE' using errcode='40001';
+  end if;
   v_server_hash:=public._import_review_hash_v1(v_envelope::text);
   if lower(btrim(p_request_hash))<>v_server_hash then
     raise exception 'IMPORT_REVIEW_APPLY_REQUEST_HASH_MISMATCH' using errcode='22023',detail=jsonb_build_object('server_request_hash',v_server_hash)::text;
   end if;
+  v_guard_token:=encode(gen_random_bytes(32),'hex');
+  perform set_config('cloudtms.import_reconciliation_guard_token',v_guard_token,true);
+  perform set_config('cloudtms.import_reconciliation_operation_id',p_operation_id::text,true);
+  perform set_config('cloudtms.import_reconciliation_request_hash',v_server_hash,true);
+  perform set_config('cloudtms.import_reconciliation_unit_fingerprints',coalesce((
+    select string_agg(unit_fingerprint,',' order by action_id) from pg_temp.import_review_reconciliation_units_v1
+  ),''),true);
   v_op_result:=public._import_apply_operation_claim_core_v2(p_operation_id,p_import_id,v_i.source_system,
     concat_ws(':',coalesce(v_i.revision_group_id,v_i.id),coalesce(v_i.revision_no,1)),v_server_hash,p_actor_user_id,v_envelope);
   update public.import_review_states set status='APPLYING',state_version=state_version+1,last_operation_id=p_operation_id,updated_at_utc=now(),updated_by_user_id=p_actor_user_id where import_id=p_import_id returning * into v_s;
   insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json) values(p_import_id,v_s.state_version,p_operation_id,'APPLY_STARTED',p_actor_user_id,jsonb_build_object('request_hash',btrim(p_request_hash),'selected_count',cardinality(v_ids),'batch_scope_units',v_envelope->'batch_scope_units'));
   return jsonb_build_object('ok',true,'import_id',p_import_id,'operation_id',p_operation_id,'state_version',v_s.state_version,'selected_action_ids',to_jsonb(v_ids),'operation_state',v_op_result->>'state'); end $function$;
+
+create or replace function public.import_review_correction_generation_transition_v1(
+  p_import_id uuid,
+  p_operation_id uuid,
+  p_request_hash text,
+  p_action text,
+  p_actor_user_id uuid,
+  p_action_ids text[] default '{}'::text[],
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public','extensions','pg_temp'
+as $function$
+declare
+  v_operation public.import_apply_operations%rowtype;
+  v_action text:=upper(btrim(coalesce(p_action,'')));
+  v_units jsonb:='[]'::jsonb;
+  v_unit jsonb;
+  v_balance jsonb;
+  v_capability_token text;
+  v_items jsonb;
+  v_result jsonb;
+  v_target_ids uuid[];
+  v_pending_target_ids uuid[];
+  v_member_count integer;
+  v_bad_count integer;
+  v_id uuid;
+  v_signature jsonb;
+  v_current_invoice_fingerprint text;
+  v_recomputed_unit_fingerprint text;
+  v_all_authorised boolean:=false;
+  v_any_authorised boolean:=false;
+  v_unit_fingerprints jsonb:='[]'::jsonb;
+begin
+  perform public._import_review_assert_actor_v1(p_actor_user_id);
+  if session_user not in ('postgres','service_role') and coalesce(
+      current_setting('request.jwt.claim.role',true),
+      nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_OPERATION_INVALID' using errcode='42501';
+  end if;
+  if p_import_id is null or p_operation_id is null or length(btrim(coalesce(p_request_hash,''))) not between 16 and 256
+     or v_action not in ('PREPARE','VALIDATE','AUTHORISE') or cardinality(coalesce(p_action_ids,array[]::text[]))>100 then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_OPERATION_INVALID' using errcode='22023';
+  end if;
+  perform set_config('lock_timeout','1500ms',true);
+  select * into v_operation from public.import_apply_operations
+  where id=p_operation_id and import_id=p_import_id for update;
+  if v_operation.id is null or v_operation.request_hash<>lower(btrim(p_request_hash)) then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_OPERATION_INVALID' using errcode='40001';
+  end if;
+  if v_action in ('VALIDATE','AUTHORISE') and (
+      v_operation.committed_at_utc is null
+      or v_operation.state not in ('SOURCE_COMMITTED_TSFIN_PENDING','COMPLETE')) then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_OPERATION_INVALID' using errcode='40001';
+  end if;
+
+  if v_action='PREPARE' then
+    if to_regclass('pg_temp.import_review_reconciliation_units_v1') is null
+       or current_setting('cloudtms.import_reconciliation_operation_id',true) is distinct from p_operation_id::text
+       or current_setting('cloudtms.import_reconciliation_request_hash',true) is distinct from v_operation.request_hash then
+      raise exception 'IMPORT_REVIEW_RECONCILIATION_GUARD_REQUIRED' using errcode='55000';
+    end if;
+    select coalesce(jsonb_agg(u.unit_json order by u.action_id),'[]'::jsonb) into v_units
+    from pg_temp.import_review_reconciliation_units_v1 u
+    where cardinality(coalesce(p_action_ids,array[]::text[]))=0 or u.action_id=any(p_action_ids);
+  else
+    v_units:=coalesce(v_operation.response_json#>'{request_envelope,reconciliation_units}',
+      v_operation.response_json->'reconciliation_units','[]'::jsonb);
+    if cardinality(coalesce(p_action_ids,array[]::text[]))>0 then
+      select coalesce(jsonb_agg(u order by u->>'action_id'),'[]'::jsonb) into v_units
+      from jsonb_array_elements(v_units) u where u->>'action_id'=any(p_action_ids);
+    end if;
+  end if;
+  if jsonb_array_length(v_units)=0 then
+    return jsonb_build_object('ok',true,'action',v_action,'idempotent',true,'unit_count',0,'timesheet_ids','[]'::jsonb);
+  end if;
+  select coalesce(jsonb_agg(u->>'unit_fingerprint' order by u->>'action_id'),'[]'::jsonb)
+  into v_unit_fingerprints from jsonb_array_elements(v_units) u;
+  if exists(select 1 from jsonb_array_elements(v_units) u
+      where u->>'schema_version'<>'IMPORT_AUTHORITATIVE_RECONCILIATION_V1'
+        or nullif(u->>'unit_fingerprint','') is null
+        or nullif(u->>'source_identity','') is null
+        or u->>'route' not in ('AMEND_SOURCE','AMEND_PAID_UNINVOICED_SOURCE','AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')) then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_NOT_FOUND' using errcode='22023';
+  end if;
+  if v_action<>'PREPARE' and exists(
+    select 1
+    from jsonb_array_elements(v_units) u
+    left join public.import_review_action_outcomes outcome
+      on outcome.operation_id=p_operation_id and outcome.action_id=u->>'action_id'
+    where outcome.action_id is null
+       or u->>'unit_fingerprint' is distinct from public._import_review_hash_v1(concat_ws('|','unit-v1',
+         u->>'action_id',u->>'source_identity',u->>'route',u->>'reconciliation_fingerprint',outcome.evidence_fingerprint))
+  ) then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_FINGERPRINT_MISMATCH' using errcode='40001';
+  end if;
+
+  if v_action='PREPARE' then
+    select coalesce(array_agg(distinct x.value::uuid order by x.value::uuid),array[]::uuid[]) into v_target_ids
+    from jsonb_array_elements(v_units) u
+    cross join lateral jsonb_array_elements_text(coalesce(u->'M_active_member_ids','[]'::jsonb)) x(value)
+    join public.timesheets t on t.timesheet_id=x.value::uuid and t.is_current and t.archived_at_utc is null
+    left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+    left join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id
+    where t.authorised_at_server is not null or tf.authorised_at_utc is not null
+       or cw.status='AUTHORISED'::public.contract_week_status_enum;
+    if exists(select 1 from jsonb_array_elements(v_units) u
+      cross join lateral jsonb_array_elements_text(coalesce(u->'M_active_member_ids','[]'::jsonb)) x(value)
+      join public.timesheets t on t.timesheet_id=x.value::uuid where t.archived_at_utc is not null) then
+      raise exception 'IMPORT_REVIEW_RECONCILIATION_ARCHIVED_MEMBER_EXCLUDED' using errcode='55000';
+    end if;
+    if cardinality(v_target_ids)>0 then
+      v_capability_token:=encode(gen_random_bytes(32),'hex');
+      create temporary table if not exists pg_temp.import_review_lifecycle_capability_v1(
+        capability_token text not null,txid bigint not null,operation_id uuid not null,request_hash text not null,
+        actor_user_id uuid not null,action text not null,action_id text not null,unit_fingerprint text not null,
+        timesheet_id uuid not null,expected_timesheet_id uuid not null,expected_version integer,
+        expected_row_signature text,expected_tsfin_id uuid,expected_contract_week_id uuid
+      ) on commit drop;
+      truncate pg_temp.import_review_lifecycle_capability_v1;
+      foreach v_id in array v_target_ids loop
+        v_signature:=public.timesheet_lifecycle_signature_v1(v_id,null,false);
+        insert into pg_temp.import_review_lifecycle_capability_v1
+        select v_capability_token,txid_current(),p_operation_id,v_operation.request_hash,p_actor_user_id,'UNAUTHORISE',
+          u->>'action_id',u->>'unit_fingerprint',v_id,v_id,t.version,
+          coalesce(v_signature->>'backend_row_signature',v_signature->>'row_signature',v_signature->>'signature'),
+          tf.id,cw.id
+        from jsonb_array_elements(v_units) u
+        join lateral jsonb_array_elements_text(coalesce(u->'M_active_member_ids','[]'::jsonb)) x(value) on x.value::uuid=v_id
+        join public.timesheets t on t.timesheet_id=v_id and t.is_current and t.archived_at_utc is null
+        left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+        left join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id;
+      end loop;
+      perform set_config('cloudtms.import_reconciliation_capability_token',v_capability_token,true);
+      perform set_config('cloudtms.import_reconciliation_operation_id',p_operation_id::text,true);
+      perform set_config('cloudtms.import_reconciliation_action','UNAUTHORISE',true);
+      select jsonb_agg(jsonb_build_object('timesheet_id',x) order by x) into v_items from unnest(v_target_ids) x;
+      v_result:=public.timesheet_unauthorise_bulk_atomic(v_items,p_actor_user_id,coalesce(p_now_utc,now()));
+      if coalesce((v_result->>'ok')::boolean,false) is not true or coalesce((v_result->>'all_success')::boolean,false) is not true then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_PREPARE_INCOMPLETE' using errcode='55000',detail=coalesce(v_result->>'error_code','bulk unauthorise incomplete');
+      end if;
+      truncate pg_temp.import_review_lifecycle_capability_v1;
+      perform set_config('cloudtms.import_reconciliation_capability_token','',true);
+      perform set_config('cloudtms.import_reconciliation_action','',true);
+    end if;
+    if exists(select 1 from jsonb_array_elements(v_units) u
+      cross join lateral jsonb_array_elements_text(coalesce(u->'M_active_member_ids','[]'::jsonb)) x(value)
+      join public.timesheets t on t.timesheet_id=x.value::uuid and t.is_current and t.archived_at_utc is null
+      left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+      left join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id
+      where t.authorised_at_server is not null or tf.authorised_at_utc is not null
+         or cw.status='AUTHORISED'::public.contract_week_status_enum) then
+      raise exception 'IMPORT_REVIEW_RECONCILIATION_PREPARE_INCOMPLETE' using errcode='55000';
+    end if;
+    return jsonb_build_object('ok',true,'action','PREPARE','unit_count',jsonb_array_length(v_units),
+      'timesheet_ids',to_jsonb(coalesce(v_target_ids,array[]::uuid[])),'bulk_result',v_result);
+  end if;
+
+  for v_unit in select value from jsonb_array_elements(v_units) loop
+    perform 1 from public.invoices i where i.id in (
+      select x.value::uuid from jsonb_array_elements_text(coalesce(v_unit->'B_effective_invoice_ids','[]'::jsonb)) x(value)
+    ) order by i.id for update;
+    perform 1 from public.invoice_lines il where il.id in (
+      select x.value::uuid from jsonb_array_elements_text(coalesce(v_unit->'B_effective_invoice_line_ids','[]'::jsonb)) x(value)
+    ) order by il.id for update;
+    perform 1 from public.nhsp_shifts s where s.id=(v_unit->>'source_shift_id')::uuid for update;
+    if not exists(select 1 from public.nhsp_shifts s where s.id=(v_unit->>'source_shift_id')::uuid
+      and s.external_row_key=v_unit->>'source_identity' and s.cancelled_at_utc is null
+      and s.source_system::text=v_unit->>'source_system') then
+      raise exception 'IMPORT_REVIEW_RECONCILIATION_SOURCE_MISMATCH' using errcode='40001';
+    end if;
+    perform 1 from public.timesheets t where t.correction_id=v_unit->>'correction_id'
+      and t.is_current and t.archived_at_utc is null order by t.timesheet_id for update;
+    perform 1 from public.timesheets_financials tf where tf.is_current and tf.timesheet_id in (
+      select t.timesheet_id from public.timesheets t where t.correction_id=v_unit->>'correction_id'
+        and t.is_current and t.archived_at_utc is null
+    ) order by tf.timesheet_id,tf.id for update;
+    perform 1 from public.contract_weeks cw where cw.timesheet_id in (
+      select t.timesheet_id from public.timesheets t where t.correction_id=v_unit->>'correction_id'
+        and t.is_current and t.archived_at_utc is null
+    ) order by cw.id for update;
+    select b.balance_json into v_balance
+    from public._import_review_effective_invoice_balance_core_v1(p_import_id,jsonb_build_array(jsonb_build_object(
+      'source_identity',v_unit->>'source_identity','source_system',v_unit->>'source_system',
+      'source_shift_id',v_unit->>'source_shift_id','external_row_key',v_unit->>'source_identity',
+      'hr_row_id',v_unit->>'hr_row_id','source_timesheet_id',v_unit->>'source_timesheet_id',
+      'candidate_id',v_unit->>'candidate_id','client_id',v_unit->>'client_id','contract_id',v_unit->>'contract_id',
+      'week_ending_date',v_unit->>'week_ending_date','invoice_stream',v_unit->>'invoice_stream',
+      'authoritative_import_id',p_import_id,'authoritative_schedule_json',v_unit->'A_schedule_json',
+      'authoritative_hours',v_unit->'A_hours')),100,512,256,128) b;
+    if nullif(v_balance->>'blocking_code','') is not null then
+      raise exception 'IMPORT_REVIEW_INVOICE_ACTIVITY_IN_PROGRESS' using errcode='55000',detail=v_balance->>'blocking_code';
+    end if;
+    v_current_invoice_fingerprint:=v_balance->>'effective_invoice_fingerprint';
+    if v_current_invoice_fingerprint is distinct from v_unit->>'B_invoice_fingerprint' then
+      raise exception 'IMPORT_REVIEW_SELECTED_ACTION_STALE' using errcode='40001';
+    end if;
+    if v_unit->>'route' in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT') then
+      select count(*) into v_member_count from public.timesheets t
+      where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
+        and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT');
+      if v_member_count<>2 or not exists(select 1 from public.timesheets t where t.correction_id=v_unit->>'correction_id'
+          and t.is_current and t.archived_at_utc is null and t.correction_kind='CHANGED_HOURS_REVERSAL')
+        or not exists(select 1 from public.timesheets t where t.correction_id=v_unit->>'correction_id'
+          and t.is_current and t.archived_at_utc is null and t.correction_kind='CHANGED_HOURS_REPLACEMENT') then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_MEMBER_SET_MISMATCH' using errcode='55000';
+      end if;
+      if exists(select 1 from public.timesheets t
+        left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+        where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
+          and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT') and (
+            not coalesce(t.is_adjustment,false) or t.adjustment_origin<>'IMPORT_CORRECTION'
+            or t.parent_timesheet_id is distinct from (v_unit->>'parent_timesheet_id')::uuid
+            or t.contract_id is distinct from (v_unit->>'contract_id')::uuid
+            or t.week_ending_date is distinct from (v_unit->>'week_ending_date')::date
+            or t.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum
+            or tf.candidate_id is distinct from (v_unit->>'candidate_id')::uuid
+            or tf.client_id is distinct from (v_unit->>'client_id')::uuid
+            or (v_unit->>'source_system'='NHSP' and tf.basis<>'NHSP_ADJUSTMENT'::public.timesheet_fin_basis_enum)
+            or (v_unit->>'source_system'='HEALTHROSTER' and tf.basis<>'HEALTHROSTER_ADJUSTMENT'::public.timesheet_fin_basis_enum)
+            or t.candidate_hint_text#>>'{import_authoritative_reconciliation,operation_id}'<>p_operation_id::text
+            or t.candidate_hint_text#>>'{import_authoritative_reconciliation,unit_fingerprint}'<>v_unit->>'unit_fingerprint'
+            or t.candidate_hint_text#>>'{import_authoritative_reconciliation,source_identity}'<>v_unit->>'source_identity'
+            or jsonb_typeof(t.actual_schedule_json)<>'array'
+            or jsonb_array_length(t.actual_schedule_json)<>1
+            or not t.actual_schedule_json @> jsonb_build_array(jsonb_build_object(
+              'shift_id',v_unit->>'source_shift_id','external_row_key',v_unit->>'source_identity'))
+            or (select count(*) from public.contract_weeks cw where cw.timesheet_id=t.timesheet_id)<>1
+            or exists(select 1 from public.contract_weeks cw where cw.timesheet_id=t.timesheet_id
+              and (not coalesce(cw.is_adjustment,false)
+                or cw.contract_id is distinct from (v_unit->>'contract_id')::uuid
+                or cw.week_ending_date is distinct from (v_unit->>'week_ending_date')::date))
+          ))
+         or not exists(select 1 from public.timesheets parent_ts
+           where parent_ts.timesheet_id=(v_unit->>'parent_timesheet_id')::uuid
+             and parent_ts.is_current and parent_ts.archived_at_utc is null) then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_SOURCE_MISMATCH' using errcode='40001';
+      end if;
+      if exists(select 1 from public.timesheets t
+        where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
+          and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+          and coalesce(t.candidate_hint_text#>>'{correction_financials_policy_envelope,envelope_fingerprint}','')
+            is distinct from coalesce(public._ctms_correction_policy_envelope_read_v1(t.timesheet_id)->>'envelope_fingerprint',''))
+        or (select count(distinct t.candidate_hint_text#>>'{correction_financials_policy_envelope,envelope_fingerprint}')
+            from public.timesheets t where t.correction_id=v_unit->>'correction_id'
+              and t.is_current and t.archived_at_utc is null
+              and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'))<>1 then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_POLICY_MISMATCH' using errcode='40001';
+      end if;
+      if exists(select 1 from public.timesheets t
+        left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+        where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
+          and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+          and (tf.id is null or tf.processing_status not in (
+            'PENDING_AUTH'::public.ts_fin_processing_status_enum,
+            'READY_FOR_HR'::public.ts_fin_processing_status_enum,
+            'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum))) then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_TSFIN_NOT_SETTLED' using errcode='55000';
+      end if;
+      if exists(select 1 from public.timesheets t where t.correction_id=v_unit->>'correction_id'
+        and t.is_current and t.archived_at_utc is null and (
+          (t.correction_kind='CHANGED_HOURS_REVERSAL' and (
+            (t.actual_schedule_json#>>'{0,start_utc}')::timestamptz is distinct from (v_unit#>>'{B_standard_schedule_json,0,start_utc}')::timestamptz
+            or (t.actual_schedule_json#>>'{0,end_utc}')::timestamptz is distinct from (v_unit#>>'{B_standard_schedule_json,0,end_utc}')::timestamptz
+            or coalesce((t.actual_schedule_json#>>'{0,break_mins}')::integer,0) is distinct from coalesce((v_unit#>>'{B_standard_schedule_json,0,break_mins}')::integer,0)))
+          or (t.correction_kind='CHANGED_HOURS_REPLACEMENT' and (
+            (t.actual_schedule_json#>>'{0,start_utc}')::timestamptz is distinct from (v_unit#>>'{A_schedule_json,0,start_utc}')::timestamptz
+            or (t.actual_schedule_json#>>'{0,end_utc}')::timestamptz is distinct from (v_unit#>>'{A_schedule_json,0,end_utc}')::timestamptz
+            or coalesce((t.actual_schedule_json#>>'{0,break_mins}')::integer,0) is distinct from coalesce((v_unit#>>'{A_schedule_json,0,break_mins}')::integer,0)))
+        )) then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_BALANCE_MISMATCH' using errcode='55000';
+      end if;
+      select count(*) into v_bad_count
+      from public.timesheets t join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+      where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
+        and (coalesce(tf.is_stale,true) or coalesce(tf.has_rate_issue,false) or coalesce(tf.has_pay_channel_issue,false));
+      if v_bad_count>0 then raise exception 'IMPORT_REVIEW_RECONCILIATION_TSFIN_NOT_SETTLED' using errcode='55000'; end if;
+      if exists(select 1 from public.timesheets t join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+        where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
+          and ((t.correction_kind='CHANGED_HOURS_REVERSAL' and (
+            tf.hours_day<>-coalesce((v_unit#>>'{B_hours,hours_day}')::numeric,0) or tf.hours_night<>-coalesce((v_unit#>>'{B_hours,hours_night}')::numeric,0)
+            or tf.hours_sat<>-coalesce((v_unit#>>'{B_hours,hours_sat}')::numeric,0) or tf.hours_sun<>-coalesce((v_unit#>>'{B_hours,hours_sun}')::numeric,0)
+            or tf.hours_bh<>-coalesce((v_unit#>>'{B_hours,hours_bh}')::numeric,0) or tf.total_pay_ex_vat<>-coalesce((v_unit#>>'{B_financials,pay_ex_vat}')::numeric,0)
+            or tf.total_charge_ex_vat<>-coalesce((v_unit#>>'{B_financials,charge_ex_vat}')::numeric,0) or tf.margin_ex_vat<>-coalesce((v_unit#>>'{B_financials,margin_ex_vat}')::numeric,0)))
+          or (t.correction_kind='CHANGED_HOURS_REPLACEMENT' and (
+            tf.hours_day<>coalesce((v_unit#>>'{A_hours,hours_day}')::numeric,0) or tf.hours_night<>coalesce((v_unit#>>'{A_hours,hours_night}')::numeric,0)
+            or tf.hours_sat<>coalesce((v_unit#>>'{A_hours,hours_sat}')::numeric,0) or tf.hours_sun<>coalesce((v_unit#>>'{A_hours,hours_sun}')::numeric,0)
+            or tf.hours_bh<>coalesce((v_unit#>>'{A_hours,hours_bh}')::numeric,0))))) then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_BALANCE_MISMATCH' using errcode='55000';
+      end if;
+    else
+      if jsonb_array_length(coalesce(v_unit->'B_effective_invoice_ids','[]'::jsonb))<>0
+         or jsonb_array_length(coalesce(v_unit->'B_effective_invoice_line_ids','[]'::jsonb))<>0
+         or coalesce((v_unit#>>'{B_hours,hours_day}')::numeric,0)<>0
+         or coalesce((v_unit#>>'{B_hours,hours_night}')::numeric,0)<>0
+         or coalesce((v_unit#>>'{B_hours,hours_sat}')::numeric,0)<>0
+         or coalesce((v_unit#>>'{B_hours,hours_sun}')::numeric,0)<>0
+         or coalesce((v_unit#>>'{B_hours,hours_bh}')::numeric,0)<>0
+         or coalesce((v_unit#>>'{B_financials,pay_ex_vat}')::numeric,0)<>0
+         or coalesce((v_unit#>>'{B_financials,charge_ex_vat}')::numeric,0)<>0
+         or coalesce((v_unit#>>'{B_financials,margin_ex_vat}')::numeric,0)<>0 then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_BALANCE_MISMATCH' using errcode='55000';
+      end if;
+      if not exists(select 1 from public.timesheets t join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+        where t.timesheet_id=(v_unit->>'source_timesheet_id')::uuid and t.is_current and t.archived_at_utc is null
+          and t.contract_id=(v_unit->>'contract_id')::uuid
+          and t.week_ending_date=(v_unit->>'week_ending_date')::date
+          and t.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+          and tf.candidate_id=(v_unit->>'candidate_id')::uuid
+          and tf.client_id=(v_unit->>'client_id')::uuid
+          and ((v_unit->>'source_system'='NHSP' and tf.basis='NHSP'::public.timesheet_fin_basis_enum)
+            or (v_unit->>'source_system'='HEALTHROSTER' and tf.basis='HEALTHROSTER'::public.timesheet_fin_basis_enum))
+          and jsonb_typeof(t.actual_schedule_json)='array' and jsonb_array_length(t.actual_schedule_json)=1
+          and (t.actual_schedule_json#>>'{0,start_utc}')::timestamptz=(v_unit#>>'{A_schedule_json,0,start_utc}')::timestamptz
+          and (t.actual_schedule_json#>>'{0,end_utc}')::timestamptz=(v_unit#>>'{A_schedule_json,0,end_utc}')::timestamptz
+          and coalesce((t.actual_schedule_json#>>'{0,break_mins}')::integer,0)=coalesce((v_unit#>>'{A_schedule_json,0,break_mins}')::integer,0)
+          and t.actual_schedule_json @> jsonb_build_array(jsonb_build_object(
+            'shift_id',v_unit->>'source_shift_id','external_row_key',v_unit->>'source_identity'))
+          and encode(digest(convert_to(coalesce(tf.policy_snapshot_json,'{}'::jsonb)::text,'UTF8'),'sha256'),'hex')
+            =v_unit->>'frozen_policy_fingerprint'
+          and not coalesce(tf.is_stale,true) and not coalesce(tf.has_rate_issue,false) and not coalesce(tf.has_pay_channel_issue,false)
+          and tf.processing_status in ('PENDING_AUTH'::public.ts_fin_processing_status_enum,
+            'READY_FOR_HR'::public.ts_fin_processing_status_enum,'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum)
+          and tf.hours_day=coalesce((v_unit#>>'{A_hours,hours_day}')::numeric,0)
+          and tf.hours_night=coalesce((v_unit#>>'{A_hours,hours_night}')::numeric,0)
+          and tf.hours_sat=coalesce((v_unit#>>'{A_hours,hours_sat}')::numeric,0)
+          and tf.hours_sun=coalesce((v_unit#>>'{A_hours,hours_sun}')::numeric,0)
+          and tf.hours_bh=coalesce((v_unit#>>'{A_hours,hours_bh}')::numeric,0)) then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_TSFIN_NOT_SETTLED' using errcode='55000';
+      end if;
+    end if;
+  end loop;
+
+  if v_action='VALIDATE' then
+    if not exists(select 1 from public.audit_events ae where ae.action='IMPORT_REVIEW_RECONCILIATION_VALIDATED'
+      and ae.after_json->>'operation_id'=p_operation_id::text
+      and ae.after_json->>'request_hash'=v_operation.request_hash
+      and ae.after_json->'unit_fingerprints'=v_unit_fingerprints) then
+      perform public._audit_insert('import_apply_operations',p_operation_id::text,'IMPORT_REVIEW_RECONCILIATION_VALIDATED',null,
+        jsonb_build_object('import_id',p_import_id,'operation_id',p_operation_id,'request_hash',v_operation.request_hash,
+          'unit_fingerprints',v_unit_fingerprints),
+        'IMPORT_REVIEW',p_actor_user_id);
+    end if;
+    return jsonb_build_object('ok',true,'action','VALIDATE','unit_count',jsonb_array_length(v_units),'idempotent',false);
+  end if;
+
+  select coalesce(array_agg(distinct q.timesheet_id order by q.timesheet_id),array[]::uuid[]) into v_target_ids
+  from (
+    select t.timesheet_id
+    from jsonb_array_elements(v_units) u
+    join public.timesheets t on u->>'route' in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')
+      and t.correction_id=u->>'correction_id' and t.is_current and t.archived_at_utc is null
+      and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+    where coalesce(u->>'intended_authorisation_action','LEAVE_UNAUTHORISED') in ('AUTHORISE','REAUTHORISE')
+    union all
+    select t.timesheet_id
+    from jsonb_array_elements(v_units) u
+    join public.timesheets t on u->>'route' in ('AMEND_SOURCE','AMEND_PAID_UNINVOICED_SOURCE')
+      and t.timesheet_id=(u->>'source_timesheet_id')::uuid and t.is_current and t.archived_at_utc is null
+    where coalesce(u->>'intended_authorisation_action','LEAVE_UNAUTHORISED') in ('AUTHORISE','REAUTHORISE')
+  ) q;
+  if exists(
+    select 1 from unnest(v_target_ids) x(timesheet_id)
+    join public.timesheets t on t.timesheet_id=x.timesheet_id
+    join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+    join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id
+    where (t.authorised_at_server is not null)::integer
+        +(tf.authorised_at_utc is not null)::integer
+        +(cw.status='AUTHORISED'::public.contract_week_status_enum)::integer not in (0,3)
+  ) then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_LIFECYCLE_STATE_INVALID' using errcode='55000';
+  end if;
+  select coalesce(array_agg(x.timesheet_id order by x.timesheet_id),array[]::uuid[]) into v_pending_target_ids
+  from unnest(v_target_ids) x(timesheet_id)
+  join public.timesheets t on t.timesheet_id=x.timesheet_id
+  join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+  join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id
+  where t.authorised_at_server is null and tf.authorised_at_utc is null
+    and cw.status<>'AUTHORISED'::public.contract_week_status_enum;
+  v_all_authorised:=cardinality(v_target_ids)>0 and cardinality(v_pending_target_ids)=0;
+  v_any_authorised:=cardinality(v_target_ids)>cardinality(v_pending_target_ids);
+  if cardinality(v_pending_target_ids)>0 then
+    v_capability_token:=encode(gen_random_bytes(32),'hex');
+    create temporary table if not exists pg_temp.import_review_lifecycle_capability_v1(
+      capability_token text not null,txid bigint not null,operation_id uuid not null,request_hash text not null,
+      actor_user_id uuid not null,action text not null,action_id text not null,unit_fingerprint text not null,
+      timesheet_id uuid not null,expected_timesheet_id uuid not null,expected_version integer,
+      expected_row_signature text,expected_tsfin_id uuid,expected_contract_week_id uuid
+    ) on commit drop;
+    truncate pg_temp.import_review_lifecycle_capability_v1;
+    foreach v_id in array v_pending_target_ids loop
+      v_signature:=public.timesheet_lifecycle_signature_v1(v_id,null,false);
+      insert into pg_temp.import_review_lifecycle_capability_v1
+      select v_capability_token,txid_current(),p_operation_id,v_operation.request_hash,p_actor_user_id,'AUTHORISE',
+        u->>'action_id',u->>'unit_fingerprint',v_id,v_id,t.version,
+        coalesce(v_signature->>'backend_row_signature',v_signature->>'row_signature',v_signature->>'signature'),tf.id,cw.id
+      from jsonb_array_elements(v_units) u join public.timesheets t on t.timesheet_id=v_id
+        and ((u->>'route' in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT') and t.correction_id=u->>'correction_id')
+          or (u->>'route' in ('AMEND_SOURCE','AMEND_PAID_UNINVOICED_SOURCE') and t.timesheet_id=(u->>'source_timesheet_id')::uuid))
+      left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+      left join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id;
+    end loop;
+    perform set_config('cloudtms.import_reconciliation_capability_token',v_capability_token,true);
+    perform set_config('cloudtms.import_reconciliation_operation_id',p_operation_id::text,true);
+    perform set_config('cloudtms.import_reconciliation_action','AUTHORISE',true);
+    select jsonb_agg(jsonb_build_object('timesheet_id',x) order by x) into v_items from unnest(v_pending_target_ids) x;
+    v_result:=public.timesheet_authorise_bulk_atomic(v_items,p_actor_user_id,coalesce(p_now_utc,now()));
+    if coalesce((v_result->>'ok')::boolean,false) is not true or coalesce((v_result->>'all_success')::boolean,false) is not true then
+      raise exception 'IMPORT_REVIEW_RECONCILIATION_AUTHORISE_INCOMPLETE' using errcode='55000',detail=coalesce(v_result->>'error_code','bulk authorise incomplete');
+    end if;
+    truncate pg_temp.import_review_lifecycle_capability_v1;
+    perform set_config('cloudtms.import_reconciliation_capability_token','',true);
+    perform set_config('cloudtms.import_reconciliation_action','',true);
+  end if;
+  if exists(
+    select 1 from unnest(v_target_ids) x(timesheet_id)
+    left join public.timesheets t on t.timesheet_id=x.timesheet_id and t.is_current and t.archived_at_utc is null
+    left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+    left join public.contract_weeks cw on cw.timesheet_id=t.timesheet_id
+    where t.timesheet_id is null or tf.id is null or cw.id is null
+      or t.authorised_at_server is null or tf.authorised_at_utc is null
+      or cw.status<>'AUTHORISED'::public.contract_week_status_enum
+  ) then
+    raise exception 'IMPORT_REVIEW_RECONCILIATION_AUTHORISE_INCOMPLETE' using errcode='55000';
+  end if;
+  if not exists(select 1 from public.audit_events ae where ae.action='IMPORT_REVIEW_RECONCILIATION_AUTHORISED'
+      and ae.after_json->>'operation_id'=p_operation_id::text and ae.after_json->>'request_hash'=v_operation.request_hash
+      and ae.after_json->'unit_fingerprints'=v_unit_fingerprints) then
+    perform public._audit_insert('import_apply_operations',p_operation_id::text,'IMPORT_REVIEW_RECONCILIATION_AUTHORISED',null,
+      jsonb_build_object('import_id',p_import_id,'operation_id',p_operation_id,'request_hash',v_operation.request_hash,
+        'unit_fingerprints',v_unit_fingerprints,'timesheet_ids',to_jsonb(coalesce(v_target_ids,array[]::uuid[]))),
+      'IMPORT_REVIEW',p_actor_user_id);
+  end if;
+  return jsonb_build_object('ok',true,'action','AUTHORISE','unit_count',jsonb_array_length(v_units),
+    'timesheet_ids',to_jsonb(coalesce(v_target_ids,array[]::uuid[])),
+    'newly_authorised_timesheet_ids',to_jsonb(coalesce(v_pending_target_ids,array[]::uuid[])),
+    'idempotent',v_all_authorised,'bulk_result',v_result);
+end
+$function$;
+
+alter function public.import_review_correction_generation_transition_v1(uuid,uuid,text,text,uuid,text[],timestamptz) owner to postgres;
+revoke all on function public.import_review_correction_generation_transition_v1(uuid,uuid,text,text,uuid,text[],timestamptz) from public,anon,authenticated;
+grant execute on function public.import_review_correction_generation_transition_v1(uuid,uuid,text,text,uuid,text[],timestamptz) to service_role;
 
 create or replace function public._import_review_apply_complete_core_v1(p_import_id uuid,p_operation_id uuid,p_actor_user_id uuid,p_response_json jsonb,p_follow_up_required boolean)
 returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
@@ -617,9 +1135,10 @@ begin
     case d.action_kind
       when 'INCLUDE_SHIFT' then 'TMS added shift'
       when 'APPLY_AMENDMENT' then case
-        when coalesce((d.summary_json#>>'{protection,paid}')::boolean,false)
-          or coalesce((d.summary_json#>>'{protection,invoice_locked}')::boolean,false)
-        then 'TMS reversed and replaced shift' else 'TMS amended shift' end
+        when d.summary_json->>'amendment_route'='AMEND_PAID_UNINVOICED_SOURCE' then 'TMS amended the paid uninvoiced shift'
+        when d.summary_json->>'amendment_route'='AMEND_EXISTING_REPLACEMENT' then 'TMS repaired the existing correction generation'
+        when d.summary_json->>'amendment_route'='CREATE_REVERSAL_REPLACEMENT' then 'TMS created the required reversal and corrected-hours generation'
+        else 'TMS amended the existing shift' end
       when 'APPLY_CANCELLATION' then case
         when coalesce((d.summary_json#>>'{protection,paid}')::boolean,false)
           or coalesce((d.summary_json#>>'{protection,invoice_locked}')::boolean,false)

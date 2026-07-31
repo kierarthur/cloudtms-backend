@@ -96,10 +96,12 @@ test('action paging supports only the approved sizes and deterministic server-si
   assert.match(body, /other\.badge_code<>'NOT_IN_CLOUDTMS'/);
   assert.match(body, /Shift not in CloudTMS/);
   assert.match(body, /a\.summary_json->>'amendment_route'='AMEND_EXISTING_REPLACEMENT'/);
-  assert.match(body, /TMS to amend replacement shift/);
+  assert.match(body, /TMS to repair current correction generation/);
+  assert.match(body, /TMS to create correction generation/);
+  assert.match(body, /TMS to amend paid uninvoiced shift/);
   assert.match(body, /d\.summary_json->>'amendment_route' amendment_route/);
-  assert.match(body, /amendment_route='AMEND_EXISTING_REPLACEMENT'/);
-  assert.match(body, /amendment_route is distinct from 'AMEND_EXISTING_REPLACEMENT'/);
+  assert.match(body, /amendment_route='CREATE_REVERSAL_REPLACEMENT'/);
+  assert.match(body, /amendment_route is distinct from 'CREATE_REVERSAL_REPLACEMENT'/);
   assert.doesNotMatch(body, /_timesheet_query_recipient_resolve_core_v1/);
 });
 

@@ -3673,6 +3673,23 @@ BEGIN
     v_offset := GREATEST(v_offset_text::integer, 0);
   END IF;
 
+  IF EXISTS(
+    SELECT 1
+    FROM public.timesheet_summary_lightweight_rows_v1(
+      v_filters||jsonb_build_object('disable_paging',true,'apply_paging',false,'profile','list','include_evidence',false,'include_compare',false,'include_import_source_rows',false)
+    ) s
+    WHERE s.correction_is_current=true and s.correction_archived_at_utc is null
+      and coalesce(s.correction_is_adjustment,false) and s.correction_parent_timesheet_id is not null
+      and s.correction_id is not null and upper(coalesce(s.adjustment_origin,''))='IMPORT_CORRECTION'
+      and s.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+      and ((upper(coalesce(s.route_type,'')) like '%NHSP%' or upper(coalesce(s.basis,'')) like 'NHSP%'
+          or upper(coalesce(s.correction_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='NHSP')
+        = (upper(coalesce(s.route_type,'')) like '%HEALTHROSTER%' or upper(coalesce(s.basis,'')) like 'HEALTHROSTER%'
+          or upper(coalesce(s.correction_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='HEALTHROSTER'))
+  ) THEN
+    RAISE EXCEPTION 'BULK_AUTHORISE_CORRECTION_SOURCE_CONFLICT' USING ERRCODE='22023';
+  END IF;
+
   WITH lightweight_rows AS MATERIALIZED (
     SELECT summary_row.*
     FROM public.timesheet_summary_lightweight_rows_v1(
@@ -3701,6 +3718,11 @@ BEGIN
         ELSE NULL::text
       END AS row_key_calc,
       CASE
+        WHEN lightweight_rows.correction_is_current=true and lightweight_rows.correction_archived_at_utc is null
+          and coalesce(lightweight_rows.correction_is_adjustment,false) and lightweight_rows.correction_parent_timesheet_id is not null
+          and lightweight_rows.correction_id is not null and upper(coalesce(lightweight_rows.adjustment_origin,''))='IMPORT_CORRECTION'
+          and lightweight_rows.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+        THEN 'IMPORT_AUTHORITATIVE'
         WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
           AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'IMPORT_AUTHORITATIVE'
         WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
@@ -3710,6 +3732,17 @@ BEGIN
         ELSE 'MANUAL_NON_QR'
       END AS route_family_calc,
       CASE
+        WHEN lightweight_rows.correction_is_current=true and lightweight_rows.correction_archived_at_utc is null
+          and coalesce(lightweight_rows.correction_is_adjustment,false) and lightweight_rows.correction_parent_timesheet_id is not null
+          and lightweight_rows.correction_id is not null and upper(coalesce(lightweight_rows.adjustment_origin,''))='IMPORT_CORRECTION'
+          and (upper(coalesce(lightweight_rows.route_type,'')) like '%HEALTHROSTER%'
+            or upper(coalesce(lightweight_rows.basis,'')) like 'HEALTHROSTER%'
+            or upper(coalesce(lightweight_rows.correction_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='HEALTHROSTER')
+        THEN 'HEALTHROSTER_NO_TIMESHEET'
+        WHEN lightweight_rows.correction_is_current=true and lightweight_rows.correction_archived_at_utc is null
+          and coalesce(lightweight_rows.correction_is_adjustment,false) and lightweight_rows.correction_parent_timesheet_id is not null
+          and lightweight_rows.correction_id is not null and upper(coalesce(lightweight_rows.adjustment_origin,''))='IMPORT_CORRECTION'
+        THEN 'NHSP'
         WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
           AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'HEALTHROSTER_NO_TIMESHEET'
         WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY') THEN 'HEALTHROSTER_TIMESHEET_REQUIRED'
@@ -3787,6 +3820,15 @@ BEGIN
         AND UPPER(COALESCE(lightweight_rows.validation_status, '')) NOT IN ('VALIDATION_OK', 'OVERRIDDEN', 'OK', 'VALID')
       ) AS hr_validation_awaiting_calc,
       CASE
+        WHEN lightweight_rows.correction_is_current=true and lightweight_rows.correction_archived_at_utc is null
+          and coalesce(lightweight_rows.correction_is_adjustment,false) and lightweight_rows.correction_parent_timesheet_id is not null
+          and lightweight_rows.correction_id is not null and upper(coalesce(lightweight_rows.adjustment_origin,''))='IMPORT_CORRECTION'
+          and (upper(coalesce(lightweight_rows.route_type,'')) like '%HEALTHROSTER%'
+            or upper(coalesce(lightweight_rows.basis,'')) like 'HEALTHROSTER%'
+            or upper(coalesce(lightweight_rows.correction_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='HEALTHROSTER') then 'HR'
+        WHEN lightweight_rows.correction_is_current=true and lightweight_rows.correction_archived_at_utc is null
+          and coalesce(lightweight_rows.correction_is_adjustment,false) and lightweight_rows.correction_parent_timesheet_id is not null
+          and lightweight_rows.correction_id is not null and upper(coalesce(lightweight_rows.adjustment_origin,''))='IMPORT_CORRECTION' then 'NHSP'
         WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
           AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'HR'
         WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
@@ -3963,6 +4005,21 @@ BEGIN
         decision_rows.bulk_process_bucket_calc,
         'bulk_authorise_classification',
         decision_rows.bulk_authorise_classification_calc,
+        'correction_id',decision_rows.correction_id,
+        'correction_kind',decision_rows.correction_kind,
+        'adjustment_origin',decision_rows.adjustment_origin,
+        'correction_source_system',case when decision_rows.correction_is_current=true and decision_rows.correction_archived_at_utc is null
+          and coalesce(decision_rows.correction_is_adjustment,false) and decision_rows.correction_parent_timesheet_id is not null
+          and decision_rows.correction_id is not null and upper(coalesce(decision_rows.adjustment_origin,''))='IMPORT_CORRECTION'
+          then case when decision_rows.bulk_authorise_classification_calc='HR' then 'HEALTHROSTER' else 'NHSP' end end,
+        'correction_display_label',case when decision_rows.correction_is_current=true and decision_rows.correction_archived_at_utc is null
+          and coalesce(decision_rows.correction_is_adjustment,false) and decision_rows.correction_parent_timesheet_id is not null
+          and decision_rows.correction_id is not null and upper(coalesce(decision_rows.adjustment_origin,''))='IMPORT_CORRECTION'
+          then case
+            when decision_rows.bulk_authorise_classification_calc='HR' and decision_rows.correction_kind='CHANGED_HOURS_REVERSAL' then 'HealthRoster Reversal'
+            when decision_rows.bulk_authorise_classification_calc='HR' and decision_rows.correction_kind='CHANGED_HOURS_REPLACEMENT' then 'HealthRoster Corrected Hours'
+            when decision_rows.bulk_authorise_classification_calc='NHSP' and decision_rows.correction_kind='CHANGED_HOURS_REVERSAL' then 'NHSP Reversal'
+            when decision_rows.bulk_authorise_classification_calc='NHSP' and decision_rows.correction_kind='CHANGED_HOURS_REPLACEMENT' then 'NHSP Corrected Hours' end end,
         'bulk_authorise_section',
         CASE
           WHEN decision_rows.can_bulk_authorise_calc THEN 'processed_eligible'
@@ -4730,6 +4787,23 @@ BEGIN
     AND NOT v_storage_changed_hint
     AND NOT v_manual_changed_hint;
 
+  IF EXISTS(
+    SELECT 1
+    FROM public.bulk_timesheet_workbench_row_source_v1(v_source_filters) source_row
+    JOIN public.timesheets t ON t.timesheet_id=source_row.timesheet_id
+    LEFT JOIN public.timesheets_financials tf ON tf.timesheet_id=t.timesheet_id AND tf.is_current
+    WHERE t.is_current AND t.archived_at_utc IS NULL AND coalesce(t.is_adjustment,false)
+      AND t.parent_timesheet_id IS NOT NULL AND t.correction_id IS NOT NULL
+      AND upper(coalesce(t.adjustment_origin,''))='IMPORT_CORRECTION'
+      AND t.correction_kind IN ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+      AND ((upper(coalesce(source_row.route_type,'')) like '%NHSP%' or upper(coalesce(tf.basis::text,'')) like 'NHSP%'
+          or upper(coalesce(t.candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='NHSP')
+       = (upper(coalesce(source_row.route_type,'')) like '%HEALTHROSTER%' or upper(coalesce(tf.basis::text,'')) like 'HEALTHROSTER%'
+          or upper(coalesce(t.candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='HEALTHROSTER'))
+  ) THEN
+    RAISE EXCEPTION 'BULK_AUTHORISE_CORRECTION_SOURCE_CONFLICT' USING ERRCODE='22023';
+  END IF;
+
   RETURN QUERY
   WITH source_rows AS MATERIALIZED (
     SELECT
@@ -4791,6 +4865,8 @@ BEGIN
       timesheet_row.correction_id AS timesheet_correction_id,
       timesheet_row.correction_kind AS timesheet_correction_kind,
       timesheet_row.adjustment_origin AS timesheet_adjustment_origin,
+      timesheet_row.candidate_hint_text AS timesheet_candidate_hint_text,
+      financial_row.basis::text AS tsfin_basis_text,
       financial_row.updated_at AS tsfin_updated_at,
       financial_row.actual_schedule_json AS tsfin_actual_schedule_json,
       financial_row.invoice_breakdown_json AS tsfin_invoice_breakdown_json,
@@ -5102,6 +5178,27 @@ BEGIN
     SELECT
       classified_rows.*,
       CASE
+        WHEN classified_rows.timesheet_is_current=true
+         AND classified_rows.archived_at_utc is null
+         AND coalesce(classified_rows.timesheet_is_adjustment,false)
+         AND classified_rows.timesheet_parent_timesheet_id is not null
+         AND classified_rows.timesheet_correction_id is not null
+         AND upper(coalesce(classified_rows.timesheet_adjustment_origin,''))='IMPORT_CORRECTION'
+         AND classified_rows.timesheet_correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+         THEN case
+          when (classified_rows.route_type_upper like '%HEALTHROSTER%'
+              or upper(coalesce(classified_rows.tsfin_basis_text,'')) like 'HEALTHROSTER%'
+              or upper(coalesce(classified_rows.timesheet_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='HEALTHROSTER')
+            and not (classified_rows.route_type_upper like '%NHSP%'
+              or upper(coalesce(classified_rows.tsfin_basis_text,'')) like 'NHSP%'
+              or upper(coalesce(classified_rows.timesheet_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='NHSP') then 'HR'
+          when (classified_rows.route_type_upper like '%NHSP%'
+              or upper(coalesce(classified_rows.tsfin_basis_text,'')) like 'NHSP%'
+              or upper(coalesce(classified_rows.timesheet_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='NHSP')
+            and not (classified_rows.route_type_upper like '%HEALTHROSTER%'
+              or upper(coalesce(classified_rows.tsfin_basis_text,'')) like 'HEALTHROSTER%'
+              or upper(coalesce(classified_rows.timesheet_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='HEALTHROSTER') then 'NHSP'
+          else 'TIMESHEETS' end
         WHEN classified_rows.route_family_calc = 'IMPORT_AUTHORITATIVE'
          AND classified_rows.route_subfamily_calc = 'HEALTHROSTER_NO_TIMESHEET' THEN 'HR'
         WHEN classified_rows.route_family_calc = 'IMPORT_AUTHORITATIVE' THEN 'NHSP'
@@ -5621,6 +5718,22 @@ BEGIN
         'bulk_process_bucket', payload_rows.bulk_process_bucket_calc,
         'bulk_authorise_classification', payload_rows.bulk_authorise_classification_calc,
         'bulk_authorise_section', payload_rows.bulk_authorise_section_calc,
+        'correction_id',payload_rows.timesheet_correction_id,
+        'correction_kind',payload_rows.timesheet_correction_kind,
+        'adjustment_origin',payload_rows.timesheet_adjustment_origin,
+        'correction_source_system',case when payload_rows.timesheet_is_current=true and payload_rows.archived_at_utc is null
+          and coalesce(payload_rows.timesheet_is_adjustment,false) and payload_rows.timesheet_parent_timesheet_id is not null
+          and payload_rows.timesheet_correction_id is not null and upper(coalesce(payload_rows.timesheet_adjustment_origin,''))='IMPORT_CORRECTION'
+          and payload_rows.timesheet_correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+          then case when payload_rows.bulk_authorise_classification_calc='HR' then 'HEALTHROSTER' else 'NHSP' end end,
+        'correction_display_label',case when payload_rows.timesheet_is_current=true and payload_rows.archived_at_utc is null
+          and coalesce(payload_rows.timesheet_is_adjustment,false) and payload_rows.timesheet_parent_timesheet_id is not null
+          and payload_rows.timesheet_correction_id is not null and upper(coalesce(payload_rows.timesheet_adjustment_origin,''))='IMPORT_CORRECTION'
+          then case
+            when payload_rows.bulk_authorise_classification_calc='HR' and payload_rows.timesheet_correction_kind='CHANGED_HOURS_REVERSAL' then 'HealthRoster Reversal'
+            when payload_rows.bulk_authorise_classification_calc='HR' and payload_rows.timesheet_correction_kind='CHANGED_HOURS_REPLACEMENT' then 'HealthRoster Corrected Hours'
+            when payload_rows.bulk_authorise_classification_calc='NHSP' and payload_rows.timesheet_correction_kind='CHANGED_HOURS_REVERSAL' then 'NHSP Reversal'
+            when payload_rows.bulk_authorise_classification_calc='NHSP' and payload_rows.timesheet_correction_kind='CHANGED_HOURS_REPLACEMENT' then 'NHSP Corrected Hours' end end,
         'is_authorised', payload_rows.is_authorised_calc,
         'authorised_at_utc', COALESCE(payload_rows.tsfin_authorised_at_utc, payload_rows.authorised_at_server),
         'authorised_at_server', payload_rows.authorised_at_server,
@@ -5859,6 +5972,22 @@ BEGIN
             'previous_bulk_process_bucket', NULL::text,
             'bulk_authorise_classification', payload_rows.bulk_authorise_classification_calc,
             'bulk_authorise_section', payload_rows.bulk_authorise_section_calc,
+            'correction_id',payload_rows.timesheet_correction_id,
+            'correction_kind',payload_rows.timesheet_correction_kind,
+            'adjustment_origin',payload_rows.timesheet_adjustment_origin,
+            'correction_source_system',case when payload_rows.timesheet_is_current=true and payload_rows.archived_at_utc is null
+              and coalesce(payload_rows.timesheet_is_adjustment,false) and payload_rows.timesheet_parent_timesheet_id is not null
+              and payload_rows.timesheet_correction_id is not null and upper(coalesce(payload_rows.timesheet_adjustment_origin,''))='IMPORT_CORRECTION'
+              and payload_rows.timesheet_correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+              then case when payload_rows.bulk_authorise_classification_calc='HR' then 'HEALTHROSTER' else 'NHSP' end end,
+            'correction_display_label',case when payload_rows.timesheet_is_current=true and payload_rows.archived_at_utc is null
+              and coalesce(payload_rows.timesheet_is_adjustment,false) and payload_rows.timesheet_parent_timesheet_id is not null
+              and payload_rows.timesheet_correction_id is not null and upper(coalesce(payload_rows.timesheet_adjustment_origin,''))='IMPORT_CORRECTION'
+              then case
+                when payload_rows.bulk_authorise_classification_calc='HR' and payload_rows.timesheet_correction_kind='CHANGED_HOURS_REVERSAL' then 'HealthRoster Reversal'
+                when payload_rows.bulk_authorise_classification_calc='HR' and payload_rows.timesheet_correction_kind='CHANGED_HOURS_REPLACEMENT' then 'HealthRoster Corrected Hours'
+                when payload_rows.bulk_authorise_classification_calc='NHSP' and payload_rows.timesheet_correction_kind='CHANGED_HOURS_REVERSAL' then 'NHSP Reversal'
+                when payload_rows.bulk_authorise_classification_calc='NHSP' and payload_rows.timesheet_correction_kind='CHANGED_HOURS_REPLACEMENT' then 'NHSP Corrected Hours' end end,
             'previous_bulk_authorise_section', NULL::text,
             'is_authorised', payload_rows.is_authorised_calc,
             'authorised_at_utc', COALESCE(payload_rows.tsfin_authorised_at_utc, payload_rows.authorised_at_server),

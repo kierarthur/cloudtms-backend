@@ -101,6 +101,9 @@ declare
   v_existing_neg_count int := 0;
 
   v_deleted_redundant_pair boolean := false;
+  v_reconciliation_unit jsonb := null;
+  v_reconciliation_route text := null;
+  v_reconciliation_b_schedule jsonb := null;
   -- Historical correction finance authority (Policy X pre-draft only)
   v_chain_scope jsonb := null;
   v_financial_preflight jsonb := null;
@@ -240,6 +243,23 @@ begin
     -- reset per-key flags
     v_updated_existing_replacement := false;
     v_deleted_redundant_pair := false;
+    v_reconciliation_unit := null;
+    v_reconciliation_route := null;
+    v_reconciliation_b_schedule := null;
+
+    if to_regclass('pg_temp.import_review_reconciliation_units_v1') is not null then
+      select u.unit_json into v_reconciliation_unit
+      from pg_temp.import_review_reconciliation_units_v1 u
+      where u.source_identity=v_key;
+      if v_reconciliation_unit is not null then
+        if v_reconciliation_unit->>'source_system'<>'NHSP'
+           or v_reconciliation_unit->>'route' not in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT') then
+          raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+        end if;
+        v_reconciliation_route:=v_reconciliation_unit->>'route';
+        v_reconciliation_b_schedule:=coalesce(v_reconciliation_unit->'B_standard_schedule_json','[]'::jsonb);
+      end if;
+    end if;
 
     v_existing_pos_ts_id := null;
     v_existing_pos_correction_id := null;
@@ -390,11 +410,15 @@ begin
       v_base_timesheet_id, true, 32, 100
     ) into v_chain_scope;
 
-    if coalesce((v_chain_scope->>'valid')::boolean,false) is not true then
+    if coalesce((v_chain_scope->>'valid')::boolean,false) is not true
+       and v_reconciliation_unit is null then
       raise exception using message='CORRECTION_CHAIN_UNRESOLVED', errcode='P0001', detail=v_chain_scope::text;
     end if;
 
     v_root_timesheet_id := nullif(v_chain_scope->>'root_timesheet_id','')::uuid;
+    if v_root_timesheet_id is null then
+      raise exception 'IMPORT_REVIEW_RECONCILIATION_PARENT_INVALID' using errcode='55000';
+    end if;
     v_latest_positive_timesheet_id := coalesce(
       nullif(v_chain_scope->>'latest_positive_timesheet_id','')::uuid,
       v_base_timesheet_id
@@ -418,19 +442,24 @@ begin
     v_correction_financials_policy_envelope_fingerprint :=
       v_correction_financials_policy_envelope ->> 'envelope_fingerprint';
 
-    select public.import_timesheet_financial_preflight_v1(
-      p_timesheet_ids := array[v_base_timesheet_id]::uuid[],
-      p_action := 'IMPORT_CHANGED_HOURS_CORRECTION',
-      p_actor_user_id := p_actor_user_id,
-      p_expected_state_json := jsonb_build_object(
-        'chain_fingerprints',jsonb_build_object(v_root_timesheet_id::text,v_chain_scope->>'chain_fingerprint')
-      ),
-      p_lock_rows := true,
-      p_max_scope := 100
-    ) into v_financial_preflight;
+    if v_reconciliation_unit is null then
+      select public.import_timesheet_financial_preflight_v1(
+        p_timesheet_ids := array[v_base_timesheet_id]::uuid[],
+        p_action := 'IMPORT_CHANGED_HOURS_CORRECTION',
+        p_actor_user_id := p_actor_user_id,
+        p_expected_state_json := jsonb_build_object(
+          'chain_fingerprints',jsonb_build_object(v_root_timesheet_id::text,v_chain_scope->>'chain_fingerprint')
+        ),
+        p_lock_rows := true,
+        p_max_scope := 100
+      ) into v_financial_preflight;
 
-    if coalesce((v_financial_preflight->>'allowed')::boolean,false) is not true then
-      raise exception using message='IMPORT_FINANCIAL_PREFLIGHT_BLOCKED', errcode='P0001', detail=v_financial_preflight::text;
+      if coalesce((v_financial_preflight->>'allowed')::boolean,false) is not true then
+        raise exception using message='IMPORT_FINANCIAL_PREFLIGHT_BLOCKED', errcode='P0001', detail=v_financial_preflight::text;
+      end if;
+    elsif nullif(current_setting('cloudtms.import_reconciliation_operation_id',true),'') is null
+       or nullif(current_setting('cloudtms.import_reconciliation_request_hash',true),'') is null then
+      raise exception 'IMPORT_REVIEW_RECONCILIATION_GUARD_REQUIRED' using errcode='55000';
     end if;
 
     -- Extract old/new shift times and break mins
@@ -466,6 +495,26 @@ begin
     v_new_end_str   := coalesce(v_row->>'new_end_utc', '');
     v_old_break_str := coalesce(v_row->>'old_break_mins', '');
     v_new_break_str := coalesce(v_row->>'new_break_mins', '');
+
+    if v_reconciliation_unit is not null then
+      if jsonb_typeof(v_reconciliation_unit->'A_schedule_json')<>'array'
+         or jsonb_array_length(v_reconciliation_unit->'A_schedule_json')<>1 then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+      end if;
+      begin
+        v_new_start_utc:=(v_reconciliation_unit#>>'{A_schedule_json,0,start_utc}')::timestamptz;
+        v_new_end_utc:=(v_reconciliation_unit#>>'{A_schedule_json,0,end_utc}')::timestamptz;
+        v_new_break_mins:=coalesce((v_reconciliation_unit#>>'{A_schedule_json,0,break_mins}')::integer,0);
+      exception when others then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+      end;
+      if v_new_start_utc is null or v_new_end_utc is null or v_new_end_utc<=v_new_start_utc then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+      end if;
+      v_new_start_str:=v_reconciliation_unit#>>'{A_schedule_json,0,start_utc}';
+      v_new_end_str:=v_reconciliation_unit#>>'{A_schedule_json,0,end_utc}';
+      v_new_break_str:=coalesce(v_reconciliation_unit#>>'{A_schedule_json,0,break_mins}','0');
+    end if;
 
     -- Compute correction_id (stable + deterministic)
     v_fnv_s :=
@@ -764,6 +813,41 @@ begin
     -- a zero residual only after its canonical pair lifecycle transition.
     v_deleted_redundant_pair := false;
 
+    if v_reconciliation_unit is not null then
+      if jsonb_typeof(v_reconciliation_b_schedule)<>'array' or jsonb_array_length(v_reconciliation_b_schedule)<>1 then
+        raise exception 'IMPORT_REVIEW_EFFECTIVE_POSITION_NOT_STANDARD_REPRESENTABLE' using errcode='55000';
+      end if;
+      v_existing_pos_old_start_str:=v_reconciliation_b_schedule#>>'{0,start_utc}';
+      v_existing_pos_old_end_str:=v_reconciliation_b_schedule#>>'{0,end_utc}';
+      v_existing_pos_old_break_str:=coalesce(v_reconciliation_b_schedule#>>'{0,break_mins}','0');
+      v_old_start_utc:=v_existing_pos_old_start_str::timestamptz;
+      v_old_end_utc:=v_existing_pos_old_end_str::timestamptz;
+      v_old_break_mins:=v_existing_pos_old_break_str::integer;
+      v_old_start_str:=v_existing_pos_old_start_str;
+      v_old_end_str:=v_existing_pos_old_end_str;
+      v_old_break_str:=v_existing_pos_old_break_str;
+      if v_reconciliation_route='AMEND_EXISTING_REPLACEMENT' then
+        v_correction_id:=v_reconciliation_unit->>'correction_id';
+        if nullif(v_correction_id,'') is null then
+          raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+        end if;
+      end if;
+      if v_reconciliation_route='CREATE_REVERSAL_REPLACEMENT'
+         and v_existing_pos_ts_id is not null and v_existing_pos_is_invoiced then
+        v_base_timesheet_id:=v_existing_pos_ts_id;
+      elsif nullif(v_reconciliation_unit->>'parent_timesheet_id','') is not null then
+        v_base_timesheet_id:=(v_reconciliation_unit->>'parent_timesheet_id')::uuid;
+      end if;
+      if not exists(select 1 from public.timesheets parent_ts
+        where parent_ts.timesheet_id=v_base_timesheet_id and parent_ts.is_current and parent_ts.archived_at_utc is null) then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_PARENT_INVALID' using errcode='55000';
+      end if;
+      v_existing_pos_ts_id:=null;
+      v_existing_pos_is_invoiced:=false;
+      v_existing_neg_ts_id:=null;
+      v_existing_neg_is_invoiced:=false;
+    end if;
+
         -- If the latest POS is invoiced, the new series must reverse POS (not the original base).
     if v_existing_pos_ts_id is not null and v_existing_pos_is_invoiced is true then
       v_existing_pos_seg := null;
@@ -962,6 +1046,12 @@ begin
         'root_timesheet_id', v_root_timesheet_id::text,
         'latest_positive_timesheet_id', coalesce(v_latest_positive_timesheet_id,v_base_timesheet_id)::text
       );
+      if v_reconciliation_unit is not null then
+        v_hint:=v_hint||jsonb_build_object('import_authoritative_reconciliation',jsonb_build_object(
+          'operation_id',current_setting('cloudtms.import_reconciliation_operation_id',true),
+          'unit_fingerprint',v_reconciliation_unit->>'unit_fingerprint','route',v_reconciliation_route,
+          'source_identity',v_key));
+      end if;
 
 
       -- This is an amendment within the existing correction unit, not a new
@@ -1132,6 +1222,12 @@ begin
           'root_timesheet_id', v_root_timesheet_id::text,
           'latest_positive_timesheet_id', coalesce(v_latest_positive_timesheet_id,v_base_timesheet_id)::text
         );
+        if v_reconciliation_unit is not null then
+          v_hint:=v_hint||jsonb_build_object('import_authoritative_reconciliation',jsonb_build_object(
+            'operation_id',current_setting('cloudtms.import_reconciliation_operation_id',true),
+            'unit_fingerprint',v_reconciliation_unit->>'unit_fingerprint','route',v_reconciliation_route,
+            'source_identity',v_key));
+        end if;
 
 
         v_shift_label := 'weekly-correction-' || lower(v_kind) || '-' || v_correction_id;
@@ -1183,6 +1279,7 @@ begin
         from public.timesheets t
         where t.correction_id = v_correction_id
           and t.correction_kind = v_kind
+          and (v_reconciliation_unit is null or (t.is_current and t.archived_at_utc is null))
         order by t.is_current desc, t.version desc
         limit 1
         for update;
@@ -1456,6 +1553,18 @@ begin
 
       end loop; -- kind loop
     end if; -- updated_existing_replacement
+
+    if v_reconciliation_unit is not null then
+      if v_rev_ts_id is null or v_rep_ts_id is null then
+        raise exception 'IMPORT_REVIEW_APPLY_POSTCONDITION_FAILED' using errcode='55000',
+          detail=jsonb_build_object('reason_code','CORRECTION_MEMBER_SET_INCOMPLETE','source_identity',v_key)::text;
+      end if;
+      update pg_temp.import_review_reconciliation_units_v1 u
+      set unit_json=u.unit_json||jsonb_build_object(
+        'correction_id',v_correction_id,'M_active_member_ids',jsonb_build_array(v_rev_ts_id,v_rep_ts_id),
+        'parent_timesheet_id',v_base_timesheet_id,'applied_member_ids',jsonb_build_array(v_rev_ts_id,v_rep_ts_id))
+      where u.source_identity=v_key;
+    end if;
 
     -- ─────────────────────────────────────────────
     -- ✅ User-facing audit entries (timesheet modal + invoice history)
