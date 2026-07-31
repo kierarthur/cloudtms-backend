@@ -1084,7 +1084,15 @@ BEGIN
   v_display_ready := UPPER(BTRIM(COALESCE(v_session.status, ''))) = 'OPEN'
     AND v_session.discarded_at_utc IS NULL
     AND v_session.replacement_session_id IS NULL
-    AND COALESCE(v_session.scope_seed_complete, false);
+    AND COALESCE(v_session.scope_seed_complete, false)
+    AND (
+      COALESCE(v_session.preview_row_count, 0) > 0
+      OR (
+        v_active_session_jobs = 0
+        AND COALESCE(v_session.scope_pending_count, 0) = 0
+        AND COALESCE(v_session.line_units_pending, 0) = 0
+      )
+    );
 
   v_draft_safe := v_display_ready
     AND COALESCE(v_session.scope_change_generation_applied, 0) = v_current
