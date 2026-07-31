@@ -93,7 +93,7 @@ begin
         then 'DRAFT_PREVIEW' else 'TIMESHEET' end purpose,
       coalesce(nullif(r.command_json->>'template_version',''),
         case when r.command_type='VIEW_INVOICE_DOCUMENT'
-          then 'invoice-professional-v1' else 'timesheet-professional-v1' end) template_version
+          then 'invoice-professional-v2' else 'timesheet-professional-v1' end) template_version
     from raw r
     left join command_ids ci on ci.command_no=r.command_no and ci.valid_uuid
     left join public.invoices i

@@ -44,7 +44,7 @@ begin
         then (request_json->>'parent_operation_id')::uuid end parent_operation_id,
       case when pg_input_is_valid(coalesce(request_json->>'actor_user_id',''),'uuid')
         then (request_json->>'actor_user_id')::uuid end actor_user_id,
-      coalesce(nullif(request_json->>'template_version',''),'invoice-professional-v1') template_version,
+      coalesce(nullif(request_json->>'template_version',''),'invoice-professional-v2') template_version,
       request_json
     from raw_requests
   ),
@@ -55,7 +55,7 @@ begin
         when invoice_id is null then 'INVOICE_ID_INVALID'
         when document_revision is null then 'DOCUMENT_REVISION_INVALID'
         when purpose <> 'DRAFT_PREVIEW' then 'DOCUMENT_PURPOSE_INVALID'
-        when template_version <> 'invoice-professional-v1' then 'DOCUMENT_TEMPLATE_VERSION_INVALID'
+        when template_version <> 'invoice-professional-v2' then 'DOCUMENT_TEMPLATE_VERSION_INVALID'
         when parent_operation_id is null then 'PARENT_OPERATION_ID_REQUIRED'
         when actor_user_id is null then 'ACTOR_USER_ID_REQUIRED'
         else null end code
@@ -64,7 +64,7 @@ begin
        or invoice_id is null
        or document_revision is null
        or purpose <> 'DRAFT_PREVIEW'
-       or template_version <> 'invoice-professional-v1'
+       or template_version <> 'invoice-professional-v2'
        or parent_operation_id is null
        or actor_user_id is null
   ),

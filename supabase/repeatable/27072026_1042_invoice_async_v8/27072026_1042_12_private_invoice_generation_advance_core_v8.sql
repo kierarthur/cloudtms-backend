@@ -1831,7 +1831,7 @@ begin
      and v.entity_id=q.planned_invoice_id
      and v.purpose='DRAFT_PREVIEW'
      and v.source_revision=q.document_revision
-     and v.template_version='invoice-professional-v1'
+     and v.template_version='invoice-professional-v2'
      and v.status in(
        'PLANNING','WAITING_FOR_INPUTS','RENDERING','ASSEMBLING',
        'VERIFYING','READY')
@@ -1845,8 +1845,8 @@ begin
       total_units,chunk_count,control_version,change_seq,created_at_utc,updated_at_utc)
     select q.parent_operation_id,'BUILD_DOCUMENT','INVOICE',q.planned_invoice_id,o.actor_user_id,
       encode(digest('DRAFT_PREVIEW|'||q.planned_invoice_id||'|'||q.document_revision||
-        '|invoice-professional-v1','sha256'),'hex'),
-      'QUEUED','BUILD_MANIFEST',550,q.document_revision,'invoice-professional-v1',
+        '|invoice-professional-v2','sha256'),'hex'),
+      'QUEUED','BUILD_MANIFEST',550,q.document_revision,'invoice-professional-v2',
       jsonb_build_object('invoice_id',q.planned_invoice_id,'purpose','DRAFT_PREVIEW'),
       jsonb_build_object('processor_policy',o.config_json->'processor_policy'),
       '{}',1,1,1,
@@ -1875,7 +1875,7 @@ begin
     insert into public.invoice_document_versions(entity_type,entity_id,purpose,operation_id,source_revision,
       template_version,status,snapshot_json,snapshot_hash,manifest_json,manifest_hash,created_at_utc)
     select 'INVOICE',d.planned_invoice_id,'DRAFT_PREVIEW',d.operation_id,d.source_revision,
-      'invoice-professional-v1','PLANNING','{}',encode(digest('{}','sha256'),'hex'),
+      'invoice-professional-v2','PLANNING','{}',encode(digest('{}','sha256'),'hex'),
       '[]',encode(digest('[]','sha256'),'hex'),v_now
     from selected_doc_ops d
     where d.existing_version_id is null
@@ -1900,7 +1900,7 @@ begin
       document_version_id,status,priority,run_after_utc,payload_json,operation_control_version,created_at_utc,updated_at_utc)
     select d.operation_id,'DOCUMENT_PLAN','BUILD_MANIFEST',
       encode(digest(concat_ws('|','DOCUMENT_PLAN',d.document_version_id::text,
-        d.source_revision,'invoice-professional-v1','1'),'sha256'),'hex'),
+        d.source_revision,'invoice-professional-v2','1'),'sha256'),'hex'),
       0,'INVOICE',d.planned_invoice_id,d.document_version_id,
       'QUEUED',550,v_now,jsonb_build_object('purpose','DRAFT_PREVIEW'),d.control_version,v_now,v_now
     from all_doc_versions d
@@ -1925,7 +1925,7 @@ begin
       o.actor_user_id,
       encode(digest('CREDIT_ISSUE|'||q.planned_invoice_id||'|'||
         q.document_revision||'|'||coalesce(q.command_token,''),'sha256'),'hex'),
-      'QUEUED','VALIDATE',850,q.document_revision,'invoice-professional-v1',
+      'QUEUED','VALIDATE',850,q.document_revision,'invoice-professional-v2',
       jsonb_build_object(
         'invoice_ids',jsonb_build_array(q.planned_invoice_id),
         'credit_note',true,'credit_reason',q.credit_reason,

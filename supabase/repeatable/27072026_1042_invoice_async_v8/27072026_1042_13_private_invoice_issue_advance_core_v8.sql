@@ -177,7 +177,7 @@ begin
         'entity_type','INVOICE',
         'entity_id',fs.invoice_id,
         'purpose','FINAL_ISSUE',
-        'template_version','invoice-professional-v1',
+        'template_version','invoice-professional-v2',
         'issue_at_utc',fs.issue_at_utc,
         'tax_point_utc',fs.tax_point_utc,
         'due_at_utc',fs.due_at_utc
@@ -228,7 +228,7 @@ begin
       and v.entity_type='INVOICE' and v.entity_id=f.invoice_id
       and v.purpose='FINAL_ISSUE'
       and v.snapshot_hash=encode(digest(f.snapshot::text,'sha256'),'hex')
-      and v.template_version='invoice-professional-v1'
+      and v.template_version='invoice-professional-v2'
       and v.status in('PLANNING','WAITING_FOR_INPUTS','RENDERING',
         'ASSEMBLING','VERIFYING','READY')
     join public.invoice_operations o on o.id=v.operation_id
@@ -240,8 +240,8 @@ begin
     select f.operation_id,'BUILD_DOCUMENT','INVOICE',f.invoice_id,o.actor_user_id,
       encode(digest('FINAL_ISSUE|'||f.invoice_id||'|'||
         encode(digest(f.snapshot::text,'sha256'),'hex')||
-        '|invoice-professional-v1','sha256'),'hex'),
-      'QUEUED','BUILD_MANIFEST',850,f.document_revision::text,'invoice-professional-v1',
+        '|invoice-professional-v2','sha256'),'hex'),
+      'QUEUED','BUILD_MANIFEST',850,f.document_revision::text,'invoice-professional-v2',
       jsonb_build_object('invoice_id',f.invoice_id,'purpose','FINAL_ISSUE'),
       jsonb_build_object('processor_policy',o.config_json->'processor_policy'),
       '{}',1,1,1,
@@ -284,7 +284,7 @@ begin
     insert into public.invoice_document_versions(entity_type,entity_id,purpose,operation_id,source_revision,
       template_version,status,snapshot_json,snapshot_hash,manifest_json,manifest_hash,created_at_utc)
     select 'INVOICE',s.invoice_id,'FINAL_ISSUE',s.doc_operation_id,s.document_revision::text,
-      'invoice-professional-v1','PLANNING',s.snapshot,encode(digest(s.snapshot::text,'sha256'),'hex'),
+      'invoice-professional-v2','PLANNING',s.snapshot,encode(digest(s.snapshot::text,'sha256'),'hex'),
       '[]',encode(digest('[]','sha256'),'hex'),v_now
     from selected s
     where s.existing_document_version_id is null
@@ -307,7 +307,7 @@ begin
     select s.doc_operation_id,'DOCUMENT_PLAN','BUILD_MANIFEST',
       encode(digest(concat_ws('|','DOCUMENT_PLAN',
         s.document_version_id::text,s.document_revision::text,
-        'invoice-professional-v1','1'),'sha256'),'hex'),
+        'invoice-professional-v2','1'),'sha256'),'hex'),
       0,'INVOICE',s.invoice_id,s.document_version_id,
       'QUEUED',850,v_now,jsonb_build_object('purpose','FINAL_ISSUE'),s.doc_control_version,v_now,v_now
     from exact_versions s

@@ -1279,6 +1279,43 @@ test('presentation authority repeatable defers safely instead of failing CI whil
   );
 });
 
+test('invoice presentation rows freeze each source timesheet week ending for the v2 table', () => {
+  const presentationSnapshot = read(
+    'supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql',
+  );
+  assert.match(
+    presentationSnapshot,
+    /coalesce\(t\.week_ending_date,[\s\S]*il\.meta_json->>'week_ending_date'[\s\S]*timesheet_week_ending_date/i,
+  );
+  assert.match(
+    presentationSnapshot,
+    /'week_ending_date',c\.timesheet_week_ending_date/i,
+  );
+});
+
+test('invoice-professional-v2 identity is propagated through every invoice document entry point', () => {
+  const files = [
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql',
+    'supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql',
+    'supabase/repeatable/26072026_1947_invoice_batch_generate_candidate_rows_v1.sql',
+    'supabase/repeatable/26072026_1947_invoice_batch_issue_candidate_rows_v1.sql',
+    'supabase/repeatable/26072026_1947_invoice_document_operation_ensure_batch.sql',
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_11_private_invoice_operation_start_core_v8.sql',
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_12_private_invoice_generation_advance_core_v8.sql',
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql',
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_18_private_invoice_batch_manifest_advance_v2.sql',
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_generate_classification_v2.sql',
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql',
+  ];
+  for (const file of files) {
+    const sql = read(file);
+    assert.match(sql, /invoice-professional-v2/i, `${file} must opt into the new invoice layout`);
+    assert.doesNotMatch(sql, /invoice-professional-v1/i, `${file} must not reuse the old READY identity`);
+  }
+});
+
 test('source render processor context carries the frozen source template identity', () => {
   const workContext = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'

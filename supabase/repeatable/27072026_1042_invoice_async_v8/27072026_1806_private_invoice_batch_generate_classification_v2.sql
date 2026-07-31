@@ -1145,7 +1145,7 @@ begin
           and version.entity_id=invoice.id
           and version.purpose='DRAFT_PREVIEW'
           and version.source_revision=invoice.document_revision::text
-          and version.template_version='invoice-professional-v1'
+          and version.template_version='invoice-professional-v2'
           and version.status='READY'
           and version.r2_key is not null
           and version.sha256~'^[0-9a-f]{64}$'

@@ -669,7 +669,7 @@ begin
           'priority',greatest(c.priority,550),
           'parent_operation_id',c.operation_id,
           'actor_user_id',v_expander.actor_user_id,
-          'template_version','invoice-professional-v1'
+          'template_version','invoice-professional-v2'
         ) order by c.selection_key),'[]'::jsonb)
         into v_requests
         from public.invoice_operation_chunks c

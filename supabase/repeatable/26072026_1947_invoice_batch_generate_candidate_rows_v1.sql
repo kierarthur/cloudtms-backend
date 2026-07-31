@@ -347,7 +347,7 @@ begin
           and v.entity_id=i.id
           and v.purpose='DRAFT_PREVIEW'
           and v.source_revision=i.document_revision::text
-          and v.template_version='invoice-professional-v1'
+          and v.template_version='invoice-professional-v2'
           and v.status='READY'
           and v.r2_key is not null
           and v.sha256 ~ '^[0-9a-f]{64}$'

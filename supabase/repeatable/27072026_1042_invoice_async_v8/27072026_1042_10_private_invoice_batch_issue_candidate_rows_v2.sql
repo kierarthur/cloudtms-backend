@@ -315,7 +315,7 @@ begin
             and v.entity_id=r.invoice_id
             and v.purpose='DRAFT_PREVIEW'
             and v.source_revision=r.document_revision::text
-            and v.template_version='invoice-professional-v1'
+            and v.template_version='invoice-professional-v2'
             and v.status='READY'
             and v.r2_key is not null
             and v.sha256 ~ '^[0-9a-f]{64}$'
@@ -327,7 +327,7 @@ begin
           where prior_ready.entity_type='INVOICE'
             and prior_ready.entity_id=r.invoice_id
             and prior_ready.purpose='DRAFT_PREVIEW'
-            and prior_ready.template_version='invoice-professional-v1'
+            and prior_ready.template_version='invoice-professional-v2'
             and prior_ready.status='READY'
             and prior_ready.r2_key is not null
             and prior_ready.sha256 ~ '^[0-9a-f]{64}$'

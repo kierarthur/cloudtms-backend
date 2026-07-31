@@ -3060,7 +3060,7 @@ end if;
           'purpose','DRAFT_PREVIEW',
           'priority_reason',case when v_source_edit_preexisting_preview
             then 'SOURCE_EDIT_REPLACEMENT' else 'VIEW_NOW' end,
-          'template_version','invoice-professional-v1'));
+          'template_version','invoice-professional-v2'));
     end if;
 
     v_expected_command_count:=jsonb_array_length(v_document_commands);

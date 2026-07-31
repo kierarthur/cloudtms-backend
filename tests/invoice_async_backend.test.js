@@ -328,6 +328,7 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
       source_key: 'source-1',
       description: '<unsafe>',
       worker: 'Worker One',
+      week_ending_date: '2026-07-11',
       reference: 'REF-1',
       unit: 'HOUR',
       quantity: '1.0000',
@@ -344,7 +345,7 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
     credit_note: { is_credit_note: false },
     self_bill: { is_self_bill: false },
     legal_wording: [],
-    template_version: 'invoice-professional-v1'
+    template_version: 'invoice-professional-v2'
   };
   const first = buildProfessionalInvoiceHtml(model);
   const second = buildProfessionalInvoiceHtml(model);
@@ -354,6 +355,9 @@ test('invoice HTML is deterministic and escapes all mutable presentation values'
   assert.ok(first.includes('Rate / item type'));
   assert.ok(first.includes('Candidate / worker'));
   assert.ok(first.includes('Worker One'));
+  assert.ok(first.includes('Week ending'));
+  assert.ok(first.includes('11/07/2026'));
+  assert.ok(!first.includes('<th>Unit</th>'));
   assert.ok(first.includes('Cost per unit'));
   assert.ok(first.includes('30 days from invoice date'));
   assert.ok(!first.includes('Supplier Trading'));
@@ -365,6 +369,35 @@ test('invoice line item descriptions keep Accommodation whole in a wider first c
   const css = buildInvoiceTemplateCss();
   const table = renderInvoiceLineTable({
     currency: 'GBP',
+    template_version: 'invoice-professional-v2',
+    lines: [{
+      description: 'Accommodation',
+      worker: 'Worker One',
+      week_ending_date: '2026-03-22',
+      reference: 'REF-1',
+      unit: 'item',
+      quantity: 1,
+      unit_price: 10,
+      net_amount: 10,
+      vat_amount: 2,
+      gross_amount: 12
+    }]
+  });
+  assert.match(css, /\.invoice-lines \.item-type\{overflow-wrap:normal;word-break:normal;hyphens:none\}/);
+  assert.match(table, /<col style="width:15%">/);
+  assert.match(table, /<th>Week ending<\/th>/);
+  assert.match(table, /<th class="number">Units<\/th>/);
+  assert.match(table, /<td class="week-ending">22\/03\/2026<\/td>/);
+  assert.match(table, /<td class="item-type">Accommodation<\/td>/);
+  assert.doesNotMatch(table, /Accommodatio<[^>]*>n/);
+  assert.doesNotMatch(table, /<th>Unit<\/th>/);
+  assert.doesNotMatch(table, />item<\/td>/);
+});
+
+test('legacy v1 frozen invoice rows retain their original Unit layout', () => {
+  const table = renderInvoiceLineTable({
+    currency: 'GBP',
+    template_version: 'invoice-professional-v1',
     lines: [{
       description: 'Accommodation',
       worker: 'Worker One',
@@ -377,10 +410,8 @@ test('invoice line item descriptions keep Accommodation whole in a wider first c
       gross_amount: 12
     }]
   });
-  assert.match(css, /\.invoice-lines \.item-type\{overflow-wrap:normal;word-break:normal;hyphens:none\}/);
-  assert.match(table, /<col style="width:15%">/);
-  assert.match(table, /<td class="item-type">Accommodation<\/td>/);
-  assert.doesNotMatch(table, /Accommodatio<[^>]*>n/);
+  assert.match(table, /<th>Unit<\/th>/);
+  assert.doesNotMatch(table, /<th>Week ending<\/th>/);
 });
 
 test('consolidated invoice hides the top worker field but keeps workers in line rows', () => {
@@ -400,6 +431,7 @@ test('consolidated invoice hides the top worker field but keeps workers in line 
       source_key: `source-${index + 1}`,
       description: index ? 'Additional rate' : 'Day',
       worker,
+      week_ending_date: index ? '2026-07-18' : '2026-07-11',
       reference: `REF-${index + 1}`,
       unit: 'hours',
       quantity: '1',
@@ -416,12 +448,15 @@ test('consolidated invoice hides the top worker field but keeps workers in line 
     credit_note: { is_credit_note: false },
     self_bill: { is_self_bill: false },
     legal_wording: [],
-    template_version: 'invoice-professional-v1'
+    template_version: 'invoice-professional-v2'
   };
   const html = buildProfessionalInvoiceHtml(model);
   assert.ok(html.includes('Worker One'));
   assert.ok(html.includes('Worker Two'));
   assert.ok(html.includes('Additional rate'));
+  assert.ok(html.includes('11/07/2026'));
+  assert.ok(html.includes('18/07/2026'));
+  assert.doesNotMatch(html, /<th>Unit<\/th>/);
   assert.doesNotMatch(html, /<div class="label">Candidate \/ worker<\/div>/);
 });
 
@@ -446,6 +481,7 @@ test('NHSP invoice hides a single worker header but keeps the line worker', () =
       source_key: 'source-1',
       description: 'Day',
       worker: 'Worker One',
+      week_ending_date: '2026-07-11',
       reference: 'REF-1',
       unit: 'hours',
       quantity: '7.5',
@@ -462,7 +498,7 @@ test('NHSP invoice hides a single worker header but keeps the line worker', () =
     credit_note: { is_credit_note: false },
     self_bill: { is_self_bill: true, legal_wording: 'Self bill wording' },
     legal_wording: [],
-    template_version: 'invoice-professional-v1'
+    template_version: 'invoice-professional-v2'
   };
   const html = buildProfessionalInvoiceHtml(model);
   assert.doesNotMatch(html, /<div class="label">Candidate \/ worker<\/div>/);
@@ -489,6 +525,7 @@ test('frozen presentation identity is recomputed and pay-side fields are rejecte
       source_invoice_line_id: '00000000-0000-4000-8000-000000000001',
       source_key: 'source-1',
       description: 'Day hours',
+      week_ending_date: '2026-07-11',
       reference: '',
       unit: 'hours',
       quantity: '1.0000',
@@ -512,7 +549,7 @@ test('frozen presentation identity is recomputed and pay-side fields are rejecte
     credit_note: { is_credit_note: false },
     self_bill: { is_self_bill: false },
     legal_wording: [],
-    template_version: 'invoice-professional-v1'
+    template_version: 'invoice-professional-v2'
   };
   const canonical = invoiceQueueRuntimeInternals.postgresJsonbText(model);
   const expectedHash = createHash('sha256').update(canonical).digest('hex');
@@ -522,7 +559,7 @@ test('frozen presentation identity is recomputed and pay-side fields are rejecte
     {
       presentation_model_schema_version: 'INVOICE_RENDER_MODEL_V1',
       presentation_model_hash: expectedHash,
-      template_version: 'invoice-professional-v1'
+      template_version: 'invoice-professional-v2'
     }
   );
   assert.equal(verified.presentation_model_hash, expectedHash);
@@ -533,7 +570,7 @@ test('frozen presentation identity is recomputed and pay-side fields are rejecte
       {
         presentation_model_schema_version: 'INVOICE_RENDER_MODEL_V1',
         presentation_model_hash: expectedHash,
-        template_version: 'invoice-professional-v1'
+        template_version: 'invoice-professional-v2'
       }
     ),
     /INVOICE_PRESENTATION_LINE_TOTAL_MISMATCH/

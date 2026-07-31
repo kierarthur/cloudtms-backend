@@ -60,7 +60,7 @@ begin
            case when coalesce(x.value->>'entity_id','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
              then (x.value->>'entity_id')::uuid end entity_id,
            upper(nullif(btrim(coalesce(x.value->>'purpose','')),'')) purpose,
-           coalesce(nullif(btrim(x.value->>'template_version'),''),'invoice-professional-v1') template_version,
+           coalesce(nullif(btrim(x.value->>'template_version'),''),'invoice-professional-v2') template_version,
            case when pg_input_is_valid(nullif(x.value->>'issue_at_utc',''),'timestamptz') then (x.value->>'issue_at_utc')::timestamptz end issue_at_utc,
            case when pg_input_is_valid(nullif(x.value->>'tax_point_utc',''),'timestamptz') then (x.value->>'tax_point_utc')::timestamptz end tax_point_utc,
            case when pg_input_is_valid(nullif(x.value->>'due_at_utc',''),'timestamptz') then (x.value->>'due_at_utc')::timestamptz end due_at_utc
@@ -144,6 +144,10 @@ begin
   invoice_line_base as materialized (
     select il.*,
            coalesce(nullif(btrim(vs.candidate_name),''),nullif(btrim(t.occupant_key_norm),'')) worker_name,
+           coalesce(t.week_ending_date,
+             case when pg_input_is_valid(nullif(il.meta_json->>'week_ending_date',''),'date')
+               then (il.meta_json->>'week_ending_date')::date end)
+             timesheet_week_ending_date,
            row_number() over(partition by il.invoice_id order by il.created_at,il.id)::integer base_display_order,
            case when pg_input_is_valid(nullif(il.meta_json->>'quantity',''),'numeric') then nullif(il.meta_json->>'quantity','')::numeric end meta_quantity,
            case when pg_input_is_valid(nullif(il.meta_json->>'units',''),'numeric') then nullif(il.meta_json->>'units','')::numeric end meta_units,
@@ -203,7 +207,8 @@ begin
            round(coalesce(b.total_charge_ex_vat,0),2) line_net,
            round(coalesce(b.vat_amount,0),2) line_vat,
            coalesce(b.vat_rate_pct,0) vat_rate,
-           b.source_key,b.id source_invoice_line_id,b.worker_name
+           b.source_key,b.id source_invoice_line_id,b.worker_name,
+           b.timesheet_week_ending_date
     from invoice_line_base b
     cross join lateral (values
       ('DAY','Day',1,coalesce(b.hours_day,0),coalesce(b.charge_day,0)),
@@ -238,7 +243,8 @@ begin
              + coalesce(b.hours_sun,0)*coalesce(b.charge_sun,0)
              + coalesce(b.hours_bh,0)*coalesce(b.charge_bh,0)
            ),4),
-           round(coalesce(b.total_charge_ex_vat,0),2),round(coalesce(b.vat_amount,0),2),coalesce(b.vat_rate_pct,0),b.source_key,b.id,b.worker_name
+           round(coalesce(b.total_charge_ex_vat,0),2),round(coalesce(b.vat_amount,0),2),coalesce(b.vat_rate_pct,0),b.source_key,b.id,b.worker_name,
+           b.timesheet_week_ending_date
     from invoice_line_base b
     where abs(coalesce(b.total_charge_ex_vat,0) - (
       coalesce(b.hours_day,0)*coalesce(b.charge_day,0)
@@ -271,7 +277,8 @@ begin
            q.quantity_raw quantity,
            case when q.quantity_raw<>0 then round(q.net_amount/q.quantity_raw,4) else q.net_amount end unit_price,
            q.net_amount,q.vat_rate,q.vat_amount,round(q.net_amount+q.vat_amount,2) gross_amount,
-           q.source_key,q.source_invoice_line_id,q.worker_name
+           q.source_key,q.source_invoice_line_id,q.worker_name,
+           q.timesheet_week_ending_date
     from (
       select r.*,
         case when r.component_no=r.component_count
@@ -291,6 +298,7 @@ begin
              'source_key',coalesce(c.source_key,c.source_invoice_line_id::text),
              'description',c.description,
              'worker',c.worker_name,
+             'week_ending_date',c.timesheet_week_ending_date,
              'reference',c.reference,
              'reference_required',c.reference_required,
              'reference_scope',c.reference_scope,
