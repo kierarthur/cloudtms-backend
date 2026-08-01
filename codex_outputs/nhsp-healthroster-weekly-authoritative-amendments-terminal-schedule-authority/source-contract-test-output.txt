@@ -1,0 +1,39 @@
+✔ the production delta preserves the locked helper signature and bounds (1.7846ms)
+✔ completed operation authority is validated before invoice scope is built (0.1692ms)
+✔ operation evidence requires one request, applied result, and policy unit (0.1492ms)
+✔ fresh and mutable generation repair modes are validated by route (0.1772ms)
+✔ the real request and both phase-3 producers match the route-aware repair contract (0.1858ms)
+✔ completed operation authority re-attests source scope and the immutable request unit (0.1063ms)
+✔ operation and applied-result fingerprints are independently re-attested (0.206ms)
+✔ all valid completed generations are accumulated rather than newest-only selected (0.2965ms)
+✔ validated applied member IDs enter historical invoice scope (0.1643ms)
+✔ canonical member ownership accepts only a proven archived-role re-key lineage (0.2479ms)
+✔ archived-member supersession is canonicalised transitively and fails closed on graph conflicts (0.1619ms)
+✔ deleted operation-proven members can scope exact HOURS_WEEKLY lines (0.1016ms)
+✔ one canonical economic ledger drives B and correction role state (0.1831ms)
+✔ role economics are deduplicated by physical invoice-line scope (0.2429ms)
+✔ separable non-hours components remain excluded from B and role state (0.1134ms)
+✔ credits require a full mirror and allocate multi-source money by exact frozen segment (0.1032ms)
+✔ credits require exact header, line, client, and source provenance (0.1209ms)
+✔ archived-only generations cannot become mutable (0.1344ms)
+✔ missing mutable roles require durable completed-operation proof (0.1137ms)
+✔ multiple effective physical members for one role fail closed (0.0992ms)
+✔ terminal schedule provenance rejects older candidates even when their buckets match B (0.1322ms)
+✔ terminal completed operation fallback carries its exact schedule and policy authority (0.2599ms)
+✔ the helper emits and fingerprints the complete B schedule-authority contract (0.2741ms)
+✔ effective-zero source safety distinguishes full credit from paid-uninvoiced (0.1102ms)
+✔ safe current source requires one ordinary current row and a safe lifecycle (0.1724ms)
+✔ source safety participates in review/apply staleness fingerprinting (0.1508ms)
+✔ historical operations survive latest-import replacement through decision outcomes (0.0641ms)
+✔ zero hours with a non-zero frozen monetary balance blocks as non-standard (0.1056ms)
+✔ existing catalog blocker precedence and route order remain unchanged (0.0974ms)
+✔ helper remains read-only and contains no Banking Pay or invoice mutation path (0.6459ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 138.7695
+
