@@ -300,6 +300,72 @@ begin
     from tmp_phase3_by_key t
     where t.external_row_key = v_key;
 
+    -- A financial-position-only amendment can remain necessary after the
+    -- source shift has already adopted the latest authoritative schedule. In
+    -- that case the legacy changed-hours reader intentionally returns no row.
+    -- Reconstruct the narrow Phase 3 carrier only from the already validated,
+    -- transaction-local reconciliation unit: frozen B supplies the schedule
+    -- to reverse and authoritative A supplies the replacement schedule.
+    if v_row is null and v_reconciliation_unit is not null then
+      if jsonb_typeof(v_reconciliation_b_schedule)<>'array'
+         or jsonb_array_length(v_reconciliation_b_schedule)<>1
+         or jsonb_typeof(v_reconciliation_a_schedule)<>'array'
+         or jsonb_array_length(v_reconciliation_a_schedule)<>1 then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_UNIT_INVALID' using errcode='22023';
+      end if;
+
+      select jsonb_build_object(
+        'shift_id', ns.id,
+        'candidate_id', ns.candidate_id,
+        'client_id', ns.client_id,
+        'contract_id', ns.contract_id,
+        'timesheet_id', ns.timesheet_id,
+        'work_date', coalesce(
+          nullif(v_reconciliation_a_schedule#>>'{0,date}','')::date,
+          ((v_reconciliation_a_schedule#>>'{0,start_utc}')::timestamptz at time zone 'Europe/London')::date
+        ),
+        'week_ending_date', coalesce(ts.week_ending_date,ns.week_ending_date),
+        'old_start_utc', v_reconciliation_b_schedule#>>'{0,start_utc}',
+        'old_end_utc', v_reconciliation_b_schedule#>>'{0,end_utc}',
+        'old_break_mins', coalesce(v_reconciliation_b_schedule#>>'{0,break_mins}','0'),
+        'new_start_utc', v_reconciliation_a_schedule#>>'{0,start_utc}',
+        'new_end_utc', v_reconciliation_a_schedule#>>'{0,end_utc}',
+        'new_break_mins', coalesce(v_reconciliation_a_schedule#>>'{0,break_mins}','0'),
+        'old_paid_minutes', greatest(0,
+          floor(extract(epoch from (
+            (v_reconciliation_b_schedule#>>'{0,end_utc}')::timestamptz
+            - (v_reconciliation_b_schedule#>>'{0,start_utc}')::timestamptz
+          )) / 60.0)::integer
+          - coalesce((v_reconciliation_b_schedule#>>'{0,break_mins}')::integer,0)
+        ),
+        'new_paid_minutes', greatest(0,
+          floor(extract(epoch from (
+            (v_reconciliation_a_schedule#>>'{0,end_utc}')::timestamptz
+            - (v_reconciliation_a_schedule#>>'{0,start_utc}')::timestamptz
+          )) / 60.0)::integer
+          - coalesce((v_reconciliation_a_schedule#>>'{0,break_mins}')::integer,0)
+        ),
+        'is_invoiced', false,
+        'invoice_id_detected', null
+      )
+      into v_row
+      from public.nhsp_shifts ns
+      left join public.timesheets ts
+        on ts.timesheet_id=ns.timesheet_id
+       and ts.is_current=true
+      where ns.id=nullif(v_reconciliation_unit->>'source_shift_id','')::uuid
+        and ns.external_row_key=v_key
+        and ns.source_system='NHSP'::public.hr_source_enum
+        and ns.cancelled_at_utc is null
+        and exists (
+          select 1
+          from public.hr_rows current_row
+          where current_row.import_id=p_import_id
+            and current_row.external_row_key=v_key
+        )
+      limit 1;
+    end if;
+
     if v_row is null then
       raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Phase 3 row not found for selected external_row_key=%', v_key;
     end if;

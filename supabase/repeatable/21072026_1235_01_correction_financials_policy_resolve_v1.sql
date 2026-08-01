@@ -652,6 +652,8 @@ begin
         case
           when coalesce(i.header_snapshot_json->>'applied_vat_rate_pct','') ~ '^-?[0-9]+([.][0-9]+)?$'
             then (i.header_snapshot_json->>'applied_vat_rate_pct')::numeric is distinct from il.vat_rate_pct
+          when nullif(btrim(coalesce(i.header_snapshot_json->>'applied_vat_rate_pct','')),'') is null
+            then false
           else true
         end
         or (

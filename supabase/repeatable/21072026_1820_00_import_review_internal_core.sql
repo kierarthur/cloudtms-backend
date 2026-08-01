@@ -709,6 +709,11 @@ declare
   v_member_supersession_conflict boolean:=false;
   v_operation_evidence_conflict boolean:=false;
   v_operation_in_progress boolean:=false;
+  v_transition_operation_id uuid:=case
+    when coalesce(current_setting('cloudtms.import_reconciliation_operation_id',true),'')
+      ~*'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+      then current_setting('cloudtms.import_reconciliation_operation_id',true)::uuid
+    else null end;
   v_member_role_map jsonb:='[]'::jsonb;
   v_member_role_conflict boolean:=false;
   v_effective_component_count integer:=0;
@@ -746,6 +751,14 @@ declare
   v_terminal_operation_hours jsonb:='{}'::jsonb;
   v_terminal_operation_policy_fingerprint text;
   v_terminal_operation_id uuid;
+  v_terminal_policy_snapshot jsonb:='{}'::jsonb;
+  v_terminal_policy_snapshot_fingerprint text;
+  v_terminal_derived_day numeric:=0;
+  v_terminal_derived_night numeric:=0;
+  v_terminal_derived_sat numeric:=0;
+  v_terminal_derived_sun numeric:=0;
+  v_terminal_derived_bh numeric:=0;
+  v_terminal_derived_total numeric:=0;
   v_terminal_frozen_matches_b boolean:=false;
   v_terminal_operation_matches_b boolean:=false;
   v_terminal_schedule_authority_conflict boolean:=false;
@@ -831,6 +844,7 @@ declare
   v_current_source_contract_week_safe boolean:=false;
   v_current_source_invoice_operation_clear boolean:=false;
   v_source_protection jsonb:='{}'::jsonb;
+  v_financial_position_requires_amendment boolean:=false;
   v_blocking_code text;
   v_reconciliation_fingerprint text;
   v_uuid_re constant text:='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$';
@@ -1142,6 +1156,7 @@ begin
         'B_hours',coalesce(e.request_unit->'B_hours','{}'::jsonb),
         'A_schedule_json',coalesce(e.request_unit->'A_schedule_json','[]'::jsonb),
         'A_hours',coalesce(e.request_unit->'A_hours','{}'::jsonb),
+        'policy_envelope',e.policy_unit->'policy_envelope',
         'policy_envelope_fingerprint',e.policy_unit->>'policy_envelope_fingerprint'
       ) order by e.finalised_at_utc,e.operation_id,e.request_unit->>'action_id')
         filter(where e.valid_historical_authority),'[]'::jsonb),
@@ -1149,7 +1164,8 @@ begin
         and e.request_unit->>'route' in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')
         and not e.valid_historical_authority),false),
       coalesce(bool_or(e.operation_state in ('SOURCE_COMMITTED_TSFIN_PENDING','FINANCIALISED_PENDING_FINALISATION')
-        and e.committed_at_utc is not null),false)
+        and e.committed_at_utc is not null
+        and e.operation_id is distinct from v_transition_operation_id),false)
     into v_operation_evidence,v_operation_evidence_conflict,v_operation_in_progress
     from evaluated e;
 
@@ -1394,6 +1410,9 @@ begin
     v_terminal_frozen_schedule_variant_count:=0; v_terminal_frozen_policy_variant_count:=0;
     v_terminal_operation:=null; v_terminal_operation_schedule:='[]'::jsonb; v_terminal_operation_hours:='{}'::jsonb;
     v_terminal_operation_policy_fingerprint:=null; v_terminal_operation_id:=null;
+    v_terminal_policy_snapshot:='{}'::jsonb; v_terminal_policy_snapshot_fingerprint:=null;
+    v_terminal_derived_day:=0; v_terminal_derived_night:=0; v_terminal_derived_sat:=0;
+    v_terminal_derived_sun:=0; v_terminal_derived_bh:=0; v_terminal_derived_total:=0;
     v_terminal_frozen_matches_b:=false; v_terminal_operation_matches_b:=false;
     v_terminal_schedule_authority_conflict:=false; v_terminal_policy_authority_conflict:=false;
     v_b_standard_schedule_authority:='NONE'; v_b_standard_schedule_authority_timesheet_id:=null;
@@ -1416,6 +1435,7 @@ begin
     v_role_scope_unprovable:=false;
     v_scope_unprovable:=false; v_credit_ambiguous:=false; v_stream_conflict:=false;
     v_archived_invoice_conflict:=false; v_active_invoice_activity:=false;
+    v_financial_position_requires_amendment:=false;
 
     with directly_scoped as (
       select il.id
@@ -1901,7 +1921,10 @@ begin
           or (g.proven_roles<2 and (g.effective_roles>0 or g.pending_roles>0))),'[]'::jsonb),
       exists(select 1 from generation_state g where g.effective_roles=1 and g.proven_roles=2
         and not g.active_duplicate and not g.economic_member_duplicate),
-      exists(select 1 from generation_state g where g.pending_roles>0),
+      -- A fully issued generation legitimately retains TSFIN/invoice locks.
+      -- Those locks are immutable history, not active invoice activity.  Keep
+      -- blocking only while at least one expected role is not yet effective.
+      exists(select 1 from generation_state g where g.pending_roles>0 and g.effective_roles<2),
       exists(select 1 from generation_state g where g.active_duplicate or g.economic_member_duplicate
         or (g.proven_roles<2 and (g.effective_roles>0 or g.pending_roles>0)))
     into v_generation_role_evidence,v_fully_invoiced_generation_ids,v_partial_generation_ids,v_mutable_generation_ids,
@@ -2004,6 +2027,69 @@ begin
     v_terminal_operation_policy_fingerprint:=nullif(v_terminal_operation->>'policy_envelope_fingerprint','');
     v_terminal_operation_id:=case when coalesce(v_terminal_operation->>'operation_id','')~*v_uuid_re
       then (v_terminal_operation->>'operation_id')::uuid end;
+
+    -- Historical request envelopes created before bucketed A-hours were
+    -- populated can legitimately contain total_hours with zeroed buckets.
+    -- Recover the buckets only from the exact terminal replacement member:
+    -- its validated completed-operation schedule plus its matching frozen
+    -- correction policy.  Never borrow a surviving older positive schedule.
+    if v_terminal_positive_timesheet_id is not null and v_terminal_operation is not null then
+      select tf.policy_snapshot_json,
+        coalesce(tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',
+          tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}')
+      into v_terminal_policy_snapshot,v_terminal_policy_snapshot_fingerprint
+      from public.timesheets_financials tf
+      where tf.timesheet_id=v_terminal_positive_timesheet_id
+        and tf.is_current
+        and jsonb_typeof(tf.policy_snapshot_json->'correction_financials_policy_envelope')='object'
+        and coalesce(tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',
+          tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}')
+          =v_terminal_operation_policy_fingerprint
+        and tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}'
+          =v_terminal_operation_policy_fingerprint
+        -- jsonb considers numerically equivalent values (for example 1 and
+        -- 1.0) equal even though their text encodings hash differently.  The
+        -- completed operation envelope was already independently re-attested;
+        -- require the terminal TSFIN copy to be semantically identical and to
+        -- carry that exact validated fingerprint.
+        and tf.policy_snapshot_json->'correction_financials_policy_envelope'
+          =v_terminal_operation->'policy_envelope'
+      order by tf.computed_at_utc desc nulls last,tf.id desc
+      limit 1;
+
+      if v_terminal_policy_snapshot_fingerprint=v_terminal_operation_policy_fingerprint
+        and jsonb_typeof(v_terminal_operation_schedule)='array'
+        and jsonb_array_length(v_terminal_operation_schedule)=1
+        and nullif(coalesce((v_terminal_operation_schedule->0)->>'start_utc',
+          (v_terminal_operation_schedule->0)->>'start'),'') is not null
+        and nullif(coalesce((v_terminal_operation_schedule->0)->>'end_utc',
+          (v_terminal_operation_schedule->0)->>'end'),'') is not null then
+        begin
+          select bucket.hours_day,bucket.hours_night,bucket.hours_sat,bucket.hours_sun,
+            bucket.hours_bh,bucket.total_hours
+          into v_terminal_derived_day,v_terminal_derived_night,v_terminal_derived_sat,
+            v_terminal_derived_sun,v_terminal_derived_bh,v_terminal_derived_total
+          from public._wkimp_bucket_hours_from_policy(
+            v_terminal_policy_snapshot,
+            coalesce((v_terminal_operation_schedule->0)->>'start_utc',
+              (v_terminal_operation_schedule->0)->>'start')::timestamptz,
+            coalesce((v_terminal_operation_schedule->0)->>'end_utc',
+              (v_terminal_operation_schedule->0)->>'end')::timestamptz,
+            coalesce(nullif(coalesce((v_terminal_operation_schedule->0)->>'break_mins',
+              (v_terminal_operation_schedule->0)->>'break_minutes'),'')::integer,0)
+          ) bucket;
+          if v_terminal_derived_total=
+            coalesce((v_terminal_operation_hours->>'total_hours')::numeric,v_terminal_derived_total) then
+            v_terminal_operation_hours:=jsonb_build_object(
+              'hours_day',v_terminal_derived_day,'hours_night',v_terminal_derived_night,
+              'hours_sat',v_terminal_derived_sat,'hours_sun',v_terminal_derived_sun,
+              'hours_bh',v_terminal_derived_bh,'total_hours',v_terminal_derived_total);
+          end if;
+        exception when others then
+          v_b_standard_schedule_authority_diagnostic:='TERMINAL_OPERATION_SCHEDULE_BUCKET_DERIVATION_FAILED';
+        end;
+      end if;
+    end if;
 
     v_terminal_frozen_matches_b:=v_terminal_frozen_candidate_count>0
       and jsonb_array_length(v_candidate_schedule)=1
@@ -2183,6 +2269,26 @@ begin
       when coalesce((v_source_protection->>'active_pay_draft')::boolean,false) then 'CURRENT_SOURCE_ACTIVE_PAY_DRAFT'
       else 'CURRENT_SOURCE_LIFECYCLE_UNSAFE' end;
 
+    -- The authoritative decision is economic whenever an invoiced position or
+    -- a mutable correction generation exists.  The live operational source row
+    -- is not the financial authority in that case.  Compare every rate bucket,
+    -- using B + M for an active mutable generation and B otherwise.
+    v_financial_position_requires_amendment:=case
+      when v_mutable_correction_id is not null then
+        v_b_day+v_m_day is distinct from coalesce((v_a_hours->>'hours_day')::numeric,0)
+        or v_b_night+v_m_night is distinct from coalesce((v_a_hours->>'hours_night')::numeric,0)
+        or v_b_sat+v_m_sat is distinct from coalesce((v_a_hours->>'hours_sat')::numeric,0)
+        or v_b_sun+v_m_sun is distinct from coalesce((v_a_hours->>'hours_sun')::numeric,0)
+        or v_b_bh+v_m_bh is distinct from coalesce((v_a_hours->>'hours_bh')::numeric,0)
+      when v_effective_component_count>0 and not v_effective_zero then
+        v_b_day is distinct from coalesce((v_a_hours->>'hours_day')::numeric,0)
+        or v_b_night is distinct from coalesce((v_a_hours->>'hours_night')::numeric,0)
+        or v_b_sat is distinct from coalesce((v_a_hours->>'hours_sat')::numeric,0)
+        or v_b_sun is distinct from coalesce((v_a_hours->>'hours_sun')::numeric,0)
+        or v_b_bh is distinct from coalesce((v_a_hours->>'hours_bh')::numeric,0)
+      else false
+    end;
+
     v_blocking_code:=case
       when v_partial_invoice_state then 'IMPORT_REVIEW_CORRECTION_GENERATION_PARTIALLY_INVOICED'
       when v_active_invoice_activity then 'IMPORT_REVIEW_INVOICE_ACTIVITY_IN_PROGRESS'
@@ -2203,7 +2309,8 @@ begin
       v_b_standard_schedule_authority_policy_fingerprint,v_b_standard_schedule_authority_fingerprint,
       v_current_source_safe,v_current_source_safety_reason,v_current_source_invoice_lined,v_current_source_paid,
       v_current_source_unlocked,v_current_source_fresh,v_current_source_segment_unlocked,
-      v_current_source_contract_week_safe,v_current_source_invoice_operation_clear,v_b_hours_zero,v_b_money_zero),'UTF8'),'sha256'),'hex');
+      v_current_source_contract_week_safe,v_current_source_invoice_operation_clear,v_b_hours_zero,v_b_money_zero,
+      v_financial_position_requires_amendment),'UTF8'),'sha256'),'hex');
 
     source_identity:=v_source_identity;
     balance_json:=jsonb_build_object(
@@ -2262,6 +2369,7 @@ begin
       'current_source_safe_for_effective_zero_amendment',v_current_source_safe,
       'effective_zero_source_safety_reason',v_current_source_safety_reason,
       'current_source_invoice_lined',v_current_source_invoice_lined,'current_source_paid',v_current_source_paid,
+      'financial_position_requires_amendment',v_financial_position_requires_amendment,
       'recommended_route_inputs',jsonb_build_object('B_positive',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0,
         'has_mutable_generation',v_mutable_correction_id is not null,'source_timesheet_active',v_source_timesheet_id=any(v_active_ids),
         'current_source_safe_for_effective_zero_amendment',v_current_source_safe),
@@ -2697,11 +2805,6 @@ begin
       ((row_number() over (order by f.source_row_key) - 1) / 100)::integer as reconciliation_batch
     from facts f
     where not f.is_daily and coalesce(f.import_authoritative,false) and f.existing_shift_id is not null
-      and (
-        (f.payload_json->>'start_utc')::timestamptz is distinct from f.existing_shift_start_utc
-        or (f.payload_json->>'end_utc')::timestamptz is distinct from f.existing_shift_end_utc
-        or ((f.payload_json->>'break_mins') is not null and (f.payload_json->>'break_mins')::integer is distinct from coalesce(f.existing_shift_break_minutes,0))
-      )
   ), reconciliation_inputs as (
     select coalesce(jsonb_agg(jsonb_build_object(
       'source_identity',f.source_row_key,
@@ -2766,6 +2869,8 @@ begin
         when not coalesce(f.contract_rate_complete,false) then 'ADVISORY'
         when coalesce(f.authoritative_timesheet_has_calculated_expenses,false) then 'ADVISORY'
         when f.existing_shift_id is null then 'INCLUDE_SHIFT'
+        when coalesce((f.reconciliation_balance->>'financial_position_requires_amendment')::boolean,false)
+          then 'APPLY_AMENDMENT'
         when (f.payload_json->>'start_utc')::timestamptz is distinct from (select n.start_utc from public.nhsp_shifts n where n.id=f.existing_shift_id)
           or (f.payload_json->>'end_utc')::timestamptz is distinct from (select n.end_utc from public.nhsp_shifts n where n.id=f.existing_shift_id)
           or ((f.payload_json->>'break_mins') is not null
@@ -2940,7 +3045,9 @@ begin
             and (m.payload_json->>'break_mins')::integer is distinct from coalesce(m.existing_shift_break_minutes,0)
             then 'BREAK_MINUTES'::text end,
           case when not m.is_daily and m.existing_shift_id is not null and m.hours_worked is not null
-            and abs((m.hours_worked*60)-m.existing_shift_paid_minutes)>1 then 'WORKED_HOURS'::text end
+            and abs((m.hours_worked*60)-m.existing_shift_paid_minutes)>1 then 'WORKED_HOURS'::text end,
+          case when not m.is_daily and coalesce((m.reconciliation_balance->>'financial_position_requires_amendment')::boolean,false)
+            then 'FINANCIAL_POSITION'::text end
         ],null)),
         'outcome_label',case
           when not m.is_daily and not coalesce(m.import_authoritative,false) then 'Validate candidate timesheet'

@@ -56,17 +56,25 @@ begin
           ) then (claim.claim_json->>'chunk_id')::uuid
         end
           and c.chunk_type='GENERATION_GROUP'
-          and c.is_manifest_member
-          and c.manifest_committed
-          and o.manifest_committed
-          and c.phase not in (
-            'AWAITING_MANIFEST_COMMIT',
-            'AWAITING_RELEASE'
+          and (
+            -- Direct client-scoped operations pre-date the batch manifest and
+            -- are intentionally admitted by the public dispatcher.  They must
+            -- continue directly to the V8 core processor.
+            o.entity_type is distinct from 'INVOICE_BATCH'
+            or (
+              c.is_manifest_member
+              and c.manifest_committed
+              and o.manifest_committed
+              and c.phase not in (
+                'AWAITING_MANIFEST_COMMIT',
+                'AWAITING_RELEASE'
+              )
+              and coalesce(
+                c.payload_json->>'is_selection_expander',
+                'false'
+              ) not in ('true','t','1','yes','on')
+            )
           )
-          and coalesce(
-            c.payload_json->>'is_selection_expander',
-            'false'
-          ) not in ('true','t','1','yes','on')
       ) is_released
     from claims claim
   )

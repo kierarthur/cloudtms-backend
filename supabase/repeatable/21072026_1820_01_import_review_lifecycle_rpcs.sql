@@ -627,12 +627,14 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id);
     raise exception 'IMPORT_REVIEW_REFERENCE_INVALIDATION_PROTECTED' using errcode='55000'; end if;
   v_envelope:=public._import_review_apply_envelope_core_v1(p_import_id);
   if exists(
-    select 1 from pg_temp.import_review_reconciliation_units_v1 frozen
-    full join lateral (
-      select u from jsonb_array_elements(coalesce(v_envelope->'reconciliation_units','[]'::jsonb)) u
-      where u->>'action_id'=frozen.action_id
-    ) current_unit on true
-    where current_unit.u is null or current_unit.u->>'unit_fingerprint' is distinct from frozen.unit_fingerprint
+    select 1
+    from pg_temp.import_review_reconciliation_units_v1 frozen
+    where not exists (
+      select 1
+      from jsonb_array_elements(coalesce(v_envelope->'reconciliation_units','[]'::jsonb)) current_unit(u)
+      where current_unit.u->>'action_id'=frozen.action_id
+        and current_unit.u->>'unit_fingerprint'=frozen.unit_fingerprint
+    )
   ) or (select count(*) from pg_temp.import_review_reconciliation_units_v1)<>
       jsonb_array_length(coalesce(v_envelope->'reconciliation_units','[]'::jsonb)) then
     raise exception 'IMPORT_REVIEW_SELECTED_ACTION_STALE' using errcode='40001';
@@ -686,11 +688,16 @@ declare
   v_bad_count integer;
   v_id uuid;
   v_signature jsonb;
-  v_current_invoice_fingerprint text;
-  v_recomputed_unit_fingerprint text;
   v_all_authorised boolean:=false;
   v_any_authorised boolean:=false;
   v_unit_fingerprints jsonb:='[]'::jsonb;
+  v_expected_a_day numeric;
+  v_expected_a_night numeric;
+  v_expected_a_sat numeric;
+  v_expected_a_sun numeric;
+  v_expected_a_bh numeric;
+  v_expected_a_total numeric;
+  v_frozen_a_bucket_total numeric;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if session_user not in ('postgres','service_role') and coalesce(
@@ -713,6 +720,7 @@ begin
       or v_operation.state not in ('SOURCE_COMMITTED_TSFIN_PENDING','COMPLETE')) then
     raise exception 'IMPORT_REVIEW_RECONCILIATION_OPERATION_INVALID' using errcode='40001';
   end if;
+  perform set_config('cloudtms.import_reconciliation_operation_id',p_operation_id::text,true);
 
   if v_action='PREPARE' then
     if to_regclass('pg_temp.import_review_reconciliation_units_v1') is null
@@ -819,7 +827,7 @@ begin
       or jsonb_typeof(u->'operation_policy_envelope')<>'object'
       or nullif(u->>'operation_policy_fingerprint','') is null
       or u#>>'{operation_policy_envelope,envelope_fingerprint}' is distinct from u->>'operation_policy_fingerprint'
-      or encode(digest(convert_to((u->'operation_policy_envelope'-'envelope_fingerprint')::text,'UTF8'),'sha256'),'hex')
+      or encode(digest(convert_to(((u->'operation_policy_envelope')-'envelope_fingerprint')::text,'UTF8'),'sha256'),'hex')
         is distinct from u->>'operation_policy_fingerprint'
     )
   ) then
@@ -841,7 +849,7 @@ begin
       or jsonb_typeof(u->'operation_policy_envelope')<>'object'
       or nullif(u->>'operation_policy_fingerprint','') is null
       or u#>>'{operation_policy_envelope,envelope_fingerprint}' is distinct from u->>'operation_policy_fingerprint'
-      or encode(digest(convert_to((u->'operation_policy_envelope'-'envelope_fingerprint')::text,'UTF8'),'sha256'),'hex')
+      or encode(digest(convert_to(((u->'operation_policy_envelope')-'envelope_fingerprint')::text,'UTF8'),'sha256'),'hex')
         is distinct from u->>'operation_policy_fingerprint'
       or u->>'applied_result_fingerprint' is distinct from encode(digest(convert_to(jsonb_build_object(
         'applied_timesheet_id',(u->>'applied_timesheet_id')::uuid,
@@ -952,8 +960,22 @@ begin
     if nullif(v_balance->>'blocking_code','') is not null then
       raise exception 'IMPORT_REVIEW_INVOICE_ACTIVITY_IN_PROGRESS' using errcode='55000',detail=v_balance->>'blocking_code';
     end if;
-    v_current_invoice_fingerprint:=v_balance->>'effective_invoice_fingerprint';
-    if v_current_invoice_fingerprint is distinct from v_unit->>'B_invoice_fingerprint' then
+    -- The review-time effective invoice fingerprint also attests mutable role
+    -- evidence.  That evidence is expected to change when this operation
+    -- repairs the approved pair, so it is not a valid post-mutation equality
+    -- check.  Re-attest the immutable B authority directly instead: the exact
+    -- invoice and line identities, signed hours and money, and terminal
+    -- schedule must all remain byte-for-byte equal to the reviewed envelope.
+    if coalesce(v_balance->'effective_invoice_ids','[]'::jsonb)
+          is distinct from coalesce(v_unit->'B_effective_invoice_ids','[]'::jsonb)
+       or coalesce(v_balance->'effective_invoice_line_ids','[]'::jsonb)
+          is distinct from coalesce(v_unit->'B_effective_invoice_line_ids','[]'::jsonb)
+       or coalesce(v_balance->'B_hours','{}'::jsonb)
+          is distinct from coalesce(v_unit->'B_hours','{}'::jsonb)
+       or coalesce(v_balance->'B_financials','{}'::jsonb)
+          is distinct from coalesce(v_unit->'B_financials','{}'::jsonb)
+       or coalesce(v_balance->'B_standard_schedule_json','[]'::jsonb)
+          is distinct from coalesce(v_unit->'B_standard_schedule_json','[]'::jsonb) then
       raise exception 'IMPORT_REVIEW_SELECTED_ACTION_STALE' using errcode='40001';
     end if;
     if v_unit->>'route' in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT') then
@@ -1017,6 +1039,37 @@ begin
               and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'))<>1 then
         raise exception 'IMPORT_REVIEW_RECONCILIATION_POLICY_MISMATCH' using errcode='40001';
       end if;
+      select h.hours_day,h.hours_night,h.hours_sat,h.hours_sun,h.hours_bh,h.total_hours
+      into v_expected_a_day,v_expected_a_night,v_expected_a_sat,v_expected_a_sun,v_expected_a_bh,v_expected_a_total
+      from public.timesheets t
+      join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+      cross join lateral public._wkimp_bucket_hours_from_policy(
+        coalesce(tf.policy_snapshot_json,'{}'::jsonb),
+        (v_unit#>>'{A_schedule_json,0,start_utc}')::timestamptz,
+        (v_unit#>>'{A_schedule_json,0,end_utc}')::timestamptz,
+        coalesce((v_unit#>>'{A_schedule_json,0,break_mins}')::integer,0)
+      ) h
+      where t.timesheet_id=(v_unit->>'replacement_timesheet_id')::uuid
+        and t.correction_id=v_unit->>'correction_id'
+        and t.correction_kind='CHANGED_HOURS_REPLACEMENT'
+        and t.is_current and t.archived_at_utc is null
+      limit 1;
+      v_frozen_a_bucket_total:=coalesce((v_unit#>>'{A_hours,hours_day}')::numeric,0)
+        +coalesce((v_unit#>>'{A_hours,hours_night}')::numeric,0)
+        +coalesce((v_unit#>>'{A_hours,hours_sat}')::numeric,0)
+        +coalesce((v_unit#>>'{A_hours,hours_sun}')::numeric,0)
+        +coalesce((v_unit#>>'{A_hours,hours_bh}')::numeric,0);
+      if v_expected_a_total is null
+        or v_expected_a_total is distinct from coalesce((v_unit#>>'{A_hours,total_hours}')::numeric,0)
+        or (v_frozen_a_bucket_total<>0 and (
+          v_expected_a_day is distinct from coalesce((v_unit#>>'{A_hours,hours_day}')::numeric,0)
+          or v_expected_a_night is distinct from coalesce((v_unit#>>'{A_hours,hours_night}')::numeric,0)
+          or v_expected_a_sat is distinct from coalesce((v_unit#>>'{A_hours,hours_sat}')::numeric,0)
+          or v_expected_a_sun is distinct from coalesce((v_unit#>>'{A_hours,hours_sun}')::numeric,0)
+          or v_expected_a_bh is distinct from coalesce((v_unit#>>'{A_hours,hours_bh}')::numeric,0)
+        )) then
+        raise exception 'IMPORT_REVIEW_RECONCILIATION_BALANCE_MISMATCH' using errcode='55000';
+      end if;
       if exists(select 1 from public.timesheets t
         left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
         where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
@@ -1045,17 +1098,26 @@ begin
       where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
         and (coalesce(tf.is_stale,true) or coalesce(tf.has_rate_issue,false) or coalesce(tf.has_pay_channel_issue,false));
       if v_bad_count>0 then raise exception 'IMPORT_REVIEW_RECONCILIATION_TSFIN_NOT_SETTLED' using errcode='55000'; end if;
-      if exists(select 1 from public.timesheets t join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
-        where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
-          and ((t.correction_kind='CHANGED_HOURS_REVERSAL' and (
-            tf.hours_day<>-coalesce((v_unit#>>'{B_hours,hours_day}')::numeric,0) or tf.hours_night<>-coalesce((v_unit#>>'{B_hours,hours_night}')::numeric,0)
-            or tf.hours_sat<>-coalesce((v_unit#>>'{B_hours,hours_sat}')::numeric,0) or tf.hours_sun<>-coalesce((v_unit#>>'{B_hours,hours_sun}')::numeric,0)
-            or tf.hours_bh<>-coalesce((v_unit#>>'{B_hours,hours_bh}')::numeric,0) or tf.total_pay_ex_vat<>-coalesce((v_unit#>>'{B_financials,pay_ex_vat}')::numeric,0)
-            or tf.total_charge_ex_vat<>-coalesce((v_unit#>>'{B_financials,charge_ex_vat}')::numeric,0) or tf.margin_ex_vat<>-coalesce((v_unit#>>'{B_financials,margin_ex_vat}')::numeric,0)))
-          or (t.correction_kind='CHANGED_HOURS_REPLACEMENT' and (
-            tf.hours_day<>coalesce((v_unit#>>'{A_hours,hours_day}')::numeric,0) or tf.hours_night<>coalesce((v_unit#>>'{A_hours,hours_night}')::numeric,0)
-            or tf.hours_sat<>coalesce((v_unit#>>'{A_hours,hours_sat}')::numeric,0) or tf.hours_sun<>coalesce((v_unit#>>'{A_hours,hours_sun}')::numeric,0)
-            or tf.hours_bh<>coalesce((v_unit#>>'{A_hours,hours_bh}')::numeric,0))))) then
+      select count(*) into v_bad_count
+      from public.timesheets t
+      join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+      where t.correction_id=v_unit->>'correction_id' and t.is_current and t.archived_at_utc is null
+        and case t.correction_kind
+          when 'CHANGED_HOURS_REVERSAL' then
+            tf.hours_day<>-coalesce((v_unit#>>'{B_hours,hours_day}')::numeric,0)
+            or tf.hours_night<>-coalesce((v_unit#>>'{B_hours,hours_night}')::numeric,0)
+            or tf.hours_sat<>-coalesce((v_unit#>>'{B_hours,hours_sat}')::numeric,0)
+            or tf.hours_sun<>-coalesce((v_unit#>>'{B_hours,hours_sun}')::numeric,0)
+            or tf.hours_bh<>-coalesce((v_unit#>>'{B_hours,hours_bh}')::numeric,0)
+            or tf.total_pay_ex_vat<>-coalesce((v_unit#>>'{B_financials,pay_ex_vat}')::numeric,0)
+            or tf.total_charge_ex_vat<>-coalesce((v_unit#>>'{B_financials,charge_ex_vat}')::numeric,0)
+          when 'CHANGED_HOURS_REPLACEMENT' then
+            tf.hours_day<>v_expected_a_day or tf.hours_night<>v_expected_a_night
+            or tf.hours_sat<>v_expected_a_sat or tf.hours_sun<>v_expected_a_sun
+            or tf.hours_bh<>v_expected_a_bh
+          else false
+        end;
+      if v_bad_count>0 then
         raise exception 'IMPORT_REVIEW_RECONCILIATION_BALANCE_MISMATCH' using errcode='55000';
       end if;
     else

@@ -41,6 +41,7 @@ declare
   v_phase3_result jsonb := null;
   v_changed_preflight jsonb := null;
   v_changed_timesheet_ids uuid[] := array[]::uuid[];
+  v_protected_source_timesheet_ids uuid[] := array[]::uuid[];
   v_reauthorise_timesheet_ids uuid[] := array[]::uuid[];
   v_auto_authorise_timesheet_ids uuid[] := array[]::uuid[];
   v_lifecycle_items jsonb := '[]'::jsonb;
@@ -584,6 +585,25 @@ begin
         v_operation_bound_correction_action_ids,v_now);
     end if;
   end if;
+
+  select coalesce(array_agg(distinct protected.timesheet_id order by protected.timesheet_id),array[]::uuid[])
+  into v_protected_source_timesheet_ids
+  from (
+    select cs.timesheet_id
+    from tmp_changed_sel cs
+    where cs.timesheet_id is not null
+      and cs.is_invoiced is true
+    union all
+    -- A financial-position-only action may have no legacy changed-hours row.
+    -- Its reviewed reconciliation unit is then the durable authority proving
+    -- that the ordinary source is protected history and only the mutable
+    -- correction members may enter the post-commit TSFIN target set.
+    select nullif(u.unit_json->>'source_timesheet_id','')::uuid
+    from pg_temp.import_review_reconciliation_units_v1 u
+    where u.route in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')
+      and nullif(u.unit_json->>'source_timesheet_id','') is not null
+  ) protected
+  where protected.timesheet_id is not null;
 
   v_invoiced_changed_keys_count := coalesce(array_length(v_invoiced_changed_keys, 1), 0);
   v_not_invoiced_changed_keys_count := coalesce(array_length(v_not_invoiced_changed_keys, 1), 0);
@@ -1745,7 +1765,10 @@ begin
   select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
   into v_affected_timesheet_ids
   from (
-    select a.timesheet_id from tmp_aff_ts a where a.timesheet_id is not null
+    select a.timesheet_id
+    from tmp_aff_ts a
+    where a.timesheet_id is not null
+      and not (a.timesheet_id=any(coalesce(v_protected_source_timesheet_ids,array[]::uuid[])))
     union all
     select paid_id from unnest(coalesce(v_paid_applied_timesheet_ids,array[]::uuid[])) paid(paid_id)
   ) a;

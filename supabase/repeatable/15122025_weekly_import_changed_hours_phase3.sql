@@ -387,6 +387,7 @@ begin
   hours_bh    := round((m_bh::numeric    / 60.0), 2);
   total_hours := round((hours_day + hours_night + hours_sat + hours_sun + hours_bh), 2);
 
+  return next;
   return;
 end;
 $$;
@@ -600,7 +601,6 @@ BEGIN
   RETURN;
 END;
 $function$;
-
 
 
 
