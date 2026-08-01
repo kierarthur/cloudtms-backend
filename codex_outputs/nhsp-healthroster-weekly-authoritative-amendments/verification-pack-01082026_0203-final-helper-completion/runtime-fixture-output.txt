@@ -1,0 +1,62 @@
+Disposable PostgreSQL 18 runtime fixture reproduction
+Database: local disposable helper_fixture_repro (not TEST, not production)
+
+COMMAND: psql -f tests/01082026_0150_import_authoritative_effective_balance_runtime_schema.sql
+EXIT: 0
+SET
+SET
+SET
+SET
+SET
+SET
+ set_config 
+------------
+ 
+(1 row)
+
+SET
+SET
+SET
+SET
+CREATE SCHEMA
+CREATE EXTENSION
+COMMENT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+SET
+SET
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+
+COMMAND: psql -f tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql
+EXIT: 0
+BEGIN
+SET
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+DO
+DO
+DO
+DO
+ROLLBACK
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:215: NOTICE:  PASS cross-import deleted-member reconstruction: NHSP
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:215: NOTICE:  PASS cross-import deleted-member reconstruction: HEALTHROSTER
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:304: NOTICE:  PASS archived-member repair supersession: NHSP
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:304: NOTICE:  PASS archived-member repair supersession: HEALTHROSTER
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:394: NOTICE:  PASS multi-source credit allocation: NHSP
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:394: NOTICE:  PASS multi-source credit allocation: HEALTHROSTER
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:451: NOTICE:  PASS zero-hours non-zero-money blocker: NHSP
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:451: NOTICE:  PASS zero-hours non-zero-money blocker: HEALTHROSTER
+
