@@ -693,6 +693,8 @@ BEGIN
         SET status = 'QUEUED',
             run_at_utc = v_now,
             started_at_utc = NULL::timestamptz,
+            failed_at_utc = NULL::timestamptz,
+            last_error_json = NULL::jsonb,
             payload_json = (COALESCE(coordinator_job.payload_json, '{}'::jsonb)
               - 'active_session_id' - 'cursor_generation' - 'cursor_entity_key')
               || jsonb_build_object('target_generation', v_current_generation),
@@ -706,6 +708,8 @@ BEGIN
       SET status = 'SUCCEEDED',
           completed_at_utc = v_now,
           started_at_utc = NULL::timestamptz,
+          failed_at_utc = NULL::timestamptz,
+          last_error_json = NULL::jsonb,
           payload_json = COALESCE(coordinator_job.payload_json, '{}'::jsonb)
             || jsonb_build_object('completed_generation', v_target),
           updated_at_utc = v_now
@@ -1617,29 +1621,76 @@ BEGIN
     FROM generated_classified
     WHERE generated_classified.relevance_decision <> 'IRRELEVANT'
   ), generated_effective AS MATERIALIZED (
-    SELECT *
+    SELECT
+      generated_ranked.*,
+      CASE
+        -- A terminal row that the normal failure processor has proved obsolete
+        -- is audit history, not current blocking authority.
+        WHEN generated_ranked.status IN ('FAILED', 'DEAD')
+         AND LOWER(BTRIM(COALESCE(generated_ranked.payload_json->>'non_blocking_terminal_failure', 'false'))) = 'true'
+          THEN 'SUCCEEDED'
+        -- Backward compatibility for cancellation jobs written before
+        -- supersessions became successful terminal work. Do not trust the flag
+        -- alone: require the exact legacy code and the replacement full-candidate
+        -- job for this session/batch. The replacement's own active/error state is
+        -- evaluated independently with the session pipeline below.
+        WHEN generated_ranked.status IN ('FAILED', 'DEAD')
+         AND generated_ranked.job_type = 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'
+         AND LOWER(BTRIM(COALESCE(generated_ranked.payload_json->>'superseded_by_cancel_full_candidate_refresh', 'false'))) = 'true'
+         AND UPPER(BTRIM(COALESCE(generated_ranked.last_error_json->>'code', '')))
+               = 'WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH'
+         AND generated_ranked.payload_json->>'superseding_session_id' = p_session_id::text
+         AND COALESCE(generated_ranked.payload_json->>'superseding_pay_batch_id', '')
+               ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+         AND EXISTS (
+           SELECT 1
+           FROM public.banking_pay_workbench_jobs AS replacement_job
+           WHERE replacement_job.session_id = p_session_id
+             AND replacement_job.job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+             AND replacement_job.created_at_utc >= generated_ranked.created_at_utc
+             AND COALESCE(
+                   replacement_job.payload_json->>'pay_batch_id',
+                   replacement_job.payload_json#>>'{source_build,pay_batch_id}',
+                   ''
+                 ) = generated_ranked.payload_json->>'superseding_pay_batch_id'
+             AND UPPER(BTRIM(COALESCE(
+                   replacement_job.payload_json->>'refresh_scope_kind',
+                   replacement_job.payload_json#>>'{source_build,refresh_scope_kind}',
+                   ''
+                 ))) = 'CANDIDATE_FULL_LIVE'
+             AND LOWER(BTRIM(COALESCE(
+                   replacement_job.payload_json->>'full_candidate_recovery_reallocation_required',
+                   'false'
+                 ))) = 'true'
+             AND (
+               COALESCE(array_length(generated_ranked.candidate_ids, 1), 0) = 0
+               OR replacement_job.candidate_id = ANY(generated_ranked.candidate_ids)
+             )
+         ) THEN 'SUCCEEDED'
+        ELSE generated_ranked.status
+      END AS effective_status
     FROM generated_ranked
     WHERE authority_ordinal = 1
   )
   SELECT
-    (SELECT COUNT(*)::integer FROM generated_effective WHERE status IN ('QUEUED', 'RUNNING')),
-    (SELECT COUNT(*)::integer FROM generated_effective WHERE status IN ('FAILED', 'DEAD')),
+    (SELECT COUNT(*)::integer FROM generated_effective WHERE effective_status IN ('QUEUED', 'RUNNING')),
+    (SELECT COUNT(*)::integer FROM generated_effective WHERE effective_status IN ('FAILED', 'DEAD')),
     (SELECT COUNT(*)::integer FROM generated_effective
       WHERE job_type = 'CONTRACT_CLIENT_DIRTY_FANOUT'
-        AND status IN ('QUEUED', 'RUNNING', 'FAILED', 'DEAD')),
+        AND effective_status IN ('QUEUED', 'RUNNING', 'FAILED', 'DEAD')),
     (SELECT COUNT(*)::integer FROM generated_effective WHERE relevance_decision = 'UNKNOWN'),
     COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
         'job_id', limited_job.id::text,
         'job_type', limited_job.job_type,
-        'status', limited_job.status,
+        'status', limited_job.effective_status,
         'scope_change_generation', limited_job.scope_change_generation,
         'dedupe_key', limited_job.work_identity,
         'relevance', limited_job.relevance_decision
       ) ORDER BY limited_job.scope_change_generation, limited_job.id)
       FROM (
         SELECT * FROM generated_effective
-        WHERE status IN ('QUEUED', 'RUNNING')
+        WHERE effective_status IN ('QUEUED', 'RUNNING')
         ORDER BY scope_change_generation, id
         LIMIT 25
       ) AS limited_job
@@ -1648,14 +1699,14 @@ BEGIN
       SELECT jsonb_agg(jsonb_build_object(
         'job_id', limited_job.id::text,
         'job_type', limited_job.job_type,
-        'status', limited_job.status,
+        'status', limited_job.effective_status,
         'scope_change_generation', limited_job.scope_change_generation,
         'dedupe_key', limited_job.work_identity,
         'relevance', limited_job.relevance_decision
       ) ORDER BY limited_job.scope_change_generation, limited_job.id)
       FROM (
         SELECT * FROM generated_effective
-        WHERE status IN ('FAILED', 'DEAD')
+        WHERE effective_status IN ('FAILED', 'DEAD')
         ORDER BY scope_change_generation, id
         LIMIT 25
       ) AS limited_job
@@ -1668,14 +1719,16 @@ BEGIN
     v_active_sample,
     v_failure_sample;
 
-  WITH session_ranked AS MATERIALIZED (
+  -- Session job rows are immutable execution history. Their raw FAILED/DEAD
+  -- status is not durable readiness authority because a later current-state
+  -- rebuild may have recovered the candidate under a different dedupe key.
+  -- Active work remains a blocker. Terminal failure authority is held by the
+  -- session's recomputed scope/line failure counters, which the worker updates
+  -- from current candidate state and clears after a successful recovery.
+  WITH session_active AS MATERIALIZED (
     SELECT
       session_job.*,
-      COALESCE(NULLIF(BTRIM(session_job.dedupe_key), ''), 'JOB:' || session_job.id::text) AS work_identity,
-      ROW_NUMBER() OVER (
-        PARTITION BY COALESCE(NULLIF(BTRIM(session_job.dedupe_key), ''), 'JOB:' || session_job.id::text)
-        ORDER BY session_job.created_at_utc DESC, session_job.id DESC
-      ) AS authority_ordinal
+      COALESCE(NULLIF(BTRIM(session_job.dedupe_key), ''), 'JOB:' || session_job.id::text) AS work_identity
     FROM public.banking_pay_workbench_jobs AS session_job
     WHERE session_job.session_id = p_session_id
       AND session_job.job_type IN (
@@ -1687,15 +1740,11 @@ BEGIN
         'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
         'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
       )
-      AND session_job.status IN ('QUEUED', 'RUNNING', 'FAILED', 'DEAD', 'SUCCEEDED')
-  ), session_effective AS MATERIALIZED (
-    SELECT *
-    FROM session_ranked
-    WHERE authority_ordinal = 1
+      AND session_job.status IN ('QUEUED', 'RUNNING')
   )
   SELECT
-    (SELECT COUNT(*)::integer FROM session_effective WHERE status IN ('QUEUED', 'RUNNING')),
-    (SELECT COUNT(*)::integer FROM session_effective WHERE status IN ('FAILED', 'DEAD')),
+    (SELECT COUNT(*)::integer FROM session_active),
+    0::integer,
     COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
         'job_id', limited_job.id::text,
@@ -1704,26 +1753,12 @@ BEGIN
         'dedupe_key', limited_job.work_identity
       ) ORDER BY limited_job.created_at_utc, limited_job.id)
       FROM (
-        SELECT * FROM session_effective
-        WHERE status IN ('QUEUED', 'RUNNING')
+        SELECT * FROM session_active
         ORDER BY created_at_utc, id
         LIMIT 25
       ) AS limited_job
     ), '[]'::jsonb),
-    COALESCE((
-      SELECT jsonb_agg(jsonb_build_object(
-        'job_id', limited_job.id::text,
-        'job_type', limited_job.job_type,
-        'status', limited_job.status,
-        'dedupe_key', limited_job.work_identity
-      ) ORDER BY limited_job.created_at_utc, limited_job.id)
-      FROM (
-        SELECT * FROM session_effective
-        WHERE status IN ('FAILED', 'DEAD')
-        ORDER BY created_at_utc, id
-        LIMIT 25
-      ) AS limited_job
-    ), '[]'::jsonb)
+    '[]'::jsonb
   INTO
     v_session_active,
     v_session_failed,
@@ -2280,6 +2315,8 @@ BEGIN
         SET status = 'QUEUED',
             run_at_utc = v_now,
             started_at_utc = NULL::timestamptz,
+            failed_at_utc = NULL::timestamptz,
+            last_error_json = NULL::jsonb,
             payload_json = (COALESCE(coordinator_job.payload_json, '{}'::jsonb)
               - 'active_session_id' - 'cursor_generation' - 'cursor_entity_key')
               || jsonb_build_object('target_generation', v_current_generation, 'reconcile_mode', v_mode),
@@ -2293,6 +2330,8 @@ BEGIN
       SET status = 'SUCCEEDED',
           completed_at_utc = v_now,
           started_at_utc = NULL::timestamptz,
+          failed_at_utc = NULL::timestamptz,
+          last_error_json = NULL::jsonb,
           payload_json = COALESCE(coordinator_job.payload_json, '{}'::jsonb)
             || jsonb_build_object('completed_generation', v_target, 'completed_mode', v_mode),
           updated_at_utc = v_now
@@ -2353,6 +2392,15 @@ BEGIN
         'failure_sample', COALESCE(v_blocker->'failure_sample', '[]'::jsonb)
       );
     END IF;
+
+    -- A previously observed blocker may have recovered under the promoted
+    -- generation target. Clear stale coordinator error evidence before waiting
+    -- for active work or processing the next bounded page.
+    UPDATE public.banking_pay_workbench_jobs AS recovered_coordinator
+    SET failed_at_utc = NULL::timestamptz,
+        last_error_json = NULL::jsonb,
+        updated_at_utc = v_now
+    WHERE recovered_coordinator.id = v_job.id;
 
     IF v_upstream_active > 0 THEN
       UPDATE public.banking_pay_workbench_jobs AS coordinator_job
@@ -2532,6 +2580,8 @@ BEGIN
       SET status = 'QUEUED',
           run_at_utc = v_now,
           started_at_utc = NULL::timestamptz,
+          failed_at_utc = NULL::timestamptz,
+          last_error_json = NULL::jsonb,
           payload_json = COALESCE(coordinator_job.payload_json, '{}'::jsonb)
             || jsonb_build_object(
               'target_generation', v_target,
@@ -2657,6 +2707,8 @@ BEGIN
       SET status = 'QUEUED',
           run_at_utc = v_now,
           started_at_utc = NULL::timestamptz,
+          failed_at_utc = NULL::timestamptz,
+          last_error_json = NULL::jsonb,
           payload_json = (COALESCE(coordinator_job.payload_json, '{}'::jsonb)
             - 'active_session_id' - 'cursor_generation' - 'cursor_entity_key')
             || jsonb_build_object('target_generation', v_current_generation, 'reconcile_mode', v_mode),
@@ -2668,6 +2720,8 @@ BEGIN
       SET status = 'SUCCEEDED',
           completed_at_utc = v_now,
           started_at_utc = NULL::timestamptz,
+          failed_at_utc = NULL::timestamptz,
+          last_error_json = NULL::jsonb,
           payload_json = COALESCE(coordinator_job.payload_json, '{}'::jsonb)
             || jsonb_build_object('completed_generation', v_target, 'completed_mode', v_mode),
           updated_at_utc = v_now

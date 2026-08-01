@@ -68,26 +68,22 @@ test('workbench refresh route recomputes pre-draft live rows without payment exe
   assert.doesNotMatch(body, /pay_workbench_session_clear_all_decisions|pay_workbench_session_discard|pay_batch_execute|pay_batch_settle/);
 });
 
-test('opening an attached shared session rediscovers candidates that became eligible later', () => {
+test('opening an attached shared session is read-only for continuous candidate discovery', () => {
   const body = functionBody(
     'handleBankingPayWorkbenchSessionOpen',
     'handleBankingPayWorkbenchSessionGet'
   );
 
   assert.match(body, /openAction === 'WORKBENCH_SESSION_ATTACHED'/);
-  assert.match(body, /refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY'/);
-  assert.match(body, /limit: 5,[\s\S]*refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY'/);
-  assert.match(body, /WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY/);
-  assert.match(body, /scope_discovery_queued: discoveryPage\.scope_discovery_queued === true/);
-  assert.doesNotMatch(body, /while \(discoveryHasMore/);
-  assert.doesNotMatch(body, /PAY_WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY_TOO_LARGE/);
-  assert.match(body, /scopeDiscoveryEnqueuedCount/);
-  assert.match(body, /NEWLY_ELIGIBLE_CANDIDATES_DISCOVERED/);
-  assert.doesNotMatch(
-    body,
-    /refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY'[\s\S]*force_refresh:\s*true/,
-    'opening must discover newly eligible candidates without forcing every existing candidate through a full rebuild'
-  );
+  assert.match(body, /scope_discovery_completed: true/);
+  assert.match(body, /scope_discovery_queued: false/);
+  assert.match(body, /continuous_scope_maintenance: true/);
+  assert.match(body, /Modal open is now read-only[\s\S]*returns materialised rows directly/);
+  assert.doesNotMatch(body, /refresh_scope_kind: 'SESSION_SCOPE_DISCOVERY'/);
+  assert.doesNotMatch(body, /WORKBENCH_SESSION_OPEN_SCOPE_DISCOVERY/);
+  assert.doesNotMatch(body, /pay_workbench_enqueue_session_candidate_refresh/);
+  assert.match(body, /inline_drain_attempted: false/);
+  assert.match(body, /code: 'INLINE_DRAIN_DISABLED_ASYNC_ONLY'/);
 });
 
 test('refresh route is registered before generic workbench reads', () => {

@@ -29,6 +29,20 @@ test('generated blockers are recovery aware only inside the requested generation
   assert.doesNotMatch(body, /scope_change_generation IS NULL[\s\S]*status IN/);
 });
 
+test('blockers distinguish current failure authority from superseded execution history', () => {
+  const body = lastFunction(runtime, 'pay_workbench_scope_blocker_state_v1');
+  assert.match(body, /non_blocking_terminal_failure/);
+  assert.match(body, /WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
+  assert.match(body, /superseding_session_id'[\s\S]*p_session_id::text/);
+  assert.match(body, /refresh_scope_kind'[\s\S]*CANDIDATE_FULL_LIVE/);
+  assert.match(body, /full_candidate_recovery_reallocation_required/);
+  assert.match(body, /effective_status IN \('FAILED', 'DEAD'\)/);
+  assert.match(body, /Session job rows are immutable execution history/);
+  assert.match(body, /session_job\.status IN \('QUEUED', 'RUNNING'\)/);
+  assert.match(body, /session_scope_failed_count/);
+  assert.match(body, /session_line_failed_count/);
+});
+
 test('coordinator promotes targets and implements a genuinely non-authoritative shadow pass', () => {
   const body = lastFunction(runtime, 'pay_workbench_scope_reconcile_drain_one_v1');
   assert.match(body, /v_target := GREATEST\(v_target, v_current_generation\)/);
@@ -37,6 +51,7 @@ test('coordinator promotes targets and implements a genuinely non-authoritative 
   assert.match(body, /IF v_mode = 'SHADOW' THEN[\s\S]*scope_change_generation_shadow_checked = v_target/);
   assert.match(body, /pay_workbench_scope_blocker_state_v1\(v_session\.id, v_target/);
   assert.match(body, /UPSTREAM_SCOPE_FAILURE_UNRESOLVED/);
+  assert.match(body, /previously observed blocker may have recovered[\s\S]*last_error_json = NULL::jsonb/);
 });
 
 test('admission is bounded, empty-match-none and output-isolated', () => {

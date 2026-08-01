@@ -199,25 +199,26 @@ BEGIN
   -- work in the cancellation transaction. If allowed to fan out afterwards it
   -- can narrow the scope to one linked timesheet and overwrite the correct
   -- candidate-wide recovery allocation. Only still-QUEUED jobs for finance
-  -- cases frozen into this cancelled batch are superseded. RUNNING jobs and all
-  -- unrelated finance cases are deliberately outside this update.
+  -- cases frozen into this cancelled batch are superseded. A supersession is a
+  -- successful terminal orchestration result, not a processing failure. Keep
+  -- the reason as immutable payload audit evidence while the replacement full
+  -- candidate refresh remains responsible for rebuilding the live preview.
+  -- RUNNING jobs and all unrelated finance cases are deliberately outside this
+  -- update.
   WITH superseded_finance_dirty_jobs AS (
     UPDATE public.banking_pay_workbench_jobs AS finance_dirty_job
-    SET status = 'FAILED',
+    SET status = 'SUCCEEDED',
         updated_at_utc = v_now,
-        failed_at_utc = v_now,
-        last_error_json = jsonb_build_object(
-          'code', 'WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH',
-          'message', 'The cancellation finance refresh was replaced atomically by the required full-candidate refresh.',
-          'session_id', p_session_id::text,
-          'pay_batch_id', p_pay_batch_id::text,
-          'superseded_at_utc', v_now
-        ),
+        completed_at_utc = v_now,
+        failed_at_utc = NULL::timestamptz,
+        last_error_json = NULL::jsonb,
         payload_json = COALESCE(finance_dirty_job.payload_json, '{}'::jsonb) || jsonb_build_object(
           'superseded_by_cancel_full_candidate_refresh', true,
           'superseding_session_id', p_session_id::text,
           'superseding_pay_batch_id', p_pay_batch_id::text,
-          'superseded_at_utc', v_now::text
+          'superseded_at_utc', v_now::text,
+          'completion_code', 'WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH',
+          'completion_message', 'The cancellation finance refresh was replaced atomically by the required full-candidate refresh.'
         )
     WHERE UPPER(BTRIM(COALESCE(finance_dirty_job.job_type, ''))) = 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'
       AND UPPER(BTRIM(COALESCE(finance_dirty_job.status, ''))) = 'QUEUED'
@@ -250,20 +251,18 @@ BEGIN
   LOOP
     WITH superseded_targeted_jobs AS (
       UPDATE public.banking_pay_workbench_jobs AS targeted_job
-      SET status = 'FAILED',
+      SET status = 'SUCCEEDED',
           updated_at_utc = v_now,
-          failed_at_utc = v_now,
-          last_error_json = jsonb_build_object(
-            'code', 'WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH',
-            'message', 'The targeted cancellation refresh was replaced atomically by a full-candidate finance refresh.',
-            'session_id', p_session_id::text,
-            'candidate_id', v_candidate_id::text,
-            'pay_batch_id', p_pay_batch_id::text,
-            'superseded_at_utc', v_now
-          ),
+          completed_at_utc = v_now,
+          failed_at_utc = NULL::timestamptz,
+          last_error_json = NULL::jsonb,
           payload_json = COALESCE(targeted_job.payload_json, '{}'::jsonb) || jsonb_build_object(
             'superseded_by_cancel_full_candidate_refresh', true,
-            'superseded_at_utc', v_now::text
+            'superseding_session_id', p_session_id::text,
+            'superseding_pay_batch_id', p_pay_batch_id::text,
+            'superseded_at_utc', v_now::text,
+            'completion_code', 'WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH',
+            'completion_message', 'The targeted cancellation refresh was replaced atomically by a full-candidate finance refresh.'
           )
       WHERE targeted_job.session_id = p_session_id
         AND targeted_job.candidate_id = v_candidate_id

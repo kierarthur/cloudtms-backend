@@ -29,6 +29,18 @@ test('only queued finance dirty jobs for matching finance cases are superseded',
   assert.doesNotMatch(sql, /status, ''\)\)\) IN \('QUEUED', 'RUNNING'\)/);
 });
 
+test('cancellation supersession is successful terminal work with durable audit metadata', () => {
+  assert.match(sql, /WITH superseded_finance_dirty_jobs AS \([\s\S]*SET status = 'SUCCEEDED'/);
+  assert.match(sql, /WITH superseded_targeted_jobs AS \([\s\S]*SET status = 'SUCCEEDED'/);
+  assert.match(sql, /completed_at_utc = v_now/);
+  assert.match(sql, /failed_at_utc = NULL::timestamptz/);
+  assert.match(sql, /last_error_json = NULL::jsonb/);
+  assert.match(sql, /'completion_code', 'WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH'/);
+  assert.match(sql, /'completion_code', 'WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH'/);
+  assert.match(sql, /'superseding_session_id', p_session_id::text/);
+  assert.match(sql, /'superseding_pay_batch_id', p_pay_batch_id::text/);
+});
+
 test('finance race guard runs before the full candidate refresh is enqueued', () => {
   const supersedeAt = sql.indexOf('WITH superseded_finance_dirty_jobs AS');
   const enqueueAt = sql.indexOf('v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh');
