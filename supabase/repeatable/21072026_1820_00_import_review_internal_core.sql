@@ -696,6 +696,7 @@ declare
   v_active_ids uuid[]:=array[]::uuid[];
   v_missing_ids uuid[]:=array[]::uuid[];
   v_import_ids uuid[]:=array[]::uuid[];
+  v_operation_ids uuid[]:=array[]::uuid[];
   v_effective_invoice_ids uuid[]:=array[]::uuid[];
   v_effective_line_ids uuid[]:=array[]::uuid[];
   v_credit_line_ids uuid[]:=array[]::uuid[];
@@ -704,6 +705,7 @@ declare
   v_operation_count integer:=0;
   v_operation_evidence jsonb:='[]'::jsonb;
   v_operation_member_ids uuid[]:=array[]::uuid[];
+  v_member_supersession_map jsonb:='[]'::jsonb;
   v_operation_evidence_conflict boolean:=false;
   v_operation_in_progress boolean:=false;
   v_member_role_map jsonb:='[]'::jsonb;
@@ -755,6 +757,8 @@ declare
   v_original_line_id uuid;
   v_seg_count integer:=0;
   v_matching_seg_count integer:=0;
+  v_original_seg_count integer:=0;
+  v_original_matching_seg_count integer:=0;
   v_single_source boolean:=false;
   v_line_scope_proven boolean:=false;
   v_operation_member_scope_proven boolean:=false;
@@ -786,6 +790,8 @@ declare
   v_m_margin numeric:=0;
   v_m_financials_complete boolean:=true;
   v_b_standard_representable boolean:=false;
+  v_b_hours_zero boolean:=false;
+  v_b_money_zero boolean:=false;
   v_effective_zero boolean:=false;
   v_current_source_safe boolean:=false;
   v_current_source_safety_reason text;
@@ -923,8 +929,29 @@ begin
         and (ae.after_json->>'shift_id'=v_source_shift_id::text
           or ae.after_json->>'external_row_key'=v_external_row_key)
     ) imports where import_id is not null;
-    select count(*)::integer into v_operation_count
-    from public.import_apply_operations op where op.import_id=any(v_import_ids);
+    -- A later authoritative import replaces latest_import_id, so historical
+    -- operation identity is discovered both through known imports and through
+    -- the immutable decision/outcome link for this exact source shift.
+    select coalesce(array_agg(distinct operation_id order by operation_id),array[]::uuid[])
+    into v_operation_ids
+    from (
+      select op.id operation_id
+      from public.import_apply_operations op
+      where op.import_id=any(v_import_ids)
+      union all
+      select outcome.operation_id
+      from public.import_review_decisions decision
+      join public.import_review_action_outcomes outcome on outcome.action_id=decision.action_id
+      where decision.shift_id=v_source_shift_id and outcome.shift_id=v_source_shift_id
+        and decision.source_identity=v_source_identity and outcome.source_identity=v_source_identity
+        and decision.candidate_id=v_candidate_id and outcome.candidate_id=v_candidate_id
+        and decision.client_id=v_client_id and outcome.client_id=v_client_id
+        and decision.contract_id is not distinct from v_contract_id
+        and outcome.contract_id is not distinct from v_contract_id
+        and decision.action_kind='APPLY_AMENDMENT' and outcome.action_kind='APPLY_AMENDMENT'
+    ) operation_candidates
+    where operation_id is not null;
+    v_operation_count:=cardinality(v_operation_ids);
     if v_operation_count>p_max_operations_per_source then
       raise exception 'IMPORT_REVIEW_OPERATION_EVIDENCE_LIMIT_EXCEEDED' using errcode='54000',detail=v_source_identity;
     end if;
@@ -938,7 +965,7 @@ begin
         op.response_json,request_unit
       from public.import_apply_operations op
       cross join lateral jsonb_array_elements(coalesce(op.response_json#>'{request_envelope,reconciliation_units}','[]'::jsonb)) request_unit
-      where op.import_id=any(v_import_ids)
+      where op.id=any(v_operation_ids)
         and (request_unit->>'source_identity'=v_source_identity
           or request_unit->>'source_shift_id'=v_source_shift_id::text)
     ), triples as (
@@ -985,6 +1012,15 @@ begin
           and nullif(t.request_unit->>'unit_fingerprint','') is not null
           and t.applied_unit->>'reviewed_unit_fingerprint'=t.request_unit->>'unit_fingerprint'
           and t.applied_unit->>'reconciliation_fingerprint'=t.request_unit->>'reconciliation_fingerprint'
+          and coalesce(t.applied_unit->>'repair_identity_mode','')=coalesce(t.request_unit->>'repair_identity_mode','')
+          and (coalesce(t.request_unit->>'repair_identity_mode','')<>'FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED'
+            or (t.request_unit->>'route'='AMEND_EXISTING_REPLACEMENT'
+              and nullif(t.request_unit->>'reviewed_existing_correction_id','') is not null
+              and t.request_unit->>'reviewed_existing_correction_id'<>t.applied_unit->>'correction_id'
+              and jsonb_typeof(t.request_unit->'reviewed_existing_member_ids')='array'
+              and jsonb_array_length(t.request_unit->'reviewed_existing_member_ids') between 1 and 2
+              and exists(select 1 from jsonb_array_elements_text(t.request_unit->'reviewed_existing_member_ids') reviewed(member_id)
+                where reviewed.member_id in (t.applied_unit->>'reversal_timesheet_id',t.applied_unit->>'replacement_timesheet_id'))))
           and nullif(t.applied_unit->>'correction_id','') is not null
           and coalesce(t.applied_unit->>'reversal_timesheet_id','')~*v_uuid_re
           and coalesce(t.applied_unit->>'replacement_timesheet_id','')~*v_uuid_re
@@ -1032,6 +1068,9 @@ begin
         'replacement_timesheet_id',e.applied_unit->>'replacement_timesheet_id',
         'applied_member_ids',e.applied_unit->'applied_member_ids',
         'parent_timesheet_id',e.applied_unit->>'parent_timesheet_id',
+        'route',e.request_unit->>'route',
+        'reviewed_existing_correction_id',e.request_unit->>'reviewed_existing_correction_id',
+        'reviewed_existing_member_ids',coalesce(e.request_unit->'reviewed_existing_member_ids','[]'::jsonb),
         'repair_identity_mode',e.applied_unit->>'repair_identity_mode',
         'reviewed_unit_fingerprint',e.request_unit->>'unit_fingerprint',
         'reconciliation_fingerprint',e.request_unit->>'reconciliation_fingerprint',
@@ -1048,6 +1087,42 @@ begin
         and e.committed_at_utc is not null),false)
     into v_operation_evidence,v_operation_evidence_conflict,v_operation_in_progress
     from evaluated e;
+
+    -- A valid archived-sibling repair deliberately re-keys the surviving
+    -- physical member.  Preserve that exact old-to-new identity edge so a
+    -- later import treats the old assignment as superseded audit history,
+    -- rather than as contradictory ownership.
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'operation_id',edge.operation_id,
+      'member_timesheet_id',edge.member_timesheet_id,
+      'correction_kind',edge.correction_kind,
+      'superseded_correction_id',edge.superseded_correction_id,
+      'canonical_correction_id',edge.canonical_correction_id
+    ) order by edge.operation_id,edge.correction_kind,edge.member_timesheet_id),'[]'::jsonb)
+    into v_member_supersession_map
+    from (
+      select distinct (unit->>'operation_id')::uuid operation_id,
+        role.member_id::uuid member_timesheet_id,role.correction_kind,
+        unit->>'reviewed_existing_correction_id' superseded_correction_id,
+        unit->>'correction_id' canonical_correction_id
+      from jsonb_array_elements(v_operation_evidence) unit
+      cross join lateral (values
+        ('CHANGED_HOURS_REVERSAL'::text,unit->>'reversal_timesheet_id'),
+        ('CHANGED_HOURS_REPLACEMENT'::text,unit->>'replacement_timesheet_id')
+      ) role(correction_kind,member_id)
+      where unit->>'route'='AMEND_EXISTING_REPLACEMENT'
+        and unit->>'repair_identity_mode'='FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED'
+        and nullif(unit->>'reviewed_existing_correction_id','') is not null
+        and unit->>'reviewed_existing_correction_id'<>unit->>'correction_id'
+        and role.member_id~*v_uuid_re
+        and coalesce(unit->'reviewed_existing_member_ids','[]'::jsonb) @> jsonb_build_array(role.member_id)
+        and not exists(
+          select 1
+          from public.invoice_lines historical_line
+          where (historical_line.timesheet_id=role.member_id::uuid
+              or historical_line.meta_json->>'timesheet_id'=role.member_id)
+            and historical_line.created_at<=coalesce((unit->>'evidence_at')::timestamptz,'infinity'::timestamptz))
+    ) edge;
 
     select coalesce(array_agg(distinct member_id order by member_id),array[]::uuid[])
     into v_operation_member_ids
@@ -1133,14 +1208,31 @@ begin
       where t.timesheet_id=any(v_hist_ids) and nullif(t.correction_id,'') is not null
         and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
     ), conflicts as (
-      select timesheet_id
-      from evidence
-      group by timesheet_id
-      having count(distinct correction_id||'|'||correction_kind)>1
+      select distinct left_evidence.timesheet_id
+      from evidence left_evidence
+      join evidence right_evidence on right_evidence.timesheet_id=left_evidence.timesheet_id
+        and (right_evidence.correction_id,right_evidence.correction_kind)
+          is distinct from (left_evidence.correction_id,left_evidence.correction_kind)
+      where left_evidence.correction_kind<>right_evidence.correction_kind
+        or (left_evidence.correction_id<>right_evidence.correction_id
+          and not exists(
+            select 1 from jsonb_array_elements(v_member_supersession_map) edge
+            where edge->>'member_timesheet_id'=left_evidence.timesheet_id::text
+              and edge->>'correction_kind'=left_evidence.correction_kind
+              and ((edge->>'superseded_correction_id'=left_evidence.correction_id
+                    and edge->>'canonical_correction_id'=right_evidence.correction_id)
+                or (edge->>'superseded_correction_id'=right_evidence.correction_id
+                    and edge->>'canonical_correction_id'=left_evidence.correction_id))))
     ), canonical as (
       select distinct on (e.timesheet_id) e.*
       from evidence e
       where not exists(select 1 from conflicts c where c.timesheet_id=e.timesheet_id)
+        and not exists(
+          select 1 from jsonb_array_elements(v_member_supersession_map) edge
+          where edge->>'member_timesheet_id'=e.timesheet_id::text
+            and edge->>'correction_kind'=e.correction_kind
+            and edge->>'superseded_correction_id'=e.correction_id
+            and edge->>'canonical_correction_id'<>e.correction_id)
       order by e.timesheet_id,e.priority,e.correction_id,e.correction_kind
     )
     select
@@ -1248,6 +1340,8 @@ begin
       v_original_line:=null;
       v_original_tf:=null;
       v_original_seg:=null;
+      v_original_seg_count:=0;
+      v_original_matching_seg_count:=0;
       v_original_line_id:=null;
       if v_line.invoice_type='CREDIT_NOTE' then
         if coalesce(v_line.meta_json->>'original_invoice_line_id',v_line.meta_json->>'credit_of_line_id','')~*v_uuid_re then
@@ -1266,11 +1360,35 @@ begin
           order by case when tf.is_current then 0 else 1 end,tf.computed_at_utc desc nulls last,tf.id desc limit 1;
         end if;
         if v_original_tf.id is not null then
-          select seg into v_original_seg
+          select count(*)::integer,
+            count(*) filter(where seg->>'nhsp_shift_id'=v_source_shift_id::text
+              or seg->>'shift_id'=v_source_shift_id::text
+              or seg->>'external_row_key'=v_external_row_key)::integer,
+            (array_agg(seg order by seg::text) filter(where seg->>'nhsp_shift_id'=v_source_shift_id::text
+              or seg->>'shift_id'=v_source_shift_id::text
+              or seg->>'external_row_key'=v_external_row_key))[1]
+          into v_original_seg_count,v_original_matching_seg_count,v_original_seg
           from jsonb_array_elements(case when jsonb_typeof(v_original_tf.invoice_breakdown_json->'segments')='array'
-            then v_original_tf.invoice_breakdown_json->'segments' else '[]'::jsonb end) seg
-          where seg->>'nhsp_shift_id'=v_source_shift_id::text or seg->>'shift_id'=v_source_shift_id::text or seg->>'external_row_key'=v_external_row_key
-          order by seg::text limit 1;
+            then v_original_tf.invoice_breakdown_json->'segments' else '[]'::jsonb end) seg;
+        end if;
+        -- The credit writer preserves the original hour buckets and writes one
+        -- exact signed monetary mirror.  Reject partial or contradictory credit
+        -- shapes before allocating any source component.
+        if coalesce(v_line.hours_day,0)<>coalesce(v_original_line.hours_day,0)
+          or coalesce(v_line.hours_night,0)<>coalesce(v_original_line.hours_night,0)
+          or coalesce(v_line.hours_sat,0)<>coalesce(v_original_line.hours_sat,0)
+          or coalesce(v_line.hours_sun,0)<>coalesce(v_original_line.hours_sun,0)
+          or coalesce(v_line.hours_bh,0)<>coalesce(v_original_line.hours_bh,0)
+          or round(coalesce(v_line.total_pay_ex_vat,0),2)<>-round(coalesce(v_original_line.total_pay_ex_vat,0),2)
+          or round(coalesce(v_line.total_charge_ex_vat,0),2)<>-round(coalesce(v_original_line.total_charge_ex_vat,0),2)
+          or round(coalesce(v_line.margin_ex_vat,v_line.total_charge_ex_vat-v_line.total_pay_ex_vat,0),2)
+            <>-round(coalesce(v_original_line.margin_ex_vat,v_original_line.total_charge_ex_vat-v_original_line.total_pay_ex_vat,0),2)
+          or (v_original_seg_count>0 and v_original_matching_seg_count<>1)
+          or (v_original_seg_count>1 and (v_original_seg is null
+            or nullif(v_original_seg->>'pay_amount','') is null
+            or nullif(v_original_seg->>'charge_amount','') is null)) then
+          v_scope_unprovable:=true;
+          continue;
         end if;
       end if;
 
@@ -1368,8 +1486,9 @@ begin
       end if;
 
       if v_line.invoice_type='CREDIT_NOTE' then
-        -- Credit financials are already signed.  Hours are reconstructed from
-        -- the exact original frozen Weekly component and negated once.
+        -- Hours are the negative of the exact original frozen component.  A
+        -- multi-source credit receives the matching source segment's money,
+        -- never the whole aggregate line's money.
         if v_original_seg is not null then
           v_component_day:=-coalesce((v_original_seg->>'hours_day')::numeric,0);
           v_component_night:=-coalesce((v_original_seg->>'hours_night')::numeric,0);
@@ -1383,9 +1502,15 @@ begin
           v_component_sun:=-coalesce(v_original_line.hours_sun,0);
           v_component_bh:=-coalesce(v_original_line.hours_bh,0);
         end if;
-        v_component_pay:=coalesce(v_line.total_pay_ex_vat,0);
-        v_component_charge:=coalesce(v_line.total_charge_ex_vat,0);
-        v_component_margin:=coalesce(v_line.margin_ex_vat,v_component_charge-v_component_pay);
+        if v_original_seg_count>1 then
+          v_component_pay:=-coalesce((v_original_seg->>'pay_amount')::numeric,0);
+          v_component_charge:=-coalesce((v_original_seg->>'charge_amount')::numeric,0);
+          v_component_margin:=v_component_charge-v_component_pay;
+        else
+          v_component_pay:=coalesce(v_line.total_pay_ex_vat,0);
+          v_component_charge:=coalesce(v_line.total_charge_ex_vat,0);
+          v_component_margin:=coalesce(v_line.margin_ex_vat,v_component_charge-v_component_pay);
+        end if;
       elsif v_single_source or v_operation_member_scope_proven then
         v_component_day:=coalesce(v_line.hours_day,0); v_component_night:=coalesce(v_line.hours_night,0);
         v_component_sat:=coalesce(v_line.hours_sat,0); v_component_sun:=coalesce(v_line.hours_sun,0); v_component_bh:=coalesce(v_line.hours_bh,0);
@@ -1597,10 +1722,10 @@ begin
           and archived.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'))
         then 'FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED' else 'RETAIN_EXISTING_CORRECTION_ID' end;
     end if;
-    v_role_evidence_fingerprint:=encode(digest(convert_to(concat_ws('|','role-evidence-v2',
-      v_operation_evidence::text,v_member_role_map::text,v_generation_role_evidence::text,
+    v_role_evidence_fingerprint:=encode(digest(convert_to(concat_ws('|','role-evidence-v3',
+      v_operation_evidence::text,v_member_supersession_map::text,v_member_role_map::text,v_generation_role_evidence::text,
       v_archived_history_roles::text,v_role_evidence_conflicts::text),'UTF8'),'sha256'),'hex');
-    v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v2',v_source_identity,
+    v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v3',v_source_identity,
       v_line_evidence::text,v_ignored_nonhours_line_ids::text,v_role_evidence_fingerprint,
       v_b_day,v_b_night,v_b_sat,v_b_sun,v_b_bh,v_b_pay,v_b_charge,v_b_margin),'UTF8'),'sha256'),'hex');
 
@@ -1655,7 +1780,9 @@ begin
       into v_candidate_schedule,v_candidate_hours;
     end if;
 
-    v_b_standard_representable:=(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)=0
+    v_b_hours_zero:=v_b_day=0 and v_b_night=0 and v_b_sat=0 and v_b_sun=0 and v_b_bh=0;
+    v_b_money_zero:=round(v_b_pay,2)=0 and round(v_b_charge,2)=0 and round(v_b_margin,2)=0;
+    v_b_standard_representable:=(v_b_hours_zero and v_b_money_zero)
       or (v_b_day>=0 and v_b_night>=0 and v_b_sat>=0 and v_b_sun>=0 and v_b_bh>=0
         and coalesce((v_candidate_hours->>'hours_day')::numeric,0)=v_b_day
         and coalesce((v_candidate_hours->>'hours_night')::numeric,0)=v_b_night
@@ -1676,8 +1803,7 @@ begin
           and t.actual_schedule_json is not distinct from v_a_schedule);
     end if;
 
-    v_effective_zero:=v_b_day=0 and v_b_night=0 and v_b_sat=0 and v_b_sun=0 and v_b_bh=0
-      and v_b_pay=0 and v_b_charge=0 and v_b_margin=0;
+    v_effective_zero:=v_b_hours_zero and v_b_money_zero;
     v_source_protection:=public._import_review_timesheet_protection_core_v1(v_source_timesheet_id);
     select count(*)::integer
     into v_current_source_count
@@ -1745,17 +1871,18 @@ begin
       when v_credit_ambiguous then 'IMPORT_REVIEW_EFFECTIVE_CREDIT_AMBIGUOUS'
       when v_scope_unprovable or v_stream_conflict then 'IMPORT_REVIEW_INVOICE_COMPONENT_SCOPE_UNPROVABLE'
       when v_paid_mutable_state then 'IMPORT_REVIEW_PAID_MUTABLE_GENERATION_ROLLOVER_UNAVAILABLE'
+      when v_b_hours_zero and not v_b_money_zero then 'IMPORT_REVIEW_EFFECTIVE_POSITION_NOT_STANDARD_REPRESENTABLE'
       when v_effective_zero and v_effective_component_count>0 and v_mutable_correction_id is null
         and coalesce((v_a_hours->>'total_hours')::numeric,0)>0 and not v_current_source_safe
         then 'IMPORT_REVIEW_EFFECTIVE_ZERO_NO_ACTIVE_SOURCE'
       when (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)<0 then 'IMPORT_REVIEW_INVOICE_STATE_UNSUPPORTED'
       when (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0 and not v_b_standard_representable then 'IMPORT_REVIEW_EFFECTIVE_POSITION_NOT_STANDARD_REPRESENTABLE'
       else null end;
-    v_reconciliation_fingerprint:=encode(digest(convert_to(concat_ws('|','reconciliation-v2',v_scope_fingerprint,
+    v_reconciliation_fingerprint:=encode(digest(convert_to(concat_ws('|','reconciliation-v3',v_scope_fingerprint,v_operation_ids::text,v_member_supersession_map::text,
       v_effective_fingerprint,v_mutable_fingerprint,v_a_fingerprint,v_blocking_code,v_b_policy_fingerprint,
       v_current_source_safe,v_current_source_safety_reason,v_current_source_invoice_lined,v_current_source_paid,
       v_current_source_unlocked,v_current_source_fresh,v_current_source_segment_unlocked,
-      v_current_source_contract_week_safe,v_current_source_invoice_operation_clear),'UTF8'),'sha256'),'hex');
+      v_current_source_contract_week_safe,v_current_source_invoice_operation_clear,v_b_hours_zero,v_b_money_zero),'UTF8'),'sha256'),'hex');
 
     source_identity:=v_source_identity;
     balance_json:=jsonb_build_object(
@@ -1776,6 +1903,7 @@ begin
       'generation_role_evidence',v_generation_role_evidence,
       'validated_completed_operation_evidence_count',jsonb_array_length(v_operation_evidence),
       'validated_completed_operation_evidence_fingerprint',encode(digest(convert_to(v_operation_evidence::text,'UTF8'),'sha256'),'hex'),
+      'correction_member_supersession_lineage',v_member_supersession_map,
       'fully_invoiced_generation_ids',to_jsonb(v_fully_invoiced_generation_ids),
       'partial_generation_ids',to_jsonb(v_partial_generation_ids),
       'mutable_generation_ids',to_jsonb(v_mutable_generation_ids),
@@ -1784,6 +1912,7 @@ begin
       'effective_invoice_fingerprint',v_effective_fingerprint,
       'B_hours',jsonb_build_object('hours_day',v_b_day,'hours_night',v_b_night,'hours_sat',v_b_sat,'hours_sun',v_b_sun,'hours_bh',v_b_bh,'total_hours',v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh),
       'effective_hours_net_is_zero',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)=0,
+      'effective_money_net_is_zero',v_b_money_zero,
       'effective_position_net_is_zero',v_effective_zero,
       'effective_hours_net_is_positive',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0,
       'effective_hours_net_is_negative',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)<0,
