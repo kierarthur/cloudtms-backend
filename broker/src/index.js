@@ -146933,6 +146933,33 @@ async function handleListInvoices(env, req) {
 // GET INVOICE (+meta)
 // -------------------
 
+function invoiceEmailDeliveryPolicySummary(invoiceAsyncDetail) {
+  const detail = (invoiceAsyncDetail && typeof invoiceAsyncDetail === 'object')
+    ? invoiceAsyncDetail
+    : {};
+  const issue = (detail.issue && typeof detail.issue === 'object') ? detail.issue : {};
+  const route = (issue.route_policy && typeof issue.route_policy === 'object')
+    ? issue.route_policy
+    : null;
+  if (!route || !Object.prototype.hasOwnProperty.call(route, 'delivery_suppressed')) {
+    return null;
+  }
+  const boolish = (value) => value === true || value === 1
+    || ['true', 't', '1', 'yes', 'y', 'on'].includes(String(value ?? '').trim().toLowerCase());
+  const cleanText = (value) => {
+    const text = String(value ?? '').trim();
+    return text || null;
+  };
+  return {
+    resolved: true,
+    delivery_suppressed: boolish(route.delivery_suppressed),
+    suppression_reason: cleanText(route.suppression_reason),
+    do_not_send: boolish(route.do_not_send),
+    self_bill: boolish(route.self_bill),
+    route_policy_hash: cleanText(route.route_policy_hash)
+  };
+}
+
 async function handleGetInvoice(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -146961,6 +146988,7 @@ async function handleGetInvoice(env, req, invoiceId) {
         invoiceAsyncDetail = null;
       }
     }
+    const emailDeliveryPolicy = invoiceEmailDeliveryPolicySummary(invoiceAsyncDetail);
     const evidence = Array.isArray(invoiceAsyncDetail?.evidence)
       ? invoiceAsyncDetail.evidence
       : (Array.isArray(manifest.evidence) ? manifest.evidence : []);
@@ -147178,6 +147206,7 @@ async function handleGetInvoice(env, req, invoiceId) {
         items,
         header_snapshot_json,
         email_summary: manifest.email_summary ?? null,
+        email_delivery_policy: emailDeliveryPolicy,
 
         attach_policy: manifest.attach_policy ?? null,
 
@@ -147209,6 +147238,7 @@ async function handleGetInvoice(env, req, invoiceId) {
       items,
       header_snapshot_json,
       email_summary: manifest.email_summary ?? null,
+      email_delivery_policy: emailDeliveryPolicy,
 
       attach_policy: manifest.attach_policy ?? null,
 
