@@ -53430,7 +53430,28 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        );
      }
    }
- 
+
+   if (!currentTimesheetIdForWeek && !expectedRowSignature) {
+     wlog('guard_fail_missing_planned_row_signature', {
+       contract_week_id: cw?.id || weekId || null,
+       response_context: bulkResponseContext
+     });
+     return withCORS(env, req, new Response(JSON.stringify({
+       error: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+       error_code: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+       message: 'The current planned contract-week signature is required before processing this manual week.',
+       contract_week_id: cw?.id || weekId || null,
+       current_timesheet_id: null,
+       refresh_required: true,
+       affected_rows: [{
+         contract_week_id: cw?.id || weekId || null,
+         timesheet_id: null,
+         row_key: `contract_week:${cw?.id || weekId}`,
+         context: bulkResponseContext
+       }]
+     }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
+   }
+
    // Candidate/client rows are only needed for new-timesheet identity fallbacks and
    // expense/mileage default fallback. Existing weekly-manual hours edits do not need
    // these REST reads, so load them lazily when a later branch proves they are required.
@@ -68070,6 +68091,32 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
       return withCORS(env, req, badRequest('manual-draft-details only applies to MANUAL or ELECTRONIC contract weeks'));
     }
 
+    const plannedSignatureRaw = await sbRpc(env, 'timesheet_lifecycle_guard_signature_v1', {
+      p_timesheet_id: null,
+      p_contract_week_id: cw.id,
+      p_include_payload: false
+    }, { timeoutMs: 8000 });
+    const plannedSignaturePayload = (() => {
+      let value = plannedSignatureRaw;
+      if (Array.isArray(value) && value.length === 1) value = value[0];
+      if (value && typeof value === 'object' && !Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, 'timesheet_lifecycle_guard_signature_v1')) {
+        value = value.timesheet_lifecycle_guard_signature_v1;
+      }
+      if (typeof value === 'string') {
+        try { value = JSON.parse(value); } catch { value = null; }
+      }
+      return (value && typeof value === 'object' && !Array.isArray(value)) ? value : null;
+    })();
+    const plannedRowSignature = String(
+      plannedSignaturePayload?.backend_row_signature ||
+      plannedSignaturePayload?.row_signature ||
+      plannedSignaturePayload?.signature ||
+      ''
+    ).trim();
+    if (!plannedRowSignature || plannedSignaturePayload?.ok === false) {
+      throw new Error('PLANNED_CONTRACT_WEEK_SIGNATURE_MISSING');
+    }
+
     const contract = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`
@@ -68233,6 +68280,13 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
         ? resolvedImportAuthoritativeFlag
         : fallbackImportAuthoritative;
 
+    const contractWeekStatus = String(cw.status || '').trim().toUpperCase();
+    const canProcessPlannedManualWeek = !!(
+      submissionModeSnapshot === 'MANUAL' &&
+      !isImportAuthoritative &&
+      (contractWeekStatus === 'PLANNED' || contractWeekStatus === 'OPEN')
+    );
+
     const compareBlockRequired =
       (routeType === 'WEEKLY_HEALTHROSTER') &&
       (clientNoTimesheetRequired !== true);
@@ -68313,7 +68367,13 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
       can_unadvance_payment: false,
       can_snooze_payment: false,
       can_clear_payment_snooze: false,
+      can_process: canProcessPlannedManualWeek,
       is_unprocessed: true,
+      planned_contract_week_authority_complete: true,
+      planned_contract_week_authority_contract_week_id: cw.id,
+      backend_row_signature: plannedRowSignature,
+      row_signature: plannedRowSignature,
+      expected_row_signature: plannedRowSignature,
       route_family: routeFamily,
       underlying_channel_family: underlyingChannelFamily,
       is_import_authoritative: isImportAuthoritative,
@@ -68348,6 +68408,11 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
       planned_schedule_json: keepEmptyAdditionalManualSchedule ? [] : plannedScheduleJson,
       std_schedule_json: stdScheduleJson,
       submission_mode_snapshot: submissionModeSnapshot,
+      backend_row_signature: plannedRowSignature,
+      row_signature: plannedRowSignature,
+      expected_row_signature: plannedRowSignature,
+      planned_contract_week_authority_complete: true,
+      planned_contract_week_authority_contract_week_id: cw.id,
       totals_json: {
         ...totalsJson,
         hours: draftHours,
@@ -68412,6 +68477,12 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
       current_timesheet_id: null,
       current_version: null,
       was_stale: false,
+      backend_row_signature: plannedRowSignature,
+      row_signature: plannedRowSignature,
+      expected_row_signature: plannedRowSignature,
+      planned_contract_week_authority_complete: true,
+      planned_contract_week_authority_contract_week_id: cw.id,
+      refresh_required: false,
 
       timesheet: null,
       tsfin: null,
@@ -160886,6 +160957,16 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
+  const expectedRowSignature = String(
+    body?.expected_row_signature ||
+    body?.expectedRowSignature ||
+    body?.backend_row_signature ||
+    body?.backendRowSignature ||
+    body?.row_signature ||
+    body?.rowSignature ||
+    ''
+  ).trim();
+
   const draftSaveDiagText = (v) => {
     const s = String(v == null ? '' : v).trim();
     return s || null;
@@ -160928,7 +161009,8 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     has_actual_schedule_json: Object.prototype.hasOwnProperty.call(body || {}, 'actual_schedule_json'),
     has_schedule_json: Object.prototype.hasOwnProperty.call(body || {}, 'schedule_json'),
     has_additional_units_week: Object.prototype.hasOwnProperty.call(body || {}, 'additional_units_week'),
-    has_additional_units_per_day: Object.prototype.hasOwnProperty.call(body || {}, 'additional_units_per_day')
+    has_additional_units_per_day: Object.prototype.hasOwnProperty.call(body || {}, 'additional_units_per_day'),
+    expected_row_signature_present: !!expectedRowSignature
   });
 
   // Load contract_week. The schedule draft path remains MANUAL-only, but an
@@ -160955,6 +161037,16 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
 
   if (cw.timesheet_id) {
     return withCORS(env, req, badRequest('This week already has a timesheet; draft save is not allowed.'));
+  }
+  if (!expectedRowSignature) {
+    return withCORS(env, req, new Response(JSON.stringify({
+      error: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      error_code: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+      message: 'The current planned contract-week signature is required before saving.',
+      contract_week_id: cw.id || weekId,
+      current_timesheet_id: null,
+      refresh_required: true
+    }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
   }
 
   const mode = String(cw.submission_mode_snapshot || '').toUpperCase();
@@ -161037,6 +161129,92 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=id,client_id,is_nhsp,autoprocess_hr,no_timesheet_required,weekly_timesheet_source,self_bill`
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  const applyPlannedDraftPatch = async (patch, replacePlannedSchedule) => {
+    try {
+      const rpcRaw = await sbRpc(env, 'contract_week_manual_draft_upsert_atomic_v1', {
+        p_week_id: String(cw.id || weekId),
+        p_expected_row_signature: expectedRowSignature,
+        p_totals_json: patch?.totals_json || {},
+        p_planned_schedule_json: replacePlannedSchedule ? (patch?.planned_schedule_json || []) : null,
+        p_replace_planned_schedule: !!replacePlannedSchedule,
+        p_force_adjustment: patch?.is_adjustment === true,
+        p_now_utc: patch?.updated_at || nowIso()
+      }, { timeoutMs: 8000 });
+      let value = rpcRaw;
+      if (Array.isArray(value) && value.length === 1) value = value[0];
+      if (value && typeof value === 'object' && !Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, 'contract_week_manual_draft_upsert_atomic_v1')) {
+        value = value.contract_week_manual_draft_upsert_atomic_v1;
+      }
+      if (typeof value === 'string') {
+        try { value = JSON.parse(value); } catch { value = null; }
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value) || value.ok === false) {
+        throw new Error('PLANNED_CONTRACT_WEEK_DRAFT_UPSERT_INVALID_RESULT');
+      }
+      return { ok: true, row: value };
+    } catch (err) {
+      const errorCode = String(
+        err?.json?.message ||
+        err?.json?.error_code ||
+        err?.json?.error ||
+        err?.message ||
+        ''
+      ).trim();
+      const detailsText = String(err?.json?.details || err?.json?.detail || err?.body || '').trim();
+      const combined = `${errorCode} ${detailsText}`;
+      if (/ROW_SIGNATURE_MISMATCH/.test(combined)) {
+        return {
+          ok: false,
+          response: withCORS(env, req, new Response(JSON.stringify({
+            error: 'ROW_SIGNATURE_MISMATCH',
+            error_code: 'ROW_SIGNATURE_MISMATCH',
+            contract_week_id: cw.id || weekId,
+            current_timesheet_id: null,
+            refresh_required: true
+          }), { status: 409, headers: { 'Content-Type': 'application/json' } }))
+        };
+      }
+      if (/EXPECTED_ROW_SIGNATURE_REQUIRED/.test(combined)) {
+        return {
+          ok: false,
+          response: withCORS(env, req, new Response(JSON.stringify({
+            error: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+            error_code: 'EXPECTED_ROW_SIGNATURE_REQUIRED',
+            contract_week_id: cw.id || weekId,
+            current_timesheet_id: null,
+            refresh_required: true
+          }), { status: 409, headers: { 'Content-Type': 'application/json' } }))
+        };
+      }
+      if (/TIMESHEET_MOVED/.test(combined)) {
+        return {
+          ok: false,
+          response: withCORS(env, req, new Response(JSON.stringify({
+            error: 'TIMESHEET_MOVED',
+            error_code: 'TIMESHEET_MOVED',
+            contract_week_id: cw.id || weekId,
+            refresh_required: true
+          }), { status: 409, headers: { 'Content-Type': 'application/json' } }))
+        };
+      }
+      if (/CONTRACT_WEEK_DRAFT_NOT_EDITABLE/.test(combined)) {
+        return {
+          ok: false,
+          response: withCORS(env, req, new Response(JSON.stringify({
+            error: 'CONTRACT_WEEK_DRAFT_NOT_EDITABLE',
+            error_code: 'CONTRACT_WEEK_DRAFT_NOT_EDITABLE',
+            contract_week_id: cw.id || weekId,
+            refresh_required: true
+          }), { status: 409, headers: { 'Content-Type': 'application/json' } }))
+        };
+      }
+      if (/CONTRACT_WEEK_NOT_FOUND/.test(combined)) {
+        return { ok: false, response: withCORS(env, req, notFound('Week not found')) };
+      }
+      return { ok: false, response: withCORS(env, req, serverError('Failed to save contract week draft')) };
+    }
+  };
 
   const hasOwnBody = (key) => !!(body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, key));
   const hasExpensesDraft = hasOwnBody('expenses_draft');
@@ -161201,26 +161379,16 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
       }
     });
 
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-        body: JSON.stringify(patch)
-      }
-    );
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
+    const writeResult = await applyPlannedDraftPatch(patch, Object.prototype.hasOwnProperty.call(patch, 'planned_schedule_json'));
+    if (!writeResult.ok) {
       draftSaveDiagLog('write_failed', {
         save_domain: 'EXPENSES_DRAFT',
-        status: res.status || null,
-        contract_week_id: cw?.id || weekId || null,
-        error_text: String(txt || '').slice(0, 500)
+        status: writeResult.response?.status || null,
+        contract_week_id: cw?.id || weekId || null
       });
-      return withCORS(env, req, serverError(txt || 'Failed to patch contract_week expenses draft'));
+      return writeResult.response;
     }
-    const json = await res.json().catch(() => []);
-    const row = Array.isArray(json) ? (json[0] || null) : json;
+    const row = writeResult.row;
     const responsePayload = row || { updated: true, week_id: weekId, expenses_draft: expensesDraft };
     draftSaveDiagLog('response_shape', {
       save_domain: 'EXPENSES_DRAFT',
@@ -161667,31 +161835,18 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     keep_empty_additional_manual_adjustment_week: keepEmptyAdditionalManualAdjustmentWeek
   });
 
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
-    {
-      method: 'PATCH',
-      headers: {
-        ...sbHeaders(env),
-        Prefer: 'return=representation',
-      },
-      body: JSON.stringify(patch),
-    }
-  );
+  const writeResult = await applyPlannedDraftPatch(patch, true);
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
+  if (!writeResult.ok) {
     draftSaveDiagLog('write_failed', {
       save_domain: 'SCHEDULE_DRAFT',
-      status: res.status || null,
-      contract_week_id: cw?.id || weekId || null,
-      error_text: String(txt || '').slice(0, 500)
+      status: writeResult.response?.status || null,
+      contract_week_id: cw?.id || weekId || null
     });
-    return withCORS(env, req, serverError(txt || 'Failed to patch contract_week'));
+    return writeResult.response;
   }
 
-  const json = await res.json().catch(() => []);
-  const row = Array.isArray(json) ? (json[0] || null) : json;
+  const row = writeResult.row;
   const responsePayload = row || { updated: true, week_id: weekId, hours };
 
   draftSaveDiagLog('response_shape', {
