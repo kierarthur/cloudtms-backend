@@ -1,0 +1,21 @@
+Repository-wide Node test run
+=============================
+
+Total:   326
+Passed:  301
+Failed:  8
+Skipped: 17
+
+Failures:
+
+1. post-draft freshness selects the correction carrier snapshot before family deduplication
+2. correction-chain entry point definitions retain the checker guard when deployed independently
+3. source-build continuation reuses only an exact durable first-page reconciliation attestation
+4. zero-raw correction residual preserves VAT and cross-channel target authority
+5. canonical correction carriers preserve server-owned suggested-rate evidence
+6. opening an attached shared session rediscovers candidates that became eligible later
+7. tests/invoice_async_backend.test.js
+8. tests/timesheet_official_pdf.test.js
+
+These are pre-existing Banking Pay or unrelated invoice/PDF failures. Commit cffab09 changes none of the implicated Banking Pay, invoice, PDF, frontend or Worker files/functions. They are recorded as a repository baseline limitation and are not an Import Review implementation failure.
+
