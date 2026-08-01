@@ -20984,6 +20984,7 @@ DECLARE
   v_exclude_lifecycle_ineligible_current_payability boolean := false;
   v_authoritative_timesheet_scope boolean := false;
   v_scope_admission_authorised boolean := false;
+  v_scope_admission_mode boolean := false;
   v_scope_admission_candidate_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('PREVIEW_PROGRESS');
@@ -21067,8 +21068,18 @@ BEGIN
     'false'
   ))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
-  IF v_scope_admission_authorised
-     AND jsonb_typeof(v_preview_decisions_root->'scope_admission_candidate_ids') = 'array' THEN
+  IF v_preview_decisions_root ? 'scope_admission_candidate_ids' THEN
+    IF NOT v_scope_admission_authorised THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_ADMISSION_NOT_AUTHORISED'
+        USING ERRCODE = '42501';
+    END IF;
+
+    IF jsonb_typeof(v_preview_decisions_root->'scope_admission_candidate_ids') <> 'array' THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_ADMISSION_INPUT_INVALID'
+        USING ERRCODE = '22023';
+    END IF;
+
+    v_scope_admission_mode := true;
     IF jsonb_array_length(v_preview_decisions_root->'scope_admission_candidate_ids') > 50 THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_ADMISSION_INPUT_TOO_LARGE'
         USING ERRCODE = '22023';
@@ -21438,7 +21449,7 @@ BEGIN
       FROM public.candidates AS candidate_scope_row
       WHERE (v_last_candidate_id IS NULL OR candidate_scope_row.id > v_last_candidate_id)
         AND (
-          COALESCE(array_length(v_scope_admission_candidate_ids, 1), 0) = 0
+          v_scope_admission_mode IS NOT TRUE
           OR candidate_scope_row.id = ANY(v_scope_admission_candidate_ids)
         )
         -- A selected candidate is a hard scope boundary, not merely another
@@ -48746,9 +48757,94 @@ DECLARE
   v_expected_advance_override_ids jsonb := '[]'::jsonb;
   v_advance_override_consumption_mismatch_count integer := 0;
   v_advance_override_consumption_mismatches jsonb := '[]'::jsonb;
+  v_integrity_operation public.banking_pay_operations%ROWTYPE;
+  v_integrity_batch public.pay_batches%ROWTYPE;
+  v_generation_provenance_mismatch_count integer := 0;
+  v_generation_provenance_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
+  END IF;
+
+  IF p_operation_id IS NOT NULL THEN
+    SELECT operation_row.*
+    INTO v_integrity_operation
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id = p_operation_id;
+
+    SELECT batch_row.*
+    INTO v_integrity_batch
+    FROM public.pay_batches AS batch_row
+    WHERE batch_row.id = v_batch_id;
+
+    IF v_integrity_operation.id IS NULL OR v_integrity_batch.id IS NULL THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'pass', false,
+        'code', 'DRAFT_CREATE_OPERATION_BATCH_PROVENANCE_MISMATCH',
+        'mismatch_details', jsonb_build_array(jsonb_build_object('check_code', 'OPERATION_OR_BATCH_NOT_FOUND'))
+      );
+    END IF;
+
+    IF UPPER(BTRIM(COALESCE(v_integrity_operation.operation_type, ''))) = 'DRAFT_CREATE' THEN
+      SELECT COUNT(*)::integer
+      INTO v_generation_provenance_mismatch_count
+      FROM public.banking_pay_operation_candidate_scope AS scope_row
+      WHERE scope_row.operation_id = p_operation_id
+        AND scope_row.pay_batch_id = v_batch_id
+        AND (
+          scope_row.workbench_session_id IS DISTINCT FROM v_integrity_operation.workbench_session_id
+          OR scope_row.source_session_version IS DISTINCT FROM v_integrity_operation.frozen_source_session_version
+          OR scope_row.source_snapshot_run_id IS DISTINCT FROM v_integrity_operation.frozen_source_snapshot_run_id
+        );
+
+      v_generation_provenance_json := jsonb_build_object(
+        'scope_freeze_status', v_integrity_operation.scope_freeze_status,
+        'operation_scope_change_generation', v_integrity_operation.frozen_scope_change_generation,
+        'batch_scope_change_generation', v_integrity_batch.source_scope_change_generation,
+        'operation_workbench_session_id', v_integrity_operation.workbench_session_id,
+        'batch_workbench_session_id', v_integrity_batch.source_workbench_session_id,
+        'operation_source_session_version', v_integrity_operation.frozen_source_session_version,
+        'batch_source_session_version', v_integrity_batch.source_session_version,
+        'operation_source_snapshot_run_id', v_integrity_operation.frozen_source_snapshot_run_id,
+        'batch_source_snapshot_run_id', v_integrity_batch.source_snapshot_run_id,
+        'policy_x_authority', 'FROZEN_OPERATION_SCOPE'
+      );
+
+      IF UPPER(BTRIM(COALESCE(v_integrity_operation.scope_freeze_status, ''))) <> 'FROZEN'
+         OR NOT COALESCE(v_integrity_operation.source_scope_seed_complete, false)
+         OR v_integrity_operation.frozen_scope_change_generation IS NULL
+         OR v_integrity_batch.source_scope_change_generation IS DISTINCT FROM v_integrity_operation.frozen_scope_change_generation
+         OR v_integrity_batch.source_workbench_session_id IS DISTINCT FROM v_integrity_operation.workbench_session_id
+         OR v_integrity_batch.source_session_version IS DISTINCT FROM v_integrity_operation.frozen_source_session_version
+         OR v_integrity_batch.source_snapshot_run_id IS DISTINCT FROM v_integrity_operation.frozen_source_snapshot_run_id
+         OR v_generation_provenance_mismatch_count > 0
+         OR NOT EXISTS (
+           SELECT 1
+           FROM public.banking_pay_operation_candidate_scope AS linked_scope
+           WHERE linked_scope.operation_id = p_operation_id
+             AND linked_scope.pay_batch_id = v_batch_id
+         ) THEN
+        RETURN jsonb_build_object(
+          'ok', false,
+          'pay_batch_id', v_batch_id::text,
+          'operation_id', p_operation_id::text,
+          'pass', false,
+          'error', 'DRAFT_INTEGRITY_FAILED',
+          'code', 'DRAFT_CREATE_OPERATION_BATCH_PROVENANCE_MISMATCH',
+          'mismatch_details', jsonb_build_array(
+            jsonb_build_object(
+              'check_code', 'DRAFT_CREATE_OPERATION_BATCH_PROVENANCE_MISMATCH',
+              'generation_provenance', v_generation_provenance_json,
+              'candidate_scope_provenance_mismatch_count', v_generation_provenance_mismatch_count
+            )
+          ),
+          'friendly_error_message', 'Draft integrity failed because frozen operation and batch provenance do not match.'
+        );
+      END IF;
+    END IF;
   END IF;
 
   IF to_regclass('pg_temp.tmp_pay_build_settings_context') IS NOT NULL THEN
@@ -50157,6 +50253,10 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
     'pass', true,
     'mismatch_details', coalesce(v_operation_mismatch_details, '{}'::jsonb),
     'affected_candidate_ids', coalesce(v_operation_affected_candidate_ids, '[]'::jsonb),
+    'generation_provenance', CASE
+      WHEN p_operation_id IS NULL THEN NULL::jsonb
+      ELSE v_generation_provenance_json
+    END,
     'friendly_error_message', null::text,
     'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
     'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
@@ -54211,6 +54311,30 @@ BEGIN
   END IF;
   IF TG_OP <> 'INSERT' THEN
     v_old_row := to_jsonb(OLD);
+  END IF;
+
+  -- Natural-expiry fields are derived scheduler metadata.  An update confined
+  -- to this allowlist must not create another generation or candidate build.
+  IF TG_OP = 'UPDATE'
+     AND v_trigger_table = 'pay_item_snoozes'
+     AND (
+       v_new_row - ARRAY[
+         'natural_expiry_source_fingerprint',
+         'natural_expiry_checked_fingerprint',
+         'natural_expiry_checked_at_utc',
+         'natural_expiry_state_changed',
+         'natural_expiry_result_code'
+       ]::text[]
+     ) IS NOT DISTINCT FROM (
+       v_old_row - ARRAY[
+         'natural_expiry_source_fingerprint',
+         'natural_expiry_checked_fingerprint',
+         'natural_expiry_checked_at_utc',
+         'natural_expiry_state_changed',
+         'natural_expiry_result_code'
+       ]::text[]
+     ) THEN
+    RETURN NEW;
   END IF;
 
   IF NULLIF(BTRIM(COALESCE(v_old_row->>'candidate_id', '')), '') ~* v_uuid_re THEN
@@ -66476,6 +66600,14 @@ DECLARE
     v_finish_scope_generation bigint := 0;
     v_finish_relevant_generation bigint := NULL::bigint;
     v_finish_unresolved_root_count integer := 0;
+    v_finish_failed_root_count integer := 0;
+    v_finish_scope_count integer := 0;
+    v_finish_selected_count integer := 0;
+    v_finish_scope_invalid_count integer := 0;
+    v_finish_chunk_count integer := 0;
+    v_finish_chunk_invalid_count integer := 0;
+    v_finish_scope_hash text := NULL::text;
+    v_finish_blocker jsonb := '{}'::jsonb;
     v_finish_scope_status text := 'NONE';
     v_finish_freshness_status text := 'VALID_AT_SCOPE_FREEZE';
 BEGIN
@@ -66515,6 +66647,84 @@ BEGIN
     IF upper(BTRIM(COALESCE(v_operation.status, ''))) IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED') THEN
         RETURN QUERY SELECT false, 'ALREADY_TERMINAL'::text, v_operation.id, v_operation.operation_type, v_operation.status, v_operation.phase, v_operation.actor_user_id, v_operation.workbench_session_id, v_operation.pay_batch_id, v_operation.root_operation_id, v_operation.idempotency_key, v_operation.input_json, v_operation.config_json, v_operation.progress_json, v_operation.result_json, v_operation.error_json, v_operation.total_units, v_operation.completed_units, v_operation.failed_units, v_operation.current_chunk_index, v_operation.chunk_count, COALESCE(v_operation.lease_owner, v_operation.locked_by), COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc), v_operation.created_at_utc, v_operation.started_at_utc, v_operation.updated_at_utc, v_operation.completed_at_utc, v_operation.failed_at_utc;
         RETURN;
+    END IF;
+
+    IF UPPER(BTRIM(COALESCE(v_operation.operation_type, ''))) = 'DRAFT_CREATE'
+       AND v_status = 'COMPLETE' THEN
+      IF UPPER(BTRIM(COALESCE(v_operation.scope_freeze_status, ''))) <> 'FROZEN'
+         OR NOT COALESCE(v_operation.source_scope_seed_complete, false)
+         OR v_operation.frozen_scope_change_generation IS NULL
+         OR v_operation.scope_frozen_at_utc IS NULL
+         OR COALESCE(v_operation.frozen_candidate_scope_count, 0) <= 0
+         OR COALESCE(v_operation.frozen_selected_row_count, 0) <= 0
+         OR NULLIF(BTRIM(COALESCE(v_operation.frozen_operation_scope_hash, '')), '') IS NULL
+         OR v_operation.frozen_source_session_version IS NULL
+         OR v_operation.frozen_source_snapshot_run_id IS NULL THEN
+        RAISE EXCEPTION 'DRAFT_CREATE_OPERATION_SCOPE_NOT_FROZEN'
+          USING ERRCODE = 'P0001';
+      END IF;
+
+      SELECT
+        (SELECT COUNT(*)::integer
+         FROM public.banking_pay_operation_candidate_scope AS scope_count
+         WHERE scope_count.operation_id = v_operation.id),
+        (SELECT COUNT(DISTINCT selected_id.value)::integer
+         FROM public.banking_pay_operation_candidate_scope AS selected_scope
+         CROSS JOIN LATERAL jsonb_array_elements_text(
+           CASE WHEN jsonb_typeof(selected_scope.selected_preview_row_ids_json) = 'array'
+             THEN selected_scope.selected_preview_row_ids_json ELSE '[]'::jsonb END
+         ) AS selected_id(value)
+         WHERE selected_scope.operation_id = v_operation.id),
+        (SELECT COUNT(*)::integer
+         FROM public.banking_pay_operation_candidate_scope AS invalid_scope
+         WHERE invalid_scope.operation_id = v_operation.id
+           AND (
+             invalid_scope.pay_batch_id IS NULL
+             OR invalid_scope.workbench_session_id IS DISTINCT FROM v_operation.workbench_session_id
+             OR invalid_scope.source_session_version IS DISTINCT FROM v_operation.frozen_source_session_version
+             OR invalid_scope.source_snapshot_run_id IS DISTINCT FROM v_operation.frozen_source_snapshot_run_id
+             OR UPPER(BTRIM(COALESCE(invalid_scope.status, ''))) NOT IN ('ALLOCATED', 'DRAFTED')
+             OR NOT EXISTS (
+               SELECT 1
+               FROM public.pay_batches AS provenance_batch
+               WHERE provenance_batch.id = invalid_scope.pay_batch_id
+                 AND provenance_batch.source_scope_change_generation IS NOT DISTINCT FROM v_operation.frozen_scope_change_generation
+                 AND provenance_batch.source_workbench_session_id IS NOT DISTINCT FROM v_operation.workbench_session_id
+                 AND provenance_batch.source_session_version IS NOT DISTINCT FROM v_operation.frozen_source_session_version
+                 AND provenance_batch.source_snapshot_run_id IS NOT DISTINCT FROM v_operation.frozen_source_snapshot_run_id
+             )
+           )),
+        (SELECT md5(COALESCE(string_agg(
+           hash_scope.candidate_id::text || ':' || hash_scope.pay_channel || ':' || hash_scope.scope_hash,
+           '|' ORDER BY hash_scope.pay_channel, hash_scope.candidate_id
+         ), ''))
+         FROM public.banking_pay_operation_candidate_scope AS hash_scope
+         WHERE hash_scope.operation_id = v_operation.id)
+      INTO v_finish_scope_count, v_finish_selected_count, v_finish_scope_invalid_count, v_finish_scope_hash;
+
+      IF v_finish_scope_count <> v_operation.frozen_candidate_scope_count
+         OR v_finish_selected_count <> v_operation.frozen_selected_row_count
+         OR v_finish_scope_invalid_count > 0
+         OR v_finish_scope_hash IS DISTINCT FROM v_operation.frozen_operation_scope_hash THEN
+        RAISE EXCEPTION 'DRAFT_CREATE_OPERATION_BATCH_PROVENANCE_MISMATCH'
+          USING ERRCODE = 'P0001';
+      END IF;
+
+      SELECT COUNT(*)::integer,
+             COUNT(*) FILTER (
+               WHERE UPPER(BTRIM(COALESCE(operation_chunk.status, ''))) <> 'COMPLETE'
+                  OR COALESCE(operation_chunk.completed_count, 0) <> COALESCE(operation_chunk.unit_count, 0)
+                  OR COALESCE(operation_chunk.failed_count, 0) <> 0
+             )::integer
+      INTO v_finish_chunk_count, v_finish_chunk_invalid_count
+      FROM public.banking_pay_operation_chunks AS operation_chunk
+      WHERE operation_chunk.operation_id = v_operation.id
+        AND UPPER(BTRIM(COALESCE(operation_chunk.chunk_type, ''))) = 'CANDIDATE_SCOPE';
+
+      IF v_finish_chunk_count <= 0 OR v_finish_chunk_invalid_count > 0 THEN
+        RAISE EXCEPTION 'DRAFT_CREATE_OPERATION_CHUNKS_INCOMPLETE'
+          USING ERRCODE = 'P0001';
+      END IF;
     END IF;
 
     v_runner_state := CASE
@@ -66558,13 +66768,13 @@ BEGIN
         AND candidate_counter.scope_change_generation > v_operation.frozen_scope_change_generation
         AND candidate_counter.scope_change_generation <= v_finish_scope_generation;
 
-      SELECT COUNT(*)::integer
-      INTO v_finish_unresolved_root_count
-      FROM public.banking_pay_workbench_jobs AS broad_root
-      WHERE broad_root.job_type = 'CONTRACT_CLIENT_DIRTY_FANOUT'
-        AND broad_root.scope_change_generation > v_operation.frozen_scope_change_generation
-        AND broad_root.scope_change_generation <= v_finish_scope_generation
-        AND broad_root.status IN ('QUEUED', 'RUNNING', 'FAILED');
+      v_finish_blocker := public.pay_workbench_scope_blocker_state_v1(
+        v_operation.workbench_session_id,
+        v_finish_scope_generation,
+        v_operation.id
+      );
+      v_finish_unresolved_root_count := COALESCE((v_finish_blocker->>'upstream_active_count')::integer, 0);
+      v_finish_failed_root_count := COALESCE((v_finish_blocker->>'upstream_unresolved_failure_count')::integer, 0);
 
       IF v_finish_scope_generation = v_operation.frozen_scope_change_generation THEN
         v_finish_scope_status := 'NONE';
@@ -66572,6 +66782,9 @@ BEGIN
       ELSIF v_finish_relevant_generation IS NOT NULL THEN
         v_finish_scope_status := 'RELEVANT';
         v_finish_freshness_status := 'STALE_POST_SCOPE_FREEZE';
+      ELSIF v_finish_failed_root_count > 0 THEN
+        v_finish_scope_status := 'PENDING_RELEVANCE';
+        v_finish_freshness_status := 'PENDING_SCOPE_CHANGE_RELEVANCE_FAILED';
       ELSIF v_finish_unresolved_root_count > 0 THEN
         v_finish_scope_status := 'PENDING_RELEVANCE';
         v_finish_freshness_status := 'PENDING_SCOPE_CHANGE_RELEVANCE';
@@ -66593,6 +66806,8 @@ BEGIN
               'scope_generation_observed_at_operation_finish', v_finish_scope_generation,
               'post_freeze_relevant_generation', v_finish_relevant_generation,
               'unresolved_broad_root_count', v_finish_unresolved_root_count,
+              'failed_broad_root_count', v_finish_failed_root_count,
+              'scope_blocker_failure_sample', COALESCE(v_finish_blocker->'failure_sample', '[]'::jsonb),
               'checked_at_utc', v_now::text,
               'policy_x_authority', 'FROZEN_OPERATION_SCOPE'
             ))
@@ -67121,6 +67336,10 @@ DECLARE
   v_new_chunk_count integer := 0;
   v_repaired_chunk_count integer := 0;
   v_mismatch_count integer := 0;
+  v_frozen_scope_count integer := 0;
+  v_frozen_selected_count integer := 0;
+  v_frozen_invalid_count integer := 0;
+  v_recomputed_scope_hash text := NULL::text;
   v_legacy_mode boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKER_CHUNK');
@@ -67174,6 +67393,61 @@ BEGIN
   END IF;
 
   v_operation_type := upper(btrim(coalesce(v_operation_row.operation_type, '')));
+
+  IF v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN
+    IF UPPER(BTRIM(COALESCE(v_operation_row.scope_freeze_status, ''))) <> 'FROZEN'
+       OR NOT COALESCE(v_operation_row.source_scope_seed_complete, false)
+       OR v_operation_row.frozen_scope_change_generation IS NULL
+       OR v_operation_row.scope_frozen_at_utc IS NULL
+       OR COALESCE(v_operation_row.frozen_candidate_scope_count, 0) <= 0
+       OR COALESCE(v_operation_row.frozen_selected_row_count, 0) <= 0
+       OR NULLIF(BTRIM(COALESCE(v_operation_row.frozen_operation_scope_hash, '')), '') IS NULL
+       OR v_operation_row.frozen_source_session_version IS NULL
+       OR v_operation_row.frozen_source_snapshot_run_id IS NULL THEN
+      RAISE EXCEPTION 'DRAFT_CREATE_OPERATION_SCOPE_NOT_FROZEN'
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT
+      (SELECT COUNT(*)::integer
+       FROM public.banking_pay_operation_candidate_scope AS scope_count
+       WHERE scope_count.operation_id = p_operation_id),
+      (SELECT COUNT(DISTINCT selected_id.value)::integer
+       FROM public.banking_pay_operation_candidate_scope AS selected_scope
+       CROSS JOIN LATERAL jsonb_array_elements_text(
+         CASE
+           WHEN jsonb_typeof(selected_scope.selected_preview_row_ids_json) = 'array'
+             THEN selected_scope.selected_preview_row_ids_json
+           ELSE '[]'::jsonb
+         END
+       ) AS selected_id(value)
+       WHERE selected_scope.operation_id = p_operation_id),
+      (SELECT COUNT(*)::integer
+       FROM public.banking_pay_operation_candidate_scope AS invalid_scope
+       WHERE invalid_scope.operation_id = p_operation_id
+         AND (
+           invalid_scope.workbench_session_id IS DISTINCT FROM v_operation_row.workbench_session_id
+           OR invalid_scope.source_session_version IS DISTINCT FROM v_operation_row.frozen_source_session_version
+           OR invalid_scope.source_snapshot_run_id IS DISTINCT FROM v_operation_row.frozen_source_snapshot_run_id
+           OR UPPER(BTRIM(COALESCE(invalid_scope.status, ''))) IN ('FAILED', 'CANCELLED', 'CANCELED', 'ERROR')
+         )),
+      (SELECT md5(COALESCE(string_agg(
+         hash_scope.candidate_id::text || ':' || hash_scope.pay_channel || ':' || hash_scope.scope_hash,
+         '|' ORDER BY hash_scope.pay_channel, hash_scope.candidate_id
+       ), ''))
+       FROM public.banking_pay_operation_candidate_scope AS hash_scope
+       WHERE hash_scope.operation_id = p_operation_id)
+    INTO v_frozen_scope_count, v_frozen_selected_count, v_frozen_invalid_count, v_recomputed_scope_hash;
+
+    IF v_frozen_scope_count <> v_operation_row.frozen_candidate_scope_count
+       OR v_frozen_selected_count <> v_operation_row.frozen_selected_row_count
+       OR v_frozen_invalid_count > 0
+       OR v_recomputed_scope_hash IS DISTINCT FROM v_operation_row.frozen_operation_scope_hash THEN
+      RAISE EXCEPTION 'DRAFT_CREATE_FROZEN_SCOPE_PROVENANCE_MISMATCH'
+        USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
   v_legacy_mode := p_units_json IS NOT NULL
     AND jsonb_array_length(v_units_json) > 0
     AND NOT (
@@ -68834,6 +69108,8 @@ DECLARE
     v_locked_generation bigint := 0;
     v_highest_relevant_generation bigint := NULL::bigint;
     v_unresolved_broad_root_count integer := 0;
+    v_failed_broad_root_count integer := 0;
+    v_scope_blocker jsonb := '{}'::jsonb;
     v_post_freeze_scope_status text := 'NONE';
     v_batch_freshness_status text := 'VALID_AT_SCOPE_FREEZE';
 BEGIN
@@ -69443,13 +69719,13 @@ BEGIN
       AND candidate_counter.scope_change_generation > v_frozen_generation
       AND candidate_counter.scope_change_generation <= v_prechecked_generation;
 
-    SELECT COUNT(*)::integer
-    INTO v_unresolved_broad_root_count
-    FROM public.banking_pay_workbench_jobs AS broad_root
-    WHERE broad_root.job_type = 'CONTRACT_CLIENT_DIRTY_FANOUT'
-      AND broad_root.scope_change_generation > v_frozen_generation
-      AND broad_root.scope_change_generation <= v_prechecked_generation
-      AND broad_root.status IN ('QUEUED', 'RUNNING', 'FAILED');
+    v_scope_blocker := public.pay_workbench_scope_blocker_state_v1(
+      p_workbench_session_id,
+      v_prechecked_generation,
+      p_operation_id
+    );
+    v_unresolved_broad_root_count := COALESCE((v_scope_blocker->>'upstream_active_count')::integer, 0);
+    v_failed_broad_root_count := COALESCE((v_scope_blocker->>'upstream_unresolved_failure_count')::integer, 0);
 
     SELECT settings_row.banking_system,
            settings_row.external_paye_system,
@@ -69485,6 +69761,9 @@ BEGIN
     ELSIF v_highest_relevant_generation IS NOT NULL THEN
         v_post_freeze_scope_status := 'RELEVANT';
         v_batch_freshness_status := 'STALE_POST_SCOPE_FREEZE';
+    ELSIF v_failed_broad_root_count > 0 THEN
+        v_post_freeze_scope_status := 'PENDING_RELEVANCE';
+        v_batch_freshness_status := 'PENDING_SCOPE_CHANGE_RELEVANCE_FAILED';
     ELSIF v_locked_generation > v_prechecked_generation
        OR v_unresolved_broad_root_count > 0 THEN
         v_post_freeze_scope_status := 'PENDING_RELEVANCE';
@@ -69561,6 +69840,8 @@ BEGIN
           'post_freeze_scope_status', v_post_freeze_scope_status,
           'post_freeze_relevant_generation', v_highest_relevant_generation,
           'unresolved_broad_root_count', v_unresolved_broad_root_count,
+          'failed_broad_root_count', v_failed_broad_root_count,
+          'scope_blocker_failure_sample', COALESCE(v_scope_blocker->'failure_sample', '[]'::jsonb),
           'policy_x_authority', 'FROZEN_OPERATION_SCOPE'
         ))
     )

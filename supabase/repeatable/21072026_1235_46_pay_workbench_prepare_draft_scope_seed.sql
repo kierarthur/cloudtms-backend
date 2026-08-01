@@ -34,6 +34,8 @@ DECLARE
   v_scope_generation_final bigint := 0;
   v_scope_upstream_active_count integer := 0;
   v_scope_upstream_failed_count integer := 0;
+  v_scope_blocker jsonb := '{}'::jsonb;
+  v_scope_shadow_mode boolean := false;
   v_operation_scope_hash text := NULL::text;
 BEGIN
   perform public._ctms_assert_session_correction_residuals_draftable_v1(p_workbench_session_id,p_selected_preview_row_ids,'PAY_WORKBENCH_PREPARE_DRAFT');
@@ -125,6 +127,17 @@ BEGIN
   FROM public.app_change_counters AS change_counter
   WHERE change_counter.entity_key = 'pay_candidate_scope_generation';
 
+  SELECT COALESCE(settings_row.banking_pay_workbench_scope_reconcile_shadow_mode, false)
+  INTO v_scope_shadow_mode
+  FROM public.settings_defaults AS settings_row
+  ORDER BY settings_row.id
+  LIMIT 1;
+
+  IF v_scope_shadow_mode THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_RECONCILIATION_SHADOW_MODE'
+      USING ERRCODE = 'P0001';
+  END IF;
+
   IF COALESCE(v_session.scope_change_generation_applied, 0) <> v_scope_generation_start THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_RECONCILIATION_REQUIRED'
       USING ERRCODE = 'P0001',
@@ -137,19 +150,17 @@ BEGIN
             )::text;
   END IF;
 
-  SELECT
-    COUNT(*) FILTER (WHERE upstream_job.status IN ('QUEUED', 'RUNNING'))::integer,
-    COUNT(*) FILTER (WHERE upstream_job.status = 'FAILED')::integer
-  INTO v_scope_upstream_active_count, v_scope_upstream_failed_count
-  FROM public.banking_pay_workbench_jobs AS upstream_job
-  WHERE upstream_job.job_type IN (
-      'WORKBENCH_CANDIDATE_DIRTY_APPLY',
-      'WORKBENCH_FINANCE_CASE_DIRTY_APPLY',
-      'CONTRACT_CLIENT_DIRTY_FANOUT'
-    )
-    AND upstream_job.scope_change_generation IS NOT NULL
-    AND upstream_job.scope_change_generation <= v_scope_generation_start
-    AND upstream_job.status IN ('QUEUED', 'RUNNING', 'FAILED');
+  v_scope_blocker := public.pay_workbench_scope_blocker_state_v1(
+    p_workbench_session_id,
+    v_scope_generation_start,
+    NULL::uuid
+  );
+  v_scope_upstream_active_count := COALESCE((v_scope_blocker->>'upstream_active_count')::integer, 0)
+    + COALESCE((v_scope_blocker->>'session_active_count')::integer, 0);
+  v_scope_upstream_failed_count := COALESCE((v_scope_blocker->>'upstream_unresolved_failure_count')::integer, 0)
+    + COALESCE((v_scope_blocker->>'session_unresolved_failure_count')::integer, 0)
+    + COALESCE((v_scope_blocker->>'session_scope_failed_count')::integer, 0)
+    + COALESCE((v_scope_blocker->>'session_line_failed_count')::integer, 0);
 
   IF v_scope_upstream_failed_count > 0 THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_RECONCILIATION_FAILED'
@@ -1235,19 +1246,17 @@ BEGIN
       'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
     );
 
-  SELECT
-    COUNT(*) FILTER (WHERE upstream_job.status IN ('QUEUED', 'RUNNING'))::integer,
-    COUNT(*) FILTER (WHERE upstream_job.status = 'FAILED')::integer
-  INTO v_scope_upstream_active_count, v_scope_upstream_failed_count
-  FROM public.banking_pay_workbench_jobs AS upstream_job
-  WHERE upstream_job.job_type IN (
-      'WORKBENCH_CANDIDATE_DIRTY_APPLY',
-      'WORKBENCH_FINANCE_CASE_DIRTY_APPLY',
-      'CONTRACT_CLIENT_DIRTY_FANOUT'
-    )
-    AND upstream_job.scope_change_generation IS NOT NULL
-    AND upstream_job.scope_change_generation <= v_scope_generation_start
-    AND upstream_job.status IN ('QUEUED', 'RUNNING', 'FAILED');
+  v_scope_blocker := public.pay_workbench_scope_blocker_state_v1(
+    p_workbench_session_id,
+    v_scope_generation_start,
+    NULL::uuid
+  );
+  v_scope_upstream_active_count := COALESCE((v_scope_blocker->>'upstream_active_count')::integer, 0)
+    + COALESCE((v_scope_blocker->>'session_active_count')::integer, 0);
+  v_scope_upstream_failed_count := COALESCE((v_scope_blocker->>'upstream_unresolved_failure_count')::integer, 0)
+    + COALESCE((v_scope_blocker->>'session_unresolved_failure_count')::integer, 0)
+    + COALESCE((v_scope_blocker->>'session_scope_failed_count')::integer, 0)
+    + COALESCE((v_scope_blocker->>'session_line_failed_count')::integer, 0);
 
   IF v_active_workbench_job_count > 0 OR v_scope_upstream_active_count > 0 THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_REFRESH_IN_PROGRESS'
