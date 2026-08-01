@@ -8,6 +8,20 @@ const canonicalPath = path.resolve(
   '../supabase/repeatable/21072026_1820_00_import_review_internal_core.sql'
 );
 const source = fs.readFileSync(canonicalPath, 'utf8');
+const hrPhase3Source = fs.readFileSync(
+  path.resolve(
+    __dirname,
+    '../supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql'
+  ),
+  'utf8'
+);
+const nhspPhase3Source = fs.readFileSync(
+  path.resolve(
+    __dirname,
+    '../supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql'
+  ),
+  'utf8'
+);
 
 const extractFunction = (sql, name) => {
   const start = new RegExp(
@@ -26,6 +40,7 @@ const helper = extractFunction(
   '_import_review_effective_invoice_balance_core_v1'
 );
 const catalog = extractFunction(source, '_import_review_action_catalog_core_v1');
+const applyEnvelope = extractFunction(source, '_import_review_apply_envelope_core_v1');
 
 test('the production delta preserves the locked helper signature and bounds', () => {
   assert.match(helper, /p_import_id uuid,[\s\S]*p_source_items jsonb/);
@@ -48,11 +63,47 @@ test('completed operation authority is validated before invoice scope is built',
 });
 
 test('operation evidence requires one request, applied result, and policy unit', () => {
-  assert.match(helper, /t\.request_count=1 and t\.applied_count=1 and t\.policy_count=1/);
+  assert.match(helper, /t\.request_count=1 and t\.applied_count=1 and t\.policy_count=1 and t\.outcome_count=1/);
   assert.match(helper, /request_unit->>'action_id'=t\.applied_unit->>'action_id'/);
   assert.match(helper, /request_unit->>'action_id'=t\.policy_unit->>'action_id'/);
   assert.match(helper, /reviewed_unit_fingerprint'=t\.request_unit->>'unit_fingerprint'/);
   assert.match(helper, /applied_unit->>'reconciliation_fingerprint'=t\.request_unit->>'reconciliation_fingerprint'/);
+});
+
+test('fresh and mutable generation repair modes are validated by route', () => {
+  assert.match(helper, /when t\.request_unit->>'route'='CREATE_REVERSAL_REPLACEMENT'/);
+  assert.match(helper, /coalesce\(t\.request_unit->>'repair_identity_mode',''\) in \('','CREATE_NEW_GENERATION'\)/);
+  assert.match(helper, /t\.applied_unit->>'repair_identity_mode'='CREATE_NEW_GENERATION'/);
+  assert.match(helper, /when t\.request_unit->>'route'='AMEND_EXISTING_REPLACEMENT'/);
+  assert.match(helper, /'RETAIN_EXISTING_CORRECTION_ID','FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED'/);
+  assert.match(helper, /t\.applied_unit->>'repair_identity_mode'=t\.request_unit->>'repair_identity_mode'/);
+});
+
+test('the real request and both phase-3 producers match the route-aware repair contract', () => {
+  assert.match(
+    applyEnvelope,
+    /'repair_identity_mode',d\.summary_json->>'repair_identity_mode'/
+  );
+  for (const phase3 of [hrPhase3Source, nhspPhase3Source]) {
+    assert.match(
+      phase3,
+      /'repair_identity_mode',coalesce\(v_repair_identity_mode,'CREATE_NEW_GENERATION'\)/
+    );
+  }
+  assert.match(helper, /when t\.request_unit->>'route'='CREATE_REVERSAL_REPLACEMENT'/);
+  assert.match(
+    helper,
+    /coalesce\(t\.request_unit->>'repair_identity_mode',''\) in \('','CREATE_NEW_GENERATION'\)/
+  );
+  assert.match(helper, /t\.applied_unit->>'repair_identity_mode'='CREATE_NEW_GENERATION'/);
+});
+
+test('completed operation authority re-attests source scope and the immutable request unit', () => {
+  assert.match(helper, /request_unit->>'invoice_stream'=v_invoice_stream/);
+  assert.match(helper, /request_unit->>'source_scope_fingerprint'=v_scope_fingerprint/);
+  assert.match(helper, /action_outcome->>'evidence_fingerprint'/);
+  assert.match(helper, /concat_ws\('\|','unit-v2'/);
+  assert.match(helper, /request_unit->>'unit_fingerprint'=encode\(digest/);
 });
 
 test('operation and applied-result fingerprints are independently re-attested', () => {
@@ -83,10 +134,23 @@ test('canonical member ownership accepts only a proven archived-role re-key line
   assert.match(helper, /v_member_supersession_map/);
   assert.match(helper, /FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED/);
   assert.match(helper, /historical_line\.created_at<=coalesce/);
+  assert.match(helper, /join public\.invoices historical_invoice/);
+  assert.match(helper, /historical_invoice\.status::text in \('ISSUED','PAID','ON_HOLD'\)/);
+  assert.match(helper, /EXPENSE\(_\.\*\)\?\|MILEAGE\|TRAVEL\|ACCOMMODATION/);
   assert.match(helper, /superseded_correction_id/);
   assert.match(helper, /canonical_correction_id/);
   assert.match(helper, /left_evidence\.correction_kind<>right_evidence\.correction_kind/);
   assert.match(helper, /into v_member_role_map,v_member_role_conflict/);
+});
+
+test('archived-member supersession is canonicalised transitively and fails closed on graph conflicts', () => {
+  assert.match(helper, /with recursive direct_edges as/);
+  assert.match(helper, /walk\.path\|\|edge\.canonical_correction_id/);
+  assert.match(helper, /'supersession_depth',entry\.depth/);
+  assert.match(helper, /'supersession_path',to_jsonb\(entry\.path\)/);
+  assert.match(helper, /v_member_supersession_conflict/);
+  assert.match(helper, /count\(distinct edge\.canonical_correction_id\)<>1/);
+  assert.match(helper, /exists\(select 1 from walk where cycle\)/);
 });
 
 test('deleted operation-proven members can scope exact HOURS_WEEKLY lines', () => {
@@ -124,6 +188,14 @@ test('credits require a full mirror and allocate multi-source money by exact fro
   assert.match(helper, /v_component_pay:=-coalesce\(\(v_original_seg->>'pay_amount'\)::numeric,0\)/);
   assert.match(helper, /v_component_charge:=-coalesce\(\(v_original_seg->>'charge_amount'\)::numeric,0\)/);
   assert.match(helper, /v_component_margin:=v_component_charge-v_component_pay/);
+});
+
+test('credits require exact header, line, client, and source provenance', () => {
+  assert.match(helper, /v_line\.original_invoice_id is distinct from v_original_line\.invoice_id/);
+  assert.match(helper, /original_invoice_line_id' is distinct from v_original_line\.id::text/);
+  assert.match(helper, /v_line\.invoice_client_id is distinct from v_original_invoice\.client_id/);
+  assert.match(helper, /credit_member->>'source_identity'=v_source_identity/);
+  assert.match(helper, /original_member->>'source_identity'=v_source_identity/);
 });
 
 test('archived-only generations cannot become mutable', () => {

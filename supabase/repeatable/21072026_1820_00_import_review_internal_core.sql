@@ -706,6 +706,7 @@ declare
   v_operation_evidence jsonb:='[]'::jsonb;
   v_operation_member_ids uuid[]:=array[]::uuid[];
   v_member_supersession_map jsonb:='[]'::jsonb;
+  v_member_supersession_conflict boolean:=false;
   v_operation_evidence_conflict boolean:=false;
   v_operation_in_progress boolean:=false;
   v_member_role_map jsonb:='[]'::jsonb;
@@ -746,6 +747,7 @@ declare
   v_replacement_repair_required boolean:=false;
   v_line record;
   v_original_line public.invoice_lines%rowtype;
+  v_original_invoice public.invoices%rowtype;
   v_tf public.timesheets_financials%rowtype;
   v_original_tf public.timesheets_financials%rowtype;
   v_seg jsonb;
@@ -975,6 +977,7 @@ begin
             and (candidate->>'source_identity'=v_source_identity or candidate->>'source_shift_id'=v_source_shift_id::text)) request_count,
         applied_match.applied_unit,applied_match.applied_count,
         policy_match.policy_unit,policy_match.policy_count,
+        outcome_match.action_outcome,outcome_match.outcome_count,
         mr.response_json->'correction_operation_contract' operation_contract
       from matching_requests mr
       left join lateral (
@@ -987,12 +990,18 @@ begin
         from jsonb_array_elements(coalesce(mr.response_json#>'{correction_operation_contract,correction_units}','[]'::jsonb)) policy
         where policy->>'action_id'=mr.request_unit->>'action_id'
       ) policy_match on true
+      left join lateral (
+        select min(to_jsonb(outcome)::text)::jsonb action_outcome,count(*)::integer outcome_count
+        from public.import_review_action_outcomes outcome
+        where outcome.operation_id=mr.operation_id
+          and outcome.action_id=mr.request_unit->>'action_id'
+      ) outcome_match on true
     ), evaluated as (
       select t.*,
         case when t.operation_state='COMPLETE'
           and t.committed_at_utc is not null and t.finalised_at_utc is not null
           and t.request_unit->>'route' in ('AMEND_EXISTING_REPLACEMENT','CREATE_REVERSAL_REPLACEMENT')
-          and t.request_count=1 and t.applied_count=1 and t.policy_count=1
+          and t.request_count=1 and t.applied_count=1 and t.policy_count=1 and t.outcome_count=1
           and t.request_unit->>'action_id'=t.applied_unit->>'action_id'
           and t.request_unit->>'action_id'=t.policy_unit->>'action_id'
           and t.request_unit->>'source_identity'=v_source_identity
@@ -1009,18 +1018,44 @@ begin
           and t.request_unit->>'client_id'=v_client_id::text
           and t.request_unit->>'contract_id'=v_contract_id::text
           and t.request_unit->>'week_ending_date'=v_week_ending_date::text
+          and t.request_unit->>'invoice_stream'=v_invoice_stream
+          and t.request_unit->>'source_scope_fingerprint'=v_scope_fingerprint
+          and t.action_outcome->>'action_kind'='APPLY_AMENDMENT'
+          and t.action_outcome->>'source_identity'=v_source_identity
+          and t.action_outcome->>'shift_id'=v_source_shift_id::text
+          and t.action_outcome->>'candidate_id'=v_candidate_id::text
+          and t.action_outcome->>'client_id'=v_client_id::text
+          and t.action_outcome->>'contract_id'=v_contract_id::text
+          and nullif(t.action_outcome->>'evidence_fingerprint','') is not null
           and nullif(t.request_unit->>'unit_fingerprint','') is not null
+          and t.request_unit->>'unit_fingerprint'=encode(digest(convert_to(concat_ws('|','unit-v2',
+            t.request_unit->>'action_id',t.request_unit->>'source_identity',t.request_unit->>'source_shift_id',
+            t.request_unit->>'route',t.request_unit->>'reconciliation_mode',
+            t.request_unit->>'reconciliation_fingerprint',t.request_unit->>'review_policy_basis_kind',
+            t.request_unit->>'review_policy_basis_fingerprint',t.action_outcome->>'evidence_fingerprint'),'UTF8'),'sha256'),'hex')
           and t.applied_unit->>'reviewed_unit_fingerprint'=t.request_unit->>'unit_fingerprint'
           and t.applied_unit->>'reconciliation_fingerprint'=t.request_unit->>'reconciliation_fingerprint'
-          and coalesce(t.applied_unit->>'repair_identity_mode','')=coalesce(t.request_unit->>'repair_identity_mode','')
-          and (coalesce(t.request_unit->>'repair_identity_mode','')<>'FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED'
-            or (t.request_unit->>'route'='AMEND_EXISTING_REPLACEMENT'
+          and case
+            when t.request_unit->>'route'='CREATE_REVERSAL_REPLACEMENT' then
+              coalesce(t.request_unit->>'repair_identity_mode','') in ('','CREATE_NEW_GENERATION')
+              and t.applied_unit->>'repair_identity_mode'='CREATE_NEW_GENERATION'
+              and nullif(t.request_unit->>'reviewed_existing_correction_id','') is null
+            when t.request_unit->>'route'='AMEND_EXISTING_REPLACEMENT' then
+              t.request_unit->>'repair_identity_mode' in ('RETAIN_EXISTING_CORRECTION_ID','FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED')
+              and t.applied_unit->>'repair_identity_mode'=t.request_unit->>'repair_identity_mode'
               and nullif(t.request_unit->>'reviewed_existing_correction_id','') is not null
-              and t.request_unit->>'reviewed_existing_correction_id'<>t.applied_unit->>'correction_id'
-              and jsonb_typeof(t.request_unit->'reviewed_existing_member_ids')='array'
-              and jsonb_array_length(t.request_unit->'reviewed_existing_member_ids') between 1 and 2
-              and exists(select 1 from jsonb_array_elements_text(t.request_unit->'reviewed_existing_member_ids') reviewed(member_id)
-                where reviewed.member_id in (t.applied_unit->>'reversal_timesheet_id',t.applied_unit->>'replacement_timesheet_id'))))
+              and case
+                when t.request_unit->>'repair_identity_mode'='RETAIN_EXISTING_CORRECTION_ID' then
+                  t.applied_unit->>'correction_id'=t.request_unit->>'reviewed_existing_correction_id'
+                else
+                  t.request_unit->>'reviewed_existing_correction_id'<>t.applied_unit->>'correction_id'
+                  and jsonb_typeof(t.request_unit->'reviewed_existing_member_ids')='array'
+                  and jsonb_array_length(t.request_unit->'reviewed_existing_member_ids') between 1 and 2
+                  and exists(select 1 from jsonb_array_elements_text(t.request_unit->'reviewed_existing_member_ids') reviewed(member_id)
+                    where reviewed.member_id in (t.applied_unit->>'reversal_timesheet_id',t.applied_unit->>'replacement_timesheet_id'))
+              end
+            else false
+          end
           and nullif(t.applied_unit->>'correction_id','') is not null
           and coalesce(t.applied_unit->>'reversal_timesheet_id','')~*v_uuid_re
           and coalesce(t.applied_unit->>'replacement_timesheet_id','')~*v_uuid_re
@@ -1069,10 +1104,14 @@ begin
         'applied_member_ids',e.applied_unit->'applied_member_ids',
         'parent_timesheet_id',e.applied_unit->>'parent_timesheet_id',
         'route',e.request_unit->>'route',
+        'invoice_stream',e.request_unit->>'invoice_stream',
+        'source_scope_fingerprint',e.request_unit->>'source_scope_fingerprint',
         'reviewed_existing_correction_id',e.request_unit->>'reviewed_existing_correction_id',
         'reviewed_existing_member_ids',coalesce(e.request_unit->'reviewed_existing_member_ids','[]'::jsonb),
+        'request_repair_identity_mode',e.request_unit->>'repair_identity_mode',
         'repair_identity_mode',e.applied_unit->>'repair_identity_mode',
         'reviewed_unit_fingerprint',e.request_unit->>'unit_fingerprint',
+        'action_evidence_fingerprint',e.action_outcome->>'evidence_fingerprint',
         'reconciliation_fingerprint',e.request_unit->>'reconciliation_fingerprint',
         'B_standard_schedule_json',coalesce(e.request_unit->'B_standard_schedule_json','[]'::jsonb),
         'B_hours',coalesce(e.request_unit->'B_hours','{}'::jsonb),
@@ -1088,23 +1127,15 @@ begin
     into v_operation_evidence,v_operation_evidence_conflict,v_operation_in_progress
     from evaluated e;
 
-    -- A valid archived-sibling repair deliberately re-keys the surviving
-    -- physical member.  Preserve that exact old-to-new identity edge so a
-    -- later import treats the old assignment as superseded audit history,
-    -- rather than as contradictory ownership.
-    select coalesce(jsonb_agg(jsonb_build_object(
-      'operation_id',edge.operation_id,
-      'member_timesheet_id',edge.member_timesheet_id,
-      'correction_kind',edge.correction_kind,
-      'superseded_correction_id',edge.superseded_correction_id,
-      'canonical_correction_id',edge.canonical_correction_id
-    ) order by edge.operation_id,edge.correction_kind,edge.member_timesheet_id),'[]'::jsonb)
-    into v_member_supersession_map
-    from (
-      select distinct (unit->>'operation_id')::uuid operation_id,
-        role.member_id::uuid member_timesheet_id,role.correction_kind,
+    -- A surviving member can be re-keyed more than once as successive archived
+    -- siblings occupy prior correction identities.  Canonicalise the complete
+    -- bounded chain (C1 -> C2 -> C3), retain every earlier assignment as audit
+    -- history, and fail closed on cycles or branches.
+    with recursive direct_edges as (
+      select role.member_id::uuid member_timesheet_id,role.correction_kind,
         unit->>'reviewed_existing_correction_id' superseded_correction_id,
-        unit->>'correction_id' canonical_correction_id
+        unit->>'correction_id' canonical_correction_id,
+        array_agg(distinct (unit->>'operation_id')::uuid order by (unit->>'operation_id')::uuid) operation_ids
       from jsonb_array_elements(v_operation_evidence) unit
       cross join lateral (values
         ('CHANGED_HOURS_REVERSAL'::text,unit->>'reversal_timesheet_id'),
@@ -1119,10 +1150,90 @@ begin
         and not exists(
           select 1
           from public.invoice_lines historical_line
+          join public.invoices historical_invoice on historical_invoice.id=historical_line.invoice_id
           where (historical_line.timesheet_id=role.member_id::uuid
               or historical_line.meta_json->>'timesheet_id'=role.member_id)
-            and historical_line.created_at<=coalesce((unit->>'evidence_at')::timestamptz,'infinity'::timestamptz))
-    ) edge;
+            and historical_line.created_at<=coalesce((unit->>'evidence_at')::timestamptz,'infinity'::timestamptz)
+            and upper(coalesce(historical_line.meta_json->>'line_type',''))
+              !~ '^(EXPENSE(_.*)?|MILEAGE|TRAVEL|ACCOMMODATION|REIMBURSEMENT|ADDITION)$'
+            and (
+              historical_invoice.status::text='DRAFT'
+              or historical_invoice.issued_at_utc is null
+              or historical_invoice.active_document_operation_id is not null
+              or historical_invoice.active_issue_operation_id is not null
+              or upper(coalesce(historical_invoice.issue_state,'')) not in ('','IDLE','COMPLETE','COMPLETED','ISSUED')
+              or (historical_invoice.status::text in ('ISSUED','PAID','ON_HOLD')
+                and historical_invoice.issued_at_utc is not null)
+            ))
+      group by role.member_id,role.correction_kind,
+        unit->>'reviewed_existing_correction_id',unit->>'correction_id'
+    ), walk as (
+      select edge.member_timesheet_id,edge.correction_kind,
+        edge.superseded_correction_id root_correction_id,
+        edge.canonical_correction_id reached_correction_id,
+        array[edge.superseded_correction_id,edge.canonical_correction_id]::text[] path,
+        edge.operation_ids,1 depth,
+        edge.canonical_correction_id=edge.superseded_correction_id cycle
+      from direct_edges edge
+      union all
+      select walk.member_timesheet_id,walk.correction_kind,walk.root_correction_id,
+        edge.canonical_correction_id,walk.path||edge.canonical_correction_id,
+        walk.operation_ids||edge.operation_ids,walk.depth+1,
+        edge.canonical_correction_id=any(walk.path)
+      from walk
+      join direct_edges edge
+        on edge.member_timesheet_id=walk.member_timesheet_id
+       and edge.correction_kind=walk.correction_kind
+       and edge.superseded_correction_id=walk.reached_correction_id
+      where not walk.cycle and walk.depth<p_max_operations_per_source
+    ), closure as (
+      select distinct on (member_timesheet_id,correction_kind,root_correction_id,reached_correction_id)
+        member_timesheet_id,correction_kind,root_correction_id,reached_correction_id,
+        operation_ids,depth,path
+      from walk
+      where not cycle and root_correction_id<>reached_correction_id
+      order by member_timesheet_id,correction_kind,root_correction_id,reached_correction_id,depth desc,operation_ids::text
+    ), conflicts as (
+      select exists(
+        select 1 from direct_edges edge
+        group by edge.member_timesheet_id,edge.correction_kind,edge.superseded_correction_id
+        having count(distinct edge.canonical_correction_id)<>1
+      )
+      or exists(select 1 from walk where cycle)
+      or exists(
+        select 1 from walk
+        where depth=p_max_operations_per_source
+          and exists(select 1 from direct_edges edge
+            where edge.member_timesheet_id=walk.member_timesheet_id
+              and edge.correction_kind=walk.correction_kind
+              and edge.superseded_correction_id=walk.reached_correction_id)
+      )
+      or exists(
+        select 1
+        from walk terminal
+        where not terminal.cycle and not exists(select 1 from direct_edges edge
+          where edge.member_timesheet_id=terminal.member_timesheet_id
+            and edge.correction_kind=terminal.correction_kind
+            and edge.superseded_correction_id=terminal.reached_correction_id)
+        group by terminal.member_timesheet_id,terminal.correction_kind,terminal.root_correction_id
+        having count(distinct terminal.reached_correction_id)<>1
+      ) as has_conflict
+    )
+    select coalesce((select jsonb_agg(jsonb_build_object(
+        'operation_id',entry.operation_ids[cardinality(entry.operation_ids)],
+        'operation_ids',to_jsonb(entry.operation_ids),
+        'member_timesheet_id',entry.member_timesheet_id,
+        'correction_kind',entry.correction_kind,
+        'superseded_correction_id',entry.root_correction_id,
+        'canonical_correction_id',entry.reached_correction_id,
+        'supersession_depth',entry.depth,
+        'supersession_path',to_jsonb(entry.path)
+      ) order by entry.member_timesheet_id,entry.correction_kind,
+        entry.root_correction_id,entry.depth,entry.reached_correction_id)
+      from closure entry),'[]'::jsonb),
+      coalesce((select has_conflict from conflicts),false)
+    into v_member_supersession_map,v_member_supersession_conflict;
+    v_operation_evidence_conflict:=v_operation_evidence_conflict or v_member_supersession_conflict;
 
     select coalesce(array_agg(distinct member_id order by member_id),array[]::uuid[])
     into v_operation_member_ids
@@ -1308,7 +1419,8 @@ begin
           and coalesce(credit.meta_json->>'original_invoice_line_id',credit.meta_json->>'credit_of_line_id')::uuid in(select id from directly_scoped)
       )
       select il.*,i.type::text invoice_type,i.status::text invoice_status,i.issued_at_utc,
-        i.original_invoice_id,i.active_document_operation_id,i.active_issue_operation_id,i.issue_state
+        i.client_id invoice_client_id,i.original_invoice_id,
+        i.active_document_operation_id,i.active_issue_operation_id,i.issue_state
       from scoped s join public.invoice_lines il on il.id=s.id join public.invoices i on i.id=il.invoice_id
       order by i.issued_at_utc nulls last,il.id
     loop
@@ -1338,6 +1450,7 @@ begin
       end if;
 
       v_original_line:=null;
+      v_original_invoice:=null;
       v_original_tf:=null;
       v_original_seg:=null;
       v_original_seg_count:=0;
@@ -1349,6 +1462,36 @@ begin
           select original.* into v_original_line from public.invoice_lines original where original.id=v_original_line_id;
         end if;
         if v_original_line.id is null then
+          v_scope_unprovable:=true;
+          continue;
+        end if;
+        select original_invoice.* into v_original_invoice
+        from public.invoices original_invoice
+        where original_invoice.id=v_original_line.invoice_id;
+        -- A credit is admissible only when the header, original physical line,
+        -- client and exact source identity all prove one lineage.  The line's
+        -- signed values are never trusted in isolation.
+        if v_original_invoice.id is null
+          or v_line.original_invoice_id is distinct from v_original_line.invoice_id
+          or v_line.meta_json->>'original_invoice_line_id' is distinct from v_original_line.id::text
+          or v_line.invoice_client_id is distinct from v_original_invoice.client_id
+          or not (
+            coalesce(v_line.timesheet_id::text,
+              case when coalesce(v_line.meta_json->>'timesheet_id','')~*v_uuid_re
+                then v_line.meta_json->>'timesheet_id' end)
+              is not distinct from
+            coalesce(v_original_line.timesheet_id::text,
+              case when coalesce(v_original_line.meta_json->>'timesheet_id','')~*v_uuid_re
+                then v_original_line.meta_json->>'timesheet_id' end)
+            or (
+              exists(select 1 from jsonb_array_elements(v_member_role_map) credit_member
+                where credit_member->>'timesheet_id'=coalesce(v_line.timesheet_id::text,v_line.meta_json->>'timesheet_id')
+                  and credit_member->>'source_identity'=v_source_identity)
+              and exists(select 1 from jsonb_array_elements(v_member_role_map) original_member
+                where original_member->>'timesheet_id'=coalesce(v_original_line.timesheet_id::text,v_original_line.meta_json->>'timesheet_id')
+                  and original_member->>'source_identity'=v_source_identity)
+            )
+          ) then
           v_scope_unprovable:=true;
           continue;
         end if;
