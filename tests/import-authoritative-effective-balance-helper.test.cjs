@@ -219,12 +219,43 @@ test('multiple effective physical members for one role fail closed', () => {
   assert.match(helper, /g\.active_duplicate or g\.economic_member_duplicate/);
 });
 
-test('latest fully invoiced operation may reconstruct a deleted schedule only on exact bucket equality', () => {
-  assert.match(helper, /v_fully_invoiced_generation_ids\[cardinality\(v_fully_invoiced_generation_ids\)\]/);
+test('terminal schedule provenance rejects older candidates even when their buckets match B', () => {
+  assert.match(helper, /v_terminal_generation_id:=v_fully_invoiced_generation_ids\[cardinality\(v_fully_invoiced_generation_ids\)\]/);
+  assert.match(helper, /candidate->>'timesheet_id'=v_terminal_positive_timesheet_id::text/);
+  assert.match(helper, /candidate->>'correction_id'=v_terminal_generation_id/);
+  assert.match(helper, /candidate->>'correction_kind'='CHANGED_HOURS_REPLACEMENT'/);
+  assert.doesNotMatch(helper, /jsonb_array_length\(v_candidate_schedule\)=0 and cardinality\(v_fully_invoiced_generation_ids\)>0/);
+  assert.match(helper, /TERMINAL_SCHEDULE_AUTHORITY_CONFLICT/);
+});
+
+test('terminal completed operation fallback carries its exact schedule and policy authority', () => {
+  assert.match(helper, /'policy_envelope_fingerprint',e\.policy_unit->>'policy_envelope_fingerprint'/);
+  assert.match(helper, /unit->>'replacement_timesheet_id'=v_terminal_positive_timesheet_id::text/);
   for (const bucket of ['hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh']) {
-    assert.match(helper, new RegExp(`A_hours,${bucket}`));
+    assert.match(helper, new RegExp(`v_terminal_operation_hours->>'${bucket}'`));
   }
-  assert.match(helper, /jsonb_array_length\(unit->'A_schedule_json'\)=1/);
+  assert.match(helper, /v_b_policy_fingerprint:=v_terminal_operation_policy_fingerprint/);
+  assert.match(helper, /v_b_standard_schedule_authority:='TERMINAL_COMPLETED_OPERATION_A_SCHEDULE'/);
+  assert.match(helper, /TERMINAL_POLICY_AUTHORITY_MISSING/);
+  assert.match(helper, /TERMINAL_POLICY_AUTHORITY_CONFLICT/);
+});
+
+test('the helper emits and fingerprints the complete B schedule-authority contract', () => {
+  for (const field of [
+    'B_standard_schedule_authority',
+    'B_standard_schedule_authority_timesheet_id',
+    'B_standard_schedule_authority_correction_id',
+    'B_standard_schedule_authority_operation_id',
+    'B_standard_schedule_authority_policy_fingerprint',
+    'B_standard_schedule_authority_fingerprint',
+  ]) {
+    assert.match(helper, new RegExp(`'${field}'`));
+  }
+  assert.match(helper, /'B-standard-schedule-authority-v1'/);
+  assert.match(helper, /'role-evidence-v4'/);
+  assert.match(helper, /'effective-invoice-v4'/);
+  assert.match(helper, /'reconciliation-v4'/);
+  assert.match(helper, /v_b_standard_schedule_authority_fingerprint/);
 });
 
 test('effective-zero source safety distinguishes full credit from paid-uninvoiced', () => {
@@ -244,7 +275,7 @@ test('safe current source requires one ordinary current row and a safe lifecycle
 });
 
 test('source safety participates in review/apply staleness fingerprinting', () => {
-  assert.match(helper, /'reconciliation-v3'/);
+  assert.match(helper, /'reconciliation-v4'/);
   assert.match(helper, /v_current_source_safe,v_current_source_safety_reason/);
   assert.match(helper, /v_current_source_invoice_lined,v_current_source_paid/);
   assert.match(helper, /current_source_safe_for_effective_zero_amendment/);

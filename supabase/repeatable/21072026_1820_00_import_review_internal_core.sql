@@ -731,7 +731,32 @@ declare
   v_b_schedule jsonb:='[]'::jsonb;
   v_candidate_schedule jsonb:='[]'::jsonb;
   v_candidate_hours jsonb:='{}'::jsonb;
+  v_schedule_candidates jsonb:='[]'::jsonb;
+  v_candidate_policy_fingerprint text;
   v_b_policy_fingerprint text;
+  v_terminal_generation_id text;
+  v_terminal_positive_timesheet_id uuid;
+  v_terminal_positive_member_count integer:=0;
+  v_terminal_frozen_candidate jsonb;
+  v_terminal_frozen_candidate_count integer:=0;
+  v_terminal_frozen_schedule_variant_count integer:=0;
+  v_terminal_frozen_policy_variant_count integer:=0;
+  v_terminal_operation jsonb;
+  v_terminal_operation_schedule jsonb:='[]'::jsonb;
+  v_terminal_operation_hours jsonb:='{}'::jsonb;
+  v_terminal_operation_policy_fingerprint text;
+  v_terminal_operation_id uuid;
+  v_terminal_frozen_matches_b boolean:=false;
+  v_terminal_operation_matches_b boolean:=false;
+  v_terminal_schedule_authority_conflict boolean:=false;
+  v_terminal_policy_authority_conflict boolean:=false;
+  v_b_standard_schedule_authority text:='NONE';
+  v_b_standard_schedule_authority_timesheet_id uuid;
+  v_b_standard_schedule_authority_correction_id text;
+  v_b_standard_schedule_authority_operation_id uuid;
+  v_b_standard_schedule_authority_policy_fingerprint text;
+  v_b_standard_schedule_authority_fingerprint text;
+  v_b_standard_schedule_authority_diagnostic text;
   v_effective_fingerprint text;
   v_line_evidence jsonb:='[]'::jsonb;
   v_ignored_nonhours_line_ids uuid[]:=array[]::uuid[];
@@ -1116,7 +1141,8 @@ begin
         'B_standard_schedule_json',coalesce(e.request_unit->'B_standard_schedule_json','[]'::jsonb),
         'B_hours',coalesce(e.request_unit->'B_hours','{}'::jsonb),
         'A_schedule_json',coalesce(e.request_unit->'A_schedule_json','[]'::jsonb),
-        'A_hours',coalesce(e.request_unit->'A_hours','{}'::jsonb)
+        'A_hours',coalesce(e.request_unit->'A_hours','{}'::jsonb),
+        'policy_envelope_fingerprint',e.policy_unit->>'policy_envelope_fingerprint'
       ) order by e.finalised_at_utc,e.operation_id,e.request_unit->>'action_id')
         filter(where e.valid_historical_authority),'[]'::jsonb),
       coalesce(bool_or(e.operation_state='COMPLETE'
@@ -1362,11 +1388,18 @@ begin
     v_b_day:=0; v_b_night:=0; v_b_sat:=0; v_b_sun:=0; v_b_bh:=0;
     v_b_pay:=0; v_b_charge:=0; v_b_margin:=0;
     v_b_schedule:='[]'::jsonb; v_candidate_schedule:='[]'::jsonb; v_candidate_hours:='{}'::jsonb;
-    select encode(digest(convert_to(coalesce(tf.policy_snapshot_json,'{}'::jsonb)::text,'UTF8'),'sha256'),'hex')
-    into v_b_policy_fingerprint
-    from public.timesheets_financials tf
-    where tf.timesheet_id=v_source_timesheet_id and tf.is_current
-    order by tf.computed_at_utc desc nulls last,tf.id desc limit 1;
+    v_schedule_candidates:='[]'::jsonb; v_candidate_policy_fingerprint:=null; v_b_policy_fingerprint:=null;
+    v_terminal_generation_id:=null; v_terminal_positive_timesheet_id:=null; v_terminal_positive_member_count:=0;
+    v_terminal_frozen_candidate:=null; v_terminal_frozen_candidate_count:=0;
+    v_terminal_frozen_schedule_variant_count:=0; v_terminal_frozen_policy_variant_count:=0;
+    v_terminal_operation:=null; v_terminal_operation_schedule:='[]'::jsonb; v_terminal_operation_hours:='{}'::jsonb;
+    v_terminal_operation_policy_fingerprint:=null; v_terminal_operation_id:=null;
+    v_terminal_frozen_matches_b:=false; v_terminal_operation_matches_b:=false;
+    v_terminal_schedule_authority_conflict:=false; v_terminal_policy_authority_conflict:=false;
+    v_b_standard_schedule_authority:='NONE'; v_b_standard_schedule_authority_timesheet_id:=null;
+    v_b_standard_schedule_authority_correction_id:=null; v_b_standard_schedule_authority_operation_id:=null;
+    v_b_standard_schedule_authority_policy_fingerprint:=null; v_b_standard_schedule_authority_fingerprint:=null;
+    v_b_standard_schedule_authority_diagnostic:=null;
     v_line_evidence:='[]'::jsonb;
     v_ignored_nonhours_line_ids:=array[]::uuid[];
     v_generation_role_evidence:='[]'::jsonb;
@@ -1685,7 +1718,28 @@ begin
           'ref_num',coalesce(v_seg->>'ref_num',v_seg->>'reference_number',(v_a_schedule->0)->>'ref_num')
         )));
         v_candidate_hours:=jsonb_build_object('hours_day',v_component_day,'hours_night',v_component_night,'hours_sat',v_component_sat,'hours_sun',v_component_sun,'hours_bh',v_component_bh,'total_hours',v_component_day+v_component_night+v_component_sat+v_component_sun+v_component_bh);
-        v_b_policy_fingerprint:=coalesce(v_tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',v_tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}',encode(digest(convert_to(coalesce(v_tf.policy_snapshot_json,'{}'::jsonb)::text,'UTF8'),'sha256'),'hex'));
+        v_candidate_policy_fingerprint:=case
+          when v_component_correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT') then
+            case when jsonb_typeof(v_tf.policy_snapshot_json->'correction_financials_policy_envelope')='object'
+                and nullif(coalesce(v_tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',
+                  v_tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}'),'') is not null
+                and v_tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}'
+                  =coalesce(v_tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',
+                    v_tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}')
+                and encode(digest(convert_to(((v_tf.policy_snapshot_json->'correction_financials_policy_envelope')
+                    -'envelope_fingerprint'::text)::text,'UTF8'),'sha256'),'hex')
+                  =coalesce(v_tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',
+                    v_tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}')
+              then coalesce(v_tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',
+                v_tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}') end
+          else coalesce(v_tf.policy_snapshot_json->>'correction_financials_policy_envelope_fingerprint',
+            v_tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,envelope_fingerprint}',
+            encode(digest(convert_to(coalesce(v_tf.policy_snapshot_json,'{}'::jsonb)::text,'UTF8'),'sha256'),'hex')) end;
+        v_schedule_candidates:=v_schedule_candidates||jsonb_build_array(jsonb_build_object(
+          'timesheet_id',v_component_timesheet_id,'correction_id',v_component_correction_id,
+          'correction_kind',v_component_correction_kind,'invoice_line_id',v_line.id,
+          'schedule_json',v_candidate_schedule,'hours',v_candidate_hours,
+          'policy_fingerprint',v_candidate_policy_fingerprint));
       end if;
     end loop;
 
@@ -1865,13 +1919,6 @@ begin
           and archived.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'))
         then 'FRESH_CORRECTION_ID_ARCHIVED_ROLE_IGNORED' else 'RETAIN_EXISTING_CORRECTION_ID' end;
     end if;
-    v_role_evidence_fingerprint:=encode(digest(convert_to(concat_ws('|','role-evidence-v3',
-      v_operation_evidence::text,v_member_supersession_map::text,v_member_role_map::text,v_generation_role_evidence::text,
-      v_archived_history_roles::text,v_role_evidence_conflicts::text),'UTF8'),'sha256'),'hex');
-    v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v3',v_source_identity,
-      v_line_evidence::text,v_ignored_nonhours_line_ids::text,v_role_evidence_fingerprint,
-      v_b_day,v_b_night,v_b_sat,v_b_sun,v_b_bh,v_b_pay,v_b_charge,v_b_margin),'UTF8'),'sha256'),'hex');
-
     v_mutable_member_ids:=array[]::uuid[]; v_mutable_missing_roles:=array[]::text[];
     v_mutable_parent_id:=null; v_m_day:=0; v_m_night:=0; v_m_sat:=0; v_m_sun:=0; v_m_bh:=0;
     v_m_pay:=0; v_m_charge:=0; v_m_margin:=0; v_m_financials_complete:=true; v_paid_mutable_state:=false;
@@ -1895,45 +1942,173 @@ begin
     end if;
     v_mutable_fingerprint:=encode(digest(convert_to(concat_ws('|','mutable-v1',v_mutable_correction_id,v_mutable_member_ids::text,v_mutable_missing_roles::text,v_m_day,v_m_night,v_m_sat,v_m_sun,v_m_bh,v_m_pay,v_m_charge,v_m_margin),'UTF8'),'sha256'),'hex');
 
-    -- If a historical member and its TSFIN were physically deleted, the
-    -- latest fully invoiced generation's validated applied operation still
-    -- carries the reviewed replacement schedule.  Use it only when every
-    -- hours bucket exactly matches the signed frozen ledger.
-    if jsonb_array_length(v_candidate_schedule)=0 and cardinality(v_fully_invoiced_generation_ids)>0 then
-      select coalesce((select unit->'A_schedule_json'
-        from jsonb_array_elements(v_operation_evidence) unit
-        where unit->>'correction_id'=v_fully_invoiced_generation_ids[cardinality(v_fully_invoiced_generation_ids)]
-          and jsonb_typeof(unit->'A_schedule_json')='array' and jsonb_array_length(unit->'A_schedule_json')=1
-          and coalesce((unit#>>'{A_hours,hours_day}')::numeric,0)=v_b_day
-          and coalesce((unit#>>'{A_hours,hours_night}')::numeric,0)=v_b_night
-          and coalesce((unit#>>'{A_hours,hours_sat}')::numeric,0)=v_b_sat
-          and coalesce((unit#>>'{A_hours,hours_sun}')::numeric,0)=v_b_sun
-          and coalesce((unit#>>'{A_hours,hours_bh}')::numeric,0)=v_b_bh
-        order by (unit->>'evidence_at')::timestamptz desc,unit->>'operation_id' desc limit 1),v_candidate_schedule),
-        coalesce((select unit->'A_hours'
-        from jsonb_array_elements(v_operation_evidence) unit
-        where unit->>'correction_id'=v_fully_invoiced_generation_ids[cardinality(v_fully_invoiced_generation_ids)]
-          and jsonb_typeof(unit->'A_schedule_json')='array' and jsonb_array_length(unit->'A_schedule_json')=1
-          and coalesce((unit#>>'{A_hours,hours_day}')::numeric,0)=v_b_day
-          and coalesce((unit#>>'{A_hours,hours_night}')::numeric,0)=v_b_night
-          and coalesce((unit#>>'{A_hours,hours_sat}')::numeric,0)=v_b_sat
-          and coalesce((unit#>>'{A_hours,hours_sun}')::numeric,0)=v_b_sun
-          and coalesce((unit#>>'{A_hours,hours_bh}')::numeric,0)=v_b_bh
-        order by (unit->>'evidence_at')::timestamptz desc,unit->>'operation_id' desc limit 1),v_candidate_hours)
-      into v_candidate_schedule,v_candidate_hours;
+    -- A schedule is valid only when it belongs to the exact terminal positive
+    -- member.  An older positive may have the same buckets while representing
+    -- different work times, so mere candidate presence or bucket equality is
+    -- never provenance authority.
+    if cardinality(v_fully_invoiced_generation_ids)>0 then
+      v_terminal_generation_id:=v_fully_invoiced_generation_ids[cardinality(v_fully_invoiced_generation_ids)];
+      select count(distinct (member->>'timesheet_id')::uuid),
+        (array_agg(distinct (member->>'timesheet_id')::uuid order by (member->>'timesheet_id')::uuid))[1]
+      into v_terminal_positive_member_count,v_terminal_positive_timesheet_id
+      from jsonb_array_elements(v_member_role_map) member
+      where member->>'correction_id'=v_terminal_generation_id
+        and member->>'correction_kind'='CHANGED_HOURS_REPLACEMENT';
+      if v_terminal_positive_member_count<>1 then
+        v_scope_unprovable:=true;
+        v_b_standard_schedule_authority_diagnostic:='TERMINAL_POSITIVE_MEMBER_UNPROVABLE';
+      end if;
+    elsif (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0 then
+      v_terminal_positive_timesheet_id:=v_source_timesheet_id;
+      v_terminal_positive_member_count:=case when v_source_timesheet_id is null then 0 else 1 end;
+    end if;
+
+    if v_terminal_positive_timesheet_id is not null then
+      select count(*)::integer,
+        count(distinct candidate->'schedule_json'::text)::integer,
+        count(distinct coalesce(candidate->>'policy_fingerprint','<NULL>'))::integer
+      into v_terminal_frozen_candidate_count,v_terminal_frozen_schedule_variant_count,
+        v_terminal_frozen_policy_variant_count
+      from jsonb_array_elements(v_schedule_candidates) candidate
+      where candidate->>'timesheet_id'=v_terminal_positive_timesheet_id::text
+        and (v_terminal_generation_id is null or (
+          candidate->>'correction_id'=v_terminal_generation_id
+          and candidate->>'correction_kind'='CHANGED_HOURS_REPLACEMENT'));
+
+      select candidate
+      into v_terminal_frozen_candidate
+      from jsonb_array_elements(v_schedule_candidates) candidate
+      where candidate->>'timesheet_id'=v_terminal_positive_timesheet_id::text
+        and (v_terminal_generation_id is null or (
+          candidate->>'correction_id'=v_terminal_generation_id
+          and candidate->>'correction_kind'='CHANGED_HOURS_REPLACEMENT'))
+      order by candidate->>'invoice_line_id'
+      limit 1;
+    end if;
+
+    if v_terminal_generation_id is not null and v_terminal_positive_timesheet_id is not null then
+      select unit
+      into v_terminal_operation
+      from jsonb_array_elements(v_operation_evidence) unit
+      where unit->>'correction_id'=v_terminal_generation_id
+        and unit->>'replacement_timesheet_id'=v_terminal_positive_timesheet_id::text
+      order by (unit->>'evidence_at')::timestamptz desc,unit->>'operation_id' desc
+      limit 1;
+    end if;
+
+    v_candidate_schedule:=coalesce(v_terminal_frozen_candidate->'schedule_json','[]'::jsonb);
+    v_candidate_hours:=coalesce(v_terminal_frozen_candidate->'hours','{}'::jsonb);
+    v_candidate_policy_fingerprint:=nullif(v_terminal_frozen_candidate->>'policy_fingerprint','');
+    v_terminal_operation_schedule:=coalesce(v_terminal_operation->'A_schedule_json','[]'::jsonb);
+    v_terminal_operation_hours:=coalesce(v_terminal_operation->'A_hours','{}'::jsonb);
+    v_terminal_operation_policy_fingerprint:=nullif(v_terminal_operation->>'policy_envelope_fingerprint','');
+    v_terminal_operation_id:=case when coalesce(v_terminal_operation->>'operation_id','')~*v_uuid_re
+      then (v_terminal_operation->>'operation_id')::uuid end;
+
+    v_terminal_frozen_matches_b:=v_terminal_frozen_candidate_count>0
+      and jsonb_array_length(v_candidate_schedule)=1
+      and coalesce((v_candidate_hours->>'hours_day')::numeric,0)=v_b_day
+      and coalesce((v_candidate_hours->>'hours_night')::numeric,0)=v_b_night
+      and coalesce((v_candidate_hours->>'hours_sat')::numeric,0)=v_b_sat
+      and coalesce((v_candidate_hours->>'hours_sun')::numeric,0)=v_b_sun
+      and coalesce((v_candidate_hours->>'hours_bh')::numeric,0)=v_b_bh;
+    v_terminal_operation_matches_b:=v_terminal_operation is not null
+      and jsonb_typeof(v_terminal_operation_schedule)='array'
+      and jsonb_array_length(v_terminal_operation_schedule)=1
+      and coalesce((v_terminal_operation_hours->>'hours_day')::numeric,0)=v_b_day
+      and coalesce((v_terminal_operation_hours->>'hours_night')::numeric,0)=v_b_night
+      and coalesce((v_terminal_operation_hours->>'hours_sat')::numeric,0)=v_b_sat
+      and coalesce((v_terminal_operation_hours->>'hours_sun')::numeric,0)=v_b_sun
+      and coalesce((v_terminal_operation_hours->>'hours_bh')::numeric,0)=v_b_bh;
+
+    v_terminal_schedule_authority_conflict:=v_terminal_frozen_schedule_variant_count>1
+      or (v_terminal_frozen_candidate_count>0 and v_terminal_operation is not null and (
+        not v_terminal_frozen_matches_b or not v_terminal_operation_matches_b
+        or jsonb_strip_nulls(jsonb_build_object(
+          'date',coalesce((v_candidate_schedule->0)->>'date',(v_candidate_schedule->0)->>'work_date'),
+          'start_utc',coalesce((v_candidate_schedule->0)->>'start_utc',(v_candidate_schedule->0)->>'start'),
+          'end_utc',coalesce((v_candidate_schedule->0)->>'end_utc',(v_candidate_schedule->0)->>'end'),
+          'break_mins',coalesce((v_candidate_schedule->0)->>'break_mins',(v_candidate_schedule->0)->>'break_minutes','0'),
+          'shift_id',(v_candidate_schedule->0)->>'shift_id',
+          'external_row_key',(v_candidate_schedule->0)->>'external_row_key'))
+          is distinct from
+        jsonb_strip_nulls(jsonb_build_object(
+          'date',coalesce((v_terminal_operation_schedule->0)->>'date',(v_terminal_operation_schedule->0)->>'work_date'),
+          'start_utc',coalesce((v_terminal_operation_schedule->0)->>'start_utc',(v_terminal_operation_schedule->0)->>'start'),
+          'end_utc',coalesce((v_terminal_operation_schedule->0)->>'end_utc',(v_terminal_operation_schedule->0)->>'end'),
+          'break_mins',coalesce((v_terminal_operation_schedule->0)->>'break_mins',(v_terminal_operation_schedule->0)->>'break_minutes','0'),
+          'shift_id',(v_terminal_operation_schedule->0)->>'shift_id',
+          'external_row_key',(v_terminal_operation_schedule->0)->>'external_row_key'))));
+    v_terminal_policy_authority_conflict:=v_terminal_frozen_policy_variant_count>1
+      or (v_terminal_frozen_candidate_count>0 and v_terminal_operation is not null
+        and v_candidate_policy_fingerprint is distinct from v_terminal_operation_policy_fingerprint);
+
+    if v_terminal_schedule_authority_conflict then
+      v_scope_unprovable:=true;
+      v_b_standard_schedule_authority_diagnostic:='TERMINAL_SCHEDULE_AUTHORITY_CONFLICT';
+    elsif v_terminal_policy_authority_conflict then
+      v_scope_unprovable:=true;
+      v_b_standard_schedule_authority_diagnostic:='TERMINAL_POLICY_AUTHORITY_CONFLICT';
+    elsif v_terminal_frozen_matches_b then
+      if v_candidate_policy_fingerprint is null then
+        v_scope_unprovable:=true;
+        v_b_standard_schedule_authority_diagnostic:='TERMINAL_POLICY_AUTHORITY_MISSING';
+      else
+        v_b_schedule:=v_candidate_schedule;
+        v_b_policy_fingerprint:=v_candidate_policy_fingerprint;
+        v_b_standard_schedule_authority:=case when v_terminal_generation_id is null
+          then 'ORIGINAL_SOURCE_FROZEN_SEGMENT' else 'TERMINAL_REPLACEMENT_FROZEN_SEGMENT' end;
+        v_b_standard_schedule_authority_timesheet_id:=v_terminal_positive_timesheet_id;
+        v_b_standard_schedule_authority_correction_id:=v_terminal_generation_id;
+        v_b_standard_schedule_authority_operation_id:=v_terminal_operation_id;
+        v_b_standard_schedule_authority_policy_fingerprint:=v_candidate_policy_fingerprint;
+      end if;
+    elsif v_terminal_operation_matches_b then
+      if v_terminal_operation_policy_fingerprint is null then
+        v_scope_unprovable:=true;
+        v_b_standard_schedule_authority_diagnostic:='TERMINAL_POLICY_AUTHORITY_MISSING';
+      else
+        v_b_schedule:=v_terminal_operation_schedule;
+        v_b_policy_fingerprint:=v_terminal_operation_policy_fingerprint;
+        v_b_standard_schedule_authority:='TERMINAL_COMPLETED_OPERATION_A_SCHEDULE';
+        v_b_standard_schedule_authority_timesheet_id:=v_terminal_positive_timesheet_id;
+        v_b_standard_schedule_authority_correction_id:=v_terminal_generation_id;
+        v_b_standard_schedule_authority_operation_id:=v_terminal_operation_id;
+        v_b_standard_schedule_authority_policy_fingerprint:=v_terminal_operation_policy_fingerprint;
+      end if;
     end if;
 
     v_b_hours_zero:=v_b_day=0 and v_b_night=0 and v_b_sat=0 and v_b_sun=0 and v_b_bh=0;
     v_b_money_zero:=round(v_b_pay,2)=0 and round(v_b_charge,2)=0 and round(v_b_margin,2)=0;
+    if v_b_hours_zero and v_b_money_zero then
+      v_b_schedule:='[]'::jsonb;
+      v_b_policy_fingerprint:=null;
+      v_b_standard_schedule_authority:='NONE';
+      v_b_standard_schedule_authority_timesheet_id:=null;
+      v_b_standard_schedule_authority_correction_id:=null;
+      v_b_standard_schedule_authority_operation_id:=null;
+      v_b_standard_schedule_authority_policy_fingerprint:=null;
+    end if;
     v_b_standard_representable:=(v_b_hours_zero and v_b_money_zero)
       or (v_b_day>=0 and v_b_night>=0 and v_b_sat>=0 and v_b_sun>=0 and v_b_bh>=0
-        and coalesce((v_candidate_hours->>'hours_day')::numeric,0)=v_b_day
-        and coalesce((v_candidate_hours->>'hours_night')::numeric,0)=v_b_night
-        and coalesce((v_candidate_hours->>'hours_sat')::numeric,0)=v_b_sat
-        and coalesce((v_candidate_hours->>'hours_sun')::numeric,0)=v_b_sun
-        and coalesce((v_candidate_hours->>'hours_bh')::numeric,0)=v_b_bh
-        and jsonb_array_length(v_candidate_schedule)=1);
-    if v_b_standard_representable and (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0 then v_b_schedule:=v_candidate_schedule; end if;
+        and v_b_standard_schedule_authority<>'NONE' and jsonb_array_length(v_b_schedule)=1);
+    v_b_standard_schedule_authority_fingerprint:=encode(digest(convert_to(jsonb_build_object(
+      'contract','B-standard-schedule-authority-v1','source_scope_fingerprint',v_scope_fingerprint,
+      'authority',v_b_standard_schedule_authority,'timesheet_id',v_b_standard_schedule_authority_timesheet_id,
+      'correction_id',v_b_standard_schedule_authority_correction_id,
+      'operation_id',v_b_standard_schedule_authority_operation_id,
+      'schedule_json',v_b_schedule,
+      'B_hours',jsonb_build_object('hours_day',v_b_day,'hours_night',v_b_night,'hours_sat',v_b_sat,
+        'hours_sun',v_b_sun,'hours_bh',v_b_bh,'total_hours',v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh),
+      'policy_fingerprint',v_b_standard_schedule_authority_policy_fingerprint)::text,'UTF8'),'sha256'),'hex');
+
+    v_role_evidence_fingerprint:=encode(digest(convert_to(concat_ws('|','role-evidence-v4',
+      v_operation_evidence::text,v_member_supersession_map::text,v_member_role_map::text,v_generation_role_evidence::text,
+      v_archived_history_roles::text,v_role_evidence_conflicts::text,v_b_standard_schedule_authority_fingerprint),'UTF8'),'sha256'),'hex');
+    v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v4',v_source_identity,
+      v_line_evidence::text,v_ignored_nonhours_line_ids::text,v_role_evidence_fingerprint,
+      v_b_day,v_b_night,v_b_sat,v_b_sun,v_b_bh,v_b_pay,v_b_charge,v_b_margin,
+      v_b_standard_schedule_authority_fingerprint),'UTF8'),'sha256'),'hex');
 
     if v_mutable_correction_id is not null then
       v_reversal_repair_required:=not exists(select 1 from public.timesheets t
@@ -2021,8 +2196,11 @@ begin
       when (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)<0 then 'IMPORT_REVIEW_INVOICE_STATE_UNSUPPORTED'
       when (v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0 and not v_b_standard_representable then 'IMPORT_REVIEW_EFFECTIVE_POSITION_NOT_STANDARD_REPRESENTABLE'
       else null end;
-    v_reconciliation_fingerprint:=encode(digest(convert_to(concat_ws('|','reconciliation-v3',v_scope_fingerprint,v_operation_ids::text,v_member_supersession_map::text,
+    v_reconciliation_fingerprint:=encode(digest(convert_to(concat_ws('|','reconciliation-v4',v_scope_fingerprint,v_operation_ids::text,v_member_supersession_map::text,
       v_effective_fingerprint,v_mutable_fingerprint,v_a_fingerprint,v_blocking_code,v_b_policy_fingerprint,
+      v_b_standard_schedule_authority,v_b_standard_schedule_authority_timesheet_id,
+      v_b_standard_schedule_authority_correction_id,v_b_standard_schedule_authority_operation_id,
+      v_b_standard_schedule_authority_policy_fingerprint,v_b_standard_schedule_authority_fingerprint,
       v_current_source_safe,v_current_source_safety_reason,v_current_source_invoice_lined,v_current_source_paid,
       v_current_source_unlocked,v_current_source_fresh,v_current_source_segment_unlocked,
       v_current_source_contract_week_safe,v_current_source_invoice_operation_clear,v_b_hours_zero,v_b_money_zero),'UTF8'),'sha256'),'hex');
@@ -2061,6 +2239,13 @@ begin
       'effective_hours_net_is_negative',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)<0,
       'B_financials',jsonb_build_object('pay_ex_vat',v_b_pay,'charge_ex_vat',v_b_charge,'margin_ex_vat',v_b_margin),
       'B_standard_schedule_json',v_b_schedule,'B_policy_fingerprint',v_b_policy_fingerprint,'B_standard_representable',v_b_standard_representable,
+      'B_standard_schedule_authority',v_b_standard_schedule_authority,
+      'B_standard_schedule_authority_timesheet_id',v_b_standard_schedule_authority_timesheet_id,
+      'B_standard_schedule_authority_correction_id',v_b_standard_schedule_authority_correction_id,
+      'B_standard_schedule_authority_operation_id',v_b_standard_schedule_authority_operation_id,
+      'B_standard_schedule_authority_policy_fingerprint',v_b_standard_schedule_authority_policy_fingerprint,
+      'B_standard_schedule_authority_fingerprint',v_b_standard_schedule_authority_fingerprint,
+      'B_standard_schedule_authority_diagnostic',v_b_standard_schedule_authority_diagnostic,
       'active_mutable_generation',v_mutable_correction_id is not null,'active_mutable_member_ids',to_jsonb(v_mutable_member_ids),
       'active_mutable_missing_roles',to_jsonb(v_mutable_missing_roles),'active_mutable_correction_id',v_mutable_correction_id,
       'physically_missing_mutable_roles',to_jsonb(v_mutable_missing_roles),

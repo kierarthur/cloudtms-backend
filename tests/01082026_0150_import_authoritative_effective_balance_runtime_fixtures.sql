@@ -680,6 +680,9 @@ declare
   v_balance jsonb;
   v_identity text;
   v_invoice uuid;
+  v_terminal_schedule jsonb;
+  v_terminal_policy_envelope jsonb;
+  v_terminal_policy_fingerprint text;
 begin
   for v_system,v_base in
     select * from (values ('NHSP'::text,15000),('HEALTHROSTER'::text,16000)) cases(source_system,base_value)
@@ -711,6 +714,33 @@ begin
       public.fixture_uuid(v_base+34),public.fixture_uuid(v_base+35),
       'CREATE_REVERSAL_REPLACEMENT',null,'CREATE_NEW_GENERATION',null,'[]'::jsonb,now()-interval '2 days',10
     );
+
+    -- Preserve an older positive schedule whose hour buckets exactly equal the
+    -- terminal B position.  It is deliberately different work-time evidence
+    -- and therefore must never win merely because its buckets match.
+    update public.timesheets_financials
+    set invoice_breakdown_json=jsonb_build_object('segments',jsonb_build_array(jsonb_build_object(
+      'shift_id',v_item->>'source_shift_id','external_row_key',v_item->>'external_row_key',
+      'date','2026-07-27','start_utc','2026-07-27T08:00:00Z','end_utc','2026-07-27T18:00:00Z',
+      'break_mins',0,'hours_day',10,'hours_night',0,'hours_sat',0,'hours_sun',0,'hours_bh',0,
+      'pay_amount',100,'charge_amount',120
+    )))
+    where timesheet_id=(v_item->>'source_timesheet_id')::uuid and is_current;
+
+    -- The exact terminal positive row/TSFIN is absent.  Its validated completed
+    -- operation remains and supplies the authoritative A schedule and policy.
+    update public.import_apply_operations
+    set response_json=jsonb_set(
+      response_json,
+      '{request_envelope,reconciliation_units,0,A_schedule_json}',
+      jsonb_build_array(jsonb_build_object(
+        'shift_id',v_item->>'source_shift_id','external_row_key',v_item->>'external_row_key',
+        'date','2026-07-27','start_utc','2026-07-27T10:00:00Z','end_utc','2026-07-27T20:00:00Z',
+        'break_mins',0,'hours_day',10,'hours_night',0,'hours_sat',0,'hours_sun',0,'hours_bh',0
+      )),
+      false
+    )
+    where id=public.fixture_uuid(v_base+25);
     v_invoice:=public.fixture_uuid(v_base+40);
     insert into public.invoices(id,client_id,type,status,issued_at_utc,original_invoice_id,issue_state)
     values(v_invoice,(v_item->>'client_id')::uuid,'INVOICE','ISSUED',now()-interval '1 day',null,'ISSUED');
@@ -738,9 +768,83 @@ begin
     perform public.fixture_assert(v_balance->'fully_invoiced_generation_ids' @>
       jsonb_build_array('G1-'||v_system,'G2-'||v_system,'G3-'||v_system),
       v_system||' repeated generations were not all classified as historical');
+    perform public.fixture_assert(
+      v_balance->>'B_standard_schedule_authority'='TERMINAL_COMPLETED_OPERATION_A_SCHEDULE'
+      and v_balance->>'B_standard_schedule_authority_timesheet_id'=public.fixture_uuid(v_base+35)::text
+      and v_balance->>'B_standard_schedule_authority_correction_id'='G3-'||v_system
+      and v_balance->>'B_standard_schedule_authority_operation_id'=public.fixture_uuid(v_base+25)::text,
+      v_system||' terminal completed-operation schedule authority was not selected');
+    perform public.fixture_assert(
+      v_balance#>>'{B_standard_schedule_json,0,start_utc}'='2026-07-27T10:00:00Z'
+      and nullif(v_balance->>'B_standard_schedule_authority_policy_fingerprint','') is not null
+      and nullif(v_balance->>'B_standard_schedule_authority_fingerprint','') is not null,
+      v_system||' terminal schedule/policy authority contract was incomplete');
     perform public.fixture_assert(nullif(v_balance->>'blocking_code','') is null,
       v_system||' repeated correction history was blocked');
-    raise notice 'PASS repeated correction chain arithmetic: %',v_system;
+
+    -- When the terminal frozen segment later exists as well, it is preferred
+    -- only when the material schedule and canonical policy agree exactly with
+    -- the completed operation authority.
+    select response_json#>'{request_envelope,reconciliation_units,0,A_schedule_json}',
+      response_json#>'{correction_operation_contract,correction_units,0,policy_envelope}',
+      response_json#>>'{correction_operation_contract,correction_units,0,policy_envelope_fingerprint}'
+    into v_terminal_schedule,v_terminal_policy_envelope,v_terminal_policy_fingerprint
+    from public.import_apply_operations
+    where id=public.fixture_uuid(v_base+25);
+    insert into public.timesheets(
+      timesheet_id,contract_id,week_ending_date,actual_schedule_json,candidate_hint_text,
+      correction_id,correction_kind,parent_timesheet_id,created_at,updated_at,is_current,archived_at_utc
+    ) values(
+      public.fixture_uuid(v_base+35),(v_item->>'contract_id')::uuid,(v_item->>'week_ending_date')::date,
+      v_terminal_schedule,'{}'::jsonb,'G3-'||v_system,'CHANGED_HOURS_REPLACEMENT',
+      (v_item->>'source_timesheet_id')::uuid,now()-interval '2 days',now()-interval '2 days',true,null
+    );
+    insert into public.timesheets_financials(
+      id,timesheet_id,is_current,computed_at_utc,invoice_breakdown_json,basis,policy_snapshot_json,
+      candidate_id,locked_by_invoice_id,is_stale,has_rate_issue,has_pay_channel_issue,paid_at_utc,
+      hours_day,hours_night,hours_sat,hours_sun,hours_bh,total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat
+    ) values(
+      public.fixture_uuid(v_base+48),public.fixture_uuid(v_base+35),false,now()-interval '2 days',
+      jsonb_build_object('segments',jsonb_build_array(jsonb_build_object(
+        'shift_id',v_item->>'source_shift_id','external_row_key',v_item->>'external_row_key',
+        'date','2026-07-27','start_utc','2026-07-27T10:00:00Z','end_utc','2026-07-27T20:00:00Z',
+        'break_mins',0,'hours_day',10,'hours_night',0,'hours_sat',0,'hours_sun',0,'hours_bh',0,
+        'pay_amount',100,'charge_amount',120
+      ))),
+      case when v_system='NHSP' then 'NHSP' else 'HEALTHROSTER_SELF_BILL' end,
+      jsonb_build_object(
+        'correction_financials_policy_envelope',v_terminal_policy_envelope,
+        'correction_financials_policy_envelope_fingerprint',v_terminal_policy_fingerprint
+      ),
+      (v_item->>'candidate_id')::uuid,v_invoice,false,false,false,null,
+      10,0,0,0,0,100,120,20
+    );
+    select h.balance_json into strict v_balance
+    from public._import_review_effective_invoice_balance_core_v1(
+      (v_item->>'authoritative_import_id')::uuid,jsonb_build_array(v_item)
+    ) h;
+    perform public.fixture_assert(
+      v_balance->>'B_standard_schedule_authority'='TERMINAL_REPLACEMENT_FROZEN_SEGMENT'
+      and v_balance->>'B_standard_schedule_authority_timesheet_id'=public.fixture_uuid(v_base+35)::text
+      and v_balance->>'B_policy_fingerprint'=v_terminal_policy_fingerprint
+      and nullif(v_balance->>'blocking_code','') is null,
+      v_system||' agreeing terminal frozen segment was not preferred');
+
+    -- A material disagreement cannot silently fall back to either authority.
+    update public.timesheets_financials
+    set invoice_breakdown_json=jsonb_set(
+      invoice_breakdown_json,'{segments,0,start_utc}','"2026-07-27T09:00:00Z"'::jsonb,false
+    )
+    where id=public.fixture_uuid(v_base+48);
+    select h.balance_json into strict v_balance
+    from public._import_review_effective_invoice_balance_core_v1(
+      (v_item->>'authoritative_import_id')::uuid,jsonb_build_array(v_item)
+    ) h;
+    perform public.fixture_assert(
+      v_balance->>'blocking_code'='IMPORT_REVIEW_INVOICE_COMPONENT_SCOPE_UNPROVABLE'
+      and v_balance->>'B_standard_schedule_authority_diagnostic'='TERMINAL_SCHEDULE_AUTHORITY_CONFLICT',
+      v_system||' terminal schedule conflict did not fail closed');
+    raise notice 'PASS repeated correction chain and terminal schedule authority: %',v_system;
   end loop;
 end
 $test$;
