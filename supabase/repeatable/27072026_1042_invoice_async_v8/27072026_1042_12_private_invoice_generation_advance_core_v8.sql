@@ -1473,7 +1473,16 @@ begin
         case when substr(coalesce(x.value->>'segment_id',''),6)~*
             '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           then substr(x.value->>'segment_id',6)::uuid end) shift_id,
-      false is_reversal
+      case
+        when s.basis::text='NHSP_ADJUSTMENT'
+         and (
+           lower(coalesce(x.value->>'is_reversal','false')) in(
+             'true','t','1','yes')
+           or coalesce(s.total_hours,0)<0
+         ) then 'REVERSAL'
+        when s.basis::text='NHSP_ADJUSTMENT' then 'CORRECTED_HOURS'
+        else 'SOURCE'
+      end evidence_role_key
     from source_rows s
     join target_headers h
       on h.chunk_id=s.chunk_id and h.invoice_id=s.planned_invoice_id
@@ -1492,7 +1501,9 @@ begin
           and coalesce((s.payload_json#>>'{plan,settings_snapshot,attach_policy,requires_hr}')::boolean,false)
           and coalesce((s.payload_json#>>'{plan,settings_snapshot,attach_policy,hr_attach_to_invoice}')::boolean,true)))
     union
-    select distinct r.planned_invoice_id,n.id shift_id,r.is_reversal
+    select distinct r.planned_invoice_id,n.id shift_id,
+      case when r.is_reversal then 'REVERSAL'
+        else 'CORRECTED_HOURS' end evidence_role_key
     from adjustment_segment_refs r
     join source_timesheet_ancestry a
       on a.planned_invoice_id=r.planned_invoice_id
@@ -1514,15 +1525,23 @@ begin
        )
      )
   ),
+  source_import_rows as materialized (
+    select distinct s.planned_invoice_id,
+      upper(coalesce(n.source_system::text,'UNKNOWN')) source_system,
+      n.latest_import_id import_id,n.external_row_key,s.evidence_role_key
+    from source_segments s
+    join public.nhsp_shifts n on n.id=s.shift_id
+    where n.latest_import_id is not null
+      and n.external_row_key is not null
+  ),
   source_imports as materialized (
-    select s.planned_invoice_id,upper(coalesce(n.source_system::text,'UNKNOWN')) source_system,
-      n.latest_import_id import_id,
-      jsonb_agg(distinct n.external_row_key) row_keys,
-      coalesce(jsonb_agg(distinct n.external_row_key)
-        filter(where s.is_reversal),'[]'::jsonb) reversal_row_keys
-    from source_segments s join public.nhsp_shifts n on n.id=s.shift_id
-    where n.latest_import_id is not null and n.external_row_key is not null
-    group by s.planned_invoice_id,upper(coalesce(n.source_system::text,'UNKNOWN')),n.latest_import_id
+    select s.planned_invoice_id,s.source_system,s.import_id,
+      jsonb_agg(jsonb_build_object(
+        'external_row_key',s.external_row_key,
+        'evidence_role_key',s.evidence_role_key)
+        order by s.external_row_key,s.evidence_role_key) row_occurrences
+    from source_import_rows s
+    group by s.planned_invoice_id,s.source_system,s.import_id
   ),
   authoritative_hr_sources as (
     insert into public.invoice_hr_source_rows(
@@ -1532,13 +1551,23 @@ begin
         then i.parse_summary_json->'header_columns' else '[]'::jsonb end,
       coalesce((select jsonb_agg(
           r.payload_json
-            ||case when r.external_row_key in(
-                select jsonb_array_elements_text(g.reversal_row_keys))
+            ||jsonb_build_object(
+              'evidence_role',case occurrence.value->>'evidence_role_key'
+                when 'REVERSAL' then case when g.source_system='NHSP'
+                  then 'NHSP Reversal' else 'HealthRoster Reversal' end
+                when 'CORRECTED_HOURS' then case when g.source_system='NHSP'
+                  then 'NHSP Corrected Hours' else 'HealthRoster Corrected Hours' end
+                else case when g.source_system='NHSP'
+                  then 'NHSP Shift' else 'HealthRoster Shift' end
+              end)
+            ||case when occurrence.value->>'evidence_role_key'='REVERSAL'
               then jsonb_build_object('reversal_state','REVERSED')
               else '{}'::jsonb end
-          order by r.id)
-        from public.hr_rows r where r.import_id=g.import_id
-          and r.external_row_key in(select jsonb_array_elements_text(g.row_keys))),
+          order by r.id,occurrence.value->>'evidence_role_key')
+        from jsonb_array_elements(g.row_occurrences) occurrence(value)
+        join public.hr_rows r
+          on r.import_id=g.import_id
+         and r.external_row_key=occurrence.value->>'external_row_key'),
         '[]'::jsonb)
     from source_imports g join public.hr_imports i on i.id=g.import_id
     on conflict(invoice_id,source_system,import_id) do update

@@ -286,6 +286,22 @@ export function buildHealthRosterSupportHtml(model={}) {
     : [['worker','Worker'],['assignment','Assignment'],['shift_date','Date','date'],['shift_times','Shift'],['site','Site'],['ward','Ward'],['reference','Reference'],['units_hours','Units / hours'],['validation_state','Validation'],['source_identity','Source']];
   return supportTable('HealthRoster support',m,columns.map(([key,label,kind])=>({key,label,kind})));
 }
-export function buildNhspSupportHtml(model={}) { const m=validateFrozenPresentationModel('NHSP_SUPPORT',model); return supportTable('NHSP support',m,[['worker','Worker'],['nhsp_shift_id','Assignment / shift ID'],['booking_reference','Booking / reference'],['site_ward','Site / ward'],['shift_date','Date','date'],['shift_times','Times'],['hours_units','Hours / units'],['commission_amount','Commission','money'],['total_amount','Total','money']].map(([key,label,kind])=>({key,label,kind}))); }
+export function buildNhspSupportHtml(model={}) {
+  const m=validateFrozenPresentationModel('NHSP_SUPPORT',model);
+  const rows=(Array.isArray(m.rows)?m.rows:[]).map(row=>({
+    ...row,
+    evidence_role:String(row?.evidence_role||'').trim()
+      ||(String(row?.reversal_state||'').toUpperCase()==='REVERSED'
+        ?'NHSP Reversal':'NHSP Shift')
+  }));
+  return supportTable('NHSP support',{...m,rows},[
+    ['evidence_role','Entry'],['worker','Worker'],
+    ['nhsp_shift_id','Assignment / shift ID'],
+    ['booking_reference','Booking / reference'],['site_ward','Site / ward'],
+    ['shift_date','Date','date'],['shift_times','Times'],
+    ['hours_units','Hours / units'],['commission_amount','Commission','money'],
+    ['total_amount','Total','money']
+  ].map(([key,label,kind])=>({key,label,kind})));
+}
 export function buildHigherRateSupportHtml(model={}) { const m=validateFrozenPresentationModel('HIGHER_RATE_SUPPORT',model); return supportTable('Higher-rate support',m,[['worker_source','Worker / source'],['shift_date','Date / shift'],['original_rate','Original rate'],['applied_rate','Applied rate'],['units','Units'],['display_amount','Amount'],['reason','Reason'],['approval_identity','Approval'],['reference','Reference']].map(([key,label,kind])=>({key,label,kind}))); }
 export function buildInvoiceSourceDocumentHtml(renderKind,model={}) { const kind=String(renderKind||'').toUpperCase(); validateFrozenPresentationModel(kind,model); const builder={ELECTRONIC_TIMESHEET:buildElectronicTimesheetHtml,ATTACHMENT_INDEX:buildAttachmentIndexHtml,SECTION_SEPARATOR:buildSectionSeparatorHtml,HEALTHROSTER_SUPPORT:buildHealthRosterSupportHtml,NHSP_SUPPORT:buildNhspSupportHtml,HIGHER_RATE_SUPPORT:buildHigherRateSupportHtml}[kind]; if(!builder) throw new Error(`UNSUPPORTED_INVOICE_SOURCE_RENDER_KIND:${kind||'EMPTY'}`); return `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${buildInvoiceTemplateCss()}</style></head><body>${builder(model)}</body></html>`; }

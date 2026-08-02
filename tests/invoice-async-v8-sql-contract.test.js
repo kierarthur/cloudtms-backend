@@ -229,7 +229,7 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
   );
   assert.match(
     generationAdvance,
-    /reversal_row_keys[\s\S]*jsonb_build_object\('reversal_state','REVERSED'\)/i,
+    /source_import_rows[\s\S]*evidence_role_key[\s\S]*jsonb_build_object\('reversal_state','REVERSED'\)/i,
   );
   assert.match(
     issueValidation,
@@ -1462,7 +1462,7 @@ test('generation commits exact NHSP shift ownership and attaches the authoritati
   );
   assert.match(
     generationCore,
-    /r\.external_row_key in\(\s*select jsonb_array_elements_text\(g\.reversal_row_keys\)\)[\s\S]*jsonb_build_object\('reversal_state','REVERSED'\)/s,
+    /occurrence\.value->>'evidence_role_key'='REVERSAL'[\s\S]*jsonb_build_object\('reversal_state','REVERSED'\)[\s\S]*jsonb_array_elements\(g\.row_occurrences\)[\s\S]*r\.external_row_key=occurrence\.value->>'external_row_key'/s,
   );
 });
 

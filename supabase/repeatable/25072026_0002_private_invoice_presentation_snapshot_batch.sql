@@ -1127,6 +1127,15 @@ begin
             then 'NHSP_PRESENTATION_V1' else 'HEALTHROSTER_PRESENTATION_V2' end,
           'rows',coalesce((select jsonb_agg(
             case when upper(source_group.source_system)='NHSP' then jsonb_build_object(
+              'evidence_role',coalesce(
+                nullif(btrim(r.value->>'evidence_role'),''),
+                case
+                  when upper(coalesce(
+                    r.value->>'reversal_state',r.value->>'status',''))
+                    in ('REVERSED','REVERSAL')
+                  then 'NHSP Reversal'
+                  else 'NHSP Shift'
+                end),
               'worker',coalesce(
                 r.value->>'worker',r.value->>'candidate',r.value->>'name',
                 r.value->>'worker_name',r.value->>'staff_name'),
