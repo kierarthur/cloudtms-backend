@@ -432,7 +432,7 @@ begin
   end if;
   if v?'active_section' and (
     jsonb_typeof(v->'active_section')<>'string'
-    or upper(v->>'active_section') not in ('PENDING','READY','EMAILS','NO_ACTION')
+    or upper(v->>'active_section') not in ('PENDING','READY','EMAIL','NO_ACTION')
   ) then raise exception 'IMPORT_REVIEW_UI_STATE_SECTION_INVALID' using errcode='22023'; end if;
   if v?'scroll_anchor' and jsonb_typeof(v->'scroll_anchor')<>'null' then
     raise exception 'IMPORT_REVIEW_UI_STATE_SCROLL_ANCHOR_INVALID' using errcode='22023'; end if;
