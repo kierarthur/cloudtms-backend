@@ -60,6 +60,7 @@ test('UI contract hides mismatch support rows from Passed checks', () => {
 test('UI contract exposes an exact Weekly validation hold badge per candidate and week', () => {
   assert.match(uiContract, /weekly_validation_holds as \(/);
   assert.match(uiContract, /a\.candidate_branch_key,a\.week_ending_date/);
+  assert.match(uiContract, /a\.summary_json->>'reason_code'='HEALTHROSTER_WEEKLY'/);
   assert.match(uiContract, /a\.summary_json->>'source_route'='HR_WEEKLY'/);
   assert.match(uiContract, /a\.summary_json->>'authority_mode'='VALIDATION_ONLY'/);
   assert.match(uiContract, /validation_difference_count/);

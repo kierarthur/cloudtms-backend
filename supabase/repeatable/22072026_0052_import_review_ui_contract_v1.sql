@@ -591,8 +591,13 @@ begin
       end)::integer hold_count
     from current_actions a
     where a.week_ending_date is not null
-      and a.summary_json->>'source_route'='HR_WEEKLY'
-      and a.summary_json->>'authority_mode'='VALIDATION_ONLY'
+      and (
+        a.summary_json->>'reason_code'='HEALTHROSTER_WEEKLY'
+        or (
+          a.summary_json->>'source_route'='HR_WEEKLY'
+          and a.summary_json->>'authority_mode'='VALIDATION_ONLY'
+        )
+      )
       and (
         a.action_category='EMAIL'
         or a.blocking
