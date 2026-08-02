@@ -240,8 +240,12 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
     /join public\.invoices invoice_policy on invoice_policy\.id=s\.invoice_id[\s\S]*like '%HEALTHROSTER%'[\s\S]*attach_policy,hr_attach_to_invoice/i,
   );
   assert.doesNotMatch(
-    issueValidation.match(/import_source_requirements as materialized[\s\S]*?\n\),\nimport_source_checks as materialized/i)?.[0] || '',
+    issueValidation.match(/import_source_requirements as materialized[\s\S]*?\r?\n\),\r?\nimport_source_checks as materialized/i)?.[0] || '',
     /attach_policy,requires_hr/i,
+  );
+  assert.match(
+    issueValidation,
+    /invoice_operation_chunks oc[\s\S]*join public\.invoice_operations other_operation[\s\S]*other_operation\.status in\(\s*'QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'\s*\)/i,
   );
   assert.match(issueValidation, /MISSING_IMPORT_SOURCE_EVIDENCE/i);
   assert.match(issueValidation, /missing_import_source_count/i);
@@ -1055,12 +1059,23 @@ test('Issue finalisation locks invoices deterministically and keeps delivery sep
   const issueCore = read(
     'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql',
   );
+  const issueClassification = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql',
+  );
 
   assert.match(issueCore, /locked_invoices as materialized/);
   assert.match(issueCore, /order by invoice\.id\s*for update of invoice/i);
   assert.match(issueCore, /active_issue_operation_id=c\.operation_id/);
   assert.match(issueCore, /not d\.frozen_route_usable/);
   assert.match(issueCore, /'blocked_for_sending'/);
+  assert.match(
+    issueCore,
+    /'expected_revision',case[\s\S]*payload_json->>'source_revision'[\s\S]*to_jsonb\(\(c\.payload_json->>'source_revision'\)::bigint\)/i,
+  );
+  assert.match(
+    issueClassification,
+    /chunk\.status in\([\s\S]*'QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'[\s\S]*operation\.status in\([\s\S]*'QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'/i,
+  );
 });
 
 test('timesheet presentation uses authoritative schedule and authorisation fields', () => {
@@ -1430,6 +1445,46 @@ test('candidate correction validation treats a planned invoice identity as null-
   );
 });
 
+test('authoritative changed-hours pairs remain one atomic NONE-consolidation group', () => {
+  const resolver = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+    + '23072026_2207_private_invoice_generation_resolve_command_groups.sql',
+  );
+
+  assert.match(
+    resolver,
+    /then 'IMPORT_AUTHORITATIVE_CORRECTION:'\|\|s\.correction_id/,
+  );
+  assert.match(
+    resolver,
+    /s\.correction_envelope->>'envelope_fingerprint'=\s*encode\(digest\(convert_to\(\s*\(s\.correction_envelope-'envelope_fingerprint'\)::text,'UTF8'\)/s,
+  );
+  assert.match(
+    resolver,
+    /when s\.consolidation_mode='NONE' then s\.atomic_grouping_value/g,
+  );
+  assert.match(
+    resolver,
+    /when source_row\.consolidation_mode='NONE'\s*then source_row\.atomic_grouping_value/s,
+  );
+});
+
+test('correction candidate presence cannot be fabricated by two null invoice identities', () => {
+  const correctionValidation = read(
+    'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
+    + '23072026_2207_private_invoice_correction_validate_batch.sql',
+  );
+
+  assert.match(
+    correctionValidation,
+    /filter\(where l\.timesheet_id is not null and\(\s*l\.planned or\(\s*r\.invoice_id is not null and l\.line_invoice_id=r\.invoice_id\)\)\)\s*present_ids/s,
+  );
+  assert.doesNotMatch(
+    correctionValidation,
+    /l\.line_invoice_id is not distinct from r\.invoice_id/,
+  );
+});
+
 test('generation validation accepts pending NHSP sources and resolves VAT from the source week', () => {
   const generationCore = read(
     'supabase/repeatable/27072026_1042_invoice_async_v8/'
@@ -1557,6 +1612,21 @@ test('root repeatable installs every changed nested Invoice V8 authority', () =>
       new RegExp(filename.replaceAll('.', '\\.')),
     );
   }
+});
+
+test('issue uniqueness retains terminal blocked audit without owning the active slot', () => {
+  const issueIndex = read(
+    'supabase/migrations/01082026_1953_invoice_issue_blocked_history_uniqueness.sql',
+  );
+
+  assert.match(
+    issueIndex,
+    /create unique index uq_invoice_operation_chunks_active_issue_invoice[\s\S]*status in\('QUEUED','RUNNING','WAITING','RETRY_WAIT'\)/i,
+  );
+  assert.doesNotMatch(
+    issueIndex,
+    /status in\('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'\)/i,
+  );
 });
 
 test('committed TEST configuration keeps interactive enabled and scheduled disabled', () => {

@@ -114,6 +114,9 @@ active_issue as materialized (
     and chunk.status in(
       'QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'
     )
+    and operation.status in(
+      'QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'
+    )
     and coalesce(
       chunk.payload_json->>'is_selection_expander',
       'false'

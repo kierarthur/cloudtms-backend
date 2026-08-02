@@ -578,17 +578,21 @@ candidate_lines as materialized (
 line_scope as materialized (
   select r.invoice_id,r.scope_key,r.timesheet_id,
     array_agg(distinct l.timesheet_id order by l.timesheet_id)
-      filter(where l.planned
-        or l.line_invoice_id is not distinct from r.invoice_id) present_ids,
+      filter(where l.timesheet_id is not null and(
+        l.planned or(
+          r.invoice_id is not null and l.line_invoice_id=r.invoice_id)))
+      present_ids,
     array_agg(distinct l.line_invoice_id order by l.line_invoice_id)
       filter(where not l.planned and(
         r.invoice_id is null or l.line_invoice_id<>r.invoice_id))
       conflicting_ids,
-    count(distinct l.timesheet_id) filter(where l.planned
-      or l.line_invoice_id is not distinct from r.invoice_id)
+    count(distinct l.timesheet_id) filter(where l.timesheet_id is not null and(
+      l.planned or(
+        r.invoice_id is not null and l.line_invoice_id=r.invoice_id)))
       present_count,
-    count(*) filter(where(
-        l.planned or l.line_invoice_id is not distinct from r.invoice_id)
+    count(*) filter(where l.timesheet_id is not null and(
+        l.planned or(
+          r.invoice_id is not null and l.line_invoice_id=r.invoice_id))
       and coalesce(l.vat_rate_pct,-999999) is distinct from
         case when coalesce(
           m.correction_leg#>>'{invoice_policy,applied_vat_rate_pct}','')

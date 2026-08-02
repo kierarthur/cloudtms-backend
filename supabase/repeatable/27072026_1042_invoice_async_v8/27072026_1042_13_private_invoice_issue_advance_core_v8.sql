@@ -38,7 +38,11 @@ begin
         'request_key',c.id::text,
         'invoice_id',c.entity_id,
         'operation_id',c.operation_id,
-        'expected_revision',c.payload_json->'source_revision',
+        'expected_revision',case
+          when coalesce(c.payload_json->>'source_revision','')~'^[0-9]+$'
+            then to_jsonb((c.payload_json->>'source_revision')::bigint)
+          else c.payload_json->'source_revision'
+        end,
         'allow_early',coalesce(c.payload_json->'allow_early','false'::jsonb),
         'deliver',coalesce(c.payload_json->'deliver','false'::jsonb),
         'recipient_set',coalesce(c.payload_json#>'{delivery_intent,recipient_set}',

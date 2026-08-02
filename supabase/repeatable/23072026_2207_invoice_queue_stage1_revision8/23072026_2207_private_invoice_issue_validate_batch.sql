@@ -506,10 +506,14 @@ facts as materialized (
     dr.delivery_suppressed,
     exists(
       select 1 from public.invoice_operation_chunks oc
+      join public.invoice_operations other_operation
+        on other_operation.id=oc.operation_id
       where oc.chunk_type='ISSUE_INVOICE' and oc.entity_type='INVOICE'
         and oc.entity_id=r.invoice_id
         and(r.operation_id is null or oc.operation_id<>r.operation_id)
-        and oc.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'))
+        and oc.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+        and other_operation.status in(
+          'QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED'))
       conflicting_issue
   from raw r
   left join request_counts rkc on rkc.request_key=r.request_key

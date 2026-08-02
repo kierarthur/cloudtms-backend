@@ -110,12 +110,17 @@ base_sources as materialized (
     (ts.week_ending_date::date-6) natural_week_start,
     ts.version timesheet_version,ts.updated_at timesheet_updated_at,
     ts.is_current timesheet_is_current,ts.revoked_at,ts.is_adjustment,ts.adjustment_origin,
-    ts.parent_timesheet_id,
+    ts.parent_timesheet_id,ts.correction_id,ts.correction_kind::text correction_kind,
     tf.id tsfin_id,tf.timesheet_version tsfin_timesheet_version,
     tf.updated_at tsfin_updated_at,tf.is_current tsfin_is_current,tf.is_stale,
     tf.processing_status::text processing_status,tf.locked_by_invoice_id,
     tf.client_id,tf.candidate_id,tf.basis::text basis,tf.invoice_breakdown_json,
     tf.additional_units_json,
+    coalesce(
+      ts.candidate_hint_text->'correction_financials_policy_envelope',
+      tf.policy_snapshot_json->'correction_financials_policy_envelope',
+      tf.rate_source_refs_json->'correction_financials_policy_envelope'
+    ) correction_envelope,
     coalesce(ts.contract_id,cw.contract_id) contract_id,
     coalesce(parent_ts.contract_id,parent_cw.contract_id) parent_contract_id,
     coalesce(parent_contract.self_bill,contract.self_bill,false) self_bill,
@@ -273,6 +278,36 @@ settings_resolved as materialized (
 ),
 source_rows_base as materialized (
   select s.*,
+    case
+      when s.consolidation_mode='NONE'
+        and coalesce(s.is_adjustment,false)
+        and upper(btrim(coalesce(s.adjustment_origin,'')))='IMPORT_CORRECTION'
+        and nullif(btrim(coalesce(s.correction_id,'')),'') is not null
+        and upper(btrim(coalesce(s.correction_kind,''))) in(
+          'CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+        and jsonb_typeof(s.correction_envelope)='object'
+        and s.correction_envelope->>'policy_schema_version'=
+          'IMPORT_CORRECTION_FINANCIALS_POLICY_V2'
+        and s.correction_envelope->>'route_family'='IMPORT_AUTHORITATIVE'
+        and lower(coalesce(
+          s.correction_envelope#>>'{classification,canonical}','false'))
+          in('true','t','1','yes')
+        and s.correction_envelope->>'correction_shape'=
+          'REVERSAL_REPLACEMENT'
+        and s.correction_envelope->>'expected_member_count'='2'
+        and nullif(
+          s.correction_envelope#>>'{operation,operation_id}','') is not null
+        and nullif(
+          s.correction_envelope->>'correction_chain_id','') is not null
+        and s.correction_envelope#>>'{operation,correction_action}'=
+          'CHANGED_HOURS'
+        and s.correction_envelope->>'envelope_fingerprint'=
+          encode(digest(convert_to(
+            (s.correction_envelope-'envelope_fingerprint')::text,'UTF8'),
+            'sha256'),'hex')
+      then 'IMPORT_AUTHORITATIVE_CORRECTION:'||s.correction_id
+      else s.timesheet_id::text
+    end atomic_grouping_value,
     encode(digest(concat_ws('|',
       s.resolved_source_type,s.timesheet_id::text,
       coalesce(s.segment_id,'WHOLE'),s.economic_target_week::text),
@@ -298,7 +333,7 @@ pre_reference_groups as materialized (
     s.invoice_stream,
     s.consolidation_mode,
     case
-      when s.consolidation_mode='NONE' then s.timesheet_id::text
+      when s.consolidation_mode='NONE' then s.atomic_grouping_value
       when s.consolidation_mode='BY_WEEK'
         then s.economic_target_week::text
       else 'ANY_WEEK'
@@ -310,7 +345,7 @@ pre_reference_groups as materialized (
       s.invoice_stream,
       s.consolidation_mode,
       case
-        when s.consolidation_mode='NONE' then s.timesheet_id::text
+        when s.consolidation_mode='NONE' then s.atomic_grouping_value
         when s.consolidation_mode='BY_WEEK'
           then s.economic_target_week::text
         else 'ANY_WEEK'
@@ -333,7 +368,7 @@ pre_reference_groups as materialized (
     s.invoice_stream,
     s.consolidation_mode,
     case
-      when s.consolidation_mode='NONE' then s.timesheet_id::text
+      when s.consolidation_mode='NONE' then s.atomic_grouping_value
       when s.consolidation_mode='BY_WEEK'
         then s.economic_target_week::text
       else 'ANY_WEEK'
@@ -350,7 +385,7 @@ source_rows_scoped as materialized (
        source_row.consolidation_mode
    and candidate_group.grouping_value is not distinct from case
      when source_row.consolidation_mode='NONE'
-       then source_row.timesheet_id::text
+       then source_row.atomic_grouping_value
      when source_row.consolidation_mode='BY_WEEK'
        then source_row.economic_target_week::text
      else 'ANY_WEEK'
@@ -414,7 +449,7 @@ grouped as materialized (
     encode(digest(concat_ws('|',s.command_type,s.client_id::text,s.invoice_stream,
       s.consolidation_mode,
       case
-        when s.consolidation_mode='NONE' then s.timesheet_id::text
+        when s.consolidation_mode='NONE' then s.atomic_grouping_value
         when s.consolidation_mode='BY_WEEK' then s.economic_target_week::text
         else 'ANY_WEEK' end,
       encode(digest(string_agg(concat_ws(':',s.timesheet_id::text,
@@ -468,7 +503,7 @@ grouped as materialized (
   from source_rows s
   group by s.command_no,s.command_type,s.client_id,s.consolidation_mode,s.invoice_stream,
     case
-      when s.consolidation_mode='NONE' then s.timesheet_id::text
+      when s.consolidation_mode='NONE' then s.atomic_grouping_value
       when s.consolidation_mode='BY_WEEK' then s.economic_target_week::text
       else 'ANY_WEEK' end
 ),
