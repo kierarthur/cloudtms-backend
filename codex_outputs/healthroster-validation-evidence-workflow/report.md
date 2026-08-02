@@ -50,7 +50,7 @@ The import list previously exposed the underlying lifecycle state only. It now d
 - Repository branch: `cloudtms-backend/test`
 - Commit: `ace010237f70932b8f121b73a3ffa6ab5fcdcf66`
 - Commit message: `Complete HealthRoster validation evidence workflow`
-- Remote parity: local `HEAD` and `origin/test` both equal this SHA at handover time.
+- This is the runtime implementation commit. The branch also contains a later documentation-only handover commit; no runtime source changed in that documentation commit.
 
 Changed files:
 
