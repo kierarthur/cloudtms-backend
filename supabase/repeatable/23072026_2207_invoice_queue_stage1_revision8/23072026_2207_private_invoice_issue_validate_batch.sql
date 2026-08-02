@@ -356,12 +356,23 @@ import_source_requirements as materialized (
     on summary.timesheet_id=s.timesheet_id
   left join public.timesheets_financials financial
     on financial.timesheet_id=s.timesheet_id and financial.is_current
-  where coalesce(summary.client_is_nhsp,false)
-    or upper(coalesce(summary.route_type,'')) like '%NHSP%'
-    or upper(coalesce(financial.basis::text,'')) like 'NHSP%'
-    or upper(coalesce(summary.route_type,'')) like '%HEALTHROSTER%'
-    or upper(coalesce(financial.basis::text,'')) in(
-      'HEALTHROSTER','HEALTHROSTER_ADJUSTMENT','HR_WEEKLY','HR_DAILY')
+  join public.invoices invoice_policy on invoice_policy.id=s.invoice_id
+  where (
+      coalesce(summary.client_is_nhsp,false)
+      or upper(coalesce(summary.route_type,'')) like '%NHSP%'
+      or upper(coalesce(financial.basis::text,'')) like 'NHSP%'
+    )
+    or (
+      (
+        upper(coalesce(summary.route_type,'')) like '%HEALTHROSTER%'
+        or upper(coalesce(financial.basis::text,'')) in(
+          'HEALTHROSTER','HEALTHROSTER_ADJUSTMENT','HR_WEEKLY','HR_DAILY')
+      )
+      and coalesce(
+        (invoice_policy.header_snapshot_json#>>'{attach_policy,hr_attach_to_invoice}')::boolean,
+        true
+      )
+    )
 ),
 import_source_checks as materialized (
   select i.invoice_id,

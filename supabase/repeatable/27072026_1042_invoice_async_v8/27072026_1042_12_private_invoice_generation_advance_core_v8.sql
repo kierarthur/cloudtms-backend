@@ -877,6 +877,10 @@ begin
   ),
   adjustment_segment_refs as materialized (
     select distinct s.planned_invoice_id,s.timesheet_id root_timesheet_id,
+      coalesce(
+        (s.payload_json#>>'{plan,settings_snapshot,attach_policy,hr_attach_to_invoice}')::boolean,
+        true
+      ) healthroster_attach_allowed,
       nullif(btrim(seg.value->>'ref_num'),'') ref_num,
       case when pg_input_is_valid(
           seg.value->>'start_utc','timestamp with time zone')
@@ -891,7 +895,7 @@ begin
       case when jsonb_typeof(s.invoice_breakdown_json->'segments')='array'
         then s.invoice_breakdown_json->'segments' else '[]'::jsonb end)
       seg(value)
-    where s.basis::text='NHSP_ADJUSTMENT'
+    where s.basis::text in('NHSP_ADJUSTMENT','HEALTHROSTER_ADJUSTMENT')
   ),
   segment_lock_targets_pre as materialized (
     select coalesce(jsonb_agg(jsonb_build_object(
@@ -1474,13 +1478,14 @@ begin
             '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           then substr(x.value->>'segment_id',6)::uuid end) shift_id,
       case
-        when s.basis::text='NHSP_ADJUSTMENT'
+        when s.basis::text in('NHSP_ADJUSTMENT','HEALTHROSTER_ADJUSTMENT')
          and (
            lower(coalesce(x.value->>'is_reversal','false')) in(
              'true','t','1','yes')
            or coalesce(s.total_hours,0)<0
          ) then 'REVERSAL'
-        when s.basis::text='NHSP_ADJUSTMENT' then 'CORRECTED_HOURS'
+        when s.basis::text in('NHSP_ADJUSTMENT','HEALTHROSTER_ADJUSTMENT')
+          then 'CORRECTED_HOURS'
         else 'SOURCE'
       end evidence_role_key
     from source_rows s
@@ -1498,7 +1503,6 @@ begin
       and (
         upper(coalesce(x.value->>'source_system',''))='NHSP'
         or (upper(coalesce(x.value->>'source_system',''))='HEALTHROSTER'
-          and coalesce((s.payload_json#>>'{plan,settings_snapshot,attach_policy,requires_hr}')::boolean,false)
           and coalesce((s.payload_json#>>'{plan,settings_snapshot,attach_policy,hr_attach_to_invoice}')::boolean,true)))
     union
     select distinct r.planned_invoice_id,n.id shift_id,
@@ -1513,6 +1517,13 @@ begin
       on n.timesheet_id=a.source_timesheet_id
      and n.latest_import_id is not null
      and n.external_row_key is not null
+     and (
+       upper(coalesce(n.source_system::text,''))='NHSP'
+       or (
+         upper(coalesce(n.source_system::text,''))='HEALTHROSTER'
+         and r.healthroster_attach_allowed
+       )
+     )
      and (
        (r.ref_num is not null
          and btrim(coalesce(n.ref_num,''))=r.ref_num)

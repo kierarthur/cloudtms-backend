@@ -225,7 +225,7 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
   );
   assert.match(
     generationAdvance,
-    /adjustment_segment_refs[\s\S]*basis::text='NHSP_ADJUSTMENT'[\s\S]*btrim\(coalesce\(n\.ref_num,''\)\)=r\.ref_num/i,
+    /adjustment_segment_refs[\s\S]*basis::text in\('NHSP_ADJUSTMENT','HEALTHROSTER_ADJUSTMENT'\)[\s\S]*btrim\(coalesce\(n\.ref_num,''\)\)=r\.ref_num/i,
   );
   assert.match(
     generationAdvance,
@@ -234,6 +234,14 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
   assert.match(
     issueValidation,
     /import_source_requirements as materialized[\s\S]*invoice_hr_source_rows[\s\S]*jsonb_array_length\(source\.rows_json\)>0/i,
+  );
+  assert.match(
+    issueValidation,
+    /join public\.invoices invoice_policy on invoice_policy\.id=s\.invoice_id[\s\S]*like '%HEALTHROSTER%'[\s\S]*attach_policy,hr_attach_to_invoice/i,
+  );
+  assert.doesNotMatch(
+    issueValidation.match(/import_source_requirements as materialized[\s\S]*?\n\),\nimport_source_checks as materialized/i)?.[0] || '',
+    /attach_policy,requires_hr/i,
   );
   assert.match(issueValidation, /MISSING_IMPORT_SOURCE_EVIDENCE/i);
   assert.match(issueValidation, /missing_import_source_count/i);

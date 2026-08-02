@@ -281,10 +281,16 @@ export function buildSectionSeparatorHtml(model={}) { return `<section class="se
 function supportTable(title,model,columns) { const rows=Array.isArray(model.rows)?model.rows:[]; return `<section class="source-page"><h1>${escapeInvoiceHtml(title)}</h1><table><thead><tr>${columns.map(c=>`<th>${escapeInvoiceHtml(c.label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${columns.map(c=>`<td>${escapeInvoiceHtml(formatFrozenDocumentValue(row?.[c.key],{kind:c.kind}))}</td>`).join('')}</tr>`).join('')}</tbody></table></section>`; }
 export function buildHealthRosterSupportHtml(model={}) {
   const m=validateFrozenPresentationModel('HEALTHROSTER_SUPPORT',model);
+  const rows=(Array.isArray(m.rows)?m.rows:[]).map(row=>({
+    ...row,
+    evidence_role:String(row?.evidence_role||'').trim()
+      ||(String(row?.reversal_state||'').toUpperCase()==='REVERSED'
+        ?'HealthRoster Reversal':'HealthRoster Shift')
+  }));
   const columns=m.schema_version==='HEALTHROSTER_PRESENTATION_V2'
-    ? [['worker','Worker'],['assignment','Assignment'],['shift_date','Date','date'],['shift_times','Shift'],['site','Site'],['ward','Ward'],['booking_reference','Booking reference'],['units_hours','Units / hours']]
-    : [['worker','Worker'],['assignment','Assignment'],['shift_date','Date','date'],['shift_times','Shift'],['site','Site'],['ward','Ward'],['reference','Reference'],['units_hours','Units / hours'],['validation_state','Validation'],['source_identity','Source']];
-  return supportTable('HealthRoster support',m,columns.map(([key,label,kind])=>({key,label,kind})));
+    ? [['evidence_role','Entry'],['worker','Worker'],['assignment','Assignment'],['shift_date','Date','date'],['shift_times','Shift'],['site','Site'],['ward','Ward'],['booking_reference','Booking reference'],['units_hours','Units / hours']]
+    : [['evidence_role','Entry'],['worker','Worker'],['assignment','Assignment'],['shift_date','Date','date'],['shift_times','Shift'],['site','Site'],['ward','Ward'],['reference','Reference'],['units_hours','Units / hours'],['validation_state','Validation'],['source_identity','Source']];
+  return supportTable('HealthRoster support',{...m,rows},columns.map(([key,label,kind])=>({key,label,kind})));
 }
 export function buildNhspSupportHtml(model={}) {
   const m=validateFrozenPresentationModel('NHSP_SUPPORT',model);

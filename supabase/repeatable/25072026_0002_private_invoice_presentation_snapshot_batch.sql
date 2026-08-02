@@ -1216,6 +1216,15 @@ begin
                     r.value->>'units',r.value->>'hours_worked','') ~ '^-[0-9]'
                 then 'REVERSED' else null end)
             else jsonb_build_object(
+              'evidence_role',coalesce(
+                nullif(btrim(r.value->>'evidence_role'),''),
+                case
+                  when upper(coalesce(
+                    r.value->>'reversal_state',r.value->>'status',''))
+                    in ('REVERSED','REVERSAL')
+                  then 'HealthRoster Reversal'
+                  else 'HealthRoster Shift'
+                end),
               'worker',coalesce(
                 r.value->>'worker',r.value->>'candidate',r.value->>'name',
                 r.value->>'worker_name',r.value->>'staff_name'),
