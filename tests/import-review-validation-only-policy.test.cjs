@@ -57,6 +57,16 @@ test('UI contract hides mismatch support rows from Passed checks', () => {
   assert.match(ui, /when 'NO_ACTION' then 'Passed checks'/);
 });
 
+test('UI contract exposes an exact Weekly validation hold badge per candidate and week', () => {
+  assert.match(uiContract, /weekly_validation_holds as \(/);
+  assert.match(uiContract, /a\.candidate_branch_key,a\.week_ending_date/);
+  assert.match(uiContract, /a\.summary_json->>'source_route'='HR_WEEKLY'/);
+  assert.match(uiContract, /a\.summary_json->>'authority_mode'='VALIDATION_ONLY'/);
+  assert.match(uiContract, /validation_difference_count/);
+  assert.match(uiContract, /WEEKLY_VALIDATION_INCOMPLETE/);
+  assert.match(uiContract, /'week_validation_badges',week_validation_badges/);
+});
+
 test('UI state accepts the Emails section but persists only opaque expansion tokens', () => {
   assert.match(core, /upper\(v->>'active_section'\) not in \('PENDING','READY','EMAIL','NO_ACTION'\)/);
   assert.match(core, /\^\(candidate\|client\|week\|shift\):u-/);

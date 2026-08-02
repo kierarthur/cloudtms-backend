@@ -582,9 +582,40 @@ begin
           and other.badge_code<>'NOT_IN_CLOUDTMS' and other.badge_tone='ISSUE'
       )
     group by candidate_branch_key
+  ), weekly_validation_holds as (
+    select a.candidate_branch_key,a.week_ending_date,
+      sum(case
+        when a.action_category='EMAIL' and a.summary_json->>'reason_code'='HEALTHROSTER_WEEKLY'
+          then greatest(coalesce(nullif(a.summary_json->>'validation_difference_count','')::integer,0),1)
+        else 1
+      end)::integer hold_count
+    from current_actions a
+    where a.week_ending_date is not null
+      and a.summary_json->>'source_route'='HR_WEEKLY'
+      and a.summary_json->>'authority_mode'='VALIDATION_ONLY'
+      and (
+        a.action_category='EMAIL'
+        or a.blocking
+        or a.action_category in ('PENDING','BLOCKED')
+      )
+    group by a.candidate_branch_key,a.week_ending_date
+  ), week_validation_badges as (
+    select h.candidate_branch_key,h.week_ending_date,
+      jsonb_build_array(jsonb_build_object(
+        'code','WEEKLY_VALIDATION_INCOMPLETE',
+        'label','Validation incomplete · '||h.hold_count::text||' shift'
+          ||case when h.hold_count=1 then ' differs' else 's differ' end,
+        'count',0,
+        'tone','ISSUE'
+      )) badges
+    from weekly_validation_holds h
   ), filtered as (
-    select a.*,coalesce(bb.badges,'[]'::jsonb) branch_badges
-    from current_actions a left join branch_badges bb using(candidate_branch_key) where case v_view
+    select a.*,coalesce(bb.badges,'[]'::jsonb) branch_badges,
+      coalesce(wb.badges,'[]'::jsonb) week_validation_badges
+    from current_actions a
+    left join branch_badges bb using(candidate_branch_key)
+    left join week_validation_badges wb using(candidate_branch_key,week_ending_date)
+    where case v_view
       when 'PENDING' then a.blocking or a.action_category in ('PENDING','BLOCKED')
       when 'READY' then a.action_category='READY'
       when 'EMAIL' then a.action_category='EMAIL'
@@ -637,6 +668,7 @@ begin
       'selectable',selectable,'selected',selected,'blocking',blocking,'batch_eligible',batch_eligible,
       'candidate_name',candidate_name,'candidate_surname_sort',candidate_surname_sort,
       'candidate_branch_key',candidate_branch_key,'branch_badges',branch_badges,
+      'week_validation_badges',week_validation_badges,
       'candidate_section_total_count',candidate_section_total_count,
       'client_section_total_count',client_section_total_count,
       'client_name',client_name,'week_ending_date',week_ending_date,'work_date',work_date,
