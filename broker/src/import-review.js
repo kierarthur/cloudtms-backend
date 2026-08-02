@@ -33,6 +33,7 @@ const ROUTE_RPCS = Object.freeze(new Set([
   'import_review_refresh_v1',
   'import_review_abandon_v1',
   'hr_daily_timesheet_resolution_save_v1',
+  'hr_weekly_candidate_not_worked_resolution_save_v1',
   'import_review_apply_status_get_v1',
   'import_review_apply_failed_before_commit_recover_v1',
   'nhsp_weekly_review_preview_v1',
@@ -805,6 +806,29 @@ export function createImportReviewDispatcher(dependencies) {
           p_import_id: uuid(dailyResolution.import_id, 'import_id'),
           p_hr_row_id: uuid(body.hr_row_id, 'hr_row_id'),
           p_timesheet_id: uuid(body.timesheet_id, 'timesheet_id', { nullable: true }),
+          p_expected_state_version: integer(body.expected_state_version, 'expected_state_version', 1, Number.MAX_SAFE_INTEGER),
+          p_expected_preview_generation: integer(body.expected_preview_generation, 'expected_preview_generation', 1, Number.MAX_SAFE_INTEGER),
+          p_expected_evidence_fingerprint: sha256(body.expected_evidence_fingerprint, 'expected_evidence_fingerprint'),
+          p_actor_user_id: user.id,
+          p_request_id: uuid(body.request_id, 'request_id')
+        });
+        return success(data);
+      }
+
+      const weeklyCandidateNotWorked = routeMatch(pathname, '/api/import-reviews/:import_id/weekly-candidate-not-worked');
+      if (req.method === 'PUT' && weeklyCandidateNotWorked) {
+        const body = await readBoundedJson(req);
+        assertAllowedKeys(body, new Set([
+          'action_id', 'confirmed', 'expected_state_version', 'expected_preview_generation',
+          'expected_evidence_fingerprint', 'request_id'
+        ]));
+        if (typeof body.confirmed !== 'boolean') {
+          throw new ImportReviewInputError('confirmed must be boolean');
+        }
+        const data = await runAllowedRpc(sbRpc, env, 'hr_weekly_candidate_not_worked_resolution_save_v1', {
+          p_import_id: uuid(weeklyCandidateNotWorked.import_id, 'import_id'),
+          p_action_id: sha256(body.action_id, 'action_id'),
+          p_confirmed: body.confirmed,
           p_expected_state_version: integer(body.expected_state_version, 'expected_state_version', 1, Number.MAX_SAFE_INTEGER),
           p_expected_preview_generation: integer(body.expected_preview_generation, 'expected_preview_generation', 1, Number.MAX_SAFE_INTEGER),
           p_expected_evidence_fingerprint: sha256(body.expected_evidence_fingerprint, 'expected_evidence_fingerprint'),

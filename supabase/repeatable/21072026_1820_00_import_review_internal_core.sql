@@ -3207,6 +3207,11 @@ begin
         and g.week_ending_date=p.row_json->>'week_ending_date'
       cross join lateral jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
       where p.timesheet_id is not null and cx.value->>'match_status'='HR_ONLY'
+    ), confirmed_exceptions as (
+      select p.*,cx.value exception_json
+      from preview_rows p
+      cross join lateral jsonb_array_elements(coalesce(p.row_json->'confirmed_exceptions','[]'::jsonb)) cx(value)
+      where p.timesheet_id is not null
     )
     select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
         'WEEKLY_TIMESHEET_NOT_SUBMITTED',m.shift_hr_row_id)),
@@ -3225,18 +3230,17 @@ begin
     from missing_timesheets m
     union all
     select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
-        'WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET',o.timesheet_id,o.comparison_json->>'work_date',
-        o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end')),
+        'WEEKLY_CANDIDATE_DID_NOT_WORK',o.comparison_json->>'hr_row_id')),
       'ADVISORY','BLOCKED',
-      concat_ws(':','weekly-shift-absent',o.timesheet_id,o.comparison_json->>'work_date',
-        o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end'),
+      concat_ws(':','weekly-candidate-did-not-work',o.comparison_json->>'hr_row_id'),
       concat_ws('|',o.timesheet_id,o.comparison_json->>'work_date',
         o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end'),
-      null::uuid,o.timesheet_id,null::uuid,o.client_id,o.candidate_id,o.contract_id,null::uuid,
-      public._import_review_hash_v1(concat_ws('|','weekly-shift-absent-v1',o.timesheet_id,o.comparison_json::text)),
+      nullif(o.comparison_json->>'hr_row_id','')::uuid,o.timesheet_id,null::uuid,o.client_id,o.candidate_id,o.contract_id,null::uuid,
+      o.comparison_json->>'exception_evidence_fingerprint',
       false,false,true,
       jsonb_build_object(
         'reason_code','WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET','source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
+        'resolution_kind','WEEKLY_CANDIDATE_DID_NOT_WORK',
         'candidate_name',o.row_json->>'candidate_name','week_ending_date',o.row_json->>'week_ending_date',
         'work_date',o.comparison_json->>'work_date',
         'imported_evidence',jsonb_strip_nulls(jsonb_build_object(
@@ -3246,8 +3250,35 @@ begin
           'reference',o.comparison_json->>'ref_after')),
         'current_evidence',jsonb_build_object('timesheet_id',o.timesheet_id),
         'difference_codes',jsonb_build_array('HR_ONLY'),
-        'outcome_label','Candidate timesheet states they did not work this shift')
-    from omitted_shifts o;
+        'outcome_label','Confirm candidate did not work this shift')
+    from omitted_shifts o
+    union all
+    select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
+        'WEEKLY_CANDIDATE_DID_NOT_WORK',c.exception_json->>'hr_row_id')),
+      'NO_ACTION','NO_ACTION',
+      concat_ws(':','weekly-candidate-did-not-work',c.exception_json->>'hr_row_id'),
+      concat_ws('|',c.timesheet_id,c.exception_json->>'work_date',
+        c.exception_json->>'healthroster_start',c.exception_json->>'healthroster_end'),
+      nullif(c.exception_json->>'hr_row_id','')::uuid,c.timesheet_id,null::uuid,c.client_id,c.candidate_id,c.contract_id,null::uuid,
+      c.exception_json->>'evidence_fingerprint',
+      false,false,false,
+      jsonb_build_object(
+        'reason_code','CANDIDATE_DID_NOT_WORK_CONFIRMED','source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
+        'resolution_kind','WEEKLY_CANDIDATE_DID_NOT_WORK',
+        'candidate_name',c.row_json->>'candidate_name','week_ending_date',c.row_json->>'week_ending_date',
+        'validation_total_shift_count',jsonb_array_length(coalesce(c.row_json->'comparisons','[]'::jsonb))
+          + coalesce(nullif(c.row_json->>'confirmed_exception_count','')::integer,0),
+        'confirmed_exception_count',coalesce(nullif(c.row_json->>'confirmed_exception_count','')::integer,0),
+        'work_date',c.exception_json->>'work_date',
+        'imported_evidence',jsonb_strip_nulls(jsonb_build_object(
+          'work_date',c.exception_json->>'work_date','start',c.exception_json->>'healthroster_start',
+          'end',c.exception_json->>'healthroster_end',
+          'break_minutes',nullif(c.exception_json->>'healthroster_break_mins','')::integer,
+          'reference',c.exception_json->>'reference')),
+        'current_evidence',jsonb_build_object('timesheet_id',c.timesheet_id),
+        'difference_codes',jsonb_build_array('CONFIRMED_EXCEPTION'),
+        'outcome_label','Passed with confirmed exception')
+    from confirmed_exceptions c;
 
     insert into pg_temp.import_review_catalog_v1
     with preview_rows as (
@@ -3331,6 +3362,9 @@ begin
       coalesce((a.protection->>'active_pay_draft')::boolean,false),
       jsonb_build_object('reason_code','HEALTHROSTER_WEEKLY','issue_fingerprint',a.email_issue_fingerprint,
         'candidate_name',a.row_json->>'candidate_name','week_ending_date',a.row_json->>'week_ending_date',
+        'validation_total_shift_count',jsonb_array_length(coalesce(a.row_json->'comparisons','[]'::jsonb))
+          + coalesce(nullif(a.row_json->>'confirmed_exception_count','')::integer,0),
+        'validation_difference_count',jsonb_array_length(a.email_comparisons),
       'failure_reasons',a.email_failure_reasons,
         'days',a.email_days,'comparisons',a.email_comparisons,
         'evidence_rows',coalesce((
@@ -3683,6 +3717,20 @@ begin
   where r.import_id=p_import_id and r.status='CURRENT' and not exists (
     select 1 from pg_temp.review_next_actions n
     where n.hr_row_id=r.hr_row_id and n.evidence_fingerprint=r.evidence_fingerprint);
+
+  -- A Weekly candidate-did-not-work exception remains current only while the
+  -- same server-proved HR row/timesheet evidence is still represented by the
+  -- current catalogue.  The confirmed display action deliberately retains the
+  -- same identity after the blocking advisory has been resolved.
+  update public.import_review_weekly_validation_resolutions r
+  set status='STALE',stale_at_utc=now(),stale_reason_code='EVIDENCE_CHANGED',updated_at_utc=now()
+  where r.import_id=p_import_id and r.status='CURRENT' and not exists (
+    select 1 from pg_temp.review_next_actions n
+    where n.hr_row_id=r.hr_row_id
+      and n.timesheet_id=r.timesheet_id
+      and n.evidence_fingerprint=r.evidence_fingerprint
+      and n.summary_json->>'resolution_kind'='WEEKLY_CANDIDATE_DID_NOT_WORK'
+  );
 
   select count(*) filter(where blocking),count(*) filter(where selected)
   into v_blockers,v_selected from public.import_review_decisions

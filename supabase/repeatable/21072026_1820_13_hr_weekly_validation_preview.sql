@@ -408,6 +408,8 @@ begin
       on tfu.timesheet_id = t.timesheet_id
      and tfu.is_current = true
     where t.is_current = true
+      and t.revoked_at is null
+      and t.archived_at_utc is null
       and t.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
       and ct.client_id = v_client_id
       and t.week_ending_date is not null
@@ -415,6 +417,14 @@ begin
       and coalesce(ce.eff_autoprocess_hr,false) = true
       and coalesce(ce.eff_requires_hr,false) = true
       and coalesce(ce.eff_no_timesheet_required,false) = false
+      and (
+        (jsonb_typeof(t.actual_schedule_json)='array' and jsonb_array_length(t.actual_schedule_json)>0)
+        or (
+          jsonb_typeof(tfu.invoice_breakdown_json)='object'
+          and jsonb_typeof(tfu.invoice_breakdown_json->'segments')='array'
+          and jsonb_array_length(tfu.invoice_breakdown_json->'segments')>0
+        )
+      )
   ),
 
   ts_matches_raw as (
@@ -439,11 +449,13 @@ begin
       tmr.raw_timesheet_id as raw_timesheet_id,
       case
         when tmr.raw_timesheet_id is null then null::uuid
+        when tur.timesheet_id is null then null::uuid
         when ce2.contract_id is null then null::uuid
         else tmr.raw_timesheet_id
       end as timesheet_id,
       case
         when tmr.raw_timesheet_id is null then false
+        when tur.timesheet_id is null then false
         when ce2.contract_id is null then false
         when tts.authorised_at_server is null then true
         else false
@@ -456,6 +468,8 @@ begin
     left join public.timesheets tts
       on tts.timesheet_id = tmr.raw_timesheet_id
      and tts.is_current = true
+    left join ts_universe_raw tur
+      on tur.timesheet_id=tmr.raw_timesheet_id
     left join contract_effective ce2
       on ce2.contract_id = tts.contract_id
      and coalesce(ce2.eff_autoprocess_hr,false) = true
@@ -473,6 +487,68 @@ begin
       tur.actual_schedule_json,
       tur.tsfin_invoice_breakdown_json
     from ts_universe_raw tur
+  ),
+
+  hr_exception_evidence as (
+    select
+      hf.*,
+      tu.timesheet_id,
+      public._import_review_hash_v1(concat_ws('|',
+        'hr-weekly-candidate-did-not-work-v1',p_import_id,hf.hr_row_id,tu.timesheet_id,
+        hf.candidate_id,hf.week_ending_date,hf.work_date,hf.hr_start_hhmm,hf.hr_end_hhmm,
+        coalesce(hf.hr_break_mins,0),coalesce(hf.hr_request_id,''),coalesce(hf.hr_location,'')
+      )) as exception_evidence_fingerprint
+    from hr_entries_flat hf
+    join ts_universe tu
+      on tu.candidate_id=hf.candidate_id
+     and tu.week_ending_date=hf.week_ending_date
+  ),
+
+  confirmed_hr_exceptions as (
+    select he.*
+    from hr_exception_evidence he
+    join public.import_review_weekly_validation_resolutions r
+      on r.import_id=p_import_id
+     and r.hr_row_id=he.hr_row_id
+     and r.timesheet_id=he.timesheet_id
+     and r.resolution_code='CANDIDATE_DID_NOT_WORK'
+     and r.status in ('CURRENT','APPLIED')
+     and r.evidence_fingerprint=he.exception_evidence_fingerprint
+  ),
+
+  hr_day_totals_effective as (
+    select
+      he.candidate_id,
+      he.candidate_name,
+      he.week_ending_date,
+      he.work_date,
+      sum(he.hr_paid_minutes)::int as hr_paid_minutes
+    from hr_exception_evidence he
+    where not exists (
+      select 1 from confirmed_hr_exceptions confirmed
+      where confirmed.hr_row_id=he.hr_row_id
+        and confirmed.timesheet_id=he.timesheet_id
+    )
+    group by he.candidate_id,he.candidate_name,he.week_ending_date,he.work_date
+  ),
+
+  confirmed_exceptions_by_group as (
+    select
+      candidate_id,candidate_name,week_ending_date,timesheet_id,
+      count(*)::int as confirmed_exception_count,
+      jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+        'hr_row_id',hr_row_id,
+        'work_date',work_date::text,
+        'healthroster_start',hr_start_hhmm,
+        'healthroster_end',hr_end_hhmm,
+        'healthroster_break_mins',hr_break_mins,
+        'reference',hr_request_id,
+        'location',hr_location,
+        'resolution_code','CANDIDATE_DID_NOT_WORK',
+        'evidence_fingerprint',exception_evidence_fingerprint
+      )) order by work_date,hr_start_min,hr_end_min,hr_row_id) as confirmed_exceptions_json
+    from confirmed_hr_exceptions
+    group by candidate_id,candidate_name,week_ending_date,timesheet_id
   ),
 
   ts_entries_indexed as (
@@ -704,6 +780,8 @@ begin
       tu.candidate_name,
       tu.week_ending_date,
       hf.work_date,
+      hf.hr_row_id,
+      hf.exception_evidence_fingerprint,
 
       null::text as ts_start_hhmm,
       null::text as ts_end_hhmm,
@@ -723,7 +801,7 @@ begin
       'HR_ONLY'::text as match_status,
 
       100000 + hf.hr_start_min as sort_key
-    from hr_entries_flat hf
+    from hr_exception_evidence hf
     join ts_universe tu
       on tu.candidate_id = hf.candidate_id
      and tu.week_ending_date = hf.week_ending_date
@@ -733,6 +811,11 @@ begin
      and pc.match_count = 1
      and pc.matched_hr_row_id = hf.hr_row_id
     where pc.matched_hr_row_id is null
+      and not exists (
+        select 1 from confirmed_hr_exceptions confirmed
+        where confirmed.hr_row_id=hf.hr_row_id
+          and confirmed.timesheet_id=tu.timesheet_id
+      )
   ),
 
   comparisons_worker as (
@@ -742,6 +825,8 @@ begin
       pc.candidate_name,
       pc.week_ending_date,
       pc.work_date,
+      case when pc.match_count=1 then pc.matched_hr_row_id else null end as hr_row_id,
+      null::text as exception_evidence_fingerprint,
 
       pc.ts_start_hhmm,
       pc.ts_end_hhmm,
@@ -795,6 +880,8 @@ begin
       cu.candidate_name,
       cu.week_ending_date,
       cu.work_date,
+      cu.hr_row_id,
+      cu.exception_evidence_fingerprint,
 
       cu.ts_start_hhmm,
       cu.ts_end_hhmm,
@@ -909,6 +996,8 @@ begin
 
       jsonb_agg(
         jsonb_build_object(
+          'hr_row_id', ce.hr_row_id,
+          'exception_evidence_fingerprint',ce.exception_evidence_fingerprint,
           'work_date', ce.work_date::text,
 
           'timesheet_start', ce.ts_start_hhmm,
@@ -920,13 +1009,13 @@ begin
           'healthroster_break_mins', ce.hr_break_mins,
 
           -- stable key for FE checkbox state
-          'comparison_key',
-            (
-              ce.work_date::text
+          'comparison_key',coalesce(
+            case when ce.hr_row_id is not null then 'hr-row:'||ce.hr_row_id::text end,
+            ce.work_date::text
               || '|' || coalesce(ce.ts_start_hhmm,'')
               || '|' || coalesce(ce.ts_end_hhmm,'')
               || '|' || coalesce(ce.ts_break_mins,0)::text
-            ),
+          ),
 
           -- destructive invalidation flags (missing from import OR mismatched + had prior ref + not invoice locked)
           'is_destructive_invalidation',
@@ -1008,10 +1097,15 @@ begin
       hf.candidate_name,
       hf.week_ending_date,
       hf.work_date
-    from hr_entries_flat hf
+    from hr_exception_evidence hf
     join ts_universe tu
       on tu.candidate_id = hf.candidate_id
      and tu.week_ending_date = hf.week_ending_date
+    where not exists (
+      select 1 from confirmed_hr_exceptions confirmed
+      where confirmed.hr_row_id=hf.hr_row_id
+        and confirmed.timesheet_id=tu.timesheet_id
+    )
   ),
 
   day_eval as (
@@ -1030,7 +1124,7 @@ begin
         else 'OK'
       end as day_status
     from day_set ds
-    left join hr_day_totals hdt
+    left join hr_day_totals_effective hdt
       on hdt.candidate_id = ds.candidate_id
      and hdt.week_ending_date = ds.week_ending_date
      and hdt.work_date = ds.work_date
@@ -1080,6 +1174,8 @@ begin
       p.has_totals_mismatch,
       p.sig_text,
       cbg.comparisons_json,
+      coalesce(ceg.confirmed_exception_count,0) as confirmed_exception_count,
+      coalesce(ceg.confirmed_exceptions_json,'[]'::jsonb) as confirmed_exceptions_json,
       coalesce(cbg.any_invoice_locked,false) as any_invoice_locked,
       coalesce(cbg.any_locked_ref_change,false) as any_locked_ref_change,
       coalesce(cbg.any_locked_time_mismatch,false) as any_locked_time_mismatch
@@ -1088,6 +1184,10 @@ begin
       on cbg.candidate_id = p.candidate_id
      and cbg.week_ending_date = p.week_ending_date
      and cbg.timesheet_id = p.timesheet_id
+    left join confirmed_exceptions_by_group ceg
+      on ceg.candidate_id=p.candidate_id
+     and ceg.week_ending_date=p.week_ending_date
+     and ceg.timesheet_id=p.timesheet_id
   ),
 
   final_groups as (
@@ -1123,6 +1223,7 @@ begin
             )
           )
         ) then 'FAIL'
+        when coalesce(g.confirmed_exception_count,0)>0 then 'OVERRIDDEN'
         else 'OK'
       end as overall_status
     from grouped g
@@ -1163,6 +1264,8 @@ begin
 
         'overall_status', wes.overall_status,
         'has_mismatch', wes.has_mismatch,
+        'confirmed_exception_count',wes.confirmed_exception_count,
+        'confirmed_exceptions',wes.confirmed_exceptions_json,
 
         'failure_reasons',
           (

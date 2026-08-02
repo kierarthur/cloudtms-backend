@@ -391,7 +391,7 @@ begin
           then 'Request new shift' else 'Request amend shift' end
         when 'EMAIL_REMINDER' then case when d.summary_json->>'reason_code'='MISSING_FROM_IMPORT'
           then 'Request new shift reminder' else 'Request amend shift reminder' end
-        when 'INVALIDATE_REFERENCE' then 'Clear stored reference' when 'NO_ACTION' then 'No action required'
+        when 'INVALIDATE_REFERENCE' then 'Clear stored reference' when 'NO_ACTION' then 'Passed checks'
         when 'DAILY_TIMESHEET_RESOLUTION' then 'Choose existing timesheet' else 'Resolve before continuing' end) outcome_label,
       d.summary_json->>'resolution_kind' resolution_kind,
       d.summary_json->>'authority_mode' authority_mode,
@@ -608,7 +608,13 @@ begin
       when 'PENDING' then a.blocking or a.action_category in ('PENDING','BLOCKED')
       when 'READY' then a.action_category='READY'
       when 'EMAIL' then a.action_category='EMAIL'
-      when 'NO_ACTION' then a.action_category='NO_ACTION'
+      when 'NO_ACTION' then a.action_category='NO_ACTION' and (
+        a.summary_json->>'reason_code'='CANDIDATE_DID_NOT_WORK_CONFIRMED'
+        or (
+          coalesce(jsonb_array_length(case when jsonb_typeof(a.difference_codes)='array' then a.difference_codes else '[]'::jsonb end),0)=0
+          and nullif(a.summary_json->>'reason_code','') is null
+        )
+      )
       when 'CONFIRM_STANDARD' then a.selected and a.batch_eligible and a.action_kind='INCLUDE_SHIFT'
       when 'CONFIRM_NON_STANDARD' then a.selected and a.batch_eligible and a.action_kind in ('APPLY_AMENDMENT','APPLY_CANCELLATION')
       when 'CONFIRM_VALIDATION' then a.selected and a.batch_eligible and a.action_kind='MARK_VALIDATION_ERROR'
@@ -670,7 +676,14 @@ begin
     'PENDING',count(*) filter(where blocking or action_category in ('PENDING','BLOCKED')),
     'READY',count(*) filter(where action_category='READY'),
     'EMAIL',count(*) filter(where action_category='EMAIL'),
-    'NO_ACTION',count(*) filter(where action_category='NO_ACTION')
+    'NO_ACTION',count(*) filter(where action_category='NO_ACTION' and (
+      summary_json->>'reason_code'='CANDIDATE_DID_NOT_WORK_CONFIRMED'
+      or (
+        coalesce(jsonb_array_length(case when jsonb_typeof(summary_json->'difference_codes')='array'
+          then summary_json->'difference_codes' else '[]'::jsonb end),0)=0
+        and nullif(summary_json->>'reason_code','') is null
+      )
+    ))
   ) into v_counts
   from public.import_review_decisions d where d.import_id=p_import_id and d.is_current;
 
