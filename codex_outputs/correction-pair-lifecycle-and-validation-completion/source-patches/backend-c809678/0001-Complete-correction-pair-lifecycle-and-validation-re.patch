@@ -1,0 +1,1670 @@
+From c8096785adf46f7570c3d7a1c86215337ec4556d Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 21:01:47 +0100
+Subject: [PATCH] Complete correction pair lifecycle and validation review
+
+---
+ broker/src/index.js                           | 253 +++++++++++++++++-
+ ...t_correction_pair_lifecycle_preview_v1.sql | 151 +++++++++++
+ ...35_00_import_correction_policy_helpers.sql |  37 ++-
+ ...5_00b_import_correction_runtime_guards.sql |   8 +-
+ ...35_10_invoice_correction_pair_scope_v1.sql | 110 +++++++-
+ ...235_32_timesheet_authorise_bulk_atomic.sql |  37 +++
+ ...5_33_timesheet_unauthorise_bulk_atomic.sql |  37 +++
+ ...26_1820_00_import_review_internal_core.sql | 130 +++++++--
+ .../23072026_2207_invoice_apply_edits.sql     |  88 ++++++
+ ...vate_invoice_correction_validate_batch.sql |  21 +-
+ .../26052026_2100HRS_NEW_FUNCTIONS.sql        | 186 ++++++++++++-
+ ...rrection-pair-lifecycle-placement.test.cjs |  91 +++++++
+ ...ritative-effective-balance-helper.test.cjs |   5 +-
+ 13 files changed, 1091 insertions(+), 63 deletions(-)
+ create mode 100644 supabase/repeatable/02082026_2014_timesheet_correction_pair_lifecycle_preview_v1.sql
+ create mode 100644 tests/correction-pair-lifecycle-placement.test.cjs
+
+diff --git a/broker/src/index.js b/broker/src/index.js
+index 2ad0201..531f5cc 100644
+--- a/broker/src/index.js
++++ b/broker/src/index.js
+@@ -71408,8 +71408,46 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
+     return guard.res;
+   }
+ 
+-  const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+-  lifecycleSignatureLog('guard_resolved', {
++  const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
++  try {
++    const pairFlow = await runCorrectionPairLifecycleIfApplicable(
++      env, 'UNAUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
++    );
++    if (pairFlow?.is_pair) {
++      if (pairFlow.preview_only) return withJson(200, { ok: true, pair_lifecycle: pairFlow.preview });
++      if (pairFlow.confirmation_required) return withJson(409, {
++        ok: false, error: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
++        error_code: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
++        message: 'This is a linked correction pair. Both timesheets will be unauthorised together.',
++        pair_lifecycle: pairFlow.preview
++      });
++      if (pairFlow.blocked || pairFlow.mutation?.ok === false || pairFlow.mutation?.all_success === false) {
++        return withJson(409, {
++          ok: false, error: pairFlow.mutation?.error_code || 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++          error_code: pairFlow.mutation?.error_code || 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++          message: 'The linked correction pair could not be unauthorised safely. Refresh and try again.',
++          pair_lifecycle: pairFlow.preview, mutation: pairFlow.mutation || null, refresh_required: true
++        });
++      }
++      const results = Array.isArray(pairFlow.mutation?.results) ? pairFlow.mutation.results : [];
++      return withJson(200, {
++        ok: true, success: true, unauthorised: true, authorised: false,
++        operation: 'correction_pair_unauthorise', pair_lifecycle: pairFlow.preview,
++        mutation: pairFlow.mutation,
++        affected_rows: results.flatMap((row) => Array.isArray(row?.affected_rows) ? row.affected_rows : []),
++        affected_timesheet_ids: pairFlow.mutation?.affected_timesheet_ids || [],
++        refresh_required: true
++      });
++    }
++  } catch (error) {
++    return withJson(409, {
++      ok: false, error: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++      error_code: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++      message: 'The linked correction pair could not be checked safely. Refresh and try again.',
++      refresh_required: true
++    });
++  }
++  lifecycleSignatureLog('guard_resolved', {
+     requested_timesheet_id: requestedTimesheetId || null,
+     expected_timesheet_id: expectedTimesheetId || null,
+     current_timesheet_id: currentTimesheetId || null,
+@@ -80470,8 +80508,11 @@ async function handleTimesheetsSummary(env, req) {
+       }));
+     }
+ 
+-    const rowRes = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: rowFilters });
+-    const outRows = normalizeSummaryRows(rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1'));
++    const rowRes = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: rowFilters });
++    const outRows = await enrichCorrectionPairPlacementIssues(
++      env,
++      normalizeSummaryRows(rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1'))
++    );
+ 
+     let totals = null;
+     let totalCount = outRows.length;
+@@ -80506,9 +80547,65 @@ async function handleTimesheetsSummary(env, req) {
+   } catch (e) {
+     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
+   }
+-}
+-
+-function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
++}
++
++async function enrichCorrectionPairPlacementIssues(env, rows) {
++  const sourceRows = Array.isArray(rows) ? rows : [];
++  const ids = Array.from(new Set(sourceRows.map((row) => String(row?.timesheet_id || row?.id || '').trim()).filter(Boolean))).slice(0, 200);
++  if (!ids.length) return sourceRows;
++  try {
++    const encodedIds = ids.map((id) => encodeURIComponent(id)).join(',');
++    const selectedRes = await sbFetch(env,
++      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=in.(${encodedIds})&adjustment_origin=eq.IMPORT_CORRECTION&correction_id=not.is.null&select=timesheet_id,correction_id,correction_kind,is_current,archived_at_utc`
++    );
++    const selectedCorrectionRows = Array.isArray(selectedRes?.rows) ? selectedRes.rows : [];
++    const correctionIds = Array.from(new Set(selectedCorrectionRows.map((row) => String(row?.correction_id || '').trim()).filter(Boolean)));
++    if (!correctionIds.length) return sourceRows;
++    const encodedCorrections = correctionIds.map((id) => encodeURIComponent(id)).join(',');
++    const membersRes = await sbFetch(env,
++      `${env.SUPABASE_URL}/rest/v1/timesheets?correction_id=in.(${encodedCorrections})&adjustment_origin=eq.IMPORT_CORRECTION&is_current=eq.true&archived_at_utc=is.null&select=timesheet_id,correction_id,correction_kind`
++    );
++    const members = Array.isArray(membersRes?.rows) ? membersRes.rows : [];
++    const memberIds = Array.from(new Set(members.map((row) => String(row?.timesheet_id || '').trim()).filter(Boolean)));
++    if (!memberIds.length) return sourceRows;
++    const encodedMembers = memberIds.map((id) => encodeURIComponent(id)).join(',');
++    const linesRes = await sbFetch(env,
++      `${env.SUPABASE_URL}/rest/v1/invoice_lines?timesheet_id=in.(${encodedMembers})&select=timesheet_id,invoice_id`
++    );
++    const invoiceLines = Array.isArray(linesRes?.rows) ? linesRes.rows : [];
++    const invoiceIds = Array.from(new Set(invoiceLines.map((row) => String(row?.invoice_id || '').trim()).filter(Boolean)));
++    const nonCreditInvoices = new Set();
++    if (invoiceIds.length) {
++      const invoiceRes = await sbFetch(env,
++        `${env.SUPABASE_URL}/rest/v1/invoices?id=in.(${invoiceIds.map((id) => encodeURIComponent(id)).join(',')})&select=id,type`
++      );
++      for (const invoice of (Array.isArray(invoiceRes?.rows) ? invoiceRes.rows : [])) {
++        if (String(invoice?.type || '').trim().toUpperCase() !== 'CREDIT_NOTE') nonCreditInvoices.add(String(invoice.id));
++      }
++    }
++    const placed = new Set(invoiceLines.filter((line) => nonCreditInvoices.has(String(line.invoice_id))).map((line) => String(line.timesheet_id)));
++    const issueIds = new Set();
++    for (const correctionId of correctionIds) {
++      const pair = members.filter((row) => String(row.correction_id) === correctionId && ['CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'].includes(String(row.correction_kind || '').toUpperCase()));
++      if (pair.length !== 2 || new Set(pair.map((row) => String(row.correction_kind).toUpperCase())).size !== 2) continue;
++      const placedMembers = pair.filter((row) => placed.has(String(row.timesheet_id)));
++      if (placedMembers.length !== 1) continue;
++      const missing = pair.find((row) => !placed.has(String(row.timesheet_id)));
++      if (missing) issueIds.add(String(missing.timesheet_id));
++    }
++    return sourceRows.map((row) => {
++      const id = String(row?.timesheet_id || row?.id || '');
++      if (!issueIds.has(id)) return row;
++      const existing = Array.isArray(row.issue_codes) ? row.issue_codes.slice() : [];
++      if (!existing.includes('Paired needs invoicing')) existing.push('Paired needs invoicing');
++      return { ...row, issue_codes: existing, correction_pair_placement_incomplete: true };
++    });
++  } catch {
++    return sourceRows;
++  }
++}
++
++function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
+   const startedAt = Date.now();
+   const trimText = (value) => String(value == null ? '' : value).trim();
+   const upperText = (value) => trimText(value).toUpperCase();
+@@ -87528,6 +87625,43 @@ async function validateBulkAuthoriseRequiredExpenseEvidence(env, timesheetId) {
+   };
+ }
+ 
++async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, expectedTimesheetId, expectedRowSignature, body, user) {
++  const item = {
++    timesheet_id: timesheetId,
++    expected_timesheet_id: expectedTimesheetId || timesheetId,
++    expected_row_signature: expectedRowSignature || null,
++    expected_pair_fingerprint: body?.expected_pair_fingerprint || body?.pair_fingerprint || null,
++    row_key: `timesheet:${timesheetId}`
++  };
++  const preview = await sbRpc(env, 'timesheet_correction_pair_lifecycle_preview_v1', {
++    p_items: [item],
++    p_action: action,
++    p_actor_user_id: user?.id || null,
++    p_max_members: 100
++  });
++  const pairCount = Number(preview?.correction_pair_count || 0);
++  if (!pairCount) return null;
++  const group = Array.isArray(preview?.groups) ? preview.groups[0] : null;
++  if (body?.preview_only === true || body?.previewOnly === true) {
++    return { is_pair: true, preview_only: true, preview, group };
++  }
++  if (body?.confirm_pair_lifecycle !== true && body?.confirmPairLifecycle !== true) {
++    return { is_pair: true, confirmation_required: true, preview, group };
++  }
++  if (!preview?.valid || !group?.action_ready) {
++    return { is_pair: true, blocked: true, preview, group };
++  }
++  const rpcName = action === 'AUTHORISE'
++    ? 'timesheet_authorise_bulk_atomic'
++    : 'timesheet_unauthorise_bulk_atomic';
++  const mutation = await sbRpc(env, rpcName, {
++    p_items: [item],
++    p_actor_user_id: user?.id || null,
++    p_now_utc: nowIso()
++  }, { timeoutMs: 20000 });
++  return { is_pair: true, preview, group, mutation };
++}
++
+ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, item, actorUser) {
+   const timesheetId = lifecycleBulkReadFirst(item, ['timesheet_id', 'current_timesheet_id', 'requested_timesheet_id']);
+   const expectedTimesheetId = lifecycleBulkReadFirst(item, ['expected_timesheet_id', 'current_timesheet_id', 'timesheet_id']) || timesheetId;
+@@ -87984,15 +88118,68 @@ async function drainTimesheetLifecycleBulkOperationChunk(env, req, operationId,
+ }
+ 
+ 
+-async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, action, items, body) {
++async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, action, items, body) {
+   const maxItems = 500;
+   const selected = items.slice(0, maxItems);
+   if (!selected.length) return withCORS(env, req, lifecycleBulkJson(400, { ok: false, error: 'NO_TIMESHEET_ITEMS_SELECTED' }));
+-  if (items.length > maxItems) {
++  if (items.length > maxItems) {
+     return withCORS(env, req, lifecycleBulkJson(413, { ok: false, error: 'TOO_MANY_TIMESHEET_ITEMS_SELECTED', max_items: maxItems }));
+-  }
+-
+-  if (selected.length === 1) {
++  }
++
++  let pairPreview = null;
++  try {
++    pairPreview = await sbRpc(env, 'timesheet_correction_pair_lifecycle_preview_v1', {
++      p_items: selected,
++      p_action: action,
++      p_actor_user_id: user?.id || null,
++      p_max_members: 100
++    });
++  } catch (error) {
++    return withCORS(env, req, lifecycleBulkJson(409, {
++      ok: false, error: 'CORRECTION_PAIR_LIFECYCLE_PREVIEW_FAILED',
++      error_code: 'CORRECTION_PAIR_LIFECYCLE_PREVIEW_FAILED',
++      message: 'The selected timesheet lifecycle could not be checked safely. Refresh and try again.'
++    }));
++  }
++  if (Number(pairPreview?.correction_pair_count || 0) > 0) {
++    if (selected.length > 100) {
++      return withCORS(env, req, lifecycleBulkJson(413, {
++        ok: false, error: 'CORRECTION_PAIR_LIFECYCLE_SELECTION_TOO_LARGE', max_items: 100
++      }));
++    }
++    if (body?.confirm_pair_lifecycle !== true && body?.confirmPairLifecycle !== true) {
++      return withCORS(env, req, lifecycleBulkJson(409, {
++        ok: false, error: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
++        error_code: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
++        message: action === 'AUTHORISE'
++          ? 'Your selection includes linked correction pairs. Both timesheets in each pair will be authorised together.'
++          : 'Your selection includes linked correction pairs. Both timesheets in each pair will be unauthorised together.',
++        pair_lifecycle: pairPreview
++      }));
++    }
++    if (!pairPreview?.valid) {
++      return withCORS(env, req, lifecycleBulkJson(409, {
++        ok: false, error: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++        error_code: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++        message: 'One or more linked correction pairs cannot be changed safely.',
++        pair_lifecycle: pairPreview
++      }));
++    }
++    const rpcName = action === 'AUTHORISE'
++      ? 'timesheet_authorise_bulk_atomic'
++      : 'timesheet_unauthorise_bulk_atomic';
++    const mutation = await sbRpc(env, rpcName, {
++      p_items: selected,
++      p_actor_user_id: user?.id || null,
++      p_now_utc: nowIso()
++    }, { timeoutMs: 20000 });
++    return withCORS(env, req, lifecycleBulkJson(
++      mutation?.all_success === false ? 207 : 200,
++      { ...(mutation || {}), pair_lifecycle: pairPreview, atomic_pair_lifecycle: true }
++    ));
++  }
++
++  if (selected.length === 1) {
+     const result = await callGoldTimesheetLifecycleActionForBulkItem(env, req, action, selected[0], user);
+     const payload = {
+       ok: true,
+@@ -160513,8 +160700,46 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
+     return guard.res;
+   }
+ 
+-  const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+-  lifecycleSignatureLog('guard_resolved', {
++  const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
++  try {
++    const pairFlow = await runCorrectionPairLifecycleIfApplicable(
++      env, 'AUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
++    );
++    if (pairFlow?.is_pair) {
++      if (pairFlow.preview_only) return withJson(200, { ok: true, pair_lifecycle: pairFlow.preview });
++      if (pairFlow.confirmation_required) return withJson(409, {
++        ok: false, error: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
++        error_code: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
++        message: 'This is a linked correction pair. Both timesheets will be authorised together.',
++        pair_lifecycle: pairFlow.preview
++      });
++      if (pairFlow.blocked || pairFlow.mutation?.ok === false || pairFlow.mutation?.all_success === false) {
++        return withJson(409, {
++          ok: false, error: pairFlow.mutation?.error_code || 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++          error_code: pairFlow.mutation?.error_code || 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++          message: 'The linked correction pair could not be authorised safely. Refresh and try again.',
++          pair_lifecycle: pairFlow.preview, mutation: pairFlow.mutation || null, refresh_required: true
++        });
++      }
++      const results = Array.isArray(pairFlow.mutation?.results) ? pairFlow.mutation.results : [];
++      return withJson(200, {
++        ok: true, success: true, authorised: true,
++        operation: 'correction_pair_authorise', pair_lifecycle: pairFlow.preview,
++        mutation: pairFlow.mutation,
++        affected_rows: results.flatMap((row) => Array.isArray(row?.affected_rows) ? row.affected_rows : []),
++        affected_timesheet_ids: pairFlow.mutation?.affected_timesheet_ids || [],
++        refresh_required: true
++      });
++    }
++  } catch (error) {
++    return withJson(409, {
++      ok: false, error: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++      error_code: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
++      message: 'The linked correction pair could not be checked safely. Refresh and try again.',
++      refresh_required: true
++    });
++  }
++  lifecycleSignatureLog('guard_resolved', {
+     requested_timesheet_id: requestedTimesheetId || null,
+     expected_timesheet_id: expectedTimesheetId || null,
+     current_timesheet_id: currentTimesheetId || null,
+diff --git a/supabase/repeatable/02082026_2014_timesheet_correction_pair_lifecycle_preview_v1.sql b/supabase/repeatable/02082026_2014_timesheet_correction_pair_lifecycle_preview_v1.sql
+new file mode 100644
+index 0000000..cb878c9
+--- /dev/null
++++ b/supabase/repeatable/02082026_2014_timesheet_correction_pair_lifecycle_preview_v1.sql
+@@ -0,0 +1,151 @@
++create or replace function public.timesheet_correction_pair_lifecycle_preview_v1(
++  p_items jsonb,
++  p_action text,
++  p_actor_user_id uuid,
++  p_max_members integer default 100
++)
++returns jsonb
++language plpgsql
++security definer
++set search_path to 'public','extensions','pg_temp'
++as $function$
++declare
++  v_action text:=upper(btrim(coalesce(p_action,'')));
++  v_item jsonb;
++  v_id_text text;
++  v_id uuid;
++  v_class jsonb;
++  v_transition jsonb;
++  v_group jsonb;
++  v_groups jsonb:='[]'::jsonb;
++  v_seen text[]:=array[]::text[];
++  v_selected_count integer:=0;
++  v_affected_count integer:=0;
++  v_ordinary_count integer:=0;
++  v_valid boolean:=true;
++  v_repairable_mixed boolean:=false;
++  v_already_target_state boolean:=false;
++  v_group_ready boolean:=false;
++  v_group_fingerprint text;
++  v_members jsonb;
++  v_errors jsonb;
++begin
++  if v_action not in ('AUTHORISE','UNAUTHORISE') then
++    raise exception 'CORRECTION_LIFECYCLE_ACTION_INVALID' using errcode='22023';
++  end if;
++  if p_actor_user_id is null then
++    raise exception 'CORRECTION_LIFECYCLE_ACTOR_REQUIRED' using errcode='22023';
++  end if;
++  if p_max_members<1 or p_max_members>100
++     or jsonb_typeof(coalesce(p_items,'[]'::jsonb))<>'array'
++     or jsonb_array_length(coalesce(p_items,'[]'::jsonb))>p_max_members then
++    raise exception 'CORRECTION_LIFECYCLE_ITEMS_INVALID' using errcode='22023';
++  end if;
++
++  v_selected_count:=jsonb_array_length(coalesce(p_items,'[]'::jsonb));
++  for v_item in select value from jsonb_array_elements(coalesce(p_items,'[]'::jsonb))
++  loop
++    v_id_text:=nullif(btrim(coalesce(
++      v_item->>'timesheet_id',v_item->>'timesheetId',
++      v_item->>'current_timesheet_id',v_item->>'currentTimesheetId',
++      v_item->>'requested_timesheet_id',v_item->>'requestedTimesheetId',
++      case when coalesce(v_item->>'row_key','') like 'timesheet:%'
++        then substring(v_item->>'row_key' from 11) end,'')), '');
++    if v_id_text is null or v_id_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
++      v_valid:=false;
++      v_groups:=v_groups||jsonb_build_array(jsonb_build_object(
++        'valid',false,'action_ready',false,'errors',jsonb_build_array(
++          jsonb_build_object('code','TIMESHEET_ID_REQUIRED'))));
++      continue;
++    end if;
++
++    v_id:=v_id_text::uuid;
++    v_class:=public._ctms_import_correction_classify_v1(v_id);
++    if coalesce((v_class->>'is_import_authoritative_correction')::boolean,false) is not true then
++      v_ordinary_count:=v_ordinary_count+1;
++      continue;
++    end if;
++    if nullif(v_class->>'correction_id','')=any(v_seen) then continue; end if;
++    v_seen:=array_append(v_seen,v_class->>'correction_id');
++
++    v_transition:=public.timesheet_correction_pair_transition_v1(
++      v_id,v_action,p_actor_user_id,null::uuid,null::text,false,p_max_members);
++    v_errors:=coalesce(v_transition->'errors','[]'::jsonb);
++    v_repairable_mixed:=
++      coalesce((v_transition->>'expected_member_count')::integer,0)=2
++      and coalesce((v_transition->>'authorised_count')::integer,0)>0
++      and coalesce((v_transition->>'unauthorised_count')::integer,0)>0
++      and coalesce((v_transition->>'authorised_count')::integer,0)
++          +coalesce((v_transition->>'unauthorised_count')::integer,0)=2
++      and coalesce((v_transition->>'paid_count')::integer,0)=0
++      and coalesce((v_transition->>'invoice_lined_count')::integer,0)=0
++      and (select count(*)=1 and bool_and(e->>'code'='CORRECTION_UNIT_ACTION_STATE_INVALID')
++           from jsonb_array_elements(v_errors) e)
++      and (v_action='UNAUTHORISE'
++        or coalesce((v_transition->>'ready_count')::integer,0)=2);
++    v_already_target_state:=coalesce((v_transition->>'expected_member_count')::integer,0)=2
++      and coalesce((v_transition->>'paid_count')::integer,0)=0
++      and coalesce((v_transition->>'invoice_lined_count')::integer,0)=0
++      and ((v_action='AUTHORISE' and coalesce((v_transition->>'authorised_count')::integer,0)=2)
++        or (v_action='UNAUTHORISE' and coalesce((v_transition->>'unauthorised_count')::integer,0)=2));
++    v_group_ready:=coalesce((v_transition->>'action_ready')::boolean,false)
++      or v_repairable_mixed or v_already_target_state;
++
++    select coalesce(jsonb_agg(
++      row_json||jsonb_build_object(
++        'signed_hours',jsonb_build_object(
++          'day',coalesce(tf.hours_day,0),'night',coalesce(tf.hours_night,0),
++          'sat',coalesce(tf.hours_sat,0),'sun',coalesce(tf.hours_sun,0),
++          'bh',coalesce(tf.hours_bh,0),
++          'total',coalesce(tf.hours_day,0)+coalesce(tf.hours_night,0)+coalesce(tf.hours_sat,0)+coalesce(tf.hours_sun,0)+coalesce(tf.hours_bh,0)),
++        'current_state',case when coalesce((row_json->>'timesheet_authorised')::boolean,false)
++          and coalesce((row_json->>'tsfin_authorised')::boolean,false) then 'AUTHORISED' else 'UNAUTHORISED' end,
++        'resulting_state',case when v_action='AUTHORISE' then 'AUTHORISED' else 'UNAUTHORISED' end)
++      order by case row_json->>'correction_kind' when 'CHANGED_HOURS_REVERSAL' then 1 else 2 end),
++      '[]'::jsonb)
++    into v_members
++    from jsonb_array_elements(coalesce(v_transition->'pair_rows','[]'::jsonb)) row_json
++    left join public.timesheets_financials tf
++      on tf.timesheet_id=nullif(row_json->>'timesheet_id','')::uuid and tf.is_current=true;
++
++    v_group_fingerprint:=public._import_review_hash_v1(concat_ws('|',
++      'correction-lifecycle-preview-v1',v_action,v_transition->>'chain_fingerprint',
++      v_transition->>'correction_id',v_members::text,v_group_ready));
++    v_group:=v_transition||jsonb_build_object(
++      'valid',v_group_ready,'action_ready',v_group_ready,
++      'repairing_legacy_mixed_state',v_repairable_mixed,
++      'already_in_target_state',v_already_target_state,
++      'source_system',case
++        when exists(select 1 from jsonb_array_elements(v_members) m
++          join public.timesheets t on t.timesheet_id=(m->>'timesheet_id')::uuid
++          left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
++          where upper(coalesce(
++            t.candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',
++            tf.policy_snapshot_json#>>'{correction_financials_policy_envelope,classification,source_system}',
++            tf.rate_source_refs_json#>>'{correction_financials_policy_envelope,classification,source_system}',
++            case when tf.basis in ('NHSP','NHSP_ADJUSTMENT') then 'NHSP' end,''))='NHSP')
++        then 'NHSP' else 'HealthRoster' end,
++      'members',v_members,'pair_fingerprint',v_group_fingerprint,
++      'errors',case when v_repairable_mixed or v_already_target_state then '[]'::jsonb else v_errors end);
++    v_groups:=v_groups||jsonb_build_array(v_group);
++    v_affected_count:=v_affected_count+coalesce((v_transition->>'expected_member_count')::integer,0);
++    if not v_group_ready then v_valid:=false; end if;
++  end loop;
++
++  return jsonb_build_object(
++    'ok',true,'valid',v_valid,'action',v_action,
++    'selected_count',v_selected_count,
++    'ordinary_timesheet_count',v_ordinary_count,
++    'correction_pair_count',jsonb_array_length(v_groups),
++    'affected_timesheet_count',v_ordinary_count+v_affected_count,
++    'groups',v_groups,
++    'preview_fingerprint',public._import_review_hash_v1(concat_ws('|',
++      'correction-lifecycle-batch-preview-v1',v_action,v_selected_count,v_groups::text)));
++end;
++$function$;
++
++comment on function public.timesheet_correction_pair_lifecycle_preview_v1(jsonb,text,uuid,integer) is
++  'Read-only server-authoritative preview for atomic NHSP/HealthRoster import-correction pair authorise and unauthorise actions.';
++alter function public.timesheet_correction_pair_lifecycle_preview_v1(jsonb,text,uuid,integer) owner to postgres;
++revoke all on function public.timesheet_correction_pair_lifecycle_preview_v1(jsonb,text,uuid,integer) from public,anon,authenticated;
++grant execute on function public.timesheet_correction_pair_lifecycle_preview_v1(jsonb,text,uuid,integer) to service_role;
+diff --git a/supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql b/supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql
+index 05b0cfa..b4ddb1a 100644
+--- a/supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql
++++ b/supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql
+@@ -396,6 +396,10 @@ declare
+   v_id uuid;
+   v_class jsonb;
+   v_transition jsonb;
++  v_preview jsonb;
++  v_group jsonb;
++  v_transition_item jsonb;
++  v_expected_pair_fingerprint text;
+   v_correction_id text;
+ begin
+   if v_action not in ('AUTHORISE', 'UNAUTHORISE') then
+@@ -439,17 +443,36 @@ begin
+       continue;
+     end if;
+ 
+-    v_transition := public.timesheet_correction_pair_transition_v1(
+-      v_id, v_action, p_actor_user_id, null::uuid, null::text, true, p_max_members
+-    );
+-    if coalesce((v_transition ->> 'valid')::boolean, false) is not true
+-       or coalesce((v_transition ->> 'action_ready')::boolean, false) is not true then
++    v_preview:=public.timesheet_correction_pair_lifecycle_preview_v1(
++      jsonb_build_array(v_item),v_action,p_actor_user_id,p_max_members);
++    v_group:=v_preview#>'{groups,0}';
++    v_transition:=public.timesheet_correction_pair_transition_v1(
++      v_id,v_action,p_actor_user_id,null::uuid,v_group->>'chain_fingerprint',true,p_max_members);
++    v_expected_pair_fingerprint:=nullif(btrim(coalesce(
++      v_item->>'expected_pair_fingerprint',v_item->>'pair_fingerprint','')),'');
++    if v_expected_pair_fingerprint is not null
++       and v_expected_pair_fingerprint is distinct from v_group->>'pair_fingerprint' then
++      raise exception 'CORRECTION_UNIT_LIFECYCLE_PREVIEW_STALE'
++        using errcode='40001',detail=v_group::text;
++    end if;
++    if coalesce((v_group->>'valid')::boolean,false) is not true
++       or coalesce((v_group->>'action_ready')::boolean,false) is not true then
+       raise exception 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED'
+-        using errcode = 'P0001', detail = v_transition::text;
++        using errcode = 'P0001', detail = v_group::text;
+     end if;
+ 
+     v_seen_correction_ids := array_append(v_seen_correction_ids, v_correction_id);
+-    v_result := v_result || coalesce(v_transition -> 'transition_items', '[]'::jsonb);
++    for v_transition_item in
++      select value from jsonb_array_elements(coalesce(v_transition->'transition_items','[]'::jsonb))
++    loop
++      v_result:=v_result||jsonb_build_array(v_transition_item||jsonb_build_object(
++        'lifecycle_group_id','correction:'||v_correction_id,
++        'lifecycle_group_size',coalesce((v_transition->>'expected_member_count')::integer,2),
++        'pair_fingerprint',v_group->>'pair_fingerprint',
++        'selected_timesheet_id',v_id,
++        'repairing_legacy_mixed_state',coalesce((v_group->>'repairing_legacy_mixed_state')::boolean,false)
++      ));
++    end loop;
+   end loop;
+ 
+   if jsonb_array_length(v_result) > p_max_members then
+diff --git a/supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql b/supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql
+index a02b078..c6bddcd 100644
+--- a/supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql
++++ b/supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql
+@@ -3260,9 +3260,11 @@ begin
+   loop
+     v_scope := public.invoice_correction_pair_scope_v1(v_id,p_invoice_id,p_actor_user_id,p_lock_rows,100);
+     if coalesce((v_scope->>'valid')::boolean,false) is not true
+-       or coalesce((v_scope->>'existing_line_member_count')::integer,0)
+-          <> coalesce((v_scope->>'expected_member_count')::integer,0)
+-       or coalesce((v_scope->>'existing_line_invoice_count')::integer,0)<>1 then
++       or (case when upper(coalesce(p_context,''))='INVOICE_APPLY_EDITS_RESULT'
++          then coalesce(v_scope->>'placement_state','MALFORMED_PAIR') not in (
++            'COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES','INCOMPLETE_MOVE','UNPLACED')
++          else coalesce(v_scope->>'placement_state','MALFORMED_PAIR') not in (
++            'COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES') end) then
+       raise exception 'INVOICE_CORRECTION_LINES_NOT_UNIT_SAFE' using errcode='P0001',detail=v_scope::text;
+     end if;
+     v_scopes:=v_scopes||jsonb_build_array(v_scope);
+diff --git a/supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql b/supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql
+index d267d99..fc923c6 100644
+--- a/supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql
++++ b/supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql
+@@ -33,6 +33,13 @@ declare
+   v_current_stream text;
+   v_target_stream text;
+   v_line_policy_mismatch_count integer:=0;
++  v_reversal_line_count integer:=0;
++  v_replacement_line_count integer:=0;
++  v_reversal_invoice_ids uuid[]:=array[]::uuid[];
++  v_replacement_invoice_ids uuid[]:=array[]::uuid[];
++  v_placement_state text:='MALFORMED_PAIR';
++  v_placement_compatible boolean:=false;
++  v_placement_invoices jsonb:='[]'::jsonb;
+   v_compatibility_mode text;
+   v_operation public.import_apply_operations%rowtype;
+   v_operation_unit jsonb;
+@@ -331,7 +338,68 @@ begin
+ 
+   select count(distinct il.timesheet_id),count(distinct il.invoice_id)
+   into v_line_member_count,v_line_invoice_count
+-  from public.invoice_lines il where il.timesheet_id=any(v_ids);
++  from public.invoice_lines il
++  join public.invoices i on i.id=il.invoice_id
++  where il.timesheet_id=any(v_ids)
++    and upper(coalesce(i.type::text,''))<>'CREDIT_NOTE';
++
++  select
++    count(il.invoice_id) filter(where ts.correction_kind='CHANGED_HOURS_REVERSAL')::integer,
++    count(il.invoice_id) filter(where ts.correction_kind='CHANGED_HOURS_REPLACEMENT')::integer,
++    coalesce(array_agg(il.invoice_id order by il.invoice_id)
++      filter(where ts.correction_kind='CHANGED_HOURS_REVERSAL'),array[]::uuid[]),
++    coalesce(array_agg(il.invoice_id order by il.invoice_id)
++      filter(where ts.correction_kind='CHANGED_HOURS_REPLACEMENT'),array[]::uuid[])
++  into v_reversal_line_count,v_replacement_line_count,
++       v_reversal_invoice_ids,v_replacement_invoice_ids
++  from public.timesheets ts
++  left join public.invoice_lines il on il.timesheet_id=ts.timesheet_id
++    and exists(select 1 from public.invoices active_invoice where active_invoice.id=il.invoice_id
++      and upper(coalesce(active_invoice.type::text,''))<>'CREDIT_NOTE')
++  where ts.timesheet_id=any(v_ids);
++
++  select coalesce(jsonb_agg(jsonb_build_object(
++    'invoice_id',i.id,'status',i.status,'issued_at_utc',i.issued_at_utc,
++    'client_id',i.client_id,
++    'invoice_stream',case when lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}','false'))='true'
++      then 'SELF_BILL' else 'NORMAL' end,
++    'currency',upper(coalesce(nullif(i.header_snapshot_json->>'currency',''),nullif(i.header_snapshot_json#>>'{meta,currency}',''),'GBP')),
++    'invoice_week',coalesce(i.header_snapshot_json#>>'{meta,invoice_week_start}',
++      i.header_snapshot_json->>'week_ending_date',i.header_snapshot_json#>>'{meta,week_ending_date}'))
++    order by i.id),'[]'::jsonb)
++  into v_placement_invoices
++  from public.invoices i
++  where i.id=any(v_reversal_invoice_ids||v_replacement_invoice_ids);
++
++  if v_expected_count<>2 then
++    v_placement_state:='MALFORMED_PAIR';
++  elsif v_reversal_line_count>1 or v_replacement_line_count>1 then
++    v_placement_state:='DUPLICATE_PLACEMENT';
++  elsif v_reversal_line_count=0 and v_replacement_line_count=0 then
++    v_placement_state:='UNPLACED';
++    v_placement_compatible:=true;
++  elsif (v_reversal_line_count=1 and v_replacement_line_count=0)
++     or (v_reversal_line_count=0 and v_replacement_line_count=1) then
++    v_placement_state:='INCOMPLETE_MOVE';
++    v_placement_compatible:=true;
++  elsif v_reversal_invoice_ids[1]=v_replacement_invoice_ids[1] then
++    v_placement_state:='COMPLETE_SAME_INVOICE';
++    v_placement_compatible:=true;
++  else
++    select count(distinct i.client_id)=1
++       and count(distinct case when lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}','false'))='true'
++         then 'SELF_BILL' else 'NORMAL' end)=1
++       and count(distinct upper(coalesce(nullif(i.header_snapshot_json->>'currency',''),
++         nullif(i.header_snapshot_json#>>'{meta,currency}',''),'GBP')))=1
++       and count(distinct coalesce(i.header_snapshot_json#>>'{meta,invoice_week_start}',i.header_snapshot_json->>'week_ending_date',
++         i.header_snapshot_json#>>'{meta,week_ending_date}',(select min(ts.week_ending_date)::text
++           from public.timesheets ts where ts.timesheet_id=any(v_ids))))=1
++    into v_placement_compatible
++    from public.invoices i
++    where i.id=any(v_reversal_invoice_ids||v_replacement_invoice_ids);
++    v_placement_state:=case when v_placement_compatible then 'COMPLETE_SPLIT_INVOICES'
++      else 'INCOMPATIBLE_PLACEMENT' end;
++  end if;
+ 
+   select count(*)::integer into v_line_policy_mismatch_count
+   from public.invoice_lines il
+@@ -367,8 +435,12 @@ begin
+       'expected_stream',v_expected_stream
+     ));
+   end if;
+-  if v_line_member_count not in (0,v_expected_count) or (v_line_member_count=v_expected_count and v_line_invoice_count<>1) then
+-    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_UNIT_SPLIT'));
++  if v_placement_state='DUPLICATE_PLACEMENT' then
++    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_PAIR_DUPLICATE_PLACEMENT'));
++  elsif v_placement_state='INCOMPATIBLE_PLACEMENT' then
++    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_PAIR_INCOMPATIBLE_PLACEMENT'));
++  elsif v_placement_state='MALFORMED_PAIR' then
++    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_PAIR_MALFORMED'));
+   end if;
+   if v_line_policy_mismatch_count<>0 then
+     v_errors:=v_errors||jsonb_build_array(jsonb_build_object(
+@@ -379,6 +451,29 @@ begin
+   if p_target_invoice_id is not null and v_target.client_id is distinct from (select tf.client_id from public.timesheets_financials tf where tf.timesheet_id=v_ids[1] and tf.is_current=true) then
+     v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_TARGET_CLIENT_MISMATCH'));
+   end if;
++  if p_target_invoice_id is not null and v_placement_state='INCOMPLETE_MOVE'
++     and exists (
++       select 1
++       from public.invoices placed
++       where placed.id=any(v_reversal_invoice_ids||v_replacement_invoice_ids)
++         and placed.id<>p_target_invoice_id
++         and (
++           placed.client_id is distinct from v_target.client_id
++           or (case when lower(coalesce(placed.header_snapshot_json#>>'{meta,self_bill}','false'))='true'
++                 then 'SELF_BILL' else 'NORMAL' end) is distinct from v_target_stream
++           or upper(coalesce(nullif(placed.header_snapshot_json->>'currency',''),
++                nullif(placed.header_snapshot_json#>>'{meta,currency}',''),'GBP'))
++              is distinct from upper(coalesce(nullif(v_target.header_snapshot_json->>'currency',''),
++                nullif(v_target.header_snapshot_json#>>'{meta,currency}',''),'GBP'))
++           or coalesce(placed.header_snapshot_json#>>'{meta,invoice_week_start}',placed.header_snapshot_json->>'week_ending_date',
++                placed.header_snapshot_json#>>'{meta,week_ending_date}',(select min(ts.week_ending_date)::text from public.timesheets ts where ts.timesheet_id=any(v_ids)))
++              is distinct from coalesce(v_target.header_snapshot_json#>>'{meta,invoice_week_start}',v_target.header_snapshot_json->>'week_ending_date',
++                v_target.header_snapshot_json#>>'{meta,week_ending_date}',(select min(ts.week_ending_date)::text from public.timesheets ts where ts.timesheet_id=any(v_ids)))
++         )
++     ) then
++    v_errors:=v_errors||jsonb_build_array(jsonb_build_object(
++      'code','INVOICE_CORRECTION_TARGET_INCOMPATIBLE_WITH_PARTNER'));
++  end if;
+ 
+   return jsonb_build_object(
+     'ok',true,'valid',jsonb_array_length(v_errors)=0,'root_timesheet_id',v_chain->>'root_timesheet_id',
+@@ -390,6 +485,15 @@ begin
+     'invoice_stream',v_expected_stream,
+     'pair_rows',v_rows,'ready_count',v_ready_count,'existing_line_member_count',v_line_member_count,
+     'existing_line_invoice_count',v_line_invoice_count,
++    'placement_state',v_placement_state,
++    'placement_complete',v_placement_state in ('COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES'),
++    'placement_compatible',v_placement_compatible,
++    'placement_invoices',v_placement_invoices,
++    'reversal_invoice_ids',to_jsonb(v_reversal_invoice_ids),
++    'replacement_invoice_ids',to_jsonb(v_replacement_invoice_ids),
++    'missing_member_kind',case
++      when v_placement_state='INCOMPLETE_MOVE' and v_reversal_line_count=0 then 'CHANGED_HOURS_REVERSAL'
++      when v_placement_state='INCOMPLETE_MOVE' and v_replacement_line_count=0 then 'CHANGED_HOURS_REPLACEMENT' end,
+     'line_policy_mismatch_count',v_line_policy_mismatch_count,'errors',v_errors,
+     'compatibility_mode',v_compatibility_mode);
+ end;
+diff --git a/supabase/repeatable/21072026_1235_32_timesheet_authorise_bulk_atomic.sql b/supabase/repeatable/21072026_1235_32_timesheet_authorise_bulk_atomic.sql
+index 5e7fe43..f7b6a61 100644
+--- a/supabase/repeatable/21072026_1235_32_timesheet_authorise_bulk_atomic.sql
++++ b/supabase/repeatable/21072026_1235_32_timesheet_authorise_bulk_atomic.sql
+@@ -244,6 +244,23 @@ BEGIN
+     END AS new_processing_status
+   FROM pg_temp.timesheet_authorise_bulk_state AS state_rows;
+ 
++  -- A linked correction pair is one lifecycle unit.  An already-authorised
++  -- sibling in a repairable legacy mixed state is idempotent, while any real
++  -- blocker is propagated to both members before either member is mutated.
++  UPDATE pg_temp.timesheet_authorise_bulk_work work_rows
++     SET failure_code=NULL
++   WHERE NULLIF(work_rows.item_json->>'lifecycle_group_id','') IS NOT NULL
++     AND work_rows.failure_code='ALREADY_AUTHORISED';
++
++  UPDATE pg_temp.timesheet_authorise_bulk_work work_rows
++     SET failure_code='CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED'
++   WHERE NULLIF(work_rows.item_json->>'lifecycle_group_id','') IS NOT NULL
++     AND EXISTS (
++       SELECT 1 FROM pg_temp.timesheet_authorise_bulk_work blocked
++       WHERE blocked.item_json->>'lifecycle_group_id'=work_rows.item_json->>'lifecycle_group_id'
++         AND blocked.failure_code IS NOT NULL
++     );
++
+   CREATE TEMP TABLE timesheet_authorise_bulk_updated_ts ON COMMIT DROP AS
+   WITH updated_rows AS (
+     UPDATE public.timesheets AS ts_upd
+@@ -286,6 +303,24 @@ BEGIN
+   )
+   SELECT updated_rows.* FROM updated_rows;
+ 
++  IF EXISTS (
++    SELECT 1
++    FROM pg_temp.timesheet_authorise_bulk_work work_rows
++    JOIN public.timesheets current_pair
++      ON current_pair.timesheet_id=work_rows.current_timesheet_id
++    JOIN public.timesheets_financials current_tf
++      ON current_tf.timesheet_id=current_pair.timesheet_id AND current_tf.is_current=true
++    WHERE NULLIF(work_rows.item_json->>'lifecycle_group_id','') IS NOT NULL
++      AND work_rows.failure_code IS NULL
++    GROUP BY work_rows.item_json->>'lifecycle_group_id',
++             (work_rows.item_json->>'lifecycle_group_size')::integer
++    HAVING count(*)<>(work_rows.item_json->>'lifecycle_group_size')::integer
++       OR count(*) FILTER (WHERE current_pair.authorised_at_server IS NOT NULL
++                            AND current_tf.authorised_at_utc IS NOT NULL)<>count(*)
++  ) THEN
++    RAISE EXCEPTION 'CORRECTION_PAIR_LIFECYCLE_POSTCONDITION_FAILED' USING ERRCODE='P0001';
++  END IF;
++
+   PERFORM public._audit_insert(
+     'timesheet_batch',
+     'bulk_authorise:' || v_now::text,
+@@ -317,6 +352,8 @@ BEGIN
+       'processing_status_before', work_rows.tsfin_processing_status::text,
+       'processing_status_after', CASE WHEN updated_tf.processing_status IS NULL THEN NULL ELSE updated_tf.processing_status::text END,
+       'contract_week_id', work_rows.contract_week_id,
++      'lifecycle_group_id', NULLIF(work_rows.item_json ->> 'lifecycle_group_id', ''),
++      'pair_fingerprint', NULLIF(work_rows.item_json ->> 'pair_fingerprint', ''),
+       'affected_rows', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN jsonb_build_array(jsonb_build_object('timesheet_id', work_rows.current_timesheet_id, 'contract_week_id', work_rows.contract_week_id, 'booking_id', work_rows.current_booking_id, 'row_key', 'timesheet:' || work_rows.current_timesheet_id::text)) ELSE '[]'::jsonb END
+     ) AS result_json
+   FROM pg_temp.timesheet_authorise_bulk_work AS work_rows
+diff --git a/supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql b/supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql
+index 12f6cc9..223cf68 100644
+--- a/supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql
++++ b/supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql
+@@ -190,6 +190,23 @@ BEGIN
+     'PENDING_AUTH'::public.ts_fin_processing_status_enum AS new_processing_status
+   FROM pg_temp.timesheet_unauthorise_bulk_state AS state_rows;
+ 
++  -- Correction pairs are one lifecycle unit.  Treat an already-unauthorised
++  -- sibling as idempotent only inside a proven pair group and propagate any
++  -- real blocker to both members before mutation.
++  UPDATE pg_temp.timesheet_unauthorise_bulk_work work_rows
++     SET failure_code=NULL
++   WHERE NULLIF(work_rows.item_json->>'lifecycle_group_id','') IS NOT NULL
++     AND work_rows.failure_code='ALREADY_UNAUTHORISED';
++
++  UPDATE pg_temp.timesheet_unauthorise_bulk_work work_rows
++     SET failure_code='CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED'
++   WHERE NULLIF(work_rows.item_json->>'lifecycle_group_id','') IS NOT NULL
++     AND EXISTS (
++       SELECT 1 FROM pg_temp.timesheet_unauthorise_bulk_work blocked
++       WHERE blocked.item_json->>'lifecycle_group_id'=work_rows.item_json->>'lifecycle_group_id'
++         AND blocked.failure_code IS NOT NULL
++     );
++
+   CREATE TEMP TABLE timesheet_unauthorise_bulk_updated_ts ON COMMIT DROP AS
+   WITH updated_rows AS (
+     UPDATE public.timesheets AS ts_upd
+@@ -233,6 +250,24 @@ BEGIN
+   )
+   SELECT updated_rows.* FROM updated_rows;
+ 
++  IF EXISTS (
++    SELECT 1
++    FROM pg_temp.timesheet_unauthorise_bulk_work work_rows
++    JOIN public.timesheets current_pair
++      ON current_pair.timesheet_id=work_rows.current_timesheet_id
++    JOIN public.timesheets_financials current_tf
++      ON current_tf.timesheet_id=current_pair.timesheet_id AND current_tf.is_current=true
++    WHERE NULLIF(work_rows.item_json->>'lifecycle_group_id','') IS NOT NULL
++      AND work_rows.failure_code IS NULL
++    GROUP BY work_rows.item_json->>'lifecycle_group_id',
++             (work_rows.item_json->>'lifecycle_group_size')::integer
++    HAVING count(*)<>(work_rows.item_json->>'lifecycle_group_size')::integer
++       OR count(*) FILTER (WHERE current_pair.authorised_at_server IS NULL
++                            AND current_tf.authorised_at_utc IS NULL)<>count(*)
++  ) THEN
++    RAISE EXCEPTION 'CORRECTION_PAIR_LIFECYCLE_POSTCONDITION_FAILED' USING ERRCODE='P0001';
++  END IF;
++
+   PERFORM public._audit_insert(
+     'timesheet_batch',
+     'bulk_unauthorise:' || v_now::text,
+@@ -264,6 +299,8 @@ BEGIN
+       'processing_status_before', work_rows.tsfin_processing_status::text,
+       'processing_status_after', CASE WHEN updated_tf.processing_status IS NULL THEN NULL ELSE updated_tf.processing_status::text END,
+       'contract_week_id', work_rows.contract_week_id,
++      'lifecycle_group_id', NULLIF(work_rows.item_json ->> 'lifecycle_group_id', ''),
++      'pair_fingerprint', NULLIF(work_rows.item_json ->> 'pair_fingerprint', ''),
+       'affected_rows', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN jsonb_build_array(jsonb_build_object('timesheet_id', work_rows.current_timesheet_id, 'contract_week_id', work_rows.contract_week_id, 'booking_id', work_rows.current_booking_id, 'row_key', 'timesheet:' || work_rows.current_timesheet_id::text)) ELSE '[]'::jsonb END
+     ) AS result_json
+   FROM pg_temp.timesheet_unauthorise_bulk_work AS work_rows
+diff --git a/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql b/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
+index 4e4e997..59c2332 100644
+--- a/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
++++ b/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
+@@ -881,6 +881,10 @@ declare
+   v_operation_ids uuid[]:=array[]::uuid[];
+   v_effective_invoice_ids uuid[]:=array[]::uuid[];
+   v_effective_line_ids uuid[]:=array[]::uuid[];
++  v_issued_invoice_ids uuid[]:=array[]::uuid[];
++  v_issued_line_ids uuid[]:=array[]::uuid[];
++  v_pending_invoice_ids uuid[]:=array[]::uuid[];
++  v_pending_line_ids uuid[]:=array[]::uuid[];
+   v_credit_line_ids uuid[]:=array[]::uuid[];
+   v_line_count integer:=0;
+   v_audit_count integer:=0;
+@@ -899,6 +903,8 @@ declare
+   v_member_role_map jsonb:='[]'::jsonb;
+   v_member_role_conflict boolean:=false;
+   v_effective_component_count integer:=0;
++  v_issued_component_count integer:=0;
++  v_pending_component_count integer:=0;
+   v_b_day numeric:=0;
+   v_b_night numeric:=0;
+   v_b_sat numeric:=0;
+@@ -907,6 +913,22 @@ declare
+   v_b_pay numeric:=0;
+   v_b_charge numeric:=0;
+   v_b_margin numeric:=0;
++  v_issued_day numeric:=0;
++  v_issued_night numeric:=0;
++  v_issued_sat numeric:=0;
++  v_issued_sun numeric:=0;
++  v_issued_bh numeric:=0;
++  v_issued_pay numeric:=0;
++  v_issued_charge numeric:=0;
++  v_issued_margin numeric:=0;
++  v_pending_day numeric:=0;
++  v_pending_night numeric:=0;
++  v_pending_sat numeric:=0;
++  v_pending_sun numeric:=0;
++  v_pending_bh numeric:=0;
++  v_pending_pay numeric:=0;
++  v_pending_charge numeric:=0;
++  v_pending_margin numeric:=0;
+   v_component_day numeric:=0;
+   v_component_night numeric:=0;
+   v_component_sat numeric:=0;
+@@ -987,6 +1009,7 @@ declare
+   v_component_timesheet_id uuid;
+   v_component_correction_id text;
+   v_component_correction_kind text;
++  v_component_economic_state text;
+   v_scope_unprovable boolean:=false;
+   v_credit_ambiguous boolean:=false;
+   v_stream_conflict boolean:=false;
+@@ -1581,10 +1604,20 @@ begin
+ 
+     v_effective_invoice_ids:=array[]::uuid[];
+     v_effective_line_ids:=array[]::uuid[];
++    v_issued_invoice_ids:=array[]::uuid[];
++    v_issued_line_ids:=array[]::uuid[];
++    v_pending_invoice_ids:=array[]::uuid[];
++    v_pending_line_ids:=array[]::uuid[];
+     v_credit_line_ids:=array[]::uuid[];
+     v_effective_component_count:=0;
++    v_issued_component_count:=0;
++    v_pending_component_count:=0;
+     v_b_day:=0; v_b_night:=0; v_b_sat:=0; v_b_sun:=0; v_b_bh:=0;
+     v_b_pay:=0; v_b_charge:=0; v_b_margin:=0;
++    v_issued_day:=0; v_issued_night:=0; v_issued_sat:=0; v_issued_sun:=0; v_issued_bh:=0;
++    v_issued_pay:=0; v_issued_charge:=0; v_issued_margin:=0;
++    v_pending_day:=0; v_pending_night:=0; v_pending_sat:=0; v_pending_sun:=0; v_pending_bh:=0;
++    v_pending_pay:=0; v_pending_charge:=0; v_pending_margin:=0;
+     v_b_schedule:='[]'::jsonb; v_candidate_schedule:='[]'::jsonb; v_candidate_hours:='{}'::jsonb;
+     v_schedule_candidates:='[]'::jsonb; v_candidate_policy_fingerprint:=null; v_b_policy_fingerprint:=null;
+     v_terminal_generation_id:=null; v_terminal_positive_timesheet_id:=null; v_terminal_positive_member_count:=0;
+@@ -1810,9 +1843,8 @@ begin
+       where member->>'timesheet_id'=v_component_timesheet_id::text
+       limit 1;
+ 
+-      if v_line.invoice_status='DRAFT' or v_line.issued_at_utc is null
+-         or v_line.active_document_operation_id is not null or v_line.active_issue_operation_id is not null
+-         or upper(coalesce(v_line.issue_state,'')) not in ('','IDLE','COMPLETE','COMPLETED','ISSUED') then
++      if v_line.active_document_operation_id is not null or v_line.active_issue_operation_id is not null
++         or upper(coalesce(v_line.issue_state,'')) not in ('','IDLE','NOT_STARTED','COMPLETE','COMPLETED','ISSUED') then
+         v_active_invoice_activity:=true;
+       end if;
+       if v_line.invoice_type='CREDIT_NOTE'
+@@ -1853,15 +1885,9 @@ begin
+         continue;
+       end if;
+ 
+-      if v_line.invoice_status='DRAFT' or v_line.issued_at_utc is null
+-         or v_line.active_document_operation_id is not null or v_line.active_issue_operation_id is not null
+-         or upper(coalesce(v_line.issue_state,'')) not in ('','IDLE','COMPLETE','COMPLETED','ISSUED') then
+-        v_line_evidence:=v_line_evidence||jsonb_build_array(jsonb_build_object(
+-          'invoice_id',v_line.invoice_id,'invoice_line_id',v_line.id,'invoice_type',v_line.invoice_type,
+-          'economic_state','PENDING','timesheet_id',v_component_timesheet_id,
+-          'correction_id',v_component_correction_id,'correction_kind',v_component_correction_kind));
+-        continue;
+-      end if;
++      v_component_economic_state:=case
++        when v_line.invoice_status='DRAFT' or v_line.issued_at_utc is null then 'PENDING'
++        else 'EFFECTIVE' end;
+ 
+       if v_line.invoice_type='CREDIT_NOTE' then
+         -- Hours are the negative of the exact original frozen component.  A
+@@ -1903,10 +1929,25 @@ begin
+       v_effective_component_count:=v_effective_component_count+1;
+       v_effective_invoice_ids:=array_append(v_effective_invoice_ids,v_line.invoice_id);
+       v_effective_line_ids:=array_append(v_effective_line_ids,v_line.id);
++      if v_component_economic_state='PENDING' then
++        v_pending_day:=v_pending_day+v_component_day; v_pending_night:=v_pending_night+v_component_night;
++        v_pending_sat:=v_pending_sat+v_component_sat; v_pending_sun:=v_pending_sun+v_component_sun; v_pending_bh:=v_pending_bh+v_component_bh;
++        v_pending_pay:=v_pending_pay+v_component_pay; v_pending_charge:=v_pending_charge+v_component_charge; v_pending_margin:=v_pending_margin+v_component_margin;
++        v_pending_component_count:=v_pending_component_count+1;
++        v_pending_invoice_ids:=array_append(v_pending_invoice_ids,v_line.invoice_id);
++        v_pending_line_ids:=array_append(v_pending_line_ids,v_line.id);
++      else
++        v_issued_day:=v_issued_day+v_component_day; v_issued_night:=v_issued_night+v_component_night;
++        v_issued_sat:=v_issued_sat+v_component_sat; v_issued_sun:=v_issued_sun+v_component_sun; v_issued_bh:=v_issued_bh+v_component_bh;
++        v_issued_pay:=v_issued_pay+v_component_pay; v_issued_charge:=v_issued_charge+v_component_charge; v_issued_margin:=v_issued_margin+v_component_margin;
++        v_issued_component_count:=v_issued_component_count+1;
++        v_issued_invoice_ids:=array_append(v_issued_invoice_ids,v_line.invoice_id);
++        v_issued_line_ids:=array_append(v_issued_line_ids,v_line.id);
++      end if;
+       if v_line.invoice_type='CREDIT_NOTE' then v_credit_line_ids:=array_append(v_credit_line_ids,v_line.id); end if;
+       v_line_evidence:=v_line_evidence||jsonb_build_array(jsonb_build_object(
+         'invoice_id',v_line.invoice_id,'invoice_line_id',v_line.id,'invoice_type',v_line.invoice_type,
+-        'economic_state','EFFECTIVE','timesheet_id',v_component_timesheet_id,
++        'economic_state',v_component_economic_state,'timesheet_id',v_component_timesheet_id,
+         'correction_id',v_component_correction_id,'correction_kind',v_component_correction_kind,
+         'hours',jsonb_build_object('hours_day',v_component_day,'hours_night',v_component_night,'hours_sat',v_component_sat,'hours_sun',v_component_sun,'hours_bh',v_component_bh),
+         'pay_ex_vat',v_component_pay,'charge_ex_vat',v_component_charge,'margin_ex_vat',v_component_margin));
+@@ -1947,6 +1988,10 @@ begin
+ 
+     select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_effective_invoice_ids from unnest(v_effective_invoice_ids) x;
+     select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_effective_line_ids from unnest(v_effective_line_ids) x;
++    select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_issued_invoice_ids from unnest(v_issued_invoice_ids) x;
++    select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_issued_line_ids from unnest(v_issued_line_ids) x;
++    select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_pending_invoice_ids from unnest(v_pending_invoice_ids) x;
++    select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_pending_line_ids from unnest(v_pending_line_ids) x;
+     select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_credit_line_ids from unnest(v_credit_line_ids) x;
+     v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v1',v_source_identity,v_line_evidence::text,v_b_day,v_b_night,v_b_sat,v_b_sun,v_b_bh,v_b_pay,v_b_charge,v_b_margin),'UTF8'),'sha256'),'hex');
+ 
+@@ -1990,7 +2035,7 @@ begin
+             and not exists(select 1 from public.timesheets t where t.timesheet_id=(member->>'timesheet_id')::uuid)),array[]::uuid[]) operation_missing_ids,
+         exists(select 1 from jsonb_array_elements(v_line_evidence) component
+           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
+-            and component->>'economic_state'='EFFECTIVE') has_effective_history,
++            and component->>'economic_state' in ('EFFECTIVE','PENDING')) has_effective_history,
+         exists(select 1 from jsonb_array_elements(v_line_evidence) component
+           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
+             and component->>'economic_state'='PENDING')
+@@ -2021,23 +2066,23 @@ begin
+         coalesce((select sum(coalesce((component#>>'{hours,hours_day}')::numeric,0))
+           from jsonb_array_elements(v_line_evidence) component
+           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
+-            and component->>'economic_state'='EFFECTIVE'),0) net_day,
++            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_day,
+         coalesce((select sum(coalesce((component#>>'{hours,hours_night}')::numeric,0))
+           from jsonb_array_elements(v_line_evidence) component
+           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
+-            and component->>'economic_state'='EFFECTIVE'),0) net_night,
++            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_night,
+         coalesce((select sum(coalesce((component#>>'{hours,hours_sat}')::numeric,0))
+           from jsonb_array_elements(v_line_evidence) component
+           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
+-            and component->>'economic_state'='EFFECTIVE'),0) net_sat,
++            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_sat,
+         coalesce((select sum(coalesce((component#>>'{hours,hours_sun}')::numeric,0))
+           from jsonb_array_elements(v_line_evidence) component
+           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
+-            and component->>'economic_state'='EFFECTIVE'),0) net_sun,
++            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_sun,
+         coalesce((select sum(coalesce((component#>>'{hours,hours_bh}')::numeric,0))
+           from jsonb_array_elements(v_line_evidence) component
+           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
+-            and component->>'economic_state'='EFFECTIVE'),0) net_bh
++            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_bh
+       from roles r
+     ), generation_state as (
+       select correction_id,max(evidence_at) evidence_at,
+@@ -2114,7 +2159,10 @@ begin
+       v_role_active_invoice_activity,v_role_scope_unprovable;
+ 
+     v_partial_invoice_state:=v_role_partial_invoice_state;
+-    v_active_invoice_activity:=v_active_invoice_activity or v_role_active_invoice_activity or v_operation_in_progress;
++    -- Stable DRAFT lines are planned economics, not active invoice work.  Only
++    -- a real document/issue operation or an import operation still in progress
++    -- blocks review.  One-sided placement is reported separately below.
++    v_active_invoice_activity:=v_active_invoice_activity or v_operation_in_progress;
+     v_scope_unprovable:=v_scope_unprovable or v_role_scope_unprovable
+       or v_operation_evidence_conflict or v_member_role_conflict;
+ 
+@@ -2376,6 +2424,9 @@ begin
+     v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v4',v_source_identity,
+       v_line_evidence::text,v_ignored_nonhours_line_ids::text,v_role_evidence_fingerprint,
+       v_b_day,v_b_night,v_b_sat,v_b_sun,v_b_bh,v_b_pay,v_b_charge,v_b_margin,
++      v_issued_line_ids::text,v_pending_line_ids::text,
++      v_issued_day,v_issued_night,v_issued_sat,v_issued_sun,v_issued_bh,v_issued_pay,v_issued_charge,v_issued_margin,
++      v_pending_day,v_pending_night,v_pending_sat,v_pending_sun,v_pending_bh,v_pending_pay,v_pending_charge,v_pending_margin,
+       v_b_standard_schedule_authority_fingerprint),'UTF8'),'sha256'),'hex');
+ 
+     if v_mutable_correction_id is not null then
+@@ -2472,7 +2523,7 @@ begin
+     end;
+ 
+     v_blocking_code:=case
+-      when v_partial_invoice_state then 'IMPORT_REVIEW_CORRECTION_GENERATION_PARTIALLY_INVOICED'
++      when v_partial_invoice_state then 'IMPORT_REVIEW_CORRECTION_PAIR_PLACEMENT_INCOMPLETE'
+       when v_active_invoice_activity then 'IMPORT_REVIEW_INVOICE_ACTIVITY_IN_PROGRESS'
+       when v_credit_ambiguous then 'IMPORT_REVIEW_EFFECTIVE_CREDIT_AMBIGUOUS'
+       when v_scope_unprovable or v_stream_conflict then 'IMPORT_REVIEW_INVOICE_COMPONENT_SCOPE_UNPROVABLE'
+@@ -2508,6 +2559,10 @@ begin
+       'effective_invoice_ids',to_jsonb(v_effective_invoice_ids),'effective_invoice_line_ids',to_jsonb(v_effective_line_ids),
+       'effective_credit_line_ids',to_jsonb(v_credit_line_ids),'effective_invoice_component_count',v_effective_component_count,
+       'effective_hours_component_count',v_effective_component_count,
++      'issued_invoice_ids',to_jsonb(v_issued_invoice_ids),'issued_invoice_line_ids',to_jsonb(v_issued_line_ids),
++      'issued_invoice_component_count',v_issued_component_count,
++      'pending_invoice_ids',to_jsonb(v_pending_invoice_ids),'pending_invoice_line_ids',to_jsonb(v_pending_line_ids),
++      'pending_invoice_component_count',v_pending_component_count,
+       'ignored_nonhours_invoice_line_ids',to_jsonb(v_ignored_nonhours_line_ids)
+     ) || jsonb_build_object(
+       'generation_role_evidence',v_generation_role_evidence,
+@@ -2521,12 +2576,18 @@ begin
+       'role_evidence_fingerprint',v_role_evidence_fingerprint,
+       'effective_invoice_fingerprint',v_effective_fingerprint,
+       'B_hours',jsonb_build_object('hours_day',v_b_day,'hours_night',v_b_night,'hours_sat',v_b_sat,'hours_sun',v_b_sun,'hours_bh',v_b_bh,'total_hours',v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh),
++      'B_issued_hours',jsonb_build_object('hours_day',v_issued_day,'hours_night',v_issued_night,'hours_sat',v_issued_sat,'hours_sun',v_issued_sun,'hours_bh',v_issued_bh,'total_hours',v_issued_day+v_issued_night+v_issued_sat+v_issued_sun+v_issued_bh),
++      'P_pending_hours',jsonb_build_object('hours_day',v_pending_day,'hours_night',v_pending_night,'hours_sat',v_pending_sat,'hours_sun',v_pending_sun,'hours_bh',v_pending_bh,'total_hours',v_pending_day+v_pending_night+v_pending_sat+v_pending_sun+v_pending_bh),
++      'planned_invoice_hours',jsonb_build_object('hours_day',v_b_day,'hours_night',v_b_night,'hours_sat',v_b_sat,'hours_sun',v_b_sun,'hours_bh',v_b_bh,'total_hours',v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh),
+       'effective_hours_net_is_zero',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)=0,
+       'effective_money_net_is_zero',v_b_money_zero,
+       'effective_position_net_is_zero',v_effective_zero,
+       'effective_hours_net_is_positive',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0,
+       'effective_hours_net_is_negative',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)<0,
+       'B_financials',jsonb_build_object('pay_ex_vat',v_b_pay,'charge_ex_vat',v_b_charge,'margin_ex_vat',v_b_margin),
++      'B_issued_financials',jsonb_build_object('pay_ex_vat',v_issued_pay,'charge_ex_vat',v_issued_charge,'margin_ex_vat',v_issued_margin),
++      'P_pending_financials',jsonb_build_object('pay_ex_vat',v_pending_pay,'charge_ex_vat',v_pending_charge,'margin_ex_vat',v_pending_margin),
++      'planned_invoice_financials',jsonb_build_object('pay_ex_vat',v_b_pay,'charge_ex_vat',v_b_charge,'margin_ex_vat',v_b_margin),
+       'B_standard_schedule_json',v_b_schedule,'B_policy_fingerprint',v_b_policy_fingerprint,'B_standard_representable',v_b_standard_representable,
+       'B_standard_schedule_authority',v_b_standard_schedule_authority,
+       'B_standard_schedule_authority_timesheet_id',v_b_standard_schedule_authority_timesheet_id,
+@@ -3852,6 +3913,33 @@ begin
+   from evidence e
+   where e.action_id=c.action_id;
+ 
++  -- An invoice-linked validation shift owns this blocker.  Do not also expose
++  -- the aggregate query-email action as a second visual copy of the same
++  -- shift.  Preserve any delivery history on the owning shift before removing
++  -- only that redundant email row; genuine query emails remain untouched.
++  update pg_temp.import_review_catalog_v1 owner_row
++  set summary_json=owner_row.summary_json||jsonb_strip_nulls(jsonb_build_object(
++        'delivery_history_status',email_row.summary_json->>'delivery_history_status',
++        'sent_count',nullif(email_row.summary_json->>'sent_count','')::integer,
++        'previously_queried',coalesce(nullif(email_row.summary_json->>'sent_count','')::integer,0)>0
++      ))
++  from pg_temp.import_review_catalog_v1 email_row
++  where owner_row.timesheet_id=email_row.timesheet_id
++    and owner_row.action_id<>email_row.action_id
++    and owner_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
++    and owner_row.summary_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED'
++    and email_row.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
++    and email_row.summary_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED';
++
++  delete from pg_temp.import_review_catalog_v1 email_row
++  using pg_temp.import_review_catalog_v1 owner_row
++  where email_row.timesheet_id=owner_row.timesheet_id
++    and email_row.action_id<>owner_row.action_id
++    and email_row.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
++    and email_row.summary_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED'
++    and owner_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
++    and owner_row.summary_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED';
++
+   -- Daily validation is atomic per Daily timesheet.  An email, document hold
+   -- or invoice blocker for that record prevents only that record from entering
+   -- validation and TSFIN work.
+diff --git a/supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql b/supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql
+index 62eb661..98c7ebe 100644
+--- a/supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql
++++ b/supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql
+@@ -253,6 +253,10 @@ v_ref_seg_cur_ref text;
+   v_hdr_meta_segment_count int := 0;
+ 
+   v_manifest jsonb;
++  v_correction_placement_only boolean:=false;
++  v_correction_placement_ts_id uuid:=null;
++  v_correction_placement_scope jsonb:='{}'::jsonb;
++  v_correction_placement_states jsonb:='[]'::jsonb;
+   v_service boolean:=coalesce(auth.role(),'')='service_role';
+   v_actor_role text;
+ begin
+@@ -273,7 +277,31 @@ begin
+   perform public._ctms_assert_invoice_mutable_draft_v1(
+     p_invoice_id,'INVOICE_APPLY_EDITS',true
+   );
++  v_correction_placement_only:=
++    jsonb_typeof(coalesce(p_payload,'{}'::jsonb))='object'
++    and not exists(select 1 from jsonb_object_keys(coalesce(p_payload,'{}'::jsonb)) payload_key
++      where payload_key not in ('remove_invoice_line_ids','add_timesheet_ids'))
++    and coalesce(jsonb_array_length(case when jsonb_typeof(p_payload->'remove_invoice_line_ids')='array'
++      then p_payload->'remove_invoice_line_ids' else '[]'::jsonb end),0)
++      +coalesce(jsonb_array_length(case when jsonb_typeof(p_payload->'add_timesheet_ids')='array'
++      then p_payload->'add_timesheet_ids' else '[]'::jsonb end),0)=1
++    and (
++      (case when coalesce(p_payload#>>'{remove_invoice_line_ids,0}','')
++          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then exists(
++          select 1 from public.invoice_lines placement_line
++          where placement_line.id=(p_payload#>>'{remove_invoice_line_ids,0}')::uuid
++            and placement_line.invoice_id=p_invoice_id
++            and coalesce((public._ctms_import_correction_classify_v1(placement_line.timesheet_id)
++              ->>'is_import_authoritative_correction')::boolean,false)) else false end)
++      or
++      (case when coalesce(p_payload#>>'{add_timesheet_ids,0}','')
++          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
++        coalesce((public._ctms_import_correction_classify_v1(
++          (p_payload#>>'{add_timesheet_ids,0}')::uuid)->>'is_import_authoritative_correction')::boolean,false)
++        else false end)
++    );
+   if public._ctms_invoice_payload_has_financial_edit_v1(p_payload)
++     and not v_correction_placement_only
+      and exists (
+        select 1 from public.invoice_lines il
+        where il.invoice_id=p_invoice_id and il.timesheet_id is not null
+@@ -413,6 +441,47 @@ end if;
+     where nullif(btrim(coalesce(x,'')),'') is not null;
+   end if;
+ 
++  IF v_correction_placement_only THEN
++    IF COALESCE(cardinality(v_remove_ids),0)=1 THEN
++      SELECT il.timesheet_id INTO v_correction_placement_ts_id
++      FROM public.invoice_lines il
++      WHERE il.id=v_remove_ids[1] AND il.invoice_id=p_invoice_id
++      FOR UPDATE;
++      IF v_correction_placement_ts_id IS NULL
++         OR COALESCE((public._ctms_import_correction_classify_v1(v_correction_placement_ts_id)
++             ->>'is_import_authoritative_correction')::boolean,false) IS NOT TRUE THEN
++        RAISE EXCEPTION 'IMPORT_CORRECTION_PLACEMENT_ONLY_TARGET_INVALID' USING ERRCODE='P0001';
++      END IF;
++      v_correction_placement_scope:=public.invoice_correction_pair_scope_v1(
++        v_correction_placement_ts_id,null::uuid,p_actor_user_id,true,100);
++      IF COALESCE((v_correction_placement_scope->>'valid')::boolean,false) IS NOT TRUE
++         OR v_correction_placement_scope->>'placement_state' NOT IN (
++           'COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES') THEN
++        RAISE EXCEPTION 'INVOICE_CORRECTION_PAIR_PLACEMENT_MOVE_NOT_STARTABLE'
++          USING ERRCODE='P0001',DETAIL=v_correction_placement_scope::text;
++      END IF;
++    ELSIF COALESCE(cardinality(v_add_ts_ids),0)=1 THEN
++      v_correction_placement_ts_id:=v_add_ts_ids[1];
++      IF COALESCE((public._ctms_import_correction_classify_v1(v_correction_placement_ts_id)
++             ->>'is_import_authoritative_correction')::boolean,false) IS NOT TRUE THEN
++        RAISE EXCEPTION 'IMPORT_CORRECTION_PLACEMENT_ONLY_TARGET_INVALID' USING ERRCODE='P0001';
++      END IF;
++      v_correction_placement_scope:=public.invoice_correction_pair_scope_v1(
++        v_correction_placement_ts_id,p_invoice_id,p_actor_user_id,true,100);
++      IF COALESCE((v_correction_placement_scope->>'valid')::boolean,false) IS NOT TRUE
++         OR v_correction_placement_scope->>'placement_state'<>'INCOMPLETE_MOVE'
++         OR v_correction_placement_scope->>'missing_member_kind' IS DISTINCT FROM
++              (SELECT t.correction_kind FROM public.timesheets t
++               WHERE t.timesheet_id=v_correction_placement_ts_id)
++         OR COALESCE((v_correction_placement_scope->>'target_appendable')::boolean,false) IS NOT TRUE THEN
++        RAISE EXCEPTION 'INVOICE_CORRECTION_PAIR_PLACEMENT_TARGET_INVALID'
++          USING ERRCODE='P0001',DETAIL=v_correction_placement_scope::text;
++      END IF;
++    ELSE
++      RAISE EXCEPTION 'IMPORT_CORRECTION_PLACEMENT_ONLY_PAYLOAD_INVALID' USING ERRCODE='22023';
++    END IF;
++  END IF;
++
+ 
+ -- Parse segment move payloads (tsfin_id + segment_id)
+ v_remove_seg_refs := null;
+@@ -3276,6 +3345,25 @@ end if;
+     p_invoice_id,p_actor_user_id,false,'INVOICE_APPLY_EDITS_RESULT'
+   );
+ 
++  IF v_correction_placement_ts_id IS NOT NULL THEN
++    v_correction_placement_scope:=public.invoice_correction_pair_scope_v1(
++      v_correction_placement_ts_id,null::uuid,p_actor_user_id,false,100);
++    IF COALESCE((v_correction_placement_scope->>'valid')::boolean,false) IS NOT TRUE
++       OR v_correction_placement_scope->>'placement_state' NOT IN (
++         'COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES','INCOMPLETE_MOVE','UNPLACED') THEN
++      RAISE EXCEPTION 'INVOICE_CORRECTION_PAIR_PLACEMENT_RESULT_INVALID'
++        USING ERRCODE='P0001',DETAIL=v_correction_placement_scope::text;
++    END IF;
++    v_correction_placement_states:=jsonb_build_array(jsonb_build_object(
++      'correction_id',v_correction_placement_scope->>'correction_id',
++      'pair_timesheet_ids',v_correction_placement_scope->'pair_timesheet_ids',
++      'placement_state',v_correction_placement_scope->>'placement_state',
++      'missing_member_kind',v_correction_placement_scope->>'missing_member_kind',
++      'placement_invoices',v_correction_placement_scope->'placement_invoices'));
++    v_manifest:=v_manifest||jsonb_build_object(
++      'correction_pair_placement_states',v_correction_placement_states);
++  END IF;
++
+   return v_manifest;
+ 
+ exception when others then
+diff --git a/supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql b/supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql
+index d333027..0cdbdb2 100644
+--- a/supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql
++++ b/supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql
+@@ -622,6 +622,7 @@ final as materialized (
+       ti.header_snapshot_json#>>'{meta,self_bill}','false'))
+       in('true','t','1','yes') then 'SELF_BILL' else 'NORMAL' end
+       target_invoice_stream,
++    coalesce(pair_scope.scope_json,'{}'::jsonb) pair_scope_json,
+     (
+       not r.import_declared
+       or(
+@@ -649,6 +650,11 @@ final as materialized (
+    and ls.scope_key=r.scope_key
+    and ls.timesheet_id=r.timesheet_id
+   left join public.invoices ti on ti.id=r.invoice_id
++  left join lateral (
++    select public.invoice_correction_pair_scope_v1(
++      r.timesheet_id,null::uuid,null::uuid,false,100) scope_json
++    where r.import_declared
++  ) pair_scope on true
+ ),
+ member_results as materialized (
+   select f.*,s.request_key,s.external_scope_key,s.validation_purpose,
+@@ -812,11 +818,22 @@ member_results as materialized (
+         then 'INVOICE_CORRECTION_SOURCE_LOCK_CONFLICT' end,
+       case when f.segment_lock_conflict_count>0
+         then 'INVOICE_CORRECTION_SEGMENT_LOCK_CONFLICT' end,
++      case when f.pair_scope_json->>'placement_state'='INCOMPLETE_MOVE'
++        then 'INVOICE_CORRECTION_PAIR_PLACEMENT_INCOMPLETE' end,
+       case when cardinality(f.conflicting_ids)>0
++        and not (
++          coalesce((f.pair_scope_json->>'valid')::boolean,false)
++          and f.pair_scope_json->>'placement_state' in ('COMPLETE_SPLIT_INVOICES','INCOMPLETE_MOVE')
++        )
+         then 'INVOICE_CORRECTION_UNIT_SPLIT_ACROSS_INVOICES' end,
+-      case when cardinality(f.missing_ids)>0
++      case when (cardinality(f.missing_ids)>0
++        and not (
++          coalesce((f.pair_scope_json->>'valid')::boolean,false)
++          and f.pair_scope_json->>'placement_state' in ('COMPLETE_SPLIT_INVOICES','INCOMPLETE_MOVE')
++        ))
+         or(f.import_declared
+-          and coalesce(f.expected_member_count,0)>f.member_count)
++          and coalesce(f.expected_member_count,0)>f.member_count
++          and f.pair_scope_json->>'placement_state'<>'INCOMPLETE_MOVE')
+         then 'INVOICE_CORRECTION_MEMBER_MISSING' end,
+       case when f.vat_mismatch_count>0
+         then 'INVOICE_CORRECTION_VAT_POLICY_MISMATCH' end,
+diff --git a/supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql b/supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql
+index 11b261e..1166236 100644
+--- a/supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql
++++ b/supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql
+@@ -207592,7 +207592,21 @@ BEGIN
+ 
+   IF v_already_archived_count > 0
+      AND v_already_archived_count <> array_length(v_timesheet_ids, 1) THEN
+-    RAISE EXCEPTION USING MESSAGE = 'ARCHIVE_UNIT_PARTIAL_STATE';
++    RAISE EXCEPTION USING MESSAGE = CASE
++      WHEN COALESCE((v_recheck->>'correction_pair')::boolean,false)
++        THEN 'CORRECTION_PAIR_PARTIAL_ARCHIVE'
++      ELSE 'ARCHIVE_UNIT_PARTIAL_STATE' END;
++  END IF;
++
++  IF v_action='UNARCHIVE' AND EXISTS (
++    SELECT 1 FROM jsonb_array_elements(COALESCE(v_recheck->'blockers','[]'::jsonb)) blocker(value)
++    WHERE blocker.value->>'code'='CORRECTION_PAIR_HAS_LATER_GENERATION'
++  ) THEN
++    RETURN jsonb_build_object(
++      'ok',false,'action','UNARCHIVE','decision','BLOCKED',
++      'error_code','CORRECTION_PAIR_UNARCHIVE_SUPERSEDED',
++      'timesheet_ids',to_jsonb(v_timesheet_ids),
++      'contract_week_ids',to_jsonb(v_contract_week_ids));
+   END IF;
+ 
+   -- Idempotent already-completed outcomes above deliberately precede the
+@@ -207611,7 +207625,10 @@ BEGIN
+     );
+   END IF;
+ 
+-  v_primary_contract_week_id := v_contract_week_ids[1];
++  SELECT cw.id INTO v_primary_contract_week_id
++  FROM public.contract_weeks cw
++  WHERE cw.timesheet_id=v_current_timesheet_id
++  ORDER BY cw.id LIMIT 1;
+   v_signature_payload := public.timesheet_lifecycle_guard_signature_v1(
+     v_current_timesheet_id,
+     v_primary_contract_week_id,
+@@ -208244,6 +208261,13 @@ DECLARE
+   v_decision text := 'BLOCKED';
+   v_signature_payload jsonb := '{}'::jsonb;
+   v_current_signature text := NULL;
++  v_class jsonb := '{}'::jsonb;
++  v_chain jsonb := '{}'::jsonb;
++  v_unit jsonb := '{}'::jsonb;
++  v_is_correction_pair boolean := false;
++  v_pair_fingerprint text := NULL;
++  v_pair_members jsonb := '[]'::jsonb;
++  v_pair_net_hours numeric := 0;
+ BEGIN
+   IF p_timesheet_id IS NULL THEN
+     RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ID_REQUIRED';
+@@ -208325,16 +208349,64 @@ BEGIN
+     );
+   END IF;
+ 
+-  -- The installed standard-delete path removes the authoritative current row only.
+-  -- Weekly parent/manual paths resolve their own larger units in their existing previews.
+-  v_timesheet_ids := ARRAY[v_current.timesheet_id]::uuid[];
++  -- Import-authoritative changed-hours members are one exact two-row removal
++  -- unit.  Resolve the requested correction generation, never the wider Weekly
++  -- parent chain or a neighbouring generation.
++  v_class:=public._ctms_import_correction_classify_v1(v_current.timesheet_id);
++  IF COALESCE((v_class->>'is_import_authoritative_correction')::boolean,false) THEN
++    v_chain:=public.timesheet_correction_chain_scope_v1(v_current.timesheet_id,false,32,100);
++    v_unit:=v_chain->'requested_correction_unit';
++    IF COALESCE((v_chain->>'valid')::boolean,false) IS TRUE
++       AND COALESCE((v_unit->>'valid')::boolean,false) IS TRUE
++       AND v_unit->>'correction_shape'='REVERSAL_REPLACEMENT'
++       AND COALESCE((v_unit->>'expected_member_count')::integer,0)=2 THEN
++      SELECT COALESCE(array_agg(value::uuid ORDER BY value::uuid),ARRAY[]::uuid[])
++      INTO v_timesheet_ids
++      FROM jsonb_array_elements_text(v_unit->'member_ids') member(value);
++      v_is_correction_pair:=cardinality(v_timesheet_ids)=2;
++      v_pair_fingerprint:=public._import_review_hash_v1(concat_ws('|',
++        'correction-pair-removal-v1',v_chain->>'chain_fingerprint',v_unit->>'correction_id',
++        array_to_string(v_timesheet_ids,',')));
++    ELSE
++      -- Archived pairs are intentionally excluded from some active-chain
++      -- projections.  Their exact durable correction identity remains enough
++      -- to support an atomic Unarchive preview, but never a guessed role.
++      SELECT COALESCE(array_agg(t.timesheet_id ORDER BY t.timesheet_id),ARRAY[]::uuid[])
++      INTO v_timesheet_ids
++      FROM public.timesheets t
++      WHERE t.correction_id=v_current.correction_id AND t.is_current
++        AND t.correction_kind IN ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT');
++      IF cardinality(v_timesheet_ids)=2
++         AND (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_timesheet_ids)
++                AND t.correction_kind='CHANGED_HOURS_REVERSAL')=1
++         AND (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_timesheet_ids)
++                AND t.correction_kind='CHANGED_HOURS_REPLACEMENT')=1 THEN
++        v_is_correction_pair:=true;
++        v_unit:=jsonb_build_object('valid',true,'correction_id',v_current.correction_id,
++          'correction_shape','REVERSAL_REPLACEMENT','expected_member_count',2,
++          'member_ids',to_jsonb(v_timesheet_ids));
++        v_pair_fingerprint:=public._import_review_hash_v1(concat_ws('|',
++          'correction-pair-removal-v1',v_current.correction_id,array_to_string(v_timesheet_ids,',')));
++      ELSE
++        v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object(
++          'code','CORRECTION_PAIR_MALFORMED','detail',v_chain));
++      END IF;
++    END IF;
++  END IF;
++  IF NOT v_is_correction_pair THEN
++    -- Ordinary and non-authoritative paths keep the installed single-row unit.
++    v_timesheet_ids:=ARRAY[v_current.timesheet_id]::uuid[];
++  END IF;
+ 
+   SELECT COALESCE(array_agg(DISTINCT cw.id ORDER BY cw.id), ARRAY[]::uuid[])
+     INTO v_contract_week_ids
+   FROM public.contract_weeks AS cw
+-  WHERE cw.timesheet_id = v_current.timesheet_id;
++  WHERE cw.timesheet_id = ANY(v_timesheet_ids);
+ 
+-  v_primary_contract_week_id := v_contract_week_ids[1];
++  SELECT cw.id INTO v_primary_contract_week_id
++  FROM public.contract_weeks cw
++  WHERE cw.timesheet_id=v_current.timesheet_id
++  ORDER BY cw.id LIMIT 1;
+ 
+   SELECT COALESCE(array_agg(DISTINCT nhsp_shift.id ORDER BY nhsp_shift.id), ARRAY[]::uuid[])
+     INTO v_nhsp_shift_ids
+@@ -208410,7 +208482,7 @@ BEGIN
+     ));
+   END IF;
+ 
+-  IF v_current.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum THEN
++  IF NOT v_is_correction_pair AND v_current.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum THEN
+     IF COALESCE(v_current.is_adjustment, false)
+        OR EXISTS (
+          SELECT 1
+@@ -208428,15 +208500,53 @@ BEGIN
+     END IF;
+   END IF;
+ 
+-  IF UPPER(COALESCE(v_current.adjustment_origin, '')) IN ('IMPORT_CORRECTION', 'IMPORT_CANCELLATION')
++  IF NOT v_is_correction_pair AND (UPPER(COALESCE(v_current.adjustment_origin, '')) IN ('IMPORT_CORRECTION', 'IMPORT_CANCELLATION')
+      OR NULLIF(BTRIM(COALESCE(v_current.correction_kind, '')), '') IS NOT NULL
+-     OR v_current.correction_id IS NOT NULL THEN
++     OR v_current.correction_id IS NOT NULL) THEN
+     v_blockers := v_blockers || jsonb_build_array(jsonb_build_object(
+       'code', 'IMPORT_DERIVED_CHILD',
+       'message', 'Import-derived children must be handled through the parent-chain removal path.'
+     ));
+   END IF;
+ 
++  IF v_is_correction_pair THEN
++    SELECT COALESCE(jsonb_agg(jsonb_build_object(
++      'timesheet_id',t.timesheet_id,'correction_kind',t.correction_kind,
++      'signed_hours',COALESCE(tf.hours_day,0)+COALESCE(tf.hours_night,0)+COALESCE(tf.hours_sat,0)+COALESCE(tf.hours_sun,0)+COALESCE(tf.hours_bh,0),
++      'authorised',t.authorised_at_server IS NOT NULL OR tf.authorised_at_utc IS NOT NULL,
++      'invoice_linked',EXISTS(SELECT 1 FROM public.invoice_lines il WHERE il.timesheet_id=t.timesheet_id),
++      'paid',tf.paid_at_utc IS NOT NULL,'archived',t.archived_at_utc IS NOT NULL)
++      ORDER BY CASE t.correction_kind WHEN 'CHANGED_HOURS_REVERSAL' THEN 1 ELSE 2 END),'[]'::jsonb),
++      COALESCE(sum(COALESCE(tf.hours_day,0)+COALESCE(tf.hours_night,0)+COALESCE(tf.hours_sat,0)+COALESCE(tf.hours_sun,0)+COALESCE(tf.hours_bh,0)),0)
++    INTO v_pair_members,v_pair_net_hours
++    FROM public.timesheets t
++    LEFT JOIN public.timesheets_financials tf ON tf.timesheet_id=t.timesheet_id AND tf.is_current=true
++    WHERE t.timesheet_id=ANY(v_timesheet_ids);
++
++    IF (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_timesheet_ids)
++          AND t.archived_at_utc IS NOT NULL)=1 THEN
++      v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','CORRECTION_PAIR_PARTIAL_ARCHIVE'));
++    END IF;
++    IF EXISTS(SELECT 1 FROM public.timesheets t LEFT JOIN public.timesheets_financials tf
++        ON tf.timesheet_id=t.timesheet_id AND tf.is_current=true
++      WHERE t.timesheet_id=ANY(v_timesheet_ids)
++        AND (t.authorised_at_server IS NOT NULL OR tf.authorised_at_utc IS NOT NULL)) THEN
++      v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','CORRECTION_PAIR_MUST_BE_UNAUTHORISED'));
++    END IF;
++    IF EXISTS(
++      SELECT 1 FROM public.timesheets later
++      WHERE later.is_current AND later.archived_at_utc IS NULL
++        AND later.adjustment_origin='IMPORT_CORRECTION'
++        AND later.parent_timesheet_id=(
++          SELECT replacement.timesheet_id FROM public.timesheets replacement
++          WHERE replacement.timesheet_id=ANY(v_timesheet_ids)
++            AND replacement.correction_kind='CHANGED_HOURS_REPLACEMENT' LIMIT 1)
++        AND later.timesheet_id<>ALL(v_timesheet_ids)
++    ) THEN
++      v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','CORRECTION_PAIR_HAS_LATER_GENERATION'));
++    END IF;
++  END IF;
++
+   v_history := public.timesheet_removal_financial_history_v1(
+     v_timesheet_ids,
+     ARRAY[v_current.booking_id]::text[],
+@@ -208471,7 +208581,19 @@ BEGIN
+     'blocked_reasons', v_blockers,
+     'retention_reasons', COALESCE(v_history -> 'retention_reasons', '[]'::jsonb),
+     'advance', COALESCE(v_history -> 'advance', '{}'::jsonb),
+-    'current_row_signature', v_current_signature
++    'current_row_signature', v_current_signature,
++    'correction_pair',v_is_correction_pair,
++    'source_system',CASE WHEN v_is_correction_pair THEN CASE
++      WHEN upper(coalesce(
++        v_current.candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',
++        v_current.adjustment_origin,'')) like 'NHSP%' THEN 'NHSP'
++      ELSE 'HEALTHROSTER' END END,
++    'correction_id',CASE WHEN v_is_correction_pair THEN v_unit->>'correction_id' END,
++    'pair_timesheet_ids',CASE WHEN v_is_correction_pair THEN to_jsonb(v_timesheet_ids) ELSE '[]'::jsonb END,
++    'pair_fingerprint',v_pair_fingerprint,
++    'members',CASE WHEN v_is_correction_pair THEN v_pair_members ELSE '[]'::jsonb END,
++    'pair_net_position',CASE WHEN v_is_correction_pair THEN jsonb_build_object('hours',v_pair_net_hours) ELSE NULL END,
++    'resulting_financial_position',CASE WHEN v_is_correction_pair THEN jsonb_build_object('pair_removed_hours',v_pair_net_hours) ELSE NULL END
+   );
+ END;
+ $function$;
+@@ -209373,6 +209495,10 @@ DECLARE
+   v_locked_by_invoice_id uuid := NULL;
+   v_invoice_segments_locked integer := 0;
+   v_contract_week_id uuid := NULL;
++  v_pair_ids uuid[] := ARRAY[]::uuid[];
++  v_pair_members jsonb := '[]'::jsonb;
++  v_pair_state text := NULL;
++  v_pair_fingerprint text := NULL;
+ BEGIN
+   IF p_timesheet_id IS NULL THEN
+     RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ID_REQUIRED';
+@@ -209387,6 +209513,38 @@ BEGIN
+     RETURN jsonb_build_object('ok', false, 'error_code', 'TARGET_NOT_FOUND');
+   END IF;
+ 
++  IF UPPER(COALESCE(v_current.adjustment_origin,''))='IMPORT_CORRECTION'
++     AND v_current.correction_kind IN ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
++     AND v_current.correction_id IS NOT NULL THEN
++    SELECT COALESCE(array_agg(t.timesheet_id ORDER BY t.timesheet_id),ARRAY[]::uuid[]),
++      COALESCE(jsonb_agg(jsonb_build_object(
++        'timesheet_id',t.timesheet_id,'correction_kind',t.correction_kind,
++        'is_archived',t.archived_at_utc IS NOT NULL,
++        'archived_at_utc',t.archived_at_utc,
++        'authorised',t.authorised_at_server IS NOT NULL,
++        'invoice_linked',EXISTS(SELECT 1 FROM public.invoice_lines il WHERE il.timesheet_id=t.timesheet_id))
++        ORDER BY CASE t.correction_kind WHEN 'CHANGED_HOURS_REVERSAL' THEN 1 ELSE 2 END),'[]'::jsonb)
++    INTO v_pair_ids,v_pair_members
++    FROM public.timesheets t
++    WHERE t.correction_id=v_current.correction_id AND t.is_current
++      AND t.correction_kind IN ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT');
++    IF cardinality(v_pair_ids)=2
++       AND (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_pair_ids)
++            AND t.correction_kind='CHANGED_HOURS_REVERSAL')=1
++       AND (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_pair_ids)
++            AND t.correction_kind='CHANGED_HOURS_REPLACEMENT')=1 THEN
++      SELECT CASE count(*) FILTER(WHERE archived_at_utc IS NOT NULL)
++        WHEN 0 THEN 'PAIR_ACTIVE' WHEN 2 THEN 'PAIR_ARCHIVED'
++        ELSE 'PAIR_PARTIALLY_ARCHIVED_BLOCKED' END
++      INTO v_pair_state FROM public.timesheets WHERE timesheet_id=ANY(v_pair_ids);
++      v_pair_fingerprint:=public._import_review_hash_v1(concat_ws('|',
++        'correction-pair-archive-state-v1',v_current.correction_id,
++        array_to_string(v_pair_ids,','),v_pair_members::text));
++    ELSE
++      v_pair_state:='PAIR_MALFORMED_BLOCKED';
++    END IF;
++  END IF;
++
+   SELECT t.*
+     INTO v_current
+   FROM public.timesheets AS t
+@@ -209483,6 +209641,12 @@ BEGIN
+     'paid_at_utc', v_paid_at_utc,
+     'locked_by_invoice_id', v_locked_by_invoice_id,
+     'invoice_segments_locked', v_invoice_segments_locked,
++    'correction_pair',v_pair_state IS NOT NULL,
++    'correction_id',CASE WHEN v_pair_state IS NOT NULL THEN v_current.correction_id END,
++    'pair_state',v_pair_state,
++    'pair_timesheet_ids',to_jsonb(v_pair_ids),
++    'pair_members',v_pair_members,
++    'pair_fingerprint',v_pair_fingerprint,
+     'backend_row_signature', v_signature,
+     'row_signature', v_signature
+   );
+diff --git a/tests/correction-pair-lifecycle-placement.test.cjs b/tests/correction-pair-lifecycle-placement.test.cjs
+new file mode 100644
+index 0000000..b9b925f
+--- /dev/null
++++ b/tests/correction-pair-lifecycle-placement.test.cjs
+@@ -0,0 +1,91 @@
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++const test = require('node:test');
++
++const read = (relativePath) => fs.readFileSync(path.resolve(__dirname, '..', relativePath), 'utf8');
++const preview = read('supabase/repeatable/02082026_2014_timesheet_correction_pair_lifecycle_preview_v1.sql');
++const policy = read('supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql');
++const runtime = read('supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql');
++const scope = read('supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql');
++const authorise = read('supabase/repeatable/21072026_1235_32_timesheet_authorise_bulk_atomic.sql');
++const unauthorise = read('supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql');
++const review = read('supabase/repeatable/21072026_1820_00_import_review_internal_core.sql');
++const invoiceEdit = read('supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql');
++const invoiceValidation = read('supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql');
++const lifecycle = read('supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql');
++const worker = read('broker/src/index.js');
++
++test('one selected correction member expands to one exact two-member lifecycle group', () => {
++  assert.match(preview, /timesheet_correction_pair_transition_v1\(/i);
++  assert.match(preview, /expected_member_count'\)::integer,0\)=2/i);
++  assert.match(preview, /pair_fingerprint/i);
++  assert.match(policy, /timesheet_correction_pair_lifecycle_preview_v1/i);
++  assert.match(policy, /expected_pair_fingerprint/i);
++  assert.match(policy, /CORRECTION_UNIT_LIFECYCLE_PREVIEW_STALE/i);
++});
++
++test('authorise and unauthorise apply both pair members atomically', () => {
++  for (const sql of [authorise, unauthorise]) {
++    assert.match(sql, /_ctms_expand_lifecycle_items_v1/i);
++    assert.match(sql, /CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED/i);
++    assert.match(sql, /CORRECTION_PAIR_LIFECYCLE_POSTCONDITION_FAILED/i);
++    assert.match(sql, /affected_timesheet_ids/i);
++  }
++  assert.match(worker, /CORRECTION_PAIR_CONFIRMATION_REQUIRED/g);
++  assert.match(worker, /runCorrectionPairLifecycleIfApplicable/i);
++  assert.match(worker, /timesheet_authorise_bulk_atomic/i);
++  assert.match(worker, /timesheet_unauthorise_bulk_atomic/i);
++});
++
++test('delete archive and unarchive resolve the exact pair rather than a parent chain', () => {
++  assert.match(lifecycle, /correction-pair-removal-v1/i);
++  assert.match(lifecycle, /CORRECTION_PAIR_MUST_BE_UNAUTHORISED/i);
++  assert.match(lifecycle, /CORRECTION_PAIR_HAS_LATER_GENERATION/i);
++  assert.match(lifecycle, /PAIR_PARTIALLY_ARCHIVED_BLOCKED/i);
++  assert.match(lifecycle, /CORRECTION_PAIR_UNARCHIVE_SUPERSEDED/i);
++  assert.match(lifecycle, /'pair_timesheet_ids'/i);
++});
++
++test('invoice placement supports compatible complete splits and one bounded move gap', () => {
++  for (const state of [
++    'UNPLACED', 'COMPLETE_SAME_INVOICE', 'COMPLETE_SPLIT_INVOICES',
++    'INCOMPLETE_MOVE', 'DUPLICATE_PLACEMENT', 'INCOMPATIBLE_PLACEMENT', 'MALFORMED_PAIR'
++  ]) assert.match(scope, new RegExp(state));
++  assert.match(runtime, /INVOICE_APPLY_EDITS_RESULT[\s\S]*INCOMPLETE_MOVE[\s\S]*UNPLACED/i);
++  assert.match(invoiceEdit, /v_correction_placement_only/i);
++  assert.match(invoiceEdit, /IMPORT_CORRECTION_PLACEMENT_ONLY_TARGET_INVALID/i);
++  assert.match(invoiceEdit, /INVOICE_CORRECTION_PAIR_PLACEMENT_MOVE_NOT_STARTABLE/i);
++  assert.match(invoiceEdit, /INVOICE_CORRECTION_PAIR_PLACEMENT_TARGET_INVALID/i);
++  assert.match(invoiceValidation, /INVOICE_CORRECTION_PAIR_PLACEMENT_INCOMPLETE/i);
++});
++
++test('Import Review partitions issued and draft economics without double counting', () => {
++  assert.match(review, /B_issued_hours/i);
++  assert.match(review, /P_pending_hours/i);
++  assert.match(review, /planned_invoice_hours/i);
++  assert.match(review, /v_component_economic_state:=case[\s\S]*'PENDING'[\s\S]*'EFFECTIVE'/i);
++  assert.match(review, /IMPORT_REVIEW_CORRECTION_PAIR_PLACEMENT_INCOMPLETE/i);
++  assert.match(review, /v_pending_line_ids::text/i);
++});
++
++test('the validation catalogue removes only the redundant invoiced email row', () => {
++  assert.match(review, /owner_row\.summary_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED'/i);
++  assert.match(review, /email_row\.action_kind in \('EMAIL_ISSUE','EMAIL_REMINDER'\)/i);
++  assert.match(review, /delete from pg_temp\.import_review_catalog_v1 email_row/i);
++  assert.match(review, /'delivery_history_status',email_row\.summary_json->>'delivery_history_status'/i);
++});
++
++test('timesheet summary marks only the unplaced correction member', () => {
++  assert.match(worker, /enrichCorrectionPairPlacementIssues/i);
++  assert.match(worker, /placedMembers\.length !== 1/i);
++  assert.match(worker, /Paired needs invoicing/i);
++});
++
++test('the targeted implementation does not introduce Banking Pay or Daily mutation into pair SQL', () => {
++  const targeted = [preview, policy, scope, authorise, unauthorise, invoiceEdit, invoiceValidation];
++  for (const sql of targeted) {
++    assert.doesNotMatch(sql, /pay_workbench|pay_execute_bank|settlement|remittance/i);
++    assert.doesNotMatch(sql, /hr_daily_apply_transactional/i);
++  }
++});
+diff --git a/tests/import-authoritative-effective-balance-helper.test.cjs b/tests/import-authoritative-effective-balance-helper.test.cjs
+index 744c8b7..9a62d43 100644
+--- a/tests/import-authoritative-effective-balance-helper.test.cjs
++++ b/tests/import-authoritative-effective-balance-helper.test.cjs
+@@ -217,8 +217,9 @@ test('deleted operation-proven members can scope exact HOURS_WEEKLY lines', () =
+ });
+ 
+ test('one canonical economic ledger drives B and correction role state', () => {
+-  assert.match(helper, /'economic_state','EFFECTIVE'/);
+-  assert.match(helper, /'economic_state','PENDING'/);
++  assert.match(helper, /v_component_economic_state:=case[\s\S]*then 'PENDING'[\s\S]*else 'EFFECTIVE' end/);
++  assert.match(helper, /'economic_state',v_component_economic_state/);
++  assert.match(helper, /component->>'economic_state' in \('EFFECTIVE','PENDING'\)/);
+   assert.match(helper, /from jsonb_array_elements\(v_line_evidence\) component/);
+   const roleSection = helper.slice(
+     helper.indexOf('with correction_seed as'),
+-- 
+2.54.0.windows.1
+

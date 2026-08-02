@@ -1,0 +1,41 @@
+From 540a490e3a8750f504f8bb9c83938025d5553b7a Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 21:11:07 +0100
+Subject: [PATCH] Show preserved import query delivery history
+
+---
+ js/import-review-v1.js                             | 1 +
+ tests/correction-pair-lifecycle-ui.static.test.mjs | 5 +++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/js/import-review-v1.js b/js/import-review-v1.js
+index b029330..7fbf97b 100644
+--- a/js/import-review-v1.js
++++ b/js/import-review-v1.js
+@@ -1044,6 +1044,7 @@
+               ? `<button type="button" class="irv1-btn" data-ir-action="weekly-candidate-not-worked" data-action-id="${esc(item.action_id)}" data-confirmed="false">Undo confirmation</button>`
+               : '';
+     const deliveryStatus = ['EMAIL_ISSUE','EMAIL_REMINDER'].includes(item.action_kind)
++      || Number(summary.sent_count || 0) > 0
+       ? `<span class="irv1-advisory">${Number(summary.sent_count || 0)>0
+           ? `Previously sent ${Number(summary.sent_count)} time${Number(summary.sent_count)===1?'':'s'} · ${esc(String(summary.delivery_history_status || 'SENT_VERIFIED').replaceAll('_',' ').toLowerCase())}`
+           : 'Not previously sent. A reminder is never selected automatically.'}</span>`
+diff --git a/tests/correction-pair-lifecycle-ui.static.test.mjs b/tests/correction-pair-lifecycle-ui.static.test.mjs
+index f5fb6b2..6267324 100644
+--- a/tests/correction-pair-lifecycle-ui.static.test.mjs
++++ b/tests/correction-pair-lifecycle-ui.static.test.mjs
+@@ -32,6 +32,11 @@ test('document preparation polls automatically without asking for Recheck', () =
+   );
+ });
+ 
++test('a deduplicated validation blocker still displays preserved delivery history', () => {
++  assert.match(importReview, /\['EMAIL_ISSUE','EMAIL_REMINDER'\]\.includes\(item\.action_kind\)[\s\S]*Number\(summary\.sent_count \|\| 0\) > 0/);
++  assert.match(importReview, /Previously sent \$\{Number\(summary\.sent_count\)\}/);
++});
++
+ test('the incomplete placement blocker has a friendly Import Review explanation', () => {
+   assert.match(importReview, /IMPORT_REVIEW_CORRECTION_PAIR_PLACEMENT_INCOMPLETE/i);
+   assert.match(importReview, /temporarily split while one member is being moved between invoices/i);
+-- 
+2.54.0.windows.1
+

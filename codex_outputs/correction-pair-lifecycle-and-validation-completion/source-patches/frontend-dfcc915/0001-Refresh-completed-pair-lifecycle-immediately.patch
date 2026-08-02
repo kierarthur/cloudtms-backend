@@ -1,0 +1,54 @@
+From dfcc915e8c8475c0297fd36be828377d6e955229 Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 21:47:19 +0100
+Subject: [PATCH] Refresh completed pair lifecycle immediately
+
+---
+ js/main.js                                         | 10 ++++++++--
+ tests/correction-pair-lifecycle-ui.static.test.mjs |  5 +++++
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/js/main.js b/js/main.js
+index 99614f9..594c581 100644
+--- a/js/main.js
++++ b/js/main.js
+@@ -266042,7 +266042,10 @@ async function unauthoriseTimesheet(ctxOrId, expectedTimesheetId) {
+       response_contract_week_status_after: json?.contract_week_status_after || json?.week_status_after || json?.contract_week_status || null
+     }));
+ 
+-    const unauthoriseResponseNeedsRefresh = responseNeedsLifecycleReconcile(json);
++    const successfulPairUnauthorise = json?.ok === true
++      && json?.success === true
++      && String(json?.operation || '').toLowerCase() === 'correction_pair_unauthorise';
++    const unauthoriseResponseNeedsRefresh = !successfulPairUnauthorise && responseNeedsLifecycleReconcile(json);
+     try {
+       if (typeof tsHandleLifecycleReconcileModal === 'function' && unauthoriseResponseNeedsRefresh) {
+         const reconciled = await tsHandleLifecycleReconcileModal(json, {
+@@ -303867,7 +303870,10 @@ async function authoriseTimesheet(ctxOrId, expectedTimesheetId) {
+       response_contract_week_status_after: json?.contract_week_status_after || json?.week_status_after || json?.contract_week_status || null
+     }));
+ 
+-    const authoriseResponseNeedsRefresh = responseNeedsLifecycleReconcile(json);
++    const successfulPairAuthorise = json?.ok === true
++      && json?.success === true
++      && String(json?.operation || '').toLowerCase() === 'correction_pair_authorise';
++    const authoriseResponseNeedsRefresh = !successfulPairAuthorise && responseNeedsLifecycleReconcile(json);
+     try {
+       if (typeof tsHandleLifecycleReconcileModal === 'function' && authoriseResponseNeedsRefresh) {
+         const reconciled = await tsHandleLifecycleReconcileModal(json, {
+diff --git a/tests/correction-pair-lifecycle-ui.static.test.mjs b/tests/correction-pair-lifecycle-ui.static.test.mjs
+index bd14e72..2469ec2 100644
+--- a/tests/correction-pair-lifecycle-ui.static.test.mjs
++++ b/tests/correction-pair-lifecycle-ui.static.test.mjs
+@@ -49,3 +49,8 @@ test('simple correction-pair confirmation is not covered by the global loading o
+   assert.match(main, /GE\(\);\s*const confirmation = await openUiConfirmModal\(\{\s*title: 'Authorise linked correction pair'/s);
+   assert.match(main, /GC\('authoriseTimesheet\.confirmedPair'\);\s*json = await apiPostJson\(urlPath, \{ \.\.\.payload, confirm_pair_lifecycle: true \}\)/s);
+ });
++
++test('successful pair lifecycle responses use their signed affected rows instead of the uncertain-outcome reconciler', () => {
++  assert.match(main, /successfulPairUnauthorise[\s\S]*correction_pair_unauthorise[\s\S]*!successfulPairUnauthorise && responseNeedsLifecycleReconcile\(json\)/);
++  assert.match(main, /successfulPairAuthorise[\s\S]*correction_pair_authorise[\s\S]*!successfulPairAuthorise && responseNeedsLifecycleReconcile\(json\)/);
++});
+-- 
+2.54.0.windows.1
+

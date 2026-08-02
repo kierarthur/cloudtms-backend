@@ -1,0 +1,71 @@
+From cb405331d6a8b6c95c8208d96625e989b9b42920 Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 18:08:27 +0100
+Subject: [PATCH] Show incomplete validation on week headers
+
+---
+ index.html                             |  2 +-
+ js/import-review-v1.js                 | 13 +++++++++----
+ tests/import-review-v1.static.test.mjs |  2 ++
+ 3 files changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/index.html b/index.html
+index 17274b3..14a8102 100644
+--- a/index.html
++++ b/index.html
+@@ -2816,7 +2816,7 @@ body{
+  <script src="./js/invoice-diagnostic-catalog.js?v=20260728-invoice-async-v8-source-evidence-r1"></script>
+  <script src="./js/invoice-batch-modal.js?v=20260730-invoice-v8-auto-recovery-r8"></script>
+ <script src="./js/invoice-async-ui.js?v=20260730-invoice-refs-ward-r13"></script>
+- <script src="./js/import-review-v1.js?v=20260802-validation-policy-r2"></script>
++ <script src="./js/import-review-v1.js?v=20260802-validation-policy-r3"></script>
+  <script src="./js/bulk-row-freshness-v1.js"></script>
+  <script src="./js/bulk-authorise-lifecycle-v2.js"></script>
+  <script src="./js/bulk-authorise-evidence-controller.js"></script>
+diff --git a/js/import-review-v1.js b/js/import-review-v1.js
+index 88464f6..5b72e47 100644
+--- a/js/import-review-v1.js
++++ b/js/import-review-v1.js
+@@ -1016,7 +1016,11 @@
+     if (type === 'client') return { id: String(item.client_id || summary.client_name || 'unknown'), label: item.client_name || summary.client_name || 'Unknown client' };
+     if (type === 'week') {
+       const value = item.week_ending_date || summary.week_ending_date || item.work_date || summary.work_date || 'unknown';
+-      return { id: String(value), label: value === 'unknown' ? 'Unknown week' : `Week ending ${formatDate(value)}` };
++      return {
++        id: String(value),
++        label: value === 'unknown' ? 'Unknown week' : `Week ending ${formatDate(value)}`,
++        badges: Array.isArray(item.week_validation_badges) ? item.week_validation_badges : []
++      };
+     }
+     if (type === 'date') {
+       const value = item.work_date || summary.work_date || 'unknown';
+@@ -1070,9 +1074,10 @@
+       const isPrimary = depth === 0;
+       const open = review.expanded.has(node.key);
+       const children = Array.from(node.children.values()).map((child) => renderNode(child, depth + 1)).join('');
+-      // Issue badges belong to the affected shift row.  Candidate-level badge
+-      // rolls made unrelated rows look as if they shared the same problem.
+-      const badges = '';
++      // Detailed issue badges stay on their affected shift.  A single
++      // server-derived badge on the week node makes it clear when individually
++      // passed rows do not yet mean the complete Weekly timesheet is validated.
++      const badges = node.type === 'week' ? branchBadgesHtml(node.badges) : '';
+       const bigToggle = isPrimary ? `<button type="button" class="irv1-branch-toggle" data-ir-action="toggle-branch" data-expand="${open ? 'false' : 'true'}" aria-label="${open ? 'Collapse' : 'Expand'} ${esc(node.label)} and all sections">${open ? '−' : '+'}</button>` : '';
+       return `<details class="irv1-group" data-ir-expand-key="${esc(node.key)}" ${open ? 'open' : ''}><summary>${bigToggle}<span class="irv1-group-label">${esc(node.label)} · ${node.count} item${node.count === 1 ? '' : 's'}</span>${badges}</summary>${children}${node.items.length ? table(node.items) : ''}</details>`;
+     };
+diff --git a/tests/import-review-v1.static.test.mjs b/tests/import-review-v1.static.test.mjs
+index 5db7db9..017eae5 100644
+--- a/tests/import-review-v1.static.test.mjs
++++ b/tests/import-review-v1.static.test.mjs
+@@ -240,6 +240,8 @@ test('validation-only review presents passed rows without duplicating mismatches
+   assert.match(source, /CANDIDATE_DID_NOT_WORK_CONFIRMED/);
+   assert.match(source, /Undo confirmation/);
+   assert.match(source, /openUiConfirmModal/);
++  assert.match(source, /week_validation_badges/);
++  assert.match(source, /node\.type === 'week' \? branchBadgesHtml\(node\.badges\) : ''/);
+   assert.doesNotMatch(source, /client:email:/);
+   assert.doesNotMatch(source, /week:email:/);
+ });
+-- 
+2.54.0.windows.1
+

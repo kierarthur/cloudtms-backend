@@ -1,0 +1,58 @@
+From 3e31b21214631b0cd8d002cd1718587d6ecd1feb Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 17:49:53 +0100
+Subject: [PATCH] Clarify Daily validation email summaries
+
+---
+ index.html                             | 2 +-
+ js/import-review-v1.js                 | 6 +++++-
+ tests/import-review-v1.static.test.mjs | 2 ++
+ 3 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/index.html b/index.html
+index 88fa133..17274b3 100644
+--- a/index.html
++++ b/index.html
+@@ -2816,7 +2816,7 @@ body{
+  <script src="./js/invoice-diagnostic-catalog.js?v=20260728-invoice-async-v8-source-evidence-r1"></script>
+  <script src="./js/invoice-batch-modal.js?v=20260730-invoice-v8-auto-recovery-r8"></script>
+ <script src="./js/invoice-async-ui.js?v=20260730-invoice-refs-ward-r13"></script>
+- <script src="./js/import-review-v1.js?v=20260802-validation-policy-r1"></script>
++ <script src="./js/import-review-v1.js?v=20260802-validation-policy-r2"></script>
+  <script src="./js/bulk-row-freshness-v1.js"></script>
+  <script src="./js/bulk-authorise-lifecycle-v2.js"></script>
+  <script src="./js/bulk-authorise-evidence-controller.js"></script>
+diff --git a/js/import-review-v1.js b/js/import-review-v1.js
+index a428982..88464f6 100644
+--- a/js/import-review-v1.js
++++ b/js/import-review-v1.js
+@@ -1113,8 +1113,12 @@
+           const totalShifts = Number(summaryRow.validation_total_shift_count || candidateRows.reduce((n, row) => n + Math.max(1, Array.isArray(row.evidence_rows) ? row.evidence_rows.length : 1), 0));
+           const differenceCount = Number(summaryRow.validation_difference_count || candidateRows.reduce((n, row) => n + Math.max(1, Array.isArray(row.evidence_rows) ? row.evidence_rows.length : 1), 0));
+           const weekEnding = candidateRows[0]?.week_ending_date || summaryRow.week_ending_date;
++          const workDate = candidateRows[0]?.work_date || summaryRow.work_date;
++          const periodLabel = reviewRoute(review).includes('DAILY')
++            ? `Date ${formatDate(workDate)}`
++            : `Week ending ${formatDate(weekEnding)}`;
+           const validationLabel = totalShifts > 0
+-            ? `${candidate.label} · Week ending ${formatDate(weekEnding)} — validation failed: ${differenceCount} of ${totalShifts} shift${totalShifts===1?'':'s'} differ${differenceCount===1?'s':''}`
++            ? `${candidate.label} · ${periodLabel} — validation failed: ${differenceCount} of ${totalShifts} shift${totalShifts===1?'':'s'} differ${differenceCount===1?'s':''}`
+             : candidate.label;
+           return `<details class="irv1-group" data-ir-expand-key="${esc(expandCandidate)}" ${review.expanded.has(expandCandidate) ? 'open' : ''}><summary>${esc(validationLabel)}</summary>${Array.from(candidate.contracts, ([contractKey, contract]) => {
+             const expandContract = `week:u-${routeToken}-${opaqueUiToken(`${clientKey}|${candidateKey}|${contractKey}`)}`;
+diff --git a/tests/import-review-v1.static.test.mjs b/tests/import-review-v1.static.test.mjs
+index 65e8b31..5db7db9 100644
+--- a/tests/import-review-v1.static.test.mjs
++++ b/tests/import-review-v1.static.test.mjs
+@@ -118,6 +118,8 @@ test('email confirmation states and renders one message per shared recipient wit
+   assert.match(source, /Client → Candidate → Contract → Shift/);
+   assert.match(source, /opaqueUiToken/);
+   assert.match(source, /validation failed:/);
++  assert.match(source, /reviewRoute\(review\)\.includes\('DAILY'\)/);
++  assert.match(source, /Date \$\{formatDate\(workDate\)\}/);
+   assert.match(source, /Previously sent/);
+   assert.match(source, /reminder is never selected automatically/);
+ });
+-- 
+2.54.0.windows.1
+

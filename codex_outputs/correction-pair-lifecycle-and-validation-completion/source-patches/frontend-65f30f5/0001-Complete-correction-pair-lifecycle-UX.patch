@@ -1,0 +1,453 @@
+From 65f30f580f48f7ab929e9ff7c324e68f8d3d1c68 Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 21:01:50 +0100
+Subject: [PATCH] Complete correction pair lifecycle UX
+
+---
+ js/import-review-v1.js                        |  54 +++++-
+ js/main.js                                    | 182 +++++++++++++-----
+ ...rrection-pair-lifecycle-ui.static.test.mjs |  38 ++++
+ 3 files changed, 224 insertions(+), 50 deletions(-)
+ create mode 100644 tests/correction-pair-lifecycle-ui.static.test.mjs
+
+diff --git a/js/import-review-v1.js b/js/import-review-v1.js
+index 7a42aec..b029330 100644
+--- a/js/import-review-v1.js
++++ b/js/import-review-v1.js
+@@ -24,6 +24,7 @@
+     coverage: null,
+     review: null,
+     saveTimer: null,
++    documentPollTimer: null,
+     reviewEpoch: 0,
+     closeBypass: false
+   };
+@@ -216,6 +217,50 @@
+     );
+   }
+ 
++  function cancelDocumentPreparationPoll() {
++    if (state.documentPollTimer !== null) {
++      global.clearTimeout(state.documentPollTimer);
++      state.documentPollTimer = null;
++    }
++  }
++
++  function pageNeedsDocumentPreparationPoll(review) {
++    const items = Array.isArray(review?.pageData?.items) ? review.pageData.items : [];
++    return items.some((item) => {
++      try {
++        return JSON.stringify(item || {}).toUpperCase().includes('TIMESHEET_EVIDENCE_PREPARING');
++      } catch {
++        return false;
++      }
++    });
++  }
++
++  function scheduleDocumentPreparationPoll(review) {
++    cancelDocumentPreparationPoll();
++    if (!review || state.review !== review || !pageNeedsDocumentPreparationPoll(review)) return;
++    const importId = review.importId;
++    const epoch = review.epoch;
++    state.documentPollTimer = global.setTimeout(async () => {
++      state.documentPollTimer = null;
++      const current = state.review;
++      if (!current || current !== review || current.importId !== importId || current.epoch !== epoch) return;
++      if (!currentImportFrame() || current.screen !== 'review') return;
++      if (current.pendingSave || current.dirty?.size) {
++        scheduleDocumentPreparationPoll(current);
++        return;
++      }
++      try {
++        await openReview(importId, { preserveLocal: true, documentPoll: true });
++      } catch (error) {
++        if (state.review === current) {
++          current.error = `Timesheet evidence is still being prepared. CloudTMS will check again automatically. ${error?.message || ''}`.trim();
++          showScreen('Import review', renderReview, 'import-review-v1');
++          scheduleDocumentPreparationPoll(current);
++        }
++      }
++    }, 1800);
++  }
++
+   function formatDate(value) {
+     const raw = String(value || '').slice(0, 10);
+     const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+@@ -648,6 +693,7 @@
+   }
+ 
+   async function openReview(importId, options = {}) {
++    cancelDocumentPreparationPoll();
+     const epoch = ++state.reviewEpoch;
+     let header = await fetchReviewHeader(importId);
+     if (epoch !== state.reviewEpoch) return;
+@@ -705,6 +751,7 @@
+     state.review.pageData = await fetchActionPage(state.review);
+     if (epoch !== state.reviewEpoch) return;
+     showScreen('Import review', renderReview, 'import-review-v1');
++    scheduleDocumentPreparationPoll(state.review);
+   }
+ 
+   function reviewUiState(review) {
+@@ -825,7 +872,8 @@
+       BLOCKED_ACTIVE_PAY_DRAFT: 'An active Banking Pay draft protects this timesheet. Resolve the draft outside the import, then choose Recheck.',
+       TIMESHEET_PRESENT_BUT_INVOICED: 'Timesheet present but invoiced. Remove it from the invoice (and unissue first if required), then choose Recheck before validating it.',
+       TIMESHEET_EVIDENCE_INCOMPLETE: 'Timesheet evidence incomplete. The submitted timesheet must contain its hours and all required signatures or manual/QR evidence before a correction email can be sent.',
+-      TIMESHEET_EVIDENCE_PREPARING: 'Preparing timesheet evidence. CloudTMS is generating the current timesheet PDF asynchronously; choose Recheck when preparation has completed.',
++      TIMESHEET_EVIDENCE_PREPARING: 'Preparing timesheet evidence. CloudTMS has queued the current timesheet PDF for immediate asynchronous generation and will refresh this review automatically when it is ready.',
++      IMPORT_REVIEW_CORRECTION_PAIR_PLACEMENT_INCOMPLETE: 'This correction pair is temporarily split while one member is being moved between invoices. Attach the outstanding member to a compatible invoice, then choose Recheck.',
+       IMPORT_REVIEW_CORRECTION_GENERATION_PARTIALLY_INVOICED: 'The current correction generation is only partly invoiced. CloudTMS cannot safely amend it or create a further correction generation while one member remains uninvoiced. Resolve the invoice state through the existing invoice process, then choose Recheck.',
+       IMPORT_REVIEW_ARCHIVED_GENERATION_ACTIVE_MEMBER_CONFLICT: 'An inactive Archived correction record has an active partner still outstanding. CloudTMS will not restore or reuse the Archived generation. Resolve the active record through the normal timesheet lifecycle, then choose Recheck.',
+       IMPORT_REVIEW_ARCHIVED_INVOICE_STATE_CONFLICT: 'An Archived timesheet also has frozen invoice evidence, which is not a supported lifecycle state. Nothing was selected. Resolve the conflicting historical state, then choose Recheck.',
+@@ -853,7 +901,7 @@
+       BLOCKED_ACTIVE_PAY_DRAFT: 'Deferred because an active Banking Pay draft protects this timesheet.',
+       TIMESHEET_PRESENT_BUT_INVOICED: 'This validation is unavailable while the timesheet is attached to an invoice.',
+       TIMESHEET_EVIDENCE_INCOMPLETE: 'The correction email cannot be selected until the timesheet evidence is complete.',
+-      TIMESHEET_EVIDENCE_PREPARING: 'The correction email cannot be selected until the current timesheet PDF is ready.'
++      TIMESHEET_EVIDENCE_PREPARING: 'The correction email will become available automatically when the queued timesheet PDF is ready.'
+     };
+     return labels[String(code || '').toUpperCase()] || '';
+   }
+@@ -1440,6 +1488,7 @@
+     review.error = '';
+     review.pageData = await fetchActionPage(review);
+     showScreen('Import review', renderReview, 'import-review-v1');
++    scheduleDocumentPreparationPoll(review);
+   }
+ 
+   async function saveDailyResolution(select, explicitTimesheetId) {
+@@ -1769,6 +1818,7 @@
+         return showScreen('Imports', renderHome, 'imports-v1');
+       }
+       if (action === 'home' || action === 'coverage-cancel' || action === 'overlap-cancel') {
++        cancelDocumentPreparationPoll();
+         if (action === 'coverage-cancel' || action === 'overlap-cancel') {
+           if (!(await confirmCoverageDiscard())) return;
+           state.coverage = null;
+diff --git a/js/main.js b/js/main.js
+index 3c39064..b550144 100644
+--- a/js/main.js
++++ b/js/main.js
+@@ -110633,9 +110633,12 @@ function summaryUpdateRowDom(section, id, patchedRow) {
+         cls = 'pill pill-warn';
+       }
+ 
+-      span.className = cls;
+-      span.textContent = label;
+-      wrap.appendChild(span);
++      span.className = cls;
++      span.textContent = label;
++      if (label === 'Paired needs invoicing') {
++        span.title = 'This paired timesheet needs invoicing. The other timesheet is attached to an invoice, this timesheet needs attaching as soon as possible';
++      }
++      wrap.appendChild(span);
+     });
+ 
+     return wrap;
+@@ -111308,9 +111311,12 @@ function summaryInsertRowDom(section, patchedRow) {
+         cls = 'pill pill-warn';
+       }
+ 
+-      span.className = cls;
+-      span.textContent = label;
+-      wrap.appendChild(span);
++      span.className = cls;
++      span.textContent = label;
++      if (label === 'Paired needs invoicing') {
++        span.title = 'This paired timesheet needs invoicing. The other timesheet is attached to an invoice, this timesheet needs attaching as soon as possible';
++      }
++      wrap.appendChild(span);
+     });
+ 
+     return wrap;
+@@ -187370,9 +187376,24 @@ async function authoriseSelectedTimesheets(payload) {
+   const urlPath = '/api/timesheets/bulk-authorise-selected';
+   L('→ POST', { url: typeof API === 'function' ? API(urlPath) : urlPath, count: items.length });
+ 
+-  let json;
+-  if (typeof apiPostJson === 'function') {
+-    json = await apiPostJson(urlPath, { ...body, items, context: body.context || 'bulk_authorise', response_context: 'minimal_lifecycle_mutation', minimal_lifecycle_mutation: true });
++  let json;
++  if (typeof apiPostJson === 'function') {
++    const requestPayload = { ...body, items, context: body.context || 'bulk_authorise', response_context: 'minimal_lifecycle_mutation', minimal_lifecycle_mutation: true };
++    try {
++      json = await apiPostJson(urlPath, requestPayload);
++    } catch (error) {
++      if (String(error?.json?.error_code || error?.json?.error || '').toUpperCase() !== 'CORRECTION_PAIR_CONFIRMATION_REQUIRED') throw error;
++      const preview = error?.json?.pair_lifecycle || {};
++      const pairCount = Number(preview.correction_pair_count || 0) || 0;
++      const affectedCount = Number(preview.affected_timesheet_count || 0) || items.length;
++      const confirmed = await openUiConfirmModal({
++        title: 'Authorise linked correction pair',
++        message: `${pairCount} linked correction pair${pairCount === 1 ? '' : 's'} ${pairCount === 1 ? 'is' : 'are'} included. Both timesheets in each pair will be authorised together (${affectedCount} timesheets affected). Continue?`,
++        confirm_label: 'Authorise pair', cancel_label: 'Cancel', confirm_class: 'btn btn-primary'
++      });
++      if (!confirmed) throw new Error('Authorisation cancelled.');
++      json = await apiPostJson(urlPath, { ...requestPayload, confirm_pair_lifecycle: true });
++    }
+   } else {
+     const res = await authFetch(API(urlPath), {
+       method: 'POST',
+@@ -187612,9 +187633,24 @@ async function unauthoriseSelectedTimesheets(payload) {
+   const urlPath = '/api/timesheets/bulk-unauthorise-selected';
+   L('→ POST', { url: typeof API === 'function' ? API(urlPath) : urlPath, count: items.length });
+ 
+-  let json;
+-  if (typeof apiPostJson === 'function') {
+-    json = await apiPostJson(urlPath, { ...body, items, context: body.context || 'bulk_authorise', response_context: 'minimal_lifecycle_mutation', minimal_lifecycle_mutation: true });
++  let json;
++  if (typeof apiPostJson === 'function') {
++    const requestPayload = { ...body, items, context: body.context || 'bulk_authorise', response_context: 'minimal_lifecycle_mutation', minimal_lifecycle_mutation: true };
++    try {
++      json = await apiPostJson(urlPath, requestPayload);
++    } catch (error) {
++      if (String(error?.json?.error_code || error?.json?.error || '').toUpperCase() !== 'CORRECTION_PAIR_CONFIRMATION_REQUIRED') throw error;
++      const preview = error?.json?.pair_lifecycle || {};
++      const pairCount = Number(preview.correction_pair_count || 0) || 0;
++      const affectedCount = Number(preview.affected_timesheet_count || 0) || items.length;
++      const confirmed = await openUiConfirmModal({
++        title: 'Unauthorise linked correction pair',
++        message: `${pairCount} linked correction pair${pairCount === 1 ? '' : 's'} ${pairCount === 1 ? 'is' : 'are'} included. Both timesheets in each pair will be unauthorised together (${affectedCount} timesheets affected). Continue?`,
++        confirm_label: 'Unauthorise pair', cancel_label: 'Cancel', confirm_class: 'btn btn-primary'
++      });
++      if (!confirmed) throw new Error('Unauthorisation cancelled.');
++      json = await apiPostJson(urlPath, { ...requestPayload, confirm_pair_lifecycle: true });
++    }
+   } else {
+     const res = await authFetch(API(urlPath), {
+       method: 'POST',
+@@ -265941,11 +265977,25 @@ async function unauthoriseTimesheet(ctxOrId, expectedTimesheetId) {
+       lifecycle_critical_incomplete: window.modalCtx?.__timesheetLifecycleCriticalStateIncomplete === true,
+       latest_saved_mutation_started_at: Number(window.modalCtx?.__timesheetLatestSavedMutationStartedAt || 0) || null
+     });
+-    let json;
+-    try {
+-      json = await apiPostJson(urlPath, payload);
+-    } catch (err) {
+-      try {
++    let json;
++    try {
++      json = await apiPostJson(urlPath, payload);
++    } catch (err) {
++      if (String(err?.json?.error_code || err?.json?.error || '').toUpperCase() === 'CORRECTION_PAIR_CONFIRMATION_REQUIRED') {
++        const preview = err?.json?.pair_lifecycle || {};
++        const confirmed = await openUiConfirmModal({
++          title: 'Unauthorise linked correction pair',
++          message: `This timesheet is one half of a linked correction pair. Both timesheets will be unauthorised together (${Number(preview.affected_timesheet_count || 2)} timesheets affected). Continue?`,
++          confirm_label: 'Unauthorise pair', cancel_label: 'Cancel', confirm_class: 'btn btn-primary'
++        });
++        if (!confirmed) {
++          GE();
++          return { ok: false, cancelled: true };
++        }
++        json = await apiPostJson(urlPath, { ...payload, confirm_pair_lifecycle: true });
++      }
++      if (!json) {
++      try {
+         if (typeof tsHandleLifecycleReconcileModal === 'function') {
+           const reconciled = await tsHandleLifecycleReconcileModal(err, {
+             action: 'unauthorise',
+@@ -265973,11 +266023,12 @@ async function unauthoriseTimesheet(ctxOrId, expectedTimesheetId) {
+             return { ok: false, stale: true, moved: true, current_timesheet_id: window.modalCtx?.data?.timesheet_id || null };
+           }
+         }
+-      } catch {}
+-      GE();
+-      throw err;
+-    }
+-    L('unauthorise result', json);
++      } catch {}
++      GE();
++      throw err;
++      }
++    }
++    L('unauthorise result', json);
+     logTimesheetSaveSignatureDiag('unauthoriseTimesheet.responseBeforeAdoption', () => ({
+       timesheet_id: tsId,
+       contract_week_id: window.modalCtx?.data?.contract_week_id || window.modalCtx?.timesheetDetails?.contract_week_id || window.modalCtx?.timesheetDetails?.contract_week?.id || json?.contract_week_id || null,
+@@ -303749,11 +303800,25 @@ async function authoriseTimesheet(ctxOrId, expectedTimesheetId) {
+       latest_saved_mutation_started_at: Number(window.modalCtx?.__timesheetLatestSavedMutationStartedAt || 0) || null
+     });
+ 
+-    let json;
+-    try {
+-      json = await apiPostJson(urlPath, payload);
+-    } catch (err) {
+-      try {
++    let json;
++    try {
++      json = await apiPostJson(urlPath, payload);
++    } catch (err) {
++      if (String(err?.json?.error_code || err?.json?.error || '').toUpperCase() === 'CORRECTION_PAIR_CONFIRMATION_REQUIRED') {
++        const preview = err?.json?.pair_lifecycle || {};
++        const confirmed = await openUiConfirmModal({
++          title: 'Authorise linked correction pair',
++          message: `This timesheet is one half of a linked correction pair. Both timesheets will be authorised together (${Number(preview.affected_timesheet_count || 2)} timesheets affected). Continue?`,
++          confirm_label: 'Authorise pair', cancel_label: 'Cancel', confirm_class: 'btn btn-primary'
++        });
++        if (!confirmed) {
++          GE();
++          return { ok: false, cancelled: true };
++        }
++        json = await apiPostJson(urlPath, { ...payload, confirm_pair_lifecycle: true });
++      }
++      if (!json) {
++      try {
+         if (typeof tsHandleLifecycleReconcileModal === 'function') {
+           const reconciled = await tsHandleLifecycleReconcileModal(err, {
+             action: 'authorise',
+@@ -303782,9 +303847,10 @@ async function authoriseTimesheet(ctxOrId, expectedTimesheetId) {
+           }
+         }
+       } catch {}
+-      GE();
+-      throw err;
+-    }
++      GE();
++      throw err;
++      }
++    }
+ 
+     logTimesheetSaveSignatureDiag('authoriseTimesheet.responseBeforeAdoption', () => ({
+       timesheet_id: tsId,
+@@ -306349,9 +306415,12 @@ function renderSummary(rows){
+         cls = 'pill pill-warn';
+       }
+ 
+-      span.className = cls;
+-      span.textContent = label;
+-      wrap.appendChild(span);
++      span.className = cls;
++      span.textContent = label;
++      if (label === 'Paired needs invoicing') {
++        span.title = 'This paired timesheet needs invoicing. The other timesheet is attached to an invoice, this timesheet needs attaching as soon as possible';
++      }
++      wrap.appendChild(span);
+     });
+ 
+     return wrap;
+@@ -323239,9 +323308,13 @@ if (btnTsProcess) {
+             const v = Number.isFinite(x) ? x : 0;
+             return v.toFixed(2);
+           };
+-           const roleLabel = (it) => {
+-            const r = String(it?.display_role || '').toUpperCase();
+-            if (dpKindX === 'WEEKLY_MANUAL_ADJUSTMENT_DELETE') return 'Manual Adjustment';
++           const roleLabel = (it) => {
++            const r = String(it?.display_role || '').toUpperCase();
++            const correctionKind = String(it?.correction_kind || '').toUpperCase();
++            const correctionSource = String(freshDpX?.source_system || '').toUpperCase().includes('NHSP') ? 'NHSP' : 'HealthRoster';
++            if (correctionKind === 'CHANGED_HOURS_REVERSAL') return `${correctionSource} Reversal`;
++            if (correctionKind === 'CHANGED_HOURS_REPLACEMENT') return `${correctionSource} Corrected Hours`;
++            if (dpKindX === 'WEEKLY_MANUAL_ADJUSTMENT_DELETE') return 'Manual Adjustment';
+             if (r === 'PARENT') return 'Parent';
+             if (r === 'MANUAL_ADJUSTMENT') return 'Manual Adjustment';
+             if (r === 'IMPORT_CHILD_ADJUSTMENT') return 'Import Adjustment';
+@@ -323306,7 +323379,17 @@ if (btnTsProcess) {
+             `;
+           };
+ 
+-            const dpItems = (!isPlannedOnly && freshDpX && Array.isArray(freshDpX.delete_items)) ? freshDpX.delete_items : [];
++          const pairMemberById = new Map(
++            Array.isArray(freshDpX?.members)
++              ? freshDpX.members.map((member) => [String(member?.timesheet_id || ''), member])
++              : []
++          );
++          const dpItems = (!isPlannedOnly && freshDpX && Array.isArray(freshDpX.delete_items))
++            ? freshDpX.delete_items.map((item) => ({
++                ...item,
++                ...(pairMemberById.get(String(item?.timesheet_id || '')) || {})
++              }))
++            : [];
+           const weYmdX =
+             (dpItems[0] && dpItems[0].week_ending_date) ? String(dpItems[0].week_ending_date) :
+             (det?.timesheet?.week_ending_date) ? String(det.timesheet.week_ending_date) :
+@@ -323347,11 +323430,11 @@ if (btnTsProcess) {
+                   </div>
+                 `
+                 : `
+-                  <div style="font-size:14px;font-weight:700;margin-bottom:6px;">
+-                    Delete timesheet(s) for week ending ${enc2(weYmdX || 'Unknown')}?
+-                  </div>
+-                  <div class="mini" style="white-space:pre-wrap;">
+-                    This will permanently delete the timesheet(s) listed below. Associated evidence, images and files will also be permanently deleted and will not return to Timesheet Imports.
++                  <div style="font-size:14px;font-weight:700;margin-bottom:6px;">
++                    ${freshDpX?.correction_pair === true ? 'Delete both linked correction-pair timesheets' : 'Delete timesheet(s)'} for week ending ${enc2(weYmdX || 'Unknown')}?
++                  </div>
++                  <div class="mini" style="white-space:pre-wrap;">
++                    ${freshDpX?.correction_pair === true ? 'The reversal and corrected-hours timesheets must be deleted together. ' : ''}This will permanently delete the timesheet(s) listed below. Associated evidence, images and files will also be permanently deleted and will not return to Timesheet Imports.
+                   </div>
+                   <div class="mini" style="margin-top:10px;opacity:.8;">
+                     This action cannot be undone.
+@@ -327452,15 +327535,18 @@ async function requestTimesheetArchiveAction(timesheetId, action, options = {})
+     }
+     return payload;
+   };
+-  const confirmAction = async (state) => {
+-    const isArchive = requestedAction === 'ARCHIVE';
+-    const unitCount = state.timesheet_ids.length;
+-    const unitText = unitCount > 1 ? `${unitCount} Timesheets in this weekly unit` : 'this Timesheet';
++  const confirmAction = async (state) => {
++    const isArchive = requestedAction === 'ARCHIVE';
++    const unitCount = state.timesheet_ids.length;
++    const isCorrectionPair = state.correction_pair === true && unitCount === 2;
++    const unitText = isCorrectionPair
++      ? 'both linked correction-pair Timesheets'
++      : (unitCount > 1 ? `${unitCount} Timesheets in this weekly unit` : 'this Timesheet');
+     const archivedBy = String(state.archived_by_display || '').trim();
+     const archivedAt = String(state.archived_at_utc || '').trim();
+     const reasonText = isArchive
+-      ? `Archive ${unitText}? Archive changes lifecycle metadata only and moves the Timesheet out of active lifecycle views. It does not clear or change any active Advance, payment workflow, Timesheet economics, paid history or source financial record.`
+-      : `Unarchive ${unitText}? Unarchive changes lifecycle metadata only and restores the Timesheet to active lifecycle views. It does not create, restore, clear or change any active Advance, payment workflow, Timesheet economics, paid history or source financial record.${archivedBy || archivedAt ? `\n\nArchived${archivedBy ? ` by ${archivedBy}` : ''}${archivedAt ? ` on ${archivedAt}` : ''}.` : ''}`;
++      ? `Archive ${unitText}?${isCorrectionPair ? ' The reversal and corrected-hours Timesheets must be archived together.' : ''} Archive changes lifecycle metadata only and moves the Timesheet out of active lifecycle views. It does not clear or change any active Advance, payment workflow, Timesheet economics, paid history or source financial record.`
++      : `Unarchive ${unitText}?${isCorrectionPair ? ' The reversal and corrected-hours Timesheets must be unarchived together.' : ''} Unarchive changes lifecycle metadata only and restores the Timesheet to active lifecycle views. It does not create, restore, clear or change any active Advance, payment workflow, Timesheet economics, paid history or source financial record.${archivedBy || archivedAt ? `\n\nArchived${archivedBy ? ` by ${archivedBy}` : ''}${archivedAt ? ` on ${archivedAt}` : ''}.` : ''}`;
+ 
+     if (typeof openUiConfirmModal === 'function') {
+       const result = await openUiConfirmModal({
+diff --git a/tests/correction-pair-lifecycle-ui.static.test.mjs b/tests/correction-pair-lifecycle-ui.static.test.mjs
+new file mode 100644
+index 0000000..f5fb6b2
+--- /dev/null
++++ b/tests/correction-pair-lifecycle-ui.static.test.mjs
+@@ -0,0 +1,38 @@
++import assert from 'node:assert/strict';
++import { readFileSync } from 'node:fs';
++import test from 'node:test';
++
++const main = readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
++const importReview = readFileSync(new URL('../js/import-review-v1.js', import.meta.url), 'utf8');
++
++test('simple and bulk lifecycle actions use the friendly pair confirmation', () => {
++  assert.ok((main.match(/CORRECTION_PAIR_CONFIRMATION_REQUIRED/g) || []).length >= 4);
++  assert.match(main, /openUiConfirmModal[\s\S]*linked correction pair/i);
++  assert.match(main, /confirm_pair_lifecycle:\s*true/i);
++});
++
++test('delete and archive confirmations explicitly describe the joint pair action', () => {
++  assert.match(main, /both linked correction-pair Timesheets/i);
++  assert.match(main, /reversal and corrected-hours Timesheets must be archived together/i);
++  assert.match(main, /reversal and corrected-hours timesheets must be deleted together/i);
++});
++
++test('the incomplete invoice placement issue has the exact user guidance', () => {
++  const exact = 'This paired timesheet needs invoicing. The other timesheet is attached to an invoice, this timesheet needs attaching as soon as possible';
++  assert.ok((main.match(new RegExp(exact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length >= 3);
++});
++
++test('document preparation polls automatically without asking for Recheck', () => {
++  assert.match(importReview, /scheduleDocumentPreparationPoll/i);
++  assert.match(importReview, /openReview\(importId, \{ preserveLocal: true, documentPoll: true \}\)/i);
++  assert.match(importReview, /queued the current timesheet PDF for immediate asynchronous generation/i);
++  assert.doesNotMatch(
++    importReview,
++    /TIMESHEET_EVIDENCE_PREPARING:\s*'[^']*choose Recheck/i
++  );
++});
++
++test('the incomplete placement blocker has a friendly Import Review explanation', () => {
++  assert.match(importReview, /IMPORT_REVIEW_CORRECTION_PAIR_PLACEMENT_INCOMPLETE/i);
++  assert.match(importReview, /temporarily split while one member is being moved between invoices/i);
++});
+-- 
+2.54.0.windows.1
+

@@ -1,0 +1,42 @@
+From a074f9237e9c876b640d17742609fedd7af27656 Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 17:29:08 +0100
+Subject: [PATCH] Persist opaque Import Review expansion state
+
+---
+ js/import-review-v1.js                 | 6 +++++-
+ tests/import-review-v1.static.test.mjs | 1 +
+ 2 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/js/import-review-v1.js b/js/import-review-v1.js
+index a2dcf19..696d607 100644
+--- a/js/import-review-v1.js
++++ b/js/import-review-v1.js
+@@ -1051,7 +1051,11 @@
+         const dim = itemDimension(item, type);
+         path.push(`${type}=${dim.id}`);
+         const keyPrefix = type === 'candidate' ? 'candidate' : type === 'client' ? 'client' : type === 'week' ? 'week' : 'shift';
+-        const key = `${keyPrefix}:${path.join('|')}`;
++        // Expansion state is presentation-only.  Persist an opaque token rather
++        // than candidate/client/action identifiers, otherwise a harmless UI
++        // preference can look like financial or recipient authority to the
++        // database validator.
++        const key = `${keyPrefix}:u-${opaqueUiToken(path.join('|'))}`;
+         if (!node.children.has(key)) node.children.set(key, { key, type, label: dim.label, badges: dim.badges || [], children: new Map(), items: [], count: 0 });
+         node = node.children.get(key);
+         if (type === 'candidate' && dim.badges?.length) node.badges = dim.badges;
+diff --git a/tests/import-review-v1.static.test.mjs b/tests/import-review-v1.static.test.mjs
+index 3a33a02..e7f591c 100644
+--- a/tests/import-review-v1.static.test.mjs
++++ b/tests/import-review-v1.static.test.mjs
+@@ -46,6 +46,7 @@ test('review nesting follows the active sort and keeps full-branch context', ()
+   assert.match(source, /branch_badges/);
+   assert.match(source, /data-ir-action="toggle-branch"/);
+   assert.match(source, /expanded: prior\?\.expanded \|\| new Set\(\)/);
++  assert.match(source, /const key = `\$\{keyPrefix\}:u-\$\{opaqueUiToken\(path\.join\('\|'\)\)\}`/);
+   assert.doesNotMatch(source, /review\.view === 'PENDING' && isPrimary/);
+   assert.match(css, /\.irv1-branch-toggle/);
+   assert.match(css, /\.irv1-branch-badge/);
+-- 
+2.54.0.windows.1
+

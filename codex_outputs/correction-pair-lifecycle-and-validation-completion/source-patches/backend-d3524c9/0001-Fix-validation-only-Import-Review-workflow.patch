@@ -1,0 +1,833 @@
+From d3524c9ad845bb06d8f96b39fe77b367801c2d92 Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 17:06:27 +0100
+Subject: [PATCH] Fix validation-only Import Review workflow
+
+---
+ broker/src/import-review.js                   |  24 +++
+ ...weekly_candidate_not_worked_resolution.sql |  84 +++++++++
+ ...hroster_weekly_resolution_hr_row_index.sql |   6 +
+ ...weekly_candidate_not_worked_resolution.sql | 178 ++++++++++++++++++
+ ...26_1820_00_import_review_internal_core.sql |  64 ++++++-
+ ...6_1820_13_hr_weekly_validation_preview.sql | 117 +++++++++++-
+ ...2026_0052_import_review_ui_contract_v1.sql |  19 +-
+ ...ort-review-validation-only-policy.test.cjs |  65 +++++++
+ 8 files changed, 539 insertions(+), 18 deletions(-)
+ create mode 100644 supabase/migrations/02082026_1626_healthroster_weekly_candidate_not_worked_resolution.sql
+ create mode 100644 supabase/migrations/02082026_1703_healthroster_weekly_resolution_hr_row_index.sql
+ create mode 100644 supabase/repeatable/02082026_1626_hr_weekly_candidate_not_worked_resolution.sql
+ create mode 100644 tests/import-review-validation-only-policy.test.cjs
+
+diff --git a/broker/src/import-review.js b/broker/src/import-review.js
+index b258876..79c1d45 100644
+--- a/broker/src/import-review.js
++++ b/broker/src/import-review.js
+@@ -33,6 +33,7 @@ const ROUTE_RPCS = Object.freeze(new Set([
+   'import_review_refresh_v1',
+   'import_review_abandon_v1',
+   'hr_daily_timesheet_resolution_save_v1',
++  'hr_weekly_candidate_not_worked_resolution_save_v1',
+   'import_review_apply_status_get_v1',
+   'import_review_apply_failed_before_commit_recover_v1',
+   'nhsp_weekly_review_preview_v1',
+@@ -814,6 +815,29 @@ export function createImportReviewDispatcher(dependencies) {
+         return success(data);
+       }
+ 
++      const weeklyCandidateNotWorked = routeMatch(pathname, '/api/import-reviews/:import_id/weekly-candidate-not-worked');
++      if (req.method === 'PUT' && weeklyCandidateNotWorked) {
++        const body = await readBoundedJson(req);
++        assertAllowedKeys(body, new Set([
++          'action_id', 'confirmed', 'expected_state_version', 'expected_preview_generation',
++          'expected_evidence_fingerprint', 'request_id'
++        ]));
++        if (typeof body.confirmed !== 'boolean') {
++          throw new ImportReviewInputError('confirmed must be boolean');
++        }
++        const data = await runAllowedRpc(sbRpc, env, 'hr_weekly_candidate_not_worked_resolution_save_v1', {
++          p_import_id: uuid(weeklyCandidateNotWorked.import_id, 'import_id'),
++          p_action_id: sha256(body.action_id, 'action_id'),
++          p_confirmed: body.confirmed,
++          p_expected_state_version: integer(body.expected_state_version, 'expected_state_version', 1, Number.MAX_SAFE_INTEGER),
++          p_expected_preview_generation: integer(body.expected_preview_generation, 'expected_preview_generation', 1, Number.MAX_SAFE_INTEGER),
++          p_expected_evidence_fingerprint: sha256(body.expected_evidence_fingerprint, 'expected_evidence_fingerprint'),
++          p_actor_user_id: user.id,
++          p_request_id: uuid(body.request_id, 'request_id')
++        });
++        return success(data);
++      }
++
+       const preview = routeMatch(pathname, '/api/import-reviews/:import_id/preview');
+       if (req.method === 'GET' && preview) {
+         const importId = uuid(preview.import_id, 'import_id');
+diff --git a/supabase/migrations/02082026_1626_healthroster_weekly_candidate_not_worked_resolution.sql b/supabase/migrations/02082026_1626_healthroster_weekly_candidate_not_worked_resolution.sql
+new file mode 100644
+index 0000000..40b84d2
+--- /dev/null
++++ b/supabase/migrations/02082026_1626_healthroster_weekly_candidate_not_worked_resolution.sql
+@@ -0,0 +1,84 @@
++begin;
++
++create table if not exists public.import_review_weekly_validation_resolutions (
++  id uuid primary key default gen_random_uuid(),
++  import_id uuid not null references public.import_review_states(import_id) on delete cascade,
++  hr_row_id uuid not null references public.hr_rows(id) on delete cascade,
++  timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
++  resolution_code text not null,
++  status text not null default 'CURRENT',
++  evidence_fingerprint text not null,
++  preview_generation integer not null,
++  state_version bigint not null,
++  selected_at_utc timestamptz not null default now(),
++  selected_by_user_id uuid,
++  stale_at_utc timestamptz,
++  stale_reason_code text,
++  applied_operation_id uuid references public.import_apply_operations(id) on delete restrict,
++  applied_at_utc timestamptz,
++  created_at_utc timestamptz not null default now(),
++  updated_at_utc timestamptz not null default now(),
++  unique (import_id, hr_row_id)
++);
++
++do $constraints$
++begin
++  if not exists (
++    select 1 from pg_constraint
++    where conrelid='public.import_review_weekly_validation_resolutions'::regclass
++      and conname='import_review_weekly_validation_resolution_code_ck'
++  ) then
++    alter table public.import_review_weekly_validation_resolutions
++      add constraint import_review_weekly_validation_resolution_code_ck
++      check (resolution_code='CANDIDATE_DID_NOT_WORK');
++  end if;
++
++  if not exists (
++    select 1 from pg_constraint
++    where conrelid='public.import_review_weekly_validation_resolutions'::regclass
++      and conname='import_review_weekly_validation_resolution_status_ck'
++  ) then
++    alter table public.import_review_weekly_validation_resolutions
++      add constraint import_review_weekly_validation_resolution_status_ck
++      check (status in ('CURRENT','STALE','CLEARED','APPLIED'));
++  end if;
++
++  if not exists (
++    select 1 from pg_constraint
++    where conrelid='public.import_review_weekly_validation_resolutions'::regclass
++      and conname='import_review_weekly_validation_resolution_bounds_ck'
++  ) then
++    alter table public.import_review_weekly_validation_resolutions
++      add constraint import_review_weekly_validation_resolution_bounds_ck check (
++        length(evidence_fingerprint)=64
++        and evidence_fingerprint ~ '^[0-9a-f]{64}$'
++        and preview_generation >= 0
++        and state_version > 0
++        and (status <> 'APPLIED' or (applied_operation_id is not null and applied_at_utc is not null))
++      );
++  end if;
++end
++$constraints$;
++
++create index if not exists import_review_weekly_validation_resolution_import_idx
++  on public.import_review_weekly_validation_resolutions(import_id,status,hr_row_id);
++create index if not exists import_review_weekly_validation_resolution_timesheet_idx
++  on public.import_review_weekly_validation_resolutions(timesheet_id);
++create index if not exists import_review_weekly_validation_resolution_operation_idx
++  on public.import_review_weekly_validation_resolutions(applied_operation_id)
++  where applied_operation_id is not null;
++
++drop trigger if exists trg_import_review_weekly_validation_resolution_guard
++  on public.import_review_weekly_validation_resolutions;
++create trigger trg_import_review_weekly_validation_resolution_guard
++before update or delete on public.import_review_weekly_validation_resolutions
++for each row execute function public._import_review_daily_resolution_guard_v1();
++
++alter table public.import_review_weekly_validation_resolutions enable row level security;
++revoke all on table public.import_review_weekly_validation_resolutions
++  from public, anon, authenticated, service_role;
++
++comment on table public.import_review_weekly_validation_resolutions is
++  'HealthRoster Weekly validation-only exceptions. CANDIDATE_DID_NOT_WORK records that one imported HealthRoster shift was absent from a proved submitted Weekly timesheet. It never authorises an hours, TSFIN, invoice, payment or other financial mutation.';
++
++commit;
+diff --git a/supabase/migrations/02082026_1703_healthroster_weekly_resolution_hr_row_index.sql b/supabase/migrations/02082026_1703_healthroster_weekly_resolution_hr_row_index.sql
+new file mode 100644
+index 0000000..c2f5b76
+--- /dev/null
++++ b/supabase/migrations/02082026_1703_healthroster_weekly_resolution_hr_row_index.sql
+@@ -0,0 +1,6 @@
++begin;
++
++create index if not exists import_review_weekly_validation_resolution_hr_row_idx
++  on public.import_review_weekly_validation_resolutions(hr_row_id);
++
++commit;
+diff --git a/supabase/repeatable/02082026_1626_hr_weekly_candidate_not_worked_resolution.sql b/supabase/repeatable/02082026_1626_hr_weekly_candidate_not_worked_resolution.sql
+new file mode 100644
+index 0000000..becf9fc
+--- /dev/null
++++ b/supabase/repeatable/02082026_1626_hr_weekly_candidate_not_worked_resolution.sql
+@@ -0,0 +1,178 @@
++create or replace function public.hr_weekly_candidate_not_worked_resolution_save_v1(
++  p_import_id uuid,
++  p_action_id text,
++  p_confirmed boolean,
++  p_expected_state_version bigint,
++  p_expected_preview_generation integer,
++  p_expected_evidence_fingerprint text,
++  p_actor_user_id uuid default null,
++  p_request_id uuid default null
++)
++returns jsonb
++language plpgsql
++security definer
++set search_path to 'public','extensions','pg_temp'
++as $function$
++declare
++  v_state public.import_review_states%rowtype;
++  v_action public.import_review_decisions%rowtype;
++  v_existing public.import_review_weekly_validation_resolutions%rowtype;
++  v_preview jsonb;
++  v_preview_evidence jsonb;
++  v_preview_timesheet_id uuid;
++  v_match_count integer:=0;
++  v_hash text;
++  v_prior jsonb;
++  v_refresh jsonb;
++begin
++  perform public._import_review_assert_actor_v1(p_actor_user_id);
++  if p_import_id is null or p_request_id is null or p_confirmed is null
++     or coalesce(p_action_id,'')!~'^[0-9a-f]{64}$'
++     or coalesce(p_expected_evidence_fingerprint,'')!~'^[0-9a-f]{64}$' then
++    raise exception 'HR_WEEKLY_CANDIDATE_NOT_WORKED_INPUT_INVALID' using errcode='22023';
++  end if;
++
++  v_hash:=public._import_review_hash_v1(concat_ws('|','hr-weekly-candidate-not-worked-resolution-v1',
++    p_import_id,p_action_id,p_confirmed,p_expected_state_version,p_expected_preview_generation,
++    p_expected_evidence_fingerprint));
++
++  select event_context_json into v_prior
++  from public.import_review_events
++  where import_id=p_import_id and operation_id=p_request_id
++    and event_code='WEEKLY_CANDIDATE_NOT_WORKED_RESOLUTION_SAVED'
++  order by id desc limit 1;
++  if found then
++    if v_prior->>'request_hash'<>v_hash then
++      raise exception 'HR_WEEKLY_CANDIDATE_NOT_WORKED_REQUEST_CONFLICT' using errcode='23505';
++    end if;
++    return jsonb_build_object('ok',true,'replay',true,'import_id',p_import_id,
++      'hr_row_id',v_prior->>'hr_row_id','confirmed',(v_prior->>'confirmed')::boolean,
++      'state_version',(v_prior->>'resulting_state_version')::bigint,'status',v_prior->>'status');
++  end if;
++
++  select * into v_state
++  from public.import_review_states where import_id=p_import_id for update;
++  if not found then raise exception 'IMPORT_REVIEW_NOT_FOUND' using errcode='P0002'; end if;
++  if v_state.status not in ('BLOCKED','READY','IN_REVIEW')
++     or v_state.state_version<>p_expected_state_version
++     or v_state.preview_generation<>p_expected_preview_generation then
++    raise exception 'HR_WEEKLY_CANDIDATE_NOT_WORKED_REVIEW_STALE' using errcode='40001';
++  end if;
++
++  select * into v_action
++  from public.import_review_decisions d
++  where d.import_id=p_import_id and d.action_id=p_action_id and d.is_current
++    and d.hr_row_id is not null and d.timesheet_id is not null
++    and d.summary_json->>'source_route'='HR_WEEKLY'
++    and d.summary_json->>'authority_mode'='VALIDATION_ONLY'
++    and d.summary_json->>'resolution_kind'='WEEKLY_CANDIDATE_DID_NOT_WORK'
++    and (
++      (p_confirmed and d.action_kind='ADVISORY' and d.summary_json->>'reason_code'='WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET')
++      or (not p_confirmed and d.action_kind='NO_ACTION' and d.summary_json->>'reason_code'='CANDIDATE_DID_NOT_WORK_CONFIRMED')
++    )
++  for update;
++  if not found or v_action.evidence_fingerprint<>p_expected_evidence_fingerprint then
++    raise exception 'HR_WEEKLY_CANDIDATE_NOT_WORKED_EVIDENCE_STALE' using errcode='40001';
++  end if;
++
++  -- Re-run the bounded server comparison.  The option exists only when an
++  -- actual submitted Weekly schedule is present and one exact HR row is absent.
++  v_preview:=public.hr_weekly_validation_preview(p_import_id);
++  with preview_evidence as (
++    select nullif(row_json->>'timesheet_id','')::uuid timesheet_id,cx.value evidence_json
++    from jsonb_array_elements(coalesce(v_preview->'rows','[]'::jsonb)) rows(row_json)
++    cross join lateral jsonb_array_elements(coalesce(row_json->'comparisons','[]'::jsonb)) cx(value)
++    where cx.value->>'match_status'='HR_ONLY'
++      and nullif(cx.value->>'hr_row_id','')::uuid=v_action.hr_row_id
++    union all
++    select nullif(row_json->>'timesheet_id','')::uuid timesheet_id,cx.value evidence_json
++    from jsonb_array_elements(coalesce(v_preview->'rows','[]'::jsonb)) rows(row_json)
++    cross join lateral jsonb_array_elements(coalesce(row_json->'confirmed_exceptions','[]'::jsonb)) cx(value)
++    where nullif(cx.value->>'hr_row_id','')::uuid=v_action.hr_row_id
++  )
++  select count(*),min(timesheet_id::text)::uuid,min(evidence_json::text)::jsonb
++  into v_match_count,v_preview_timesheet_id,v_preview_evidence
++  from preview_evidence;
++
++  if v_match_count<>1
++     or v_preview_timesheet_id is distinct from v_action.timesheet_id
++     or coalesce(v_preview_evidence->>'exception_evidence_fingerprint',v_preview_evidence->>'evidence_fingerprint')
++        is distinct from v_action.evidence_fingerprint then
++    raise exception 'HR_WEEKLY_CANDIDATE_NOT_WORKED_EVIDENCE_STALE' using errcode='40001';
++  end if;
++
++  if not exists (
++    select 1
++    from public.timesheets t
++    join public.contracts c on c.id=t.contract_id
++    left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
++    where t.timesheet_id=v_action.timesheet_id and t.is_current
++      and t.revoked_at is null and t.archived_at_utc is null
++      and t.sheet_scope='WEEKLY'::public.timesheet_scope_enum
++      and c.candidate_id=v_action.candidate_id and c.client_id=v_action.client_id
++      and t.week_ending_date=nullif(v_action.summary_json->>'week_ending_date','')::date
++      and (
++        (jsonb_typeof(t.actual_schedule_json)='array' and jsonb_array_length(t.actual_schedule_json)>0)
++        or (
++          jsonb_typeof(tf.invoice_breakdown_json)='object'
++          and jsonb_typeof(tf.invoice_breakdown_json->'segments')='array'
++          and jsonb_array_length(tf.invoice_breakdown_json->'segments')>0
++        )
++      )
++  ) then
++    raise exception 'HR_WEEKLY_CANDIDATE_NOT_WORKED_TIMESHEET_NOT_SUBMITTED' using errcode='40001';
++  end if;
++
++  select * into v_existing
++  from public.import_review_weekly_validation_resolutions
++  where import_id=p_import_id and hr_row_id=v_action.hr_row_id for update;
++  if found and v_existing.status='APPLIED' then
++    if p_confirmed and v_existing.evidence_fingerprint=v_action.evidence_fingerprint then
++      return jsonb_build_object('ok',true,'replay',true,'immutable',true,'import_id',p_import_id,
++        'hr_row_id',v_action.hr_row_id,'confirmed',true,'state_version',v_state.state_version,'status',v_state.status);
++    end if;
++    raise exception 'HR_WEEKLY_CANDIDATE_NOT_WORKED_APPLIED_IMMUTABLE' using errcode='55000';
++  end if;
++
++  insert into public.import_review_weekly_validation_resolutions(
++    import_id,hr_row_id,timesheet_id,resolution_code,status,evidence_fingerprint,
++    preview_generation,state_version,selected_by_user_id,stale_at_utc,stale_reason_code
++  ) values (
++    p_import_id,v_action.hr_row_id,v_action.timesheet_id,'CANDIDATE_DID_NOT_WORK',
++    case when p_confirmed then 'CURRENT' else 'CLEARED' end,
++    v_action.evidence_fingerprint,v_state.preview_generation,v_state.state_version,p_actor_user_id,
++    case when p_confirmed then null else now() end,
++    case when p_confirmed then null else 'USER_CLEARED' end
++  )
++  on conflict(import_id,hr_row_id) do update set
++    timesheet_id=excluded.timesheet_id,resolution_code=excluded.resolution_code,status=excluded.status,
++    evidence_fingerprint=excluded.evidence_fingerprint,preview_generation=excluded.preview_generation,
++    state_version=excluded.state_version,selected_at_utc=now(),selected_by_user_id=excluded.selected_by_user_id,
++    stale_at_utc=excluded.stale_at_utc,stale_reason_code=excluded.stale_reason_code,updated_at_utc=now();
++
++  update public.import_review_states
++  set state_version=state_version+1,status='IN_REVIEW',updated_at_utc=now(),updated_by_user_id=p_actor_user_id
++  where import_id=p_import_id returning * into v_state;
++
++  insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json)
++  values(p_import_id,v_state.state_version,p_request_id,'WEEKLY_CANDIDATE_NOT_WORKED_RESOLUTION_SAVED',p_actor_user_id,
++    jsonb_build_object('request_hash',v_hash,'action_id',p_action_id,'hr_row_id',v_action.hr_row_id,
++      'timesheet_id',v_action.timesheet_id,'confirmed',p_confirmed,
++      'evidence_fingerprint',v_action.evidence_fingerprint,
++      'resulting_state_version',v_state.state_version,'status',v_state.status));
++
++  v_refresh:=public._import_review_refresh_core_v1(p_import_id,v_state.state_version,p_actor_user_id,500);
++  return v_refresh||jsonb_build_object('replay',false,'hr_row_id',v_action.hr_row_id,
++    'timesheet_id',v_action.timesheet_id,'confirmed',p_confirmed);
++end
++$function$;
++
++alter function public.hr_weekly_candidate_not_worked_resolution_save_v1(
++  uuid,text,boolean,bigint,integer,text,uuid,uuid
++) owner to postgres;
++revoke all on function public.hr_weekly_candidate_not_worked_resolution_save_v1(
++  uuid,text,boolean,bigint,integer,text,uuid,uuid
++) from public,anon,authenticated;
++grant execute on function public.hr_weekly_candidate_not_worked_resolution_save_v1(
++  uuid,text,boolean,bigint,integer,text,uuid,uuid
++) to postgres,service_role;
+diff --git a/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql b/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
+index 0a837cd..6f95ba4 100644
+--- a/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
++++ b/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
+@@ -3207,6 +3207,11 @@ begin
+         and g.week_ending_date=p.row_json->>'week_ending_date'
+       cross join lateral jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
+       where p.timesheet_id is not null and cx.value->>'match_status'='HR_ONLY'
++    ), confirmed_exceptions as (
++      select p.*,cx.value exception_json
++      from preview_rows p
++      cross join lateral jsonb_array_elements(coalesce(p.row_json->'confirmed_exceptions','[]'::jsonb)) cx(value)
++      where p.timesheet_id is not null
+     )
+     select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
+         'WEEKLY_TIMESHEET_NOT_SUBMITTED',m.shift_hr_row_id)),
+@@ -3225,18 +3230,17 @@ begin
+     from missing_timesheets m
+     union all
+     select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
+-        'WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET',o.timesheet_id,o.comparison_json->>'work_date',
+-        o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end')),
++        'WEEKLY_CANDIDATE_DID_NOT_WORK',o.comparison_json->>'hr_row_id')),
+       'ADVISORY','BLOCKED',
+-      concat_ws(':','weekly-shift-absent',o.timesheet_id,o.comparison_json->>'work_date',
+-        o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end'),
++      concat_ws(':','weekly-candidate-did-not-work',o.comparison_json->>'hr_row_id'),
+       concat_ws('|',o.timesheet_id,o.comparison_json->>'work_date',
+         o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end'),
+-      null::uuid,o.timesheet_id,null::uuid,o.client_id,o.candidate_id,o.contract_id,null::uuid,
+-      public._import_review_hash_v1(concat_ws('|','weekly-shift-absent-v1',o.timesheet_id,o.comparison_json::text)),
++      nullif(o.comparison_json->>'hr_row_id','')::uuid,o.timesheet_id,null::uuid,o.client_id,o.candidate_id,o.contract_id,null::uuid,
++      o.comparison_json->>'exception_evidence_fingerprint',
+       false,false,true,
+       jsonb_build_object(
+         'reason_code','WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET','source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
++        'resolution_kind','WEEKLY_CANDIDATE_DID_NOT_WORK',
+         'candidate_name',o.row_json->>'candidate_name','week_ending_date',o.row_json->>'week_ending_date',
+         'work_date',o.comparison_json->>'work_date',
+         'imported_evidence',jsonb_strip_nulls(jsonb_build_object(
+@@ -3246,8 +3250,35 @@ begin
+           'reference',o.comparison_json->>'ref_after')),
+         'current_evidence',jsonb_build_object('timesheet_id',o.timesheet_id),
+         'difference_codes',jsonb_build_array('HR_ONLY'),
+-        'outcome_label','Candidate timesheet states they did not work this shift')
+-    from omitted_shifts o;
++        'outcome_label','Confirm candidate did not work this shift')
++    from omitted_shifts o
++    union all
++    select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
++        'WEEKLY_CANDIDATE_DID_NOT_WORK',c.exception_json->>'hr_row_id')),
++      'NO_ACTION','NO_ACTION',
++      concat_ws(':','weekly-candidate-did-not-work',c.exception_json->>'hr_row_id'),
++      concat_ws('|',c.timesheet_id,c.exception_json->>'work_date',
++        c.exception_json->>'healthroster_start',c.exception_json->>'healthroster_end'),
++      nullif(c.exception_json->>'hr_row_id','')::uuid,c.timesheet_id,null::uuid,c.client_id,c.candidate_id,c.contract_id,null::uuid,
++      c.exception_json->>'evidence_fingerprint',
++      false,false,false,
++      jsonb_build_object(
++        'reason_code','CANDIDATE_DID_NOT_WORK_CONFIRMED','source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
++        'resolution_kind','WEEKLY_CANDIDATE_DID_NOT_WORK',
++        'candidate_name',c.row_json->>'candidate_name','week_ending_date',c.row_json->>'week_ending_date',
++        'validation_total_shift_count',jsonb_array_length(coalesce(c.row_json->'comparisons','[]'::jsonb))
++          + coalesce(nullif(c.row_json->>'confirmed_exception_count','')::integer,0),
++        'confirmed_exception_count',coalesce(nullif(c.row_json->>'confirmed_exception_count','')::integer,0),
++        'work_date',c.exception_json->>'work_date',
++        'imported_evidence',jsonb_strip_nulls(jsonb_build_object(
++          'work_date',c.exception_json->>'work_date','start',c.exception_json->>'healthroster_start',
++          'end',c.exception_json->>'healthroster_end',
++          'break_minutes',nullif(c.exception_json->>'healthroster_break_mins','')::integer,
++          'reference',c.exception_json->>'reference')),
++        'current_evidence',jsonb_build_object('timesheet_id',c.timesheet_id),
++        'difference_codes',jsonb_build_array('CONFIRMED_EXCEPTION'),
++        'outcome_label','Passed with confirmed exception')
++    from confirmed_exceptions c;
+ 
+     insert into pg_temp.import_review_catalog_v1
+     with preview_rows as (
+@@ -3331,6 +3362,9 @@ begin
+       coalesce((a.protection->>'active_pay_draft')::boolean,false),
+       jsonb_build_object('reason_code','HEALTHROSTER_WEEKLY','issue_fingerprint',a.email_issue_fingerprint,
+         'candidate_name',a.row_json->>'candidate_name','week_ending_date',a.row_json->>'week_ending_date',
++        'validation_total_shift_count',jsonb_array_length(coalesce(a.row_json->'comparisons','[]'::jsonb))
++          + coalesce(nullif(a.row_json->>'confirmed_exception_count','')::integer,0),
++        'validation_difference_count',jsonb_array_length(a.email_comparisons),
+       'failure_reasons',a.email_failure_reasons,
+         'days',a.email_days,'comparisons',a.email_comparisons,
+         'evidence_rows',coalesce((
+@@ -3684,6 +3718,20 @@ begin
+     select 1 from pg_temp.review_next_actions n
+     where n.hr_row_id=r.hr_row_id and n.evidence_fingerprint=r.evidence_fingerprint);
+ 
++  -- A Weekly candidate-did-not-work exception remains current only while the
++  -- same server-proved HR row/timesheet evidence is still represented by the
++  -- current catalogue.  The confirmed display action deliberately retains the
++  -- same identity after the blocking advisory has been resolved.
++  update public.import_review_weekly_validation_resolutions r
++  set status='STALE',stale_at_utc=now(),stale_reason_code='EVIDENCE_CHANGED',updated_at_utc=now()
++  where r.import_id=p_import_id and r.status='CURRENT' and not exists (
++    select 1 from pg_temp.review_next_actions n
++    where n.hr_row_id=r.hr_row_id
++      and n.timesheet_id=r.timesheet_id
++      and n.evidence_fingerprint=r.evidence_fingerprint
++      and n.summary_json->>'resolution_kind'='WEEKLY_CANDIDATE_DID_NOT_WORK'
++  );
++
+   select count(*) filter(where blocking),count(*) filter(where selected)
+   into v_blockers,v_selected from public.import_review_decisions
+   where import_id=p_import_id and is_current;
+diff --git a/supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql b/supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql
+index e452732..55acabd 100644
+--- a/supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql
++++ b/supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql
+@@ -408,6 +408,8 @@ begin
+       on tfu.timesheet_id = t.timesheet_id
+      and tfu.is_current = true
+     where t.is_current = true
++      and t.revoked_at is null
++      and t.archived_at_utc is null
+       and t.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+       and ct.client_id = v_client_id
+       and t.week_ending_date is not null
+@@ -415,6 +417,14 @@ begin
+       and coalesce(ce.eff_autoprocess_hr,false) = true
+       and coalesce(ce.eff_requires_hr,false) = true
+       and coalesce(ce.eff_no_timesheet_required,false) = false
++      and (
++        (jsonb_typeof(t.actual_schedule_json)='array' and jsonb_array_length(t.actual_schedule_json)>0)
++        or (
++          jsonb_typeof(tfu.invoice_breakdown_json)='object'
++          and jsonb_typeof(tfu.invoice_breakdown_json->'segments')='array'
++          and jsonb_array_length(tfu.invoice_breakdown_json->'segments')>0
++        )
++      )
+   ),
+ 
+   ts_matches_raw as (
+@@ -439,11 +449,13 @@ begin
+       tmr.raw_timesheet_id as raw_timesheet_id,
+       case
+         when tmr.raw_timesheet_id is null then null::uuid
++        when tur.timesheet_id is null then null::uuid
+         when ce2.contract_id is null then null::uuid
+         else tmr.raw_timesheet_id
+       end as timesheet_id,
+       case
+         when tmr.raw_timesheet_id is null then false
++        when tur.timesheet_id is null then false
+         when ce2.contract_id is null then false
+         when tts.authorised_at_server is null then true
+         else false
+@@ -456,6 +468,8 @@ begin
+     left join public.timesheets tts
+       on tts.timesheet_id = tmr.raw_timesheet_id
+      and tts.is_current = true
++    left join ts_universe_raw tur
++      on tur.timesheet_id=tmr.raw_timesheet_id
+     left join contract_effective ce2
+       on ce2.contract_id = tts.contract_id
+      and coalesce(ce2.eff_autoprocess_hr,false) = true
+@@ -475,6 +489,68 @@ begin
+     from ts_universe_raw tur
+   ),
+ 
++  hr_exception_evidence as (
++    select
++      hf.*,
++      tu.timesheet_id,
++      public._import_review_hash_v1(concat_ws('|',
++        'hr-weekly-candidate-did-not-work-v1',p_import_id,hf.hr_row_id,tu.timesheet_id,
++        hf.candidate_id,hf.week_ending_date,hf.work_date,hf.hr_start_hhmm,hf.hr_end_hhmm,
++        coalesce(hf.hr_break_mins,0),coalesce(hf.hr_request_id,''),coalesce(hf.hr_location,'')
++      )) as exception_evidence_fingerprint
++    from hr_entries_flat hf
++    join ts_universe tu
++      on tu.candidate_id=hf.candidate_id
++     and tu.week_ending_date=hf.week_ending_date
++  ),
++
++  confirmed_hr_exceptions as (
++    select he.*
++    from hr_exception_evidence he
++    join public.import_review_weekly_validation_resolutions r
++      on r.import_id=p_import_id
++     and r.hr_row_id=he.hr_row_id
++     and r.timesheet_id=he.timesheet_id
++     and r.resolution_code='CANDIDATE_DID_NOT_WORK'
++     and r.status in ('CURRENT','APPLIED')
++     and r.evidence_fingerprint=he.exception_evidence_fingerprint
++  ),
++
++  hr_day_totals_effective as (
++    select
++      he.candidate_id,
++      he.candidate_name,
++      he.week_ending_date,
++      he.work_date,
++      sum(he.hr_paid_minutes)::int as hr_paid_minutes
++    from hr_exception_evidence he
++    where not exists (
++      select 1 from confirmed_hr_exceptions confirmed
++      where confirmed.hr_row_id=he.hr_row_id
++        and confirmed.timesheet_id=he.timesheet_id
++    )
++    group by he.candidate_id,he.candidate_name,he.week_ending_date,he.work_date
++  ),
++
++  confirmed_exceptions_by_group as (
++    select
++      candidate_id,candidate_name,week_ending_date,timesheet_id,
++      count(*)::int as confirmed_exception_count,
++      jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
++        'hr_row_id',hr_row_id,
++        'work_date',work_date::text,
++        'healthroster_start',hr_start_hhmm,
++        'healthroster_end',hr_end_hhmm,
++        'healthroster_break_mins',hr_break_mins,
++        'reference',hr_request_id,
++        'location',hr_location,
++        'resolution_code','CANDIDATE_DID_NOT_WORK',
++        'evidence_fingerprint',exception_evidence_fingerprint
++      )) order by work_date,hr_start_min,hr_end_min,hr_row_id) as confirmed_exceptions_json
++    from confirmed_hr_exceptions
++    group by candidate_id,candidate_name,week_ending_date,timesheet_id
++  ),
++
+   ts_entries_indexed as (
+     select
+       s.candidate_id,
+@@ -704,6 +780,8 @@ begin
+       tu.candidate_name,
+       tu.week_ending_date,
+       hf.work_date,
++      hf.hr_row_id,
++      hf.exception_evidence_fingerprint,
+ 
+       null::text as ts_start_hhmm,
+       null::text as ts_end_hhmm,
+@@ -723,7 +801,7 @@ begin
+       'HR_ONLY'::text as match_status,
+ 
+       100000 + hf.hr_start_min as sort_key
+-    from hr_entries_flat hf
++    from hr_exception_evidence hf
+     join ts_universe tu
+       on tu.candidate_id = hf.candidate_id
+      and tu.week_ending_date = hf.week_ending_date
+@@ -733,6 +811,11 @@ begin
+      and pc.match_count = 1
+      and pc.matched_hr_row_id = hf.hr_row_id
+     where pc.matched_hr_row_id is null
++      and not exists (
++        select 1 from confirmed_hr_exceptions confirmed
++        where confirmed.hr_row_id=hf.hr_row_id
++          and confirmed.timesheet_id=tu.timesheet_id
++      )
+   ),
+ 
+   comparisons_worker as (
+@@ -742,6 +825,8 @@ begin
+       pc.candidate_name,
+       pc.week_ending_date,
+       pc.work_date,
++      case when pc.match_count=1 then pc.matched_hr_row_id else null end as hr_row_id,
++      null::text as exception_evidence_fingerprint,
+ 
+       pc.ts_start_hhmm,
+       pc.ts_end_hhmm,
+@@ -795,6 +880,8 @@ begin
+       cu.candidate_name,
+       cu.week_ending_date,
+       cu.work_date,
++      cu.hr_row_id,
++      cu.exception_evidence_fingerprint,
+ 
+       cu.ts_start_hhmm,
+       cu.ts_end_hhmm,
+@@ -909,6 +996,8 @@ begin
+ 
+       jsonb_agg(
+         jsonb_build_object(
++          'hr_row_id', ce.hr_row_id,
++          'exception_evidence_fingerprint',ce.exception_evidence_fingerprint,
+           'work_date', ce.work_date::text,
+ 
+           'timesheet_start', ce.ts_start_hhmm,
+@@ -920,13 +1009,13 @@ begin
+           'healthroster_break_mins', ce.hr_break_mins,
+ 
+           -- stable key for FE checkbox state
+-          'comparison_key',
+-            (
+-              ce.work_date::text
++          'comparison_key',coalesce(
++            case when ce.hr_row_id is not null then 'hr-row:'||ce.hr_row_id::text end,
++            ce.work_date::text
+               || '|' || coalesce(ce.ts_start_hhmm,'')
+               || '|' || coalesce(ce.ts_end_hhmm,'')
+               || '|' || coalesce(ce.ts_break_mins,0)::text
+-            ),
++          ),
+ 
+           -- destructive invalidation flags (missing from import OR mismatched + had prior ref + not invoice locked)
+           'is_destructive_invalidation',
+@@ -1008,10 +1097,15 @@ begin
+       hf.candidate_name,
+       hf.week_ending_date,
+       hf.work_date
+-    from hr_entries_flat hf
++    from hr_exception_evidence hf
+     join ts_universe tu
+       on tu.candidate_id = hf.candidate_id
+      and tu.week_ending_date = hf.week_ending_date
++    where not exists (
++      select 1 from confirmed_hr_exceptions confirmed
++      where confirmed.hr_row_id=hf.hr_row_id
++        and confirmed.timesheet_id=tu.timesheet_id
++    )
+   ),
+ 
+   day_eval as (
+@@ -1030,7 +1124,7 @@ begin
+         else 'OK'
+       end as day_status
+     from day_set ds
+-    left join hr_day_totals hdt
++    left join hr_day_totals_effective hdt
+       on hdt.candidate_id = ds.candidate_id
+      and hdt.week_ending_date = ds.week_ending_date
+      and hdt.work_date = ds.work_date
+@@ -1080,6 +1174,8 @@ begin
+       p.has_totals_mismatch,
+       p.sig_text,
+       cbg.comparisons_json,
++      coalesce(ceg.confirmed_exception_count,0) as confirmed_exception_count,
++      coalesce(ceg.confirmed_exceptions_json,'[]'::jsonb) as confirmed_exceptions_json,
+       coalesce(cbg.any_invoice_locked,false) as any_invoice_locked,
+       coalesce(cbg.any_locked_ref_change,false) as any_locked_ref_change,
+       coalesce(cbg.any_locked_time_mismatch,false) as any_locked_time_mismatch
+@@ -1088,6 +1184,10 @@ begin
+       on cbg.candidate_id = p.candidate_id
+      and cbg.week_ending_date = p.week_ending_date
+      and cbg.timesheet_id = p.timesheet_id
++    left join confirmed_exceptions_by_group ceg
++      on ceg.candidate_id=p.candidate_id
++     and ceg.week_ending_date=p.week_ending_date
++     and ceg.timesheet_id=p.timesheet_id
+   ),
+ 
+   final_groups as (
+@@ -1123,6 +1223,7 @@ begin
+             )
+           )
+         ) then 'FAIL'
++        when coalesce(g.confirmed_exception_count,0)>0 then 'OVERRIDDEN'
+         else 'OK'
+       end as overall_status
+     from grouped g
+@@ -1163,6 +1264,8 @@ begin
+ 
+         'overall_status', wes.overall_status,
+         'has_mismatch', wes.has_mismatch,
++        'confirmed_exception_count',wes.confirmed_exception_count,
++        'confirmed_exceptions',wes.confirmed_exceptions_json,
+ 
+         'failure_reasons',
+           (
+diff --git a/supabase/repeatable/22072026_0052_import_review_ui_contract_v1.sql b/supabase/repeatable/22072026_0052_import_review_ui_contract_v1.sql
+index 002d4b5..dec9d85 100644
+--- a/supabase/repeatable/22072026_0052_import_review_ui_contract_v1.sql
++++ b/supabase/repeatable/22072026_0052_import_review_ui_contract_v1.sql
+@@ -391,7 +391,7 @@ begin
+           then 'Request new shift' else 'Request amend shift' end
+         when 'EMAIL_REMINDER' then case when d.summary_json->>'reason_code'='MISSING_FROM_IMPORT'
+           then 'Request new shift reminder' else 'Request amend shift reminder' end
+-        when 'INVALIDATE_REFERENCE' then 'Clear stored reference' when 'NO_ACTION' then 'No action required'
++        when 'INVALIDATE_REFERENCE' then 'Clear stored reference' when 'NO_ACTION' then 'Passed checks'
+         when 'DAILY_TIMESHEET_RESOLUTION' then 'Choose existing timesheet' else 'Resolve before continuing' end) outcome_label,
+       d.summary_json->>'resolution_kind' resolution_kind,
+       d.summary_json->>'authority_mode' authority_mode,
+@@ -608,7 +608,13 @@ begin
+       when 'PENDING' then a.blocking or a.action_category in ('PENDING','BLOCKED')
+       when 'READY' then a.action_category='READY'
+       when 'EMAIL' then a.action_category='EMAIL'
+-      when 'NO_ACTION' then a.action_category='NO_ACTION'
++      when 'NO_ACTION' then a.action_category='NO_ACTION' and (
++        a.summary_json->>'reason_code'='CANDIDATE_DID_NOT_WORK_CONFIRMED'
++        or (
++          coalesce(jsonb_array_length(case when jsonb_typeof(a.difference_codes)='array' then a.difference_codes else '[]'::jsonb end),0)=0
++          and nullif(a.summary_json->>'reason_code','') is null
++        )
++      )
+       when 'CONFIRM_STANDARD' then a.selected and a.batch_eligible and a.action_kind='INCLUDE_SHIFT'
+       when 'CONFIRM_NON_STANDARD' then a.selected and a.batch_eligible and a.action_kind in ('APPLY_AMENDMENT','APPLY_CANCELLATION')
+       when 'CONFIRM_VALIDATION' then a.selected and a.batch_eligible and a.action_kind='MARK_VALIDATION_ERROR'
+@@ -670,7 +676,14 @@ begin
+     'PENDING',count(*) filter(where blocking or action_category in ('PENDING','BLOCKED')),
+     'READY',count(*) filter(where action_category='READY'),
+     'EMAIL',count(*) filter(where action_category='EMAIL'),
+-    'NO_ACTION',count(*) filter(where action_category='NO_ACTION')
++    'NO_ACTION',count(*) filter(where action_category='NO_ACTION' and (
++      summary_json->>'reason_code'='CANDIDATE_DID_NOT_WORK_CONFIRMED'
++      or (
++        coalesce(jsonb_array_length(case when jsonb_typeof(summary_json->'difference_codes')='array'
++          then summary_json->'difference_codes' else '[]'::jsonb end),0)=0
++        and nullif(summary_json->>'reason_code','') is null
++      )
++    ))
+   ) into v_counts
+   from public.import_review_decisions d where d.import_id=p_import_id and d.is_current;
+ 
+diff --git a/tests/import-review-validation-only-policy.test.cjs b/tests/import-review-validation-only-policy.test.cjs
+new file mode 100644
+index 0000000..2e41a72
+--- /dev/null
++++ b/tests/import-review-validation-only-policy.test.cjs
+@@ -0,0 +1,65 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++
++const read = (relative) => fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
++const migration = read('supabase/migrations/02082026_1626_healthroster_weekly_candidate_not_worked_resolution.sql');
++const resolver = read('supabase/repeatable/02082026_1626_hr_weekly_candidate_not_worked_resolution.sql');
++const preview = read('supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql');
++const core = read('supabase/repeatable/21072026_1820_00_import_review_internal_core.sql');
++const ui = read('supabase/repeatable/22072026_0052_import_review_ui_contract_v1.sql');
++const worker = read('broker/src/import-review.js');
++
++test('Weekly candidate-did-not-work evidence is a locked validation-only record', () => {
++  assert.match(migration, /import_review_weekly_validation_resolutions/);
++  assert.match(migration, /resolution_code='CANDIDATE_DID_NOT_WORK'/);
++  assert.match(migration, /enable row level security/i);
++  assert.match(migration, /revoke all on table public\.import_review_weekly_validation_resolutions[\s\S]*service_role/i);
++  assert.match(migration, /never authorises an hours, TSFIN, invoice, payment or other financial mutation/i);
++});
++
++test('resolution RPC re-proves the current submitted Weekly comparison and is server-only', () => {
++  assert.match(resolver, /_import_review_assert_actor_v1/);
++  assert.match(resolver, /hr_weekly_validation_preview\(p_import_id\)/);
++  assert.match(resolver, /match_status'='HR_ONLY/);
++  assert.match(resolver, /jsonb_array_length\(t\.actual_schedule_json\)>0/);
++  assert.match(resolver, /jsonb_array_length\(tf\.invoice_breakdown_json->'segments'\)>0/);
++  assert.match(resolver, /WEEKLY_CANDIDATE_DID_NOT_WORK/);
++  assert.match(resolver, /revoke all on function[\s\S]*public,anon,authenticated/i);
++  assert.match(resolver, /grant execute on function[\s\S]*postgres,service_role/i);
++});
++
++test('Weekly preview excludes only the confirmed HR row and returns OVERRIDDEN', () => {
++  assert.match(preview, /confirmed_hr_exceptions/);
++  assert.match(preview, /hr_day_totals_effective/);
++  assert.match(preview, /exception_evidence_fingerprint/);
++  assert.match(preview, /when coalesce\(g\.confirmed_exception_count,0\)>0 then 'OVERRIDDEN'/);
++  assert.match(preview, /confirmed_exceptions_json/);
++  assert.match(preview, /t\.revoked_at is null/);
++  assert.match(preview, /t\.archived_at_utc is null/);
++});
++
++test('catalog exposes the resolution only for a proved omitted Weekly shift', () => {
++  assert.match(core, /WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET/);
++  assert.match(core, /WEEKLY_CANDIDATE_DID_NOT_WORK/);
++  assert.match(core, /nullif\(o\.comparison_json->>'hr_row_id',''\)::uuid/);
++  assert.match(core, /CANDIDATE_DID_NOT_WORK_CONFIRMED/);
++  assert.match(core, /Passed with confirmed exception/);
++  assert.match(core, /import_review_weekly_validation_resolutions[\s\S]*EVIDENCE_CHANGED/);
++});
++
++test('UI contract hides mismatch support rows from Passed checks', () => {
++  assert.match(ui, /when 'NO_ACTION' then a\.action_category='NO_ACTION' and/);
++  assert.match(ui, /CANDIDATE_DID_NOT_WORK_CONFIRMED/);
++  assert.match(ui, /jsonb_array_length/);
++  assert.match(ui, /when 'NO_ACTION' then 'Passed checks'/);
++});
++
++test('Worker exposes one bounded intent-only resolution route', () => {
++  assert.match(worker, /hr_weekly_candidate_not_worked_resolution_save_v1/);
++  assert.match(worker, /weekly-candidate-not-worked/);
++  assert.match(worker, /typeof body\.confirmed !== 'boolean'/);
++  assert.match(worker, /p_action_id: sha256\(body\.action_id/);
++  assert.doesNotMatch(worker, /weekly-candidate-not-worked[\s\S]{0,1800}(?:hours|pay|charge|invoice)_value/i);
++});
+-- 
+2.54.0.windows.1
+
