@@ -385,7 +385,9 @@ immutable
 security definer
 set search_path to 'public', 'pg_temp'
 as $function$
-declare v jsonb:=coalesce(p_ui_state,'{}'::jsonb); v_key text;
+declare
+  v jsonb:=coalesce(p_ui_state,'{}'::jsonb);
+  v_key text;
 begin
   if jsonb_typeof(v)<>'object' or pg_column_size(v)>65536 then
     raise exception 'IMPORT_REVIEW_UI_STATE_INVALID' using errcode='22023';
@@ -397,13 +399,47 @@ begin
       raise exception 'IMPORT_REVIEW_UI_STATE_KEY_NOT_ALLOWED' using errcode='22023',detail=v_key;
     end if;
   end loop;
-  if v::text ~* '(recipient|email|amount|rate|timesheet_id|financial|action_id|selected)' then
-    raise exception 'IMPORT_REVIEW_UI_STATE_CONTAINS_AUTHORITY' using errcode='22023';
+  -- Validate presentation state structurally.  Scanning the entire JSON text
+  -- treated the legitimate active section EMAILS as authority and made a
+  -- checkbox save fail.  Expansion tokens are now opaque, typed and bounded;
+  -- no recipient, action, timesheet or financial identity can be persisted.
+  if exists (
+    select 1
+    from jsonb_each(v) e
+    where e.key in ('expanded_candidates','expanded_clients','expanded_weeks','expanded_shifts')
+      and jsonb_typeof(e.value)<>'array'
+  ) then
+    raise exception 'IMPORT_REVIEW_UI_STATE_EXPANSION_INVALID' using errcode='22023';
   end if;
   if exists (
     select 1 from jsonb_each(v) e
     where jsonb_array_length(case when jsonb_typeof(e.value)='array' then e.value else '[]'::jsonb end)>500
   ) then raise exception 'IMPORT_REVIEW_UI_STATE_ARRAY_LIMIT_EXCEEDED' using errcode='22023'; end if;
+  if exists (
+    select 1
+    from jsonb_each(v) e
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(e.value)='array' then e.value else '[]'::jsonb end
+    ) a(value)
+    where e.key in ('expanded_candidates','expanded_clients','expanded_weeks','expanded_shifts')
+      and (
+        jsonb_typeof(a.value)<>'string'
+        or length(a.value#>>'{}')>96
+        or (a.value#>>'{}') !~ '^(candidate|client|week|shift):u-[0-9a-f]{16}(-[0-9a-f]{16})?$'
+      )
+  ) then
+    raise exception 'IMPORT_REVIEW_UI_STATE_CONTAINS_AUTHORITY' using errcode='22023';
+  end if;
+  if v?'active_section' and (
+    jsonb_typeof(v->'active_section')<>'string'
+    or upper(v->>'active_section') not in ('PENDING','READY','EMAILS','NO_ACTION')
+  ) then raise exception 'IMPORT_REVIEW_UI_STATE_SECTION_INVALID' using errcode='22023'; end if;
+  if v?'scroll_anchor' and jsonb_typeof(v->'scroll_anchor')<>'null' then
+    raise exception 'IMPORT_REVIEW_UI_STATE_SCROLL_ANCHOR_INVALID' using errcode='22023'; end if;
+  if v?'show_no_action' and jsonb_typeof(v->'show_no_action')<>'boolean' then
+    raise exception 'IMPORT_REVIEW_UI_STATE_FLAG_INVALID' using errcode='22023'; end if;
+  if v?'show_automatic' and jsonb_typeof(v->'show_automatic')<>'boolean' then
+    raise exception 'IMPORT_REVIEW_UI_STATE_FLAG_INVALID' using errcode='22023'; end if;
   if v?'page_number' and (jsonb_typeof(v->'page_number')<>'number' or (v->>'page_number')!~'^\d+$'
       or (v->>'page_number')::integer not between 1 and 100) then
     raise exception 'IMPORT_REVIEW_UI_STATE_PAGE_INVALID' using errcode='22023'; end if;

@@ -57,6 +57,13 @@ test('UI contract hides mismatch support rows from Passed checks', () => {
   assert.match(ui, /when 'NO_ACTION' then 'Passed checks'/);
 });
 
+test('UI state accepts the Emails section but persists only opaque expansion tokens', () => {
+  assert.match(core, /upper\(v->>'active_section'\) not in \('PENDING','READY','EMAILS','NO_ACTION'\)/);
+  assert.match(core, /\^\(candidate\|client\|week\|shift\):u-/);
+  assert.match(core, /IMPORT_REVIEW_UI_STATE_CONTAINS_AUTHORITY/);
+  assert.doesNotMatch(core, /v::text ~\* '\(recipient\|email\|amount/);
+});
+
 test('Worker exposes one bounded intent-only resolution route', () => {
   assert.match(worker, /hr_weekly_candidate_not_worked_resolution_save_v1/);
   assert.match(worker, /weekly-candidate-not-worked/);
