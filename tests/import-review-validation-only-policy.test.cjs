@@ -50,6 +50,7 @@ test('catalog exposes the resolution only for a proved omitted Weekly shift', ()
 });
 
 test('UI contract hides mismatch support rows from Passed checks', () => {
+  assert.doesNotMatch(ui, /create or replace function public\.import_review_contract_version_get_v1/i);
   assert.match(ui, /when 'NO_ACTION' then a\.action_category='NO_ACTION' and/);
   assert.match(ui, /CANDIDATE_DID_NOT_WORK_CONFIRMED/);
   assert.match(ui, /jsonb_array_length/);

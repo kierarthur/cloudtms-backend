@@ -1,28 +1,8 @@
--- Bounded, server-owned import-review scope discovery and action paging for the
--- durable review UI. This repeatable also advances the fail-closed Worker/UI
--- contract without changing the financial apply envelope.
-
-create or replace function public.import_review_contract_version_get_v1()
-returns jsonb
-language sql
-stable
-security definer
-set search_path to 'public', 'pg_temp'
-as $function$
-  select jsonb_build_object(
-    'ok',true,
-    'schema_contract_version','IMPORT_REVIEW_DB_V1',
-    'apply_envelope_version','IMPORT_REVIEW_APPLY_V1',
-    'apply_operation_version','IMPORT_APPLY_OPERATION_V2',
-    'correction_operation_version','IMPORT_CORRECTION_OPERATION_V2',
-    'follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1',
-    'tsfin_follow_up_settlement_version','IMPORT_REVIEW_TSFIN_SETTLEMENT_V1',
-    'incremental_apply_version','IMPORT_REVIEW_INCREMENTAL_APPLY_V1',
-    'review_ui_contract_version','IMPORT_REVIEW_UI_V6',
-    'email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1',
-    'legacy_contracts_supported',false
-  )
-$function$;
+-- Bounded, server-owned Import Review scope discovery and action paging.
+-- import_review_contract_version_get_v1 is deliberately defined only by the
+-- later canonical correction-carrier repeatable.  Keeping an older copy here
+-- caused a changed-file deployment to remove established capability fields and
+-- correctly trip the Worker contract gate.
 
 create or replace function public.import_review_staged_scope_get_v1(
   p_import_id uuid,
