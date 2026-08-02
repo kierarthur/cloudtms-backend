@@ -1,0 +1,79 @@
+From 08382f3a38371cf1820c9e664e177192f90ebac4 Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 19:08:06 +0100
+Subject: [PATCH] Show settled import validation success
+
+
+diff --git a/css/import-review-v1.css b/css/import-review-v1.css
+index 5270868..8f2690c 100644
+--- a/css/import-review-v1.css
++++ b/css/import-review-v1.css
+@@ -11,7 +11,7 @@
+ .irv1-drop{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:13px;border:1px dashed rgba(148,163,184,.55);border-radius:12px;text-align:center}.irv1-drop strong{color:#fff}.irv1-drop span{color:#94a3b8;font-size:11px}
+ .irv1-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.irv1-client-select{width:100%;min-height:38px}
+ .irv1-history{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(11,18,33,.72)}.irv1-history-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 15px;border-bottom:1px solid var(--line)}
+-.irv1-history-list{display:grid}.irv1-history-row{display:grid;grid-template-columns:minmax(180px,1.6fr) minmax(130px,.8fr) minmax(150px,.9fr) auto;gap:12px;align-items:center;padding:12px 15px;border-top:1px solid rgba(51,65,85,.65)}.irv1-history-row:first-child{border-top:0}.irv1-history-row small{display:block;color:#94a3b8}.irv1-status{display:inline-flex;width:max-content;padding:3px 8px;border-radius:999px;background:rgba(245,158,11,.12);color:#fde68a;font-size:11px}
++.irv1-history-list{display:grid}.irv1-history-row{display:grid;grid-template-columns:minmax(180px,1.6fr) minmax(130px,.8fr) minmax(150px,.9fr) auto;gap:12px;align-items:center;padding:12px 15px;border-top:1px solid rgba(51,65,85,.65)}.irv1-history-row:first-child{border-top:0}.irv1-history-row small{display:block;color:#94a3b8}.irv1-status{display:inline-flex;width:max-content;padding:3px 8px;border-radius:999px;background:rgba(245,158,11,.12);color:#fde68a;font-size:11px}.irv1-status.is-success{background:rgba(34,197,94,.16);color:#86efac;border:1px solid rgba(34,197,94,.4)}
+ .irv1-btn{display:inline-flex;min-height:34px;align-items:center;justify-content:center;gap:6px;padding:7px 11px;border:1px solid var(--line);border-radius:9px;background:#0f172a;color:#f8fafc;cursor:pointer;font:inherit}.irv1-btn:hover:not(:disabled){border-color:#60a5fa;background:#172554}.irv1-btn:disabled{opacity:.45;cursor:not-allowed}.irv1-btn.primary{border-color:#4f46e5;background:#4f46e5}.irv1-btn.danger{border-color:rgba(239,68,68,.55);color:#fecaca;background:rgba(127,29,29,.18)}
+ .irv1-coverage-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.irv1-choice{display:grid;grid-template-columns:20px 1fr;gap:9px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#0b1221;cursor:pointer}.irv1-choice:has(input:checked){border-color:#60a5fa;background:rgba(37,99,235,.13)}.irv1-choice strong{display:block}.irv1-choice span{display:block;margin-top:3px;color:#94a3b8;font-size:11px}
+ .irv1-scope-summary{display:flex;flex-wrap:wrap;gap:8px}.irv1-chip{padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#111827;color:#cbd5e1;font-size:11px}.irv1-scope-chip{display:inline-flex;align-items:center;gap:5px}.irv1-scope-chip.is-matched{border-color:rgba(34,197,94,.62);background:rgba(22,101,52,.34);color:#dcfce7}.irv1-scope-chip.is-unmatched{border-color:rgba(248,113,113,.72);background:rgba(127,29,29,.4);color:#fee2e2}
+diff --git a/index.html b/index.html
+index 14a8102..9e6e3a0 100644
+--- a/index.html
++++ b/index.html
+@@ -4,7 +4,7 @@
+   <meta charset="utf-8"/>
+   <title>CloudTMS</title>
+   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+-  <link rel="stylesheet" href="./css/import-review-v1.css"/>
++  <link rel="stylesheet" href="./css/import-review-v1.css?v=20260802-validation-policy-r4"/>
+   <link rel="stylesheet" href="./css/timesheet-nhsp-lines.css"/>
+   <link rel="stylesheet" href="./css/invoice-batch-modal.css?v=20260729-invoice-v8-flat-table-r5"/>
+   <style>
+@@ -2816,7 +2816,7 @@ body{
+  <script src="./js/invoice-diagnostic-catalog.js?v=20260728-invoice-async-v8-source-evidence-r1"></script>
+  <script src="./js/invoice-batch-modal.js?v=20260730-invoice-v8-auto-recovery-r8"></script>
+ <script src="./js/invoice-async-ui.js?v=20260730-invoice-refs-ward-r13"></script>
+- <script src="./js/import-review-v1.js?v=20260802-validation-policy-r3"></script>
++ <script src="./js/import-review-v1.js?v=20260802-validation-policy-r4"></script>
+  <script src="./js/bulk-row-freshness-v1.js"></script>
+  <script src="./js/bulk-authorise-lifecycle-v2.js"></script>
+  <script src="./js/bulk-authorise-evidence-controller.js"></script>
+diff --git a/js/import-review-v1.js b/js/import-review-v1.js
+index 5b72e47..7a42aec 100644
+--- a/js/import-review-v1.js
++++ b/js/import-review-v1.js
+@@ -320,7 +320,7 @@
+     const rows = state.home.reviews.length ? state.home.reviews.map((item) => `<div class="irv1-history-row">
+       <div><strong>${esc(item.filename || 'Import')}</strong><small>${esc(item.source_route || item.source_system || '')}</small></div>
+       <div>${esc(formatDate(item.coverage_start_date))} – ${esc(formatDate(item.coverage_end_date))}</div>
+-      <div><span class="irv1-status">${esc(displayReviewStatus(item.status, item.partial_application === true))}</span><small>Updated ${esc(formatDateTime(item.updated_at_utc))}</small></div>
++      <div><span class="irv1-status ${String(item.display_status || '').toUpperCase() === 'SUCCESS' ? 'is-success' : ''}">${esc(displayReviewStatus(item.display_status || item.status, item.partial_application === true))}</span><small>Updated ${esc(formatDateTime(item.updated_at_utc))}</small></div>
+       <button type="button" class="irv1-btn" data-ir-action="continue" data-import-id="${esc(item.import_id)}">Continue</button>
+     </div>`).join('') : '<div class="irv1-empty">There are no unfinished import reviews.</div>';
+     const busy = state.home.busy ? `<div class="irv1-alert">${esc(state.home.busy)}</div>` : '';
+@@ -823,6 +823,9 @@
+       REFERENCE_ON_SHIFT_MISSING_OR_MISMATCHED_IN_COMPLETE_IMPORT: 'The stored reference is missing or differs in the complete import. Clearing it is a separate explicit choice.',
+       QUERY_RECIPIENT_EMAIL_MISSING_OR_INVALID: 'No valid query recipient is configured. Correct the client or contract query email outside this review, then choose Recheck.',
+       BLOCKED_ACTIVE_PAY_DRAFT: 'An active Banking Pay draft protects this timesheet. Resolve the draft outside the import, then choose Recheck.',
++      TIMESHEET_PRESENT_BUT_INVOICED: 'Timesheet present but invoiced. Remove it from the invoice (and unissue first if required), then choose Recheck before validating it.',
++      TIMESHEET_EVIDENCE_INCOMPLETE: 'Timesheet evidence incomplete. The submitted timesheet must contain its hours and all required signatures or manual/QR evidence before a correction email can be sent.',
++      TIMESHEET_EVIDENCE_PREPARING: 'Preparing timesheet evidence. CloudTMS is generating the current timesheet PDF asynchronously; choose Recheck when preparation has completed.',
+       IMPORT_REVIEW_CORRECTION_GENERATION_PARTIALLY_INVOICED: 'The current correction generation is only partly invoiced. CloudTMS cannot safely amend it or create a further correction generation while one member remains uninvoiced. Resolve the invoice state through the existing invoice process, then choose Recheck.',
+       IMPORT_REVIEW_ARCHIVED_GENERATION_ACTIVE_MEMBER_CONFLICT: 'An inactive Archived correction record has an active partner still outstanding. CloudTMS will not restore or reuse the Archived generation. Resolve the active record through the normal timesheet lifecycle, then choose Recheck.',
+       IMPORT_REVIEW_ARCHIVED_INVOICE_STATE_CONFLICT: 'An Archived timesheet also has frozen invoice evidence, which is not a supported lifecycle state. Nothing was selected. Resolve the conflicting historical state, then choose Recheck.',
+@@ -847,7 +850,10 @@
+       PREVIOUS_OR_LEGACY_HISTORY_REQUIRES_EXPLICIT_REMINDER: 'Previously recorded issue: deferred by default. Tick it only when you deliberately want to send a reminder.',
+       REFERENCE_INVALIDATION_REQUIRES_EXPLICIT_SELECTION: 'Reference clearing is deferred by default and happens only when explicitly selected.',
+       QUERY_RECIPIENT_EMAIL_MISSING_OR_INVALID: 'Deferred because the client or contract has no valid query recipient email.',
+-      BLOCKED_ACTIVE_PAY_DRAFT: 'Deferred because an active Banking Pay draft protects this timesheet.'
++      BLOCKED_ACTIVE_PAY_DRAFT: 'Deferred because an active Banking Pay draft protects this timesheet.',
++      TIMESHEET_PRESENT_BUT_INVOICED: 'This validation is unavailable while the timesheet is attached to an invoice.',
++      TIMESHEET_EVIDENCE_INCOMPLETE: 'The correction email cannot be selected until the timesheet evidence is complete.',
++      TIMESHEET_EVIDENCE_PREPARING: 'The correction email cannot be selected until the current timesheet PDF is ready.'
+     };
+     return labels[String(code || '').toUpperCase()] || '';
+   }
+-- 
+2.54.0.windows.1
+
