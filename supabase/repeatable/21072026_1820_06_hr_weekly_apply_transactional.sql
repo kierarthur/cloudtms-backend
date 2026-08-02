@@ -483,11 +483,65 @@ begin
    and gm.candidate_id = p2ok.candidate_id
    and gm.week_ending_date = p2ok.week_ending_date;
 
+  -- Validation-only Weekly work is atomic at the real timesheet boundary.
+  -- A selected email by itself must never cause matching sibling shifts to be
+  -- validated or sent to TSFIN.  The complete group is eligible only when at
+  -- least one server-selected validation row exists, no unresolved action is
+  -- present, and every selectable validation row in the group was selected.
+  create temporary table tmp_mode_a_eligible_groups on commit drop as
+  select gm.contract_id,gm.candidate_id,gm.client_id,gm.week_ending_date,gm.group_id
+  from tmp_group_mode gm
+  join tmp_review_batch_units bu
+    on bu.candidate_id=gm.candidate_id and bu.client_id=gm.client_id
+  where gm.mode='MODE_A'
+    and exists (
+      select 1
+      from public.import_review_decisions selected_row
+      where selected_row.import_id=p_import_id
+        and selected_row.is_current
+        and selected_row.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
+        and selected_row.action_kind='NO_ACTION'
+        and selected_row.candidate_id=gm.candidate_id
+        and selected_row.client_id=gm.client_id
+        and selected_row.contract_id is not distinct from gm.contract_id
+        and nullif(selected_row.summary_json->>'week_ending_date','')::date=gm.week_ending_date
+        and selected_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
+    )
+    and not exists (
+      select 1
+      from public.import_review_decisions hold
+      where hold.import_id=p_import_id
+        and hold.is_current
+        and hold.candidate_id=gm.candidate_id
+        and hold.client_id=gm.client_id
+        and hold.contract_id is not distinct from gm.contract_id
+        and nullif(hold.summary_json->>'week_ending_date','')::date=gm.week_ending_date
+        and hold.summary_json->>'source_route' not like '%DAILY%'
+        and (hold.blocking or hold.action_category in ('EMAIL','PENDING','BLOCKED'))
+    )
+    and not exists (
+      select 1
+      from public.import_review_decisions deferred_row
+      where deferred_row.import_id=p_import_id
+        and deferred_row.is_current
+        and deferred_row.action_kind='NO_ACTION'
+        and deferred_row.selectable
+        and deferred_row.candidate_id=gm.candidate_id
+        and deferred_row.client_id=gm.client_id
+        and deferred_row.contract_id is not distinct from gm.contract_id
+        and nullif(deferred_row.summary_json->>'week_ending_date','')::date=gm.week_ending_date
+        and deferred_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
+        and deferred_row.action_id not in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
+    );
+
   select coalesce(array_agg(distinct m.external_row_key order by m.external_row_key), array[]::text[])
   into v_mode_a_external_keys
   from tmp_p2_ok_mode m
-  join tmp_review_batch_units bu
-    on bu.candidate_id=m.candidate_id and bu.client_id=m.client_id
+  join tmp_mode_a_eligible_groups eligible
+    on eligible.contract_id=m.contract_id
+   and eligible.candidate_id=m.candidate_id
+   and eligible.client_id=m.client_id
+   and eligible.week_ending_date=m.week_ending_date
   where m.mode = 'MODE_A';
 
   select coalesce(array_agg(distinct m.external_row_key order by m.external_row_key), array[]::text[])
@@ -2031,9 +2085,11 @@ begin
     and nullif(btrim(r.value->>'week_ending_date'), '') is not null
     and nullif(btrim(r.value->>'client_id'), '') is not null
     and exists (
-      select 1 from tmp_review_batch_units bu
-      where bu.candidate_id=nullif(btrim(r.value->>'candidate_id'), '')::uuid
-        and bu.client_id=nullif(btrim(r.value->>'client_id'), '')::uuid
+      select 1 from tmp_mode_a_eligible_groups eligible
+      where eligible.candidate_id=nullif(btrim(r.value->>'candidate_id'), '')::uuid
+        and eligible.client_id=nullif(btrim(r.value->>'client_id'), '')::uuid
+        and eligible.contract_id=nullif(btrim(r.value->>'contract_id'), '')::uuid
+        and eligible.week_ending_date=nullif(btrim(r.value->>'week_ending_date'), '')::date
     );
 
   select count(*)::int

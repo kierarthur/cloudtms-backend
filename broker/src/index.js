@@ -113,7 +113,8 @@ const runImportReviewPostCommit = createImportReviewPostCommitRunner({
 const dispatchImportReviewRequest = createImportReviewDispatcher({
   requireUser,
   sbRpc,
-  runFollowUp: runImportReviewPostCommit
+  runFollowUp: runImportReviewPostCommit,
+  nudgeInvoiceOperations
 });
 
 const BANKING_PAY_WORKBENCH_DB_CONTRACT = 'BANKING_PAY_WORKBENCH_DB_V1';

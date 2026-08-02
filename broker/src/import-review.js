@@ -28,6 +28,7 @@ const ROUTE_RPCS = Object.freeze(new Set([
   'import_review_create_v1',
   'import_review_replace_v1',
   'import_review_get_v1',
+  'import_review_attachment_preparation_targets_v1',
   'import_review_actions_page_v1',
   'import_review_save_v1',
   'import_review_refresh_v1',
@@ -38,6 +39,7 @@ const ROUTE_RPCS = Object.freeze(new Set([
   'import_review_apply_failed_before_commit_recover_v1',
   'nhsp_weekly_review_preview_v1',
   'hr_daily_validation_preview_v1',
+  'invoice_operation_start_batch',
   'nhsp_weekly_apply_transactional',
   'hr_weekly_apply_transactional',
   'hr_daily_apply_transactional'
@@ -371,6 +373,42 @@ function sourceRouteToApplyRpc(route) {
   throw new ImportReviewInputError('The review source route is unsupported');
 }
 
+function scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId, actorId }) {
+  const task = (async () => {
+    const targets = await runAllowedRpc(sbRpc, env, 'import_review_attachment_preparation_targets_v1', {
+      p_import_id: importId,
+      p_actor_user_id: actorId,
+      p_max_targets: 100
+    }, { timeoutMs: 10000 });
+    const commands = Array.isArray(targets?.commands) ? targets.commands : [];
+    if (!commands.length) return;
+    const raw = await runAllowedRpc(sbRpc, env, 'invoice_operation_start_batch', {
+      p_commands: commands,
+      p_actor_user_id: actorId,
+      p_now_utc: new Date().toISOString()
+    }, { timeoutMs: 15000 });
+    const operations = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : [raw].filter(Boolean));
+    const active = operations.filter((operation) => operation?.accepted !== false && operation?.operation_id
+      && ['QUEUED', 'RUNNING', 'WAITING', 'RETRY_WAIT'].includes(String(operation?.status || '').toUpperCase()));
+    if (active.length && typeof nudgeInvoiceOperations === 'function') {
+      await nudgeInvoiceOperations(env, active, {
+        ctx,
+        rpc: (name, args, options) => sbRpc(env, name, args, options),
+        lanes: ['DATABASE', 'DOCUMENT'],
+        priorityClass: 'INTERACTIVE'
+      });
+    }
+  })().catch((error) => {
+    console.warn(JSON.stringify({
+      event: 'IMPORT_REVIEW_ATTACHMENT_PREPARATION_DEFERRED',
+      code: postgresErrorToken(error) || 'IMPORT_REVIEW_ATTACHMENT_PREPARATION_FAILED',
+      retryable: true
+    }));
+  });
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(task);
+  return task;
+}
+
 async function getReview(sbRpc, env, importId, actorId, options = {}) {
   return runAllowedRpc(sbRpc, env, 'import_review_get_v1', {
     p_import_id: importId,
@@ -576,7 +614,7 @@ function routeMatch(pathname, pattern) {
 }
 
 export function createImportReviewDispatcher(dependencies) {
-  const { requireUser, sbRpc, runFollowUp } = dependencies || {};
+  const { requireUser, sbRpc, runFollowUp, nudgeInvoiceOperations } = dependencies || {};
   if (typeof requireUser !== 'function' || typeof sbRpc !== 'function') {
     throw new Error('createImportReviewDispatcher requires requireUser and sbRpc');
   }
@@ -699,6 +737,7 @@ export function createImportReviewDispatcher(dependencies) {
           );
         }
         const data = await runAllowedRpc(sbRpc, env, rpcName, rpcArgs, { timeoutMs: 30000 });
+        scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId, actorId: user.id });
         return success(data, 201);
       }
 
@@ -711,16 +750,19 @@ export function createImportReviewDispatcher(dependencies) {
           eventCursor: url.searchParams.get('event_cursor') == null ? null : integer(url.searchParams.get('event_cursor'), 'event_cursor', 0, Number.MAX_SAFE_INTEGER),
           eventLimit: integer(url.searchParams.get('event_limit'), 'event_limit', 1, 100, 50)
         });
+        scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId, actorId: user.id });
         return success(data);
       }
 
       const actionPage = routeMatch(pathname, '/api/import-reviews/:import_id/actions');
       if (req.method === 'GET' && actionPage) {
+        const importId = uuid(actionPage.import_id, 'import_id');
         const data = await runAllowedRpc(sbRpc, env, 'import_review_actions_page_v1', {
-          p_import_id: uuid(actionPage.import_id, 'import_id'),
+          p_import_id: importId,
           p_actor_user_id: user.id,
           ...parseActionPageQuery(url)
         });
+        scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId, actorId: user.id });
         return success(data);
       }
 
@@ -772,6 +814,7 @@ export function createImportReviewDispatcher(dependencies) {
           }));
           data = await runAllowedRpc(sbRpc, env, 'import_review_refresh_v1', refreshArgs, { timeoutMs: 30000 });
         }
+        scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId: refreshArgs.p_import_id, actorId: user.id });
         return success(data);
       }
 

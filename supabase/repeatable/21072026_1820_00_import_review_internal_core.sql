@@ -600,6 +600,152 @@ begin
 end
 $function$;
 
+create or replace function public._import_review_query_evidence_core_v1(p_timesheet_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public', 'extensions', 'pg_temp'
+as $function$
+declare
+  v_ts public.timesheets%rowtype;
+  v_doc public.invoice_document_versions%rowtype;
+  v_asset public.invoice_document_assets%rowtype;
+  v_protection jsonb;
+  v_has_hours boolean:=false;
+  v_source_complete boolean:=false;
+  v_document_ready boolean:=false;
+  v_is_signed_qr boolean:=false;
+  v_reason_code text;
+  v_fingerprint text;
+begin
+  if p_timesheet_id is null then
+    return jsonb_build_object(
+      'timesheet_id',null,'source_complete',false,'document_ready',false,
+      'preparation_required',false,'reason_code','TIMESHEET_EVIDENCE_INCOMPLETE',
+      'evidence_fingerprint',public._import_review_hash_v1('query-evidence-v1|null')
+    );
+  end if;
+
+  select * into v_ts
+  from public.timesheets t
+  where t.timesheet_id=p_timesheet_id
+  limit 1;
+
+  if not found or not coalesce(v_ts.is_current,false) or v_ts.archived_at_utc is not null then
+    return jsonb_build_object(
+      'timesheet_id',p_timesheet_id,'source_complete',false,'document_ready',false,
+      'preparation_required',false,'reason_code','TIMESHEET_EVIDENCE_INCOMPLETE',
+      'evidence_fingerprint',public._import_review_hash_v1(concat_ws('|','query-evidence-v1',p_timesheet_id,'MISSING_CURRENT_SOURCE'))
+    );
+  end if;
+
+  v_protection:=public._import_review_timesheet_protection_core_v1(p_timesheet_id);
+  v_has_hours:=case
+    when upper(coalesce(v_ts.sheet_scope::text,''))='WEEKLY' then
+      jsonb_typeof(coalesce(v_ts.actual_schedule_json,'[]'::jsonb))='array'
+      and jsonb_array_length(coalesce(v_ts.actual_schedule_json,'[]'::jsonb))>0
+      and not exists (
+        select 1 from jsonb_array_elements(coalesce(v_ts.actual_schedule_json,'[]'::jsonb)) day(value)
+        where nullif(btrim(coalesce(day.value->>'start',day.value->>'start_time',day.value->>'worked_start','')),'') is null
+           or nullif(btrim(coalesce(day.value->>'end',day.value->>'end_time',day.value->>'worked_end','')),'') is null
+      )
+    else v_ts.worked_start_iso is not null and v_ts.worked_end_iso is not null
+  end;
+
+  -- Any QR lifecycle marker makes this a QR timesheet.  It is complete only
+  -- when the complete signed-QR contract below is satisfied; a pending or
+  -- unsigned QR PDF must never fall through as an ordinary manual upload.
+  v_is_signed_qr:=v_ts.qr_status is not null
+    or v_ts.qr_scanned_at is not null
+    or nullif(btrim(coalesce(v_ts.qr_signed_hash,'')),'') is not null
+    or v_ts.qr_signed_at_utc is not null;
+
+  if upper(coalesce(v_ts.submission_mode::text,''))='ELECTRONIC' then
+    v_source_complete:=v_has_hours
+      and nullif(btrim(coalesce(v_ts.r2_nurse_key,'')),'') is not null
+      and nullif(btrim(coalesce(v_ts.img_sha256_nurse,'')),'') is not null
+      and nullif(btrim(coalesce(v_ts.r2_auth_key,'')),'') is not null
+      and nullif(btrim(coalesce(v_ts.img_sha256_auth,'')),'') is not null
+      and nullif(btrim(coalesce(v_ts.auth_name,'')),'') is not null
+      and v_ts.authorised_at_server is not null;
+  elsif upper(coalesce(v_ts.submission_mode::text,''))='MANUAL' and v_is_signed_qr then
+    v_source_complete:=v_has_hours
+      and upper(coalesce(v_ts.qr_status::text,''))='USED'
+      and v_ts.qr_scanned_at is not null
+      and nullif(btrim(coalesce(v_ts.qr_signed_hash,'')),'') is not null
+      and v_ts.qr_signed_at_utc is not null
+      and nullif(btrim(coalesce(v_ts.manual_pdf_r2_key,'')),'') is not null;
+  elsif upper(coalesce(v_ts.submission_mode::text,''))='MANUAL' then
+    if v_ts.manual_document_asset_id is not null then
+      select * into v_asset from public.invoice_document_assets a
+      where a.id=v_ts.manual_document_asset_id limit 1;
+    end if;
+    v_source_complete:=v_has_hours and (
+      nullif(btrim(coalesce(v_ts.manual_pdf_r2_key,'')),'') is not null
+      or (
+        v_asset.id is not null
+        and upper(coalesce(v_asset.status,''))='READY'
+        and nullif(btrim(coalesce(v_asset.normalised_r2_key,v_asset.original_r2_key,'')),'') is not null
+      )
+    );
+  end if;
+
+  if v_ts.current_document_version_id is not null then
+    select * into v_doc from public.invoice_document_versions d
+    where d.id=v_ts.current_document_version_id limit 1;
+  end if;
+  v_document_ready:=v_source_complete
+    and v_doc.id is not null
+    and v_doc.entity_type='TIMESHEET'
+    and v_doc.entity_id=v_ts.timesheet_id
+    and v_doc.purpose='TIMESHEET'
+    and v_doc.source_revision=v_ts.document_revision::text
+    and v_doc.status='READY'
+    and v_doc.superseded_at_utc is null
+    and nullif(btrim(coalesce(v_doc.r2_key,'')),'') is not null
+    and coalesce(v_doc.sha256,'')~'^[0-9a-f]{64}$'
+    and coalesce(v_doc.size_bytes,0)>0
+    and coalesce(v_doc.page_count,0)>0
+    and v_doc.ready_at_utc is not null
+    and v_doc.verified_at_utc is not null;
+
+  v_reason_code:=case
+    when coalesce((v_protection->>'invoice_locked')::boolean,false) then 'TIMESHEET_PRESENT_BUT_INVOICED'
+    when not v_source_complete then 'TIMESHEET_EVIDENCE_INCOMPLETE'
+    when not v_document_ready then 'TIMESHEET_EVIDENCE_PREPARING'
+  end;
+  v_fingerprint:=public._import_review_hash_v1(concat_ws('|','query-evidence-v1',v_ts.timesheet_id,
+    v_ts.document_revision,v_ts.document_state,v_ts.current_document_version_id,
+    v_ts.submission_mode::text,v_ts.sheet_scope::text,v_ts.updated_at,
+    v_source_complete,v_document_ready,v_reason_code,
+    coalesce(v_doc.id::text,''),coalesce(v_doc.source_revision,''),coalesce(v_doc.sha256,''),
+    coalesce(v_doc.size_bytes::text,''),coalesce(v_doc.page_count::text,''),
+    coalesce((v_protection->>'invoice_locked')::boolean,false)));
+
+  return jsonb_strip_nulls(jsonb_build_object(
+    'timesheet_id',v_ts.timesheet_id,
+    'source_complete',v_source_complete,
+    'document_ready',v_document_ready,
+    'preparation_required',v_source_complete and not v_document_ready
+      and not coalesce((v_protection->>'invoice_locked')::boolean,false),
+    'reason_code',v_reason_code,
+    'evidence_fingerprint',v_fingerprint,
+    'document_revision',v_ts.document_revision,
+    'document_state',v_ts.document_state,
+    'document_version_id',case when v_document_ready then v_doc.id end,
+    'attachment_r2_key',case when v_document_ready then v_doc.r2_key end,
+    'attachment_sha256',case when v_document_ready then v_doc.sha256 end,
+    'attachment_size_bytes',case when v_document_ready then v_doc.size_bytes end,
+    'attachment_page_count',case when v_document_ready then v_doc.page_count end,
+    'attachment_filename',case when v_document_ready then 'timesheet-'||v_ts.timesheet_id::text||'.pdf' end,
+    'submission_mode',v_ts.submission_mode::text,
+    'sheet_scope',v_ts.sheet_scope::text,
+    'signed_qr',v_is_signed_qr,
+    'protection',v_protection
+  ));
+end
+$function$;
+
 create or replace function public._import_review_timesheet_has_calculated_expenses_core_v1(
   p_timesheet_id uuid
 )
@@ -3634,6 +3780,128 @@ begin
       'start_time',m.start_utc,'end_time',m.end_utc,'break_minutes',m.break_mins,'role',m.assignment_code,'protection',m.protection)
   from missing m;
 
+  -- Query emails can be committed only with one exact, complete, current
+  -- timesheet PDF.  Invoice-linked validation records are never eligible for
+  -- validation.  The same evidence fingerprint is frozen into the decision so
+  -- document or invoice lifecycle movement makes a reviewed action stale.
+  with evidence as materialized (
+    select c.action_id,public._import_review_query_evidence_core_v1(c.timesheet_id) evidence_json
+    from pg_temp.import_review_catalog_v1 c
+    where c.timesheet_id is not null
+      and (
+        c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+        or c.summary_json->>'authority_mode'='VALIDATION_ONLY'
+        or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
+      )
+  )
+  update pg_temp.import_review_catalog_v1 c
+  set evidence_fingerprint=public._import_review_hash_v1(concat_ws('|','query-evidence-decision-v1',
+        c.evidence_fingerprint,e.evidence_json->>'evidence_fingerprint')),
+      action_category=case
+        when c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+          and nullif(e.evidence_json->>'reason_code','') is not null then 'PENDING'
+        when (
+          c.summary_json->>'authority_mode'='VALIDATION_ONLY'
+          or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
+        ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED' then 'PENDING'
+        else c.action_category end,
+      selectable=case
+        when c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+          and nullif(e.evidence_json->>'reason_code','') is not null then false
+        when (
+          c.summary_json->>'authority_mode'='VALIDATION_ONLY'
+          or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
+        ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED' then false
+        else c.selectable end,
+      default_selected=case
+        when c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+          and nullif(e.evidence_json->>'reason_code','') is not null then false
+        when (
+          c.summary_json->>'authority_mode'='VALIDATION_ONLY'
+          or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
+        ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED' then false
+        else c.default_selected end,
+      blocking=case
+        when c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+          and nullif(e.evidence_json->>'reason_code','') is not null then true
+        when (
+          c.summary_json->>'authority_mode'='VALIDATION_ONLY'
+          or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
+        ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED' then true
+        else c.blocking end,
+      summary_json=c.summary_json||jsonb_build_object(
+        'attachment_evidence',e.evidence_json,
+        'attachment_fingerprint',e.evidence_json->>'evidence_fingerprint'
+      )||case
+        when (
+          c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+          and nullif(e.evidence_json->>'reason_code','') is not null
+        ) or (
+          (
+            c.summary_json->>'authority_mode'='VALIDATION_ONLY'
+            or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
+          ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED'
+        ) then jsonb_build_object(
+          'reason_code',e.evidence_json->>'reason_code',
+          'default_excluded_reason',e.evidence_json->>'reason_code',
+          'outcome_label',case e.evidence_json->>'reason_code'
+            when 'TIMESHEET_PRESENT_BUT_INVOICED' then 'Timesheet present but invoiced'
+            when 'TIMESHEET_EVIDENCE_PREPARING' then 'Preparing timesheet evidence'
+            else 'Timesheet evidence incomplete' end
+        ) else '{}'::jsonb end
+  from evidence e
+  where e.action_id=c.action_id;
+
+  -- Daily validation is atomic per Daily timesheet.  An email, document hold
+  -- or invoice blocker for that record prevents only that record from entering
+  -- validation and TSFIN work.
+  update pg_temp.import_review_catalog_v1 current_row
+  set selectable=false,
+      default_selected=false,
+      evidence_fingerprint=public._import_review_hash_v1(concat_ws('|','daily-validation-held-v1',
+        current_row.evidence_fingerprint,current_row.timesheet_id)),
+      summary_json=current_row.summary_json||jsonb_build_object(
+        'daily_validation_held',true,
+        'validation_hold_label','Validation held: resolve this Daily timesheet first'
+      )
+  where current_row.action_kind='NO_ACTION'
+    and coalesce(nullif(current_row.summary_json->>'is_daily','')::boolean,false)
+    and current_row.timesheet_id is not null
+    and exists (
+      select 1 from pg_temp.import_review_catalog_v1 hold
+      where hold.timesheet_id=current_row.timesheet_id
+        and hold.action_id<>current_row.action_id
+        and (hold.blocking or hold.action_category in ('EMAIL','PENDING','BLOCKED'))
+    );
+
+  -- Weekly validation is all-or-nothing per candidate/client/contract/week.
+  -- One mismatch, unresolved exception, missing attachment or invoice blocker
+  -- holds the whole Weekly timesheet while leaving the actual issue visible.
+  update pg_temp.import_review_catalog_v1 current_row
+  set selectable=false,
+      default_selected=false,
+      evidence_fingerprint=public._import_review_hash_v1(concat_ws('|','weekly-validation-held-v2',
+        current_row.evidence_fingerprint,current_row.candidate_id,current_row.client_id,
+        current_row.contract_id,current_row.summary_json->>'week_ending_date')),
+      summary_json=current_row.summary_json||jsonb_build_object(
+        'weekly_validation_held',true,
+        'weekly_validation_badge_code','WEEKLY_VALIDATION_HELD',
+        'weekly_validation_badge_label','Validation held: resolve outstanding shift',
+        'validation_hold_label','Validation held: one or more shifts still require action'
+      )
+  where current_row.action_kind='NO_ACTION'
+    and current_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
+    and current_row.summary_json->>'source_route' not like '%DAILY%'
+    and exists (
+      select 1 from pg_temp.import_review_catalog_v1 hold
+      where hold.candidate_id=current_row.candidate_id
+        and hold.client_id=current_row.client_id
+        and hold.contract_id is not distinct from current_row.contract_id
+        and hold.summary_json->>'week_ending_date'=current_row.summary_json->>'week_ending_date'
+        and hold.action_id<>current_row.action_id
+        and (hold.blocking or hold.action_category in ('EMAIL','PENDING','BLOCKED'))
+    );
+
   select count(*) into v_count from pg_temp.import_review_catalog_v1;
   if v_count>p_max_actions then
     raise exception 'IMPORT_REVIEW_ACTION_LIMIT_EXCEEDED' using errcode='54000',
@@ -3792,6 +4060,7 @@ revoke all on function public._import_review_assert_actor_v1(uuid) from public,a
 revoke all on function public._import_review_ready_action_ids_core_v1(uuid) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_validate_ui_state_v1(jsonb) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_timesheet_protection_core_v1(uuid) from public,anon,authenticated,service_role;
+revoke all on function public._import_review_query_evidence_core_v1(uuid) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_auto_authorise_targets_core_v1(uuid[],public.hr_source_enum,boolean) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_effective_invoice_balance_core_v1(uuid,jsonb,integer,integer,integer,integer) from public,anon,authenticated,service_role;
 revoke all on function public._import_review_action_catalog_core_v1(uuid,integer,integer) from public,anon,authenticated,service_role;

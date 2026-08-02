@@ -277,7 +277,23 @@ begin
       hi.coverage_fingerprint,hi.source_file_sha256,
       (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current and d.blocking) blocker_count,
       (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current and d.selected) selected_count,
-      (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current and d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')) selected_email_count
+      (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current and d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')) selected_email_count,
+      (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current
+        and (d.blocking or d.action_category in ('EMAIL','PENDING','BLOCKED'))) unresolved_current_count,
+      (select count(*) from public.import_review_action_outcomes o where o.import_id=s.import_id
+        and o.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')) applied_email_count,
+      (select count(*) from public.import_review_action_outcomes o where o.import_id=s.import_id
+        and o.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION')) applied_change_count,
+      (select count(distinct o.timesheet_id) from public.import_review_action_outcomes o
+        where o.import_id=s.import_id and o.timesheet_id is not null
+          and (o.summary_json->>'authority_mode'='VALIDATION_ONLY'
+            or coalesce(nullif(o.summary_json->>'is_daily','')::boolean,false))) validation_target_count,
+      (select count(distinct o.timesheet_id) from public.import_review_action_outcomes o
+        left join public.timesheet_validations tv on tv.timesheet_id=o.timesheet_id
+        where o.import_id=s.import_id and o.timesheet_id is not null
+          and (o.summary_json->>'authority_mode'='VALIDATION_ONLY'
+            or coalesce(nullif(o.summary_json->>'is_daily','')::boolean,false))
+          and (tv.timesheet_id is null or tv.status::text<>'VALIDATION_OK' or tv.last_source is distinct from s.import_id)) validation_incomplete_count
     from public.import_review_states s join public.hr_imports hi on hi.id=s.import_id
     where (case upper(coalesce(p_status_class,'ACTIVE')) when 'ACTIVE' then s.status in ('STAGED','IN_REVIEW','BLOCKED','READY','APPLYING')
       when 'COMPLETED' then s.status='APPLIED' when 'ABANDONED' then s.status='ABANDONED' when 'SUPERSEDED' then s.status='SUPERSEDED' else true end)
@@ -290,8 +306,21 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object('schema_contract_version',schema_contract_version,
     'import_id',import_id,'filename',filename,'source_system',source_system,'source_route',import_scope,
     'source_hash_prefix',left(source_file_sha256,12),'coverage_mode',coverage_mode,'coverage_start_date',coverage_start_date,'coverage_end_date',coverage_end_date,
-    'status',status,'follow_up_status',follow_up_status,'state_version',state_version,'preview_generation',preview_generation,
+    'status',status,'display_status',case
+      when status='APPLIED'
+        and follow_up_status in ('COMPLETE','NOT_REQUIRED')
+        and blocker_count=0 and unresolved_current_count=0 and applied_email_count=0
+        and validation_incomplete_count=0
+        and (
+          validation_target_count>0
+          or applied_change_count>0
+        )
+      then 'SUCCESS' else status end,
+    'follow_up_status',follow_up_status,'state_version',state_version,'preview_generation',preview_generation,
     'blocker_count',blocker_count,'selected_count',selected_count,'selected_email_count',selected_email_count,
+    'unresolved_current_count',unresolved_current_count,'applied_email_count',applied_email_count,
+    'applied_change_count',applied_change_count,'validation_target_count',validation_target_count,
+    'validation_incomplete_count',validation_incomplete_count,
     'read_only',status in ('APPLYING','APPLIED','ABANDONED','SUPERSEDED'),'updated_at_utc',updated_at_utc) order by updated_at_utc desc,import_id desc),'[]'),
     (select count(*)>v_limit from page) into v_items,v_has_more from limited;
   if v_has_more and jsonb_array_length(v_items)>0 then
@@ -299,6 +328,50 @@ begin
     where import_id=(v_items->(jsonb_array_length(v_items)-1)->>'import_id')::uuid;
   end if;
   return jsonb_build_object('ok',true,'items',v_items,'page_size',v_limit,'next_cursor',case when v_has_more then jsonb_build_object('updated_at_utc',v_last_updated_at,'import_id',v_last_import_id) end);
+end $function$;
+
+create or replace function public.import_review_attachment_preparation_targets_v1(
+  p_import_id uuid,p_actor_user_id uuid default null,p_max_targets integer default 100
+)
+returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
+declare v_commands jsonb; v_count integer;
+begin
+  perform public._import_review_assert_actor_v1(p_actor_user_id);
+  if p_import_id is null or p_max_targets<1 or p_max_targets>100 then
+    raise exception 'IMPORT_REVIEW_ATTACHMENT_TARGET_INPUT_INVALID' using errcode='22023';
+  end if;
+  if not exists(select 1 from public.import_review_states s where s.import_id=p_import_id) then
+    raise exception 'IMPORT_REVIEW_NOT_FOUND' using errcode='P0002';
+  end if;
+  with targets as (
+    select distinct d.timesheet_id,e.evidence_json
+    from public.import_review_decisions d
+    cross join lateral (select public._import_review_query_evidence_core_v1(d.timesheet_id) evidence_json) e
+    where d.import_id=p_import_id and d.is_current
+      and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+      and d.timesheet_id is not null
+      and coalesce((e.evidence_json->>'preparation_required')::boolean,false)
+    order by d.timesheet_id
+    limit p_max_targets+1
+  ), bounded as (
+    select * from targets order by timesheet_id limit p_max_targets
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'command_type','VIEW_TIMESHEET_DOCUMENT',
+      'timesheet_id',timesheet_id,
+      'purpose','TIMESHEET',
+      'priority_reason','IMPORT_REVIEW_EMAIL_EVIDENCE',
+      'template_version','timesheet-professional-v2',
+      'command_token','import-review-evidence:'||public._import_review_hash_v1(concat_ws('|',p_import_id,timesheet_id,
+        evidence_json->>'evidence_fingerprint'))
+    ) order by timesheet_id),'[]'::jsonb),
+    (select count(*) from targets)
+  into v_commands,v_count
+  from bounded;
+  if v_count>p_max_targets then
+    raise exception 'IMPORT_REVIEW_ATTACHMENT_TARGET_LIMIT_EXCEEDED' using errcode='54000';
+  end if;
+  return jsonb_build_object('ok',true,'import_id',p_import_id,'target_count',coalesce(v_count,0),'commands',v_commands);
 end $function$;
 
 create or replace function public.import_review_get_v1(
@@ -1638,6 +1711,8 @@ revoke all on function public.import_review_replace_v1(uuid,text,date,date,jsonb
 grant execute on function public.import_review_replace_v1(uuid,text,date,date,jsonb,jsonb,text,text,uuid,text,uuid,bigint) to service_role;
 revoke all on function public.import_review_list_v1(text,text,uuid,date,date,timestamptz,uuid,integer) from public,anon,authenticated;
 grant execute on function public.import_review_list_v1(text,text,uuid,date,date,timestamptz,uuid,integer) to service_role;
+revoke all on function public.import_review_attachment_preparation_targets_v1(uuid,uuid,integer) from public,anon,authenticated;
+grant execute on function public.import_review_attachment_preparation_targets_v1(uuid,uuid,integer) to service_role;
 revoke all on function public.import_review_get_v1(uuid,uuid,text,integer,bigint,integer) from public,anon,authenticated;
 grant execute on function public.import_review_get_v1(uuid,uuid,text,integer,bigint,integer) to service_role;
 revoke all on function public.import_review_save_v1(uuid,bigint,integer,text,jsonb,jsonb,uuid,uuid) from public,anon,authenticated;
