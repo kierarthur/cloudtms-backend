@@ -2819,7 +2819,12 @@ function invoiceOperationOutboxRow(row) {
   const progress = row.progress_json && typeof row.progress_json === 'object' ? row.progress_json : {};
   const result = row.result_json && typeof row.result_json === 'object' ? row.result_json : {};
   const authoritativeAttempts = Number(result.attempt_summary?.attempt_count);
-  return { channel: 'INVOICE', outbox_id: row.id, id: row.id, outbox_type: row.operation_type, type: row.operation_type, entity_type: row.entity_type || null, entity_id: row.entity_id || null, status: row.status, queue_state: row.status, phase: row.phase, legal_issue_state: result.legal_issue_state || progress.legal_issue_state || 'NOT_REQUESTED', delivery_state: result.delivery_state || progress.delivery_state || 'NOT_REQUESTED', requires_user_action: row.requires_user_action === true, progress_summary: { completed_units: Number(row.completed_units || 0), total_units: Number(row.total_units || 0), failed_units: Number(row.failed_units || 0), pages_complete: Number(progress.pages_complete || 0), pages_total: Number(progress.pages_total || 0), status_message: String(progress.status_message || '').slice(0, 200) || null }, retry_summary: { run_after_utc: row.run_after_utc || null, attempt_count: Number.isSafeInteger(authoritativeAttempts) ? authoritativeAttempts : null, attempt_detail_available: true }, error_code: String(row.error_json?.code || row.error_json?.error_code || '').slice(0, 120) || null, created_at_utc: row.created_at_utc, scheduled_for_utc: row.run_after_utc || null, effective_ready_at_utc: row.run_after_utc || row.created_at_utc, change_seq: Number(row.change_seq || 0), parent_operation_id: row.parent_operation_id || null };
+  const runAfterUtc = String(
+    result.attempt_summary?.run_after_utc
+    || progress.run_after_utc
+    || ''
+  ).trim() || null;
+  return { channel: 'INVOICE', outbox_id: row.id, id: row.id, outbox_type: row.operation_type, type: row.operation_type, entity_type: row.entity_type || null, entity_id: row.entity_id || null, status: row.status, queue_state: row.status, phase: row.phase, legal_issue_state: result.legal_issue_state || progress.legal_issue_state || 'NOT_REQUESTED', delivery_state: result.delivery_state || progress.delivery_state || 'NOT_REQUESTED', requires_user_action: row.requires_user_action === true, progress_summary: { completed_units: Number(row.completed_units || 0), total_units: Number(row.total_units || 0), failed_units: Number(row.failed_units || 0), pages_complete: Number(progress.pages_complete || 0), pages_total: Number(progress.pages_total || 0), status_message: String(progress.status_message || '').slice(0, 200) || null }, retry_summary: { run_after_utc: runAfterUtc, attempt_count: Number.isSafeInteger(authoritativeAttempts) ? authoritativeAttempts : null, attempt_detail_available: true }, error_code: String(row.error_json?.code || row.error_json?.error_code || '').slice(0, 120) || null, created_at_utc: row.created_at_utc, scheduled_for_utc: runAfterUtc, effective_ready_at_utc: runAfterUtc || row.created_at_utc, change_seq: Number(row.change_seq || 0), parent_operation_id: row.parent_operation_id || null };
 }
 
 function compareUnifiedOutboxRows(left, right, sortBy, sortDir) {
@@ -3008,9 +3013,9 @@ function normaliseInvoiceOutboxQueueState(queueState, snapshotAt) {
   if (!state) return { expression: null, requiresAction: null, semantics: null };
   if (state === 'QUEUED') {
     return {
-      expression: `or(status.in.(QUEUED,WAITING),and(status.eq.RETRY_WAIT,run_after_utc.lte.${snapshotAt}))`,
+      expression: 'status.in.(QUEUED,WAITING)',
       requiresAction: null,
-      semantics: 'QUEUED_OR_WAITING_OR_DUE_RETRY'
+      semantics: 'QUEUED_OR_WAITING'
     };
   }
   if (state === 'RUNNING') {
@@ -3018,9 +3023,9 @@ function normaliseInvoiceOutboxQueueState(queueState, snapshotAt) {
   }
   if (state === 'SCHEDULED') {
     return {
-      expression: `and(status.eq.RETRY_WAIT,run_after_utc.gt.${snapshotAt})`,
+      expression: 'status.eq.RETRY_WAIT',
       requiresAction: null,
-      semantics: 'FUTURE_RETRY'
+      semantics: 'RETRY_WAIT'
     };
   }
   if (state === 'FAILED') {
@@ -3058,7 +3063,7 @@ async function loadUnifiedOutboxCursorPage(env, {
   const invoiceQueue = normaliseInvoiceOutboxQueueState(queueState, snapshotAt);
   const perSourceLimit = limit + 1;
   const invoiceQuery = new URL(`${env.SUPABASE_URL}/rest/v1/invoice_operations`);
-  invoiceQuery.searchParams.set('select', 'id,operation_type,entity_type,entity_id,status,phase,priority,total_units,completed_units,failed_units,progress_json,result_json,error_json,requires_user_action,change_seq,created_at_utc,updated_at_utc,run_after_utc,parent_operation_id');
+  invoiceQuery.searchParams.set('select', 'id,operation_type,entity_type,entity_id,status,phase,priority,total_units,completed_units,failed_units,progress_json,result_json,error_json,requires_user_action,change_seq,created_at_utc,updated_at_utc,parent_operation_id');
   invoiceQuery.searchParams.set('created_at_utc', `lte.${snapshotAt}`);
   if (status && /^[A-Z_]+$/.test(status)) invoiceQuery.searchParams.set('status', `eq.${status}`);
   if (operationType && /^[A-Z_]+$/.test(operationType)) {
@@ -3197,7 +3202,7 @@ async function handleInvoiceOutboxList(env, req, deps) {
   const sortDir = String(url.searchParams.get('sort_dir') || 'desc').trim().toLowerCase();
   if (!new Set(['created_at_utc','scheduled_for_utc','effective_ready_at_utc','status','channel']).has(sortBy) || !['asc','desc'].includes(sortDir)) return jsonResponse({ error: 'INVALID_OUTBOX_SORT' }, 400);
   const query = new URL(`${env.SUPABASE_URL}/rest/v1/invoice_operations`);
-  query.searchParams.set('select', 'id,operation_type,entity_type,entity_id,status,phase,priority,total_units,completed_units,failed_units,progress_json,result_json,error_json,requires_user_action,change_seq,created_at_utc,updated_at_utc,run_after_utc,parent_operation_id');
+  query.searchParams.set('select', 'id,operation_type,entity_type,entity_id,status,phase,priority,total_units,completed_units,failed_units,progress_json,result_json,error_json,requires_user_action,change_seq,created_at_utc,updated_at_utc,parent_operation_id');
   const snapshotAt = new Date().toISOString();
   let invoiceQueue;
   try {
