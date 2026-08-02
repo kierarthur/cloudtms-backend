@@ -1035,6 +1035,7 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
     assert.ok(['/rest/v1/invoice_operations', '/rest/v1/v_outbox_unified'].includes(url.pathname));
     if (url.pathname === '/rest/v1/invoice_operations') {
       assert.equal(url.searchParams.get('operation_type'), 'neq.OPERATION_CONTROL_REQUEST');
+      assert.doesNotMatch(url.searchParams.get('select') || '', /(?:^|,)run_after_utc(?:,|$)/);
     }
     const rows = url.pathname === '/rest/v1/invoice_operations'
       ? [{
@@ -1044,8 +1045,7 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
           entity_id: '00000000-0000-4000-8000-000000000031',
           status: 'RUNNING',
           phase: 'RENDERING',
-          created_at_utc: '2026-07-24T12:00:00.000Z',
-          run_after_utc: null
+          created_at_utc: '2026-07-24T12:00:00.000Z'
         }]
       : [{
           channel: 'EMAIL',
@@ -1077,7 +1077,57 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
     assert.equal(response.status, 200, JSON.stringify(body));
     assert.equal(body.total_count, 2);
     assert.equal(body.items[0].channel, 'INVOICE');
+    assert.equal(body.items[0].scheduled_for_utc, null);
     assert.equal(body.items[1].channel, 'EMAIL');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('invoice Outbox queue filters never query chunk-only scheduling columns', async () => {
+  const originalFetch = globalThis.fetch;
+  const observed = [];
+  globalThis.fetch = async request => {
+    const url = new URL(
+      typeof request === 'string'
+        ? request
+        : (request instanceof URL ? request.href : request.url)
+    );
+    assert.equal(url.pathname, '/rest/v1/invoice_operations');
+    const select = url.searchParams.get('select') || '';
+    const andExpression = url.searchParams.get('and') || '';
+    assert.doesNotMatch(select, /(?:^|,)run_after_utc(?:,|$)/);
+    assert.doesNotMatch(andExpression, /run_after_utc/);
+    observed.push(andExpression);
+    return new Response('[]', {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'content-range': '*/0'
+      }
+    });
+  };
+  try {
+    for (const state of ['QUEUED', 'SCHEDULED']) {
+      const response = await handleInvoiceAsyncHttpRequest(
+        new Request(`https://example.test/api/outbox?channel=INVOICE&queue_state=${state}&limit=50`),
+        v8Environment(),
+        {},
+        {
+          requireUser: async () => v8Actor(),
+          rpc: v8Rpc(async () => {
+            throw new Error('Invoice-channel Outbox listing must use its bounded table projection');
+          })
+        }
+      );
+      const body = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(body));
+      assert.deepEqual(body.items, []);
+    }
+    assert.deepEqual(observed, [
+      '(status.in.(QUEUED,WAITING))',
+      '(status.eq.RETRY_WAIT)'
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }
